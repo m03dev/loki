@@ -229,6 +229,38 @@ inspection become available.
 
 Total offered to the model with everything on: 40 tools (29 built-in + 11 MCP).
 
+## The editor bridge is vendored INSIDE addons/loki
+
+No second plugin, no addon in the project, nothing for the user to enable. The
+godot-mcp editor half (MIT, (c) 2026 Johnny D - see
+`addons/loki/godot_mcp/LICENSE.godot-mcp.txt`) is vendored at
+`addons/loki/godot_mcp/` and **Loki's own EditorPlugin hosts it**:
+
+- `plugin.gd::_start_mcp_bridge()` builds the router (RefCounted), registers the
+  EditorDebuggerPlugin via `add_debugger_plugin`, creates the `MCPBridge` Node, adds it
+  as a child and calls `start(url)` (`ws://127.0.0.1:9080`, override with
+  `GODOT_MCP_BRIDGE_URL`). `_exit_tree` disposes it.
+- The upstream entry point `godot_mcp.gd` and its status dock are deliberately NOT used:
+  they exist to be enabled as a separate plugin, which is exactly what we are avoiding.
+- The two internal `res://addons/godot_mcp` references were repointed to
+  `res://addons/loki/godot_mcp`.
+
+Verified live: with the Loki plugin enabled, `godot_health_check` returns
+`bridge_connected: true`, and `godot_inspection_get_project_info` returns the real project
+name, Godot version, path, autoloads and input actions from the running editor.
+
+The editor is the WebSocket client and reconnects with backoff, so launch order does not
+matter. The server listens; the editor dials out.
+
+### Other Godot / game-dev MCP servers worth knowing
+- Coding-Solo/godot-mcp (5.4k stars), hi-godot/godot-ai (1.9k), IvanMurzak/Godot-MCP (C#,
+  editor + runtime), ee0pdt/Godot-MCP, Dokujaa/Godot-MCP
+- weekitmo/mcp_godot_rag - Godot documentation RAG (would complement godot_api/godot_search)
+- Blender MCP (26k stars) - mesh/material/procedural asset creation, the natural companion
+  for a game agent that needs real art
+- Asset generation servers: PixelLab, Ludo.ai, mcp-game-asset-gen; sprite-ai.art has an
+  HTTP API + MCP server (paid)
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
