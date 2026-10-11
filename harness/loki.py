@@ -1151,6 +1151,24 @@ def _new_conversation(title: str = "") -> dict:
             "created": time.time(), "updated": time.time(), "messages": []}
 
 
+_TITLE_SKIP = ("You ended your turn", "is premature", "NO file was created", "(no output)",
+               "the model stopped responding", "returned empty replies",
+               "You have not used any tools", "You have now made this exact call")
+
+
+def _is_internal_turn(text: str) -> bool:
+    """True for Loki's own steering messages, which must never title a chat."""
+    plain = (text or "").strip()
+    return any(marker in plain for marker in _TITLE_SKIP)
+
+
+def _first_real_user(turns: list) -> str:
+    for turn in turns:
+        if turn.get("role") == "user" and not _is_internal_turn(turn.get("content", "")):
+            return turn.get("content", "")
+    return ""
+
+
 def _title_from_text(text: str) -> str:
     rows = (text or "").strip().splitlines()
     head = rows[0].strip() if rows else ""
@@ -1194,9 +1212,10 @@ def save_history() -> None:
     turns = _sanitize_history(messages)
     convo["messages"] = turns
     convo["updated"] = time.time()
-    if convo["title"] in ("", "New chat"):
-        first_user = next((t["content"] for t in turns if t["role"] == "user"), "")
-        convo["title"] = _title_from_text(first_user)
+    if convo["title"] in ("", "New chat") or _is_internal_turn(convo["title"]):
+        first_user = _first_real_user(turns)
+        if first_user:
+            convo["title"] = _title_from_text(first_user)
     save_conversations()
 
 

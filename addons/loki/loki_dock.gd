@@ -23,6 +23,7 @@ const INTERNAL_MARKERS: Array[String] = [
 ]
 
 var _chat_log: RichTextLabel
+var _recent_log: Array[String] = []
 var _input_edit: TextEdit
 var _send_button: Button
 var _stop_button: Button
@@ -205,19 +206,13 @@ func _build_ui() -> void:
 	var bottom_spacer: Control = Control.new()
 	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(bottom_spacer)
-	_send_button = Button.new()
-	_send_button.text = "Send"
-	_send_button.icon = _editor_icon("Play")
+	_send_button = _icon_button("Play", "Send  (Ctrl+Enter)")
 	_send_button.pressed.connect(_on_send_pressed)
 	bottom.add_child(_send_button)
-	_clear_button = Button.new()
-	_clear_button.text = "Clear"
-	_clear_button.icon = _editor_icon("Clear")
+	_clear_button = _icon_button("Clear", "Clear the display")
 	_clear_button.pressed.connect(_on_clear_pressed)
 	bottom.add_child(_clear_button)
-	_stop_button = Button.new()
-	_stop_button.text = "Stop"
-	_stop_button.icon = _editor_icon("Stop")
+	_stop_button = _icon_button("Stop", "Stop Loki")
 	_stop_button.disabled = true
 	_stop_button.pressed.connect(_on_stop_pressed)
 	bottom.add_child(_stop_button)
@@ -778,6 +773,12 @@ func _on_clear_pressed() -> void:
 func _append_log(text: String) -> void:
 	if _is_internal(text):
 		return
+	var plain: String = text.strip_edges()
+	if plain in _recent_log:
+		return
+	_recent_log.append(plain)
+	if _recent_log.size() > 80:
+		_recent_log.remove_at(0)
 	_chat_log.append_text(text + "\n\n")
 	_chat_log.scroll_to_line(_chat_log.get_line_count())
 
@@ -789,8 +790,25 @@ func _is_internal(text: String) -> bool:
 			return true
 	return false
 
+func _icon_button(icon_name: String, tip: String) -> Button:
+	var button: Button = Button.new()
+	var icon: Texture2D = _editor_icon(icon_name)
+	if icon != null:
+		button.icon = icon
+	else:
+		button.text = tip.split(" ")[0]
+	button.tooltip_text = tip
+	button.flat = true
+	return button
+
+
 func _escape(value: String) -> String:
-	return value.replace("[", "[lb]").replace("]", "[rb]")
+	# Already-escaped text escaped again used to render the markers literally
+	# ("[lb]0,5,-10[rb]"), so normalise first, then escape exactly once using
+	# sentinels that cannot themselves be re-escaped.
+	var v: String = value.replace("[lb]", "[").replace("[rb]", "]")
+	v = v.replace("[", "[[LB]]").replace("]", "[[RB]]")
+	return v.replace("[[LB]]", "[lb]").replace("[[RB]]", "[rb]")
 
 func _poll_approval() -> void:
 	_load_token()

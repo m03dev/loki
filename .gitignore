@@ -36,3 +36,6 @@ harness/workspace/
 
 # Godot API dump (generated on first run: godot --headless --dump-extension-api)
 harness/extension_api.json
+
+# stray files an agent run may create in the plugin repo itself
+plugins/
