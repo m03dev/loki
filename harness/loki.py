@@ -1452,9 +1452,24 @@ mcp_sessions = {}
 
 
 async def connect_mcp(stack: AsyncExitStack) -> None:
+    """Start every MCP server and offer its tools to the model.
+
+    A server entry may set:
+      "enabled": false      - skip it entirely
+      "tools": ["a", "b"]   - offer only these (an allow-list)
+      "max_tools": 20       - cap how many are offered
+
+    Gating matters: a Godot MCP server can expose 150+ tools, and every tool
+    schema is paid for on every request - free tiers choke on a few extra k.
+    """
     config = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
     for name, spec in config["mcpServers"].items():
+        if spec.get("enabled", True) is False:
+            print(f"  [mcp] '{name}' is disabled in mcp_servers.json")
+            continue
         params = StdioServerParameters(command=spec["command"], args=spec["args"])
+        if spec.get("env"):
+            params.env = {**os.environ, **spec["env"]}
         try:
             read, write = await stack.enter_async_context(stdio_client(params))
             session = await stack.enter_async_context(ClientSession(read, write))
@@ -1462,13 +1477,30 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
         except Exception as e:
             print(f"  [mcp] '{name}' failed to start: {e}")
             continue
-        tools = (await session.list_tools()).tools
+        try:
+            tools = (await session.list_tools()).tools
+        except Exception as e:
+            print(f"  [mcp] '{name}' connected but listing tools failed: {e}")
+            continue
+        allow = spec.get("tools")
+        limit = spec.get("max_tools")
+        added = []
         for tool in tools:
+            if allow is not None and tool.name not in allow:
+                continue
+            if limit is not None and len(added) >= int(limit):
+                break
             mcp_sessions[tool.name] = session
-            TOOL_SCHEMAS.append(schema(tool.name, tool.description,
+            TOOL_SCHEMAS.append(schema(tool.name, (tool.description or "")[:500],
                                        tool.input_schema.get("properties", {}),
                                        tool.input_schema.get("required", [])))
-        print(f"  [mcp] connected '{name}': {[t.name for t in tools]}")
+            MODEL_TOOL_NAMES.add(tool.name)
+            added.append(tool.name)
+        MODEL_TOOL_SCHEMAS[:] = [t for t in TOOL_SCHEMAS
+                                 if t["function"]["name"] in MODEL_TOOL_NAMES]
+        hidden = len(tools) - len(added)
+        print(f"  [mcp] connected '{name}': {len(added)} tools offered to the model"
+              + (f", {hidden} hidden" if hidden else ""))
 
 
 async def approve(kind: str, detail: str) -> bool:

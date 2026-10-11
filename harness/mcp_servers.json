@@ -7,6 +7,20 @@
     "fetch": {
       "command": "uvx",
       "args": ["mcp-server-fetch"]
+    },
+    "godot": {
+      "command": "uvx",
+      "args": ["godot-editor-mcp"],
+      "tools": [
+        "godot_health_check",
+        "godot_list_toolsets",
+        "godot_enable_toolset",
+        "godot_inspection_get_project_info",
+        "godot_inspection_get_scene_tree",
+        "godot_inspection_get_selected_node",
+        "godot_undo",
+        "godot_redo"
+      ]
     }
   }
 }

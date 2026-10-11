@@ -199,6 +199,36 @@ Loop: build_scene -> capture_scene -> view_image -> fix what the model reports.
 - **Sprite generation**: sprite-ai.art has an HTTP API and an MCP server for text->sprite and
   sprite->animation, but it is paid ($8/mo, 100 sprites).
 
+## MCP: borrowing other people's tools
+
+Loki speaks MCP (harness/mcp_servers.json). Two things were wrong and are now fixed:
+
+1. MCP tools were discovered and callable but **never offered to the model** - the model's
+   schema list was filtered against a fixed name set built at import. connect_mcp now adds each
+   discovered tool to MODEL_TOOL_NAMES and refreshes MODEL_TOOL_SCHEMAS in place. Verified:
+   the time/fetch servers' tools now show up in the model's tool list.
+2. There was no way to control how many tools a server contributes. Each entry now supports:
+   `"enabled": false`, `"tools": [allow-list]`, `"max_tools": N`, and `"env": {...}`.
+   This matters because every tool schema is tokens on every request.
+
+### Configured: godot-editor-mcp (uvx, no install)
+A real Godot MCP server that drives a live editor. It exposes 23 tools and ships its own
+gating (`godot_list_toolsets` / `godot_enable_toolset`), so Loki keeps 8 in context and can
+unlock more on demand:
+
+  godot_health_check, godot_list_toolsets, godot_enable_toolset,
+  godot_inspection_get_project_info, godot_inspection_get_scene_tree,
+  godot_inspection_get_selected_node, godot_undo, godot_redo
+
+Verified live: `godot_health_check` returns the server version and bridge state;
+`godot_list_toolsets` returns the toolset list. It reports
+`bridge_connected: false` until the project has the companion Godot addon installed - that
+addon exposes a WebSocket bridge on ws://localhost:9080 and is what makes the live-editor
+tools work. Install it from the server's own setup command, then undo/redo and live scene
+inspection become available.
+
+Total offered to the model with everything on: 40 tools (29 built-in + 11 MCP).
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
