@@ -912,7 +912,13 @@ async def view_image(filename: str, question: str = "") -> str:
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": "data:image/png;base64," + payload}}]}])
     except Exception as exc:
-        return "error: vision request failed (%s). The current provider may not accept images." % exc
+        detail = str(exc)[:160]
+        low = detail.lower()
+        if "429" in detail or "quota" in low or "resource_exhausted" in low or "rate limit" in low:
+            return ("error: the vision provider is rate-limited or out of quota. Wait, or let Smart "
+                    "pick another provider. Details: " + detail)
+        return ("error: vision request failed - the current provider may not accept images; use a "
+                "vision-capable one such as gemini. Details: " + detail)
     text = str(response.choices[0].message.content or "").strip()
     return text or "(the model returned no description)"
 
