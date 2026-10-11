@@ -201,6 +201,36 @@ def _mark_smart_failure() -> None:
         _SMART_FAILED.add(active_model_name())
 
 
+# A provider being out of quota or rate-limited must NOT end the run - we move to
+# the next available provider and carry on. These markers tell an "out of
+# allowance" refusal apart from a genuine bug.
+_LIMIT_MARKERS = ("429", "402", "413", "quota", "rate limit", "rate_limit",
+                  "rate-limit", "resource_exhausted", "too large", "exceeded",
+                  "insufficient", "credit", "billing")
+
+
+def _is_limit_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _LIMIT_MARKERS)
+
+
+def failover_target() -> str:
+    """Mark the provider in use as used-up and return the next usable one.
+
+    Returns "" when nothing else is available so the caller can surface the
+    original error instead of looping.
+    """
+    global model_name
+    current = active_model_name()
+    _SMART_FAILED.add(current)
+    if model_name != "smart":
+        # The chosen provider is spent; pick automatically from here so the task
+        # keeps going instead of dying on one exhausted key.
+        model_name = "smart"
+    nxt = active_model_name()
+    return "" if nxt == current else nxt
+
+
 # ---------------------------------------------------------------------------
 # Memory and the plan: two markdown files in the prompt + tools to edit them.
 # ---------------------------------------------------------------------------
@@ -1800,7 +1830,29 @@ async def agent_turn(force_tool: bool = False) -> str:
             kwargs["extra_body"] = {"think": False}
         if force_tool:
             kwargs["tool_choice"] = "required"
-        response = await _model_request(client, kwargs, cfg)
+        # A limit is not a failure: mark the provider used-up and continue this SAME
+        # turn on the next provider rather than ending the run.
+        switches = 0
+        while True:
+            try:
+                response = await _model_request(client, kwargs, cfg)
+                break
+            except ModelUnavailable as exc:
+                if not _is_limit_error(exc) or switches >= len(SMART_ORDER):
+                    raise
+                spent = active_model_name()
+                target = failover_target()
+                if not target:
+                    raise
+                switches += 1
+                client = make_client()
+                cfg = MODELS[active_model_name()]
+                kwargs["model"] = cfg.model
+                kwargs.pop("extra_body", None)
+                if "11434" in cfg.base_url or "ollama" in cfg.api_key:
+                    kwargs["extra_body"] = {"think": False}
+                _progress("thinking", "Out of allowance on %s - switched to %s and continuing."
+                    % (spent, target))
         message = response.choices[0].message
         global _last_turn_had_tools
         _last_turn_had_tools = bool(message.tool_calls)

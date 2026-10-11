@@ -261,6 +261,25 @@ matter. The server listens; the editor dials out.
 - Asset generation servers: PixelLab, Ludo.ai, mcp-game-asset-gen; sprite-ai.art has an
   HTTP API + MCP server (paid)
 
+## Running out of allowance is not a failure
+
+A provider hitting its quota used to end the whole run. Now it just moves on:
+
+- `_is_limit_error()` recognises an "out of allowance" refusal from an ordinary bug
+  (429/402/413, quota, rate limit, resource_exhausted, too large, exceeded, credit, billing).
+- `failover_target()` marks the current provider used-up and returns the next usable one. If the
+  user had pinned a specific model and it runs dry, Loki switches into automatic mode so the
+  task keeps going instead of dying on one exhausted key.
+- The turn loop catches `ModelUnavailable`, and when it is a limit error rebuilds the client for
+  the next provider and **retries the very same turn**. A limit no longer loses work.
+- When nothing else is available it raises the original error rather than looping.
+
+Verified end to end with a deliberately forced 429: gemini -> groq -> openrouter -> vireonix ->
+local, and the task still returned a correct answer after four providers were exhausted.
+
+This matters because it makes paid quota non-essential: the chain always ends at what is left,
+including the keyless Vireonix provider and the offline Ollama models.
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
