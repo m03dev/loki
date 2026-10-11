@@ -807,8 +807,8 @@ func _escape(value: String) -> String:
 	# ("[lb]0,5,-10[rb]"), so normalise first, then escape exactly once using
 	# sentinels that cannot themselves be re-escaped.
 	var v: String = value.replace("[lb]", "[").replace("[rb]", "]")
-	v = v.replace("[", "[[LB]]").replace("]", "[[RB]]")
-	return v.replace("[[LB]]", "[lb]").replace("[[RB]]", "[rb]")
+	v = v.replace("[", "@@LB@@").replace("]", "@@RB@@")
+	return v.replace("@@LB@@", "[lb]").replace("@@RB@@", "[rb]")
 
 func _poll_approval() -> void:
 	_load_token()
