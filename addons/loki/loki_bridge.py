@@ -435,8 +435,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/health":
             agent = self.server.state.agent
             resolved = agent.active_model_name() if hasattr(agent, "active_model_name") else agent.model_name
+            report = agent.smart_report() if hasattr(agent, "smart_report") else ""
             self._send_json(200, {"ok": True, "service": "loki", "mode": agent.model_name,
-                                  "provider": resolved, "model": agent.MODELS[resolved].model})
+                                  "provider": resolved, "model": agent.MODELS[resolved].model,
+                                  "providers": report})
             return
         if route == "/progress":
             try:
@@ -819,6 +821,8 @@ async def serve() -> None:
     keeper = threading.Thread(target=keep_secret_alive, args=(secret_path, secret, keeper_stop), name="loki-secret-keeper", daemon=True)
     keeper.start()
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    if hasattr(loki, "smart_report"):
+        print(f"[loki-bridge] {loki.smart_report()}", flush=True)
     try:
         await asyncio.Event().wait()
     finally:

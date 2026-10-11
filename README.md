@@ -18,10 +18,12 @@ a key for.
 - **Real verification** — Loki validates scenes (`validate_scene`), compiles
   scripts (`check_script`) and actually runs scenes (`play_scene`) before it
   claims success.
-- **Any model** — local Ollama out of the box, or **online mode** (`LOKI_MODEL=online`),
-  which needs no GPU and no Ollama and runs on free tiers (Gemini, Groq, OpenRouter,
-  SambaNova, Cloudflare Workers AI, UnoRouter, Nous) with your Claude Code / Codex
-  subscription as the next fallback.
+- **Any model, zero setup** — it runs with **no key at all** (the built-in
+  `vireonix` route needs no account and no card), or point it at any free tier
+  (Gemini, Groq, OpenRouter, SambaNova, Cloudflare Workers AI, UnoRouter, Nous) or a
+  local Ollama model. `LOKI_MODEL=smart` picks the best one you have and falls over
+  automatically when a quota runs out. Your Claude Code / Codex subscription also
+  works as a provider.
 - **Skills built in** — ships with the [Ponytail](https://github.com/DietrichGebert/ponytail)
   "least-code-that-works" standard and can load any of the 70+ specialised
   agents from [ECC](https://github.com/affaan-m/ECC).
@@ -42,7 +44,7 @@ See `HANDOFF.md` for the layout, modes, provider notes and the traps worth knowi
 | Piece | Needed for | Notes |
 |---|---|---|
 | **Godot 4.3+** | the editor plugin | set `GODOT_EXE` if it is not in the default path |
-| **Python 3.11+** | the agent bridge | a venv is created by `setup.bat` |
+| **Python 3.11+** | the agent bridge | a private venv is made in `harness_data/.venv` |
 | **Ollama** (optional) | local models | `ollama pull qwen3.5:9b` |
 | **Node 22 + npm** (optional) | the OmniRoute gateway | see `docs/providers.md` |
 
@@ -55,23 +57,37 @@ git clone https://github.com/m03dev/loki
 cd loki
 setup.bat
 ```
+On macOS or Linux use `./setup.sh` instead.
 
 Then open the folder as a Godot project and enable **Loki** in
-*Project -> Project Settings -> Plugins*. The dock appears beside the Scene dock.
+*Project -> Project Settings -> Plugins*. The dock appears beside Scene.
 
-## Choosing a model
+Setup creates the Python environment, installs the dependencies, fetches the skill
+libraries and runs the doctor. It is safe to re-run.
 
-Copy `harness/.env.example` to `harness/.env` and add any key you have — every
-listed provider has a free tier. Then set `LOKI_MODEL` (e.g. `gemini`, `groq`,
-`local-reasoning`, `omniroute`). Details in `docs/providers.md`.
+## Choosing a model — you do not have to
+
+Loki starts on `LOKI_MODEL=smart`, which uses the best provider you have, falls over
+automatically when one runs out of quota, and works with **no keys at all**. To add a
+key, copy `addons/loki/harness/.env.example` to `harness_data/.env` and fill in any
+provider you have — or run:
+
+```bash
+harness_data/.venv/Scripts/python.exe tools/loki_doctor.py
+```
+
+which lists every provider, whether it is ready, and the link to get a key for it.
+Details in `docs/providers.md`.
 
 ## Layout
 
 ```
-addons/loki/     the Godot editor plugin (dock + bridge launcher)
-harness/         the Python agent (loki.py), tools and memory
-docs/            dependencies, providers, sign-in
-tools/           headless checks
+addons/loki/          the Godot editor plugin (dock, bridge, bundled agent)
+  harness/            the Python agent (loki.py), tools, mcp_servers.json
+  godot_mcp/          the vendored Godot editor MCP bridge
+harness_data/         YOUR data - keys, memory, chats, downloaded skills, .venv
+docs/                 dependencies, providers, sign-in
+tools/                loki_doctor.py and headless checks
 ```
 
 ## Signing in with Google

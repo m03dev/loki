@@ -143,6 +143,28 @@ check("toolset summary reports a disable",
       loki._toolset_summary('{"name":"shader","enabled":false}') == "Disabled domain 'shader'.")
 check("toolset summary ignores non-JSON", loki._toolset_summary("plain text") == "")
 
+section("setup / onboarding")
+_checkout = REPO / "addons" / "loki" / "harness"
+_B = chr(92)  # one backslash, so the assertions below survive any transport mangling
+_bat = (REPO / "setup.bat").read_text(encoding="utf-8")
+check("setup.bat uses the post-fold harness path", ("addons" + _B + "loki" + _B + "harness") in _bat)
+check("setup.bat dropped the pre-fold harness root", ('set "HARNESS=%REPO%' + _B + 'harness"') not in _bat)
+check("setup.bat creates the venv under harness_data",
+      ('set "DATA=%REPO%' + _B + 'harness_data"') in _bat and (_B + ".venv") in _bat)
+check("setup.sh ships for macOS/Linux", (REPO / "setup.sh").is_file())
+check("doctor script ships", (REPO / "tools" / "loki_doctor.py").is_file())
+
+_envx = (_checkout / ".env.example").read_text(encoding="utf-8")
+check(".env.example does not disable the zero-key provider",
+      not any(line.strip() == "VIREONIX_API_KEY=" for line in _envx.splitlines()))
+check(".env.example defaults to smart", "LOKI_MODEL=smart" in _envx)
+check(".env.example carries no stale model names",
+      "gemini-2.0-flash" not in _envx and "llama-3.3-70b-versatile" not in _envx)
+check("LOKI_MODEL is smart by default (zero-config)",
+      'os.getenv("LOKI_MODEL", "smart")' in (_checkout / "loki.py").read_text(encoding="utf-8"))
+check("vireonix needs no key", loki.provider_configured("vireonix"))
+check("vireonix is tried before local", loki.SMART_ORDER.index("vireonix") < loki.SMART_ORDER.index("local"))
+
 import cli_agents  # noqa: E402
 for _name in ("claude-code", "codex"):
     _spec = cli_agents.CLI_AGENTS[_name]

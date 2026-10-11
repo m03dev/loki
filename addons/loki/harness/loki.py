@@ -218,7 +218,7 @@ MODELS = {
     ),
 }
 
-model_name = os.getenv("LOKI_MODEL", "local")
+model_name = os.getenv("LOKI_MODEL", "smart")
 
 # --- Smart mode -------------------------------------------------------------
 # "smart" picks the best available FREE provider on its own: the first in this
