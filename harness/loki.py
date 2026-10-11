@@ -118,7 +118,7 @@ MODELS = {
     "gemini": ModelConfig(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
                           api_key=os.getenv("GEMINI_API_KEY", ""), model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash")),
     "groq": ModelConfig(base_url="https://api.groq.com/openai/v1",
-                        api_key=os.getenv("GROQ_API_KEY", ""), model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
+                        api_key=os.getenv("GROQ_API_KEY", ""), model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")),
     "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
                               api_key=os.getenv("OPENROUTER_API_KEY", ""), model=os.getenv("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")),
     "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
@@ -1044,7 +1044,12 @@ def _read_vendor(*parts: str) -> str:
 
 # Ponytail: the "lazy senior dev" coding standard (github.com/DietrichGebert/ponytail).
 # Braces escaped so SYSTEM_PROMPT.format() still works.
-_PONYTAIL = _read_vendor("ponytail", "AGENTS.md").replace("{", "{{").replace("}", "}}")
+# LOKI_LEAN=1 trims the coding-standard block: free tiers (e.g. Groq at 7k
+# input tokens/minute) reject the full agent request otherwise.
+if os.getenv("LOKI_LEAN"):
+    _PONYTAIL = ""
+else:
+    _PONYTAIL = _read_vendor("ponytail", "AGENTS.md").replace("{", "{{").replace("}", "}}")
 if _PONYTAIL:
     SYSTEM_PROMPT += chr(10) * 2 + "# Coding standard - Ponytail (write the least code that works)" + chr(10) + _PONYTAIL
 
