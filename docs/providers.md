@@ -16,6 +16,26 @@ Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness/.env`
 | `omniroute` | local OmniRoute gateway | routes to any of the above |
 | `cloud` | Loki Cloud (after Google sign-in) | key stays server-side |
 | `gpt` / `claude` | OpenAI / Anthropic | paid |
+| `claude-code` | Claude Code CLI (your subscription) | no key - flat rate you already pay |
+| `codex` | Codex CLI (your subscription) | no key - flat rate you already pay |
+
+## Subscription coding agents
+
+`claude-code` and `codex` are not API clients. Once installed and signed in they run on
+the subscription allowance you already pay, so an extra request costs nothing more - and
+they are real coding agents with their own file/edit/shell tools, which they use on the
+project folder directly. Loki hands Claude Code its own MCP servers too, so it also gets
+the Godot editor tools.
+
+```
+npm install -g @anthropic-ai/claude-code   # then: claude   -> /login
+npm install -g @openai/codex               # then: codex login
+```
+
+Then `LOKI_MODEL=claude-code` (or `codex`). They also sit in Smart order after the free
+cloud tiers and before the local models, so when every free quota is spent the job goes
+to a real agent rather than a weak local model. Point Loki at a different binary with
+`LOKI_CLAUDE_CODE_EXE` / `LOKI_CODEX_EXE`.
 
 ## Environment variables
 

@@ -92,9 +92,14 @@ class ModelConfig(BaseModel):
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import godot_tools  # noqa: E402  (Godot API + project editing tools)
+import cli_agents  # noqa: E402  (Claude Code / Codex as subscription providers)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
+
+
+# Providers whose "base_url" is one of these are CLI coding agents, not HTTP APIs.
+CLI_AGENT_PREFIX = "cli-agent://"
 
 
 MODELS = {
@@ -112,6 +117,12 @@ MODELS = {
     "local-reasoning": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3.5:9b"),
     "gpt": ModelConfig(base_url="https://api.openai.com/v1", api_key=os.getenv("OPENAI_API_KEY", ""), model="gpt-5.2"),
     "claude": ModelConfig(base_url="https://api.anthropic.com/v1/", api_key=os.getenv("ANTHROPIC_API_KEY", ""), model="claude-sonnet-5"),
+    # Subscription coding agents (see harness/cli_agents.py). These are NOT API
+    # clients: once signed in they run on the flat-rate allowance you already pay,
+    # so extra requests add nothing to the bill. Install once, then
+    # LOKI_MODEL=claude-code (or codex).
+    "claude-code": ModelConfig(base_url="cli-agent://claude-code", model="claude-code"),
+    "codex": ModelConfig(base_url="cli-agent://codex", model="codex"),
     # OmniRoute: local AI gateway (one OpenAI-compatible endpoint -> many providers,
     # free tiers and auto-fallback). Run it, set a provider key, then use LOKI_MODEL=omniroute.
     # Free tiers (put the key in harness/.env). OpenAI-compatible endpoints.
@@ -156,8 +167,11 @@ model_name = os.getenv("LOKI_MODEL", "local")
 # Ordered most-suitable-first for a big agent prompt. Gemini leads because its free
 # tier allows 1M input tokens/min; Groq's free tier caps at 7k/min and returns 413
 # on Loki's ~8k-token request, so it sits lower.
+# Free cloud tiers first, then the subscription agents - when every free quota is
+# spent it is better to hand the job to a real coding agent than a weak local model.
 SMART_ORDER = ("gemini", "cerebras", "groq", "openrouter", "github", "mistral",
-               "deepseek", "together", "vireonix", "local", "local-hermes")
+               "deepseek", "together", "vireonix", "claude-code", "codex",
+               "local", "local-hermes")
 _SMART_FAILED = set()
 
 
@@ -173,6 +187,9 @@ def provider_configured(name: str) -> bool:
     cfg = MODELS.get(name)
     if cfg is None:
         return False
+    if cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        # Counts as configured only once the CLI is actually installed.
+        return cli_agents.is_available(cfg.base_url[len(CLI_AGENT_PREFIX):])
     if "11434" in cfg.base_url:
         return _ollama_reachable()
     return bool(str(cfg.api_key or "").strip())
@@ -1653,8 +1670,11 @@ def model_down_hint(cfg) -> str:
     )
 
 
-def make_client() -> AsyncOpenAI:
+def make_client():
+    """An AsyncOpenAI for HTTP providers, or the CLI-agent shim for subscription ones."""
     cfg = MODELS[active_model_name()]
+    if cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        return cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
     return AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
 
 
