@@ -2,6 +2,7 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")  # so emoji don't crash the Windows console
 
+import ast
 import asyncio
 import json
 import os
@@ -349,6 +350,24 @@ def open_in_editor(path: str, run: bool = False) -> str:
     return "asked the editor to open %s" % path
 
 
+def _loads_lenient(text):
+    """Parse model-supplied JSON, also accepting Python-style literals.
+
+    Models very often emit single quotes, True/False/None and trailing commas.
+    json.loads rejects those; Python's literal_eval accepts them.
+    """
+    if not isinstance(text, str):
+        return text
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        pass
+    try:
+        return ast.literal_eval(text)
+    except (ValueError, SyntaxError, TypeError):
+        return None
+
+
 def build_3d_scene(filename: str, objects: str, camera: bool = True, light: bool = True) -> str:
     """Write a guaranteed-valid Godot 4 .tscn of primitive meshes, then verify it.
 
@@ -358,10 +377,11 @@ def build_3d_scene(filename: str, objects: str, camera: bool = True, light: bool
     """
     spec = objects
     if isinstance(objects, str):
-        try:
-            spec = json.loads(objects)
-        except json.JSONDecodeError as exc:
-            return "error: objects is not valid JSON: %s" % exc
+        spec = _loads_lenient(objects)
+        if spec is None:
+            return ('error: objects is not a valid JSON array. Pass a JSON string like '
+                    '[{"type":"box","name":"Box","pos":[0,1,0],"size":[1,1,1]}] '
+                    'with double quotes. Supported types: %s.' % ", ".join(_PRIMITIVES))
     if isinstance(spec, dict):
         spec = spec.get("objects", spec)
     if not isinstance(spec, list) or not spec:
@@ -379,7 +399,10 @@ def build_3d_scene(filename: str, objects: str, camera: bool = True, light: bool
             return "error: object %d is not a JSON object" % index
         kind = str(obj.get("type", "box")).lower()
         if kind not in _PRIMITIVES:
-            return "error: unknown primitive '%s' (use %s)" % (kind, ", ".join(_PRIMITIVES))
+            return ("error: unknown primitive '%s'. build_3d_scene can only make %s. "
+                    "It cannot add scripts, collision shapes, spring arms or node hierarchies - "
+                    "for a scene like that, author the .tscn with write_file and prove it with "
+                    "validate_scene." % (kind, ", ".join(_PRIMITIVES)))
         if index == 1:
             root_name = re.sub(r"[^A-Za-z0-9_]", "_", str(obj.get("root") or "Scene3D"))
         mesh_type, prop_fn = _PRIMITIVES[kind]
@@ -419,6 +442,135 @@ def build_3d_scene(filename: str, objects: str, camera: bool = True, light: bool
     check = validate_scene(filename)
     opened = open_in_editor(filename)
     return "wrote %s (%d primitives)%s%s%s%s" % (filename, len(spec), chr(10), check, chr(10), opened)
+
+
+_SCENE_MESH = {"box": "BoxMesh", "sphere": "SphereMesh", "cylinder": "CylinderMesh",
+               "capsule": "CapsuleMesh", "plane": "PlaneMesh", "torus": "TorusMesh"}
+_SCENE_SHAPE = {"box": "BoxShape3D", "sphere": "SphereShape3D", "cylinder": "CylinderShape3D",
+                "capsule": "CapsuleShape3D", "plane": "WorldBoundaryShape3D"}
+
+
+def _gd_value(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        return "Vector3(%s, %s, %s)" % (float(value[0]), float(value[1]), float(value[2]))
+    if value is None:
+        return "null"
+    return '"' + str(value).replace('"', "") + '"'
+
+
+def _vec3(value, default=(0.0, 0.0, 0.0)):
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        return "Vector3(%s, %s, %s)" % (float(value[0]), float(value[1]), float(value[2]))
+    return "Vector3(%s, %s, %s)" % (float(default[0]), float(default[1]), float(default[2]))
+
+
+def build_scene(filename: str, nodes, light: bool = True, camera: bool = False) -> str:
+    """Create AND verify a Godot 4 scene from a NODE TREE - use this for anything
+    richer than primitives: players, cameras, collision shapes, scripts, instancing.
+
+    nodes is a JSON array, one object per node, parents BEFORE children:
+      {"name": "Player", "type": "CharacterBody3D", "parent": ".",
+       "script": "res://scripts/player.gd", "pos": [0, 2, 0],
+       "shape": "capsule", "mesh": "capsule", "props": {"current": true}}
+      {"name": "PlayerInstance", "parent": ".", "instance": "res://scenes/player.tscn"}
+    Keys: name, type, parent, script, instance, pos (or position), rot (degrees),
+    scale, shape, mesh, and props (any extra Godot property -> value).
+    Node types: Node3D, Node, CharacterBody3D, StaticBody3D, RigidBody3D, Area3D,
+    Camera3D, SpringArm3D, MeshInstance3D, CollisionShape3D, DirectionalLight3D,
+    OmniLight3D, Marker3D, RayCast3D, WorldEnvironment, CanvasLayer, Control.
+    shape/mesh values: box, sphere, cylinder, capsule, plane, torus.
+    """
+    NL = chr(10)
+    spec = nodes
+    if isinstance(nodes, str):
+        spec = _loads_lenient(nodes)
+    if isinstance(spec, dict):
+        spec = spec.get("nodes", spec.get("objects", spec))
+    if not isinstance(spec, list) or not spec:
+        return ('error: nodes must be a non-empty JSON array of node specs, e.g. '
+                '[{"name":"Player","type":"CharacterBody3D","parent":"."}]')
+    if not filename.endswith(".tscn"):
+        filename += ".tscn"
+    if not filename.startswith("res://"):
+        filename = "res://" + filename.lstrip("/")
+
+    ext, sub, blocks, counts = [], [], [], {}
+
+    def next_id(kind):
+        counts[kind] = counts.get(kind, 0) + 1
+        return "%s_%d" % (kind, counts[kind])
+
+    for index, node in enumerate(spec):
+        if not isinstance(node, dict):
+            return "error: node %d is not a JSON object" % (index + 1)
+        ntype = str(node.get("type") or "Node3D")
+        name = re.sub(r"[^A-Za-z0-9_]", "_", str(node.get("name") or (ntype + str(index + 1))))
+        head_parent = "" if index == 0 else ' parent="%s"' % str(node.get("parent", "."))
+        if node.get("instance"):
+            rid = next_id("scene")
+            ext.append((rid, "PackedScene", str(node["instance"])))
+            blocks.append('[node name="%s"%s instance=ExtResource("%s")]' % (name, head_parent, rid))
+            continue
+        lines = []
+        if node.get("script"):
+            sid = next_id("script")
+            ext.append((sid, "Script", str(node["script"])))
+            lines.append('script = ExtResource("%s")' % sid)
+        if node.get("shape"):
+            key = str(node["shape"]).lower()
+            if key not in _SCENE_SHAPE:
+                return "error: unknown shape '%s' (use %s)" % (node["shape"], ", ".join(_SCENE_SHAPE))
+            sub_id = next_id("shape")
+            shape_lines = []
+            if "radius" in node:
+                shape_lines.append("radius = %s" % float(node["radius"]))
+            if "height" in node:
+                shape_lines.append("height = %s" % float(node["height"]))
+            if isinstance(node.get("size"), (list, tuple)) and len(node["size"]) == 3:
+                shape_lines.append("size = %s" % _vec3(node["size"], (1.0, 1.0, 1.0)))
+            sub.append((sub_id, _SCENE_SHAPE[key], shape_lines))
+            lines.append('shape = SubResource("%s")' % sub_id)
+        if node.get("mesh"):
+            key = str(node["mesh"]).lower()
+            if key not in _SCENE_MESH:
+                return "error: unknown mesh '%s' (use %s)" % (node["mesh"], ", ".join(_SCENE_MESH))
+            sub_id = next_id("mesh")
+            sub.append((sub_id, _SCENE_MESH[key], []))
+            lines.append('mesh = SubResource("%s")' % sub_id)
+        if node.get("pos") is not None or node.get("position") is not None:
+            lines.append("position = " + _vec3(node.get("pos", node.get("position"))))
+        rot = node.get("rot", node.get("rotation_degrees"))
+        if isinstance(rot, (list, tuple)) and len(rot) == 3:
+            lines.append("rotation_degrees = " + _vec3(rot))
+        if isinstance(node.get("scale"), (list, tuple)) and len(node["scale"]) == 3:
+            lines.append("scale = " + _vec3(node["scale"], (1.0, 1.0, 1.0)))
+        props = node.get("props")
+        if isinstance(props, dict):
+            for key, value in props.items():
+                lines.append("%s = %s" % (key, _gd_value(value)))
+        block = '[node name="%s" type="%s"%s]' % (name, ntype, head_parent)
+        if lines:
+            block += NL + NL.join(lines)
+        blocks.append(block)
+
+    parts = ["[gd_scene load_steps=%d format=3]" % (len(ext) + len(sub) + 1)]
+    for rid, rtype, path in ext:
+        parts.append('[ext_resource type="%s" path="%s" id="%s"]' % (rtype, path, rid))
+    for sid, stype, shape_lines in sub:
+        body = (NL + NL.join(shape_lines)) if shape_lines else ""
+        parts.append('[sub_resource type="%s" id="%s"]%s' % (stype, sid, body))
+    parts.extend(blocks)
+    text = (NL + NL).join(parts) + NL
+
+    written = write_file(filename, text)
+    checked = validate_scene(filename)
+    return "build_scene: %s%s%s" % (written, NL, checked)
 
 
 def validate_scene(filename: str, timeout: int = 90) -> str:
@@ -599,6 +751,7 @@ LOCAL_TOOLS = {
     "run_godot": run_godot,
     "open_godot": open_godot,
     "build_3d_scene": build_3d_scene,
+    "build_scene": build_scene,
     "validate_scene": validate_scene,
     "play_scene": play_scene,
     "check_script": check_script,
@@ -672,6 +825,7 @@ TOOL_SCHEMAS = [
            {"name": {"type": "string"}}, ["name"]),
     schema("sync_ecc", "Refresh the ECC agent/skill library from GitHub. Use when the library is missing or stale.",
            {"force": {"type": "boolean"}}),
+    schema("build_scene", "Create AND verify a Godot scene from a node tree (any node type: players, cameras, collision shapes, scripts, instancing). Prefer this over build_3d_scene for anything richer than primitives, and over hand-writing .tscn.", {"filename": {"type": "string"}, "nodes": {"type": "string"}, "light": {"type": "boolean"}, "camera": {"type": "boolean"}}, ["filename", "nodes"]),
     schema("check_script", "Compile-check a GDScript file with Godot and report parse errors. Use after writing or editing a .gd file.",
            {"filename": {"type": "string"}}, ["filename"]),
     schema("validate_scene", "Load a scene headless and report whether Godot loads it cleanly.",
@@ -692,7 +846,7 @@ MODEL_TOOL_NAMES = {
     "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
-    "build_3d_scene", "validate_scene", "play_scene", "open_in_editor",
+    "build_3d_scene", "build_scene", "validate_scene", "play_scene", "open_in_editor",
     "check_script",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
@@ -703,7 +857,7 @@ MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_
 TOOL_CATEGORIES = {
     "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
               "edit_file", "search_files", "make_dir", "move_file", "delete_file"],
-    "scenes": ["build_3d_scene", "validate_scene", "open_in_editor"],
+    "scenes": ["build_3d_scene", "build_scene", "validate_scene", "open_in_editor"],
     "runtime": ["play_scene", "check_script"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
@@ -1087,7 +1241,48 @@ async def approve(kind: str, detail: str) -> bool:
     return answer.strip().lower() in ("y", "yes")
 
 
+# Models rarely use the exact parameter name from the schema (they say "path" for
+# "filename", "text" for "content", ...). Accept the common synonyms so a reasonable
+# call is not rejected outright.
+_ARG_ALIASES = {
+    "filename": ("path", "file", "filepath", "file_path", "name"),
+    "path": ("filename", "file", "filepath", "file_path"),
+    "content": ("text", "data", "body", "code", "contents"),
+    "name": ("agent", "agent_name", "tool_name"),
+    "command": ("cmd", "shell", "script"),
+    "item": ("step", "task", "todo"),
+    "objects": ("object", "primitives", "meshes"),
+    "fact": ("memory", "note", "text"),
+    "seconds": ("duration", "time", "timeout"),
+    "args": ("arguments", "params", "command"),
+}
+
+_TOOL_REQUIRED = {
+    entry["function"]["name"]: list(entry["function"].get("parameters", {}).get("required", []))
+    for entry in TOOL_SCHEMAS
+}
+
+
+def _normalize_args(name: str, args: dict) -> dict:
+    """Map a model's synonym argument names onto the tool's real parameters."""
+    if not isinstance(args, dict):
+        return args if isinstance(args, dict) else {}
+    required = _TOOL_REQUIRED.get(name)
+    if not required:
+        return args
+    out = dict(args)
+    for canonical in required:
+        if canonical in out:
+            continue
+        for alias in _ARG_ALIASES.get(canonical, ()):
+            if alias in out:
+                out[canonical] = out.pop(alias)
+                break
+    return out
+
+
 async def call_tool(name: str, args: dict) -> str:
+    args = _normalize_args(name, args)
     if name in LOCAL_TOOLS:
         if name in DANGEROUS and not await approve(name, json.dumps(args)[:400]):
             return ("DENIED: the user did not approve this tool. Do NOT request it again. "
@@ -1174,6 +1369,8 @@ class BudgetExhausted(Exception):
 _cancel_event = threading.Event()
 _empty_nudges = 0
 _last_turn_had_tools = False
+_repeat_sig = ""
+_repeat_count = 0
 _task_modified = False
 
 
@@ -1376,11 +1573,30 @@ async def agent_turn(force_tool: bool = False) -> str:
             print("  [tool] %s(%s)" % (call.function.name, json.dumps(args)[:200]))
             result = await call_tool(call.function.name, args)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+            # Break a loop where the model repeats an identical failing call forever.
+            global _repeat_sig, _repeat_count
+            signature = "%s|%s" % (call.function.name, json.dumps(args, sort_keys=True)[:400])
+            if "error" in str(result)[:80].lower():
+                if signature == _repeat_sig:
+                    _repeat_count += 1
+                else:
+                    _repeat_sig, _repeat_count = signature, 1
+                if _repeat_count >= 3:
+                    _repeat_count = 0
+                    messages.append({"role": "user", "content": (
+                        "You have now made this exact call %d times with identical arguments and it "
+                        "keeps failing. Do NOT repeat it. Read the error text, then change approach: "
+                        "use a different tool or different arguments, or do something simpler. If the "
+                        "tool cannot do what you want, use write_file to author the file instead."
+                    ) % 3})
+            else:
+                _repeat_sig, _repeat_count = "", 0
 
 
 async def run_agent(user_message: str) -> str:
-    global _empty_nudges
+    global _empty_nudges, _repeat_sig, _repeat_count
     _empty_nudges = 0
+    _repeat_sig, _repeat_count = "", 0
     messages.append({"role": "user", "content": user_message})
     try:
         answer = await agent_turn()
@@ -1403,8 +1619,9 @@ def _goal_needs_files(goal: str) -> bool:
 
 
 async def pursue_goal(goal: str) -> str:
-    global _empty_nudges, _task_modified
+    global _empty_nudges, _task_modified, _repeat_sig, _repeat_count
     _empty_nudges = 0
+    _repeat_sig, _repeat_count = "", 0
     _task_modified = False
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)

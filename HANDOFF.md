@@ -87,6 +87,35 @@ Every run below drove the same task through the real `/task` path.
   - `qwen3.5:9b` - replies "DONE" without calling any tool.
   - Both were re-tested after the recovery fix and still fail. Use `qwen3:8b`.
 
+## What is still missing (found by testing, 2026-10-11)
+
+Driving a real "build a third-person shooter template" task exposed the two things that
+stop Loki from being a useful game-dev product yet. Both are TOOL problems, not model problems:
+
+1. **No Godot API reference.** The agent invents APIs that do not exist - e.g. it wrote
+   `InputMap.map_action(...)` (real Godot 4 is `InputMap.add_action(name)` then
+   `InputMap.action_add_event(name, event)`). It then loops editing the same line because it
+   cannot know the correct call. **Needed: a docs/reference lookup tool** (search Godot
+   class docs and return the real signature) so the agent checks instead of guessing.
+2. **No scene-graph builder** - FIXED, see `build_scene` below.
+
+### build_scene (new tool)
+`build_scene(filename, nodes, light, camera)` writes AND verifies a Godot 4 `.tscn` from a
+node tree: any node type, attached scripts, collision shapes, primitive meshes, positions,
+and `instance` for instancing another scene. Verified: it generated a valid player scene
+(CharacterBody3D + CollisionShape3D + MeshInstance3D + SpringArm3D + Camera3D + script) and
+a main scene that instances it - both reported "valid - Godot loaded it cleanly".
+`build_3d_scene` stays for quick primitive-only scenes.
+
+### Other harness fixes from the same testing pass
+- **Argument aliases**: models say `path` when the schema says `filename`; calls were rejected
+  outright ("unexpected keyword argument 'path'"). Synonyms are now mapped before dispatch.
+- **Lenient JSON**: models emit Python literals (`[{'type':'box'}]`). `json.loads` rejected
+  them; `ast.literal_eval` fallback accepts single quotes / trailing commas.
+- **Repeat breaker**: after 3 identical failing calls the agent is told to change approach, so
+  it stops thrashing on a call that cannot succeed.
+- **Retry/backoff** on 429/5xx/timeout (already documented above).
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
