@@ -813,6 +813,110 @@ def sync_ecc(force: bool = False) -> str:
     return "synced %s; %d agents, %d skills" % (report, state["agents"], state["skills"])
 
 
+_CAPTURE_BOOTSTRAP = """extends SceneTree
+
+var _frames := 20
+var _target := ""
+
+func _initialize() -> void:
+    var args := OS.get_cmdline_user_args()
+    if args.size() > 0:
+        _target = args[0]
+    if args.size() > 1:
+        _frames = int(args[1])
+    if _target.is_empty():
+        print("LOKI_CAPTURE_ERROR: no scene given")
+        quit(1)
+        return
+    var packed: PackedScene = load(_target)
+    if packed == null:
+        print("LOKI_CAPTURE_ERROR: cannot load " + _target)
+        quit(1)
+        return
+    root.add_child(packed.instantiate())
+
+func _process(_delta: float) -> bool:
+    if _frames > 0:
+        _frames -= 1
+        return false
+    var image: Image = root.get_texture().get_image()
+    image.save_png("user://loki_capture.png")
+    print("LOKI_CAPTURE_OK: " + ProjectSettings.globalize_path("user://loki_capture.png"))
+    quit(0)
+    return true
+"""
+
+
+def capture_scene(filename: str, frames: int = 20, timeout: int = 120) -> str:
+    """Run a scene in a REAL window and save a PNG of the running frame.
+
+    The agent is otherwise blind - it can build a scene but never see it. Pair
+    this with view_image so it can look at its own work and fix what it sees.
+    """
+    project = GAME_PROJECT or str(WORKSPACE)
+    bootstrap = Path(project) / "loki_capture_tmp.gd"
+    scene = filename if filename.startswith("res://") else "res://" + filename.lstrip("/")
+    try:
+        bootstrap.write_text(_CAPTURE_BOOTSTRAP, encoding="utf-8")
+    except OSError as exc:
+        return "error: cannot stage the capture script in %s: %s" % (project, exc)
+    try:
+        proc = subprocess.run(
+            [GODOT_EXE, "--path", project, "--resolution", "1152x648",
+             "--script", "res://loki_capture_tmp.gd", "--", scene, str(int(frames))],
+            capture_output=True, text=True, timeout=timeout)
+        out = (proc.stdout or "") + (proc.stderr or "")
+    except subprocess.TimeoutExpired:
+        return "error: capture timed out after %ds - the scene probably never finishes loading" % timeout
+    except Exception as exc:
+        return "error: %s" % exc
+    finally:
+        try:
+            bootstrap.unlink()
+        except OSError:
+            pass
+    for line in out.splitlines():
+        if line.startswith("LOKI_CAPTURE_OK: "):
+            path = line.split(": ", 1)[1].strip()
+            extra = ""
+            try:
+                extra = " (%d bytes)" % os.path.getsize(path)
+            except OSError:
+                pass
+            return "captured %s -> %s%s. Inspect it with view_image." % (scene, path, extra)
+    problems = [l.strip() for l in out.splitlines() if "ERROR" in l][:8]
+    return "capture failed for " + scene + chr(10) + (chr(10).join(problems) or out[-400:])
+
+
+async def view_image(filename: str, question: str = "") -> str:
+    """Send a PNG to the current model and get a description or critique back."""
+    import base64
+    path = Path(filename)
+    if not path.is_absolute():
+        path = (Path(GAME_PROJECT or str(WORKSPACE)) / filename.replace("res://", "")).resolve()
+    if not path.is_file():
+        return "error: no image at %s" % path
+    size = path.stat().st_size
+    if size > 6_000_000:
+        return "error: image is %d bytes; too large to send" % size
+    prompt = question or ("Describe exactly what is visible in this Godot game screenshot. "
+                          "Then list anything that looks wrong: black or empty viewport, missing "
+                          "meshes, the camera looking at nothing, objects floating or clipping.")
+    payload = base64.b64encode(path.read_bytes()).decode()
+    client = make_client()
+    try:
+        response = await client.chat.completions.create(
+            model=MODELS[active_model_name()].model,
+            max_tokens=int(os.getenv("LOKI_MAX_TOKENS", "8192")),
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + payload}}]}])
+    except Exception as exc:
+        return "error: vision request failed (%s). The current provider may not accept images." % exc
+    text = str(response.choices[0].message.content or "").strip()
+    return text or "(the model returned no description)"
+
+
 LOCAL_TOOLS = {
     "list_files": list_files,
     "list_tree": list_tree,
@@ -832,6 +936,8 @@ LOCAL_TOOLS = {
     "validate_scene": validate_scene,
     "play_scene": play_scene,
     "check_script": check_script,
+    "capture_scene": capture_scene,
+    "view_image": view_image,
     "godot_api": godot_tools.godot_api,
     "godot_search": godot_tools.godot_search,
     "read_scene": godot_tools.read_scene,
@@ -900,6 +1006,10 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "objects": {"type": "string"}, "camera": {"type": "boolean"}, "light": {"type": "boolean"}}, ["filename", "objects"]),
     schema("play_scene", "Run a game scene headless for a few seconds to test runtime behaviour (controller, shooting, physics) and report errors and printed output. Use this to verify work actually functions.",
            {"filename": {"type": "string"}, "seconds": {"type": "integer"}}, ["filename"]),
+    schema("capture_scene", "Run a scene in a real window and save a screenshot of the running frame. Use this to SEE what your scene actually looks like, then view_image to inspect the picture.",
+           {"filename": {"type": "string"}, "frames": {"type": "integer"}}, ["filename"]),
+    schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
+           {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.)."),
     schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
            {"name": {"type": "string"}}, ["name"]),
@@ -938,7 +1048,7 @@ MODEL_TOOL_NAMES = {
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "open_in_editor",
-    "check_script",
+    "check_script", "capture_scene", "view_image",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -951,7 +1061,7 @@ TOOL_CATEGORIES = {
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload"],
-    "runtime": ["play_scene", "check_script"],
+    "runtime": ["play_scene", "check_script", "capture_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
@@ -967,6 +1077,7 @@ CATEGORY_LABELS = {
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",
     "system": "System (shell commands, launch Godot) - dangerous",
+    "runtime": "Runtime checks (run scene, compile script, screenshot + look)",
 }
 SETTINGS_FILE = ROOT / "loki_settings.json"
 

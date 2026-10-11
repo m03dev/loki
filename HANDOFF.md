@@ -177,6 +177,28 @@ Caveat: prompts and file contents go to a third-party service.
 Free tiers that need a (free) key, best first for Loki's ~8k-token agent prompt:
 Gemini (1M TPM) > Cerebras > Groq (7k TPM - too small, will 413) > OpenRouter > GitHub Models.
 
+## Eyes: the visual feedback loop (29 tools)
+
+Loki could build a scene but never see it. Two tools close that loop:
+
+- **`capture_scene`** - runs a scene in a real window (`--resolution 1152x648`), waits N frames,
+  then saves the rendered frame. Usually `user://loki_capture.png`. Verified: it produces a
+  genuine 1152x648 render of the scene, not a black frame.
+- **`view_image`** - sends a PNG to the current model and returns a description plus a list of
+  visual problems (empty/black viewport, missing meshes, camera pointing at nothing, clipping).
+  Needs a vision-capable provider; gemini is the natural one (its free tier is only
+  20 requests/day for gemini-3.8-flash, so it runs out fast).
+
+Loop: build_scene -> capture_scene -> view_image -> fix what the model reports.
+
+### Ideas researched but not built yet
+- **godot-mcp servers**: hybridindie/godot-mcp (180 tools), TomasLucasUTN/godot-mcp-bridge
+  (231 tools incl. render_scene_preview + "what the user just did"), Demiurgic-io/godot-mcp
+  (149 tools). Loki's harness already speaks MCP via mcp_servers.json, so wiring one in would
+  add a huge surface at once (input driving, replays, profiling, native undo).
+- **Sprite generation**: sprite-ai.art has an HTTP API and an MCP server for text->sprite and
+  sprite->animation, but it is paid ($8/mo, 100 sprites).
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
