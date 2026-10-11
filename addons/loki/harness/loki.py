@@ -1704,8 +1704,8 @@ async def refresh_mcp_tools(server: str = "") -> list:
         for tool in tools:
             if tool.name in MODEL_TOOL_NAMES:
                 continue
-            if len(MODEL_TOOL_SCHEMAS) >= DYNAMIC_TOOLS_MAX:
-                return added
+            if len(MODEL_TOOL_SCHEMAS) + len(added) >= DYNAMIC_TOOLS_MAX:
+                break
             mcp_sessions[tool.name] = session
             MCP_SERVER_OF[tool.name] = server_name
             TOOL_SCHEMAS.append(schema(tool.name, (tool.description or "")[:500],
@@ -1745,7 +1745,10 @@ async def call_tool(name: str, args: dict) -> str:
         if "toolset" in name:
             # Enabling a toolset changes the server's tool list; without this the
             # model would have to guess at tools it can never see.
-            newly = await refresh_mcp_tools(MCP_SERVER_OF.get(name, ""))
+            try:
+                newly = await refresh_mcp_tools(MCP_SERVER_OF.get(name, ""))
+            except Exception:
+                newly = []
             if newly:
                 text += ("\n\n%d new tool(s) are now available and can be called directly: %s"
                          % (len(newly), ", ".join(sorted(newly)[:40])))
@@ -1957,6 +1960,13 @@ def _recover_text_tool_calls(content: str) -> list:
 async def agent_turn(force_tool: bool = False) -> str:
     cfg = MODELS[active_model_name()]
     client = make_client()
+    # Refresh ONCE per request, never between turns: a tool list that changes mid
+    # conversation invalidates prompt caching and can push the request past a
+    # provider's limit. Guarded - this is an optimisation, not a requirement.
+    try:
+        await refresh_mcp_tools()
+    except Exception:
+        pass
     started = time.monotonic()
     turns = 0
     while True:
@@ -1968,13 +1978,6 @@ async def agent_turn(force_tool: bool = False) -> str:
             raise BudgetExhausted("hit the %d-turn budget" % MAX_TURNS_PER_REQUEST)
         turns += 1
         _trim_context()
-        if mcp_sessions:
-            # A Godot MCP server grows its tool list at runtime - the editor bridge
-            # connecting and any toolset the model enables both add tools - so re-read
-            # it each turn. A startup-only snapshot silently hides real capability.
-            if await refresh_mcp_tools():
-                _progress("thinking", "New tools became available (%d offered)."
-                          % len(MODEL_TOOL_SCHEMAS))
         _progress("thinking", "Turn %d: asking the model..." % turns)
         # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so
         # give them headroom or the tool call gets truncated away.
