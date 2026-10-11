@@ -8,8 +8,11 @@ their own model API keys. Stdlib only.
 ```bat
 cd cloud
 copy .env.example .env      & rem then fill in the two Google values
-python auth_server.py
+run_cloud.bat
 ```
+
+The Loki dock starts this service automatically the first time you click
+*Sign in with Google*, so running it by hand is optional.
 
 ## Google setup (once)
 
@@ -37,9 +40,14 @@ The dock opens `/auth/google/start` with `redirect_uri=http://127.0.0.1:<port>/c
 receives `?code=...`, exchanges it at `/auth/session`, and stores the returned
 token. It then sends that token as `Authorization: Bearer` on hosted calls.
 
+## Hosted agent proxy
+
+The auth service also fronts the model: `POST /v1/chat/completions` and
+`GET /v1/models` require a Bearer session token and forward to
+`UPSTREAM_BASE` using the server-held `UPSTREAM_API_KEY`. The bridge
+registers this as the `cloud` model, so a signed-in user needs no key.
+
 ## Not done yet (needs a real deployment)
 
 - Sessions are in memory; use a database for production.
-- No hosted agent endpoint yet — this only covers **auth**. The agent proxy
-  (which holds the model keys) is the next piece.
 - HTTPS + a real domain before shipping.

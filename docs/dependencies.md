@@ -13,6 +13,8 @@ Loki is two halves that talk over a loopback socket:
 - **Ollama** — optional, only if you run a local model.
 - **Node 22 + npm** — optional, only for the OmniRoute gateway.
 - **`git`** — used once by `setup.bat` to fetch agent skills.
+- **Cloud sign-in** — no extra deps. `cloud/auth_server.py` is stdlib-only;
+  the bridge starts it for you, or run `cloud/run_cloud.bat`.
 
 `setup.bat` creates `harness/.venv`, installs the Python deps, and clones the
 optional skills into `harness/vendor/` (never committed — they are large).

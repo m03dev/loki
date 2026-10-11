@@ -28,3 +28,8 @@ cloud/sessions.json
 # Harness runtime state
 harness/loki_settings.json
 .git-rewrite/
+
+# Harness user data (memory + plan written at runtime)
+harness/memory.md
+harness/plan.md
+harness/workspace/

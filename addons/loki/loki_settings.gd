@@ -5,6 +5,7 @@ signal profile_saved
 signal category_toggled(category: String, enabled: bool)
 signal sign_in_requested
 signal sign_out_requested
+signal memory_save_requested(text: String)
 
 const PROFILE_PATH: String = "user://loki_profile.cfg"
 
@@ -16,6 +17,7 @@ var _category_box: VBoxContainer
 var _account_label: Label
 var _sign_in_button: Button
 var _sign_out_button: Button
+var _memory_edit: TextEdit
 
 
 func _ready() -> void:
@@ -29,7 +31,7 @@ func _ready() -> void:
 
 func _build() -> void:
 	var root: VBoxContainer = VBoxContainer.new()
-	root.custom_minimum_size = Vector2(460.0, 360.0)
+	root.custom_minimum_size = Vector2(580.0, 470.0)
 	add_child(root)
 
 	var heading: Label = Label.new()
@@ -38,13 +40,14 @@ func _build() -> void:
 	root.add_child(heading)
 
 	_tabs = TabContainer.new()
-	_tabs.custom_minimum_size = Vector2(440.0, 300.0)
+	_tabs.custom_minimum_size = Vector2(560.0, 410.0)
 	_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(_tabs)
 
 	_build_agent_tab()
 	_build_account_tab()
 	_build_profile_tab()
+	_build_memory_tab()
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -76,7 +79,7 @@ func _build_account_tab() -> void:
 	_tabs.add_child(page)
 
 	var hint: Label = Label.new()
-	hint.text = "Sign in with Google to run Loki on the cloud - no API keys needed."
+	hint.text = "Sign in with Google to use Loki Cloud - no API keys needed. Loki starts the cloud service for you."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	page.add_child(hint)
 
@@ -122,6 +125,43 @@ func _build_profile_tab() -> void:
 	save.text = "Save profile"
 	save.pressed.connect(_save_profile)
 	page.add_child(save)
+
+func _build_memory_tab() -> void:
+	var page: VBoxContainer = VBoxContainer.new()
+	page.name = "Memory"
+	_tabs.add_child(page)
+
+	var hint: Label = Label.new()
+	hint.text = "Lasting facts Loki remembers about you and your project - one bullet per line."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(hint)
+
+	_memory_edit = TextEdit.new()
+	_memory_edit.custom_minimum_size = Vector2(540.0, 230.0)
+	_memory_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_memory_edit.placeholder_text = "- prefers concise answers
+- building a 2D platformer in Godot 4"
+	_memory_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	page.add_child(_memory_edit)
+
+	var save: Button = Button.new()
+	save.text = "Save memory"
+	save.pressed.connect(func() -> void: memory_save_requested.emit(_memory_edit.text))
+	page.add_child(save)
+
+
+func set_memory(text: String) -> void:
+	if _memory_edit != null:
+		_memory_edit.text = text
+
+
+func open_memory_tab() -> void:
+	if _tabs == null:
+		return
+	for i in _tabs.get_tab_count():
+		if _tabs.get_tab_title(i) == "Memory":
+			_tabs.current_tab = i
+			return
 
 
 func set_categories(state: Dictionary) -> void:

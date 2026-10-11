@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -126,6 +127,7 @@ def load_memory() -> str:
 def save_memory(fact: str) -> str:
     with MEMORY_FILE.open("a", encoding="utf-8") as f:
         f.write(f"- {fact}\n")
+    refresh_system_prompt()  # take effect this session, not next restart
     return f"saved: {fact}"
 
 
@@ -523,7 +525,9 @@ def open_godot(project_path: str = "") -> str:
     return f"launched the Godot editor{where}"
 
 
-ECC_AGENTS_DIR = ROOT / "vendor" / "ECC" / "agents"
+ECC_DIR = ROOT / "vendor" / "ECC"
+ECC_AGENTS_DIR = ECC_DIR / "agents"
+ECC_SKILLS_DIR = ECC_DIR / "skills"
 
 
 def list_ecc_agents() -> str:
@@ -540,6 +544,35 @@ def load_ecc_agent(name: str) -> str:
     if not target.is_file():
         return "no such ECC agent: %s" % name
     return target.read_text(encoding="utf-8")[:12000]
+
+
+def list_ecc_skills() -> str:
+    """List the specialised skill packs available from the vendored ECC repo."""
+    if not ECC_SKILLS_DIR.is_dir():
+        return "ECC skills not installed (vendor/ECC/skills missing)."
+    names = sorted(p.parent.name for p in ECC_SKILLS_DIR.glob("*/SKILL.md"))
+    return "ECC skills (%d): %s" % (len(names), ", ".join(names))
+
+
+def load_ecc_skill(name: str) -> str:
+    """Return a skill's guidance so you can follow it for the task."""
+    target = ECC_SKILLS_DIR / os.path.basename(str(name).strip()) / "SKILL.md"
+    if not target.is_file():
+        return "no such ECC skill: %s" % name
+    return target.read_text(encoding="utf-8")[:12000]
+
+
+def sync_ecc(force: bool = False) -> str:
+    """Refresh the ECC agent/skill library from GitHub."""
+    try:
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        import ecc_sync
+        report = ecc_sync.sync(force=bool(force))
+        state = ecc_sync.installed()
+    except Exception as e:
+        return "error: could not sync ECC: %s" % e
+    return "synced %s; %d agents, %d skills" % (report, state["agents"], state["skills"])
 
 
 LOCAL_TOOLS = {
@@ -562,6 +595,9 @@ LOCAL_TOOLS = {
     "check_script": check_script,
     "list_ecc_agents": list_ecc_agents,
     "load_ecc_agent": load_ecc_agent,
+    "list_ecc_skills": list_ecc_skills,
+    "load_ecc_skill": load_ecc_skill,
+    "sync_ecc": sync_ecc,
     "open_in_editor": open_in_editor,
     "todo_add": todo_add,
     "todo_list": todo_list,
@@ -622,6 +658,11 @@ TOOL_SCHEMAS = [
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.)."),
     schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
            {"name": {"type": "string"}}, ["name"]),
+    schema("list_ecc_skills", "List the specialised skill packs available (TDD, security, frontend, data, ML, operations, ...)."),
+    schema("load_ecc_skill", "Load a skill's guidance and follow it for the task.",
+           {"name": {"type": "string"}}, ["name"]),
+    schema("sync_ecc", "Refresh the ECC agent/skill library from GitHub. Use when the library is missing or stale.",
+           {"force": {"type": "boolean"}}),
     schema("check_script", "Compile-check a GDScript file with Godot and report parse errors. Use after writing or editing a .gd file.",
            {"filename": {"type": "string"}}, ["filename"]),
     schema("validate_scene", "Load a scene headless and report whether Godot loads it cleanly.",
@@ -639,7 +680,7 @@ TOOL_SCHEMAS = [
 # excluded: they are dangerous (approval prompts) and a small model misuses them
 # (e.g. unix "ls -R" on Windows), which stalls the whole task.
 MODEL_TOOL_NAMES = {
-    "list_ecc_agents", "load_ecc_agent",
+    "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "validate_scene", "play_scene", "open_in_editor",
@@ -657,7 +698,7 @@ TOOL_CATEGORIES = {
     "runtime": ["play_scene", "check_script"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
-    "skills": ["list_ecc_agents", "load_ecc_agent"],
+    "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
 CATEGORY_LABELS = {
@@ -666,7 +707,7 @@ CATEGORY_LABELS = {
     "runtime": "Runtime checks (run scene, compile script)",
     "planning": "Planning (todo list)",
     "memory": "Memory (save facts)",
-    "skills": "Skills (ECC agents)",
+    "skills": "Skills (ECC agents and skills)",
     "system": "System (shell commands, launch Godot) - dangerous",
 }
 SETTINGS_FILE = ROOT / "loki_settings.json"
@@ -757,28 +798,12 @@ _PONYTAIL = _read_vendor("ponytail", "AGENTS.md").replace("{", "{{").replace("}"
 if _PONYTAIL:
     SYSTEM_PROMPT += chr(10) * 2 + "# Coding standard - Ponytail (write the least code that works)" + chr(10) + _PONYTAIL
 
-ECC_AGENTS_DIR = ROOT / "vendor" / "ECC" / "agents"
-
-
-def list_ecc_agents() -> str:
-    """List the specialised agents available from the vendored ECC repo."""
-    if not ECC_AGENTS_DIR.is_dir():
-        return "ECC agents not installed (vendor/ECC/agents missing)."
-    names = sorted(p.stem for p in ECC_AGENTS_DIR.glob("*.md"))
-    return "ECC agents (%d): %s" % (len(names), ", ".join(names))
-
-
-def load_ecc_agent(name: str) -> str:
-    """Return a specialised agent's instructions so you can follow them for the task."""
-    target = ECC_AGENTS_DIR / (os.path.basename(str(name).strip()) + ".md")
-    if not target.is_file():
-        return "no such ECC agent: %s" % name
-    return target.read_text(encoding="utf-8")[:12000]
 HISTORY_FILE = WORKSPACE / ".godot" / "loki_history.json"
+CONVERSATIONS_FILE = WORKSPACE / ".godot" / "loki_conversations.json"
 
 
 def _as_dict(message) -> dict:
-    """Make a chat message JSON-safe (OpenAI objects or plain dicts)."""
+    # JSON-safe chat message (OpenAI objects or plain dicts)
     if isinstance(message, dict):
         return message
     for attr in ("model_dump", "to_dict", "dict"):
@@ -791,35 +816,8 @@ def _as_dict(message) -> dict:
     return {"role": getattr(message, "role", "assistant"), "content": getattr(message, "content", "")}
 
 
-def save_history() -> None:
-    """Persist the conversation so it survives a bridge restart."""
-    try:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        safe = [_as_dict(item) for item in messages]
-        HISTORY_FILE.write_text(json.dumps(safe, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def load_history() -> None:
-    """Restore the previous conversation, keeping the current system prompt."""
-    try:
-        if not HISTORY_FILE.is_file():
-            return
-        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, list) and data:
-            messages[:] = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())}]
-            messages.extend(_sanitize_history(data))
-    except (OSError, json.JSONDecodeError):
-        pass
-
-
 def _sanitize_history(items: list) -> list:
-    """Keep only plain conversational turns.
-
-    Drops tool scaffolding and finished-task text (GOAL:/DONE:/BLOCKED:) so a new
-    request cannot be hijacked into redoing a previous task from replayed context.
-    """
+    # keep only plain conversational turns
     clean = []
     for item in items:
         if not isinstance(item, dict):
@@ -834,11 +832,215 @@ def _sanitize_history(items: list) -> list:
         if head.startswith("GOAL:") or head.startswith("DONE:") or head.startswith("BLOCKED:"):
             continue
         clean.append({"role": role, "content": content})
-    return clean[-20:]
+    return clean[-40:]
 
 
-messages = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())}]
-load_history()
+PROFILE: dict = {"name": "", "notes": ""}
+
+
+def composed_memory() -> str:
+    text = load_memory()
+    lines = []
+    if PROFILE.get("name"):
+        lines.append("Preferred name: " + PROFILE["name"])
+    if PROFILE.get("notes"):
+        lines.append("User-provided profile/preferences: " + PROFILE["notes"])
+    if lines:
+        text += chr(10) * 2 + "Editable user profile:" + chr(10) + chr(10).join(lines)
+    return text
+
+
+def refresh_system_prompt() -> None:
+    if messages:
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}
+
+
+def set_profile(name: str, notes: str) -> None:
+    PROFILE["name"] = (name or "").strip()[:100]
+    PROFILE["notes"] = (notes or "").strip()[:4000]
+    refresh_system_prompt()
+    save_conversations()
+
+
+def get_memory() -> str:
+    return MEMORY_FILE.read_text(encoding="utf-8") if MEMORY_FILE.is_file() else ""
+
+
+def set_memory(text: str) -> str:
+    try:
+        MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MEMORY_FILE.write_text((text or "").strip() + chr(10), encoding="utf-8")
+        refresh_system_prompt()
+    except OSError as exc:
+        return "could not save memory: %s" % exc
+    return "memory saved"
+
+
+CONVERSATIONS: dict = {}
+active_conversation: str = ""
+
+
+def _new_conversation(title: str = "") -> dict:
+    return {"id": uuid.uuid4().hex[:12],
+            "title": (title or "New chat").strip()[:60] or "New chat",
+            "created": time.time(), "updated": time.time(), "messages": []}
+
+
+def _title_from_text(text: str) -> str:
+    rows = (text or "").strip().splitlines()
+    head = rows[0].strip() if rows else ""
+    if len(head) > 48:
+        head = head[:48] + chr(8230)
+    return head or "New chat"
+
+
+def list_conversations() -> list:
+    ordered = sorted(CONVERSATIONS.values(), key=lambda c: c.get("updated", 0), reverse=True)
+    return [{"id": c["id"], "title": c["title"], "updated": c["updated"], "count": len(c["messages"])}
+            for c in ordered]
+
+
+def active_conversation_id() -> str:
+    return active_conversation
+
+
+def conversation_messages(cid: str) -> list:
+    convo = CONVERSATIONS.get(cid)
+    if convo is None:
+        return []
+    return [{"role": m["role"], "content": m["content"]} for m in convo["messages"]
+            if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)]
+
+
+def save_conversations() -> None:
+    try:
+        CONVERSATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"active": active_conversation, "profile": PROFILE,
+                   "conversations": list(CONVERSATIONS.values())}
+        CONVERSATIONS_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def save_history() -> None:
+    convo = CONVERSATIONS.get(active_conversation)
+    if convo is None:
+        return
+    turns = _sanitize_history(messages)
+    convo["messages"] = turns
+    convo["updated"] = time.time()
+    if convo["title"] in ("", "New chat"):
+        first_user = next((t["content"] for t in turns if t["role"] == "user"), "")
+        convo["title"] = _title_from_text(first_user)
+    save_conversations()
+
+
+def _activate(cid: str) -> None:
+    global active_conversation
+    active_conversation = cid
+    messages[:] = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}]
+    for item in CONVERSATIONS.get(cid, {}).get("messages", []):
+        if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
+            messages.append({"role": item["role"], "content": item["content"]})
+
+
+def new_conversation(title: str = "") -> str:
+    save_history()
+    convo = _new_conversation(title)
+    CONVERSATIONS[convo["id"]] = convo
+    _activate(convo["id"])
+    save_conversations()
+    return convo["id"]
+
+
+def switch_conversation(cid: str) -> bool:
+    if cid not in CONVERSATIONS:
+        return False
+    if cid != active_conversation:
+        save_history()
+        _activate(cid)
+        save_conversations()
+    return True
+
+
+def rename_conversation(cid: str, title: str) -> bool:
+    convo = CONVERSATIONS.get(cid)
+    if convo is None:
+        return False
+    convo["title"] = (title or "").strip()[:60] or convo["title"]
+    convo["updated"] = time.time()
+    save_conversations()
+    return True
+
+
+def delete_conversation(cid: str) -> bool:
+    global active_conversation
+    if cid not in CONVERSATIONS:
+        return False
+    was_active = cid == active_conversation
+    del CONVERSATIONS[cid]
+    if not CONVERSATIONS:
+        convo = _new_conversation()
+        CONVERSATIONS[convo["id"]] = convo
+        _activate(convo["id"])
+    elif was_active:
+        newest = max(CONVERSATIONS.values(), key=lambda c: c.get("updated", 0))
+        _activate(newest["id"])
+    save_conversations()
+    return True
+
+
+def load_conversations() -> None:
+    global active_conversation
+    data = {}
+    try:
+        if CONVERSATIONS_FILE.is_file():
+            data = json.loads(CONVERSATIONS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    saved_profile = data.get("profile")
+    if isinstance(saved_profile, dict):
+        PROFILE["name"] = str(saved_profile.get("name", ""))[:100]
+        PROFILE["notes"] = str(saved_profile.get("notes", ""))[:4000]
+    for convo in (data.get("conversations") or []):
+        if isinstance(convo, dict) and convo.get("id"):
+            convo.setdefault("title", "New chat")
+            convo.setdefault("created", time.time())
+            convo.setdefault("updated", convo.get("created", time.time()))
+            convo["messages"] = [m for m in (convo.get("messages") or []) if isinstance(m, dict)][-40:]
+            CONVERSATIONS[convo["id"]] = convo
+    if not CONVERSATIONS:
+        convo = _new_conversation()
+        try:
+            if HISTORY_FILE.is_file():
+                old = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+                turns = _sanitize_history(old) if isinstance(old, list) else []
+                convo["messages"] = turns
+                if turns:
+                    convo["title"] = _title_from_text(
+                        next((t["content"] for t in turns if t["role"] == "user"), ""))
+        except (OSError, json.JSONDecodeError):
+            pass
+        CONVERSATIONS[convo["id"]] = convo
+    wanted = data.get("active", "")
+    if wanted in CONVERSATIONS:
+        active_conversation = wanted
+    else:
+        active_conversation = max(CONVERSATIONS.values(), key=lambda c: c.get("updated", 0))["id"]
+    _activate(active_conversation)
+
+
+def clear_active_conversation() -> None:
+    convo = CONVERSATIONS.get(active_conversation)
+    if convo is not None:
+        convo["messages"] = []
+        convo["updated"] = time.time()
+    refresh_system_prompt()
+    save_conversations()
+
+
+messages = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}]
+load_conversations()
 
 
 # ---------------------------------------------------------------------------

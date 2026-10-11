@@ -7,8 +7,14 @@ a key for.
 
 ## Features
 
-- **Godot-native dock** — chat and task UI beside the Scene dock, with live
-  progress, tool approvals and a Stop button.
+- **Godot-native dock** — a chat beside the Scene dock with **conversation
+  tabs and saved history**, live progress, tool approvals and a Stop button.
+- **Memory + saved chats** — every chat is kept on disk and reopens in a tab;
+  lasting facts live in an editable Memory (Settings → Memory).
+- **ECC agent library** — 71 specialist agents and 311 skills from
+  [affaan-m/ECC](https://github.com/affaan-m/ECC), fetched from GitHub on first
+  run and browsable from the dock ("Agents and skills"); Loki adopts whichever
+  one suits the task.
 - **Real verification** — Loki validates scenes (`validate_scene`), compiles
   scripts (`check_script`) and actually runs scenes (`play_scene`) before it
   claims success.
@@ -60,8 +66,10 @@ tools/           headless checks
 
 ## Signing in with Google
 
-A hosted, zero-install mode ("Sign in with Google") is specified in
-`docs/google-signin.md`.
+Optional hosted mode — run the agent on Loki Cloud with the model key kept
+server-side, so users need no keys of their own. Implemented in `cloud/`;
+see `docs/google-signin.md`. It is entirely optional: Loki works fully
+offline with a local model or your own key.
 
 ## License
 

@@ -1,79 +1,120 @@
 @tool
 extends VBoxContainer
 
+## Loki dock - a Ziva-style chat with conversation tabs, saved history and memory.
+
 const BRIDGE_URL: String = "http://127.0.0.1:8766"
-const BRIDGE_LAUNCHER: String = "res://addons/loki/run_bridge.bat"
-const DEFAULT_MODEL: String = "qwen3.5:9b"
+const BRIDGE_BOOTSTRAP: String = "res://addons/loki/bootstrap.py"
+const BRIDGE_HARNESS: String = "res://harness"
 const SETTINGS_DIALOG_SCRIPT: Script = preload("res://addons/loki/loki_settings.gd")
+const BRIDGE_MAX_LAUNCHES: int = 3
+const BRIDGE_GRACE_POLLS: int = 240
+const BRIDGE_MISS_TOLERANCE: int = 4
 
 var _chat_log: RichTextLabel
 var _input_edit: TextEdit
 var _send_button: Button
+var _stop_button: Button
+var _clear_button: Button
 var _status: Label
+var _elapsed_label: Label
+var _model_picker: OptionButton
+var _menu: MenuButton
+var _tabs: TabBar
+var _add_tab_button: Button
+
 var _chat_http: HTTPRequest
 var _approval_http: HTTPRequest
+var _settings_http: HTTPRequest
+var _auth_http: HTTPRequest
+var _progress_http: HTTPRequest
+var _cancel_http: HTTPRequest
+var _conv_http: HTTPRequest
+var _memory_http: HTTPRequest
+var _ecc_http: HTTPRequest
+
 var _poll_timer: Timer
+var _progress_timer: Timer
+var _auth_timer: Timer
+
 var _permission_dialog: ConfirmationDialog
+var _settings_dialog: ConfirmationDialog
+var _rename_dialog: ConfirmationDialog
+var _rename_edit: LineEdit
+var _ecc_dialog: AcceptDialog
+var _ecc_search: LineEdit
+var _ecc_agents_list: ItemList
+var _ecc_skills_list: ItemList
+
 var _token: String = ""
 var _approval_id: String = ""
 var _busy: bool = false
 var _bridge_ready: bool = false
-var _profile_apply_requested: bool = false
-var _profile_request_pending: bool = false
-var _settings_dialog: ConfirmationDialog
-var _model_picker: OptionButton
-var _models: Array = []
-var _settings_http: HTTPRequest
-var _auth_http: HTTPRequest
-var _auth_timer: Timer
-var _progress_http: HTTPRequest
-var _progress_timer: Timer
+var _task_mode: bool = false
+var _signed_in: bool = false
 var _progress_cursor: int = 0
 var _active_chat_id: String = ""
-var _task_mode: bool = false
-var _relaunch_ticks: int = 0
-var _stop_button: Button
-var _elapsed_label: Label
 var _started_ms: int = 0
-var _cancel_http: HTTPRequest
+var _relaunch_ticks: int = 0
+var _bridge_misses: int = 0
+var _bridge_grace: int = 0
+var _bridge_launches: int = 0
+var _launch_warned: bool = false
+var _profile_apply_requested: bool = false
+var _profile_request_pending: bool = false
 var _last_op_id: int = 0
+var _models: Array = []
+var _current_model: String = ""
+var _conversations: Array = []
+var _ecc_agents: Array = []
+var _ecc_skills: Array = []
+var _active_conversation: String = ""
+var _shown_conversation: String = ""
+var _tab_suppressed: bool = false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
+	_build_ecc_dialog()
 	_chat_http = HTTPRequest.new()
 	_chat_http.timeout = 0.0
 	_chat_http.request_completed.connect(_on_chat_response)
 	add_child(_chat_http)
-	_approval_http = HTTPRequest.new()
-	_approval_http.timeout = 3.0
-	_approval_http.request_completed.connect(_on_approval_poll)
-	add_child(_approval_http)
+	_approval_http = _new_http(3.0, _on_approval_poll)
+	_settings_http = _new_http(10.0, _on_settings_response)
+	_auth_http = _new_http(12.0, _on_auth_response)
+	_progress_http = _new_http(3.0, _on_progress_response)
+	_cancel_http = _new_http(5.0, _on_cancel_response)
+	_conv_http = _new_http(12.0, _on_conv_response)
+	_memory_http = _new_http(10.0, _on_memory_response)
+	_ecc_http = _new_http(30.0, _on_ecc_response)
 	_poll_timer = Timer.new()
 	_poll_timer.wait_time = 0.5
 	_poll_timer.timeout.connect(_poll_approval)
 	_poll_timer.timeout.connect(_poll_editor_ops)
 	add_child(_poll_timer)
-	_profile_apply_requested = FileAccess.file_exists("user://loki_profile.cfg")
-	_progress_http = HTTPRequest.new()
-	_progress_http.timeout = 3.0
-	_progress_http.request_completed.connect(_on_progress_response)
-	add_child(_progress_http)
 	_progress_timer = Timer.new()
 	_progress_timer.wait_time = 0.4
 	_progress_timer.timeout.connect(_poll_progress)
 	add_child(_progress_timer)
-	_cancel_http = HTTPRequest.new()
-	_cancel_http.timeout = 5.0
-	_cancel_http.request_completed.connect(_on_cancel_response)
-	add_child(_cancel_http)
+	_auth_timer = Timer.new()
+	_auth_timer.wait_time = 2.0
+	_auth_timer.timeout.connect(_refresh_account)
+	add_child(_auth_timer)
+	_profile_apply_requested = FileAccess.file_exists("user://loki_profile.cfg")
 	_start_bridge()
 
+func _new_http(timeout: float, handler: Callable) -> HTTPRequest:
+	var node: HTTPRequest = HTTPRequest.new()
+	node.timeout = timeout
+	node.request_completed.connect(handler)
+	add_child(node)
+	return node
+
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(350.0, 300.0)
-	var sidebar_content: VBoxContainer = self
+	custom_minimum_size = Vector2(360.0, 320.0)
 	var header: HBoxContainer = HBoxContainer.new()
-	sidebar_content.add_child(header)
+	add_child(header)
 	var heading: Label = Label.new()
 	heading.text = "Loki"
 	heading.add_theme_font_size_override("font_size", 15)
@@ -81,68 +122,80 @@ func _build_ui() -> void:
 	header.add_child(heading)
 	_model_picker = OptionButton.new()
 	_model_picker.tooltip_text = "Model / provider"
+	_model_picker.fit_to_longest_item = false
+	_model_picker.clip_text = true
+	_model_picker.custom_minimum_size = Vector2(140.0, 0.0)
 	_model_picker.item_selected.connect(_on_model_selected)
 	header.add_child(_model_picker)
-	var menu: MenuButton = MenuButton.new()
-	menu.text = "⋮"
-	menu.flat = true
-	menu.tooltip_text = "More"
-	var popup: PopupMenu = menu.get_popup()
-	popup.add_item("Settings", 1)
-	popup.add_item("New chat", 2)
-	popup.add_item("Copy chat as Markdown", 3)
+	_menu = MenuButton.new()
+	_menu.text = "⋮"
+	_menu.flat = true
+	_menu.tooltip_text = "More"
+	var popup: PopupMenu = _menu.get_popup()
+	popup.add_icon_item(_editor_icon("Tools"), "Settings", 1)
+	popup.add_icon_item(_editor_icon("Add"), "New chat", 2)
+	popup.add_icon_item(_editor_icon("Edit"), "Rename chat", 4)
+	popup.add_icon_item(_editor_icon("History"), "Memory...", 5)
+	popup.add_icon_item(_editor_icon("Node"), "Agents and skills (ECC)", 6)
+	popup.add_icon_item(_editor_icon("Reload"), "Sync ECC library from GitHub", 7)
+	popup.add_icon_item(_editor_icon("Copy"), "Copy chat as Markdown", 3)
 	popup.add_separator()
-	popup.add_item("Inspect current scene", 10)
-	popup.add_item("Validate project", 11)
-	popup.add_item("Run task (no limit)", 12)
+	popup.add_icon_item(_editor_icon("AnimationPlayer"), "Inspect current scene", 10)
+	popup.add_icon_item(_editor_icon("Search"), "Validate project", 11)
+	popup.add_icon_item(_editor_icon("Play"), "Run task (no limit)", 12)
 	popup.id_pressed.connect(_on_menu_pressed)
-	header.add_child(menu)
-	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
-	_settings_dialog.profile_saved.connect(_on_profile_saved)
-	_settings_dialog.category_toggled.connect(_on_category_toggled)
-	_settings_dialog.sign_in_requested.connect(_on_sign_in)
-	_settings_dialog.sign_out_requested.connect(_on_sign_out)
-	_settings_dialog.confirmed.connect(_on_settings_closed)
-	_settings_dialog.canceled.connect(_on_settings_closed)
-	add_child(_settings_dialog)
-	_settings_http = HTTPRequest.new()
-	_settings_http.timeout = 10.0
-	_settings_http.request_completed.connect(_on_settings_response)
-	add_child(_settings_http)
-	_auth_http = HTTPRequest.new()
-	_auth_http.timeout = 10.0
-	_auth_http.request_completed.connect(_on_auth_response)
-	add_child(_auth_http)
-	_auth_timer = Timer.new()
-	_auth_timer.wait_time = 2.0
-	_auth_timer.timeout.connect(_refresh_account)
-	add_child(_auth_timer)
+	header.add_child(_menu)
+
+	var tab_row: HBoxContainer = HBoxContainer.new()
+	add_child(tab_row)
+	_tabs = TabBar.new()
+	_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tabs.clip_tabs = true
+	_tabs.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ALWAYS
+	_tabs.tab_changed.connect(_on_tab_changed)
+	_tabs.tab_close_pressed.connect(_on_tab_close)
+	tab_row.add_child(_tabs)
+	_add_tab_button = Button.new()
+	_add_tab_button.text = "+"
+	var add_icon: Texture2D = _editor_icon("Add")
+	if add_icon != null:
+		_add_tab_button.icon = add_icon
+		_add_tab_button.text = ""
+	_add_tab_button.tooltip_text = "New chat"
+	_add_tab_button.pressed.connect(_on_new_chat)
+	tab_row.add_child(_add_tab_button)
+
 	_chat_log = RichTextLabel.new()
 	_chat_log.bbcode_enabled = true
 	_chat_log.selection_enabled = true
 	_chat_log.scroll_following = true
 	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_log.custom_minimum_size = Vector2(350.0, 180.0)
-	sidebar_content.add_child(_chat_log)
-	_append_log("[b]Loki Python harness[/b] — tool approval prompts are enabled.")
+	_chat_log.custom_minimum_size = Vector2(360.0, 170.0)
+	add_child(_chat_log)
+	_append_log("[b]Loki[/b] - your local agent. Tool approvals are on.")
+
 	_input_edit = TextEdit.new()
-	_input_edit.custom_minimum_size = Vector2(350.0, 100.0)
+	_input_edit.custom_minimum_size = Vector2(360.0, 96.0)
 	_input_edit.placeholder_text = "Describe a task; Loki works until done (Ctrl+Enter)"
 	_input_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_input_edit.gui_input.connect(_on_input_gui)
-	sidebar_content.add_child(_input_edit)
+	add_child(_input_edit)
+
 	var bottom: HBoxContainer = HBoxContainer.new()
-	sidebar_content.add_child(bottom)
+	add_child(bottom)
 	_send_button = Button.new()
 	_send_button.text = "Send"
+	_send_button.icon = _editor_icon("Play")
 	_send_button.pressed.connect(_on_send_pressed)
 	bottom.add_child(_send_button)
-	var clear: Button = Button.new()
-	clear.text = "Clear"
-	clear.pressed.connect(_on_clear_pressed)
-	bottom.add_child(clear)
+	_clear_button = Button.new()
+	_clear_button.text = "Clear"
+	_clear_button.icon = _editor_icon("Clear")
+	_clear_button.pressed.connect(_on_clear_pressed)
+	bottom.add_child(_clear_button)
 	_stop_button = Button.new()
 	_stop_button.text = "Stop"
+	_stop_button.icon = _editor_icon("Stop")
 	_stop_button.disabled = true
 	_stop_button.pressed.connect(_on_stop_pressed)
 	bottom.add_child(_stop_button)
@@ -154,6 +207,17 @@ func _build_ui() -> void:
 	_elapsed_label = Label.new()
 	_elapsed_label.text = ""
 	bottom.add_child(_elapsed_label)
+
+	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
+	_settings_dialog.profile_saved.connect(_on_profile_saved)
+	_settings_dialog.category_toggled.connect(_on_category_toggled)
+	_settings_dialog.sign_in_requested.connect(_on_sign_in)
+	_settings_dialog.sign_out_requested.connect(_on_sign_out)
+	_settings_dialog.memory_save_requested.connect(_on_memory_save)
+	_settings_dialog.confirmed.connect(_on_settings_closed)
+	_settings_dialog.canceled.connect(_on_settings_closed)
+	add_child(_settings_dialog)
+
 	_permission_dialog = ConfirmationDialog.new()
 	_permission_dialog.title = "Approve Loki tool call?"
 	_permission_dialog.ok_button_text = "Approve"
@@ -161,6 +225,25 @@ func _build_ui() -> void:
 	_permission_dialog.confirmed.connect(_submit_approval.bind(true))
 	_permission_dialog.canceled.connect(_submit_approval.bind(false))
 	add_child(_permission_dialog)
+
+	_rename_dialog = ConfirmationDialog.new()
+	_rename_dialog.title = "Rename chat"
+	_rename_edit = LineEdit.new()
+	_rename_edit.custom_minimum_size = Vector2(320.0, 0.0)
+	_rename_dialog.add_child(_rename_edit)
+	_rename_dialog.confirmed.connect(_on_rename_confirmed)
+	add_child(_rename_dialog)
+
+func _editor_icon(name: String) -> Texture2D:
+	# Godot's built-in editor icons - the same set Ziva's panel draws from.
+	# Returns null outside a real editor session so headless runs never fail.
+	if not Engine.is_editor_hint() or EditorInterface == null:
+		return null
+	var theme: Theme = EditorInterface.get_editor_theme()
+	if theme != null and theme.has_icon(name, "EditorIcons"):
+		return theme.get_icon(name, "EditorIcons")
+	return null
+
 
 func _project_dir() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/")
@@ -174,24 +257,92 @@ func _load_token() -> void:
 	else:
 		_token = ""
 
-func _start_bridge() -> void:
+func _headers() -> PackedStringArray:
+	return PackedStringArray(["Content-Type: application/json", "Authorization: Bearer " + _token])
+
+func _api_get(node: HTTPRequest, path: String) -> void:
 	_load_token()
-	if not _token.is_empty():
+	if _token.is_empty():
+		return
+	if node.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	node.request(BRIDGE_URL + path, _headers())
+
+func _api_post(node: HTTPRequest, path: String, payload: Dictionary) -> void:
+	_load_token()
+	if _token.is_empty():
+		return
+	if node.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	node.request(BRIDGE_URL + path, _headers(), HTTPClient.METHOD_POST, JSON.stringify(payload))
+
+func _start_bridge(force: bool = false) -> void:
+	# force = the token file exists but nothing answers on the port (stale token),
+	# so drop it and relaunch instead of polling a dead bridge forever.
+	_load_token()
+	if not force and not _token.is_empty() and _bridge_ready:
 		_status.text = "Checking bridge..."
 		_poll_timer.start()
 		return
-	_relaunch_ticks = 20
-	var launcher: String = ProjectSettings.globalize_path(BRIDGE_LAUNCHER)
-	var pid: int = OS.create_process("cmd.exe", PackedStringArray(["/c", "start", "\"Loki Bridge\"", "/min", launcher]), false)
+	if not force and not _token.is_empty() and _bridge_grace == 0 and _bridge_launches == 0:
+		# first look after the editor opened: a token may be live from a bridge
+		# started outside the editor, so give it a moment before relaunching.
+		_bridge_grace = 4
+		_status.text = "Checking bridge..."
+		_poll_timer.start()
+		return
+	if _bridge_launches >= BRIDGE_MAX_LAUNCHES:
+		_status.text = "Bridge not running"
+		if not _launch_warned:
+			_launch_warned = true
+			_append_log("[color=#ff7777]Loki could not start its local engine. Check .godot/loki_bridge.log[/color]")
+		_poll_timer.start()
+		return
+	_bridge_launches += 1
+	if force:
+		DirAccess.remove_absolute(_token_path())
+		_token = ""
+	_bridge_grace = BRIDGE_GRACE_POLLS
+	_bridge_misses = 0
+	var pid: int = _spawn_bridge()
 	if pid <= 0:
 		_status.text = "Bridge launch failed"
-		_append_log("[color=#ff7777]Could not start the bridge. Run addons/loki/run_bridge.bat manually.[/color]")
+		_append_log("[color=#ff7777]Could not start Loki: no Python 3 interpreter was found.[/color]")
 		return
 	_status.text = "Starting Loki bridge..."
 	_poll_timer.start()
 
-func _headers() -> PackedStringArray:
-	return PackedStringArray(["Content-Type: application/json", "Authorization: Bearer " + _token])
+
+func _spawn_bridge() -> int:
+	# Launch the bridge ourselves. A shell chain such as
+	# "cmd /c start \"title\" /min app.bat" is mangled by cmd on Windows
+	# ("cannot find the file Bridge\.") and never starts anything.
+	# Create the process directly, preferring an interpreter that ships with
+	# the project so the plugin needs no setup from the user.
+	var project: String = _project_dir()
+	var args: PackedStringArray = PackedStringArray([
+		ProjectSettings.globalize_path(BRIDGE_BOOTSTRAP),
+		"--loki-root", ProjectSettings.globalize_path(BRIDGE_HARNESS),
+		"--project-dir", project,
+		"--godot-exe", OS.get_executable_path(),
+		"--secret-file", _token_path(),
+	])
+	var bundled: PackedStringArray = PackedStringArray([
+		project.path_join("harness/.venv/Scripts/pythonw.exe"),
+		project.path_join("harness/.venv/Scripts/python.exe"),
+		project.path_join(".venv/Scripts/pythonw.exe"),
+		project.path_join(".venv/Scripts/python.exe"),
+	])
+	for interpreter in bundled:
+		if FileAccess.file_exists(interpreter):
+			var bundled_pid: int = OS.create_process(interpreter, args, false)
+			if bundled_pid > 0:
+				return bundled_pid
+	for name in PackedStringArray(["pythonw", "python", "py"]):
+		var path_pid: int = OS.create_process(name, args, false)
+		if path_pid > 0:
+			return path_pid
+	return -1
 
 func _on_input_gui(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER and event.ctrl_pressed:
@@ -199,6 +350,9 @@ func _on_input_gui(event: InputEvent) -> void:
 		_input_edit.accept_event()
 
 func _on_send_pressed() -> void:
+	_submit(false)
+
+func _submit(no_limit: bool) -> void:
 	if _busy:
 		return
 	_load_token()
@@ -207,7 +361,9 @@ func _on_send_pressed() -> void:
 		return
 	var prompt: String = _input_edit.text.strip_edges()
 	if prompt.is_empty():
-		return
+		if not no_limit:
+			return
+		prompt = "Inspect this Godot project read-only in short steps: the project tree, the current scene, then a headless validation. Do not modify files."
 	_input_edit.clear()
 	_append_log("[color=#88c0d0][b]You:[/b][/color] " + _escape(prompt))
 	_busy = true
@@ -218,21 +374,18 @@ func _on_send_pressed() -> void:
 	_stop_button.disabled = false
 	_started_ms = Time.get_ticks_msec()
 	_elapsed_label.text = ""
-	_status.text = "Loki is thinking..."
-	_append_log("[color=#b48ead]Working (autonomous, until done)[/color]")
+	_status.text = "Loki is working..."
 	_progress_timer.start()
 	var err: Error = _chat_http.request(BRIDGE_URL + "/task", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"task": prompt, "steps": 0}))
 	if err != OK:
 		_busy = false
 		_send_button.disabled = false
 		_stop_button.disabled = true
-		_elapsed_label.text = ""
-		_status.text = "Request failed"
 		_progress_timer.stop()
+		_status.text = "Request failed"
 		_append_log("[color=#ff7777]Bridge request error: %s[/color]" % error_string(err))
 
-func _on_chat_response(result: int, code: int, _received_headers: PackedStringArray, body: PackedByteArray) -> void:
-	var was_task: bool = _task_mode
+func _on_chat_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	_busy = false
 	_task_mode = false
 	_progress_timer.stop()
@@ -246,39 +399,29 @@ func _on_chat_response(result: int, code: int, _received_headers: PackedStringAr
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not parsed is Dictionary:
 		_status.text = "Invalid response"
-		_append_log("[color=#ff7777]Bridge returned HTTP %d with invalid JSON: %s[/color]" % [code, _escape(body.get_string_from_utf8())])
 		return
 	var response: Dictionary = parsed
-	if was_task:
-		if not bool(response.get("ok", false)):
-			_status.text = "Task error"
-			_append_log("[color=#ff7777]%s[/color]" % _escape(str(response.get("error", "Unknown task error"))))
-		else:
-			_status.text = "Task complete"
-			_append_log("[color=#d8dee9][b]Task:[/b][/color] " + _escape(str(response.get("response", "Task complete."))))
-		return
 	if not bool(response.get("ok", false)):
-		_status.text = "Loki error"
-		_append_log("[color=#ff7777]%s[/color]" % _escape(str(response.get("error", "Unknown bridge error"))))
-		return
-	var _answer: String = str(response.get("response", "")).strip_edges()
-	if _answer.is_empty():
-		_answer = "(no message returned - see the progress log above)"
-	_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + _escape(_answer))
-	_status.text = "Connected • " + DEFAULT_MODEL
+		_status.text = "Task error"
+		_append_log("[color=#ff7777]%s[/color]" % _escape(str(response.get("error", "Unknown error"))))
+	else:
+		_status.text = "Connected"
+		var text: String = str(response.get("response", "")).strip_edges()
+		if not text.is_empty():
+			_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + _escape(text))
+	_refresh_conversations()
 
 func _poll_progress() -> void:
 	if not _busy or _token.is_empty():
 		return
-	var secs: int = int((Time.get_ticks_msec() - _started_ms) / 1000.0)
-	_elapsed_label.text = "%ds" % secs
+	_elapsed_label.text = "%ds" % int((Time.get_ticks_msec() - _started_ms) / 1000.0)
 	if _progress_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
 		return
 	var err: Error = _progress_http.request(BRIDGE_URL + "/progress?after=" + str(_progress_cursor), _headers())
 	if err != OK:
 		_append_log("[color=#ff7777]Could not poll Loki progress: %s[/color]" % error_string(err))
 
-func _on_progress_response(result: int, code: int, _headers_received: PackedStringArray, body: PackedByteArray) -> void:
+func _on_progress_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -308,12 +451,11 @@ func _on_progress_response(result: int, code: int, _headers_received: PackedStri
 		var text: String = _escape(str(event.get("text", "")))
 		if kind == "thinking":
 			_status.text = "Thinking..."
-			_append_log("[color=#b48ead]Thinking: [/color]" + text)
 		elif kind == "tool":
 			_status.text = "Using a tool..."
-			_append_log("[color=#81a1c1]Using tool: [/color]" + text)
+			_append_log("[color=#81a1c1]Tool: [/color]" + text)
 		elif kind == "tool_result":
-			_append_log("[color=#a3be8c]Tool result: [/color]" + text)
+			_append_log("[color=#a3be8c]Result: [/color]" + text)
 		elif kind == "approval":
 			_status.text = "Waiting for approval..."
 			_append_log("[color=#ebcb8b]Permission: [/color]" + text)
@@ -326,137 +468,143 @@ func _on_progress_response(result: int, code: int, _headers_received: PackedStri
 			_append_log("[color=#a3be8c]Done: [/color]" + text)
 		elif kind == "error":
 			_append_log("[color=#ff7777]Error: [/color]" + text)
-	# Advance only through events actually consumed, otherwise a chat_id race can skip them.
 
-func _poll_approval() -> void:
-	_load_token()
-	if _approval_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+func _on_stop_pressed() -> void:
+	if not _busy or _token.is_empty():
 		return
-	if _token.is_empty():
-		if _relaunch_ticks > 0:
-			_relaunch_ticks -= 1
-		else:
-			_start_bridge()
-		return
-	var route: String = "/approval" if _bridge_ready else "/health"
-	var err: Error = _approval_http.request(BRIDGE_URL + route, _headers())
+	_status.text = "Stopping..."
+	_stop_button.disabled = true
+	var err: Error = _cancel_http.request(BRIDGE_URL + "/cancel", _headers(), HTTPClient.METHOD_POST, "{}")
 	if err != OK:
-		_status.text = "Bridge unavailable"
+		_append_log("[color=#ff7777]Could not send stop request: %s[/color]" % error_string(err))
 
-func _on_approval_poll(result: int, code: int, _received_headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_cancel_response(_result: int, _code: int, _h: PackedStringArray, _body: PackedByteArray) -> void:
+	_append_log("[color=#ffb86c]Stop requested - waiting for Loki to stop.[/color]")
+	_status.text = "Stopping..."
+
+func _refresh_conversations() -> void:
+	_api_get(_conv_http, "/conversations")
+
+func _on_conv_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		_bridge_ready = false
-		_status.text = "Waiting for bridge..."
-		if code == 401:
-			_token = ""
-			_relaunch_ticks = 0
-			DirAccess.remove_absolute(_token_path())
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-	if not parsed is Dictionary:
+	if parsed is Dictionary:
+		_apply_conversations(parsed)
+
+func _apply_conversations(payload: Dictionary) -> void:
+	if payload.has("conversations"):
+		_conversations = payload.get("conversations", [])
+	if payload.has("active"):
+		_active_conversation = str(payload.get("active", ""))
+	_rebuild_tabs()
+	if payload.has("messages"):
+		_shown_conversation = _active_conversation
+		_render_messages(payload.get("messages", []))
+	elif not _active_conversation.is_empty() and _active_conversation != _shown_conversation:
+		_api_get(_conv_http, "/conversations/messages?id=" + _active_conversation)
+
+func _rebuild_tabs() -> void:
+	_tab_suppressed = true
+	while _tabs.get_tab_count() > 0:
+		_tabs.remove_tab(0)
+	var select_index: int = -1
+	for i in _conversations.size():
+		var convo: Dictionary = _conversations[i]
+		_tabs.add_tab(str(convo.get("title", "chat")))
+		if str(convo.get("id", "")) == _active_conversation:
+			select_index = i
+	if select_index >= 0:
+		_tabs.current_tab = select_index
+	elif _tabs.get_tab_count() > 0:
+		_tabs.current_tab = 0
+	_tab_suppressed = false
+
+func _on_tab_changed(index: int) -> void:
+	if _tab_suppressed or index < 0 or index >= _conversations.size():
 		return
-	_bridge_ready = true
-	_status.text = "Connected • " + DEFAULT_MODEL
-	if _profile_apply_requested:
-		_apply_saved_profile()
-	if not _approval_id.is_empty():
+	var cid: String = str((_conversations[index] as Dictionary).get("id", ""))
+	if cid.is_empty() or cid == _active_conversation:
 		return
-	var ticket_value: Variant = parsed.get("approval")
-	if not ticket_value is Dictionary:
+	_active_conversation = cid
+	_api_post(_conv_http, "/conversations/switch", {"id": cid})
+
+func _on_tab_close(index: int) -> void:
+	if index < 0 or index >= _conversations.size():
 		return
-	var ticket: Dictionary = ticket_value
-	var ticket_id: String = str(ticket.get("id", ""))
-	if ticket_id.is_empty() or ticket_id == _approval_id:
+	var cid: String = str((_conversations[index] as Dictionary).get("id", ""))
+	if cid.is_empty():
 		return
-	_approval_id = ticket_id
-	_permission_dialog.dialog_text = "%s\n\n%s\n\nApprove only if you understand this action." % [str(ticket.get("tool", "tool")), str(ticket.get("details", ""))]
-	_permission_dialog.popup_centered(Vector2i(560, 380))
+	_api_post(_conv_http, "/conversations/delete", {"id": cid})
 
-func _submit_approval(approved: bool) -> void:
-	if _approval_id.is_empty() or _token.is_empty():
+func _on_new_chat() -> void:
+	_api_post(_conv_http, "/conversations", {"title": ""})
+
+func _on_rename_confirmed() -> void:
+	if _active_conversation.is_empty():
 		return
-	var request: HTTPRequest = HTTPRequest.new()
-	request.timeout = 5.0
-	add_child(request)
-	request.request_completed.connect(_on_approval_submitted.bind(request, approved))
-	var payload: Dictionary = {"id": _approval_id, "approved": approved}
-	var err: Error = request.request(BRIDGE_URL + "/approval", _headers(), HTTPClient.METHOD_POST, JSON.stringify(payload))
-	if err != OK:
-		request.queue_free()
-	if not approved:
-		_append_log("[color=#ebcb8b]Tool approval denied.[/color]")
+	_api_post(_conv_http, "/conversations/rename", {"id": _active_conversation, "title": _rename_edit.text.strip_edges()})
 
-func _on_approval_submitted(_result: int, _code: int, _received_headers: PackedStringArray, _body: PackedByteArray, request: HTTPRequest, approved: bool) -> void:
-	request.queue_free()
-	if approved:
-		_append_log("[color=#a3be8c]Tool approval granted.[/color]")
-	_approval_id = ""
+func _current_title() -> String:
+	for convo: Variant in _conversations:
+		if convo is Dictionary and str((convo as Dictionary).get("id", "")) == _active_conversation:
+			return str((convo as Dictionary).get("title", ""))
+	return ""
 
-func _refresh_models() -> void:
-	_load_token()
-	if _token.is_empty():
+func _render_messages(messages: Array) -> void:
+	_chat_log.clear()
+	if messages.is_empty():
+		_append_log("[i]New chat. Ask Loki for a change.[/i]")
 		return
-	_settings_http.request(BRIDGE_URL + "/models", _headers())
+	for entry: Variant in messages:
+		if not entry is Dictionary:
+			continue
+		var message: Dictionary = entry
+		var role: String = str(message.get("role", ""))
+		var content: String = str(message.get("content", "")).strip_edges()
+		if content.is_empty():
+			continue
+		if role == "user":
+			_append_log("[color=#88c0d0][b]You:[/b][/color] " + _escape(content))
+		elif role == "assistant":
+			_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + _escape(content))
 
+func _refresh_memory() -> void:
+	_api_get(_memory_http, "/memory")
 
-func _on_model_selected(index: int) -> void:
-	if index < 0 or index >= _models.size():
+func _on_memory_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		return
-	_load_token()
-	if _token.is_empty():
-		return
-	_settings_http.request(BRIDGE_URL + "/model", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"model": _models[index]}))
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary and _settings_dialog.has_method("set_memory"):
+		_settings_dialog.set_memory(str((parsed as Dictionary).get("memory", "")))
 
-
-func _on_menu_pressed(id: int) -> void:
-	match id:
-		1:
-			_on_settings_pressed()
-		2:
-			_on_new_chat()
-		3:
-			_copy_chat_markdown()
-		10:
-			_on_quick_action_selected(1)
-		11:
-			_on_quick_action_selected(2)
-		12:
-			_on_quick_action_selected(3)
-
-
-func _copy_chat_markdown() -> void:
-	DisplayServer.clipboard_set(_chat_log.get_parsed_text())
-	_append_log("[color=#a3be8c]Chat copied to clipboard as text.[/color]")
-
+func _on_memory_save(text: String) -> void:
+	_api_post(_memory_http, "/memory", {"text": text})
+	_append_log("[color=#a3be8c]Memory updated.[/color]")
 
 func _on_settings_pressed() -> void:
 	_refresh_settings()
 	_refresh_models()
 	_refresh_account()
+	_refresh_memory()
 	_auth_timer.start()
-	_settings_dialog.popup_centered(Vector2i(520, 440))
-
+	_settings_dialog.popup_centered(Vector2i(620, 610))
 
 func _on_settings_closed() -> void:
 	_auth_timer.stop()
 
-
 func _refresh_settings() -> void:
-	_load_token()
-	if _token.is_empty():
-		return
-	_settings_http.request(BRIDGE_URL + "/settings", _headers())
+	_api_get(_settings_http, "/settings")
 
+func _refresh_models() -> void:
+	_api_get(_settings_http, "/models")
 
 func _refresh_account() -> void:
-	_load_token()
-	if _token.is_empty():
-		return
 	if _auth_http.get_http_client_status() == HTTPClient.STATUS_DISCONNECTED:
-		_auth_http.request(BRIDGE_URL + "/auth/status", _headers())
+		_api_get(_auth_http, "/auth/status")
 
-
-func _on_settings_response(_result: int, code: int, _headers_in: PackedStringArray, body: PackedByteArray) -> void:
+func _on_settings_response(_result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	if code != 200:
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -468,16 +616,24 @@ func _on_settings_response(_result: int, code: int, _headers_in: PackedStringArr
 		if _model_picker != null:
 			_model_picker.clear()
 			var current: String = str(payload.get("current", ""))
+			_current_model = current
 			for i in _models.size():
 				_model_picker.add_item(str(_models[i]))
 				if str(_models[i]) == current:
 					_model_picker.select(i)
+			_status.text = "Connected - " + (_current_model if not _current_model.is_empty() else "model")
 		return
 	if _settings_dialog.has_method("set_categories"):
 		_settings_dialog.set_categories(payload)
 
+func _on_model_selected(index: int) -> void:
+	if index < 0 or index >= _models.size():
+		return
+	_api_post(_settings_http, "/model", {"model": _models[index]})
+	_current_model = str(_models[index])
+	_status.text = "Connected - " + _current_model
 
-func _on_auth_response(result: int, code: int, _headers_in: PackedStringArray, body: PackedByteArray) -> void:
+func _on_auth_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -486,30 +642,25 @@ func _on_auth_response(result: int, code: int, _headers_in: PackedStringArray, b
 	var payload: Dictionary = parsed
 	if payload.has("signed_in") and _settings_dialog.has_method("set_account"):
 		var user: Dictionary = payload.get("user", {})
-		_settings_dialog.set_account(str(user.get("email", "")), str(user.get("name", "")), bool(payload.get("signed_in", false)))
-
+		var is_signed_in: bool = bool(payload.get("signed_in", false))
+		if is_signed_in and not _signed_in:
+			_append_log("[color=#a3be8c]Signed in to Loki Cloud.[/color]")
+		elif _signed_in and not is_signed_in:
+			_append_log("[color=#ebcb8b]Signed out of Loki Cloud.[/color]")
+		_signed_in = is_signed_in
+		_settings_dialog.set_account(str(user.get("email", "")), str(user.get("name", "")), is_signed_in)
 
 func _on_category_toggled(category: String, enabled: bool) -> void:
-	_load_token()
-	if _token.is_empty():
-		return
-	_settings_http.request(BRIDGE_URL + "/settings", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"category": category, "enabled": enabled}))
-
+	_api_post(_settings_http, "/settings", {"category": category, "enabled": enabled})
 
 func _on_sign_in() -> void:
-	_load_token()
-	if _token.is_empty():
-		return
 	_settings_dialog.set_status("Opening your browser to sign in with Google...")
-	_auth_http.request(BRIDGE_URL + "/auth/start", _headers(), HTTPClient.METHOD_POST, "{}")
-
+	_append_log("[color=#b48ead]Opening your browser for Google sign-in...[/color]")
+	_api_post(_auth_http, "/auth/start", {})
 
 func _on_sign_out() -> void:
-	_load_token()
-	if _token.is_empty():
-		return
 	_settings_dialog.set_status("Signing out...")
-	_auth_http.request(BRIDGE_URL + "/auth/signout", _headers(), HTTPClient.METHOD_POST, "{}")
+	_api_post(_auth_http, "/auth/signout", {})
 
 func _on_profile_saved() -> void:
 	_load_token()
@@ -528,30 +679,56 @@ func _apply_saved_profile() -> void:
 	_profile_request_pending = true
 	var profile_path: String = ProjectSettings.globalize_path("user://loki_profile.cfg")
 	var request: HTTPRequest = HTTPRequest.new()
-	request.timeout = 5.0
+	request.timeout = 6.0
 	add_child(request)
-	request.request_completed.connect(_on_profile_updated.bind(request))
-	var payload: Dictionary = {"profile_path": profile_path}
-	var err: Error = request.request(BRIDGE_URL + "/profile", _headers(), HTTPClient.METHOD_POST, JSON.stringify(payload))
+	request.request_completed.connect(func(_r: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+		_profile_request_pending = false
+		request.queue_free()
+		if code != 200:
+			_profile_apply_requested = true
+			_append_log("[color=#ff7777]Profile update failed (HTTP %d)[/color]" % code)
+		else:
+			_profile_apply_requested = false
+			_append_log("[color=#a3be8c]Profile applied to the next Loki turn.[/color]"))
+	var err: Error = request.request(BRIDGE_URL + "/profile", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"profile_path": profile_path}))
 	if err != OK:
 		_profile_request_pending = false
 		request.queue_free()
 		_profile_apply_requested = true
 		_append_log("[color=#ff7777]Could not apply profile: %s[/color]" % error_string(err))
 
-func _on_profile_updated(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest) -> void:
-	_profile_request_pending = false
-	request.queue_free()
-	if code != 200:
-		_profile_apply_requested = true
-		_append_log("[color=#ff7777]Profile update failed (HTTP %d): %s[/color]" % [code, _escape(body.get_string_from_utf8())])
-	else:
-		_profile_apply_requested = false
-		_append_log("[color=#a3be8c]Profile saved and applied to the next Loki turn.[/color]")
+func _on_menu_pressed(id: int) -> void:
+	match id:
+		1:
+			_on_settings_pressed()
+		2:
+			_on_new_chat()
+		3:
+			_copy_chat_markdown()
+		4:
+			_rename_edit.text = _current_title()
+			_rename_dialog.popup_centered(Vector2i(380, 150))
+		5:
+			_on_settings_pressed()
+			_settings_dialog.open_memory_tab()
+		6:
+			_open_ecc()
+		7:
+			_sync_ecc()
+		10:
+			_on_quick_action_selected(1)
+		11:
+			_on_quick_action_selected(2)
+		12:
+			_on_quick_action_selected(3)
+
+func _copy_chat_markdown() -> void:
+	DisplayServer.clipboard_set(_chat_log.get_parsed_text())
+	_append_log("[color=#a3be8c]Chat copied to clipboard as text.[/color]")
 
 func _on_quick_action_selected(index: int) -> void:
 	if index == 3:
-		_submit_multistep_task()
+		_submit(true)
 		return
 	if index == 1:
 		_input_edit.text = "Inspect the currently open Godot scene and report its node tree and configuration warnings. Do not modify files."
@@ -559,60 +736,11 @@ func _on_quick_action_selected(index: int) -> void:
 		_input_edit.text = "Validate this Godot project with a headless editor check and report warnings/errors. Do not modify files."
 	else:
 		return
-	_on_send_pressed()
-
-func _submit_multistep_task() -> void:
-	if _busy:
-		return
-	_load_token()
-	if _token.is_empty():
-		_status.text = "Bridge unavailable"
-		_append_log("[color=#ff7777]Cannot start task: bridge token is missing.[/color]")
-		return
-	var prompt: String = _input_edit.text.strip_edges()
-	if prompt.is_empty():
-		prompt = "Inspect the clean Godot project read-only. Use multiple short steps: first inspect the project tree, then inspect the active scene, then run a headless Godot validation and summarize results. Do not modify files."
-	_input_edit.clear()
-	_append_log("[color=#88c0d0][b]Multi-step task:[/b][/color] " + _escape(prompt))
-	_busy = true
-	_task_mode = true
-	_active_chat_id = ""
-	_progress_cursor = 0
-	_send_button.disabled = true
-	_stop_button.disabled = false
-	_started_ms = Time.get_ticks_msec()
-	_elapsed_label.text = ""
-	_status.text = "Running multi-step task..."
-	_progress_timer.start()
-	var payload: Dictionary = {"task": prompt, "steps": 0}
-	var err: Error = _chat_http.request(BRIDGE_URL + "/task", _headers(), HTTPClient.METHOD_POST, JSON.stringify(payload))
-	if err != OK:
-		_busy = false
-		_send_button.disabled = false
-		_progress_timer.stop()
-		_status.text = "Task request failed"
-		_append_log("[color=#ff7777]Task request error: %s[/color]" % error_string(err))
-
-func _on_new_chat() -> void:
-	_chat_log.clear()
-	_append_log("[b]New Loki chat context requested.[/b]")
-	_load_token()
-	if _token.is_empty():
-		return
-	var request: HTTPRequest = HTTPRequest.new()
-	request.timeout = 20.0
-	add_child(request)
-	request.request_completed.connect(_on_reset_response.bind(request))
-	request.request(BRIDGE_URL + "/reset", _headers(), HTTPClient.METHOD_POST, "{}")
-
-func _on_reset_response(_result: int, code: int, _received_headers: PackedStringArray, _body: PackedByteArray, request: HTTPRequest) -> void:
-	if code != 200:
-		_append_log("[color=#ff7777]Could not reset Loki context (HTTP %d).[/color]" % code)
-	request.queue_free()
+	_submit(false)
 
 func _on_clear_pressed() -> void:
 	_chat_log.clear()
-	_append_log("[b]Display cleared. Context remains until New chat.[/b]")
+	_append_log("[b]Display cleared.[/b] Use the + tab to start a new chat.")
 
 func _append_log(text: String) -> void:
 	_chat_log.append_text(text + "\n\n")
@@ -621,18 +749,81 @@ func _append_log(text: String) -> void:
 func _escape(value: String) -> String:
 	return value.replace("[", "[lb]").replace("]", "[rb]")
 
-func _on_stop_pressed() -> void:
-	if not _busy or _token.is_empty():
+func _poll_approval() -> void:
+	_load_token()
+	if _approval_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
 		return
-	_status.text = "Stopping..."
-	_stop_button.disabled = true
-	var err: Error = _cancel_http.request(BRIDGE_URL + "/cancel", _headers(), HTTPClient.METHOD_POST, "{}")
+	if _token.is_empty():
+		if _bridge_grace > 0:
+			_bridge_grace -= 1
+		else:
+			_start_bridge()
+		return
+	var route: String = "/approval" if _bridge_ready else "/health"
+	var err: Error = _approval_http.request(BRIDGE_URL + route, _headers())
 	if err != OK:
-		_append_log("[color=#ff7777]Could not send stop request: %s[/color]" % error_string(err))
+		_status.text = "Bridge unavailable"
 
-func _on_cancel_response(_result: int, _code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
-	_append_log("[color=#ffb86c]Stop requested - waiting for Loki to stop.[/color]")
-	_status.text = "Stopping..."
+func _on_approval_poll(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		_bridge_ready = false
+		if code == 401:
+			_token = ""
+			_bridge_grace = 0
+			DirAccess.remove_absolute(_token_path())
+			return
+		if _token.is_empty():
+			_status.text = "Waiting for bridge..."
+			return
+		if _bridge_grace > 0:
+			_bridge_grace -= 1
+			_status.text = "Starting Loki bridge..."
+			return
+		_bridge_misses += 1
+		if _bridge_misses < BRIDGE_MISS_TOLERANCE:
+			_status.text = "Waiting for bridge..."
+			return
+		_status.text = "Bridge not running - restarting..."
+		_start_bridge(true)
+		return
+	_bridge_misses = 0
+	_bridge_grace = 0
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return
+	if not _bridge_ready:
+		_bridge_ready = true
+		_refresh_models()
+		_refresh_conversations()
+		if _profile_apply_requested:
+			_apply_saved_profile()
+	_status.text = "Connected - " + (_current_model if not _current_model.is_empty() else "model")
+	if not _approval_id.is_empty():
+		return
+	var ticket_value: Variant = (parsed as Dictionary).get("approval")
+	if not ticket_value is Dictionary:
+		return
+	var ticket: Dictionary = ticket_value
+	var ticket_id: String = str(ticket.get("id", ""))
+	if ticket_id.is_empty() or ticket_id == _approval_id:
+		return
+	_approval_id = ticket_id
+	_permission_dialog.dialog_text = "%s\n\n%s\n\nApprove only if you understand this action." % [str(ticket.get("tool", "tool")), str(ticket.get("details", ""))]
+	_permission_dialog.popup_centered(Vector2i(560, 380))
+
+func _submit_approval(approved: bool) -> void:
+	if _approval_id.is_empty() or _token.is_empty():
+		return
+	var request: HTTPRequest = HTTPRequest.new()
+	request.timeout = 5.0
+	add_child(request)
+	request.request_completed.connect(func(_r: int, _c: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		request.queue_free())
+	var err: Error = request.request(BRIDGE_URL + "/approval", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"id": _approval_id, "approved": approved}))
+	if err != OK:
+		request.queue_free()
+	_append_log("[color=#a3be8c]Tool approval granted.[/color]" if approved else "[color=#ebcb8b]Tool approval denied.[/color]")
+	_approval_id = ""
 
 func _dock_log(text: String) -> void:
 	var file: FileAccess = FileAccess.open(_project_dir() + "/.godot/loki_dock.log", FileAccess.READ_WRITE)
@@ -649,15 +840,14 @@ func _poll_editor_ops() -> void:
 	if not FileAccess.file_exists(path):
 		return
 	var text: String = FileAccess.get_file_as_string(path)
-	for line in text.split("
-"):
+	for line in text.split("\n"):
 		var trimmed: String = line.strip_edges()
 		if trimmed.is_empty():
 			continue
 		var parsed: Variant = JSON.parse_string(trimmed)
 		if not (parsed is Dictionary):
 			continue
-		var op_id: int = int(parsed.get("id", 0))
+		var op_id: int = int((parsed as Dictionary).get("id", 0))
 		if op_id <= _last_op_id:
 			continue
 		_last_op_id = op_id
@@ -677,3 +867,97 @@ func _apply_editor_op(op: Dictionary) -> void:
 	_append_log("[color=#a3be8c]Opened in the editor: [/color]" + _escape(path))
 	if bool(op.get("run", false)):
 		EditorInterface.play_custom_scene(path)
+
+
+func _build_ecc_dialog() -> void:
+	_ecc_dialog = AcceptDialog.new()
+	_ecc_dialog.title = "ECC agents and skills"
+	_ecc_dialog.ok_button_text = "Close"
+	var box: VBoxContainer = VBoxContainer.new()
+	box.custom_minimum_size = Vector2(540.0, 470.0)
+	_ecc_dialog.add_child(box)
+	var hint: Label = Label.new()
+	hint.text = "Pick one to ask Loki to adopt it. The agent loads it with the load_ecc_agent / load_ecc_skill tool."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(hint)
+	_ecc_search = LineEdit.new()
+	_ecc_search.placeholder_text = "Search agents and skills..."
+	_ecc_search.text_changed.connect(func(_text: String) -> void: _filter_ecc())
+	box.add_child(_ecc_search)
+	var tabs: TabContainer = TabContainer.new()
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(tabs)
+	_ecc_agents_list = ItemList.new()
+	_ecc_agents_list.name = "Agents"
+	_ecc_agents_list.item_activated.connect(_on_ecc_chosen.bind(true))
+	tabs.add_child(_ecc_agents_list)
+	_ecc_skills_list = ItemList.new()
+	_ecc_skills_list.name = "Skills"
+	_ecc_skills_list.item_activated.connect(_on_ecc_chosen.bind(false))
+	tabs.add_child(_ecc_skills_list)
+	add_child(_ecc_dialog)
+
+func _open_ecc() -> void:
+	if not _bridge_ready:
+		_append_log("[color=#ebcb8b]The bridge is still starting; try again in a moment.[/color]")
+		return
+	_ecc_dialog.popup_centered(Vector2i(580, 540))
+	_api_get(_ecc_http, "/ecc")
+
+func _on_ecc_response(_result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	if code != 200:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return
+	_ecc_agents = (parsed as Dictionary).get("agents", [])
+	_ecc_skills = (parsed as Dictionary).get("skills", [])
+	_filter_ecc()
+
+func _filter_ecc() -> void:
+	if _ecc_agents_list == null or _ecc_skills_list == null:
+		return
+	var needle: String = _ecc_search.text.strip_edges().to_lower()
+	_ecc_agents_list.clear()
+	for name in _ecc_agents:
+		if needle.is_empty() or needle in str(name).to_lower():
+			_ecc_agents_list.add_item(str(name))
+	_ecc_skills_list.clear()
+	for name in _ecc_skills:
+		if needle.is_empty() or needle in str(name).to_lower():
+			_ecc_skills_list.add_item(str(name))
+
+func _on_ecc_chosen(index: int, is_agent: bool) -> void:
+	var list: ItemList = _ecc_agents_list if is_agent else _ecc_skills_list
+	if list == null or index < 0 or index >= list.item_count:
+		return
+	var name: String = list.get_item_text(index)
+	if is_agent:
+		_input_edit.text = "Adopt the ECC agent '" + name + "' (call load_ecc_agent first) and continue with my request."
+	else:
+		_input_edit.text = "Apply the ECC skill '" + name + "' (call load_ecc_skill first) to this task."
+	_ecc_dialog.hide()
+	_input_edit.grab_focus()
+
+func _sync_ecc() -> void:
+	_load_token()
+	if _token.is_empty():
+		_append_log("[color=#ff7777]The bridge is not running, so ECC cannot be synced yet.[/color]")
+		return
+	_append_log("[color=#b48ead]Fetching the ECC library from GitHub...[/color]")
+	var request: HTTPRequest = HTTPRequest.new()
+	request.timeout = 300.0
+	add_child(request)
+	request.request_completed.connect(func(_r: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+		request.queue_free()
+		if code != 200:
+			_append_log("[color=#ff7777]ECC sync failed (HTTP %d).[/color]" % code)
+			return
+		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+		if not parsed is Dictionary:
+			return
+		var payload: Dictionary = parsed
+		_ecc_agents = payload.get("agents", [])
+		_ecc_skills = payload.get("skills", [])
+		_append_log("[color=#a3be8c]ECC library ready: %d agents, %d skills.[/color]" % [_ecc_agents.size(), _ecc_skills.size()]))
+	request.request(BRIDGE_URL + "/ecc/sync", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"force": true}))

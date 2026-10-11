@@ -31,11 +31,22 @@ Google OAuth **Web application** client; register the redirect URI
 
 ## Status
 
-- Auth service: **implemented AND verified end-to-end** — a real Google account
-  completed consent, the cloud received the code, and issued a session token.
-- Hosted agent proxy (the part that holds model keys and runs tasks): **not yet**.
-- Dock "Sign in with Google" button + client: pending (next), so a button would
-  be a fake until the hosted endpoint exists.
+- Auth service (`cloud/auth_server.py`): **implemented and verified end-to-end** —
+  a real Google account completed consent, the cloud received the code, and
+  issued a session token.
+- Dock "Sign in with Google" button + client: **implemented**. The bridge opens
+  the browser, captures the loopback `?code=`, exchanges it for a session token,
+  persists it to `<project>/.godot/loki_session.json`, and validates it against
+  the cloud on every start (a stale token is dropped instead of silently 401ing).
+- Hosted agent proxy (`POST /v1/chat/completions` on the cloud, model key held
+  server-side): **implemented**; the bridge registers it as the `cloud` model.
+
+## Running the cloud locally
+
+The plugin talks to `LOKI_CLOUD_URL` (default `http://localhost:8788`). When that
+points at this machine the bridge **starts the bundled cloud for you** the first
+time you click *Sign in with Google*, so there is nothing to run by hand. You can
+also start it yourself with `cloud/run_cloud.bat`.
 
 ## Not for production yet
 

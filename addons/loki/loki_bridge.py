@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs, quote
 import urllib.request
+import urllib.error
 import webbrowser
 
 
@@ -44,8 +45,83 @@ def save_session(project, data) -> None:
         pass
 
 
+CLOUD_DIR = Path(__file__).resolve().parents[2] / "cloud"
+
+
+def _cloud_is_local() -> bool:
+    """True when CLOUD_URL points at this machine (safe to auto-start the cloud)."""
+    return urlparse(CLOUD_URL).hostname in ("localhost", "127.0.0.1", "::1")
+
+
+def _cloud_healthy() -> bool:
+    try:
+        with urllib.request.urlopen(CLOUD_URL + "/health", timeout=2) as response:
+            return response.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def ensure_cloud_running() -> bool:
+    """Best-effort: start the bundled local cloud auth service if it is not up.
+
+    Only ever does this for a loopback CLOUD_URL, so a remote cloud is untouched.
+    Returns True when the cloud answered a health probe afterwards.
+    """
+    import subprocess
+
+    if _cloud_healthy():
+        return True
+    if not _cloud_is_local():
+        return False
+    server = CLOUD_DIR / "auth_server.py"
+    if not server.is_file():
+        return False
+    env = dict(os.environ)
+    port = urlparse(CLOUD_URL).port
+    if port:
+        env["LOKI_CLOUD_PORT"] = str(port)
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    try:
+        log = open(CLOUD_DIR / "cloud.log", "a", encoding="utf-8")
+    except OSError:
+        log = subprocess.DEVNULL
+    try:
+        subprocess.Popen([sys.executable, str(server)], cwd=str(CLOUD_DIR), env=env,
+                         stdout=log, stderr=subprocess.STDOUT, creationflags=creationflags)
+    except OSError:
+        return False
+    for _ in range(20):
+        if _cloud_healthy():
+            return True
+        time.sleep(0.25)
+    return _cloud_healthy()
+
+
+def validate_session(state, project) -> None:
+    """Drop a saved session the cloud no longer accepts (e.g. cloud restarted).
+
+    Only clears the session on an explicit 401, never when the cloud is simply
+    unreachable, so an offline cloud does not sign the user out.
+    """
+    token = (state.session or {}).get("token", "")
+    if not token:
+        return
+    req = urllib.request.Request(CLOUD_URL + "/auth/me", headers={"Authorization": "Bearer " + token})
+    try:
+        urllib.request.urlopen(req, timeout=5).read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            state.session = {}
+            save_session(project, {})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def begin_sign_in(state, project) -> str:
     """Open the browser to Loki Cloud sign-in and capture the loopback code."""
+    ensure_cloud_running()
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     class Callback(BaseHTTPRequestHandler):
@@ -128,6 +204,23 @@ class BridgeState:
         self.progress: list[dict[str, Any]] = []
         self.progress_seq: int = 0
         self.progress_chat_id: str = ""
+
+    def try_busy(self) -> list | None:
+        # acquire both request locks, or None when a request is in flight
+        got: list = []
+        for lock in (self.chat_request_lock, self.task_request_lock):
+            if lock.acquire(blocking=False):
+                got.append(lock)
+            else:
+                for held in got:
+                    held.release()
+                return None
+        return got
+
+    @staticmethod
+    def release_busy(locks: list) -> None:
+        for lock in locks:
+            lock.release()
 
     def push_progress(self, chat_id: str, event: str, text: str) -> None:
         with self.lock:
@@ -254,6 +347,24 @@ class BridgeState:
                     self.pending = None
 
 
+def ecc_library(agent) -> dict:
+    """The agents and skills currently vendored from ECC."""
+    agents = sorted(path.stem for path in agent.ECC_AGENTS_DIR.glob("*.md"))         if agent.ECC_AGENTS_DIR.is_dir() else []
+    skills = sorted(path.parent.name for path in agent.ECC_SKILLS_DIR.glob("*/SKILL.md"))         if agent.ECC_SKILLS_DIR.is_dir() else []
+    return {"agents": agents, "skills": skills}
+
+
+def initial_ecc_sync(agent) -> None:
+    """Fetch the ECC library on first run so its tools work with no setup."""
+    if agent.ECC_AGENTS_DIR.is_dir() and any(agent.ECC_AGENTS_DIR.glob("*.md")):
+        return
+    try:
+        print("[loki-bridge] fetching the ECC agent library (first run)...", flush=True)
+        print("  " + agent.sync_ecc(False), flush=True)
+    except Exception as exc:
+        print(f"  [ecc] initial sync failed: {exc}", flush=True)
+
+
 class BridgeHandler(BaseHTTPRequestHandler):
     server: "BridgeHTTPServer"
 
@@ -339,6 +450,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "signed_in": bool(session.get("token")),
                                   "user": user, "cloud": CLOUD_URL})
             return
+        if route == "/conversations":
+            agent = self.server.state.agent
+            self._send_json(200, {"ok": True, "active": agent.active_conversation_id(),
+                                  "conversations": agent.list_conversations()})
+            return
+        if route == "/conversations/messages":
+            agent = self.server.state.agent
+            cid = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+            self._send_json(200, {"ok": True, "id": cid, "messages": agent.conversation_messages(cid)})
+            return
+        if route == "/memory":
+            self._send_json(200, {"ok": True, "memory": self.server.state.agent.get_memory()})
+            return
+        if route == "/ecc":
+            self._send_json(200, {"ok": True, **ecc_library(self.server.state.agent)})
+            return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
 
     def do_POST(self) -> None:
@@ -403,19 +530,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 import configparser
                 config = configparser.ConfigParser()
                 config.read(profile_file, encoding="utf-8")
-                state.profile = {"name": config.get("profile", "name", fallback="").strip()[:100], "notes": config.get("profile", "notes", fallback="").strip()[:4000]}
-                assert state.loop is not None and state.chat_lock is not None
-                async def update_profile() -> None:
-                    async with state.chat_lock:
-                        memory: str = state.agent.load_memory().replace("- The user's name is Tim and they are 26 years old." + chr(10), "")
-                        lines: list[str] = []
-                        if state.profile["name"]:
-                            lines.append("Preferred name: " + state.profile["name"])
-                        if state.profile["notes"]:
-                            lines.append("User-provided profile/preferences: " + state.profile["notes"])
-                        memory += chr(10) * 2 + "Editable user profile:" + chr(10) + (chr(10).join(lines) if lines else "(none provided)")
-                        state.agent.messages[0] = {"role": "system", "content": state.agent.SYSTEM_PROMPT.format(memory=memory)}
-                asyncio.run_coroutine_threadsafe(update_profile(), state.loop).result(timeout=30)
+                name = config.get("profile", "name", fallback="").strip()
+                notes = config.get("profile", "notes", fallback="").strip()
+                busy = state.try_busy()
+                if busy is None:
+                    self._send_json(409, {"ok": False, "error": "Loki is busy; try again shortly."})
+                    return
+                try:
+                    state.agent.set_profile(name, notes)
+                finally:
+                    state.release_busy(busy)
                 self._send_json(200, {"ok": True})
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": f"Could not load profile: {type(exc).__name__}: {exc}"})
@@ -464,25 +588,54 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "approved": approved})
             return
         if route == "/reset":
-            if state.loop is None or state.chat_lock is None:
-                self._send_json(503, {"ok": False, "error": "Agent loop is not ready."})
+            busy = state.try_busy()
+            if busy is None:
+                self._send_json(409, {"ok": False, "error": "Loki is busy; try again shortly."})
                 return
-            async def reset_chat() -> None:
-                async with state.chat_lock:
-                    memory: str = state.agent.load_memory().replace("- The user's name is Tim and they are 26 years old." + chr(10), "")
-                    lines: list[str] = []
-                    if state.profile["name"]:
-                        lines.append("Preferred name: " + state.profile["name"])
-                    if state.profile["notes"]:
-                        lines.append("User-provided profile/preferences: " + state.profile["notes"])
-                    memory += chr(10) * 2 + "Editable user profile:" + chr(10) + (chr(10).join(lines) if lines else "(none provided)")
-                    state.agent.messages[:] = [{"role": "system", "content": state.agent.SYSTEM_PROMPT.format(memory=memory)}]
-            future = asyncio.run_coroutine_threadsafe(reset_chat(), state.loop)
             try:
-                future.result(timeout=15)
-                self._send_json(200, {"ok": True})
+                state.agent.clear_active_conversation()
+            finally:
+                state.release_busy(busy)
+            self._send_json(200, {"ok": True, "conversations": state.agent.list_conversations()})
+            return
+        if route.startswith("/conversations") or route == "/memory":
+            busy = state.try_busy()
+            if busy is None:
+                self._send_json(409, {"ok": False, "error": "Loki is busy; try again shortly."})
+                return
+            try:
+                if route == "/conversations":
+                    cid = state.agent.new_conversation(str(data.get("title", "") or ""))
+                    self._send_json(200, {"ok": True, "active": cid, "conversations": state.agent.list_conversations()})
+                elif route == "/conversations/switch":
+                    cid = str(data.get("id", ""))
+                    if not state.agent.switch_conversation(cid):
+                        self._send_json(404, {"ok": False, "error": "No such conversation."})
+                    else:
+                        self._send_json(200, {"ok": True, "active": cid, "messages": state.agent.conversation_messages(cid), "conversations": state.agent.list_conversations()})
+                elif route == "/conversations/rename":
+                    if not state.agent.rename_conversation(str(data.get("id", "")), str(data.get("title", ""))):
+                        self._send_json(404, {"ok": False, "error": "No such conversation."})
+                    else:
+                        self._send_json(200, {"ok": True, "conversations": state.agent.list_conversations()})
+                elif route == "/conversations/delete":
+                    if not state.agent.delete_conversation(str(data.get("id", ""))):
+                        self._send_json(404, {"ok": False, "error": "No such conversation."})
+                    else:
+                        self._send_json(200, {"ok": True, "active": state.agent.active_conversation_id(), "conversations": state.agent.list_conversations()})
+                elif route == "/memory":
+                    message = state.agent.set_memory(str(data.get("text", "")))
+                    self._send_json(200, {"ok": True, "memory": state.agent.get_memory(), "message": message})
+            finally:
+                state.release_busy(busy)
+            return
+        if route == "/ecc/sync":
+            try:
+                message: str = state.agent.sync_ecc(bool(data.get("force", False)))
             except Exception as exc:
-                self._send_json(500, {"ok": False, "error": str(exc)})
+                self._send_json(500, {"ok": False, "error": f"ECC sync failed: {exc}"})
+                return
+            self._send_json(200, {"ok": True, "message": message, **ecc_library(state.agent)})
             return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
 
@@ -594,6 +747,8 @@ async def serve() -> None:
 
     state = BridgeState(loki, secret)
     state.project = project
+    state.session = load_session(project)
+    validate_session(state, project)
     # Hosted mode: model calls go through Loki Cloud (key stays server-side).
     loki.MODELS["cloud"] = loki.ModelConfig(
         base_url=CLOUD_URL + "/v1",
@@ -602,7 +757,6 @@ async def serve() -> None:
     )
     if os.environ.get("LOKI_MODEL") == "cloud" and not (state.session or {}).get("token"):
         print("[loki-bridge] LOKI_MODEL=cloud but not signed in yet", flush=True)
-    state.session = load_session(project)
     state.loop = asyncio.get_running_loop()
     state.chat_lock = asyncio.Lock()
     stack = AsyncExitStack()
@@ -629,6 +783,7 @@ async def serve() -> None:
         finally:
             in_tool_wrapper = False
     loki.call_tool = observed_call_tool
+    threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
     try:
         server, server_thread = start_bridge_server(state, secret_path, secret)
     except OSError as exc:

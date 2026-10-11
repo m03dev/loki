@@ -2,7 +2,8 @@ extends SceneTree
 
 var _dock: Control
 var _t: float = 0.0
-var _phase: int = 0
+var _opened: bool = false
+var _done: bool = false
 
 func _initialize() -> void:
 	var script: Script = load("res://addons/loki/loki_dock.gd")
@@ -11,12 +12,20 @@ func _initialize() -> void:
 
 func _process(delta: float) -> bool:
 	_t += delta
-	if _phase == 0 and _t > 1.5:
-		var sb: Button = _dock.get("_stop_button") as Button
-		var el: Label = _dock.get("_elapsed_label") as Label
-		var ch: HTTPRequest = _dock.get("_cancel_http") as HTTPRequest
-		print("CONTROLS stop=", sb != null, " stop_text=", (sb.text if sb else ""),
-			" elapsed=", el != null, " cancel=", ch != null,
-			" timeout=", (_dock.get("_chat_http") as HTTPRequest).timeout)
-		_phase = 1; quit()
-	return false
+	if not _opened and _t >= 12.0:
+		_opened = true
+		_dock.call("_open_ecc")
+	if _done or _t < 18.0:
+		return false
+	_done = true
+	var tabs: TabBar = _dock.get("_tabs") as TabBar
+	var agents_list: ItemList = _dock.get("_ecc_agents_list")
+	var skills_list: ItemList = _dock.get("_ecc_skills_list")
+	print("PROBE ready=", _dock.get("_bridge_ready"),
+		" tabs=", tabs.get_tab_count(),
+		" ecc_dialog=", _dock.get("_ecc_dialog") != null,
+		" agents=", (_dock.get("_ecc_agents") as Array).size(),
+		" skills=", (_dock.get("_ecc_skills") as Array).size(),
+		" agents_rows=", (agents_list.item_count if agents_list != null else -1),
+		" skills_rows=", (skills_list.item_count if skills_list != null else -1))
+	return true
