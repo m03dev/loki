@@ -51,6 +51,27 @@ them through `list_ecc_agents` / `load_ecc_agent` / `list_ecc_skills` /
 (**⋮ → Agents and skills (ECC)**) and **Sync ECC library from GitHub**. Only the
 selected document is loaded (capped at ~12k chars), so the context stays small.
 
+## Which models actually work (tested 2026-10-11)
+
+Every run below drove the same task through the real `/task` path.
+
+| Model | Endpoint | Result |
+| --- | --- | --- |
+| `local` = **qwen3:8b** | Ollama | **PASS, 36s, 6 tool calls, and it self-corrects a failed tool call** |
+| `openrouter` = poolside/laguna-s-2.1:free | OpenRouter | PASS, 20s, 5 tool calls - but rate-limited (429) and returns empty replies under load |
+| `local-reasoning` = qwen3.5:9b | Ollama | BROKEN for agents: replies "DONE" without calling any tool |
+| `local-coder` = qwen2.5-coder:7b | Ollama | BROKEN for agents: prints the tool call as JSON *text*; no `tool_calls` |
+| `omniroute` | OmniRoute | BROKEN: HTTP 503, model in cooldown |
+
+- **Use `qwen3:8b` offline.** `ollama pull qwen3:8b`. It is the only local model
+  verified to emit real structured `tool_calls` through Ollama.
+- `qwen2.5-coder:7b` does **not** support tools in Ollama's template - never wire it
+  to the agent loop. It answers in prose and the run stalls.
+- The free OpenRouter pool works but is not reliable for long tasks; a paid key or a
+  bigger local model is needed for sustained work.
+- Loki's guard is doing its job: a model that claims completion without writing files
+  is rejected ("nothing was written yet - not accepting DONE").
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
