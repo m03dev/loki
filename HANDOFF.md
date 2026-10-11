@@ -72,6 +72,21 @@ Every run below drove the same task through the real `/task` path.
 - Loki's guard is doing its job: a model that claims completion without writing files
   is rejected ("nothing was written yet - not accepting DONE").
 
+## Reliability behaviour (harness)
+
+- **Transient model failures are retried, not fatal.** HTTP 408/409/425/429/5xx and dropped
+  connections retry with exponential backoff (1.5s, 3, 6, 12 - capped at 20s). Tunable with
+  `LOKI_MODEL_RETRIES`, `LOKI_RETRY_BASE_S`, `LOKI_RETRY_MAX_S`. Verified live: 4 attempts,
+  then a clear error instead of an instant failure.
+- **Text-form tool calls are recovered.** Some models print
+  `{"name": "tool", "arguments": {...}}` into the message body instead of emitting structured
+  `tool_calls`. Those calls are now parsed and executed, so such a model can still drive the
+  agent. Only names matching a real tool are accepted, so ordinary JSON in a reply is ignored.
+- **Model limits that are NOT fixable in the harness:**
+  - `qwen2.5-coder:7b` - Ollama's template gives it no tools at all; it invents a "DONE" it never did.
+  - `qwen3.5:9b` - replies "DONE" without calling any tool.
+  - Both were re-tested after the recovery fix and still fail. Use `qwen3:8b`.
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`

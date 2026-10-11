@@ -48,6 +48,12 @@ MAX_OUTPUT = 8000   # characters of command output handed back to the model
 GOAL_STEPS = 0      # 0 = run a goal until it says DONE/BLOCKED (no step limit)
 MAX_TURNS_PER_REQUEST = int(os.getenv("LOKI_MAX_TURNS", "0"))       # model<->tool cycles per request (0 = UNLIMITED)
 REQUEST_DEADLINE_S = float(os.getenv("LOKI_REQUEST_DEADLINE", "0"))    # wall-clock seconds per request (0 = no deadline)
+
+# Transient model failures (429 rate limits, 5xx, dropped connections) are retried
+# with exponential backoff instead of killing the whole task.
+MODEL_RETRIES = int(os.getenv("LOKI_MODEL_RETRIES", "4"))
+RETRY_BASE_S = float(os.getenv("LOKI_RETRY_BASE_S", "1.5"))
+RETRY_MAX_S = float(os.getenv("LOKI_RETRY_MAX_S", "20"))
 MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context window (0 = keep everything)
 
 
@@ -1202,6 +1208,103 @@ def _trim_context() -> None:
     messages[:] = [messages[0]] + tail
 
 
+_TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff, capped."""
+    return min(RETRY_MAX_S, RETRY_BASE_S * (2 ** (attempt - 1)))
+
+
+def _status_of(exc) -> int:
+    status = getattr(exc, "status_code", None)
+    return int(status) if isinstance(status, int) else 0
+
+
+async def _model_request(client, kwargs: dict, cfg):
+    """Ask the model, retrying transient failures so one 429 does not end the task."""
+    attempt = 0
+    while True:
+        try:
+            return await client.chat.completions.create(**kwargs)
+        except openai.APIStatusError as exc:
+            status = _status_of(exc)
+            if "tool_choice" in kwargs and 400 <= status < 500:
+                # Backend does not support tool_choice; retry unforced.
+                kwargs.pop("tool_choice", None)
+                continue
+            if status in _TRANSIENT_STATUS and attempt < MODEL_RETRIES:
+                attempt += 1
+                delay = _retry_delay(attempt)
+                _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
+                await asyncio.sleep(delay)
+                continue
+            raise ModelUnavailable(
+                "[model error] %s answered HTTP %s: %s" % (cfg.model, status, exc.message)
+            ) from exc
+        except openai.APIConnectionError as exc:
+            if attempt < MODEL_RETRIES:
+                attempt += 1
+                delay = _retry_delay(attempt)
+                _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, MODEL_RETRIES))
+                await asyncio.sleep(delay)
+                continue
+            raise ModelUnavailable(model_down_hint(cfg)) from exc
+        except openai.OpenAIError as exc:
+            raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
+
+
+def _json_object_spans(text: str) -> list:
+    """Every balanced {...} object in a string (handles nesting)."""
+    spans, depth, start = [], 0, -1
+    for index, char in enumerate(text):
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    spans.append(text[start:index + 1])
+                    start = -1
+    return spans
+
+
+def _recover_text_tool_calls(content: str) -> list:
+    """Recover tool calls a model wrote as TEXT instead of real tool_calls.
+
+    Some models (e.g. qwen2.5-coder via Ollama) print
+    {"name": "list_files", "arguments": {"path": "."}} into the message body and
+    never emit a structured call, which used to stall the agent. Only names that
+    match a real tool are accepted, so ordinary JSON in a reply is ignored.
+    """
+    if not content or "{" not in content or "name" not in content:
+        return []
+    known = set(LOCAL_TOOLS) | set(mcp_sessions)
+    calls = []
+    for blob in _json_object_spans(content):
+        try:
+            data = json.loads(blob)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if isinstance(data.get("function"), dict):
+            data = data["function"]
+        name = data.get("name") or data.get("tool")
+        if not isinstance(name, str) or name not in known:
+            continue
+        args = data.get("arguments", data.get("parameters", data.get("args", {})))
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (ValueError, TypeError):
+                args = {}
+        calls.append((name, args if isinstance(args, dict) else {}))
+    return calls
+
+
 async def agent_turn(force_tool: bool = False) -> str:
     cfg = MODELS[model_name]
     client = make_client()
@@ -1224,21 +1327,7 @@ async def agent_turn(force_tool: bool = False) -> str:
             kwargs["extra_body"] = {"think": False}
         if force_tool:
             kwargs["tool_choice"] = "required"
-        try:
-            try:
-                response = await client.chat.completions.create(**kwargs)
-            except openai.APIStatusError as exc:
-                # Backend does not support tool_choice; retry unforced.
-                kwargs.pop("tool_choice", None)
-                response = await client.chat.completions.create(**kwargs)
-        except openai.APIConnectionError as exc:
-            raise ModelUnavailable(model_down_hint(cfg)) from exc
-        except openai.APIStatusError as exc:
-            raise ModelUnavailable(
-                "[model error] %s answered HTTP %s: %s" % (cfg.model, exc.status_code, exc.message)
-            ) from exc
-        except openai.OpenAIError as exc:
-            raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
+        response = await _model_request(client, kwargs, cfg)
         message = response.choices[0].message
         global _last_turn_had_tools
         _last_turn_had_tools = bool(message.tool_calls)
@@ -1247,6 +1336,18 @@ async def agent_turn(force_tool: bool = False) -> str:
             if not content.strip():
                 # Some local models finish a turn with only hidden reasoning; recover it.
                 content = getattr(message, "reasoning", None) or ""
+            recovered = _recover_text_tool_calls(content)
+            if recovered:
+                _progress("thinking", "Model wrote %d tool call(s) as text; running them." % len(recovered))
+                messages.append({"role": "assistant", "content": content})
+                notes = []
+                for tool_name, tool_args in recovered[:4]:
+                    print("  [tool:text] %s(%s)" % (tool_name, json.dumps(tool_args)[:200]))
+                    tool_result = await call_tool(tool_name, tool_args)
+                    notes.append("Result of %s(%s):\n%s" % (tool_name, json.dumps(tool_args)[:200], tool_result))
+                messages.append({"role": "user", "content": "\n\n".join(notes)})
+                _last_turn_had_tools = True
+                continue
             if not content.strip():
                 global _empty_nudges
                 if _empty_nudges < 2:
