@@ -2,15 +2,21 @@
   "mcpServers": {
     "time": {
       "command": "uvx",
-      "args": ["mcp-server-time"]
+      "args": [
+        "mcp-server-time"
+      ]
     },
     "fetch": {
       "command": "uvx",
-      "args": ["mcp-server-fetch"]
+      "args": [
+        "mcp-server-fetch"
+      ]
     },
     "godot": {
       "command": "uvx",
-      "args": ["godot-editor-mcp"],
+      "args": [
+        "godot-editor-mcp"
+      ],
       "tools": [
         "godot_health_check",
         "godot_list_toolsets",
@@ -20,7 +26,8 @@
         "godot_inspection_get_selected_node",
         "godot_undo",
         "godot_redo"
-      ]
+      ],
+      "toolsets": []
     }
   }
 }

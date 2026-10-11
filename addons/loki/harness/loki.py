@@ -1282,6 +1282,15 @@ Rules:
 - Never claim something works without running it and seeing the output.
 - If you are blocked, reply 'BLOCKED: <what you need>'.
 
+Beyond these tools, the Godot editor exposes capability domains you can unlock on
+demand - animation, scene_3d, tilemap, shader, theme and UI, resources (.tres), physics,
+particles, navigation, audio, input, input map, profiling, batch, analysis, export, the
+debugger, and more. godot_list_toolsets lists them all with a description. Before doing
+a Godot task by hand, call godot_enable_toolset with category set to the domain name (for
+example "animation"); that domain's tools become callable on your next step, and
+godot_disable_toolset turns it off again. A domain whose min_godot is 4.4 needs the
+editor's Godot bridge connected.
+
 What you remember about the user from previous sessions:
 {memory}
 
@@ -1609,7 +1618,26 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
         except Exception as e:
             print(f"  [mcp] '{name}' connected but listing tools failed: {e}")
             continue
-        allow = spec.get("tools")
+        # Opt-in always-on capability domains (mcp_servers.json "toolsets"): the
+        # vendored Godot server ships ~25 domains but starts with only core and
+        # inspection, so enabling one here is what makes its tools offerable. A
+        # domain that needs the Godot bridge answers BRIDGE_DISCONNECTED and adds
+        # nothing, so this is best-effort and never fatal.
+        want_toolsets = spec.get("toolsets") or []
+        for domain in want_toolsets:
+            try:
+                await session.call_tool("godot_enable_toolset", {"category": domain})
+                print(f"  [mcp] '{name}' enabled domain '{domain}'")
+            except Exception as e:
+                print(f"  [mcp] '{name}' could not enable domain '{domain}': {e}")
+        if want_toolsets:
+            try:
+                tools = (await session.list_tools()).tools
+            except Exception:
+                pass
+        # Domains enabled on purpose mean offer the whole domain surface (bounded by
+        # max_tools) rather than the small startup allow-list.
+        allow = None if want_toolsets else spec.get("tools")
         limit = spec.get("max_tools")
         added = []
         for tool in tools:
@@ -1719,6 +1747,25 @@ async def refresh_mcp_tools(server: str = "") -> list:
     return added
 
 
+def _toolset_summary(text: str) -> str:
+    """Compact a godot toolset enable/disable JSON payload to one or two lines."""
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(data, dict) or "name" not in data:
+        return ""
+    domain = data.get("name")
+    if data.get("enabled"):
+        names = sorted(t["name"] for t in (data.get("tools") or [])
+                       if isinstance(t, dict) and t.get("name"))
+        head = "Enabled domain '%s': %d tool(s) now available." % (domain, len(names))
+        if names:
+            head += " " + ", ".join(names[:40]) + "."
+        return head
+    return "Disabled domain '%s'." % domain
+
+
 async def call_tool(name: str, args: dict) -> str:
     args = _normalize_args(name, args)
     if name in LOCAL_TOOLS:
@@ -1749,6 +1796,12 @@ async def call_tool(name: str, args: dict) -> str:
                 newly = await refresh_mcp_tools(MCP_SERVER_OF.get(name, ""))
             except Exception:
                 newly = []
+            # The server answers a domain enable with its full JSON (every tool and
+            # its schema). Those schemas are already offered, so echo a summary, not
+            # the blob - the blob is pure context cost on every remaining request.
+            _summary = _toolset_summary(text)
+            if _summary:
+                text = _summary
             if newly:
                 text += ("\n\n%d new tool(s) are now available and can be called directly: %s"
                          % (len(newly), ", ".join(sorted(newly)[:40])))

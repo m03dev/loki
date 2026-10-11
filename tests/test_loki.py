@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -112,6 +113,22 @@ check("MCP config defines the godot server", "godot" in loki.MCP_CONFIG.read_tex
 check("system prompt renders", len(loki.SYSTEM_PROMPT.format(memory="")) > 100)
 
 section("CLI agents")
+section("godot domains (the vendored capability surface)")
+_cfg = json.loads(loki.MCP_CONFIG.read_text(encoding="utf-8"))
+_godot = _cfg["mcpServers"]["godot"]
+check("godot server declares a toolsets knob", "toolsets" in _godot)
+check("startup surface stays small (token discipline)", len(_godot.get("tools", [])) <= 12, len(_godot.get("tools", [])))
+for _t in ("godot_list_toolsets", "godot_enable_toolset"):
+    check("%s is offered at startup" % _t, _t in _godot.get("tools", []))
+check("prompt advertises the unlockable domains",
+      "godot_enable_toolset" in loki.SYSTEM_PROMPT and "capability domains" in loki.SYSTEM_PROMPT)
+check("toolset summary compacts an enable payload",
+      loki._toolset_summary('{"name":"animation","enabled":true,"tools":[{"name":"godot_animation_x"}]}')
+      == "Enabled domain 'animation': 1 tool(s) now available. godot_animation_x.")
+check("toolset summary reports a disable",
+      loki._toolset_summary('{"name":"shader","enabled":false}') == "Disabled domain 'shader'.")
+check("toolset summary ignores non-JSON", loki._toolset_summary("plain text") == "")
+
 import cli_agents  # noqa: E402
 for _name in ("claude-code", "codex"):
     _spec = cli_agents.CLI_AGENTS[_name]
@@ -167,6 +184,25 @@ async def live() -> None:
         except Exception as exc:
             check("a dead MCP server cannot break a refresh", False, exc)
         del loki.MCP_SESSIONS_BY_SERVER["__dead__"]
+
+        section("live: godot capability domains")
+        _ts = loki.mcp_sessions.get("godot_list_toolsets")
+        if not _ts:
+            check("godot_list_toolsets is reachable", False, "not offered at startup")
+        else:
+            _res = await _ts.call_tool("godot_list_toolsets", {})
+            _sets = json.loads("\n".join(c.text for c in _res.content if hasattr(c, "text")))
+            check("the server exposes many domains", len(_sets) >= 10, len(_sets))
+            check("every domain carries a description", all(s.get("description") for s in _sets))
+            # 'scripts' needs no Godot bridge, so it proves the unlock path headlessly.
+            _out = await loki.call_tool("godot_enable_toolset", {"category": "scripts"})
+            check("an enable is summarised, not dumped",
+                  "Enabled domain 'scripts'" in _out and '"tools"' not in _out, _out[:160])
+            _surfaced = [t["function"]["name"] for t in loki.MODEL_TOOL_SCHEMAS
+                         if t["function"]["name"].startswith("godot_scripts")]
+            check("enabling a domain surfaces its tools to the model", bool(_surfaced), _surfaced[:4])
+            check("a surfaced tool is callable (in mcp_sessions)",
+                  all(n in loki.mcp_sessions for n in _surfaced))
 
         section("live: agent turn")
         loki.messages[:] = [{"role": "system", "content": loki.SYSTEM_PROMPT.format(memory="")}]

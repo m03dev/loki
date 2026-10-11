@@ -12,7 +12,8 @@ harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, 
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 ```
 
-43 structural checks pass offline. `--live` adds MCP connection and a real agent turn.
+51 structural checks pass offline. `--live` adds MCP connection, the capability-domain
+unlock path, and a real agent turn.
 Run these before and after any change to `addons/loki/harness/loki.py`.
 
 ## Layout — the addon is self-contained
@@ -100,15 +101,31 @@ mid-conversation invalidates prompt caching and can push a request past a provid
 Both call sites are guarded - the refresh is an optimisation and a dead server must never
 take a turn down. The total is capped by `LOKI_DYNAMIC_TOOLS_MAX` (60).
 
-Toolsets are gated for token cost: only an allow-list is offered at startup. Enable more with
-`godot_enable_toolset` (argument is `category`, not `toolset`); the newly unlocked tools are
-then offered on the next request. `scene_edit` and others require **Godot 4.4+ and a
-connected bridge**.
+**Capability domains are surfaced on demand.** `godot_list_toolsets` lists every domain with a
+description and its `min_godot`; `godot_enable_toolset` (argument is `category`, not
+`toolset`) switches one on and `godot_disable_toolset` switches it off. The system prompt
+tells the agent to do this before hand-rolling Godot work, so animation, tilemap, shader,
+resources (.tres), physics, audio, particles, navigation, theme/UI, profiling, export, batch
+and the rest are reachable - and none of them cost context until used. Proven live: the suite
+enables `scripts` and the very next model turn calls `godot_scripts_list`.
+
+An enable answers with its full JSON (every tool and schema). `call_tool` summarises it to one
+line (`_toolset_summary`) because those schemas are already offered - echoing the blob is pure
+context cost on every later request.
+
+To make domains **always on** at startup, list them under the godot server's `toolsets` key in
+`harness/mcp_servers.json` (default `[]`); their whole surface is then offered, bounded by
+`max_tools`. It is empty by default on purpose: every schema is paid for on every request
+(free tiers such as Groq at ~7k input tokens/min choke), so the startup allow-list stays at 8
+tools. Domains needing the editor bridge (`scene_edit`, `scene_3d`, `tilemap`, `input_map`)
+answer `BRIDGE_DISCONNECTED` and add nothing until the editor is connected.
 
 The vendored server ships handlers for animation, audio, particles, physics, navigation,
 tilemap, tileset, shaders, visual_shader, theme/UI, resources, export, profiling, debugger,
 import_asset, runtime_inspect/session, scene_3d, mesh_library, input_recording, batch and
-project_scaffold. **Most of these are not yet surfaced as first-class Loki tools.**
+project_scaffold. The server groups them into **26 capability domains** (toolset names) but
+starts with only `core` + `inspection` enabled - 15 Godot tools reach the model out of the
+box, out of roughly 150 behind the domains.
 
 ## Traps that have cost real time — read before patching
 
@@ -136,7 +153,7 @@ project_scaffold. **Most of these are not yet surfaced as first-class Loki tools
 
 ## Known state
 
-- `tests/test_loki.py` — 43 offline checks green; `--live` adds MCP + a real agent turn.
+- `tests/test_loki.py` - 51 offline + 10 live checks green (`--live`).
 - The bridge starts via `bootstrap.py` and answers `/health` with
   `{"ok": true, "service": "loki", ...}`. Auth is `Authorization: Bearer <token>`.
 - Play-session/runtime inspection additionally needs `mcp_runtime_probe.gd` registered as an
@@ -145,9 +162,13 @@ project_scaffold. **Most of these are not yet surfaced as first-class Loki tools
 
 ## Next steps, in value order
 
-1. **Surface the vendored Godot domains as real tools** — signals, resources (.tres),
-   animation, tilemap, shader, theme, export, profiling. The capability is already inside the
-   addon; only exposure is missing. This is the single biggest gap.
+1. ~~**Surface the vendored Godot domains as real tools**~~ - **done.** The domains were
+   already reachable (`godot_list_toolsets` / `godot_enable_toolset`); what was missing was
+   the agent knowing to use them. The prompt now says so, `call_tool` compacts the enable
+   response, `mcp_servers.json` gained a `toolsets` knob, and the live suite proves the unlock
+   path. Next in this area: promote the most-used domains into the *startup* surface for users
+   with allowance to spare, and give `godot_list_toolsets` a compact one-line-per-domain
+   rendering so the model can choose a domain without a large call.
 2. **Adopt the safety patterns** comparable agents use: route scene edits through Godot's
    **undo manager**, lock file operations to `res://`, and never eval raw source — restrict
    script execution to calling a method on an existing `@tool` script or runtime node.
