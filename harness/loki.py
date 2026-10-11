@@ -12,6 +12,8 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -99,6 +101,8 @@ MODELS = {
     # Offline default. qwen3:8b is the ONLY local model verified to emit real
     # structured tool_calls through Ollama; qwen2.5-coder only *writes* the call
     # as JSON text, so it cannot drive the agent. Ollama: `ollama pull qwen3:8b`.
+    # SMART: automatically use the best available free provider (see SMART_ORDER).
+    "smart": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-small": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-coder": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen2.5-coder:7b"),
@@ -125,6 +129,10 @@ MODELS = {
                             api_key=os.getenv("TOGETHER_API_KEY", ""), model=os.getenv("TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free")),
     "deepseek": ModelConfig(base_url="https://api.deepseek.com/v1",
                             api_key=os.getenv("DEEPSEEK_API_KEY", ""), model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+    # GitHub Models - free with a GitHub personal access token (models.github.ai).
+    "github": ModelConfig(base_url=os.getenv("GITHUB_MODELS_URL", "https://models.github.ai/inference"),
+                          api_key=os.getenv("GITHUB_TOKEN", ""),
+                          model=os.getenv("GITHUB_MODEL", "openai/gpt-4o")),
     "omniroute": ModelConfig(
         base_url=os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1"),
         api_key=os.getenv("OMNIROUTE_API_KEY", "omniroute"),
@@ -133,6 +141,54 @@ MODELS = {
 }
 
 model_name = os.getenv("LOKI_MODEL", "local")
+
+# --- Smart mode -------------------------------------------------------------
+# "smart" picks the best available FREE provider on its own: the first in this
+# order that has a key configured (or a reachable Ollama), and it falls back to
+# the next one whenever a provider fails, so the user never chooses.
+SMART_ORDER = ("groq", "cerebras", "gemini", "github", "mistral", "deepseek",
+               "together", "openrouter", "local", "local-hermes")
+_SMART_FAILED = set()
+
+
+def _ollama_reachable() -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def provider_configured(name: str) -> bool:
+    cfg = MODELS.get(name)
+    if cfg is None:
+        return False
+    if "11434" in cfg.base_url:
+        return _ollama_reachable()
+    return bool(str(cfg.api_key or "").strip())
+
+
+def active_model_name() -> str:
+    """The provider actually in use - SMART resolves to the best available."""
+    if model_name != "smart":
+        return model_name
+    for candidate in SMART_ORDER:
+        if candidate not in _SMART_FAILED and provider_configured(candidate):
+            return candidate
+    return "local"
+
+
+def smart_report() -> str:
+    marks = []
+    for candidate in SMART_ORDER:
+        state = "used-up" if candidate in _SMART_FAILED else ("ready" if provider_configured(candidate) else "-")
+        marks.append("%s=%s" % (candidate, state))
+    return "smart uses %s | %s" % (active_model_name(), ", ".join(marks))
+
+
+def _mark_smart_failure() -> None:
+    if model_name == "smart":
+        _SMART_FAILED.add(active_model_name())
 
 
 # ---------------------------------------------------------------------------
@@ -966,6 +1022,8 @@ Work like a professional, in this order - do not skip steps:
 5. ITERATE until the task is finished, then stop and summarise what you did.
 
 Rules:
+- You are EXECUTING, not chatting. Never ask the user a question, never ask for permission or confirmation, and never end a turn with only a plan or a summary of what you are about to do. Call the tool and do the work. If a detail is ambiguous, pick the most reasonable option and continue.
+- Keep calling tools until the task is finished; a turn with no tool call is only acceptable when the task is genuinely done.
 - Prefer the smallest change that works; never rewrite a whole file when edit_file will do.
 - Do not create empty folders. Do not repeat a tool call that already succeeded.
 - Never claim something works without running it and seeing the output.
@@ -1383,7 +1441,7 @@ def model_down_hint(cfg) -> str:
 
 
 def make_client() -> AsyncOpenAI:
-    cfg = MODELS[model_name]
+    cfg = MODELS[active_model_name()]
     return AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
 
 
@@ -1465,6 +1523,7 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
+            _mark_smart_failure()
             raise ModelUnavailable(
                 "[model error] %s answered HTTP %s: %s" % (cfg.model, status, exc.message)
             ) from exc
@@ -1475,8 +1534,10 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
+            _mark_smart_failure()
             raise ModelUnavailable(model_down_hint(cfg)) from exc
         except openai.OpenAIError as exc:
+            _mark_smart_failure()
             raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
 
 
@@ -1532,7 +1593,7 @@ def _recover_text_tool_calls(content: str) -> list:
 
 
 async def agent_turn(force_tool: bool = False) -> str:
-    cfg = MODELS[model_name]
+    cfg = MODELS[active_model_name()]
     client = make_client()
     started = time.monotonic()
     turns = 0
@@ -1783,7 +1844,7 @@ async def main() -> None:
     async with AsyncExitStack() as stack:
         print("starting loki...")
         await connect_mcp(stack)
-        cfg = MODELS[model_name]
+        cfg = MODELS[active_model_name()]
         print(f"\nloki ready - model: {model_name} ({cfg.model}), {len(TOOL_SCHEMAS)} tools")
         print(f"workspace: {WORKSPACE}")
         print(f"Godot:     {GODOT_EXE}")

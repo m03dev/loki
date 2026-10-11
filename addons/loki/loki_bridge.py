@@ -433,7 +433,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         route = urlparse(self.path).path
         if route == "/health":
-            self._send_json(200, {"ok": True, "service": "loki", "model": self.server.state.agent.MODELS[self.server.state.agent.model_name].model})
+            agent = self.server.state.agent
+            resolved = agent.active_model_name() if hasattr(agent, "active_model_name") else agent.model_name
+            self._send_json(200, {"ok": True, "service": "loki", "mode": agent.model_name,
+                                  "provider": resolved, "model": agent.MODELS[resolved].model})
             return
         if route == "/progress":
             try:
@@ -567,8 +570,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": "Unknown model."})
                 return
             agent.model_name = name
-            print("[loki-bridge] model switched to " + name, flush=True)
-            self._send_json(200, {"ok": True, "current": name})
+            resolved = name
+            report = ""
+            if name == "smart" and hasattr(agent, "active_model_name"):
+                agent._SMART_FAILED.clear()
+                resolved = agent.active_model_name()
+                report = agent.smart_report() if hasattr(agent, "smart_report") else ""
+            print("[loki-bridge] model switched to %s (using %s)" % (name, resolved), flush=True)
+            self._send_json(200, {"ok": True, "current": name, "resolved": resolved, "smart": report})
             return
         if route == "/auth/start":
             project = self.server.state.project

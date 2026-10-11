@@ -135,6 +135,36 @@ Everything the agent needs for real Godot work, all reachable by the model:
 - **Plan/memory** - `todo_add`, `todo_list`, `todo_done`, `save_memory`.
 - **Skills** - `list_ecc_agents`, `load_ecc_agent`, `list_ecc_skills`, `load_ecc_skill`, `sync_ecc`.
 
+## Smart mode (the "best free provider" button)
+
+`LOKI_MODEL=smart` (or the **⚡ Smart** button in the dock) makes Loki pick the best available
+FREE provider by itself and fall back automatically:
+
+```
+SMART_ORDER = groq, cerebras, gemini, github, mistral, deepseek, together, openrouter, local, local-hermes
+```
+
+A provider counts as available when its API key is set (or, for Ollama, the server answers on
+11434). If the chosen one fails, it is marked used-up for the session and the next request
+silently moves to the next provider. `/health` reports `mode`, `provider` and `model`, so the
+dock shows what Smart actually chose.
+
+### Free providers (all need only a free key, no card)
+| Provider | env var | model |
+|---|---|---|
+| Groq (fastest, best tool-calling) | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| Cerebras | `CEREBRAS_API_KEY` | `llama-3.3-70b` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` |
+| GitHub Models | `GITHUB_TOKEN` | `openai/gpt-4o` |
+| Mistral / DeepSeek / Together | `MISTRAL_API_KEY` / `DEEPSEEK_API_KEY` / `TOGETHER_API_KEY` | |
+
+### Offline reality check
+Verified tool-callers that emit real structured `tool_calls` through Ollama: **qwen3:8b**,
+**hermes3:8b**. Verified broken: qwen2.5-coder:7b, qwen3.5:9b. But at 8B both verified models
+still fail the multi-step TPS task - hermes3 keeps asking for confirmation instead of acting,
+qwen3 goes silent. A capable cloud model is required for long agentic runs; the local models
+are fine for single-step work.
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`

@@ -19,6 +19,7 @@ var _clear_button: Button
 var _status: Label
 var _elapsed_label: Label
 var _model_picker: OptionButton
+var _smart_button: Button
 var _menu: MenuButton
 var _tabs: TabBar
 var _add_tab_button: Button
@@ -120,6 +121,11 @@ func _build_ui() -> void:
 	heading.add_theme_font_size_override("font_size", 15)
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(heading)
+	_smart_button = Button.new()
+	_smart_button.text = "⚡ Smart"
+	_smart_button.tooltip_text = "Use the best available free provider, chosen automatically"
+	_smart_button.pressed.connect(_on_smart_pressed)
+	header.add_child(_smart_button)
 	_model_picker = OptionButton.new()
 	_model_picker.tooltip_text = "Model / provider"
 	_model_picker.fit_to_longest_item = false
@@ -625,6 +631,16 @@ func _on_settings_response(_result: int, code: int, _h: PackedStringArray, body:
 		return
 	if _settings_dialog.has_method("set_categories"):
 		_settings_dialog.set_categories(payload)
+
+func _on_smart_pressed() -> void:
+	_api_post(_settings_http, "/model", {"model": "smart"})
+	_current_model = "smart"
+	_status.text = "Smart - choosing the best free provider"
+	for i in _models.size():
+		if str(_models[i]) == "smart":
+			_model_picker.select(i)
+	_refresh_models()
+
 
 func _on_model_selected(index: int) -> void:
 	if index < 0 or index >= _models.size():
