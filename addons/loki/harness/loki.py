@@ -140,6 +140,12 @@ MODELS = {
     # long hidden-reasoning phase, so it can be steadier on long agent loops.
     "local-hermes": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="hermes3:8b"),
     "local-reasoning": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3.5:9b"),
+    # Best small model for TOOL RELIABILITY specifically (highest published BFCL score of
+    # any small self-hosted finetune, ~4.8 GB - fits an 8 GB card). `ollama pull llama3-groq-tool-use:8b`.
+    "local-tools": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="llama3-groq-tool-use:8b"),
+    # Faster, smaller agent option for 8 GB: ~2.8 GB, optional thinking, ~80 tok/s.
+    # `ollama pull qwen3:4b`
+    "local-fast": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:4b"),
     "gpt": ModelConfig(base_url="https://api.openai.com/v1", api_key=os.getenv("OPENAI_API_KEY", ""), model="gpt-5.2"),
     "claude": ModelConfig(base_url="https://api.anthropic.com/v1/", api_key=os.getenv("ANTHROPIC_API_KEY", ""), model="claude-sonnet-5"),
     # Subscription coding agents (see harness/cli_agents.py). These are NOT API
@@ -151,12 +157,16 @@ MODELS = {
     # OmniRoute: local AI gateway (one OpenAI-compatible endpoint -> many providers,
     # free tiers and auto-fallback). Run it, set a provider key, then use LOKI_MODEL=omniroute.
     # Free tiers (put the key in harness/.env). OpenAI-compatible endpoints.
+    # NOTE: the Gemini free tier may use your content to improve Google products.
     "gemini": ModelConfig(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
                           api_key=os.getenv("GEMINI_API_KEY", ""), model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
     "groq": ModelConfig(base_url="https://api.groq.com/openai/v1",
                         api_key=os.getenv("GROQ_API_KEY", ""), model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")),
+    # NOTE: free variants allow 50 requests/day (1,000 after a one-time $10 credit
+    # purchase). A NEGATIVE credit balance can make even the :free models error.
     "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
                               api_key=os.getenv("OPENROUTER_API_KEY", ""), model=os.getenv("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")),
+    # NOTE: not really free - Cerebras requires a verified payment method to activate.
     "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
                             api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")),
     "mistral": ModelConfig(base_url="https://api.mistral.ai/v1",
@@ -172,10 +182,28 @@ MODELS = {
     "vireonix": ModelConfig(base_url=os.getenv("VIREONIX_BASE_URL", "https://vireonix.ai/v1"),
                             api_key=os.getenv("VIREONIX_API_KEY", "vireonix"),
                             model=os.getenv("VIREONIX_MODEL", "auto")),
-    # GitHub Models - free with a GitHub personal access token (models.github.ai).
-    "github": ModelConfig(base_url=os.getenv("GITHUB_MODELS_URL", "https://models.github.ai/inference"),
-                          api_key=os.getenv("GITHUB_TOKEN", ""),
-                          model=os.getenv("GITHUB_MODEL", "openai/gpt-4o")),
+    # --- Additional STANDING free tiers (verified 2026-10). These are providers that
+    # keep a free tier indefinitely, as opposed to a one-off trial. Model names move
+    # around, so every one is overridable with <PROVIDER>_MODEL.
+    # SambaNova Cloud: 20 requests/min, 20/day, 200k tokens/day, no card.
+    "sambanova": ModelConfig(base_url=os.getenv("SAMBANOVA_BASE_URL", "https://api.sambanova.ai/v1"),
+                             api_key=os.getenv("SAMBANOVA_API_KEY", ""),
+                             model=os.getenv("SAMBANOVA_MODEL", "Meta-Llama-3.3-70B-Instruct")),
+    # Cloudflare Workers AI: 10,000 Neurons/day free. Needs an ACCOUNT_ID in the URL.
+    "cloudflare": ModelConfig(
+        base_url=os.getenv("CLOUDFLARE_BASE_URL",
+                           "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
+                           % os.getenv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID")),
+        api_key=os.getenv("CLOUDFLARE_API_TOKEN", ""),
+        model=os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast")),
+    # UnoRouter: a large catalogue of :free routes, no card required.
+    "unorouter": ModelConfig(base_url=os.getenv("UNOROUTER_BASE_URL", "https://api.unorouter.com/v1"),
+                             api_key=os.getenv("UNOROUTER_API_KEY", ""),
+                             model=os.getenv("UNOROUTER_MODEL", "ling-3.1-flash:free")),
+    # Nous Portal: the $0 plan includes :free models.
+    "nous": ModelConfig(base_url=os.getenv("NOUS_BASE_URL", "https://inference-api.nousresearch.com/v1"),
+                        api_key=os.getenv("NOUS_API_KEY", ""),
+                        model=os.getenv("NOUS_MODEL", "hermes-4-405b:free")),
     "omniroute": ModelConfig(
         base_url=os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1"),
         api_key=os.getenv("OMNIROUTE_API_KEY", "omniroute"),
@@ -194,9 +222,9 @@ model_name = os.getenv("LOKI_MODEL", "local")
 # on Loki's ~8k-token request, so it sits lower.
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("gemini", "cerebras", "groq", "openrouter", "github", "mistral",
-               "deepseek", "together", "vireonix", "claude-code", "codex",
-               "local", "local-hermes")
+SMART_ORDER = ("gemini", "groq", "openrouter", "mistral", "sambanova", "cloudflare",
+               "together", "nous", "unorouter", "deepseek", "cerebras", "vireonix",
+               "claude-code", "codex", "local", "local-hermes")
 _SMART_FAILED = set()
 
 
@@ -235,7 +263,10 @@ def smart_report() -> str:
     for candidate in SMART_ORDER:
         state = "used-up" if candidate in _SMART_FAILED else ("ready" if provider_configured(candidate) else "-")
         marks.append("%s=%s" % (candidate, state))
-    return "smart uses %s | %s" % (active_model_name(), ", ".join(marks))
+    # Only claim "smart" when Loki is actually in smart mode; otherwise report the
+    # pinned model, which is what the user chose.
+    headline = ("smart uses %s" % active_model_name()) if model_name == "smart"         else ("model: %s" % model_name)
+    return "%s | %s" % (headline, ", ".join(marks))
 
 
 def _mark_smart_failure() -> None:
@@ -1549,6 +1580,7 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
         except Exception as e:
             print(f"  [mcp] '{name}' failed to start: {e}")
             continue
+        MCP_SESSIONS_BY_SERVER[name] = session
         try:
             tools = (await session.list_tools()).tools
         except Exception as e:
@@ -1623,6 +1655,47 @@ def _normalize_args(name: str, args: dict) -> dict:
     return out
 
 
+# Tools a server starts exposing at runtime, after the model enables a toolset.
+# The allow-list in mcp_servers.json decides what is offered at STARTUP; a toolset the
+# model explicitly unlocks may add to that, because otherwise enabling it would have no
+# effect at all - the model could never call what it just unlocked.
+MCP_SESSIONS_BY_SERVER: dict = {}
+MCP_SERVER_OF: dict = {}
+# Cap the offered list so one greedy unlock cannot blow the context budget that every
+# free tier is measured against.
+DYNAMIC_TOOLS_MAX = int(os.getenv("LOKI_DYNAMIC_TOOLS_MAX", "60"))
+
+
+async def refresh_mcp_tools(server: str = "") -> list:
+    """Re-read tool lists and offer anything new. Returns the names added."""
+    if server and server in MCP_SESSIONS_BY_SERVER:
+        targets = {server: MCP_SESSIONS_BY_SERVER[server]}
+    else:
+        targets = dict(MCP_SESSIONS_BY_SERVER)
+    added: list = []
+    for server_name, session in targets.items():
+        try:
+            tools = (await session.list_tools()).tools
+        except Exception:
+            continue
+        for tool in tools:
+            if tool.name in MODEL_TOOL_NAMES:
+                continue
+            if len(MODEL_TOOL_SCHEMAS) >= DYNAMIC_TOOLS_MAX:
+                return added
+            mcp_sessions[tool.name] = session
+            MCP_SERVER_OF[tool.name] = server_name
+            TOOL_SCHEMAS.append(schema(tool.name, (tool.description or "")[:500],
+                                       tool.input_schema.get("properties", {}),
+                                       tool.input_schema.get("required", [])))
+            MODEL_TOOL_NAMES.add(tool.name)
+            added.append(tool.name)
+    if added:
+        MODEL_TOOL_SCHEMAS[:] = [t for t in TOOL_SCHEMAS
+                                 if t["function"]["name"] in MODEL_TOOL_NAMES]
+    return added
+
+
 async def call_tool(name: str, args: dict) -> str:
     args = _normalize_args(name, args)
     if name in LOCAL_TOOLS:
@@ -1643,9 +1716,17 @@ async def call_tool(name: str, args: dict) -> str:
     if name in mcp_sessions:
         try:
             result = await mcp_sessions[name].call_tool(name, args)
-            return "\n".join(c.text for c in result.content if hasattr(c, "text"))
+            text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
         except Exception as e:
             return f"error: {e}"
+        if "toolset" in name:
+            # Enabling a toolset changes the server's tool list; without this the
+            # model would have to guess at tools it can never see.
+            newly = await refresh_mcp_tools(MCP_SERVER_OF.get(name, ""))
+            if newly:
+                text += ("\n\n%d new tool(s) are now available and can be called directly: %s"
+                         % (len(newly), ", ".join(sorted(newly)[:40])))
+        return text
     return f"error: unknown tool {name}"
 
 
@@ -1864,6 +1945,13 @@ async def agent_turn(force_tool: bool = False) -> str:
             raise BudgetExhausted("hit the %d-turn budget" % MAX_TURNS_PER_REQUEST)
         turns += 1
         _trim_context()
+        if mcp_sessions:
+            # A Godot MCP server grows its tool list at runtime - the editor bridge
+            # connecting and any toolset the model enables both add tools - so re-read
+            # it each turn. A startup-only snapshot silently hides real capability.
+            if await refresh_mcp_tools():
+                _progress("thinking", "New tools became available (%d offered)."
+                          % len(MODEL_TOOL_SCHEMAS))
         _progress("thinking", "Turn %d: asking the model..." % turns)
         # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so
         # give them headroom or the tool call gets truncated away.

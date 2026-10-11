@@ -9,7 +9,11 @@ Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness/.env`
 | `gemini` | Google AI Studio | yes |
 | `groq` | Groq | yes |
 | `openrouter` | OpenRouter | yes (`:free` models) |
-| `cerebras` | Cerebras | yes |
+| `cerebras` | Cerebras | no - needs a verified payment method |
+| `sambanova` | SambaNova Cloud | yes (20 req/min, 20/day, 200k tok/day) |
+| `cloudflare` | Cloudflare Workers AI | yes (10,000 Neurons/day) |
+| `unorouter` | UnoRouter | yes (many `:free` routes, no card) |
+| `nous` | Nous Portal | yes ($0 plan `:free` models) |
 | `mistral` | Mistral | yes |
 | `together` | Together AI | yes |
 | `deepseek` | DeepSeek | paid |
