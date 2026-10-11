@@ -62,7 +62,11 @@ Running out of allowance is **not** a failure. `_is_limit_error()` recognises an
 out-of-allowance refusal (429/402/413, quota, rate limit, resource_exhausted, too large,
 exceeded, credit, billing) as distinct from a real bug; `failover_target()` marks the
 provider used-up and the turn **retries the same turn** on the next provider, so no work is
-lost. Verified: gemini -> groq -> openrouter -> vireonix -> local, task still completed.
+lost. A provider that cannot run at all - an installed but **unsigned** coding CLI
+(CliAgentError) - is now skipped the same way instead of ending the turn, and a spent
+*quota* is no longer retried through the whole backoff (only a genuine transient rate
+limit is). Verified: gemini -> groq -> openrouter -> vireonix -> claude-code -> codex ->
+local, task still completed.
 
 Provider notes (verified Oct 2026):
 - GitHub Models is **retired** — the `github` provider was removed.

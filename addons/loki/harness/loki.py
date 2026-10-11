@@ -310,6 +310,32 @@ def _is_limit_error(exc) -> bool:
     return any(marker in text for marker in _LIMIT_MARKERS)
 
 
+# A provider that cannot run at all - most often a coding CLI that is installed but
+# NOT signed in - must be skipped like an exhausted quota, never treated as a fatal
+# bug. Otherwise one unusable provider late in the order (claude-code) kills a turn
+# that a ready provider further down (local Ollama) would have finished.
+_AGENT_UNAVAILABLE_MARKERS = ("cliagenterror", "not signed in", "not logged in",
+                              "no cli agent", "could not find the cli")
+
+
+def _is_agent_unavailable(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _AGENT_UNAVAILABLE_MARKERS)
+
+
+# A rate limit clears on its own and is worth retrying; a spent QUOTA or a billing
+# refusal will not, so retrying one only delays the failover by the whole backoff
+# (1.5 + 3 + 6 + 12s). Deliberately no bare "429"/"exceeded" here, so a genuine
+# transient rate limit still gets its retries.
+_QUOTA_MARKERS = ("quota", "billing", "insufficient", "credit", "resource_exhausted",
+                  "free-models-per-day")
+
+
+def _is_quota_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _QUOTA_MARKERS)
+
+
 def failover_target() -> str:
     """Mark the provider in use as used-up and return the next usable one.
 
@@ -1935,7 +1961,8 @@ async def _model_request(client, kwargs: dict, cfg):
                 # Backend does not support tool_choice; retry unforced.
                 kwargs.pop("tool_choice", None)
                 continue
-            if status in _TRANSIENT_STATUS and attempt < MODEL_RETRIES:
+            if (status in _TRANSIENT_STATUS and attempt < MODEL_RETRIES
+                    and not _is_quota_error(exc)):
                 attempt += 1
                 delay = _retry_delay(attempt)
                 _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
@@ -2050,7 +2077,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                 response = await _model_request(client, kwargs, cfg)
                 break
             except ModelUnavailable as exc:
-                if not _is_limit_error(exc) or switches >= len(SMART_ORDER):
+                if switches >= len(SMART_ORDER) or not (
+                        _is_limit_error(exc) or _is_agent_unavailable(exc)):
                     raise
                 spent = active_model_name()
                 target = failover_target()
@@ -2063,7 +2091,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                 kwargs.pop("extra_body", None)
                 if "11434" in cfg.base_url or "ollama" in cfg.api_key:
                     kwargs["extra_body"] = {"think": False}
-                _progress("thinking", "Out of allowance on %s - switched to %s and continuing."
+                _progress("thinking", "Cannot use %s - switched to %s and continuing."
                     % (spent, target))
         message = response.choices[0].message
         global _last_turn_had_tools

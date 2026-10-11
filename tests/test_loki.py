@@ -78,6 +78,20 @@ check("resource_exhausted counts as a limit", loki._is_limit_error(Exception("RE
 check("413 too large counts as a limit", loki._is_limit_error(Exception("Request too large")))
 check("a real bug is not a limit", not loki._is_limit_error(Exception("KeyError: objects")))
 
+# A provider that cannot run (an unsigned coding CLI) must be skipped, not fatal -
+# otherwise one unusable provider at the end of the order kills a turn a ready
+# provider further down would have finished.
+check("an unsigned CLI agent is a skippable provider",
+      loki._is_agent_unavailable(Exception("[model error] CliAgentError: Claude Code is not signed in.")))
+check("an ordinary bug is not a skippable provider",
+      not loki._is_agent_unavailable(Exception("KeyError: objects")))
+check("a spent quota must not be retried",
+      loki._is_quota_error(Exception("You exceeded your current quota, please check your plan and billing details")))
+check("a daily free-model limit must not be retried",
+      loki._is_quota_error(Exception("Rate limit exceeded: free-models-per-day. Add 10 credits to unlock")))
+check("a transient rate limit IS still retried",
+      not loki._is_quota_error(Exception("temporarily rate-limited upstream, please try again")))
+
 _failed_before = set(loki._SMART_FAILED)
 loki.model_name = "gemini"
 _next = loki.failover_target()
