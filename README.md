@@ -18,9 +18,10 @@ a key for.
 - **Real verification** — Loki validates scenes (`validate_scene`), compiles
   scripts (`check_script`) and actually runs scenes (`play_scene`) before it
   claims success.
-- **Any model** — local Ollama out of the box; optional free cloud providers
-  (Gemini, Groq, OpenRouter, Cerebras, Mistral, Together, …) and the OmniRoute
-  gateway.
+- **Any model** — local Ollama out of the box, or **online mode** (`LOKI_MODEL=online`),
+  which needs no GPU and no Ollama and runs on free tiers (Gemini, Groq, OpenRouter,
+  SambaNova, Cloudflare Workers AI, UnoRouter, Nous) with your Claude Code / Codex
+  subscription as the next fallback.
 - **Skills built in** — ships with the [Ponytail](https://github.com/DietrichGebert/ponytail)
   "least-code-that-works" standard and can load any of the 70+ specialised
   agents from [ECC](https://github.com/affaan-m/ECC).

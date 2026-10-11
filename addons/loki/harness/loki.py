@@ -133,6 +133,8 @@ MODELS = {
     # as JSON text, so it cannot drive the agent. Ollama: `ollama pull qwen3:8b`.
     # SMART: automatically use the best available free provider (see SMART_ORDER).
     "smart": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
+    # A mode, not an endpoint: resolves to the best online provider. No Ollama, no GPU.
+    "online": ModelConfig(base_url="https://api.deepseek.com", model="deepseek-flash"),
     "local": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-small": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-coder": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen2.5-coder:7b"),
@@ -173,8 +175,13 @@ MODELS = {
                            api_key=os.getenv("MISTRAL_API_KEY", ""), model=os.getenv("MISTRAL_MODEL", "mistral-large-latest")),
     "together": ModelConfig(base_url="https://api.together.xyz/v1",
                             api_key=os.getenv("TOGETHER_API_KEY", ""), model=os.getenv("TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free")),
-    "deepseek": ModelConfig(base_url="https://api.deepseek.com/v1",
-                            api_key=os.getenv("DEEPSEEK_API_KEY", ""), model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+    # DeepSeek V4.1-Flash. The live model name is "deepseek-flash" (the retired
+    # deepseek-v4-flash and deepseek-chat names route to it). NOT free - it is
+    # pay-as-you-go, and off-peak is half price: $0.15/1M in, $0.60/1M out.
+    # Thinking mode is ON by default there, which burns tokens in an agent loop.
+    "deepseek": ModelConfig(base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+                            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+                            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash")),
     # Vireonix: OpenAI-compatible, needs NO key, NO account and NO card, and mixes
     # MiniMax/Nemotron/GLM/Qwen/GPT-OSS behind "auto". 20M input tokens/hour, 1M
     # context. This is the "nothing to set up at all" option - note that prompts
@@ -225,6 +232,15 @@ model_name = os.getenv("LOKI_MODEL", "local")
 SMART_ORDER = ("gemini", "groq", "openrouter", "mistral", "sambanova", "cloudflare",
                "together", "nous", "unorouter", "deepseek", "cerebras", "vireonix",
                "claude-code", "codex", "local", "local-hermes")
+
+# Providers that need a GPU and a local download. The "online" mode exists so Loki is
+# usable with NEITHER - it never touches these.
+LOCAL_PROVIDERS = ("local", "local-small", "local-coder", "local-hermes",
+                   "local-reasoning", "local-tools", "local-fast")
+
+# ONLINE MODE (LOKI_MODEL=online): everything reached over the network. Free tiers first,
+# then the subscription agents (which need no key and no GPU), and never a local model.
+ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 _SMART_FAILED = set()
 
 
@@ -250,6 +266,13 @@ def provider_configured(name: str) -> bool:
 
 def active_model_name() -> str:
     """The provider actually in use - SMART resolves to the best available."""
+    if model_name == "online":
+        for candidate in ONLINE_ORDER:
+            if candidate not in _SMART_FAILED and provider_configured(candidate):
+                return candidate
+        # Nothing is configured yet. Name one anyway so the error tells the user exactly
+        # what to set, instead of silently reaching for a local model they may not have.
+        return ONLINE_ORDER[0]
     if model_name != "smart":
         return model_name
     for candidate in SMART_ORDER:

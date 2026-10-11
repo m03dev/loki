@@ -6,6 +6,9 @@ Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness/.env`
 | `LOKI_MODEL` | Provider | Free tier |
 |---|---|---|
 | `local` / `local-reasoning` | Ollama (local) | yes, local |
+| `local-tools` | Ollama `llama3-groq-tool-use:8b` | yes - best tool-caller for an 8 GB card |
+| `local-fast` | Ollama `qwen3:4b` | yes - ~2.8 GB, ~80 tok/s |
+| `online` | **online mode** - see below | resolves to the best online provider |
 | `gemini` | Google AI Studio | yes |
 | `groq` | Groq | yes |
 | `openrouter` | OpenRouter | yes (`:free` models) |
@@ -16,9 +19,9 @@ Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness/.env`
 | `nous` | Nous Portal | yes ($0 plan `:free` models) |
 | `mistral` | Mistral | yes |
 | `together` | Together AI | yes |
-| `deepseek` | DeepSeek | paid |
+| `deepseek` | DeepSeek V4.1-Flash (`deepseek-flash`) | no - $0.15/M in, $0.60/M out off-peak |
 | `omniroute` | local OmniRoute gateway | routes to any of the above |
-| `cloud` | Loki Cloud (after Google sign-in) | key stays server-side |
+
 | `gpt` / `claude` | OpenAI / Anthropic | paid |
 | `claude-code` | Claude Code CLI (your subscription) | no key - flat rate you already pay |
 | `codex` | Codex CLI (your subscription) | no key - flat rate you already pay |
@@ -40,6 +43,22 @@ Then `LOKI_MODEL=claude-code` (or `codex`). They also sit in Smart order after t
 cloud tiers and before the local models, so when every free quota is spent the job goes
 to a real agent rather than a weak local model. Point Loki at a different binary with
 `LOKI_CLAUDE_CODE_EXE` / `LOKI_CODEX_EXE`.
+
+## Online mode
+
+`LOKI_MODEL=online` runs Loki with **no Ollama and no GPU**. It picks the best provider
+you can reach over the network: the free tiers first, then the subscription agents
+(Claude Code / Codex, which need no key and no GPU), and it **never** falls back to a local
+model. If nothing is configured it names the provider to set up rather than silently
+reaching for a local model you may not have.
+
+```bash
+LOKI_MODEL=online
+```
+
+This is the mode to use on a machine with no GPU, or when you would rather not install
+Ollama at all. `smart` is different: it prefers the same free tiers but falls back to a
+local model as a last resort.
 
 ## Environment variables
 
