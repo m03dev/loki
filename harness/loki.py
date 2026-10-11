@@ -87,6 +87,14 @@ class ModelConfig(BaseModel):
     model: str
 
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+import godot_tools  # noqa: E402  (Godot API + project editing tools)
+
+godot_tools.ROOT = ROOT
+godot_tools.WORKSPACE = WORKSPACE
+
+
 MODELS = {
     # Offline default. qwen3:8b is the ONLY local model verified to emit real
     # structured tool_calls through Ollama; qwen2.5-coder only *writes* the call
@@ -755,6 +763,12 @@ LOCAL_TOOLS = {
     "validate_scene": validate_scene,
     "play_scene": play_scene,
     "check_script": check_script,
+    "godot_api": godot_tools.godot_api,
+    "godot_search": godot_tools.godot_search,
+    "read_scene": godot_tools.read_scene,
+    "add_input_action": godot_tools.add_input_action,
+    "set_project_setting": godot_tools.set_project_setting,
+    "add_autoload": godot_tools.add_autoload,
     "list_ecc_agents": list_ecc_agents,
     "load_ecc_agent": load_ecc_agent,
     "list_ecc_skills": list_ecc_skills,
@@ -825,6 +839,12 @@ TOOL_SCHEMAS = [
            {"name": {"type": "string"}}, ["name"]),
     schema("sync_ecc", "Refresh the ECC agent/skill library from GitHub. Use when the library is missing or stale.",
            {"force": {"type": "boolean"}}),
+    schema("godot_api", "Look up the REAL Godot 4 API before calling a Godot method you are unsure about - never guess a method name. name is a class like InputMap or CharacterBody3D, or Class.member for one exact signature.", {"name": {"type": "string"}, "member": {"type": "string"}}, ["name"]),
+    schema("godot_search", "Search the Godot API by keyword to find the right class or method name (e.g. input action, raycast).", {"query": {"type": "string"}}, ["query"]),
+    schema("read_scene", "Show the node tree of a .tscn - names, types, attached scripts, instanced scenes - before editing it.", {"filename": {"type": "string"}}, ["filename"]),
+    schema("add_input_action", "Register an input action in project.godot so scripts can use Input.is_action_pressed(name). keys is a comma-separated list such as W,Up or Space or mouse_left.", {"name": {"type": "string"}, "keys": {"type": "string"}, "deadzone": {"type": "number"}}, ["name", "keys"]),
+    schema("set_project_setting", "Set a project.godot setting using section/key form, e.g. display/window/size/viewport_width = 1280.", {"name": {"type": "string"}, "value": {"type": "string"}}, ["name", "value"]),
+    schema("add_autoload", "Register an autoload singleton, e.g. add_autoload with GameState and res://scripts/game_state.gd.", {"name": {"type": "string"}, "path": {"type": "string"}}, ["name", "path"]),
     schema("build_scene", "Create AND verify a Godot scene from a node tree (any node type: players, cameras, collision shapes, scripts, instancing). Prefer this over build_3d_scene for anything richer than primitives, and over hand-writing .tscn.", {"filename": {"type": "string"}, "nodes": {"type": "string"}, "light": {"type": "boolean"}, "camera": {"type": "boolean"}}, ["filename", "nodes"]),
     schema("check_script", "Compile-check a GDScript file with Godot and report parse errors. Use after writing or editing a .gd file.",
            {"filename": {"type": "string"}}, ["filename"]),
@@ -844,6 +864,8 @@ TOOL_SCHEMAS = [
 # (e.g. unix "ls -R" on Windows), which stalls the whole task.
 MODEL_TOOL_NAMES = {
     "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
+    "godot_api", "godot_search", "read_scene", "add_input_action",
+    "set_project_setting", "add_autoload",
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "open_in_editor",
@@ -857,7 +879,9 @@ MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_
 TOOL_CATEGORIES = {
     "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
               "edit_file", "search_files", "make_dir", "move_file", "delete_file"],
-    "scenes": ["build_3d_scene", "build_scene", "validate_scene", "open_in_editor"],
+    "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
+    "godot": ["godot_api", "godot_search"],
+    "project": ["add_input_action", "set_project_setting", "add_autoload"],
     "runtime": ["play_scene", "check_script"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
@@ -871,6 +895,8 @@ CATEGORY_LABELS = {
     "planning": "Planning (todo list)",
     "memory": "Memory (save facts)",
     "skills": "Skills (ECC agents and skills)",
+    "godot": "Godot API reference (look up classes and methods)",
+    "project": "Project setup (input actions, settings, autoloads)",
     "system": "System (shell commands, launch Godot) - dangerous",
 }
 SETTINGS_FILE = ROOT / "loki_settings.json"

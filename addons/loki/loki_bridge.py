@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import secrets
+import subprocess
 import sys
 import threading
 import time
@@ -352,6 +353,21 @@ def ecc_library(agent) -> dict:
     agents = sorted(path.stem for path in agent.ECC_AGENTS_DIR.glob("*.md"))         if agent.ECC_AGENTS_DIR.is_dir() else []
     skills = sorted(path.parent.name for path in agent.ECC_SKILLS_DIR.glob("*/SKILL.md"))         if agent.ECC_SKILLS_DIR.is_dir() else []
     return {"agents": agents, "skills": skills}
+
+
+def dump_godot_api(godot_exe: str, harness) -> None:
+    """Generate extension_api.json (the Godot API reference) on first run."""
+    target = harness / "extension_api.json"
+    if target.is_file() or not godot_exe:
+        return
+    try:
+        print("[loki-bridge] generating the Godot API reference (first run)...", flush=True)
+        subprocess.run([godot_exe, "--headless", "--dump-extension-api"],
+                       cwd=str(harness), timeout=240)
+        print("  [api] extension_api.json ready" if target.is_file()
+              else "  [api] dump produced nothing", flush=True)
+    except Exception as exc:
+        print(f"  [api] dump failed: {exc}", flush=True)
 
 
 def initial_ecc_sync(agent) -> None:
@@ -784,6 +800,7 @@ async def serve() -> None:
             in_tool_wrapper = False
     loki.call_tool = observed_call_tool
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
+    threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
     try:
         server, server_thread = start_bridge_server(state, secret_path, secret)
     except OSError as exc:

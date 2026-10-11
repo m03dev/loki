@@ -33,3 +33,6 @@ harness/loki_settings.json
 harness/memory.md
 harness/plan.md
 harness/workspace/
+
+# Godot API dump (generated on first run: godot --headless --dump-extension-api)
+harness/extension_api.json

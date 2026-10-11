@@ -116,6 +116,25 @@ a main scene that instances it - both reported "valid - Godot loaded it cleanly"
   it stops thrashing on a call that cannot succeed.
 - **Retry/backoff** on 429/5xx/timeout (already documented above).
 
+## The toolset (27 tools)
+
+Everything the agent needs for real Godot work, all reachable by the model:
+
+- **Knowledge** - `godot_api` (real class/method/property/enum signatures from the engine's
+  own `--dump-extension-api`), `godot_search`. This exists so the model **stops inventing APIs**
+  (it previously wrote `InputMap.map_action()`, which does not exist). The dump is generated
+  automatically on first bridge start; it is gitignored.
+- **Scenes** - `build_scene` (any node type, scripts, collision shapes, meshes, instancing,
+  verified), `build_3d_scene` (primitive scenes), `read_scene` (show the node tree),
+  `validate_scene`, `open_in_editor`, `play_scene`.
+- **Scripts** - `write_file`, `append_file`, `edit_file`, `read_file`, `check_script`.
+- **Project** - `add_input_action` (writes a real input action into project.godot, so scripts
+  can use `Input.is_action_pressed` with no runtime InputMap hack), `set_project_setting`,
+  `add_autoload`.
+- **Workspace** - `list_files`, `list_tree`, `search_files`, `make_dir`, `move_file`, `delete_file`.
+- **Plan/memory** - `todo_add`, `todo_list`, `todo_done`, `save_memory`.
+- **Skills** - `list_ecc_agents`, `load_ecc_agent`, `list_ecc_skills`, `load_ecc_skill`, `sync_ecc`.
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
