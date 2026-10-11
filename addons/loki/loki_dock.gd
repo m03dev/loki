@@ -11,6 +11,17 @@ const BRIDGE_MAX_LAUNCHES: int = 3
 const BRIDGE_GRACE_POLLS: int = 240
 const BRIDGE_MISS_TOLERANCE: int = 4
 
+# Internal agent-steering turns; these are not conversation and must be hidden.
+const INTERNAL_MARKERS: Array[String] = [
+	"You ended your turn",
+	"is premature",
+	"NO file was created",
+	"(no output)",
+	"the model stopped responding",
+	"returned empty replies",
+	"You have not used any tools",
+]
+
 var _chat_log: RichTextLabel
 var _input_edit: TextEdit
 var _send_button: Button
@@ -121,18 +132,6 @@ func _build_ui() -> void:
 	heading.add_theme_font_size_override("font_size", 15)
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(heading)
-	_smart_button = Button.new()
-	_smart_button.text = "⚡ Smart"
-	_smart_button.tooltip_text = "Use the best available free provider, chosen automatically"
-	_smart_button.pressed.connect(_on_smart_pressed)
-	header.add_child(_smart_button)
-	_model_picker = OptionButton.new()
-	_model_picker.tooltip_text = "Model / provider"
-	_model_picker.fit_to_longest_item = false
-	_model_picker.clip_text = true
-	_model_picker.custom_minimum_size = Vector2(140.0, 0.0)
-	_model_picker.item_selected.connect(_on_model_selected)
-	header.add_child(_model_picker)
 	_menu = MenuButton.new()
 	_menu.text = "⋮"
 	_menu.flat = true
@@ -178,7 +177,7 @@ func _build_ui() -> void:
 	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_chat_log.custom_minimum_size = Vector2(360.0, 170.0)
 	add_child(_chat_log)
-	_append_log("[b]Loki[/b] - your local agent. Tool approvals are on.")
+	_append_log("[color=#6e7681]Loki - your Godot agent.[/color]")
 
 	_input_edit = TextEdit.new()
 	_input_edit.custom_minimum_size = Vector2(360.0, 96.0)
@@ -189,6 +188,23 @@ func _build_ui() -> void:
 
 	var bottom: HBoxContainer = HBoxContainer.new()
 	add_child(bottom)
+	_model_picker = OptionButton.new()
+	_model_picker.tooltip_text = "Model / provider"
+	_model_picker.fit_to_longest_item = false
+	_model_picker.clip_text = true
+	_model_picker.flat = true
+	_model_picker.custom_minimum_size = Vector2(112.0, 0.0)
+	_model_picker.item_selected.connect(_on_model_selected)
+	bottom.add_child(_model_picker)
+	_smart_button = Button.new()
+	_smart_button.text = "Smart"
+	_smart_button.flat = true
+	_smart_button.tooltip_text = "Use the best available free provider, chosen automatically"
+	_smart_button.pressed.connect(_on_smart_pressed)
+	bottom.add_child(_smart_button)
+	var bottom_spacer: Control = Control.new()
+	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(bottom_spacer)
 	_send_button = Button.new()
 	_send_button.text = "Send"
 	_send_button.icon = _editor_icon("Play")
@@ -207,7 +223,6 @@ func _build_ui() -> void:
 	bottom.add_child(_stop_button)
 	_status = Label.new()
 	_status.text = "Starting bridge..."
-	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	bottom.add_child(_status)
 	_elapsed_label = Label.new()
@@ -371,7 +386,8 @@ func _submit(no_limit: bool) -> void:
 			return
 		prompt = "Inspect this Godot project read-only in short steps: the project tree, the current scene, then a headless validation. Do not modify files."
 	_input_edit.clear()
-	_append_log("[color=#88c0d0][b]You:[/b][/color] " + _escape(prompt))
+	_append_log("[right][color=#7f9db0][b]You[/b][/color][/right]
+[right][color=#dfe6ee]" + _escape(prompt) + "[/color][/right]")
 	_busy = true
 	_task_mode = true
 	_active_chat_id = ""
@@ -414,7 +430,7 @@ func _on_chat_response(result: int, code: int, _h: PackedStringArray, body: Pack
 		_status.text = "Connected"
 		var text: String = str(response.get("response", "")).strip_edges()
 		if not text.is_empty():
-			_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + _escape(text))
+			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + _escape(text) + "[/color]")
 	_refresh_conversations()
 
 func _poll_progress() -> void:
@@ -469,7 +485,7 @@ func _on_progress_response(result: int, code: int, _h: PackedStringArray, body: 
 			_status.text = "Running task..."
 			_append_log("[color=#b48ead][b]Task:[/b][/color] " + text)
 		elif kind == "assistant":
-			_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + text)
+			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + text + "[/color]")
 		elif kind == "done":
 			_append_log("[color=#a3be8c]Done: [/color]" + text)
 		elif kind == "error":
@@ -571,9 +587,10 @@ func _render_messages(messages: Array) -> void:
 		if content.is_empty():
 			continue
 		if role == "user":
-			_append_log("[color=#88c0d0][b]You:[/b][/color] " + _escape(content))
+			_append_log("[right][color=#7f9db0][b]You[/b][/color][/right]
+[right][color=#dfe6ee]" + _escape(content) + "[/color][/right]")
 		elif role == "assistant":
-			_append_log("[color=#d8dee9][b]Loki:[/b][/color] " + _escape(content))
+			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + _escape(content) + "[/color]")
 
 func _refresh_memory() -> void:
 	_api_get(_memory_http, "/memory")
@@ -759,8 +776,18 @@ func _on_clear_pressed() -> void:
 	_append_log("[b]Display cleared.[/b] Use the + tab to start a new chat.")
 
 func _append_log(text: String) -> void:
+	if _is_internal(text):
+		return
 	_chat_log.append_text(text + "\n\n")
 	_chat_log.scroll_to_line(_chat_log.get_line_count())
+
+
+func _is_internal(text: String) -> bool:
+	var plain: String = text.strip_edges()
+	for marker: String in INTERNAL_MARKERS:
+		if plain.contains(marker):
+			return true
+	return false
 
 func _escape(value: String) -> String:
 	return value.replace("[", "[lb]").replace("]", "[rb]")
