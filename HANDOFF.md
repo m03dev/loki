@@ -157,7 +157,19 @@ box, out of roughly 150 behind the domains.
 
 ## Known state
 
-- `tests/test_loki.py` - 51 offline + 10 live checks green (`--live`).
+- `tests/test_loki.py` - 68 offline + 10 live checks green (`--live`).
+- **Setup is seamless and needs no keys.** `setup.bat` / `setup.sh` create
+  `harness_data/.venv`, install the deps, fetch the skill libraries and run
+  `tools/loki_doctor.py`. `LOKI_MODEL` defaults to `smart`, which with no keys at all
+  resolves to `vireonix` (needs no key, account or card), so the agent runs out of the box.
+- `tools/loki_doctor.py` lists every provider, whether it is usable, and the link to get a key.
+  `VIREONIX_API_KEY` must stay unset/empty-inert: `_load_env_file` treats an empty value as
+  "set", which would DISABLE the zero-key provider (`.env.example` keeps it commented out).
+- A stale bridge from a pre-`15f298e` build can linger and hold port 8766. Tell: its
+  `--loki-root` points at `<repo>/harness` instead of `<repo>/addons/loki/harness`. Kill those
+  exact PIDs and let the dock relaunch one. The bridge itself refuses to double-bind, and the
+  dock now has a 5s launch cooldown so a plugin re-entry (filesystem rescan) cannot start a
+  second one.
 - The bridge starts via `bootstrap.py` and answers `/health` with
   `{"ok": true, "service": "loki", ...}`. Auth is `Authorization: Bearer <token>`.
 - Play-session/runtime inspection additionally needs `mcp_runtime_probe.gd` registered as an

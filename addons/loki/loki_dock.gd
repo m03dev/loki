@@ -11,6 +11,12 @@ const BRIDGE_MAX_LAUNCHES: int = 3
 const BRIDGE_GRACE_POLLS: int = 240
 const BRIDGE_MISS_TOLERANCE: int = 4
 
+## Two dock instances can exist (this plugin is re-entered on a filesystem
+## rescan), and each would spawn its own bridge. The bridge refuses to double-bind,
+## which leaves a stray bootstrap behind, so a short shared cooldown makes the
+## later dock yield to the one that just launched.
+static var _last_bridge_spawn_msec: int = 0
+
 # Internal agent-steering turns; these are not conversation and must be hidden.
 const INTERNAL_MARKERS: Array[String] = [
 	"You ended your turn",
@@ -314,6 +320,15 @@ func _start_bridge(force: bool = false) -> void:
 			_append_log("[color=#ff7777]Loki could not start its local engine. Check .godot/loki_bridge.log[/color]")
 		_poll_timer.start()
 		return
+	# Yield to a bridge another dock instance just launched (see the note above).
+	var now_msec: int = Time.get_ticks_msec()
+	if not force and now_msec - _last_bridge_spawn_msec < 5000:
+		_bridge_grace = BRIDGE_GRACE_POLLS
+		_bridge_misses = 0
+		_status.text = "Starting Loki bridge..."
+		_poll_timer.start()
+		return
+	_last_bridge_spawn_msec = now_msec
 	_bridge_launches += 1
 	if force:
 		DirAccess.remove_absolute(_token_path())
