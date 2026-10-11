@@ -1,307 +1,157 @@
-# Loki — handoff notes
+# Loki — handoff
 
-A **local-first coding agent for Godot**, presented Ziva-style: a chat dock beside
-the Scene dock with conversation tabs, saved history, memory, and a library of
-specialist agents/skills (ECC).
+An AI game-dev agent that lives **inside the Godot 4 editor**. You describe a change in
+the dock; Loki plans, edits scenes and scripts, runs Godot to check its work, and iterates.
 
-## Layout
+Repo: https://github.com/m03dev/loki
 
-| Path | What it is |
-| --- | --- |
-| `addons/loki/chat/plugin.gd` | Adds the dock (`EditorDock`, left-upper slot) |
-| `addons/loki/loki_dock.gd` | The dock UI: tabs, chat, ECC picker, approvals, settings entry |
-| `addons/loki/loki_settings.gd` | Settings dialog: Agent / Account / Profile / Memory tabs |
-| `addons/loki/loki_bridge.py` | Loopback HTTP bridge (`127.0.0.1:8766`) between dock and agent |
-| `addons/loki/bootstrap.py` | **Zero-setup launcher** — creates the venv, installs deps, runs the bridge |
-| `addons/loki/run_bridge.bat` | Manual bridge launcher (optional; the dock does this itself) |
-| `harness/loki.py` | The agent: tool loop, model providers, conversations, memory |
-| `harness/ecc_sync.py` | Fetches the ECC library + Ponytail from GitHub (stdlib only) |
-| `harness/vendor/` | Fetched library (gitignored, ~7 MB) |
-| `cloud/` | Optional hosted mode (`auth_server.py`) |
+## Run the tests first
 
-## First run (nothing to install)
-
-1. Open the project in **Godot 4.3+** (developed against 4.8-dev7).
-2. Make sure both plugins are enabled (`addons/loki/plugin.cfg`, `addons/loki/chat/plugin.cfg`).
-3. That is it. The dock runs `bootstrap.py`, which creates `harness/.venv`,
-   installs `harness/requirements.txt`, then starts the bridge. The ECC library
-   is fetched from GitHub on the first bridge start.
-   - Only prerequisite: **Python 3.11+**. Internet is needed the first time.
-   - Watch `project/.godot/loki_bridge.log` if something looks stuck.
-
-## Configuration (never committed)
-
-- `harness/.env` — `LOKI_MODEL` and provider keys (see `harness/.env.example`).
-- `cloud/.env` — hosted-mode secrets.
-- `user://loki_profile.cfg`, `harness/memory.md` — profile and lasting facts.
-- `<project>/.godot/loki_conversations.json` — chats; `.godot/loki_session.json` — cloud session.
-
-## Providers / models
-
-`openrouter` (default) — `poolside/laguna-s-2.1:free` is the tested free
-tool-calling model; occasional 429s on the shared pool are expected.
-Also wired: `local-reasoning` (Ollama), `omniroute` (local gateway), `cloud`
-(sign in through the bridge; the key stays server-side).
-
-## ECC
-
-71 agents and 311 skills from <https://github.com/affaan-m/ECC>. The model reaches
-them through `list_ecc_agents` / `load_ecc_agent` / `list_ecc_skills` /
-`load_ecc_skill` / `sync_ecc`. The dock exposes a searchable picker
-(**⋮ → Agents and skills (ECC)**) and **Sync ECC library from GitHub**. Only the
-selected document is loaded (capped at ~12k chars), so the context stays small.
-
-## Which models actually work (tested 2026-10-11)
-
-Every run below drove the same task through the real `/task` path.
-
-| Model | Endpoint | Result |
-| --- | --- | --- |
-| `local` = **qwen3:8b** | Ollama | **PASS, 36s, 6 tool calls, and it self-corrects a failed tool call** |
-| `openrouter` = poolside/laguna-s-2.1:free | OpenRouter | PASS, 20s, 5 tool calls - but rate-limited (429) and returns empty replies under load |
-| `local-reasoning` = qwen3.5:9b | Ollama | BROKEN for agents: replies "DONE" without calling any tool |
-| `local-coder` = qwen2.5-coder:7b | Ollama | BROKEN for agents: prints the tool call as JSON *text*; no `tool_calls` |
-| `omniroute` | OmniRoute | BROKEN: HTTP 503, model in cooldown |
-
-- **Use `qwen3:8b` offline.** `ollama pull qwen3:8b`. It is the only local model
-  verified to emit real structured `tool_calls` through Ollama.
-- `qwen2.5-coder:7b` does **not** support tools in Ollama's template - never wire it
-  to the agent loop. It answers in prose and the run stalls.
-- The free OpenRouter pool works but is not reliable for long tasks; a paid key or a
-  bigger local model is needed for sustained work.
-- Loki's guard is doing its job: a model that claims completion without writing files
-  is rejected ("nothing was written yet - not accepting DONE").
-
-## Reliability behaviour (harness)
-
-- **Transient model failures are retried, not fatal.** HTTP 408/409/425/429/5xx and dropped
-  connections retry with exponential backoff (1.5s, 3, 6, 12 - capped at 20s). Tunable with
-  `LOKI_MODEL_RETRIES`, `LOKI_RETRY_BASE_S`, `LOKI_RETRY_MAX_S`. Verified live: 4 attempts,
-  then a clear error instead of an instant failure.
-- **Text-form tool calls are recovered.** Some models print
-  `{"name": "tool", "arguments": {...}}` into the message body instead of emitting structured
-  `tool_calls`. Those calls are now parsed and executed, so such a model can still drive the
-  agent. Only names matching a real tool are accepted, so ordinary JSON in a reply is ignored.
-- **Model limits that are NOT fixable in the harness:**
-  - `qwen2.5-coder:7b` - Ollama's template gives it no tools at all; it invents a "DONE" it never did.
-  - `qwen3.5:9b` - replies "DONE" without calling any tool.
-  - Both were re-tested after the recovery fix and still fail. Use `qwen3:8b`.
-
-## What is still missing (found by testing, 2026-10-11)
-
-Driving a real "build a third-person shooter template" task exposed the two things that
-stop Loki from being a useful game-dev product yet. Both are TOOL problems, not model problems:
-
-1. **No Godot API reference.** The agent invents APIs that do not exist - e.g. it wrote
-   `InputMap.map_action(...)` (real Godot 4 is `InputMap.add_action(name)` then
-   `InputMap.action_add_event(name, event)`). It then loops editing the same line because it
-   cannot know the correct call. **Needed: a docs/reference lookup tool** (search Godot
-   class docs and return the real signature) so the agent checks instead of guessing.
-2. **No scene-graph builder** - FIXED, see `build_scene` below.
-
-### build_scene (new tool)
-`build_scene(filename, nodes, light, camera)` writes AND verifies a Godot 4 `.tscn` from a
-node tree: any node type, attached scripts, collision shapes, primitive meshes, positions,
-and `instance` for instancing another scene. Verified: it generated a valid player scene
-(CharacterBody3D + CollisionShape3D + MeshInstance3D + SpringArm3D + Camera3D + script) and
-a main scene that instances it - both reported "valid - Godot loaded it cleanly".
-`build_3d_scene` stays for quick primitive-only scenes.
-
-### Other harness fixes from the same testing pass
-- **Argument aliases**: models say `path` when the schema says `filename`; calls were rejected
-  outright ("unexpected keyword argument 'path'"). Synonyms are now mapped before dispatch.
-- **Lenient JSON**: models emit Python literals (`[{'type':'box'}]`). `json.loads` rejected
-  them; `ast.literal_eval` fallback accepts single quotes / trailing commas.
-- **Repeat breaker**: after 3 identical failing calls the agent is told to change approach, so
-  it stops thrashing on a call that cannot succeed.
-- **Retry/backoff** on 429/5xx/timeout (already documented above).
-
-## The toolset (27 tools)
-
-Everything the agent needs for real Godot work, all reachable by the model:
-
-- **Knowledge** - `godot_api` (real class/method/property/enum signatures from the engine's
-  own `--dump-extension-api`), `godot_search`. This exists so the model **stops inventing APIs**
-  (it previously wrote `InputMap.map_action()`, which does not exist). The dump is generated
-  automatically on first bridge start; it is gitignored.
-- **Scenes** - `build_scene` (any node type, scripts, collision shapes, meshes, instancing,
-  verified), `build_3d_scene` (primitive scenes), `read_scene` (show the node tree),
-  `validate_scene`, `open_in_editor`, `play_scene`.
-- **Scripts** - `write_file`, `append_file`, `edit_file`, `read_file`, `check_script`.
-- **Project** - `add_input_action` (writes a real input action into project.godot, so scripts
-  can use `Input.is_action_pressed` with no runtime InputMap hack), `set_project_setting`,
-  `add_autoload`.
-- **Workspace** - `list_files`, `list_tree`, `search_files`, `make_dir`, `move_file`, `delete_file`.
-- **Plan/memory** - `todo_add`, `todo_list`, `todo_done`, `save_memory`.
-- **Skills** - `list_ecc_agents`, `load_ecc_agent`, `list_ecc_skills`, `load_ecc_skill`, `sync_ecc`.
-
-## Smart mode (the "best free provider" button)
-
-`LOKI_MODEL=smart` (or the **⚡ Smart** button in the dock) makes Loki pick the best available
-FREE provider by itself and fall back automatically:
-
-```
-SMART_ORDER = groq, cerebras, gemini, github, mistral, deepseek, together, openrouter, local, local-hermes
+```bash
+harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, offline
+harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 ```
 
-A provider counts as available when its API key is set (or, for Ollama, the server answers on
-11434). If the chosen one fails, it is marked used-up for the session and the next request
-silently moves to the next provider. `/health` reports `mode`, `provider` and `model`, so the
-dock shows what Smart actually chose.
+43 structural checks pass offline. `--live` adds MCP connection and a real agent turn.
+Run these before and after any change to `addons/loki/harness/loki.py`.
 
-### Free providers (all need only a free key, no card)
-| Provider | env var | model |
-|---|---|---|
-| Groq (fastest, best tool-calling) | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
-| Cerebras | `CEREBRAS_API_KEY` | `llama-3.3-70b` |
-| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` |
-| GitHub Models | `GITHUB_TOKEN` | `openai/gpt-4o` |
-| Mistral / DeepSeek / Together | `MISTRAL_API_KEY` / `DEEPSEEK_API_KEY` / `TOGETHER_API_KEY` | |
+## Layout — the addon is self-contained
 
-### Offline reality check
-Verified tool-callers that emit real structured `tool_calls` through Ollama: **qwen3:8b**,
-**hermes3:8b**. Verified broken: qwen2.5-coder:7b, qwen3.5:9b. But at 8B both verified models
-still fail the multi-step TPS task - hermes3 keeps asking for confirmation instead of acting,
-qwen3 goes silent. A capable cloud model is required for long agentic runs; the local models
-are fine for single-step work.
+A consuming Godot project needs **only `addons/loki`**. Nothing else. This is a hard
+requirement and it drives every layout decision below.
 
+```
+addons/loki/
+  plugin.gd              EditorPlugin: dock + hosts the vendored MCP bridge
+  loki_dock.gd           the chat dock (tabs, history, progress, approvals)
+  loki_bridge.py         local HTTP bridge (port 8766, Bearer token)
+  bootstrap.py           zero-setup launcher: makes the venv, starts the bridge
+  harness/               THE AGENT CODE (142 KB, ships inside the addon)
+    loki.py              the agent: providers, tool loop, prompts
+    godot_tools.py       Godot project tools (build_scene, validate_scene, ...)
+    cli_agents.py        Claude Code / Codex as subscription providers
+    ecc_sync.py          fetches the ECC agent/skill library
+    mcp_servers.json     which MCP servers to start, and which tools to offer
+  godot_mcp/             the Godot editor MCP bridge, vendored (MIT, (c) 2026 Johnny D)
 
-## Zero-setup providers
+<project>/harness_data/  USER DATA - never shipped, never inside the addon
+  .env                   API keys
+  memory.md  plan.md  loki_settings.json
+  workspace/             the folder file tools may touch
+  vendor/                downloaded ECC + ponytail libraries
+  .venv/                 Python environment (created by bootstrap.py)
+```
 
-**Vireonix** (`https://vireonix.ai/v1`) needs no key, no account and no card. Set
-`LOKI_MODEL=vireonix` (or just let Smart pick it when nothing else is configured). It is
-OpenAI-compatible, supports tool calling, routes "auto" across MiniMax/Nemotron/GLM/Qwen/
-GPT-OSS, and advertises 20M input tokens/hour with a 1M context.
-Caveat: prompts and file contents go to a third-party service.
+`loki.py` keeps `ROOT` (its own code dir) for imports, and resolves all user data via
+`DATA_DIR` by walking up to `project.godot`. Override with `LOKI_DATA`.
+`mcp_servers.json` ships with the code; `memory.md`, `plan.md`, `.env`, `loki_settings.json`
+and the venv are user data. **Do not move user data back inside the addon** — it would ship
+the user's API keys and chat memory with the addon.
 
-Free tiers that need a (free) key, best first for Loki's ~8k-token agent prompt:
-Gemini (1M TPM) > Cerebras > Groq (7k TPM - too small, will 413) > OpenRouter > GitHub Models.
+## Modes and providers
 
-## Eyes: the visual feedback loop (29 tools)
+- `smart` — best available: free cloud tiers first, then the subscription agents, then a
+  local Ollama model as a last resort.
+- `online` — **no Ollama and no GPU.** Same order but never a local model. If nothing is
+  configured it names a provider to set up instead of silently using a local model.
+- Explicit: `gb`, `groq`, `openrouter`, `mistral`, `sambanova`, `cloudflare`, `together`,
+  `nous`, `unorouter`, `deepseek`, `cerebras`, `vireonix`, `claude-code`, `codex`, `local*`.
 
-Loki could build a scene but never see it. Two tools close that loop:
+Running out of allowance is **not** a failure. `_is_limit_error()` recognises an
+out-of-allowance refusal (429/402/413, quota, rate limit, resource_exhausted, too large,
+exceeded, credit, billing) as distinct from a real bug; `failover_target()` marks the
+provider used-up and the turn **retries the same turn** on the next provider, so no work is
+lost. Verified: gemini -> groq -> openrouter -> vireonix -> local, task still completed.
 
-- **`capture_scene`** - runs a scene in a real window (`--resolution 1152x648`), waits N frames,
-  then saves the rendered frame. Usually `user://loki_capture.png`. Verified: it produces a
-  genuine 1152x648 render of the scene, not a black frame.
-- **`view_image`** - sends a PNG to the current model and returns a description plus a list of
-  visual problems (empty/black viewport, missing meshes, camera pointing at nothing, clipping).
-  Needs a vision-capable provider; gemini is the natural one (its free tier is only
-  20 requests/day for gemini-3.8-flash, so it runs out fast).
+Provider notes (verified Oct 2026):
+- GitHub Models is **retired** — the `github` provider was removed.
+- Cerebras needs a **verified payment method**, so it is not free.
+- Gemini's free tier **may train on your content**.
+- OpenRouter free = 50 requests/day; a **negative balance breaks even `:free` models**.
+- DeepSeek is `deepseek-flash` (V4.1-Flash) and is **paid** — $0.15/1M in, $0.60/1M out
+  off-peak. Thinking mode is on by default there.
+- `vireonix` needs **no key, no account and no card**, but requests go to a third party.
 
-Loop: build_scene -> capture_scene -> view_image -> fix what the model reports.
+### Claude Code and Codex as providers
+`cli-agent://<name>` base URLs mean "run the installed CLI in the project and return its
+answer". No API key - they use the subscription allowance you already pay, and they are real
+agents with their own file/edit/shell tools. Claude Code also gets Loki's MCP servers.
+Install and **sign in** (`claude` then `/login`; `codex login`) or they report "not signed
+in". Override the binary with `LOKI_CLAUDE_CODE_EXE` / `LOKI_CODEX_EXE`.
 
-### Ideas researched but not built yet
-- **godot-mcp servers**: hybridindie/godot-mcp (180 tools), TomasLucasUTN/godot-mcp-bridge
-  (231 tools incl. render_scene_preview + "what the user just did"), Demiurgic-io/godot-mcp
-  (149 tools). Loki's harness already speaks MCP via mcp_servers.json, so wiring one in would
-  add a huge surface at once (input driving, replays, profiling, native undo).
-- **Sprite generation**: sprite-ai.art has an HTTP API and an MCP server for text->sprite and
-  sprite->animation, but it is paid ($8/mo, 100 sprites).
+## The Godot MCP bridge
 
-## MCP: borrowing other people's tools
+Vendored at `addons/loki/godot_mcp/` and hosted by Loki's own `EditorPlugin`
+(`_start_mcp_bridge()` in `plugin.gd`): it registers the `EditorDebuggerPlugin` via
+`add_debugger_plugin`, creates the `MCPBridge` node and calls `start()` on
+`ws://127.0.0.1:9080` (`GODOT_MCP_BRIDGE_URL` overrides). Upstream's own entry point and
+status dock are deliberately **not** used - their purpose is to be enabled as a separate
+plugin, which is what we are avoiding.
 
-Loki speaks MCP (harness/mcp_servers.json). Two things were wrong and are now fixed:
+The MCP **server** runs via `uvx godot-editor-mcp` (see `harness/mcp_servers.json`). The
+editor dials out to it, so launch order does not matter, but the server must be running for
+`bridge_connected: true`.
 
-1. MCP tools were discovered and callable but **never offered to the model** - the model's
-   schema list was filtered against a fixed name set built at import. connect_mcp now adds each
-   discovered tool to MODEL_TOOL_NAMES and refreshes MODEL_TOOL_SCHEMAS in place. Verified:
-   the time/fetch servers' tools now show up in the model's tool list.
-2. There was no way to control how many tools a server contributes. Each entry now supports:
-   `"enabled": false`, `"tools": [allow-list]`, `"max_tools": N`, and `"env": {...}`.
-   This matters because every tool schema is tokens on every request.
+**Tool exposure.** A Godot MCP server grows its tool list at runtime - the editor bridge
+connecting and any toolset the model enables both add tools. `connect_mcp` snapshots the list
+once, so `refresh_mcp_tools()` re-reads it and offers anything new. Measured: 40 -> 55 tools.
+It runs **once per request**, never between turns, because a tool list that changes
+mid-conversation invalidates prompt caching and can push a request past a provider's limit.
+Both call sites are guarded - the refresh is an optimisation and a dead server must never
+take a turn down. The total is capped by `LOKI_DYNAMIC_TOOLS_MAX` (60).
 
-### Configured: godot-editor-mcp (uvx, no install)
-A real Godot MCP server that drives a live editor. It exposes 23 tools and ships its own
-gating (`godot_list_toolsets` / `godot_enable_toolset`), so Loki keeps 8 in context and can
-unlock more on demand:
+Toolsets are gated for token cost: only an allow-list is offered at startup. Enable more with
+`godot_enable_toolset` (argument is `category`, not `toolset`); the newly unlocked tools are
+then offered on the next request. `scene_edit` and others require **Godot 4.4+ and a
+connected bridge**.
 
-  godot_health_check, godot_list_toolsets, godot_enable_toolset,
-  godot_inspection_get_project_info, godot_inspection_get_scene_tree,
-  godot_inspection_get_selected_node, godot_undo, godot_redo
+The vendored server ships handlers for animation, audio, particles, physics, navigation,
+tilemap, tileset, shaders, visual_shader, theme/UI, resources, export, profiling, debugger,
+import_asset, runtime_inspect/session, scene_3d, mesh_library, input_recording, batch and
+project_scaffold. **Most of these are not yet surfaced as first-class Loki tools.**
 
-Verified live: `godot_health_check` returns the server version and bridge state;
-`godot_list_toolsets` returns the toolset list. It reports
-`bridge_connected: false` until the project has the companion Godot addon installed - that
-addon exposes a WebSocket bridge on ws://localhost:9080 and is what makes the live-editor
-tools work. Install it from the server's own setup command, then undo/redo and live scene
-inspection become available.
+## Traps that have cost real time — read before patching
 
-Total offered to the model with everything on: 40 tools (29 built-in + 11 MCP).
+1. **Never patch `loki.py` with a long multi-line find/replace.** Multi-line anchors get
+   corrupted in transit, and `\n` inside a patch script can arrive as a real newline (it once
+   wrote a literal line break into `"\n".join(...)` and broke the file). Instead:
+   - locate lines by **short single-line predicates** (`l.strip() == "..."`, `"foo(" in l`);
+   - build a backslash-n as `chr(92) + "n"`, and avoid literal backslashes in patch text;
+   - **compile in memory before writing** — `compile(new, path, "exec")` and refuse to write
+     on SyntaxError, so a broken edit can never reach disk.
+   - On failure, `git checkout -- <file>` back to the last good commit rather than repairing
+     by hand.
+2. **A failed assert in a patch script means NOTHING was applied** if the write happens at
+   the end. Do not read a later "compiles OK" as success.
+3. **Never put backticks in a double-quoted bash string** - they execute. A commit message
+   containing a CLI command actually ran it and started an OAuth server on port 1455. Write
+   commit messages to a file and use `git commit -F file`.
+4. **Never broad-kill Godot processes.** The argless `Godot_..._console.exe` hosts the running
+   editor; killing it closes the user's editor. Kill only by an exact PID whose command line
+   you have read. Loki's own editor runs as
+   `--path C:/Users/macul/Documents/loki --editor`.
+5. `--check-only` on a single `.gd` reports bogus errors for global `class_name`s defined in
+   sibling files. Whole-project load is the real test.
+6. The `time` MCP server has intermittently failed to start (`Connection closed`). Harmless.
 
-## The editor bridge is vendored INSIDE addons/loki
+## Known state
 
-No second plugin, no addon in the project, nothing for the user to enable. The
-godot-mcp editor half (MIT, (c) 2026 Johnny D - see
-`addons/loki/godot_mcp/LICENSE.godot-mcp.txt`) is vendored at
-`addons/loki/godot_mcp/` and **Loki's own EditorPlugin hosts it**:
+- `tests/test_loki.py` — 43 offline checks green; `--live` adds MCP + a real agent turn.
+- The bridge starts via `bootstrap.py` and answers `/health` with
+  `{"ok": true, "service": "loki", ...}`. Auth is `Authorization: Bearer <token>`.
+- Play-session/runtime inspection additionally needs `mcp_runtime_probe.gd` registered as an
+  autoload **in the game project**. That is a project modification, so it is opt-in and not
+  done by default.
 
-- `plugin.gd::_start_mcp_bridge()` builds the router (RefCounted), registers the
-  EditorDebuggerPlugin via `add_debugger_plugin`, creates the `MCPBridge` Node, adds it
-  as a child and calls `start(url)` (`ws://127.0.0.1:9080`, override with
-  `GODOT_MCP_BRIDGE_URL`). `_exit_tree` disposes it.
-- The upstream entry point `godot_mcp.gd` and its status dock are deliberately NOT used:
-  they exist to be enabled as a separate plugin, which is exactly what we are avoiding.
-- The two internal `res://addons/godot_mcp` references were repointed to
-  `res://addons/loki/godot_mcp`.
+## Next steps, in value order
 
-Verified live: with the Loki plugin enabled, `godot_health_check` returns
-`bridge_connected: true`, and `godot_inspection_get_project_info` returns the real project
-name, Godot version, path, autoloads and input actions from the running editor.
-
-The editor is the WebSocket client and reconnects with backoff, so launch order does not
-matter. The server listens; the editor dials out.
-
-### Other Godot / game-dev MCP servers worth knowing
-- Coding-Solo/godot-mcp (5.4k stars), hi-godot/godot-ai (1.9k), IvanMurzak/Godot-MCP (C#,
-  editor + runtime), ee0pdt/Godot-MCP, Dokujaa/Godot-MCP
-- weekitmo/mcp_godot_rag - Godot documentation RAG (would complement godot_api/godot_search)
-- Blender MCP (26k stars) - mesh/material/procedural asset creation, the natural companion
-  for a game agent that needs real art
-- Asset generation servers: PixelLab, Ludo.ai, mcp-game-asset-gen; sprite-ai.art has an
-  HTTP API + MCP server (paid)
-
-## Running out of allowance is not a failure
-
-A provider hitting its quota used to end the whole run. Now it just moves on:
-
-- `_is_limit_error()` recognises an "out of allowance" refusal from an ordinary bug
-  (429/402/413, quota, rate limit, resource_exhausted, too large, exceeded, credit, billing).
-- `failover_target()` marks the current provider used-up and returns the next usable one. If the
-  user had pinned a specific model and it runs dry, Loki switches into automatic mode so the
-  task keeps going instead of dying on one exhausted key.
-- The turn loop catches `ModelUnavailable`, and when it is a limit error rebuilds the client for
-  the next provider and **retries the very same turn**. A limit no longer loses work.
-- When nothing else is available it raises the original error rather than looping.
-
-Verified end to end with a deliberately forced 429: gemini -> groq -> openrouter -> vireonix ->
-local, and the task still returned a correct answer after four providers were exhausted.
-
-This matters because it makes paid quota non-essential: the chain always ends at what is left,
-including the keyless Vireonix provider and the offline Ollama models.
-
-## Gotchas worth knowing
-
-- **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
-  is mangled by cmd on Windows (`The system cannot find the file Bridge\.`) and
-  silently does nothing. The dock spawns the interpreter directly — keep it that way.
-- The bridge is **single-instance**: it refuses to start if `8766` is busy and prints
-  a clear message. Kill the stale listener before testing.
-- A leftover `.godot/loki_bridge.token` is handled: repeated connection failures
-  force a relaunch (see `_start_bridge(force)`), so a stale token cannot wedge the dock.
-- Headless UI check without opening the editor: `godot --headless --script res://tools/loki_probe.gd`.
-- Icons come from Godot's built-in **`EditorIcons`** set via `_editor_icon()`; it
-  returns null outside a real editor session so headless runs never break.
-
-## Known gaps / next steps
-
-- The ECC picker inserts a directive; the agent then calls the load tool. A direct
-  "run as this agent" sub-loop is not implemented yet.
-- Long-running game-dev tasks have not been soaked/monitored end-to-end.
-- `harness/loki.py` is CRLF; the `.gd` files are LF. Keep that in mind when patching.
-
-## Secrets / personal data
-
-- No credentials are tracked: `.env`, session files and `harness/loki_settings.json`
-  are all gitignored; `harness/vendor/` is gitignored too.
-- The repository commit identity is set to a GitHub noreply address.
+1. **Surface the vendored Godot domains as real tools** — signals, resources (.tres),
+   animation, tilemap, shader, theme, export, profiling. The capability is already inside the
+   addon; only exposure is missing. This is the single biggest gap.
+2. **Adopt the safety patterns** comparable agents use: route scene edits through Godot's
+   **undo manager**, lock file operations to `res://`, and never eval raw source — restrict
+   script execution to calling a method on an existing `@tool` script or runtime node.
+3. **Composite tools** (one `nodes` tool with add/remove/set_property) to cut schema tokens;
+   every schema is paid for on every request.
+4. A **`help` tool** for tiered tool descriptions instead of full schemas.
+5. **Runtime inspection** while the game runs.

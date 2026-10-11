@@ -28,6 +28,15 @@ a key for.
 - **Memory + autonomy** — persistent conversation and a task loop that keeps
   going until the job is done.
 
+## Tests
+
+```bash
+harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, offline
+harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real turn
+```
+
+See `HANDOFF.md` for the layout, modes, provider notes and the traps worth knowing.
+
 ## Requirements
 
 | Piece | Needed for | Notes |
