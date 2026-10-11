@@ -129,6 +129,13 @@ MODELS = {
                             api_key=os.getenv("TOGETHER_API_KEY", ""), model=os.getenv("TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free")),
     "deepseek": ModelConfig(base_url="https://api.deepseek.com/v1",
                             api_key=os.getenv("DEEPSEEK_API_KEY", ""), model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+    # Vireonix: OpenAI-compatible, needs NO key, NO account and NO card, and mixes
+    # MiniMax/Nemotron/GLM/Qwen/GPT-OSS behind "auto". 20M input tokens/hour, 1M
+    # context. This is the "nothing to set up at all" option - note that prompts
+    # and file contents are sent to a third-party service.
+    "vireonix": ModelConfig(base_url=os.getenv("VIREONIX_BASE_URL", "https://vireonix.ai/v1"),
+                            api_key=os.getenv("VIREONIX_API_KEY", "vireonix"),
+                            model=os.getenv("VIREONIX_MODEL", "auto")),
     # GitHub Models - free with a GitHub personal access token (models.github.ai).
     "github": ModelConfig(base_url=os.getenv("GITHUB_MODELS_URL", "https://models.github.ai/inference"),
                           api_key=os.getenv("GITHUB_TOKEN", ""),
@@ -150,7 +157,7 @@ model_name = os.getenv("LOKI_MODEL", "local")
 # tier allows 1M input tokens/min; Groq's free tier caps at 7k/min and returns 413
 # on Loki's ~8k-token request, so it sits lower.
 SMART_ORDER = ("gemini", "cerebras", "groq", "openrouter", "github", "mistral",
-               "deepseek", "together", "local", "local-hermes")
+               "deepseek", "together", "vireonix", "local", "local-hermes")
 _SMART_FAILED = set()
 
 

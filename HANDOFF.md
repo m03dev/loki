@@ -165,6 +165,18 @@ still fail the multi-step TPS task - hermes3 keeps asking for confirmation inste
 qwen3 goes silent. A capable cloud model is required for long agentic runs; the local models
 are fine for single-step work.
 
+
+## Zero-setup providers
+
+**Vireonix** (`https://vireonix.ai/v1`) needs no key, no account and no card. Set
+`LOKI_MODEL=vireonix` (or just let Smart pick it when nothing else is configured). It is
+OpenAI-compatible, supports tool calling, routes "auto" across MiniMax/Nemotron/GLM/Qwen/
+GPT-OSS, and advertises 20M input tokens/hour with a 1M context.
+Caveat: prompts and file contents go to a third-party service.
+
+Free tiers that need a (free) key, best first for Loki's ~8k-token agent prompt:
+Gemini (1M TPM) > Cerebras > Groq (7k TPM - too small, will 413) > OpenRouter > GitHub Models.
+
 ## Gotchas worth knowing
 
 - **Never launch the bridge through a shell chain.** `cmd /c start "Title" /min x.bat`
