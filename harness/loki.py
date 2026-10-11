@@ -1,0 +1,1264 @@
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")  # so emoji don't crash the Windows console
+
+import asyncio
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import threading
+import time
+from contextlib import AsyncExitStack
+from pathlib import Path
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+import openai
+from openai import AsyncOpenAI
+from pydantic import BaseModel
+
+ROOT = Path(__file__).parent
+
+# --- configuration (override with environment variables) --------------------
+# GAME_PROJECT  : path to the Godot game project the agent should work on.
+# LOKI_WORKSPACE : the folder the file tools are allowed to touch (defaults
+#                     to GAME_PROJECT if set, else ./workspace).
+# GODOT_EXE     : path to the Godot executable.
+GAME_PROJECT = os.getenv("GAME_PROJECT", "")
+WORKSPACE = Path(
+    os.getenv("LOKI_WORKSPACE")
+    or os.getenv("HARNESS_WORKSPACE")  # legacy name, still honoured
+    or GAME_PROJECT
+    or str(ROOT / "workspace")
+)
+GODOT_EXE = os.getenv("GODOT_EXE", "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe")
+
+MEMORY_FILE = ROOT / "memory.md"
+PLAN_FILE = ROOT / "plan.md"
+MCP_CONFIG = ROOT / "mcp_servers.json"
+
+# LOKI_AUTO_APPROVE=1 runs dangerous tools without asking (for unattended runs).
+AUTO_APPROVE = (os.getenv("LOKI_AUTO_APPROVE") or os.getenv("HARNESS_AUTO_APPROVE", "")) == "1"
+
+MAX_OUTPUT = 8000   # characters of command output handed back to the model
+GOAL_STEPS = 0      # 0 = run a goal until it says DONE/BLOCKED (no step limit)
+MAX_TURNS_PER_REQUEST = int(os.getenv("LOKI_MAX_TURNS", "0"))       # model<->tool cycles per request (0 = UNLIMITED)
+REQUEST_DEADLINE_S = float(os.getenv("LOKI_REQUEST_DEADLINE", "0"))    # wall-clock seconds per request (0 = no deadline)
+MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context window (0 = keep everything)
+
+
+# ---------------------------------------------------------------------------
+# Pillar: the model registry. Every entry is an OpenAI-compatible endpoint.
+# ---------------------------------------------------------------------------
+
+def _load_env_file() -> None:
+    """Load KEY=VALUE pairs from harness/.env so users can store API keys."""
+    path = ROOT / ".env"
+    if not path.is_file():
+        return
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    except OSError:
+        pass
+
+
+_load_env_file()
+
+
+class ModelConfig(BaseModel):
+    base_url: str
+    api_key: str = "none"
+    model: str
+
+
+MODELS = {
+    # Code-specialized default; /model local-reasoning switches to Qwen 3.5 9B.
+    "local": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen2.5-coder:7b"),
+    "local-reasoning": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3.5:9b"),
+    "local-small": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen2.5-coder:7b"),
+    "gpt": ModelConfig(base_url="https://api.openai.com/v1", api_key=os.getenv("OPENAI_API_KEY", ""), model="gpt-5.2"),
+    "claude": ModelConfig(base_url="https://api.anthropic.com/v1/", api_key=os.getenv("ANTHROPIC_API_KEY", ""), model="claude-sonnet-5"),
+    # OmniRoute: local AI gateway (one OpenAI-compatible endpoint -> many providers,
+    # free tiers and auto-fallback). Run it, set a provider key, then use LOKI_MODEL=omniroute.
+    # Free tiers (put the key in harness/.env). OpenAI-compatible endpoints.
+    "gemini": ModelConfig(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                          api_key=os.getenv("GEMINI_API_KEY", ""), model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash")),
+    "groq": ModelConfig(base_url="https://api.groq.com/openai/v1",
+                        api_key=os.getenv("GROQ_API_KEY", ""), model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
+    "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
+                              api_key=os.getenv("OPENROUTER_API_KEY", ""), model=os.getenv("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")),
+    "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
+                            api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")),
+    "mistral": ModelConfig(base_url="https://api.mistral.ai/v1",
+                           api_key=os.getenv("MISTRAL_API_KEY", ""), model=os.getenv("MISTRAL_MODEL", "mistral-large-latest")),
+    "together": ModelConfig(base_url="https://api.together.xyz/v1",
+                            api_key=os.getenv("TOGETHER_API_KEY", ""), model=os.getenv("TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free")),
+    "deepseek": ModelConfig(base_url="https://api.deepseek.com/v1",
+                            api_key=os.getenv("DEEPSEEK_API_KEY", ""), model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+    "omniroute": ModelConfig(
+        base_url=os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1"),
+        api_key=os.getenv("OMNIROUTE_API_KEY", "omniroute"),
+        model=os.getenv("OMNIROUTE_MODEL", "auto"),
+    ),
+}
+
+model_name = os.getenv("LOKI_MODEL", "local")
+
+
+# ---------------------------------------------------------------------------
+# Memory and the plan: two markdown files in the prompt + tools to edit them.
+# ---------------------------------------------------------------------------
+
+def load_memory() -> str:
+    if MEMORY_FILE.is_file():
+        return MEMORY_FILE.read_text(encoding="utf-8")
+    return "(nothing saved yet)"
+
+
+def save_memory(fact: str) -> str:
+    with MEMORY_FILE.open("a", encoding="utf-8") as f:
+        f.write(f"- {fact}\n")
+    return f"saved: {fact}"
+
+
+def todo_list() -> str:
+    if not PLAN_FILE.is_file():
+        return "(no plan yet - use todo_add to start one)"
+    text = PLAN_FILE.read_text(encoding="utf-8").strip()
+    return text or "(empty plan)"
+
+
+def todo_clear() -> str:
+    if PLAN_FILE.is_file():
+        PLAN_FILE.unlink()
+    return "plan cleared"
+
+
+def todo_add(item: str) -> str:
+    with PLAN_FILE.open("a", encoding="utf-8") as f:
+        f.write(f"- [ ] {item}\n")
+    return f"added to plan: {item}"
+
+
+def todo_done(index: int) -> str:
+    if not PLAN_FILE.is_file():
+        return "error: no plan yet"
+    lines = PLAN_FILE.read_text(encoding="utf-8").splitlines()
+    seen = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith("- [ ]"):
+            seen += 1
+            if seen == index:
+                lines[i] = line.replace("- [ ]", "- [x]", 1)
+                PLAN_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                return f"done: {line.strip()[6:].strip()}"
+    return f"error: no open plan item number {index}"
+
+
+# ---------------------------------------------------------------------------
+# Sandbox: every file tool resolves inside WORKSPACE, so a stray '../../'
+# cannot read or overwrite the rest of the disk.
+# ---------------------------------------------------------------------------
+
+def resolve_in_workspace(name: str) -> Path:
+    # Models sometimes wrap paths in quotes or add a res:// prefix.
+    cleaned = str(name).strip().strip('"').strip("'").strip()
+    for prefix in ("res://", "res:/", "./"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+    path = (WORKSPACE / cleaned).resolve()
+    if path != WORKSPACE.resolve() and WORKSPACE.resolve() not in path.parents:
+        raise ValueError(f"path escapes workspace: {name}")
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Local tools: read the code, edit it precisely, search it, run it, verify it.
+# ---------------------------------------------------------------------------
+
+def list_files() -> str:
+    return "\n".join(p.name for p in WORKSPACE.iterdir()) or "(empty)"
+
+
+def list_tree(subdir: str = ".", max_depth: int = 3) -> str:
+    base = resolve_in_workspace(subdir)
+    lines = []
+
+    def walk(d: Path, prefix: str, depth: int) -> None:
+        if depth > max_depth:
+            return
+        for e in sorted(d.iterdir(), key=lambda p: (p.is_file(), p.name)):
+            if e.name in (".git", "__pycache__", ".venv", ".godot", "node_modules"):
+                continue
+            lines.append(prefix + e.name + ("/" if e.is_dir() else ""))
+            if e.is_dir():
+                walk(e, prefix + "   ", depth + 1)
+
+    walk(base, "", 1)
+    return "\n".join(lines) if lines else "(empty)"
+
+
+def read_file(filename: str) -> str:
+    path = resolve_in_workspace(filename)
+    return path.read_text(encoding="utf-8") if path.is_file() else f"error: no {filename}"
+
+
+def write_file(filename: str, content: str) -> str:
+    path = resolve_in_workspace(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    note = chr(10) + check_script(filename) if str(filename).endswith(".gd") else ""
+    return f"wrote {filename}{note}"
+
+
+def append_file(filename: str, content: str) -> str:
+    path = resolve_in_workspace(filename)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(content)
+    return f"appended to {filename}"
+
+
+def edit_file(filename: str, old: str, new: str) -> str:
+    path = resolve_in_workspace(filename)
+    if not path.is_file():
+        return f"error: no {filename}"
+    text = path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count == 0:
+        return f"error: that exact text was not found in {filename}"
+    path.write_text(text.replace(old, new), encoding="utf-8")
+    note = chr(10) + check_script(filename) if str(filename).endswith(".gd") else ""
+    return f"edited {filename} ({count} replacement(s)){note}"
+
+
+def search_files(pattern: str, subdir: str = ".", glob: str = "*") -> str:
+    base = resolve_in_workspace(subdir)
+    rx = re.compile(pattern)
+    hits = []
+    for path in sorted(base.rglob(glob)):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            if rx.search(line):
+                rel = path.relative_to(WORKSPACE)
+                hits.append(f"{rel}:{i}: {line.strip()[:200]}")
+                if len(hits) >= 200:
+                    hits.append("...[truncated at 200 matches]")
+                    return "\n".join(hits)
+    return "\n".join(hits) if hits else "(no matches)"
+
+
+def make_dir(path: str) -> str:
+    resolve_in_workspace(path).mkdir(parents=True, exist_ok=True)
+    return f"created {path}"
+
+
+def move_file(src: str, dst: str) -> str:
+    s = resolve_in_workspace(src)
+    d = resolve_in_workspace(dst)
+    if not s.exists():
+        return f"error: no {src}"
+    d.parent.mkdir(parents=True, exist_ok=True)
+    s.replace(d)
+    return f"moved {src} -> {dst}"
+
+
+def delete_file(path: str) -> str:
+    p = resolve_in_workspace(path)
+    if not p.exists():
+        return f"error: no {path}"
+    if p.is_dir():
+        shutil.rmtree(p)
+    else:
+        p.unlink()
+    return f"deleted {path}"
+
+
+def _pad(values, *defaults):
+    values = list(values or [])
+    while len(values) < len(defaults):
+        values.append(defaults[len(values)])
+    return values
+
+
+def _v3(values) -> str:
+    a = _pad(values, 0, 0, 0)
+    return f"{float(a[0])}, {float(a[1])}, {float(a[2])}"
+
+
+def _color(values) -> str:
+    c = _pad(values, 0.8, 0.8, 0.8, 1.0)
+    return f"Color({float(c[0])}, {float(c[1])}, {float(c[2])}, {float(c[3])})"
+
+
+_PRIMITIVES = {
+    "box": ("BoxMesh", lambda o: ["size = Vector3(%s)" % _v3(_pad(o.get("size"), 1, 1, 1))]),
+    "sphere": ("SphereMesh", lambda o: [
+        "radius = %s" % float(o.get("radius", 0.5)),
+        "height = %s" % (float(o.get("radius", 0.5)) * 2)]),
+    "cylinder": ("CylinderMesh", lambda o: [
+        "top_radius = %s" % float(o.get("radius", 0.5)),
+        "bottom_radius = %s" % float(o.get("radius", 0.5)),
+        "height = %s" % float(o.get("height", 2.0))]),
+    "capsule": ("CapsuleMesh", lambda o: [
+        "radius = %s" % float(o.get("radius", 0.5)),
+        "height = %s" % float(o.get("height", 2.0))]),
+    "plane": ("PlaneMesh", lambda o: ["size = Vector2(%s, %s)" % (
+        float(_pad(o.get("size"), 10, 10)[0]), float(_pad(o.get("size"), 10, 10)[1]))]),
+    "torus": ("TorusMesh", lambda o: [
+        "inner_radius = %s" % float(o.get("inner_radius", 0.5)),
+        "outer_radius = %s" % float(o.get("outer_radius", 1.0))]),
+}
+
+
+def open_in_editor(path: str, run: bool = False) -> str:
+    """Ask the running Godot editor to open (and optionally run) a scene.
+
+    Writes a line to <project>/.godot/loki_editor_ops.jsonl, which the Loki dock
+    polls inside the editor. This is how file-based work becomes visible on screen.
+    """
+    if not path.startswith("res://"):
+        path = "res://" + path.lstrip("/")
+    ops = WORKSPACE / ".godot" / "loki_editor_ops.jsonl"
+    ops.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"id": int(time.time() * 1000), "op": "open_scene", "path": path, "run": bool(run)}
+    ops.write_text(json.dumps(payload) + chr(10), encoding="utf-8")
+    return "asked the editor to open %s" % path
+
+
+def build_3d_scene(filename: str, objects: str, camera: bool = True, light: bool = True) -> str:
+    """Write a guaranteed-valid Godot 4 .tscn of primitive meshes, then verify it.
+
+    objects is a JSON array like [{"type":"box","name":"Box","pos":[0,1,0],
+    "size":[1,1,1],"color":[0.8,0.2,0.2]}]. Types: box, sphere, cylinder,
+    capsule, plane, torus. Exists so the model never hand-writes .tscn text.
+    """
+    spec = objects
+    if isinstance(objects, str):
+        try:
+            spec = json.loads(objects)
+        except json.JSONDecodeError as exc:
+            return "error: objects is not valid JSON: %s" % exc
+    if isinstance(spec, dict):
+        spec = spec.get("objects", spec)
+    if not isinstance(spec, list) or not spec:
+        return "error: objects must be a non-empty JSON array of {type,name,pos,size,color}"
+    if not filename.endswith(".tscn"):
+        filename += ".tscn"
+    if not filename.startswith("res://"):
+        filename = "res://" + filename.lstrip("/")
+
+    subs = []
+    blocks = []
+    root_name = "Scene3D"
+    for index, obj in enumerate(spec, 1):
+        if not isinstance(obj, dict):
+            return "error: object %d is not a JSON object" % index
+        kind = str(obj.get("type", "box")).lower()
+        if kind not in _PRIMITIVES:
+            return "error: unknown primitive '%s' (use %s)" % (kind, ", ".join(_PRIMITIVES))
+        if index == 1:
+            root_name = re.sub(r"[^A-Za-z0-9_]", "_", str(obj.get("root") or "Scene3D"))
+        mesh_type, prop_fn = _PRIMITIVES[kind]
+        name = re.sub(r"[^A-Za-z0-9_]", "_", str(obj.get("name") or (kind.capitalize() + str(index))))
+        mesh_id = "Mesh_" + name
+        mat_id = "Mat_" + name
+        subs.append((mesh_id, mesh_type, prop_fn(obj)))
+        subs.append((mat_id, "StandardMaterial3D", ["albedo_color = %s" % _color(obj.get("color"))]))
+        blocks.append((name, "MeshInstance3D", ".", [
+            'mesh = SubResource("%s")' % mesh_id,
+            'material_override = SubResource("%s")' % mat_id,
+            "transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %s)" % _v3(obj.get("pos"))]))
+
+    if camera:
+        blocks.insert(0, ("Camera3D", "Camera3D", ".",
+                          ["transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 10)"]))
+    if light:
+        blocks.insert(0, ("DirectionalLight3D", "DirectionalLight3D", ".",
+                          ["transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 8, 4)"]))
+
+    lines = ["[gd_scene load_steps=%d format=3]" % (len(subs) + 1), ""]
+    for sid, stype, props in subs:
+        lines.append('[sub_resource type="%s" id="%s"]' % (stype, sid))
+        lines.extend(props)
+        lines.append("")
+    lines.append('[node name="%s" type="Node3D"]' % root_name)
+    lines.append("")
+    for name, ntype, parent, props in blocks:
+        lines.append('[node name="%s" type="%s" parent="%s"]' % (name, ntype, parent))
+        lines.extend(props)
+        lines.append("")
+    lines.append("")
+
+    path = resolve_in_workspace(filename[len("res://"):])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(chr(10).join(lines), encoding="utf-8")
+    check = validate_scene(filename)
+    opened = open_in_editor(filename)
+    return "wrote %s (%d primitives)%s%s%s%s" % (filename, len(spec), chr(10), check, chr(10), opened)
+
+
+def validate_scene(filename: str, timeout: int = 90) -> str:
+    """Run a scene headless and report whether Godot loaded it without errors."""
+    if not filename.startswith("res://"):
+        filename = "res://" + filename.lstrip("/")
+    # run_godot uses shlex.split(posix=False), which keeps literal quotes,
+    # so the res:// path must be passed unquoted here.
+    res = run_godot("--headless --quit-after 1 " + filename, timeout=timeout)
+    low = res.lower()
+    bad = "error:" in low or "failed loading" in low or "parse error" in low
+    verdict = "INVALID - fix these errors:" if bad else "valid - Godot loaded it cleanly."
+    return chr(10).join(["validate_scene %s: %s" % (filename, verdict), res])
+
+
+def _shorten(text: str) -> str:
+    if len(text) > MAX_OUTPUT:
+        half = MAX_OUTPUT // 2
+        return text[:half] + "\n...[output truncated]...\n" + text[-half:]
+    return text
+
+
+def check_script(filename: str) -> str:
+    """Compile-check a GDScript file with Godot and report any parse errors."""
+    if not filename.startswith("res://"):
+        filename = "res://" + filename.lstrip("/")
+    cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, "--check-only", "--script", filename]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
+        return "check_script %s: timed out" % filename
+    except Exception as exc:
+        return "check_script %s: error %s" % (filename, exc)
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    bad = ("Parse Error" in out) or ("Failed to load script" in out) or ("SCRIPT ERROR" in out)
+    verdict = "ERRORS - fix these:" if bad else "compiles OK"
+    return "check_script %s: %s%s%s" % (filename, verdict, chr(10), _shorten(out))
+
+
+def play_scene(filename: str, seconds: int = 5) -> str:
+    """Actually RUN a game scene headless for a few seconds and report errors/output.
+
+    This is how to test a controller, shooting system, physics or any runtime
+    behaviour for real instead of assuming it works.
+    """
+    if not filename.startswith("res://"):
+        filename = "res://" + filename.lstrip("/")
+    cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, filename]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            out, _ = proc.communicate(timeout=max(1, int(seconds)))
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                out, _ = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, _ = proc.communicate()
+    except Exception as exc:
+        return "error: %s" % exc
+    out = (out or "").strip()
+    errors = [line for line in out.splitlines()
+              if "error" in line.lower() or "script error" in line.lower()]
+    verdict = ("runtime errors found - FIX THESE:" if errors else "ran with no errors")
+    return "play_scene %s (%ds): %s%s%s" % (filename, seconds, verdict, chr(10), _shorten(out))
+
+
+def run_command(command: str, timeout: int = 120) -> str:
+    try:
+        proc = subprocess.run(command, shell=True, cwd=WORKSPACE,
+                              capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"error: command timed out after {timeout}s"
+    except Exception as e:
+        return f"error: {e}"
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return f"exit {proc.returncode}\n{_shorten(out)}" if out else f"exit {proc.returncode}"
+
+
+def run_godot(args: str = "", project_path: str = "", timeout: int = 180) -> str:
+    cmd = [GODOT_EXE]
+    proj = project_path or GAME_PROJECT
+    if proj:
+        cmd += ["--path", proj]
+    if args:
+        cmd += shlex.split(args, posix=False)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"error: Godot timed out after {timeout}s"
+    except Exception as e:
+        return f"error: {e}"
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return f"exit {proc.returncode}\n{_shorten(out)}" if out else f"exit {proc.returncode}"
+
+
+def open_godot(project_path: str = "") -> str:
+    # Launch the editor detached so it keeps running after this tool returns.
+    args = [GODOT_EXE]
+    if project_path:
+        args += ["--path", project_path]
+    args.append("-e")
+    kwargs = {}
+    if os.name == "nt":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200
+    try:
+        subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, **kwargs)
+    except Exception as e:
+        return f"error: could not launch Godot: {e}"
+    where = f" for {project_path}" if project_path else ""
+    return f"launched the Godot editor{where}"
+
+
+ECC_AGENTS_DIR = ROOT / "vendor" / "ECC" / "agents"
+
+
+def list_ecc_agents() -> str:
+    """List the specialised agents available from the vendored ECC repo."""
+    if not ECC_AGENTS_DIR.is_dir():
+        return "ECC agents not installed (vendor/ECC/agents missing)."
+    names = sorted(p.stem for p in ECC_AGENTS_DIR.glob("*.md"))
+    return "ECC agents (%d): %s" % (len(names), ", ".join(names))
+
+
+def load_ecc_agent(name: str) -> str:
+    """Return a specialised agent's instructions so you can follow them for the task."""
+    target = ECC_AGENTS_DIR / (os.path.basename(str(name).strip()) + ".md")
+    if not target.is_file():
+        return "no such ECC agent: %s" % name
+    return target.read_text(encoding="utf-8")[:12000]
+
+
+LOCAL_TOOLS = {
+    "list_files": list_files,
+    "list_tree": list_tree,
+    "read_file": read_file,
+    "write_file": write_file,
+    "append_file": append_file,
+    "edit_file": edit_file,
+    "search_files": search_files,
+    "make_dir": make_dir,
+    "move_file": move_file,
+    "delete_file": delete_file,
+    "run_command": run_command,
+    "run_godot": run_godot,
+    "open_godot": open_godot,
+    "build_3d_scene": build_3d_scene,
+    "validate_scene": validate_scene,
+    "play_scene": play_scene,
+    "check_script": check_script,
+    "list_ecc_agents": list_ecc_agents,
+    "load_ecc_agent": load_ecc_agent,
+    "open_in_editor": open_in_editor,
+    "todo_add": todo_add,
+    "todo_list": todo_list,
+    "todo_done": todo_done,
+    "save_memory": save_memory,
+}
+
+# Tools that change files on disk (used to verify a task really did work).
+MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "move_file", "delete_file", "make_dir"}
+
+# Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
+DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file"}
+
+
+def schema(name, description, properties=None, required=None) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties or {},
+                "required": required or [],
+            },
+        },
+    }
+
+
+TOOL_SCHEMAS = [
+    schema("list_files", "List the files at the top of the game project."),
+    schema("list_tree", "Show the project as a tree.",
+           {"subdir": {"type": "string"}, "max_depth": {"type": "integer"}}),
+    schema("read_file", "Read one file.", {"filename": {"type": "string"}}, ["filename"]),
+    schema("write_file", "Write (overwrite) a file.",
+           {"filename": {"type": "string"}, "content": {"type": "string"}}, ["filename", "content"]),
+    schema("append_file", "Append text to the end of a file.",
+           {"filename": {"type": "string"}, "content": {"type": "string"}}, ["filename", "content"]),
+    schema("edit_file", "Replace an exact snippet of text in a file. Prefer this over rewriting a whole file.",
+           {"filename": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}},
+           ["filename", "old", "new"]),
+    schema("search_files", "Search file contents with a regular expression, with line numbers.",
+           {"pattern": {"type": "string"}, "subdir": {"type": "string"}, "glob": {"type": "string"}}, ["pattern"]),
+    schema("make_dir", "Create a directory (and parents).", {"path": {"type": "string"}}, ["path"]),
+    schema("move_file", "Move or rename a file or directory.",
+           {"src": {"type": "string"}, "dst": {"type": "string"}}, ["src", "dst"]),
+    schema("delete_file", "Delete a file or directory.", {"path": {"type": "string"}}, ["path"]),
+    schema("run_command", "Run a shell command and return its output (tests, git, etc.).",
+           {"command": {"type": "string"}, "timeout": {"type": "integer"}}, ["command"]),
+    schema("run_godot", "Run the Godot engine with arguments and return its output. Use for headless import ('--headless --quit') and running scenes, then READ the output to catch errors.",
+           {"args": {"type": "string"}, "project_path": {"type": "string"}, "timeout": {"type": "integer"}}),
+    schema("open_godot", "Open the Godot editor (optionally for a project folder).",
+           {"project_path": {"type": "string"}}),
+    schema("build_3d_scene", 'Create AND verify a Godot 4 3D scene (.tscn) from primitive meshes. ALWAYS use this instead of hand-writing .tscn text. objects is a JSON array like [{"type": "box", "name": "Box", "pos": [0, 1, 0], "size": [1, 1, 1], "color": [0.8, 0.2, 0.2]}]. Types: box, sphere, cylinder, capsule, plane, torus.',
+           {"filename": {"type": "string"}, "objects": {"type": "string"}, "camera": {"type": "boolean"}, "light": {"type": "boolean"}}, ["filename", "objects"]),
+    schema("play_scene", "Run a game scene headless for a few seconds to test runtime behaviour (controller, shooting, physics) and report errors and printed output. Use this to verify work actually functions.",
+           {"filename": {"type": "string"}, "seconds": {"type": "integer"}}, ["filename"]),
+    schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.)."),
+    schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
+           {"name": {"type": "string"}}, ["name"]),
+    schema("check_script", "Compile-check a GDScript file with Godot and report parse errors. Use after writing or editing a .gd file.",
+           {"filename": {"type": "string"}}, ["filename"]),
+    schema("validate_scene", "Load a scene headless and report whether Godot loads it cleanly.",
+           {"filename": {"type": "string"}}, ["filename"]),
+    schema("open_in_editor", "Open a scene in the running Godot editor (and optionally run it) so the user sees it. Call this after creating or changing a scene.",
+           {"path": {"type": "string"}, "run": {"type": "boolean"}}, ["path"]),
+    schema("todo_add", "Add a step to the persistent plan.", {"item": {"type": "string"}}, ["item"]),
+    schema("todo_list", "Show the persistent plan."),
+    schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
+    schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
+]
+
+
+# The tools actually offered to the model. run_command/open_godot are deliberately
+# excluded: they are dangerous (approval prompts) and a small model misuses them
+# (e.g. unix "ls -R" on Windows), which stalls the whole task.
+MODEL_TOOL_NAMES = {
+    "list_ecc_agents", "load_ecc_agent",
+    "list_files", "list_tree", "read_file", "write_file", "append_file",
+    "edit_file", "search_files", "make_dir", "move_file", "delete_file",
+    "build_3d_scene", "validate_scene", "play_scene", "open_in_editor",
+    "check_script",
+}
+MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
+
+
+
+# --- tool categories (toggleable from the editor Settings dialog) ------------
+TOOL_CATEGORIES = {
+    "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
+              "edit_file", "search_files", "make_dir", "move_file", "delete_file"],
+    "scenes": ["build_3d_scene", "validate_scene", "open_in_editor"],
+    "runtime": ["play_scene", "check_script"],
+    "planning": ["todo_add", "todo_list", "todo_done"],
+    "memory": ["save_memory"],
+    "skills": ["list_ecc_agents", "load_ecc_agent"],
+    "system": ["run_command", "run_godot", "open_godot"],
+}
+CATEGORY_LABELS = {
+    "files": "Files (read/write/edit/search)",
+    "scenes": "Scenes (build/validate/open in editor)",
+    "runtime": "Runtime checks (run scene, compile script)",
+    "planning": "Planning (todo list)",
+    "memory": "Memory (save facts)",
+    "skills": "Skills (ECC agents)",
+    "system": "System (shell commands, launch Godot) - dangerous",
+}
+SETTINGS_FILE = ROOT / "loki_settings.json"
+
+
+def _load_settings() -> dict:
+    defaults = {name: (name != "system") for name in TOOL_CATEGORIES}
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        for name, value in (data.get("categories") or {}).items():
+            if name in defaults:
+                defaults[name] = bool(value)
+    except (OSError, json.JSONDecodeError):
+        pass
+    return defaults
+
+
+CATEGORIES = _load_settings()
+
+
+def save_settings() -> None:
+    try:
+        SETTINGS_FILE.write_text(json.dumps({"categories": CATEGORIES}, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def set_category(name: str, enabled: bool) -> bool:
+    if name not in TOOL_CATEGORIES:
+        return False
+    CATEGORIES[name] = bool(enabled)
+    save_settings()
+    return True
+
+
+def _tool_enabled(tool_name: str) -> bool:
+    for category, members in TOOL_CATEGORIES.items():
+        if tool_name in members:
+            return CATEGORIES.get(category, True)
+    return True
+
+
+def model_tool_schemas() -> list:
+    """The tool schemas to offer the model, filtered by enabled categories."""
+    return [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
+            and _tool_enabled(t["function"]["name"])]
+
+
+def categories_state() -> dict:
+    return {"categories": CATEGORIES, "labels": CATEGORY_LABELS}
+
+
+SYSTEM_PROMPT = '''You are a SENIOR GAME DEVELOPER working autonomously in a Godot 4 project. You are practical, rigorous and concise.
+
+The workspace folder is the game project. You can list, read, search, edit, create, move and delete files; run shell commands (run_command); run the Godot engine (run_godot); and open the Godot editor (open_godot).
+
+To create or extend a 3D scene, ALWAYS use build_3d_scene - never hand-write .tscn text, you get it wrong. build_3d_scene writes the file and re-loads it in Godot for you, so only claim a scene works when its output says valid. Do NOT launch the editor (open_godot) unless the user asks.
+
+Work like a professional, in this order - do not skip steps:
+1. UNDERSTAND: use list_tree, search_files and read_file to learn the project structure, scenes (.tscn), scripts (.gd) and resources before you change anything.
+2. PLAN: at most two todo_add items, only if genuinely useful. Do NOT pad the task with planning.
+3. IMPLEMENT: every turn must produce a real artifact - a .tscn (use build_3d_scene), a .gd or .tres (use write_file). Creating folders or todo items is NOT progress. You are on Windows: never use 'mkdir -p', use make_dir. Write correct Godot 4 code: typed GDScript (class_name, type hints on vars, params and return types), signals, and valid .tscn/.tres text format.
+4. VERIFY: after changes, check the scene with validate_scene or run the engine headless with run_godot and READ the output. Fix what breaks. A feature is not done until the engine runs it cleanly. If you cannot verify it, say so plainly.
+5. ITERATE until the task is finished, then stop and summarise what you did.
+
+Rules:
+- Prefer the smallest change that works; never rewrite a whole file when edit_file will do.
+- Do not create empty folders. Do not repeat a tool call that already succeeded.
+- Never claim something works without running it and seeing the output.
+- If you are blocked, reply 'BLOCKED: <what you need>'.
+
+What you remember about the user from previous sessions:
+{memory}
+
+When you learn a new lasting fact about the user, save it with save_memory.'''
+
+
+def _read_vendor(*parts: str) -> str:
+    try:
+        return (ROOT / "vendor").joinpath(*parts).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+# Ponytail: the "lazy senior dev" coding standard (github.com/DietrichGebert/ponytail).
+# Braces escaped so SYSTEM_PROMPT.format() still works.
+_PONYTAIL = _read_vendor("ponytail", "AGENTS.md").replace("{", "{{").replace("}", "}}")
+if _PONYTAIL:
+    SYSTEM_PROMPT += chr(10) * 2 + "# Coding standard - Ponytail (write the least code that works)" + chr(10) + _PONYTAIL
+
+ECC_AGENTS_DIR = ROOT / "vendor" / "ECC" / "agents"
+
+
+def list_ecc_agents() -> str:
+    """List the specialised agents available from the vendored ECC repo."""
+    if not ECC_AGENTS_DIR.is_dir():
+        return "ECC agents not installed (vendor/ECC/agents missing)."
+    names = sorted(p.stem for p in ECC_AGENTS_DIR.glob("*.md"))
+    return "ECC agents (%d): %s" % (len(names), ", ".join(names))
+
+
+def load_ecc_agent(name: str) -> str:
+    """Return a specialised agent's instructions so you can follow them for the task."""
+    target = ECC_AGENTS_DIR / (os.path.basename(str(name).strip()) + ".md")
+    if not target.is_file():
+        return "no such ECC agent: %s" % name
+    return target.read_text(encoding="utf-8")[:12000]
+HISTORY_FILE = WORKSPACE / ".godot" / "loki_history.json"
+
+
+def _as_dict(message) -> dict:
+    """Make a chat message JSON-safe (OpenAI objects or plain dicts)."""
+    if isinstance(message, dict):
+        return message
+    for attr in ("model_dump", "to_dict", "dict"):
+        method = getattr(message, attr, None)
+        if callable(method):
+            try:
+                return method()
+            except Exception:
+                continue
+    return {"role": getattr(message, "role", "assistant"), "content": getattr(message, "content", "")}
+
+
+def save_history() -> None:
+    """Persist the conversation so it survives a bridge restart."""
+    try:
+        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        safe = [_as_dict(item) for item in messages]
+        HISTORY_FILE.write_text(json.dumps(safe, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def load_history() -> None:
+    """Restore the previous conversation, keeping the current system prompt."""
+    try:
+        if not HISTORY_FILE.is_file():
+            return
+        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, list) and data:
+            messages[:] = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())}]
+            messages.extend(_sanitize_history(data))
+    except (OSError, json.JSONDecodeError):
+        pass
+
+
+def _sanitize_history(items: list) -> list:
+    """Keep only plain conversational turns.
+
+    Drops tool scaffolding and finished-task text (GOAL:/DONE:/BLOCKED:) so a new
+    request cannot be hijacked into redoing a previous task from replayed context.
+    """
+    clean = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        if role not in ("user", "assistant") or item.get("tool_calls"):
+            continue
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        head = content.strip().upper()
+        if head.startswith("GOAL:") or head.startswith("DONE:") or head.startswith("BLOCKED:"):
+            continue
+        clean.append({"role": role, "content": content})
+    return clean[-20:]
+
+
+messages = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())}]
+load_history()
+
+
+# ---------------------------------------------------------------------------
+# Pillar: MCP. Launch servers from mcp_servers.json and merge in their tools.
+# ---------------------------------------------------------------------------
+
+mcp_sessions = {}
+
+
+async def connect_mcp(stack: AsyncExitStack) -> None:
+    config = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
+    for name, spec in config["mcpServers"].items():
+        params = StdioServerParameters(command=spec["command"], args=spec["args"])
+        try:
+            read, write = await stack.enter_async_context(stdio_client(params))
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+        except Exception as e:
+            print(f"  [mcp] '{name}' failed to start: {e}")
+            continue
+        tools = (await session.list_tools()).tools
+        for tool in tools:
+            mcp_sessions[tool.name] = session
+            TOOL_SCHEMAS.append(schema(tool.name, tool.description,
+                                       tool.input_schema.get("properties", {}),
+                                       tool.input_schema.get("required", [])))
+        print(f"  [mcp] connected '{name}': {[t.name for t in tools]}")
+
+
+async def approve(kind: str, detail: str) -> bool:
+    if AUTO_APPROVE:
+        print(f"  [auto-approved] {kind}: {detail}")
+        return True
+    answer = await asyncio.to_thread(input, f"  [approve] {kind}: {detail}\n  allow? [y/N] ")
+    return answer.strip().lower() in ("y", "yes")
+
+
+async def call_tool(name: str, args: dict) -> str:
+    if name in LOCAL_TOOLS:
+        if name in DANGEROUS and not await approve(name, json.dumps(args)[:400]):
+            return ("DENIED: the user did not approve this tool. Do NOT request it again. "
+                    "Make progress with file tools (build_3d_scene, write_file, edit_file, "
+                    "play_scene, validate_scene) instead, or reply 'BLOCKED: <reason>'.")
+        try:
+            result = LOCAL_TOOLS[name](**args)
+            if asyncio.iscoroutine(result):
+                result = await result
+            global _task_modified
+            if name in MODIFYING:
+                _task_modified = True
+            return result
+        except Exception as e:
+            return f"error: {e}"
+    if name in mcp_sessions:
+        try:
+            result = await mcp_sessions[name].call_tool(name, args)
+            return "\n".join(c.text for c in result.content if hasattr(c, "text"))
+        except Exception as e:
+            return f"error: {e}"
+    return f"error: unknown tool {name}"
+
+
+# ---------------------------------------------------------------------------
+# The agent loop: one turn = keep calling tools until the model stops asking.
+# ---------------------------------------------------------------------------
+
+class ModelUnavailable(Exception):
+    """Raised when the model endpoint cannot be reached."""
+
+    def __init__(self, hint: str) -> None:
+        super().__init__(hint)
+        self.hint = hint
+
+
+def model_endpoint(cfg) -> str:
+    from urllib.parse import urlparse
+    return urlparse(cfg.base_url).netloc or cfg.base_url
+
+
+def endpoint_reachable(base_url: str, timeout: float = 1.5) -> bool:
+    import socket
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def model_down_hint(cfg) -> str:
+    where = model_endpoint(cfg)
+    if "11434" in cfg.base_url or "ollama" in cfg.base_url.lower():
+        return (
+            f"[model unavailable] I cannot reach the model at {where}.\n"
+            "  Ollama does not look like it is running. Start it, then retry:\n"
+            "    1) launch the Ollama app, or run:  ollama serve\n"
+            f"    2) make sure the model is pulled:  ollama pull {cfg.model}\n"
+            "  Your prompt was not lost - press Up to resend, or type /status to check."
+        )
+    return (
+        f"[model unavailable] I cannot reach the model at {where} ({cfg.model}).\n"
+        "  Check that the endpoint is up and the API key is set, then retry. /status to check."
+    )
+
+
+def make_client() -> AsyncOpenAI:
+    cfg = MODELS[model_name]
+    return AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
+
+
+class BudgetExhausted(Exception):
+    """A request stopped early because it hit a turn/time budget or was cancelled."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+_cancel_event = threading.Event()
+_empty_nudges = 0
+_last_turn_had_tools = False
+_task_modified = False
+
+
+def request_cancel() -> None:
+    """Ask the in-flight request to stop at the next safe point."""
+    _cancel_event.set()
+
+
+def clear_cancel() -> None:
+    _cancel_event.clear()
+
+
+def _progress(event: str, text: str) -> None:
+    """Report activity to whatever host set loki_progress_callback (the Godot dock)."""
+    callback = globals().get("loki_progress_callback")
+    if callback is not None:
+        try:
+            callback(event, text)
+        except Exception:
+            pass
+
+
+def _trim_context() -> None:
+    """Keep the system prompt plus a bounded window so context cannot overflow."""
+    if MAX_CONTEXT_MESSAGES <= 0 or len(messages) <= MAX_CONTEXT_MESSAGES:
+        return
+    tail = messages[-MAX_CONTEXT_MESSAGES:]
+    for index, item in enumerate(tail):
+        if item.get("role") == "user":
+            messages[:] = [messages[0]] + tail[index:]
+            return
+    messages[:] = [messages[0]] + tail
+
+
+async def agent_turn(force_tool: bool = False) -> str:
+    cfg = MODELS[model_name]
+    client = make_client()
+    started = time.monotonic()
+    turns = 0
+    while True:
+        if _cancel_event.is_set():
+            raise BudgetExhausted("cancelled by the user")
+        if REQUEST_DEADLINE_S > 0 and time.monotonic() - started > REQUEST_DEADLINE_S:
+            raise BudgetExhausted("hit the %ds time budget" % int(REQUEST_DEADLINE_S))
+        if MAX_TURNS_PER_REQUEST > 0 and turns >= MAX_TURNS_PER_REQUEST:
+            raise BudgetExhausted("hit the %d-turn budget" % MAX_TURNS_PER_REQUEST)
+        turns += 1
+        _trim_context()
+        _progress("thinking", "Turn %d: asking the model..." % turns)
+        kwargs = {"model": cfg.model, "messages": messages, "tools": model_tool_schemas()}
+        if "11434" in cfg.base_url or "ollama" in cfg.api_key:
+            # Qwen3 family: disable extended thinking so the model acts instead of
+            # writing long reasoning prose that never calls a tool.
+            kwargs["extra_body"] = {"think": False}
+        if force_tool:
+            kwargs["tool_choice"] = "required"
+        try:
+            try:
+                response = await client.chat.completions.create(**kwargs)
+            except openai.APIStatusError as exc:
+                # Backend does not support tool_choice; retry unforced.
+                kwargs.pop("tool_choice", None)
+                response = await client.chat.completions.create(**kwargs)
+        except openai.APIConnectionError as exc:
+            raise ModelUnavailable(model_down_hint(cfg)) from exc
+        except openai.APIStatusError as exc:
+            raise ModelUnavailable(
+                "[model error] %s answered HTTP %s: %s" % (cfg.model, exc.status_code, exc.message)
+            ) from exc
+        except openai.OpenAIError as exc:
+            raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
+        message = response.choices[0].message
+        global _last_turn_had_tools
+        _last_turn_had_tools = bool(message.tool_calls)
+        if not message.tool_calls:
+            content = message.content or ""
+            if not content.strip():
+                # Some local models finish a turn with only hidden reasoning; recover it.
+                content = getattr(message, "reasoning", None) or ""
+            if not content.strip():
+                global _empty_nudges
+                if _empty_nudges < 2:
+                    _empty_nudges += 1
+                    _progress("thinking", "Model returned an empty reply; asking it to continue...")
+                    messages.append({"role": "assistant", "content": "(no output)"})
+                    messages.append({"role": "user", "content": (
+                        "You ended your turn without any message or tool call. Continue the task. "
+                        "If it is finished, reply on its own line as 'DONE: <summary>'."
+                    )})
+                    continue
+                content = "(the model stopped responding and gave no message; it may have stalled.)"
+            messages.append({"role": "assistant", "content": content})
+            return content
+        messages.append(message)
+        for call in message.tool_calls:
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                print("  [tool] %s(invalid JSON args)" % call.function.name)
+                messages.append({
+                    "role": "tool", "tool_call_id": call.id,
+                    "content": "error: invalid JSON in tool arguments: %r" % (call.function.arguments,),
+                })
+                continue
+            print("  [tool] %s(%s)" % (call.function.name, json.dumps(args)[:200]))
+            result = await call_tool(call.function.name, args)
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+
+
+async def run_agent(user_message: str) -> str:
+    global _empty_nudges
+    _empty_nudges = 0
+    messages.append({"role": "user", "content": user_message})
+    try:
+        answer = await agent_turn()
+        save_history()
+        return answer
+    except ModelUnavailable:
+        messages.pop()  # drop the stalled prompt so a retry starts clean
+        raise
+    except BudgetExhausted:
+        save_history()
+        raise
+
+
+def _goal_needs_files(goal: str) -> bool:
+    words = ("create", "add", "make", "build", "implement", "write", "system",
+             "script", "scene", "setup", "set up", "configure", "fix", "update",
+             "generate", "template", "controller", "player")
+    text = goal.lower()
+    return any(word in text for word in words)
+
+
+async def pursue_goal(goal: str) -> str:
+    global _empty_nudges, _task_modified
+    _empty_nudges = 0
+    _task_modified = False
+    todo_clear()  # stale items from earlier tasks derail the model
+    print("  [goal] working on: %s" % goal)
+    _progress("task", "Goal: %s" % goal[:200])
+    messages.append({
+        "role": "user",
+        "content": (
+            "GOAL: " + goal + chr(10) * 2 +
+            "This is a new, independent task. Work only on the goal above; do not "
+            "resume or recreate anything from earlier tasks." + chr(10) * 2 +
+            "Work toward this goal on your own until it is done. Use your tools "
+            "and your plan. When it is finished, reply on its own line as "
+            "'DONE: <short summary>'. If you cannot continue, reply "
+            "'BLOCKED: <what you need>'."
+        ),
+    })
+    step = 0
+    idle = 0
+    stalls = 0
+    force_next = False
+    while True:
+        step += 1
+        if GOAL_STEPS > 0 and step > GOAL_STEPS:
+            _progress("done", "Reached the %d-step limit without finishing." % GOAL_STEPS)
+            save_history()
+            print("  [goal] hit the step limit without finishing")
+            return "Reached the %d-step limit without finishing." % GOAL_STEPS
+        label = ("Step %d of %d..." % (step, GOAL_STEPS)) if GOAL_STEPS > 0 else ("Step %d..." % step)
+        _progress("thinking", label)
+        reply = await agent_turn(force_tool=force_next)
+        force_next = False
+        print(chr(10) + "[step %d] %s" % (step, reply) + chr(10))
+        if reply.strip():
+            _progress("assistant", reply.strip()[:300])
+        if reply.strip().startswith("(the model stopped responding"):
+            stalls += 1
+            if stalls >= 2:
+                message = "The model returned empty replies repeatedly; task halted. Try again or use a stronger model."
+                _progress("done", message)
+                save_history()
+                return message
+        else:
+            stalls = 0
+        head = reply.strip().upper()
+        if head.startswith("DONE") and _goal_needs_files(goal) and not _task_modified:
+            _progress("thinking", "Checked: nothing was written yet - not accepting DONE.")
+            messages.append({"role": "user", "content": (
+                "Your 'DONE' is premature: NO file was created or changed during this "
+                "task, so the goal is not actually done. Implement it now with real tool "
+                "calls (build_3d_scene for a scene, write_file for a script, edit_file for "
+                "a change). After writing, verify with validate_scene or play_scene, and "
+                "only then reply 'DONE'."
+            )})
+            force_next = True
+            continue
+        if head.startswith("DONE") or head.startswith("BLOCKED"):
+            save_history()
+            return reply.strip()
+        if _last_turn_had_tools:
+            idle = 0
+        else:
+            idle += 1
+            if idle >= 12:
+                message = "The model stopped calling tools after several nudges. Say 'continue' to resume."
+                _progress("done", message)
+                save_history()
+                return message
+            # Stalled in prose. Do NOT inject a "user" nudge - the model just echoes
+            # it and loops. Silently force a tool call on the next turn instead.
+            force_next = True
+
+
+# ---------------------------------------------------------------------------
+# Slash commands
+# ---------------------------------------------------------------------------
+
+def ollama_status() -> str:
+    """Report installed and loaded models via Ollama's local API."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as response:
+            installed = json.loads(response.read().decode("utf-8")).get("models", [])
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/ps", timeout=3) as response:
+            running = json.loads(response.read().decode("utf-8")).get("models", [])
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return f"Ollama unavailable at localhost:11434: {exc}"
+    names = [str(model.get("name", "?")) for model in installed]
+    loaded = [str(model.get("name", "?")) for model in running]
+    return "Installed: " + (", ".join(names) or "none") + "\\nLoaded now: " + (", ".join(loaded) or "none")
+def handle_command(line: str) -> bool:
+    global model_name
+    if not line.startswith("/"):
+        return False
+    cmd, _, arg = line.partition(" ")
+    if cmd == "/models":
+        print(ollama_status())
+        for name, cfg in MODELS.items():
+            marker = "*" if name == model_name else " "
+            print(f" {marker} {name:<12} {cfg.model}  ({cfg.base_url})")
+    elif cmd == "/model":
+        if arg in MODELS:
+            model_name = arg
+            print(f"  switched to {arg} ({MODELS[arg].model})")
+        else:
+            print(f"  unknown model '{arg}' - try /models")
+    elif cmd == "/tools":
+        for s in TOOL_SCHEMAS:
+            fn = s["function"]
+            origin = "local" if fn["name"] in LOCAL_TOOLS else "mcp"
+            print(f"  [{origin}] {fn['name']}: {fn['description'][:60]}")
+    elif cmd == "/memory":
+        print(load_memory())
+    elif cmd == "/plan":
+        print(todo_list())
+    elif cmd == "/clear":
+        messages.clear()
+        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())})
+        print("  conversation cleared")
+    elif cmd == "/status":
+        print(ollama_status())
+    elif cmd == "/quit":
+        raise SystemExit
+    else:
+        print("  commands: /models /model <name> /tools /memory /plan /clear /goal <text> /status /quit")
+    return True
+
+
+async def main() -> None:
+    async with AsyncExitStack() as stack:
+        print("starting loki...")
+        await connect_mcp(stack)
+        cfg = MODELS[model_name]
+        print(f"\nloki ready - model: {model_name} ({cfg.model}), {len(TOOL_SCHEMAS)} tools")
+        print(f"workspace: {WORKSPACE}")
+        print(f"Godot:     {GODOT_EXE}")
+        if not endpoint_reachable(cfg.base_url):
+            print(f"! WARNING: the model endpoint at {model_endpoint(cfg)} is not reachable.")
+            print("  For a local model, start Ollama (ollama serve) before you send a prompt.\n")
+        print("type /models, /model <name>, /tools, /memory, /plan, /goal <task>, or just talk\n")
+        while True:
+            try:
+                line = (await asyncio.to_thread(input, "you: ")).strip()
+                if not line:
+                    continue
+                if line.startswith("/goal "):
+                    await pursue_goal(line[len("/goal "):].strip())
+                    continue
+                if handle_command(line):
+                    continue
+                print("\nassistant:", await run_agent(line), "\n")
+            except ModelUnavailable as exc:
+                print(f"\n{exc.hint}\n")
+            except (EOFError, KeyboardInterrupt, SystemExit):
+                print("\nbye!")
+                return
+            except Exception as exc:
+                print(f"\n[loki] unexpected error: {type(exc).__name__}: {exc}")
+                print("[loki] staying alive - your next prompt starts a fresh turn.\n")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

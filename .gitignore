@@ -1,0 +1,30 @@
+# Godot
+.godot/
+*.import
+export.cfg
+export_presets.cfg
+
+# Python
+harness/.venv/
+__pycache__/
+*.pyc
+
+# Vendored agent skills (fetched by setup.bat)
+harness/vendor/
+
+# Local secrets & runtime
+harness/.env
+*.token
+*.log
+
+# Test output created by the agent
+scenes/
+scripts/
+cloud/.env
+
+# Cloud runtime state (never commit - holds session tokens)
+cloud/sessions.json
+
+# Harness runtime state
+harness/loki_settings.json
+.git-rewrite/
