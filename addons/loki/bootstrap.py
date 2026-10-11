@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ADDON_DIR = Path(__file__).resolve().parent
@@ -39,6 +40,8 @@ VENV = DATA / ".venv"
 REQUIREMENTS = HARNESS / "requirements.txt"
 BRIDGE = ADDON_DIR / "loki_bridge.py"
 LOG = REPO / ".godot" / "loki_bridge.log"
+LOCK = REPO / ".godot" / "loki_bridge.launch"
+LOCK_TTL_S = 60
 
 
 def log(message: str) -> None:
@@ -48,6 +51,36 @@ def log(message: str) -> None:
             handle.write(f"[loki-setup] {message}\n")
     except OSError:
         pass
+
+
+def take_launch_lock() -> bool:
+    """Atomically claim the single launch slot; False if someone else holds it.
+
+    Two dock instances exist briefly (this plugin is re-entered on a filesystem
+    rescan) and each calls bootstrap, and they can arrive in the same millisecond.
+    A plain "does the file exist?" check loses that race, and on Windows the bridge
+    does NOT reliably refuse a second bind, so two bridges end up serving one port.
+    O_CREAT|O_EXCL is atomic, so exactly one launcher wins. A stale lock (older than
+    LOCK_TTL_S) is cleared, so a genuine restart still works.
+    """
+    try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            handle = os.open(str(LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                if (time.time() - LOCK.stat().st_mtime) < LOCK_TTL_S:
+                    return False
+                LOCK.unlink()
+            except OSError:
+                return False
+            handle = os.open(str(LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(handle, "w") as stream:
+            stream.write(str(os.getpid()))
+        return True
+    except OSError:
+        # Cannot lock at all (odd permissions): never block the user over it.
+        return True
 
 
 def venv_python() -> Path:
@@ -100,6 +133,9 @@ def ensure_environment() -> Path | None:
 
 
 def main() -> int:
+    if not take_launch_lock():
+        log("another Loki launch is already in progress; standing down")
+        return 0
     python = ensure_environment()
     if python is None:
         log("setup failed; trying the current interpreter anyway")

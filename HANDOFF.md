@@ -165,11 +165,18 @@ box, out of roughly 150 behind the domains.
 - `tools/loki_doctor.py` lists every provider, whether it is usable, and the link to get a key.
   `VIREONIX_API_KEY` must stay unset/empty-inert: `_load_env_file` treats an empty value as
   "set", which would DISABLE the zero-key provider (`.env.example` keeps it commented out).
-- A stale bridge from a pre-`15f298e` build can linger and hold port 8766. Tell: its
-  `--loki-root` points at `<repo>/harness` instead of `<repo>/addons/loki/harness`. Kill those
-  exact PIDs and let the dock relaunch one. The bridge itself refuses to double-bind, and the
-  dock now has a 5s launch cooldown so a plugin re-entry (filesystem rescan) cannot start a
-  second one.
+- **One bridge looks like FOUR python processes on Windows - that is normal.** The
+  `harness_data/.venv` interpreter is a redirector: it starts the base interpreter as a CHILD,
+  so a single launch shows as launcher + real for `bootstrap.py`, and again for
+  `loki_bridge.py`. Do not "fix" this by killing processes. To count BRIDGES, check the
+  listener, not the process list: `netstat -ano | findstr 8766` - exactly one PID is LISTENING.
+- A stale bridge from a pre-`15f298e` build can linger and hold 8766. Tell: its `--loki-root`
+  points at `<repo>/harness` instead of `<repo>/addons/loki/harness`. Kill those exact PIDs and
+  let the dock relaunch one.
+- Kept as hardening against a genuine simultaneous launch (two docks after a plugin re-entry, or
+  a dock-vs-manual race): `bootstrap.py` takes an atomic `O_CREAT|O_EXCL` lock at
+  `.godot/loki_bridge.launch` (60s TTL) and stands down if another launch holds it, and the dock
+  has a 5s spawn cooldown.
 - The bridge starts via `bootstrap.py` and answers `/health` with
   `{"ok": true, "service": "loki", ...}`. Auth is `Authorization: Bearer <token>`.
 - Play-session/runtime inspection additionally needs `mcp_runtime_probe.gd` registered as an

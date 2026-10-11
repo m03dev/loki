@@ -153,6 +153,8 @@ check("setup.bat creates the venv under harness_data",
       ('set "DATA=%REPO%' + _B + 'harness_data"') in _bat and (_B + ".venv") in _bat)
 check("setup.sh ships for macOS/Linux", (REPO / "setup.sh").is_file())
 check("doctor script ships", (REPO / "tools" / "loki_doctor.py").is_file())
+check("bootstrap is single-instance (atomic lock)",
+      "O_EXCL" in (REPO / "addons" / "loki" / "bootstrap.py").read_text(encoding="utf-8"))
 check("dock guards against a duplicate bridge launch",
       "_last_bridge_spawn_msec" in (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8"))
 
