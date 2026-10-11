@@ -146,8 +146,11 @@ model_name = os.getenv("LOKI_MODEL", "local")
 # "smart" picks the best available FREE provider on its own: the first in this
 # order that has a key configured (or a reachable Ollama), and it falls back to
 # the next one whenever a provider fails, so the user never chooses.
-SMART_ORDER = ("groq", "cerebras", "gemini", "github", "mistral", "deepseek",
-               "together", "openrouter", "local", "local-hermes")
+# Ordered most-suitable-first for a big agent prompt. Gemini leads because its free
+# tier allows 1M input tokens/min; Groq's free tier caps at 7k/min and returns 413
+# on Loki's ~8k-token request, so it sits lower.
+SMART_ORDER = ("gemini", "cerebras", "groq", "openrouter", "github", "mistral",
+               "deepseek", "together", "local", "local-hermes")
 _SMART_FAILED = set()
 
 
