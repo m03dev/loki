@@ -9,21 +9,21 @@ An AI game-dev agent dock for the Godot 4 editor.
 - `loki_settings.gd` — the settings dialog (Agent / Account / Profile / Memory).
 - `loki_settings.gd` — the settings dialog.
 - `loki_bridge.py` — loopback HTTP bridge to the Python agent.
-- `run_bridge.bat` — launches the bridge using `harness/` from the repo root.
+- `run_bridge.bat` — launches the bridge using `addons/loki/harness/` from the repo root.
 
-The agent itself lives in `../../harness/loki.py`. See the repo README and
+The agent itself lives in `../../addons/loki/harness/loki.py`. See the repo README and
 `docs/` for setup and providers.
 
 ### First run / dependencies
 
-The dock launches `bootstrap.py`, which creates `harness/.venv` and installs
-`harness/requirements.txt` automatically, then starts `loki_bridge.py`. The only
+The dock launches `bootstrap.py`, which creates `harness_data/.venv` and installs
+`addons/loki/harness/requirements.txt` automatically, then starts `loki_bridge.py`. The only
 prerequisite is Python 3 - nothing else to install or configure.
 
 ### ECC agents and skills
 
-`harness/ecc_sync.py` fetches [affaan-m/ECC](https://github.com/affaan-m/ECC)
-(agents + skills) and DietrichGebert/ponytail into `harness/vendor/` over HTTPS,
+`addons/loki/harness/ecc_sync.py` fetches [affaan-m/ECC](https://github.com/affaan-m/ECC)
+(agents + skills) and DietrichGebert/ponytail into `harness_data/vendor/` over HTTPS,
 using only the standard library. The bridge runs it on first start and the dock
 exposes it via **Sync ECC library from GitHub**; the model reaches it through the
 `list_ecc_agents` / `load_ecc_agent` / `list_ecc_skills` / `load_ecc_skill` /
@@ -32,6 +32,6 @@ exposes it via **Sync ECC library from GitHub**; the model reaches it through th
 ### Runtime files (all under the target project)
 
 - `.godot/loki_conversations.json` — every chat and its messages (the tabs).
-- `harness/memory.md` — the Memory tab's lasting facts (gitignored).
+- `harness_data/memory.md` — the Memory tab's lasting facts (gitignored).
 - `.godot/loki_bridge.token` / `.godot/loki_session.json` — bridge token and
   optional Google sign-in session.

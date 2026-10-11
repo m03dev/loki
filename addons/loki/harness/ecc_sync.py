@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -19,7 +20,20 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-VENDOR = ROOT / "vendor"
+
+
+def _data_dir() -> Path:
+    """Downloads belong with the rest of the user data, not inside the addon."""
+    explicit = os.getenv("LOKI_DATA", "").strip()
+    if explicit:
+        return Path(explicit)
+    for candidate in (ROOT, *ROOT.parents):
+        if (candidate / "project.godot").is_file():
+            return candidate / "harness_data"
+    return ROOT / "harness_data"
+
+
+VENDOR = _data_dir() / "vendor"
 
 # name -> repo, and which top-level folders to keep (None keeps everything)
 SOURCES = {

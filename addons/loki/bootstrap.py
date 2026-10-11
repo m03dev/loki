@@ -14,8 +14,28 @@ from pathlib import Path
 
 ADDON_DIR = Path(__file__).resolve().parent
 REPO = ADDON_DIR.parent.parent
-HARNESS = REPO / "harness"
-VENV = HARNESS / ".venv"
+
+
+def _harness_dir() -> Path:
+    """The agent code, which ships INSIDE the addon so a project needs nothing else.
+
+    The repo-root fallback keeps an older checkout working, where the code still
+    lived in a top-level harness/ folder.
+    """
+    bundled = ADDON_DIR / "harness"
+    if (bundled / "loki.py").is_file():
+        return bundled
+    legacy = REPO / "harness"
+    if (legacy / "loki.py").is_file():
+        return legacy
+    return bundled
+
+
+HARNESS = _harness_dir()
+# Secrets, memory, plans, downloads and the venv live outside the addon so they are
+# never shipped with it, and never get copied into a project.
+DATA = REPO / "harness_data"
+VENV = DATA / ".venv"
 REQUIREMENTS = HARNESS / "requirements.txt"
 BRIDGE = ADDON_DIR / "loki_bridge.py"
 LOG = REPO / ".godot" / "loki_bridge.log"
@@ -85,6 +105,9 @@ def main() -> int:
         log("setup failed; trying the current interpreter anyway")
         python = Path(sys.executable)
     log(f"starting the bridge with {python}")
+    # Tell the harness where its data lives; it cannot infer this reliably once the
+    # code sits inside the addon.
+    os.environ["LOKI_DATA"] = str(DATA)
     try:
         return subprocess.call([str(python), str(BRIDGE)] + sys.argv[1:])
     except KeyboardInterrupt:

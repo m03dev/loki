@@ -5,7 +5,7 @@ extends VBoxContainer
 
 const BRIDGE_URL: String = "http://127.0.0.1:8766"
 const BRIDGE_BOOTSTRAP: String = "res://addons/loki/bootstrap.py"
-const BRIDGE_HARNESS: String = "res://harness"
+const BRIDGE_HARNESS: String = "res://addons/loki/harness"
 const SETTINGS_DIALOG_SCRIPT: Script = preload("res://addons/loki/loki_settings.gd")
 const BRIDGE_MAX_LAUNCHES: int = 3
 const BRIDGE_GRACE_POLLS: int = 240
@@ -344,8 +344,8 @@ func _spawn_bridge() -> int:
 		"--secret-file", _token_path(),
 	])
 	var bundled: PackedStringArray = PackedStringArray([
-		project.path_join("harness/.venv/Scripts/pythonw.exe"),
-		project.path_join("harness/.venv/Scripts/python.exe"),
+		project.path_join("harness_data/.venv/Scripts/pythonw.exe"),
+		project.path_join("harness_data/.venv/Scripts/python.exe"),
 		project.path_join(".venv/Scripts/pythonw.exe"),
 		project.path_join(".venv/Scripts/python.exe"),
 	])

@@ -24,7 +24,26 @@ import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent   # the code that ships inside the addon
+
+
+def _resolve_data_dir() -> Path:
+    """Where secrets, memory, plans and downloads live - NOT inside the addon.
+
+    Anything stored next to the code would ship with the addon, so user data goes
+    in <project>/harness_data beside project.godot. LOKI_DATA overrides, and the
+    bridge sets it explicitly.
+    """
+    explicit = os.getenv("LOKI_DATA", "").strip()
+    if explicit:
+        return Path(explicit)
+    for candidate in (ROOT, *ROOT.parents):
+        if (candidate / "project.godot").is_file():
+            return candidate / "harness_data"
+    return ROOT / "harness_data"
+
+
+DATA_DIR = _resolve_data_dir()
 
 # --- configuration (override with environment variables) --------------------
 # GAME_PROJECT  : path to the Godot game project the agent should work on.
@@ -36,12 +55,12 @@ WORKSPACE = Path(
     os.getenv("LOKI_WORKSPACE")
     or os.getenv("HARNESS_WORKSPACE")  # legacy name, still honoured
     or GAME_PROJECT
-    or str(ROOT / "workspace")
+    or str(DATA_DIR / "workspace")
 )
 GODOT_EXE = os.getenv("GODOT_EXE", "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe")
 
-MEMORY_FILE = ROOT / "memory.md"
-PLAN_FILE = ROOT / "plan.md"
+MEMORY_FILE = DATA_DIR / "memory.md"
+PLAN_FILE = DATA_DIR / "plan.md"
 MCP_CONFIG = ROOT / "mcp_servers.json"
 
 # LOKI_AUTO_APPROVE=1 runs dangerous tools without asking (for unattended runs).
@@ -66,9 +85,15 @@ MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context wi
 
 def _load_env_file() -> None:
     """Load KEY=VALUE pairs from harness/.env so users can store API keys."""
-    path = ROOT / ".env"
+    path = DATA_DIR / ".env"
     if not path.is_file():
-        return
+        # Backwards compatible: an older install kept .env beside the code.
+        for fallback in (ROOT / ".env", Path.cwd() / ".env"):
+            if fallback.is_file():
+                path = fallback
+                break
+        else:
+            return
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -810,7 +835,7 @@ def open_godot(project_path: str = "") -> str:
     return f"launched the Godot editor{where}"
 
 
-ECC_DIR = ROOT / "vendor" / "ECC"
+ECC_DIR = DATA_DIR / "vendor" / "ECC"
 ECC_AGENTS_DIR = ECC_DIR / "agents"
 ECC_SKILLS_DIR = ECC_DIR / "skills"
 
@@ -1132,7 +1157,7 @@ CATEGORY_LABELS = {
     "system": "System (shell commands, launch Godot) - dangerous",
     "runtime": "Runtime checks (run scene, compile script, screenshot + look)",
 }
-SETTINGS_FILE = ROOT / "loki_settings.json"
+SETTINGS_FILE = DATA_DIR / "loki_settings.json"
 
 
 def _load_settings() -> dict:
@@ -1211,7 +1236,7 @@ When you learn a new lasting fact about the user, save it with save_memory.'''
 
 def _read_vendor(*parts: str) -> str:
     try:
-        return (ROOT / "vendor").joinpath(*parts).read_text(encoding="utf-8")
+        return (DATA_DIR / "vendor").joinpath(*parts).read_text(encoding="utf-8")
     except OSError:
         return ""
 

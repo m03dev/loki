@@ -5,15 +5,15 @@ export.cfg
 export_presets.cfg
 
 # Python
-harness/.venv/
+harness_data/.venv/
 __pycache__/
 *.pyc
 
 # Vendored agent skills (fetched by setup.bat)
-harness/vendor/
+harness_data/vendor/
 
 # Local secrets & runtime
-harness/.env
+harness_data/.env
 *.token
 *.log
 
@@ -26,16 +26,16 @@ cloud/.env
 cloud/sessions.json
 
 # Harness runtime state
-harness/loki_settings.json
+harness_data/loki_settings.json
 .git-rewrite/
 
 # Harness user data (memory + plan written at runtime)
-harness/memory.md
-harness/plan.md
-harness/workspace/
+harness_data/memory.md
+harness_data/plan.md
+harness_data/workspace/
 
 # Godot API dump (generated on first run: godot --headless --dump-extension-api)
-harness/extension_api.json
+addons/loki/harness/extension_api.json
 
 # stray files an agent run may create in the plugin repo itself
 plugins/
