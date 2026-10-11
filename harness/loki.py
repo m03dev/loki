@@ -116,7 +116,7 @@ MODELS = {
     # free tiers and auto-fallback). Run it, set a provider key, then use LOKI_MODEL=omniroute.
     # Free tiers (put the key in harness/.env). OpenAI-compatible endpoints.
     "gemini": ModelConfig(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                          api_key=os.getenv("GEMINI_API_KEY", ""), model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash")),
+                          api_key=os.getenv("GEMINI_API_KEY", ""), model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
     "groq": ModelConfig(base_url="https://api.groq.com/openai/v1",
                         api_key=os.getenv("GROQ_API_KEY", ""), model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")),
     "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
@@ -1612,7 +1612,10 @@ async def agent_turn(force_tool: bool = False) -> str:
         turns += 1
         _trim_context()
         _progress("thinking", "Turn %d: asking the model..." % turns)
-        kwargs = {"model": cfg.model, "messages": messages, "tools": model_tool_schemas()}
+        # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so
+        # give them headroom or the tool call gets truncated away.
+        kwargs = {"model": cfg.model, "messages": messages, "tools": model_tool_schemas(),
+                  "max_tokens": int(os.getenv("LOKI_MAX_TOKENS", "8192"))}
         if "11434" in cfg.base_url or "ollama" in cfg.api_key:
             # Qwen3 family: disable extended thinking so the model acts instead of
             # writing long reasoning prose that never calls a tool.
