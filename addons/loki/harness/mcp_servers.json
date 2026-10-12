@@ -46,31 +46,46 @@
     },
     "godot_runtime": {
       "command": "npx",
-      "args": ["-y", "godot-mcp-runtime"],
+      "args": [
+        "-y",
+        "godot-mcp-runtime"
+      ],
       "requires_cmd": "npx",
       "enabled": false,
       "note": "39 tools: launch/run/attach a project and read debug output."
     },
     "godot_enhanced": {
       "command": "npx",
-      "args": ["-y", "godot-mcp-enhanced"],
+      "args": [
+        "-y",
+        "godot-mcp-enhanced"
+      ],
       "requires_cmd": "npx",
       "enabled": false,
-      "note": "26 tools: runtime, screenshots and script/scene validation."
+      "note": "26 tools: runtime, screenshots and script/scene validation.",
+      "cwd": "${LOKI_DATA}"
     },
     "better_godot": {
       "command": "npx",
-      "args": ["-y", "@n24q02m/better-godot-mcp"],
+      "args": [
+        "-y",
+        "@n24q02m/better-godot-mcp"
+      ],
       "requires_cmd": "npx",
       "enabled": false,
-      "note": "17 tools: project/scene/node/script/editor/config. Needs Node >= 24."
+      "note": "17 tools: project/scene/node/script/editor/config. Needs Node >= 24.",
+      "cwd": "${LOKI_DATA}"
     },
     "godot_scene": {
       "command": "npx",
-      "args": ["-y", "@satelliteoflove/godot-mcp"],
+      "args": [
+        "-y",
+        "@satelliteoflove/godot-mcp"
+      ],
       "requires_cmd": "npx",
       "enabled": false,
-      "note": "21 tools: scene/node/editor read+edit."
+      "note": "21 tools: scene/node/editor read+edit.",
+      "cwd": "${LOKI_DATA}"
     },
     "git": {
       "command": "uvx",

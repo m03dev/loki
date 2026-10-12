@@ -2016,6 +2016,10 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
             else:
                 params = StdioServerParameters(command=spec["command"],
                                                args=[_expand_env(a) for a in spec["args"]])
+                if spec.get("cwd"):
+                    # Some servers drop files into their working directory. Point
+                    # that at Loki's data dir so they never litter the game project.
+                    params.cwd = _expand_env(spec["cwd"])
                 if spec.get("env"):
                     params.env = {**os.environ,
                                   **{k: _expand_env(v) for k, v in spec["env"].items()}}
