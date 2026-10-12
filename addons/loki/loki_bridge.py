@@ -273,7 +273,7 @@ class BridgeState:
                 self.push_progress(chat_id, "error", exc.hint)
                 return {"ok": False, "error": exc.hint, "chat_id": chat_id}
             except Exception as exc:
-                error = "%s: %s" % (type(exc).__name__, exc)
+                error = self.agent.friendly_error(exc)
                 self.push_progress(chat_id, "error", error)
                 return {"ok": False, "error": error, "chat_id": chat_id}
             finally:
@@ -319,7 +319,7 @@ class BridgeState:
                 self.push_progress(task_id, "error", exc.hint)
                 return {"ok": False, "error": exc.hint, "chat_id": task_id}
             except Exception as exc:
-                detail: str = "%s: %s" % (type(exc).__name__, exc)
+                detail: str = self.agent.friendly_error(exc)
                 self.push_progress(task_id, "error", detail)
                 return {"ok": False, "error": detail, "chat_id": task_id}
             finally:

@@ -105,3 +105,11 @@ Each provider is one entry in `MODELS` in `harness/loki.py`:
 ```python
 "myprovider": ModelConfig(base_url="https://.../v1", api_key=os.getenv("MYPROVIDER_API_KEY",""), model="...")
 ```
+
+## Go-to model: DeepSeek V4.1 via OpenRouter
+
+The default go-to is **`deepseek/deepseek-v4.1-flash`** on OpenRouter: one account, 1M
+context, very cheap, and it tolerates a **200-tool** request where Gemini and Groq refuse
+one well below that. It leads `SMART_ORDER`, so smart mode picks it whenever
+`OPENROUTER_API_KEY` is set. Name it directly with `LOKI_MODEL=deepseek-4.1`, or use
+`deepseek-4.1`'s override `DEEPSEEK_41_MODEL`.

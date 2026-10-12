@@ -303,6 +303,16 @@ func _editor_icon(name: String) -> Texture2D:
 	return null
 
 
+func _first_icon(names: PackedStringArray) -> Texture2D:
+	# Several candidate names per meaning, because not every Godot version ships
+	# every editor icon. The first that exists is used; none means no icon.
+	for name in names:
+		var texture: Texture2D = _editor_icon(name)
+		if texture != null:
+			return texture
+	return null
+
+
 func _project_dir() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/")
 
@@ -563,7 +573,7 @@ func _on_chat_response(result: int, code: int, _h: PackedStringArray, body: Pack
 		_status.text = "Connected"
 		var text: String = str(response.get("response", "")).strip_edges()
 		if not text.is_empty():
-			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + _escape(text) + "[/color]")
+			_append_log("[color=#dfe6ee]" + _escape(text) + "[/color]", PackedStringArray(["Script", "Node"]))
 	_refresh_conversations()
 
 func _poll_progress() -> void:
@@ -608,21 +618,21 @@ func _on_progress_response(result: int, code: int, _h: PackedStringArray, body: 
 			_status.text = "Thinking..."
 		elif kind == "tool":
 			_status.text = "Using a tool..."
-			_append_log("[color=#81a1c1]Tool: [/color]" + text)
+			_append_log("[color=#81a1c1]Tool: [/color]" + text, PackedStringArray(["Tools", "Wrench", "Node"]))
 		elif kind == "tool_result":
-			_append_log("[color=#a3be8c]Result: [/color]" + text)
+			_append_log("[color=#a3be8c]Result: [/color]" + text, PackedStringArray(["StatusSuccess", "CheckBox", "Output", "Node"]))
 		elif kind == "approval":
 			_status.text = "Waiting for approval..."
-			_append_log("[color=#ebcb8b]Permission: [/color]" + text)
+			_append_log("[color=#ebcb8b]Permission: [/color]" + text, PackedStringArray(["Lock", "GuiLocked", "Security", "Node"]))
 		elif kind == "task":
 			_status.text = "Running task..."
-			_append_log("[color=#b48ead][b]Task:[/b][/color] " + text)
+			_append_log("[color=#b48ead][b]Task:[/b][/color] " + text, PackedStringArray(["AnimationPlayer", "Time", "Node"]))
 		elif kind == "assistant":
-			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + text + "[/color]")
+			_append_log("[color=#dfe6ee]" + text + "[/color]", PackedStringArray(["Script", "Node"]))
 		elif kind == "done":
-			_append_log("[color=#a3be8c]Done: [/color]" + text)
+			_append_log("[color=#a3be8c]Done: [/color]" + text, PackedStringArray(["StatusSuccess", "CheckBox", "Node"]))
 		elif kind == "error":
-			_append_log("[color=#ff7777]Error: [/color]" + text)
+			_append_log("[color=#ff7777]Error: [/color]" + text, PackedStringArray(["StatusError", "Error", "Warning", "Node"]))
 
 func _on_stop_pressed() -> void:
 	if not _busy or _token.is_empty():
@@ -723,7 +733,7 @@ func _render_messages(messages: Array) -> void:
 			_append_log("[right][color=#7f9db0][b]You[/b][/color][/right]
 [right][color=#dfe6ee]" + _escape(content) + "[/color][/right]")
 		elif role == "assistant":
-			_append_log("[color=#5c6670]▏[/color] [color=#dfe6ee]" + _escape(content) + "[/color]")
+			_append_log("[color=#dfe6ee]" + _escape(content) + "[/color]", PackedStringArray(["Script", "Node"]))
 
 func _refresh_memory() -> void:
 	_api_get(_memory_http, "/memory")
@@ -921,7 +931,7 @@ func _on_clear_pressed() -> void:
 	_chat_log.clear()
 	_append_log("[b]Display cleared.[/b] Use the + tab to start a new chat.")
 
-func _append_log(text: String) -> void:
+func _append_log(text: String, icons: PackedStringArray = PackedStringArray()) -> void:
 	if _is_internal(text):
 		return
 	var plain: String = text.strip_edges()
@@ -930,6 +940,11 @@ func _append_log(text: String) -> void:
 	_recent_log.append(plain)
 	if _recent_log.size() > 80:
 		_recent_log.remove_at(0)
+	if icons.size() > 0:
+		var texture: Texture2D = _first_icon(icons)
+		if texture != null:
+			_chat_log.add_image(texture, 15, 15)
+			_chat_log.append_text("  ")
 	_chat_log.append_text(text + "
 
 ")

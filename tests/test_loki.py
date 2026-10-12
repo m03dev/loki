@@ -1138,6 +1138,28 @@ check("smart mode offers a zero-key/local landing spot",
 
 
 
+NL = chr(10)
+section("chat text normalisation")
+check("a mangled character is dropped",
+      loki.clean_text("passed" + chr(0xFFFD)) == "passed")
+check("runaway blank lines collapse",
+      loki.clean_text("a" + NL * 5 + "b") == "a" + NL + NL + "b")
+check("carriage returns normalise", loki.clean_text("a" + chr(13) + "b") == "a" + NL + "b")
+check("a repeated reply is stored once",
+      len(loki._sanitize_history([{"role": "assistant", "content": "same"},
+                                  {"role": "assistant", "content": "same"}])) == 1)
+check("distinct replies both survive",
+      len(loki._sanitize_history([{"role": "assistant", "content": "a"},
+                                  {"role": "assistant", "content": "b"}])) == 2)
+
+section("go-to model: DeepSeek 4.1 via OpenRouter")
+check("the deepseek-4.1 alias exists", "deepseek-4.1" in loki.MODELS)
+check("it points at deepseek v4.1 flash",
+      "v4.1" in loki.MODELS["deepseek-4.1"].model, loki.MODELS["deepseek-4.1"].model)
+check("OpenRouter leads smart mode", loki.SMART_ORDER[0] == "openrouter", loki.SMART_ORDER[0])
+
+
+
 async def live() -> None:
 
 

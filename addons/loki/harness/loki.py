@@ -175,6 +175,14 @@ MODELS = {
     # purchase). A NEGATIVE credit balance can make even the :free models error.
     "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
                               api_key=os.getenv("OPENROUTER_API_KEY", ""), model=os.getenv("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")),
+    # DeepSeek V4.1-Flash on OpenRouter - the go-to model. One account, 1M context,
+    # very cheap, and it tolerates a 200-tool request where Gemini/Groq refuse one
+    # well below that. Equivalent to LOKI_MODEL=openrouter with OPENROUTER_MODEL set;
+    # this alias exists so "deepseek-4.1" can be named directly.
+    "deepseek-4.1": ModelConfig(
+        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        api_key=os.getenv("OPENROUTER_API_KEY", ""),
+        model=os.getenv("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash")),
     # NOTE: not really free - Cerebras requires a verified payment method to activate.
     "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
                             api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")),
@@ -236,9 +244,9 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # on Loki's ~8k-token request, so it sits lower.
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("gemini", "groq", "openrouter", "mistral", "sambanova", "cloudflare",
-               "together", "nous", "unorouter", "deepseek", "cerebras", "vireonix",
-               "claude-code", "codex", "local", "local-hermes")
+SMART_ORDER = ("openrouter", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
+               "cloudflare", "together", "nous", "unorouter", "deepseek", "cerebras",
+               "vireonix", "claude-code", "codex", "local", "local-hermes")
 
 # Providers that need a GPU and a local download. The "online" mode exists so Loki is
 # usable with NEITHER - it never touches these.
@@ -1482,8 +1490,30 @@ def _as_dict(message) -> dict:
     return {"role": getattr(message, "role", "assistant"), "content": getattr(message, "content", "")}
 
 
+_REPLACEMENT_CHAR = chr(0xFFFD)
+_NL = chr(10)
+_CR = chr(13)
+_TAB = chr(9)
+_TRAILING_BLANKS = re.compile("[" + " " + _TAB + "]+" + _NL)
+_BLANK_RUN = re.compile(_NL + "{3,}")
+
+
+def clean_text(text: str) -> str:
+    """Normalise text so the chat never shows mangled or stray characters.
+
+    A byte that did not decode becomes U+FFFD, which renders as a black diamond;
+    stray control bytes, trailing spaces and runaway blank lines are just as ugly.
+    """
+    text = str(text).replace(_CR + _NL, _NL).replace(_CR, _NL)
+    text = text.replace(_REPLACEMENT_CHAR, "")
+    text = "".join(ch for ch in text if ch in (_NL, _TAB) or ord(ch) >= 32)
+    text = _TRAILING_BLANKS.sub(_NL, text)
+    text = _BLANK_RUN.sub(_NL + _NL, text)
+    return text.strip()
+
+
 def _sanitize_history(items: list) -> list:
-    # keep only plain conversational turns
+    # keep only plain conversational turns, cleaned and de-duplicated
     clean = []
     for item in items:
         if not isinstance(item, dict):
@@ -1492,10 +1522,15 @@ def _sanitize_history(items: list) -> list:
         if role not in ("user", "assistant") or item.get("tool_calls"):
             continue
         content = item.get("content")
-        if not isinstance(content, str) or not content.strip():
+        if not isinstance(content, str):
             continue
-        head = content.strip().upper()
+        content = clean_text(content)
+        if not content:
+            continue
+        head = content.upper()
         if head.startswith("GOAL:") or head.startswith("DONE:") or head.startswith("BLOCKED:"):
+            continue
+        if clean and clean[-1]["role"] == role and clean[-1]["content"] == content:
             continue
         clean.append({"role": role, "content": content})
     return clean[-40:]
@@ -2150,6 +2185,39 @@ def make_client():
     return AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
 
 
+def short_error(text, limit: int = 240) -> str:
+    """Collapse a message into one readable paragraph, trimming a huge API body."""
+    collapsed = " ".join(clean_text(str(text)).split())
+    if len(collapsed) > limit:
+        collapsed = collapsed[: limit - 3].rstrip() + "..."
+    return collapsed
+
+
+def friendly_error(exc) -> str:
+    """A short, human message for the chat - never a raw exception name.
+
+    The dock shows this directly, so it reads the way Ziva's does: what happened
+    and what to do, not "KeyError: 'x'".
+    """
+    if isinstance(exc, ModelUnavailable):
+        return exc.hint
+    if isinstance(exc, BudgetExhausted):
+        return str(exc)
+    text = short_error(exc)
+    low = text.lower()
+    if isinstance(exc, FileNotFoundError) or "no such file" in low:
+        return "That file does not exist: " + text
+    if isinstance(exc, PermissionError) or "permission denied" in low:
+        return "Loki cannot write there (permission denied)."
+    if isinstance(exc, TimeoutError) or "timed out" in low or "timeout" in low:
+        return "That took too long and timed out. Try again."
+    if "connection" in low or "unreachable" in low or "refused" in low:
+        return "Loki could not reach the model. Check your connection and retry."
+    if isinstance(exc, KeyError):
+        return "Loki was missing something it needed (%s)." % text
+    return text or type(exc).__name__
+
+
 class BudgetExhausted(Exception):
     """A request stopped early because it hit a turn/time budget or was cancelled."""
 
@@ -2270,7 +2338,7 @@ async def _model_request(client, kwargs: dict, cfg):
                 continue
             _mark_smart_failure()
             raise ModelUnavailable(
-                "[model error] %s answered HTTP %s: %s" % (cfg.model, status, exc.message)
+                "[model error] %s answered HTTP %s: %s" % (cfg.model, status, short_error(exc.message))
             ) from exc
         except openai.APIConnectionError as exc:
             if attempt < MODEL_RETRIES:

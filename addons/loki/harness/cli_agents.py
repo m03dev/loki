@@ -161,7 +161,10 @@ def mcp_config_args(servers_path: Path) -> list[str]:
         translated[name] = entry
     if not translated:
         return []
-    out = servers_path.parent / ".godot" / "loki_claude_mcp.json"
+    # NOT inside the addon: this is runtime state, and writing it under
+    # addons/loki/ would ship it with the plugin and litter the source tree.
+    base = Path(os.environ.get("LOKI_DATA") or tempfile.gettempdir())
+    out = base / "loki_claude_mcp.json"
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps({"mcpServers": translated}, indent=2), encoding="utf-8")
