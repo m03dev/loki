@@ -18,6 +18,10 @@ var _account_label: Label
 var _sign_in_button: Button
 var _sign_out_button: Button
 var _memory_edit: TextEdit
+var _connections_list: VBoxContainer
+var _connections_status: Label
+
+signal connections_refresh_requested
 
 
 func _ready() -> void:
@@ -48,6 +52,7 @@ func _build() -> void:
 	_build_account_tab()
 	_build_profile_tab()
 	_build_memory_tab()
+	_build_connections_tab()
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -148,6 +153,64 @@ func _build_memory_tab() -> void:
 	save.text = "Save memory"
 	save.pressed.connect(func() -> void: memory_save_requested.emit(_memory_edit.text))
 	page.add_child(save)
+
+
+func _build_connections_tab() -> void:
+	var page: VBoxContainer = VBoxContainer.new()
+	page.name = "Connections"
+	_tabs.add_child(page)
+	var hint: Label = Label.new()
+	hint.text = "Account/provider availability and local tool integrations. Loki never displays secret keys here. Sign-in and paid account authorization remain yours to complete."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(hint)
+	var refresh: Button = Button.new()
+	refresh.text = "Refresh connection status"
+	refresh.pressed.connect(func() -> void: connections_refresh_requested.emit())
+	page.add_child(refresh)
+	_connections_status = Label.new()
+	_connections_status.text = "Waiting for local Loki bridge..."
+	page.add_child(_connections_status)
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(scroll)
+	_connections_list = VBoxContainer.new()
+	_connections_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_connections_list)
+
+func set_connections(payload: Dictionary) -> void:
+	if _connections_list == null:
+		return
+	for child: Node in _connections_list.get_children():
+		child.queue_free()
+	_connections_status.text = "Status checked locally. Secrets and tokens are not returned."
+	var accounts: Array = payload.get("providers", [])
+	for value: Variant in accounts:
+		if not value is Dictionary:
+			continue
+		var entry: Dictionary = value
+		var row: HBoxContainer = HBoxContainer.new()
+		var label: Label = Label.new()
+		label.text = str(entry.get("label", entry.get("id", "Provider")))
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var status: Label = Label.new()
+		status.text = str(entry.get("status", "Unknown"))
+		row.add_child(status)
+		_connections_list.add_child(row)
+	var tools: Array = payload.get("tools", [])
+	for value: Variant in tools:
+		if not value is Dictionary:
+			continue
+		var entry: Dictionary = value
+		var row: HBoxContainer = HBoxContainer.new()
+		var label: Label = Label.new()
+		label.text = str(entry.get("label", entry.get("id", "Tool")))
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var status: Label = Label.new()
+		status.text = str(entry.get("status", "Not detected"))
+		row.add_child(status)
+		_connections_list.add_child(row)
 
 
 func set_memory(text: String) -> void:

@@ -39,3 +39,8 @@ addons/loki/harness/extension_api.json
 
 # stray files an agent run may create in the plugin repo itself
 plugins/
+
+# Optional local Godot MCP addons (installed for this dev project only;
+# not part of Loki - a consuming project still needs only addons/loki)
+addons/godot_ai/
+addons/godot_omni/

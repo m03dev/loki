@@ -20,6 +20,8 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client, create_mcp_http_client
+from mcp.client.sse import sse_client
 import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -58,6 +60,10 @@ WORKSPACE = Path(
     or str(DATA_DIR / "workspace")
 )
 GODOT_EXE = os.getenv("GODOT_EXE", "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe")
+# MCP servers that drive the engine (Coding-Solo's godot-mcp, Godot Forge) look
+# for GODOT_PATH; Loki already knows the engine as GODOT_EXE, so share it.
+if str(GODOT_EXE or "").strip() and Path(GODOT_EXE).is_file() and not os.getenv("GODOT_PATH"):
+    os.environ["GODOT_PATH"] = GODOT_EXE
 
 MEMORY_FILE = DATA_DIR / "memory.md"
 PLAN_FILE = DATA_DIR / "plan.md"
@@ -118,6 +124,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import godot_tools  # noqa: E402  (Godot API + project editing tools)
 import cli_agents  # noqa: E402  (Claude Code / Codex as subscription providers)
+import jev  # noqa: E402  (Jev typed decisions: risk gate + loop detection)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -915,45 +922,132 @@ def open_godot(project_path: str = "") -> str:
     return f"launched the Godot editor{where}"
 
 
-ECC_DIR = DATA_DIR / "vendor" / "ECC"
+# ---- vendored agent/skill libraries ---------------------------------------
+# Downloaded by ecc_sync.py into harness_data/vendor/<name>/. Every library uses
+# the same layout - agents/<name>.md and skills/<name>/SKILL.md - so one loader
+# covers ECC (general agents/skills) and GodotPrompter (Godot-specific skills)
+# alike. Nothing ships inside the addon; these are user data.
+# ---- vendored agent/skill libraries ---------------------------------------
+# Downloaded by ecc_sync.py into harness_data/vendor/<name>/. Layouts vary - some
+# keep skills/ at the root, others plugins/<x>/skills or .agents/skills - so the
+# loader searches RECURSIVELY for SKILL.md and agents/*.md. One loader therefore
+# covers ECC, GodotPrompter, Superpowers and the game-dev skill packs alike.
+# Nothing ships inside the addon; these are user data.
+LIBRARIES = ("ECC", "GodotPrompter", "Superpowers", "awesome-gamedev", "gamedev-plugin",
+             "agentic-gamedev")
+ECC_DIR = DATA_DIR / "vendor" / "ECC"          # kept for backward compatibility
 ECC_AGENTS_DIR = ECC_DIR / "agents"
 ECC_SKILLS_DIR = ECC_DIR / "skills"
+SKILL_LIST_CAP = int(os.getenv("LOKI_SKILL_LIST_CAP", "120"))
 
 
-def list_ecc_agents() -> str:
-    """List the specialised agents available from the vendored ECC repo."""
-    if not ECC_AGENTS_DIR.is_dir():
-        return "ECC agents not installed (vendor/ECC/agents missing)."
-    names = sorted(p.stem for p in ECC_AGENTS_DIR.glob("*.md"))
-    return "ECC agents (%d): %s" % (len(names), ", ".join(names))
+def _lib_roots():
+    """(library, folder) for every vendored library present on disk."""
+    for library in LIBRARIES:
+        folder = DATA_DIR / "vendor" / library
+        if folder.is_dir():
+            yield library, folder
+
+
+def _agent_entries() -> list:
+    """[(library, name, path)] for every vendored agent, whatever the layout."""
+    entries = []
+    for library, folder in _lib_roots():
+        for path in sorted(folder.glob("**/agents/*.md")):
+            entries.append((library, path.stem, path))
+    return entries
+
+
+def _skill_entries() -> list:
+    """[(library, name, path)] for every vendored skill, whatever the layout."""
+    entries = []
+    for library, folder in _lib_roots():
+        for path in sorted(folder.glob("**/SKILL.md")):
+            entries.append((library, path.parent.name, path))
+    return entries
+
+
+def _describe(entries, query: str = "") -> str:
+    by_lib: dict = {}
+    for library, name, _path in entries:
+        if query and query.lower() not in name.lower():
+            continue
+        by_lib.setdefault(library, []).append(name)
+    if not by_lib:
+        return ("nothing matches %r" % query) if query else "nothing found"
+    parts = []
+    for library, names in by_lib.items():
+        shown = names[:SKILL_LIST_CAP]
+        more = "" if len(names) <= SKILL_LIST_CAP else " ... (+%d more)" % (len(names) - SKILL_LIST_CAP)
+        parts.append("%s (%d): %s%s" % (library, len(names), ", ".join(shown), more))
+    return " | ".join(parts)
+
+
+def list_ecc_agents(query: str = "") -> str:
+    """List the specialised agents available from every vendored library."""
+    entries = _agent_entries()
+    if not entries:
+        return "no agent libraries installed (call sync_ecc to fetch them)."
+    return "agents - " + _describe(entries, query)
 
 
 def load_ecc_agent(name: str) -> str:
     """Return a specialised agent's instructions so you can follow them for the task."""
-    target = ECC_AGENTS_DIR / (os.path.basename(str(name).strip()) + ".md")
-    if not target.is_file():
-        return "no such ECC agent: %s" % name
-    return target.read_text(encoding="utf-8")[:12000]
+    wanted = os.path.basename(str(name).strip())
+    for _library, stem, path in _agent_entries():
+        if stem == wanted:
+            return path.read_text(encoding="utf-8")[:12000]
+    return "no such agent: %s (call list_ecc_agents)" % name
 
 
-def list_ecc_skills() -> str:
-    """List the specialised skill packs available from the vendored ECC repo."""
-    if not ECC_SKILLS_DIR.is_dir():
-        return "ECC skills not installed (vendor/ECC/skills missing)."
-    names = sorted(p.parent.name for p in ECC_SKILLS_DIR.glob("*/SKILL.md"))
-    return "ECC skills (%d): %s" % (len(names), ", ".join(names))
+def list_ecc_skills(query: str = "") -> str:
+    """List the specialised skill packs from every vendored library.
+
+    Pass query to filter by name substring - the library holds several hundred.
+    """
+    entries = _skill_entries()
+    if not entries:
+        return "no skill libraries installed (call sync_ecc to fetch them)."
+    return "skills - " + _describe(entries, query)
 
 
 def load_ecc_skill(name: str) -> str:
     """Return a skill's guidance so you can follow it for the task."""
-    target = ECC_SKILLS_DIR / os.path.basename(str(name).strip()) / "SKILL.md"
-    if not target.is_file():
-        return "no such ECC skill: %s" % name
-    return target.read_text(encoding="utf-8")[:12000]
+    wanted = os.path.basename(str(name).strip())
+    for _library, skill, path in _skill_entries():
+        if skill == wanted:
+            return path.read_text(encoding="utf-8")[:12000]
+    return "no such skill: %s (call list_ecc_skills)" % name
+
+
+def mcp_status() -> dict:
+    """Per-server state for the bridge and the doctor: connected, or why not."""
+    try:
+        servers = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))["mcpServers"]
+    except Exception:
+        return {}
+    out: dict = {}
+    for name, spec in servers.items():
+        if name in MCP_SESSIONS_BY_SERVER:
+            offered = sorted(n for n in MODEL_TOOL_NAMES if mcp_sessions.get(n) is MCP_SESSIONS_BY_SERVER[name])
+            out[name] = {"state": "connected", "tools": len(offered)}
+        else:
+            out[name] = {"state": "off", "reason": _server_skip_reason(spec, name) or "not started"}
+    return out
+
+
+def vendor_library() -> dict:
+    """{library: {agents: [...], skills: [...]}} for the bridge and the dock."""
+    result: dict = {}
+    for library, name, _path in _agent_entries():
+        result.setdefault(library, {"agents": [], "skills": []})["agents"].append(name)
+    for library, name, _path in _skill_entries():
+        result.setdefault(library, {"agents": [], "skills": []})["skills"].append(name)
+    return result
 
 
 def sync_ecc(force: bool = False) -> str:
-    """Refresh the ECC agent/skill library from GitHub."""
+    """Refresh every vendored agent/skill library (ECC, GodotPrompter, ponytail)."""
     try:
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
@@ -961,8 +1055,9 @@ def sync_ecc(force: bool = False) -> str:
         report = ecc_sync.sync(force=bool(force))
         state = ecc_sync.installed()
     except Exception as e:
-        return "error: could not sync ECC: %s" % e
-    return "synced %s; %d agents, %d skills" % (report, state["agents"], state["skills"])
+        return "error: could not sync the libraries: %s" % e
+    totals = state.get("totals", {})
+    return "synced %s; %d agents, %d skills total" % (report, totals.get("agents", 0), totals.get("skills", 0))
 
 
 _CAPTURE_BOOTSTRAP = """extends SceneTree
@@ -1168,10 +1263,12 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "frames": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
-    schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.)."),
+    schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.). Pass query to filter by name when the list is long.",
+           {"query": {"type": "string"}}),
     schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
            {"name": {"type": "string"}}, ["name"]),
-    schema("list_ecc_skills", "List the specialised skill packs available (TDD, security, frontend, data, ML, operations, ...)."),
+    schema("list_ecc_skills", "List the specialised skill packs available (TDD, security, Godot game dev, frontend, data, ML, operations, ...). Pass query to filter by name - the library holds hundreds.",
+           {"query": {"type": "string"}}),
     schema("load_ecc_skill", "Load a skill's guidance and follow it for the task.",
            {"name": {"type": "string"}}, ["name"]),
     schema("sync_ecc", "Refresh the ECC agent/skill library from GitHub. Use when the library is missing or stale.",
@@ -1612,11 +1709,107 @@ load_conversations()
 mcp_sessions = {}
 
 
+_ENV_TOKEN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env(value) -> str:
+    """Replace ${VAR} in an mcp_servers.json arg/env with the environment value.
+
+    This is what lets a server be pointed at the active workspace, e.g.
+    "args": ["mcp-server-git", "--repository", "${LOKI_WORKSPACE}"].
+    """
+    return _ENV_TOKEN.sub(lambda m: os.environ.get(m.group(1), ""), str(value))
+
+def _godot_capability_dir() -> str:
+    """Where the Godot MCP server publishes its per-launch capability record."""
+    explicit = str(os.getenv("GODOT_AI_CAPABILITY_DIR") or "").strip()
+    if explicit:
+        return explicit
+    local = str(os.getenv("LOCALAPPDATA") or "").strip()  # Windows
+    if local:
+        return os.path.join(local, "godot-ai", "capabilities")
+    return os.path.join(os.path.expanduser("~"), ".local", "share", "godot-ai", "capabilities")
+
+
+# The Godot addon and its python server both honour this; defaulting it here means
+# mcp_servers.json can say ${GODOT_AI_CAPABILITY_DIR}/http-8000.json with no setup.
+os.environ.setdefault("GODOT_AI_CAPABILITY_DIR", _godot_capability_dir())
+
+
+def _json_field(path: str, key: str) -> str:
+    """The string field `key` of a JSON file, or "" if it is missing/unreadable."""
+    if not path or not key:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return ""
+    value = data.get(key, "") if isinstance(data, dict) else ""
+    return str(value).strip()
+
+
+def _endpoint_reachable(url: str, timeout: float = 0.7) -> bool:
+    """Whether a URL MCP server's host:port accepts a connection right now.
+
+    A stale capability record outlives the editor that published it, so a URL
+    server can look configured while nothing is listening. Probing first turns a
+    multi-minute hang into a one-line skip.
+    """
+    import socket
+    import urllib.parse as _urlparse
+
+    parsed = _urlparse.urlparse(url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _csv_env(name: str) -> set:
+    return {item.strip() for item in str(os.getenv(name) or "").split(",") if item.strip()}
+
+
+def _server_skip_reason(spec: dict, name: str = "") -> str:
+    """Why an MCP server entry must be skipped, or "" to start it.
+
+    Kept as a pure function so the gating stays testable without spawning processes:
+      "enabled": false        -> never start (an opt-in server)
+      "requires_env": NAME    -> start only when that env var is set (e.g. an API key)
+      "requires_cmd": CMD     -> start only when CMD is on PATH (e.g. npx / uvx)
+    LOKI_MCP_ENABLE=godot_omni,git turns opt-in servers on locally WITHOUT editing the
+    shipped mcp_servers.json, and LOKI_MCP_DISABLE forces servers off. Every gate keeps
+    a server's tool schemas off every request until it can actually work.
+    """
+    if name and name in _csv_env("LOKI_MCP_DISABLE"):
+        return "disabled by LOKI_MCP_DISABLE"
+    forced_on = bool(name) and name in _csv_env("LOKI_MCP_ENABLE")
+    if spec.get("enabled", True) is False and not forced_on:
+        return "disabled in mcp_servers.json (enable with LOKI_MCP_ENABLE=%s)" % name
+    required = spec.get("requires_env")
+    if required and not str(os.environ.get(required) or "").strip():
+        return "needs %s to be set" % required
+    command_needed = spec.get("requires_cmd")
+    if command_needed and not spec.get("url") and not shutil.which(command_needed):
+        return "needs '%s' on PATH" % command_needed
+    bearer = spec.get("auth_bearer_json")
+    if isinstance(bearer, dict):
+        token_path = _expand_env(bearer.get("path", ""))
+        if not _json_field(token_path, str(bearer.get("key", ""))):
+            return "no capability token at %s (start the Godot editor)" % token_path
+    return ""
+
+
 async def connect_mcp(stack: AsyncExitStack) -> None:
     """Start every MCP server and offer its tools to the model.
 
     A server entry may set:
       "enabled": false      - skip it entirely
+      "url": "http://..."   - connect to a running server over HTTP (no spawn)
+      "transport": "sse"    - use the SSE handshake instead of streamable-http
       "tools": ["a", "b"]   - offer only these (an allow-list)
       "max_tools": 20       - cap how many are offered
 
@@ -1625,16 +1818,49 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
     """
     config = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
     for name, spec in config["mcpServers"].items():
-        if spec.get("enabled", True) is False:
-            print(f"  [mcp] '{name}' is disabled in mcp_servers.json")
+        reason = _server_skip_reason(spec, name)
+        if reason:
+            print(f"  [mcp] '{name}' skipped: {reason}")
             continue
-        params = StdioServerParameters(command=spec["command"], args=spec["args"])
-        if spec.get("env"):
-            params.env = {**os.environ, **spec["env"]}
+        if spec.get("url") and not _endpoint_reachable(_expand_env(spec["url"])):
+            print(f"  [mcp] '{name}' skipped: nothing is listening at "
+                  f"{_expand_env(spec['url'])}")
+            continue
         try:
-            read, write = await stack.enter_async_context(stdio_client(params))
+            if spec.get("url"):
+                # A server that is already running, addressed by URL rather than
+                # spawned. The Godot editor plugin starts and owns its own python
+                # server (http://127.0.0.1:8000/mcp); spawning a second copy here
+                # makes the two fight over ports 8000/9500 and kills the editor,
+                # so connect to the one that exists. streamable_http is the
+                # default; "transport": "sse" selects the older SSE handshake.
+                url = _expand_env(spec["url"])
+                if str(spec.get("transport", "")).lower() == "sse":
+                    entered = await stack.enter_async_context(sse_client(url))
+                else:
+                    kwargs = {}
+                    bearer = spec.get("auth_bearer_json")
+                    if isinstance(bearer, dict):
+                        # A per-launch capability token: read it fresh at connect
+                        # time, since the editor mints a new one every startup.
+                        token = _json_field(_expand_env(bearer.get("path", "")),
+                                            str(bearer.get("key", "")))
+                        client = create_mcp_http_client(
+                            headers={"Authorization": "Bearer " + token})
+                        kwargs["http_client"] = await stack.enter_async_context(client)
+                    entered = await stack.enter_async_context(
+                        streamable_http_client(url, **kwargs))
+                read, write = entered[0], entered[1]
+            else:
+                params = StdioServerParameters(command=spec["command"],
+                                               args=[_expand_env(a) for a in spec["args"]])
+                if spec.get("env"):
+                    params.env = {**os.environ,
+                                  **{k: _expand_env(v) for k, v in spec["env"].items()}}
+                read, write = await stack.enter_async_context(stdio_client(params))
             session = await stack.enter_async_context(ClientSession(read, write))
-            await session.initialize()
+            await asyncio.wait_for(session.initialize(),
+                                   timeout=float(os.getenv("LOKI_MCP_TIMEOUT", "30")))
         except Exception as e:
             print(f"  [mcp] '{name}' failed to start: {e}")
             continue
@@ -1688,6 +1914,11 @@ async def approve(kind: str, detail: str) -> bool:
     if AUTO_APPROVE:
         print(f"  [auto-approved] {kind}: {detail}")
         return True
+    # Risk gate (Jev): auto-allow only when the action is confidently safe; anything
+    # risky or uncertain still asks. Never weakens the human path - 'confirm' = ask.
+    if jev.risk_gate(kind, detail) == "allow":
+        print(f"  [jev] {kind} judged safe to run without asking")
+        return True
     answer = await asyncio.to_thread(input, f"  [approve] {kind}: {detail}\n  allow? [y/N] ")
     return answer.strip().lower() in ("y", "yes")
 
@@ -1740,7 +1971,7 @@ MCP_SESSIONS_BY_SERVER: dict = {}
 MCP_SERVER_OF: dict = {}
 # Cap the offered list so one greedy unlock cannot blow the context budget that every
 # free tier is measured against.
-DYNAMIC_TOOLS_MAX = int(os.getenv("LOKI_DYNAMIC_TOOLS_MAX", "60"))
+DYNAMIC_TOOLS_MAX = int(os.getenv("LOKI_DYNAMIC_TOOLS_MAX", "400"))
 
 
 async def refresh_mcp_tools(server: str = "") -> list:
@@ -1794,6 +2025,10 @@ def _toolset_summary(text: str) -> str:
 
 async def call_tool(name: str, args: dict) -> str:
     args = _normalize_args(name, args)
+    # The git MCP server requires repo_path on every call. Loki already knows the
+    # project, so fill it in - the model never has to guess the workspace path.
+    if name.startswith("git_") and "repo_path" not in args:
+        args = {**args, "repo_path": str(WORKSPACE)}
     if name in LOCAL_TOOLS:
         if name in DANGEROUS and not await approve(name, json.dumps(args)[:400]):
             return ("DENIED: the user did not approve this tool. Do NOT request it again. "
@@ -1904,6 +2139,35 @@ _repeat_sig = ""
 _repeat_count = 0
 _task_modified = False
 
+# Loop detection (Jev): a rolling window of recent actions, checked periodically so a
+# model that keeps retrying the same *approach* (not an identical call) gets nudged.
+_jev_loop_window = []
+JEV_LOOP_CHECK_EVERY = int(os.getenv("LOKI_JEV_LOOP_EVERY", "6"))
+
+
+async def _jev_loop_nudge() -> str:
+    """Ask Jev whether the recent actions repeat the same approach without progress.
+
+    Returns the probability as text when Jev is confident, else "". Never fatal.
+    """
+    if not jev.enabled() or len(_jev_loop_window) < 4:
+        return ""
+    state = "Recent agent actions, oldest first:" + chr(10) + chr(10).join(_jev_loop_window[-8:])
+    try:
+        p = await asyncio.to_thread(
+            jev.noul,
+            "Is the agent repeating the same approach without making real progress?",
+            state)
+    except Exception:
+        return ""
+    if p is not None and p >= 0.7:
+        return "%.2f" % p
+    return ""
+
+
+def jev_status() -> dict:
+    """Jev availability for the doctor, the bridge and the dock."""
+    return jev.status()
 
 def request_cancel() -> None:
     """Ask the in-flight request to stop at the next safe point."""
@@ -2160,11 +2424,32 @@ async def agent_turn(force_tool: bool = False) -> str:
             else:
                 _repeat_sig, _repeat_count = "", 0
 
+            # Jev loop detection: a rolling window of recent actions; every few tool
+            # calls, ask Jev whether the agent is spinning without real progress.
+            global _jev_loop_window
+            _jev_loop_window.append("%s(%s) -> %s" % (
+                call.function.name, json.dumps(args)[:120], str(result)[:100]))
+            if call.function.name in MODIFYING and "error" not in str(result)[:80].lower():
+                _jev_loop_window = []   # real progress - start a fresh window
+            elif len(_jev_loop_window) > 16:
+                del _jev_loop_window[:-16]
+            if jev.enabled() and turns % JEV_LOOP_CHECK_EVERY == 0 and len(_jev_loop_window) >= 4:
+                _spinning = await _jev_loop_nudge()
+                if _spinning:
+                    _jev_loop_window = []
+                    _progress("thinking", "Jev flagged a likely loop (p=%s); nudging." % _spinning)
+                    messages.append({"role": "user", "content": (
+                        "You appear to be repeating the same approach without progress. Stop and "
+                        "reassess: name what is blocking you, then try a materially different tool "
+                        "or arguments, or reply 'BLOCKED: <reason>'. Do not repeat the last action."
+                    )})
+
 
 async def run_agent(user_message: str) -> str:
-    global _empty_nudges, _repeat_sig, _repeat_count
+    global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
+    _jev_loop_window = []
     messages.append({"role": "user", "content": user_message})
     try:
         answer = await agent_turn()
@@ -2187,9 +2472,10 @@ def _goal_needs_files(goal: str) -> bool:
 
 
 async def pursue_goal(goal: str) -> str:
-    global _empty_nudges, _task_modified, _repeat_sig, _repeat_count
+    global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
+    _jev_loop_window = []
     _task_modified = False
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)

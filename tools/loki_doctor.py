@@ -89,6 +89,19 @@ def main() -> int:
     print("  Put a key in %s (copy from .env.example), e.g.:" % (loki.DATA_DIR / ".env"))
     print("      GEMINI_API_KEY=...      then set  LOKI_MODEL=smart")
     print("  Or leave it empty and run  LOKI_MODEL=smart  - it uses whatever is available.")
+    print()
+    try:
+        import jev
+        _js = jev.status()
+    except Exception:
+        _js = {"enabled": False}
+    if _js.get("enabled"):
+        print("  %-11s %-7s %-30s %s" % ("Jev", MARK[True], _js.get("model"), _js.get("endpoint")))
+        print("              typed decisions: risk gate + loop detection are ON.")
+    else:
+        print("  %-11s %-7s %-30s %s" % ("Jev", MARK[False], "-", "optional: https://thejevai.com"))
+        print("              add TYPESAFE_API_KEY to .env for risk-gated approvals. Optional.")
+    print()
     return 0
 
 

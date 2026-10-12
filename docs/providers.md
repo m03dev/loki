@@ -79,6 +79,25 @@ omniroute --no-open           # serves http://localhost:20128/v1
 Create an API key in the dashboard, put it in `OMNIROUTE_API_KEY`, and set
 `LOKI_MODEL=omniroute`.
 
+## Jev (optional typed decisions)
+
+Jev is **not a chat model** — it is a decision model: send one `state` and typed
+questions (`choice` / `score` / `noul`) and get probability-backed answers your code
+branches on in a few hundred ms. Loki uses it for two loop decisions: the **risk gate**
+before a dangerous tool call and **loop detection** when the agent repeats itself.
+It is optional and never fatal — no key means Loki behaves exactly as before.
+
+- Key: `TYPESAFE_API_KEY` (aliases `JEV_API_KEY`, `JEV_KEY`) in `harness_data/.env`.
+  A hosted `jv_live_` key talks to `https://thejevai.com/v1/systemone`; an official
+  `console.typesafe.ai` key to `https://api.typesafe.ai/v1/systemone`. The endpoint
+  follows the key; `JEV_BASE_URL` overrides it.
+- Model: `JEV_MODEL` (default `typesafe/jev-1.13`); pin a version in production.
+- Knobs: `LOKI_JEV=0` disables it; `LOKI_JEV_RISK` (0.15) is the risk threshold;
+  `LOKI_JEV_CACHE` caches identical decisions; `GET /jev` on the bridge shows status.
+- The MCP route (`mcp_servers.json` -> `"jev"` -> `uvx jev-mcp-server`) is registered
+  but **gated by `requires_env: TYPESAFE_API_KEY`**, so it starts (and costs tool
+  schemas) only once a key is set.
+
 ## Adding your own provider
 
 Each provider is one entry in `MODELS` in `harness/loki.py`:

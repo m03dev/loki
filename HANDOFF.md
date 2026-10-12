@@ -12,7 +12,7 @@ harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, 
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 ```
 
-51 structural checks pass offline. `--live` adds MCP connection, the capability-domain
+125 structural checks pass offline. `--live` adds MCP connection, the capability-domain
 unlock path, and a real agent turn.
 Run these before and after any change to `addons/loki/harness/loki.py`.
 
@@ -31,7 +31,8 @@ addons/loki/
     loki.py              the agent: providers, tool loop, prompts
     godot_tools.py       Godot project tools (build_scene, validate_scene, ...)
     cli_agents.py        Claude Code / Codex as subscription providers
-    ecc_sync.py          fetches the ECC agent/skill library
+    ecc_sync.py          fetches the agent/skill libraries (see docs/godot-plugins.md)
+    jev.py               optional Jev typed decisions (risk gate + loop detection)
     mcp_servers.json     which MCP servers to start, and which tools to offer
   godot_mcp/             the Godot editor MCP bridge, vendored (MIT, (c) 2026 Johnny D)
 
@@ -150,14 +151,14 @@ box, out of roughly 150 behind the domains.
 4. **Never broad-kill Godot processes.** The argless `Godot_..._console.exe` hosts the running
    editor; killing it closes the user's editor. Kill only by an exact PID whose command line
    you have read. Loki's own editor runs as
-   `--path C:/Users/macul/Documents/loki --editor`.
+   `--path <loki> --editor`.
 5. `--check-only` on a single `.gd` reports bogus errors for global `class_name`s defined in
    sibling files. Whole-project load is the real test.
 6. The `time` MCP server has intermittently failed to start (`Connection closed`). Harmless.
 
 ## Known state
 
-- `tests/test_loki.py` - 68 offline + 10 live checks green (`--live`).
+- `tests/test_loki.py` - 125 offline + 10 live checks green (`--live`).
 - **Setup is seamless and needs no keys.** `setup.bat` / `setup.sh` create
   `harness_data/.venv`, install the deps, fetch the skill libraries and run
   `tools/loki_doctor.py`. `LOKI_MODEL` defaults to `smart`, which with no keys at all
@@ -182,6 +183,98 @@ box, out of roughly 150 behind the domains.
 - Play-session/runtime inspection additionally needs `mcp_runtime_probe.gd` registered as an
   autoload **in the game project**. That is a project modification, so it is opt-in and not
   done by default.
+
+## Jev — typed decisions in the loop (optional)
+
+Loki makes hundreds of small judgements between edits: is this tool call safe, are we
+stuck. Jev (TypeSafe System One, https://thejevai.com) answers those as typed
+`choice` / `score` / `noul` decisions in a few hundred ms, so the loop thresholds a
+number instead of parsing prose. It is **optional**: with no key every call is inert
+and Loki behaves exactly as before.
+
+Two routes, matching how Jev is meant to be adopted:
+
+- **Direct (hard-wired) — `addons/loki/harness/jev.py`.** A stdlib-only client used
+  where a decision is non-negotiable:
+  - **Risk gate** in `approve()`: before the y/N prompt, Jev judges a dangerous tool
+    call. `destructive < LOKI_JEV_RISK` (default 0.15) *and* the action choice is
+    `allow` => run it silently; otherwise it still asks. The human path stays
+    **authoritative** — Jev can only skip a prompt, never force an action. The bridge
+    overrides `approve()` with the dock's approval UI, so this covers both modes.
+  - **Loop detection** in `agent_turn`: a rolling window of recent actions; every
+    `LOKI_JEV_LOOP_EVERY` (6) tool calls Jev answers "is the agent repeating without
+    progress?" (p >= 0.7) and the agent gets a stop-and-reassess nudge. This catches
+    the same *approach* retried with different args, which the exact-signature check
+    already in the loop cannot see.
+  - Every call is guarded and non-fatal: no key, a 401/422/429/529, or a dropped
+    connection all return None/{} and the caller keeps its heuristic.
+- **MCP (`mcp_servers.json` -> `"jev"`).** The `jev-mcp-server` (uvx) exposes Jev's
+  decision primitives as tools the agent can call on its own initiative. Gated by a
+  new `requires_env` key so it only starts (and only costs tool-schema tokens) once
+  `TYPESAFE_API_KEY` is set.
+
+Turn it on: put `TYPESAFE_API_KEY=` (a hosted `jv_live_` key or an official
+`console.typesafe.ai` key; the endpoint follows the key) in `harness_data/.env`.
+`LOKI_JEV=0` force-disables it. `GET /jev` on the bridge reports status and
+`tools/loki_doctor.py` shows a Jev line.
+
+## Vendored Godot knowledge + optional MCP servers
+
+`ecc_sync.py` fetches several libraries into `harness_data/vendor/` and `loki.py`
+loads them all through one loader (`LIBRARIES`). The loader searches **recursively**
+for `SKILL.md` and `agents/*.md`, so every repo layout works (root `skills/`,
+`plugins/<x>/skills`, `.agents/skills`). Total: **482 skills, 88 agents**.
+
+- **ECC** (general): 76 agents, 311 skills.
+- **GodotPrompter** (`jame581/GodotPrompter`): 9 agents, 56 Godot-4 skills.
+- **awesome-gamedev** (`gamedev-skills/awesome-gamedev-agent-skills`): 75 game-dev skills.
+- **gamedev-plugin** (`fcsouza/agent-skills`): 3 agents, 25 design/eng/narrative skills.
+- **agentic-gamedev** (`abagames/agentic-gamedev-skills`): 37 skills.
+- **Superpowers** (`obra/superpowers`): 15 core workflow skills.
+- **ponytail**: the coding standard (rendered as a prompt block).
+
+`list_ecc_skills(query)` groups names per library and caps the dump at
+`LOKI_SKILL_LIST_CAP` (120) with a `(+N more)` tail.
+
+`load_ecc_skill` / `load_ecc_agent` search every library; `list_ecc_*` name each
+library it found; `/ecc` returns flat lists plus a per-library `libraries` map.
+`docs/godot-plugins.md` has the full ecosystem survey and what was/wasn't taken.
+
+MCP servers now offer their FULL tool surface (no allow-lists or caps; ~157
+MCP tools reach the model). Gating is three generic rules, enforced by the pure
+function
+`_server_skip_reason()`: `enabled:false`, `requires_env` (an API key), and
+`requires_cmd` (e.g. `npx`/`uvx` on PATH). `LOKI_MCP_ENABLE=a,b` turns opt-in
+servers on locally without editing the shipped JSON (`LOKI_MCP_DISABLE` forces
+off); args/env support `${ENV}` templating (git uses `--repository
+${LOKI_WORKSPACE}`, and Loki auto-fills git's `repo_path` from the workspace);
+`GET /connections` reports each server's state. Registered additions: **`godot_run`**
+(Coding-Solo `@coding-solo/godot-mcp` - run/stop/debug the game, gated by `npx`),
+**`godot_omni`** (the 1,820-op bebabinlarsson gateway - registered but OFF until
+its own addons are installed), **`jev`** (gated by `TYPESAFE_API_KEY`), and two
+opt-in servers **`git`** (`uvx mcp-server-git`) and **`sequential`**
+(`uvx mcp-sequential-thinking`). Loki exports `GODOT_PATH` from a real `GODOT_EXE`
+so engine-driving servers find the binary. The full survey is in
+`docs/godot-plugins.md`.
+
+**A real bug this caught:** an earlier patch inserted the `requires_env` block
+BETWEEN the `enabled` print and its `continue`, so a disabled server still started
+and added 20 tool schemas to every request. Gating is now one pure function with
+unit tests. After editing `mcp_servers.json`, read the `[mcp]` lines in
+`.godot/loki_bridge.log` - every server should say `connected` or `skipped: <why>`.
+
+## Release signing
+
+`keys/loki_public.pem` is the trusted RSA-2048 public key (fingerprint
+`SHA256:k7mnIAntVdK6HNIKTPLtOuN6Ps5kfLTzSPkmJ5oqCNs`). The matching **private** key
+is never in the repo - point `LOKI_SIGNING_KEY` at it to sign. `tools/loki_sign.py`
+signs (`sign`), verifies against the bundled key (`verify` / `verify-all`, or
+`--pubkey` for another key) and prints the pinnable fingerprint. See `keys/README.md`.
+
+**WARNING - do not enable `addons/godot_ai` + `addons/godot_omni` alongside the
+`godot_omni` MCP backend.** They fight over ports 8000/9500 and the Loki editor is
+terminated ~45s after launch (reproduced). Both addons are on disk but disabled,
+and `godot_omni` is off; the editor is stable without them.
 
 ## Next steps, in value order
 

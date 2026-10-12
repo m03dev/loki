@@ -41,6 +41,17 @@ var _smart_button: Button
 var _menu: MenuButton
 var _tabs: TabBar
 var _add_tab_button: Button
+var _attach_button: Button
+var _attachment_status: Label
+var _attachment_dialog: FileDialog
+var _pending_attachments: Array[Dictionary] = []
+
+const MAX_ATTACHMENT_FILES: int = 8
+const MAX_ATTACHMENT_FILE_BYTES: int = 96_000
+const MAX_ATTACHMENT_TOTAL_BYTES: int = 384_000
+const TEXT_ATTACHMENT_EXTENSIONS: Array[String] = [
+	"gd", "cs", "tscn", "tres", "gdshader", "shader", "json", "txt", "md", "cfg", "ini", "csv", "xml", "yaml", "yml", "toml", "py", "js", "ts", "html", "css", "sql", "log"
+]
 
 var _chat_http: HTTPRequest
 var _approval_http: HTTPRequest
@@ -51,6 +62,7 @@ var _cancel_http: HTTPRequest
 var _conv_http: HTTPRequest
 var _memory_http: HTTPRequest
 var _ecc_http: HTTPRequest
+var _connections_http: HTTPRequest
 
 var _poll_timer: Timer
 var _progress_timer: Timer
@@ -107,6 +119,7 @@ func _ready() -> void:
 	_conv_http = _new_http(12.0, _on_conv_response)
 	_memory_http = _new_http(10.0, _on_memory_response)
 	_ecc_http = _new_http(30.0, _on_ecc_response)
+	_connections_http = _new_http(10.0, _on_connections_response)
 	_poll_timer = Timer.new()
 	_poll_timer.wait_time = 0.5
 	_poll_timer.timeout.connect(_poll_approval)
@@ -155,6 +168,7 @@ func _build_ui() -> void:
 	popup.add_icon_item(_editor_icon("AnimationPlayer"), "Inspect current scene", 10)
 	popup.add_icon_item(_editor_icon("Search"), "Validate project", 11)
 	popup.add_icon_item(_editor_icon("Play"), "Run task (no limit)", 12)
+	popup.add_icon_item(_editor_icon("Clear"), "Clear pending attachments", 13)
 	popup.id_pressed.connect(_on_menu_pressed)
 	header.add_child(_menu)
 
@@ -195,6 +209,16 @@ func _build_ui() -> void:
 
 	var bottom: HBoxContainer = HBoxContainer.new()
 	add_child(bottom)
+	_attach_button = _icon_button("Attach", "Attach text, code, scenes, or images")
+	_attach_button.text = "+"
+	_attach_button.pressed.connect(_on_attach_pressed)
+	bottom.add_child(_attach_button)
+	_attachment_status = Label.new()
+	_attachment_status.text = ""
+	_attachment_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_attachment_status.clip_text = true
+	_attachment_status.tooltip_text = "Pending attachments"
+	bottom.add_child(_attachment_status)
 	_model_picker = OptionButton.new()
 	_model_picker.tooltip_text = "Model / provider"
 	_model_picker.fit_to_longest_item = false
@@ -232,6 +256,7 @@ func _build_ui() -> void:
 
 	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
 	_settings_dialog.profile_saved.connect(_on_profile_saved)
+	_settings_dialog.connections_refresh_requested.connect(_refresh_connections)
 	_settings_dialog.category_toggled.connect(_on_category_toggled)
 	_settings_dialog.sign_in_requested.connect(_on_sign_in)
 	_settings_dialog.sign_out_requested.connect(_on_sign_out)
@@ -247,6 +272,17 @@ func _build_ui() -> void:
 	_permission_dialog.confirmed.connect(_submit_approval.bind(true))
 	_permission_dialog.canceled.connect(_submit_approval.bind(false))
 	add_child(_permission_dialog)
+
+	_attachment_dialog = FileDialog.new()
+	_attachment_dialog.title = "Attach files to Loki"
+	_attachment_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILES
+	_attachment_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_attachment_dialog.filters = PackedStringArray([
+		"*.gd, *.cs, *.tscn, *.tres, *.gdshader, *.shader, *.json, *.txt, *.md, *.cfg, *.ini, *.csv, *.xml, *.yaml, *.yml, *.toml, *.py, *.js, *.ts, *.html, *.css, *.sql, *.log ; Text, code and Godot resources",
+		"*.png, *.jpg, *.jpeg, *.webp ; Images (sent as file references)"
+	])
+	_attachment_dialog.files_selected.connect(_on_attachment_files_selected)
+	add_child(_attachment_dialog)
 
 	_rename_dialog = ConfirmationDialog.new()
 	_rename_dialog.title = "Rename chat"
@@ -383,6 +419,91 @@ func _on_input_gui(event: InputEvent) -> void:
 func _on_send_pressed() -> void:
 	_submit(false)
 
+func _on_attach_pressed() -> void:
+	_attachment_dialog.popup_centered_ratio(0.72)
+
+func _on_attachment_files_selected(paths: PackedStringArray) -> void:
+	var added: int = 0
+	var total_bytes: int = 0
+	for attachment: Dictionary in _pending_attachments:
+		total_bytes += int(attachment.get("size", 0))
+	for path: String in paths:
+		if _pending_attachments.size() >= MAX_ATTACHMENT_FILES:
+			break
+		if _find_attachment(path) >= 0:
+			continue
+		var extension: String = path.get_extension().to_lower()
+		var is_image: bool = extension in ["png", "jpg", "jpeg", "webp"]
+		if not is_image and not extension in TEXT_ATTACHMENT_EXTENSIONS:
+			_append_log("[color=#ebcb8b]Skipped unsupported attachment: %s[/color]" % _escape(path.get_file()))
+			continue
+		var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			_append_log("[color=#ff7777]Could not read attachment: %s[/color]" % _escape(path.get_file()))
+			continue
+		var file_size: int = file.get_length()
+		file.close()
+		var size_limit: int = 6_000_000 if is_image else MAX_ATTACHMENT_FILE_BYTES
+		if file_size <= 0 or file_size > size_limit:
+			_append_log("[color=#ebcb8b]Skipped %s: file must be 1 byte to %s.[/color]" % [_escape(path.get_file()), "6 MB" if is_image else "96 KB"])
+			continue
+		if total_bytes + file_size > MAX_ATTACHMENT_TOTAL_BYTES and not is_image:
+			_append_log("[color=#ebcb8b]Attachment text limit reached (384 KB total).[/color]")
+			continue
+		_pending_attachments.append({"path": path, "name": path.get_file(), "size": file_size, "image": is_image})
+		total_bytes += file_size
+		added += 1
+	_update_attachment_status()
+	if added > 0:
+		_append_log("[color=#a3be8c]Added %d attachment(s).[/color]" % added)
+
+func _find_attachment(path: String) -> int:
+	for index: int in _pending_attachments.size():
+		if str(_pending_attachments[index].get("path", "")) == path:
+			return index
+	return -1
+
+func _update_attachment_status() -> void:
+	if _attachment_status == null:
+		return
+	var names: PackedStringArray = PackedStringArray()
+	for attachment: Dictionary in _pending_attachments:
+		names.append(str(attachment.get("name", "file")))
+	_attachment_status.text = ("%d file(s) attached" % _pending_attachments.size()) if not names.is_empty() else ""
+	_attachment_status.tooltip_text = "\n".join(names) if not names.is_empty() else "No pending attachments"
+
+func _clear_attachments() -> void:
+	_pending_attachments.clear()
+	_update_attachment_status()
+
+func _build_prompt_with_attachments(prompt: String) -> String:
+	if _pending_attachments.is_empty():
+		return prompt
+	var context: String = prompt + "\n\n--- Attached files ---\n"
+	for attachment: Dictionary in _pending_attachments:
+		var path: String = str(attachment.get("path", ""))
+		var name: String = str(attachment.get("name", path.get_file()))
+		if bool(attachment.get("image", false)):
+			var project_path: String = ""
+			var global_project: String = _project_dir().replace("\\", "/")
+			var global_image: String = path.replace("\\", "/")
+			if global_image.begins_with(global_project + "/"):
+				project_path = "res://" + global_image.trim_prefix(global_project + "/")
+			context += "\nImage attachment: %s\n" % name
+			if not project_path.is_empty():
+				context += "Ask Loki to inspect this image with view_image using project path %s.\n" % project_path
+			else:
+				context += "Image path (external to this Godot project): %s\n" % path
+			continue
+		var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			context += "\n[Could not read %s; file may have moved.]\n" % name
+			continue
+		var content: String = file.get_as_text()
+		file.close()
+		context += "\nFile: %s (%d chars)\n```%s\n%s\n```\n" % [name, content.length(), path.get_extension().to_lower(), content]
+	return context
+
 func _submit(no_limit: bool) -> void:
 	if _busy:
 		return
@@ -395,6 +516,8 @@ func _submit(no_limit: bool) -> void:
 		if not no_limit:
 			return
 		prompt = "Inspect this Godot project read-only in short steps: the project tree, the current scene, then a headless validation. Do not modify files."
+	prompt = _build_prompt_with_attachments(prompt)
+	_clear_attachments()
 	_input_edit.clear()
 	_append_log("[right][color=#7f9db0][b]You[/b][/color][/right]
 [right][color=#dfe6ee]" + _escape(prompt) + "[/color][/right]")
@@ -621,6 +744,7 @@ func _on_settings_pressed() -> void:
 	_refresh_models()
 	_refresh_account()
 	_refresh_memory()
+	_refresh_connections()
 	_auth_timer.start()
 	_settings_dialog.popup_centered(Vector2i(620, 610))
 
@@ -632,6 +756,16 @@ func _refresh_settings() -> void:
 
 func _refresh_models() -> void:
 	_api_get(_settings_http, "/models")
+
+func _refresh_connections() -> void:
+	_api_get(_connections_http, "/connections")
+
+func _on_connections_response(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary and _settings_dialog.has_method("set_connections"):
+		_settings_dialog.set_connections(parsed)
 
 func _refresh_account() -> void:
 	if _auth_http.get_http_client_status() == HTTPClient.STATUS_DISCONNECTED:
@@ -764,6 +898,8 @@ func _on_menu_pressed(id: int) -> void:
 			_on_quick_action_selected(2)
 		12:
 			_on_quick_action_selected(3)
+		13:
+			_clear_attachments()
 
 func _copy_chat_markdown() -> void:
 	DisplayServer.clipboard_set(_chat_log.get_parsed_text())
@@ -794,7 +930,9 @@ func _append_log(text: String) -> void:
 	_recent_log.append(plain)
 	if _recent_log.size() > 80:
 		_recent_log.remove_at(0)
-	_chat_log.append_text(text + "\n\n")
+	_chat_log.append_text(text + "
+
+")
 	_chat_log.scroll_to_line(_chat_log.get_line_count())
 
 
@@ -884,7 +1022,11 @@ func _on_approval_poll(result: int, code: int, _h: PackedStringArray, body: Pack
 	if ticket_id.is_empty() or ticket_id == _approval_id:
 		return
 	_approval_id = ticket_id
-	_permission_dialog.dialog_text = "%s\n\n%s\n\nApprove only if you understand this action." % [str(ticket.get("tool", "tool")), str(ticket.get("details", ""))]
+	_permission_dialog.dialog_text = "%s
+
+%s
+
+Approve only if you understand this action." % [str(ticket.get("tool", "tool")), str(ticket.get("details", ""))]
 	_permission_dialog.popup_centered(Vector2i(560, 380))
 
 func _submit_approval(approved: bool) -> void:
@@ -916,7 +1058,8 @@ func _poll_editor_ops() -> void:
 	if not FileAccess.file_exists(path):
 		return
 	var text: String = FileAccess.get_file_as_string(path)
-	for line in text.split("\n"):
+	for line in text.split("
+"):
 		var trimmed: String = line.strip_edges()
 		if trimmed.is_empty():
 			continue

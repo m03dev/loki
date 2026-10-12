@@ -1,11 +1,21 @@
-"""Fetch the ECC agent/skill library from GitHub into harness/vendor.
+"""Fetch agent/skill libraries from GitHub into harness_data/vendor.
 
-Standard library only - it downloads the repository zip over HTTPS, so it
-works with no git and no extra packages. Usable as a module or a CLI:
+Standard library only - it downloads each repository zip over HTTPS, so it works
+with no git and no extra packages. Usable as a module or a CLI:
 
     python ecc_sync.py            # fetch anything missing
     python ecc_sync.py --force    # re-download everything
     python ecc_sync.py --status   # report what is installed
+
+Every source follows the SAME convention - `agents/*.md` and `skills/<name>/SKILL.md`
+- so loki.py loads them all through one loader:
+
+  ECC                general-purpose agent + skill library (affaan-m/ECC)
+  GodotPrompter      Godot 4 domain skills + agents (jame581/GodotPrompter)
+  Superpowers        the core agentic-workflow skills (obra/superpowers)
+  awesome-gamedev    game-dev skills across engines (gamedev-skills/...)
+  gamedev-plugin     game design/engineering/narrative skills (fcsouza/agent-skills)
+  ponytail           the "lazy senior dev" coding standard (AGENTS.md only)
 """
 from __future__ import annotations
 
@@ -35,9 +45,15 @@ def _data_dir() -> Path:
 
 VENDOR = _data_dir() / "vendor"
 
-# name -> repo, and which top-level folders to keep (None keeps everything)
+# name -> repo, and which top-level folders to keep (None keeps everything).
 SOURCES = {
     "ECC": {"repo": "affaan-m/ECC", "keep": ("agents", "skills")},
+    "GodotPrompter": {"repo": "jame581/GodotPrompter", "keep": ("agents", "skills")},
+    "Superpowers": {"repo": "obra/superpowers", "keep": ("skills",)},
+    "awesome-gamedev": {"repo": "gamedev-skills/awesome-gamedev-agent-skills",
+                        "keep": ("skills", "router")},
+    "gamedev-plugin": {"repo": "fcsouza/agent-skills", "keep": ("plugins/game-dev",)},
+    "agentic-gamedev": {"repo": "abagames/agentic-gamedev-skills", "keep": (".agents",)},
     "ponytail": {"repo": "DietrichGebert/ponytail", "keep": None,
                  "files": ("AGENTS.md", "LICENSE")},
 }
@@ -95,31 +111,49 @@ def sync(force: bool = False, log=print) -> dict:
         try:
             count = _extract(spec["repo"], spec.get("keep"), spec.get("files"), target)
         except Exception as exc:
-            log(f"[ecc] {name}: failed - {exc}")
+            log(f"[sync] {name}: failed - {exc}")
             report[name] = f"error: {exc}"
             continue
         marker.write_text(
             json.dumps({"repo": spec["repo"], "files": count, "when": time.time()}),
             encoding="utf-8",
         )
-        log(f"[ecc] {name}: {count} files from {spec['repo']}")
+        log(f"[sync] {name}: {count} files from {spec['repo']}")
         report[name] = count
     return report
 
 
+def _count(root: Path, kind: str) -> int:
+    """Count agents/skills recursively - repositories nest them differently."""
+    if not root.is_dir():
+        return 0
+    if kind == "agents":
+        return len(list(root.glob("**/agents/*.md")))
+    return len(list(root.glob("**/SKILL.md")))
+
+
 def installed() -> dict:
-    """What is on disk right now."""
-    agents_dir = VENDOR / "ECC" / "agents"
-    skills_dir = VENDOR / "ECC" / "skills"
-    return {
-        "agents": len(list(agents_dir.glob("*.md"))) if agents_dir.is_dir() else 0,
-        "skills": len(list(skills_dir.glob("*/SKILL.md"))) if skills_dir.is_dir() else 0,
-        "ponytail": (VENDOR / "ponytail" / "AGENTS.md").is_file(),
-    }
+    """What is on disk right now, per source and in total."""
+    sources: dict = {}
+    agents = skills = 0
+    for name in SOURCES:
+        if name == "ponytail":
+            sources[name] = (VENDOR / name / "AGENTS.md").is_file()
+            continue
+        a, s = _count(VENDOR / name, "agents"), _count(VENDOR / name, "skills")
+        sources[name] = {"agents": a, "skills": s}
+        agents += a
+        skills += s
+    return {"sources": sources, "totals": {"agents": agents, "skills": skills}}
+
+
+def missing() -> list:
+    """Sources whose download marker is absent (never fetched)."""
+    return [name for name in SOURCES if not (VENDOR / name / ".loki_sync.json").exists()]
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Fetch the ECC agent library.")
+    parser = argparse.ArgumentParser(description="Fetch the agent/skill libraries.")
     parser.add_argument("--force", action="store_true", help="re-download even if present")
     parser.add_argument("--status", action="store_true", help="report what is installed")
     args = parser.parse_args()

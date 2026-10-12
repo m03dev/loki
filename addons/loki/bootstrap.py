@@ -53,6 +53,41 @@ def log(message: str) -> None:
         pass
 
 
+def _pid_alive(pid: int) -> bool:
+    """Whether `pid` is a live process. Used to tell a held lock from a stale one."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def release_launch_lock() -> None:
+    """Drop the lock if we still own it, so a restart never waits on a dead PID."""
+    try:
+        if LOCK.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            LOCK.unlink()
+    except OSError:
+        pass
+
+
 def take_launch_lock() -> bool:
     """Atomically claim the single launch slot; False if someone else holds it.
 
@@ -68,9 +103,26 @@ def take_launch_lock() -> bool:
         try:
             handle = os.open(str(LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
+            # The lock is held only while the launcher that wrote it is alive.
+            # A PID check beats a plain TTL because the launcher now runs in the
+            # foreground for the bridge's whole life: a first start with MCP
+            # servers still downloading easily outlives LOCK_TTL_S, and a second
+            # dock-triggered launch then saw a "stale" lock, took it, and served a
+            # second bridge on the same port. The TTL remains only as a fallback
+            # for a lock whose PID cannot be read.
             try:
-                if (time.time() - LOCK.stat().st_mtime) < LOCK_TTL_S:
+                holder = int(LOCK.read_text(encoding="utf-8").strip() or "0")
+            except (OSError, ValueError):
+                holder = 0
+            if holder and _pid_alive(holder):
+                return False
+            if not holder:
+                try:
+                    if (time.time() - LOCK.stat().st_mtime) < LOCK_TTL_S:
+                        return False
+                except OSError:
                     return False
+            try:
                 LOCK.unlink()
             except OSError:
                 return False
@@ -148,6 +200,8 @@ def main() -> int:
         return subprocess.call([str(python), str(BRIDGE)] + sys.argv[1:])
     except KeyboardInterrupt:
         return 0
+    finally:
+        release_launch_lock()
 
 
 if __name__ == "__main__":

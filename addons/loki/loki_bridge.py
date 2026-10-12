@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -349,10 +350,14 @@ class BridgeState:
 
 
 def ecc_library(agent) -> dict:
-    """The agents and skills currently vendored from ECC."""
-    agents = sorted(path.stem for path in agent.ECC_AGENTS_DIR.glob("*.md"))         if agent.ECC_AGENTS_DIR.is_dir() else []
-    skills = sorted(path.parent.name for path in agent.ECC_SKILLS_DIR.glob("*/SKILL.md"))         if agent.ECC_SKILLS_DIR.is_dir() else []
-    return {"agents": agents, "skills": skills}
+    """The agents and skills currently vendored, aggregated across every library."""
+    libraries = agent.vendor_library() if hasattr(agent, "vendor_library") else {}
+    agents: list[str] = []
+    skills: list[str] = []
+    for data in libraries.values():
+        agents += data.get("agents", [])
+        skills += data.get("skills", [])
+    return {"agents": sorted(set(agents)), "skills": sorted(set(skills)), "libraries": libraries}
 
 
 def dump_godot_api(godot_exe: str, harness) -> None:
@@ -371,14 +376,48 @@ def dump_godot_api(godot_exe: str, harness) -> None:
 
 
 def initial_ecc_sync(agent) -> None:
-    """Fetch the ECC library on first run so its tools work with no setup."""
-    if agent.ECC_AGENTS_DIR.is_dir() and any(agent.ECC_AGENTS_DIR.glob("*.md")):
-        return
+    """Fetch the agent/skill libraries on first run so their tools work with no setup."""
     try:
-        print("[loki-bridge] fetching the ECC agent library (first run)...", flush=True)
+        import ecc_sync
+        if not ecc_sync.missing():
+            return
+    except Exception:
+        pass
+    try:
+        print("[loki-bridge] fetching the agent/skill libraries (first run)...", flush=True)
         print("  " + agent.sync_ecc(False), flush=True)
     except Exception as exc:
-        print(f"  [ecc] initial sync failed: {exc}", flush=True)
+        print(f"  [sync] initial sync failed: {exc}", flush=True)
+
+
+def connection_inventory(agent: Any) -> dict[str, Any]:
+    """Credential-free overview of model providers and optional local integrations."""
+    providers: list[dict[str, str]] = []
+    for name, cfg in agent.MODELS.items():
+        if name in ("smart", "online") or name.startswith("local"):
+            continue
+        if cfg.base_url.startswith("cli-agent://"):
+            ready = bool(agent.provider_configured(name))
+            status = "CLI installed; sign-in not verified" if ready else "CLI not installed"
+        elif "11434" in cfg.base_url:
+            ready = bool(agent.provider_configured(name))
+            status = "Ollama service detected" if ready else "Ollama not detected"
+        else:
+            key_ready = bool(str(cfg.api_key or "").strip())
+            status = "Credential configured (connectivity not verified)" if key_ready else "Not configured"
+        providers.append({"id": name, "label": name.replace("-", " ").title(), "status": status})
+    tools: list[dict[str, str]] = []
+    for label, command, ready_text in (
+        ("Chrome DevTools MCP prerequisite (Node/npx)", "npx", "Node/npx installed; Chrome MCP not configured"),
+        ("PowerShell 7", "pwsh", "Installed; MCP not enabled"),
+        ("Windows PowerShell", "powershell", "Installed; MCP not enabled"),
+        ("CMake CLI", "cmake", "Installed; CMake MCP not enabled"),
+    ):
+        executable = shutil.which(command)
+        status = ready_text if executable else "Not detected"
+        tools.append({"id": command, "label": label, "status": status})
+    return {"providers": providers, "tools": tools,
+            "mcp_servers": agent.mcp_status() if hasattr(agent, "mcp_status") else {}}
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -432,6 +471,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         route = urlparse(self.path).path
+        if route == "/connections":
+            self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
+            return
         if route == "/health":
             agent = self.server.state.agent
             resolved = agent.active_model_name() if hasattr(agent, "active_model_name") else agent.model_name
@@ -486,6 +528,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/ecc":
             self._send_json(200, {"ok": True, **ecc_library(self.server.state.agent)})
+            return
+        if route == "/jev":
+            agent = self.server.state.agent
+            status = agent.jev_status() if hasattr(agent, "jev_status") else {}
+            self._send_json(200, {"ok": True, **status})
             return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
 
