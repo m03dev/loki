@@ -989,7 +989,62 @@ def play_scene(filename: str, seconds: int = 5) -> str:
     return "play_scene %s (%ds): %s%s%s" % (filename, seconds, verdict, chr(10), _shorten(out))
 
 
+# ---------------------------------------------------------------------------
+# Command policy: a structured guard in front of the run_command shell.
+# ---------------------------------------------------------------------------
+# run_command hands a raw string to the OS shell. Before it does, the command is
+# normalised and checked against a policy of known-destructive shapes: disk and
+# boot tampering, wholesale deletion of a drive or root, account and registry
+# edits, and downloading remote code straight into an interpreter. The policy is a
+# pure function so it is unit tested. It is a GUARD, not a full sandbox - a
+# determined command can still be built - so run_command also stays behind the
+# approval gate. Set LOKI_COMMAND_POLICY=0 to disable it in a trusted context.
+
+_DESTRUCTIVE_SNIPPETS = (
+    "rm -rf /", "rm -fr /", "rm -rf ~",
+    "del /f /s /q", "del /s /q", "rd /s /q", "rmdir /s /q",
+    "format ", "mkfs", "diskpart", "fdisk", "wipefs",
+    "dd if=", "dd of=/dev/", "> /dev/sda", "> /dev/nvme",
+    ":(){", ":() {",
+    "shutdown", "reboot", "poweroff",
+    "cipher /w", "vssadmin", "bcdedit", "bootrec",
+    "takeown", "icacls", "reg delete", "reg add",
+    "net user", "net localgroup", "netsh advfirewall",
+    "chmod -r 777 /", "chown -r", "chmod 777 /",
+)
+
+_REMOTE_EXEC_TOKENS = (
+    "| sh", "| bash", "| zsh", "| python", "| perl", "| iex",
+    "invoke-expression", "iex(", "eval(",
+)
+
+
+def command_policy(command: str) -> tuple:
+    """Return (allowed, reason) for a shell command string. Pure, no side effects.
+
+    A blank command is refused. A command whose whitespace-normalised text contains
+    a known-destructive shape, or that pipes remote content into an interpreter, is
+    refused with a reason. Everything else is allowed.
+    """
+    if str(os.getenv("LOKI_COMMAND_POLICY", "1")).strip().lower() in ("0", "false", "off", "no"):
+        return True, "policy disabled"
+    text = " ".join(str(command or "").split()).lower()
+    if not text:
+        return False, "empty command"
+    for snippet in _DESTRUCTIVE_SNIPPETS:
+        if snippet in text:
+            return False, "refused: destructive command pattern (%s)" % snippet
+    for token in _REMOTE_EXEC_TOKENS:
+        if token in text:
+            return False, "refused: remote content piped into an interpreter (%s)" % token
+    return True, "ok"
+
+
 def run_command(command: str, timeout: int = 120) -> str:
+    allowed, reason = command_policy(command)
+    if not allowed:
+        print("  [policy] " + reason)
+        return "error: " + reason
     try:
         proc = subprocess.run(command, shell=True, cwd=WORKSPACE,
                               capture_output=True, text=True, timeout=timeout)
