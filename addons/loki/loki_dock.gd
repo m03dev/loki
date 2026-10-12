@@ -65,6 +65,7 @@ var _connections_http: HTTPRequest
 var _connect_http: HTTPRequest
 var _mode_http: HTTPRequest
 var _mode_button: MenuButton
+var _settings_button: Button
 
 var _poll_timer: Timer
 var _progress_timer: Timer
@@ -156,7 +157,9 @@ func _build_ui() -> void:
 	# Honest minimum: the rows below need ~497px across (the toolbar is the widest
 	# row) and ~286px down. Declaring less lets the editor shrink the dock below
 	# what its content needs, which clips the input row and the right-hand buttons.
-	custom_minimum_size = Vector2(500.0, 300.0)
+	# A small honest minimum: the user has to be able to drag the dock narrow. Nothing
+	# below needs more than this - the toolbar clips and the transcript scrolls.
+	custom_minimum_size = Vector2(300.0, 240.0)
 	# No title row. The dock's own tab already reads "Loki", and Ziva's panel shows
 	# nothing but its tab until you talk to it - repeating the name inside the panel
 	# is just clutter. The menu button lives on the tab row instead.
@@ -197,6 +200,9 @@ func _build_ui() -> void:
 	_add_tab_button.tooltip_text = "New chat"
 	_add_tab_button.pressed.connect(_on_new_chat)
 	tab_row.add_child(_add_tab_button)
+	_settings_button = _icon_button("Tools", "Loki settings")
+	_settings_button.pressed.connect(_on_settings_pressed)
+	tab_row.add_child(_settings_button)
 	tab_row.add_child(_menu)
 
 	# The transcript is ONE self-scrolling RichTextLabel. It must not sit inside a
@@ -209,20 +215,24 @@ func _build_ui() -> void:
 	_chat_log.selection_enabled = true
 	_chat_log.scroll_active = true
 	_chat_log.scroll_following = true
-	_chat_log.custom_minimum_size = Vector2(360.0, 120.0)
+	_chat_log.custom_minimum_size = Vector2(200.0, 80.0)
 	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(_chat_log)
 
+	# The composer is one block: the box and its icon row travel together.
+	var composer: VBoxContainer = VBoxContainer.new()
+	composer.add_theme_constant_override("separation", 3)
+	add_child(composer)
 	_input_edit = TextEdit.new()
-	_input_edit.custom_minimum_size = Vector2(360.0, 72.0)
+	_input_edit.custom_minimum_size = Vector2(200.0, 56.0)
 	_input_edit.placeholder_text = "Describe a task; Loki works until done (Ctrl+Enter)"
 	_input_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_input_edit.gui_input.connect(_on_input_gui)
-	add_child(_input_edit)
+	composer.add_child(_input_edit)
 
 	var bottom: HBoxContainer = HBoxContainer.new()
-	add_child(bottom)
+	composer.add_child(bottom)
 	_attach_button = _icon_button("Attach", "Attach text, code, scenes, or images")
 	_attach_button.text = "+"
 	_attach_button.pressed.connect(_on_attach_pressed)
@@ -308,6 +318,22 @@ func _build_ui() -> void:
 	_rename_dialog.add_child(_rename_edit)
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	add_child(_rename_dialog)
+
+func _popup_fit(dialog: Window, wanted: Vector2) -> void:
+	# A Godot Window GROWS to its content's minimum size, so a tall dialog used to run
+	# off the bottom of the editor and take its own Close button with it. Cap the usable
+	# size to the host window, wrap the controls so their minimums cannot force it open
+	# again, and only then center it.
+	var host: Window = get_window()
+	var limit: Vector2 = Vector2(1000.0, 700.0)
+	if host != null:
+		limit = Vector2(maxf(420.0, host.size.x - 60.0), maxf(300.0, host.size.y - 100.0))
+	var fit: Vector2 = Vector2(minf(wanted.x, limit.x), minf(wanted.y, limit.y))
+	dialog.wrap_controls = true
+	dialog.max_size = Vector2i(int(limit.x), int(limit.y))
+	dialog.size = Vector2i(int(fit.x), int(fit.y))
+	dialog.popup_centered(Vector2i(int(fit.x), int(fit.y)))
+
 
 func _editor_icon(name: String) -> Texture2D:
 	# Godot's built-in editor icons - the same set Ziva's panel draws from.
@@ -462,7 +488,7 @@ func _on_send_pressed() -> void:
 	_submit(false)
 
 func _on_attach_pressed() -> void:
-	_attachment_dialog.popup_centered_ratio(0.72)
+	_popup_fit(_attachment_dialog, Vector2(900.0, 600.0))
 
 func _on_attachment_files_selected(paths: PackedStringArray) -> void:
 	var added: int = 0
@@ -854,6 +880,11 @@ func _on_memory_save(text: String) -> void:
 	_api_post(_memory_http, "/memory", {"text": text})
 	_append_log("[color=#a3be8c]Memory updated.[/color]")
 
+func open_settings() -> void:
+	# Called from the Loki viewport screen.
+	_on_settings_pressed()
+
+
 func _on_settings_pressed() -> void:
 	_refresh_settings()
 	_refresh_models()
@@ -861,7 +892,7 @@ func _on_settings_pressed() -> void:
 	_refresh_memory()
 	_refresh_connections()
 	_auth_timer.start()
-	_settings_dialog.popup_centered(Vector2i(620, 610))
+	_popup_fit(_settings_dialog, Vector2(620.0, 620.0))
 
 func _on_settings_closed() -> void:
 	_auth_timer.stop()
@@ -989,7 +1020,7 @@ func _on_menu_pressed(id: int) -> void:
 			_copy_chat_markdown()
 		4:
 			_rename_edit.text = _current_title()
-			_rename_dialog.popup_centered(Vector2i(380, 150))
+			_popup_fit(_rename_dialog, Vector2(380.0, 180.0))
 		5:
 			_on_settings_pressed()
 			_settings_dialog.open_memory_tab()
@@ -1137,7 +1168,7 @@ func _on_approval_poll(result: int, code: int, _h: PackedStringArray, body: Pack
 %s
 
 Approve only if you understand this action." % [str(ticket.get("tool", "tool")), str(ticket.get("details", ""))]
-	_permission_dialog.popup_centered(Vector2i(560, 380))
+	_popup_fit(_permission_dialog, Vector2(560.0, 400.0))
 
 func _submit_approval(approved: bool) -> void:
 	if _approval_id.is_empty() or _token.is_empty():
@@ -1230,7 +1261,7 @@ func _open_ecc() -> void:
 	if not _bridge_ready:
 		_append_log("[color=#ebcb8b]The bridge is still starting; try again in a moment.[/color]")
 		return
-	_ecc_dialog.popup_centered(Vector2i(580, 540))
+	_popup_fit(_ecc_dialog, Vector2(580.0, 540.0))
 	_api_get(_ecc_http, "/ecc")
 
 func _on_ecc_response(_result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:

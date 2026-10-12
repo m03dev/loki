@@ -494,7 +494,10 @@ _settings_source = (REPO / "addons" / "loki" / "loki_settings.gd").read_text(enc
 _bridge_source = (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8")
 
 
-check("settings provide a Connections tab", 'page.name = "Connections"' in _settings_source and "set_connections(payload: Dictionary)" in _settings_source)
+check("settings provide a Connections tab", '_page("Connections")' in _settings_source and "set_connections(payload: Dictionary)" in _settings_source)
+check("every settings tab scrolls so a tall tab cannot inflate the dialog",
+      "_page(title: String)" in _settings_source and "ScrollContainer.new()" in _settings_source
+      and "min_size = Vector2i(440, 300)" in _settings_source and "wrap_controls = true" in _settings_source)
 
 
 check("connection inventory is available from the authenticated local bridge", 'route == "/connections"' in _bridge_source and "connection_inventory" in _bridge_source)

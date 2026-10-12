@@ -22,7 +22,15 @@ func _enter_tree() -> void:
 	# transient = a loaded editor layout may MOVE this dock but never closes it, so the
 	# panel is always there instead of silently vanishing when a layout is restored.
 	_dock.transient = true
+	# The main-screen plugin is also called "Loki". Give this dock its OWN layout key, or
+	# the editor treats the two as one widget and drags the chat up into the main-screen
+	# tab row (and shows two Loki tabs).
+	_dock.set("layout_key", "loki_chat_dock")
+	if str(_dock.get("layout_key")) != "loki_chat_dock":
+		push_warning("Loki: EditorDock.layout_key is not writable; keeping the default key.")
+	_chat_panel.add_to_group("loki_chat_panel")
 	_dock.add_child(_chat_panel)
+	_dock.add_to_group("loki_chat_dock")
 	add_dock(_dock)
 	_dock.open()
 	_dock.make_visible()

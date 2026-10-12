@@ -5,6 +5,32 @@ the dock; Loki plans, edits scenes and scripts, runs Godot to check its work, an
 
 Repo: https://github.com/m03dev/loki
 
+## The UI (read before touching the dock or the settings dialog)
+
+Two editor plugins, deliberately independent: `addons/loki/plugin.gd` owns the
+**Loki viewport screen** (a welcome with *Open chat* / *Settings*) plus the bundled MCP
+bridge, and `addons/loki/chat/plugin.gd` owns the **chat dock**. They talk through node
+groups (`loki_chat_dock`, `loki_chat_panel`), never by holding references to each other.
+
+Both call themselves "Loki", so the dock sets its own `layout_key` in
+`chat/plugin.gd`. Without that the editor treats the two as one widget, shows two Loki
+tabs, and drags the chat up into the main-screen tab row.
+
+Three traps that cost real time here:
+
+1. **A Godot `Window` grows to its content's minimum size.** A tall settings tab used to
+   push the dialog past the bottom of the editor and take its own Close button with it.
+   `_popup_fit()` in `loki_dock.gd` caps the size to the host window, sets `max_size`,
+   turns on `wrap_controls`, and only then centers it - use it for every dialog. Every
+   settings tab is also scrollable (`_page()` in `loki_settings.gd`) so no tab can
+   inflate the window again.
+2. **The transcript is one self-scrolling `RichTextLabel`.** Do not put it back inside a
+   `ScrollContainer`; keep the dock's `custom_minimum_size` small (300x240) so the panel
+   can be dragged narrow.
+3. **The modes live in the bridge, not the dock.** `LOKI_MODE`/`set_mode()` in
+   `harness/loki.py` decide which tools are offered; `GET`/`POST /mode` is the switch and
+   the dock simply renders the label.
+
 ## Run the tests first
 
 ```bash
@@ -12,7 +38,7 @@ harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, 
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 ```
 
-125 structural checks pass offline. `--live` adds MCP connection, the capability-domain
+173 structural checks pass offline. `--live` adds MCP connection, the capability-domain
 unlock path, and a real agent turn.
 Run these before and after any change to `addons/loki/harness/loki.py`.
 
@@ -23,8 +49,9 @@ requirement and it drives every layout decision below.
 
 ```
 addons/loki/
-  plugin.gd              EditorPlugin: dock + hosts the vendored MCP bridge
-  loki_dock.gd           the chat dock (tabs, history, progress, approvals)
+  plugin.gd              EditorPlugin: the Loki viewport screen + the vendored MCP bridge
+  loki_dock.gd           the chat dock (tabs, history, progress, approvals, modes)
+  loki_settings.gd       the tabbed Settings dialog (Agent/Account/Memory/Profile/Connections)
   loki_bridge.py         local HTTP bridge (port 8766, Bearer token)
   bootstrap.py           zero-setup launcher: makes the venv, starts the bridge
   harness/               THE AGENT CODE (142 KB, ships inside the addon)
@@ -158,7 +185,7 @@ box, out of roughly 150 behind the domains.
 
 ## Known state
 
-- `tests/test_loki.py` - 125 offline + 10 live checks green (`--live`).
+- `tests/test_loki.py` - 173 offline checks green (`--live` adds MCP + a real turn).
 - **Setup is seamless and needs no keys.** `setup.bat` / `setup.sh` create
   `harness_data/.venv`, install the deps, fetch the skill libraries and run
   `tools/loki_doctor.py`. `LOKI_MODEL` defaults to `smart`, which with no keys at all
@@ -225,7 +252,9 @@ loads them all through one loader (`LIBRARIES`). The loader searches **recursive
 for `SKILL.md` and `agents/*.md`, so every repo layout works (root `skills/`,
 `plugins/<x>/skills`, `.agents/skills`). Total: **482 skills, 88 agents**.
 
-- **ECC** (general): 76 agents, 311 skills.
+- **ECC** (general): 311 skills. The vendored libraries together hold **519 skills**:
+  ECC 311, awesome-gamedev 75, GodotPrompter 56, agentic-gamedev 37, gamedev-plugin 25,
+  Superpowers 15, plus the Ponytail standard.
 - **GodotPrompter** (`jame581/GodotPrompter`): 9 agents, 56 Godot-4 skills.
 - **awesome-gamedev** (`gamedev-skills/awesome-gamedev-agent-skills`): 75 game-dev skills.
 - **gamedev-plugin** (`fcsouza/agent-skills`): 3 agents, 25 design/eng/narrative skills.
