@@ -1,0 +1,2 @@
+# Keep prepared upstream patches byte-exact so git am applies them.
+*.patch -text

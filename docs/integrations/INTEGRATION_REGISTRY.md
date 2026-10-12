@@ -9,7 +9,8 @@ something; **Rejected**: deliberately not adopted.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Loki** | github.com/m03dev/loki | the project itself | confirmed checkout | MIT | — | — | Verified | none |
 | **Jev** (TypeSafe System One) | thejevai.com/docs | typed decisions | API; key-gated | hosted API | `harness/jev.py` risk gate + loop detection | direct client + optional MCP | Verified (optional) | set `TYPESAFE_API_KEY` to enable |
-| **Laya** | unknown | local-first decision provider | **not found** | unknown | none | adapter contract + mock first | Blocked | identify the real Laya source |
+| **Laya** | github.com/receptron/laya | local-first decision provider | public repo | MIT (weights Apache-2.0) | `harness/laya.py` + `harness/decisions.py` | Jev-compatible client: HTTP `system_one` endpoint or a local Node driver delegating to `@receptron/laya`; Laya-first routing with Jev fallback | Verified (the forward pass itself needs the 1.7 GB weights, so it is not run offline) | none |
+| **Laya (upstream patch)** | github.com/receptron/laya | offline testability for `systemOne` | prepared in `contrib/laya/` | MIT | improves the dependency | `Laya.fromParts()` seam + offline tests; verified with `yarn test`/`typecheck`/`lint` | Prepared (not submitted) | approve a fork + PR |
 | **OpenViking** | github.com/volcengine/OpenViking | context/knowledge/memory/skill retrieval | public repo | check before use | current memory system works | evaluate as backend behind a memory interface; adopt patterns only | Planned | none |
 | **public-apis** | github.com/public-apis/public-apis | API catalog | public repo | check | none | import/normalize into the API Vault | Planned | none |
 | **public-api-lists** | github.com/public-api-lists/public-api-lists | API catalog | public repo | check | none | as above | Planned | none |

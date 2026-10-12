@@ -1307,6 +1307,91 @@ def capture_scene(filename: str, frames: int = 20, timeout: int = 120) -> str:
     return "capture failed for " + scene + chr(10) + (chr(10).join(problems) or out[-400:])
 
 
+def probe_scene(filename: str, inputs: str = "[]", settle_frames: int = 5,
+                duration_ms: int = 3000, timeout: int = 120) -> str:
+    """Run a scene in a real window, feed it a timed input sequence, and report what landed.
+
+    inputs is a JSON array of steps, for example:
+      [{"at_ms": 400, "hold_ms": 150, "type": "action", "action": "move_right"},
+       {"at_ms": 900, "hold_ms": 60,  "type": "key", "key": "Space"},
+       {"at_ms": 1200, "type": "motion", "dx": 120, "dy": 0}]
+    Every press is held at least two PHYSICS frames so a per-frame poller sees it, and the
+    result reports what the game actually received. This is how to prove a controller moves,
+    a button fires, or a shot lands - instead of assuming it.
+    """
+    if not GODOT_EXE:
+        return "error: the Godot executable was not found; set GODOT_EXE in harness_data/.env"
+    project = GAME_PROJECT or str(WORKSPACE)
+    scene = filename if filename.startswith("res://") else "res://" + filename.lstrip("/")
+    try:
+        steps = json.loads(inputs) if isinstance(inputs, str) else list(inputs)
+    except (ValueError, TypeError):
+        return "error: inputs must be a JSON array of steps"
+    if not isinstance(steps, list):
+        return "error: inputs must be a JSON array of steps"
+    harness = ROOT / "loki_probe.gd"
+    staged = Path(project) / "loki_probe_tmp.gd"
+    sidecar = Path(project) / ".godot" / "loki_probe.json"
+    if not harness.is_file():
+        return "error: the input probe asset is missing (%s)" % harness
+    try:
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_text(harness.read_text(encoding="utf-8"), encoding="utf-8")
+        sidecar.write_text(json.dumps({
+            "scene": scene, "inputs": steps,
+            "settle_frames": int(settle_frames), "duration_ms": int(duration_ms)}),
+            encoding="utf-8")
+    except OSError as exc:
+        return "error: cannot stage the probe in %s: %s" % (project, exc)
+    try:
+        proc = subprocess.run(
+            [GODOT_EXE, "--path", project, "--resolution", "1152x648",
+             "--script", "res://loki_probe_tmp.gd"],
+            capture_output=True, text=True, timeout=timeout)
+        out = (proc.stdout or "") + (proc.stderr or "")
+    except subprocess.TimeoutExpired:
+        return "error: probe timed out after %ds" % timeout
+    except Exception as exc:
+        return "error: %s" % exc
+    finally:
+        for leftover in (staged, sidecar):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+    results = ""
+    shot = ""
+    for line in out.splitlines():
+        if line.startswith("LOKI_PROBE_RESULTS: "):
+            results = line.split(": ", 1)[1].strip()
+        elif line.startswith("LOKI_PROBE_SHOT: "):
+            shot = line.split(": ", 1)[1].strip()
+    if not results:
+        problems = [l.strip() for l in out.splitlines() if "ERROR" in l][:8]
+        return "probe failed for " + scene + chr(10) + (chr(10).join(problems) or out[-400:])
+    try:
+        data = json.loads(Path(results).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return "probe ran but its results could not be read: %s" % exc
+    delivered = data.get("delivered", [])
+    ok = sum(1 for e in delivered if e.get("delivered"))
+    lines = ["probe_scene %s: %d/%d inputs delivered at %s Hz"
+             % (scene, ok, int(data.get("requested", len(delivered))),
+                data.get("physics_ticks_per_second", "?"))]
+    for event in delivered:
+        if not event.get("delivered"):
+            lines.append("  #%s %s: NOT delivered (%s)"
+                         % (event.get("index"), event.get("type"), event.get("reason", "?")))
+            continue
+        note = " - held to the physics floor" if event.get("clamp_applied") else ""
+        lines.append("  #%s %s: %s physics frame(s)%s"
+                     % (event.get("index"), event.get("type"),
+                        event.get("physics_frames", "?"), note))
+    if shot:
+        lines.append("screenshot: %s. Inspect it with view_image." % shot)
+    return chr(10).join(lines)
+
+
 async def view_image(filename: str, question: str = "") -> str:
     """Send a PNG to the current model and get a description or critique back."""
     import base64
@@ -1362,6 +1447,7 @@ LOCAL_TOOLS = {
     "play_scene": play_scene,
     "check_script": check_script,
     "capture_scene": capture_scene,
+    "probe_scene": probe_scene,
     "view_image": view_image,
     "godot_api": godot_tools.godot_api,
     "godot_search": godot_tools.godot_search,
@@ -1433,6 +1519,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "seconds": {"type": "integer"}}, ["filename"]),
     schema("capture_scene", "Run a scene in a real window and save a screenshot of the running frame. Use this to SEE what your scene actually looks like, then view_image to inspect the picture.",
            {"filename": {"type": "string"}, "frames": {"type": "integer"}}, ["filename"]),
+    schema("probe_scene", "Run a scene in a real window and FEED IT INPUTS, then report what the game actually received (and a screenshot). Use this to prove a controller moves, a button fires or a shot lands instead of assuming it. inputs is a JSON array like [{\"at_ms\": 400, \"hold_ms\": 150, \"type\": \"action\", \"action\": \"move_right\"}] (types: action, key, mouse, motion).",
+           {"filename": {"type": "string"}, "inputs": {"type": "string"}, "settle_frames": {"type": "integer"}, "duration_ms": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.). Pass query to filter by name when the list is long.",
@@ -1474,7 +1562,7 @@ MODEL_TOOL_NAMES = {
     "set_project_setting", "add_autoload",
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
-    "build_3d_scene", "build_scene", "validate_scene", "play_scene", "open_in_editor",
+    "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
@@ -1488,7 +1576,7 @@ TOOL_CATEGORIES = {
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload"],
-    "runtime": ["play_scene", "check_script", "capture_scene", "view_image"],
+    "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],

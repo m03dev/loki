@@ -1,0 +1,192 @@
+From 5690d817ade8f7432fdc572be63ef3fdd07b501d Mon Sep 17 00:00:00 2001
+From: m03dev <m03dev@users.noreply.github.com>
+Date: Mon, 12 Oct 2026 17:40:40 -0600
+Subject: [PATCH] Add a test seam and offline coverage for systemOne's answer
+ shaping
+
+systemOne's answer shaping - the temperature buckets, softmax, per-question-type
+output, rounding and usage accounting - was only exercised by the end-to-end test,
+which runs only when the 1.7 GB ONNX bundle is on disk. sequence.ts is covered
+without weights; this closes the other half.
+
+- Laya.fromParts() builds an instance from already-open parts (session, tokenizer,
+  config, ids), so the shaping can be driven by a stub session. It is a static
+  factory calling the private constructor, so the public surface is unchanged and
+  ordinary callers still use Laya.load().
+- test/test_systemone.ts answers with a known logit pattern located through
+  marker_mask, so a batched call with different option counts lines up, and checks
+  each answer type, 4-decimal rounding, a tie's zero confidence, and that a
+  single-question call matches the same question inside a batch.
+- package.json adds the new test file to `yarn test`.
+
+Run: yarn test (13 pass, 1 skipped), yarn typecheck, yarn lint - all clean.
+---
+ package.json           |   2 +-
+ src/laya.ts            |  12 +++++
+ test/test_systemone.ts | 118 +++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 131 insertions(+), 1 deletion(-)
+ create mode 100644 test/test_systemone.ts
+
+diff --git a/package.json b/package.json
+index 59dfbe4..35e6468 100644
+--- a/package.json
++++ b/package.json
+@@ -44,7 +44,7 @@
+     "build": "tsc -p tsconfig.json",
+     "lint": "eslint .",
+     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit",
+-    "test": "tsx --test test/test_download.ts test/test_model.ts test/test_sequence.ts",
++    "test": "tsx --test test/test_download.ts test/test_model.ts test/test_sequence.ts test/test_systemone.ts",
+     "format": "prettier --write \"{src,test,examples}/**/*.ts\" \"*.{json,md}\"",
+     "format:check": "prettier --check \"{src,test,examples}/**/*.ts\" \"*.{json,md}\"",
+     "example": "tsx examples/basic.ts",
+diff --git a/src/laya.ts b/src/laya.ts
+index 47e9f81..26a3f71 100644
+--- a/src/laya.ts
++++ b/src/laya.ts
+@@ -57,6 +57,18 @@ export class Laya {
+     return new Laya(session, tok, config, ids, modelDir);
+   }
+ 
++  /**
++   * Build an instance from already-open parts, without touching disk or the network.
++   *
++   * Exposed so the answer shaping in `systemOne` - the temperature buckets, softmax,
++   * rounding and per-question-type output - can be unit-tested against a stub session
++   * instead of the 1.7 GB ONNX bundle, which otherwise only runs when the weights are on
++   * disk. Ordinary callers use `Laya.load()`.
++   */
++  static fromParts(session: ort.InferenceSession, tokenizer: Tokenizer, config: LayaConfig, ids: SpecialIds, modelDir = ""): Laya {
++    return new Laya(session, tokenizer, config, ids, modelDir);
++  }
++
+   private readonly encode = (text: string): number[] => this.tok.encode(text, { add_special_tokens: false }).ids;
+ 
+   /** Answer every question about `state` in one forward pass (Jev's `system_one` request/response shape). */
+diff --git a/test/test_systemone.ts b/test/test_systemone.ts
+new file mode 100644
+index 0000000..a0937e8
+--- /dev/null
++++ b/test/test_systemone.ts
+@@ -0,0 +1,118 @@
++/**
++ * Offline coverage for the answer shaping in `Laya.systemOne` - the half that used to run only
++ * when the 1.7 GB ONNX bundle was on disk. `sequence.ts` is already covered without weights;
++ * this closes the rest with a stub session, so the temperature buckets, softmax, rounding,
++ * usage accounting and per-question-type output are exercised on every `yarn test`.
++ *
++ * The stub answers with a known logit pattern: for each question the LAST real option gets the
++ * high logit (located through `marker_mask`, so a batched call with different option counts
++ * still lines up) and every other option is zero. The expected answers then follow from softmax
++ * alone, with no model in the loop.
++ */
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import * as ort from "onnxruntime-node";
++import { Tokenizer } from "@huggingface/tokenizers";
++import { Laya } from "../src/index.js";
++import type { SpecialIds } from "../src/sequence.js";
++import type { LayaConfig } from "../src/types.js";
++
++const ids: SpecialIds = { cls: 1, sep: 2, mask: 3, pad: 0, maskTok: "[MASK]" };
++// temperature 1 for every bucket so the expected probabilities are plain softmax(logits)
++const config: LayaConfig = { max_len: 512, head_max_len: 192, temperature: [1, 1, 1], temperature_by_options: {} };
++
++// one id per whitespace-separated word, like test_sequence.ts
++const tokenizer = {
++  encode: (text: string) => ({
++    ids: text
++      .split(/\s+/)
++      .filter(Boolean)
++      .map((w) => 100 + w.length),
++  }),
++} as unknown as Tokenizer;
++
++/**
++ * A session whose logits make the last REAL option of each question the argmax. `flat` gives
++ * every option the same logit instead, so ties and rounding can be checked.
++ */
++function stubSession(mode: "ramp" | "flat" = "ramp"): ort.InferenceSession {
++  return {
++    run: (feeds: Record<string, ort.Tensor>) => {
++      const markerPos = feeds["marker_pos"] as ort.Tensor;
++      const markerMask = feeds["marker_mask"] as ort.Tensor;
++      const dims = markerPos.dims as number[];
++      const n = dims[0] ?? 1;
++      const k = dims[1] ?? 1;
++      const mask = markerMask.data as Uint8Array;
++      const logits = new Float32Array(n * k);
++      if (mode === "ramp") {
++        for (let r = 0; r < n; r++) {
++          let real = 0;
++          for (let j = 0; j < k; j++) if (mask[r * k + j]) real++;
++          if (real > 0) logits[r * k + (real - 1)] = 8;
++        }
++      }
++      return Promise.resolve({
++        logits: new ort.Tensor("float32", logits, [n, k]),
++        act_probs: new ort.Tensor("float32", new Float32Array(n), [n, 1]),
++      });
++    },
++  } as unknown as ort.InferenceSession;
++}
++
++test("systemOne shapes choice / score / noul from raw logits, without the model", async () => {
++  const laya = Laya.fromParts(stubSession("ramp"), tokenizer, config, ids, "/stub");
++  const r = await laya.systemOne(
++    { subject: "x" },
++    {
++      department: { type: "choice", instructions: "which team?", criteria: { billing: "money", support: "bugs", sales: "new" } },
++      urgency: { type: "score", instructions: "how urgent?", criteria: ["low", "mid", "high"] },
++      churn: { type: "noul", instructions: "will they cancel?" },
++    },
++  );
++
++  assert.equal(r.model, "laya");
++
++  // choice: the last option wins, keys stay in insertion order, probabilities are 4-dp rounded
++  assert.equal(r.answers.department.type, "choice");
++  assert.equal(r.answers.department.choice, "sales");
++  assert.deepEqual(Object.keys(r.answers.department.probabilities), ["billing", "support", "sales"]);
++  assert.deepEqual(r.answers.department.probabilities, { billing: 0.0003, support: 0.0003, sales: 0.9993 });
++  assert.ok(r.answers.department.confidence > 0.9, "a near-certain choice is confident");
++  assert.equal(r.answers.department.rl_agent.act_probability, 0);
++
++  // score: expected level (sum of index * probability), legend maps index -> criterion
++  assert.equal(r.answers.urgency.type, "score");
++  assert.equal(r.answers.urgency.score, 1.999);
++  assert.deepEqual(r.answers.urgency.legend, { "0": "low", "1": "mid", "2": "high" });
++  assert.deepEqual(Object.keys(r.answers.urgency.probabilities), ["0", "1", "2"]);
++
++  // noul: P(true) is the second option's probability
++  assert.equal(r.answers.churn.type, "noul");
++  assert.equal(r.answers.churn.noul, 0.9997);
++
++  // usage: input tokens are counted across the batch, output tokens are always zero
++  assert.ok(r.usage.input_tokens > 0);
++  assert.equal(r.usage.output_tokens, 0);
++});
++
++test("systemOne rounds to four decimals and treats a tie as zero confidence", async () => {
++  const laya = Laya.fromParts(stubSession("flat"), tokenizer, config, ids, "/stub");
++  const r = await laya.systemOne({ s: 1 }, { pick: { type: "choice", instructions: "pick one", criteria: ["a", "b", "c"] } });
++  // flat logits -> a uniform distribution, rounded (not the raw 0.333...) and zero confidence
++  assert.deepEqual(r.answers.pick.probabilities, { a: 0.3333, b: 0.3333, c: 0.3333 });
++  assert.equal(r.answers.pick.confidence, 0);
++});
++
++test("systemOne answers a single-question call the same as one inside a batch", async () => {
++  const laya = Laya.fromParts(stubSession("ramp"), tokenizer, config, ids, "/stub");
++  const many = await laya.systemOne(
++    { s: 1 },
++    {
++      a: { type: "choice", instructions: "pick", criteria: { x: "1", y: "2" } },
++      b: { type: "choice", instructions: "pick", criteria: { x: "1", y: "2" } },
++    },
++  );
++  const one = await laya.systemOne({ s: 1 }, { a: { type: "choice", instructions: "pick", criteria: { x: "1", y: "2" } } });
++  assert.deepEqual(many.answers.a, one.answers.a);
++});
+-- 
+2.55.0.windows.5
+

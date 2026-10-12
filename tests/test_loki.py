@@ -1704,6 +1704,46 @@ check("loki exposes a decision status for the bridge", isinstance(loki.decision_
 
 
 
+section("injected-input probe (run a scene and feed it inputs)")
+
+
+check("the probe harness ships in the addon", (loki.ROOT / "loki_probe.gd").is_file())
+
+
+_probe_src = (loki.ROOT / "loki_probe.gd").read_text(encoding="utf-8")
+
+
+check("the harness holds each press for at least two physics frames",
+
+
+      "MIN_HOLD_PHYSICS := 2" in _probe_src and "Engine.get_physics_frames()" in _probe_src)
+
+
+check("the harness is driven by a sidecar, not text substitution",
+
+
+      "SIDECAR" in _probe_src and "res://.godot/loki_probe.json" in _probe_src)
+
+
+check("the harness reports the clamp it applied", "clamp_applied" in _probe_src)
+
+
+check("probe_scene has a tool schema", any(t["function"]["name"] == "probe_scene" for t in loki.TOOL_SCHEMAS))
+
+
+check("probe_scene is offered to the model", "probe_scene" in loki.MODEL_TOOL_NAMES)
+
+
+check("probe_scene is in the runtime category", "probe_scene" in loki.TOOL_CATEGORIES["runtime"])
+
+
+check("probe_scene rejects non-JSON inputs", loki.probe_scene("res://x.tscn", "nope").startswith("error:"))
+
+
+check("probe_scene rejects a non-array inputs value", loki.probe_scene("res://x.tscn", "{\"a\": 1}").startswith("error:"))
+
+
+
 if "--live" in sys.argv:
 
 

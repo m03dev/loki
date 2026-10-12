@@ -30,12 +30,14 @@ integrations, session log).
 **Acceptance:** destructive command strings cannot execute; file tools cannot escape the
 workspace; suite stays green.
 
-## Phase 2 — Jev / Laya — Partial
+## Phase 2 — Jev / Laya — Done (partial verification)
 - Jev: Done (risk gate + loop detection, optional, non-fatal).
-- Laya: **Blocked** — no local implementation exists. Next: define the DecisionProvider
-  adapter contract and a mock, then wire a real Laya when its source is identified.
-**Acceptance:** a decision changes downstream planning in a test; Laya has a documented
-adapter + mock even if no real backend is connected.
+- Laya: Done — `laya.py` + `decisions.py` integrate github.com/receptron/laya as the
+  local-first provider (HTTP or a local Node driver that delegates to the real package),
+  Laya-first routing with Jev fallback, recorded disagreements, tests with a mock.
+- Open: the model's own forward pass is not run offline (needs the 1.7 GB ONNX weights).
+**Acceptance met:** routing, fallback and disagreement handling are tested; a decision can
+skip a prompt (never force one).
 
 ## Phase 3 — Capability registry and repository browser — Planned
 Capability manifests; repository discovery + provenance/license checks; isolated staging;
@@ -65,7 +67,10 @@ Worker registration/heartbeat/capacity; capability-aware routing; authenticated 
 ## Phase 8 — Creative and external integrations — Partial
 - Done: Godot editor workflow (build/validate/compile/run/screenshot) and the vendored
   Godot MCP bridge with on-demand capability domains.
-- Planned: route scene edits through Godot's undo manager; evaluate Unreal/Blender;
+- Done: an injected-input runtime probe (`probe_scene`) drives the running game and reports
+  what it received (ported from a proven external harness).
+- Planned: route scene edits through Godot's undo manager; assert game state after input
+  (a value probe / servo); evaluate Unreal/Blender;
   investigate Higgsfield, Supabase, Cloudflare, Whop and the intended neobanking provider
   with the provider-pattern stubs. **Acceptance:** each provider is verified or has a
   documented stub + manual workflow.

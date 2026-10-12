@@ -4,6 +4,48 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 2) - Laya, an upstream contribution, and the input probe
+
+**Work completed**
+- Integrated **Laya** (github.com/receptron/laya) as Loki's local-first decision provider:
+  `laya.py` (HTTP + a local Node backend via `laya_driver.mjs`, delegating to the real
+  `@receptron/laya` package), `decisions.py` (Laya-first routing with Jev fallback and
+  recorded disagreements), wired into `approve()` and loop detection; the bridge `/jev`
+  and the doctor report it. Installed `@receptron/laya` into `harness_data/laya` (gitignored).
+- Prepared an upstream contribution to `receptron/laya` in `contrib/laya/`
+  (`0001-systemone-offline-tests.patch` + README): a `Laya.fromParts()` test seam and
+  offline tests for `systemOne`'s answer shaping. Verified in the clone: `yarn test`
+  13 pass / 1 skip, `yarn typecheck` clean, `yarn lint` no errors.
+- Ported the injected-input discipline into Loki: `addons/loki/harness/loki_probe.gd` +
+  the `probe_scene` tool run a scene in a real window, feed it timed inputs (action/key/
+  mouse/motion), hold each press for at least two PHYSICS frames, and report what the game
+  actually received, plus a screenshot.
+
+**Files changed**
+- `addons/loki/harness/`: `laya.py`, `laya_driver.mjs`, `decisions.py`, `loki_probe.gd`,
+  `loki.py`, `.env.example`; plus `loki_bridge.py`, `tools/loki_doctor.py`,
+  `tests/test_loki.py`, `.gitignore`.
+- `contrib/laya/0001-systemone-offline-tests.patch`, `contrib/laya/README.md` (new).
+- docs: this log, CURRENT_STATE, IMPLEMENTATION_PLAN, INTEGRATION_REGISTRY.
+
+**Tests executed and results**
+- `tests/test_loki.py` -> **248 passed, 0 failed** (was 200 at session start).
+- Laya driver error paths exercised through Node (missing package, empty stdin).
+- `probe_scene` run end-to-end against a throwaway Godot project: 2/2 inputs delivered,
+  the game printed `INPUT_SEEN: ui_right`, and the 0 ms key was clamped to 2 physics frames.
+
+**Known issues**
+- Laya's model forward pass is not exercised (needs the 1.7 GB ONNX weights on first use).
+- The input probe reports delivery and a screenshot; it does not yet assert game-state
+  changes (a value probe / servo is the next step).
+
+**Next concrete actions**
+1. Assert game state after input (a value probe / servo), not only delivery.
+2. Fork and open a PR for the Laya patch if it should be submitted.
+3. Resumable `PROJECT_STATE` file.
+
+---
+
 ## 2026-10-12 — Audit, command policy, and the durable documentation
 
 **Work completed**

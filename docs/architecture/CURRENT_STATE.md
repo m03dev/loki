@@ -64,11 +64,16 @@ decides which tools are offered. Plan cannot write/run/delete.
 - Every Jev call is guarded and non-fatal; with no key, or on any HTTP/network error, Loki
   keeps its own heuristic. It is optionally exposed as an MCP server gated by an env key.
 
-## 6. Decision layer (Laya) — status: absent
+## 6. Decision layer (Laya) — status: implemented, local-first
 
-- **There is no Laya implementation in the repository.** The blueprint's preference for
-  Laya as a local-first decision provider is not yet satisfiable. Any Laya work must
-  begin with a documented adapter contract and a mock provider (see the roadmap).
+- **Laya is integrated** (`harness/laya.py` + `harness/decisions.py`). It is the Jev-compatible
+  open-source System-1 decision model (github.com/receptron/laya). Two backends: an HTTP
+  `system_one` endpoint, or the local Node driver `laya_driver.mjs`, which delegates to the
+  real `@receptron/laya` package (installed under `harness_data/laya`, never inside the addon).
+  Routing prefers Laya and falls back to Jev; a disagreement is recorded and the safer answer
+  wins. `approve()` and loop detection route through this layer.
+- **Not exercised offline**: the model's forward pass needs the 1.7 GB ONNX weights
+  (downloaded on first use), so only the plumbing and the error paths are covered.
 
 ## 7. Memory and persistence
 
@@ -82,8 +87,9 @@ decides which tools are offered. Plan cannot write/run/delete.
 ## 8. Tools and MCP
 
 - Local tools: file read/write/edit/search/delete, scene builders, validation, script
-  compile check, scene run + screenshot, Godot API search, project-setting/autoload/input
-  helpers, skills browser, memory.
+  compile check, scene run + screenshot, an injected-input runtime probe (`probe_scene`,
+  which drives the running game and reports what it received), Godot API search,
+  project-setting/autoload/input helpers, skills browser, memory.
 - **Offered-to-model set** (`MODEL_TOOL_NAMES`) deliberately excludes `run_command`,
   `open_godot`, and `run_godot` (dangerous / misused by small models). They remain
   callable behind the approval gate, and the `system` tool category is off by default.
