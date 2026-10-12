@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import traceback
 import time
 import uuid
 from contextlib import AsyncExitStack
@@ -272,7 +273,8 @@ class BridgeState:
             except self.agent.ModelUnavailable as exc:
                 self.push_progress(chat_id, "error", exc.hint)
                 return {"ok": False, "error": exc.hint, "chat_id": chat_id}
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
                 error = self.agent.friendly_error(exc)
                 self.push_progress(chat_id, "error", error)
                 return {"ok": False, "error": error, "chat_id": chat_id}
@@ -318,7 +320,10 @@ class BridgeState:
             except self.agent.ModelUnavailable as exc:
                 self.push_progress(task_id, "error", exc.hint)
                 return {"ok": False, "error": exc.hint, "chat_id": task_id}
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
+                # Always leave a full traceback in the bridge log: a one-line message
+                # in the panel is not enough to diagnose an unexpected failure.
+                traceback.print_exc()
                 detail: str = self.agent.friendly_error(exc)
                 self.push_progress(task_id, "error", detail)
                 return {"ok": False, "error": detail, "chat_id": task_id}
@@ -428,13 +433,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(raw)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(raw)
+        except (BrokenPipeError, ConnectionError, OSError):
+            # The dock gave up (its HTTPRequest timed out or was cancelled) and closed
+            # the socket, so there is nobody left to answer. Letting this raise only
+            # printed a scary traceback in the bridge log; the request was already gone.
+            return
 
     def _authorized(self) -> bool:
         origin = self.headers.get("Origin", "")

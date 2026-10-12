@@ -1529,7 +1529,39 @@ def categories_state() -> dict:
     return {"categories": CATEGORIES, "labels": CATEGORY_LABELS}
 
 
-SYSTEM_PROMPT = '''You are a SENIOR GAME DEVELOPER working autonomously in a Godot 4 project. You are practical, rigorous and concise.
+_ENGLISH_RULE = (
+    "# Language - ENGLISH ONLY, always" + chr(10)
+    + "Every word you produce must be in English: replies, questions, plans, todo items,"
+    + " code comments and commit messages. Never answer in any other language, not even"
+    + " one sentence, even when the user writes in another language or the project"
+    + " contains another language. Leave the non-English *data* of a file you were asked"
+    + " to edit alone, but keep all of your own writing in English."
+)
+
+
+SYSTEM_PROMPT = '''You are LOKI. You are a SENIOR GAME DEVELOPER working autonomously in a Godot 4 project. You are practical, rigorous and concise.
+
+# What you are - answer questions about yourself from HERE, without using a single tool
+When the user asks about YOU (what you are, what you can do, how to use you, which model
+you are on, what you remember), that is a CONVERSATION, not a task. Answer from this
+section, in a few sentences, and make NO tool call at all. Do not list the project, read
+files, or "check" yourself by exploring: nothing in the project describes you, and going
+to look for it wastes the user's time and looks broken.
+
+- You are Loki, an agent that lives in this project's left-hand dock in the Godot 4
+  editor. You read the project, edit its scenes and scripts, run Godot to check your own
+  work, and iterate until the job is done.
+- You work in three modes, picked in the dock: ASK answers a question and touches
+  nothing; PLAN reads the project, asks up to three clarifying questions, then writes a
+  numbered plan; BUILD is the full autonomous agent.
+- Your tools: read/write/move files in the workspace, search, run shell commands, run the
+  engine headless, build scenes with build_3d_scene, and unlock extra Godot capability
+  domains on demand with godot_enable_toolset.
+- You run on the model the user picks: a free route with no key, a local Ollama model, or
+  their own provider key. "smart" picks the best one available and falls over to the next
+  when a quota runs out.
+- You keep a Memory of lasting facts about the user and the project (Settings -> Memory),
+  and every conversation is saved as its own tab.
 
 The workspace folder is the game project. You can list, read, search, edit, create, move and delete files; run shell commands (run_command); run the Godot engine (run_godot); and open the Godot editor (open_godot).
 
@@ -1587,18 +1619,54 @@ HISTORY_FILE = WORKSPACE / ".godot" / "loki_history.json"
 CONVERSATIONS_FILE = WORKSPACE / ".godot" / "loki_conversations.json"
 
 
+_MESSAGE_KEYS = ("role", "content", "tool_calls", "tool_call_id", "name")
+
+
 def _as_dict(message) -> dict:
-    # JSON-safe chat message (OpenAI objects or plain dicts)
+    """A plain, JSON-safe chat message from either a dict or a provider object.
+
+    Providers hand back two different shapes: raw dictionaries (our own HTTP routes,
+    some OpenAI-compatible servers) and SDK objects (openai's ChatCompletionMessage,
+    which is what Ollama goes through). Everything that walks or saves the
+    conversation assumes a dict, so this MUST be applied at the point a message
+    enters the list. An object left in there crashes the history pass with
+    "'ChatCompletionMessage' object has no attribute 'get'".
+    """
     if isinstance(message, dict):
-        return message
-    for attr in ("model_dump", "to_dict", "dict"):
-        method = getattr(message, attr, None)
-        if callable(method):
-            try:
-                return method()
-            except Exception:
+        raw: dict = message
+    else:
+        raw = {}
+        for attr in ("model_dump", "to_dict", "dict"):
+            method = getattr(message, attr, None)
+            if not callable(method):
                 continue
-    return {"role": getattr(message, "role", "assistant"), "content": getattr(message, "content", "")}
+            try:
+                candidate = method()
+            except Exception:  # noqa: BLE001 - a broken dumper must not end the turn
+                continue
+            if isinstance(candidate, dict):
+                raw = candidate
+                break
+        else:
+            raw = {}
+        if not raw:
+            # Manual fallback. tool_calls is kept deliberately: without it the
+            # following role:"tool" messages point at ids the provider cannot resolve.
+            calls = []
+            for call in (getattr(message, "tool_calls", None) or []):
+                fn = getattr(call, "function", None)
+                calls.append({
+                    "id": getattr(call, "id", "") or "",
+                    "type": "function",
+                    "function": {"name": getattr(fn, "name", "") or "",
+                                 "arguments": getattr(fn, "arguments", "") or "{}"},
+                })
+            raw = {"role": getattr(message, "role", "assistant") or "assistant",
+                   "content": getattr(message, "content", None) or ""}
+            if calls:
+                raw["tool_calls"] = calls
+    # Keep only what a chat message may carry; strict providers reject stray fields.
+    return {key: raw[key] for key in _MESSAGE_KEYS if key in raw}
 
 
 _REPLACEMENT_CHAR = chr(0xFFFD)
@@ -1624,6 +1692,8 @@ def clean_text(text: str) -> str:
 
 
 def _sanitize_history(items: list) -> list:
+    # Anything that is not a dict is normalised first (see _as_dict).
+    items = [_as_dict(item) for item in items]
     # keep only plain conversational turns, cleaned and de-duplicated
     clean = []
     for item in items:
@@ -1697,10 +1767,11 @@ def mode_state() -> dict:
 
 
 def system_prompt() -> str:
-    """The system prompt for the current mode."""
+    """The system prompt for the current mode, always English-only."""
+    english = _ENGLISH_RULE + chr(10) * 2
     if AGENT_MODE in MODE_PROMPTS:
-        return MODE_PROMPTS[AGENT_MODE] + chr(10) * 2 + "# Project context" + chr(10) + composed_memory()
-    return SYSTEM_PROMPT.format(memory=composed_memory())
+        return english + MODE_PROMPTS[AGENT_MODE] + chr(10) * 2 + "# Project context" + chr(10) + composed_memory()
+    return english + SYSTEM_PROMPT.format(memory=composed_memory())
 
 
 def composed_memory() -> str:
@@ -2364,7 +2435,7 @@ def short_error(text, limit: int = 240) -> str:
 def friendly_error(exc) -> str:
     """A short, human message for the chat - never a raw exception name.
 
-    The dock shows this directly, so it reads the way Ziva's does: what happened
+    The dock shows this directly, so it reads plainly: what happened
     and what to do, not "KeyError: 'x'".
     """
     if isinstance(exc, ModelUnavailable):
@@ -2452,6 +2523,9 @@ def _progress(event: str, text: str) -> None:
 
 def _trim_context() -> None:
     """Keep the system prompt plus a bounded window so context cannot overflow."""
+    # Normalise FIRST and unconditionally: one provider object left in the list used to
+    # crash every later pass that walks it (see _as_dict).
+    messages[:] = [messages[0]] + [_as_dict(m) for m in messages[1:]]
     if MAX_CONTEXT_MESSAGES <= 0 or len(messages) <= MAX_CONTEXT_MESSAGES:
         return
     tail = messages[-MAX_CONTEXT_MESSAGES:]
@@ -2663,7 +2737,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                 content = "(the model stopped responding and gave no message; it may have stalled.)"
             messages.append({"role": "assistant", "content": content})
             return content
-        messages.append(message)
+        messages.append(_as_dict(message))
         for call in message.tool_calls:
             try:
                 args = json.loads(call.function.arguments or "{}")
@@ -2743,6 +2817,31 @@ def _goal_needs_files(goal: str) -> bool:
     return any(word in text for word in words)
 
 
+_CONVERSATIONAL = re.compile(
+    "^("
+    "hi|hello|hey|yo|thanks|thank you|"
+    "what|who|how|why|when|where|which|"
+    "can you|could you|would you|do you|are you|"
+    "is it|does it|tell me|explain|describe|show me|list what"
+    ")",
+    re.IGNORECASE,
+)
+
+
+def is_conversational(goal: str) -> bool:
+    """True when this is a question or greeting, not a change to make.
+
+    A question must be ANSWERED, not pursued. Sending one through the autonomous goal
+    loop is what made "what do you do?" explore the project for dozens of turns and
+    finally answer in the wrong language: the loop only stops at DONE/BLOCKED, and a
+    question never produces either.
+    """
+    text: str = goal.strip()
+    if not text or len(text) > 300:
+        return False
+    return bool(_CONVERSATIONAL.match(text)) or text.rstrip().endswith("?")
+
+
 async def pursue_goal(goal: str) -> str:
     global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
@@ -2752,6 +2851,17 @@ async def pursue_goal(goal: str) -> str:
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)
     _progress("task", "Goal: %s" % goal[:200])
+    if is_conversational(goal):
+        # One turn, then stop. See is_conversational().
+        messages.append({"role": "user", "content": (
+            "The user asked you a QUESTION, not for a change to the project." + chr(10) +
+            "Answer it directly in your reply. Do not create, edit, move or delete "
+            "anything, and only call a tool if the answer genuinely needs one." + chr(10) * 2 +
+            goal
+        )})
+        reply = await agent_turn()
+        save_history()
+        return reply.strip()
     messages.append({
         "role": "user",
         "content": (

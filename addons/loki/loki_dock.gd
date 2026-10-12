@@ -1,7 +1,7 @@
 @tool
 extends VBoxContainer
 
-## Loki dock - a Ziva-style chat with conversation tabs, saved history and memory.
+## Loki dock - the chat panel: conversation tabs, saved history, modes and memory.
 
 const BRIDGE_URL: String = "http://127.0.0.1:8766"
 const BRIDGE_BOOTSTRAP: String = "res://addons/loki/bootstrap.py"
@@ -160,9 +160,8 @@ func _build_ui() -> void:
 	# A small honest minimum: the user has to be able to drag the dock narrow. Nothing
 	# below needs more than this - the toolbar clips and the transcript scrolls.
 	custom_minimum_size = Vector2(300.0, 240.0)
-	# No title row. The dock's own tab already reads "Loki", and Ziva's panel shows
-	# nothing but its tab until you talk to it - repeating the name inside the panel
-	# is just clutter. The menu button lives on the tab row instead.
+	# No title row: the dock's own tab already reads "Loki", so repeating the name
+	# inside the panel is just clutter. The header controls live on the tab row.
 	_menu = MenuButton.new()
 	_menu.text = "⋮"
 	_menu.flat = true
@@ -180,6 +179,7 @@ func _build_ui() -> void:
 	popup.add_icon_item(_editor_icon("Search"), "Validate project", 11)
 	popup.add_icon_item(_editor_icon("Play"), "Run task (no limit)", 12)
 	popup.add_icon_item(_editor_icon("Clear"), "Clear pending attachments", 13)
+	_cap_popup(popup, 320)
 	popup.id_pressed.connect(_on_menu_pressed)
 
 	var tab_row: HBoxContainer = HBoxContainer.new()
@@ -231,7 +231,12 @@ func _build_ui() -> void:
 	_input_edit.gui_input.connect(_on_input_gui)
 	composer.add_child(_input_edit)
 
-	var bottom: HBoxContainer = HBoxContainer.new()
+	# A flow container WRAPS its children instead of forcing their total width as the
+	# minimum (measured: HBox 446px vs HFlow 71px). That is what makes the dock
+	# resizable - with an HBox the panel could never be dragged narrower than its row.
+	var bottom: HFlowContainer = HFlowContainer.new()
+	bottom.add_theme_constant_override("h_separation", 4)
+	bottom.add_theme_constant_override("v_separation", 2)
 	composer.add_child(bottom)
 	_attach_button = _icon_button("Attach", "Attach text, code, scenes, or images")
 	_attach_button.text = "+"
@@ -249,18 +254,17 @@ func _build_ui() -> void:
 	_model_picker.clip_text = true
 	_model_picker.flat = true
 	_model_picker.custom_minimum_size = Vector2(112.0, 0.0)
+	_cap_popup(_model_picker.get_popup(), 320)
 	_model_picker.item_selected.connect(_on_model_selected)
 	bottom.add_child(_model_picker)
 	_mode_button = MenuButton.new()
 	_mode_button.tooltip_text = "Ask (questions) -> Plan (clear the fog) -> Build (do it)"
 	_mode_button.flat = true
 	_mode_button.text = "Build"
+	_cap_popup(_mode_button.get_popup(), 200)
 	_mode_button.get_popup().id_pressed.connect(_on_mode_selected)
 	_populate_modes()
 	bottom.add_child(_mode_button)
-	var bottom_spacer: Control = Control.new()
-	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bottom.add_child(bottom_spacer)
 	_send_button = _icon_button("Play", "Send  (Ctrl+Enter)")
 	_send_button.pressed.connect(_on_send_pressed)
 	bottom.add_child(_send_button)
@@ -319,6 +323,13 @@ func _build_ui() -> void:
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	add_child(_rename_dialog)
 
+func _cap_popup(popup: PopupMenu, max_height: int = 300) -> void:
+	# The model picker lists every provider and the menu lists every action, so the
+	# dropdown opened taller than the editor window. Capping the height makes it scroll.
+	if popup != null:
+		popup.max_size = Vector2i(520, max_height)
+
+
 func _popup_fit(dialog: Window, wanted: Vector2) -> void:
 	# A Godot Window GROWS to its content's minimum size, so a tall dialog used to run
 	# off the bottom of the editor and take its own Close button with it. Cap the usable
@@ -336,7 +347,7 @@ func _popup_fit(dialog: Window, wanted: Vector2) -> void:
 
 
 func _editor_icon(name: String) -> Texture2D:
-	# Godot's built-in editor icons - the same set Ziva's panel draws from.
+	# Godot's built-in editor icons.
 	# Returns null outside a real editor session so headless runs never fail.
 	if not Engine.is_editor_hint() or EditorInterface == null:
 		return null
@@ -599,7 +610,13 @@ func _submit(no_limit: bool) -> void:
 	_elapsed_label.text = ""
 	_status.text = "Loki is working..."
 	_progress_timer.start()
-	var err: Error = _chat_http.request(BRIDGE_URL + "/task", _headers(), HTTPClient.METHOD_POST, JSON.stringify({"task": prompt, "steps": 0}))
+	# A normal message is ONE turn: /chat answers it and stops. The unbounded goal loop
+	# is only for the explicit "Run task (no limit)" menu item. Sending every message
+	# through /task is what let a simple question run dozens of turns, drift out of
+	# English and stall until the dock's request gave up.
+	var route: String = "/task" if no_limit else "/chat"
+	var payload: Dictionary = {"task": prompt, "steps": 0} if no_limit else {"message": prompt}
+	var err: Error = _chat_http.request(BRIDGE_URL + route, _headers(), HTTPClient.METHOD_POST, JSON.stringify(payload))
 	if err != OK:
 		_busy = false
 		_send_button.disabled = false

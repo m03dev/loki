@@ -492,6 +492,7 @@ _settings_source = (REPO / "addons" / "loki" / "loki_settings.gd").read_text(enc
 
 
 _bridge_source = (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8")
+_loki_source = (REPO / "addons" / "loki" / "harness" / "loki.py").read_text(encoding="utf-8")
 
 
 check("settings provide a Connections tab", '_page("Connections")' in _settings_source and "set_connections(payload: Dictionary)" in _settings_source)
@@ -1198,6 +1199,84 @@ check("each mode carries its own instructions",
       and "SENIOR GAME DEVELOPER" in loki.system_prompt())
 check("mode_state lists all three", len(loki.mode_state()["modes"]) == 3)
 
+
+
+section("a provider message object can never crash the run")
+
+
+class _FakeFunction:
+    name = "read_file"
+    arguments = '{"filename": "a.gd"}'
+
+
+class _FakeCall:
+    id = "call_1"
+    function = _FakeFunction()
+
+
+class _FakeMessage:
+    """Stands in for openai's ChatCompletionMessage: attributes, no .get()."""
+
+    role = "assistant"
+    content = None
+    tool_calls = [_FakeCall()]
+
+    def model_dump(self) -> dict:
+        raise RuntimeError("this dump path is broken on purpose")
+
+
+_converted = loki._as_dict(_FakeMessage())
+check("a provider message object converts to a plain dict",
+      isinstance(_converted, dict) and _converted.get("role") == "assistant")
+check("tool calls survive the conversion",
+      bool(_converted.get("tool_calls"))
+      and _converted["tool_calls"][0]["function"]["name"] == "read_file")
+check("the converted message is JSON-serializable", json.dumps(_converted) != "")
+check("sanitizing history that contains an object does not raise",
+      isinstance(loki._sanitize_history([_FakeMessage(), {"role": "user", "content": "hi"}]), list))
+_saved_messages = list(loki.messages)
+loki.messages[:] = [{"role": "system", "content": "s"}, _FakeMessage(),
+                    {"role": "user", "content": "hi"}]
+loki._trim_context()
+check("trimming with an object in the list leaves only dicts",
+      all(isinstance(m, dict) for m in loki.messages))
+loki.messages[:] = _saved_messages
+check("the turn loop stores the converted message, never the raw object",
+      "messages.append(_as_dict(message))" in _loki_source)
+check("Loki is told what it is, so it can answer about itself without exploring",
+      "# What you are" in _loki_source and "make NO tool call" in _loki_source)
+check("the bridge writes a traceback before reporting a failure",
+      "import traceback" in _bridge_source and _bridge_source.count("traceback.print_exc()") >= 2)
+check("the dock's icon row wraps instead of forcing a wide minimum",
+      "HFlowContainer.new()" in _dock_source)
+check("long dropdowns are capped so they scroll instead of filling the screen",
+      "_cap_popup(" in _dock_source and "popup.max_size = Vector2i(520, max_height)" in _dock_source)
+
+
+section("a question is answered, not pursued by the goal loop")
+for _q in ("what do you do?", "hi", "hello there", "how are you", "tell me about yourself",
+           "explain your modes", "who are you"):
+    check("conversational: %r" % _q, loki.is_conversational(_q))
+for _g in ("build me a player controller", "add a jump to the player",
+           "fix the bug in player.gd", "make the enemies faster"):
+    check("a task is not conversational: %r" % _g, not loki.is_conversational(_g))
+check("a question is answered in one turn before the loop starts",
+      "if is_conversational(goal):" in _loki_source)
+
+
+section("English only, and a plain message is one turn")
+check("every mode is told to write in English only",
+      "_ENGLISH_RULE" in _loki_source
+      and "english + SYSTEM_PROMPT" in _loki_source
+      and "english + MODE_PROMPTS" in _loki_source)
+check("the English rule says never to answer in another language",
+      "Never answer in any other language" in _loki_source)
+check("a normal message is sent to the one-turn chat route",
+      '"/task" if no_limit else "/chat"' in _dock_source)
+check("only the explicit no-limit item uses the unbounded goal loop",
+      '{"task": prompt, "steps": 0} if no_limit else {"message": prompt}' in _dock_source)
+check("a client that gives up no longer dumps a traceback",
+      "BrokenPipeError" in _bridge_source)
 
 
 async def live() -> None:

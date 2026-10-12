@@ -27,6 +27,7 @@ cloud/sessions.json
 
 # Harness runtime state
 harness_data/loki_settings.json
+harness_data/loki_claude_mcp.json
 .git-rewrite/
 
 # Harness user data (memory + plan written at runtime)
@@ -44,3 +45,4 @@ plugins/
 # not part of Loki - a consuming project still needs only addons/loki)
 addons/godot_ai/
 addons/godot_omni/
+HANDOFF.md
