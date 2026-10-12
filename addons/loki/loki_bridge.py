@@ -585,6 +585,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             state.push_progress(state.progress_chat_id, "thinking", "Cancel requested; stopping soon...")
             self._send_json(200, {"ok": True})
             return
+        if route == "/connect":
+            result = self.server.state.agent.connect_provider(
+                str(data.get("provider", "")), str(data.get("key", "")))
+            self._send_json(200 if result.get("ok") else 400, result)
+            return
         if route == "/profile":
             profile_path = data.get("profile_path", "")
             if not isinstance(profile_path, str) or not profile_path:

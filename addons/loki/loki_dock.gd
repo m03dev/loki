@@ -63,6 +63,7 @@ var _conv_http: HTTPRequest
 var _memory_http: HTTPRequest
 var _ecc_http: HTTPRequest
 var _connections_http: HTTPRequest
+var _connect_http: HTTPRequest
 
 var _poll_timer: Timer
 var _progress_timer: Timer
@@ -113,6 +114,7 @@ func _ready() -> void:
 	add_child(_chat_http)
 	_approval_http = _new_http(3.0, _on_approval_poll)
 	_settings_http = _new_http(10.0, _on_settings_response)
+	_connect_http = _new_http(15.0, _on_connect_response)
 	_auth_http = _new_http(12.0, _on_auth_response)
 	_progress_http = _new_http(3.0, _on_progress_response)
 	_cancel_http = _new_http(5.0, _on_cancel_response)
@@ -257,6 +259,7 @@ func _build_ui() -> void:
 	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
 	_settings_dialog.profile_saved.connect(_on_profile_saved)
 	_settings_dialog.connections_refresh_requested.connect(_refresh_connections)
+	_settings_dialog.connect_requested.connect(_connect_provider)
 	_settings_dialog.category_toggled.connect(_on_category_toggled)
 	_settings_dialog.sign_in_requested.connect(_on_sign_in)
 	_settings_dialog.sign_out_requested.connect(_on_sign_out)
@@ -633,6 +636,36 @@ func _on_progress_response(result: int, code: int, _h: PackedStringArray, body: 
 			_append_log("[color=#a3be8c]Done: [/color]" + text, PackedStringArray(["StatusSuccess", "CheckBox", "Node"]))
 		elif kind == "error":
 			_append_log("[color=#ff7777]Error: [/color]" + text, PackedStringArray(["StatusError", "Error", "Warning", "Node"]))
+
+func _connect_provider(provider: String, key: String) -> void:
+	if key.strip_edges().is_empty():
+		_settings_dialog.set_connect_result(false, "Enter a key first.")
+		return
+	_load_token()
+	if _token.is_empty():
+		_settings_dialog.set_connect_result(false, "Loki's local engine is not running yet.")
+		return
+	if _connect_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	_settings_dialog.set_connect_result(true, "Checking the key...")
+	var err: Error = _connect_http.request(BRIDGE_URL + "/connect", _headers(),
+		HTTPClient.METHOD_POST, JSON.stringify({"provider": provider, "key": key}))
+	if err != OK:
+		_settings_dialog.set_connect_result(false, "Could not reach Loki's local engine.")
+
+
+func _on_connect_response(result: int, _code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if result != HTTPRequest.RESULT_SUCCESS or not parsed is Dictionary:
+		_settings_dialog.set_connect_result(false, "Connection check failed.")
+		return
+	var payload: Dictionary = parsed
+	var ok: bool = bool(payload.get("ok", false))
+	var message: String = str(payload.get("message", payload.get("error", "No response.")))
+	_settings_dialog.set_connect_result(ok, message)
+	if ok:
+		_refresh_connections()
+
 
 func _on_stop_pressed() -> void:
 	if not _busy or _token.is_empty():

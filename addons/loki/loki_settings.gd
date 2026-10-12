@@ -20,8 +20,11 @@ var _sign_out_button: Button
 var _memory_edit: TextEdit
 var _connections_list: VBoxContainer
 var _connections_status: Label
+var _connect_key: LineEdit
+var _connect_status: Label
 
 signal connections_refresh_requested
+signal connect_requested(provider: String, key: String)
 
 
 func _ready() -> void:
@@ -167,6 +170,25 @@ func _build_connections_tab() -> void:
 	refresh.text = "Refresh connection status"
 	refresh.pressed.connect(func() -> void: connections_refresh_requested.emit())
 	page.add_child(refresh)
+	var connect_row: HBoxContainer = HBoxContainer.new()
+	var connect_label: Label = Label.new()
+	connect_label.text = "Connect OpenRouter"
+	connect_row.add_child(connect_label)
+	_connect_key = LineEdit.new()
+	_connect_key.secret = true
+	_connect_key.placeholder_text = "Paste your OpenRouter API key (sk-or-...)"
+	_connect_key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	connect_row.add_child(_connect_key)
+	var connect_button: Button = Button.new()
+	connect_button.text = "Connect"
+	connect_button.tooltip_text = "Check the key against the provider, then save it."
+	connect_button.pressed.connect(func() -> void:
+		connect_requested.emit("openrouter", _connect_key.text))
+	connect_row.add_child(connect_button)
+	page.add_child(connect_row)
+	_connect_status = Label.new()
+	_connect_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(_connect_status)
 	_connections_status = Label.new()
 	_connections_status.text = "Waiting for local Loki bridge..."
 	page.add_child(_connections_status)
@@ -176,6 +198,16 @@ func _build_connections_tab() -> void:
 	_connections_list = VBoxContainer.new()
 	_connections_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_connections_list)
+
+func set_connect_result(ok: bool, message: String) -> void:
+	# Shows what happened to the key - never the key itself.
+	if _connect_status == null:
+		return
+	_connect_status.text = message
+	_connect_status.modulate = Color(0.55, 0.85, 0.6) if ok else Color(1.0, 0.5, 0.5)
+	if ok and _connect_key != null:
+		_connect_key.text = ""
+
 
 func set_connections(payload: Dictionary) -> void:
 	if _connections_list == null:

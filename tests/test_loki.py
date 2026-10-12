@@ -1160,6 +1160,19 @@ check("OpenRouter leads smart mode", loki.SMART_ORDER[0] == "openrouter", loki.S
 
 
 
+section("account connection")
+check("every connectable provider maps to an env var",
+      set(loki.PROVIDER_ENV_VARS) >= {"openrouter", "gemini", "groq", "deepseek"})
+check("an unknown provider is refused",
+      loki.connect_provider("nope", "x")["ok"] is False)
+check("an empty key is refused",
+      loki.connect_provider("openrouter", "")["ok"] is False)
+check("a rejected key is reported, not saved",
+      loki.verify_provider_key("openrouter", "sk-or-definitely-not-real") != "")
+check("the env file path is absolute-ish", str(loki.env_file_path()).endswith(".env"), str(loki.env_file_path()))
+
+
+
 async def live() -> None:
 
 

@@ -89,6 +89,107 @@ MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context wi
 # Pillar: the model registry. Every entry is an OpenAI-compatible endpoint.
 # ---------------------------------------------------------------------------
 
+PROVIDER_ENV_VARS = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "together": "TOGETHER_API_KEY",
+    "cerebras": "CEREBRAS_API_KEY",
+    "sambanova": "SAMBANOVA_API_KEY",
+    "nous": "NOUS_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "unorouter": "UNOROUTER_API_KEY",
+    "omniroute": "OMNIROUTE_API_KEY",
+    "vireonix": "VIREONIX_API_KEY",
+    "typesafe": "TYPESAFE_API_KEY",
+}
+
+
+def env_file_path() -> Path:
+    """The .env Loki reads keys from: the data dir, then a legacy location."""
+    path = DATA_DIR / ".env"
+    if path.is_file():
+        return path
+    for fallback in (ROOT / ".env", Path.cwd() / ".env"):
+        if fallback.is_file():
+            return fallback
+    return DATA_DIR / ".env"
+
+
+def write_provider_key(provider: str, key: str) -> bool:
+    """Persist a provider key into the .env and make it live for this session."""
+    name = PROVIDER_ENV_VARS.get((provider or "").strip().lower())
+    value = (key or "").strip()
+    if not name or not value:
+        return False
+    path = env_file_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+        replaced = False
+        for index, line in enumerate(lines):
+            if line.strip().startswith(name + "="):
+                lines[index] = name + "=" + value
+                replaced = True
+                break
+        if not replaced:
+            lines.append(name + "=" + value)
+        path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+    except OSError:
+        return False
+    os.environ[name] = value
+    cfg = MODELS.get((provider or "").strip().lower())
+    if cfg is not None:
+        cfg.api_key = value
+    _SMART_FAILED.discard((provider or "").strip().lower())
+    return True
+
+
+# Endpoints that actually REQUIRE the key: /models is public on several providers,
+# so a bad key would still return 200 and the check would be worthless.
+_VERIFY_PATHS = {"openrouter": "/key"}
+
+
+def verify_provider_key(provider: str, key: str, timeout: float = 12.0) -> str:
+    """Empty when the key checks out, else a short human reason."""
+    name = (provider or "").strip().lower()
+    value = (key or "").strip()
+    if not value:
+        return "Enter a key first."
+    cfg = MODELS.get(name)
+    if cfg is None or cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        return ""
+    url = cfg.base_url.rstrip("/") + _VERIFY_PATHS.get(name, "/models")
+    request = urllib.request.Request(
+        url, headers={"Authorization": "Bearer " + value, "User-Agent": "Loki/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return "" if 200 <= response.status < 300 else "Provider answered HTTP %d." % response.status
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return "That key was rejected (HTTP %d)." % exc.code
+        return ""
+    except Exception:
+        return "Could not reach the provider to check that key."
+
+
+def connect_provider(provider: str, key: str) -> dict:
+    """Verify a key and save it, so an account can be connected from the GUI."""
+    name = (provider or "").strip().lower()
+    if name not in PROVIDER_ENV_VARS:
+        return {"ok": False, "error": "Unknown provider '%s'." % name}
+    reason = verify_provider_key(name, key)
+    if reason:
+        return {"ok": False, "error": reason}
+    if not write_provider_key(name, key):
+        return {"ok": False, "error": "Could not save the key."}
+    return {"ok": True, "provider": name, "env": PROVIDER_ENV_VARS[name],
+            "message": "%s connected." % name.replace("-", " ").title()}
+
+
 def _load_env_file() -> None:
     """Load KEY=VALUE pairs from harness/.env so users can store API keys."""
     path = DATA_DIR / ".env"
