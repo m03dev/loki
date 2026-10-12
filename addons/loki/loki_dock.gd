@@ -110,6 +110,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_build_ecc_dialog()
+	if _ecc_dialog != null:
+		_ecc_dialog.theme = _theme
 	# A restored dock can come back with stale geometry; re-sorting once the layout
 	# settles re-fits every row so the input can never be pushed off the panel.
 	resized.connect(_refit_rows)
@@ -154,6 +156,9 @@ func _new_http(timeout: float, handler: Callable) -> HTTPRequest:
 	return node
 
 func _build_ui() -> void:
+	_theme = _ziva_theme()
+	theme = _theme
+	queue_redraw()
 	# Honest minimum: the rows below need ~497px across (the toolbar is the widest
 	# row) and ~286px down. Declaring less lets the editor shrink the dock below
 	# what its content needs, which clips the input row and the right-hand buttons.
@@ -295,6 +300,7 @@ func _build_ui() -> void:
 	_settings_dialog.confirmed.connect(_on_settings_closed)
 	_settings_dialog.canceled.connect(_on_settings_closed)
 	add_child(_settings_dialog)
+	_settings_dialog.theme = _theme
 
 	_permission_dialog = ConfirmationDialog.new()
 	_permission_dialog.title = "Approve Loki tool call?"
@@ -303,6 +309,7 @@ func _build_ui() -> void:
 	_permission_dialog.confirmed.connect(_submit_approval.bind(true))
 	_permission_dialog.canceled.connect(_submit_approval.bind(false))
 	add_child(_permission_dialog)
+	_permission_dialog.theme = _theme
 
 	_attachment_dialog = FileDialog.new()
 	_attachment_dialog.title = "Attach files to Loki"
@@ -314,6 +321,7 @@ func _build_ui() -> void:
 	])
 	_attachment_dialog.files_selected.connect(_on_attachment_files_selected)
 	add_child(_attachment_dialog)
+	_attachment_dialog.theme = _theme
 
 	_rename_dialog = ConfirmationDialog.new()
 	_rename_dialog.title = "Rename chat"
@@ -322,6 +330,7 @@ func _build_ui() -> void:
 	_rename_dialog.add_child(_rename_edit)
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	add_child(_rename_dialog)
+	_rename_dialog.theme = _theme
 
 func _cap_popup(popup: PopupMenu, max_height: int = 300) -> void:
 	# The model picker lists every provider and the menu lists every action, so the
@@ -367,9 +376,90 @@ func _refit_rows() -> void:
 	# Only Containers have queue_sort; calling it on a RichTextLabel/TextEdit is an
 	# invalid call that aborts the whole refit and leaves the rows unsorted.
 	queue_sort()
+	queue_redraw()
 	for child in get_children():
 		if child is Container:
 			(child as Container).queue_sort()
+
+
+# --- Ziva-style theme ------------------------------------------------------
+# Loki's panel follows Ziva's visual language: a near-black canvas, quietly
+# rounded fields, one muted secondary colour and one accent. Godot Controls are
+# themed through a single Theme applied on the dock root, so every child (the
+# tabs, the transcript, the composer, the icon row and the dialogs) inherits it.
+# Ziva's own GUI is a compiled CEF app, so this matches its LOOK, not its markup.
+const Z_BG := Color("0d0d0f")
+const Z_SURFACE := Color("17171a")
+const Z_FIELD := Color("1c1c20")
+const Z_HOVER := Color("26262b")
+const Z_PRESSED := Color("2a2a30")
+const Z_BORDER := Color("2e2e34")
+const Z_TEXT := Color("ececed")
+const Z_MUTED := Color("8b8b92")
+const Z_ACCENT := Color("6ba1ff")
+
+var _theme: Theme
+
+
+func _draw() -> void:
+	draw_rect(Rect2(Vector2.ZERO, size), Z_BG)
+
+
+func _flat(bg: Color, radius: int, border: Color = Color(0, 0, 0, 0), border_w: int = 0,
+		pad_h: int = 8, pad_v: int = 4) -> StyleBoxFlat:
+	var box: StyleBoxFlat = StyleBoxFlat.new()
+	box.bg_color = bg
+	box.set_corner_radius_all(radius)
+	box.content_margin_left = float(pad_h)
+	box.content_margin_right = float(pad_h)
+	box.content_margin_top = float(pad_v)
+	box.content_margin_bottom = float(pad_v)
+	if border_w > 0:
+		box.border_width_left = border_w
+		box.border_width_right = border_w
+		box.border_width_top = border_w
+		box.border_width_bottom = border_w
+		box.border_color = border
+	return box
+
+
+func _ziva_theme() -> Theme:
+	var t: Theme = Theme.new()
+	t.set_color("font_color", "Label", Z_TEXT)
+	t.set_color("default_color", "RichTextLabel", Z_TEXT)
+	t.set_stylebox("normal", "RichTextLabel", _flat(Z_BG, 0, Color(0, 0, 0, 0), 0, 8, 8))
+	t.set_stylebox("normal", "Button", _flat(Color(0, 0, 0, 0), 6, Color(0, 0, 0, 0), 0, 6, 3))
+	t.set_stylebox("hover", "Button", _flat(Z_HOVER, 6, Color(0, 0, 0, 0), 0, 6, 3))
+	t.set_stylebox("pressed", "Button", _flat(Z_PRESSED, 6, Color(0, 0, 0, 0), 0, 6, 3))
+	t.set_stylebox("focus", "Button", _flat(Color(0, 0, 0, 0), 6))
+	t.set_stylebox("disabled", "Button", _flat(Color(0, 0, 0, 0), 6))
+	t.set_color("font_color", "Button", Z_TEXT)
+	t.set_color("font_hover_color", "Button", Color.WHITE)
+	t.set_color("font_pressed_color", "Button", Z_ACCENT)
+	t.set_color("font_disabled_color", "Button", Z_MUTED)
+	t.set_color("icon_normal_color", "Button", Z_MUTED)
+	t.set_color("icon_hover_color", "Button", Z_TEXT)
+	t.set_stylebox("normal", "TextEdit", _flat(Z_FIELD, 10, Z_BORDER, 1, 10, 8))
+	t.set_stylebox("focus", "TextEdit", _flat(Z_FIELD, 10, Z_ACCENT, 1, 10, 8))
+	t.set_stylebox("read_only", "TextEdit", _flat(Z_SURFACE, 10, Z_BORDER, 1, 10, 8))
+	t.set_color("font_color", "TextEdit", Z_TEXT)
+	t.set_color("font_placeholder_color", "TextEdit", Z_MUTED)
+	t.set_color("caret_color", "TextEdit", Z_ACCENT)
+	t.set_color("selection_color", "TextEdit", Color(Z_ACCENT.r, Z_ACCENT.g, Z_ACCENT.b, 0.25))
+	t.set_stylebox("tab_selected", "TabBar", _flat(Z_SURFACE, 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_stylebox("tab_unselected", "TabBar", _flat(Color(0, 0, 0, 0), 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_stylebox("tab_hovered", "TabBar", _flat(Z_HOVER, 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_color("font_selected_color", "TabBar", Z_TEXT)
+	t.set_color("font_unselected_color", "TabBar", Z_MUTED)
+	t.set_color("font_hovered_color", "TabBar", Z_TEXT)
+	t.set_stylebox("panel", "PopupMenu", _flat(Z_SURFACE, 8, Z_BORDER, 1, 8, 6))
+	t.set_color("font_color", "PopupMenu", Z_TEXT)
+	t.set_color("font_separator_color", "PopupMenu", Z_MUTED)
+	t.set_stylebox("panel", "Window", _flat(Z_BG, 10, Z_BORDER, 1, 0, 0))
+	t.set_color("title_color", "Window", Z_TEXT)
+	t.set_constant("separation", "VBoxContainer", 6)
+	t.set_constant("separation", "HBoxContainer", 6)
+	return t
 
 
 func _first_icon(names: PackedStringArray) -> Texture2D:

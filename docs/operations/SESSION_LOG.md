@@ -4,6 +4,36 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 3) - Ziva-style dock theme
+
+**Work completed**
+- Restyled the Loki dock toward Ziva's visual language: a near-black canvas drawn in
+  `_draw()`, quietly rounded fields, one muted secondary colour and one accent, applied
+  through a single `Theme` on the dock root so the tabs, transcript, composer, icon row
+  and every dialog inherit it. Palette: bg #0d0d0f, surface #17171a, field #1c1c20,
+  hover #26262b, border #2e2e34, text #ececed, muted #8b8b92, accent #6ba1ff.
+
+**Finding (important)**
+- Ziva's own GUI is a **compiled CEF web app** (`addons/ziva_agent/bin/*/chrome_*.pak`,
+  a 7.8 MB GDExtension DLL, a 122 MB `zivacode.exe`). There is **no readable HTML/CSS/JS**
+  - the only loose UI file is `icon.svg`. Loki's dock therefore matches Ziva's LOOK, not
+  its markup; a pixel-exact copy is not possible from a compiled application.
+
+**Tests / verification**
+- `loki_dock.gd` compiles; `tests/test_loki.py` -> 248 passed, 0 failed; the headless dock
+  probe builds (`ready=true tabs=1`); the theme values are read back and confirmed
+  (label #ececed, field #1c1c20, accent focus border, hover #26262b, tab #17171a).
+- **Not visually confirmed**: `view_image` reads only the `ai` project, which must not be
+  written to, so the PrintWindow screenshot could not be inspected. The Loki editor is
+  open for a human look.
+
+**Residual gap vs Ziva**
+- Ziva's right-aligned rounded user BUBBLES need a message-list container; Loki's
+  transcript is one self-scrolling RichTextLabel (a deliberate anti-min-size-blowup
+  choice) that cannot render a true padded bubble. Staged, not done.
+
+---
+
 ## 2026-10-12 (session 2) - Laya, an upstream contribution, and the input probe
 
 **Work completed**
