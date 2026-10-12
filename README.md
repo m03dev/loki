@@ -42,9 +42,17 @@ Codex subscription as a provider.
 Choose `smart` to have Loki pick the best available and fail over automatically when a
 quota runs out. One provider going dark degrades a run - it does not end it.
 
+**Decisions, not just generation.** An optional decision layer answers typed
+`choice` / `score` / `noul` questions in the loop - to skip a prompt it is confident is
+safe, and to notice when it is stuck. **Jev** (hosted, key-gated) and **Laya**
+(local-first, no key: `github.com/receptron/laya`) both work; Laya is preferred when
+installed (`npm install --prefix harness_data/laya @receptron/laya`).
+
 ## What it can do
 
 - Validates scenes, compiles scripts and actually runs scenes before claiming success.
+- Runs AND **drives** a scene: inject a timed sequence of inputs, confirm the game
+  actually received them, and screenshot the result (`probe_scene`).
 - 519 skills from six skill libraries (ECC, GodotPrompter, Superpowers,
   awesome-gamedev, gamedev-plugin, agentic-gamedev), browsable from the dock, plus the
   Ponytail "least code that works" standard.

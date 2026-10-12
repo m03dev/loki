@@ -20,6 +20,28 @@ replaceable, and observable.
 
 ---
 
+## 0. Scope log
+
+Dated, permanent records of scope changes. The vision above stays; this is how the
+concrete scope has grown against it.
+
+- **2026-10-12 — Phase 1 safety.** `run_command` gained a `command_policy()` guard
+(destructive shapes and remote-execution pipes are refused before the shell).
+- **2026-10-12 — the decision layer is filled in.** Laya is identified as
+  **github.com/receptron/laya** (the open-source, Jev-compatible System-1 decision model,
+  ONNX Runtime) and integrated as the **preferred local-first decision provider**, with
+  Jev as the fallback (see `harness/laya.py`, `harness/decisions.py`). This resolves the
+  earlier 'Laya unavailable' blocker in section 4.
+- **2026-10-12 — runtime input harness.** Loki can now drive a running scene: inject a
+  timed input sequence, hold each press for at least two physics frames, and report what
+  the game actually received, with a screenshot (`harness/loki_probe.gd`, `probe_scene`).
+- **Ongoing — prepared upstream contributions.** Improvements to third-party
+  dependencies are prepared as patches under `contrib/<project>/` with a README. Opening
+  a fork or pull request is an externally visible action and requires explicit
+  authorization; the patch is the deliverable until then.
+
+---
+
 ## 1. Principles
 
 - **Preserve working functionality.** Build from the existing codebase; do not rewrite

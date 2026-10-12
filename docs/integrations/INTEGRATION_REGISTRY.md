@@ -36,6 +36,14 @@ something; **Rejected**: deliberately not adopted.
 | **Ponytail standard** | — | coding standard | embedded prompt block | — | part of the prompt | prompt block | Verified | none |
 | **ECC + skill libraries** | mixed | 519 skills / 88 agents | vendored into `harness_data/vendor/` | per library | skills browser | `ecc_sync.py` | Verified | none |
 
+| **Convai Innovations / laya-onnx** | huggingface.co/receptron/laya-onnx | the ONNX bundle Laya runs | public | weights Apache-2.0 | `laya.py` local backend | resolved by the `@receptron/laya` package | Verified (downloads on first use) | none |
+| **Opus model reference** | (provider to confirm) | a requested Claude model reference | **identifier unverified** | commercial | none | verify the real model id, access and pricing before any adapter; never invent one | Blocked (no verified id) | confirm which model/plan is meant |
+| **Agent substrate** | (reference ambiguous) | a common agent runtime | **identity unconfirmed** | unknown | Loki already has an agent loop | do not invent a repository from an ambiguous name; Loki's own runtime is the substrate today | Blocked (ambiguous reference) | clarify the intended project |
+| **Git repository browser** | (a capability, not a repo) | repo discovery and inspection | not built | - | none | Phase 3: capability registry + provenance and license checks | Planned | none |
+| **Diagramming / design skills** | (e.g. anthropics/skills) | architecture, sequence, flow, ER diagrams | not yet sourced | check | none | Mermaid/SVG-preferred skill; verify the diagram renders | Planned | none |
+| **Cybersecurity skills** | (defensive, to source) | code review, threat modeling, secret detection | not yet sourced | check | none | defensive only; explicit scope for any active testing | Planned | none |
+| **Scientific skills** | (to source) | evidence synthesis, citations, statistics | not yet sourced | check | none | distinguish evidence from hypothesis; never fabricate sources | Planned | none |
+
 ## Notes
 - **License verification is required before adoption** for every catalog/repo above; the
   table records "check" rather than assuming.
