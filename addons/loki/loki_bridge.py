@@ -507,6 +507,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/settings":
             self._send_json(200, {"ok": True, **self.server.state.agent.categories_state()})
             return
+        if route == "/mode":
+            self._send_json(200, {"ok": True, **self.server.state.agent.mode_state()})
+            return
         if route == "/auth/status":
             session = self.server.state.session or {}
             user = session.get("user") or {}
@@ -584,6 +587,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             state.agent.request_cancel()
             state.push_progress(state.progress_chat_id, "thinking", "Cancel requested; stopping soon...")
             self._send_json(200, {"ok": True})
+            return
+        if route == "/mode":
+            self.server.state.agent.set_mode(str(data.get("mode", "")))
+            self._send_json(200, {"ok": True, **self.server.state.agent.mode_state()})
             return
         if route == "/connect":
             result = self.server.state.agent.connect_provider(

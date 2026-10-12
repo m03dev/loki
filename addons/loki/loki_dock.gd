@@ -28,8 +28,6 @@ const INTERNAL_MARKERS: Array[String] = [
 	"You have not used any tools",
 ]
 
-var _chat_scroll: ScrollContainer
-var _trailing_slack: Control
 var _chat_log: RichTextLabel
 var _recent_log: Array[String] = []
 var _input_edit: TextEdit
@@ -39,7 +37,6 @@ var _clear_button: Button
 var _status: Label
 var _elapsed_label: Label
 var _model_picker: OptionButton
-var _smart_button: Button
 var _menu: MenuButton
 var _tabs: TabBar
 var _add_tab_button: Button
@@ -66,6 +63,8 @@ var _memory_http: HTTPRequest
 var _ecc_http: HTTPRequest
 var _connections_http: HTTPRequest
 var _connect_http: HTTPRequest
+var _mode_http: HTTPRequest
+var _mode_button: MenuButton
 
 var _poll_timer: Timer
 var _progress_timer: Timer
@@ -121,6 +120,8 @@ func _ready() -> void:
 	_approval_http = _new_http(3.0, _on_approval_poll)
 	_settings_http = _new_http(10.0, _on_settings_response)
 	_connect_http = _new_http(15.0, _on_connect_response)
+	_mode_http = _new_http(10.0, _on_mode_response)
+	_refresh_mode()
 	_auth_http = _new_http(12.0, _on_auth_response)
 	_progress_http = _new_http(3.0, _on_progress_response)
 	_cancel_http = _new_http(5.0, _on_cancel_response)
@@ -156,13 +157,9 @@ func _build_ui() -> void:
 	# row) and ~286px down. Declaring less lets the editor shrink the dock below
 	# what its content needs, which clips the input row and the right-hand buttons.
 	custom_minimum_size = Vector2(500.0, 300.0)
-	var header: HBoxContainer = HBoxContainer.new()
-	add_child(header)
-	var heading: Label = Label.new()
-	heading.text = "Loki"
-	heading.add_theme_font_size_override("font_size", 15)
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(heading)
+	# No title row. The dock's own tab already reads "Loki", and Ziva's panel shows
+	# nothing but its tab until you talk to it - repeating the name inside the panel
+	# is just clutter. The menu button lives on the tab row instead.
 	_menu = MenuButton.new()
 	_menu.text = "⋮"
 	_menu.flat = true
@@ -181,7 +178,6 @@ func _build_ui() -> void:
 	popup.add_icon_item(_editor_icon("Play"), "Run task (no limit)", 12)
 	popup.add_icon_item(_editor_icon("Clear"), "Clear pending attachments", 13)
 	popup.id_pressed.connect(_on_menu_pressed)
-	header.add_child(_menu)
 
 	var tab_row: HBoxContainer = HBoxContainer.new()
 	add_child(tab_row)
@@ -201,27 +197,22 @@ func _build_ui() -> void:
 	_add_tab_button.tooltip_text = "New chat"
 	_add_tab_button.pressed.connect(_on_new_chat)
 	tab_row.add_child(_add_tab_button)
+	tab_row.add_child(_menu)
 
-	# The transcript scrolls inside a ScrollContainer, which ALWAYS clips its child.
-	# A RichTextLabel whose content is taller than its box otherwise draws straight
-	# over the input row below it - the "bottom gui is bugged" where the chat covers
-	# the input. clip_contents on a plain Control parent did not stop it; this does.
-	_chat_scroll = ScrollContainer.new()
-	_chat_scroll.name = "ChatScroll"
-	_chat_scroll.custom_minimum_size = Vector2(360.0, 160.0)
-	_chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_chat_scroll.size_flags_stretch_ratio = 1.0
-	_chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(_chat_scroll)
+	# The transcript is ONE self-scrolling RichTextLabel. It must not sit inside a
+	# ScrollContainer: a ScrollContainer's minimum height follows its child's, so a long
+	# transcript inflates it and shoves the input row and toolbar off the bottom of the
+	# dock. RichTextLabel scrolls itself, so its own minimum height stays tiny.
 	_chat_log = RichTextLabel.new()
+	_chat_log.name = "ChatLog"
 	_chat_log.bbcode_enabled = true
 	_chat_log.selection_enabled = true
-	_chat_log.scroll_active = false
-	_chat_log.fit_content = true
+	_chat_log.scroll_active = true
+	_chat_log.scroll_following = true
+	_chat_log.custom_minimum_size = Vector2(360.0, 120.0)
+	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_chat_scroll.add_child(_chat_log)
-	_append_log("[color=#6e7681]Loki - your Godot agent.[/color]")
+	add_child(_chat_log)
 
 	_input_edit = TextEdit.new()
 	_input_edit.custom_minimum_size = Vector2(360.0, 72.0)
@@ -250,12 +241,13 @@ func _build_ui() -> void:
 	_model_picker.custom_minimum_size = Vector2(112.0, 0.0)
 	_model_picker.item_selected.connect(_on_model_selected)
 	bottom.add_child(_model_picker)
-	_smart_button = Button.new()
-	_smart_button.text = "Smart"
-	_smart_button.flat = true
-	_smart_button.tooltip_text = "Use the best available free provider, chosen automatically"
-	_smart_button.pressed.connect(_on_smart_pressed)
-	bottom.add_child(_smart_button)
+	_mode_button = MenuButton.new()
+	_mode_button.tooltip_text = "Ask (questions) -> Plan (clear the fog) -> Build (do it)"
+	_mode_button.flat = true
+	_mode_button.text = "Build"
+	_mode_button.get_popup().id_pressed.connect(_on_mode_selected)
+	_populate_modes()
+	bottom.add_child(_mode_button)
 	var bottom_spacer: Control = Control.new()
 	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(bottom_spacer)
@@ -277,15 +269,6 @@ func _build_ui() -> void:
 	_elapsed_label.text = ""
 	bottom.add_child(_elapsed_label)
 
-	# Slack goes BELOW the toolbar, not into the transcript. A docked panel can be
-	# handed (or retain) more height than the editor window shows, in which case
-	# whatever sits at the panel's bottom lands off-screen. Giving the spacer a
-	# larger share than the transcript keeps the input row well above the panel's
-	# bottom, so it stays visible even when the dock is over-tall.
-	_trailing_slack = Control.new()
-	_trailing_slack.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_trailing_slack.size_flags_stretch_ratio = 2.0
-	add_child(_trailing_slack)
 
 	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
 	_settings_dialog.profile_saved.connect(_on_profile_saved)
@@ -337,9 +320,10 @@ func _editor_icon(name: String) -> Texture2D:
 	return null
 
 
+
 func _scroll_chat_to_bottom() -> void:
-	if _chat_scroll != null and _chat_log != null:
-		_chat_scroll.scroll_vertical = int(_chat_log.size.y)
+	if _chat_log != null:
+		_chat_log.scroll_to_line(maxi(0, _chat_log.get_line_count() - 1))
 
 
 func _refit_rows() -> void:
@@ -619,6 +603,7 @@ func _on_chat_response(result: int, code: int, _h: PackedStringArray, body: Pack
 		_append_log("[color=#ff7777]%s[/color]" % _escape(str(response.get("error", "Unknown error"))))
 	else:
 		_status.text = "Connected"
+		_refresh_mode()
 		var text: String = str(response.get("response", "")).strip_edges()
 		if not text.is_empty():
 			_append_log("[color=#dfe6ee]" + _escape(text) + "[/color]", PackedStringArray(["Script", "Node"]))
@@ -681,6 +666,48 @@ func _on_progress_response(result: int, code: int, _h: PackedStringArray, body: 
 			_append_log("[color=#a3be8c]Done: [/color]" + text, PackedStringArray(["StatusSuccess", "CheckBox", "Node"]))
 		elif kind == "error":
 			_append_log("[color=#ff7777]Error: [/color]" + text, PackedStringArray(["StatusError", "Error", "Warning", "Node"]))
+
+func _populate_modes() -> void:
+	var popup: PopupMenu = _mode_button.get_popup()
+	popup.clear()
+	popup.add_item("Ask - answer my questions only", 0)
+	popup.add_item("Plan - clear the fog, then a plan", 1)
+	popup.add_item("Build - implement it", 2)
+	popup.add_separator()
+	popup.add_item("Working this way: Ask first, then Plan, then Build.", 3)
+	popup.set_item_disabled(3, true)
+
+
+func _on_mode_selected(id: int) -> void:
+	var wanted: String = ["ask", "plan", "build"][id] if id < 3 else ""
+	if wanted.is_empty():
+		return
+	_load_token()
+	if _token.is_empty() or _mode_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	_mode_http.request(BRIDGE_URL + "/mode", _headers(), HTTPClient.METHOD_POST,
+		JSON.stringify({"mode": wanted}))
+
+
+func _on_mode_response(result: int, _code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		_set_mode_label(str((parsed as Dictionary).get("label", "")))
+
+
+func _set_mode_label(label: String) -> void:
+	if _mode_button != null and not label.is_empty():
+		_mode_button.text = label
+
+
+func _refresh_mode() -> void:
+	_load_token()
+	if _token.is_empty() or _mode_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	_mode_http.request(BRIDGE_URL + "/mode", _headers())
+
 
 func _connect_provider(provider: String, key: String) -> void:
 	if key.strip_edges().is_empty():
@@ -880,16 +907,6 @@ func _on_settings_response(_result: int, code: int, _h: PackedStringArray, body:
 		return
 	if _settings_dialog.has_method("set_categories"):
 		_settings_dialog.set_categories(payload)
-
-func _on_smart_pressed() -> void:
-	_api_post(_settings_http, "/model", {"model": "smart"})
-	_current_model = "smart"
-	_status.text = "Smart - choosing the best free provider"
-	for i in _models.size():
-		if str(_models[i]) == "smart":
-			_model_picker.select(i)
-	_refresh_models()
-
 
 func _on_model_selected(index: int) -> void:
 	if index < 0 or index >= _models.size():

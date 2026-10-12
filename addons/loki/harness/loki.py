@@ -1499,8 +1499,18 @@ TRIMMED_TOOLS_NOTE = ""
 def model_tool_schemas() -> list:
     """The tool schemas to offer the model: enabled categories, within the budget."""
     global TRIMMED_TOOLS_NOTE
+    if AGENT_MODE == "ask":
+        # Ask mode is a conversation, not an agent turn: no tools at all.
+        TRIMMED_TOOLS_NOTE = "ask mode: no tools offered"
+        return []
     schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
                and _tool_enabled(t["function"]["name"])]
+    if AGENT_MODE == "plan":
+        # Plan mode is read-only: no writing, moving, deleting or running.
+        schemas = [t for t in schemas
+                   if t["function"]["name"] in LOCAL_TOOLS
+                   and t["function"]["name"] not in MODIFYING
+                   and t["function"]["name"] not in DANGEROUS]
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
         TRIMMED_TOOLS_NOTE = ""
         return schemas
@@ -1640,6 +1650,59 @@ def _sanitize_history(items: list) -> list:
 PROFILE: dict = {"name": "", "notes": ""}
 
 
+# --- Modes: ask -> plan -> build --------------------------------------------
+# The panel works in one of three modes, and the point is to stop the agent charging
+# into a change it does not understand yet:
+#   ask    answer the question. No tools, nothing touched.
+#   plan   investigate READ-ONLY, ask the questions that clear the fog, then write
+#          a numbered plan. Nothing is implemented.
+#   build  the full autonomous agent (the original behaviour).
+AGENT_MODE = str(os.getenv("LOKI_MODE", "build")).strip().lower() or "build"
+MODE_LABELS = {"ask": "Ask", "plan": "Plan", "build": "Build"}
+MODE_PROMPTS = {
+    "ask": (
+        "You are Loki in ASK mode. Answer the user's question directly and briefly." + chr(10)
+        + "Rules:" + chr(10)
+        + "- Call NO tools. Change nothing, start no task." + chr(10)
+        + "- Answer from what you already know about the project. If you genuinely need to"
+        + " look something up, say exactly which file you would read." + chr(10)
+        + "- Be concise. No preamble, no restating the question."
+    ),
+    "plan": (
+        "You are Loki in PLAN mode. Investigate, then plan - and write nothing." + chr(10)
+        + "Rules:" + chr(10)
+        + "- You may only READ (read_file, list_tree, search_files, read_scene, godot_api,"
+        + " godot_search). Every writing, running and deleting tool is unavailable to you."
+        + chr(10)
+        + "- FIRST clear the fog: if anything about the request is open, ask up to three"
+        + " short questions, each with the options you would choose, then stop." + chr(10)
+        + "- When there is no fog left, answer with a numbered plan of 3 to 7 steps naming"
+        + " the files you would touch. Do not implement it."
+    ),
+}
+
+
+def set_mode(mode: str) -> str:
+    """Switch mode. Returns the mode actually in effect."""
+    global AGENT_MODE
+    name = str(mode or "").strip().lower()
+    if name in MODE_LABELS:
+        AGENT_MODE = name
+    return AGENT_MODE
+
+
+def mode_state() -> dict:
+    return {"mode": AGENT_MODE, "label": MODE_LABELS.get(AGENT_MODE, AGENT_MODE),
+            "modes": [{"id": key, "label": MODE_LABELS[key]} for key in ("ask", "plan", "build")]}
+
+
+def system_prompt() -> str:
+    """The system prompt for the current mode."""
+    if AGENT_MODE in MODE_PROMPTS:
+        return MODE_PROMPTS[AGENT_MODE] + chr(10) * 2 + "# Project context" + chr(10) + composed_memory()
+    return SYSTEM_PROMPT.format(memory=composed_memory())
+
+
 def composed_memory() -> str:
     text = load_memory()
     lines = []
@@ -1654,7 +1717,7 @@ def composed_memory() -> str:
 
 def refresh_system_prompt() -> None:
     if messages:
-        messages[0] = {"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}
+        messages[0] = {"role": "system", "content": system_prompt()}
 
 
 def set_profile(name: str, notes: str) -> None:
@@ -1759,7 +1822,7 @@ def save_history() -> None:
 def _activate(cid: str) -> None:
     global active_conversation
     active_conversation = cid
-    messages[:] = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}]
+    messages[:] = [{"role": "system", "content": system_prompt()}]
     for item in CONVERSATIONS.get(cid, {}).get("messages", []):
         if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
             messages.append({"role": item["role"], "content": item["content"]})
@@ -1860,7 +1923,7 @@ def clear_active_conversation() -> None:
     save_conversations()
 
 
-messages = [{"role": "system", "content": SYSTEM_PROMPT.format(memory=composed_memory())}]
+messages = [{"role": "system", "content": system_prompt()}]
 load_conversations()
 
 
@@ -2802,7 +2865,7 @@ def handle_command(line: str) -> bool:
         print(todo_list())
     elif cmd == "/clear":
         messages.clear()
-        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(memory=load_memory())})
+        messages.append({"role": "system", "content": system_prompt()})
         print("  conversation cleared")
     elif cmd == "/status":
         print(ollama_status())

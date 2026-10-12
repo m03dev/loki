@@ -1173,6 +1173,30 @@ check("the env file path is absolute-ish", str(loki.env_file_path()).endswith(".
 
 
 
+section("modes: ask -> plan -> build")
+check("the default mode is build", loki.set_mode("build") == "build")
+loki.set_mode("ask")
+check("ask offers no tools at all", loki.model_tool_schemas() == [])
+loki.set_mode("plan")
+_plan = {s["function"]["name"] for s in loki.model_tool_schemas()}
+check("plan can still read", "read_file" in _plan, str(sorted(_plan)[:4]))
+check("plan offers no writing tool", not (_plan & loki.MODIFYING), str(sorted(_plan & loki.MODIFYING)))
+check("plan offers no running tool", not (_plan & loki.DANGEROUS), str(sorted(_plan & loki.DANGEROUS)))
+loki.set_mode("build")
+check("build offers more than plan", len(loki.model_tool_schemas()) > len(_plan))
+check("an unknown mode changes nothing", loki.set_mode("nonsense") == "build")
+loki.set_mode("ask")
+_ask_prompt = loki.system_prompt()
+loki.set_mode("plan")
+_plan_prompt = loki.system_prompt()
+loki.set_mode("build")
+check("each mode carries its own instructions",
+      "ASK mode" in _ask_prompt and "PLAN mode" in _plan_prompt
+      and "SENIOR GAME DEVELOPER" in loki.system_prompt())
+check("mode_state lists all three", len(loki.mode_state()["modes"]) == 3)
+
+
+
 async def live() -> None:
 
 
