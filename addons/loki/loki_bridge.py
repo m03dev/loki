@@ -546,6 +546,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/jev":
             agent = self.server.state.agent
             status = agent.jev_status() if hasattr(agent, "jev_status") else {}
+            if hasattr(agent, "decision_status"):
+                status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
             return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})

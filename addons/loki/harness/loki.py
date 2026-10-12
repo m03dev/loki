@@ -226,6 +226,9 @@ if str(ROOT) not in sys.path:
 import godot_tools  # noqa: E402  (Godot API + project editing tools)
 import cli_agents  # noqa: E402  (Claude Code / Codex as subscription providers)
 import jev  # noqa: E402  (Jev typed decisions: risk gate + loop detection)
+# Laya's optional local backend resolves @receptron/laya from the data dir, never the addon.
+os.environ.setdefault("LOKI_LAYA_PACKAGE_DIR", str(DATA_DIR / "laya"))
+import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -2269,10 +2272,9 @@ async def approve(kind: str, detail: str) -> bool:
     if AUTO_APPROVE:
         print(f"  [auto-approved] {kind}: {detail}")
         return True
-    # Risk gate (Jev): auto-allow only when the action is confidently safe; anything
-    # risky or uncertain still asks. Never weakens the human path - 'confirm' = ask.
-    if jev.risk_gate(kind, detail) == "allow":
-        print(f"  [jev] {kind} judged safe to run without asking")
+    # Risk gate: auto-allow only when a decision provider is confident the action is safe;
+    # anything risky, uncertain, or contested still asks. Never weakens the human path.
+    if decisions.risk_gate(kind, detail) == "allow":
         return True
     answer = await asyncio.to_thread(input, f"  [approve] {kind}: {detail}\n  allow? [y/N] ")
     return answer.strip().lower() in ("y", "yes")
@@ -2538,24 +2540,23 @@ async def _jev_loop_nudge() -> str:
 
     Returns the probability as text when Jev is confident, else "". Never fatal.
     """
-    if not jev.enabled() or len(_jev_loop_window) < 4:
+    if not decisions.enabled_providers() or len(_jev_loop_window) < 4:
         return ""
     state = "Recent agent actions, oldest first:" + chr(10) + chr(10).join(_jev_loop_window[-8:])
     try:
-        p = await asyncio.to_thread(
-            jev.noul,
-            "Is the agent repeating the same approach without making real progress?",
-            state)
+        return await asyncio.to_thread(decisions.loop_nudge, state)
     except Exception:
         return ""
-    if p is not None and p >= 0.7:
-        return "%.2f" % p
-    return ""
 
 
 def jev_status() -> dict:
     """Jev availability for the doctor, the bridge and the dock."""
     return jev.status()
+
+
+def decision_status() -> dict:
+    """Laya/Jev routing, provider availability and disagreement stats."""
+    return decisions.status()
 
 def request_cancel() -> None:
     """Ask the in-flight request to stop at the next safe point."""
@@ -2834,11 +2835,11 @@ async def agent_turn(force_tool: bool = False) -> str:
                 _jev_loop_window = []   # real progress - start a fresh window
             elif len(_jev_loop_window) > 16:
                 del _jev_loop_window[:-16]
-            if jev.enabled() and turns % JEV_LOOP_CHECK_EVERY == 0 and len(_jev_loop_window) >= 4:
+            if decisions.enabled_providers() and turns % JEV_LOOP_CHECK_EVERY == 0 and len(_jev_loop_window) >= 4:
                 _spinning = await _jev_loop_nudge()
                 if _spinning:
                     _jev_loop_window = []
-                    _progress("thinking", "Jev flagged a likely loop (p=%s); nudging." % _spinning)
+                    _progress("thinking", "A decision provider flagged a likely loop (p=%s); nudging." % _spinning)
                     messages.append({"role": "user", "content": (
                         "You appear to be repeating the same approach without progress. Stop and "
                         "reassess: name what is blocking you, then try a materially different tool "

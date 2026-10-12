@@ -771,10 +771,10 @@ check("the jev MCP server is registered but gated by an env key",
       _cfg["mcpServers"].get("jev", {}).get("requires_env") == "TYPESAFE_API_KEY")
 
 
-check("approve() is risk-gated by jev",
+check("approve() is risk-gated by the decision layer",
 
 
-      "jev.risk_gate" in (_checkout / "loki.py").read_text(encoding="utf-8"))
+      "decisions.risk_gate" in (_checkout / "loki.py").read_text(encoding="utf-8"))
 
 
 for _k, _v in _saved.items():
@@ -1475,6 +1475,232 @@ check("the policy can be switched off for a trusted context", loki.command_polic
 
 
 del os.environ["LOKI_COMMAND_POLICY"]
+
+
+
+section("Laya (the local-first decision provider)")
+
+
+_laya = loki.decisions.laya
+
+
+_env_saved = {k: os.environ.get(k) for k in ("LAYA_BASE_URL", "LOKI_LAYA_LOCAL")}
+
+
+os.environ.pop("LAYA_BASE_URL", None)
+
+
+os.environ["LOKI_LAYA_LOCAL"] = "0"
+
+
+check("Laya is off when there is no backend", _laya.backend() == "" and _laya.enabled() is False)
+
+
+check("a disabled Laya risk gate returns None", _laya.risk_gate("delete_file", "x") is None)
+
+
+check("deciding nothing asks nothing", _laya.decide({}, "state") == {})
+
+
+os.environ.pop("LOKI_LAYA_LOCAL", None)
+
+
+os.environ["LAYA_BASE_URL"] = "https://laya.test/v1/systemone"
+
+
+check("an HTTP endpoint selects the http backend", _laya.backend() == "http" and _laya.enabled() is True)
+
+
+_orig_http = _laya._http_decide
+
+
+_laya._http_decide = lambda payload: {"answers": {"q": {"type": "noul", "noul": 0.25}}}
+
+
+_laya._cache.clear()
+
+
+check("a decision parses the answers map", _laya.decide({"q": {"type": "noul", "instructions": "?"}}, "s").get("q", {}).get("noul") == 0.25)
+
+
+check("noul() returns the calibrated probability", _laya.noul("?", "s") == 0.25)
+
+
+def _laya_boom(payload):
+
+
+    raise RuntimeError("backend down")
+
+
+_laya._http_decide = _laya_boom
+
+
+_laya._cache.clear()
+
+
+check("a failing Laya backend is non-fatal", _laya.decide({"q": {"type": "noul", "instructions": "?"}}, "s2") == {})
+
+
+_laya._http_decide = _orig_http
+
+
+_laya._cache.clear()
+
+
+os.environ.pop("LAYA_BASE_URL", None)
+
+
+for _k, _v in _env_saved.items():
+
+
+    if _v is None:
+
+
+        os.environ.pop(_k, None)
+
+
+    else:
+
+
+        os.environ[_k] = _v
+
+
+check("the local driver ships as a Node module", (loki.ROOT / "laya_driver.mjs").is_file())
+
+
+check("the driver delegates to the real @receptron/laya package", "@receptron/laya" in (loki.ROOT / "laya_driver.mjs").read_text(encoding="utf-8"))
+
+
+_loki_src = (loki.ROOT / "loki.py").read_text(encoding="utf-8")
+
+
+check("approvals route through the decision layer", "decisions.risk_gate(kind, detail)" in _loki_src)
+
+
+check("loop detection routes through the decision layer", "decisions.loop_nudge" in _loki_src)
+
+
+section("decision routing (Laya first, Jev fallback)")
+
+
+_dec = loki.decisions
+
+
+class _FakeProvider:
+
+
+    def __init__(self, enabled=True, gate=None, noul=None):
+
+
+        self._enabled = enabled
+
+
+        self._gate = gate
+
+
+        self._noul = noul
+
+
+    def enabled(self):
+
+
+        return self._enabled
+
+
+    def risk_gate(self, kind, detail):
+
+
+        return self._gate
+
+
+    def noul(self, question, state, criteria=None):
+
+
+        return self._noul
+
+
+    def status(self):
+
+
+        return {}
+
+
+_orig_providers = dict(_dec.PROVIDERS)
+
+
+_orig_order = os.environ.get("LOKI_DECISION_ORDER")
+
+
+os.environ["LOKI_DECISION_ORDER"] = "laya,jev"
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(gate="allow"), "jev": _FakeProvider(gate="allow")}
+
+
+check("providers agreeing to allow -> allow", _dec.risk_gate("write_file", "x") == "allow")
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(gate="allow"), "jev": _FakeProvider(gate="confirm")}
+
+
+_disagreements_before = _dec.STATS["disagreements"]
+
+
+check("providers disagreeing -> ask (None)", _dec.risk_gate("write_file", "x") is None)
+
+
+check("a disagreement is recorded", _dec.STATS["disagreements"] == _disagreements_before + 1)
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(gate=None), "jev": _FakeProvider(gate="allow")}
+
+
+check("one provider deciding is enough", _dec.risk_gate("write_file", "x") == "allow")
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(gate=None), "jev": _FakeProvider(gate=None)}
+
+
+check("no provider deciding -> ask (None)", _dec.risk_gate("write_file", "x") is None)
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(enabled=False, noul=0.99), "jev": _FakeProvider(noul=0.95)}
+
+
+check("a disabled provider is skipped in the loop nudge", _dec.loop_nudge("state") == "0.95")
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(noul=0.4), "jev": _FakeProvider(noul=0.9)}
+
+
+check("a confident spinning report wins", _dec.loop_nudge("state") == "0.90")
+
+
+_dec.PROVIDERS = {"laya": _FakeProvider(noul=0.1), "jev": _FakeProvider(noul=0.2)}
+
+
+check("low confidence does not nudge", _dec.loop_nudge("state") == "")
+
+
+_dec.PROVIDERS = dict(_orig_providers)
+
+
+if _orig_order is None:
+
+
+    os.environ.pop("LOKI_DECISION_ORDER", None)
+
+
+else:
+
+
+    os.environ["LOKI_DECISION_ORDER"] = _orig_order
+
+
+check("the decision status names the order and both providers", set(_dec.status()["order"]) == {"laya", "jev"})
+
+
+check("loki exposes a decision status for the bridge", isinstance(loki.decision_status(), dict))
 
 
 

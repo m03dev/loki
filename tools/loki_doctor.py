@@ -101,6 +101,17 @@ def main() -> int:
     else:
         print("  %-11s %-7s %-30s %s" % ("Jev", MARK[False], "-", "optional: https://thejevai.com"))
         print("              add TYPESAFE_API_KEY to .env for risk-gated approvals. Optional.")
+    try:
+        import laya
+        _ls = laya.status()
+    except Exception:
+        _ls = {"enabled": False}
+    if _ls.get("enabled"):
+        print("  %-11s %-7s %-30s %s" % ("Laya", MARK[True], _ls.get("backend"), _ls.get("endpoint")))
+        print("              local-first decision provider: risk gate + loop detection are ON.")
+    else:
+        print("  %-11s %-7s %-30s %s" % ("Laya", MARK[False], "-", "optional: https://github.com/receptron/laya"))
+        print("              local backend needs Node 20+ and: npm install @receptron/laya")
     print()
     return 0
 
