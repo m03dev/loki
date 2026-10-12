@@ -146,7 +146,10 @@ func _new_http(timeout: float, handler: Callable) -> HTTPRequest:
 	return node
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(360.0, 320.0)
+	# Honest minimum: the rows below need ~497px across (the toolbar is the widest
+	# row) and ~286px down. Declaring less lets the editor shrink the dock below
+	# what its content needs, which clips the input row and the right-hand buttons.
+	custom_minimum_size = Vector2(500.0, 300.0)
 	var header: HBoxContainer = HBoxContainer.new()
 	add_child(header)
 	var heading: Label = Label.new()
@@ -198,12 +201,12 @@ func _build_ui() -> void:
 	_chat_log.selection_enabled = true
 	_chat_log.scroll_following = true
 	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_log.custom_minimum_size = Vector2(360.0, 170.0)
+	_chat_log.custom_minimum_size = Vector2(360.0, 120.0)
 	add_child(_chat_log)
 	_append_log("[color=#6e7681]Loki - your Godot agent.[/color]")
 
 	_input_edit = TextEdit.new()
-	_input_edit.custom_minimum_size = Vector2(360.0, 96.0)
+	_input_edit.custom_minimum_size = Vector2(360.0, 72.0)
 	_input_edit.placeholder_text = "Describe a task; Loki works until done (Ctrl+Enter)"
 	_input_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_input_edit.gui_input.connect(_on_input_gui)
