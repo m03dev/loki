@@ -28,6 +28,8 @@ const INTERNAL_MARKERS: Array[String] = [
 	"You have not used any tools",
 ]
 
+var _chat_scroll: ScrollContainer
+var _trailing_slack: Control
 var _chat_log: RichTextLabel
 var _recent_log: Array[String] = []
 var _input_edit: TextEdit
@@ -108,6 +110,10 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_build_ecc_dialog()
+	# A restored dock can come back with stale geometry; re-sorting once the layout
+	# settles re-fits every row so the input can never be pushed off the panel.
+	resized.connect(_refit_rows)
+	get_tree().create_timer(1.0).timeout.connect(_refit_rows)
 	_chat_http = HTTPRequest.new()
 	_chat_http.timeout = 0.0
 	_chat_http.request_completed.connect(_on_chat_response)
@@ -196,13 +202,25 @@ func _build_ui() -> void:
 	_add_tab_button.pressed.connect(_on_new_chat)
 	tab_row.add_child(_add_tab_button)
 
+	# The transcript scrolls inside a ScrollContainer, which ALWAYS clips its child.
+	# A RichTextLabel whose content is taller than its box otherwise draws straight
+	# over the input row below it - the "bottom gui is bugged" where the chat covers
+	# the input. clip_contents on a plain Control parent did not stop it; this does.
+	_chat_scroll = ScrollContainer.new()
+	_chat_scroll.name = "ChatScroll"
+	_chat_scroll.custom_minimum_size = Vector2(360.0, 160.0)
+	_chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_chat_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_scroll.size_flags_stretch_ratio = 1.0
+	_chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_chat_scroll)
 	_chat_log = RichTextLabel.new()
 	_chat_log.bbcode_enabled = true
 	_chat_log.selection_enabled = true
-	_chat_log.scroll_following = true
-	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_log.custom_minimum_size = Vector2(360.0, 120.0)
-	add_child(_chat_log)
+	_chat_log.scroll_active = false
+	_chat_log.fit_content = true
+	_chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_scroll.add_child(_chat_log)
 	_append_log("[color=#6e7681]Loki - your Godot agent.[/color]")
 
 	_input_edit = TextEdit.new()
@@ -259,6 +277,16 @@ func _build_ui() -> void:
 	_elapsed_label.text = ""
 	bottom.add_child(_elapsed_label)
 
+	# Slack goes BELOW the toolbar, not into the transcript. A docked panel can be
+	# handed (or retain) more height than the editor window shows, in which case
+	# whatever sits at the panel's bottom lands off-screen. Giving the spacer a
+	# larger share than the transcript keeps the input row well above the panel's
+	# bottom, so it stays visible even when the dock is over-tall.
+	_trailing_slack = Control.new()
+	_trailing_slack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_trailing_slack.size_flags_stretch_ratio = 2.0
+	add_child(_trailing_slack)
+
 	_settings_dialog = SETTINGS_DIALOG_SCRIPT.new() as ConfirmationDialog
 	_settings_dialog.profile_saved.connect(_on_profile_saved)
 	_settings_dialog.connections_refresh_requested.connect(_refresh_connections)
@@ -307,6 +335,20 @@ func _editor_icon(name: String) -> Texture2D:
 	if theme != null and theme.has_icon(name, "EditorIcons"):
 		return theme.get_icon(name, "EditorIcons")
 	return null
+
+
+func _scroll_chat_to_bottom() -> void:
+	if _chat_scroll != null and _chat_log != null:
+		_chat_scroll.scroll_vertical = int(_chat_log.size.y)
+
+
+func _refit_rows() -> void:
+	# Only Containers have queue_sort; calling it on a RichTextLabel/TextEdit is an
+	# invalid call that aborts the whole refit and leaves the rows unsorted.
+	queue_sort()
+	for child in get_children():
+		if child is Container:
+			(child as Container).queue_sort()
 
 
 func _first_icon(names: PackedStringArray) -> Texture2D:
@@ -984,7 +1026,7 @@ func _append_log(text: String, icons: PackedStringArray = PackedStringArray()) -
 	_chat_log.append_text(text + "
 
 ")
-	_chat_log.scroll_to_line(_chat_log.get_line_count())
+	call_deferred("_scroll_chat_to_bottom")
 
 
 func _is_internal(text: String) -> bool:
