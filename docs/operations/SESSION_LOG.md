@@ -4,6 +4,26 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 4) - Keep Ziva's look: bubble + Enter to send (theme reverted)
+
+**Feedback.** The session-3 dark theme read as "just darker" and looked LESS like Ziva; the
+dock before it was better. Reverted.
+
+**Work completed**
+- Reverted the Ziva-style Theme and the `_draw` canvas from `loki_dock.gd`.
+- Your messages now render as a right-aligned BUBBLE (a `[bgcolor]` block with padding);
+  Loki's replies stay plain text. A truly rounded bubble needs a message-list container,
+  which conflicts with the deliberate single self-scrolling RichTextLabel transcript, so this
+  is the closest the transcript can do.
+- The composer sends on ENTER and inserts a line on Shift+Enter (was Ctrl+Enter only), the
+  way Ziva's composer works. Enter is ignored while the box is empty.
+- Placeholder updated to say so.
+
+**Tests:** 248 passed, 0 failed; dock compiles; headless probe builds.
+**Not visually confirmed** (`view_image` reads only the `ai` project, which must not be written to).
+
+---
+
 ## 2026-10-12 (session 3) - Ziva-style dock theme
 
 **Work completed**
