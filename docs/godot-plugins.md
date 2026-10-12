@@ -100,6 +100,16 @@ Probed from the npm registry; only these speak clean stdio JSON-RPC:
 | `godot_scene` | 21 | scene/node/editor read + edit |
 | `better_godot` | 17 | project/scene/node/script/editor/config (Node >= 24) |
 
+### The tool budget (`LOKI_MAX_TOOLS`)
+
+Every connected server's tools go into one request, and **providers cap how many tools a
+request may carry** - Groq answers `'tools' : maximum number of items is 128` and the whole
+turn fails, not just the excess tools. Loki therefore offers at most `LOKI_MAX_TOOLS`
+(default **128**) schemas per request: its own tools first, then MCP tools in connection
+order, and it reports how many were held back. Raising it suits a provider with a larger
+limit (Gemini accepted ~200); lowering it suits a strict one. Nothing is uninstalled -
+enable every server you like, and the budget keeps the request valid.
+
 `@gikit/godot-mcp` and `vberai-godot-mcp` print banners to stdout and cannot be used as
 stdio servers. `godot-forge-mcp` and `godot-ai-builder` do not exist on npm or PyPI.
 

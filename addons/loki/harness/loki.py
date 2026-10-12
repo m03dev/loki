@@ -1374,10 +1374,31 @@ def _tool_enabled(tool_name: str) -> bool:
     return True
 
 
+# Hard ceiling on how many tool schemas one request may carry. Providers reject a
+# request that exceeds it (Groq: "'tools' : maximum number of items is 128"), and the
+# whole turn fails - not just the excess tools. Loki's own tools are kept first, then
+# MCP tools in connection order, so a big surface degrades instead of breaking.
+MAX_TOOLS = int(os.getenv("LOKI_MAX_TOOLS", "128"))
+TRIMMED_TOOLS_NOTE = ""
+
+
 def model_tool_schemas() -> list:
-    """The tool schemas to offer the model, filtered by enabled categories."""
-    return [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
-            and _tool_enabled(t["function"]["name"])]
+    """The tool schemas to offer the model: enabled categories, within the budget."""
+    global TRIMMED_TOOLS_NOTE
+    schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
+               and _tool_enabled(t["function"]["name"])]
+    if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
+        TRIMMED_TOOLS_NOTE = ""
+        return schemas
+    local = [t for t in schemas if t["function"]["name"] in LOCAL_TOOLS]
+    remote = [t for t in schemas if t["function"]["name"] not in LOCAL_TOOLS]
+    kept = local[:MAX_TOOLS]
+    kept += remote[:max(0, MAX_TOOLS - len(kept))]
+    dropped = len(schemas) - len(kept)
+    TRIMMED_TOOLS_NOTE = ("%d tools offered, %d held back to stay under LOKI_MAX_TOOLS=%d "
+                          "(raise it for a provider with a larger limit)"
+                          % (len(kept), dropped, MAX_TOOLS))
+    return kept
 
 
 def categories_state() -> dict:

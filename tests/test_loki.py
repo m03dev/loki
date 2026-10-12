@@ -1111,6 +1111,22 @@ _srv.close()
 
 
 
+section("tool budget (the model rejects an over-long tool list)")
+check("the default budget is provider-safe", 20 <= loki.MAX_TOOLS <= 128, str(loki.MAX_TOOLS))
+check("the offered tools respect the budget",
+      loki.MAX_TOOLS <= 0 or len(loki.model_tool_schemas()) <= loki.MAX_TOOLS)
+_saved_budget = loki.MAX_TOOLS
+loki.MAX_TOOLS = 5
+_capped = loki.model_tool_schemas()
+check("a small budget trims the offered tools", len(_capped) == 5, str(len(_capped)))
+check("trimming is reported, not silent", "held back" in loki.TRIMMED_TOOLS_NOTE,
+      loki.TRIMMED_TOOLS_NOTE)
+check("local tools survive the trim",
+      all(t["function"]["name"] in loki.LOCAL_TOOLS for t in _capped))
+loki.MAX_TOOLS = _saved_budget
+
+
+
 async def live() -> None:
 
 
