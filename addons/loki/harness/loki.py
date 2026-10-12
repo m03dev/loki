@@ -309,7 +309,12 @@ def _mark_smart_failure() -> None:
 # allowance" refusal apart from a genuine bug.
 _LIMIT_MARKERS = ("429", "402", "413", "quota", "rate limit", "rate_limit",
                   "rate-limit", "resource_exhausted", "too large", "exceeded",
-                  "insufficient", "credit", "billing")
+                  "insufficient", "credit", "billing",
+                  # A provider that refuses the request itself (an over-long tool
+                  # list, an unsupported field) is just as unusable as an exhausted
+                  # quota: the run must move on rather than end. Matching the
+                  # rendered "HTTP 400" keeps this off unrelated numbers.
+                  "http 400", "http 422")
 
 
 def _is_limit_error(exc) -> bool:
@@ -2245,6 +2250,16 @@ async def _model_request(client, kwargs: dict, cfg):
             if "tool_choice" in kwargs and 400 <= status < 500:
                 # Backend does not support tool_choice; retry unforced.
                 kwargs.pop("tool_choice", None)
+                continue
+            if status in (400, 422) and kwargs.get("tools") and attempt < 3:
+                # The provider refused the request - most often because the tool
+                # list is longer than it allows (Gemini and Groq both reject a long
+                # one). Halve it and try again on this provider; if it still fails
+                # the run fails over, so no single provider can stop the work.
+                kwargs["tools"] = kwargs["tools"][: max(1, len(kwargs["tools"]) // 2)]
+                attempt += 1
+                _progress("thinking", "Model refused the tool list (HTTP %s); retrying with %d tools..."
+                          % (status, len(kwargs["tools"])))
                 continue
             if (status in _TRANSIENT_STATUS and attempt < MODEL_RETRIES
                     and not _is_quota_error(exc)):

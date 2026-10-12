@@ -1127,6 +1127,17 @@ loki.MAX_TOOLS = _saved_budget
 
 
 
+section("no dependence on any single provider")
+check("an HTTP 400 (tool list refused) fails over instead of ending the run",
+      loki._is_limit_error(Exception("[model error] m answered HTTP 400: maximum number of items is 128")) is True)
+check("an HTTP 429 fails over", loki._is_limit_error(Exception("HTTP 429 quota")) is True)
+check("a genuine 500 is not mistaken for a limit",
+      loki._is_limit_error(Exception("HTTP 500 server exploded")) is False)
+check("smart mode offers a zero-key/local landing spot",
+      "vireonix" in loki.SMART_ORDER and "local" in loki.SMART_ORDER)
+
+
+
 async def live() -> None:
 
 
