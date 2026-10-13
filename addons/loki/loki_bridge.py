@@ -550,6 +550,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
             return
+        if route == "/capabilities":
+            agent = self.server.state.agent
+            if hasattr(agent, "capability_summary"):
+                self._send_json(200, {"ok": True, **agent.capability_summary()})
+            else:
+                self._send_json(200, {"ok": True, "total": 0})
+            return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
 
     def do_POST(self) -> None:

@@ -1772,6 +1772,73 @@ check("the new providers are NOT in the smart failover order",
 
 
 
+section("capability registry (the API Vault seed)")
+
+
+_caps = loki.capability_registry()
+
+
+check("the registry is non-empty", len(_caps) > 0)
+
+
+check("every entry has an id, a kind and a status",
+
+
+      all(e.get("id") and e.get("kind") and e.get("status") for e in _caps))
+
+
+check("every kind is a documented kind",
+
+
+      all(e.get("kind") in loki.capabilities.KINDS for e in _caps))
+
+
+check("every provider carries an endpoint",
+
+
+      all(e.get("source") for e in _caps if e.get("kind") in ("provider", "cli-agent")))
+
+
+check("the mode pseudo-providers are not entries",
+
+
+      not any(e.get("id") in ("smart", "online") for e in _caps))
+
+
+check("a provider can be found by name",
+
+
+      any(e["id"] == "zai" for e in loki.capabilities.search(_caps, "zai")))
+
+
+check("an empty query returns everything",
+
+
+      len(loki.capabilities.search(_caps, "")) == len(_caps))
+
+
+_sum = loki.capability_summary()
+
+
+check("the summary total matches the registry", _sum["total"] == len(_caps))
+
+
+check("statuses are the documented set",
+
+
+      set(_sum["by_status"]) <= {"ready", "needs_key", "disabled", "unavailable"})
+
+
+check("the registry is offered to the model", "list_capabilities" in loki.MODEL_TOOL_NAMES)
+
+
+check("it has its own tool category",
+
+
+      loki.TOOL_CATEGORIES.get("capabilities") == ["list_capabilities"])
+
+
+
 if "--live" in sys.argv:
 
 

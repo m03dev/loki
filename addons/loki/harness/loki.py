@@ -229,6 +229,7 @@ import jev  # noqa: E402  (Jev typed decisions: risk gate + loop detection)
 # Laya's optional local backend resolves @receptron/laya from the data dir, never the addon.
 os.environ.setdefault("LOKI_LAYA_PACKAGE_DIR", str(DATA_DIR / "laya"))
 import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
+import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -1469,6 +1470,26 @@ async def view_image(filename: str, question: str = "") -> str:
     return text or "(the model returned no description)"
 
 
+def capability_registry() -> list:
+    """Every way Loki can reach the outside world, as one list of entries."""
+    return capabilities.registry(
+        models=MODELS, configured=provider_configured,
+        schemas=TOOL_SCHEMAS, offered=MODEL_TOOL_NAMES, categories=TOOL_CATEGORIES,
+        mcp_path=MCP_CONFIG, skip_reason=_server_skip_reason,
+        vendor_dir=DATA_DIR / "vendor")
+
+
+def list_capabilities(query: str = "") -> str:
+    """List or search what Loki can use: providers, tools, MCP servers, skill libraries."""
+    entries = capability_registry()
+    return capabilities.render(capabilities.search(entries, query), len(entries))
+
+
+def capability_summary() -> dict:
+    """Counts by kind and status, for the bridge and the report."""
+    return capabilities.summary(capability_registry())
+
+
 LOCAL_TOOLS = {
     "list_files": list_files,
     "list_tree": list_tree,
@@ -1491,6 +1512,7 @@ LOCAL_TOOLS = {
     "capture_scene": capture_scene,
     "probe_scene": probe_scene,
     "view_image": view_image,
+    "list_capabilities": list_capabilities,
     "godot_api": godot_tools.godot_api,
     "godot_search": godot_tools.godot_search,
     "read_scene": godot_tools.read_scene,
@@ -1565,6 +1587,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "inputs": {"type": "string"}, "settle_frames": {"type": "integer"}, "duration_ms": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
+    schema("list_capabilities", "List or search what Loki can use right now - model providers, tools, MCP servers and skill libraries - with each one's status and where to get a key. Pass query to filter.",
+           {"query": {"type": "string"}}),
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.). Pass query to filter by name when the list is long.",
            {"query": {"type": "string"}}),
     schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
@@ -1605,7 +1629,7 @@ MODEL_TOOL_NAMES = {
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
-    "check_script", "capture_scene", "view_image",
+    "check_script", "capture_scene", "view_image", "list_capabilities",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1621,6 +1645,7 @@ TOOL_CATEGORIES = {
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done"],
     "memory": ["save_memory"],
+    "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
@@ -1630,6 +1655,7 @@ CATEGORY_LABELS = {
     "runtime": "Runtime checks (run scene, compile script)",
     "planning": "Planning (todo list)",
     "memory": "Memory (save facts)",
+    "capabilities": "Capabilities (what Loki can use right now)",
     "skills": "Skills (ECC agents and skills)",
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",
