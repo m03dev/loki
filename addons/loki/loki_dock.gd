@@ -28,7 +28,11 @@ const INTERNAL_MARKERS: Array[String] = [
 	"You have not used any tools",
 ]
 
-var _chat_log: RichTextLabel
+const BUBBLE_COLOR := Color("3a3a44")
+
+var _chat_clip: Control
+var _chat_scroll: ScrollContainer
+var _chat_box: VBoxContainer
 var _recent_log: Array[String] = []
 var _input_edit: TextEdit
 var _send_button: Button
@@ -206,20 +210,30 @@ func _build_ui() -> void:
 	tab_row.add_child(_settings_button)
 	tab_row.add_child(_menu)
 
-	# The transcript is ONE self-scrolling RichTextLabel. It must not sit inside a
-	# ScrollContainer: a ScrollContainer's minimum height follows its child's, so a long
-	# transcript inflates it and shoves the input row and toolbar off the bottom of the
-	# dock. RichTextLabel scrolls itself, so its own minimum height stays tiny.
-	_chat_log = RichTextLabel.new()
-	_chat_log.name = "ChatLog"
-	_chat_log.bbcode_enabled = true
-	_chat_log.selection_enabled = true
-	_chat_log.scroll_active = true
-	_chat_log.scroll_following = true
-	_chat_log.custom_minimum_size = Vector2(200.0, 80.0)
-	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(_chat_log)
+	# The transcript is a real message list, so each message can be a ROUNDED bubble like
+	# Ziva's. A plain ScrollContainer would defeat that: its minimum height follows its
+	# child's, so a long transcript inflates it and shoves the input row off the bottom of
+	# the dock. The scroll therefore lives inside a bare Control that CLIPS it - a plain
+	# Control does not aggregate its children's minimum size, so the panel keeps its own.
+	_chat_clip = Control.new()
+	_chat_clip.name = "ChatClip"
+	_chat_clip.clip_contents = true
+	_chat_clip.custom_minimum_size = Vector2(200.0, 80.0)
+	_chat_clip.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_chat_clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(_chat_clip)
+
+	_chat_scroll = ScrollContainer.new()
+	_chat_scroll.name = "ChatScroll"
+	_chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_chat_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_chat_clip.add_child(_chat_scroll)
+
+	_chat_box = VBoxContainer.new()
+	_chat_box.name = "ChatBox"
+	_chat_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_box.add_theme_constant_override("separation", 6)
+	_chat_scroll.add_child(_chat_box)
 
 	# The composer is one block: the box and its icon row travel together.
 	var composer: VBoxContainer = VBoxContainer.new()
@@ -411,8 +425,10 @@ func _editor_icon(name: String) -> Texture2D:
 
 
 func _scroll_chat_to_bottom() -> void:
-	if _chat_log != null:
-		_chat_log.scroll_to_line(maxi(0, _chat_log.get_line_count() - 1))
+	if _chat_scroll != null:
+		var bar: VScrollBar = _chat_scroll.get_v_scroll_bar()
+		if bar != null:
+			_chat_scroll.scroll_vertical = int(bar.max_value)
 
 
 func _refit_rows() -> void:
@@ -656,8 +672,7 @@ func _submit(no_limit: bool) -> void:
 	prompt = _build_prompt_with_attachments(prompt)
 	_clear_attachments()
 	_input_edit.clear()
-	_append_log("[right][color=#7f9db0][b]You[/b][/color][/right]
-[right][color=#dfe6ee]" + _escape(prompt) + "[/color][/right]")
+	_append_log(_escape(prompt), PackedStringArray(), true)
 	_busy = true
 	_task_mode = true
 	_active_chat_id = ""
@@ -923,7 +938,7 @@ func _current_title() -> String:
 	return ""
 
 func _render_messages(messages: Array) -> void:
-	_chat_log.clear()
+	_clear_chat()
 	if messages.is_empty():
 		_append_log("[i]New chat. Ask Loki for a change.[/i]")
 		return
@@ -937,7 +952,7 @@ func _render_messages(messages: Array) -> void:
 			continue
 		if role == "user":
 			# Your message gets a right-aligned bubble like Ziva's; Loki's stays plain text.
-			_append_log("[right][bgcolor=#3a3a44][color=#f2f3f6]   " + _escape(content) + "   [/color][/bgcolor][/right]")
+			_append_log(_escape(content), PackedStringArray(), true)
 		elif role == "assistant":
 			_append_log("[color=#e6e9ee]" + _escape(content) + "[/color]", PackedStringArray(["Script", "Node"]))
 
@@ -1113,7 +1128,7 @@ func _on_menu_pressed(id: int) -> void:
 			_clear_attachments()
 
 func _copy_chat_markdown() -> void:
-	DisplayServer.clipboard_set(_chat_log.get_parsed_text())
+	DisplayServer.clipboard_set(_chat_as_text())
 	_append_log("[color=#a3be8c]Chat copied to clipboard as text.[/color]")
 
 func _on_quick_action_selected(index: int) -> void:
@@ -1129,10 +1144,75 @@ func _on_quick_action_selected(index: int) -> void:
 	_submit(false)
 
 func _on_clear_pressed() -> void:
-	_chat_log.clear()
+	_clear_chat()
 	_append_log("[b]Display cleared.[/b] Use the + tab to start a new chat.")
 
-func _append_log(text: String, icons: PackedStringArray = PackedStringArray()) -> void:
+func _chat_label(text: String) -> RichTextLabel:
+	# A label that GROWS to its text (fit_content) and wraps, so a bubble is as tall as
+	# its message and never reports a large minimum width.
+	var label: RichTextLabel = RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.scroll_active = false
+	label.selection_enabled = true
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.custom_minimum_size = Vector2.ZERO
+	label.text = text
+	return label
+
+
+func _append_bubble(text: String) -> void:
+	# Ziva's rounded bubble: the user's turn gets a rounded, padded panel.
+	var panel: PanelContainer = PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _bubble_style())
+	panel.add_child(_chat_label(text))
+	_chat_box.add_child(panel)
+	call_deferred("_scroll_chat_to_bottom")
+
+
+func _bubble_style() -> StyleBoxFlat:
+	var box: StyleBoxFlat = StyleBoxFlat.new()
+	box.bg_color = BUBBLE_COLOR
+	box.set_corner_radius_all(10)
+	box.content_margin_left = 10.0
+	box.content_margin_right = 10.0
+	box.content_margin_top = 7.0
+	box.content_margin_bottom = 7.0
+	return box
+
+
+func _clear_chat() -> void:
+	if _chat_box == null:
+		return
+	for child in _chat_box.get_children():
+		_chat_box.remove_child(child)
+		child.queue_free()
+
+
+func _collect_text(node: Node) -> String:
+	if node is RichTextLabel:
+		return (node as RichTextLabel).get_parsed_text()
+	var out: String = ""
+	for child in node.get_children():
+		var part: String = _collect_text(child)
+		if not part.strip_edges().is_empty():
+			out += part + "
+"
+	return out
+
+
+func _chat_as_text() -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	if _chat_box != null:
+		for child in _chat_box.get_children():
+			parts.append(_collect_text(child))
+	return "".join(parts)
+
+
+func _append_log(text: String, icons: PackedStringArray = PackedStringArray(),
+		bubble: bool = false) -> void:
 	if _is_internal(text):
 		return
 	var plain: String = text.strip_edges()
@@ -1141,14 +1221,23 @@ func _append_log(text: String, icons: PackedStringArray = PackedStringArray()) -
 	_recent_log.append(plain)
 	if _recent_log.size() > 80:
 		_recent_log.remove_at(0)
+	if bubble:
+		_append_bubble(text)
+		return
+	# Everything else is a plain row: an optional editor icon, then the message.
+	var row: HBoxContainer = HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 6)
 	if icons.size() > 0:
 		var texture: Texture2D = _first_icon(icons)
 		if texture != null:
-			_chat_log.add_image(texture, 15, 15)
-			_chat_log.append_text("  ")
-	_chat_log.append_text(text + "
-
-")
+			var image: TextureRect = TextureRect.new()
+			image.texture = texture
+			image.custom_minimum_size = Vector2(15.0, 15.0)
+			image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			row.add_child(image)
+	row.add_child(_chat_label(text))
+	_chat_box.add_child(row)
 	call_deferred("_scroll_chat_to_bottom")
 
 
