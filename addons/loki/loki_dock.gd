@@ -110,6 +110,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_build_ecc_dialog()
+	if _ecc_dialog != null:
+		_ecc_dialog.theme = _theme
 	# A restored dock can come back with stale geometry; re-sorting once the layout
 	# settles re-fits every row so the input can never be pushed off the panel.
 	resized.connect(_refit_rows)
@@ -154,6 +156,9 @@ func _new_http(timeout: float, handler: Callable) -> HTTPRequest:
 	return node
 
 func _build_ui() -> void:
+	_theme = _vercel_theme()
+	theme = _theme
+	queue_redraw()
 	# Honest minimum: the rows below need ~497px across (the toolbar is the widest
 	# row) and ~286px down. Declaring less lets the editor shrink the dock below
 	# what its content needs, which clips the input row and the right-hand buttons.
@@ -296,6 +301,7 @@ func _build_ui() -> void:
 	_settings_dialog.confirmed.connect(_on_settings_closed)
 	_settings_dialog.canceled.connect(_on_settings_closed)
 	add_child(_settings_dialog)
+	_settings_dialog.theme = _theme
 
 	_permission_dialog = ConfirmationDialog.new()
 	_permission_dialog.title = "Approve Loki tool call?"
@@ -304,6 +310,7 @@ func _build_ui() -> void:
 	_permission_dialog.confirmed.connect(_submit_approval.bind(true))
 	_permission_dialog.canceled.connect(_submit_approval.bind(false))
 	add_child(_permission_dialog)
+	_permission_dialog.theme = _theme
 
 	_attachment_dialog = FileDialog.new()
 	_attachment_dialog.title = "Attach files to Loki"
@@ -315,6 +322,7 @@ func _build_ui() -> void:
 	])
 	_attachment_dialog.files_selected.connect(_on_attachment_files_selected)
 	add_child(_attachment_dialog)
+	_attachment_dialog.theme = _theme
 
 	_rename_dialog = ConfirmationDialog.new()
 	_rename_dialog.title = "Rename chat"
@@ -323,12 +331,92 @@ func _build_ui() -> void:
 	_rename_dialog.add_child(_rename_edit)
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	add_child(_rename_dialog)
+	_rename_dialog.theme = _theme
 	_apply_rounding()
 
 # --- Ziva-style rounding ----------------------------------------------------
 # The editor's own colours are KEPT: each control's CURRENT stylebox is copied and
 # only its corners and padding change. That is what makes the panel read as rounded
 # and beveled WITHOUT turning it into a different, darker theme.
+
+
+# --- Vercel-style design ----------------------------------------------------
+# Loki's panel follows Vercel's design language: a pure-black canvas, crisp white
+# text at full contrast, hairline #333 borders, small radii and one accent blue.
+# Applied as a Theme on the dock root, so every child and dialog inherits it; the
+# corner rounding in _apply_rounding then shapes it.
+const V_BG := Color("000000")
+const V_SURFACE := Color("0a0a0a")
+const V_FIELD := Color("0a0a0a")
+const V_HOVER := Color("1a1a1a")
+const V_PRESSED := Color("242424")
+const V_BORDER := Color("333333")
+const V_TEXT := Color("ededed")
+const V_MUTED := Color("8f8f8f")
+const V_ACCENT := Color("0070f3")
+
+var _theme: Theme
+
+
+func _draw() -> void:
+	draw_rect(Rect2(Vector2.ZERO, size), V_BG)
+
+
+func _flat(bg: Color, radius: int, border: Color = Color(0, 0, 0, 0), border_w: int = 0,
+		pad_h: int = 6, pad_v: int = 3) -> StyleBoxFlat:
+	var box: StyleBoxFlat = StyleBoxFlat.new()
+	box.bg_color = bg
+	box.set_corner_radius_all(radius)
+	box.content_margin_left = float(pad_h)
+	box.content_margin_right = float(pad_h)
+	box.content_margin_top = float(pad_v)
+	box.content_margin_bottom = float(pad_v)
+	if border_w > 0:
+		box.border_width_left = border_w
+		box.border_width_right = border_w
+		box.border_width_top = border_w
+		box.border_width_bottom = border_w
+		box.border_color = border
+	return box
+
+
+func _vercel_theme() -> Theme:
+	var t: Theme = Theme.new()
+	t.set_color("font_color", "Label", V_TEXT)
+	t.set_color("default_color", "RichTextLabel", V_TEXT)
+	t.set_stylebox("normal", "RichTextLabel", _flat(V_BG, 0, Color(0, 0, 0, 0), 0, 10, 10))
+	t.set_stylebox("normal", "Button", _flat(Color(0, 0, 0, 0), 6))
+	t.set_stylebox("hover", "Button", _flat(V_HOVER, 6))
+	t.set_stylebox("pressed", "Button", _flat(V_PRESSED, 6))
+	t.set_stylebox("focus", "Button", _flat(Color(0, 0, 0, 0), 6, V_ACCENT, 1))
+	t.set_stylebox("disabled", "Button", _flat(Color(0, 0, 0, 0), 6))
+	t.set_color("font_color", "Button", V_TEXT)
+	t.set_color("font_hover_color", "Button", Color.WHITE)
+	t.set_color("font_pressed_color", "Button", Color.WHITE)
+	t.set_color("font_disabled_color", "Button", V_MUTED)
+	t.set_color("icon_normal_color", "Button", V_MUTED)
+	t.set_color("icon_hover_color", "Button", V_TEXT)
+	t.set_stylebox("normal", "TextEdit", _flat(V_FIELD, 8, V_BORDER, 1, 10, 8))
+	t.set_stylebox("focus", "TextEdit", _flat(V_FIELD, 8, V_TEXT, 1, 10, 8))
+	t.set_stylebox("read_only", "TextEdit", _flat(V_SURFACE, 8, V_BORDER, 1, 10, 8))
+	t.set_color("font_color", "TextEdit", V_TEXT)
+	t.set_color("font_placeholder_color", "TextEdit", V_MUTED)
+	t.set_color("caret_color", "TextEdit", V_TEXT)
+	t.set_color("selection_color", "TextEdit", Color(V_TEXT.r, V_TEXT.g, V_TEXT.b, 0.2))
+	t.set_stylebox("tab_selected", "TabBar", _flat(V_SURFACE, 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_stylebox("tab_unselected", "TabBar", _flat(Color(0, 0, 0, 0), 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_stylebox("tab_hovered", "TabBar", _flat(V_HOVER, 6, Color(0, 0, 0, 0), 0, 8, 4))
+	t.set_color("font_selected_color", "TabBar", V_TEXT)
+	t.set_color("font_unselected_color", "TabBar", V_MUTED)
+	t.set_color("font_hovered_color", "TabBar", V_TEXT)
+	t.set_stylebox("panel", "PopupMenu", _flat(V_SURFACE, 8, V_BORDER, 1, 8, 6))
+	t.set_color("font_color", "PopupMenu", V_TEXT)
+	t.set_color("font_separator_color", "PopupMenu", V_MUTED)
+	t.set_stylebox("panel", "Window", _flat(V_BG, 10, V_BORDER, 1, 0, 0))
+	t.set_color("title_color", "Window", V_TEXT)
+	t.set_constant("separation", "VBoxContainer", 6)
+	t.set_constant("separation", "HBoxContainer", 6)
+	return t
 
 
 func _rounded_copy(control: Variant, item: String, type: String, radius: int,
@@ -419,6 +507,7 @@ func _refit_rows() -> void:
 	# Only Containers have queue_sort; calling it on a RichTextLabel/TextEdit is an
 	# invalid call that aborts the whole refit and leaves the rows unsorted.
 	queue_sort()
+	queue_redraw()
 	for child in get_children():
 		if child is Container:
 			(child as Container).queue_sort()
