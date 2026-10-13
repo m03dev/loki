@@ -1744,6 +1744,34 @@ check("probe_scene rejects a non-array inputs value", loki.probe_scene("res://x.
 
 
 
+section("free providers from awesome-free-llm-apis")
+
+
+_free_apis = ("aion", "cohere", "zai", "huggingface", "kilocode", "llm7",
+
+
+              "modelscope", "nvidia", "ollama-cloud", "ovh", "siliconflow")
+
+
+for _name in _free_apis:
+
+
+    check("%s is registered" % _name, _name in loki.MODELS)
+
+
+    check("%s has a base_url and a model" % _name,
+
+
+          bool(loki.MODELS[_name].base_url) and bool(loki.MODELS[_name].model))
+
+
+check("the new providers are NOT in the smart failover order",
+
+
+      not (set(_free_apis) & set(loki.SMART_ORDER)))
+
+
+
 if "--live" in sys.argv:
 
 
