@@ -550,6 +550,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             text = agent.agent_sessions() if hasattr(agent, "agent_sessions") else ""
             self._send_json(200, {"ok": True, "sessions": text})
             return
+        if route == "/vault":
+            agent = self.server.state.agent
+            text = agent.api_vault_lookup("stats") if hasattr(agent, "api_vault_lookup") else ""
+            self._send_json(200, {"ok": True, "vault": text})
+            return
         if route == "/ecc":
             self._send_json(200, {"ok": True, **ecc_library(self.server.state.agent)})
             return
@@ -767,6 +772,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, "message": message})
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"sessions failed: {exc}"})
+            return
+        if route == "/vault":
+            try:
+                message: str = state.agent.api_vault_lookup(
+                    str(data.get("action", "search")), str(data.get("query", "")),
+                    str(data.get("category", "")), str(data.get("auth", "")),
+                    str(data.get("name", "")), str(data.get("url", "")),
+                    str(data.get("provider", "")), str(data.get("docs", "")),
+                    int(data.get("limit", 25)))
+                self._send_json(200, {"ok": True, "message": message})
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"vault failed: {exc}"})
             return
         if route == "/ecc/sync":
             try:

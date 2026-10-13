@@ -51,3 +51,5 @@ HANDOFF.md
 harness_data/laya/
 harness_data/project_state.json
 harness_data/agent_sessions.json
+harness_data/api_vault_extra.json
+harness_data/apis_guru.json

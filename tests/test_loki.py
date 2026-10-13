@@ -2022,6 +2022,103 @@ check("agent_sessions has a schema", any(tt["function"]["name"] == "agent_sessio
 
 
 
+section("the API Vault (blueprint 3.3)")
+
+
+import api_vault as _av
+
+
+_payload = {"example.com": {"preferred": "1.0", "versions": {"1.0": {
+
+
+    "info": {"title": "Example API", "contact": {"url": "https://example.com"}},
+
+
+    "x-origin": [{"url": "https://api.example.com"}],
+
+
+    "x-providerName": "example",
+
+
+    "x-apisguru-categories": ["developer_tools"],
+
+
+    "swagger": {"securityDefinitions": {"apiKey": {"type": "apiKey"}}},
+
+
+}}}}
+
+
+_v = _av.import_apis_guru(_payload)
+
+
+_ve = _v["entries"][0]
+
+
+check("a catalog entry keeps its name and reachable url", _ve["name"] == "Example API" and _ve["url"] == "https://api.example.com")
+
+
+check("the provider and categories survive", _ve["provider"] == "example" and _ve["categories"] == ["developer_tools"])
+
+
+check("a keyed API is marked as needing a key", _ve["auth"] == "key")
+
+
+check("the source is recorded", _ve["source"] == "apis.guru")
+
+
+check("search finds it by a word", len(_av.search(_v, "example")) == 1)
+
+
+check("search filters by category", len(_av.search(_v, category="developer_tools")) == 1 and len(_av.search(_v, category="music")) == 0)
+
+
+check("search filters by auth", len(_av.search(_v, auth="key")) == 1 and len(_av.search(_v, auth="none")) == 0)
+
+
+_av.add(_v, "Other API", "https://other.example", "other", ["music"], "none")
+
+
+check("add records a second entry", _av.stats(_v)["total"] == 2)
+
+
+_av.add(_v, "Other API", "https://other.example/v2", "other", ["music"], "none")
+
+
+check("add updates rather than duplicates by id", _av.stats(_v)["total"] == 2 and _av.search(_v, "other")[0]["url"].endswith("/v2"))
+
+
+check("stats counts by auth", _av.stats(_v)["by_auth"].get("key") == 1)
+
+
+check("the render explains the auth marks", "needs a key" in _av.render(_av.search(_v)))
+
+
+check("an empty vault renders, not crashes", "no matching APIs" in _av.render(_av.empty()))
+
+
+_seed = _av.load(loki.VAULT_SEED)
+
+
+check("the shipped vault is present and large", _av.stats(_seed)["total"] >= 1000)
+
+
+check("the shipped vault is searchable offline", len(_av.search(_seed, "weather")) >= 1)
+
+
+check("Loki's own providers are in the vault", len(_av.search(_seed, query="openai-compatible")) >= 5)
+
+
+check("the vault never stores a key", not any("api_key" in e for e in _seed["entries"]))
+
+
+check("api_vault is offered to the model", "api_vault" in loki.MODEL_TOOL_NAMES)
+
+
+check("api_vault has a schema", any(s["function"]["name"] == "api_vault" for s in loki.TOOL_SCHEMAS))
+
+
+
 if "--live" in sys.argv:
 
 

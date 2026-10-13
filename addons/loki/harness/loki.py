@@ -232,6 +232,7 @@ import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
 import project_state  # noqa: E402  (resumable project state - blueprint 7.3)
 import repo_review  # noqa: E402  (read-only repository review - blueprint 5.1)
 import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev)
+import api_vault  # noqa: E402  (the API Vault - blueprint 3.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 
 godot_tools.ROOT = ROOT
@@ -624,6 +625,50 @@ def agent_sessions(action: str = "list", name: str = "", session_id: str = "",
         _sessions_save(data)
         return ("closed " if action == "close" else "updated ") + key + chr(10) + sessions.render(data)
     return sessions.render(data)
+
+
+VAULT_SEED = Path(__file__).resolve().parents[1] / "data" / "api_vault.json"
+VAULT_USER = DATA_DIR / "api_vault_extra.json"
+
+
+def _vault_merged() -> dict:
+    merged = api_vault.load(VAULT_SEED)
+    extra = api_vault.load(VAULT_USER)
+    seen = {entry.get("id") for entry in merged.get("entries", [])}
+    for entry in extra.get("entries", []):
+        if entry.get("id") not in seen:
+            merged["entries"].append(entry)
+    return merged
+
+
+def api_vault_lookup(action: str = "search", query: str = "", category: str = "",
+                     auth: str = "", name: str = "", url: str = "", provider: str = "",
+                     docs: str = "", limit: int = 25) -> str:
+    """Search the API Vault, or add to it.
+
+    The blueprint's API Vault (3.3): a searchable index of APIs - what they do, where to
+    reach them and whether they need a key - so Loki can propose one before connecting it.
+    The shipped catalog is read-only; 'add' appends to the caller's own extra file.
+    action: search | stats | add
+    """
+    action = (action or "search").strip().lower()
+    if action == "add":
+        if not name.strip():
+            return "add needs a name"
+        extra = api_vault.load(VAULT_USER)
+        entry = api_vault.add(extra, name, url, provider, [category] if category else ["custom"],
+                              auth or "unknown", docs, "manual")
+        api_vault.save(VAULT_USER, extra)
+        return "added %s (%s) to the vault" % (entry["name"], entry["id"])
+    merged = _vault_merged()
+    if action == "stats":
+        counts = api_vault.stats(merged)
+        return chr(10).join(["API Vault: %d entries" % counts["total"],
+                        "by auth: %s" % counts["by_auth"],
+                        "by source: %s" % counts["by_source"]])
+    hits = api_vault.search(merged, query, category, auth, limit)
+    title = "API Vault - %d match(es)%s" % (len(hits), (" for '%s'" % query) if query else "")
+    return api_vault.render(hits, title=title)
 
 
 def review_repository(path: str = ".") -> str:
@@ -1618,6 +1663,7 @@ LOCAL_TOOLS = {
     "project_state": project_state_update,
     "review_repository": review_repository,
     "agent_sessions": agent_sessions,
+    "api_vault": api_vault_lookup,
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
@@ -1679,6 +1725,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "inputs": {"type": "string"}, "settle_frames": {"type": "integer"}, "duration_ms": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
+    schema("api_vault", "Search the API Vault before building an integration: what an API does, where to reach it and whether it needs a key. action='search' (default; query/category/auth filters), 'stats' for the catalog size, 'add' to record one Loki should know about.",
+           {"action": {"type": "string"}, "query": {"type": "string"}, "category": {"type": "string"}, "auth": {"type": "string"}, "name": {"type": "string"}, "url": {"type": "string"}, "provider": {"type": "string"}, "docs": {"type": "string"}, "limit": {"type": "integer"}}),
     schema("agent_sessions", "Track concurrent agent sessions - who is working, blocked or idle - so you never hunt for the stuck one. action='list' shows them, 'add' starts one (name, workspace, agent, status, task), 'update' changes a status/task, 'close' marks one done.",
            {"action": {"type": "string"}, "name": {"type": "string"}, "session_id": {"type": "string"}, "status": {"type": "string"}, "task": {"type": "string"}, "workspace": {"type": "string"}, "agent": {"type": "string"}}),
     schema("review_repository", "Review a repository FOLDER before adopting it: size, licence, languages, entry points and manifests. Read-only - it never executes or installs anything. Use it before adding third-party code.",
@@ -1728,7 +1776,7 @@ MODEL_TOOL_NAMES = {
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
-    "list_capabilities", "agent_sessions",
+    "list_capabilities", "agent_sessions", "api_vault",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1743,7 +1791,7 @@ TOOL_CATEGORIES = {
     "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
-                 "agent_sessions"],
+                 "agent_sessions", "api_vault"],
     "memory": ["save_memory"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
