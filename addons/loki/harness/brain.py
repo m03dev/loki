@@ -91,7 +91,7 @@ def _markdown_folder(graph: Graph, root: Path, group: str, hub: str, limit: int,
             break
     by_name: dict[str, str] = {}
     for path in files:
-        nid = graph.node(_id(group, str(path)), path.stem, group, str(path.relative_to(root)), path)
+        nid = graph.node(_id(group, str(path)), path.stem, group, path.relative_to(root).as_posix(), path)
         by_name.setdefault(path.stem.lower(), nid)
         by_name.setdefault(path.relative_to(root).with_suffix("").as_posix().lower(), nid)
     for path in files:

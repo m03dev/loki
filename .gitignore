@@ -57,3 +57,5 @@ harness_data/apis_guru.json
 # Packaged builds
 build/
 dist/
+# App runtime state (engine stdout, remembered settings)
+harness_data/app/

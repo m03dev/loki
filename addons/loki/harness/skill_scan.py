@@ -97,7 +97,7 @@ def scan(skill_md: Path) -> dict:
         if count >= MAX_FILES:
             problems.append("more than %d files; scan stopped" % MAX_FILES)
             break
-        rel = str(path.relative_to(root))
+        rel = path.relative_to(root).as_posix()
         is_exec = path.suffix.lower() in EXEC_SUFFIXES
         if not is_exec and os.name != "nt":
             try:
