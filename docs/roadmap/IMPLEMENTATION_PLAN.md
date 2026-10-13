@@ -39,10 +39,15 @@ workspace; suite stays green.
 **Acceptance met:** routing, fallback and disagreement handling are tested; a decision can
 skip a prompt (never force one).
 
-## Phase 3 — Capability registry and repository browser — Planned
-Capability manifests; repository discovery + provenance/license checks; isolated staging;
-integration report. **Acceptance:** a repo can be listed, reviewed, and recommended into
-the registry without executing its code.
+## Phase 3 — Capability registry and repository browser — Partial
+- Done: the **capability registry** (`harness/capabilities.py`) with one shape for every
+  provider/tool/MCP server/skill library and an honest status, exposed as `list_capabilities`
+  and over `/capabilities`. This is the seed of the API Vault.
+- Done: the **repository browser** (`harness/repo_review.py`) - read-only review of a local
+  folder (size, licence, languages, entry points, manifests), exposed as `review_repository`.
+  Nothing is executed or installed, per the blueprint's import rule.
+- Planned: isolated staging and an integration-report workflow.
+**Acceptance (met for the read-only path):** a repo can be reviewed and its code is never run.
 
 ## Phase 4 — API Vault — Planned
 Import public API catalogs; normalize metadata; connector interface; secure credentials;

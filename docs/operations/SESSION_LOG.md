@@ -4,6 +4,32 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 6) - The document's systems: providers, project state, repo browser
+
+**Work completed**
+- Imported **awesome-free-llm-apis** (github.com/mnfst/awesome-free-llm-apis): 11 new
+  OpenAI-compatible providers (aion, cohere, zai, huggingface, kilocode, llm7, modelscope,
+  nvidia, ollama-cloud, ovh, siliconflow), documented and tested. Kept out of SMART_ORDER.
+- **Resumable project state** (blueprint 7.3): `harness/project_state.py` + the
+  `project_state` tool + `/state` on the bridge, over harness_data/project_state.json.
+- **Capability registry** (blueprint 3.3, the API Vault seed): `harness/capabilities.py`
+  with one shape for every provider/tool/MCP server/skill library, `list_capabilities` and
+  `/capabilities`. (Added by a second agent committing to this repo - see below.)
+- **Repository browser** (blueprint 5.1): `harness/repo_review.py` + the `review_repository`
+  tool - read-only, never executes or installs anything.
+
+**CONCURRENCY NOTE (important)**
+- A SECOND writer is committing and pushing to this same repo: commit `8808db7`
+  ('Add the capability registry') was made at 18:43 by m03dev and was not made by this
+  session. It briefly clobbered a duplicate `capability_registry` this session had added;
+  that duplicate was reverted and the other writer's implementation kept. Both landed
+  coherently. If two agents are meant to be working this repo, they must pull --rebase
+  before every commit and keep to separate files.
+
+**Tests:** 301 passed, 0 failed.
+
+---
+
 ## 2026-10-12 (session 5) - Rounded controls and a bubble for the typing box
 
 **Feedback.** "where is the chat bubble when you're typing - everything is beveled and nice
