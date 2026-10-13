@@ -113,3 +113,32 @@ context, very cheap, and it tolerates a **200-tool** request where Gemini and Gr
 one well below that. It leads `SMART_ORDER`, so smart mode picks it whenever
 `OPENROUTER_API_KEY` is set. Name it directly with `LOKI_MODEL=deepseek-4.1`, or use
 `deepseek-4.1`'s override `DEEPSEEK_41_MODEL`.
+
+## More free tiers (awesome-free-llm-apis)
+
+These providers come from [github.com/mnfst/awesome-free-llm-apis](https://github.com/mnfst/awesome-free-llm-apis),
+a catalogue of LLM APIs with **permanent** free tiers (it ships a machine-readable `data.json`).
+Each is an OpenAI-compatible endpoint, and each is overridable with `<PROVIDER>_MODEL` and
+`<PROVIDER>_BASE_URL`. Run `tools/loki_doctor.py` for the signup link of each.
+
+| Loki name | Endpoint | Where to get the key |
+| --- | --- | --- |
+| `aion` | `https://api.aionlabs.ai/v1` | https://www.aionlabs.ai/app/api-keys/ |
+| `cohere` | `https://api.cohere.com/compatibility/v1` | https://dashboard.cohere.com/api-keys |
+| `zai` | `https://open.bigmodel.cn/api/paas/v4` | https://open.bigmodel.cn/usercenter/apikeys |
+| `huggingface` | `https://router.huggingface.co/v1` | https://huggingface.co/settings/tokens |
+| `kilocode` | `https://api.kilo.ai/api/gateway` | https://app.kilo.ai/profile |
+| `llm7` | `https://api.llm7.io/v1` | https://token.llm7.io (optional - anonymous use works) |
+| `modelscope` | `https://api-inference.modelscope.cn/v1` | https://modelscope.cn/my/myaccesstoken |
+| `nvidia` | `https://integrate.api.nvidia.com/v1` | https://build.nvidia.com/explore/discover |
+| `ollama-cloud` | `https://ollama.com/api` | https://ollama.com/settings/keys |
+| `ovh` | `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1` | https://www.ovhcloud.com/en/public-cloud/ai-endpoints/ |
+| `siliconflow` | `https://api.siliconflow.cn/v1` | https://cloud.siliconflow.cn/account/ak |
+
+Notes:
+- These are **selectable by name** (`LOKI_MODEL=zai`). They are deliberately **not** added to
+  `SMART_ORDER`, so smart mode keeps its verified failover chain; name one to use it directly.
+- Cohere's own v2 API is not OpenAI-shaped, so `cohere` points at Cohere's OpenAI compatibility
+  endpoint.
+- `llm7` answers anonymously, so it works with no key (like `vireonix`).
+- Free-tier terms change and model names move; every value here is an override-able default.

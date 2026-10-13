@@ -44,6 +44,8 @@ something; **Rejected**: deliberately not adopted.
 | **Cybersecurity skills** | (defensive, to source) | code review, threat modeling, secret detection | not yet sourced | check | none | defensive only; explicit scope for any active testing | Planned | none |
 | **Scientific skills** | (to source) | evidence synthesis, citations, statistics | not yet sourced | check | none | distinguish evidence from hypothesis; never fabricate sources | Planned | none |
 
+| **awesome-free-llm-apis** | github.com/mnfst/awesome-free-llm-apis | catalogue of LLM APIs with permanent free tiers (`data.json`) | public repo | check before reuse | extended Loki's provider list | imported 11 providers as OpenAI-compatible endpoints: aion, cohere, zai, huggingface, kilocode, llm7, modelscope, nvidia, ollama-cloud, ovh, siliconflow | Verified (registered; keys not set) | none |
+
 ## Notes
 - **License verification is required before adoption** for every catalog/repo above; the
   table records "check" rather than assuming.
