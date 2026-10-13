@@ -1,0 +1,17 @@
+{
+  "name": "herdr",
+  "version": "0.1.0",
+  "kind": "adapter",
+  "description": "Runs background coding-agent jobs in herdr workspaces you can attach to (working / blocked / idle / done).",
+  "license": "see upstream (not verified by Loki)",
+  "homepage": "https://herdr.dev",
+  "permissions": [
+    "process:agent"
+  ],
+  "requires_cmd": [
+    "herdr"
+  ],
+  "requires_env": [],
+  "health_endpoint": "",
+  "entrypoint": "workers.HerdrBackend"
+}

@@ -404,7 +404,41 @@ async function loadMemory() {
   if (data.ok) $("#memory-text").value = data.memory || "";
 }
 
+async function loadManifests() {
+  const data = await api("/capabilities/manifests").catch(() => null);
+  const box = $("#manifests");
+  box.replaceChildren();
+  if (!data || !data.ok) return;
+  for (const cap of data.capabilities || []) {
+    const r = el("div", "row manifest");
+    const top = el("div", "row-top");
+    const label = el("label");
+    const toggle = el("input");
+    toggle.type = "checkbox";
+    toggle.checked = cap.status === "enabled" || cap.status === "missing";
+    toggle.disabled = cap.status === "invalid";
+    toggle.addEventListener("change", async () => {
+      if (toggle.checked && cap.permissions.some((p) => p.high_risk)) {
+        const list = cap.permissions.map((p) => "- " + p.text).join("\n");
+        if (!confirm("Turn on " + cap.name + "? It will be allowed to:\n" + list)) { toggle.checked = false; return; }
+      }
+      const result = await api("/capabilities/enable", { name: cap.name, enabled: toggle.checked });
+      if (!result.ok) addNotice(result.error || "Could not change that capability.", true);
+      loadManifests();
+    });
+    label.append(toggle, document.createTextNode(" " + cap.name + (cap.version ? " " + cap.version : "")));
+    top.append(label, el("span", "state" + (cap.status === "enabled" ? " ready" : ""), cap.status));
+    r.append(top, el("div", "desc", cap.description));
+    for (const p of cap.permissions) r.append(el("div", "perm" + (p.high_risk ? " high" : ""), "• " + p.text));
+    if (cap.missing && cap.missing.length) r.append(el("div", "why", "Needs " + cap.missing.join(", ")));
+    if (cap.status === "changed") r.append(el("div", "why", "Changed since you turned it on - toggle to re-approve."));
+    if (cap.errors && cap.errors.length) r.append(el("div", "why", cap.errors.join("; ")));
+    box.append(r);
+  }
+}
+
 async function loadCapabilities() {
+  loadManifests();
   const data = await api("/capabilities");
   const copy = Object.assign({}, data);
   delete copy.ok;

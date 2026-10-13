@@ -659,6 +659,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/jobs/screenshot":
             self._send_json(*job_screenshot(self.server.state, parse_qs(urlparse(self.path).query)))
             return
+        if route == "/capabilities/manifests":
+            registry = getattr(self.server.state.agent, "CAPABILITIES", None)
+            self._send_json(200, {"ok": True, "capabilities": registry.present() if registry else []})
+            return
+        if route == "/fleet":
+            agent = self.server.state.agent
+            fleet = getattr(agent, "federation", None)
+            self._send_json(200, {"ok": True, "workers": fleet.health() if fleet else []})
+            return
         if route == "/capabilities":
             agent = self.server.state.agent
             if hasattr(agent, "capability_summary"):
@@ -882,6 +891,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/jobs"):
             self._send_json(*job_action(state, route, data))
             return
+        if route == "/capabilities/enable":
+            self._send_json(*capability_toggle(state, data))
+            return
         if route == "/ecc/sync":
             try:
                 message: str = state.agent.sync_ecc(bool(data.get("force", False)))
@@ -900,6 +912,11 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         return 503, {"ok": False, "error": "Background jobs are not running."}
     if route == "/jobs":
         spec = dict(data)
+        engine_policy = getattr(state.agent, "POLICY", None) if getattr(state, "agent", None) else None
+        if engine_policy is not None:
+            verdict = engine_policy.job(str(spec.get("backend") or "local").strip().lower())
+            if not verdict.allowed:
+                return 403, {"ok": False, "error": verdict.reason}
         if not str(spec.get("workspace") or "").strip() and state.project is not None:
             spec["workspace"] = str(state.project)
         try:
@@ -917,6 +934,21 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /capabilities/enable {name, enabled}. Only the user (through the app) does this;
+    no tool exposes it to the model."""
+    registry = getattr(state.agent, "CAPABILITIES", None)
+    if registry is None:
+        return 503, {"ok": False, "error": "No capability registry."}
+    try:
+        registry.set_enabled(str(data.get("name", "")), bool(data.get("enabled")))
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    if state.jobs is not None:
+        state.jobs._avail.clear()  # pylint: disable=protected-access
+    return 200, {"ok": True, "capabilities": registry.present()}
 
 
 def job_screenshot(state: "BridgeState", query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
@@ -1062,7 +1094,9 @@ async def serve() -> None:
     await stack.__aenter__()
     await loki.connect_mcp(stack)
 
-    async def editor_approve(kind: str, detail: str) -> bool:
+    async def editor_approve(kind: str, detail: str, decidable: bool = True) -> bool:
+        # The app always asks the human; the policy engine has already refused anything
+        # it denies, so only ASK verdicts reach here.
         return await state.request_approval(kind, detail)
 
     loki.approve = editor_approve

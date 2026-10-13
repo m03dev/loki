@@ -92,8 +92,10 @@
         <div class="right"><button type="button" id="save-memory">Save memory</button></div>
       </section>
       <section data-panel="capabilities" hidden>
-        <p class="note">Everything Loki knows about, and whether it is ready.</p>
-        <pre id="capabilities" class="caps"></pre>
+        <p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again.</p>
+        <div id="manifests" class="rows"></div>
+        <details class="caps-raw"><summary>Everything Loki knows about</summary>
+        <pre id="capabilities" class="caps"></pre></details>
       </section>
     </div>
   </div>

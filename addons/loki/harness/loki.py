@@ -76,6 +76,12 @@ MAX_OUTPUT = 8000   # characters of command output handed back to the model
 GOAL_STEPS = 0      # 0 = run a goal until it says DONE/BLOCKED (no step limit)
 MAX_TURNS_PER_REQUEST = int(os.getenv("LOKI_MAX_TURNS", "0"))       # model<->tool cycles per request (0 = UNLIMITED)
 REQUEST_DEADLINE_S = float(os.getenv("LOKI_REQUEST_DEADLINE", "0"))    # wall-clock seconds per request (0 = no deadline)
+# Safety nets that hold even when the budgets above are "unlimited": a runaway loop
+# (a model that never stops calling tools) ends here instead of running forever.
+HARD_MAX_TURNS = int(os.getenv("LOKI_HARD_MAX_TURNS", "400"))
+HARD_DEADLINE_S = float(os.getenv("LOKI_HARD_DEADLINE", str(6 * 3600)))
+# Every model HTTP call gets a timeout (the client default is 10 minutes).
+MODEL_TIMEOUT_S = float(os.getenv("LOKI_MODEL_TIMEOUT", "180"))
 
 # Transient model failures (429 rate limits, 5xx, dropped connections) are retried
 # with exponential backoff instead of killing the whole task.
@@ -234,6 +240,17 @@ import repo_review  # noqa: E402  (read-only repository review - blueprint 5.1)
 import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev)
 import api_vault  # noqa: E402  (the API Vault - blueprint 3.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
+import safe_exec  # noqa: E402  (structured command execution - no shell)
+import policy  # noqa: E402  (the hardcoded policy engine: allow / ask / deny)
+import manifests  # noqa: E402  (capability manifests: discovered, never executed)
+import federation  # noqa: E402  (Ollama on other machines - LOKI_WORKERS)
+import skill_scan  # noqa: E402  (downloaded skills are untrusted text)
+import knowledge  # noqa: E402  (viking:// context store over local folders)
+
+# The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
+REPO_ROOT = ROOT.parent.parent.parent
+CAPABILITIES = manifests.default_registry(REPO_ROOT, DATA_DIR)
+KNOWLEDGE = knowledge.default_store(REPO_ROOT, DATA_DIR, WORKSPACE)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -1221,19 +1238,20 @@ def command_policy(command: str) -> tuple:
 
 
 def run_command(command: str, timeout: int = 120) -> str:
+    """Run a command WITHOUT a shell (safe_exec): argv only, `a && b` chains allowed,
+    pipes / redirects / substitution refused with a reason."""
     allowed, reason = command_policy(command)
     if not allowed:
         print("  [policy] " + reason)
         return "error: " + reason
     try:
-        proc = subprocess.run(command, shell=True, cwd=WORKSPACE,
-                              capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return f"error: command timed out after {timeout}s"
+        code, out = safe_exec.run(command, cwd=str(WORKSPACE), timeout=int(timeout))
+    except safe_exec.CommandRejected as e:
+        print("  [policy] " + str(e))
+        return f"error: {e}"
     except Exception as e:
         return f"error: {e}"
-    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
-    return f"exit {proc.returncode}\n{_shorten(out)}" if out else f"exit {proc.returncode}"
+    return f"exit {code}\n{_shorten(out)}" if out else f"exit {code}"
 
 
 def run_godot(args: str = "", project_path: str = "", timeout: int = 180) -> str:
@@ -1291,7 +1309,10 @@ SKILL_LIST_CAP = int(os.getenv("LOKI_SKILL_LIST_CAP", "120"))
 
 
 def _lib_roots():
-    """(library, folder) for every vendored library present on disk."""
+    """(library, folder) for Loki's own skills and every vendored library on disk."""
+    own = REPO_ROOT / "skills"
+    if own.is_dir():
+        yield "Loki", own
     for library in LIBRARIES:
         folder = DATA_DIR / "vendor" / library
         if folder.is_dir():
@@ -1345,7 +1366,7 @@ def load_ecc_agent(name: str) -> str:
     wanted = os.path.basename(str(name).strip())
     for _library, stem, path in _agent_entries():
         if stem == wanted:
-            return path.read_text(encoding="utf-8")[:12000]
+            return skill_scan.safe_doc(path)
     return "no such agent: %s (call list_ecc_agents)" % name
 
 
@@ -1365,7 +1386,9 @@ def load_ecc_skill(name: str) -> str:
     wanted = os.path.basename(str(name).strip())
     for _library, skill, path in _skill_entries():
         if skill == wanted:
-            return path.read_text(encoding="utf-8")[:12000]
+            # Downloaded skills are untrusted: refused if they try to override Loki's
+            # rules, annotated if they ship scripts (which Loki never runs).
+            return skill_scan.safe_text(path)
     return "no such skill: %s (call list_ecc_skills)" % name
 
 
@@ -1624,7 +1647,21 @@ def capability_summary() -> dict:
     return capabilities.summary(capability_registry())
 
 
+def knowledge_tool(action: str = "list", uri: str = "viking://memory", text: str = "") -> str:
+    """Read, list or write Loki's viking:// context store (memory/ and state/ are writable)."""
+    try:
+        if action == "read":
+            return KNOWLEDGE.read(uri)
+        if action == "write":
+            KNOWLEDGE.write(uri, text)
+            return "saved " + uri
+        return "\n".join(KNOWLEDGE.list(uri)) or "(empty)"
+    except knowledge.KnowledgeError as exc:
+        return "error: %s" % exc
+
+
 LOCAL_TOOLS = {
+    "knowledge": knowledge_tool,
     "list_files": list_files,
     "list_tree": list_tree,
     "read_file": read_file,
@@ -1674,6 +1711,10 @@ MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "move_f
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file"}
+POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
+                             command_check=lambda command: command_policy(command),
+                             parse_command=safe_exec.parse, dangerous=DANGEROUS,
+                             registry=CAPABILITIES)
 
 
 def schema(name, description, properties=None, required=None) -> dict:
@@ -1762,6 +1803,8 @@ TOOL_SCHEMAS = [
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
+    schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
+           {"action": {"type": "string"}, "uri": {"type": "string"}, "text": {"type": "string"}}, ["uri"]),
 ]
 
 
@@ -1776,7 +1819,7 @@ MODEL_TOOL_NAMES = {
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
-    "list_capabilities", "agent_sessions", "api_vault",
+    "list_capabilities", "agent_sessions", "api_vault", "knowledge",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1792,7 +1835,7 @@ TOOL_CATEGORIES = {
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
-    "memory": ["save_memory"],
+    "memory": ["save_memory", "knowledge"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
@@ -2621,14 +2664,17 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
               + (f", {hidden} hidden" if hidden else ""))
 
 
-async def approve(kind: str, detail: str) -> bool:
+async def approve(kind: str, detail: str, decidable: bool = True) -> bool:
     if AUTO_APPROVE:
         print(f"  [auto-approved] {kind}: {detail}")
         return True
-    # Risk gate: auto-allow only when a decision provider is confident the action is safe;
-    # anything risky, uncertain, or contested still asks. Never weakens the human path.
-    if decisions.risk_gate(kind, detail) == "allow":
-        return True
+    # Risk gate: auto-allow only when a decision provider is confident the action is safe
+    # AND the policy engine marked the action decidable (policy.final enforces this).
+    # Anything risky, uncertain, contested or always-ask still asks the human.
+    if decidable:
+        recommended = decisions.risk_gate(kind, detail)
+        if policy.final(policy.Verdict(policy.ASK, kind, True), recommended).allowed:
+            return True
     answer = await asyncio.to_thread(input, f"  [approve] {kind}: {detail}\n  allow? [y/N] ")
     return answer.strip().lower() in ("y", "yes")
 
@@ -2740,7 +2786,16 @@ async def call_tool(name: str, args: dict) -> str:
     if name.startswith("git_") and "repo_path" not in args:
         args = {**args, "repo_path": str(WORKSPACE)}
     if name in LOCAL_TOOLS:
-        if name in DANGEROUS and not await approve(name, json.dumps(args)[:400]):
+        # The policy engine decides first (fixed rules, no model). DENY never reaches the
+        # user; ASK goes through approve(), where a decision provider may only skip the
+        # prompt for actions the policy marks decidable.
+        verdict = POLICY.tool_call(name, args)
+        if verdict.decision == policy.DENY:
+            print("  [policy] %s: %s" % (name, verdict.reason))
+            return ("DENIED by Loki's policy: %s. Do NOT retry the same call; change the approach "
+                    "or reply 'BLOCKED: <reason>'." % verdict.reason)
+        if verdict.decision == policy.ASK and not await approve(
+                name, json.dumps(args)[:400], decidable=verdict.decidable):
             return ("DENIED: the user did not approve this tool. Do NOT request it again. "
                     "Make progress with file tools (build_3d_scene, write_file, edit_file, "
                     "play_scene, validate_scene) instead, or reply 'BLOCKED: <reason>'.")
@@ -2831,7 +2886,17 @@ def make_client():
     cfg = MODELS[active_model_name()]
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         return cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
-    return AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
+    base_url = cfg.base_url
+    # Ollama federation: when this machine's Ollama is down or lacks the model, use a
+    # listed worker that has it - only with the ollama-fleet capability enabled.
+    if federation.is_ollama(base_url) and CAPABILITIES.is_enabled("ollama-fleet"):
+        try:
+            base_url, note = federation.route(base_url, cfg.model)
+            if note:
+                print("  [fleet] " + note)
+        except Exception:
+            base_url = cfg.base_url
+    return AsyncOpenAI(base_url=base_url, api_key=cfg.api_key, timeout=MODEL_TIMEOUT_S)
 
 
 def short_error(text, limit: int = 240) -> str:
@@ -3075,6 +3140,10 @@ async def agent_turn(force_tool: bool = False) -> str:
             raise BudgetExhausted("hit the %ds time budget" % int(REQUEST_DEADLINE_S))
         if MAX_TURNS_PER_REQUEST > 0 and turns >= MAX_TURNS_PER_REQUEST:
             raise BudgetExhausted("hit the %d-turn budget" % MAX_TURNS_PER_REQUEST)
+        if HARD_MAX_TURNS > 0 and turns >= HARD_MAX_TURNS:
+            raise BudgetExhausted("hit the %d-turn safety ceiling (LOKI_HARD_MAX_TURNS)" % HARD_MAX_TURNS)
+        if HARD_DEADLINE_S > 0 and time.monotonic() - started > HARD_DEADLINE_S:
+            raise BudgetExhausted("hit the %ds safety ceiling (LOKI_HARD_DEADLINE)" % int(HARD_DEADLINE_S))
         turns += 1
         _trim_context()
         _progress("thinking", "Turn %d: asking the model..." % turns)

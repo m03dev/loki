@@ -1,0 +1,16 @@
+{
+  "name": "ollama",
+  "version": "0.1.0",
+  "kind": "model",
+  "description": "Local models through Ollama's OpenAI-compatible endpoint on this computer.",
+  "license": "MIT",
+  "homepage": "https://ollama.com",
+  "permissions": [
+    "network:loopback"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "health_endpoint": "http://127.0.0.1:11434/api/tags",
+  "entrypoint": "loki.MODELS[local*]",
+  "default_enabled": true
+}

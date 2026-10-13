@@ -99,6 +99,21 @@ Worker registration/heartbeat/capacity; capability-aware routing; authenticated 
 
 ---
 
+## Hardening pass (Phases 2-7 of the build plan) — Done, offline-verified
+Safety branch: `safety/pre-hardening` preserves the state before this pass.
+- No shell: `safe_exec.py` replaces `shell=True`; `&&` chains only; tested.
+- Safety nets: model HTTP timeout, hard turn/time ceilings, symlink-escape test.
+- Backbone: `interfaces.py` protocols, `manifests.py` discovery (never executes),
+  `capabilities/` built-ins, Settings > Capabilities toggles.
+- Policy engine: `policy.py`, the only allow/ask/deny authority; decision layer can only
+  skip a decidable prompt (`policy.final`).
+- Memory: `viking://` store over local folders + `knowledge` tool; Obsidian export tool.
+  OpenViking server and Graphiti deferred (see CAPABILITIES_AND_POLICY.md).
+- Federation: `federation.py` routes local models to a healthy Ollama worker (`LOKI_WORKERS`).
+- Skills: `skill_scan.py` refuses rule-overriding skills; Loki's own `skills/loki-testing`.
+**Acceptance met offline:** `tests/test_hardening.py` 124 checks; `test_loki.py` and
+`test_workers.py` unchanged. **Open:** Ollama on the RTX 3070 Ti PC and a federated run.
+
 ## Next concrete actions
 1. Introduce a `PROJECT_STATE` (resumable) file and load it at session start.
 2. Define the DecisionProvider contract + Laya mock (unblocks Phase 2).

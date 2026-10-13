@@ -1,0 +1,15 @@
+{
+  "name": "cua",
+  "version": "0.1.0",
+  "kind": "adapter",
+  "description": "Virtual computers from trycua/cua (Lume macOS VM or Docker Linux desktop): run commands or a computer-use agent inside the VM.",
+  "license": "see upstream (not verified by Loki)",
+  "homepage": "https://cua.ai",
+  "permissions": [
+    "computer:virtual"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "health_endpoint": "",
+  "entrypoint": "workers.CuaBackend"
+}

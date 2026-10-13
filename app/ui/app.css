@@ -181,3 +181,13 @@ button:disabled { opacity: .45; cursor: default; }
 .job pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; max-height: 260px; overflow: auto; background: var(--side); border-radius: 8px; padding: 8px; margin: 6px 0 0; }
 .job img { max-width: 100%; border-radius: 8px; margin-top: 6px; }
 .job .err { color: var(--err); font-size: 12.5px; margin-top: 4px; }
+
+/* capability manifests */
+.manifest { display: block; }
+.manifest .row-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.manifest .desc { color: var(--muted); font-size: 12.5px; margin: 2px 0 4px; }
+.manifest .perm { font-size: 12px; color: var(--muted); }
+.manifest .perm.high { color: var(--warn); }
+.manifest .why { font-size: 12px; color: var(--warn); }
+.caps-raw { margin-top: 14px; }
+.caps-raw summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }

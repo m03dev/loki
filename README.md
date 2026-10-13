@@ -30,6 +30,9 @@ Details: [macOS](docs/operations/MACOS.md), [Windows](docs/operations/WINDOWS.md
   - **Build** is the full agent: it edits, runs and verifies.
 - **Approve before it acts.** Risky tools stop and show you exactly what they will do,
   with Allow and Deny.
+  A fixed policy engine refuses anything unsafe before you are even asked, commands run
+  without a shell, and add-ons stay off until you enable them
+  ([how](docs/architecture/CAPABILITIES_AND_POLICY.md)).
 - **Workspace.** Loki works in `~/Loki` unless you start it with
   `--workspace /path/to/project` (remembered).
 - **Background jobs.** Hand work to Claude Code or Codex that keeps going while you do
@@ -82,6 +85,7 @@ installed (`npm install --prefix harness_data/laya @receptron/laya`).
 harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, offline
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 harness_data/.venv/Scripts/python.exe tests/test_workers.py        # background jobs, offline
+harness_data/.venv/Scripts/python.exe tests/test_hardening.py      # no-shell exec, policy, manifests, skills
 ```
 
 The agent lives in `addons/loki/harness/` (Python), the editor UI in

@@ -1,0 +1,17 @@
+{
+  "name": "laya",
+  "version": "0.1.0",
+  "kind": "decision",
+  "description": "Laya, the local-first open-source System-1 decision model (@receptron/laya). Recommends only.",
+  "license": "see upstream (not verified by Loki)",
+  "homepage": "https://github.com/receptron/laya",
+  "permissions": [
+    "process:spawn"
+  ],
+  "requires_cmd": [
+    "node"
+  ],
+  "requires_env": [],
+  "health_endpoint": "",
+  "entrypoint": "laya"
+}
