@@ -241,7 +241,10 @@ function setBusy(busy) {
 async function send(text) {
   if (state.busy || !text.trim()) return;
   if ($("#main").classList.contains("home")) {
-    applyConversations(await api("/conversations", { title: "" }));
+    // Reuse the current chat when it is still empty; otherwise start a new one.
+    const current = (state.conversations || []).find((c) => c.id === state.active);
+    const empty = current && !(current.count || current.messages || current.turns) && /^(new chat)?$/i.test(current.title || "");
+    if (!empty) applyConversations(await api("/conversations", { title: "" }));
     showChat();
     $("#transcript").replaceChildren();
   }
