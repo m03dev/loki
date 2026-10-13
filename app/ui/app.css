@@ -249,3 +249,20 @@ table.usage th { color: var(--muted); font-weight: 500; }
 .agent-card .row-actions { display: flex; gap: 6px; }
 .agent-card input { background: var(--surface); border: 0; border-radius: 8px; padding: 5px 8px; flex: 1; min-width: 0; }
 .job-form input:not([type]) { background: var(--surface); border: 0; border-radius: 8px; padding: 4px 8px; margin-left: 6px; }
+
+/* Home: empty space on open, instead of dropping straight into a conversation. */
+.main.home .transcript { display: none; }
+.main.home .welcome { margin-top: auto; }
+.main.home .composer { margin-bottom: auto; }
+.main.home .composer-box { max-width: 620px; box-shadow: 0 12px 40px rgba(0, 0, 0, .28); }
+.welcome { flex: 0 1 auto; display: flex; justify-content: center; padding: 24px 28px 10px; }
+.main:not(.home) .welcome { display: none; }
+.welcome-inner { max-width: 620px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.welcome-mark { width: 58px; height: 58px; border-radius: 17px; display: grid; place-items: center;
+  background: var(--surface); color: var(--ok); font-size: 27px; font-weight: 700; margin-bottom: 16px; }
+.welcome-title { margin: 0; font-size: 27px; font-weight: 650; letter-spacing: .2px; color: var(--text); }
+.welcome-sub { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 470px; margin: 10px 0 22px; }
+.welcome-chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.chip { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
+  padding: 9px 16px; font-size: 13px; transition: background .12s, border-color .12s; }
+.chip:hover { background: var(--bubble); border-color: var(--accent); }

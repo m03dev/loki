@@ -132,6 +132,22 @@ function showEmpty() {
   $("#transcript").append(box);
 }
 
+function setView(view) {
+  const home = view === "home";
+  $("#main").classList.toggle("home", home);
+  const welcome = $("#welcome");
+  if (welcome) welcome.hidden = !home;
+  if (home) {
+    $("#chat-title").textContent = "Loki";
+    $("#prompt").placeholder = "Ask Loki anything, or describe what to build";
+  } else {
+    $("#prompt").placeholder = "Message Loki";
+  }
+}
+
+function showHome() { setView("home"); $("#prompt").focus(); }
+function showChat() { setView("chat"); }
+
 function renderMessages(messages) {
   $("#transcript").replaceChildren();
   if (!messages || messages.length === 0) { showEmpty(); return; }
@@ -193,13 +209,15 @@ async function loadConversations() {
 }
 
 async function switchTo(id) {
-  if (state.busy || id === state.active) return;
+  if (state.busy) return;
   applyConversations(await api("/conversations/switch", { id }));
+  showChat();
 }
 
 async function newChat() {
   if (state.busy) return;
   applyConversations(await api("/conversations", { title: "" }));
+  showHome();
   renderMessages([]);
   $("#prompt").focus();
 }
@@ -222,7 +240,11 @@ function setBusy(busy) {
 
 async function send(text) {
   if (state.busy || !text.trim()) return;
-  if (state.active === "" || $("#transcript").querySelector(".empty")) $("#transcript").replaceChildren();
+  if ($("#main").classList.contains("home")) {
+    applyConversations(await api("/conversations", { title: "" }));
+    showChat();
+    $("#transcript").replaceChildren();
+  }
   addUser(text);
   setBusy(true);
   state.cursor = 0;
@@ -595,6 +617,9 @@ function wire() {
     setStatus("Stopping…");
   });
   $("#new-chat").addEventListener("click", newChat);
+  for (const chip of document.querySelectorAll(".welcome-chips .chip")) {
+    chip.addEventListener("click", () => send(chip.dataset.prompt || chip.textContent));
+  }
   for (const button of document.querySelectorAll(".modes button")) {
     button.addEventListener("click", async () => {
       const data = await api("/mode", { mode: button.dataset.mode });
@@ -660,6 +685,7 @@ async function start() {
   refreshJobs();
   setInterval(() => { if (!jobsView.open) refreshJobs(); }, 10000);
   if (typeof afterStart === "function") afterStart();
+  showHome();
   $("#prompt").focus();
 }
 

@@ -26,7 +26,7 @@
     </div>
   </aside>
 
-  <main class="main">
+  <main class="main" id="main">
     <header class="topbar">
       <h1 id="chat-title" class="chat-title">Loki</h1>
       <div class="topbar-right">
@@ -39,6 +39,18 @@
       </div>
     </header>
 
+    <section id="welcome" class="welcome" hidden aria-label="Welcome">
+      <div class="welcome-inner">
+        <div class="welcome-mark" aria-hidden="true">L</div>
+        <h2 class="welcome-title">What should Loki work on?</h2>
+        <p class="welcome-sub">Ask a question, plan a change, or switch to Build and let Loki edit, run and verify its own work — asking you before anything risky.</p>
+        <div class="welcome-chips">
+          <button type="button" class="chip" data-prompt="Explain what this project does and how it is organised.">Explain this project</button>
+          <button type="button" class="chip" data-prompt="Look for bugs and risky code in this project and tell me what to fix first.">Review my code</button>
+          <button type="button" class="chip" data-prompt="Plan the next change as a short, numbered plan.">Plan a change</button>
+        </div>
+      </div>
+    </section>
     <section id="transcript" class="transcript" aria-live="polite" aria-label="Conversation"></section>
 
     <form id="composer" class="composer" autocomplete="off">

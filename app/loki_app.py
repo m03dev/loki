@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.request
 import webbrowser
@@ -249,7 +250,15 @@ def open_window(url: str = "", html: str = "") -> bool:
     else:
         webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520),
                               background_color="#1f1f24")
-    webview.start()
+    log("opening the Loki window")
+    try:
+        webview.start(debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
+                      private_mode=False, storage_path=str(STATE / "webview"))
+    except Exception:
+        log("the window backend raised:")
+        log(traceback.format_exc())
+        raise
+    log("the Loki window closed")
     return True
 
 
@@ -378,8 +387,16 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        log("the Loki app is shutting down")
         stop_engine(process)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        log("Loki crashed:")
+        log(traceback.format_exc())
+        raise
