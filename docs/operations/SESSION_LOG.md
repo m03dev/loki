@@ -4,6 +4,29 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 8) - The API Vault (the real catalog)
+
+**Work completed** (`87a4770`)
+- `harness/api_vault.py`: a searchable index of APIs (id, name, url, provider,
+  categories, auth, docs, source) with `import_apis_guru()`, which normalizes the
+  apis.guru catalog - the preferred version's title, `x-origin` url, `x-providerName`,
+  `x-apisguru-categories` and its security scheme into a key/oauth hint.
+- `tools/build_api_vault.py`: fetches the catalog and folds in Loki's 38 model providers
+  (name + base_url only - never a key). Seed committed: **2,097 entries, 363 KiB**,
+  searchable offline.
+- `api_vault_lookup` tool + `GET /vault` / `POST /vault`. The shipped seed is read-only;
+  'add' writes to harness_data/api_vault_extra.json, which search merges over the seed.
+- Traps hit and fixed: apis.guru answers **403 to urllib's default User-Agent** (set one),
+  and embedded `
+` escapes get mangled when a patch is written through a heredoc - use
+  `chr(10)` in generated code.
+- public-apis / public-api-lists / davemachado are now marked **Superseded**: apis.guru is
+  the larger, machine-readable superset and is already in the vault.
+
+**Tests:** 331 passed, 0 failed.
+
+---
+
 ## 2026-10-12 (session 7) - Vercel design, and the Herdr session registry
 
 **Work completed**

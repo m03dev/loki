@@ -14,9 +14,10 @@ something; **Rejected**: deliberately not adopted.
 | **Herdr** | herdr.dev | a runtime that hosts many coding agents, each marked working/blocked/idle, across machines | public service + install script | check before use | `harness/sessions.py` keeps the same session bookkeeping | adopt the PATTERN (a session registry as shared state), not the runtime - Loki does not host terminals | Verified (pattern) | none |
 | **Vercel** | vercel.com | the panel's design language | - | - | `loki_dock.gd` `_vercel_theme()` | black canvas, #EDEDED text, #333 hairlines, #0070F3 focus accent, small radii | Verified | none |
 | **OpenViking** | github.com/volcengine/OpenViking | context/knowledge/memory/skill retrieval | public repo | check before use | current memory system works | evaluate as backend behind a memory interface; adopt patterns only | Planned | none |
-| **public-apis** | github.com/public-apis/public-apis | API catalog | public repo | check | none | import/normalize into the API Vault | Planned | none |
-| **public-api-lists** | github.com/public-api-lists/public-api-lists | API catalog | public repo | check | none | as above | Planned | none |
-| **davemachado/public-api** | github.com/davemachado/public-api | API catalog | public repo (may be archived) | check | none | as above | Planned | none |
+| **apis.guru** | api.apis.guru/v2/list.json | API catalog (the vault's seed) | public, fetched + cached | free | `harness/api_vault.py` seeds 2,059 entries | normalized into the vault: title, x-origin url, provider, categories, security hint | Verified | none |
+| **public-apis** | github.com/public-apis/public-apis | API catalog | public repo | check | the vault already carries apis.guru's 2,059 entries | not separately imported - apis.guru is the larger, machine-readable superset | Superseded | none |
+| **public-api-lists** | github.com/public-api-lists/public-api-lists | API catalog | public repo | check | as above | as above | Superseded | none |
+| **davemachado/public-api** | github.com/davemachado/public-api | API catalog | public repo (may be archived) | check | as above | as above | Superseded | none |
 | **anthropics/skills** | github.com/anthropics/skills | agent skills | public repo | check | 519 vendored skills already | review and import relevant skills | Planned | none |
 | **deepseek-harness** | github.com/deepseek-ai/deepseek-harness | harness patterns | verify existence | check | Loki has its own loop | extract patterns; write a comparison first | Planned | none |
 | **awesome-harness-engineering** (walkinglabs / yenanjing) | github.com/walkinglabs/... , github.com/yenanjing/... | harness references | verify existence | check | — | reference only | Planned | none |
