@@ -1839,6 +1839,70 @@ check("it has its own tool category",
 
 
 
+section("resumable project state (blueprint 7.3)")
+
+
+import tempfile
+
+
+import project_state as _ps
+
+
+_tmp = Path(tempfile.mkdtemp()) / "state.json"
+
+
+_blank = _ps.load(_tmp)
+
+
+check("a missing state reads as blank", _blank["objective"] == "" and _blank["next_actions"] == [])
+
+
+_ps.set_field(_blank, "objective", "ship it")
+
+
+_ps.add(_blank, "next_actions", "write docs")
+
+
+_ps.add(_blank, "next_actions", "write docs")
+
+
+_ps.save(_tmp, _blank)
+
+
+_reloaded = _ps.load(_tmp)
+
+
+check("state round-trips through disk", _reloaded["objective"] == "ship it")
+
+
+check("duplicate list items collapse", _reloaded["next_actions"] == ["write docs"])
+
+
+check("save stamps an updated time", bool(_reloaded["updated"]))
+
+
+check("an unknown field is refused", "unknown" in _ps.add(_reloaded, "nonsense", "x"))
+
+
+check("render shows the objective", "ship it" in _ps.render(_reloaded))
+
+
+check("every blueprint field is present", all(f in _reloaded for f in _ps.FIELDS))
+
+
+check("project_state is offered to the model", "project_state" in loki.MODEL_TOOL_NAMES)
+
+
+check("project_state is in the planning category", "project_state" in loki.TOOL_CATEGORIES["planning"])
+
+
+check("the bridge exposes /state", 'route == "/state"' in (_checkout.parent / "loki_bridge.py").read_text(encoding="utf-8"))
+
+
+check("the prompt tells the agent to keep the state", "RESUMABLE PROJECT STATE" in loki.SYSTEM_PROMPT)
+
+
+
 if "--live" in sys.argv:
 
 

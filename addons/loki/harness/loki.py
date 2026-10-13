@@ -229,6 +229,7 @@ import jev  # noqa: E402  (Jev typed decisions: risk gate + loop detection)
 # Laya's optional local backend resolves @receptron/laya from the data dir, never the addon.
 os.environ.setdefault("LOKI_LAYA_PACKAGE_DIR", str(DATA_DIR / "laya"))
 import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
+import project_state  # noqa: E402  (resumable project state - blueprint 7.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 
 godot_tools.ROOT = ROOT
@@ -548,6 +549,39 @@ def todo_clear() -> str:
     if PLAN_FILE.is_file():
         PLAN_FILE.unlink()
     return "plan cleared"
+
+
+STATE_FILE = DATA_DIR / "project_state.json"
+
+
+def project_state_text() -> str:
+    """The resumable project state (blueprint 7.3) rendered as text."""
+    return project_state.render(project_state.load(STATE_FILE))
+
+
+def project_state_update(action: str = "view", field: str = "", value: str = "") -> str:
+    """Read or update the RESUMABLE PROJECT STATE so work survives a restart.
+
+    action: view | add | set | reset
+    field:  objective | phase | completed | files_changed | tests | known_issues |
+            decisions | blockers | next_actions
+    """
+    data = project_state.load(STATE_FILE)
+    action = (action or "view").strip().lower()
+    if action == "view":
+        return project_state.render(data)
+    if action == "reset":
+        project_state.save(STATE_FILE, project_state.empty())
+        return "project state reset"
+    if action == "add":
+        note = project_state.add(data, field, value)
+        project_state.save(STATE_FILE, data)
+        return note + chr(10) + project_state.render(data)
+    if action == "set":
+        note = project_state.set_field(data, field, value)
+        project_state.save(STATE_FILE, data)
+        return note + chr(10) + project_state.render(data)
+    return "unknown action: %s (use view, add, set or reset)" % action
 
 
 def todo_add(item: str) -> str:
@@ -1526,6 +1560,7 @@ LOCAL_TOOLS = {
     "sync_ecc": sync_ecc,
     "open_in_editor": open_in_editor,
     "todo_add": todo_add,
+    "project_state": project_state_update,
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
@@ -1612,6 +1647,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}}, ["filename"]),
     schema("open_in_editor", "Open a scene in the running Godot editor (and optionally run it) so the user sees it. Call this after creating or changing a scene.",
            {"path": {"type": "string"}, "run": {"type": "boolean"}}, ["path"]),
+    schema("project_state", "Read or update the RESUMABLE PROJECT STATE so the work survives a restart or a different model. action='view' reads it; 'add' appends a value to a field; 'set' replaces one; 'reset' clears it. Fields: objective, phase, completed, files_changed, tests, known_issues, decisions, blockers, next_actions.",
+           {"action": {"type": "string"}, "field": {"type": "string"}, "value": {"type": "string"}}),
     schema("todo_add", "Add a step to the persistent plan.", {"item": {"type": "string"}}, ["item"]),
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
@@ -1629,7 +1666,7 @@ MODEL_TOOL_NAMES = {
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
-    "check_script", "capture_scene", "view_image", "list_capabilities",
+    "check_script", "capture_scene", "view_image", "project_state", "list_capabilities",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1643,7 +1680,7 @@ TOOL_CATEGORIES = {
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
-    "planning": ["todo_add", "todo_list", "todo_done"],
+    "planning": ["todo_add", "todo_list", "todo_done", "project_state"],
     "memory": ["save_memory"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
@@ -1776,6 +1813,9 @@ to look for it wastes the user's time and looks broken.
   when a quota runs out.
 - You keep a Memory of lasting facts about the user and the project (Settings -> Memory),
   and every conversation is saved as its own tab.
+- You keep a RESUMABLE PROJECT STATE (the project_state tool): objective, phase, what is
+  done, files changed, tests, known issues, decisions, blockers and next actions. Update
+  it at each milestone so the work survives a restart or a different model.
 
 The workspace folder is the game project. You can list, read, search, edit, create, move and delete files; run shell commands (run_command); run the Godot engine (run_godot); and open the Godot editor (open_godot).
 

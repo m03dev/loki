@@ -540,6 +540,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/memory":
             self._send_json(200, {"ok": True, "memory": self.server.state.agent.get_memory()})
             return
+        if route == "/state":
+            agent = self.server.state.agent
+            text = agent.project_state_text() if hasattr(agent, "project_state_text") else ""
+            self._send_json(200, {"ok": True, "state": text})
+            return
         if route == "/ecc":
             self._send_json(200, {"ok": True, **ecc_library(self.server.state.agent)})
             return
@@ -734,6 +739,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     self._send_json(200, {"ok": True, "memory": state.agent.get_memory(), "message": message})
             finally:
                 state.release_busy(busy)
+            return
+        if route == "/state":
+            try:
+                message: str = state.agent.project_state_update(
+                    str(data.get("action", "view")),
+                    str(data.get("field", "")),
+                    str(data.get("value", "")),
+                )
+                self._send_json(200, {"ok": True, "message": message,
+                                      "state": state.agent.project_state_text()})
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"project state failed: {exc}"})
             return
         if route == "/ecc/sync":
             try:

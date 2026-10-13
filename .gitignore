@@ -49,3 +49,4 @@ HANDOFF.md
 
 # Laya local decision model (npm @receptron/laya + cached ONNX weights)
 harness_data/laya/
+harness_data/project_state.json
