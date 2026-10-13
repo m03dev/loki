@@ -22,7 +22,7 @@ instructions once something behind it is switched on (Settings > Capabilities).
 | Firecrawl (self-hosted) | `read_web` | `POST {LOKI_FIRECRAWL_URL}/v2/scrape`, formats markdown | AGPL-3.0 server (Loki only talks HTTP to it) | `docker compose up` from the Firecrawl repo (port 3002), enable **firecrawl** |
 | Browser Use | `browse` | `runners/browse.py` (`Agent(task, llm=ChatOpenAI(...))`); **always asks you first** | MIT | `pip install browser-use` + `LOKI_BROWSE_MODEL` / key, enable **browser-use** |
 | Hindsight | `remember`, `recall` | `runners/hindsight.py` (`retain` / `recall`, bank `loki`) against `HINDSIGHT_URL` | MIT | run the Hindsight server (docker, :8888), `pip install hindsight-client`, enable **hindsight** |
-| Hermes Agent | background job | interactive `hermes` in a herdr workspace, task sent as a prompt | MIT | install Hermes, enable **herdr** and **hermes-agent**, pick it in Background |
+| Hermes Agent | background job | `hermes -z <task>` (one-shot, final answer only) on This computer, or interactive `hermes` in a herdr workspace; never `--yolo` | MIT | install Hermes, enable **hermes-agent** (and **herdr** for herdr jobs), pick it in Background. `LOKI_HERMES_MODEL` / `LOKI_HERMES_PROVIDER` pick its model |
 | Headroom | in the loop | `headroom.compress(messages, model)` on a copy before each model call | Apache-2.0 | `pip install "headroom-ai[all]"`, enable **headroom** |
 | SkillSpector | in the loop | `skillspector scan <skill> --format json --no-llm`; high/critical findings block a skill | reported Apache-2.0 | install from NVIDIA/SkillSpector, enable **skillspector** |
 | Kiln | outside Loki | eval / fine-tune workbench for Loki's prompts; no runtime hook | MIT library, fair-code app | install the Kiln app when you start measuring Loki |
@@ -44,3 +44,20 @@ instructions once something behind it is switched on (Settings > Capabilities).
 Request shapes follow each project's docs; every integration is tested offline against
 fakes (`tests/test_integrations.py`). The first real call per service is the acceptance
 test - a mismatch is a small fix in `conductor.py` or the runner.
+
+### Hermes with Perplexity
+
+Hermes has no Perplexity provider of its own, but it is an MCP client. To let a Hermes job
+search the live web with Perplexity, add the official server to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  perplexity:
+    command: npx
+    args: ["-y", "@perplexity-ai/mcp-server"]
+    env:
+      PERPLEXITY_API_KEY: "pplx-..."
+```
+
+It gives Hermes `perplexity_search`, `perplexity_ask`, `perplexity_research` and
+`perplexity_reason`. Loki itself uses Perplexity directly as its `research` specialist.

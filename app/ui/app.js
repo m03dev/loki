@@ -529,9 +529,6 @@ function syncJobForm() {
   const backend = $("#job-backend").value;
   const vm = backend === "cua";
   $("#job-agent-label").hidden = vm;
-  const hermes = $("#job-agent").querySelector('option[value="hermes"]');
-  if (hermes) hermes.disabled = backend !== "herdr";
-  if (backend !== "herdr" && $("#job-agent").value === "hermes") $("#job-agent").value = "claude-code";
   $("#job-commands").hidden = !vm;
   $("#job-isolate").parentElement.hidden = vm;
 }

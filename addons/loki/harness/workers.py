@@ -45,7 +45,7 @@ STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cance
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
 AGENTS = ("claude-code", "codex", "hermes")
-HERDR_ONLY_AGENTS = {"hermes"}   # interactive agents with no documented one-shot mode
+HERDR_ONLY_AGENTS: set = set()   # interactive-only agents (none at present)
 BACKENDS = ("local", "herdr", "cua")
 DEFAULT_TIMEOUT_S = 3600
 MAX_TIMEOUT_S = 24 * 3600
@@ -78,11 +78,16 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
         argv = ["claude", "--permission-mode", mode]
         return argv if interactive else argv + ["-p", prompt]
     if agent == "hermes":
-        # Hermes Agent (Nous Research, MIT). Its one-shot flags are not documented, so it
-        # runs interactively in a herdr pane and receives the task as a prompt.
-        if interactive:
-            return ["hermes"]
-        raise ValueError("Hermes Agent runs only on herdr (interactive)")
+        # Hermes Agent (Nous Research, MIT). `hermes -z PROMPT` is its scripted one-shot
+        # (final answer on stdout, no banner); interactive `hermes` runs in a herdr pane.
+        # Model/provider follow LOKI_HERMES_MODEL / LOKI_HERMES_PROVIDER when set (passed as
+        # Hermes' own -m / --provider flags). Never --yolo: Hermes keeps its approvals.
+        argv = ["hermes"]
+        if env.get("LOKI_HERMES_MODEL"):
+            argv += ["-m", env["LOKI_HERMES_MODEL"]]
+        if env.get("LOKI_HERMES_PROVIDER"):
+            argv += ["--provider", env["LOKI_HERMES_PROVIDER"]]
+        return argv if interactive else argv + ["-z", prompt]
     if agent == "codex":
         if interactive:
             return ["codex", "--sandbox", "workspace-write"]
@@ -223,7 +228,7 @@ class LocalBackend(Backend):
 
     def available(self) -> tuple[bool, str]:
         found = [a for a in AGENTS if a not in HERDR_ONLY_AGENTS and self.which(agent_argv(a, "")[0])]
-        return (True, "agents: " + ", ".join(found)) if found else (False, "install Claude Code or Codex")
+        return (True, "agents: " + ", ".join(found)) if found else (False, "install Claude Code, Codex or Hermes")
 
     def start(self, job: dict) -> dict:
         argv = agent_argv(job["agent"], job["prompt"])

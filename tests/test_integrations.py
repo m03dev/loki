@@ -217,20 +217,16 @@ skill_scan.EXTERNAL_SCANNERS[:] = []
 
 # ------------------------------------------------------------------ Hermes
 section("Hermes Agent")
-check("Hermes starts interactively", workers.agent_argv("hermes", "", interactive=True) == ["hermes"])
-try:
-    workers.agent_argv("hermes", "x")
-    one_shot = True
-except ValueError:
-    one_shot = False
-check("Hermes has no headless one-shot mode in Loki", not one_shot)
+check("Hermes starts interactively", workers.agent_argv("hermes", "", interactive=True, env={}) == ["hermes"])
+check("Hermes runs one-shot with -z (final answer only)",
+      workers.agent_argv("hermes", "fix it", env={}) == ["hermes", "-z", "fix it"])
+check("Hermes never gets --yolo", "--yolo" not in workers.agent_argv("hermes", "x", env={}))
+check("LOKI_HERMES_MODEL / _PROVIDER become Hermes' own flags",
+      workers.agent_argv("hermes", "x", env={"LOKI_HERMES_MODEL": "m1", "LOKI_HERMES_PROVIDER": "openrouter"})
+      == ["hermes", "-m", "m1", "--provider", "openrouter", "-z", "x"])
 sup = workers.Supervisor(workers.JobStore(TMP / "j.json"), {n: workers.Backend() for n in workers.BACKENDS}, TMP)
-try:
-    sup.create({"backend": "local", "agent": "hermes", "workspace": str(TMP), "prompt": "x"})
-    ok = False
-except ValueError as exc:
-    ok = "herdr" in str(exc)
-check("a Hermes job on the local backend is refused", ok)
+check("a Hermes job on the local backend is accepted",
+      sup.create({"backend": "local", "agent": "hermes", "workspace": str(TMP), "prompt": "x"})["agent"] == "hermes")
 check("a Hermes job on herdr is accepted",
       sup.create({"backend": "herdr", "agent": "hermes", "workspace": str(TMP), "prompt": "x"})["agent"] == "hermes")
 engine = policy.PolicyEngine(lambda p: p, lambda x: (True, ""), safe_exec.parse, set(),
@@ -239,8 +235,10 @@ check("a Hermes job needs the hermes-agent capability", not engine.job("herdr", 
 engine = policy.PolicyEngine(lambda p: p, lambda x: (True, ""), safe_exec.parse, set(),
                              Reg({"herdr": ["process:agent"], "hermes-agent": ["process:agent"]}), env={})
 check("with both on, a Hermes herdr job is allowed", engine.job("herdr", "hermes").allowed)
-check("Hermes is not counted as a local agent",
-      "hermes" not in workers.LocalBackend(TMP, which=lambda n: "/bin/" + n).available()[1])
+engine = policy.PolicyEngine(lambda p: p, lambda x: (True, ""), safe_exec.parse, set(), Reg({}), env={})
+check("a local Hermes job still needs the hermes-agent capability", not engine.job("local", "hermes").allowed)
+check("Hermes counts as a local agent when installed",
+      "hermes" in workers.LocalBackend(TMP, which=lambda n: "/bin/" + n).available()[1])
 
 # ------------------------------------------------------------------ brain map
 section("brain map")
