@@ -2133,20 +2133,21 @@ def model_tool_schemas() -> list:
         return []
     schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
                and _tool_enabled(t["function"]["name"])]
+    local_note = ""
+    if _is_local_model():
+        # A local model reads every tool schema on every turn: fewer, better-chosen tools
+        # mean a much faster first token and steadier tool calls. MAX_TOOLS stays a hard
+        # ceiling on top of that (providers reject an over-long list outright).
+        schemas = sorted(schemas, key=lambda t: _local_rank(t["function"]["name"]))[:LOCAL_MAX_TOOLS]
+        local_note = "local model: %d core tools offered" % len(schemas)
     if AGENT_MODE == "plan":
         # Plan mode is read-only: no writing, moving, deleting or running.
         schemas = [t for t in schemas
                    if t["function"]["name"] in LOCAL_TOOLS
                    and t["function"]["name"] not in MODIFYING
                    and t["function"]["name"] not in DANGEROUS]
-    if _is_local_model():
-        # A local model reads every tool schema on every turn: fewer, better-chosen tools
-        # mean a much faster first token and steadier tool calls.
-        schemas = sorted(schemas, key=lambda t: _local_rank(t["function"]["name"]))[:LOCAL_MAX_TOOLS]
-        TRIMMED_TOOLS_NOTE = "local model: %d core tools offered" % len(schemas)
-        return schemas
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
-        TRIMMED_TOOLS_NOTE = ""
+        TRIMMED_TOOLS_NOTE = local_note
         return schemas
     local = [t for t in schemas if t["function"]["name"] in LOCAL_TOOLS]
     remote = [t for t in schemas if t["function"]["name"] not in LOCAL_TOOLS]
