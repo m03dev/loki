@@ -4,6 +4,22 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 7) - Vercel design, and the Herdr session registry
+
+**Work completed**
+- **Vercel design** in the dock (`ab3fc7e`): a pure-black canvas, #EDEDED text at full
+  contrast, hairline #333 borders, small radii and one #0070F3 focus accent, applied as a
+  Theme so every child and dialog inherits it. Verified headlessly (composer #0a0a0a r8,
+  hover #1a1a1a, focus border #0070f3, menu #0a0a0a).
+- **Agent-session registry** (`67a1b30`): `harness/sessions.py` + the `agent_sessions` tool
+  + `/sessions` on the bridge. Adopts Herdr's (herdr.dev) core idea - a shared list of
+  agent sessions each working / blocked / idle / done, with a summary that names who is
+  stuck - as the blueprint's multi-agent runtime (9) and worker registry (7.1).
+
+**Tests:** 313 passed, 0 failed.
+
+---
+
 ## 2026-10-12 (session 6) - The document's systems: providers, project state, repo browser
 
 **Work completed**
