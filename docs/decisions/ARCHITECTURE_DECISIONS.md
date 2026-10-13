@@ -3,7 +3,7 @@
 Reasons behind decisions that a reader of the code cannot recover on their own. `AD-n`
 ids are referenced from the roadmap and session log.
 
-## AD-1 — Deliver as a self-contained Godot addon
+## AD-1 — Deliver as a self-contained Godot addon (superseded by AD-10)
 A consuming project needs **only `addons/loki`** — no second plugin, no manual step.
 **Why:** the user's hard requirement; it drives layout, the bundled MCP bridge, and the
 bootstrap launcher. **Consequence:** user data (keys, memory) lives in
@@ -60,3 +60,16 @@ Adopt a component only with a measured reason; do not integrate several framewor
 solve the same problem.
 **Why:** the blueprint's harness-engineering rule. **Consequence:** the repository keeps
 519 vendored skills and MCP wrappers rather than embedding competing agent frameworks.
+
+## AD-10 — Loki is a standalone desktop app; Godot is an optional adapter
+`app/loki_app.py` starts the engine (`loki_bridge.py`) and opens the Loki window
+(pywebview: WKWebView on macOS) on `app/ui/`, served by the engine itself. Godot,
+its MCP servers and the game-dev Build prompt switch on only when the workspace holds a
+`project.godot`. `Loki.app` is built on the Mac by `setup.sh`.
+**Why:** the owner's direction (2026-10-12): Loki is a desktop command center, not a
+Godot product. The engine already spoke a loopback HTTP API, so the change is a new
+front end, not a rewrite (AD-3 stands).
+**Consequences:** one engine, two front ends (app and Godot dock) behind the same
+token-protected API. The UI is served with a Host check (DNS rebinding) and a strict
+CSP; the token reaches the window in the URL fragment, never in a request. Quitting the
+app stops the engine it started. Godot-free workspaces default to `~/Loki`.

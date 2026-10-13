@@ -4,6 +4,35 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 10) - Loki becomes a standalone desktop app
+
+**Scope change (owner):** Loki is not a Godot product any more. It ships as its own app;
+Godot is an optional adapter. Recorded in the blueprint scope log and AD-10 (supersedes
+AD-1).
+
+**Work completed**
+- Engine (`loki_bridge.py`): `--godot-exe` and `--project-dir` are optional (workspace
+  defaults to `~/Loki`), `--state-dir` moves log/session out of `.godot`, `--ui-dir`
+  serves the app UI at `/` with a Host check and a strict CSP; the app's origin may call
+  the API; `/health` reports the workspace.
+- Harness: a general Build prompt when the workspace is not a Godot project; the Godot
+  MCP servers (`godot`, `godot_run`) need `GAME_PROJECT`.
+- `app/ui/`: the Loki window - chats, Ask/Plan/Build, model picker, live tool
+  activity, permission cards (Allow/Deny), Stop, Settings (Connections + connect a key,
+  Tools, Memory, Capabilities). Markdown is escaped before rendering.
+- `app/loki_app.py`: starts or attaches to the engine, opens a pywebview window (browser
+  fallback), stops the engine on quit, explains setup/port problems in a window.
+- `Loki.app` now runs the app (no Godot); `setup.sh` installs pywebview and builds the
+  bundle on macOS.
+
+**Tests:** 378 passed, 0 failed offline. Real Chromium run against the real engine: UI
+loads, no console errors, modes/models/settings/approval work; engine guards return
+403/401/404; the shell starts the engine and stops it on quit.
+
+**Not verified:** pywebview window and a real model reply on the Mac.
+
+---
+
 ## 2026-10-12 (session 9) - macOS: the bridge launch fix and Loki.app
 
 **Context.** This was the first session from the cloud workspace, not the Windows checkout.

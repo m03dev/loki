@@ -8,7 +8,8 @@ Repo: https://github.com/m03dev/loki
 Local checkout: `C:\Users\macul\Documents\loki` (this is the confirmed, active checkout)
 
 Loki is an AI development and creative operating environment, delivered as a
-self-contained Godot 4 editor addon. It should be able to receive a goal, understand a
+**standalone desktop app** (`app/`) over the Loki engine. The Godot 4 editor addon
+remains as an optional adapter for game projects (see the 2026-10-12 scope entry). It should be able to receive a goal, understand a
 project, retrieve the right context, consult its decision layer, select appropriate
 tools, execute an approved workflow, verify the result, and preserve the knowledge
 required to continue later.
@@ -35,6 +36,12 @@ concrete scope has grown against it.
 - **2026-10-12 — runtime input harness.** Loki can now drive a running scene: inject a
   timed input sequence, hold each press for at least two physics frames, and report what
   the game actually received, with a screenshot (`harness/loki_probe.gd`, `probe_scene`).
+- **2026-10-12 — Loki becomes a standalone desktop app.** The owner's direction: Loki is
+  no longer a Godot product. It ships as its own app (`app/loki_app.py` + `app/ui/`,
+  `Loki.app` on macOS) over the same engine (`addons/loki/loki_bridge.py` +
+  `harness/`), which now runs without Godot. Godot becomes one optional creative
+  adapter among several (Blender, Unreal, ...), active only when the workspace is a
+  Godot project. Supersedes AD-1; see AD-10.
 - **Ongoing — prepared upstream contributions.** Improvements to third-party
   dependencies are prepared as patches under `contrib/<project>/` with a README. Opening
   a fork or pull request is an externally visible action and requires explicit

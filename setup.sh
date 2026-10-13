@@ -27,6 +27,12 @@ echo "[loki] installing dependencies"
 "$VENV/bin/python" -m pip install --upgrade pip >/dev/null 2>&1 || true
 "$VENV/bin/python" -m pip install -r "$HARNESS/requirements.txt"
 
+if [ "$(uname -s)" = "Darwin" ]; then
+  echo "[loki] installing the Loki window (pywebview)"
+  "$VENV/bin/python" -m pip install -r "$REPO/app/requirements.txt" ||
+    echo "[loki] pywebview did not install; Loki will open in your browser instead"
+fi
+
 echo "[loki] fetching the skill libraries (optional; needs git and internet)"
 mkdir -p "$DATA/vendor"
 [ -d "$DATA/vendor/ponytail" ] || git clone --depth 1 https://github.com/DietrichGebert/ponytail.git "$DATA/vendor/ponytail" || true
@@ -39,5 +45,10 @@ fi
 
 "$VENV/bin/python" "tools/loki_doctor.py" || true
 echo
-echo "[loki] Done. Open this folder as a Godot project and enable Loki in"
-echo "       Project > Project Settings > Plugins. The chat dock appears beside Scene."
+if [ "$(uname -s)" = "Darwin" ] && [ "${LOKI_NO_APP_BUILD:-0}" != "1" ]; then
+  bash "$REPO/tools/macos/make_loki_app.sh"
+  echo "[loki] Done. Open Loki from ~/Applications (or: open ~/Applications/Loki.app)."
+else
+  echo "[loki] Done. Start Loki with: $VENV/bin/python app/loki_app.py"
+fi
+echo "       Game work: the Godot dock still works - open this folder in Godot 4.8."

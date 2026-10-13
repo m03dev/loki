@@ -1,53 +1,57 @@
 # Loki on macOS
 
-Loki is a Godot editor addon, so "the Mac app" is a small `Loki.app` launcher that
-opens this checkout in Godot with Loki enabled. It is not a separate copy of Loki:
-`git pull` in the checkout updates what the app opens.
+Loki is a standalone desktop app. `Loki.app` opens the Loki window (a native WebKit
+window via pywebview) over the Loki engine, which runs locally on `127.0.0.1:8766`.
+Godot is not needed; it is only used, if installed, when the workspace is a Godot
+project.
 
 ## One-time setup
 
-1. Install **Godot 4.8+** (godotengine.org) into `/Applications` or `~/Applications`.
-2. Install **Python 3.11+** (python.org or `brew install python`). Apple's
-   `/usr/bin/python3` is 3.9 and cannot run the harness.
-3. In the checkout:
+1. Install **Python 3.11+**. With Homebrew: `brew install python@3.13` (answer `y`).
+   Apple's `/usr/bin/python3` is 3.9 and cannot run Loki. Prefer 3.13 over a brand-new
+   release, whose packages may not have ready-made builds yet.
+2. In the checkout:
 
    ```bash
-   ./setup.sh                        # venv, deps, skill libraries, harness_data/.env
-   tools/macos/make_loki_app.sh      # builds ~/Applications/Loki.app
+   bash setup.sh
    ```
 
-4. Double-click **Loki** in `~/Applications` (drag it to the Dock if you like).
+   This creates Loki's private Python environment, installs the engine and the window
+   (`pywebview`), fetches the skill libraries, and builds `~/Applications/Loki.app`.
+3. Open **Loki** from `~/Applications`, or run `open ~/Applications/Loki.app`.
 
-## What the launcher does
+Run the two commands separately: pasting them together feeds the second line to
+Homebrew's `[y/n]` question.
 
-- Finds Godot: `LOKI_GODOT`, then `Godot*.app` in `/Applications` and
-  `~/Applications` (newest first), then Spotlight, then `godot` on `PATH`.
-- Refuses Godot older than 4.8 with a dialog; never downloads or installs Godot.
-- Runs `setup.sh` once if `harness_data/.venv` is missing (log:
-  `harness_data/loki_app.log`).
-- Adds `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin` to `PATH`. Apps opened
-  from Finder get a bare `PATH`, and the bridge needs `python3`, `git`, `node` and `uvx`.
-- Opens the editor: `Godot --path <checkout> -e`.
+## What happens when you open Loki
 
-If you move the checkout, rebuild the app. The builder only replaces a `Loki.app` that
-it made itself.
+- `Loki.app` runs `app/loki_app.py` with Loki's private Python (first launch without
+  that Python runs `setup.sh` once).
+- The app starts the engine with `--ui-dir app/ui` and its own state folder
+  (`harness_data/app/`: log, engine token, settings), waits until it answers, then opens
+  the window at `http://127.0.0.1:8766/#token=...`. The token stays in the URL
+  fragment, which is never sent over the wire.
+- Closing or quitting Loki stops the engine it started.
+- If another engine already holds the port (the Godot dock's), Loki says so instead of
+  fighting it.
 
-## Fixed for macOS in this change
+## Files
 
-- The chat dock only looked for the Windows venv (`.venv/Scripts/python.exe`). On a Mac
-  it fell back to bare `pythonw`/`python`/`py`, which do not exist there. Godot's
-  `create_process` forks before it execs, so it still returned a PID and the bridge
-  silently never started. The dock now tries `harness_data/.venv/bin/python3` and the
-  Homebrew, python.org and system Python locations, and uses bare names only on Windows.
-- `bootstrap.py` and `setup.sh` refuse to build the venv from a Python older than 3.11,
-  instead of leaving a broken venv that every later launch would prefer.
+| Path | What |
+| --- | --- |
+| `harness_data/app/loki_app.log` | app log |
+| `harness_data/app/engine.out` | engine output (startup, MCP servers, errors) |
+| `harness_data/app/settings.json` | remembered workspace |
+| `~/Loki` | default workspace |
 
-## Not verified yet
+## Verified so far
 
-Everything above was tested on Linux: the bundle structure, the plist, and the launcher
-against fake Godot binaries. It has **not** yet been run on a real Mac with a real Godot
-4.8. The first real launch is the check:
+On Linux, with real Chromium: the engine starts without Godot, serves the UI, rejects
+a foreign Host (403), a missing token (401) and path traversal (404). The UI loads,
+switches modes, lists 39 models, shows settings (10 tool groups, 98 capabilities),
+renders and answers a permission request, and has no console errors. The app shell
+starts the engine, remembers the workspace, and stops the engine when it quits.
 
-1. `tests/test_loki.py` passes with `harness_data/.venv/bin/python`.
-2. Double-clicking Loki opens the editor, and the dock status reaches "connected".
-3. One Ask-mode message gets a reply.
+**Not yet verified on the Mac:** the pywebview window itself, and a real model reply
+(this workspace could not install the `openai`/`mcp` packages). The first real launch
+on the Mac is that check.

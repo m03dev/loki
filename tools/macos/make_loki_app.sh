@@ -4,9 +4,11 @@
 #   tools/macos/make_loki_app.sh                # -> ~/Applications/Loki.app
 #   tools/macos/make_loki_app.sh /Applications  # -> /Applications/Loki.app
 #
-# The app is a thin bundle around tools/macos/launcher.sh. It does not copy Loki
-# into the bundle: it points at this checkout, so `git pull` updates what it opens.
-# It never installs Godot or anything else; see launcher.sh.
+# Loki.app runs the standalone Loki app (app/loki_app.py): the Loki window over the
+# Loki engine. It is a thin bundle around tools/macos/launcher.sh and points at this
+# checkout instead of copying it, so `git pull` updates what it runs. setup.sh calls
+# this script at the end on macOS, so the bundle is built on the Mac with the right
+# permissions.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +17,7 @@ DEST="${1:-$HOME/Applications}"
 APP="$DEST/Loki.app"
 MARKER="Contents/Resources/loki-app.marker"
 
-[ -f "$REPO/project.godot" ] && [ -f "$HERE/launcher.sh" ] ||
+[ -f "$REPO/app/loki_app.py" ] && [ -f "$HERE/launcher.sh" ] ||
   { echo "[loki-app] run this from inside the Loki checkout"; exit 1; }
 
 # Only ever replace a bundle this script made.
@@ -51,6 +53,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
 </dict>
 </plist>
 PLIST

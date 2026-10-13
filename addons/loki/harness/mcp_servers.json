@@ -13,6 +13,7 @@
       ]
     },
     "godot": {
+      "requires_env": "GAME_PROJECT",
       "command": "uvx",
       "args": [
         "godot-editor-mcp"
@@ -27,6 +28,7 @@
       "requires_env": "TYPESAFE_API_KEY"
     },
     "godot_run": {
+      "requires_env": "GAME_PROJECT",
       "command": "npx",
       "args": [
         "-y",

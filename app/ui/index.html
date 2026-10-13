@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loki</title>
+<link rel="stylesheet" href="/ui/app.css">
+<script src="/ui/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="Conversations">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">L</span>
+      <span class="brand-name">Loki</span>
+    </div>
+    <button type="button" id="new-chat" class="new-chat">New chat</button>
+    <nav id="conversations" class="conversations" aria-label="Chats"></nav>
+    <div class="sidebar-foot">
+      <div id="workspace" class="workspace" title="Workspace folder"></div>
+      <button type="button" id="open-settings" class="quiet">Settings</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1 id="chat-title" class="chat-title">Loki</h1>
+      <div class="topbar-right">
+        <label class="model">
+          <span class="visually-hidden">Model</span>
+          <select id="model-select" aria-label="Model"></select>
+        </label>
+        <span id="status" class="status" role="status" aria-live="polite">Connecting…</span>
+      </div>
+    </header>
+
+    <section id="transcript" class="transcript" aria-live="polite" aria-label="Conversation"></section>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <div class="composer-box">
+        <textarea id="prompt" rows="1" placeholder="Message Loki" aria-label="Message Loki"></textarea>
+        <div class="composer-row">
+          <div class="modes" role="radiogroup" aria-label="Mode">
+            <button type="button" role="radio" data-mode="ask" aria-checked="false" title="Answer questions; change nothing">Ask</button>
+            <button type="button" role="radio" data-mode="plan" aria-checked="false" title="Read, ask, then write a plan; change nothing">Plan</button>
+            <button type="button" role="radio" data-mode="build" aria-checked="false" title="Edit, run and verify">Build</button>
+          </div>
+          <span class="hint">Enter to send, Shift+Enter for a new line</span>
+          <span id="elapsed" class="elapsed"></span>
+          <button type="button" id="stop" class="stop" hidden>Stop</button>
+          <button type="submit" id="send" class="send">Send</button>
+        </div>
+      </div>
+    </form>
+  </main>
+</div>
+
+<div id="settings" class="sheet" hidden>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <header class="sheet-head">
+      <h2 id="settings-title">Settings</h2>
+      <button type="button" id="close-settings" class="quiet" aria-label="Close settings">Close</button>
+    </header>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="connections" aria-selected="true">Connections</button>
+      <button type="button" role="tab" data-tab="tools" aria-selected="false">Tools</button>
+      <button type="button" role="tab" data-tab="memory" aria-selected="false">Memory</button>
+      <button type="button" role="tab" data-tab="capabilities" aria-selected="false">Capabilities</button>
+    </div>
+    <div class="tab-body">
+      <section data-panel="connections">
+        <p class="note">What Loki can reach right now. Keys are never shown.</p>
+        <div id="providers" class="rows"></div>
+        <form id="connect-form" class="connect">
+          <h3>Connect a provider</h3>
+          <div class="connect-row">
+            <input id="connect-provider" placeholder="Provider, e.g. openrouter" aria-label="Provider">
+            <input id="connect-key" type="password" placeholder="API key" aria-label="API key">
+            <button type="submit">Connect</button>
+          </div>
+          <p id="connect-result" class="note"></p>
+        </form>
+      </section>
+      <section data-panel="tools" hidden>
+        <p class="note">Tool groups Loki may use. Risky tools still ask before they run.</p>
+        <div id="categories" class="rows"></div>
+      </section>
+      <section data-panel="memory" hidden>
+        <p class="note">Lasting facts Loki keeps about you and your work.</p>
+        <textarea id="memory-text" class="memory" rows="12" aria-label="Memory"></textarea>
+        <div class="right"><button type="button" id="save-memory">Save memory</button></div>
+      </section>
+      <section data-panel="capabilities" hidden>
+        <p class="note">Everything Loki knows about, and whether it is ready.</p>
+        <pre id="capabilities" class="caps"></pre>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

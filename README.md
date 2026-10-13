@@ -1,39 +1,41 @@
 # Loki
 
-An AI game-development agent that lives inside the **Godot 4** editor. Describe what you
-want and Loki reads your project, edits its scenes and scripts, runs Godot to check its
-own work, and iterates until the job is done.
+A desktop command center for AI work. Describe what you want and Loki reads your
+workspace, edits files, runs checks to verify its own work, and iterates until the job
+is done - asking you before anything risky.
 
 ## Install
 
 ```bash
 git clone https://github.com/m03dev/loki
 cd loki
+bash setup.sh      # macOS / Linux (needs Python 3.11+)
 setup.bat          # Windows
-./setup.sh         # Linux / macOS
 ```
 
-Then open the folder as a project in **Godot 4.8** and enable **Loki** and **Loki Chat**
-in *Project Settings -> Plugins*.
-
-On a Mac, `tools/macos/make_loki_app.sh` builds a double-clickable **Loki.app** that
-does this for you. See [docs/operations/MACOS.md](docs/operations/MACOS.md).
+On macOS, setup builds **Loki.app** in `~/Applications`; open it like any other app.
+Elsewhere, start it with `harness_data/.venv/bin/python app/loki_app.py`.
+Details: [docs/operations/MACOS.md](docs/operations/MACOS.md).
 
 ## Using it
 
-- **The chat dock** sits in the left column beside Scene. Type in the box and press
-  `Ctrl+Enter`. Each conversation gets its own tab, and Loki streams what it is doing
-  while it works, so you can watch and stop it.
+- **The Loki window** has your chats on the left and the conversation on the right.
+  Enter sends, Shift+Enter adds a line. Loki streams the tools it uses while it works;
+  Stop is always there.
 - **Modes.** Pick how much rope to give it:
   - **Ask** answers a question and changes nothing.
-  - **Plan** reads your project, asks up to three clarifying questions, then writes a
-    numbered plan. It cannot write, run or delete anything.
+  - **Plan** reads, asks up to three clarifying questions, then writes a numbered plan.
+    It cannot write, run or delete anything.
   - **Build** is the full agent: it edits, runs and verifies.
-- **Approve before it acts.** Dangerous tools ask first. Stop is always available.
-- **The Loki screen** is the **Loki** tab next to 3D - a quick way back to the chat and
-  its settings.
-- **Settings** has tabs: Agent (switch tool categories on and off), Account, Memory,
-  Profile and Connections (what Loki can reach right now - secrets are never shown).
+- **Approve before it acts.** Risky tools stop and show you exactly what they will do,
+  with Allow and Deny.
+- **Workspace.** Loki works in `~/Loki` unless you start it with
+  `--workspace /path/to/project` (remembered).
+- **Settings** has Connections (what Loki can reach - keys are never shown, and you can
+  connect a provider key), Tools, Memory and Capabilities.
+- **Game projects.** Godot is an optional adapter: point Loki at a folder with a
+  `project.godot` and the Godot tools switch on. The original Godot editor dock
+  (`addons/loki`) still works for in-editor use.
 
 ## Models
 

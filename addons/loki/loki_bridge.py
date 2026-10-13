@@ -1,4 +1,8 @@
-"""Loopback API that lets the Loki Godot dock call the real Loki agent."""
+"""Loopback API for the Loki engine.
+
+Two front ends use it: the standalone Loki app (app/, which this server can also hand
+its UI to) and the optional Godot dock (addons/loki). Godot is not required.
+"""
 from __future__ import annotations
 
 import argparse
@@ -28,8 +32,17 @@ MAX_PROMPT_CHARS = 16_000
 CLOUD_URL = os.environ.get("LOKI_CLOUD_URL", "http://localhost:8788")
 
 
+# Where the bridge keeps its log and sign-in session. The Godot dock expects
+# <project>/.godot; the standalone app passes its own folder with --state-dir.
+STATE_DIR: Path | None = None
+
+
+def _state_dir(project) -> Path:
+    return STATE_DIR if STATE_DIR is not None else Path(project) / ".godot"
+
+
 def _session_path(project) -> Path:
-    return Path(project) / ".godot" / "loki_session.json"
+    return _state_dir(project) / "loki_session.json"
 
 
 def load_session(project) -> dict:
@@ -168,15 +181,49 @@ MAX_TOOL_APPROVAL_SECONDS = 90
 MAX_TASK_STEPS = 0  # 0 = no cap on task steps
 HOST = "127.0.0.1"
 PORT = 8766
+ALLOWED_ORIGINS = ("http://127.0.0.1", "http://localhost", "null",
+                   f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}")
+ALLOWED_HOSTS = (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
+UI_DIR: Path | None = None
+UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
+            ".json": "application/json; charset=utf-8"}
+UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+          "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Local Loki-to-Godot editor bridge")
-    parser.add_argument("--loki-root", required=True)
-    parser.add_argument("--project-dir", required=True)
-    parser.add_argument("--godot-exe", required=True)
+def resolve_workspace(project_dir: str = "") -> Path:
+    """The folder Loki works in: --project-dir, else $LOKI_WORKSPACE, else ~/Loki."""
+    chosen = (project_dir or os.environ.get("LOKI_WORKSPACE", "")).strip()
+    return Path(chosen).expanduser().resolve() if chosen else (Path.home() / "Loki").resolve()
+
+
+def ui_file(ui_dir: Path, route: str) -> Path | None:
+    """Map a UI route to a file inside ui_dir, refusing anything that escapes it."""
+    relative = "index.html" if route == "/" else route[len("/ui/"):]
+    if not relative or "\\" in relative or relative.startswith("/"):
+        return None
+    root = ui_dir.resolve()
+    try:
+        candidate = (root / relative).resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    if candidate.suffix not in UI_TYPES or not candidate.is_file():
+        return None
+    return candidate
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Loki engine (loopback API)")
+    parser.add_argument("--loki-root", required=True, help="the harness folder (loki.py)")
+    parser.add_argument("--project-dir", default="",
+                        help="workspace the file tools may touch (default: $LOKI_WORKSPACE or ~/Loki)")
+    parser.add_argument("--godot-exe", default="", help="optional; enables the Godot tools")
     parser.add_argument("--secret-file", required=True)
-    return parser.parse_args()
+    parser.add_argument("--state-dir", default="", help="log + session folder (default: <project>/.godot)")
+    parser.add_argument("--ui-dir", default="", help="serve the standalone app UI from this folder")
+    return parser.parse_args(argv)
 
 
 def write_secret_atomic(secret_path: Path, secret: str) -> None:
@@ -449,7 +496,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def _authorized(self) -> bool:
         origin = self.headers.get("Origin", "")
-        if origin and origin not in ("http://127.0.0.1", "http://localhost", "null"):
+        if origin and origin not in ALLOWED_ORIGINS:
             self._send_json(403, {"ok": False, "error": "Origin not allowed."})
             return False
         supplied = self.headers.get("Authorization", "")
@@ -478,10 +525,43 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return None
         return value
 
+    def _serve_ui(self, route: str) -> bool:
+        """Serve the standalone app's static UI. Returns False if `route` is not a UI path.
+
+        The UI holds no secrets (the token reaches it in the URL fragment, which is
+        never sent here), but the Host check still stops a DNS-rebinding page from
+        loading it under a foreign name.
+        """
+        if UI_DIR is None or not (route == "/" or route.startswith("/ui/")):
+            return False
+        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+            self._send_json(403, {"ok": False, "error": "Host not allowed."})
+            return True
+        found = ui_file(UI_DIR, route)
+        if found is None:
+            self._send_json(404, {"ok": False, "error": "Not found."})
+            return True
+        body = found.read_bytes()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", UI_TYPES.get(found.suffix, "application/octet-stream"))
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Content-Security-Policy", UI_CSP)
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionError, OSError):
+            pass
+        return True
+
     def do_GET(self) -> None:
+        route = urlparse(self.path).path
+        if self._serve_ui(route):
+            return
         if not self._authorized():
             return
-        route = urlparse(self.path).path
         if route == "/connections":
             self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
             return
@@ -490,6 +570,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             resolved = agent.active_model_name() if hasattr(agent, "active_model_name") else agent.model_name
             report = agent.smart_report() if hasattr(agent, "smart_report") else ""
             self._send_json(200, {"ok": True, "service": "loki", "mode": agent.model_name,
+                                  "workspace": os.environ.get("LOKI_WORKSPACE", ""),
                                   "provider": resolved, "model": agent.MODELS[resolved].model,
                                   "providers": report})
             return
@@ -870,9 +951,9 @@ class _Tee:
 
 
 def start_logging(project: Path) -> None:
-    """Tee stdout/stderr to .godot/loki_bridge.log no matter who launched us."""
+    """Tee stdout/stderr to <state dir>/loki_bridge.log no matter who launched us."""
     try:
-        log_dir = project / ".godot"
+        log_dir = _state_dir(project)
         log_dir.mkdir(parents=True, exist_ok=True)
         handle = open(log_dir / "loki_bridge.log", "a", encoding="utf-8", buffering=1)
         sys.stdout = _Tee(sys.stdout, handle)
@@ -882,14 +963,22 @@ def start_logging(project: Path) -> None:
 
 
 async def serve() -> None:
+    global STATE_DIR, UI_DIR
     args = parse_args()
     root = Path(args.loki_root).resolve()
-    project = Path(args.project_dir).resolve()
+    project = resolve_workspace(args.project_dir)
+    project.mkdir(parents=True, exist_ok=True)
+    if args.state_dir:
+        STATE_DIR = Path(args.state_dir).expanduser().resolve()
+    if args.ui_dir:
+        UI_DIR = Path(args.ui_dir).expanduser().resolve()
     sys_path = os.sys.path
     sys_path.insert(0, str(root))
     start_logging(project)
-    os.environ["GAME_PROJECT"] = str(project)
     os.environ["LOKI_WORKSPACE"] = str(project)
+    # Godot is an optional adapter: only point the game tools at a Godot project.
+    if (project / "project.godot").is_file():
+        os.environ["GAME_PROJECT"] = str(project)
     os.environ["GODOT_EXE"] = args.godot_exe
     os.environ["LOKI_AUTO_APPROVE"] = "0"
     # Do NOT force a model here: harness/.env (or the environment) decides,
@@ -949,6 +1038,7 @@ async def serve() -> None:
     keeper_stop = threading.Event()
     keeper = threading.Thread(target=keep_secret_alive, args=(secret_path, secret, keeper_stop), name="loki-secret-keeper", daemon=True)
     keeper.start()
+    print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
     if hasattr(loki, "smart_report"):
         print(f"[loki-bridge] {loki.smart_report()}", flush=True)

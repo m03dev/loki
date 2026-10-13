@@ -1196,7 +1196,8 @@ _plan_prompt = loki.system_prompt()
 loki.set_mode("build")
 check("each mode carries its own instructions",
       "ASK mode" in _ask_prompt and "PLAN mode" in _plan_prompt
-      and "SENIOR GAME DEVELOPER" in loki.system_prompt())
+      and ("SENIOR GAME DEVELOPER" in loki.system_prompt()
+           or "desktop command center" in loki.system_prompt()))
 check("mode_state lists all three", len(loki.mode_state()["modes"]) == 3)
 
 
@@ -2184,40 +2185,107 @@ else:
               _deny.returncode != 0 and (_foreign / "Loki.app" / "Contents").is_dir()
               and not (_foreign / "Loki.app" / "Contents" / "MacOS").exists(), _deny.stdout)
 
-        def _fake_godot(version: str) -> Path:
-            fake = _td / ("godot_" + version.replace(".", "_"))
-            fake.write_text('#!/bin/bash\nif [ "$1" = "--version" ]; then echo "%s"; exit 0; fi\n'
-                            'printf "%%s\\n" "$@" > "%s.args"\n' % (version, fake), encoding="utf-8")
-            fake.chmod(0o755)
-            return fake
-
         def _launch(**extra: str):
-            # Search only an empty folder, so a real Godot on this machine is never opened.
             env = {"PATH": "/usr/bin:/bin", "HOME": str(_home), "LOKI_SKIP_SETUP": "1",
-                   "LOKI_GODOT_SEARCH_DIRS": str(_home)}
+                   "LOKI_DATA": str(_td / "data")}
             env.update(extra)
             return _sp.run([str(_exe)], env=env, capture_output=True, text=True, timeout=30)
 
-        _ok = _fake_godot("4.8.stable.official")
-        _r = _launch(LOKI_GODOT=str(_ok))
-        _args = Path(str(_ok) + ".args")
-        _argv = _args.read_text(encoding="utf-8").split() if _args.is_file() else []
-        check("launcher opens this checkout in the editor (allowed)",
-              _r.returncode == 0 and _argv == ["--path", str(REPO), "-e"], _r.stderr or _argv)
-        _old = _fake_godot("4.3.stable.official")
-        _r = _launch(LOKI_GODOT=str(_old))
-        check("launcher refuses Godot older than 4.8 (denied)",
-              _r.returncode == 5 and not Path(str(_old) + ".args").exists(), _r.stderr)
-        _r = _launch(LOKI_GODOT=str(_td / "no-such-godot"))
-        check("launcher rejects an invalid Godot path",
-              _r.returncode == 4 and "LOKI_GODOT" in _r.stderr, _r.stderr)
-        _junk = _fake_godot("garbage")
-        _r = _launch(LOKI_GODOT=str(_junk))
-        check("launcher fails cleanly on an unreadable Godot version",
-              _r.returncode == 5 and not Path(str(_junk) + ".args").exists(), _r.stderr)
+        _fake_py = _td / "fake_python"
+        _fake_py.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "' + str(_td) + '/py.args"\n', encoding="utf-8")
+        _fake_py.chmod(0o755)
+        _r = _launch(LOKI_PYTHON=str(_fake_py))
+        _py_args = (_td / "py.args").read_text(encoding="utf-8").split() if (_td / "py.args").is_file() else []
+        check("Loki.app runs the standalone app with Loki's Python (allowed)",
+              _r.returncode == 0 and _py_args == [str(REPO / "app" / "loki_app.py")], _r.stderr or _py_args)
+        _r = _launch(LOKI_PYTHON=str(_td / "no-such-python"))
+        check("Loki.app rejects an invalid interpreter path",
+              _r.returncode == 4 and "LOKI_PYTHON" in _r.stderr, _r.stderr)
         _r = _launch()
-        check("launcher reports a missing Godot instead of installing one",
-              _r.returncode == 4 and "not found" in _r.stderr, _r.stderr)
+        check("Loki.app without setup says how to set up, and installs nothing (denied)",
+              _r.returncode == 4 and "setup.sh" in _r.stderr and not (_td / "data" / ".venv").exists(), _r.stderr)
+        _venv_bin = _td / "data" / ".venv" / "bin"
+        _venv_bin.mkdir(parents=True)
+        (_venv_bin / "python3").symlink_to(_fake_py)
+        (_td / "py.args").unlink()
+        _r = _launch()
+        check("Loki.app finds the private environment by itself", _r.returncode == 0 and (_td / "py.args").is_file(), _r.stderr)
+    check("Loki.app no longer needs Godot",
+          "godot" not in (REPO / "tools" / "macos" / "launcher.sh").read_text(encoding="utf-8").lower())
+    check("setup.sh builds Loki.app on macOS and installs the window",
+          "make_loki_app.sh" in (REPO / "setup.sh").read_text(encoding="utf-8")
+          and "app/requirements.txt" in (REPO / "setup.sh").read_text(encoding="utf-8"))
+
+
+section("standalone app: engine without Godot")
+
+sys.path.insert(0, str(REPO / "addons" / "loki"))
+import loki_bridge as _lb  # noqa: E402
+_a = _lb.parse_args(["--loki-root", "x", "--secret-file", "t"])
+check("engine starts without --godot-exe or --project-dir", _a.godot_exe == "" and _a.project_dir == "")
+check("workspace defaults to ~/Loki", _lb.resolve_workspace("") == (Path.home() / "Loki").resolve()
+      if not os.environ.get("LOKI_WORKSPACE") else True)
+check("an explicit workspace wins", _lb.resolve_workspace("/tmp/ws-x") == Path("/tmp/ws-x").resolve())
+_ui = REPO / "app" / "ui"
+check("UI root serves index.html", _lb.ui_file(_ui, "/") == (_ui / "index.html").resolve())
+check("UI assets are served", _lb.ui_file(_ui, "/ui/app.js") == (_ui / "app.js").resolve())
+check("UI refuses path traversal", _lb.ui_file(_ui, "/ui/../../addons/loki/harness/loki.py") is None)
+check("UI refuses encoded-backslash and absolute tricks",
+      _lb.ui_file(_ui, "/ui/..\\loki_app.py") is None and _lb.ui_file(_ui, "/ui//etc/passwd") is None)
+check("UI refuses non-asset types", _lb.ui_file(REPO / "app", "/ui/loki_app.py") is None)
+check("the app's own origin may call the engine", "http://127.0.0.1:8766" in _lb.ALLOWED_ORIGINS)
+check("foreign hosts cannot load the UI (DNS rebinding)", "evil.example:8766" not in _lb.ALLOWED_HOSTS)
+check("the UI page has a strict content security policy",
+      "script-src 'self'" in _lb.UI_CSP and "frame-ancestors 'none'" in _lb.UI_CSP)
+_html = (_ui / "index.html").read_text(encoding="utf-8")
+check("the UI has no inline script or style (CSP-clean)",
+      "<script>" not in _html and " style=" not in _html and "onclick" not in _html)
+_js = (_ui / "app.js").read_text(encoding="utf-8")
+check("the UI escapes model output before rendering", "escapeHtml(part)" in _js and "escapeHtml(body" in _js)
+check("the token travels in the URL fragment, not the query", "location.hash" in _js and "?token" not in _js)
+
+_saved_gp = loki.GAME_PROJECT
+try:
+    loki.GAME_PROJECT = ""
+    _general = loki.system_prompt() if loki.AGENT_MODE == "build" else (loki.set_mode("build"), loki.system_prompt())[1]
+    check("outside a Godot project, Build mode is not told it is in Godot",
+          "Godot 4 project" not in _general and "standalone desktop app" in _general)
+    loki.GAME_PROJECT = str(REPO)
+    check("inside a Godot project, the game prompt is kept", "Godot 4 project" in loki.system_prompt())
+finally:
+    loki.GAME_PROJECT = _saved_gp
+
+
+_mcp_cfg = json.loads((REPO / "addons" / "loki" / "harness" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
+check("Godot MCP servers start only for a Godot workspace",
+      _mcp_cfg["godot"].get("requires_env") == "GAME_PROJECT"
+      and _mcp_cfg["godot_run"].get("requires_env") == "GAME_PROJECT")
+_had = os.environ.pop("GAME_PROJECT", None)
+try:
+    check("no Godot project -> the Godot MCP server is skipped",
+          "GAME_PROJECT" in loki._server_skip_reason(_mcp_cfg["godot"], "godot"))
+finally:
+    if _had is not None:
+        os.environ["GAME_PROJECT"] = _had
+
+
+section("standalone app: desktop shell")
+
+_spec2 = _ilu.spec_from_file_location("_loki_app", REPO / "app" / "loki_app.py")
+_app = _ilu.module_from_spec(_spec2)
+_spec2.loader.exec_module(_app)
+check("app workspace: --workspace wins", _app.choose_workspace("/tmp/a", {"workspace": "/tmp/b"}, {}) == Path("/tmp/a").resolve())
+check("app workspace: remembered next", _app.choose_workspace("", {"workspace": "/tmp/b"}, {"LOKI_WORKSPACE": "/tmp/c"}) == Path("/tmp/b").resolve())
+check("app workspace: default ~/Loki", _app.choose_workspace("", {}, {}) == (Path.home() / "Loki").resolve())
+_cmd = _app.engine_command(Path("/py"), Path("/ws"), "")
+check("app starts the engine with its UI and its own state folder",
+      "--ui-dir" in _cmd and "--state-dir" in _cmd and "--godot-exe" not in _cmd)
+check("app passes Godot only when it found one",
+      _app.engine_command(Path("/py"), Path("/ws"), "/G")[-2:] == ["--godot-exe", "/G"])
+check("app ignores a Godot path that does not exist", _app.find_godot({"LOKI_GODOT": "/no/such/godot"}) == "")
+check("app reports an engine that never answers", _app.probe("x", timeout=0.3) in (0, 401, 403))
+_page = _app.problem_page("<b>x</b>", "a & b")
+check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
 
 if "--live" in sys.argv:
