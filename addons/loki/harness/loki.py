@@ -335,6 +335,48 @@ MODELS = {
         api_key=os.getenv("OMNIROUTE_API_KEY", "omniroute"),
         model=os.getenv("OMNIROUTE_MODEL", "auto"),
     ),
+    # --- More standing free tiers, taken from awesome-free-llm-apis
+    # (github.com/mnfst/awesome-free-llm-apis, data.json - a machine-readable catalogue of
+    # LLM APIs with permanent free tiers; verified 2026-10). All are OpenAI-compatible
+    # endpoints, every model name is overridable with <PROVIDER>_MODEL, and every base URL
+    # with <PROVIDER>_BASE_URL. Put the key in harness_data/.env; run tools/loki_doctor.py
+    # to see what is configured. See docs/providers.md.
+    "aion": ModelConfig(base_url=os.getenv("AION_BASE_URL", "https://api.aionlabs.ai/v1"),
+                        api_key=os.getenv("AION_API_KEY", ""),
+                        model=os.getenv("AION_MODEL", "aion-labs/aion-3.0")),
+    # Cohere's own v2 API is not OpenAI-shaped, so this points at their OpenAI
+    # compatibility endpoint instead.
+    "cohere": ModelConfig(base_url=os.getenv("COHERE_BASE_URL", "https://api.cohere.com/compatibility/v1"),
+                          api_key=os.getenv("COHERE_API_KEY", ""),
+                          model=os.getenv("COHERE_MODEL", "command-a-plus-05-2026")),
+    "zai": ModelConfig(base_url=os.getenv("ZAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+                       api_key=os.getenv("ZAI_API_KEY", ""),
+                       model=os.getenv("ZAI_MODEL", "glm-4.7-flash")),
+    "huggingface": ModelConfig(base_url=os.getenv("HUGGINGFACE_BASE_URL", "https://router.huggingface.co/v1"),
+                               api_key=os.getenv("HF_TOKEN", os.getenv("HUGGINGFACE_API_KEY", "")),
+                               model=os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.1-8B-Instruct")),
+    "kilocode": ModelConfig(base_url=os.getenv("KILOCODE_BASE_URL", "https://api.kilo.ai/api/gateway"),
+                            api_key=os.getenv("KILOCODE_API_KEY", ""),
+                            model=os.getenv("KILOCODE_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")),
+    # LLM7.io answers without a token; a token raises the limits.
+    "llm7": ModelConfig(base_url=os.getenv("LLM7_BASE_URL", "https://api.llm7.io/v1"),
+                        api_key=os.getenv("LLM7_API_KEY", "unused"),
+                        model=os.getenv("LLM7_MODEL", "gpt-oss:20b")),
+    "modelscope": ModelConfig(base_url=os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1"),
+                              api_key=os.getenv("MODELSCOPE_API_KEY", ""),
+                              model=os.getenv("MODELSCOPE_MODEL", "Qwen/Qwen3.5-35B-A3B")),
+    "nvidia": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+                          api_key=os.getenv("NVIDIA_API_KEY", ""),
+                          model=os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")),
+    "ollama-cloud": ModelConfig(base_url=os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/api"),
+                                api_key=os.getenv("OLLAMA_API_KEY", ""),
+                                model=os.getenv("OLLAMA_CLOUD_MODEL", "deepseek-v4-pro")),
+    "ovh": ModelConfig(base_url=os.getenv("OVH_BASE_URL", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"),
+                       api_key=os.getenv("OVH_API_KEY", ""),
+                       model=os.getenv("OVH_MODEL", "Qwen3.5-397B-A17B")),
+    "siliconflow": ModelConfig(base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"),
+                               api_key=os.getenv("SILICONFLOW_API_KEY", ""),
+                               model=os.getenv("SILICONFLOW_MODEL", "Qwen/Qwen3-8B")),
 }
 
 model_name = os.getenv("LOKI_MODEL", "smart")

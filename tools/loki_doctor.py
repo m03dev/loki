@@ -35,6 +35,17 @@ SIGNUP = {
     "codex": "npm install -g @openai/codex   then run:  codex login",
     "vireonix": "nothing to do - needs no key, no account and no card",
     "omniroute": "local gateway on http://localhost:20128 (see docs/providers.md)",
+    "aion": "https://www.aionlabs.ai/app/api-keys/",
+    "cohere": "https://dashboard.cohere.com/api-keys",
+    "zai": "https://open.bigmodel.cn/usercenter/apikeys",
+    "huggingface": "https://huggingface.co/settings/tokens",
+    "kilocode": "https://app.kilo.ai/profile",
+    "llm7": "https://token.llm7.io  (optional - anonymous use works)",
+    "modelscope": "https://modelscope.cn/my/myaccesstoken",
+    "nvidia": "https://build.nvidia.com/explore/discover",
+    "ollama-cloud": "https://ollama.com/settings/keys",
+    "ovh": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",
+    "siliconflow": "https://cloud.siliconflow.cn/account/ak",
 }
 LOCAL_HINT = "Ollama:  ollama pull qwen3:8b"
 
