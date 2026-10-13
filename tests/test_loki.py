@@ -1964,6 +1964,64 @@ check("review_repository has a schema", any(t["function"]["name"] == "review_rep
 
 
 
+section("agent sessions - the herdr registry (blueprint 9 / 7.1)")
+
+
+import sessions as _se
+
+
+_reg = _se.empty()
+
+
+_s = _se.add(_reg, "alpha", "projA", "claude-code", "working", "wire the dock")
+
+
+check("add records who, where and what", _s["status"] == "working" and _s["agent"] == "claude-code")
+
+
+_se.add(_reg, "beta", "projB", "codex", "blocked", "needs a key")
+
+
+_se.add(_reg, "gamma", "projA", "loki", "idle")
+
+
+_sums = _se.summary(_reg)
+
+
+check("the summary counts each state", _sums["working"] == 1 and _sums["blocked"] == 1 and _sums["idle"] == 1 and _sums["total"] == 3)
+
+
+check("the summary names who is stuck", _sums["needs_attention"] == ["beta"])
+
+
+check("update flips a state", _se.update(_reg, "beta", status="working") and _se.summary(_reg)["blocked"] == 0)
+
+
+check("close marks a session done", _se.close(_reg, "alpha") and _se.summary(_reg)["done"] == 1)
+
+
+check("a session can be addressed by id as well as name", _se.update(_reg, _s["id"], status="idle"))
+
+
+check("an unknown session is refused, not invented", _se.update(_reg, "nope", status="working") is False)
+
+
+check("a bogus status is ignored rather than stored", _se.update(_reg, "gamma", status="banana") and _se.summary(_reg)["total"] == 3)
+
+
+check("the render shows every session", "alpha" in _se.render(_reg) and "gamma" in _se.render(_reg))
+
+
+check("an empty registry renders, not crashes", _se.render(_se.empty()) == "no agent sessions")
+
+
+check("agent_sessions is offered to the model", "agent_sessions" in loki.MODEL_TOOL_NAMES)
+
+
+check("agent_sessions has a schema", any(tt["function"]["name"] == "agent_sessions" for tt in loki.TOOL_SCHEMAS))
+
+
+
 if "--live" in sys.argv:
 
 

@@ -231,6 +231,7 @@ os.environ.setdefault("LOKI_LAYA_PACKAGE_DIR", str(DATA_DIR / "laya"))
 import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
 import project_state  # noqa: E402  (resumable project state - blueprint 7.3)
 import repo_review  # noqa: E402  (read-only repository review - blueprint 5.1)
+import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 
 godot_tools.ROOT = ROOT
@@ -583,6 +584,46 @@ def project_state_update(action: str = "view", field: str = "", value: str = "")
         project_state.save(STATE_FILE, data)
         return note + chr(10) + project_state.render(data)
     return "unknown action: %s (use view, add, set or reset)" % action
+
+
+SESSIONS_FILE = DATA_DIR / "agent_sessions.json"
+
+
+def _sessions_save(data: dict) -> None:
+    SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SESSIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def agent_sessions(action: str = "list", name: str = "", session_id: str = "",
+                   status: str = "", task: str = "", workspace: str = "",
+                   agent: str = "loki") -> str:
+    """Track concurrent agent sessions: who is working, blocked or idle.
+
+    The Herdr idea (herdr.dev) and the blueprint's multi-agent/worker registry: a shared
+    list of sessions, each with a workspace, the agent driving it and a status, so a run (or
+    a human) can see who is doing what and who is stuck. action: list | add | update | close.
+    """
+    data = sessions.empty()
+    if SESSIONS_FILE.is_file():
+        try:
+            loaded = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
+        except (ValueError, OSError):
+            data = sessions.empty()
+    action = (action or "list").strip().lower()
+    if action == "add":
+        session = sessions.add(data, name, workspace, agent, status or "working", task)
+        _sessions_save(data)
+        return "started %s (%s)" % (session["name"], session["id"]) + chr(10) + sessions.render(data)
+    if action in ("update", "close"):
+        key = session_id or name
+        ok = sessions.close(data, key) if action == "close" else sessions.update(data, key, status, task)
+        if not ok:
+            return "no session named or id: " + key
+        _sessions_save(data)
+        return ("closed " if action == "close" else "updated ") + key + chr(10) + sessions.render(data)
+    return sessions.render(data)
 
 
 def review_repository(path: str = ".") -> str:
@@ -1576,6 +1617,7 @@ LOCAL_TOOLS = {
     "todo_add": todo_add,
     "project_state": project_state_update,
     "review_repository": review_repository,
+    "agent_sessions": agent_sessions,
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
@@ -1637,6 +1679,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "inputs": {"type": "string"}, "settle_frames": {"type": "integer"}, "duration_ms": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
+    schema("agent_sessions", "Track concurrent agent sessions - who is working, blocked or idle - so you never hunt for the stuck one. action='list' shows them, 'add' starts one (name, workspace, agent, status, task), 'update' changes a status/task, 'close' marks one done.",
+           {"action": {"type": "string"}, "name": {"type": "string"}, "session_id": {"type": "string"}, "status": {"type": "string"}, "task": {"type": "string"}, "workspace": {"type": "string"}, "agent": {"type": "string"}}),
     schema("review_repository", "Review a repository FOLDER before adopting it: size, licence, languages, entry points and manifests. Read-only - it never executes or installs anything. Use it before adding third-party code.",
            {"path": {"type": "string"}}),
     schema("list_capabilities", "List or search what Loki can use right now - model providers, tools, MCP servers and skill libraries - with each one's status and where to get a key. Pass query to filter.",
@@ -1683,7 +1727,8 @@ MODEL_TOOL_NAMES = {
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
-    "check_script", "capture_scene", "view_image", "project_state", "review_repository", "list_capabilities",
+    "check_script", "capture_scene", "view_image", "project_state", "review_repository",
+    "list_capabilities", "agent_sessions",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1697,7 +1742,8 @@ TOOL_CATEGORIES = {
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
-    "planning": ["todo_add", "todo_list", "todo_done", "project_state"],
+    "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
+                 "agent_sessions"],
     "memory": ["save_memory"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],

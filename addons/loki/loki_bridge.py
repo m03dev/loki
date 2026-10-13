@@ -545,6 +545,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             text = agent.project_state_text() if hasattr(agent, "project_state_text") else ""
             self._send_json(200, {"ok": True, "state": text})
             return
+        if route == "/sessions":
+            agent = self.server.state.agent
+            text = agent.agent_sessions() if hasattr(agent, "agent_sessions") else ""
+            self._send_json(200, {"ok": True, "sessions": text})
+            return
         if route == "/ecc":
             self._send_json(200, {"ok": True, **ecc_library(self.server.state.agent)})
             return
@@ -751,6 +756,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                       "state": state.agent.project_state_text()})
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"project state failed: {exc}"})
+            return
+        if route == "/sessions":
+            try:
+                message: str = state.agent.agent_sessions(
+                    str(data.get("action", "list")), str(data.get("name", "")),
+                    str(data.get("session_id", "")), str(data.get("status", "")),
+                    str(data.get("task", "")), str(data.get("workspace", "")),
+                    str(data.get("agent", "loki")))
+                self._send_json(200, {"ok": True, "message": message})
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"sessions failed: {exc}"})
             return
         if route == "/ecc/sync":
             try:
