@@ -13,9 +13,10 @@ bash setup.sh      # macOS / Linux (needs Python 3.11+)
 setup.bat          # Windows
 ```
 
-On macOS, setup builds **Loki.app** in `~/Applications`; open it like any other app.
-Elsewhere, start it with `harness_data/.venv/bin/python app/loki_app.py`.
-Details: [docs/operations/MACOS.md](docs/operations/MACOS.md).
+On macOS, setup builds **Loki.app** in `~/Applications`. On Windows, setup adds **Loki**
+to the Start menu and the Desktop (or run `Loki.cmd`). On Linux, start it with
+`harness_data/.venv/bin/python app/loki_app.py`.
+Details: [macOS](docs/operations/MACOS.md), [Windows](docs/operations/WINDOWS.md).
 
 ## Using it
 

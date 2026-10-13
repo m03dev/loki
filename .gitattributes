@@ -1,2 +1,7 @@
 # Keep prepared upstream patches byte-exact so git am applies them.
 *.patch -text
+
+# Windows batch files misparse labels with LF-only endings; always check them out CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

@@ -102,7 +102,7 @@ def find_godot(env: dict | None = None) -> str:
                 binary = app / "Contents" / "MacOS" / "Godot"
                 if binary.is_file():
                     return str(binary)
-    return shutil.which("godot") or ""
+    return shutil.which("godot") or shutil.which("godot4") or ""
 
 
 # --------------------------------------------------------------------- engine
@@ -137,6 +137,16 @@ def engine_command(python: Path, workspace: Path, godot: str) -> list[str]:
     return command
 
 
+def popen_options(platform: str | None = None) -> dict:
+    """How to detach the engine: its own session on macOS/Linux, no console on Windows."""
+    platform = platform or sys.platform
+    if platform == "win32":
+        # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP: no black console window, and the
+        # engine can be stopped on its own.
+        return {"creationflags": 0x08000000 | 0x00000200}
+    return {"start_new_session": True}
+
+
 def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
     STATE.mkdir(parents=True, exist_ok=True)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -149,7 +159,7 @@ def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
     log(f"starting the engine for {workspace}" + (f" (Godot: {godot})" if godot else " (no Godot)"))
     return subprocess.Popen(engine_command(python, workspace, godot), cwd=str(REPO), env=env,
                             stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
-                            start_new_session=True)
+                            **popen_options())
 
 
 def wait_for_engine(process: subprocess.Popen | None, timeout: float = ENGINE_START_TIMEOUT_S) -> str:
@@ -170,7 +180,10 @@ def stop_engine(process: subprocess.Popen | None) -> None:
         return
     log("stopping the engine")
     try:
-        os.killpg(process.pid, signal.SIGTERM) if hasattr(os, "killpg") else process.terminate()
+        if hasattr(os, "killpg"):
+            os.killpg(process.pid, signal.SIGTERM)
+        else:  # Windows
+            process.terminate()
         process.wait(timeout=8)
     except Exception:
         process.kill()
@@ -250,9 +263,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         python = engine_python()
         if python is None:
+            fix = (f"cd /d {REPO} && setup.bat" if sys.platform == "win32"
+                   else f"cd {REPO} && bash setup.sh")
             return tell("Loki is not set up yet",
-                        f"Run this once in Terminal, then open Loki again:\n\n"
-                        f"cd {REPO} && bash setup.sh")
+                        f"Run this once in a terminal, then open Loki again:\n\n{fix}")
         process = start_engine(python, workspace, find_godot())
         token = wait_for_engine(process)
         if not token:

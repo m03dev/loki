@@ -2287,6 +2287,18 @@ check("app reports an engine that never answers", _app.probe("x", timeout=0.3) i
 _page = _app.problem_page("<b>x</b>", "a & b")
 check("the app's engine has its own port, apart from the Godot dock's", _app.PORT == 8767 and _lb.PORT == 8766)
 check("the app tells its engine which port to use", "LOKI_PORT=str(PORT)" in (REPO / "app" / "loki_app.py").read_text(encoding="utf-8"))
+check("on Windows the engine gets no console window",
+      _app.popen_options("win32").get("creationflags", 0) & 0x08000000 == 0x08000000)
+check("on macOS/Linux the engine gets its own session", _app.popen_options("darwin") == {"start_new_session": True})
+_bat = (REPO / "setup.bat").read_text(encoding="utf-8")
+check("setup.bat picks a Python 3.11+ (py launcher first)", "py -%%V" in _bat and "(3, 11)" in _bat)
+check("setup.bat installs the Loki window and makes shortcuts",
+      "app\\requirements.txt" in _bat and "make_shortcuts.ps1" in _bat)
+_ps1 = (REPO / "tools" / "windows" / "make_shortcuts.ps1").read_text(encoding="utf-8")
+check("Windows shortcuts start Loki without a console (pythonw)", "pythonw.exe" in _ps1 and "loki_app.py" in _ps1)
+check("Loki.cmd starts the app with pythonw", "pythonw.exe" in (REPO / "Loki.cmd").read_text(encoding="utf-8"))
+check("Windows scripts are checked out with CRLF",
+      "*.bat text eol=crlf" in (REPO / ".gitattributes").read_text(encoding="utf-8"))
 check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
 
