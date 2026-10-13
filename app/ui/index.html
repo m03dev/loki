@@ -18,6 +18,7 @@
     <nav id="conversations" class="conversations" aria-label="Chats"></nav>
     <div class="sidebar-foot">
       <div id="workspace" class="workspace" title="Workspace folder"></div>
+      <button type="button" id="open-jobs" class="quiet">Background <span id="jobs-badge" class="badge" hidden></span></button>
       <button type="button" id="open-settings" class="quiet">Settings</button>
     </div>
   </aside>
@@ -94,6 +95,51 @@
         <p class="note">Everything Loki knows about, and whether it is ready.</p>
         <pre id="capabilities" class="caps"></pre>
       </section>
+    </div>
+  </div>
+</div>
+<div id="jobs" class="sheet" hidden>
+  <div class="sheet-panel wide" role="dialog" aria-modal="true" aria-labelledby="jobs-title">
+    <header class="sheet-head">
+      <h2 id="jobs-title">Background jobs</h2>
+      <button type="button" id="close-jobs" class="quiet" aria-label="Close background jobs">Close</button>
+    </header>
+    <div class="tab-body">
+      <p class="note">Hand work to an agent that keeps going while you do something else. Host jobs work in their own git branch; virtual computers keep everything inside the VM.</p>
+      <div id="backends" class="backends"></div>
+      <form id="job-form" class="job-form">
+        <div class="job-row">
+          <label>Run on
+            <select id="job-backend">
+              <option value="herdr">herdr (attachable terminal)</option>
+              <option value="local">This computer (detached)</option>
+              <option value="cua">Virtual computer (cua)</option>
+            </select>
+          </label>
+          <label id="job-agent-label">Agent
+            <select id="job-agent">
+              <option value="claude-code">Claude Code</option>
+              <option value="codex">Codex</option>
+            </select>
+          </label>
+          <label>Time limit
+            <select id="job-timeout">
+              <option value="900">15 min</option>
+              <option value="3600" selected>1 hour</option>
+              <option value="14400">4 hours</option>
+            </select>
+          </label>
+        </div>
+        <textarea id="job-prompt" rows="3" placeholder="What should it do?" aria-label="Job prompt"></textarea>
+        <textarea id="job-commands" rows="3" placeholder="Or shell commands to run inside the virtual computer, one per line" aria-label="Commands" hidden></textarea>
+        <div class="job-row end">
+          <label class="check"><input type="checkbox" id="job-isolate" checked> Separate git branch</label>
+          <span id="job-result" class="note"></span>
+          <button type="submit" class="send">Start job</button>
+        </div>
+      </form>
+      <div class="job-list-head"><h3>Jobs</h3><button type="button" id="clear-jobs" class="quiet">Clear finished</button></div>
+      <div id="job-list" class="job-list"></div>
     </div>
   </div>
 </div>

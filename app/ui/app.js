@@ -411,6 +411,126 @@ async function loadCapabilities() {
   $("#capabilities").textContent = JSON.stringify(copy, null, 2);
 }
 
+// ---------------------------------------------------------------- background jobs
+const jobsView = { timer: 0, open: false, shots: {} };
+
+function updateBadge(data) {
+  const badge = $("#jobs-badge");
+  if (!data || !data.ok) { badge.hidden = true; return; }
+  const c = data.counts || {};
+  const live = (c.queued || 0) + (c.starting || 0) + (c.working || 0) + (c.blocked || 0);
+  badge.hidden = live === 0;
+  badge.textContent = String(live);
+  badge.classList.toggle("attention", (c.blocked || 0) > 0);
+  badge.title = (c.blocked || 0) > 0 ? "A job is waiting for you" : live + " running";
+}
+
+function renderBackends(backends) {
+  const box = $("#backends");
+  box.replaceChildren();
+  for (const [name, info] of Object.entries(backends || {})) {
+    const b = el("div", "backend " + (info.available ? "ready" : "off"));
+    b.append(el("b", "", name), document.createTextNode(info.detail || ""));
+    box.append(b);
+  }
+}
+
+async function loadShot(job, holder) {
+  if (jobsView.shots[job.id]) { holder.src = jobsView.shots[job.id]; return; }
+  const data = await api("/jobs/screenshot?id=" + encodeURIComponent(job.id)).catch(() => null);
+  if (data && data.ok) { jobsView.shots[job.id] = data.image; holder.src = data.image; }
+}
+
+function renderJobs(jobs) {
+  const list = $("#job-list");
+  const openIds = new Set([...list.querySelectorAll("details[open]")].map((d) => d.dataset.id));
+  list.replaceChildren();
+  if (!jobs || !jobs.length) { list.append(el("p", "note", "No jobs yet.")); return; }
+  for (const job of jobs) {
+    const card = el("div", "job");
+    const top = el("div", "job-top");
+    top.append(el("span", "pill " + job.status, job.status), el("span", "job-title", job.title));
+    if (!["done", "failed", "cancelled"].includes(job.status)) {
+      const stop = el("button", "quiet", "Cancel");
+      stop.type = "button";
+      stop.addEventListener("click", async () => { renderAfter(await api("/jobs/cancel", { id: job.id })); });
+      top.append(stop);
+    }
+    const where = job.backend + (job.agent && job.agent !== "cua" ? " · " + job.agent : "");
+    card.append(top, el("div", "job-meta", where + " · started " + (job.started || "—") + (job.finished ? " · finished " + job.finished : "")));
+    if (job.note) card.append(el("div", "job-meta", job.note));
+    if (job.error) card.append(el("div", "err", job.error));
+    if (job.output || job.screenshot) {
+      const details = el("details");
+      details.dataset.id = job.id;
+      details.open = openIds.has(job.id);
+      details.append(el("summary", "", "Output"));
+      if (job.output) details.append(el("pre", "", job.output));
+      if (job.screenshot) {
+        const img = el("img");
+        img.alt = "Virtual computer screenshot";
+        details.append(img);
+        loadShot(job, img);
+      }
+      card.append(details);
+    }
+    list.append(card);
+  }
+}
+
+function renderAfter(data) {
+  updateBadge(data);
+  if (!data || !data.ok) return;
+  renderBackends(data.backends);
+  renderJobs(data.jobs);
+}
+
+async function refreshJobs() {
+  const data = await api("/jobs").catch(() => null);
+  updateBadge(data);
+  if (jobsView.open && data && data.ok) renderAfter(data);
+}
+
+function syncJobForm() {
+  const backend = $("#job-backend").value;
+  const vm = backend === "cua";
+  $("#job-agent-label").hidden = vm;
+  $("#job-commands").hidden = !vm;
+  $("#job-isolate").parentElement.hidden = vm;
+}
+
+function openJobs() {
+  jobsView.open = true;
+  $("#jobs").hidden = false;
+  syncJobForm();
+  refreshJobs();
+  clearInterval(jobsView.timer);
+  jobsView.timer = setInterval(refreshJobs, 3000);
+  $("#job-prompt").focus();
+}
+
+function closeJobs() {
+  jobsView.open = false;
+  $("#jobs").hidden = true;
+  clearInterval(jobsView.timer);
+}
+
+async function submitJob(event) {
+  event.preventDefault();
+  const backend = $("#job-backend").value;
+  const body = {
+    backend,
+    prompt: $("#job-prompt").value.trim(),
+    timeout_s: Number($("#job-timeout").value),
+  };
+  if (backend === "cua") body.commands = $("#job-commands").value;
+  else { body.agent = $("#job-agent").value; body.isolate = $("#job-isolate").checked; }
+  $("#job-result").textContent = "Starting…";
+  const data = await api("/jobs", body).catch((e) => ({ ok: false, error: String(e) }));
+  $("#job-result").textContent = data.ok ? "Started job " + data.id : (data.error || "Could not start the job.");
+  if (data.ok) { $("#job-prompt").value = ""; $("#job-commands").value = ""; renderAfter(data); }
+}
+
 // ---------------------------------------------------------------- wiring
 function autosize() {
   const t = $("#prompt");
@@ -450,9 +570,15 @@ function wire() {
     else if (data.resolved && data.resolved !== data.current) setStatus("Using " + data.resolved, true);
   });
   $("#open-settings").addEventListener("click", openSettings);
+  $("#open-jobs").addEventListener("click", openJobs);
+  $("#close-jobs").addEventListener("click", closeJobs);
+  $("#jobs").addEventListener("click", (event) => { if (event.target === $("#jobs")) closeJobs(); });
+  $("#job-form").addEventListener("submit", submitJob);
+  $("#job-backend").addEventListener("change", syncJobForm);
+  $("#clear-jobs").addEventListener("click", async () => renderAfter(await api("/jobs/clear", {})));
   $("#close-settings").addEventListener("click", () => { $("#settings").hidden = true; });
   $("#settings").addEventListener("click", (event) => { if (event.target === $("#settings")) $("#settings").hidden = true; });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("#settings").hidden = true; });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; closeJobs(); } });
   for (const tab of document.querySelectorAll(".tabs button")) tab.addEventListener("click", () => showTab(tab.dataset.tab));
   $("#save-memory").addEventListener("click", async () => {
     const data = await api("/memory", { text: $("#memory-text").value });
@@ -489,6 +615,8 @@ async function start() {
   setStatus("Ready", true);
   await Promise.all([loadModels(), loadMode(), loadConversations()]);
   setInterval(pollApproval, 1500);
+  refreshJobs();
+  setInterval(() => { if (!jobsView.open) refreshJobs(); }, 10000);
   $("#prompt").focus();
 }
 

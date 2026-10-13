@@ -65,6 +65,17 @@ shows auth/cost/health, and has a tested connector or an explicit "needs credent
   independent verification. **Acceptance:** a task graph runs with a checkpoint and an
   independent verifier pass.
 
+## Phase 6b — Background jobs (herdr, virtual computers) — Partial
+- Done: `harness/workers.py` - a job store and supervisor with three backends: `local`
+  (detached Claude Code / Codex), `herdr` (one herdr workspace per job, working / blocked /
+  idle tracked) and `cua` (commands or a computer-use agent inside a Docker Linux or Lume
+  macOS VM). Host jobs run only known agents, in an isolated git worktree, with timeouts
+  and cancel. Engine endpoints `/jobs*` and the app's Background panel. 68 offline checks
+  in `tests/test_workers.py`.
+- Open: first real run against herdr and cua on the Mac mini; merge/review flow for job
+  branches in the app.
+**Acceptance:** a herdr job and a VM command job each run to `done` on real hardware.
+
 ## Phase 7 — Distributed local models — Planned
 Worker registration/heartbeat/capacity; capability-aware routing; authenticated transport.
 **Acceptance:** a task runs on a remote worker and survives its disconnect.

@@ -32,6 +32,10 @@ Details: [macOS](docs/operations/MACOS.md), [Windows](docs/operations/WINDOWS.md
   with Allow and Deny.
 - **Workspace.** Loki works in `~/Loki` unless you start it with
   `--workspace /path/to/project` (remembered).
+- **Background jobs.** Hand work to Claude Code or Codex that keeps going while you do
+  something else - in a herdr workspace you can attach to, as a detached process, or
+  inside a virtual computer (cua). Host jobs work on their own git branch. See
+  [Background jobs](docs/operations/BACKGROUND_WORKERS.md).
 - **Settings** has Connections (what Loki can reach - keys are never shown, and you can
   connect a provider key), Tools, Memory and Capabilities.
 - **Game projects.** Godot is an optional adapter: point Loki at a folder with a
@@ -77,6 +81,7 @@ installed (`npm install --prefix harness_data/laya @receptron/laya`).
 ```bash
 harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, offline
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
+harness_data/.venv/Scripts/python.exe tests/test_workers.py        # background jobs, offline
 ```
 
 The agent lives in `addons/loki/harness/` (Python), the editor UI in

@@ -256,6 +256,7 @@ class BridgeState:
         self.progress: list[dict[str, Any]] = []
         self.progress_seq: int = 0
         self.progress_chat_id: str = ""
+        self.jobs: Any = None  # workers.Supervisor - background jobs (local / herdr / cua)
 
     def try_busy(self) -> list | None:
         # acquire both request locks, or None when a request is in flight
@@ -648,6 +649,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
             return
+        if route == "/jobs":
+            jobs = self.server.state.jobs
+            if jobs is None:
+                self._send_json(503, {"ok": False, "error": "Background jobs are not running."})
+            else:
+                self._send_json(200, {"ok": True, **jobs.status()})
+            return
+        if route == "/jobs/screenshot":
+            self._send_json(*job_screenshot(self.server.state, parse_qs(urlparse(self.path).query)))
+            return
         if route == "/capabilities":
             agent = self.server.state.agent
             if hasattr(agent, "capability_summary"):
@@ -868,6 +879,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"vault failed: {exc}"})
             return
+        if route.startswith("/jobs"):
+            self._send_json(*job_action(state, route, data))
+            return
         if route == "/ecc/sync":
             try:
                 message: str = state.agent.sync_ecc(bool(data.get("force", False)))
@@ -877,6 +891,43 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "message": message, **ecc_library(state.agent)})
             return
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
+
+
+def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /jobs (create), /jobs/cancel, /jobs/clear. Returns (status, payload)."""
+    jobs = state.jobs
+    if jobs is None:
+        return 503, {"ok": False, "error": "Background jobs are not running."}
+    if route == "/jobs":
+        spec = dict(data)
+        if not str(spec.get("workspace") or "").strip() and state.project is not None:
+            spec["workspace"] = str(state.project)
+        try:
+            job = jobs.create(spec)
+        except ValueError as exc:
+            return 400, {"ok": False, "error": str(exc)}
+        threading.Thread(target=jobs.tick, daemon=True).start()  # start it now, not next tick
+        return 200, {"ok": True, "id": job["id"], **jobs.status()}
+    if route == "/jobs/cancel":
+        job = jobs.cancel(str(data.get("id", "")))
+        if job is None:
+            return 404, {"ok": False, "error": "No such job."}
+        return 200, {"ok": True, **jobs.status()}
+    if route == "/jobs/clear":
+        removed = jobs.store.remove_finished(keep=0)
+        return 200, {"ok": True, "removed": removed, **jobs.status()}
+    return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def job_screenshot(state: "BridgeState", query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
+    """The last virtual-computer screenshot of a job, as a data: URL (the UI's CSP allows it)."""
+    import base64  # pylint: disable=import-outside-toplevel
+    jobs = state.jobs
+    job = jobs.store.get((query.get("id") or [""])[0]) if jobs is not None else None
+    path = Path(str(((job or {}).get("handle") or {}).get("screenshot", "")))
+    if job is None or not path.is_file():
+        return 404, {"ok": False, "error": "No screenshot for that job."}
+    return 200, {"ok": True, "image": "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii")}
 
 
 class BridgeHTTPServer(ThreadingHTTPServer):
@@ -1030,6 +1081,15 @@ async def serve() -> None:
         finally:
             in_tool_wrapper = False
     loki.call_tool = observed_call_tool
+    try:
+        import workers  # pylint: disable=import-outside-toplevel
+        state.jobs = workers.default_supervisor(Path(loki.DATA_DIR))
+        state.jobs.start()
+        print("[loki-bridge] background jobs: " + ", ".join(
+            "%s %s" % (name, "ready" if info["available"] else "off")
+            for name, info in state.jobs.status()["backends"].items()), flush=True)
+    except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
+        print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
     threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
     try:
@@ -1048,6 +1108,8 @@ async def serve() -> None:
         await asyncio.Event().wait()
     finally:
         keeper_stop.set()
+        if state.jobs is not None:
+            state.jobs.stop()
         server.shutdown()
         server.server_close()
         await stack.aclose()
