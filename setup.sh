@@ -8,9 +8,20 @@ VENV="$DATA/.venv"
 
 [ -f "$HARNESS/loki.py" ] || { echo "[loki] run this from the Loki repo root"; exit 1; }
 
+# The newest Python 3.11+ on the machine. Apple's /usr/bin/python3 is 3.9, which
+# cannot install the harness dependencies.
+PY=""
+for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
+  if command -v "$candidate" >/dev/null 2>&1 &&
+     "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PY="$candidate"; break
+  fi
+done
+[ -n "$PY" ] || { echo "[loki] needs Python 3.11+ (python.org or 'brew install python'); none found"; exit 1; }
+
 if [ ! -x "$VENV/bin/python" ]; then
-  echo "[loki] creating a private Python environment (one time)"
-  python3 -m venv "$VENV"
+  echo "[loki] creating a private Python environment with $PY (one time)"
+  "$PY" -m venv "$VENV"
 fi
 echo "[loki] installing dependencies"
 "$VENV/bin/python" -m pip install --upgrade pip >/dev/null 2>&1 || true

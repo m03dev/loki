@@ -4,6 +4,38 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 9) - macOS: the bridge launch fix and Loki.app
+
+**Context.** This was the first session from the cloud workspace, not the Windows checkout.
+It worked on the fresh clone `github.com/m03dev/loki`, `master` at `b0c805d` (clean),
+on branch `macos-app`. PyPI and GitHub zip downloads are blocked from this workspace, so
+the baseline was run with throwaway import stubs for `mcp`/`openai`/`pydantic`. The skill
+libraries were fetched with `git clone` into the same vendor folders. Baseline:
+**331 passed, 0 failed**.
+
+**Work completed**
+- `loki_dock.gd`: `_bridge_interpreters()` now gives macOS/Linux venv paths
+  (`bin/python3`) and the Homebrew, python.org and system Python 3 locations. The
+  bare-name `pythonw`/`python`/`py` fallback is Windows-only. Before this, the bridge
+  never started on a Mac: `create_process` forks before it execs, so a missing name
+  still returned a PID.
+- `bootstrap.py` / `setup.sh`: there is now a Python 3.11 floor. A too-old interpreter
+  (Apple's 3.9) gets a clear message and no venv, instead of a broken venv that later
+  launches would prefer.
+- `tools/macos/make_loki_app.sh` + `launcher.sh`: build `Loki.app`, which finds Godot
+  4.8+, runs setup once, fixes the Finder `PATH`, and opens this checkout in the editor.
+  It never installs Godot, and it only replaces its own bundle.
+- `docs/operations/MACOS.md`, README pointer.
+
+**Tests:** 351 passed, 0 failed (+20: dock interpreter order, bootstrap floor (behavioural),
+bundle build/plist/rebuild/refuse-foreign, launcher allowed/old-version/invalid-path/
+bad-version/missing-Godot against fake Godot binaries).
+
+**Not verified:** no run on a real Mac with real Godot 4.8 yet (see MACOS.md, "Not
+verified yet").
+
+---
+
 ## 2026-10-12 (session 8) - The API Vault (the real catalog)
 
 **Work completed** (`87a4770`)

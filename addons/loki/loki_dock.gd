@@ -541,22 +541,45 @@ func _spawn_bridge() -> int:
 		"--godot-exe", OS.get_executable_path(),
 		"--secret-file", _token_path(),
 	])
-	var bundled: PackedStringArray = PackedStringArray([
-		project.path_join("harness_data/.venv/Scripts/pythonw.exe"),
-		project.path_join("harness_data/.venv/Scripts/python.exe"),
-		project.path_join(".venv/Scripts/pythonw.exe"),
-		project.path_join(".venv/Scripts/python.exe"),
-	])
-	for interpreter in bundled:
+	for interpreter in _bridge_interpreters(project):
 		if FileAccess.file_exists(interpreter):
 			var bundled_pid: int = OS.create_process(interpreter, args, false)
 			if bundled_pid > 0:
 				return bundled_pid
-	for name in PackedStringArray(["pythonw", "python", "py"]):
-		var path_pid: int = OS.create_process(name, args, false)
-		if path_pid > 0:
-			return path_pid
+	# Bare names only on Windows. On macOS/Linux create_process forks first, so it
+	# returns a pid even when the name does not exist and the bridge silently never
+	# starts; and a stock Mac has no `python`, `pythonw` or `py` at all.
+	if OS.get_name() == "Windows":
+		for name in PackedStringArray(["pythonw", "python", "py"]):
+			var path_pid: int = OS.create_process(name, args, false)
+			if path_pid > 0:
+				return path_pid
 	return -1
+
+
+func _bridge_interpreters(project: String) -> PackedStringArray:
+	# Absolute interpreter paths to try, best first: the project's own venv
+	# (setup.bat / setup.sh make it), then a system Python 3 that bootstrap.py can
+	# build that venv from.
+	if OS.get_name() == "Windows":
+		return PackedStringArray([
+			project.path_join("harness_data/.venv/Scripts/pythonw.exe"),
+			project.path_join("harness_data/.venv/Scripts/python.exe"),
+			project.path_join(".venv/Scripts/pythonw.exe"),
+			project.path_join(".venv/Scripts/python.exe"),
+		])
+	# macOS / Linux. A Godot started from Finder gets a minimal PATH, so name the
+	# usual Homebrew, python.org and system locations explicitly.
+	return PackedStringArray([
+		project.path_join("harness_data/.venv/bin/python3"),
+		project.path_join("harness_data/.venv/bin/python"),
+		project.path_join(".venv/bin/python3"),
+		project.path_join(".venv/bin/python"),
+		"/opt/homebrew/bin/python3",
+		"/usr/local/bin/python3",
+		"/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+		"/usr/bin/python3",
+	])
 
 func _on_input_gui(event: InputEvent) -> void:
 	# Enter sends and Shift+Enter adds a line, the way Ziva's composer works, so the habit

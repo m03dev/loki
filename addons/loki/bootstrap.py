@@ -37,6 +37,7 @@ HARNESS = _harness_dir()
 # never shipped with it, and never get copied into a project.
 DATA = REPO / "harness_data"
 VENV = DATA / ".venv"
+MIN_PYTHON = (3, 11)
 REQUIREMENTS = HARNESS / "requirements.txt"
 BRIDGE = ADDON_DIR / "loki_bridge.py"
 LOG = REPO / ".godot" / "loki_bridge.log"
@@ -161,6 +162,13 @@ def ensure_environment() -> Path | None:
         return python
 
     if not python.exists():
+        if sys.version_info < MIN_PYTHON:
+            # e.g. Apple's /usr/bin/python3 (3.9): a venv built from it can never
+            # install the harness deps, and would be preferred on every later launch.
+            log("Python %d.%d is too old to build Loki's environment (needs %d.%d+); "
+                "install a newer Python 3 (python.org or Homebrew) or run setup.sh"
+                % (sys.version_info[:2] + MIN_PYTHON))
+            return None
         log(f"creating a private Python environment at {VENV} (one time)")
         try:
             subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
@@ -189,6 +197,9 @@ def main() -> int:
         log("another Loki launch is already in progress; standing down")
         return 0
     python = ensure_environment()
+    if python is None and sys.version_info < MIN_PYTHON:
+        release_launch_lock()
+        return 2
     if python is None:
         log("setup failed; trying the current interpreter anyway")
         python = Path(sys.executable)

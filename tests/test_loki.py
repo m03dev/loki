@@ -2119,6 +2119,107 @@ check("api_vault has a schema", any(s["function"]["name"] == "api_vault" for s i
 
 
 
+section("macOS: bridge interpreter and Loki.app")
+
+_dock_now = (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8")
+_interp = _dock_now.split("func _bridge_interpreters", 1)[-1].split("\nfunc ", 1)[0]
+check("dock looks for the macOS/Linux venv (bin/python3)",
+      'harness_data/.venv/bin/python3' in _interp and '/opt/homebrew/bin/python3' in _interp)
+check("dock keeps the Windows venv paths",
+      'harness_data/.venv/Scripts/pythonw.exe' in _interp)
+_spawn = _dock_now.split("func _spawn_bridge", 1)[-1].split("\nfunc ", 1)[0]
+check("bare-name python fallback is Windows-only (fork hides exec failure elsewhere)",
+      'if OS.get_name() == "Windows":' in _spawn
+      and _spawn.index('if OS.get_name() == "Windows":') < _spawn.index('"pythonw", "python", "py"'))
+check("Apple's system python3 is tried last",
+      _interp.rstrip().rstrip("])").rstrip().rstrip(",").endswith('"/usr/bin/python3"'))
+
+import importlib.util as _ilu  # noqa: E402
+_bs_spec = _ilu.spec_from_file_location("_loki_bootstrap", REPO / "addons" / "loki" / "bootstrap.py")
+_bs = _ilu.module_from_spec(_bs_spec)
+_bs_spec.loader.exec_module(_bs)
+check("bootstrap declares Python 3.11 as the floor", _bs.MIN_PYTHON == (3, 11))
+_bs_src = (REPO / "addons" / "loki" / "bootstrap.py").read_text(encoding="utf-8")
+check("bootstrap refuses to build a venv from a too-old Python",
+      _bs_src.index("sys.version_info < MIN_PYTHON") < _bs_src.index('"-m", "venv"'))
+import tempfile as _tf0  # noqa: E402
+with _tf0.TemporaryDirectory() as _bsd:
+    _saved = (_bs.VENV, _bs.MIN_PYTHON)
+    _bs.VENV, _bs.MIN_PYTHON = Path(_bsd) / ".venv", (99, 0)
+    try:
+        _env_result = _bs.ensure_environment()
+    finally:
+        _bs.VENV, _bs.MIN_PYTHON = _saved
+    check("a too-old Python gets no venv at all (not a broken one)",
+          _env_result is None and not (Path(_bsd) / ".venv").exists())
+check("setup.sh picks a Python 3.11+ instead of whatever python3 is",
+      "sys.version_info >= (3, 11)" in (REPO / "setup.sh").read_text(encoding="utf-8"))
+
+import shutil as _sh, subprocess as _sp, tempfile as _tf, plistlib as _pl  # noqa: E401,E402
+_builder = REPO / "tools" / "macos" / "make_loki_app.sh"
+if os.name == "nt" or not _sh.which("bash"):
+    print("  SKIP Loki.app build checks (needs a POSIX bash)")
+else:
+    check("make_loki_app.sh parses", _sp.run(["bash", "-n", str(_builder)]).returncode == 0)
+    check("launcher.sh parses",
+          _sp.run(["bash", "-n", str(REPO / "tools" / "macos" / "launcher.sh")]).returncode == 0)
+    with _tf.TemporaryDirectory() as _td:
+        _td = Path(_td)
+        _home = _td / "home"
+        _home.mkdir()
+        _built = _sp.run(["bash", str(_builder), str(_td)], capture_output=True, text=True)
+        _app = _td / "Loki.app"
+        _exe = _app / "Contents" / "MacOS" / "Loki"
+        check("Loki.app builds", _built.returncode == 0 and _exe.is_file(), _built.stdout + _built.stderr)
+        _plist = _pl.loads((_app / "Contents" / "Info.plist").read_bytes()) if _built.returncode == 0 else {}
+        check("Info.plist is valid and names the launcher",
+              _plist.get("CFBundleExecutable") == "Loki" and _plist.get("CFBundlePackageType") == "APPL")
+        check("launcher is executable", _exe.is_file() and os.access(_exe, os.X_OK))
+        _rebuilt = _sp.run(["bash", str(_builder), str(_td)], capture_output=True, text=True)
+        check("rebuilding replaces its own bundle", _rebuilt.returncode == 0 and _exe.is_file())
+        _foreign = _td / "foreign"
+        (_foreign / "Loki.app" / "Contents").mkdir(parents=True)
+        _deny = _sp.run(["bash", str(_builder), str(_foreign)], capture_output=True, text=True)
+        check("refuses to overwrite a Loki.app it did not make",
+              _deny.returncode != 0 and (_foreign / "Loki.app" / "Contents").is_dir()
+              and not (_foreign / "Loki.app" / "Contents" / "MacOS").exists(), _deny.stdout)
+
+        def _fake_godot(version: str) -> Path:
+            fake = _td / ("godot_" + version.replace(".", "_"))
+            fake.write_text('#!/bin/bash\nif [ "$1" = "--version" ]; then echo "%s"; exit 0; fi\n'
+                            'printf "%%s\\n" "$@" > "%s.args"\n' % (version, fake), encoding="utf-8")
+            fake.chmod(0o755)
+            return fake
+
+        def _launch(**extra: str):
+            # Search only an empty folder, so a real Godot on this machine is never opened.
+            env = {"PATH": "/usr/bin:/bin", "HOME": str(_home), "LOKI_SKIP_SETUP": "1",
+                   "LOKI_GODOT_SEARCH_DIRS": str(_home)}
+            env.update(extra)
+            return _sp.run([str(_exe)], env=env, capture_output=True, text=True, timeout=30)
+
+        _ok = _fake_godot("4.8.stable.official")
+        _r = _launch(LOKI_GODOT=str(_ok))
+        _args = Path(str(_ok) + ".args")
+        _argv = _args.read_text(encoding="utf-8").split() if _args.is_file() else []
+        check("launcher opens this checkout in the editor (allowed)",
+              _r.returncode == 0 and _argv == ["--path", str(REPO), "-e"], _r.stderr or _argv)
+        _old = _fake_godot("4.3.stable.official")
+        _r = _launch(LOKI_GODOT=str(_old))
+        check("launcher refuses Godot older than 4.8 (denied)",
+              _r.returncode == 5 and not Path(str(_old) + ".args").exists(), _r.stderr)
+        _r = _launch(LOKI_GODOT=str(_td / "no-such-godot"))
+        check("launcher rejects an invalid Godot path",
+              _r.returncode == 4 and "LOKI_GODOT" in _r.stderr, _r.stderr)
+        _junk = _fake_godot("garbage")
+        _r = _launch(LOKI_GODOT=str(_junk))
+        check("launcher fails cleanly on an unreadable Godot version",
+              _r.returncode == 5 and not Path(str(_junk) + ".args").exists(), _r.stderr)
+        _r = _launch()
+        check("launcher reports a missing Godot instead of installing one",
+              _r.returncode == 4 and "not found" in _r.stderr, _r.stderr)
+
+
 if "--live" in sys.argv:
 
 

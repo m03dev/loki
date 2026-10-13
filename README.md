@@ -16,6 +16,9 @@ setup.bat          # Windows
 Then open the folder as a project in **Godot 4.8** and enable **Loki** and **Loki Chat**
 in *Project Settings -> Plugins*.
 
+On a Mac, `tools/macos/make_loki_app.sh` builds a double-clickable **Loki.app** that
+does this for you. See [docs/operations/MACOS.md](docs/operations/MACOS.md).
+
 ## Using it
 
 - **The chat dock** sits in the left column beside Scene. Type in the box and press
