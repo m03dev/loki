@@ -180,7 +180,9 @@ def begin_sign_in(state, project) -> str:
 MAX_TOOL_APPROVAL_SECONDS = 90
 MAX_TASK_STEPS = 0  # 0 = no cap on task steps
 HOST = "127.0.0.1"
-PORT = 8766
+# 8766 is the Godot dock's engine; the standalone app runs its own on 8767
+# (LOKI_PORT), so the two never fight over one port.
+PORT = int(os.environ.get("LOKI_PORT", "8766") or 8766)
 ALLOWED_ORIGINS = ("http://127.0.0.1", "http://localhost", "null",
                    f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}")
 ALLOWED_HOSTS = (f"127.0.0.1:{PORT}", f"localhost:{PORT}")

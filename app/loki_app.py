@@ -35,7 +35,9 @@ STATE = DATA / "app"
 TOKEN_FILE = STATE / "engine.token"
 SETTINGS_FILE = STATE / "settings.json"
 LOG_FILE = STATE / "loki_app.log"
-HOST, PORT = "127.0.0.1", 8766
+# The Godot dock's engine owns 8766; the app keeps its own engine on 8767 so both
+# can run at once.
+HOST, PORT = "127.0.0.1", int(os.environ.get("LOKI_APP_PORT", "8767") or 8767)
 BASE = f"http://{HOST}:{PORT}"
 ENGINE_START_TIMEOUT_S = 180
 
@@ -142,7 +144,7 @@ def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
         TOKEN_FILE.unlink()
     except OSError:
         pass
-    env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1")
+    env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1", LOKI_PORT=str(PORT))
     output = open(STATE / "engine.out", "a", encoding="utf-8")
     log(f"starting the engine for {workspace}" + (f" (Godot: {godot})" if godot else " (no Godot)"))
     return subprocess.Popen(engine_command(python, workspace, godot), cwd=str(REPO), env=env,
@@ -242,9 +244,9 @@ def main(argv: list[str] | None = None) -> int:
     if token and status == 200:
         log("attaching to the running engine")
     elif status != 0:
-        return tell("Another Loki engine is already running",
-                    f"Something else answers on {BASE} (probably the Godot dock's engine). "
-                    "Close the Godot editor, then open Loki again.")
+        return tell("Port %d is taken" % PORT,
+                    f"Something else answers on {BASE}. Quit it, or start Loki with "
+                    "LOKI_APP_PORT set to a free port.")
     else:
         python = engine_python()
         if python is None:

@@ -2285,6 +2285,8 @@ check("app passes Godot only when it found one",
 check("app ignores a Godot path that does not exist", _app.find_godot({"LOKI_GODOT": "/no/such/godot"}) == "")
 check("app reports an engine that never answers", _app.probe("x", timeout=0.3) in (0, 401, 403))
 _page = _app.problem_page("<b>x</b>", "a & b")
+check("the app's engine has its own port, apart from the Godot dock's", _app.PORT == 8767 and _lb.PORT == 8766)
+check("the app tells its engine which port to use", "LOKI_PORT=str(PORT)" in (REPO / "app" / "loki_app.py").read_text(encoding="utf-8"))
 check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
 
