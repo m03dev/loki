@@ -1903,6 +1903,67 @@ check("the prompt tells the agent to keep the state", "RESUMABLE PROJECT STATE" 
 
 
 
+section("repository browser (blueprint 5.1)")
+
+
+import repo_review as _rr
+
+
+import tempfile as _tf
+
+
+_tmpdir = Path(_tf.mkdtemp())
+
+
+(_tmpdir / "LICENSE").write_text("MIT", encoding="utf-8")
+
+
+(_tmpdir / "README.md").write_text("hi", encoding="utf-8")
+
+
+(_tmpdir / "a.py").write_text("x = 1", encoding="utf-8")
+
+
+(_tmpdir / "project.godot").write_text("config_version=5", encoding="utf-8")
+
+
+(_tmpdir / "node_modules").mkdir()
+
+
+(_tmpdir / "node_modules" / "junk.js").write_text("junk", encoding="utf-8")
+
+
+_report = _rr.review(_tmpdir)
+
+
+check("the review finds the licence", _report["licence"] == "LICENSE")
+
+
+check("the review finds the readme and the manifest",
+
+
+      _report["readme"] == "README.md" and "project.godot" in _report["manifests"])
+
+
+check("the review counts the files, skipping node_modules", _report["files"] == 4)
+
+
+check("the review lists languages", _report["languages"].get("py") == 1)
+
+
+check("the review is read-only and says so", "nothing was executed" in _rr.render(_report))
+
+
+check("a missing folder is reported, not raised", "not a folder" in _rr.review(_tmpdir / "nope").get("error", ""))
+
+
+check("review_repository is offered to the model", "review_repository" in loki.MODEL_TOOL_NAMES)
+
+
+check("review_repository has a schema", any(t["function"]["name"] == "review_repository" for t in loki.TOOL_SCHEMAS))
+
+
+
 if "--live" in sys.argv:
 
 

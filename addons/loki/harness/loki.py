@@ -230,6 +230,7 @@ import jev  # noqa: E402  (Jev typed decisions: risk gate + loop detection)
 os.environ.setdefault("LOKI_LAYA_PACKAGE_DIR", str(DATA_DIR / "laya"))
 import decisions  # noqa: E402  (Laya-first decision routing with Jev fallback)
 import project_state  # noqa: E402  (resumable project state - blueprint 7.3)
+import repo_review  # noqa: E402  (read-only repository review - blueprint 5.1)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 
 godot_tools.ROOT = ROOT
@@ -582,6 +583,19 @@ def project_state_update(action: str = "view", field: str = "", value: str = "")
         project_state.save(STATE_FILE, data)
         return note + chr(10) + project_state.render(data)
     return "unknown action: %s (use view, add, set or reset)" % action
+
+
+def review_repository(path: str = ".") -> str:
+    """Review a LOCAL repository folder read-only: size, licence, languages, entry points.
+
+    The blueprint's repository browser (5.1). Nothing is executed or installed - the
+    review only reads files, so a listed repository never becomes runnable (5.2).
+    """
+    try:
+        target = resolve_in_workspace(path or ".")
+    except ValueError:
+        target = Path(path or ".").expanduser()
+    return repo_review.render(repo_review.review(target))
 
 
 def todo_add(item: str) -> str:
@@ -1561,6 +1575,7 @@ LOCAL_TOOLS = {
     "open_in_editor": open_in_editor,
     "todo_add": todo_add,
     "project_state": project_state_update,
+    "review_repository": review_repository,
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
@@ -1622,6 +1637,8 @@ TOOL_SCHEMAS = [
            {"filename": {"type": "string"}, "inputs": {"type": "string"}, "settle_frames": {"type": "integer"}, "duration_ms": {"type": "integer"}}, ["filename"]),
     schema("view_image", "Send a screenshot (or any PNG) to the model and get back a description and a list of visual problems. Use it after capture_scene to check your own work.",
            {"filename": {"type": "string"}, "question": {"type": "string"}}, ["filename"]),
+    schema("review_repository", "Review a repository FOLDER before adopting it: size, licence, languages, entry points and manifests. Read-only - it never executes or installs anything. Use it before adding third-party code.",
+           {"path": {"type": "string"}}),
     schema("list_capabilities", "List or search what Loki can use right now - model providers, tools, MCP servers and skill libraries - with each one's status and where to get a key. Pass query to filter.",
            {"query": {"type": "string"}}),
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.). Pass query to filter by name when the list is long.",
@@ -1666,7 +1683,7 @@ MODEL_TOOL_NAMES = {
     "list_files", "list_tree", "read_file", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
-    "check_script", "capture_scene", "view_image", "project_state", "list_capabilities",
+    "check_script", "capture_scene", "view_image", "project_state", "review_repository", "list_capabilities",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1678,7 +1695,7 @@ TOOL_CATEGORIES = {
               "edit_file", "search_files", "make_dir", "move_file", "delete_file"],
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
     "godot": ["godot_api", "godot_search"],
-    "project": ["add_input_action", "set_project_setting", "add_autoload"],
+    "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done", "project_state"],
     "memory": ["save_memory"],
