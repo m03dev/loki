@@ -167,13 +167,14 @@ func _build_ui() -> void:
 	_menu.flat = true
 	_menu.tooltip_text = "More"
 	var popup: PopupMenu = _menu.get_popup()
-	popup.add_icon_item(_editor_icon("Tools"), "Settings", 1)
 	popup.add_icon_item(_editor_icon("Add"), "New chat", 2)
 	popup.add_icon_item(_editor_icon("Edit"), "Rename chat", 4)
+	popup.add_icon_item(_editor_icon("Copy"), "Copy chat as Markdown", 3)
 	popup.add_icon_item(_editor_icon("History"), "Memory...", 5)
+	popup.add_separator()
+	popup.add_icon_item(_editor_icon("Tools"), "Settings", 1)
 	popup.add_icon_item(_editor_icon("Node"), "Agents and skills (ECC)", 6)
 	popup.add_icon_item(_editor_icon("Reload"), "Sync ECC library from GitHub", 7)
-	popup.add_icon_item(_editor_icon("Copy"), "Copy chat as Markdown", 3)
 	popup.add_separator()
 	popup.add_icon_item(_editor_icon("AnimationPlayer"), "Inspect current scene", 10)
 	popup.add_icon_item(_editor_icon("Search"), "Validate project", 11)
@@ -322,6 +323,57 @@ func _build_ui() -> void:
 	_rename_dialog.add_child(_rename_edit)
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	add_child(_rename_dialog)
+	_apply_rounding()
+
+# --- Ziva-style rounding ----------------------------------------------------
+# The editor's own colours are KEPT: each control's CURRENT stylebox is copied and
+# only its corners and padding change. That is what makes the panel read as rounded
+# and beveled WITHOUT turning it into a different, darker theme.
+
+
+func _rounded_copy(control: Variant, item: String, type: String, radius: int,
+		pad_h: int = 0, pad_v: int = 0) -> StyleBox:
+	var base: StyleBox = control.get_theme_stylebox(item, type)
+	if base == null:
+		return null
+	var box: StyleBox = base.duplicate()
+	if box is StyleBoxFlat:
+		var flat: StyleBoxFlat = box
+		flat.set_corner_radius_all(radius)
+		if pad_h > 0:
+			flat.content_margin_left = float(pad_h)
+			flat.content_margin_right = float(pad_h)
+		if pad_v > 0:
+			flat.content_margin_top = float(pad_v)
+			flat.content_margin_bottom = float(pad_v)
+	return box
+
+
+func _round(control: Variant, type: String, items: PackedStringArray, radius: int,
+		pad_h: int = 0, pad_v: int = 0) -> void:
+	if control == null:
+		return
+	for item: String in items:
+		var box: StyleBox = _rounded_copy(control, item, type, radius, pad_h, pad_v)
+		if box != null:
+			control.add_theme_stylebox_override(item, box)
+
+
+func _apply_rounding() -> void:
+	# The typing box IS the bubble: a rounded field with real padding.
+	_round(_input_edit, "TextEdit", PackedStringArray(["normal", "focus", "read_only"]), 12, 12, 9)
+	# Every button and picker in the composer row, plus the header controls.
+	for button: Button in [_attach_button, _model_picker, _mode_button, _send_button,
+			_clear_button, _stop_button, _add_tab_button, _settings_button, _menu]:
+		_round(button, "Button", PackedStringArray(
+			["normal", "hover", "pressed", "focus", "disabled"]), 6)
+	# The chat tabs.
+	_round(_tabs, "TabBar", PackedStringArray(["tab_selected", "tab_unselected", "tab_hovered"]), 6, 6, 3)
+	# The dropdown panels.
+	_round(_menu.get_popup(), "PopupMenu", PackedStringArray(["panel"]), 8, 6, 6)
+	_round(_model_picker.get_popup(), "PopupMenu", PackedStringArray(["panel"]), 8, 6, 6)
+	_round(_mode_button.get_popup(), "PopupMenu", PackedStringArray(["panel"]), 8, 6, 6)
+
 
 func _cap_popup(popup: PopupMenu, max_height: int = 300) -> void:
 	# The model picker lists every provider and the menu lists every action, so the

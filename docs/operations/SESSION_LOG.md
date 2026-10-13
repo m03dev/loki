@@ -4,6 +4,28 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-12 (session 5) - Rounded controls and a bubble for the typing box
+
+**Feedback.** "where is the chat bubble when you're typing - everything is beveled and nice
+and rounded ... do that". Session 4 only rounded the SENT message; the composer was still a
+plain box and nothing else was rounded.
+
+**Work completed**
+- `_rounded_copy` / `_round` / `_apply_rounding`: each control's CURRENT stylebox is
+  duplicated and only its corners and padding change, so the editor's own colours are kept.
+  Deliberately NOT a replacement theme - that is what read as "just darker".
+- The typing box (`_input_edit`) is now the bubble: StyleBoxFlat corner radius 12, padding
+  12x9, across normal/focus/read_only.
+- Every composer and header button, the chat tabs and the three dropdown panels are rounded.
+- The overflow menu was reordered chat-first (New chat, Rename, Copy, Memory | Settings,
+  ECC, Sync | Inspect, Validate, Run task, Clear attachments); ids are unchanged.
+
+**Tests:** 248 passed, 0 failed. Rounding confirmed headlessly: composer box is StyleBoxFlat
+corner=12 pad=12; button hover corner=6; tab corner=6.
+**Not visually confirmed** (`view_image` only reads the `ai` project).
+
+---
+
 ## 2026-10-12 (session 4) - Keep Ziva's look: bubble + Enter to send (theme reverted)
 
 **Feedback.** The session-3 dark theme read as "just darker" and looked LESS like Ziva; the
