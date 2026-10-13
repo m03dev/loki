@@ -1,0 +1,19 @@
+{
+  "name": "perplexity",
+  "version": "0.1.0",
+  "kind": "api",
+  "description": "Perplexity Sonar: a cited answer from the live web. Loki's `research` specialist.",
+  "license": "proprietary API",
+  "homepage": "https://docs.perplexity.ai",
+  "permissions": [
+    "network:api.perplexity.ai",
+    "secret:PERPLEXITY_API_KEY"
+  ],
+  "requires_cmd": [],
+  "requires_env": [
+    "PERPLEXITY_API_KEY"
+  ],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "conductor.Conductor.research"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "firecrawl",
+  "version": "0.1.0",
+  "kind": "api",
+  "description": "Firecrawl, self-hosted (docker compose, port 3002): page to markdown over HTTP. A `read_web` specialist. AGPL-3.0 - Loki only talks to it over the network and ships none of its code.",
+  "license": "AGPL-3.0 (server), MIT (SDKs)",
+  "homepage": "https://github.com/firecrawl/firecrawl",
+  "permissions": [
+    "network:loopback"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "conductor.Conductor.read_web"
+}

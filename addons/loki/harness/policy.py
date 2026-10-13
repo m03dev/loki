@@ -41,8 +41,10 @@ DECIDABLE = {"run_command", "move_file", "open_godot"}
 ALWAYS_ASK = {"delete_file"}
 # Tools that need an enabled capability (tool -> capability name).
 CAPABILITY_TOOLS: dict[str, str] = {}
+# conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
 # Job backends that need an enabled capability.
 BACKEND_CAPABILITY = {"herdr": "herdr", "cua": "cua"}
+AGENT_CAPABILITY = {"hermes": "hermes-agent"}
 BACKEND_PERMISSION = {"herdr": "process:agent", "cua": "computer:virtual", "local": "process:agent"}
 
 
@@ -103,6 +105,9 @@ class PolicyEngine:
             verdict = self.capability(capability)
             if not verdict.allowed:
                 return verdict
+        if name == "conductor" and str(args.get("role", "")).strip().lower() == "browse":
+            # A browser acting on live websites always asks; no recommendation skips it.
+            return Verdict(ASK, "a browser will act on websites", decidable=False)
         if name in ALWAYS_ASK:
             return Verdict(ASK, "%s always asks" % name, decidable=False)
         if name in self.dangerous:
@@ -129,11 +134,16 @@ class PolicyEngine:
             return Verdict(DENY, "%s was not granted %s" % (name, permission))
         return Verdict(ALLOW, "ok")
 
-    def job(self, backend: str) -> Verdict:
+    def job(self, backend: str, agent: str = "") -> Verdict:
         capability = BACKEND_CAPABILITY.get(backend)
-        if not capability:
-            return Verdict(ALLOW, "ok")
-        return self.capability(capability, BACKEND_PERMISSION.get(backend, ""))
+        if capability:
+            verdict = self.capability(capability, BACKEND_PERMISSION.get(backend, ""))
+            if not verdict.allowed:
+                return verdict
+        agent_capability = AGENT_CAPABILITY.get(agent)
+        if agent_capability:
+            return self.capability(agent_capability, "process:agent")
+        return Verdict(ALLOW, "ok")
 
     # ------------------------------------------------------------- network
     def network(self, url: str, capability: str = "") -> Verdict:

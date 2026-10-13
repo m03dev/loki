@@ -529,6 +529,9 @@ function syncJobForm() {
   const backend = $("#job-backend").value;
   const vm = backend === "cua";
   $("#job-agent-label").hidden = vm;
+  const hermes = $("#job-agent").querySelector('option[value="hermes"]');
+  if (hermes) hermes.disabled = backend !== "herdr";
+  if (backend !== "herdr" && $("#job-agent").value === "hermes") $("#job-agent").value = "claude-code";
   $("#job-commands").hidden = !vm;
   $("#job-isolate").parentElement.hidden = vm;
 }
@@ -605,6 +608,11 @@ function wire() {
   });
   $("#open-settings").addEventListener("click", openSettings);
   $("#open-jobs").addEventListener("click", openJobs);
+  if (window.LokiBrain) {
+    window.LokiBrain.init(api);
+    $("#open-brain").addEventListener("click", () => window.LokiBrain.open());
+    $("#close-brain").addEventListener("click", () => window.LokiBrain.close());
+  }
   $("#close-jobs").addEventListener("click", closeJobs);
   $("#jobs").addEventListener("click", (event) => { if (event.target === $("#jobs")) closeJobs(); });
   $("#job-form").addEventListener("submit", submitJob);
@@ -612,7 +620,7 @@ function wire() {
   $("#clear-jobs").addEventListener("click", async () => renderAfter(await api("/jobs/clear", {})));
   $("#close-settings").addEventListener("click", () => { $("#settings").hidden = true; });
   $("#settings").addEventListener("click", (event) => { if (event.target === $("#settings")) $("#settings").hidden = true; });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; closeJobs(); } });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; closeJobs(); if (window.LokiBrain) window.LokiBrain.close(); } });
   for (const tab of document.querySelectorAll(".tabs button")) tab.addEventListener("click", () => showTab(tab.dataset.tab));
   $("#save-memory").addEventListener("click", async () => {
     const data = await api("/memory", { text: $("#memory-text").value });

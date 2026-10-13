@@ -1,0 +1,19 @@
+{
+  "name": "browser-use",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Browser Use: an AI drives a real local browser to finish a task on websites. Loki's `browse` specialist; every use asks you first.",
+  "license": "MIT",
+  "homepage": "https://github.com/browser-use/browser-use",
+  "permissions": [
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [
+    "browser_use"
+  ],
+  "health_endpoint": "",
+  "entrypoint": "runners/browse.py"
+}

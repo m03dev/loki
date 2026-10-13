@@ -25,12 +25,32 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent
-REPO = APP_DIR.parent
+# Packaged builds (PyInstaller, see packaging/loki.spec) carry the repo tree inside the
+# bundle and keep user data in a per-user folder, because the install folder may be
+# read-only. FROZEN is True there.
+FROZEN = bool(getattr(sys, "frozen", False))
+if FROZEN:
+    REPO = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)).resolve()
+    APP_DIR = REPO / "app"
+else:
+    APP_DIR = Path(__file__).resolve().parent
+    REPO = APP_DIR.parent
 HARNESS = REPO / "addons" / "loki" / "harness"
 ENGINE = REPO / "addons" / "loki" / "loki_bridge.py"
 UI_DIR = APP_DIR / "ui"
-DATA = Path(os.environ.get("LOKI_DATA") or (REPO / "harness_data"))
+
+
+def default_data_dir() -> Path:
+    if not FROZEN:
+        return REPO / "harness_data"
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "Loki"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Loki"
+    return Path.home() / ".local" / "share" / "loki"
+
+
+DATA = Path(os.environ.get("LOKI_DATA") or default_data_dir())
 STATE = DATA / "app"
 TOKEN_FILE = STATE / "engine.token"
 SETTINGS_FILE = STATE / "settings.json"
@@ -82,7 +102,10 @@ def choose_workspace(cli_value: str = "", settings: dict | None = None, env: dic
 
 # --------------------------------------------------------------------- discovery
 def engine_python() -> Path | None:
-    """The interpreter of Loki's private environment (setup.sh / setup.bat make it)."""
+    """The interpreter of Loki's private environment (setup.sh / setup.bat make it).
+    A packaged build is its own interpreter: it runs the engine as `Loki --engine`."""
+    if FROZEN:
+        return Path(sys.executable)
     for candidate in (DATA / ".venv" / "bin" / "python3", DATA / ".venv" / "bin" / "python",
                       DATA / ".venv" / "Scripts" / "python.exe"):
         if candidate.is_file():
@@ -126,7 +149,8 @@ def probe(token: str, timeout: float = 1.5) -> int:
 
 
 def engine_command(python: Path, workspace: Path, godot: str) -> list[str]:
-    command = [str(python), str(ENGINE),
+    command = [str(python), "--engine"] if FROZEN else [str(python), str(ENGINE)]
+    command += [
                "--loki-root", str(HARNESS),
                "--project-dir", str(workspace),
                "--secret-file", str(TOKEN_FILE),
@@ -237,7 +261,58 @@ def tell(title: str, detail: str) -> int:
 
 
 # --------------------------------------------------------------------- main
+def run_engine(args: list[str]) -> int:
+    """`Loki --engine ...`: run the engine (loki_bridge.py) inside this interpreter."""
+    import runpy
+    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
+    sys.argv = [str(ENGINE), *args]
+    runpy.run_path(str(ENGINE), run_name="__main__")
+    return 0
+
+
+def run_script(args: list[str]) -> int:
+    """`Loki --run-script SCRIPT`: a packaged build's stand-in for `python -I SCRIPT` (the
+    conductor's runners). Only scripts that ship inside the bundle may run."""
+    import runpy
+    if not args:
+        return 2
+    script = Path(args[0]).resolve()
+    runners = (HARNESS / "runners").resolve()
+    if script.parent != runners or script.suffix != ".py":
+        print("refused: only Loki's bundled runners can be run", file=sys.stderr)
+        return 2
+    sys.argv = [str(script), *args[1:]]
+    runpy.run_path(str(script), run_name="__main__")
+    return 0
+
+
+def self_test() -> int:
+    """`Loki --self-test`: import the engine and its modules and report. Used by CI."""
+    import tempfile
+    os.environ.setdefault("LOKI_DATA", tempfile.mkdtemp(prefix="loki-selftest-"))
+    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
+    problems = []
+    for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
+                 "knowledge", "federation", "skill_scan", "loki"):
+        try:
+            __import__(name)
+        except Exception as exc:  # noqa: BLE001
+            problems.append("%s: %s: %s" % (name, type(exc).__name__, exc))
+    for path in (UI_DIR / "index.html", UI_DIR / "brain.js", REPO / "capabilities", REPO / "skills"):
+        if not path.exists():
+            problems.append("missing " + str(path))
+    print("Loki self-test: " + ("OK" if not problems else "FAILED\n  " + "\n  ".join(problems)), flush=True)
+    return 0 if not problems else 1
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["--engine"]:
+        return run_engine(argv[1:])
+    if argv[:1] == ["--run-script"]:
+        return run_script(argv[1:])
+    if argv[:1] == ["--self-test"]:
+        return self_test()
     parser = argparse.ArgumentParser(description="Loki desktop app")
     parser.add_argument("--workspace", default="", help="folder Loki works in (remembered)")
     parser.add_argument("--print-url", action="store_true", help="start the engine, print the URL, keep running")

@@ -1,0 +1,14 @@
+{
+  "name": "kiln",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Kiln: local-first workbench for evals, synthetic data and fine-tuning. Use it to measure Loki's prompts and agents; no runtime hook into Loki.",
+  "license": "MIT (library), fair-code (desktop app)",
+  "homepage": "https://github.com/Kiln-AI/Kiln",
+  "permissions": [],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": ""
+}

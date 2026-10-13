@@ -44,7 +44,8 @@ from typing import Any, Callable
 STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cancelled")
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
-AGENTS = ("claude-code", "codex")
+AGENTS = ("claude-code", "codex", "hermes")
+HERDR_ONLY_AGENTS = {"hermes"}   # interactive agents with no documented one-shot mode
 BACKENDS = ("local", "herdr", "cua")
 DEFAULT_TIMEOUT_S = 3600
 MAX_TIMEOUT_S = 24 * 3600
@@ -76,6 +77,12 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
         mode = env.get("LOKI_JOB_CLAUDE_MODE", "acceptEdits") or "acceptEdits"
         argv = ["claude", "--permission-mode", mode]
         return argv if interactive else argv + ["-p", prompt]
+    if agent == "hermes":
+        # Hermes Agent (Nous Research, MIT). Its one-shot flags are not documented, so it
+        # runs interactively in a herdr pane and receives the task as a prompt.
+        if interactive:
+            return ["hermes"]
+        raise ValueError("Hermes Agent runs only on herdr (interactive)")
     if agent == "codex":
         if interactive:
             return ["codex", "--sandbox", "workspace-write"]
@@ -215,7 +222,7 @@ class LocalBackend(Backend):
         self.procs: dict[str, Any] = {}
 
     def available(self) -> tuple[bool, str]:
-        found = [a for a in AGENTS if self.which(agent_argv(a, "")[0])]
+        found = [a for a in AGENTS if a not in HERDR_ONLY_AGENTS and self.which(agent_argv(a, "")[0])]
         return (True, "agents: " + ", ".join(found)) if found else (False, "install Claude Code or Codex")
 
     def start(self, job: dict) -> dict:
@@ -602,6 +609,8 @@ class Supervisor:
         agent = str(spec.get("agent") or "claude-code").strip().lower()
         if backend in ("local", "herdr") and agent not in AGENTS:
             raise ValueError("agent must be one of %s" % ", ".join(AGENTS))
+        if backend == "local" and agent in HERDR_ONLY_AGENTS:
+            raise ValueError("%s runs only on herdr" % agent)
         workspace = str(spec.get("workspace") or "").strip()
         if backend in ("local", "herdr"):
             if not workspace or not Path(workspace).expanduser().is_dir():

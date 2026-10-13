@@ -13,6 +13,9 @@ bash setup.sh      # macOS / Linux (needs Python 3.11+)
 setup.bat          # Windows
 ```
 
+Or download the packaged Windows app: the **Windows build** workflow attaches
+`Loki-windows.zip` to every run (no Python needed).
+
 On macOS, setup builds **Loki.app** in `~/Applications`. On Windows, setup adds **Loki**
 to the Start menu and the Desktop (or run `Loki.cmd`). On Linux, start it with
 `harness_data/.venv/bin/python app/loki_app.py`.
@@ -39,6 +42,13 @@ Details: [macOS](docs/operations/MACOS.md), [Windows](docs/operations/WINDOWS.md
   something else - in a herdr workspace you can attach to, as a detached process, or
   inside a virtual computer (cua). Host jobs work on their own git branch. See
   [Background jobs](docs/operations/BACKGROUND_WORKERS.md).
+- **Loki is the conductor.** It keeps the plan and calls specialists by role - research
+  (Perplexity), reading pages (Crawl4AI / Scrapling / Firecrawl), a real browser (Browser
+  Use), long-term memory (Hindsight) - with Headroom and SkillSpector in the loop and Hermes
+  Agent as a background job. Each is off until you enable it.
+  See [the conductor](docs/architecture/CONDUCTOR.md).
+- **Brain.** An Obsidian-style map of everything Loki knows - memory, skills, capabilities,
+  jobs, project docs - and your own Obsidian vault (read-only, linked from the Brain view).
 - **Settings** has Connections (what Loki can reach - keys are never shown, and you can
   connect a provider key), Tools, Memory and Capabilities.
 - **Game projects.** Godot is an optional adapter: point Loki at a folder with a
@@ -86,6 +96,7 @@ harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, 
 harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
 harness_data/.venv/Scripts/python.exe tests/test_workers.py        # background jobs, offline
 harness_data/.venv/Scripts/python.exe tests/test_hardening.py      # no-shell exec, policy, manifests, skills
+harness_data/.venv/Scripts/python.exe tests/test_integrations.py   # conductor, specialists, brain map
 ```
 
 The agent lives in `addons/loki/harness/` (Python), the editor UI in

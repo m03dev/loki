@@ -257,6 +257,7 @@ class BridgeState:
         self.progress_seq: int = 0
         self.progress_chat_id: str = ""
         self.jobs: Any = None  # workers.Supervisor - background jobs (local / herdr / cua)
+        self.brain: dict[str, Any] = {}  # last brain-map graph (its note ids are the only readable files)
 
     def try_busy(self) -> list | None:
         # acquire both request locks, or None when a request is in flight
@@ -659,6 +660,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/jobs/screenshot":
             self._send_json(*job_screenshot(self.server.state, parse_qs(urlparse(self.path).query)))
             return
+        if route == "/brain":
+            self._send_json(*brain_graph(self.server.state))
+            return
+        if route == "/brain/note":
+            self._send_json(*brain_note(self.server.state, parse_qs(urlparse(self.path).query)))
+            return
+        if route == "/conductor":
+            conductor_obj = getattr(self.server.state.agent, "CONDUCTOR", None)
+            self._send_json(200, {"ok": True, "roles": conductor_obj.roster() if conductor_obj else []})
+            return
         if route == "/capabilities/manifests":
             registry = getattr(self.server.state.agent, "CAPABILITIES", None)
             self._send_json(200, {"ok": True, "capabilities": registry.present() if registry else []})
@@ -891,6 +902,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/jobs"):
             self._send_json(*job_action(state, route, data))
             return
+        if route == "/brain/vault":
+            self._send_json(*brain_vault(state, data))
+            return
         if route == "/capabilities/enable":
             self._send_json(*capability_toggle(state, data))
             return
@@ -914,7 +928,8 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         spec = dict(data)
         engine_policy = getattr(state.agent, "POLICY", None) if getattr(state, "agent", None) else None
         if engine_policy is not None:
-            verdict = engine_policy.job(str(spec.get("backend") or "local").strip().lower())
+            verdict = engine_policy.job(str(spec.get("backend") or "local").strip().lower(),
+                                        str(spec.get("agent") or "").strip().lower())
             if not verdict.allowed:
                 return 403, {"ok": False, "error": verdict.reason}
         if not str(spec.get("workspace") or "").strip() and state.project is not None:
@@ -949,6 +964,40 @@ def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, 
     if state.jobs is not None:
         state.jobs._avail.clear()  # pylint: disable=protected-access
     return 200, {"ok": True, "capabilities": registry.present()}
+
+
+def brain_graph(state: "BridgeState") -> tuple[int, dict[str, Any]]:
+    """GET /brain: Loki's knowledge as a graph (plus the user's Obsidian vault, read-only)."""
+    import brain  # pylint: disable=import-outside-toplevel
+    agent = state.agent
+    data_dir = Path(getattr(agent, "DATA_DIR", ".") or ".")
+    vault = brain.load_settings(data_dir).get("vault") or os.environ.get("LOKI_OBSIDIAN_VAULT", "")
+    try:
+        roster = agent.CONDUCTOR.roster() if hasattr(agent, "CONDUCTOR") else []
+        skills = agent._skill_entries() if hasattr(agent, "_skill_entries") else []  # pylint: disable=protected-access
+        graph = brain.build(data_dir, Path(getattr(agent, "WORKSPACE", state.project or ".")),
+                            getattr(agent, "CAPABILITIES", None), roster, skills, vault)
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"ok": False, "error": f"brain map failed: {type(exc).__name__}: {exc}"}
+    state.brain = graph
+    return 200, {"ok": True, "vault": vault, **brain.public(graph)}
+
+
+def brain_note(state: "BridgeState", query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
+    import brain  # pylint: disable=import-outside-toplevel
+    text = brain.note_text(state.brain, (query.get("id") or [""])[0])
+    if text is None:
+        return 404, {"ok": False, "error": "Not a note in the current map."}
+    return 200, {"ok": True, "text": text}
+
+
+def brain_vault(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    import brain  # pylint: disable=import-outside-toplevel
+    try:
+        vault = brain.save_vault(Path(getattr(state.agent, "DATA_DIR", ".")), str(data.get("path", "")))
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    return 200, {"ok": True, "vault": vault}
 
 
 def job_screenshot(state: "BridgeState", query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:

@@ -26,3 +26,18 @@ WebView2, which Windows 10/11 already ship with.
 The Windows pieces (`setup.bat`, `make_shortcuts.ps1`, `Loki.cmd`, the no-console
 engine start) are covered by offline checks only. They have **not** been run on a
 Windows machine yet; the first `setup.bat` run there is that check.
+
+## Packaged build (Loki.exe)
+
+A self-contained build needs no Python on the target machine.
+
+- **CI:** every push to `master` / `macos-app` runs `.github/workflows/windows-build.yml` on
+  Windows: offline tests, PyInstaller build, `Loki.exe --self-test`, and uploads
+  `Loki-windows.zip` as a workflow artifact (Actions tab > the run > Artifacts).
+- **Locally:** `powershell -ExecutionPolicy Bypass -File tools\windows\build_exe.ps1`
+  produces `dist\Loki\Loki.exe` and `dist\Loki-windows.zip`.
+
+The build carries Loki's tree inside it and keeps your data in `%LOCALAPPDATA%\Loki`. The
+same `Loki.exe` runs the engine (`--engine`) and the conductor's runners (`--run-script`,
+bundled runners only). Optional extras (crawl4ai, browser-use, Hindsight client, Headroom)
+are not bundled; use the source install (`setup.bat`) when you want those.

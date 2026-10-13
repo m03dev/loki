@@ -191,3 +191,27 @@ button:disabled { opacity: .45; cursor: default; }
 .manifest .why { font-size: 12px; color: var(--warn); }
 .caps-raw { margin-top: 14px; }
 .caps-raw summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+
+/* brain map */
+.brain { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; z-index: 5; }
+.brain-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.brain-head h2 { font-size: 15px; margin: 0; }
+.brain-head input { background: var(--surface); border: 0; border-radius: 9px; padding: 6px 10px; width: min(320px, 40vw); }
+.brain-head .note { margin: 0; flex: 1; }
+.brain-actions { display: flex; gap: 6px; }
+.brain-body { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+.brain-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.brain-stage canvas { display: block; cursor: grab; touch-action: none; }
+.brain-side { border-left: 1px solid var(--line); padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.brain-legend { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.brain-key { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
+.brain-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.brain-vault label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; }
+.brain-vault input { flex: 1; min-width: 0; background: var(--surface); border: 0; border-radius: 8px; padding: 5px 8px; }
+.brain-detail h3 { margin: 0; font-size: 15px; }
+.brain-group, .brain-sub { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+.brain-text { font-size: 13px; margin: 4px 0 8px; white-space: pre-wrap; }
+.brain-links { display: flex; flex-wrap: wrap; gap: 4px; }
+.brain-links button { font-size: 12px; padding: 2px 8px; background: var(--surface); }
+.brain-note { font: 12px/1.5 var(--mono); white-space: pre-wrap; background: var(--side); border-radius: 8px; padding: 8px; max-height: 50vh; overflow: auto; margin: 8px 0 0; }
+@media (max-width: 760px) { .brain-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40vh; } .brain-side { border-left: 0; border-top: 1px solid var(--line); } }

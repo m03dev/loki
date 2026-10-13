@@ -84,7 +84,7 @@ def validate(data: object) -> list[str]:
         errors.append("name must be lowercase letters, digits, - or _ (max 48)")
     if data.get("kind") and data.get("kind") not in KINDS:
         errors.append("kind must be one of " + ", ".join(KINDS))
-    for key in ("permissions", "requires_cmd", "requires_env"):
+    for key in ("permissions", "requires_cmd", "requires_env", "requires_python"):
         value = data.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             errors.append("%s must be a list of strings" % key)
@@ -174,9 +174,20 @@ class Enablement:
             self._save(data)
 
 
-def missing_requirements(manifest: dict, env: dict | None = None, which=shutil.which) -> list[str]:
+def _module_present(name: str) -> bool:
+    """Installed? Uses find_spec on the top-level name, which locates without importing."""
+    import importlib.util
+    try:
+        return importlib.util.find_spec(name.split(".")[0]) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def missing_requirements(manifest: dict, env: dict | None = None, which=shutil.which,
+                         module_present=_module_present) -> list[str]:
     env = env if env is not None else os.environ
     missing = ["command `%s`" % c for c in manifest.get("requires_cmd", []) if not which(c)]
+    missing += ["python package `%s`" % m for m in manifest.get("requires_python", []) if not module_present(m)]
     missing += ["env %s" % e for e in manifest.get("requires_env", []) if not str(env.get(e, "")).strip()]
     return missing
 

@@ -246,6 +246,7 @@ import manifests  # noqa: E402  (capability manifests: discovered, never execute
 import federation  # noqa: E402  (Ollama on other machines - LOKI_WORKERS)
 import skill_scan  # noqa: E402  (downloaded skills are untrusted text)
 import knowledge  # noqa: E402  (viking:// context store over local folders)
+import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
 REPO_ROOT = ROOT.parent.parent.parent
@@ -1387,7 +1388,10 @@ def load_ecc_skill(name: str) -> str:
     for _library, skill, path in _skill_entries():
         if skill == wanted:
             # Downloaded skills are untrusted: refused if they try to override Loki's
-            # rules, annotated if they ship scripts (which Loki never runs).
+            # rules, annotated if they ship scripts (which Loki never runs). SkillSpector
+            # adds a deeper static scan when it is enabled.
+            skill_scan.EXTERNAL_SCANNERS[:] = (
+                [conductor.skillspector_findings] if CAPABILITIES.is_enabled("skillspector") else [])
             return skill_scan.safe_text(path)
     return "no such skill: %s (call list_ecc_skills)" % name
 
@@ -1661,6 +1665,7 @@ def knowledge_tool(action: str = "list", uri: str = "viking://memory", text: str
 
 
 LOCAL_TOOLS = {
+    "conductor": lambda role, task="", url="": conductor_tool(role, task, url),
     "knowledge": knowledge_tool,
     "list_files": list_files,
     "list_tree": list_tree,
@@ -1715,6 +1720,12 @@ POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
                              command_check=lambda command: command_policy(command),
                              parse_command=safe_exec.parse, dangerous=DANGEROUS,
                              registry=CAPABILITIES)
+CONDUCTOR = conductor.Conductor(POLICY, CAPABILITIES)
+
+
+def conductor_tool(role: str, task: str = "", url: str = "") -> str:
+    """Hand one step to a specialist: research, read_web, browse, remember, recall."""
+    return CONDUCTOR.run(str(role).strip().lower(), str(task or ""), str(url or ""))
 
 
 def schema(name, description, properties=None, required=None) -> dict:
@@ -1803,6 +1814,8 @@ TOOL_SCHEMAS = [
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
+    schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory). Only roles listed under 'Specialists you can call' in your instructions are ready.",
+           {"role": {"type": "string"}, "task": {"type": "string"}, "url": {"type": "string"}}, ["role"]),
     schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
            {"action": {"type": "string"}, "uri": {"type": "string"}, "text": {"type": "string"}}, ["uri"]),
 ]
@@ -1819,7 +1832,7 @@ MODEL_TOOL_NAMES = {
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
-    "list_capabilities", "agent_sessions", "api_vault", "knowledge",
+    "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1836,6 +1849,7 @@ TOOL_CATEGORIES = {
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
+    "specialists": ["conductor"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
@@ -2217,7 +2231,16 @@ def is_godot_workspace() -> bool:
 
 
 def system_prompt() -> str:
-    """The system prompt for the current mode, always English-only."""
+    """The system prompt for the current mode, always English-only, plus the ready specialists."""
+    try:
+        specialists = CONDUCTOR.prompt_section()
+    except Exception:
+        specialists = ""
+    base = _base_system_prompt()
+    return base + (chr(10) * 2 + specialists if specialists else "")
+
+
+def _base_system_prompt() -> str:
     english = _ENGLISH_RULE + chr(10) * 2
     if AGENT_MODE in MODE_PROMPTS:
         return english + MODE_PROMPTS[AGENT_MODE] + chr(10) * 2 + "# Project context" + chr(10) + composed_memory()
@@ -3151,6 +3174,11 @@ async def agent_turn(force_tool: bool = False) -> str:
         # give them headroom or the tool call gets truncated away.
         kwargs = {"model": cfg.model, "messages": messages, "tools": model_tool_schemas(),
                   "max_tokens": int(os.getenv("LOKI_MAX_TOKENS", "8192"))}
+        if CAPABILITIES.is_enabled("headroom"):
+            # Headroom compresses a copy; the conversation itself is never rewritten.
+            kwargs["messages"], _saved = conductor.compress_messages(list(messages), cfg.model)
+            if _saved:
+                _progress("thinking", _saved)
         if "11434" in cfg.base_url or "ollama" in cfg.api_key:
             # Qwen3 family: disable extended thinking so the model acts instead of
             # writing long reasoning prose that never calls a tool.

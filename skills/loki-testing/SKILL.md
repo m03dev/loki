@@ -5,19 +5,20 @@ description: How to run and extend Loki's own test suites. Use before and after 
 
 # Testing Loki
 
-Loki has three offline suites. They need no network, no model and no Godot.
+Loki has four offline suites. They need no network, no model and no Godot.
 
 | Suite | What it covers | Command (from the repo root) |
 |---|---|---|
 | `tests/test_loki.py` | the agent, tools, providers, bridge, app launcher | `harness_data/.venv/bin/python tests/test_loki.py` |
 | `tests/test_workers.py` | background jobs: local, herdr, cua | `harness_data/.venv/bin/python tests/test_workers.py` |
 | `tests/test_hardening.py` | no-shell execution, policy engine, manifests, skills, federation, knowledge | `harness_data/.venv/bin/python tests/test_hardening.py` |
+| `tests/test_integrations.py` | the conductor and its specialists, Hermes jobs, the brain map | `harness_data/.venv/bin/python tests/test_integrations.py` |
 
 On Windows use `harness_data\.venv\Scripts\python.exe` instead of `harness_data/.venv/bin/python`.
 
 ## Steps
 
-1. Run all three suites **before** changing code and note the counts. A suite prints
+1. Run all four suites **before** changing code and note the counts. A suite prints
    `N passed, M failed` and exits non-zero on any failure.
 2. Make the change.
 3. Run the suites again. Every check that passed before must still pass.

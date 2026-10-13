@@ -43,6 +43,10 @@ REVIEW_PATTERNS = [
     r"without (asking|approval|confirmation)",
 ]
 MAX_FILES = 400
+# Extra scanners (e.g. NVIDIA SkillSpector) registered by Loki when enabled:
+# callable(folder) -> [(severity, message)]. high/critical findings block the skill.
+EXTERNAL_SCANNERS: list = []
+BLOCKING_SEVERITIES = {"critical", "high", "error"}
 
 
 def frontmatter(text: str) -> tuple[dict, str]:
@@ -108,6 +112,14 @@ def scan(skill_md: Path) -> dict:
                 pass
         if is_exec:
             executables.append(rel)
+    for scanner in list(EXTERNAL_SCANNERS):
+        try:
+            findings = scanner(root) or []
+        except Exception:  # noqa: BLE001 - an external scanner failing never blocks on its own
+            findings = []
+        for severity, message in findings:
+            (blocked if str(severity).lower() in BLOCKING_SEVERITIES else notes).append(
+                "scanner [%s]: %s" % (severity, message))
     verdict = "blocked" if blocked else ("review" if executables or notes else "ok")
     return {"verdict": verdict, "name": meta.get("name", root.name),
             "description": meta.get("description", ""), "problems": blocked + notes + problems,

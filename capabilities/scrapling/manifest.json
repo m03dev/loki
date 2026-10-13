@@ -1,0 +1,19 @@
+{
+  "name": "scrapling",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Scrapling: adaptive, fast page fetching and text extraction. A `read_web` specialist.",
+  "license": "BSD-3-Clause",
+  "homepage": "https://github.com/D4Vinci/Scrapling",
+  "permissions": [
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [
+    "scrapling"
+  ],
+  "health_endpoint": "",
+  "entrypoint": "runners/web_read.py"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "hermes-agent",
+  "version": "0.1.0",
+  "kind": "adapter",
+  "description": "Hermes Agent (Nous Research): a second general-purpose agent you can hand a background job to. Runs interactively in a herdr workspace.",
+  "license": "MIT",
+  "homepage": "https://hermes-agent.nousresearch.com",
+  "permissions": [
+    "process:agent"
+  ],
+  "requires_cmd": [
+    "hermes"
+  ],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "workers.HerdrBackend"
+}
