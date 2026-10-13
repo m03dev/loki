@@ -16,6 +16,7 @@ instructions once something behind it is switched on (Settings > Capabilities).
 
 | Project | Role | How Loki uses it | Licence | Turn it on |
 |---|---|---|---|---|
+| Vane | `research` (first choice) | `GET /api/providers` then `POST /api/search` (sources web, speed mode) on `VANE_URL` (default http://127.0.0.1:3000); answer + numbered sources. Private: your SearxNG and your local models | MIT | `docker run -d -p 3000:3000 -v vane-data:/home/vane/data --name vane itzcrazykns1337/vane:latest`, set a model in its setup screen, enable **vane** |
 | Perplexity Sonar | `research` | `POST https://api.perplexity.ai/chat/completions`, model `sonar`; answer + numbered sources | proprietary API | `PERPLEXITY_API_KEY` in `harness_data/.env`, enable **perplexity** |
 | Crawl4AI | `read_web` | `runners/web_read.py` (headless Chromium → markdown) | Apache-2.0 | `pip install crawl4ai && crawl4ai-setup` into Loki's venv, enable **crawl4ai** |
 | Scrapling | `read_web` | `runners/web_read.py` (`Fetcher.get`) | BSD-3-Clause | `pip install scrapling` into Loki's venv, enable **scrapling** |
@@ -27,7 +28,9 @@ instructions once something behind it is switched on (Settings > Capabilities).
 | SkillSpector | in the loop | `skillspector scan <skill> --format json --no-llm`; high/critical findings block a skill | reported Apache-2.0 | install from NVIDIA/SkillSpector, enable **skillspector** |
 | Kiln | outside Loki | eval / fine-tune workbench for Loki's prompts; no runtime hook | MIT library, fair-code app | install the Kiln app when you start measuring Loki |
 
-`read_web` order: `LOKI_READ_ORDER=crawl4ai,scrapling,firecrawl` (first enabled wins).
+`read_web` order: `LOKI_READ_ORDER=crawl4ai,scrapling,firecrawl`; `research` order: `LOKI_RESEARCH_ORDER=vane,perplexity` (first enabled wins).
+
+Agents: the conductor can hand a longer task to one of your agents with `delegate` (always asks you); see docs/operations/OFFLINE_FIRST.md.
 
 ## Rules that stay true
 
@@ -35,7 +38,7 @@ instructions once something behind it is switched on (Settings > Capabilities).
   network host allowed. Off means the role is invisible to the model.
 - Heavy libraries run in `runners/` child processes (`python -I`, no shell, a timeout) so a
   missing or broken library can never take the engine down; they report "not installed".
-- The model cannot start background jobs; you do (Background panel).
+- Background jobs start only with your OK: you start them in Background, or approve Loki's `delegate` request.
 - `browse` asks every time - no decision provider can skip that prompt.
 - Headroom compresses a *copy*: the conversation Loki keeps is never rewritten.
 

@@ -314,10 +314,13 @@ class BridgeState:
             self.agent.loki_progress_callback = callback
             self.agent.clear_cancel()
             stop_heartbeat = self._start_heartbeat(chat_id)
+            spent = getattr(self.agent, "LAST_USAGE", None)
+            if isinstance(spent, list):
+                spent.clear()
             try:
                 answer = await self.agent.run_agent(prompt)
                 self.push_progress(chat_id, "done", "Response ready.")
-                return {"ok": True, "response": answer, "chat_id": chat_id}
+                return {"ok": True, "response": answer, "chat_id": chat_id, "usage": usage_total(spent)}
             except self.agent.BudgetExhausted as exc:
                 self.push_progress(chat_id, "done", "Stopped: %s." % exc.reason)
                 return {"ok": True, "response": "Stopped early: %s." % exc.reason, "chat_id": chat_id, "stopped": True}
@@ -650,6 +653,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
             return
+        if route == "/setup":
+            self._send_json(200, {"ok": True, **setup_status(self.server.state)})
+            return
+        if route == "/setup/progress":
+            self._send_json(200, {"ok": True, "progress": self.server.state.agent.model_setup.PROGRESS.snapshot()})
+            return
+        if route == "/usage":
+            self._send_json(200, {"ok": True, **self.server.state.agent.USAGE.summary()})
+            return
+        if route == "/agents":
+            self._send_json(200, {"ok": True, "agents": self.server.state.agent.AGENTS.all(),
+                                  "engines": list(self.server.state.agent.agent_profiles.ENGINES)})
+            return
         if route == "/jobs":
             jobs = self.server.state.jobs
             if jobs is None:
@@ -905,6 +921,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/brain/vault":
             self._send_json(*brain_vault(state, data))
             return
+        if route.startswith("/setup/"):
+            self._send_json(*setup_action(state, route, data))
+            return
+        if route == "/usage/reset":
+            state.agent.USAGE.reset()
+            self._send_json(200, {"ok": True, **state.agent.USAGE.summary()})
+            return
+        if route.startswith("/agents"):
+            self._send_json(*agents_action(state, route, data))
+            return
         if route == "/capabilities/enable":
             self._send_json(*capability_toggle(state, data))
             return
@@ -949,6 +975,132 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def usage_total(entries: Any) -> dict[str, Any]:
+    """One request's usage: tokens, time, cost and the one-line meter."""
+    entries = list(entries or [])
+    if not entries:
+        return {}
+    total = {"calls": len(entries), "in": sum(e["in"] for e in entries), "out": sum(e["out"] for e in entries),
+             "ms": sum(e["ms"] for e in entries), "cost": round(sum(e["cost"] for e in entries), 6),
+             "model": entries[-1]["model"], "provider": entries[-1]["provider"],
+             "free": all(e["free"] for e in entries), "est": any(e.get("est") for e in entries)}
+    total["tps"] = round(total["out"] / (total["ms"] / 1000.0), 1) if total["ms"] >= 250 else 0.0
+    total["price"] = entries[-1].get("price", "")
+    try:
+        import usage as usage_mod  # pylint: disable=import-outside-toplevel
+        total["line"] = usage_mod.line(total)
+    except Exception:
+        total["line"] = ""
+    return total
+
+
+def setup_status(state: "BridgeState") -> dict[str, Any]:
+    agent = state.agent
+    info = agent.model_setup.status(info=agent.HARDWARE or None)
+    local = agent.resolve_local()
+    info["active"] = {"model": agent.model_name, "using": agent.active_model_name(),
+                      "local": local.get("name", ""), "local_note": local.get("note", ""),
+                      "online": agent.online(), "prefer": agent.PREFER}
+    # Loki's goal is to work offline: offer setup whenever there is no local model, even if a
+    # cloud route works (the UI remembers "Later").
+    info["needs_setup"] = not local.get("name")
+    info["cloud_ready"] = [n for n in agent.SMART_ORDER
+                           if n not in agent.LOCAL_PROVIDERS and agent.provider_configured(n)]
+    return info
+
+
+def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /setup/pull {tags:[...]} | /setup/install-ollama | /setup/use {model} | /setup/prefer {prefer}."""
+    agent = state.agent
+    ms = agent.model_setup
+    if route == "/setup/pull":
+        tags = data.get("tags") or ([data["tag"]] if data.get("tag") else [])
+        tags = [str(t).strip() for t in tags if str(t).strip()][:6]
+        if not tags:
+            return 400, {"ok": False, "error": "Which model? (tags)"}
+        if ms.ollama_models() is None:
+            return 409, {"ok": False, "error": "Ollama is not running. Install or open Ollama first."}
+
+        def pull_then_use() -> None:
+            got = ms.pull(tags)
+            if got:
+                agent.resolve_local(force=True)
+        if not ms.start_in_background(pull_then_use):
+            return 409, {"ok": False, "error": "Already downloading - wait for it to finish."}
+        return 200, {"ok": True, "progress": ms.PROGRESS.snapshot()}
+    if route == "/setup/install-ollama":
+        if not ms.start_in_background(ms.install_ollama):
+            return 409, {"ok": False, "error": "Already busy - wait for it to finish."}
+        return 200, {"ok": True, "progress": ms.PROGRESS.snapshot()}
+    if route == "/setup/use":
+        model = str(data.get("model", "")).strip()
+        if model:
+            os.environ["LOKI_LOCAL_MODEL"] = model
+        else:
+            os.environ.pop("LOKI_LOCAL_MODEL", None)
+        state_now = agent.resolve_local(force=True)
+        return 200, {"ok": True, "local": state_now.get("name", "")}
+    if route == "/setup/prefer":
+        prefer = str(data.get("prefer", "local")).strip().lower()
+        agent.PREFER = "cloud" if prefer == "cloud" else "local"
+        return 200, {"ok": True, "prefer": agent.PREFER, "using": agent.active_model_name()}
+    return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def agents_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /agents (save) | /agents/delete {id} | /agents/run {id, task}."""
+    agent = state.agent
+    store = agent.AGENTS
+    try:
+        if route == "/agents":
+            saved = store.save(data)
+            return 200, {"ok": True, "agent": saved, "agents": store.all()}
+        if route == "/agents/delete":
+            if not store.delete(str(data.get("id", ""))):
+                return 404, {"ok": False, "error": "No such agent."}
+            return 200, {"ok": True, "agents": store.all()}
+        if route == "/agents/run":
+            profile = store.get(str(data.get("id", "")))
+            if profile is None:
+                return 404, {"ok": False, "error": "No such agent."}
+            workspace = str(data.get("workspace") or state.project or "")
+            spec = agent.agent_profiles.job_spec(profile, str(data.get("task", "")), workspace,
+                                                 int(data.get("timeout_s") or 3600))
+            return job_action(state, "/jobs", spec)
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def write_status_forever(state: "BridgeState") -> None:
+    """harness_data/app/status.json: a live health snapshot (for Settings > Diagnostics and
+    for support). No secrets: key NAMES only, never values."""
+    path = (STATE_DIR or Path(".")) / "status.json"
+    while True:
+        try:
+            agent = state.agent
+            local = agent.resolve_local()
+            jobs = state.jobs.status() if state.jobs is not None else {}
+            snapshot = {
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"), "pid": os.getpid(), "port": PORT,
+                "model": agent.model_name, "using": agent.active_model_name(),
+                "local": {k: local.get(k) for k in ("name", "source", "note")},
+                "online": agent.online(), "prefer": agent.PREFER, "hardware": agent.HARDWARE,
+                "keys": sorted(k for k, v in os.environ.items() if k.endswith("_API_KEY") and v.strip()),
+                "mcp_tools": len(getattr(agent, "mcp_sessions", {}) or {}),
+                "backends": jobs.get("backends", {}), "job_counts": jobs.get("counts", {}),
+                "usage_today": agent.USAGE.summary().get("today", {}),
+                "capabilities": {r["name"]: r["status"] for r in agent.CAPABILITIES.present()},
+            }
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(snapshot, indent=2, default=str), encoding="utf-8")
+            os.replace(tmp, path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[loki-bridge] status snapshot failed: {exc}", flush=True)
+        time.sleep(30)
 
 
 def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -1141,7 +1293,15 @@ async def serve() -> None:
     stack = AsyncExitStack()
     state.mcp_stack = stack
     await stack.__aenter__()
-    await loki.connect_mcp(stack)
+    # MCP servers (uvx/npx) can take many seconds to start, and need the network the first
+    # time. Connect them in the background so the window is usable at once; their tools
+    # join when ready.
+    async def connect_mcp_later() -> None:
+        try:
+            await loki.connect_mcp(stack)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[loki-bridge] MCP servers unavailable: {exc}", flush=True)
+    asyncio.get_running_loop().create_task(connect_mcp_later())
 
     async def editor_approve(kind: str, detail: str, decidable: bool = True) -> bool:
         # The app always asks the human; the policy engine has already refused anything
@@ -1168,11 +1328,14 @@ async def serve() -> None:
         import workers  # pylint: disable=import-outside-toplevel
         state.jobs = workers.default_supervisor(Path(loki.DATA_DIR))
         state.jobs.start()
+        loki.JOBS = state.jobs
         print("[loki-bridge] background jobs: " + ", ".join(
             "%s %s" % (name, "ready" if info["available"] else "off")
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
+    threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
     threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
     try:

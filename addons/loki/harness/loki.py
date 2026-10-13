@@ -247,6 +247,8 @@ import manifests  # noqa: E402  (capability manifests: discovered, never execute
 import federation  # noqa: E402  (Ollama on other machines - LOKI_WORKERS)
 import skill_scan  # noqa: E402  (downloaded skills are untrusted text)
 import knowledge  # noqa: E402  (viking:// context store over local folders)
+import model_setup  # noqa: E402  (offline-first: find, download and warm local models)
+import usage  # noqa: E402  (token and cost ledger - the credits meter)
 import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
@@ -473,6 +475,8 @@ def provider_configured(name: str) -> bool:
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         # Counts as configured only once the CLI is actually installed.
         return cli_agents.is_available(cfg.base_url[len(CLI_AGENT_PREFIX):])
+    if name == "local":
+        return local_ready()
     if "11434" in cfg.base_url:
         # Reachable is not enough: a model that was never pulled answers 404 on every
         # request. Smart mode skips it; LOKI_FLEET routing may still find it elsewhere.
@@ -481,6 +485,112 @@ def provider_configured(name: str) -> bool:
             return False
         return federation.has_model(models, cfg.model) or CAPABILITIES.is_enabled("ollama-fleet")
     return bool(str(cfg.api_key or "").strip())
+
+
+# ---- offline-first: the best model on THIS computer -------------------------------
+# "local" is not a fixed tag any more: it resolves to the best tool-calling model that is
+# actually installed (Ollama, or LM Studio / llama.cpp / Jan if one is running), in a
+# variant with an agent-sized context window. LOKI_PREFER=local (default) puts it first in
+# smart mode; with no internet, smart uses ONLY local models.
+PREFER = os.getenv("LOKI_PREFER", "local").strip().lower()
+LOCAL_STATE: dict = {"at": 0.0, "name": "", "base_url": "", "source": "", "warm": "", "note": ""}
+_ONLINE: dict = {"at": 0.0, "ok": True}
+
+
+def online(max_age: float = 60.0) -> bool:
+    """Is the internet reachable? (one quick TCP connect, cached)"""
+    import socket
+    if time.time() - _ONLINE["at"] < max_age:
+        return _ONLINE["ok"]
+    ok = False
+    for host in ("1.1.1.1", "8.8.8.8"):
+        try:
+            with socket.create_connection((host, 443), timeout=1.2):
+                ok = True
+                break
+        except OSError:
+            continue
+    _ONLINE.update(at=time.time(), ok=ok)
+    return ok
+
+
+_LOCAL_LOCK = threading.Lock()
+
+
+def resolve_local(force: bool = False) -> dict:
+    """Point MODELS['local'] at the best model on this computer. Cached for 30s; never
+    makes a caller wait while another thread is already resolving."""
+    if not force and time.time() - LOCAL_STATE["at"] < 30:
+        return LOCAL_STATE
+    if not _LOCAL_LOCK.acquire(blocking=force):
+        return LOCAL_STATE
+    try:
+        return _resolve_local()
+    finally:
+        _LOCAL_LOCK.release()
+
+
+def _resolve_local() -> dict:
+    LOCAL_STATE["at"] = time.time()
+    if os.getenv("LOKI_LOCAL_MODEL"):
+        # The user pinned a model: use it as-is.
+        LOCAL_STATE.update(name=os.environ["LOKI_LOCAL_MODEL"], base_url="http://localhost:11434/v1",
+                           source="pinned", note="LOKI_LOCAL_MODEL")
+    else:
+        models = model_setup.ollama_models()
+        best = None
+        if models:
+            _match_installed_tags([m["name"] for m in models])
+            info = HARDWARE if HARDWARE else {"budget_gb": 0}
+            best = model_setup.best_installed(models, float(info.get("budget_gb") or 0))
+        if best and best.get("tools"):
+            name = best["name"]
+            if not name.startswith(model_setup.DERIVED_PREFIX) and os.getenv("LOKI_LOCAL_CONTEXT", "1") != "0":
+                name = model_setup.ensure_context(name, model_setup.context_for(HARDWARE or {}), models)
+            LOCAL_STATE.update(name=name, base_url="http://localhost:11434/v1", source="ollama",
+                               note="best installed: %s" % best["name"])
+        else:
+            servers = model_setup.other_servers()
+            if servers:
+                server = servers[0]
+                LOCAL_STATE.update(name=server["models"][0], base_url=server["base_url"],
+                                   source=server["key"], note=server["label"])
+            else:
+                LOCAL_STATE.update(name="", base_url="", source="",
+                                   note=("Ollama has no models yet" if models == [] else
+                                         "no installed model can call tools" if models else
+                                         "Ollama is not running"))
+    if LOCAL_STATE["name"]:
+        api_key = "ollama" if "11434" in LOCAL_STATE["base_url"] else "local"
+        MODELS["local"] = ModelConfig(base_url=LOCAL_STATE["base_url"], api_key=api_key,
+                                      model=LOCAL_STATE["name"])
+        if "11434" in LOCAL_STATE["base_url"] and LOCAL_STATE["warm"] != LOCAL_STATE["name"]:
+            LOCAL_STATE["warm"] = LOCAL_STATE["name"]
+            threading.Thread(target=model_setup.keep_warm, args=(LOCAL_STATE["name"],),
+                             daemon=True, name="loki-warm").start()
+    return LOCAL_STATE
+
+
+def _match_installed_tags(installed: list) -> None:
+    """local-* entries name a tag ("qwen3.5:9b"); Ollama may hold it under a longer one
+    ("qwen3.5:9b-q4_K_M"). Point the entry at what is really installed."""
+    for name in LOCAL_PROVIDERS:
+        cfg = MODELS.get(name)
+        if cfg is None or name == "local" or cfg.model in installed:
+            continue
+        match = next((t for t in installed if t.startswith(cfg.model + "-")), "")
+        if match:
+            MODELS[name] = ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key, model=match)
+
+
+def local_ready() -> bool:
+    return bool(resolve_local()["name"])
+
+
+try:
+    HARDWARE = model_setup.hardware()
+except Exception:
+    HARDWARE = {}
 
 
 def active_model_name() -> str:
@@ -494,6 +604,11 @@ def active_model_name() -> str:
         return ONLINE_ORDER[0]
     if model_name != "smart":
         return model_name
+    local_first = PREFER == "local" and "local" not in _SMART_FAILED and local_ready()
+    if local_first or (not online() and local_ready()):
+        return "local"
+    if not online():
+        return "local"
     for candidate in SMART_ORDER:
         if candidate not in _SMART_FAILED and provider_configured(candidate):
             return candidate
@@ -1703,6 +1818,7 @@ def knowledge_tool(action: str = "list", uri: str = "viking://memory", text: str
 
 LOCAL_TOOLS = {
     "conductor": lambda role, task="", url="": conductor_tool(role, task, url),
+    "delegate": lambda agent, task: delegate(agent, task),
     "knowledge": knowledge_tool,
     "list_files": list_files,
     "list_tree": list_tree,
@@ -1752,12 +1868,42 @@ LOCAL_TOOLS = {
 MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "move_file", "delete_file", "make_dir"}
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
-DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file"}
+DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate"}
 POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
                              command_check=lambda command: command_policy(command),
                              parse_command=safe_exec.parse, dangerous=DANGEROUS,
                              registry=CAPABILITIES)
 CONDUCTOR = conductor.Conductor(POLICY, CAPABILITIES)
+
+
+import agents as agent_profiles  # noqa: E402  (your named agents - harness_data/agents.json)
+AGENTS = agent_profiles.Store(DATA_DIR / "agents.json")
+JOBS = None  # workers.Supervisor, set by the engine (loki_bridge) when background jobs run
+
+
+def delegate(agent: str, task: str) -> str:
+    """Hand a longer task to one of your agents as a background job (always asks first)."""
+    if JOBS is None:
+        return "error: background jobs are not running in this Loki"
+    wanted = str(agent or "").strip().lower()
+    profile = next((a for a in AGENTS.all() if a["id"] == wanted or a["name"].lower() == wanted), None)
+    if profile is None:
+        names = ", ".join(a["name"] for a in AGENTS.all())
+        return "error: no agent called %r. Your agents: %s" % (agent, names)
+    try:
+        spec = agent_profiles.job_spec(profile, task, str(WORKSPACE))
+    except ValueError as exc:
+        return "error: %s" % exc
+    verdict = POLICY.job(spec["backend"], spec["agent"])
+    if not verdict.allowed:
+        return "error: %s" % verdict.reason
+    try:
+        job = JOBS.create(spec)
+    except ValueError as exc:
+        return "error: %s" % exc
+    threading.Thread(target=JOBS.tick, daemon=True).start()
+    return ("started background job %s: %s is working on it. The user can follow it in Background; "
+            "you do not need to wait for it." % (job["id"], profile["name"]))
 
 
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
@@ -1851,6 +1997,8 @@ TOOL_SCHEMAS = [
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
+    schema("delegate", "Hand a longer task to one of your agents (Researcher, Builder, Reviewer, Tester, or one the user made) as a background job, so you can keep talking. The user approves each one. agent=name, task=what to do.",
+           {"agent": {"type": "string"}, "task": {"type": "string"}}, ["agent", "task"]),
     schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory). Only roles listed under 'Specialists you can call' in your instructions are ready.",
            {"role": {"type": "string"}, "task": {"type": "string"}, "url": {"type": "string"}}, ["role"]),
     schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
@@ -1869,7 +2017,7 @@ MODEL_TOOL_NAMES = {
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
-    "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor",
+    "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1886,7 +2034,7 @@ TOOL_CATEGORIES = {
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
-    "specialists": ["conductor"],
+    "specialists": ["conductor", "delegate"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
@@ -1952,6 +2100,30 @@ MAX_TOOLS = int(os.getenv("LOKI_MAX_TOOLS", "128"))
 TRIMMED_TOOLS_NOTE = ""
 
 
+LOCAL_MAX_TOOLS = int(os.getenv("LOKI_LOCAL_MAX_TOOLS", "22"))
+LOCAL_TOOL_PRIORITY = ["list_tree", "read_file", "edit_file", "write_file", "search_files",
+                       "run_command", "make_dir", "move_file", "delete_file", "conductor", "delegate",
+                       "knowledge", "save_memory", "todo_add", "todo_list", "todo_done",
+                       "project_state", "append_file", "validate_scene", "play_scene",
+                       "check_script", "build_scene", "read_scene", "godot_search"]
+
+
+def _local_rank(name: str) -> int:
+    try:
+        return LOCAL_TOOL_PRIORITY.index(name)
+    except ValueError:
+        return len(LOCAL_TOOL_PRIORITY) + (0 if name in LOCAL_TOOLS else 50)
+
+
+def _is_local_model() -> bool:
+    try:
+        cfg = MODELS[active_model_name()]
+    except Exception:
+        return False
+    host = cfg.base_url
+    return any(h in host for h in ("11434", "127.0.0.1", "localhost")) and not host.startswith(CLI_AGENT_PREFIX)
+
+
 def model_tool_schemas() -> list:
     """The tool schemas to offer the model: enabled categories, within the budget."""
     global TRIMMED_TOOLS_NOTE
@@ -1967,6 +2139,12 @@ def model_tool_schemas() -> list:
                    if t["function"]["name"] in LOCAL_TOOLS
                    and t["function"]["name"] not in MODIFYING
                    and t["function"]["name"] not in DANGEROUS]
+    if _is_local_model():
+        # A local model reads every tool schema on every turn: fewer, better-chosen tools
+        # mean a much faster first token and steadier tool calls.
+        schemas = sorted(schemas, key=lambda t: _local_rank(t["function"]["name"]))[:LOCAL_MAX_TOOLS]
+        TRIMMED_TOOLS_NOTE = "local model: %d core tools offered" % len(schemas)
+        return schemas
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
         TRIMMED_TOOLS_NOTE = ""
         return schemas
@@ -3196,6 +3374,33 @@ def _recover_text_tool_calls(content: str) -> list:
     return calls
 
 
+USAGE = usage.Ledger(DATA_DIR / "usage.jsonl")
+LAST_USAGE: list = []   # entries for the current request, read by the bridge
+
+
+def _record_usage(response, kwargs: dict, cfg, started: float) -> None:
+    """Add one model call to the credits ledger; never fatal."""
+    try:
+        meta = getattr(response, "usage", None)
+        tin = getattr(meta, "prompt_tokens", None) if meta is not None else None
+        tout = getattr(meta, "completion_tokens", None) if meta is not None else None
+        message = response.choices[0].message
+        out_chars = len(message.content or "") + sum(len(str(getattr(c.function, "arguments", "")))
+                                                     for c in (message.tool_calls or []))
+        entry = USAGE.record(active_model_name(), cfg.model, tin, tout,
+                             int((time.monotonic() - started) * 1000),
+                             prompt_chars=usage.messages_chars(kwargs.get("messages", [])) +
+                             len(json.dumps(kwargs.get("tools", []))),
+                             output_chars=out_chars)
+        LAST_USAGE.append(entry)
+        _progress("usage", usage.line(entry))
+        if "11434" in cfg.base_url:
+            # Keep the model loaded between turns (Ollama unloads it after 5 idle minutes).
+            threading.Thread(target=model_setup.keep_warm, args=(cfg.model,), daemon=True).start()
+    except Exception:
+        pass
+
+
 async def agent_turn(force_tool: bool = False) -> str:
     cfg = MODELS[active_model_name()]
     client = make_client()
@@ -3240,9 +3445,11 @@ async def agent_turn(force_tool: bool = False) -> str:
         # A limit is not a failure: mark the provider used-up and continue this SAME
         # turn on the next provider rather than ending the run.
         switches = 0
+        _t0 = time.monotonic()
         while True:
             try:
                 response = await _model_request(client, kwargs, cfg)
+                _record_usage(response, kwargs, cfg, _t0)
                 break
             except ModelUnavailable as exc:
                 if switches >= len(SMART_ORDER) or not (
@@ -3577,5 +3784,64 @@ async def main() -> None:
                 print("[loki] staying alive - your next prompt starts a fresh turn.\n")
 
 
+# ---------------------------------------------------------------------------
+# Headless background job: `python loki.py --job JOB.json`
+# ---------------------------------------------------------------------------
+# workers.py starts this for the built-in "loki" agent, so background tasks work with
+# nothing else installed - on whatever model Loki uses (offline by default). The job
+# works in its own folder (a git worktree when possible). Nobody is there to click
+# Allow, so: file edits inside that folder are fine (the policy engine keeps them in
+# it); commands, moves and deletes run only when the job was started with
+# allow_commands, and still pass the command policy and the no-shell rule.
+async def run_job(job_path: str) -> int:
+    global approve, model_name
+    job = json.loads(Path(job_path).read_text(encoding="utf-8"))
+    allow_commands = bool(job.get("allow_commands"))
+    if job.get("model"):
+        model_name = str(job["model"])
+
+    async def job_approve(kind: str, detail: str, decidable: bool = True) -> bool:
+        if allow_commands and kind in ("run_command", "move_file", "open_godot"):
+            print("  [job] allowed %s: %s" % (kind, detail[:200]), flush=True)
+            return True
+        print("  [job] not allowed in a background job: %s %s" % (kind, detail[:200]), flush=True)
+        return False
+
+    approve = job_approve
+    globals()["loki_progress_callback"] = lambda event, text: print("  [%s] %s" % (event, text[:300]), flush=True)
+    system = system_prompt()
+    profile = job.get("profile") or {}
+    if profile.get("instructions"):
+        system += ("\n\n# You are the agent \"%s\"\n%s" % (profile.get("name", "agent"), profile["instructions"]))
+    system += ("\n\n# Background job\nYou are running unattended as a background job in %s. "
+               "Nobody can answer questions mid-task, so make reasonable choices and say what you "
+               "chose in your final DONE line." % WORKSPACE)
+    messages[:] = [{"role": "system", "content": system}]
+    print("[loki-job] %s | model %s | workspace %s" % (job.get("id", ""), active_model_name(), WORKSPACE), flush=True)
+    stack = AsyncExitStack()
+    await stack.__aenter__()
+    try:
+        if job.get("mcp"):
+            await connect_mcp(stack)
+        result = await pursue_goal(str(job.get("prompt", "")))
+    except ModelUnavailable as exc:
+        print("BLOCKED: " + exc.hint, flush=True)
+        return 3
+    except BudgetExhausted as exc:
+        print("BLOCKED: " + str(exc), flush=True)
+        return 4
+    finally:
+        await stack.aclose()
+    print("\n" + (result or "").strip(), flush=True)
+    if job.get("result_path"):
+        try:
+            Path(job["result_path"]).write_text(result or "", encoding="utf-8")
+        except OSError:
+            pass
+    return 2 if (result or "").strip().upper().startswith("BLOCKED") else 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--job":
+        raise SystemExit(asyncio.run(run_job(sys.argv[2])))
     asyncio.run(main())

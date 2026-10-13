@@ -37,7 +37,7 @@ a = Analysis(  # noqa: F821
     hiddenimports=hidden + ["asyncio", "sqlite3", "urllib.request", "http.server", "runpy",
                             "loki_bridge", "loki", "workers", "policy", "manifests", "conductor",
                             "brain", "safe_exec", "knowledge", "federation", "skill_scan",
-                            "interfaces", "decisions", "jev", "laya", "cli_agents", "capabilities",
+                            "interfaces", "decisions", "jev", "laya", "model_setup", "usage", "agents", "cli_agents", "capabilities",
                             "sessions", "api_vault", "project_state", "repo_review", "godot_tools",
                             "ecc_sync"],
     excludes=["tkinter", "pytest"],

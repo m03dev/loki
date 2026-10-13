@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/ui/app.css">
 <script src="/ui/brain.js" defer></script>
 <script src="/ui/app.js" defer></script>
+<script src="/ui/setup.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -33,6 +34,7 @@
           <span class="visually-hidden">Model</span>
           <select id="model-select" aria-label="Model"></select>
         </label>
+        <button type="button" id="usage-pill" class="usage-pill" title="What your messages cost - open Usage">—</button>
         <span id="status" class="status" role="status" aria-live="polite">Connecting…</span>
       </div>
     </header>
@@ -69,6 +71,8 @@
       <button type="button" role="tab" data-tab="tools" aria-selected="false">Tools</button>
       <button type="button" role="tab" data-tab="memory" aria-selected="false">Memory</button>
       <button type="button" role="tab" data-tab="capabilities" aria-selected="false">Capabilities</button>
+      <button type="button" role="tab" data-tab="models" aria-selected="false">Models</button>
+      <button type="button" role="tab" data-tab="usage" aria-selected="false">Usage</button>
     </div>
     <div class="tab-body">
       <section data-panel="connections">
@@ -93,6 +97,14 @@
         <textarea id="memory-text" class="memory" rows="12" aria-label="Memory"></textarea>
         <div class="right"><button type="button" id="save-memory">Save memory</button></div>
       </section>
+      <section data-panel="models" hidden>
+        <div id="models-panel"></div>
+      </section>
+      <section data-panel="usage" hidden>
+        <p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p>
+        <div id="usage-panel"></div>
+        <div class="right"><button type="button" id="usage-reset" class="quiet">Reset usage</button></div>
+      </section>
       <section data-panel="capabilities" hidden>
         <p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again.</p>
         <div id="manifests" class="rows"></div>
@@ -111,6 +123,29 @@
     <div class="tab-body">
       <p class="note">Hand work to an agent that keeps going while you do something else. Host jobs work in their own git branch; virtual computers keep everything inside the VM.</p>
       <div id="backends" class="backends"></div>
+      <div class="agents-head"><h3>Your agents</h3><button type="button" id="new-agent" class="quiet">New agent</button></div>
+      <div id="agent-list" class="agent-list"></div>
+      <form id="agent-form" class="job-form" hidden>
+        <div class="job-row">
+          <label>Name <input id="agent-name" maxlength="40" placeholder="e.g. Docs writer"></label>
+          <label>Engine
+            <select id="agent-engine">
+              <option value="loki">Loki (built-in)</option>
+              <option value="claude-code">Claude Code</option>
+              <option value="codex">Codex</option>
+              <option value="hermes">Hermes Agent</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="agent-commands"> May run commands</label>
+        </div>
+        <textarea id="agent-instructions" rows="3" placeholder="What is this agent good at? How should it work?" aria-label="Agent instructions"></textarea>
+        <div class="job-row end">
+          <span id="agent-result" class="note"></span>
+          <button type="button" id="agent-cancel" class="quiet">Cancel</button>
+          <button type="submit" class="send">Save agent</button>
+        </div>
+      </form>
+      <h3 class="one-off">One-off job</h3>
       <form id="job-form" class="job-form">
         <div class="job-row">
           <label>Run on
@@ -122,6 +157,7 @@
           </label>
           <label id="job-agent-label">Agent
             <select id="job-agent">
+              <option value="loki" selected>Loki (built-in, works offline)</option>
               <option value="claude-code">Claude Code</option>
               <option value="codex">Codex</option>
               <option value="hermes">Hermes Agent</option>
@@ -169,6 +205,15 @@
       </form>
       <div id="brain-detail" class="brain-detail" hidden></div>
     </aside>
+  </div>
+</div>
+<div id="setup" class="sheet" hidden>
+  <div class="sheet-panel wide" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <header class="sheet-head">
+      <h2 id="setup-title">Get Loki running on this computer</h2>
+      <button type="button" id="close-setup" class="quiet" aria-label="Close setup">Later</button>
+    </header>
+    <div class="tab-body"><div id="setup-body"></div></div>
   </div>
 </div>
 </body>

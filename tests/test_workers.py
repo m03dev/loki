@@ -201,7 +201,7 @@ check("local is available when an agent CLI is installed", local.available()[0])
 work = TMP / "work"
 work.mkdir()
 sup, _ = make_sup({"local": local})
-j = sup.create({"backend": "local", "workspace": str(work), "prompt": "hello there", "isolate": False})
+j = sup.create({"backend": "local", "agent": "claude-code", "workspace": str(work), "prompt": "hello there", "isolate": False})
 sup.tick()
 for _ in range(50):
     sup.tick()
@@ -212,8 +212,9 @@ job = sup.store.get(j["id"])
 check("the agent process ran to completion", job["status"] == "done" and job["exit_code"] == 0, job)
 check("its output was captured", "fake agent" in job["output"] and "hello there" in job["output"], job["output"])
 check("it ran in the job's folder", (work / "made.txt").is_file())
-check("local is unavailable with no agent installed",
-      not workers.LocalBackend(TMP, which=lambda n: None).available()[0])
+bare = workers.LocalBackend(TMP, which=lambda n: None).available()
+check("with nothing installed, local still offers the built-in Loki agent",
+      bare[0] and "loki (built-in)" in bare[1], bare)
 
 # ------------------------------------------------------------------ worktree isolation
 section("worktree isolation")

@@ -38,7 +38,7 @@ PATH_ARGS = {
 # Asks the human, but a confident decision provider may skip the prompt.
 DECIDABLE = {"run_command", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
-ALWAYS_ASK = {"delete_file"}
+ALWAYS_ASK = {"delete_file", "delegate"}
 # Tools that need an enabled capability (tool -> capability name).
 CAPABILITY_TOOLS: dict[str, str] = {}
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()

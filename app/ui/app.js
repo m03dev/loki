@@ -235,6 +235,7 @@ async function send(text) {
     if (data.ok) {
       const reply = String(data.response || "").trim();
       if (reply) addLoki(reply);
+      if (data.usage && typeof showMeter === "function") showMeter(data.usage);
       setStatus("Ready", true);
     } else {
       // The engine usually streamed this error already; do not show it twice.
@@ -361,6 +362,8 @@ function showTab(name) {
   if (name === "tools") loadCategories();
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
+  if (name === "models" && typeof loadModelsTab === "function") loadModelsTab();
+  if (name === "usage" && typeof loadUsageTab === "function") loadUsageTab();
 }
 
 function row(label, status, ready) {
@@ -656,6 +659,7 @@ async function start() {
   setInterval(pollApproval, 1500);
   refreshJobs();
   setInterval(() => { if (!jobsView.open) refreshJobs(); }, 10000);
+  if (typeof afterStart === "function") afterStart();
   $("#prompt").focus();
 }
 

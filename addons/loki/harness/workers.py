@@ -44,7 +44,18 @@ from typing import Any, Callable
 STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cancelled")
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
-AGENTS = ("claude-code", "codex", "hermes")
+AGENTS = ("loki", "claude-code", "codex", "hermes")
+# The built-in agent: Loki's own loop, headless, on Loki's model (local by default). It
+# needs nothing installed, so background work always has at least one agent.
+BUILTIN_AGENTS = {"loki"}
+LOKI_PY = Path(__file__).with_name("loki.py")
+
+
+def loki_job_argv(job_file: str) -> list[str]:
+    """How to start a headless Loki job: the engine's own Python, or the packaged app."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--agent-job", job_file]
+    return [sys.executable, "-u", str(LOKI_PY), "--job", job_file]
 HERDR_ONLY_AGENTS: set = set()   # interactive-only agents (none at present)
 BACKENDS = ("local", "herdr", "cua")
 DEFAULT_TIMEOUT_S = 3600
@@ -73,6 +84,8 @@ def _clip(text: str, limit: int = TAIL_CHARS) -> str:
 # commands without its own allowlist. LOKI_JOB_CLAUDE_MODE overrides it.
 def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | None = None) -> list[str]:
     env = env if env is not None else os.environ
+    if agent == "loki":
+        return [sys.executable, str(LOKI_PY)]  # the real argv is built in LocalBackend.start
     if agent == "claude-code":
         mode = env.get("LOKI_JOB_CLAUDE_MODE", "acceptEdits") or "acceptEdits"
         argv = ["claude", "--permission-mode", mode]
@@ -227,20 +240,41 @@ class LocalBackend(Backend):
         self.procs: dict[str, Any] = {}
 
     def available(self) -> tuple[bool, str]:
-        found = [a for a in AGENTS if a not in HERDR_ONLY_AGENTS and self.which(agent_argv(a, "")[0])]
-        return (True, "agents: " + ", ".join(found)) if found else (False, "install Claude Code, Codex or Hermes")
+        found = ["loki (built-in)"] + [a for a in AGENTS if a not in BUILTIN_AGENTS
+                                        and a not in HERDR_ONLY_AGENTS and self.which(agent_argv(a, "")[0])]
+        return True, "agents: " + ", ".join(found)
 
     def start(self, job: dict) -> dict:
-        argv = agent_argv(job["agent"], job["prompt"])
-        exe = self.which(argv[0])
-        if not exe:
-            raise RuntimeError("%s is not installed" % argv[0])
-        argv[0] = exe
+        env = None
+        if job["agent"] == "loki":
+            job_file = self.data_dir / "jobs" / (job["id"] + ".job.json")
+            job_file.parent.mkdir(parents=True, exist_ok=True)
+            job_file.write_text(json.dumps({
+                "id": job["id"], "prompt": job["prompt"], "profile": job.get("profile") or {},
+                "allow_commands": bool(job.get("allow_commands")), "model": job.get("model", ""),
+                "result_path": str(self.data_dir / "jobs" / (job["id"] + ".result.txt")),
+            }), encoding="utf-8")
+            argv = loki_job_argv(str(job_file))
+            # The child works in the job's folder, shares Loki's data (keys, memory, models)
+            # and never inherits the engine's own workspace.
+            env = dict(os.environ, LOKI_WORKSPACE=job["run_dir"], LOKI_DATA=str(self.data_dir),
+                       LOKI_MODE="build", PYTHONUNBUFFERED="1", LOKI_JOB_ID=job["id"])
+            env.pop("GAME_PROJECT", None)
+            if (Path(job["run_dir"]) / "project.godot").is_file():
+                env["GAME_PROJECT"] = job["run_dir"]
+        else:
+            argv = agent_argv(job["agent"], job["prompt"])
+            exe = self.which(argv[0])
+            if not exe:
+                raise RuntimeError("%s is not installed" % argv[0])
+            argv[0] = exe
         log_path = self.data_dir / "jobs" / (job["id"] + ".log")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         handle = open(log_path, "ab")
         kwargs: dict[str, Any] = {"cwd": job["run_dir"], "stdout": handle, "stderr": subprocess.STDOUT,
                                   "stdin": subprocess.DEVNULL}
+        if env is not None:
+            kwargs["env"] = env
         if sys.platform == "win32":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0) | \
                 getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -611,9 +645,11 @@ class Supervisor:
             raise ValueError("a job needs a prompt (or commands for a virtual computer)")
         if len(prompt) > MAX_PROMPT_CHARS:
             raise ValueError("the prompt is longer than %d characters" % MAX_PROMPT_CHARS)
-        agent = str(spec.get("agent") or "claude-code").strip().lower()
+        agent = str(spec.get("agent") or ("claude-code" if backend == "herdr" else "loki")).strip().lower()
         if backend in ("local", "herdr") and agent not in AGENTS:
             raise ValueError("agent must be one of %s" % ", ".join(AGENTS))
+        if backend == "herdr" and agent in BUILTIN_AGENTS:
+            raise ValueError("the built-in Loki agent runs on This computer (backend local)")
         if backend == "local" and agent in HERDR_ONLY_AGENTS:
             raise ValueError("%s runs only on herdr" % agent)
         workspace = str(spec.get("workspace") or "").strip()
@@ -633,6 +669,9 @@ class Supervisor:
             "timeout_s": timeout, "status": "queued", "created": _now(), "updated": _now(),
             "started": 0, "finished": 0, "handle": {}, "output": "", "error": "", "note": "",
             "exit_code": None, "run_dir": "",
+            "profile": spec.get("profile") if isinstance(spec.get("profile"), dict) else {},
+            "allow_commands": bool(spec.get("allow_commands")),
+            "model": str(spec.get("model") or ""),
         }
         return self.store.add(job)
 

@@ -40,8 +40,10 @@ PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
 MAX_TEXT = 20_000
 
 ROLES: dict[str, dict] = {
-    "research": {"capabilities": ("perplexity",), "permission": "network:api.perplexity.ai",
-                 "summary": "a cited answer from the live web (Perplexity)", "ask": False},
+    "research": {"capabilities": ("vane", "perplexity"), "permission": "",
+                 "permissions": {"vane": "network:loopback", "perplexity": "network:api.perplexity.ai"},
+                 "summary": "a cited answer from the live web (Vane, private and local; or Perplexity)",
+                 "ask": False},
     "read_web": {"capabilities": READ_BACKENDS, "permission": "",
                  "summary": "read one web page as markdown (url=...)", "ask": False},
     "browse": {"capabilities": ("browser-use",), "permission": "network",
@@ -77,9 +79,13 @@ class Conductor:
         if role == "read_web":
             order = [c.strip() for c in str(self.env.get("LOKI_READ_ORDER", "")).split(",") if c.strip()]
             candidates = [c for c in order if c in READ_BACKENDS] + [c for c in READ_BACKENDS if c not in order]
+        if role == "research":
+            order = [c.strip() for c in str(self.env.get("LOKI_RESEARCH_ORDER", "")).split(",") if c.strip()]
+            candidates = [c for c in order if c in spec["capabilities"]] + \
+                [c for c in spec["capabilities"] if c not in order]
         reasons = []
         for capability in candidates:
-            verdict = self._ready(capability, spec["permission"])
+            verdict = self._ready(capability, spec.get("permissions", {}).get(capability, spec["permission"]))
             if verdict.allowed:
                 return capability, ""
             reasons.append(verdict.reason)
@@ -112,7 +118,7 @@ class Conductor:
             return "error: no specialist for %r is ready - %s" % (role, why)
         try:
             if role == "research":
-                return self.research(task)
+                return self.vane(task) if capability == "vane" else self.research(task)
             if role == "read_web":
                 return self.read_web(capability, url or task)
             if role == "browse":
@@ -151,6 +157,35 @@ class Conductor:
             or [c for c in data.get("citations", []) if isinstance(c, str)]
         if sources:
             answer += "\n\nSources:\n" + "\n".join("[%d] %s" % (i + 1, u) for i, u in enumerate(sources[:12]))
+        return answer
+
+    def _get_json(self, url: str, timeout: float) -> Any:
+        with self.opener(url, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8") or "{}")
+
+    def vane(self, question: str) -> str:
+        """Vane (ItzCrazyKns/Vane, MIT): a self-hosted answering engine over SearxNG that can
+        run on local Ollama models - private research with no API key.
+        GET /api/providers picks the models; POST /api/search returns {message, sources}."""
+        if not question.strip():
+            return "error: research needs a question"
+        base = str(self.env.get("VANE_URL", "http://127.0.0.1:3000")).rstrip("/")
+        providers = self._get_json(base + "/api/providers", timeout=10)
+        providers = providers.get("providers", providers) if isinstance(providers, dict) else providers
+        chat, embed = pick_vane_models(providers if isinstance(providers, list) else [],
+                                       str(self.env.get("LOKI_VANE_CHAT", "")))
+        if not chat or not embed:
+            return "error: Vane has no chat or embedding model set up - open it at %s and add one" % base
+        data = self._post_json(base + "/api/search", {
+            "chatModel": chat, "embeddingModel": embed, "sources": ["web"],
+            "optimizationMode": str(self.env.get("LOKI_VANE_MODE", "speed")),
+            "query": question, "history": [], "stream": False}, {}, timeout=180)
+        answer = str(data.get("message", "")).strip() or "(Vane returned no answer)"
+        sources = [((s.get("metadata") or {}).get("url", ""), (s.get("metadata") or {}).get("title", ""))
+                   for s in data.get("sources", []) if isinstance(s, dict)]
+        sources = [s for s in sources if s[0]]
+        if sources:
+            answer += "\n\nSources:\n" + "\n".join("[%d] %s %s" % (i + 1, t, u) for i, (u, t) in enumerate(sources[:12]))
         return answer
 
     def _runner(self, name: str, job: dict, timeout: int) -> dict:
@@ -271,3 +306,24 @@ def python_module_present(name: str) -> bool:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
         return False
+
+
+def pick_vane_models(providers: list, prefer: str = "") -> tuple[dict | None, dict | None]:
+    """Choose Vane's chat and embedding models: a local (Ollama) provider first, or the one
+    whose model key contains `prefer`. Returns ({providerId, key}, {providerId, key})."""
+    def models(p: dict, field: str) -> list:
+        items = p.get(field) or []
+        return [m for m in items if isinstance(m, dict) and m.get("key")]
+    ordered = sorted([p for p in providers if isinstance(p, dict) and p.get("id")],
+                     key=lambda p: 0 if "ollama" in str(p.get("name", "") + p.get("type", "")).lower() else 1)
+    chat = embed = None
+    for p in ordered:
+        chats = models(p, "chatModels")
+        if prefer:
+            chats = sorted(chats, key=lambda m: 0 if prefer.lower() in m["key"].lower() else 1)
+        if chats and chat is None:
+            chat = {"providerId": p["id"], "key": chats[0]["key"]}
+        embeds = models(p, "embeddingModels")
+        if embeds and embed is None:
+            embed = {"providerId": p["id"], "key": embeds[0]["key"]}
+    return chat, embed

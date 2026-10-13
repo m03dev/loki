@@ -270,6 +270,16 @@ def run_engine(args: list[str]) -> int:
     return 0
 
 
+def run_agent_job(args: list[str]) -> int:
+    """`Loki --agent-job JOB.json`: a packaged build runs a built-in background agent."""
+    import asyncio
+    if not args:
+        return 2
+    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
+    import loki  # type: ignore
+    return int(asyncio.run(loki.run_job(args[0])) or 0)
+
+
 def run_script(args: list[str]) -> int:
     """`Loki --run-script SCRIPT`: a packaged build's stand-in for `python -I SCRIPT` (the
     conductor's runners). Only scripts that ship inside the bundle may run."""
@@ -293,6 +303,7 @@ def self_test() -> int:
     sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
     problems = []
     for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
+                 "model_setup", "usage", "agents",
                  "knowledge", "federation", "skill_scan", "loki"):
         try:
             __import__(name)
@@ -309,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["--engine"]:
         return run_engine(argv[1:])
+    if argv[:1] == ["--agent-job"]:
+        return run_agent_job(argv[1:])
     if argv[:1] == ["--run-script"]:
         return run_script(argv[1:])
     if argv[:1] == ["--self-test"]:
