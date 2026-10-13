@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from contextlib import AsyncExitStack
@@ -436,6 +437,35 @@ def _ollama_reachable() -> bool:
         return False
 
 
+_OLLAMA_MODELS_CACHE: dict = {"at": 0.0, "models": None}
+
+
+def _ollama_models() -> list | None:
+    """Names of the models this machine's Ollama has pulled (cached 20s); None if down."""
+    now = time.time()
+    if now - _OLLAMA_MODELS_CACHE["at"] < 20:
+        return _OLLAMA_MODELS_CACHE["models"]
+    models = None
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as response:
+            data = json.loads(response.read().decode("utf-8") or "{}")
+        models = [m.get("name", "") for m in data.get("models", []) if isinstance(m, dict)]
+    except Exception:
+        models = None
+    _OLLAMA_MODELS_CACHE.update(at=now, models=models)
+    return models
+
+
+def missing_key_env(name: str) -> str:
+    """The env var a provider's key goes in, for the 'add your key' message."""
+    cfg = MODELS.get(name)
+    host = (urllib.parse.urlparse(cfg.base_url).hostname or "") if cfg else ""
+    for provider, env in PROVIDER_ENV_VARS.items():
+        if provider == name or (provider in host):
+            return env
+    return name.upper().replace("-", "_").replace(".", "_") + "_API_KEY"
+
+
 def provider_configured(name: str) -> bool:
     cfg = MODELS.get(name)
     if cfg is None:
@@ -444,7 +474,12 @@ def provider_configured(name: str) -> bool:
         # Counts as configured only once the CLI is actually installed.
         return cli_agents.is_available(cfg.base_url[len(CLI_AGENT_PREFIX):])
     if "11434" in cfg.base_url:
-        return _ollama_reachable()
+        # Reachable is not enough: a model that was never pulled answers 404 on every
+        # request. Smart mode skips it; LOKI_FLEET routing may still find it elsewhere.
+        models = _ollama_models()
+        if models is None:
+            return False
+        return federation.has_model(models, cfg.model) or CAPABILITIES.is_enabled("ollama-fleet")
     return bool(str(cfg.api_key or "").strip())
 
 
@@ -491,7 +526,9 @@ _LIMIT_MARKERS = ("429", "402", "413", "quota", "rate limit", "rate_limit",
                   # list, an unsupported field) is just as unusable as an exhausted
                   # quota: the run must move on rather than end. Matching the
                   # rendered "HTTP 400" keeps this off unrelated numbers.
-                  "http 400", "http 422")
+                  "http 400", "http 422",
+                  # Ollama is running but the model was never pulled.
+                  "[model missing]")
 
 
 def _is_limit_error(exc) -> bool:
@@ -2910,6 +2947,14 @@ def make_client():
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         return cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
     base_url = cfg.base_url
+    if not str(cfg.api_key or "").strip() and "11434" not in base_url:
+        # A provider with no key: say which key, instead of the client library's
+        # "Missing credentials ... OPENAI_API_KEY" traceback (which names the wrong key).
+        name = active_model_name()
+        raise ModelUnavailable(
+            "[model unavailable] %s needs an API key and none is set. Add %s in Settings > "
+            "Connections (or harness_data/.env), or pick 'smart' so Loki uses a provider "
+            "that is ready." % (name, missing_key_env(name)))
     # Ollama federation: when this machine's Ollama is down or lacks the model, use a
     # listed worker that has it - only with the ollama-fleet capability enabled.
     if federation.is_ollama(base_url) and CAPABILITIES.is_enabled("ollama-fleet"):
@@ -3076,6 +3121,13 @@ async def _model_request(client, kwargs: dict, cfg):
                 await asyncio.sleep(delay)
                 continue
             _mark_smart_failure()
+            if status == 404 and ("11434" in cfg.base_url) and "not found" in str(exc.message).lower():
+                # Ollama is up but this model was never pulled. Marked as a limit so a
+                # smart run fails over instead of ending.
+                raise ModelUnavailable(
+                    "[model missing] Ollama does not have %s yet. "
+                    "Run `ollama pull %s` in Terminal, or pick another model." % (cfg.model, cfg.model)
+                ) from exc
             raise ModelUnavailable(
                 "[model error] %s answered HTTP %s: %s" % (cfg.model, status, short_error(exc.message))
             ) from exc

@@ -7,6 +7,7 @@ Obsidian export and the safety ceilings.
 from __future__ import annotations
 
 import asyncio
+import time
 import io
 import json
 import sys
@@ -455,6 +456,26 @@ if have_loki:
     check("Loki's own skills are a library", "Loki" in loki.list_ecc_skills("loki-testing"))
     check("loading a skill goes through the scanner", "loki-testing" in loki.load_ecc_skill("loki-testing"))
     check("the knowledge tool is offered", "knowledge" in loki.MODEL_TOOL_NAMES and "knowledge" in loki.LOCAL_TOOLS)
+    saved_model, saved_cfg = loki.model_name, loki.MODELS.get("deepseek-4.1")
+    loki.model_name = "deepseek-4.1"
+    loki.MODELS["deepseek-4.1"] = loki.ModelConfig(base_url="https://openrouter.ai/api/v1", api_key="", model="x")
+    try:
+        loki.make_client()
+        msg = ""
+    except loki.ModelUnavailable as exc:
+        msg = exc.hint
+    finally:
+        loki.model_name = saved_model
+        if saved_cfg is not None:
+            loki.MODELS["deepseek-4.1"] = saved_cfg
+    check("a keyless provider names the right key instead of crashing",
+          "OPENROUTER_API_KEY" in msg and "OPENAI_API_KEY" not in msg, msg)
+    check("a never-pulled Ollama model fails over in smart mode",
+          loki._is_limit_error(Exception("[model missing] Ollama does not have qwen3:8b yet.")))
+    loki._OLLAMA_MODELS_CACHE.update(at=time.time(), models=["qwen2.5-coder:7b"])
+    check("an Ollama model that is not pulled is not 'configured'",
+          not loki.provider_configured("local") and loki.provider_configured("local-coder"))
+    loki._OLLAMA_MODELS_CACHE.update(at=time.time(), models=None)
     check("the knowledge tool refuses escapes", loki.knowledge_tool("read", "viking://memory/../../x").startswith("error"))
 
 import loki_bridge  # noqa: E402
