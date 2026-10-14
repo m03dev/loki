@@ -593,6 +593,60 @@ def redact_secrets(text: str) -> str:
     return _SECRET_SHAPES.sub("[redacted]", str(text))
 
 
+# ---------------------------------------------------------------------------
+# Cost: usage per request, and a cap that applies ONLY to metered providers.
+# ---------------------------------------------------------------------------
+# Free tiers, local models and the flat-rate subscription CLIs keep running unbounded
+# (LOKI_MAX_TURNS still applies to everything). A provider billed per token cannot run
+# away: after LOKI_PAID_MAX_CALLS model calls in one request, the request stops and says
+# why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
+_METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
+                    "ollama-cloud"}
+PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
+REQUEST_USAGE: dict = {}   # provider -> {"calls", "prompt_tokens", "completion_tokens"}
+
+
+def is_metered(name: str) -> bool:
+    """True when every call to this provider costs money."""
+    if name in _csv_env("LOKI_FREE_PROVIDERS"):
+        return False
+    if name in _csv_env("LOKI_PAID_PROVIDERS") or name in _METERED_DEFAULT:
+        return True
+    cfg = MODELS.get(name)
+    if cfg is not None and "openrouter.ai" in cfg.base_url:
+        return not str(cfg.model).endswith(":free")
+    return False
+
+
+def _paid_calls() -> int:
+    return sum(u["calls"] for name, u in REQUEST_USAGE.items() if is_metered(name))
+
+
+def _record_usage(provider: str, response) -> None:
+    entry = REQUEST_USAGE.setdefault(provider, {"calls": 0, "prompt_tokens": 0,
+                                                "completion_tokens": 0})
+    entry["calls"] += 1
+    usage = getattr(response, "usage", None)
+    for key in ("prompt_tokens", "completion_tokens"):
+        value = getattr(usage, key, None) if usage is not None else None
+        if isinstance(value, int):
+            entry[key] += value
+
+
+def usage_summary() -> str:
+    """'openrouter 3 calls, 4.1k tokens' - one line per request, for the user and the log."""
+    parts = []
+    for name, u in REQUEST_USAGE.items():
+        tokens = u["prompt_tokens"] + u["completion_tokens"]
+        text = "%s %d call%s" % (name, u["calls"], "" if u["calls"] == 1 else "s")
+        if tokens:
+            text += ", %s tokens" % (("%.1fk" % (tokens / 1000)) if tokens >= 1000 else tokens)
+        if is_metered(name):
+            text += " (paid)"
+        parts.append(text)
+    return "; ".join(parts)
+
+
 def failover_target(spent: str = "") -> str:
     """Mark `spent` (the provider that just failed) used-up; return the next usable one.
 
@@ -2814,6 +2868,7 @@ def _toolset_summary(text: str) -> str:
 
 
 async def call_tool(name: str, args: dict) -> str:
+    global _task_modified
     args = _normalize_args(name, args)
     # The git MCP server requires repo_path on every call. Loki already knows the
     # project, so fill it in - the model never has to guess the workspace path.
@@ -2828,7 +2883,6 @@ async def call_tool(name: str, args: dict) -> str:
             result = LOCAL_TOOLS[name](**args)
             if asyncio.iscoroutine(result):
                 result = await result
-            global _task_modified
             if name in MODIFYING:
                 _task_modified = True
                 _record_touched(name, args, result)
@@ -2841,6 +2895,8 @@ async def call_tool(name: str, args: dict) -> str:
             text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
         except Exception as e:
             return f"error: {e}"
+        if _record_mcp_touched(name, args, text):
+            _task_modified = True
         if "toolset" in name:
             # Enabling a toolset changes the server's tool list; without this the
             # model would have to guess at tools it can never see.
@@ -2997,6 +3053,46 @@ def _record_touched(name: str, args: dict, result) -> None:
     if path in _task_files:
         _task_files.remove(path)
     _task_files.append(path)   # most recent last
+
+
+# MCP tools (godot-editor-mcp and friends) write project files too. Their names vary by
+# server, so recognise them by verb, and take the file from a *_path argument whose
+# value looks like a file. Node paths ("Player/Camera") are tree paths, not files.
+_MCP_WRITE_VERB = re.compile(r"(^|_)(write|patch|create|save|move|scaffold|import|attach)_")
+_MCP_SETTINGS_TOOL = re.compile(r"(^|_)(set_setting|add_input_action|remove_input_action|"
+                                r"add_input_event|clear_input_action_events|register_autoload|"
+                                r"unregister_autoload)$")
+_MCP_FILE_KEYS = ("script_path", "scene_path", "shader_path", "save_path", "resource_path",
+                  "tileset_path", "library_path", "new_path", "path", "file_path", "target_file")
+_FILE_SUFFIX = re.compile(r"\.[A-Za-z0-9]{1,6}$")
+
+
+def mcp_touched_paths(name: str, args: dict) -> list:
+    """Project files an MCP tool call writes (best effort, by name and arguments)."""
+    if not isinstance(args, dict):
+        return []
+    if _MCP_SETTINGS_TOOL.search(name):
+        return ["project.godot"]
+    if not _MCP_WRITE_VERB.search(name):
+        return []
+    found = []
+    for key in _MCP_FILE_KEYS:
+        value = args.get(key)
+        if isinstance(value, str) and _FILE_SUFFIX.search(value.strip()):
+            path = value.strip().replace("res://", "", 1).lstrip("/")
+            if path not in found:
+                found.append(path)
+    return found
+
+
+def _record_mcp_touched(name: str, args: dict, result_text: str) -> bool:
+    head = str(result_text or "")[:200].lower()
+    if head.startswith("error") or '"ok": false' in head or '"error"' in head[:40]:
+        return False
+    paths = mcp_touched_paths(name, args)
+    for path in paths:
+        _record_touched("write_file", {"filename": path}, "ok")
+    return bool(paths)
 
 
 def _verdict(text: str) -> str:
@@ -3306,8 +3402,14 @@ async def agent_turn(force_tool: bool = False) -> str:
             # Resolve the provider BEFORE the request, so a failure is pinned on the
             # provider that actually failed (re-resolving afterwards names the next one).
             provider = active_model_name()
+            if PAID_MAX_CALLS > 0 and is_metered(provider) and _paid_calls() >= PAID_MAX_CALLS:
+                raise BudgetExhausted(
+                    "hit the paid-provider budget: %d calls to metered providers this request "
+                    "(%s). Raise LOKI_PAID_MAX_CALLS, or use a free provider." % (
+                        _paid_calls(), usage_summary()))
             try:
                 response = await _model_request(client, kwargs, cfg, provider)
+                _record_usage(provider, response)
                 break
             except ModelUnavailable as exc:
                 if switches >= len(SMART_ORDER) or not should_fail_over(
@@ -3447,6 +3549,7 @@ async def run_agent(user_message: str) -> str:
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     ROUTE_TRACE.clear()
+    REQUEST_USAGE.clear()
     _task_files.clear()
     messages.append({"role": "user", "content": user_message})
     try:
@@ -3504,6 +3607,7 @@ async def pursue_goal(goal: str) -> str:
     _jev_loop_window = []
     _task_modified = False
     ROUTE_TRACE.clear()
+    REQUEST_USAGE.clear()
     _task_files.clear()
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)

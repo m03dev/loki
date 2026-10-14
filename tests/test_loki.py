@@ -2416,6 +2416,89 @@ finally:
 
 
 
+
+section("MCP edits are verified too; paid providers have a budget")
+check("an MCP script write records the script",
+      loki.mcp_touched_paths("write_script", {"script_path": "res://player.gd", "content": "x"}) == ["player.gd"])
+check("a prefixed MCP tool name is recognised",
+      loki.mcp_touched_paths("godot_create_scene", {"scene_path": "res://levels/a.tscn"}) == ["levels/a.tscn"])
+check("an MCP settings tool records project.godot",
+      loki.mcp_touched_paths("set_setting", {"name": "x", "value": 1}) == ["project.godot"])
+check("a node path is not mistaken for a file",
+      loki.mcp_touched_paths("create_node", {"parent_path": "Player", "node_path": "Player/Cam"}) == [])
+check("a read-only MCP tool records nothing",
+      loki.mcp_touched_paths("read_script", {"script_path": "res://player.gd"}) == [])
+
+_mb_saved = (dict(loki.mcp_sessions), list(loki._task_files), loki._task_modified)
+
+
+class _FakeMcp:
+    async def call_tool(self, name, args):
+        return _types.SimpleNamespace(content=[_types.SimpleNamespace(text='{"script_path": "res://p.gd", "created": true}')])
+
+
+try:
+    loki.mcp_sessions["write_script"] = _FakeMcp()
+    loki._task_files.clear()
+    loki._task_modified = False
+    asyncio.run(loki.call_tool("write_script", {"script_path": "res://p.gd", "content": "extends Node"}))
+    check("an MCP write lands in the verification set", loki._task_files == ["p.gd"], loki._task_files)
+    check("an MCP write counts as a modification (DONE is not 'premature')", loki._task_modified is True)
+finally:
+    loki.mcp_sessions.clear()
+    loki.mcp_sessions.update(_mb_saved[0])
+    loki._task_files[:] = _mb_saved[1]
+    loki._task_modified = _mb_saved[2]
+
+check("gpt and claude are metered", loki.is_metered("gpt") and loki.is_metered("claude"))
+check("a :free OpenRouter model is not metered", not loki.is_metered("openrouter"))
+check("a non-free OpenRouter model is metered", loki.is_metered("deepseek-4.1"))
+check("subscription CLIs and local models are not metered",
+      not loki.is_metered("claude-code") and not loki.is_metered("local"))
+os.environ["LOKI_FREE_PROVIDERS"] = "gpt"
+check("LOKI_FREE_PROVIDERS overrides the default", not loki.is_metered("gpt"))
+del os.environ["LOKI_FREE_PROVIDERS"]
+
+# Budget: a metered provider stops after PAID_MAX_CALLS model calls in one request.
+_pb_saved = (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+             list(loki.messages), loki.PAID_MAX_CALLS, loki.MODEL_RETRIES)
+
+
+class _LoopForever:
+    async def create(self, **kwargs):
+        call = _types.SimpleNamespace(id="x", type="function",
+                                      function=_types.SimpleNamespace(name="list_files", arguments="{}"))
+        msg = _types.SimpleNamespace(role="assistant", content="", tool_calls=[call])
+        usage = _types.SimpleNamespace(prompt_tokens=1000, completion_tokens=50)
+        return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=msg)], usage=usage)
+
+
+async def _pb_noop(*a, **k):
+    return []
+
+try:
+    loki.provider_configured = lambda n: n == "gpt"
+    loki.make_client = lambda: _types.SimpleNamespace(chat=_types.SimpleNamespace(completions=_LoopForever()))
+    loki.refresh_mcp_tools = _pb_noop
+    loki.model_name = "gpt"
+    loki.PAID_MAX_CALLS = 3
+    loki.REQUEST_USAGE.clear()
+    loki.messages[:] = [{"role": "system", "content": "t"}, {"role": "user", "content": "go"}]
+    try:
+        asyncio.run(loki.agent_turn())
+        _pb = "no stop"
+    except loki.BudgetExhausted as exc:
+        _pb = str(exc)
+    check("a metered provider stops at the paid budget", "paid-provider budget" in _pb, _pb)
+    check("it stopped after exactly the budget", loki.REQUEST_USAGE["gpt"]["calls"] == 3, loki.REQUEST_USAGE)
+    check("usage counts tokens", loki.REQUEST_USAGE["gpt"]["prompt_tokens"] == 3000, loki.REQUEST_USAGE)
+    check("the usage line says it was paid", "(paid)" in loki.usage_summary(), loki.usage_summary())
+finally:
+    (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+     _pb_msgs, loki.PAID_MAX_CALLS, loki.MODEL_RETRIES) = _pb_saved
+    loki.messages[:] = _pb_msgs
+    loki.REQUEST_USAGE.clear()
+
 if "--live" in sys.argv:
 
 

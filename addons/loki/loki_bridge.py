@@ -492,7 +492,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             route_trace = list(getattr(agent, "ROUTE_TRACE", []))
             self._send_json(200, {"ok": True, "service": "loki", "mode": agent.model_name,
                                   "provider": resolved, "model": agent.MODELS[resolved].model,
-                                  "providers": report, "route": route_trace})
+                                  "providers": report, "route": route_trace,
+                                  "usage": dict(getattr(agent, "REQUEST_USAGE", {}))})
             return
         if route == "/progress":
             try:
