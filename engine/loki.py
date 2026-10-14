@@ -271,6 +271,7 @@ import knowledge  # noqa: E402  (viking:// context store over local folders)
 import model_setup  # noqa: E402  (offline-first: find, download and warm local models)
 import usage  # noqa: E402  (token and cost ledger - the credits meter)
 import conductor  # noqa: E402  (Loki the conductor: specialists by role)
+import first_layer  # noqa: E402  (every request is triaged first: Laya, else built-in rules)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
 REPO_ROOT = ROOT.parent
@@ -2692,7 +2693,37 @@ def system_prompt() -> str:
     except Exception:
         specialists = ""
     base = _base_system_prompt()
-    return base + (chr(10) * 2 + specialists if specialists else "")
+    text = base + (chr(10) * 2 + specialists if specialists else "")
+    if TRIAGE_NOTE:
+        text += chr(10) * 2 + "# This request" + chr(10) + TRIAGE_NOTE
+    return text
+
+
+# The first layer's verdict on the request being handled (first_layer.triage), and the
+# note it adds to the system prompt for the length of that request only.
+LAST_TRIAGE: dict = {}
+TRIAGE_NOTE = ""
+
+
+def _triage(text: str) -> dict:
+    """Run the first layer for one request: show it, steer the agent, keep it for the log."""
+    global LAST_TRIAGE, TRIAGE_NOTE
+    try:
+        verdict = first_layer.triage(text, AGENT_MODE)
+    except Exception as exc:  # noqa: BLE001 - the first layer must never break a request
+        verdict = dict(first_layer.rules(text), source="rules", note="triage failed: %s" % exc)
+    LAST_TRIAGE = verdict
+    TRIAGE_NOTE = first_layer.guidance(verdict)
+    refresh_system_prompt()
+    _progress("triage", first_layer.describe(verdict))
+    return verdict
+
+
+def _end_triage() -> None:
+    global TRIAGE_NOTE
+    if TRIAGE_NOTE:
+        TRIAGE_NOTE = ""
+        refresh_system_prompt()
 
 
 def _base_system_prompt() -> str:
@@ -4070,6 +4101,15 @@ def is_conversational(goal: str) -> bool:
     return bool(_CONVERSATIONAL.match(text)) or text.rstrip().endswith("?")
 
 
+def _answer_only(goal: str) -> bool:
+    """A question is answered, not pursued: the old rule, or a confident Laya 'answer'."""
+    if is_conversational(goal):
+        return True
+    t = LAST_TRIAGE or {}
+    return (t.get("source") == "laya" and t.get("route") == "answer"
+            and (t.get("confidence") or 0) >= 0.7 and len(goal) <= 300)
+
+
 async def _pursue_goal(goal: str) -> str:
     global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
@@ -4082,7 +4122,7 @@ async def _pursue_goal(goal: str) -> str:
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)
     _progress("task", "Goal: %s" % goal[:200])
-    if is_conversational(goal):
+    if _answer_only(goal):
         # One turn, then stop. See is_conversational().
         messages.append({"role": "user", "content": (
             "The user asked you a QUESTION, not for a change to the project." + chr(10) +
@@ -4207,10 +4247,23 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
             "provider": providers[-1] if providers else "", "providers": providers,
             "tool_calls": _REQUEST_TOOL_CALLS, "files": list(_task_files),
             "usage": dict(REQUEST_USAGE), "route": list(ROUTE_TRACE),
+            "triage": _triage_record(start_index),
             "seconds": time.time() - started, "trajectory": kept,
         })
     except Exception as exc:  # noqa: BLE001 - learning must never break a request
         print("  [experience] not recorded: %s" % exc)
+
+
+def _triage_record(start_index: int = 0) -> dict:
+    t = dict(LAST_TRIAGE or {})
+    if not t:
+        return {}
+    delegated = any(isinstance(m, dict) and any(
+        (c.get("function") or {}).get("name") == "delegate" for c in (m.get("tool_calls") or [])
+        if isinstance(c, dict)) for m in messages[start_index:])
+    t["actual_route"] = first_layer.actual_route(_REQUEST_TOOL_CALLS, delegated)
+    return {k: t[k] for k in ("source", "kind", "route", "difficulty", "risk", "confidence", "ms",
+                              "actual_route") if k in t}
 
 
 def _status_of_reply(reply: str) -> str:
@@ -4224,6 +4277,7 @@ async def run_agent(user_message: str) -> str:
     started, start_index = _start_request()
     status = "error"
     try:
+        await asyncio.to_thread(_triage, user_message)
         reply = await _run_agent(user_message)
         status = "done"
         return reply
@@ -4231,6 +4285,7 @@ async def run_agent(user_message: str) -> str:
         status = "budget"
         raise
     finally:
+        _end_triage()
         _record_experience("chat", user_message, status, started, start_index)
 
 
@@ -4238,13 +4293,15 @@ async def pursue_goal(goal: str) -> str:
     started, start_index = _start_request()
     status = "error"
     try:
+        await asyncio.to_thread(_triage, goal)
         reply = await _pursue_goal(goal)
-        status = "done" if is_conversational(goal) else _status_of_reply(reply)
+        status = "done" if _answer_only(goal) else _status_of_reply(reply)
         return reply
     except BudgetExhausted:
         status = "budget"
         raise
     finally:
+        _end_triage()
         _record_experience("task", goal, status, started, start_index)
 
 

@@ -1525,10 +1525,10 @@ for _k, _v in _env_saved.items():
         os.environ[_k] = _v
 
 
-check("the local driver ships as a Node module", (loki.ROOT / "laya_driver.mjs").is_file())
+check("the warm Laya server ships as a Node module", (loki.ROOT / "laya_server.mjs").is_file())
 
 
-check("the driver delegates to the real @receptron/laya package", "@receptron/laya" in (loki.ROOT / "laya_driver.mjs").read_text(encoding="utf-8"))
+check("the server delegates to the real @receptron/laya package", "@receptron/laya" in (loki.ROOT / "laya_server.mjs").read_text(encoding="utf-8"))
 
 
 _loki_src = (loki.ROOT / "loki.py").read_text(encoding="utf-8")

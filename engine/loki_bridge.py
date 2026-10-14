@@ -193,6 +193,24 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'sel
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+def first_layer_status(agent) -> dict:
+    """What answers the first layer right now, and its last verdict (for the UI)."""
+    try:
+        import laya  # pylint: disable=import-outside-toplevel
+        laya_state = laya.status()
+    except Exception:  # noqa: BLE001
+        laya_state = {"enabled": False}
+    server = laya_state.get("server") or {}
+    if laya_state.get("backend") == "http":
+        answering = "laya"
+    elif laya_state.get("enabled") and server.get("state") == "ready":
+        answering = "laya"
+    else:
+        answering = "rules"
+    return {"answering": answering, "laya": laya_state,
+            "last": dict(getattr(agent, "LAST_TRIAGE", {}) or {})}
+
+
 def resolve_workspace(project_dir: str = "") -> Path:
     """The folder Loki works in: --project-dir, else $LOKI_WORKSPACE, else ~/LOKI Projects/Home."""
     chosen = (project_dir or os.environ.get("LOKI_WORKSPACE", "")).strip()
@@ -594,7 +612,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                   "workspace": os.environ.get("LOKI_WORKSPACE", ""),
                                   "provider": resolved, "model": agent.MODELS[resolved].model,
                                   "providers": report, "route": route_trace,
-                                  "usage": dict(getattr(agent, "REQUEST_USAGE", {}))})
+                                  "usage": dict(getattr(agent, "REQUEST_USAGE", {})),
+                                  "first_layer": first_layer_status(agent)})
             return
         if route == "/progress":
             try:
@@ -1363,6 +1382,14 @@ async def serve() -> None:
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    try:
+        import laya  # pylint: disable=import-outside-toplevel
+        laya.warm()  # the first layer asks Laya about every request: load the model now
+        print("[loki-bridge] first layer: " + (
+            "Laya (%s)" % laya.backend() if laya.backend() else
+            "built-in rules (Laya not set up: tools/setup_laya.py)"), flush=True)
+    except Exception as exc:  # noqa: BLE001 - Laya is optional; the rules answer without it
+        print(f"[loki-bridge] Laya unavailable: {exc}", flush=True)
     try:
         import peer_link  # pylint: disable=import-outside-toplevel
         state.peer_server = peer_link.start(state, loki)

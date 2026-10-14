@@ -114,7 +114,7 @@ function addNotice(text, isError) {
   scrollDown();
 }
 
-const EVENT_LABELS = { tool: "Tool", tool_result: "Result", task: "Task", done: "Done", error: "Error", approval: "Permission" };
+const EVENT_LABELS = { triage: "First layer", tool: "Tool", tool_result: "Result", task: "Task", done: "Done", error: "Error", approval: "Permission" };
 
 function addEvent(kind, text) {
   const details = el("details", "event " + kind);

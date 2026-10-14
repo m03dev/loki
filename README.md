@@ -33,6 +33,11 @@ creates launchers:
 | Windows | **Loki** in the Start menu or on the Desktop, or `Loki.cmd` |
 | Linux | `harness_data/.venv/bin/python app/loki_app.py` |
 
+Every message first goes through **Laya**, a small local decision model that sorts the
+request (question, code, research, a job for a team...) in milliseconds and works offline.
+Setup downloads it once (about 1.7 GB, needs Node 20+); `python tools/setup_laya.py --check`
+shows its state. Without it, built-in rules do the sorting and the chat says so.
+
 LOKI works with no API key (a built-in free route, Claude Code / Codex subscriptions, or a
 local Ollama model). Add keys in `harness_data/.env` or in Settings > Connections.
 
@@ -70,6 +75,7 @@ $PY tests/test_integrations.py    # conductor, specialists, knowledge
 $PY tests/test_workers.py         # background jobs
 $PY tests/test_offline_e2e.py     # full offline run against a fake model server
 $PY tests/test_peers.py           # Mac <-> PC link
+$PY tests/test_first_layer.py     # Laya first layer (needs Node 20+ for the Laya part)
 ```
 
 ## Build the Windows app

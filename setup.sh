@@ -44,6 +44,9 @@ if [ ! -f "$DATA/.env" ]; then
 fi
 
 "$VENV/bin/python" "tools/loki_doctor.py" || true
+
+echo "[loki] setting up Laya, the offline first layer (Node.js 20+; downloads about 1.7 GB once)"
+"$VENV/bin/python" "$REPO/tools/setup_laya.py" || echo "[loki] Laya is not set up yet; Loki uses its built-in rules until it is"
 echo
 if [ "$(uname -s)" = "Darwin" ] && [ "${LOKI_NO_APP_BUILD:-0}" != "1" ]; then
   bash "$REPO/tools/macos/make_loki_app.sh"

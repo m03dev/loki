@@ -87,6 +87,9 @@ def record(entry: dict, root: Path | None = None) -> dict:
         "route": entry.get("route", []),
         "seconds": round(float(entry.get("seconds", 0) or 0), 1),
         "trajectory": bool(entry.get("trajectory", False)),
+        "triage": {k: v for k, v in (entry.get("triage") or {}).items()
+                   if k in ("source", "kind", "route", "difficulty", "risk", "confidence", "ms",
+                            "actual_route")},
     }
     with open(root_dir(root) / "log.jsonl", "a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")
@@ -176,7 +179,39 @@ def summary(root: Path | None = None) -> dict:
     for line in lines:
         outcomes[line.get("outcome", "")] = outcomes.get(line.get("outcome", ""), 0) + 1
     return {"requests": len(lines), "outcomes": outcomes,
-            "trajectories": len(list((root_dir(root) / "trajectories").glob("*.json")))}
+            "trajectories": len(list((root_dir(root) / "trajectories").glob("*.json"))),
+            "triage": triage_stats(root)}
+
+
+def triage_stats(root: Path | None = None, window: int = 500) -> dict:
+    """How well the first layer predicted each request, per source (laya / rules).
+
+    A prediction counts as right when the predicted route matches what the request actually
+    needed (no tools = answer, 1-2 tools = one_step, more = plan, delegated = team), and as
+    "close" when it was off by one step on that ladder.
+    """
+    ladder = ["answer", "one_step", "plan", "team"]
+    out: dict = {}
+    for line in entries(root, last=window):
+        t = line.get("triage") or {}
+        source, predicted, actual = t.get("source"), t.get("route"), t.get("actual_route")
+        if not source or predicted not in ladder or actual not in ladder:
+            continue
+        b = out.setdefault(source, {"requests": 0, "right": 0, "close": 0, "ms": 0.0,
+                                    "verified": 0, "routes": {}})
+        b["requests"] += 1
+        gap = abs(ladder.index(predicted) - ladder.index(actual))
+        b["right"] += gap == 0
+        b["close"] += gap == 1
+        b["ms"] += float(t.get("ms") or 0)
+        b["verified"] += line.get("outcome") == "verified"
+        b["routes"][predicted] = b["routes"].get(predicted, 0) + 1
+    for b in out.values():
+        n = b["requests"]
+        b["accuracy"] = round(b["right"] / n, 3) if n else None
+        b["within_one"] = round((b["right"] + b["close"]) / n, 3) if n else None
+        b["avg_ms"] = round(b.pop("ms") / n, 1) if n else None
+    return out
 
 
 # --- training data -----------------------------------------------------------------

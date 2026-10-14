@@ -38,8 +38,8 @@ a = Analysis(  # noqa: F821
                             "loki_bridge", "loki", "workers", "policy", "manifests", "conductor",
                             "brain", "safe_exec", "knowledge", "federation", "skill_scan",
                             "interfaces", "decisions", "jev", "laya", "model_setup", "usage", "agents", "cli_agents", "capabilities",
-                            "sessions", "api_vault", "project_state", "repo_review", "godot_tools", "godot_assets",
-                            "ecc_sync", "experience", "peers", "peer_link"],
+                            "sessions", "api_vault", "project_state", "repo_review", "godot_tools",
+                            "ecc_sync", "experience", "peers", "peer_link", "first_layer", "godot_assets"],
     excludes=["tkinter", "pytest"],
     noarchive=False,
 )

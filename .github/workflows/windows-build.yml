@@ -32,6 +32,7 @@ jobs:
           python tests/test_integrations.py
           python tests/test_offline_e2e.py
           python tests/test_peers.py
+          python tests/test_first_layer.py
 
       - name: Build Loki.exe
         run: python -m PyInstaller packaging/loki.spec --noconfirm --distpath dist --workpath build/pyi

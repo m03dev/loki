@@ -46,6 +46,9 @@ if not exist "%DATA%\.env" (
 
 "%VENV%\Scripts\python.exe" "%REPO%\tools\loki_doctor.py"
 
+echo [loki] setting up Laya, the offline first layer (Node.js 20+; downloads about 1.7 GB once)
+"%VENV%\Scripts\python.exe" "%REPO%\tools\setup_laya.py" || echo [loki] Laya is not set up yet; Loki uses its built-in rules until it is
+
 echo [loki] creating the Loki shortcuts
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\windows\make_shortcuts.ps1" -Repo "%REPO%" || echo [loki] could not create shortcuts; start Loki with Loki.cmd
 
