@@ -1,7 +1,7 @@
 # Loki the conductor
 
 Everything starts with Loki. It plans, keeps the conversation and owns the tools. When a step
-needs a specialist, it calls the `conductor` tool with a role, and `harness/conductor.py`
+needs a specialist, it calls the `conductor` tool with a role, and `engine/conductor.py`
 sends the step to whichever enabled capability can do it. A role only appears in Loki's
 instructions once something behind it is switched on (Settings > Capabilities).
 

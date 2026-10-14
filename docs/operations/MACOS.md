@@ -29,11 +29,10 @@ Homebrew's `[y/n]` question.
   that Python runs `setup.sh` once).
 - The app starts the engine with `--ui-dir app/ui` and its own state folder
   (`harness_data/app/`: log, engine token, settings), waits until it answers, then opens
-  the window at `http://127.0.0.1:8766/#token=...`. The token stays in the URL
+  the window at `http://127.0.0.1:8767/#token=...`. The token stays in the URL
   fragment, which is never sent over the wire.
 - Closing or quitting Loki stops the engine it started.
-- If another engine already holds the port (the Godot dock's), Loki says so instead of
-  fighting it.
+- If another engine already holds the port, Loki says so instead of fighting it.
 
 ## Files
 

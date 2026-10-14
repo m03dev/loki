@@ -1,7 +1,7 @@
 # Model providers
 
-Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness/.env`
-(copy from `harness/.env.example`) and choose one with `LOKI_MODEL`.
+Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness_data/.env`
+(copy from `engine/.env.example`) and choose one with `LOKI_MODEL`.
 
 | `LOKI_MODEL` | Provider | Free tier |
 |---|---|---|
@@ -100,7 +100,7 @@ It is optional and never fatal — no key means Loki behaves exactly as before.
 
 ## Adding your own provider
 
-Each provider is one entry in `MODELS` in `harness/loki.py`:
+Each provider is one entry in `MODELS` in `engine/loki.py`:
 
 ```python
 "myprovider": ModelConfig(base_url="https://.../v1", api_key=os.getenv("MYPROVIDER_API_KEY",""), model="...")

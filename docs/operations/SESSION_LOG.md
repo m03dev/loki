@@ -4,6 +4,32 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 12) - LOKI is its own app; Laya first; work in the chat
+
+**PC linked for real:** the PC (`mo`, RTX 3070 Ti, 192.168.0.101) was moved onto GitHub's
+history (its unpushed merge `c25660f` is kept on its local branch
+`backup/pc-merge-c25660f`; it uniquely held `jobs.py`, `worker.py` and a Godot workers
+dialog, apparently superseded by `workers.py` - not yet reviewed), set up, paired, and
+listens on 8768. The Mac still has to pull and paste the link code.
+
+**Done (BUILD_BRIEF 5.1, 5.7, 5.2, section 9):**
+- `f4a68c1` engine/ layout; every Godot file removed (project.godot, dock, plugins, .uid,
+  vendored MCP addon); data dir no longer found via project.godot; workspace default
+  `~/LOKI Projects/Home`; chats in `.loki/` with a one-time copy from `.godot/`.
+- `3663edd` Background and Brain tabs removed; running agents show above the message box;
+  "Run in background" in the composer.
+- `8f77003` Laya as the first layer: warm `laya_server.mjs`, `first_layer.py` triage on every
+  request with rules fallback, logged and measured; `tools/setup_laya.py` in setup.
+- Docs: new ARCHITECTURE.md; removed the stale blueprint, current-state audit, target
+  architecture, implementation plan, dependencies and google-signin docs; fixed paths.
+
+**Verified:** 7 suites, 891 checks; the app UI in headless Chromium (work strip, First layer
+line, no console errors); the engine from the new layout over HTTP.
+**Not verified:** the real Laya model (no registry access here), the Windows build (CI), the
+Mac app after the move.
+
+---
+
 ## 2026-10-13 (session 11) - One line of history, and the Mac and PC talking
 
 **Found:** two sessions had worked in parallel. `macos-app` built the standalone app

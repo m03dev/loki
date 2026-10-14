@@ -73,3 +73,28 @@ front end, not a rewrite (AD-3 stands).
 token-protected API. The UI is served with a Host check (DNS rebinding) and a strict
 CSP; the token reaches the window in the URL fragment, never in a request. Quitting the
 app stops the engine it started. Godot-free workspaces default to `~/Loki`.
+
+## AD-11 — LOKI is its own application; nothing Godot in the repo (supersedes AD-1)
+The engine moved from `addons/loki/harness` to `engine/`. `project.godot`, the editor dock,
+its plugins, `.uid` files and the vendored Godot MCP addon were deleted. Godot remains one
+optional capability that works on a game project elsewhere (`godot_tools.py`; the probe
+script ships as data in `godot_assets.py`). The default workspace is
+`~/LOKI Projects/Home`, never `~/Loki`, and chats live in `<workspace>/.loki/`.
+**Why:** the owner's direction (2026-10-13): LOKI must never be mistaken for a Godot
+project; a Godot project named Loki in `~/Loki` had already been confused with the app.
+**Consequences:** one front end (the app) behind the engine's API; user data is found as
+`<repo>/harness_data` directly; older chats in `.godot/` are copied over once.
+
+## AD-12 — Laya is the first layer, kept warm
+Every request is triaged by Laya before the agent starts (`first_layer.py`), with built-in
+rules as the fallback. Laya runs as one warm Node process (`laya_server.mjs`) instead of
+one process per decision, because the model is ~1.7 GB and loading takes seconds.
+**Why:** the owner's direction: Laya fully offline, as the first layer. **Consequences:**
+~2 GB of RAM while warm (unloaded after `LOKI_LAYA_IDLE`); triage is advice only and is
+measured against outcomes (`experience.triage_stats`).
+
+## AD-13 — Background work lives in the conversation
+The Background and Brain tabs were removed. Running agents show above the message box;
+"Run in background" hands a message to an agent. **Why:** the owner's direction: no
+separate tabs for pipeline work, and no hand-built agents.
+

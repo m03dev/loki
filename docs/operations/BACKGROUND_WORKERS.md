@@ -1,8 +1,9 @@
 # Background jobs - herdr and virtual computers
 
-Loki can hand work to agents that keep going while you do something else. Open
-**Background** in the sidebar, describe the job, pick where it runs, and Start. The badge
-counts live jobs and turns amber when one is waiting for you.
+Loki can hand work to agents that keep going while you do something else. Tick **Run in
+background** next to Send, or let Loki hand parts of a large job to agents itself (the
+`delegate` tool; you approve each one). Running work shows in a strip above the message
+box, with status, output, screenshots and Stop; it turns amber when a job waits for you.
 
 | Run on | What runs | Where it works | Survives quitting Loki |
 |---|---|---|---|
@@ -16,7 +17,9 @@ Tests: `python tests/test_workers.py` (offline; herdr and cua are faked at their
 
 ## Safety rules
 
-- Only you start jobs (the app or the API). The model cannot spawn background work.
+- Jobs start only from you (Run in background, the API) or from the model's `delegate`
+  tool, which always asks you first. A linked machine can only send a prompt for the
+  built-in Loki agent (docs/operations/MACHINES.md).
 - Host jobs (herdr, this computer) only ever run a known coding agent - never a raw shell
   string. Raw commands are accepted only for the virtual computer.
 - Claude Code runs with `--permission-mode acceptEdits`: it may edit files but still asks

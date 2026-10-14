@@ -1,37 +1,22 @@
 # Background agents and self-improvement
 
-Two systems added in session 10. Both run on your own machine and cost nothing extra
-unless you point them at a paid provider (which the paid budget still caps).
+Both run on your own machines and cost nothing extra unless you point them at a paid
+provider (which the paid budget still caps).
 
 ## Background agents
 
-Loki can hand a self-contained sub-task to a **background agent** that works in parallel,
-in its own process, and reports back. You can start them too.
+Loki hands self-contained work to background agents that keep going while you chat:
 
-| Role | Mode | Does |
-| --- | --- | --- |
-| `coder` | build | implements the goal, verifies it |
-| `tester` | build | runs the feature (play/probe/check) and reports what works and what fails |
-| `reviewer` | plan (read-only) | reads the code and reports concrete problems |
-| `researcher` | plan (read-only) | finds facts in the project, the Godot API and the skill libraries |
+- **You:** tick **Run in background** next to Send. The built-in Loki agent works on it in
+  its own git worktree.
+- **Loki itself:** for a large job (the first layer marks it "team"), Loki uses the
+  `delegate` tool to hand parts to its agents (Researcher, Builder, Reviewer, Tester); you
+  approve each one. Finished work is verified before Loki reports DONE.
+- **Another machine:** a linked Mac can send a job to the PC (Settings > Machines).
 
-**From the editor:** the dock's `⋮` menu → **Background agents...** Start one with a
-role and a goal; select one to watch its event log, send it a message (it reads it before
-its next step), or stop it.
-
-**From Loki itself:** the model has `delegate_task`, `wait_for_task`, `check_tasks`,
-`message_agent` and `cancel_task`. A finished agent's edited files join the parent's
-verification set, so delegated work is still checked before Loki says DONE.
-
-**Safety and cost**
-- A background agent can never approve a dangerous tool (delete, move, shell) for itself:
-  it is denied, recorded, and the agent reports `BLOCKED`.
-- At most `LOKI_WORKERS_MAX` (2) run at once; delegation is at most
-  `LOKI_WORKERS_MAX_DEPTH` (2) levels deep. Each agent has the paid-provider budget.
-- Agents use Loki's local tools, not the editor's MCP bridge (several clients on one
-  bridge can collide). Two agents editing the same file is not prevented - give them
-  separate files.
-- Everything is plain files in `harness_data/workers/jobs/` and survives a restart.
+Running work shows above the message box with its status, output and Stop. Where jobs can
+run (this computer, herdr, a cua virtual computer) and the safety rules are in
+[operations/BACKGROUND_WORKERS.md](operations/BACKGROUND_WORKERS.md).
 
 ## Self-improvement (the RTX 3070 Ti loop)
 
@@ -90,7 +75,6 @@ python tools/self_improve.py train --force --max-steps 30   a quick trial traini
 | `LOKI_PROMOTE_MARGIN` | 0.02 | how much better the candidate must score |
 | `LOKI_EVAL_BASELINE` | qwen3:8b | the Ollama model the candidate must beat |
 | `LOKI_TUNED_PROMOTED` | 0 | set to 1 by `promote`; routes `loki-tuned` |
-| `LOKI_WORKERS_MAX` | 2 | background agents at once |
 | `LOKI_PAID_MAX_CALLS` | 40 | model calls per request on a paid provider |
 
 ### How it is measured

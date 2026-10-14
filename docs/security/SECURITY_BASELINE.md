@@ -13,7 +13,7 @@ requirement, not a later pass.
   denied (tested in tests/test_hardening.py).
 
 ## Subprocess execution — Structured (no shell)
-- `run_command` no longer uses a shell. `harness/safe_exec.py` splits the command into an
+- `run_command` no longer uses a shell. `engine/safe_exec.py` splits the command into an
   argv with `shlex` and runs it with `shell=False`, a timeout and stdin closed.
 - `a && b` chains run as separate steps that stop at the first failure. Every other shell
   feature is refused with a reason before anything runs: `|`, `||`, `;`, `&`, `>`, `>>`,
@@ -29,7 +29,7 @@ requirement, not a later pass.
   sit in the `system` category (off by default).
 
 ## Policy engine — Hardcoded
-`harness/policy.py` decides **allow / ask / deny** from fixed rules, before any approval
+`engine/policy.py` decides **allow / ask / deny** from fixed rules, before any approval
 prompt. No model is consulted.
 - DENY: command policy or no-shell parser rejects the command; any path argument escapes
   the workspace (symlinks are resolved first); a capability is off, changed since approval,
@@ -50,7 +50,7 @@ User manifests can never be on by default nor shadow a built-in. Built-ins may b
 default only without high-risk permissions (`network`, `process:spawn`, `computer:host`).
 
 ## Skills — Untrusted text
-`harness/skill_scan.py` runs before a skill or agent file reaches the model. Text that tries
+`engine/skill_scan.py` runs before a skill or agent file reaches the model. Text that tries
 to override Loki's rules (ignore previous instructions, `LOKI_AUTO_APPROVE=1`,
 `bypassPermissions`, `--dangerously-skip-permissions`, disabling the policy/sandbox) or
 frontmatter that grants permissions is **refused**. Skills that ship executables are loaded
@@ -58,8 +58,8 @@ with a note that Loki never runs them. `allowed-tools` frontmatter is ignored.
 
 ## Permission model
 - Dangerous tools (`run_command`, `open_godot`, `move_file`, `delete_file`) route through
-  `approve()`. In the editor the bridge overrides `approve()` with the dock's UI; headless
-  it prompts on stdin. `LOKI_AUTO_APPROVE=1` bypasses prompts for unattended runs — do not
+  `approve()`. In the app the engine overrides `approve()` with the approval card in the
+  conversation; headless it prompts on stdin. `LOKI_AUTO_APPROVE=1` bypasses prompts for unattended runs — do not
   enable it where destructive operations are possible.
 - Jev may skip a prompt for a confident-safe call; it can never force an action. The human
   path stays authoritative.
@@ -99,5 +99,5 @@ with a note that Loki never runs them. `allowed-tools` frontmatter is ignored.
 2. ~~`run_command` shell string.~~ Replaced by structured execution (safe_exec.py).
 3. Outbound destination policy exists for capability health checks and federation; model
    provider endpoints are configured by the user and not yet routed through it.
-4. `godot_omni` MCP backend must stay disabled alongside `addons/godot_ai` +
-   `addons/godot_omni` (port fight terminates the editor). Keep them disabled.
+4. Godot MCP backends (`godot_ai`, `godot_omni`) are off by default; they belong to a game
+   project's own editor plugins, never to Loki.

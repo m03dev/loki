@@ -19,7 +19,6 @@ WebView2, which Windows 10/11 already ship with.
 - The shortcuts run `harness_data\.venv\Scripts\pythonw.exe app\loki_app.py`, so no
   console window appears; the engine is also started without a console.
 - Logs: `harness_data\app\loki_app.log` (app) and `harness_data\app\engine.out` (engine).
-- The Godot dock keeps port 8766, so the app and the dock can run at the same time.
 
 ## Verified so far
 
