@@ -213,6 +213,18 @@ def device_start(provider: str, env: dict, connect: Callable[[str, str], dict],
 
 
 # --------------------------------------------------------------------------- phone hand-off
+class _QuickServer(ThreadingHTTPServer):
+    """HTTPServer without its reverse-DNS lookup of the bind address (socket.getfqdn), which
+    can stall for ~30 s on a Mac with slow DNS before the page even exists."""
+    daemon_threads = True
+
+    def server_bind(self) -> None:
+        import socketserver  # pylint: disable=import-outside-toplevel
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name, self.server_port = str(host), port
+
+
 class PhoneHandoff:
     """A one-time page on the home network that sends one key from a phone to LOKI."""
 
@@ -277,7 +289,8 @@ class PhoneHandoff:
                 if result.get("ok"):
                     threading.Thread(target=handoff.stop, daemon=True).start()
 
-        self.httpd = ThreadingHTTPServer((bind, 0), Handler)
+        self.httpd = _QuickServer((bind, 0), Handler)
+        self.created = time.time()          # the five minutes start once the page is up
         self.port = self.httpd.server_address[1]
         self.url = "http://%s:%d/k/%s" % (host_ip, self.port, self.token)
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="loki-phone-handoff").start()
