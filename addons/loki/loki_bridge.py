@@ -258,6 +258,7 @@ class BridgeState:
         self.progress_chat_id: str = ""
         self.jobs: Any = None  # workers.Supervisor - background jobs (local / herdr / cua)
         self.brain: dict[str, Any] = {}  # last brain-map graph (its note ids are the only readable files)
+        self.peer_server: Any = None  # peers.PeerServer when this machine listens for your other machines
 
     def try_busy(self) -> list | None:
         # acquire both request locks, or None when a request is in flight
@@ -434,6 +435,16 @@ def dump_godot_api(godot_exe: str, harness) -> None:
         print(f"  [api] dump failed: {exc}", flush=True)
 
 
+def peer_ui(state: "BridgeState", method: str, route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Settings > Machines: link this Loki with your other machines (harness/peer_link.py)."""
+    try:
+        import peer_link  # pylint: disable=import-outside-toplevel
+        result = peer_link.ui_route(state, state.agent, method, route, data)
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"ok": False, "error": f"peer link failed: {type(exc).__name__}: {exc}"}
+    return result if result is not None else (404, {"ok": False, "error": "Unknown endpoint."})
+
+
 def initial_ecc_sync(agent) -> None:
     """Fetch the agent/skill libraries on first run so their tools work with no setup."""
     try:
@@ -568,6 +579,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self._serve_ui(route):
             return
         if not self._authorized():
+            return
+        if route.startswith("/peers"):
+            self._send_json(*peer_ui(self.server.state, "GET", route, {}))
             return
         if route == "/connections":
             self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
@@ -725,6 +739,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if data is None:
             return
         state = self.server.state
+        if route.startswith("/peers"):
+            self._send_json(*peer_ui(state, "POST", route, data))
+            return
         if route in ("/chat", "/task"):
             is_task: bool = route == "/task"
             prompt: Any = data.get("task" if is_task else "message", "")
@@ -1347,6 +1364,14 @@ async def serve() -> None:
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    try:
+        import peer_link  # pylint: disable=import-outside-toplevel
+        state.peer_server = peer_link.start(state, loki)
+        threading.Thread(target=peer_link.sync_forever, args=(state, loki), daemon=True, name="loki-peers").start()
+    except OSError as exc:
+        print(f"[loki-bridge] peer link could not listen: {exc}", flush=True)
+    except Exception as exc:  # noqa: BLE001 - the link is optional; chat must still start
+        print(f"[loki-bridge] peer link unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
@@ -1369,6 +1394,8 @@ async def serve() -> None:
         keeper_stop.set()
         if state.jobs is not None:
             state.jobs.stop()
+        if state.peer_server is not None:
+            state.peer_server.stop()
         server.shutdown()
         server.server_close()
         await stack.aclose()

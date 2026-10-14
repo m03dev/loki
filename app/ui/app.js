@@ -389,6 +389,7 @@ function showTab(name) {
   if (name === "capabilities") loadCapabilities();
   if (name === "models" && typeof loadModelsTab === "function") loadModelsTab();
   if (name === "usage" && typeof loadUsageTab === "function") loadUsageTab();
+  if (name === "machines" && typeof loadMachines === "function") loadMachines();
 }
 
 function row(label, status, ready) {

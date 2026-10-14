@@ -120,3 +120,7 @@ test for anything you fix.
 ## License
 
 MIT - see [LICENSE](LICENSE).
+
+## Your machines together
+
+Link Loki on your Mac and your PC (Settings > Machines): the PC takes background jobs, trains on both machines' verified work, and shares its GPU. See [docs/operations/MACHINES.md](docs/operations/MACHINES.md).

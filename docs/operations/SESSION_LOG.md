@@ -4,6 +4,37 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 11) - One line of history, and the Mac and PC talking
+
+**Found:** two sessions had worked in parallel. `macos-app` built the standalone app
+(conductor, offline-first, credits meter, background jobs, Brain, Windows build,
+hardening). `master` fixed routing and verification and added learning. Neither had the
+other's work, and the app (`~/Documents/loki` on the Mac) ran without master's fixes.
+
+**Work completed**
+- Merged master into the app (`49b996b`): master's routing, verification, paid budget,
+  Plan-mode, Godot-path and learning work; the app's job system, launch fix and CRLF
+  rules. master's duplicate worker system was dropped.
+- Peer link (`peers.py`, `peer_link.py`, `app/ui/machines.js`, `tools/peer_link.py`):
+  signed (HMAC) LAN-only link between your Lokis; remote jobs (built-in agent only,
+  isolated); verified work flows to the trainer; the Mac adopts the PC's promoted model.
+  Settings > Machines; docs/operations/MACHINES.md.
+- Windows build lists the new modules; CI runs tests/test_peers.py.
+
+**Tests:** test_loki 486, test_hardening 127, test_integrations 71, test_workers 68,
+test_offline_e2e 39, test_peers 58 - all passed. Smoke: a real engine listening, with a
+second process linking and sending a real background job.
+
+**Not verified:** the link between the real Mac and PC; GPU training; the Machines tab
+in the pywebview window.
+
+**Mac incident (owner's machine):** this session wrongly moved `~/Documents/loki` (the
+app's checkout) to the Trash, because a file-listing tool showed it as empty. It was
+restored with Put Back. Lesson: never trust one listing tool before moving a folder;
+check it in Finder first.
+
+---
+
 ## 2026-10-12 (session 10) - Loki becomes a standalone desktop app
 
 **Scope change (owner):** Loki is not a Godot product any more. It ships as its own app;

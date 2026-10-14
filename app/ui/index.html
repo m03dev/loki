@@ -8,6 +8,7 @@
 <script src="/ui/brain.js" defer></script>
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
+<script src="/ui/machines.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -85,6 +86,7 @@
       <button type="button" role="tab" data-tab="capabilities" aria-selected="false">Capabilities</button>
       <button type="button" role="tab" data-tab="models" aria-selected="false">Models</button>
       <button type="button" role="tab" data-tab="usage" aria-selected="false">Usage</button>
+      <button type="button" role="tab" data-tab="machines" aria-selected="false">Machines</button>
     </div>
     <div class="tab-body">
       <section data-panel="connections">
@@ -116,6 +118,10 @@
         <p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p>
         <div id="usage-panel"></div>
         <div class="right"><button type="button" id="usage-reset" class="quiet">Reset usage</button></div>
+      </section>
+      <section data-panel="machines" hidden>
+        <p class="note">Your other computers running Loki - for example the PC with the GPU. Linked machines can take background jobs and train on the work this one verifies.</p>
+        <div id="machines-panel"></div>
       </section>
       <section data-panel="capabilities" hidden>
         <p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again.</p>

@@ -291,3 +291,82 @@ def save_train_state(state: dict, root: Path | None = None) -> None:
 def new_examples(root: Path | None = None) -> int:
     """Verified examples gathered since the last training run."""
     return max(0, len(trajectories(root)) - int(train_state(root).get("trained_on", 0)))
+
+
+# --- sharing verified work between your machines (see peers.py) -------------------
+
+_ID_SAFE = "abcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
+def _safe_id(text: str) -> str:
+    return "".join(ch for ch in str(text).lower() if ch in _ID_SAFE)[:60]
+
+
+def unsent(peer: str, root: Path | None = None, limit: int = 200) -> list:
+    """Local verified trajectories not yet sent to `peer` (never re-sends a peer's own)."""
+    sent = set(_sent_ids(peer, root))
+    out = []
+    for item in trajectories(root):
+        if item.get("id") in sent or str(item.get("origin", "")) == peer:
+            continue
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _sent_path(root: Path | None = None) -> Path:
+    return root_dir(root) / "peer_sent.json"
+
+
+def _sent_ids(peer: str, root: Path | None = None) -> list:
+    try:
+        return list(json.loads(_sent_path(root).read_text(encoding="utf-8")).get(peer, []))
+    except (OSError, ValueError):
+        return []
+
+
+def mark_sent(peer: str, ids: list, root: Path | None = None) -> None:
+    try:
+        data = json.loads(_sent_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    known = list(dict.fromkeys(list(data.get(peer, [])) + [str(i) for i in ids]))
+    data[peer] = known[-20000:]
+    _sent_path(root).write_text(json.dumps(data), encoding="utf-8")
+
+
+def import_trajectories(origin: str, items: list, root: Path | None = None) -> dict:
+    """Accept another machine's verified work as training data.
+
+    Everything is re-cleaned here: only user/assistant/tool turns survive, secrets are
+    masked again, the system prompt is replaced by TRAIN_SYSTEM, and the file name is
+    derived from the origin + id so one peer can never overwrite local or other files.
+    """
+    origin = _safe_id(origin) or "peer"
+    saved, skipped = 0, 0
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("messages"), list):
+            skipped += 1
+            continue
+        local_id = "%s-%s" % (origin, _safe_id(item.get("id", "")) or uuid_hex())
+        target = root_dir(root) / "trajectories" / (local_id + ".json")
+        if target.exists():
+            skipped += 1
+            continue
+        tools = [str(t)[:80] for t in (item.get("tools") or []) if isinstance(t, str)]
+        path = save_trajectory(local_id, str(item.get("goal", "")), item["messages"], tools,
+                               meta={"origin": origin, **{k: v for k, v in (item.get("meta") or {}).items()
+                                                          if k in ("kind", "provider")}}, root=root)
+        if path is None:
+            skipped += 1
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["origin"] = origin
+        path.write_text(json.dumps(data), encoding="utf-8")
+        saved += 1
+    return {"saved": saved, "skipped": skipped, "total": len(trajectories(root))}
+
+
+def uuid_hex() -> str:
+    return hashlib.sha1(str(time.time_ns()).encode()).hexdigest()[:12]

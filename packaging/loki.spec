@@ -39,7 +39,7 @@ a = Analysis(  # noqa: F821
                             "brain", "safe_exec", "knowledge", "federation", "skill_scan",
                             "interfaces", "decisions", "jev", "laya", "model_setup", "usage", "agents", "cli_agents", "capabilities",
                             "sessions", "api_vault", "project_state", "repo_review", "godot_tools",
-                            "ecc_sync"],
+                            "ecc_sync", "experience", "peers", "peer_link"],
     excludes=["tkinter", "pytest"],
     noarchive=False,
 )

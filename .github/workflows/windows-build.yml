@@ -31,6 +31,7 @@ jobs:
           python tests/test_hardening.py
           python tests/test_integrations.py
           python tests/test_offline_e2e.py
+          python tests/test_peers.py
 
       - name: Build Loki.exe
         run: python -m PyInstaller packaging/loki.spec --noconfirm --distpath dist --workpath build/pyi
