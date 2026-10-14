@@ -240,6 +240,7 @@ function setBusy(busy) {
 
 async function send(text) {
   if (state.busy || !text.trim()) return;
+  const background = $("#in-background") && $("#in-background").checked;
   if ($("#main").classList.contains("home")) {
     // Reuse the current chat when it is still empty; otherwise start a new one.
     const current = (state.conversations || []).find((c) => c.id === state.active);
@@ -248,6 +249,7 @@ async function send(text) {
     showChat();
     $("#transcript").replaceChildren();
   }
+  if (background) { $("#in-background").checked = false; return sendToBackground(text); }
   addUser(text);
   setBusy(true);
   state.cursor = 0;
@@ -474,29 +476,12 @@ async function loadCapabilities() {
   $("#capabilities").textContent = JSON.stringify(copy, null, 2);
 }
 
-// ---------------------------------------------------------------- background jobs
-const jobsView = { timer: 0, open: false, shots: {} };
-
-function updateBadge(data) {
-  const badge = $("#jobs-badge");
-  if (!data || !data.ok) { badge.hidden = true; return; }
-  const c = data.counts || {};
-  const live = (c.queued || 0) + (c.starting || 0) + (c.working || 0) + (c.blocked || 0);
-  badge.hidden = live === 0;
-  badge.textContent = String(live);
-  badge.classList.toggle("attention", (c.blocked || 0) > 0);
-  badge.title = (c.blocked || 0) > 0 ? "A job is waiting for you" : live + " running";
-}
-
-function renderBackends(backends) {
-  const box = $("#backends");
-  box.replaceChildren();
-  for (const [name, info] of Object.entries(backends || {})) {
-    const b = el("div", "backend " + (info.available ? "ready" : "off"));
-    b.append(el("b", "", name), document.createTextNode(info.detail || ""));
-    box.append(b);
-  }
-}
+// ---------------------------------------------------------------- work in progress
+// Background work is part of the conversation, not a separate tab: whatever agents are
+// running (started by Loki itself or with "Run in background") shows in a strip above the
+// message box, with its status, machine, output and screenshots.
+const jobsView = { timer: 0, shots: {}, collapsed: false, live: 0 };
+const LIVE = ["queued", "starting", "working", "blocked"];
 
 async function loadShot(job, holder) {
   if (jobsView.shots[job.id]) { holder.src = jobsView.shots[job.id]; return; }
@@ -504,36 +489,41 @@ async function loadShot(job, holder) {
   if (data && data.ok) { jobsView.shots[job.id] = data.image; holder.src = data.image; }
 }
 
+function jobWhere(job) {
+  const agent = job.agent && job.agent !== "cua" ? job.agent : "";
+  const machine = job.backend === "cua" ? "virtual computer" : job.machine || "this computer";
+  return [agent === "loki" ? "Loki agent" : agent, machine].filter(Boolean).join(" · ");
+}
+
 function renderJobs(jobs) {
   const list = $("#job-list");
   const openIds = new Set([...list.querySelectorAll("details[open]")].map((d) => d.dataset.id));
   list.replaceChildren();
-  if (!jobs || !jobs.length) { list.append(el("p", "note", "No jobs yet.")); return; }
   for (const job of jobs) {
     const card = el("div", "job");
     const top = el("div", "job-top");
     top.append(el("span", "pill " + job.status, job.status), el("span", "job-title", job.title));
-    if (!["done", "failed", "cancelled"].includes(job.status)) {
-      const stop = el("button", "quiet", "Cancel");
+    if (LIVE.includes(job.status)) {
+      const stop = el("button", "quiet small", "Stop");
       stop.type = "button";
-      stop.addEventListener("click", async () => { renderAfter(await api("/jobs/cancel", { id: job.id })); });
+      stop.addEventListener("click", async () => { renderWork(await api("/jobs/cancel", { id: job.id })); });
       top.append(stop);
     }
-    const where = job.backend + (job.agent && job.agent !== "cua" ? " · " + job.agent : "");
-    card.append(top, el("div", "job-meta", where + " · started " + (job.started || "—") + (job.finished ? " · finished " + job.finished : "")));
+    card.append(top, el("div", "job-meta", jobWhere(job) + " · started " + (job.started || "—") + (job.finished ? " · finished " + job.finished : "")));
     if (job.note) card.append(el("div", "job-meta", job.note));
     if (job.error) card.append(el("div", "err", job.error));
     if (job.output || job.screenshot) {
       const details = el("details");
       details.dataset.id = job.id;
       details.open = openIds.has(job.id);
-      details.append(el("summary", "", "Output"));
+      details.append(el("summary", "", job.screenshot ? "Output and screen" : "Output"));
       if (job.output) details.append(el("pre", "", job.output));
       if (job.screenshot) {
         const img = el("img");
-        img.alt = "Virtual computer screenshot";
+        img.alt = "Screen of " + job.title;
         details.append(img);
-        loadShot(job, img);
+        details.addEventListener("toggle", () => { if (details.open) loadShot(job, img); });
+        if (details.open) loadShot(job, img);
       }
       card.append(details);
     }
@@ -541,57 +531,41 @@ function renderJobs(jobs) {
   }
 }
 
-function renderAfter(data) {
-  updateBadge(data);
+function renderWork(data) {
   if (!data || !data.ok) return;
-  renderBackends(data.backends);
-  renderJobs(data.jobs);
+  const jobs = data.jobs || [];
+  const c = data.counts || {};
+  const live = LIVE.reduce((n, k) => n + (c[k] || 0), 0);
+  jobsView.live = live;
+  $("#work").hidden = jobs.length === 0;
+  const blocked = c.blocked || 0;
+  $("#work-summary").textContent = live
+    ? (live === 1 ? "1 agent working" : live + " agents working") + (blocked ? " · " + blocked + " waiting for you" : "")
+    : "Background work finished";
+  $("#work").classList.toggle("attention", blocked > 0);
+  $("#work").classList.toggle("collapsed", jobsView.collapsed);
+  $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
+  renderJobs(jobs);
+  // Poll fast while something runs, slowly otherwise.
+  clearInterval(jobsView.timer);
+  jobsView.timer = setInterval(refreshJobs, live ? 3000 : 10000);
 }
 
 async function refreshJobs() {
-  const data = await api("/jobs").catch(() => null);
-  updateBadge(data);
-  if (jobsView.open && data && data.ok) renderAfter(data);
+  renderWork(await api("/jobs").catch(() => null));
 }
 
-function syncJobForm() {
-  const backend = $("#job-backend").value;
-  const vm = backend === "cua";
-  $("#job-agent-label").hidden = vm;
-  $("#job-commands").hidden = !vm;
-  $("#job-isolate").parentElement.hidden = vm;
-}
-
-function openJobs() {
-  jobsView.open = true;
-  $("#jobs").hidden = false;
-  syncJobForm();
-  refreshJobs();
-  clearInterval(jobsView.timer);
-  jobsView.timer = setInterval(refreshJobs, 3000);
-  $("#job-prompt").focus();
-}
-
-function closeJobs() {
-  jobsView.open = false;
-  $("#jobs").hidden = true;
-  clearInterval(jobsView.timer);
-}
-
-async function submitJob(event) {
-  event.preventDefault();
-  const backend = $("#job-backend").value;
-  const body = {
-    backend,
-    prompt: $("#job-prompt").value.trim(),
-    timeout_s: Number($("#job-timeout").value),
-  };
-  if (backend === "cua") body.commands = $("#job-commands").value;
-  else { body.agent = $("#job-agent").value; body.isolate = $("#job-isolate").checked; }
-  $("#job-result").textContent = "Starting…";
-  const data = await api("/jobs", body).catch((e) => ({ ok: false, error: String(e) }));
-  $("#job-result").textContent = data.ok ? "Started job " + data.id : (data.error || "Could not start the job.");
-  if (data.ok) { $("#job-prompt").value = ""; $("#job-commands").value = ""; renderAfter(data); }
+async function sendToBackground(text) {
+  addUser(text);
+  const data = await api("/jobs", { backend: "local", agent: "loki", prompt: text, isolate: true, timeout_s: 3600 })
+    .catch((e) => ({ ok: false, error: String(e) }));
+  if (data.ok) {
+    addLoki("Started a background agent on this. You can keep chatting; its progress is shown above the message box.");
+    jobsView.collapsed = false;
+    renderWork(data);
+  } else {
+    addNotice(data.error || "Could not start the background agent.", true);
+  }
 }
 
 // ---------------------------------------------------------------- wiring
@@ -636,20 +610,15 @@ function wire() {
     else if (data.resolved && data.resolved !== data.current) setStatus("Using " + data.resolved, true);
   });
   $("#open-settings").addEventListener("click", openSettings);
-  $("#open-jobs").addEventListener("click", openJobs);
-  if (window.LokiBrain) {
-    window.LokiBrain.init(api);
-    $("#open-brain").addEventListener("click", () => window.LokiBrain.open());
-    $("#close-brain").addEventListener("click", () => window.LokiBrain.close());
-  }
-  $("#close-jobs").addEventListener("click", closeJobs);
-  $("#jobs").addEventListener("click", (event) => { if (event.target === $("#jobs")) closeJobs(); });
-  $("#job-form").addEventListener("submit", submitJob);
-  $("#job-backend").addEventListener("change", syncJobForm);
-  $("#clear-jobs").addEventListener("click", async () => renderAfter(await api("/jobs/clear", {})));
+  $("#work-toggle").addEventListener("click", () => {
+    jobsView.collapsed = !jobsView.collapsed;
+    $("#work").classList.toggle("collapsed", jobsView.collapsed);
+    $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
+  });
+  $("#clear-jobs").addEventListener("click", async () => renderWork(await api("/jobs/clear", {})));
   $("#close-settings").addEventListener("click", () => { $("#settings").hidden = true; });
   $("#settings").addEventListener("click", (event) => { if (event.target === $("#settings")) $("#settings").hidden = true; });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; closeJobs(); if (window.LokiBrain) window.LokiBrain.close(); } });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; } });
   for (const tab of document.querySelectorAll(".tabs button")) tab.addEventListener("click", () => showTab(tab.dataset.tab));
   $("#save-memory").addEventListener("click", async () => {
     const data = await api("/memory", { text: $("#memory-text").value });
@@ -687,7 +656,6 @@ async function start() {
   await Promise.all([loadModels(), loadMode(), loadConversations()]);
   setInterval(pollApproval, 1500);
   refreshJobs();
-  setInterval(() => { if (!jobsView.open) refreshJobs(); }, 10000);
   if (typeof afterStart === "function") afterStart();
   showHome();
   $("#prompt").focus();

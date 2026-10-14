@@ -2122,7 +2122,7 @@ def delegate(agent: str, task: str) -> str:
     except ValueError as exc:
         return "error: %s" % exc
     threading.Thread(target=JOBS.tick, daemon=True).start()
-    return ("started background job %s: %s is working on it. The user can follow it in Background; "
+    return ("started background job %s: %s is working on it. The user sees it above the message box; "
             "you do not need to wait for it." % (job["id"], profile["name"]))
 
 

@@ -322,7 +322,8 @@ check("GET /brain/note serves a mapped note", code == 200 and "Build Loki" in bo
 check("GET /brain/note refuses an unmapped id", loki_bridge.brain_note(state, {"id": ["../../etc"]})[0] == 404)
 check("POST /brain/vault refuses a bad folder", loki_bridge.brain_vault(state, {"path": "/no/such/dir"})[0] == 400)
 ui = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
-check("the app has the Brain view", 'id="brain-canvas"' in ui and "/ui/brain.js" in ui)
+check("the Brain tab is gone (knowledge stays reachable over the API)",
+      "brain" not in ui.lower() and not (REPO / "app" / "ui" / "brain.js").exists())
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

@@ -1,5 +1,5 @@
 // Loki UI: first-run model setup, the credits meter, and your agents.
-// Uses helpers from app.js ($, el, api, addNotice, setStatus, renderAfter, refreshJobs).
+// Uses helpers from app.js ($, el, api, addNotice, setStatus, refreshJobs).
 "use strict";
 
 const setupView = { timer: 0, last: null };
@@ -205,87 +205,6 @@ async function loadModelsTab() {
   renderSetup(box, data, true);
 }
 
-// ---------------------------------------------------------------- agents
-const agentsView = { list: [], editing: null };
-
-function renderAgents() {
-  const list = $("#agent-list");
-  list.replaceChildren();
-  for (const a of agentsView.list) {
-    const card = el("div", "agent-card");
-    card.append(el("b", "", a.name + (a.engine !== "loki" ? " · " + a.engine : "")),
-                el("p", "", a.instructions || "No instructions yet."));
-    const task = el("input");
-    task.placeholder = "Give " + a.name + " a task…";
-    task.setAttribute("aria-label", "Task for " + a.name);
-    const run = el("button", "send", "Run");
-    run.type = "button";
-    const go = async () => {
-      if (!task.value.trim()) { task.focus(); return; }
-      run.disabled = true;
-      const r = await api("/agents/run", { id: a.id, task: task.value.trim() });
-      run.disabled = false;
-      if (r.ok) { task.value = ""; renderAfter(r); setStatus(a.name + " is working in the background", true); }
-      else addNotice(r.error || "Could not start the agent.", true);
-    };
-    run.addEventListener("click", go);
-    task.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
-    const edit = el("button", "quiet", "Edit");
-    edit.type = "button";
-    edit.addEventListener("click", () => editAgent(a));
-    const row = el("div", "row-actions");
-    row.append(task, run, edit);
-    card.append(row);
-    list.append(card);
-  }
-}
-
-async function loadAgents() {
-  const data = await api("/agents").catch(() => null);
-  if (!data || !data.ok) return;
-  agentsView.list = data.agents || [];
-  renderAgents();
-}
-
-function editAgent(agent) {
-  agentsView.editing = agent || null;
-  $("#agent-form").hidden = false;
-  $("#agent-name").value = agent ? agent.name : "";
-  $("#agent-engine").value = agent ? agent.engine : "loki";
-  $("#agent-commands").checked = agent ? !!agent.allow_commands : false;
-  $("#agent-instructions").value = agent ? agent.instructions || "" : "";
-  $("#agent-result").textContent = "";
-  let del = $("#agent-delete");
-  if (agent && !del) {
-    del = el("button", "quiet", "Delete");
-    del.type = "button";
-    del.id = "agent-delete";
-    $("#agent-cancel").before(del);
-  }
-  if (del) {
-    del.hidden = !agent;
-    del.onclick = async () => {
-      const r = await api("/agents/delete", { id: agentsView.editing.id });
-      if (r.ok) { agentsView.list = r.agents; renderAgents(); $("#agent-form").hidden = true; }
-    };
-  }
-  $("#agent-name").focus();
-}
-
-async function saveAgent(event) {
-  event.preventDefault();
-  const body = {
-    name: $("#agent-name").value.trim(), engine: $("#agent-engine").value,
-    allow_commands: $("#agent-commands").checked, instructions: $("#agent-instructions").value.trim(),
-  };
-  if (agentsView.editing) body.id = agentsView.editing.id;
-  const r = await api("/agents", body);
-  if (!r.ok) { $("#agent-result").textContent = r.error || "Could not save."; return; }
-  agentsView.list = r.agents;
-  renderAgents();
-  $("#agent-form").hidden = true;
-}
-
 // ---------------------------------------------------------------- wiring
 function afterStart() {
   $("#usage-pill").addEventListener("click", () => { openSettings(); showTab("usage"); });
@@ -295,19 +214,6 @@ function afterStart() {
     clearInterval(setupView.timer);
     try { localStorage.setItem("loki-setup-later", String(Date.now())); } catch (_) { /* no storage */ }
   });
-  $("#new-agent").addEventListener("click", () => editAgent(null));
-  $("#agent-cancel").addEventListener("click", () => { $("#agent-form").hidden = true; });
-  $("#agent-form").addEventListener("submit", saveAgent);
-  $("#open-jobs").addEventListener("click", loadAgents);
-  $("#job-backend").addEventListener("change", () => {
-    const loki = $("#job-agent").querySelector('option[value="loki"]');
-    const herdr = $("#job-backend").value === "herdr";
-    if (loki) loki.disabled = herdr;
-    if (herdr && $("#job-agent").value === "loki") $("#job-agent").value = "claude-code";
-  });
-  // Default the backend to "This computer" so the built-in agent works out of the box.
-  const local = $("#job-backend").querySelector('option[value="local"]');
-  if (local) $("#job-backend").value = "local";
   refreshUsagePill();
   openSetup(false);
 }

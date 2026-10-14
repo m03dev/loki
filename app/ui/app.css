@@ -149,23 +149,6 @@ button:disabled { opacity: .45; cursor: default; }
 }
 
 /* background jobs */
-.badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 9px; background: var(--bubble); color: var(--text); font-size: 11.5px; text-align: center; }
-.badge.attention { background: var(--warn); color: #1f1f24; }
-.sheet-panel.wide { width: min(860px, 100%); }
-.backends { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.backend { background: var(--surface); border-radius: 10px; padding: 6px 10px; font-size: 12.5px; color: var(--muted); max-width: 100%; }
-.backend b { color: var(--text); font-weight: 600; margin-right: 6px; }
-.backend.ready b::before { content: "● "; color: var(--ok); }
-.backend.off b::before { content: "○ "; color: var(--muted); }
-.job-form { display: flex; flex-direction: column; gap: 8px; background: var(--side); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-.job-form textarea { background: var(--surface); border: 0; border-radius: 9px; padding: 8px 10px; resize: vertical; }
-.job-form select { background: var(--surface); border: 0; border-radius: 8px; padding: 4px 6px; margin-left: 6px; }
-.job-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13px; color: var(--muted); }
-.job-row.end { justify-content: flex-end; }
-.job-row.end .check { margin-right: auto; }
-.job-row .note { margin: 0; }
-.job-list-head { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 6px; }
-.job-list-head h3 { font-size: 14px; margin: 0; }
 .job-list { display: flex; flex-direction: column; gap: 8px; }
 .job { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .job-top { display: flex; gap: 10px; align-items: baseline; }
@@ -192,29 +175,6 @@ button:disabled { opacity: .45; cursor: default; }
 .caps-raw { margin-top: 14px; }
 .caps-raw summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 
-/* brain map */
-.brain { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; z-index: 5; }
-.brain-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
-.brain-head h2 { font-size: 15px; margin: 0; }
-.brain-head input { background: var(--surface); border: 0; border-radius: 9px; padding: 6px 10px; width: min(320px, 40vw); }
-.brain-head .note { margin: 0; flex: 1; }
-.brain-actions { display: flex; gap: 6px; }
-.brain-body { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
-.brain-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-.brain-stage canvas { display: block; cursor: grab; touch-action: none; }
-.brain-side { border-left: 1px solid var(--line); padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.brain-legend { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.brain-key { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
-.brain-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.brain-vault label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; }
-.brain-vault input { flex: 1; min-width: 0; background: var(--surface); border: 0; border-radius: 8px; padding: 5px 8px; }
-.brain-detail h3 { margin: 0; font-size: 15px; }
-.brain-group, .brain-sub { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
-.brain-text { font-size: 13px; margin: 4px 0 8px; white-space: pre-wrap; }
-.brain-links { display: flex; flex-wrap: wrap; gap: 4px; }
-.brain-links button { font-size: 12px; padding: 2px 8px; background: var(--surface); }
-.brain-note { font: 12px/1.5 var(--mono); white-space: pre-wrap; background: var(--side); border-radius: 8px; padding: 8px; max-height: 50vh; overflow: auto; margin: 8px 0 0; }
-@media (max-width: 760px) { .brain-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40vh; } .brain-side { border-left: 0; border-top: 1px solid var(--line); } }
 
 /* usage meter */
 .usage-pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--surface); color: var(--muted); }
@@ -238,17 +198,6 @@ table.usage th { color: var(--muted); font-weight: 500; }
 .model-row small { color: var(--muted); display: block; }
 .bar { height: 6px; background: var(--surface); border-radius: 4px; overflow: hidden; margin-top: 8px; }
 .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
-/* agents */
-.agents-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 6px; }
-.agents-head h3, .one-off { font-size: 14px; margin: 0; }
-.one-off { margin: 16px 0 6px; }
-.agent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-bottom: 8px; }
-.agent-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-.agent-card b { font-size: 13.5px; }
-.agent-card p { margin: 0; color: var(--muted); font-size: 12px; max-height: 3.2em; overflow: hidden; }
-.agent-card .row-actions { display: flex; gap: 6px; }
-.agent-card input { background: var(--surface); border: 0; border-radius: 8px; padding: 5px 8px; flex: 1; min-width: 0; }
-.job-form input:not([type]) { background: var(--surface); border: 0; border-radius: 8px; padding: 4px 8px; margin-left: 6px; }
 
 /* Home: empty space on open, instead of dropping straight into a conversation. */
 .main.home .transcript { display: none; }
@@ -266,3 +215,18 @@ table.usage th { color: var(--muted); font-weight: 500; }
 .chip { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
   padding: 9px 16px; font-size: 13px; transition: background .12s, border-color .12s; }
 .chip:hover { background: var(--bubble); border-color: var(--accent); }
+
+/* Work in progress: background agents, shown with the conversation (no separate tab). */
+.work { max-width: 760px; width: calc(100% - 44px); margin: 0 auto 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--side); padding: 6px 10px 8px; }
+.work.attention { border-color: var(--warn); }
+.work-head { display: flex; align-items: center; gap: 8px; }
+.work-toggle { flex: 1; text-align: left; background: transparent; font-weight: 600; font-size: 13px; padding: 4px 2px; }
+.work-toggle::before { content: "▾ "; color: var(--muted); }
+.work.collapsed .work-toggle::before { content: "▸ "; }
+.work.collapsed .job-list { display: none; }
+.work .job-list { max-height: 34vh; overflow-y: auto; margin-top: 4px; }
+.small { font-size: 12px; padding: 2px 8px; }
+.bg-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.bg-toggle input { margin: 0; }
+
+.sheet-panel.wide { width: min(860px, 100%); }

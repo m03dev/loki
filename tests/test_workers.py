@@ -417,7 +417,14 @@ check("no screenshot is a 404", loki_bridge.job_screenshot(state, {"id": ["nope"
 bridge_src = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
 check("the engine starts the job supervisor", "workers.default_supervisor" in bridge_src and "state.jobs.start()" in bridge_src)
 ui = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
-check("the app has a Background jobs panel", 'id="jobs"' in ui and 'id="job-form"' in ui)
+check("there is no separate Background tab", 'id="open-jobs"' not in ui and 'id="job-form"' not in ui)
+check("background work shows with the conversation", 'id="work"' in ui and 'id="job-list"' in ui
+      and ui.index('id="transcript"') < ui.index('id="work"') < ui.index('id="composer"'))
+check("a message can be handed to a background agent from the composer", 'id="in-background"' in ui)
+js = (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8")
+check("the composer's background option starts a Loki job in its own branch",
+      "sendToBackground" in js and '"/jobs", { backend: "local", agent: "loki"' in js and "isolate: true" in js)
+check("the work strip polls quickly only while something runs", "live ? 3000 : 10000" in js)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

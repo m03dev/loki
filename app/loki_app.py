@@ -338,7 +338,7 @@ def self_test() -> int:
             __import__(name)
         except Exception as exc:  # noqa: BLE001
             problems.append("%s: %s: %s" % (name, type(exc).__name__, exc))
-    for path in (UI_DIR / "index.html", UI_DIR / "brain.js", REPO / "capabilities", REPO / "skills"):
+    for path in (UI_DIR / "index.html", UI_DIR / "app.js", REPO / "capabilities", REPO / "skills"):
         if not path.exists():
             problems.append("missing " + str(path))
     print("Loki self-test: " + ("OK" if not problems else "FAILED\n  " + "\n  ".join(problems)), flush=True)
