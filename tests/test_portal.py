@@ -261,12 +261,12 @@ ho = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: (handoff_keys.append((
                          "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
 code, page = fetch(ho.url)
 check("the phone page is a form, served once to the private network", code == 200 and "Send a key to LOKI" in page
-      and "<form" in page, (code, page[:200], ho.url))
+      and "<form" in page, (code, page[-260:], ho.url, ho.expired(), time.time() - ho.created))
 code, reply = fetch(ho.url, data=b"key=AIza-test")
 check("posting the key connects it", code == 200 and handoff_keys == [("gemini", "AIza-test")] and "&#10003;" in reply,
-      (code, reply[:200], handoff_keys))
+      (code, reply[-260:], handoff_keys))
 code, _ = fetch(ho.url)
-check("the page stops working after one key", code in (0, 404), code)
+check("the page stops working after one key", code in (0, 410), code)
 ho.stop()
 ho2 = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: False, ttl_s=30, bind="127.0.0.1")
 check("devices outside the private network are refused", fetch(ho2.url)[0] == 403)

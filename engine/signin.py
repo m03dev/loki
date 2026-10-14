@@ -246,8 +246,12 @@ class PhoneHandoff:
                 if not handoff.private_client(self.client_address[0]):
                     self._page(403, callback_page(False, "Only devices on your home network can use this page."))
                     return False
-                if not self.path.split("?", 1)[0] == "/k/" + handoff.token or handoff.expired():
-                    self._page(404, callback_page(False, "This link has expired. Make a new QR code in LOKI."))
+                path = urllib.parse.urlparse(self.path).path.rstrip("/")
+                if path != "/k/" + handoff.token:
+                    self._page(404, callback_page(False, "This link is not valid. Make a new QR code in LOKI."))
+                    return False
+                if handoff.expired():
+                    self._page(410, callback_page(False, "This link has expired. Make a new QR code in LOKI."))
                     return False
                 return True
 
