@@ -580,6 +580,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
             return
+        if route == "/experience":
+            agent = self.server.state.agent
+            exp = getattr(agent, "experience", None)
+            if exp is None:
+                self._send_json(503, {"ok": False, "error": "experience log is not available"})
+                return
+            self._send_json(200, {"ok": True, **exp.summary(), "new_examples": exp.new_examples(),
+                                  "providers": exp.provider_stats(),
+                                  "learned_order": agent.routing_order(agent.SMART_ORDER),
+                                  "tuned_promoted": bool(getattr(agent, "TUNED_PROMOTED", False))})
+            return
         if route == "/workers" or route.startswith("/workers/"):
             workers = getattr(self.server.state.agent, "workers", None)
             if workers is None:

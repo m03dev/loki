@@ -260,6 +260,7 @@ import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev
 import api_vault  # noqa: E402  (the API Vault - blueprint 3.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 import workers  # noqa: E402  (background worker agents + delegation)
+import experience  # noqa: E402  (outcome log, learned routing, training data)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -432,8 +433,53 @@ LOCAL_PROVIDERS = ("local", "local-small", "local-coder", "local-hermes",
 
 # ONLINE MODE (LOKI_MODEL=online): everything reached over the network. Free tiers first,
 # then the subscription agents (which need no key and no GPU), and never a local model.
+# The model Loki fine-tuned on its own verified work (tools/self_improve.py). It joins the
+# smart order - just ahead of the stock local model - only once it has been PROMOTED, i.e.
+# it beat the base model on held-out tasks. Until then it does not exist as far as routing
+# is concerned.
+TUNED_MODEL = os.getenv("LOKI_TUNED_MODEL", "loki-tuned").strip() or "loki-tuned"
+TUNED_PROMOTED = str(os.getenv("LOKI_TUNED_PROMOTED", "0")).strip() == "1"
+MODELS["loki-tuned"] = ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama",
+                                   model=TUNED_MODEL)
+LOCAL_PROVIDERS = LOCAL_PROVIDERS + ("loki-tuned",)
+if TUNED_PROMOTED and "local" in SMART_ORDER:
+    _at = SMART_ORDER.index("local")
+    SMART_ORDER = SMART_ORDER[:_at] + ("loki-tuned",) + SMART_ORDER[_at:]
+
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 _SMART_FAILED = set()
+
+# Learned routing: measured success reorders providers WITHIN a cost tier (see
+# experience.learned_order). Free stays ahead of paid whatever the numbers say.
+LEARN_ROUTING = str(os.getenv("LOKI_LEARN_ROUTING", "1")).strip().lower() not in ("0", "false", "off", "no")
+LEARN_MIN_SAMPLES = int(os.getenv("LOKI_LEARN_MIN_SAMPLES", "10"))
+_ROUTING_CACHE = {"t": 0.0, "stats": {}}
+
+
+def provider_tier(name: str) -> str:
+    cfg = MODELS.get(name)
+    if name in LOCAL_PROVIDERS or (cfg is not None and "11434" in cfg.base_url):
+        return "local"
+    if cfg is not None and cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        return "subscription"
+    if is_metered(name):
+        return "paid"
+    return "free"
+
+
+def routing_order(order) -> list:
+    """`order` as routing should try it: learned within tiers when enabled, else as-is."""
+    if not LEARN_ROUTING:
+        return list(order)
+    now = time.time()
+    if now - _ROUTING_CACHE["t"] > 60:
+        try:
+            _ROUTING_CACHE["stats"] = experience.provider_stats()
+        except Exception:
+            _ROUTING_CACHE["stats"] = {}
+        _ROUTING_CACHE["t"] = now
+    return experience.learned_order(order, provider_tier, _ROUTING_CACHE["stats"],
+                                    LEARN_MIN_SAMPLES)
 
 
 def _ollama_reachable() -> bool:
@@ -459,7 +505,7 @@ def provider_configured(name: str) -> bool:
 def active_model_name() -> str:
     """The provider actually in use - SMART resolves to the best available."""
     if model_name == "online":
-        for candidate in ONLINE_ORDER:
+        for candidate in routing_order(ONLINE_ORDER):
             if candidate not in _SMART_FAILED and provider_configured(candidate):
                 return candidate
         # Nothing is configured yet. Name one anyway so the error tells the user exactly
@@ -467,7 +513,7 @@ def active_model_name() -> str:
         return ONLINE_ORDER[0]
     if model_name != "smart":
         return model_name
-    for candidate in SMART_ORDER:
+    for candidate in routing_order(SMART_ORDER):
         if candidate not in _SMART_FAILED and provider_configured(candidate):
             return candidate
     return "local"
@@ -3143,6 +3189,9 @@ _task_modified = False
 # times; the final answer always says what was verified, what failed, and what could
 # NOT be verified, so a missing engine is never reported as success.
 _task_files: list = []
+_LAST_VERIFY: dict = {}        # the last verification report of this request
+_REQUEST_TOOL_CALLS = 0        # tool calls made in this request
+EXPERIENCE_ENABLED = str(os.getenv("LOKI_EXPERIENCE", "1")).strip().lower() not in ("0", "false", "off", "no")
 VERIFY_ENABLED = str(os.getenv("LOKI_VERIFY", "1")).strip().lower() not in ("0", "false", "off", "no")
 VERIFY_MAX_FILES = int(os.getenv("LOKI_VERIFY_MAX_FILES", "6"))
 VERIFY_FIX_ROUNDS = int(os.getenv("LOKI_VERIFY_FIX_ROUNDS", "2"))
@@ -3299,7 +3348,10 @@ def verification_feedback(report: dict) -> str:
 
 async def _verify_touched() -> dict:
     _progress("thinking", "Verifying %d changed file(s)..." % len(_task_files))
-    return await asyncio.to_thread(verify_files, list(_task_files))
+    report = await asyncio.to_thread(verify_files, list(_task_files))
+    _LAST_VERIFY.clear()
+    _LAST_VERIFY.update(report)
+    return report
 
 # Loop detection (Jev): a rolling window of recent actions, checked periodically so a
 # model that keeps retrying the same *approach* (not an identical call) gets nudged.
@@ -3592,6 +3644,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                 })
                 continue
             print("  [tool] %s(%s)" % (call.function.name, json.dumps(args)[:200]))
+            global _REQUEST_TOOL_CALLS
+            _REQUEST_TOOL_CALLS += 1
             result = await call_tool(call.function.name, args)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             # Break a loop where the model repeats an identical failing call forever.
@@ -3659,7 +3713,7 @@ async def _finish_with_verification(answer: str, rounds: int) -> str:
     return (answer or "").rstrip() + chr(10) * 2 + verification_summary(report)
 
 
-async def run_agent(user_message: str) -> str:
+async def _run_agent(user_message: str) -> str:
     global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
@@ -3716,7 +3770,7 @@ def is_conversational(goal: str) -> bool:
     return bool(_CONVERSATIONAL.match(text)) or text.rstrip().endswith("?")
 
 
-async def pursue_goal(goal: str) -> str:
+async def _pursue_goal(goal: str) -> str:
     global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
@@ -3817,6 +3871,81 @@ async def pursue_goal(goal: str) -> str:
             # Stalled in prose. Do NOT inject a "user" nudge - the model just echoes
             # it and loops. Silently force a tool call on the next turn instead.
             force_next = True
+
+
+# ---------------------------------------------------------------------------
+# Every request leaves a record (experience.py), so Loki can learn from outcomes.
+# ---------------------------------------------------------------------------
+
+def _start_request() -> tuple:
+    global _REQUEST_TOOL_CALLS
+    _REQUEST_TOOL_CALLS = 0
+    _LAST_VERIFY.clear()
+    return time.time(), len(messages)
+
+
+def _record_experience(kind: str, goal: str, status: str, started: float, start_index: int) -> None:
+    """Log the request; keep its trajectory when it is a verified success. Never raises."""
+    if not EXPERIENCE_ENABLED:
+        return
+    try:
+        verification = dict(_LAST_VERIFY) if _task_files else {}
+        outcome = experience.outcome_of(status, verification)
+        providers = list(REQUEST_USAGE)
+        request_id = uuid.uuid4().hex[:12]
+        kept = False
+        if outcome == "verified" and status == "done":
+            turns = [m for m in messages[start_index:] if isinstance(m, dict)]
+            used = sorted({c.get("function", {}).get("name", "")
+                           for m in turns for c in (m.get("tool_calls") or []) if isinstance(c, dict)})
+            kept = experience.save_trajectory(
+                request_id, goal, turns, [u for u in used if u],
+                meta={"kind": kind, "provider": providers[-1] if providers else "",
+                      "files": list(_task_files)}) is not None
+        experience.record({
+            "id": request_id, "kind": kind, "goal": goal, "status": status, "outcome": outcome,
+            "provider": providers[-1] if providers else "", "providers": providers,
+            "tool_calls": _REQUEST_TOOL_CALLS, "files": list(_task_files),
+            "usage": dict(REQUEST_USAGE), "route": list(ROUTE_TRACE),
+            "seconds": time.time() - started, "trajectory": kept,
+        })
+    except Exception as exc:  # noqa: BLE001 - learning must never break a request
+        print("  [experience] not recorded: %s" % exc)
+
+
+def _status_of_reply(reply: str) -> str:
+    head = (reply or "").strip().upper()
+    if head.startswith("DONE"):
+        return "done"
+    return "blocked"
+
+
+async def run_agent(user_message: str) -> str:
+    started, start_index = _start_request()
+    status = "error"
+    try:
+        reply = await _run_agent(user_message)
+        status = "done"
+        return reply
+    except BudgetExhausted:
+        status = "budget"
+        raise
+    finally:
+        _record_experience("chat", user_message, status, started, start_index)
+
+
+async def pursue_goal(goal: str) -> str:
+    started, start_index = _start_request()
+    status = "error"
+    try:
+        reply = await _pursue_goal(goal)
+        status = "done" if is_conversational(goal) else _status_of_reply(reply)
+        return reply
+    except BudgetExhausted:
+        status = "budget"
+        raise
+    finally:
+        _record_experience("task", goal, status, started, start_index)
 
 
 # ---------------------------------------------------------------------------

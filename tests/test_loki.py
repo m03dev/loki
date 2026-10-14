@@ -83,6 +83,11 @@ if _env.is_file():
 
 
 import loki  # noqa: E402
+# Tests drive real turns with fake models: they must never write into the user's real
+# experience log or let it reorder providers. The self-improvement tests opt back in,
+# in a temp data dir.
+loki.EXPERIENCE_ENABLED = False
+loki.LEARN_ROUTING = False
 
 
 
@@ -2752,6 +2757,221 @@ check("the dock has a Background agents menu item", '"Background agents...", 8' 
 check("the agents dialog uses the bridge endpoints", "/workers/%s/message" in _wd_src and "/workers/%s/cancel" in _wd_src)
 check("the agents dialog does not override Object._get", "func _get(" not in _wd_src)
 check("the agents dialog polls only while open", "_timer.stop()" in _wd_src)
+
+
+section("self-improvement: experience, learned routing, training data, promotion gate")
+import tempfile as _stf  # noqa: E402
+import experience as _ex  # noqa: E402
+
+_s_root = Path(_stf.mkdtemp())
+_s_env = os.environ.get("LOKI_DATA")
+os.environ["LOKI_DATA"] = str(_s_root)
+
+check("outcome: DONE with every file OK is verified",
+      _ex.outcome_of("done", {"ok": ["a.gd"], "failed": [], "unverified": []}) == "verified")
+check("outcome: an unverifiable file is NOT verified",
+      _ex.outcome_of("done", {"ok": ["a.gd"], "failed": [], "unverified": [("b.gd", "Godot not found")]}) == "unverified")
+check("outcome: a failed check is failed", _ex.outcome_of("done", {"ok": [], "failed": [("a", "x")]}) == "failed")
+check("outcome: a budget stop is blocked", _ex.outcome_of("budget", {}) == "blocked")
+
+# learned order: reorders inside a tier only, and only with enough samples
+_tiers = {"a": "free", "b": "free", "c": "free", "p": "paid", "l": "local"}
+_stats = {"a": {"samples": 20, "success_rate": 0.2}, "b": {"samples": 20, "success_rate": 0.9},
+          "c": {"samples": 3, "success_rate": 1.0}, "p": {"samples": 50, "success_rate": 1.0}}
+_lo = _ex.learned_order(["a", "b", "c", "p", "l"], _tiers.get, _stats, min_samples=10)
+check("learned routing puts the better free provider first", _lo[:2] == ["b", "a"], _lo)
+check("a provider with too few samples keeps its place", _lo[2] == "c", _lo)
+check("a perfect PAID provider never jumps ahead of free ones", _lo.index("p") == 3, _lo)
+check("no stats, no change", _ex.learned_order(["a", "b"], _tiers.get, {}) == ["a", "b"])
+check("loki tiers: local, subscription, paid, free",
+      (loki.provider_tier("local"), loki.provider_tier("claude-code"), loki.provider_tier("gpt"),
+       loki.provider_tier("gemini")) == ("local", "subscription", "paid", "free"))
+check("the tuned model exists but is not routed until promoted",
+      "loki-tuned" in loki.MODELS and ("loki-tuned" in loki.SMART_ORDER) == loki.TUNED_PROMOTED)
+
+# End to end through the real request wrappers.
+_s_saved = (loki.EXPERIENCE_ENABLED, loki.WORKSPACE, loki.check_script, loki.save_history, loki.todo_clear,
+            loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+            list(loki.messages), loki.MODEL_RETRIES, loki.AGENT_MODE)
+_s_ws = Path(_stf.mkdtemp())
+
+
+async def _s_noop(*a, **k):
+    return []
+
+
+def _s_script(steps):
+    steps = list(steps)
+
+    class _C:
+        async def create(self, **kwargs):
+            step = steps.pop(0) if steps else ("say", "DONE: end")
+            if step[0] == "tool":
+                fn = _types.SimpleNamespace(name=step[1], arguments=json.dumps(step[2]))
+                msg = _types.SimpleNamespace(role="assistant", content="",
+                                             tool_calls=[_types.SimpleNamespace(id="c1", type="function", function=fn)])
+            else:
+                msg = _types.SimpleNamespace(role="assistant", content=step[1], tool_calls=None)
+            return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=msg)],
+                                          usage=_types.SimpleNamespace(prompt_tokens=10, completion_tokens=5))
+    loki.make_client = lambda: _types.SimpleNamespace(chat=_types.SimpleNamespace(completions=_C()))
+
+
+try:
+    loki.EXPERIENCE_ENABLED = True
+    loki.WORKSPACE = _s_ws
+    loki.check_script = lambda f: ("check_script res://%s: ERRORS - fix these:\nParse Error" % f
+                                   if "BROKEN" in loki.resolve_in_workspace(f).read_text(encoding="utf-8")
+                                   else "check_script res://%s: compiles OK" % f)
+    loki.save_history = lambda: None
+    loki.todo_clear = lambda: "cleared"
+    loki.refresh_mcp_tools = _s_noop
+    loki.provider_configured = lambda n: n == "openrouter"
+    loki.model_name = "smart"
+    loki.MODEL_RETRIES = 0
+    loki.AGENT_MODE = "build"
+
+    loki.messages[:] = [{"role": "system", "content": "SECRET USER MEMORY: my dog is Rex"}]
+    _s_script([("tool", "write_file", {"filename": "jump.gd",
+                                        "content": "extends Node # key sk-or-v1-abcdef0123456789xyz\n"}),
+               ("say", "DONE: added jump.gd")])
+    asyncio.run(loki.pursue_goal("create a jump script"))
+    _log = _ex.entries()
+    check("a verified task is logged as verified",
+          _log and _log[-1]["outcome"] == "verified" and _log[-1]["provider"] == "openrouter", _log[-1:])
+    check("its trajectory is kept", _log[-1]["trajectory"] and len(_ex.trajectories()) == 1)
+    _traj = json.dumps(_ex.trajectories()[0])
+    check("the trajectory carries the generic system prompt, not the user's memory",
+          "Rex" not in _traj and _ex.TRAIN_SYSTEM[:40] in _traj)
+    check("secrets are masked in training data", "sk-or-v1-abcdef0123456789xyz" not in _traj and "[redacted]" in _traj)
+    check("the trajectory keeps the real tool call", '"name": "write_file"' in _traj)
+
+    loki.messages[:] = [{"role": "system", "content": "t"}]
+    _s_script([("say", "GDScript is Godot's language.")])
+    asyncio.run(loki.run_agent("what is gdscript"))
+    check("a plain answer is logged but never becomes training data",
+          _ex.entries()[-1]["outcome"] == "unverified" and len(_ex.trajectories()) == 1)
+
+    loki.messages[:] = [{"role": "system", "content": "t"}]
+    _s_script([("tool", "write_file", {"filename": "bad.gd", "content": "BROKEN\n"})]
+              + [("say", "DONE: bad")] * (loki.VERIFY_FIX_ROUNDS + 1))
+    asyncio.run(loki.pursue_goal("create a bad script"))
+    check("a task whose files fail verification is logged failed, not trained on",
+          _ex.entries()[-1]["outcome"] == "failed" and len(_ex.trajectories()) == 1, _ex.entries()[-1])
+
+    _ps = _ex.provider_stats()
+    check("provider stats count verified and failed work",
+          _ps["openrouter"]["verified"] == 1 and _ps["openrouter"]["failed"] == 1, _ps)
+finally:
+    (loki.EXPERIENCE_ENABLED, loki.WORKSPACE, loki.check_script, loki.save_history, loki.todo_clear,
+     loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+     _s_msgs, loki.MODEL_RETRIES, loki.AGENT_MODE) = _s_saved
+    loki.messages[:] = _s_msgs
+    loki._task_files.clear()
+
+# dataset
+for _n in range(12):
+    _ex.save_trajectory("t%02d" % _n, "goal %d" % (_n % 11), [
+        {"role": "user", "content": "do %d" % _n},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "1", "function": {"name": "read_file", "arguments": '{"filename": "a.gd"}'}}]},
+        {"role": "tool", "tool_call_id": "1", "content": "extends Node"},
+        {"role": "assistant", "content": "DONE: ok"}], ["read_file"])
+_ds = _ex.build_dataset(_s_root / "ds", {"read_file": {"type": "function", "function": {"name": "read_file"}}})
+check("the dataset dedupes by goal and holds some back for evaluation",
+      _ds["train"] + _ds["eval"] == 12 and _ds["eval"] >= 1, _ds)
+_row = json.loads((_s_root / "ds" / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
+check("each example carries the schemas of the tools it used", _row["tools"][0]["function"]["name"] == "read_file")
+check("tool arguments are objects, as chat templates expect",
+      any(isinstance(c["function"]["arguments"], dict) for m in _row["messages"] for c in m.get("tool_calls", [])))
+check("new examples are counted since the last training run",
+      _ex.new_examples() == len(_ex.trajectories()))
+
+# the gate and the evaluator
+sys.path.insert(0, str(REPO / "tools"))
+import self_improve as _si  # noqa: E402
+
+check("first move: a tool call", _si.first_move(_row["messages"])[1] == ("tool", "read_file"))
+check("score: same tool 1, other tool 0.5, text 0",
+      (_si.score_move(("tool", "read_file"), {"tool_calls": [{"function": {"name": "read_file"}}]}),
+       _si.score_move(("tool", "read_file"), {"tool_calls": [{"function": {"name": "list_files"}}]}),
+       _si.score_move(("tool", "read_file"), {"content": "hi"})) == (1.0, 0.5, 0.0))
+_good = {"model": "cand", "n": 40, "score": 0.80, "errors": 0}
+check("promote only when the candidate beats every baseline",
+      _si.decide(_good, [{"model": "qwen3:8b", "score": 0.70}])[0]
+      and not _si.decide(_good, [{"model": "qwen3:8b", "score": 0.79}])[0])
+check("too few held-out tasks is not evidence", not _si.decide({**_good, "n": 3}, [])[0])
+check("a candidate that errors a lot is never promoted", not _si.decide({**_good, "errors": 20}, [])[0])
+check("a busy GPU blocks training", bool(_si.gpu_busy({"used_mb": 6000, "total_mb": 8192, "util": 90})))
+check("an idle GPU allows training", _si.gpu_busy({"used_mb": 300, "total_mb": 8192, "util": 0}) == "")
+check("no GPU blocks training with a reason", "no NVIDIA GPU" in _si.gpu_busy({}))
+
+# a fake Ollama that always calls read_file: the evaluator must score it 1.0 on this set
+from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS  # noqa: E402
+import threading as _sth  # noqa: E402
+
+
+class _FakeOllama(_BH):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        reply = {"message": {"role": "assistant", "content": "",
+                             "tool_calls": [{"function": {"name": "read_file", "arguments": {}}}]}}
+        if body.get("model") == "texty":
+            reply = {"message": {"role": "assistant", "content": "I would read a.gd"}}
+        data = json.dumps(reply).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+_fo = _TS(("127.0.0.1", 0), _FakeOllama)
+_sth.Thread(target=_fo.serve_forever, daemon=True).start()
+_fo_url = "http://127.0.0.1:%d" % _fo.server_address[1]
+# an eval set whose first moves are all read_file (the synthetic rows above)
+_rf = [l for l in ((_s_root / "ds" / "train.jsonl").read_text(encoding="utf-8").splitlines()
+                   + (_s_root / "ds" / "eval.jsonl").read_text(encoding="utf-8").splitlines())
+       if l.strip() and _si.first_move(json.loads(l)["messages"])[1] == ("tool", "read_file")]
+(_s_root / "rf.jsonl").write_text("\n".join(_rf) + "\n", encoding="utf-8")
+try:
+    _ev = _si.evaluate("cand", _s_root / "rf.jsonl", url=_fo_url)
+    _ev2 = _si.evaluate("texty", _s_root / "rf.jsonl", url=_fo_url)
+    check("the evaluator scores a model that makes the right first move 1.0", _ev["score"] == 1.0, _ev)
+    check("and one that only talks 0.0", _ev2["score"] == 0.0, _ev2)
+finally:
+    _fo.shutdown()
+
+check("train refuses below the example threshold",
+      _si.main(["train"]) == 0 and not (_s_root / "experience" / "runs").exists())
+check("promote refuses without a passing evaluation", _si.main(["promote"]) == 1)
+(_s_root / ".env").write_text("OPENROUTER_API_KEY=x\n# keep me\n", encoding="utf-8")
+_si.set_env_value("LOKI_TUNED_PROMOTED", "1")
+_envtxt = (_s_root / ".env").read_text(encoding="utf-8")
+check("set_env_value keeps every other line", "OPENROUTER_API_KEY=x" in _envtxt and "# keep me" in _envtxt
+      and "LOKI_TUNED_PROMOTED=1" in _envtxt)
+
+# the trainer fails clearly (not with a traceback) where there is no Unsloth / GPU
+import subprocess as _ssp  # noqa: E402
+_tr = _ssp.run([sys.executable, str(REPO / "tools" / "train_lora.py"), "--data", str(_s_root / "ds"),
+                "--out", str(_s_root / "run")], capture_output=True, text=True, timeout=120)
+check("train_lora.py without Unsloth exits with a clear message",
+      _tr.returncode in (3, 4) and "Traceback" not in _tr.stderr, (_tr.returncode, _tr.stdout[-200:], _tr.stderr[-300:]))
+_tr0 = _ssp.run([sys.executable, str(REPO / "tools" / "train_lora.py"), "--data", str(_s_root / "nothing"),
+                 "--out", str(_s_root / "run")], capture_output=True, text=True, timeout=60)
+check("train_lora.py with no data says so", _tr0.returncode == 2 and "no training data" in _tr0.stdout)
+
+if _s_env is None:
+    os.environ.pop("LOKI_DATA", None)
+else:
+    os.environ["LOKI_DATA"] = _s_env
+import shutil as _ssh  # noqa: E402
+for _dir in (_s_root, _s_ws):
+    _ssh.rmtree(_dir, ignore_errors=True)
+
+check("the bridge serves what Loki has learned on /experience",
+      'route == "/experience"' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
 
 if "--live" in sys.argv:
 

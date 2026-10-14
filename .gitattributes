@@ -1,2 +1,5 @@
 # Keep prepared upstream patches byte-exact so git am applies them.
 *.patch -text
+
+# Batch files keep CRLF: cmd.exe label lookup (goto) is unreliable with LF.
+tools/*.bat -text
