@@ -40,6 +40,7 @@ import json
 import os
 
 
+import subprocess
 import sys
 
 
@@ -52,7 +53,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(REPO / "engine"))
 
 
 
@@ -144,16 +145,21 @@ layout = Path(*loki.ROOT.parts[-3:])
 
 
 
-section("layout: the addon is self-contained")
+section("layout: Loki is its own app (engine/), not a Godot addon")
 
 
-check("ROOT is inside the addon", layout == Path("addons") / "loki" / "harness", loki.ROOT)
+check("ROOT is engine/", loki.ROOT.name == "engine" and loki.ROOT.parent == REPO, loki.ROOT)
 
 
 check("DATA_DIR is named harness_data", loki.DATA_DIR.name == "harness_data", loki.DATA_DIR)
 
 
-check("DATA_DIR is not inside addons", "addons" not in loki.DATA_DIR.parts, loki.DATA_DIR)
+check("DATA_DIR is not inside engine/", "engine" not in loki.DATA_DIR.relative_to(REPO).parts if REPO in loki.DATA_DIR.parents else True, loki.DATA_DIR)
+for _godot_leftover in ("project.godot", "addons"):
+    check("no %s in the checkout" % _godot_leftover, not (REPO / _godot_leftover).exists())
+_tracked_godot = [f for f in subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True).stdout.split()
+                  if f.endswith((".gd", ".uid", ".tscn", ".tres", ".godot", ".import")) or f.startswith("addons/")]
+check("no Godot files are tracked in the repo", not _tracked_godot, _tracked_godot[:5])
 
 
 check("MCP_CONFIG ships with the code", loki.MCP_CONFIG.parent == loki.ROOT, loki.MCP_CONFIG)
@@ -439,7 +445,7 @@ check("toolset summary ignores non-JSON", loki._toolset_summary("plain text") ==
 section("setup / onboarding")
 
 
-_checkout = REPO / "addons" / "loki" / "harness"
+_checkout = REPO / "engine"
 
 
 _B = chr(92)  # one backslash, so the assertions below survive any transport mangling
@@ -448,7 +454,7 @@ _B = chr(92)  # one backslash, so the assertions below survive any transport man
 _bat = (REPO / "setup.bat").read_text(encoding="utf-8")
 
 
-check("setup.bat uses the post-fold harness path", ("addons" + _B + "loki" + _B + "harness") in _bat)
+check("setup.bat uses the engine/ path", ('set "ENGINE=%REPO%' + _B + 'engine"') in _bat)
 
 
 check("setup.bat dropped the pre-fold harness root", ('set "HARNESS=%REPO%' + _B + 'harness"') not in _bat)
@@ -466,47 +472,8 @@ check("setup.sh ships for macOS/Linux", (REPO / "setup.sh").is_file())
 check("doctor script ships", (REPO / "tools" / "loki_doctor.py").is_file())
 
 
-check("bootstrap is single-instance (atomic lock)",
-
-
-      "O_EXCL" in (REPO / "addons" / "loki" / "bootstrap.py").read_text(encoding="utf-8"))
-
-
-check("dock guards against a duplicate bridge launch",
-
-
-      "_last_bridge_spawn_msec" in (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8"))
-
-
-_dock_source = (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8")
-
-
-check("chat dock has real multi-file attachment picker", "FileDialog.FILE_MODE_OPEN_FILES" in _dock_source and "files_selected.connect(_on_attachment_files_selected)" in _dock_source)
-
-
-check("attachments accept code and Godot scene/resource text", all(ext in _dock_source for ext in ("gdshader", "tscn", "tres", "gd", "cs")))
-
-
-check("text attachment sizes are bounded", "MAX_ATTACHMENT_FILE_BYTES" in _dock_source and "MAX_ATTACHMENT_TOTAL_BYTES" in _dock_source)
-
-
-check("images are identified distinctly and not mislabeled as text", "Image attachment:" in _dock_source and "is_image" in _dock_source)
-
-
-check("pending attachments can be cleared", "Clear pending attachments" in _dock_source and "_clear_attachments()" in _dock_source)
-
-
-_settings_source = (REPO / "addons" / "loki" / "loki_settings.gd").read_text(encoding="utf-8")
-
-
-_bridge_source = (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8")
-_loki_source = (REPO / "addons" / "loki" / "harness" / "loki.py").read_text(encoding="utf-8")
-
-
-check("settings provide a Connections tab", '_page("Connections")' in _settings_source and "set_connections(payload: Dictionary)" in _settings_source)
-check("every settings tab scrolls so a tall tab cannot inflate the dialog",
-      "_page(title: String)" in _settings_source and "ScrollContainer.new()" in _settings_source
-      and "min_size = Vector2i(440, 300)" in _settings_source and "wrap_controls = true" in _settings_source)
+_bridge_source = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+_loki_source = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
 
 
 check("connection inventory is available from the authenticated local bridge", 'route == "/connections"' in _bridge_source and "connection_inventory" in _bridge_source)
@@ -516,12 +483,6 @@ check("connection inventory never includes environment credentials", '"status": 
 
 
 check("Chrome, PowerShell and CMake prerequisites are inventoried", all(term in _bridge_source for term in ("Chrome DevTools MCP prerequisite", "PowerShell 7", "Windows PowerShell", "CMake CLI")))
-
-
-check("connections refresh is wired to settings", "connections_refresh_requested.connect(_refresh_connections)" in _dock_source and '"/connections"' in _dock_source)
-
-
-
 
 
 _envx = (_checkout / ".env.example").read_text(encoding="utf-8")
@@ -1256,12 +1217,6 @@ check("Loki is told what it is, so it can answer about itself without exploring"
       "# What you are" in _loki_source and "make NO tool call" in _loki_source)
 check("the bridge writes a traceback before reporting a failure",
       "import traceback" in _bridge_source and _bridge_source.count("traceback.print_exc()") >= 2)
-check("the dock's icon row wraps instead of forcing a wide minimum",
-      "HFlowContainer.new()" in _dock_source)
-check("long dropdowns are capped so they scroll instead of filling the screen",
-      "_cap_popup(" in _dock_source and "popup.max_size = Vector2i(520, max_height)" in _dock_source)
-
-
 section("a question is answered, not pursued by the goal loop")
 for _q in ("what do you do?", "hi", "hello there", "how are you", "tell me about yourself",
            "explain your modes", "who are you"):
@@ -1280,10 +1235,6 @@ check("every mode is told to write in English only",
       and "english + MODE_PROMPTS" in _loki_source)
 check("the English rule says never to answer in another language",
       "Never answer in any other language" in _loki_source)
-check("a normal message is sent to the one-turn chat route",
-      '"/task" if no_limit else "/chat"' in _dock_source)
-check("only the explicit no-limit item uses the unbounded goal loop",
-      '{"task": prompt, "steps": 0} if no_limit else {"message": prompt}' in _dock_source)
 check("a client that gives up no longer dumps a traceback",
       "BrokenPipeError" in _bridge_source)
 
@@ -1716,10 +1667,11 @@ check("loki exposes a decision status for the bridge", isinstance(loki.decision_
 section("injected-input probe (run a scene and feed it inputs)")
 
 
-check("the probe harness ships in the addon", (loki.ROOT / "loki_probe.gd").is_file())
+import godot_assets as _godot_assets  # noqa: E402
+check("the probe script ships as engine data, not a .gd file", "extends SceneTree" in _godot_assets.PROBE_GD)
 
 
-_probe_src = (loki.ROOT / "loki_probe.gd").read_text(encoding="utf-8")
+_probe_src = _godot_assets.PROBE_GD
 
 
 check("the harness holds each press for at least two physics frames",
@@ -1905,7 +1857,7 @@ check("project_state is offered to the model", "project_state" in loki.MODEL_TOO
 check("project_state is in the planning category", "project_state" in loki.TOOL_CATEGORIES["planning"])
 
 
-check("the bridge exposes /state", 'route == "/state"' in (_checkout.parent / "loki_bridge.py").read_text(encoding="utf-8"))
+check("the bridge exposes /state", 'route == "/state"' in (_checkout / "loki_bridge.py").read_text(encoding="utf-8"))
 
 
 check("the prompt tells the agent to keep the state", "RESUMABLE PROJECT STATE" in loki.SYSTEM_PROMPT)
@@ -2233,7 +2185,7 @@ check("the route trace masks key-shaped strings",
 check("redaction leaves ordinary error text alone",
       loki.redact_secrets("HTTP 429: quota exceeded") == "HTTP 429: quota exceeded")
 check("the bridge reports the route on /health",
-      '"route": route_trace' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
+      '"route": route_trace' in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8"))
 
 
 section("verification: DONE is checked, not believed")
@@ -2263,7 +2215,7 @@ if _v_saved_env is None:
 else:
     os.environ["GODOT_EXE"] = _v_saved_env
 check("the Godot default is no longer one developer's G: drive",
-      'os.getenv("GODOT_EXE", "G:/' not in (REPO / "addons" / "loki" / "harness" / "loki.py").read_text(encoding="utf-8"))
+      'os.getenv("GODOT_EXE", "G:/' not in (REPO / "engine" / "loki.py").read_text(encoding="utf-8"))
 
 check("build_scene counts as modifying (DONE after it is not 'premature')", "build_scene" in loki.MODIFYING)
 check("project.godot editors count as modifying",
@@ -2722,42 +2674,10 @@ for _dir in (_s_root, _s_ws):
     _ssh.rmtree(_dir, ignore_errors=True)
 
 check("the bridge serves what Loki has learned on /experience",
-      'route == "/experience"' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
+      'route == "/experience"' in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8"))
 
 
-section("macOS: bridge interpreter and Loki.app")
-
-_dock_now = (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8")
-_interp = _dock_now.split("func _bridge_interpreters", 1)[-1].split("\nfunc ", 1)[0]
-check("dock looks for the macOS/Linux venv (bin/python3)",
-      'harness_data/.venv/bin/python3' in _interp and '/opt/homebrew/bin/python3' in _interp)
-check("dock keeps the Windows venv paths",
-      'harness_data/.venv/Scripts/pythonw.exe' in _interp)
-_spawn = _dock_now.split("func _spawn_bridge", 1)[-1].split("\nfunc ", 1)[0]
-check("bare-name python fallback is Windows-only (fork hides exec failure elsewhere)",
-      'if OS.get_name() == "Windows":' in _spawn
-      and _spawn.index('if OS.get_name() == "Windows":') < _spawn.index('"pythonw", "python", "py"'))
-check("Apple's system python3 is tried last",
-      _interp.rstrip().rstrip("])").rstrip().rstrip(",").endswith('"/usr/bin/python3"'))
-
-import importlib.util as _ilu  # noqa: E402
-_bs_spec = _ilu.spec_from_file_location("_loki_bootstrap", REPO / "addons" / "loki" / "bootstrap.py")
-_bs = _ilu.module_from_spec(_bs_spec)
-_bs_spec.loader.exec_module(_bs)
-check("bootstrap declares Python 3.11 as the floor", _bs.MIN_PYTHON == (3, 11))
-_bs_src = (REPO / "addons" / "loki" / "bootstrap.py").read_text(encoding="utf-8")
-check("bootstrap refuses to build a venv from a too-old Python",
-      _bs_src.index("sys.version_info < MIN_PYTHON") < _bs_src.index('"-m", "venv"'))
-import tempfile as _tf0  # noqa: E402
-with _tf0.TemporaryDirectory() as _bsd:
-    _saved = (_bs.VENV, _bs.MIN_PYTHON)
-    _bs.VENV, _bs.MIN_PYTHON = Path(_bsd) / ".venv", (99, 0)
-    try:
-        _env_result = _bs.ensure_environment()
-    finally:
-        _bs.VENV, _bs.MIN_PYTHON = _saved
-    check("a too-old Python gets no venv at all (not a broken one)",
-          _env_result is None and not (Path(_bsd) / ".venv").exists())
+section("macOS: Loki.app")
 check("setup.sh picks a Python 3.11+ instead of whatever python3 is",
       "sys.version_info >= (3, 11)" in (REPO / "setup.sh").read_text(encoding="utf-8"))
 
@@ -2824,17 +2744,17 @@ else:
 
 section("standalone app: engine without Godot")
 
-sys.path.insert(0, str(REPO / "addons" / "loki"))
+sys.path.insert(0, str(REPO / "engine"))
 import loki_bridge as _lb  # noqa: E402
 _a = _lb.parse_args(["--loki-root", "x", "--secret-file", "t"])
 check("engine starts without --godot-exe or --project-dir", _a.godot_exe == "" and _a.project_dir == "")
-check("workspace defaults to ~/Loki", _lb.resolve_workspace("") == (Path.home() / "Loki").resolve()
+check("workspace defaults to ~/LOKI Projects/Home (never ~/Loki)", _lb.resolve_workspace("") == (Path.home() / "LOKI Projects" / "Home").resolve()
       if not os.environ.get("LOKI_WORKSPACE") else True)
 check("an explicit workspace wins", _lb.resolve_workspace("/tmp/ws-x") == Path("/tmp/ws-x").resolve())
 _ui = REPO / "app" / "ui"
 check("UI root serves index.html", _lb.ui_file(_ui, "/") == (_ui / "index.html").resolve())
 check("UI assets are served", _lb.ui_file(_ui, "/ui/app.js") == (_ui / "app.js").resolve())
-check("UI refuses path traversal", _lb.ui_file(_ui, "/ui/../../addons/loki/harness/loki.py") is None)
+check("UI refuses path traversal", _lb.ui_file(_ui, "/ui/../../engine/loki.py") is None)
 check("UI refuses encoded-backslash and absolute tricks",
       _lb.ui_file(_ui, "/ui/..\\loki_app.py") is None and _lb.ui_file(_ui, "/ui//etc/passwd") is None)
 check("UI refuses non-asset types", _lb.ui_file(REPO / "app", "/ui/loki_app.py") is None)
@@ -2855,13 +2775,16 @@ try:
     _general = loki.system_prompt() if loki.AGENT_MODE == "build" else (loki.set_mode("build"), loki.system_prompt())[1]
     check("outside a Godot project, Build mode is not told it is in Godot",
           "Godot 4 project" not in _general and "standalone desktop app" in _general)
-    loki.GAME_PROJECT = str(REPO)
-    check("inside a Godot project, the game prompt is kept", "Godot 4 project" in loki.system_prompt())
+    import tempfile as _gp_tf
+    with _gp_tf.TemporaryDirectory() as _game:
+        (Path(_game) / "project.godot").write_text("config_version=5\n", encoding="utf-8")
+        loki.GAME_PROJECT = _game
+        check("inside a Godot project, the game prompt is kept", "Godot 4 project" in loki.system_prompt())
 finally:
     loki.GAME_PROJECT = _saved_gp
 
 
-_mcp_cfg = json.loads((REPO / "addons" / "loki" / "harness" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
+_mcp_cfg = json.loads((REPO / "engine" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
 check("Godot MCP servers start only for a Godot workspace",
       _mcp_cfg["godot"].get("requires_env") == "GAME_PROJECT"
       and _mcp_cfg["godot_run"].get("requires_env") == "GAME_PROJECT")
@@ -2876,12 +2799,25 @@ finally:
 
 section("standalone app: desktop shell")
 
+import importlib.util as _ilu  # noqa: E402
 _spec2 = _ilu.spec_from_file_location("_loki_app", REPO / "app" / "loki_app.py")
 _app = _ilu.module_from_spec(_spec2)
 _spec2.loader.exec_module(_app)
 check("app workspace: --workspace wins", _app.choose_workspace("/tmp/a", {"workspace": "/tmp/b"}, {}) == Path("/tmp/a").resolve())
 check("app workspace: remembered next", _app.choose_workspace("", {"workspace": "/tmp/b"}, {"LOKI_WORKSPACE": "/tmp/c"}) == Path("/tmp/b").resolve())
-check("app workspace: default ~/Loki", _app.choose_workspace("", {}, {}) == (Path.home() / "Loki").resolve())
+check("app workspace: default ~/LOKI Projects/Home", _app.choose_workspace("", {}, {}) == (Path.home() / "LOKI Projects" / "Home").resolve())
+import tempfile as _ac_tf  # noqa: E402
+with _ac_tf.TemporaryDirectory() as _ac:
+    _ac = Path(_ac)
+    (_ac / "Loki" / ".godot").mkdir(parents=True)
+    (_ac / "Loki" / ".godot" / "loki_conversations.json").write_text('{"chats": []}', encoding="utf-8")
+    _ws_new = _ac / "LOKI Projects" / "Home"
+    check("old chats in ~/Loki/.godot are copied to the new workspace",
+          _app.adopt_old_chats(_ws_new, home=_ac) == ["loki_conversations.json"]
+          and (_ws_new / ".loki" / "loki_conversations.json").is_file()
+          and (_ac / "Loki" / ".godot" / "loki_conversations.json").is_file())
+    check("chats are adopted only once (an existing file is never overwritten)",
+          _app.adopt_old_chats(_ws_new, home=_ac) == [])
 _cmd = _app.engine_command(Path("/py"), Path("/ws"), "")
 check("app starts the engine with its UI and its own state folder",
       "--ui-dir" in _cmd and "--state-dir" in _cmd and "--godot-exe" not in _cmd)

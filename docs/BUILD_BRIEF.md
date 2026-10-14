@@ -50,7 +50,7 @@ checks their work, and gets a little better every day.
 | **PC** (RTX 3070 Ti, 8 GB, on 24/7) | the worker: agents, VMs, browsers, local models, training | `C:\Users\macul\Documents\loki` |
 | a third machine (later) | more workers | any |
 
-They talk through the **peer link** (`addons/loki/harness/peers.py`, Settings > Machines,
+They talk through the **peer link** (`engine/peers.py`, Settings > Machines,
 `docs/operations/MACHINES.md`): signed, LAN-only, off by default.
 
 ## 4. Where the code is today (start here)
@@ -58,8 +58,8 @@ They talk through the **peer link** (`addons/loki/harness/peers.py`, Settings > 
 - Repo `m03dev/loki`. `master` and `macos-app` are identical as of commit `d16dda9`.
   Two parallel sessions were merged there. Work on one branch from now on (section 9).
 - **App:** `app/loki_app.py` (pywebview window) + `app/ui/` (chat, settings, jobs,
-  brain, setup), engine `addons/loki/loki_bridge.py` (HTTP on 127.0.0.1:8767).
-- **Agent core:** `addons/loki/harness/loki.py`: providers and smart routing with
+  brain, setup), engine `engine/loki_bridge.py` (HTTP on 127.0.0.1:8767).
+- **Agent core:** `engine/loki.py`: providers and smart routing with
   failover, tools, the DONE verification gate, paid budget, modes (Ask/Plan/Build).
 - **Systems already there:** `conductor.py` (specialists by role), `workers.py` (background
   jobs: built-in Loki agent, Claude Code, Codex, herdr, cua), `agents.py`, `policy.py`,
@@ -87,7 +87,7 @@ repo root, `addons/loki/...`, `.gd`/`.uid` files, a Godot dock, a vendored Godot
 It must not be, or resemble, a Godot project anywhere.
 
 - Restructure the repo as a normal application, for example `engine/` (the Python core,
-  formerly `addons/loki/harness` + `loki_bridge.py`), `app/` (window + UI), `capabilities/`,
+  formerly `engine` + `loki_bridge.py`), `app/` (window + UI), `capabilities/`,
   `skills/`, `tools/`, `tests/`, `docs/`. Fix every import, path, the PyInstaller spec, the
   Mac launcher, setup scripts and tests.
 - Delete `project.godot`, the Godot dock and plugins (`plugin.cfg`, `loki_dock.gd`,

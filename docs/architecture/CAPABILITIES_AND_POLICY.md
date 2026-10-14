@@ -1,7 +1,7 @@
 # Capabilities, policy and the backbone
 
 How Loki decides what it may do, and how new abilities plug in. Code lives in
-`addons/loki/harness/`; tests in `tests/test_hardening.py`.
+`engine/`; tests in `tests/test_hardening.py`.
 
 ```
  model asks for a tool

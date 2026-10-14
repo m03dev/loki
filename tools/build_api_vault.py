@@ -1,7 +1,7 @@
 """Build the API Vault seed (blueprint section 3.3).
 
 Fetches the apis.guru public catalog, folds in Loki's own model providers, and writes a
-compact, offline-searchable index to addons/loki/data/api_vault.json.
+compact, offline-searchable index to engine/data/api_vault.json.
 
     python tools/build_api_vault.py             fetch and rebuild
     python tools/build_api_vault.py --offline   rebuild from the cached payload
@@ -16,13 +16,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(ROOT / "engine"))
 
 import api_vault  # noqa: E402
 
 CATALOG_URL = "https://api.apis.guru/v2/list.json"
 CACHE = ROOT / "harness_data" / "apis_guru.json"
-OUT = ROOT / "addons" / "loki" / "data" / "api_vault.json"
+OUT = ROOT / "engine" / "data" / "api_vault.json"
 
 
 def fetch() -> dict:

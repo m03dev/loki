@@ -2,14 +2,14 @@
 # Loki one-time setup (macOS / Linux). Safe to re-run. Needs python3 and git.
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HARNESS="$REPO/addons/loki/harness"
+ENGINE="$REPO/engine"
 DATA="$REPO/harness_data"
 VENV="$DATA/.venv"
 
-[ -f "$HARNESS/loki.py" ] || { echo "[loki] run this from the Loki repo root"; exit 1; }
+[ -f "$ENGINE/loki.py" ] || { echo "[loki] run this from the Loki repo root"; exit 1; }
 
 # The newest Python 3.11+ on the machine. Apple's /usr/bin/python3 is 3.9, which
-# cannot install the harness dependencies.
+# cannot install the engine dependencies.
 PY=""
 for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
   if command -v "$candidate" >/dev/null 2>&1 &&
@@ -25,7 +25,7 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 echo "[loki] installing dependencies"
 "$VENV/bin/python" -m pip install --upgrade pip >/dev/null 2>&1 || true
-"$VENV/bin/python" -m pip install -r "$HARNESS/requirements.txt"
+"$VENV/bin/python" -m pip install -r "$ENGINE/requirements.txt"
 
 if [ "$(uname -s)" = "Darwin" ]; then
   echo "[loki] installing the Loki window (pywebview)"
@@ -39,7 +39,7 @@ mkdir -p "$DATA/vendor"
 [ -d "$DATA/vendor/ECC" ] || git clone --depth 1 https://github.com/affaan-m/ECC.git "$DATA/vendor/ECC" || true
 
 if [ ! -f "$DATA/.env" ]; then
-  cp "$HARNESS/.env.example" "$DATA/.env"
+  cp "$ENGINE/.env.example" "$DATA/.env"
   echo "[loki] created harness_data/.env - paste ONE key, or none at all: Loki works without any"
 fi
 
@@ -51,4 +51,3 @@ if [ "$(uname -s)" = "Darwin" ] && [ "${LOKI_NO_APP_BUILD:-0}" != "1" ]; then
 else
   echo "[loki] Done. Start Loki with: $VENV/bin/python app/loki_app.py"
 fi
-echo "       Game work: the Godot dock still works - open this folder in Godot 4.8."

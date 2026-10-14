@@ -4,11 +4,11 @@ rem optional skill libraries, and Start menu + Desktop shortcuts.
 rem Safe to re-run. Needs Python 3.11+ (python.org; 3.13 recommended) and git on PATH.
 setlocal
 for %%I in ("%~dp0.") do set "REPO=%%~fI"
-set "HARNESS=%REPO%\addons\loki\harness"
+set "ENGINE=%REPO%\engine"
 set "DATA=%REPO%\harness_data"
 set "VENV=%DATA%\.venv"
 
-if not exist "%HARNESS%\loki.py" goto :noharness
+if not exist "%ENGINE%\loki.py" goto :noengine
 echo [loki] repo %REPO%
 
 rem Pick a Python 3.11+: the py launcher's 3.13/3.12/3.11 first, then python on PATH.
@@ -29,7 +29,7 @@ if not exist "%VENV%\Scripts\python.exe" (
 )
 echo [loki] installing dependencies
 "%VENV%\Scripts\python.exe" -m pip install --upgrade pip >nul 2>&1
-"%VENV%\Scripts\python.exe" -m pip install -r "%HARNESS%\requirements.txt" || goto :err
+"%VENV%\Scripts\python.exe" -m pip install -r "%ENGINE%\requirements.txt" || goto :err
 
 echo [loki] installing the Loki window (pywebview)
 "%VENV%\Scripts\python.exe" -m pip install -r "%REPO%\app\requirements.txt" || echo [loki] pywebview did not install; Loki will open in your browser instead
@@ -40,7 +40,7 @@ if not exist "%DATA%\vendor\ponytail" git clone --depth 1 https://github.com/Die
 if not exist "%DATA%\vendor\ECC" git clone --depth 1 https://github.com/affaan-m/ECC.git "%DATA%\vendor\ECC"
 
 if not exist "%DATA%\.env" (
-  copy /y "%HARNESS%\.env.example" "%DATA%\.env" >nul
+  copy /y "%ENGINE%\.env.example" "%DATA%\.env" >nul
   echo [loki] created harness_data\.env - paste ONE key, or none at all: Loki works without any
 )
 
@@ -51,11 +51,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\windows\make_s
 
 echo.
 echo [loki] Done. Open Loki from the Start menu or the Desktop shortcut (or run Loki.cmd).
-echo        Game work: the Godot dock still works - open this folder in Godot 4.8.
 exit /b 0
 
-:noharness
-echo [loki] Could not find addons\loki\harness\loki.py - run this from the Loki repo root.
+:noengine
+echo [loki] Could not find engine\loki.py - run this from the Loki repo root.
 exit /b 1
 :nopython
 echo [loki] Loki needs Python 3.11 or newer. Install Python 3.13 from python.org

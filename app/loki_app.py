@@ -1,11 +1,11 @@
 """Loki - the standalone desktop app.
 
-Starts the Loki engine (addons/loki/loki_bridge.py, the same agent the Godot dock
-uses) on 127.0.0.1:8766 and opens the Loki window on it. Godot is optional: it is
-only handed to the engine when one is found, so the game tools can light up.
+Starts the Loki engine (engine/loki_bridge.py) on 127.0.0.1:8767 and opens the Loki
+window on it. Godot is an optional capability for game projects: it is handed to the
+engine only when one is found, so the game tools can light up.
 
     python app/loki_app.py                 # the window (pywebview), or a browser fallback
-    python app/loki_app.py --workspace DIR # work in DIR instead of ~/Loki
+    python app/loki_app.py --workspace DIR # work in DIR instead of ~/LOKI Projects/Home
     python app/loki_app.py --print-url     # start the engine and print the window URL
 
 Standard library only, apart from the optional `pywebview` window.
@@ -36,8 +36,8 @@ if FROZEN:
 else:
     APP_DIR = Path(__file__).resolve().parent
     REPO = APP_DIR.parent
-HARNESS = REPO / "addons" / "loki" / "harness"
-ENGINE = REPO / "addons" / "loki" / "loki_bridge.py"
+HARNESS = REPO / "engine"
+ENGINE = REPO / "engine" / "loki_bridge.py"
 UI_DIR = APP_DIR / "ui"
 
 
@@ -56,8 +56,7 @@ STATE = DATA / "app"
 TOKEN_FILE = STATE / "engine.token"
 SETTINGS_FILE = STATE / "settings.json"
 LOG_FILE = STATE / "loki_app.log"
-# The Godot dock's engine owns 8766; the app keeps its own engine on 8767 so both
-# can run at once.
+# The app's engine port (the engine's own default, 8766, is left free for a CLI run).
 HOST, PORT = "127.0.0.1", int(os.environ.get("LOKI_APP_PORT", "8767") or 8767)
 BASE = f"http://{HOST}:{PORT}"
 ENGINE_START_TIMEOUT_S = 180
@@ -92,13 +91,34 @@ def save_settings(settings: dict) -> None:
 
 
 def choose_workspace(cli_value: str = "", settings: dict | None = None, env: dict | None = None) -> Path:
-    """--workspace, else the remembered one, else $LOKI_WORKSPACE, else ~/Loki."""
+    """--workspace, else the remembered one, else $LOKI_WORKSPACE, else ~/LOKI Projects/Home.
+
+    Never ~/Loki: a folder named after the app is easily mistaken for the app itself
+    (that is how a game project ended up looking like Loki)."""
     settings = settings if settings is not None else {}
     env = env if env is not None else os.environ
     for candidate in (cli_value, settings.get("workspace", ""), env.get("LOKI_WORKSPACE", "")):
         if str(candidate or "").strip():
             return Path(str(candidate)).expanduser().resolve()
-    return (Path.home() / "Loki").resolve()
+    return (Path.home() / "LOKI Projects" / "Home").resolve()
+
+
+def adopt_old_chats(workspace: Path, home: Path | None = None) -> list[str]:
+    """Bring chats from the old default workspace (~/Loki/.godot) into <workspace>/.loki.
+
+    Copies only when the new place has none yet; the old files are never touched."""
+    old_dir = (home or Path.home()) / "Loki" / ".godot"
+    copied = []
+    for name in ("loki_conversations.json", "loki_history.json"):
+        old, new = old_dir / name, workspace / ".loki" / name
+        if old.is_file() and not new.exists():
+            try:
+                new.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(old, new)
+                copied.append(name)
+            except OSError:
+                pass
+    return copied
 
 
 # --------------------------------------------------------------------- discovery
@@ -344,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = load_settings()
     workspace = choose_workspace(args.workspace, settings)
+    if adopt_old_chats(workspace):
+        log("brought your chats over from ~/Loki")
     if args.workspace:
         settings["workspace"] = str(workspace)
         save_settings(settings)

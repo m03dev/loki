@@ -38,7 +38,7 @@ concrete scope has grown against it.
   the game actually received, with a screenshot (`harness/loki_probe.gd`, `probe_scene`).
 - **2026-10-12 — Loki becomes a standalone desktop app.** The owner's direction: Loki is
   no longer a Godot product. It ships as its own app (`app/loki_app.py` + `app/ui/`,
-  `Loki.app` on macOS) over the same engine (`addons/loki/loki_bridge.py` +
+  `Loki.app` on macOS) over the same engine (`engine/loki_bridge.py` +
   `harness/`), which now runs without Godot. Godot becomes one optional creative
   adapter among several (Blender, Unreal, ...), active only when the workspace is a
   Godot project. Supersedes AD-1; see AD-10.
@@ -78,7 +78,7 @@ Godot and other creative-tool integrations; configuration/credential/secret hand
 filesystem and subprocess access; network access; tests, docs, and known failures;
 incomplete features and duplicated abstractions.
 
-If `addons/loki/harness/jev.py` exists, inspect it and trace how its outputs are
+If `engine/jev.py` exists, inspect it and trace how its outputs are
 consumed. If it does not, record that finding rather than assuming. Run the existing
 test suite if practical and safe, and record the exact commands and results.
 

@@ -35,7 +35,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-HARNESS = REPO / "addons" / "loki" / "harness"
+HARNESS = REPO / "engine"
 sys.path.insert(0, str(HARNESS))
 
 import experience  # noqa: E402

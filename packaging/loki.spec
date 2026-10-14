@@ -1,6 +1,6 @@
 # PyInstaller spec for the packaged Loki app (Windows build; works on macOS/Linux too).
 #
-#   pip install pyinstaller -r addons/loki/harness/requirements.txt -r app/requirements.txt
+#   pip install pyinstaller -r engine/requirements.txt -r app/requirements.txt
 #   pyinstaller packaging/loki.spec --noconfirm
 #
 # Result: dist/Loki/Loki.exe (onedir). The repo tree Loki reads at runtime (the agent's
@@ -24,13 +24,13 @@ for package in ("mcp", "openai", "pydantic", "pydantic_core", "httpx", "anyio", 
         pass
 
 # Loki's own tree, as files on disk (the engine imports the harness from source).
-for folder in ("addons/loki", "app/ui", "capabilities", "skills"):
+for folder in ("engine", "app/ui", "capabilities", "skills"):
     datas.append((str(ROOT / folder), folder))
 datas.append((str(ROOT / "LICENSE"), "."))
 
 a = Analysis(  # noqa: F821
     [str(ROOT / "app" / "loki_app.py")],
-    pathex=[str(ROOT / "addons" / "loki" / "harness"), str(ROOT / "addons" / "loki")],
+    pathex=[str(ROOT / "engine")],
     binaries=binaries,
     datas=datas,
     # Modules the harness imports at runtime; listing them pulls in their stdlib needs.
@@ -38,7 +38,7 @@ a = Analysis(  # noqa: F821
                             "loki_bridge", "loki", "workers", "policy", "manifests", "conductor",
                             "brain", "safe_exec", "knowledge", "federation", "skill_scan",
                             "interfaces", "decisions", "jev", "laya", "model_setup", "usage", "agents", "cli_agents", "capabilities",
-                            "sessions", "api_vault", "project_state", "repo_review", "godot_tools",
+                            "sessions", "api_vault", "project_state", "repo_review", "godot_tools", "godot_assets",
                             "ecc_sync", "experience", "peers", "peer_link"],
     excludes=["tkinter", "pytest"],
     noarchive=False,

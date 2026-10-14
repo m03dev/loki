@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import loki  # noqa: E402
 

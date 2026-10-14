@@ -1,67 +1,40 @@
-# Godot
-.godot/
-*.import
-export.cfg
-export_presets.cfg
+# Everything Loki writes at runtime lives in harness_data/ (or LOKI_DATA) - never commit it.
+harness_data/
+
+# Per-workspace chat state, if Loki is pointed at this checkout
+.loki/
 
 # Python
-harness_data/.venv/
 __pycache__/
 *.pyc
-
-# Vendored agent skills (fetched by setup.bat)
-harness_data/vendor/
+.venv/
 
 # Local secrets & runtime
-harness_data/.env
 *.token
 *.log
-
-# Test output created by the agent
-scenes/
-scripts/
 cloud/.env
-
-# Cloud runtime state (never commit - holds session tokens)
 cloud/sessions.json
 
-# Harness runtime state
-harness_data/loki_settings.json
-harness_data/loki_claude_mcp.json
+# Generated Godot API dump (optional game capability)
+engine/extension_api.json
+
+# Laya (npm @receptron/laya), if installed next to the engine
+engine/node_modules/
+engine/package.json
+engine/package-lock.json
+
+# Leftovers from the old Godot-addon layout and stray agent output
+.godot/
+addons/
+scenes/
+scripts/
+plugins/
+project.godot
+HANDOFF.md
 .git-rewrite/
 
-# Harness user data (memory + plan written at runtime)
-harness_data/memory.md
-harness_data/plan.md
-harness_data/workspace/
-
-# Godot API dump (generated on first run: godot --headless --dump-extension-api)
-addons/loki/harness/extension_api.json
-
-# stray files an agent run may create in the plugin repo itself
-plugins/
-
-# Optional local Godot MCP addons (installed for this dev project only;
-# not part of Loki - a consuming project still needs only addons/loki)
-addons/godot_ai/
-addons/godot_omni/
-HANDOFF.md
-
-# Laya local decision model (npm @receptron/laya + cached ONNX weights)
-harness_data/laya/
-harness_data/project_state.json
-harness_data/agent_sessions.json
-harness_data/api_vault_extra.json
-harness_data/apis_guru.json
-
-# Packaged builds
+# Packaged builds and models
 build/
 dist/
-# App runtime state (engine stdout, remembered settings)
-harness_data/app/
-
-# Runtime records (never commit): credits ledger, learning log, background jobs
-harness_data/usage.jsonl
-harness_data/experience/
-harness_data/workers/
-harness_data/train_venv/
+*.gguf
+*.safetensors

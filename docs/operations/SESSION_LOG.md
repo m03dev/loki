@@ -331,13 +331,13 @@ dock before it was better. Reverted.
   (`0001-systemone-offline-tests.patch` + README): a `Laya.fromParts()` test seam and
   offline tests for `systemOne`'s answer shaping. Verified in the clone: `yarn test`
   13 pass / 1 skip, `yarn typecheck` clean, `yarn lint` no errors.
-- Ported the injected-input discipline into Loki: `addons/loki/harness/loki_probe.gd` +
+- Ported the injected-input discipline into Loki: `engine/loki_probe.gd` +
   the `probe_scene` tool run a scene in a real window, feed it timed inputs (action/key/
   mouse/motion), hold each press for at least two PHYSICS frames, and report what the game
   actually received, plus a screenshot.
 
 **Files changed**
-- `addons/loki/harness/`: `laya.py`, `laya_driver.mjs`, `decisions.py`, `loki_probe.gd`,
+- `engine/`: `laya.py`, `laya_driver.mjs`, `decisions.py`, `loki_probe.gd`,
   `loki.py`, `.env.example`; plus `loki_bridge.py`, `tools/loki_doctor.py`,
   `tests/test_loki.py`, `.gitignore`.
 - `contrib/laya/0001-systemone-offline-tests.patch`, `contrib/laya/README.md` (new).
@@ -369,7 +369,7 @@ dock before it was better. Reverted.
 - Audited the request lifecycle, providers, Jev (present), Laya (absent), memory, tools
   and MCP gating, security posture, tests, and docs.
 - Ran the baseline suite: **200 offline checks green**.
-- **Phase 1 implementation:** added `command_policy()` to `addons/loki/harness/loki.py`
+- **Phase 1 implementation:** added `command_policy()` to `engine/loki.py`
   and wired it into `run_command` so destructive/remote-exec command strings are refused
   before the shell is reached. Pure, testable, overridable via `LOKI_COMMAND_POLICY=0`.
 - Added 18 tests (section "command policy (the run_command guard)"). Suite now
@@ -379,7 +379,7 @@ dock before it was better. Reverted.
   baseline, recovery and resume, session log, integration registry.
 
 **Files changed**
-- `addons/loki/harness/loki.py` (+ `command_policy`, `_DESTRUCTIVE_SNIPPETS`,
+- `engine/loki.py` (+ `command_policy`, `_DESTRUCTIVE_SNIPPETS`,
   `_REMOTE_EXEC_TOKENS`; `run_command` guarded).
 - `tests/test_loki.py` (+18 checks).
 - `docs/LOKI_MASTER_BLUEPRINT.md`, `docs/architecture/CURRENT_STATE.md`,

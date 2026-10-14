@@ -10,7 +10,7 @@ counts live jobs and turns amber when one is waiting for you.
 | **This computer** | Claude Code (`-p`) or Codex (`exec`) as a detached process | its own git branch (worktree) | the process keeps running; Loki re-attaches by pid |
 | **Virtual computer** | shell commands, or a computer-use agent, inside a cua VM | inside the VM only | no (the VM session ends) |
 
-Code: `addons/loki/harness/workers.py` (store, supervisor, three backends). Engine API:
+Code: `engine/workers.py` (store, supervisor, three backends). Engine API:
 `GET /jobs`, `POST /jobs`, `POST /jobs/cancel`, `POST /jobs/clear`, `GET /jobs/screenshot?id=`.
 Tests: `python tests/test_workers.py` (offline; herdr and cua are faked at their boundary).
 

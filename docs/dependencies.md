@@ -3,13 +3,13 @@
 Loki is two halves that talk over a loopback socket:
 
 1. **`addons/loki/`** — a GDScript editor plugin (the dock). Runs inside Godot.
-2. **`addons/loki/harness/loki.py`** — the Python agent, bundled INSIDE the addon.
+2. **`engine/loki.py`** — the Python agent, bundled INSIDE the addon.
    Started by the dock, it listens on `127.0.0.1:8766`.
 
 ## Runtime dependencies
 
 - **Godot 4.3+** (the dock uses `EditorDock`).
-- **Python 3.11+** with `mcp`, `openai`, `pydantic` (see `addons/loki/harness/requirements.txt`).
+- **Python 3.11+** with `mcp`, `openai`, `pydantic` (see `engine/requirements.txt`).
 - **Ollama** — optional, only if you run a local model.
 - **Node 22 + npm** — optional, only for the OmniRoute gateway.
 - **`git`** — used once by `setup.bat` to fetch agent skills.

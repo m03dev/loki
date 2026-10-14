@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import manifests  # noqa: E402
 
@@ -96,7 +96,7 @@ def export(data_dir: Path, workspace: Path, out: Path, repo: Path = REPO) -> lis
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=str(Path.home() / "Loki-Knowledge"))
-    parser.add_argument("--workspace", default=os.environ.get("LOKI_WORKSPACE") or str(Path.home() / "Loki"))
+    parser.add_argument("--workspace", default=os.environ.get("LOKI_WORKSPACE") or str(Path.home() / "LOKI Projects" / "Home"))
     parser.add_argument("--data", default=os.environ.get("LOKI_DATA") or str(REPO / "harness_data"))
     args = parser.parse_args(argv)
     files = export(Path(args.data), Path(args.workspace), Path(args.out))

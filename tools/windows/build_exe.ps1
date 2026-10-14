@@ -8,7 +8,7 @@ $venv = Join-Path $Repo "build\venv"
 if (-not (Test-Path "$venv\Scripts\python.exe")) { py -3 -m venv $venv }
 $py = "$venv\Scripts\python.exe"
 & $py -m pip install --upgrade pip | Out-Null
-& $py -m pip install pyinstaller -r addons\loki\harness\requirements.txt -r app\requirements.txt
+& $py -m pip install pyinstaller -r engine\requirements.txt -r app\requirements.txt
 if ($LASTEXITCODE -ne 0) { throw "dependency install failed" }
 & $py -m PyInstaller packaging\loki.spec --noconfirm --distpath dist --workpath build\pyi
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }

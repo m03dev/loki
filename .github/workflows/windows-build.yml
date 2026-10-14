@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller -r addons/loki/harness/requirements.txt -r app/requirements.txt
+          python -m pip install pyinstaller -r engine/requirements.txt -r app/requirements.txt
 
       - name: Offline tests
         run: |

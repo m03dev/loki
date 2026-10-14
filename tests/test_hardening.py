@@ -16,8 +16,8 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
-sys.path.insert(0, str(REPO / "addons" / "loki"))
+sys.path.insert(0, str(REPO / "engine"))
+sys.path.insert(0, str(REPO / "engine"))
 sys.path.insert(0, str(REPO / "tools"))
 
 import safe_exec  # noqa: E402
@@ -420,7 +420,7 @@ except Exception as exc:  # the agent needs mcp/openai installed
     have_loki = False
     check("the agent imports", False, exc)
 if have_loki:
-    src = (REPO / "addons" / "loki" / "harness" / "loki.py").read_text(encoding="utf-8")
+    src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
     check("no shell=True remains in the agent", "shell=True" not in src)
     Path(loki.WORKSPACE).mkdir(parents=True, exist_ok=True)
     out = loki.run_command("echo hi; echo injected")

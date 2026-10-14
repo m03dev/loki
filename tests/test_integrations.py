@@ -14,8 +14,8 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
-sys.path.insert(0, str(REPO / "addons" / "loki"))
+sys.path.insert(0, str(REPO / "engine"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import brain  # noqa: E402
 import conductor  # noqa: E402

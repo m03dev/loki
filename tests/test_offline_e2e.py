@@ -18,7 +18,7 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(REPO / "tests"), str(REPO / "addons" / "loki" / "harness"), str(REPO / "addons" / "loki")]
+sys.path[:0] = [str(REPO / "tests"), str(REPO / "engine"), str(REPO / "engine")]
 
 PASS: list[str] = []
 FAIL: list[str] = []

@@ -1,6 +1,6 @@
 ---
 name: loki-testing
-description: How to run and extend Loki's own test suites. Use before and after changing anything in addons/loki, app/, tools/ or capabilities/.
+description: How to run and extend Loki's own test suites. Use before and after changing anything in engine/, app/, tools/ or capabilities/.
 ---
 
 # Testing Loki

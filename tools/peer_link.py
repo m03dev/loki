@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import peers  # noqa: E402
 from peer_link import write_env  # noqa: E402

@@ -24,8 +24,8 @@ what it should become. Verified by reading the source and running the suite.
   - `addons/loki/chat/plugin.gd` — the chat dock plugin (independent of the screen plugin;
     they talk through node groups).
   - `addons/loki/bootstrap.py` — zero-setup launcher (creates the venv, starts the bridge).
-  - `addons/loki/loki_bridge.py` — local loopback HTTP bridge (port 8766, Bearer token).
-  - `addons/loki/harness/loki.py` — the agent: providers, tool loop, prompts (~3,100 lines).
+  - `engine/loki_bridge.py` — local loopback HTTP bridge (port 8766, Bearer token).
+  - `engine/loki.py` — the agent: providers, tool loop, prompts (~3,100 lines).
 
 ## 3. Request lifecycle (as implemented)
 
@@ -60,7 +60,7 @@ decides which tools are offered. Plan cannot write/run/delete.
 
 ## 5. Decision layer (Jev) — status: implemented, optional
 
-- `addons/loki/harness/jev.py` is a stdlib-only client for TypeSafe System One "typed
+- `engine/jev.py` is a stdlib-only client for TypeSafe System One "typed
   decisions". **It exists** and is consumed in two places:
   - **Risk gate** in `approve()`: Jev may judge a dangerous tool call safe enough to skip
     the prompt; it can never force an action, so the human path stays authoritative.

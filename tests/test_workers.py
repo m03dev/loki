@@ -1,4 +1,4 @@
-"""Offline tests for background jobs (addons/loki/harness/workers.py).
+"""Offline tests for background jobs (engine/workers.py).
 
 No herdr, Docker, cua or coding CLI needed: herdr and cua are faked at their boundary,
 and the local backend runs a tiny fake agent script for real.
@@ -18,8 +18,8 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
-sys.path.insert(0, str(REPO / "addons" / "loki"))
+sys.path.insert(0, str(REPO / "engine"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import workers  # noqa: E402
 
@@ -414,7 +414,7 @@ code, body3 = loki_bridge.job_action(state, "/jobs/clear", {})
 check("POST /jobs/clear removes finished jobs", code == 200 and body3["removed"] >= 1)
 check("no screenshot is a 404", loki_bridge.job_screenshot(state, {"id": ["nope"]})[0] == 404)
 
-bridge_src = (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8")
+bridge_src = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
 check("the engine starts the job supervisor", "workers.default_supervisor" in bridge_src and "state.jobs.start()" in bridge_src)
 ui = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
 check("the app has a Background jobs panel", 'id="jobs"' in ui and 'id="job-form"' in ui)

@@ -22,7 +22,7 @@ os.environ["LOKI_DATA"] = str(TMP / "mac")          # this process plays the Mac
 (TMP / "mac").mkdir()
 for key in ("LOKI_PEERS", "LOKI_PEER_SECRET", "LOKI_PEER_LISTEN", "LOKI_TRAINER_PEER", "LOKI_PEER_NAME"):
     os.environ.pop(key, None)
-sys.path.insert(0, str(REPO / "addons" / "loki" / "harness"))
+sys.path.insert(0, str(REPO / "engine"))
 
 import experience  # noqa: E402
 import peers  # noqa: E402

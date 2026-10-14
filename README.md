@@ -1,126 +1,99 @@
-# Loki
+# LOKI
 
-A desktop command center for AI work. Describe what you want and Loki reads your
-workspace, edits files, runs checks to verify its own work, and iterates until the job
-is done - asking you before anything risky.
+A living AI company on your own machines. Describe what you want; LOKI plans the work,
+picks the right agents and models, runs them (in the background, on the best machine),
+verifies the result, and learns from every verified success.
 
-## Install
+It is a standalone desktop app for macOS and Windows. It is **not** a Godot project; game
+work is one optional capability among many.
+
+## Requirements
+
+- Python **3.11+** (3.13 recommended) and git
+- macOS (Apple Silicon or Intel), Windows 10/11, or Linux
+- Optional: [Ollama](https://ollama.com) for local models, Node 20+ for Laya, an NVIDIA GPU
+  for training, Docker for cua virtual computers
+
+## Set up and run
 
 ```bash
 git clone https://github.com/m03dev/loki
 cd loki
-bash setup.sh      # macOS / Linux (needs Python 3.11+)
+bash setup.sh      # macOS / Linux
 setup.bat          # Windows
 ```
 
-Or download the packaged Windows app: the **Windows build** workflow attaches
-`Loki-windows.zip` to every run (no Python needed).
+Setup creates a private Python environment in `harness_data/.venv`, installs the
+dependencies, copies `engine/.env.example` to `harness_data/.env`, runs a health check and
+creates launchers:
 
-On macOS, setup builds **Loki.app** in `~/Applications`. On Windows, setup adds **Loki**
-to the Start menu and the Desktop (or run `Loki.cmd`). On Linux, start it with
-`harness_data/.venv/bin/python app/loki_app.py`.
-Details: [macOS](docs/operations/MACOS.md), [Windows](docs/operations/WINDOWS.md).
+| | How to start LOKI |
+| --- | --- |
+| macOS | **Loki.app** in `~/Applications` |
+| Windows | **Loki** in the Start menu or on the Desktop, or `Loki.cmd` |
+| Linux | `harness_data/.venv/bin/python app/loki_app.py` |
 
-## Using it
+LOKI works with no API key (a built-in free route, Claude Code / Codex subscriptions, or a
+local Ollama model). Add keys in `harness_data/.env` or in Settings > Connections.
 
-- **The Loki window** has your chats on the left and the conversation on the right.
-  Enter sends, Shift+Enter adds a line. Loki streams the tools it uses while it works;
-  Stop is always there.
-- **Modes.** Pick how much rope to give it:
-  - **Ask** answers a question and changes nothing.
-  - **Plan** reads, asks up to three clarifying questions, then writes a numbered plan.
-    It cannot write, run or delete anything.
-  - **Build** is the full agent: it edits, runs and verifies.
-- **Approve before it acts.** Risky tools stop and show you exactly what they will do,
-  with Allow and Deny.
-  A fixed policy engine refuses anything unsafe before you are even asked, commands run
-  without a shell, and add-ons stay off until you enable them
-  ([how](docs/architecture/CAPABILITIES_AND_POLICY.md)).
-- **Workspace.** Loki works in `~/Loki` unless you start it with
-  `--workspace /path/to/project` (remembered).
-- **Background jobs.** Hand work to Claude Code or Codex that keeps going while you do
-  something else - in a herdr workspace you can attach to, as a detached process, or
-  inside a virtual computer (cua). Host jobs work on their own git branch. See
-  [Background jobs](docs/operations/BACKGROUND_WORKERS.md).
-- **Loki is the conductor.** It keeps the plan and calls specialists by role - research
-  (Perplexity), reading pages (Crawl4AI / Scrapling / Firecrawl), a real browser (Browser
-  Use), long-term memory (Hindsight) - with Headroom and SkillSpector in the loop and Hermes
-  Agent as a background job. Each is off until you enable it.
-  See [the conductor](docs/architecture/CONDUCTOR.md).
-- **Brain.** An Obsidian-style map of everything Loki knows - memory, skills, capabilities,
-  jobs, project docs - and your own Obsidian vault (read-only, linked from the Brain view).
-- **Settings** has Connections (what Loki can reach - keys are never shown, and you can
-  connect a provider key), Tools, Memory and Capabilities.
-- **Game projects.** Godot is an optional adapter: point Loki at a folder with a
-  `project.godot` and the Godot tools switch on. The original Godot editor dock
-  (`addons/loki`) still works for in-editor use.
+Your projects live in `~/LOKI Projects/` (default `~/LOKI Projects/Home`). Start with
+`--workspace <folder>` to use another one; it is remembered.
 
-## Models
+To update: `git pull`, then run setup again.
 
-Loki works **with no key at all**: the built-in route needs no account and no card, and a
-local Ollama model always works. Point it at a free tier (Gemini, Groq, OpenRouter,
-SambaNova, Cloudflare Workers AI, Nous), use your own provider key, or use a Claude Code /
-Codex subscription as a provider.
+## Link your machines
 
-Choose `smart` to have Loki pick the best available and fail over automatically when a
-quota runs out. One provider going dark degrades a run - it does not end it.
+Run LOKI on your Mac and your PC and let them work together: the PC takes background jobs,
+trains on both machines' verified work, and can share its GPU. On the PC, Settings >
+Machines > "Let my other machines link to this one" (or
+`harness_data\.venv\Scripts\python.exe tools\peer_link.py pair --name pc`); paste the link
+code on the Mac. Full guide: [docs/operations/MACHINES.md](docs/operations/MACHINES.md).
 
-**Decisions, not just generation.** An optional decision layer answers typed
-`choice` / `score` / `noul` questions in the loop - to skip a prompt it is confident is
-safe, and to notice when it is stuck. **Jev** (hosted, key-gated) and **Laya**
-(local-first, no key: `github.com/receptron/laya`) both work; Laya is preferred when
-installed (`npm install --prefix harness_data/laya @receptron/laya`).
+## Self-improvement (PC with an NVIDIA GPU)
 
-## What it can do
-
-- Validates scenes, compiles scripts and actually runs scenes before claiming success.
-- Runs AND **drives** a scene: inject a timed sequence of inputs, confirm the game
-  actually received them, and screenshot the result (`probe_scene`).
-- 519 skills from six skill libraries (ECC, GodotPrompter, Superpowers,
-  awesome-gamedev, gamedev-plugin, agentic-gamedev), browsable from the dock, plus the
-  Ponytail "least code that works" standard.
-- Remembers lasting facts about you and your project (Settings -> Memory).
-- Live editor tools through a bundled Godot MCP bridge, with more capability domains
-  unlockable on demand.
-
-## Background agents and self-improvement
-
-Loki can hand sub-tasks to background agents (coder, tester, reviewer, researcher) that
-work in parallel and report back - start, watch and message them from the dock's
-**Background agents...** menu. It also logs how every request went, learns which
-providers actually deliver, and can fine-tune a small local model on an NVIDIA GPU from
-its own verified work, promoting it only when it beats the current one. See
-[docs/agents-and-self-improvement.md](docs/agents-and-self-improvement.md).
-
-## Requirements
-
-- Godot **4.8** (or newer 4.x).
-- Python **3.11+** - `setup.bat` / `setup.sh` creates the virtual environment for you.
-- Windows, Linux or macOS.
-
-## Development
-
-```bash
-harness_data/.venv/Scripts/python.exe tests/test_loki.py          # structural, offline
-harness_data/.venv/Scripts/python.exe tests/test_loki.py --live   # + MCP and a real model turn
-harness_data/.venv/Scripts/python.exe tests/test_workers.py        # background jobs, offline
-harness_data/.venv/Scripts/python.exe tests/test_hardening.py      # no-shell exec, policy, manifests, skills
-harness_data/.venv/Scripts/python.exe tests/test_integrations.py   # conductor, specialists, brain map
+```bat
+tools\setup_training.bat
+harness_data\.venv\Scripts\python.exe tools\self_improve.py schedule
 ```
 
-The agent lives in `addons/loki/harness/` (Python), the editor UI in
-`addons/loki/*.gd`, and the local bridge in `addons/loki/loki_bridge.py`. Run the offline
-tests before and after touching any of it.
+LOKI collects verified work, fine-tunes a small local model with QLoRA, evaluates it, and
+promotes it only when it beats the current one. See
+[docs/agents-and-self-improvement.md](docs/agents-and-self-improvement.md).
 
-## Contributing
+## Test
 
-Issues and pull requests are welcome. Please keep the offline test suite green, and add a
-test for anything you fix.
+```bash
+PY=harness_data/.venv/bin/python          # Windows: harness_data\.venv\Scripts\python.exe
+$PY tests/test_loki.py            # agent core, app, layout (offline)
+$PY tests/test_hardening.py       # no-shell exec, policy, manifests, skills
+$PY tests/test_integrations.py    # conductor, specialists, knowledge
+$PY tests/test_workers.py         # background jobs
+$PY tests/test_offline_e2e.py     # full offline run against a fake model server
+$PY tests/test_peers.py           # Mac <-> PC link
+```
+
+## Build the Windows app
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows\build_exe.ps1
+```
+
+This produces `dist\Loki-windows.zip` (no Python needed to run it). The **Windows build**
+workflow on GitHub builds the same zip on every push.
+
+## Layout
+
+| Folder | What it is |
+| --- | --- |
+| `engine/` | the Python core: agent loop (`loki.py`), loopback API (`loki_bridge.py`), routing, policy, workers, conductor, Laya, learning loop, peer link |
+| `app/` | the desktop window (`loki_app.py`, pywebview) and its UI (`app/ui/`) |
+| `capabilities/` | manifests for optional add-ons (Browser Use, cua, Crawl4AI, Laya, Ollama fleet...) |
+| `skills/` | LOKI's own skills |
+| `tools/` | doctor, peer link, self-improvement, training, packaging helpers |
+| `tests/` | offline test suites |
+| `docs/` | architecture, operations, decisions, security, session log |
+| `harness_data/` | your data at runtime: keys, memory, logs, jobs, learning (never committed) |
 
 ## License
 
 MIT - see [LICENSE](LICENSE).
-
-## Your machines together
-
-Link Loki on your Mac and your PC (Settings > Machines): the PC takes background jobs, trains on both machines' verified work, and shares its GPU. See [docs/operations/MACHINES.md](docs/operations/MACHINES.md).
