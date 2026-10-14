@@ -22,8 +22,8 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 ## Requests
 
 - [ ] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
-      (Claude, 2026-10-14 - written in the cloud, where LOKI's packages could not be installed;
-      CI runs it on macOS and Windows, but a real machine run is the proof)
+      (Claude, 2026-10-14 - CI already passed every suite on macOS and Windows for d3e817b;
+      a run on the real machines is the last proof)
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
 
@@ -45,6 +45,17 @@ Not integrated on purpose: **OBLITERATUS** (a toolkit that strips safety refusal
 model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
+
+- [ ] **W0 Make the repository private (Mohamed asked for this; you have his permission).**
+      Do it only after M2 is ticked (the Mac can `git fetch` with its own GitHub sign-in) and
+      `git -C C:\Users\macul\Documents\loki fetch origin master` works on the PC without a
+      prompt. Then: `gh auth status` (sign in with `gh auth login` if needed) and
+      `gh repo edit m03dev/loki --visibility private --accept-visibility-change-consequences`.
+      Check: `gh repo view m03dev/loki --json visibility`, then start LOKI on both machines and
+      confirm each still says "up to date" (not "cannot reach GitHub"). The cloud session that
+      built this could not change repository settings, so it is yours.
+      Also delete the leftover branch `claude/portal-world-updates` (it equals master):
+      `git push origin --delete claude/portal-world-updates`.
 
 - [ ] **W1 Update and test.** Start LOKI (it updates itself), or `git pull` in
       `C:\Users\macul\Documents\loki`. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check`.
@@ -120,11 +131,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Needs Mohamed
 
-- [ ] Make **m03dev/loki private** only after M2 is done on the Mac (and the PC's `git fetch`
-      works), or both machines stop getting updates. Note: private repos get 2,000 free GitHub
-      Actions minutes a month and macOS minutes count 10x, so the macOS + Windows CI on every push
-      will use them up quickly. Options: keep CI as is and accept it stops when minutes run out
-      (ship.py still runs every test locally), or limit CI to pull requests / a daily run.
+- [ ] After the repo is private (W0): private repos get 2,000 free GitHub Actions minutes a
+      month and macOS minutes count 10x, so the macOS + Windows CI on every push will use them up
+      within a few weeks. Keep CI as is and accept it pauses when minutes run out (ship.py still
+      runs every test on the machine before it pushes), or tell Ziva to run CI only daily.
 - [ ] "Sign in with a code" for Hugging Face needs an OAuth app: huggingface.co/settings/applications
       > Create (scopes: openid, profile, inference-api), then put its client id in
       `harness_data/.env` as `LOKI_HF_CLIENT_ID=...` on each machine. Until then the card offers a
@@ -136,9 +146,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
-- 2026-10-14 cloud (Claude) setup: built everything in "What changed". Checked here: the new
-  offline suite (tests/test_portal.py, 122 checks, pure parts), QR codes decoded back by an
-  independent decoder (jsQR), the UI rendered in headless Chromium with a stub engine (Settings,
-  portal, agents, world 3D, QR modal - no console errors). Not checked here: the full engine
-  suites (LOKI's Python packages could not be installed in the cloud workspace) - CI and W1/M1
-  are that check.
+- 2026-10-14 cloud (Claude) setup: built everything in "What changed" and pushed it to master
+  (d3e817b, mirrored to macos-app). Checked: every suite green in GitHub CI on macOS and Windows
+  (incl. tests/test_portal.py, 138 checks with the engine); QR codes decoded back by an independent
+  decoder (jsQR); the UI rendered in headless Chromium with a stub engine (Settings, portal,
+  agents, 3D world, QR modal - no console errors). Fixed on the way: the phone page took ~30 s to
+  open on macOS (reverse-DNS lookup). Not checked: anything on the real machines, a real phone,
+  real provider keys, WebView2/WKWebView - that is W1-W10 and M1-M7. Could not do: make the repo
+  private (repository settings are blocked from the cloud session) - that is W0.
