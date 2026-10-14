@@ -261,7 +261,8 @@ ho = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: (handoff_keys.append((
                          "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
 code, page = fetch(ho.url)
 check("the phone page is a form, served once to the private network", code == 200 and "Send a key to LOKI" in page
-      and "<form" in page, (code, page[-260:], ho.url, ho.expired(), time.time() - ho.created))
+      and "<form" in page, ("elapsed=%.3f ttl=%r result=%r created=%r now=%r" % (time.time() - ho.created, ho.ttl_s,
+                                                                                ho.result, ho.created, time.time()), code))
 code, reply = fetch(ho.url, data=b"key=AIza-test")
 check("posting the key connects it", code == 200 and handoff_keys == [("gemini", "AIza-test")] and "&#10003;" in reply,
       (code, reply[-260:], handoff_keys))
