@@ -473,8 +473,14 @@ if have_loki:
     check("a never-pulled Ollama model fails over in smart mode",
           loki._is_limit_error(Exception("[model missing] Ollama does not have qwen3:8b yet.")))
     loki._OLLAMA_MODELS_CACHE.update(at=time.time(), models=["qwen2.5-coder:7b"])
-    check("an Ollama model that is not pulled is not 'configured'",
-          not loki.provider_configured("local") and loki.provider_configured("local-coder"))
+    # Hermetic: this checks the pulled-model rule, not whether a server runs on this box.
+    _saved_local_ready = loki.local_ready
+    loki.local_ready = lambda: False
+    try:
+        check("an Ollama model that is not pulled is not 'configured'",
+              not loki.provider_configured("local") and loki.provider_configured("local-coder"))
+    finally:
+        loki.local_ready = _saved_local_ready
     loki._OLLAMA_MODELS_CACHE.update(at=time.time(), models=None)
     check("the knowledge tool refuses escapes", loki.knowledge_tool("read", "viking://memory/../../x").startswith("error"))
 

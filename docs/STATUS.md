@@ -43,7 +43,7 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Item | Status | Where / evidence |
 | --- | --- | --- |
 | Real-state API for the world | Tested | `GET /world`, `GET /events`, docs/WORLD.md |
-| Godot client with the existing characters | Proposed | separate Godot project; brief for Ziva in docs/WORLD.md |
+| 3D world in the app (plain WebGL) | Implemented | `app/ui/world.js`; WebView2/WKWebView check is ZIVA W6/M6 |
 | Characters only act on real events | Tested (engine side) | `events.world` builds agents from jobs/teams/events only |
 | Nordic LOKI identity (L-geometry logo, navy + cyan/emerald) | Proposed | not in the app yet |
 
@@ -81,7 +81,7 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Agent builder (skills, tools, harness, fallback, home machine, draft) | Tested | `agents.py`, `/agents/launch`; peer placement live run pending |
 | media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach) | Implemented | runners + manifests; real runs are ZIVA W5 |
 | LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
-| Godot 3D world client | Proposed | ZIVA W9 |
+| Native (non-web) world client | Not planned | the world stays in the app (WebGL) |
 
 ## Research the vision asks for (not code)
 

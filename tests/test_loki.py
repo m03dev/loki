@@ -89,6 +89,13 @@ import loki  # noqa: E402
 # in a temp data dir.
 loki.EXPERIENCE_ENABLED = False
 loki.LEARN_ROUTING = False
+# Hermetic: harness_data/.env (loaded above) can set OPENROUTER_MODEL to a PAID model, which
+# makes "openrouter" metered and changes smart-mode routing and the metering checks. The
+# offline tests must see the documented free default, not this machine's config.
+loki.MODELS["openrouter"] = loki.ModelConfig(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=loki.MODELS["openrouter"].api_key, model="poolside/laguna-s-2.1:free")
+loki.ALLOW_PAID = False
 # ...and never add test calls to the user's real credits ledger.
 import tempfile as _usage_tf  # noqa: E402
 loki.USAGE = loki.usage.Ledger(Path(_usage_tf.mkdtemp()) / "usage.jsonl")
@@ -2090,7 +2097,13 @@ section("provider failover inside a real turn (routing regression)")
 import types as _types  # noqa: E402
 
 _fo_saved = (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools,
-             loki.model_name, set(loki._SMART_FAILED), list(loki.messages), loki.MODEL_RETRIES)
+             loki.model_name, set(loki._SMART_FAILED), list(loki.messages), loki.MODEL_RETRIES,
+             loki.local_ready, loki.online, loki.PREFER)
+# Hermetic: a model server that happens to run on this machine (Ollama, LM Studio,
+# llama.cpp) must not change what this routing test sees. CI has none; a dev box does.
+loki.local_ready = lambda: False
+loki.online = lambda *a, **k: True
+loki.PREFER = "online"
 
 
 def _fo_run(mode, ready, fail_on, status=429, text="You exceeded your current quota"):
@@ -2169,7 +2182,8 @@ try:
     check("an HTTP 400 still fails over (existing behaviour kept)", _out == "answer from gemini", (_t, _out))
 finally:
     (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools,
-     loki.model_name, _fo_failed, _fo_messages, loki.MODEL_RETRIES) = _fo_saved
+     loki.model_name, _fo_failed, _fo_messages, loki.MODEL_RETRIES,
+     loki.local_ready, loki.online, loki.PREFER) = _fo_saved
     loki._SMART_FAILED.clear()
     loki._SMART_FAILED.update(_fo_failed)
     loki.messages[:] = _fo_messages
@@ -2497,7 +2511,11 @@ check("the tuned model exists but is not routed until promoted",
 # End to end through the real request wrappers.
 _s_saved = (loki.EXPERIENCE_ENABLED, loki.WORKSPACE, loki.check_script, loki.save_history, loki.todo_clear,
             loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
-            list(loki.messages), loki.MODEL_RETRIES, loki.AGENT_MODE)
+            list(loki.messages), loki.MODEL_RETRIES, loki.AGENT_MODE,
+            loki.local_ready, loki.online, loki.PREFER)
+loki.local_ready = lambda: False   # hermetic: ignore this machine's own model servers
+loki.online = lambda *a, **k: True
+loki.PREFER = "online"
 _s_ws = Path(_stf.mkdtemp())
 
 
@@ -2570,7 +2588,8 @@ try:
 finally:
     (loki.EXPERIENCE_ENABLED, loki.WORKSPACE, loki.check_script, loki.save_history, loki.todo_clear,
      loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
-     _s_msgs, loki.MODEL_RETRIES, loki.AGENT_MODE) = _s_saved
+     _s_msgs, loki.MODEL_RETRIES, loki.AGENT_MODE,
+     loki.local_ready, loki.online, loki.PREFER) = _s_saved
     loki.messages[:] = _s_msgs
     loki._task_files.clear()
 

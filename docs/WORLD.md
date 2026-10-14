@@ -1,13 +1,11 @@
-# LOKI World - agents as characters in the Godot world
+# LOKI World - agents as characters, in the app
 
-The owner's Godot world (with its existing assets, rigs and animations) shows LOKI's real
-agents as characters. It is a **viewer and control surface, not the brain**: LOKI's engine
-runs the agents, decisions, permissions and routing; the world draws what the engine reports.
-If Godot closes, nothing stops. (docs/VISION.md section 3.)
-
-The world is its **own Godot project, outside this repository** (for example
-`~/LOKI Projects/LOKI World`). This repository stays free of Godot files (AGENTS.md); it
-provides the API below.
+The LOKI World shows LOKI's real agents as characters in a small **3D scene inside the LOKI
+app** (plain WebGL, `app/ui/world.js`): faintly behind the home screen, and full size in
+Settings > LOKI World (`LOKI_WORLD=background|panel|off`). It is a **viewer, not the brain**:
+LOKI's engine runs the agents, decisions, permissions and routing; the world draws what the
+engine reports. There is no Godot project; the world lives in the app.
+(docs/VISION.md section 3.)
 
 ## Connecting
 
@@ -66,20 +64,8 @@ An **event** (types: `agent.status`, `agent.message`, `task.created`, `task.assi
 
 A character never talks, works or celebrates unless an event says so.
 
-## Brief for Ziva (paste into Ziva inside the world's Godot project)
+## Godot brief - cancelled
 
-> Build the LOKI World client in this Godot project, keeping the existing art, rigs,
-> animations and the Nordic LOKI look (midnight navy, cyan-to-emerald accents). Read
-> `docs/WORLD.md` from the LOKI repo (`~/Documents/loki` on the Mac,
-> `C:\Users\macul\Documents\loki` on the PC) and follow it exactly:
-> 1. A `LokiClient` autoload: reads the token file, polls `GET /world` every 5 s, and runs a
->    loop on `GET /events?after=<cursor>&wait=20` with HTTPRequest, emitting a Godot signal
->    per event. Re-read the token on 401; retry quietly when LOKI is closed.
-> 2. One character per agent from `/world`, using the existing rigs; place stations
->    (hall, library, drafting table, workshop, test bench, review desk, terminal) in the scene.
-> 3. Map events to animations exactly as the table in WORLD.md says; speech bubbles only for
->    `agent.message`.
-> 4. A small chat box that sends `POST /chat`, and an approval prompt for `approval.required`.
-> 5. No orchestration logic in Godot: if LOKI is closed, show "LOKI is not running".
-> Test by starting LOKI, asking it for something big (it starts a team), and watching the
-> characters move only when events arrive.
+An earlier brief asked Ziva to build this world as a **Godot** client in its own Godot
+project. That is cancelled: the world lives **in the app** (plain WebGL, `app/ui/world.js`),
+never Godot. The current checks are in ZIVA_TASKS.md (W6 on Windows, M6 on the Mac).

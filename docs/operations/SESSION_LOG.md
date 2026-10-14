@@ -4,6 +4,20 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-14 (session 15) - Repo private, Godot story gone, hermetic suites
+
+- master fast-forwarded onto the session-14 branch (portal, sign-in/QR, agent builder, 3D
+  world, Update everything, specialists) - linear history, no merge commit.
+- m03dev/loki is **private** now; the Mac needs `gh auth login` (ZIVA M2).
+- Removed every "the world is a Godot project" reference (README, docs/WORLD.md,
+  docs/STATUS.md, HANDOFF, docs/ARCHITECTURE.md); cancelled ZIVA_TASKS W9 (Godot world
+  client); deleted the leftover Godot `addons/`.
+- test_loki and test_hardening were failing on the PC only (Ollama + llama-server running,
+  and `.env` OPENROUTER_MODEL = deepseek/deepseek-v4.1-flash, a paid model, which makes
+  `openrouter` metered and changes smart routing); made hermetic. All 11 suites green.
+- `docs/LOKI_BLUEPRINT.pdf` added: improved prompt, research (free hosts, Hermes tool
+  harness, Qwen image, OBLITERATUS excluded), plan, and the Ziva Windows/Mac task lists.
+
 ## 2026-10-14 (session 14) - Portal, sign-in, Update everything, agent builder, 3D world
 
 - Connections portal (providers_catalog.py, portal_api.py, settings.js): 43 providers with

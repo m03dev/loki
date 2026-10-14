@@ -93,10 +93,12 @@ never build agents by hand.
 
 ## LOKI World
 
-Your Godot world can show LOKI's real agents as characters: the engine serves `GET /world`
-(who is there and what they do) and `GET /events` (everything that happens, in order). The
-world is its own Godot project; this repository stays Godot-free. Protocol and a brief for
-Ziva: [docs/WORLD.md](docs/WORLD.md).
+Your agents as characters in a small **3D world inside the app** - no Godot, no other
+project. The engine serves `GET /world` (who is there, where they work and what they are
+doing) and `GET /events` (everything that happens, in order); the world is a viewer, never
+the brain - a character only moves, works or speaks when an event says so. It is drawn with
+plain WebGL, faintly behind the home screen and full size in Settings > LOKI World. Protocol:
+[docs/WORLD.md](docs/WORLD.md).
 
 ## Spending
 

@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-14 (session 14).
+Last updated: 2026-10-14 (session 15).
 
 ## The machines
 
@@ -41,6 +41,21 @@ one fix round, stops when a stage cannot finish. Verified offline (tests/test_te
 live on the engine API without a model (the team stopped correctly at the architect).
 Not yet: placing team stages on the PC over the peer link; a real model run end to end.
 
+## Session 15 (2026-10-14): repo private, Godot story removed, suites hermetic
+
+Ziva (Windows), after pulling the session-14 branch into master:
+- master fast-forwarded onto `claude/portal-world-updates` (portal, sign-in/QR, agent builder,
+  3D world, Update everything, specialists).
+- `m03dev/loki` made **private** (owner's request). The Mac must run `gh auth login` (ZIVA M2)
+  or it stops getting updates; the PC is already authenticated.
+- The "project is still in Godot" confusion removed: README, docs/WORLD.md, docs/STATUS.md,
+  HANDOFF and docs/ARCHITECTURE.md now say the world is in the app (plain WebGL); the Godot
+  task ZIVA_TASKS W9 is cancelled; the leftover Godot `addons/` deleted.
+- test_loki + test_hardening made hermetic: they failed only on a machine that runs Ollama /
+  llama-server and whose `.env` sets OPENROUTER_MODEL to a paid model. All 11 suites pass; no
+  assertion was changed.
+- `docs/LOKI_BLUEPRINT.pdf`: the improved master prompt + research + plan + both task lists.
+
 ## Session 14 (2026-10-14): portal, sign-in, Update everything, agent builder, 3D world
 
 Built in the cloud by Claude; see ZIVA_TASKS.md for the full list and the machine checks.
@@ -67,7 +82,7 @@ Built in the cloud by Claude; see ZIVA_TASKS.md for the full list and the machin
 - Machines advertise real capabilities in hello.
 - Spending policy: no automatic paid routing unless LOKI_ALLOW_PAID=1; daily dollar cap.
 - Fixed: the goal loop's endless "premature DONE" path.
-- Next for the world: Ziva builds the Godot client from docs/WORLD.md in the world project.
+- The world is in the app (WebGL 3D); there is no Godot project. Checks: ZIVA_TASKS.md W6/M6.
 
 ## Done earlier (see docs/operations/SESSION_LOG.md)
 

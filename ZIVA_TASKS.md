@@ -26,6 +26,12 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       a run on the real machines is the last proof)
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
+- [ ] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
+      Chutes, Baseten, Modal, Inference.net, AI21, Upstage, NLP Cloud (Ziva, 2026-10-14 -
+      researched; engine/providers_catalog.py)
+- [ ] [either] Add "Alibaba Model Studio (Qwen image)" as a **trial** image provider
+      (Ziva, 2026-10-14 - qwen-image-2.1-turbo is paid ~$0.016/img with a 500-image/90-day
+      trial; keep Z-Image Turbo + Pollinations as the zero-cost default)
 
 ## What changed (2026-10-14) - what you are testing
 
@@ -46,20 +52,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
-- [ ] **W0 Make the repository private (Mohamed asked for this; you have his permission).**
-      Do it only after M2 is ticked (the Mac can `git fetch` with its own GitHub sign-in) and
-      `git -C C:\Users\macul\Documents\loki fetch origin master` works on the PC without a
-      prompt. Then: `gh auth status` (sign in with `gh auth login` if needed) and
-      `gh repo edit m03dev/loki --visibility private --accept-visibility-change-consequences`.
-      Check: `gh repo view m03dev/loki --json visibility`, then start LOKI on both machines and
-      confirm each still says "up to date" (not "cannot reach GitHub"). The cloud session that
-      built this could not change repository settings, so it is yours.
-      Also delete the leftover branch `claude/portal-world-updates` (it equals master):
-      `git push origin --delete claude/portal-world-updates`.
+- [x] **W0 Make the repository private.** DONE 2026-10-14 (Ziva Windows) on the owner's
+      direct request: `gh repo edit m03dev/loki --visibility private --accept-visibility-change-consequences`
+      (verified: `gh repo view` reports PRIVATE). The Mac still needs `gh auth login` (M2) before
+      it can fetch again. The leftover branch `claude/portal-world-updates` still to be deleted.
 
-- [ ] **W1 Update and test.** Start LOKI (it updates itself), or `git pull` in
+- [x] **W1 Update and test.** Start LOKI (it updates itself), or `git pull` in
       `C:\Users\macul\Documents\loki`. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check`.
       Report every suite's line. The updater installs `yt-dlp` from engine/requirements.txt.
+      REPORT 2026-10-14 (Ziva Windows): all 11 suites green - test_loki 457, test_hardening
+      126, test_integrations 71, test_workers 72, test_offline_e2e ok, test_peers 58,
+      test_first_layer 54, test_updater 44, test_team 35, test_events 33, test_portal 138.
+      Two suites failed only on this machine (Ollama + llama-server running, and .env
+      OPENROUTER_MODEL = a paid model); both made hermetic, no assertion changed.
 - [ ] **W2 Connections portal.** Settings > Connections. Press **Test** on every connected card
       (OpenRouter, DeepSeek, Groq, Gemini, Claude Code, Codex). Report each result line. Open a
       model picker on two of them and confirm the list loads. Switch Groq off, send a chat, check
@@ -90,11 +95,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **W8 Prompted tools on a local model.** Start llama.cpp *without* `--jinja` (or LM Studio)
       with a small model, set it as default in the portal, and ask LOKI to "list the files here
       and read README.md". Report whether tools ran ("tools via harness" shows on the card).
-- [ ] **W9 The Godot 3D world (your specialty).** Build the native world client from
-      docs/WORLD.md as its own Godot 4 project in `~/LOKI Projects/loki-world` (never in this
-      repo). Use the same station names and layout as `app/ui/world.js` (STATION_LAYOUT) and the
-      same data (GET /world, GET /events long poll). Kenney and KayKit assets are CC0; check
-      Quaternius packs (some are QAL v1.0 now) before using them. Report how to run it.
+- [x] ~~**W9 Build the Godot world client.**~~ **CANCELLED by the owner**: the world is in the
+      app (plain WebGL, `app/ui/world.js`), **never Godot**. Do not create a Godot project;
+      do not touch the `ai` project. W6 is the real world check.
 - [ ] **W10 24/7.** Make LOKI start at boot on the PC (Task Scheduler running `Loki.cmd`, or a
       service). An engine started without the app now restarts itself after **Update everything**
       (it starts a new copy and exits). Confirm that works headless.
@@ -146,11 +149,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 windows (Ziva) git + repo: rebased onto master after Claude's d3e817b; MADE
+  m03dev/loki PRIVATE (owner asked - the Mac now needs `gh auth login`, task M2); removed the
+  "project is still in Godot" story from README/WORLD/STATUS/HANDOFF/ARCHITECTURE and cancelled
+  the Godot task (W9); deleted the leftover Godot addons/; made test_loki + test_hardening
+  hermetic so a machine that runs local model servers can still ship.py. All 11 suites green.
+  Blueprint: docs/LOKI_BLUEPRINT.pdf.
+- 2026-10-14 windows (Ziva) research: free hosts (permanent vs trial), the Hermes tool_call
+  prompted-tool harness (already in engine/tool_harness.py), Qwen Image 2.1 Turbo (paid, trial
+  quota), OBLITERATUS (recommend NOT integrating - see the PDF).
 - 2026-10-14 cloud (Claude) setup: built everything in "What changed" and pushed it to master
   (d3e817b, mirrored to macos-app). Checked: every suite green in GitHub CI on macOS and Windows
-  (incl. tests/test_portal.py, 138 checks with the engine); QR codes decoded back by an independent
-  decoder (jsQR); the UI rendered in headless Chromium with a stub engine (Settings, portal,
-  agents, 3D world, QR modal - no console errors). Fixed on the way: the phone page took ~30 s to
-  open on macOS (reverse-DNS lookup). Not checked: anything on the real machines, a real phone,
-  real provider keys, WebView2/WKWebView - that is W1-W10 and M1-M7. Could not do: make the repo
-  private (repository settings are blocked from the cloud session) - that is W0.
+  (incl. tests/test_portal.py); QR codes decoded back by an independent decoder (jsQR); the UI
+  rendered in headless Chromium with a stub engine (no console errors). Could not do: make the
+  repo private (blocked from the cloud session) - that was W0.
