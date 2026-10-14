@@ -4,6 +4,36 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 10) - Background agents, self-improvement, MCP verification, paid budget
+
+Cloud clone again; the linked computer was the Mac mini, so nothing ran on the 3070 Ti.
+
+**Work completed**
+- MCP edits (write_script, create_scene, settings tools...) join the verification set.
+- Per-request usage and a budget for metered providers only (`LOKI_PAID_MAX_CALLS`).
+- Background agents (`workers.py`, `worker.py`): one process per goal, roles, delegation
+  tools, inbox messages, cancel, bridge `/workers*`, a supervisor thread, and a dock
+  dialog ("Background agents..."). A worker can never approve a dangerous tool.
+- Self-improvement (`experience.py`, `tools/self_improve.py`, `tools/train_lora.py`,
+  `tools/setup_training.*`): outcome log, tier-bound learned routing, verified-only
+  training data, QLoRA on Qwen3-4B, promote-only-if-better gate, nightly schedule.
+- Repo evaluation recorded in INTEGRATION_REGISTRY (Unsloth first, Cua Driver second;
+  OpenViking/Paperclip pattern-only; Graphiti rejected for now).
+
+**Tests:** 465 passed, 0 failed (+89). Includes a REAL worker subprocess with a scripted
+model, the bridge over real HTTP on a throwaway port, and the evaluator against a fake
+Ollama. The suite disables experience recording globally so it never touches a real log.
+
+**Not verified here:** GPU training (no GPU), the GDScript dialog in a running editor
+(parses with gdtoolkit only), `--live`.
+
+**Next concrete actions**
+1. On the PC: `git pull`, `tools\setup_training.bat`, `self_improve.py status`, `schedule`.
+2. Open the dock, start a background agent, confirm the dialog in Godot.
+3. Cua Driver as an opt-in MCP server (the brief's computer-use adapter).
+
+---
+
 ## 2026-10-13 (session 9) - Routing and verification: confirmed defects, fixed
 
 Worked from a fresh cloud clone of `master` (`b0c805d`), not the Windows checkout, so

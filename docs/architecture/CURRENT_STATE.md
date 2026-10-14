@@ -115,6 +115,15 @@ decides which tools are offered. Plan cannot write/run/delete.
 - Without Godot every checker says NOT VERIFIED (never INVALID, never OK).
 - Not covered: runtime behaviour, and edits made through MCP tools.
 
+## 8c. Background agents and self-improvement (session 10)
+
+- `harness/workers.py` + `worker.py`: background agents, one process per goal; roles
+  coder/tester (build) and reviewer/researcher (plan); delegation tools for the model;
+  bridge `/workers*`; dock dialog. See `docs/agents-and-self-improvement.md`.
+- `harness/experience.py`: outcome log, learned routing within cost tiers, verified-only
+  trajectories; `tools/self_improve.py` trains/evaluates/promotes a local model.
+- Paid providers are capped per request (`LOKI_PAID_MAX_CALLS`); usage on `/health`.
+
 ## 9. Security posture (what exists)
 
 - **Filesystem sandbox**: every path goes through `resolve_in_workspace()`, which rejects
