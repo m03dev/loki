@@ -67,7 +67,8 @@ def run_tests(repo: Path, say=print) -> bool:
                 say("      " + line.strip())
             if os.getenv("GITHUB_ACTIONS"):
                 # Shown on the run's page and readable through the API without the full log.
-                detail = " | ".join(f.strip() for f in fails[:6]) or out[-600:].replace("\n", " | ")
+                detail = (" | ".join(f.strip() for f in fails if f.strip().startswith("FAIL"))[:900]
+                          + " || tail: " + out[-900:].replace("\n", " | "))
                 print("::error title=%s failed::%s" % (suite, detail[:1500]), flush=True)
     return ok
 
