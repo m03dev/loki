@@ -2499,6 +2499,260 @@ finally:
     loki.messages[:] = _pb_msgs
     loki.REQUEST_USAGE.clear()
 
+
+section("background agents: workers, delegation, messages")
+import tempfile as _wtf  # noqa: E402
+import workers as _wk  # noqa: E402
+
+_w_root = Path(_wtf.mkdtemp())          # a private data dir: never the user's harness_data
+_w_ws = Path(_wtf.mkdtemp())            # a private workspace: never a real game project
+_w_saved_env = {k: os.environ.get(k) for k in ("LOKI_DATA",)}
+_w_saved_max = _wk.MAX_CONCURRENT
+os.environ["LOKI_DATA"] = str(_w_root)
+
+# pure job store
+_j = _wk.create("write a hello script", role="coder")
+check("a job is queued with its role", _j["status"] == "queued" and _j["role"] == "coder")
+check("an unknown role falls back to coder", _wk.create("x", role="wizard")["role"] == "coder")
+_raised = False
+try:
+    _wk.create("   ")
+except ValueError:
+    _raised = True
+check("an empty goal is refused", _raised)
+_d1 = _wk.create("child", parent=_j["id"])
+_d2 = _wk.create("grandchild", parent=_d1["id"])
+_raised = False
+try:
+    _wk.create("too deep", parent=_d2["id"])
+except ValueError:
+    _raised = True
+check("delegation depth is capped", _raised and _d2["depth"] == 2)
+check("children are listed by parent", [c["id"] for c in _wk.children(_j["id"])] == [_d1["id"]])
+check("a queued job can be cancelled", _wk.cancel(_d2["id"]) and _wk.load(_d2["id"])["status"] == "cancelled")
+check("a message cannot go to a finished job", not _wk.send_message(_d2["id"], "hi"))
+for _old in _wk.all_jobs():
+    _wk.update(_old["id"], status="cancelled")
+
+# the concurrency cap, with a launcher that starts nothing real
+_wk.MAX_CONCURRENT = 2
+_launched = []
+for _n in range(3):
+    _wk.create("job %d" % _n)
+_started = _wk.start_pending(launcher=lambda job, root: (_launched.append(job["id"]) or os.getpid()))
+check("no more than LOKI_WORKERS_MAX run at once", len(_started) == 2 and len(_launched) == 2, _started)
+check("the rest stay queued", sum(1 for j in _wk.all_jobs() if j["status"] == "queued") == 1)
+_wk.update(_started[0], pid=999999)
+check("a worker whose process died is marked failed",
+      _started[0] in _wk.reap() and _wk.load(_started[0])["status"] == "failed")
+for _old in _wk.all_jobs():
+    if _old["status"] not in _wk.FINISHED:
+        _wk.update(_old["id"], status="cancelled")
+
+# inbox
+_ib = _wk.create("listen")
+_wk.update(_ib["id"], status="working")
+check("a message reaches a running worker", _wk.send_message(_ib["id"], "use the blue texture", sender="loki"))
+_got = _wk.drain_inbox(_ib["id"])
+check("the worker reads it once", [m["text"] for m in _got] == ["use the blue texture"] and not _wk.drain_inbox(_ib["id"]))
+_wk.update(_ib["id"], status="cancelled")
+
+# Plan mode cannot start or steer agents; it can read their status.
+_w_mode = loki.AGENT_MODE
+loki.set_mode("plan")
+_w_plan = {t["function"]["name"] for t in loki.model_tool_schemas()}
+loki.set_mode(_w_mode)
+check("plan mode cannot delegate or steer agents", not (_w_plan & loki.DELEGATING), sorted(_w_plan & loki.DELEGATING))
+check("plan mode can still check on agents", "check_tasks" in _w_plan)
+check("build mode offers delegation", "delegate_task" in loki.MODEL_TOOL_NAMES)
+
+# END TO END: a real worker PROCESS with a scripted model. The shim patches the model
+# client inside the child (production code has no test hooks), then runs worker.py.
+_shim_dir = Path(_wtf.mkdtemp())
+(_shim_dir / "loki_test_shim.py").write_text('''
+import asyncio, json, os, sys, types
+sys.path.insert(0, os.environ["LOKI_TEST_HARNESS"])
+import loki
+steps = json.loads(os.environ["LOKI_TEST_SCRIPT"])
+
+class C:
+    async def create(self, **kw):
+        step = steps.pop(0) if steps else ["say", "DONE: (script ended)"]
+        if step[0] == "tool":
+            fn = types.SimpleNamespace(name=step[1], arguments=json.dumps(step[2]))
+            msg = types.SimpleNamespace(role="assistant", content="",
+                                        tool_calls=[types.SimpleNamespace(id="c1", type="function", function=fn)])
+        else:
+            msg = types.SimpleNamespace(role="assistant", content=step[1], tool_calls=None)
+        return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+
+async def _none(*a, **k):
+    return []
+loki.make_client = lambda: types.SimpleNamespace(chat=types.SimpleNamespace(completions=C()))
+loki.provider_configured = lambda n: n == "openrouter"
+loki.refresh_mcp_tools = _none
+loki.check_script = lambda f: "check_script res://%s: compiles OK" % f
+import worker
+sys.exit(worker.run(sys.argv[1]))
+''', encoding="utf-8")
+
+
+def _w_launch_with(script):
+    def _launch(job, root):
+        env = dict(os.environ, LOKI_DATA=str(_w_root), LOKI_WORKSPACE=str(_w_ws),
+                   GAME_PROJECT=str(_w_ws), LOKI_MODEL="smart",
+                   LOKI_TEST_HARNESS=str(REPO / "addons" / "loki" / "harness"),
+                   LOKI_TEST_SCRIPT=json.dumps(script))
+        env["PYTHONPATH"] = os.pathsep.join([str(_shim_dir), str(REPO / "addons" / "loki" / "harness"),
+                                             env.get("PYTHONPATH", "")])
+        import subprocess as _sp
+        proc = _sp.Popen([sys.executable, str(_shim_dir / "loki_test_shim.py"), job["id"]],
+                         cwd=str(REPO / "addons" / "loki" / "harness"), env=env,
+                         stdout=_sp.DEVNULL, stderr=open(_w_root / (job["id"] + ".err"), "w"))
+        _w_procs.append(proc)
+        return proc.pid
+    return _launch
+
+
+_w_procs = []
+
+
+def _w_finish(job_id, seconds=60):
+    end = time.time() + seconds
+    while time.time() < end:
+        job = _wk.load(job_id)
+        if job and job["status"] in _wk.FINISHED:
+            return job
+        time.sleep(0.2)
+    return _wk.load(job_id)
+
+
+import time  # noqa: E402
+_e2e = _wk.create("create a hello script", role="coder", workspace=str(_w_ws))
+_wk.start_pending(launcher=_w_launch_with([
+    ["tool", "write_file", {"filename": "hello.gd", "content": "extends Node\n"}],
+    ["say", "DONE: wrote hello.gd and it compiles"],
+]))
+_e2e = _w_finish(_e2e["id"])
+_err = (_w_root / (_e2e["id"] + ".err")).read_text(encoding="utf-8", errors="replace")[-600:] if (_w_root / (_e2e["id"] + ".err")).exists() else ""
+check("a background worker process finishes its goal", _e2e["status"] == "done", (_e2e["status"], _e2e.get("result"), _err))
+check("the worker wrote the file in ITS workspace", (_w_ws / "hello.gd").is_file())
+check("the worker's report carries files and verification",
+      _e2e.get("files") == ["hello.gd"] and "checked OK" in _e2e.get("verification", ""), _e2e)
+check("the worker logged what it did",
+      any(e["kind"] == "done" for e in _wk.events(_e2e["id"])) and any(e["kind"] == "created" for e in _wk.events(_e2e["id"])))
+check("the worker kept its own conversation",
+      (_wk.jobs_dir() / (_e2e["id"] + ".conversation.json")).is_file())
+
+# A background agent can never approve a dangerous tool for itself.
+_dg = _wk.create("delete the old file", role="coder", workspace=str(_w_ws))
+(_w_ws / "old.gd").write_text("x", encoding="utf-8")
+_wk.start_pending(launcher=_w_launch_with([
+    ["tool", "delete_file", {"path": "old.gd"}],
+    ["say", "BLOCKED: deleting needs approval"],
+]))
+_dg = _w_finish(_dg["id"])
+check("a dangerous tool is denied in the background", (_w_ws / "old.gd").is_file(), _dg)
+check("the denial is recorded and the job is BLOCKED",
+      _dg["status"] == "blocked" and any(e["kind"] == "denied" for e in _wk.events(_dg["id"])), _dg["status"])
+
+# The main agent delegates and waits; the child's files become the parent's to verify.
+loki._task_files.clear()
+_w_saved_launch = _wk._launch
+_wk._launch = _w_launch_with([
+    ["tool", "write_file", {"filename": "enemy.gd", "content": "extends Node\n"}],
+    ["say", "DONE: enemy.gd"],
+])
+try:
+    _rep = asyncio.run(loki.delegate_task("create enemy.gd", role="coder", wait=True, timeout=60))
+finally:
+    _wk._launch = _w_saved_launch
+check("delegate_task(wait=true) returns the child's report", " done " in _rep and "enemy.gd" in _rep, _rep)
+check("the child's edits join the parent's verification set", "enemy.gd" in loki._task_files, loki._task_files)
+loki._task_files.clear()
+
+for _p in _w_procs:
+    try:
+        _p.wait(timeout=10)
+    except Exception:
+        _p.kill()
+_wk.MAX_CONCURRENT = _w_saved_max
+for _k, _v in _w_saved_env.items():
+    if _v is None:
+        os.environ.pop(_k, None)
+    else:
+        os.environ[_k] = _v
+import shutil as _wsh  # noqa: E402
+for _dir in (_w_root, _w_ws, _shim_dir):
+    _wsh.rmtree(_dir, ignore_errors=True)
+
+
+section("background agents over the bridge (real HTTP, a throwaway port)")
+import tempfile as _btf  # noqa: E402
+import threading as _bth  # noqa: E402
+import urllib.request as _bur  # noqa: E402
+from http.server import ThreadingHTTPServer as _BServer  # noqa: E402
+
+sys.path.insert(0, str(REPO / "addons" / "loki"))
+import loki_bridge as _lb  # noqa: E402
+import workers as _bwk  # noqa: E402
+
+_b_root = Path(_btf.mkdtemp())
+_b_env = os.environ.get("LOKI_DATA")
+_b_max = _bwk.MAX_CONCURRENT
+os.environ["LOKI_DATA"] = str(_b_root)
+_bwk.MAX_CONCURRENT = 0          # queue only: this test starts no processes
+_b_state = _lb.BridgeState(loki, "test-secret")
+_b_srv = _BServer(("127.0.0.1", 0), _lb.BridgeHandler)
+_b_srv.state = _b_state
+_bth.Thread(target=_b_srv.serve_forever, daemon=True).start()
+_b_url = "http://127.0.0.1:%d" % _b_srv.server_address[1]
+
+
+def _b_call(method, path, body=None, token="test-secret"):
+    req = _bur.Request(_b_url + path, method=method,
+                       data=(json.dumps(body).encode() if body is not None else None),
+                       headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    try:
+        with _bur.urlopen(req, timeout=10) as resp:
+            return resp.status, json.loads(resp.read())
+    except _bur.HTTPError as exc:
+        return exc.code, json.loads(exc.read() or b"{}")
+
+
+try:
+    _code, _body = _b_call("POST", "/workers", {"goal": "write a door script", "role": "tester"})
+    check("POST /workers queues a background agent", _code == 200 and _body["job"]["role"] == "tester", _body)
+    _bid = _body["job"]["id"]
+    _code, _body = _b_call("GET", "/workers")
+    check("GET /workers lists it", _code == 200 and any(j["id"] == _bid for j in _body["jobs"]), _body)
+    _code, _body = _b_call("POST", "/workers/%s/message" % _bid, {"text": "use the blue door"})
+    check("a message can be sent to it", _code == 200 and _body["ok"], _body)
+    _code, _body = _b_call("GET", "/workers/" + _bid)
+    check("GET /workers/<id> returns its events", _code == 200 and any(e["kind"] == "message" for e in _body["events"]), _body)
+    _code, _body = _b_call("POST", "/workers/%s/cancel" % _bid, {})
+    check("it can be cancelled", _code == 200 and _bwk.load(_bid)["status"] == "cancelled", _body)
+    _code, _body = _b_call("POST", "/workers", {"goal": "  "})
+    check("an empty goal is a 400, not a crash", _code == 400, (_code, _body))
+    _code, _body = _b_call("GET", "/workers", token="wrong")
+    check("the workers endpoints need the bridge token", _code == 401, _code)
+finally:
+    _b_srv.shutdown()
+    _bwk.MAX_CONCURRENT = _b_max
+    if _b_env is None:
+        os.environ.pop("LOKI_DATA", None)
+    else:
+        os.environ["LOKI_DATA"] = _b_env
+    import shutil as _bsh  # noqa: E402
+    _bsh.rmtree(_b_root, ignore_errors=True)
+
+_dock_src = (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8")
+_wd_src = (REPO / "addons" / "loki" / "loki_workers_dialog.gd").read_text(encoding="utf-8")
+check("the dock has a Background agents menu item", '"Background agents...", 8' in _dock_src and "_open_workers()" in _dock_src)
+check("the agents dialog uses the bridge endpoints", "/workers/%s/message" in _wd_src and "/workers/%s/cancel" in _wd_src)
+check("the agents dialog does not override Object._get", "func _get(" not in _wd_src)
+check("the agents dialog polls only while open", "_timer.stop()" in _wd_src)
+
 if "--live" in sys.argv:
 
 

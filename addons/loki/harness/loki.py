@@ -259,6 +259,7 @@ import repo_review  # noqa: E402  (read-only repository review - blueprint 5.1)
 import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev)
 import api_vault  # noqa: E402  (the API Vault - blueprint 3.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
+import workers  # noqa: E402  (background worker agents + delegation)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -1793,6 +1794,99 @@ def capability_summary() -> dict:
     return capabilities.summary(capability_registry())
 
 
+# ---------------------------------------------------------------------------
+# Delegation: hand a sub-task to a background specialist agent (see workers.py).
+# ---------------------------------------------------------------------------
+# The job that THIS process is running, when it is a worker; "" for the main agent.
+CURRENT_JOB_ID = os.getenv("LOKI_JOB_ID", "")
+# Set by worker.py: returns messages sent to this agent, read before each model call.
+INBOX_HOOK = None
+DELEGATE_WAIT_MAX_S = int(os.getenv("LOKI_DELEGATE_WAIT_MAX", "1800"))
+
+
+def _adopt_child_files(job: dict) -> None:
+    """A child's finished edits count as this task's edits (verified again at DONE)."""
+    global _task_modified
+    if job.get("status") == "done" and job.get("files"):
+        for path in job["files"]:
+            _record_touched("write_file", {"filename": path}, "ok")
+        _task_modified = True
+
+
+async def delegate_task(goal: str, role: str = "coder", wait: bool = False, timeout: int = 900) -> str:
+    """Queue a goal for a background agent; optionally wait for its report."""
+    try:
+        job = workers.create(goal, role=role, parent=CURRENT_JOB_ID, workspace=str(WORKSPACE),
+                             model=model_name if model_name not in ("smart", "online") else "")
+    except ValueError as exc:
+        return "error: %s" % exc
+    started = workers.start_pending()
+    state = "started" if job["id"] in started else "queued (the worker limit is %d)" % workers.MAX_CONCURRENT
+    _progress("task", "Delegated to %s [%s]: %s" % (job["role"], job["id"], goal[:160]))
+    if not wait:
+        return ("delegated %s to the %s agent - %s. Keep working; use wait_for_task(task_id='%s') "
+                "or check_tasks to read its report." % (job["id"], job["role"], state, job["id"]))
+    return await wait_for_task(job["id"], timeout)
+
+
+async def wait_for_task(task_id: str, timeout: int = 900) -> str:
+    """Block until a delegated job finishes (or the timeout passes); return its report."""
+    deadline = time.monotonic() + max(5, min(int(timeout or 900), DELEGATE_WAIT_MAX_S))
+    while True:
+        job = workers.load(task_id)
+        if job is None:
+            return "error: no such task " + task_id
+        if job.get("status") in workers.FINISHED:
+            _adopt_child_files(job)
+            return workers.report(job)
+        if _cancel_event.is_set():
+            return "stopped waiting: this request was cancelled. %s is still %s." % (task_id, job.get("status"))
+        if time.monotonic() > deadline:
+            return ("still %s after waiting - it keeps running in the background. Check again "
+                    "later with check_tasks.\n%s" % (job.get("status"), workers.report(job)))
+        workers.start_pending()
+        await asyncio.sleep(2)
+
+
+def check_tasks(task_id: str = "") -> str:
+    """One job's report, or every background agent (this agent's children first)."""
+    workers.reap()
+    if task_id:
+        job = workers.load(task_id)
+        if job is None:
+            return "error: no such task " + task_id
+        if job.get("status") in workers.FINISHED:
+            _adopt_child_files(job)
+        return workers.report(job)
+    mine = workers.children(CURRENT_JOB_ID) if CURRENT_JOB_ID else []
+    return workers.render(mine or workers.all_jobs()[-20:])
+
+
+def message_agent(task_id: str, text: str) -> str:
+    sender = CURRENT_JOB_ID or "loki"
+    if workers.send_message(task_id, text, sender=sender):
+        return "sent to %s; it reads messages before its next step." % task_id
+    return "error: %s is not running (finished, or no such task)" % task_id
+
+
+def cancel_task(task_id: str) -> str:
+    return ("cancel requested for " + task_id) if workers.cancel(task_id) else (
+        "error: %s is not running" % task_id)
+
+
+def _inject_inbox() -> None:
+    """Fold messages other agents (or you) sent this worker into its conversation."""
+    hook = INBOX_HOOK
+    if hook is None:
+        return
+    try:
+        notes = hook() or []
+    except Exception:
+        notes = []
+    for note in notes:
+        messages.append({"role": "user", "content": str(note)[:4000]})
+
+
 LOCAL_TOOLS = {
     "list_files": list_files,
     "list_tree": list_tree,
@@ -1836,6 +1930,11 @@ LOCAL_TOOLS = {
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
+    "delegate_task": delegate_task,
+    "wait_for_task": wait_for_task,
+    "check_tasks": check_tasks,
+    "message_agent": message_agent,
+    "cancel_task": cancel_task,
 }
 
 # Tools that change files on disk (used to verify a task really did work).
@@ -1849,6 +1948,8 @@ MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "build_
 RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", "open_in_editor"}
 # Writes outside the project (downloads into harness_data) - not "read-only" either.
 NETWORK_WRITES = {"sync_ecc"}
+# Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
+DELEGATING = {"delegate_task", "message_agent", "cancel_task"}
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file"}
@@ -1907,6 +2008,16 @@ TOOL_SCHEMAS = [
            {"action": {"type": "string"}, "query": {"type": "string"}, "category": {"type": "string"}, "auth": {"type": "string"}, "name": {"type": "string"}, "url": {"type": "string"}, "provider": {"type": "string"}, "docs": {"type": "string"}, "limit": {"type": "integer"}}),
     schema("agent_sessions", "Track concurrent agent sessions - who is working, blocked or idle - so you never hunt for the stuck one. action='list' shows them, 'add' starts one (name, workspace, agent, status, task), 'update' changes a status/task, 'close' marks one done.",
            {"action": {"type": "string"}, "name": {"type": "string"}, "session_id": {"type": "string"}, "status": {"type": "string"}, "task": {"type": "string"}, "workspace": {"type": "string"}, "agent": {"type": "string"}}),
+    schema("delegate_task", "Hand a self-contained sub-task to a BACKGROUND agent that works in parallel with you. role: coder (implements), tester (runs and reports), reviewer (reads and reports problems, changes nothing), researcher (finds facts, changes nothing). Write the goal so it stands alone - the agent sees nothing of this conversation. wait=false returns at once with a task_id; wait=true waits for its report. Use it for parallel or separable work, not for one-line edits.",
+           {"goal": {"type": "string"}, "role": {"type": "string", "enum": sorted(workers.ROLES)}, "wait": {"type": "boolean"}, "timeout": {"type": "integer"}}, ["goal"]),
+    schema("wait_for_task", "Wait for a delegated task to finish and return its report (result, files, verification, usage).",
+           {"task_id": {"type": "string"}, "timeout": {"type": "integer"}}, ["task_id"]),
+    schema("check_tasks", "See background agents and their status. task_id gives one agent's full report; empty lists them.",
+           {"task_id": {"type": "string"}}),
+    schema("message_agent", "Send a message to a RUNNING background agent (a correction, an answer, extra context). It reads it before its next step.",
+           {"task_id": {"type": "string"}, "text": {"type": "string"}}, ["task_id", "text"]),
+    schema("cancel_task", "Stop a running or queued background agent.",
+           {"task_id": {"type": "string"}}, ["task_id"]),
     schema("review_repository", "Review a repository FOLDER before adopting it: size, licence, languages, entry points and manifests. Read-only - it never executes or installs anything. Use it before adding third-party code.",
            {"path": {"type": "string"}}),
     schema("list_capabilities", "List or search what Loki can use right now - model providers, tools, MCP servers and skill libraries - with each one's status and where to get a key. Pass query to filter.",
@@ -1955,6 +2066,7 @@ MODEL_TOOL_NAMES = {
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault",
+    "delegate_task", "wait_for_task", "check_tasks", "message_agent", "cancel_task",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -1974,6 +2086,7 @@ TOOL_CATEGORIES = {
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
+    "agents": ["delegate_task", "wait_for_task", "check_tasks", "message_agent", "cancel_task"],
 }
 CATEGORY_LABELS = {
     "files": "Files (read/write/edit/search)",
@@ -1986,6 +2099,7 @@ CATEGORY_LABELS = {
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",
     "system": "System (shell commands, launch Godot) - dangerous",
+    "agents": "Background agents (delegate sub-tasks, check on them)",
     "runtime": "Runtime checks (run scene, compile script, screenshot + look)",
 }
 SETTINGS_FILE = DATA_DIR / "loki_settings.json"
@@ -2052,7 +2166,8 @@ def model_tool_schemas() -> list:
                    and t["function"]["name"] not in MODIFYING
                    and t["function"]["name"] not in DANGEROUS
                    and t["function"]["name"] not in RUNS_PROJECT
-                   and t["function"]["name"] not in NETWORK_WRITES]
+                   and t["function"]["name"] not in NETWORK_WRITES
+                   and t["function"]["name"] not in DELEGATING]
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
         TRIMMED_TOOLS_NOTE = ""
         return schemas
@@ -3383,6 +3498,7 @@ async def agent_turn(force_tool: bool = False) -> str:
         if MAX_TURNS_PER_REQUEST > 0 and turns >= MAX_TURNS_PER_REQUEST:
             raise BudgetExhausted("hit the %d-turn budget" % MAX_TURNS_PER_REQUEST)
         turns += 1
+        _inject_inbox()
         _trim_context()
         _progress("thinking", "Turn %d: asking the model..." % turns)
         # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so

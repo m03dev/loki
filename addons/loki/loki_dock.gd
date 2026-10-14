@@ -7,6 +7,7 @@ const BRIDGE_URL: String = "http://127.0.0.1:8766"
 const BRIDGE_BOOTSTRAP: String = "res://addons/loki/bootstrap.py"
 const BRIDGE_HARNESS: String = "res://addons/loki/harness"
 const SETTINGS_DIALOG_SCRIPT: Script = preload("res://addons/loki/loki_settings.gd")
+const WORKERS_DIALOG_SCRIPT: Script = preload("res://addons/loki/loki_workers_dialog.gd")
 const BRIDGE_MAX_LAUNCHES: int = 3
 const BRIDGE_GRACE_POLLS: int = 240
 const BRIDGE_MISS_TOLERANCE: int = 4
@@ -80,6 +81,7 @@ var _settings_dialog: ConfirmationDialog
 var _rename_dialog: ConfirmationDialog
 var _rename_edit: LineEdit
 var _ecc_dialog: AcceptDialog
+var _workers_dialog: Window
 var _ecc_search: LineEdit
 var _ecc_agents_list: ItemList
 var _ecc_skills_list: ItemList
@@ -177,6 +179,7 @@ func _build_ui() -> void:
 	popup.add_icon_item(_editor_icon("History"), "Memory...", 5)
 	popup.add_separator()
 	popup.add_icon_item(_editor_icon("Tools"), "Settings", 1)
+	popup.add_icon_item(_editor_icon("Groups"), "Background agents...", 8)
 	popup.add_icon_item(_editor_icon("Node"), "Agents and skills (ECC)", 6)
 	popup.add_icon_item(_editor_icon("Reload"), "Sync ECC library from GitHub", 7)
 	popup.add_separator()
@@ -1118,6 +1121,8 @@ func _on_menu_pressed(id: int) -> void:
 			_open_ecc()
 		7:
 			_sync_ecc()
+		8:
+			_open_workers()
 		10:
 			_on_quick_action_selected(1)
 		11:
@@ -1198,8 +1203,7 @@ func _collect_text(node: Node) -> String:
 	for child in node.get_children():
 		var part: String = _collect_text(child)
 		if not part.strip_edges().is_empty():
-			out += part + "
-"
+			out += part + "\n"
 	return out
 
 
@@ -1363,8 +1367,7 @@ func _poll_editor_ops() -> void:
 	if not FileAccess.file_exists(path):
 		return
 	var text: String = FileAccess.get_file_as_string(path)
-	for line in text.split("
-"):
+	for line in text.split("\n"):
 		var trimmed: String = line.strip_edges()
 		if trimmed.is_empty():
 			continue
@@ -1420,6 +1423,20 @@ func _build_ecc_dialog() -> void:
 	_ecc_skills_list.item_activated.connect(_on_ecc_chosen.bind(false))
 	tabs.add_child(_ecc_skills_list)
 	add_child(_ecc_dialog)
+
+func _auth_headers() -> PackedStringArray:
+	_load_token()
+	return _headers()
+
+func _open_workers() -> void:
+	if not _bridge_ready:
+		_append_log("[color=#ebcb8b]The bridge is still starting; try again in a moment.[/color]")
+		return
+	if _workers_dialog == null:
+		_workers_dialog = WORKERS_DIALOG_SCRIPT.new()
+		_workers_dialog.call("setup", BRIDGE_URL, _auth_headers)
+		add_child(_workers_dialog)
+	_popup_fit(_workers_dialog, Vector2(680.0, 580.0))
 
 func _open_ecc() -> void:
 	if not _bridge_ready:

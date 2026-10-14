@@ -380,6 +380,19 @@ def dump_godot_api(godot_exe: str, harness) -> None:
         print(f"  [api] dump failed: {exc}", flush=True)
 
 
+def supervise_workers(agent, interval: float = 5.0) -> None:
+    """Keep background agents moving: start queued ones, notice dead ones. Never raises."""
+    workers = getattr(agent, "workers", None)
+    if workers is None:
+        return
+    while True:
+        try:
+            workers.start_pending()
+        except Exception as exc:  # noqa: BLE001 - a supervisor must not die
+            print(f"[loki-bridge] worker supervisor: {exc}", flush=True)
+        time.sleep(interval)
+
+
 def initial_ecc_sync(agent) -> None:
     """Fetch the agent/skill libraries on first run so their tools work with no setup."""
     try:
@@ -566,6 +579,30 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if hasattr(agent, "decision_status"):
                 status = {**status, "decision": agent.decision_status()}
             self._send_json(200, {"ok": True, **status})
+            return
+        if route == "/workers" or route.startswith("/workers/"):
+            workers = getattr(self.server.state.agent, "workers", None)
+            if workers is None:
+                self._send_json(503, {"ok": False, "error": "background agents are not available"})
+                return
+            job_id = route[len("/workers/"):] if route.startswith("/workers/") else ""
+            if not job_id:
+                workers.reap()
+                jobs = workers.all_jobs()[-50:]
+                self._send_json(200, {"ok": True, "jobs": jobs, "text": workers.render(jobs),
+                                      "max_concurrent": workers.MAX_CONCURRENT})
+                return
+            job = workers.load(job_id)
+            if job is None:
+                self._send_json(404, {"ok": False, "error": "no such background agent"})
+                return
+            try:
+                after = int(dict(part.split("=", 1) for part in urlparse(self.path).query.split("&")
+                                 if "=" in part).get("after", "0"))
+            except (ValueError, TypeError):
+                after = 0
+            self._send_json(200, {"ok": True, "job": job, "report": workers.report(job),
+                                  "events": workers.events(job_id, after)})
             return
         if route == "/capabilities":
             agent = self.server.state.agent
@@ -787,6 +824,34 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"vault failed: {exc}"})
             return
+        if route == "/workers" or route.startswith("/workers/"):
+            workers = getattr(state.agent, "workers", None)
+            if workers is None:
+                self._send_json(503, {"ok": False, "error": "background agents are not available"})
+                return
+            try:
+                if route == "/workers":
+                    goal = str(data.get("goal", "")).strip()
+                    job = workers.create(goal, role=str(data.get("role", "coder")),
+                                         workspace=str(state.agent.WORKSPACE))
+                    workers.start_pending()
+                    self._send_json(200, {"ok": True, "job": workers.load(job["id"])})
+                    return
+                parts = route[len("/workers/"):].split("/")
+                job_id, action = parts[0], (parts[1] if len(parts) > 1 else "")
+                if action == "cancel":
+                    self._send_json(200, {"ok": workers.cancel(job_id)})
+                    return
+                if action == "message":
+                    sent = workers.send_message(job_id, str(data.get("text", "")), sender="user")
+                    self._send_json(200 if sent else 409, {"ok": sent})
+                    return
+                self._send_json(404, {"ok": False, "error": "unknown worker action"})
+            except ValueError as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"workers failed: {exc}"})
+            return
         if route == "/ecc/sync":
             try:
                 message: str = state.agent.sync_ecc(bool(data.get("force", False)))
@@ -942,6 +1007,7 @@ async def serve() -> None:
             in_tool_wrapper = False
     loki.call_tool = observed_call_tool
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
+    threading.Thread(target=supervise_workers, args=(loki,), name="loki-workers", daemon=True).start()
     threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
     try:
         server, server_thread = start_bridge_server(state, secret_path, secret)
