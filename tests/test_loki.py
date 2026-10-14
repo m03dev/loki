@@ -2118,6 +2118,115 @@ check("api_vault is offered to the model", "api_vault" in loki.MODEL_TOOL_NAMES)
 check("api_vault has a schema", any(s["function"]["name"] == "api_vault" for s in loki.TOOL_SCHEMAS))
 
 
+section("provider failover inside a real turn (routing regression)")
+# These drive agent_turn itself with a fake model client, because the old tests only
+# called failover_target() alone and missed the bug: _model_request marked the failing
+# provider, then agent_turn re-resolved "the spent provider" - which by then named the
+# NEXT one - and marked that too. One quota error skipped a ready provider (with two
+# keys set it fell through to "local" and reported "Ollama is not running").
+import types as _types  # noqa: E402
+
+_fo_saved = (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools,
+             loki.model_name, set(loki._SMART_FAILED), list(loki.messages), loki.MODEL_RETRIES)
+
+
+def _fo_run(mode, ready, fail_on, status=429, text="You exceeded your current quota"):
+    """Run one agent_turn; return (providers tried, used-up set, answer or error, mode after)."""
+    tried = []
+
+    class _Completions:
+        def __init__(self, provider):
+            self.provider = provider
+
+        async def create(self, **kwargs):
+            tried.append(self.provider)
+            if self.provider in fail_on:
+                response = _types.SimpleNamespace(status_code=status, headers={}, request=None)
+                raise loki.openai.APIStatusError(text, response=response, body=None)
+            message = _types.SimpleNamespace(content="answer from " + self.provider, tool_calls=None)
+            return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=message)])
+
+    def _client():
+        name = loki.active_model_name()
+        return _types.SimpleNamespace(chat=_types.SimpleNamespace(completions=_Completions(name)))
+
+    async def _no_refresh(*args, **kwargs):
+        return []
+
+    loki.provider_configured = lambda name: name in ready
+    loki.make_client = _client
+    loki.refresh_mcp_tools = _no_refresh
+    loki.MODEL_RETRIES = 0
+    loki.model_name = mode
+    loki._SMART_FAILED.clear()
+    loki.ROUTE_TRACE.clear()
+    loki.messages[:] = [{"role": "system", "content": "test"}, {"role": "user", "content": "hi"}]
+    try:
+        outcome = asyncio.run(loki.agent_turn())
+    except loki.ModelUnavailable as exc:
+        outcome = "ERROR: " + str(exc)
+    return tried, set(loki._SMART_FAILED), outcome, loki.model_name
+
+
+try:
+    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini", "groq"}, {"openrouter"})
+    check("a spent quota moves to the NEXT ready provider, not the one after",
+          _t == ["openrouter", "gemini"], _t)
+    check("only the provider that failed is marked used-up", _used == {"openrouter"}, _used)
+    check("the turn is answered by the next provider", _out == "answer from gemini", _out)
+    check("the switch is recorded with its reason",
+          [(r["provider"], r["reason"], r["next"]) for r in loki.ROUTE_TRACE]
+          == [("openrouter", "quota spent", "gemini")], loki.ROUTE_TRACE)
+
+    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"})
+    check("with two keys, a spent quota uses the second key (never an unset local model)",
+          _t == ["openrouter", "gemini"] and _out == "answer from gemini", (_t, _out))
+
+    _t, _used, _out, _mode = _fo_run("online", {"openrouter", "gemini", "local"}, {"openrouter"})
+    check("online mode stays online after a failover", _mode == "online", _mode)
+    check("online failover never reaches a local model", "local" not in _t, _t)
+
+    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"},
+                                 status=401, text="Incorrect API key provided")
+    check("smart mode skips a provider whose key is rejected", _out == "answer from gemini", (_t, _out))
+    check("a rejected key is recorded as such",
+          bool(loki.ROUTE_TRACE) and loki.ROUTE_TRACE[0]["reason"] == "key rejected", loki.ROUTE_TRACE)
+
+    _t, _used, _out, _mode = _fo_run("gemini", {"gemini", "groq"}, {"gemini"},
+                                     status=401, text="Incorrect API key provided")
+    check("a PINNED provider with a bad key surfaces the error (no silent switch)",
+          _out.startswith("ERROR:") and _t == ["gemini"] and _mode == "gemini", (_t, _out, _mode))
+
+    _t, _used, _out, _ = _fo_run("smart", {"openrouter"}, {"openrouter"})
+    check("with nothing else configured, the ORIGINAL error is shown",
+          _out.startswith("ERROR:") and "quota" in _out.lower() and _t == ["openrouter"], (_t, _out))
+
+    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"},
+                                 status=400, text="KeyError: objects")
+    check("an HTTP 400 still fails over (existing behaviour kept)", _out == "answer from gemini", (_t, _out))
+finally:
+    (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools,
+     loki.model_name, _fo_failed, _fo_messages, loki.MODEL_RETRIES) = _fo_saved
+    loki._SMART_FAILED.clear()
+    loki._SMART_FAILED.update(_fo_failed)
+    loki.messages[:] = _fo_messages
+    loki.ROUTE_TRACE.clear()
+
+check("should_fail_over: a quota error always fails over", loki.should_fail_over(Exception("quota"), False))
+check("should_fail_over: a rejected key fails over only when auto-routing",
+      loki.should_fail_over(Exception("HTTP 401: invalid api key"), True)
+      and not loki.should_fail_over(Exception("HTTP 401: invalid api key"), False))
+check("should_fail_over: an ordinary bug never fails over",
+      not loki.should_fail_over(Exception("KeyError: objects"), True))
+check("the route trace masks key-shaped strings",
+      "sk-or-v1-abcdef0123456789" not in loki.redact_secrets("Incorrect API key provided: sk-or-v1-abcdef0123456789")
+      and "[redacted]" in loki.redact_secrets("Bearer abcdefghijklmnop1234"))
+check("redaction leaves ordinary error text alone",
+      loki.redact_secrets("HTTP 429: quota exceeded") == "HTTP 429: quota exceeded")
+check("the bridge reports the route on /health",
+      '"route": route_trace' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
+
+
 
 if "--live" in sys.argv:
 

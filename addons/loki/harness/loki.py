@@ -458,9 +458,18 @@ def smart_report() -> str:
     return "%s | %s" % (headline, ", ".join(marks))
 
 
-def _mark_smart_failure() -> None:
-    if model_name == "smart":
-        _SMART_FAILED.add(active_model_name())
+AUTO_ROUTING_MODES = ("smart", "online")
+
+
+def _mark_smart_failure(provider: str = "") -> None:
+    """Mark the provider that FAILED as used-up (auto-routing modes only).
+
+    Pass the provider the request was actually sent to. Re-resolving it here with
+    active_model_name() is wrong once anything has already been marked: it names the
+    NEXT provider, which then gets marked too and is skipped without ever being tried.
+    """
+    if model_name in AUTO_ROUTING_MODES:
+        _SMART_FAILED.add(provider or active_model_name())
 
 
 # A provider being out of quota or rate-limited must NOT end the run - we move to
@@ -507,21 +516,78 @@ def _is_quota_error(exc) -> bool:
     return any(marker in text for marker in _QUOTA_MARKERS)
 
 
-def failover_target() -> str:
-    """Mark the provider in use as used-up and return the next usable one.
+# A provider whose key is wrong/revoked, or whose endpoint cannot be reached, cannot
+# serve this turn either. In an auto-routing mode that is a reason to move on, not to
+# end the turn while other providers are ready. (A PINNED provider still surfaces the
+# error: the user chose it, and should be told its key is wrong.)
+_AUTH_MARKERS = ("http 401", "http 403", "invalid api key", "incorrect api key",
+                 "invalid_api_key", "unauthorized", "authentication", "permission denied")
 
-    Returns "" when nothing else is available so the caller can surface the
-    original error instead of looping.
+
+def _is_auth_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _AUTH_MARKERS)
+
+
+def _is_unreachable(exc) -> bool:
+    return str(exc).startswith("[model unavailable]")
+
+
+def failover_reason(exc) -> str:
+    """A short, honest label for why a provider was skipped."""
+    if _is_agent_unavailable(exc):
+        return "agent not available"
+    if _is_quota_error(exc):
+        return "quota spent"
+    if _is_auth_error(exc):
+        return "key rejected"
+    if _is_unreachable(exc):
+        return "unreachable"
+    if _is_limit_error(exc):
+        return "rate/size limit"
+    return "error"
+
+
+def should_fail_over(exc, auto_routing: bool) -> bool:
+    """True when the error means 'try another provider', not 'this is a bug'."""
+    if _is_limit_error(exc) or _is_agent_unavailable(exc):
+        return True
+    return auto_routing and (_is_auth_error(exc) or _is_unreachable(exc))
+
+
+# The route each request actually took: which provider failed, why, and where the turn
+# went next. Reset per request, so "why did Loki use X?" has a recorded answer.
+ROUTE_TRACE: list = []
+
+# Provider error bodies sometimes echo part of the key; the trace leaves the process
+# (the bridge serves it on /health), so key-shaped strings are masked first.
+_SECRET_SHAPES = re.compile(r"(sk|gsk|xai|pk|rk|AIza)[-_A-Za-z0-9]{12,}|Bearer\s+[-._A-Za-z0-9]{12,}")
+
+
+def redact_secrets(text: str) -> str:
+    return _SECRET_SHAPES.sub("[redacted]", str(text))
+
+
+def failover_target(spent: str = "") -> str:
+    """Mark `spent` (the provider that just failed) used-up; return the next usable one.
+
+    Returns "" when no other CONFIGURED provider is left, so the caller surfaces the
+    original error (e.g. "quota spent") instead of a misleading one from a provider the
+    user never set up (e.g. "Ollama is not running").
+
+    Online mode stays online: it must never fall through to a local model.
     """
     global model_name
-    current = active_model_name()
+    current = spent or active_model_name()
     _SMART_FAILED.add(current)
-    if model_name != "smart":
+    if model_name not in AUTO_ROUTING_MODES:
         # The chosen provider is spent; pick automatically from here so the task
         # keeps going instead of dying on one exhausted key.
         model_name = "smart"
     nxt = active_model_name()
-    return "" if nxt == current else nxt
+    if nxt == current or nxt in _SMART_FAILED or not provider_configured(nxt):
+        return ""
+    return nxt
 
 
 # ---------------------------------------------------------------------------
@@ -2912,8 +2978,11 @@ def _status_of(exc) -> int:
     return int(status) if isinstance(status, int) else 0
 
 
-async def _model_request(client, kwargs: dict, cfg):
-    """Ask the model, retrying transient failures so one 429 does not end the task."""
+async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
+    """Ask the model, retrying transient failures so one 429 does not end the task.
+
+    `provider` is the MODELS key the request goes to; a failure marks THAT provider.
+    """
     attempt = 0
     while True:
         try:
@@ -2941,7 +3010,7 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             raise ModelUnavailable(
                 "[model error] %s answered HTTP %s: %s" % (cfg.model, status, short_error(exc.message))
             ) from exc
@@ -2952,10 +3021,10 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             raise ModelUnavailable(model_down_hint(cfg)) from exc
         except openai.OpenAIError as exc:
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
 
 
@@ -3046,15 +3115,20 @@ async def agent_turn(force_tool: bool = False) -> str:
         # turn on the next provider rather than ending the run.
         switches = 0
         while True:
+            # Resolve the provider BEFORE the request, so a failure is pinned on the
+            # provider that actually failed (re-resolving afterwards names the next one).
+            provider = active_model_name()
             try:
-                response = await _model_request(client, kwargs, cfg)
+                response = await _model_request(client, kwargs, cfg, provider)
                 break
             except ModelUnavailable as exc:
-                if switches >= len(SMART_ORDER) or not (
-                        _is_limit_error(exc) or _is_agent_unavailable(exc)):
+                if switches >= len(SMART_ORDER) or not should_fail_over(
+                        exc, model_name in AUTO_ROUTING_MODES):
                     raise
-                spent = active_model_name()
-                target = failover_target()
+                reason = failover_reason(exc)
+                target = failover_target(provider)
+                ROUTE_TRACE.append({"provider": provider, "reason": reason,
+                                    "next": target or "", "error": redact_secrets(short_error(str(exc), 160))})
                 if not target:
                     raise
                 switches += 1
@@ -3064,8 +3138,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                 kwargs.pop("extra_body", None)
                 if "11434" in cfg.base_url or "ollama" in cfg.api_key:
                     kwargs["extra_body"] = {"think": False}
-                _progress("thinking", "Cannot use %s - switched to %s and continuing."
-                    % (spent, target))
+                _progress("thinking", "Cannot use %s (%s) - switched to %s and continuing."
+                    % (provider, reason, target))
         message = response.choices[0].message
         global _last_turn_had_tools
         _last_turn_had_tools = bool(message.tool_calls)
@@ -3159,6 +3233,7 @@ async def run_agent(user_message: str) -> str:
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
+    ROUTE_TRACE.clear()
     messages.append({"role": "user", "content": user_message})
     try:
         answer = await agent_turn()
@@ -3211,6 +3286,7 @@ async def pursue_goal(goal: str) -> str:
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     _task_modified = False
+    ROUTE_TRACE.clear()
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)
     _progress("task", "Goal: %s" % goal[:200])
