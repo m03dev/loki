@@ -62,9 +62,13 @@ def run_tests(repo: Path, say=print) -> bool:
                                      time.monotonic() - started))
         if code != 0:
             ok = False
-            fails = [line for line in out.splitlines() if line.strip().startswith("FAIL") or "Traceback" in line]
+            fails = [line for line in out.splitlines() if line.strip().startswith("FAIL") or "Error" in line]
             for line in fails[:8]:
                 say("      " + line.strip())
+            if os.getenv("GITHUB_ACTIONS"):
+                # Shown on the run's page and readable through the API without the full log.
+                detail = " | ".join(f.strip() for f in fails[:6]) or out[-600:].replace("\n", " | ")
+                print("::error title=%s failed::%s" % (suite, detail[:1500]), flush=True)
     return ok
 
 
