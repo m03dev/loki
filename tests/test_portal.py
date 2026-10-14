@@ -243,32 +243,37 @@ for _ in range(50):
 check("the device flow shows the user code and finishes with a token", started["user_code"] == "ABCD-1234"
       and saved_tokens == [("huggingface", "hf_token")])
 
+def fetch(url, data=None):
+    """(status, body) without raising, and without any proxy (the page is on 127.0.0.1)."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(url, data=data, method="POST" if data is not None else "GET")
+    try:
+        with opener.open(req, timeout=5) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001
+        return 0, "%s: %s" % (type(exc).__name__, exc)
+
+
 handoff_keys = []
 ho = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: (handoff_keys.append((p, k)), {"ok": True, "message": "ok"})[1],
                          "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
-page = urllib.request.urlopen(ho.url, timeout=5).read().decode()
-check("the phone page is a form, served once to the private network", "Send a key to LOKI" in page and "<form" in page)
-reply = urllib.request.urlopen(urllib.request.Request(ho.url, data=b"key=AIza-test", method="POST"), timeout=5).read().decode()
-check("posting the key connects it", handoff_keys == [("gemini", "AIza-test")] and "&#10003;" in reply)
-try:
-    urllib.request.urlopen(ho.url, timeout=5)
-    check("the page stops working after one key", False)
-except urllib.error.HTTPError as exc:
-    check("the page stops working after one key", exc.code == 404)
-except Exception:
-    check("the page stops working after one key", True)
+code, page = fetch(ho.url)
+check("the phone page is a form, served once to the private network", code == 200 and "Send a key to LOKI" in page
+      and "<form" in page, (code, page[:200], ho.url))
+code, reply = fetch(ho.url, data=b"key=AIza-test")
+check("posting the key connects it", code == 200 and handoff_keys == [("gemini", "AIza-test")] and "&#10003;" in reply,
+      (code, reply[:200], handoff_keys))
+code, _ = fetch(ho.url)
+check("the page stops working after one key", code in (0, 404), code)
 ho.stop()
 ho2 = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: False, ttl_s=30, bind="127.0.0.1")
-try:
-    urllib.request.urlopen(ho2.url, timeout=5)
-    check("devices outside the private network are refused", False)
-except urllib.error.HTTPError as exc:
-    check("devices outside the private network are refused", exc.code == 403)
-try:
-    urllib.request.urlopen(ho2.url.rsplit("/", 1)[0] + "/wrong-token", timeout=5)
-except urllib.error.HTTPError as exc:
-    check("a wrong token is refused", exc.code in (403, 404))
+check("devices outside the private network are refused", fetch(ho2.url)[0] == 403)
 ho2.stop()
+ho3 = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
+check("a wrong token is refused", fetch(ho3.url.rsplit("/", 1)[0] + "/wrong-token")[0] == 404)
+ho3.stop()
 
 # --------------------------------------------------------------------------- update everywhere
 section("one click updates every machine (engine/update_all.py, updater health)")

@@ -134,7 +134,10 @@ PROVIDER_ENV_VARS = {
     "omniroute": "OMNIROUTE_API_KEY",
     "vireonix": "VIREONIX_API_KEY",
     "typesafe": "TYPESAFE_API_KEY",
-    # added with the Connections portal (engine/providers_catalog.py)
+    # added with the Connections portal (engine/providers_catalog.py); the portal's cards use
+    # the MODELS names, so "gpt" and "claude" are accepted alongside openai / anthropic.
+    "gpt": "OPENAI_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
     "cloudflare": "CLOUDFLARE_API_TOKEN",
     "cohere": "COHERE_API_KEY",
     "huggingface": "HF_TOKEN",
@@ -546,8 +549,8 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
 SMART_ORDER = ("openrouter", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
-               "cloudflare", "together", "nous", "unorouter", "opencode-zen", "nvidia",
-               "kilocode", "codestral", "vercel", "deepseek", "cerebras",
+               "cloudflare", "together", "nous", "unorouter", "opencode-zen", "codestral",
+               "vercel", "deepseek", "cerebras",
                "vireonix", "claude-code", "codex", "local", "local-hermes")
 
 # Providers that need a GPU and a local download. The "online" mode exists so Loki is
