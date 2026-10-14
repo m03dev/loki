@@ -4,6 +4,65 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 9) - Routing and verification: confirmed defects, fixed
+
+Worked from a fresh cloud clone of `master` (`b0c805d`), not the Windows checkout, so
+local uncommitted work there was neither seen nor touched. Godot was not available, so
+`--live`, real compile checks and scene runs were NOT exercised.
+
+**Baseline before editing:** 331 passed, 0 failed (after fetching the vendored skill
+libraries; without them the suite crashes at the GodotPrompter check).
+
+**Confirmed defects (each reproduced before the fix)**
+1. **Failover skipped a ready provider.** `_model_request` marked the failing provider
+   used-up, then `agent_turn` re-resolved "the spent provider" - by then the NEXT one -
+   and marked it too. Repro: openrouter+gemini+groq ready, openrouter quota spent ->
+   tried `[openrouter, groq]`, gemini marked used-up unseen. With only two keys the turn
+   fell to `local` and reported "Ollama is not running".
+2. **Online mode became smart on failover**, so it could reach a local model.
+3. **A rejected key / unreachable endpoint ended the turn** in smart mode while other
+   providers were ready (401 repro).
+4. **Without Godot, `validate_scene` said "INVALID - fix these errors"** (the launch
+   error contains `error:`), inviting the model to "fix" valid files. `GODOT_EXE`
+   defaulted to one developer's `G:` drive.
+5. **`build_scene` and the project.godot editors were not in `MODIFYING`**: a task
+   finished with `build_scene` had DONE rejected as "premature", and Plan mode (documented
+   "write nothing") offered all four, plus five tools that run the game.
+6. **False completion:** DONE was accepted once any file was written; `/chat` never
+   checked anything.
+
+**Work completed** (`c665857`, and the verification commit after it)
+- Failover marks the provider that actually failed; online stays online; auto-routing
+  modes skip a rejected key / unreachable endpoint; a pinned provider still surfaces
+  its error; with nothing else configured the ORIGINAL error is shown.
+- `ROUTE_TRACE` records every switch (provider, reason, next), key-shaped strings
+  masked, served on `/health` as `route`.
+- Verification gate: files written per request are recorded; on DONE (task) or at the
+  end of a chat turn they are checked (.gd compile, .tscn headless load, .json parse);
+  real errors go back to the model (2 rounds task / 1 round chat); the answer ends
+  with `Verification: ...` naming what passed, FAILED, was not verified, or has no check.
+- `resolve_godot_exe()`: env, PATH, known paths (incl. macOS), else "".
+
+**Tests:** 376 passed, 0 failed (+45). The routing tests drive `agent_turn` with a fake
+client; 10 of them fail on the previous code. The verification tests use a temp
+WORKSPACE and stub `save_history`/`todo_clear`, so they never touch a real project.
+
+**Not done / known gaps**
+- Verification is only as good as the checkers: nothing checks behaviour (that the
+  player actually moves); MCP-driven edits (godot-editor-mcp) are not recorded yet.
+- `setup.sh`/`setup.bat` clone 2 of the 7 skill sources (the bridge's `ecc_sync` fetches
+  the rest on start, so this is cosmetic); `ecc_sync` hides WHY a download failed.
+- `tests/test_loki.py` has every line followed by blank lines (an editor/line-ending
+  artifact); harmless to Python, worth normalising in a dedicated commit.
+- No per-task model budget by default (`LOKI_MAX_TURNS=0`, `GOAL_STEPS=0`).
+
+**Next concrete actions**
+1. Record MCP edits in the verification set (map godot-editor-mcp write tools to paths).
+2. A default per-task budget for PAID providers only, reported in the answer.
+3. Run `--live` on the Windows checkout to confirm the gate with a real Godot.
+
+---
+
 ## 2026-10-12 (session 8) - The API Vault (the real catalog)
 
 **Work completed** (`87a4770`)
