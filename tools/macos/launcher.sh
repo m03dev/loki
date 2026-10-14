@@ -25,9 +25,12 @@ say() {
   return 0
 }
 
+# No dialogs in tests or CI: nobody is there to click them.
+quiet() { [ -n "${LOKI_NO_DIALOGS:-}${CI:-}" ]; }
+
 alert() {
   say "$1"
-  if command -v osascript >/dev/null 2>&1; then
+  if ! quiet && command -v osascript >/dev/null 2>&1; then
     local text=${1//\"/\'}
     osascript -e "display alert \"Loki\" message \"$text\"" >/dev/null 2>&1 || true
   fi
@@ -35,7 +38,7 @@ alert() {
 
 notify() {
   say "$1"
-  if command -v osascript >/dev/null 2>&1; then
+  if ! quiet && command -v osascript >/dev/null 2>&1; then
     local text=${1//\"/\'}
     osascript -e "display notification \"$text\" with title \"Loki\"" >/dev/null 2>&1 || true
   fi

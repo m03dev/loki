@@ -2714,7 +2714,7 @@ else:
 
         def _launch(**extra: str):
             env = {"PATH": "/usr/bin:/bin", "HOME": str(_home), "LOKI_SKIP_SETUP": "1",
-                   "LOKI_DATA": str(_td / "data")}
+                   "LOKI_DATA": str(_td / "data"), "LOKI_NO_DIALOGS": "1"}
             env.update(extra)
             return _sp.run([str(_exe)], env=env, capture_output=True, text=True, timeout=30)
 
