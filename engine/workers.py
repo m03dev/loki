@@ -676,7 +676,9 @@ class Supervisor:
             "model": str(spec.get("model") or ""),
             "team": str(spec.get("team") or "")[:40],
         }
-        return self.store.add(job)
+        stored = self.store.add(job)
+        _emit_job_event(stored, "task.created")
+        return stored
 
     def cancel(self, job_id: str) -> dict | None:
         job = self.store.get(job_id)
@@ -705,7 +707,10 @@ class Supervisor:
 
     # ----------------------------------------------------------- loop
     def _set(self, job_id: str, **fields: Any) -> dict | None:
+        before = (self.store.get(job_id) or {}).get("status")
         job = self.store.update(job_id, **fields)
+        if job is not None and fields.get("status") and fields["status"] != before:
+            _emit_job_event(job)
         if job is not None and self.on_change is not None:
             try:
                 self.on_change(job)
@@ -792,6 +797,26 @@ class Supervisor:
 
     def stop(self) -> None:
         self._stop.set()
+
+
+_STATUS_EVENTS = {"starting": "task.started", "working": "task.started", "blocked": "task.blocked",
+                  "done": "task.completed", "failed": "task.failed", "cancelled": "task.failed"}
+
+
+def _emit_job_event(job: dict, type_: str = "") -> None:
+    """Tell the event stream (engine/events.py) what a background agent is doing."""
+    try:
+        import events  # pylint: disable=import-outside-toplevel
+        type_ = type_ or _STATUS_EVENTS.get(job.get("status", ""), "")
+        if not type_:
+            return
+        role = (job.get("profile") or {}).get("name") or ("Loki agent" if job.get("agent") == "loki" else job.get("agent", "agent"))
+        payload = {"title": job.get("title", ""), "status": job.get("status", ""), "backend": job.get("backend", "")}
+        if type_ in ("task.completed", "task.failed"):
+            payload["result"] = (job.get("output") or job.get("error") or "")[-600:]
+        events.emit(type_, role, payload, task=job.get("id", ""), team=job.get("team", ""))
+    except Exception:  # noqa: BLE001 - events never break a job
+        pass
 
 
 def present(job: dict) -> dict:

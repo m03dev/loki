@@ -56,6 +56,41 @@ def write_env(path: Path, updates: dict) -> None:
 
 # --- what this machine tells a peer ------------------------------------------------
 
+def machine_capabilities(agent: Any = None, local_models: list | None = None) -> list:
+    """What this machine can really do, backed by installed tools (docs/VISION.md 8)."""
+    import shutil  # pylint: disable=import-outside-toplevel
+    caps = ["model.chat", "repository.read", "code.edit", "tests.run", "agents.team", "approval.human"]
+    if shutil.which("git"):
+        caps.append("git")
+    caps.append("command.run")
+    if local_models:
+        caps.append("model.local-inference")
+    gpu = peers.describe_machine().get("gpu")
+    if gpu:
+        caps.append("gpu.cuda")
+    try:
+        import laya  # pylint: disable=import-outside-toplevel
+        if laya.backend():
+            caps.append("decision.laya")
+    except Exception:  # noqa: BLE001
+        pass
+    if os.getenv("GODOT_EXE") or shutil.which("godot") or shutil.which("godot4"):
+        caps.append("godot.test")
+    for exe, cap in (("blender", "blender.inspect"), ("UnrealEditor", "unreal.build"),
+                     ("node", "node"), ("docker", "vm.docker"), ("ollama", "ollama")):
+        if shutil.which(exe):
+            caps.append(cap)
+    try:
+        registry = getattr(agent, "CAPABILITIES", None)
+        for name in ("browser-use", "cua", "crawl4ai", "firecrawl", "hindsight"):
+            entry = registry.get(name) if registry is not None else None
+            if entry and entry.get("status") == "enabled":
+                caps.append("capability." + name)
+    except Exception:  # noqa: BLE001
+        pass
+    return sorted(set(caps))
+
+
 def hello(state: Any, agent: Any) -> dict:
     jobs = getattr(state, "jobs", None)
     counts = {}
@@ -83,6 +118,7 @@ def hello(state: Any, agent: Any) -> dict:
     return {
         "name": peers.my_name(),
         "version": build,
+        "capabilities": machine_capabilities(agent, local_models),
         "machine": peers.describe_machine(),
         "listening": peers.listen_enabled(),
         "ollama_models": local_models,

@@ -421,6 +421,11 @@ class BridgeState:
 
     async def request_approval(self, tool_name: str, details: str) -> bool:
         self.push_progress(self.progress_chat_id, "approval", f"Approval required: {tool_name} {details[:350]}")
+        try:
+            import events  # pylint: disable=import-outside-toplevel
+            events.emit("approval.required", "LOKI", {"tool": tool_name, "details": details[:300]})
+        except Exception:  # noqa: BLE001
+            pass
         ticket_id = uuid.uuid4().hex
         finished = threading.Event()
         ticket: dict[str, Any] = {"id": ticket_id, "tool": tool_name, "details": details[:10_000], "event": finished, "approved": False}
@@ -740,6 +745,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "workers": fleet.health() if fleet else []})
         if route == "/update":
             self._send_json(200, {"ok": True, **update_status()})
+            return
+        if route in ("/events", "/world"):
+            import events  # pylint: disable=import-outside-toplevel
+            state = self.server.state
+            if route == "/events":
+                query = dict(part.split("=", 1) for part in urlparse(self.path).query.split("&") if "=" in part)
+                try:
+                    after, wait_s = int(query.get("after", "0")), float(query.get("wait", "0"))
+                except ValueError:
+                    after, wait_s = 0, 0.0
+                found = events.wait(after, timeout=wait_s) if wait_s > 0 else events.read(after)
+                self._send_json(200, {"ok": True, "events": found,
+                                      "cursor": found[-1]["seq"] if found else after})
+                return
+            runner = getattr(state.agent, "TEAMS", None)
+            raw_jobs = state.jobs.store.all() if state.jobs is not None else []
+            busy = bool(state.chat_lock is not None and state.chat_lock.locked())
+            self._send_json(200, events.world(raw_jobs, runner.all() if runner else [], busy,
+                                              dict(getattr(state.agent, "LAST_TRIAGE", {}) or {})))
             return
         if route == "/teams":
             agent = self.server.state.agent

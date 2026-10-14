@@ -20,6 +20,7 @@ function machineRow(peer) {
   }
   const facts = [];
   if (hello.machine) facts.push(hello.machine.os + " " + (hello.machine.arch || ""));
+  if (hello.capabilities && hello.capabilities.length) facts.push("can: " + hello.capabilities.join(", "));
   if (hello.version && hello.version.commit) {
     const mine = (window.LOKI_VERSION || "");
     const same = mine && hello.version.commit === mine;

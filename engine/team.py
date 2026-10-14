@@ -77,6 +77,11 @@ def post(team_id: str, author: str, text: str, to: str = "all") -> dict:
     path.mkdir(parents=True, exist_ok=True)
     with open(path / "board.jsonl", "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry) + "\n")
+    try:
+        import events  # pylint: disable=import-outside-toplevel
+        events.emit("agent.message", entry["from"], {"text": entry["text"]}, team=team_id, recipient=entry["to"])
+    except Exception:  # noqa: BLE001
+        pass
     return entry
 
 
@@ -226,6 +231,12 @@ class TeamRunner:
 
     def _spawn(self, team: dict, role: str, extra: str = "") -> str:
         spec = ROLES[role]
+        try:
+            import events  # pylint: disable=import-outside-toplevel
+            events.emit("task.assigned", "LOKI", {"role": spec["name"], "goal": team["goal"],
+                        "stage": team.get("stage", "")}, team=team["id"], recipient=spec["name"])
+        except Exception:  # noqa: BLE001
+            pass
         job = self.jobs.create({
             "backend": "local", "agent": "loki", "workspace": team["workspace"],
             "isolate": False,               # one shared folder; stages never write at once
@@ -317,6 +328,12 @@ class TeamRunner:
 
     def _finish(self, team: dict, status: str, verdict: str) -> bool:
         team.update(status=status, verdict=verdict, finished=time.time())
+        try:
+            import events  # pylint: disable=import-outside-toplevel
+            events.emit("verification.completed", "LOKI", {"goal": team["goal"], "verdict": verdict,
+                        "verified": verdict.startswith("verified")}, team=team["id"])
+        except Exception:  # noqa: BLE001
+            pass
         post(team["id"], "LOKI", "Team finished: %s" % verdict)
         return True
 

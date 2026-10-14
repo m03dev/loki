@@ -4,6 +4,17 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-14 (session 13) - The five-layer vision, checked and started
+
+- Saved the owner's vision (docs/VISION.md) and checked every item against the code
+  (docs/STATUS.md).
+- Event stream + world API for the Godot LOKI World (events.py, /events, /world,
+  docs/WORLD.md); structured decisions + Jev fallback; machine capabilities; spending policy.
+- Fixed an endless loop in the goal loop (premature DONE).
+- Verified: tests/test_events.py (33) incl. decision-before-model; all suites via ship.py.
+
+---
+
 ## 2026-10-13 (session 12, part 3) - Agent teams
 
 - `engine/team.py`: roles per goal, staged background jobs on one folder, shared board,

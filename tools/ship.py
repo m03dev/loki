@@ -30,7 +30,7 @@ DEFAULT_REPO = HERE.parent
 BRANCH = os.getenv("LOKI_BRANCH", "master")
 MIRRORS = [b for b in os.getenv("LOKI_MIRROR_BRANCHES", "macos-app").split(",") if b.strip()]
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
-          "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team"]
+          "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events"]
 
 
 def run(repo: Path, *args: str, timeout: float = 300.0) -> tuple:

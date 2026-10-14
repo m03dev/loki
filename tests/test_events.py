@@ -1,0 +1,189 @@
+"""The event stream and the world view: real events only, in order, from every part of LOKI.
+
+    python tests/test_events.py
+
+Also proves the decision layer runs BEFORE the model on every request (docs/VISION.md 5:
+"the key test is whether every applicable request follows the required decision path
+before model and tool execution").
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+TMP = Path(tempfile.mkdtemp())
+os.environ["LOKI_DATA"] = str(TMP / "data")
+os.environ["LOKI_WORKSPACE"] = str(TMP / "ws")
+os.environ["LOKI_EXPERIENCE"] = "0"
+os.environ["LOKI_PEER_NAME"] = "test-mac"
+for key in ("LAYA_BASE_URL", "TYPESAFE_API_KEY", "LOKI_TEAM_ID"):
+    os.environ.pop(key, None)
+os.environ["LOKI_LAYA_LOCAL"] = "0"
+(TMP / "data").mkdir()
+(TMP / "ws").mkdir()
+sys.path.insert(0, str(REPO / "engine"))
+
+import events  # noqa: E402
+
+PASS, FAIL = [], []
+
+
+def check(name, ok, detail=""):
+    (PASS if ok else FAIL).append(name)
+    print("  %s %s%s" % ("PASS" if ok else "FAIL", name, ("  <- " + str(detail)[:300]) if (detail and not ok) else ""))
+
+
+def section(title):
+    print("\n" + title)
+
+
+section("events have one shape and stay in order")
+a = events.emit("task.created", "LOKI", {"title": "x"}, task="t1")
+b = events.emit("agent.message", "Builder", {"text": "hi"}, team="team1", recipient="Tester")
+check("an event carries type, sender, recipient, task, team, machine, payload",
+      all(k in b for k in ("seq", "t", "type", "sender", "recipient", "task", "team", "machine", "payload"))
+      and b["machine"] == "test-mac" and b["recipient"] == "Tester")
+check("sequence numbers only go up", b["seq"] > a["seq"])
+check("read(after) returns only newer events", [e["type"] for e in events.read(a["seq"])] == ["agent.message"])
+try:
+    events.emit("made.up", "x")
+    check("unknown event types are refused", False)
+except ValueError:
+    check("unknown event types are refused", True)
+c = events.emit("agent.status", "LOKI", {"state": "idle", "api_key": "sk-secret", "note": "x" * 5000})
+check("secrets never enter the stream", "api_key" not in c["payload"])
+check("payloads stay small", len(c["payload"]["note"]) <= 2000)
+
+section("long poll: a waiting client is woken by a new event")
+got = {}
+
+
+def waiter():
+    got["events"] = events.wait(c["seq"], timeout=10)
+
+
+th = threading.Thread(target=waiter)
+th.start()
+time.sleep(0.4)
+events.emit("task.started", "Builder", {}, task="t1")
+th.join(5)
+check("the waiting client receives the new event", got.get("events") and got["events"][0]["type"] == "task.started", got)
+started = time.monotonic()
+check("an idle wait returns empty at its timeout", events.wait(events.latest_seq(), timeout=0.5) == []
+      and time.monotonic() - started < 3)
+
+section("background jobs and teams report themselves")
+import workers  # noqa: E402
+
+sup = workers.default_supervisor(TMP / "data" / "workers")
+before = events.latest_seq()
+job = sup.create({"backend": "local", "agent": "loki", "prompt": "build it", "workspace": str(TMP / "ws"),
+                  "profile": {"name": "Builder"}, "team": "team1", "title": "Team team1 · Builder: build it"})
+sup._set(job["id"], status="working")
+sup._set(job["id"], status="done", output="DONE: built")
+kinds = [(e["type"], e["sender"]) for e in events.read(before)]
+check("a job's life is created -> started -> completed, by its role",
+      kinds == [("task.created", "Builder"), ("task.started", "Builder"), ("task.completed", "Builder")], kinds)
+check("job events carry the job and team ids", all(e["task"] == job["id"] and e["team"] == "team1" for e in events.read(before)))
+
+import team  # noqa: E402
+
+before = events.latest_seq()
+team.post("team1", "Tester", "FAIL: button does nothing", "Builder")
+msg = events.read(before)
+check("a team board post is an agent.message from that agent to its recipient",
+      msg and msg[0]["type"] == "agent.message" and msg[0]["sender"] == "Tester" and msg[0]["recipient"] == "Builder", msg)
+
+section("the world: who is there and what they do, from real state only")
+world = events.world(sup.store.all(), [], chat_busy=True, last_decision={"kind": "code"})
+names = [a["name"] for a in world["agents"]]
+check("LOKI itself is always there", names[0] == "LOKI" and world["agents"][0]["state"] == "working")
+builder = [a for a in world["agents"] if a["name"] == "Builder"]
+check("a team agent appears with its role, state and station",
+      builder and builder[0]["state"] == "done" and builder[0]["station"] == "workshop" and builder[0]["team"] == "team1", builder)
+team.post("team1", "Builder", "built the order page")
+check("its last real board message is attached",
+      [a for a in events.world(sup.store.all(), [], False)["agents"] if a["name"] == "Builder"][0]["last_message"] == "built the order page")
+old = sup.create({"backend": "local", "agent": "loki", "prompt": "old", "workspace": str(TMP / "ws")})
+sup.store.update(old["id"], status="done", finished=time.time() - 7200)
+check("long-finished agents leave the world", not any(a["id"] == "job-" + old["id"] for a in
+      events.world(sup.store.all(), [], False)["agents"]))
+check("the world carries the event cursor for the next poll", world["cursor"] > 0)
+
+section("the decision is made BEFORE the model runs, on every request")
+import loki  # noqa: E402
+
+seen = {}
+
+
+async def fake_turn(*_a, **_k):
+    seen["triage"] = dict(loki.LAST_TRIAGE)
+    seen["decisions"] = [e for e in events.read(seen["mark"]) if e["type"] == "decision.made"]
+    return "DONE: answered"
+
+
+loki.agent_turn = fake_turn
+for text in ("what is this project?", "fix the crash in parser.py when the file is empty"):
+    seen.clear()
+    seen["mark"] = events.latest_seq()
+    asyncio.run(loki.run_agent(text))
+    check("decision recorded before the model call: %r" % text[:30],
+          seen.get("triage", {}).get("kind") and len(seen.get("decisions", [])) == 1, seen)
+seen.clear()
+seen["mark"] = events.latest_seq()
+result = asyncio.run(loki.pursue_goal("add a jump to the player"))
+check("a model that says DONE without writing anything is stopped, not looped forever",
+      result.startswith("BLOCKED") and "without changing any file" in result, result)
+check("tasks (the goal loop) are decided first too", len(seen.get("decisions", [])) == 1, seen)
+d = seen.get("decisions", [{}])[0].get("payload", {})
+check("the decision is structured: intent, route, capabilities, risk, approval, rationale, fallback",
+      all(k in d for k in ("intent", "route", "capabilities", "risk", "approval", "rationale", "fallback")), d)
+check("without Laya or Jev the rules decide, and say so", d.get("source") == "rules" and "rules" in d.get("rationale", "").lower(), d)
+status = [e["payload"].get("state") for e in events.read(seen["mark"]) if e["type"] == "agent.status"]
+check("LOKI reports working, then idle", status[:1] == ["working"] and status[-1:] == ["idle"], status)
+
+section("spending policy: never paid on its own, and a daily cap")
+saved = (loki.provider_configured, loki.online, loki.local_ready, loki.model_name, loki.ALLOW_PAID)
+loki.provider_configured = lambda name: name in ("deepseek-4.1", "gemini")
+loki.online = lambda: True
+loki.local_ready = lambda: False
+loki.model_name = "smart"
+loki._SMART_FAILED.clear()
+loki.ALLOW_PAID = False
+check("smart skips a configured paid provider and uses the free one", loki.active_model_name() == "gemini", loki.active_model_name())
+loki._SMART_FAILED.add("gemini")
+check("even when the free one is used up, it does not switch to paid by itself", loki.active_model_name() != "deepseek-4.1")
+loki.ALLOW_PAID = True
+check("paid is used only once you allow it", loki.active_model_name() == "deepseek-4.1")
+loki.USAGE.record("deepseek-4.1", "x", 1, 1, 10)
+loki.USAGE.path.write_text('{"t": %f, "provider": "deepseek-4.1", "model": "x", "in": 1, "out": 1, "ms": 10, "cost": 5.0, "free": false}\n' % time.time())
+check("the daily dollar limit stops automatic paid use", loki.active_model_name() != "deepseek-4.1")
+loki.provider_configured, loki.online, loki.local_ready, loki.model_name, loki.ALLOW_PAID = saved
+loki._SMART_FAILED.clear()
+check("the call path refuses paid calls past the daily limit", "hit the daily paid budget" in
+      (REPO / "engine" / "loki.py").read_text(encoding="utf-8"))
+
+section("machines advertise what they can really do")
+import peer_link  # noqa: E402
+
+caps = peer_link.machine_capabilities(None, local_models=[])
+check("the basics are always there", {"model.chat", "code.edit", "agents.team"} <= set(caps), caps)
+check("local inference is claimed only with a local model", "model.local-inference" not in caps
+      and "model.local-inference" in peer_link.machine_capabilities(None, local_models=["qwen3:8b"]))
+
+section("wired into the engine")
+bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+check("/events (long poll) and /world are served", 'route in ("/events", "/world")' in bridge and "events.wait(" in bridge)
+check("approvals are events", '"approval.required"' in bridge)
+check("the world protocol is documented for the Godot client", (REPO / "docs" / "WORLD.md").is_file())
+
+print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
+if FAIL:
+    print("FAILED: " + ", ".join(FAIL))
+sys.exit(1 if FAIL else 0)

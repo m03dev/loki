@@ -66,6 +66,7 @@ How the pieces fit, as built. The direction for the next rounds of work is in
 | `conductor.py`, `capabilities.py`, `manifests.py`, `interfaces.py`, `runners/` | specialists and optional add-ons (capabilities/*/manifest.json) |
 | `workers.py`, `agents.py`, `cli_agents.py`, `sessions.py` | background agents and coding-agent subscriptions |
 | `team.py` | agent teams: roles chosen per goal, stages (plan, build, check, one fix round), a shared board |
+| `events.py` | the event stream (`/events`) and the world view (`/world`) for the Godot LOKI World |
 | `updater.py` | one version everywhere: update from GitHub on start, check while running (publish with `tools/ship.py`) |
 | `experience.py`, `usage.py`, `model_setup.py`, `federation.py` | learning, cost, local models, other machines' Ollama |
 | `peers.py`, `peer_link.py` | the Mac <-> PC link |

@@ -89,7 +89,7 @@ def record(entry: dict, root: Path | None = None) -> dict:
         "trajectory": bool(entry.get("trajectory", False)),
         "triage": {k: v for k, v in (entry.get("triage") or {}).items()
                    if k in ("source", "kind", "route", "difficulty", "risk", "confidence", "ms",
-                            "actual_route")},
+                            "actual_route", "missing_info", "capabilities")},
     }
     with open(root_dir(root) / "log.jsonl", "a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")

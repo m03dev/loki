@@ -1,0 +1,85 @@
+# LOKI status against the vision
+
+Every item in docs/VISION.md, checked against the code on 2026-10-14 (not against older
+docs). Status words from the vision: **Proposed -> Investigating -> Blocked / Implementing ->
+Implemented -> Tested -> Verified** (Verified = shown working on the owner's machines).
+"Tested" means an automated test in `tests/` proves it; `tools/ship.py --check` runs them all,
+on macOS and Windows in CI. Update this file when a status changes.
+
+## 1. Core: decisions, routing, permissions
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Every request decided before the model runs | Tested | `first_layer.py`; tests/test_events.py proves `decision.made` before the model call for chat and tasks |
+| Laya as the local first layer, warm, offline | Verified on PC, Tested | `laya.py`, `laya_server.mjs`; PC: model downloaded, self-test passed; Mac: not installed yet |
+| Jev as the second opinion | Implemented | used when Laya cannot answer and `TYPESAFE_API_KEY` is set; no key on either machine |
+| Structured decision (intent, route, capabilities, missing info, risk, approval, rationale, fallback) | Tested | `first_layer._complete`; logged with every outcome |
+| Decision accuracy measured | Tested | `experience.triage_stats` (per source, against what the request needed) |
+| Decisions cannot grant permissions | Tested | `policy.py` decides; Laya/Jev can only skip a prompt for a confidently safe call |
+| Hardware-aware routing | Implementing | `model_setup.hardware()`, GPU in peer hello; routing does not yet weigh VRAM per task |
+| Provider routing with failover | Tested | `SMART_ORDER`, `failover_target`, learned order within cost tiers |
+| No paid fallback unless allowed; daily dollar cap | Tested | `LOKI_ALLOW_PAID` (default off), `LOKI_DAILY_USD_LIMIT` (default $1/day), per-request paid call cap |
+| Usage ledger (calls, tokens, cost) | Tested | `usage.py`, Settings > Usage; provider account balances are shown as unknown, never invented |
+| API Vault as a provider registry with quotas and health | Implementing | `api_vault.py` is an API directory (apis.guru); provider health/quota fields not built yet |
+| Secrets out of prompts, logs, events, repo | Tested | `redact_secrets`, events payload filter, `.gitignore` covers `harness_data/` |
+
+## 2. Workforce: agents, teams, machines
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Background agents in isolated worktrees | Tested | `workers.py` (local, herdr, cua backends) |
+| Teams built per goal (roles chosen for you) | Tested | `team.py`: researcher, architect, builder, tester, reviewer, browser tester; one fix round |
+| Agents talk to each other | Tested | team board (`team_post`/`team_read`) -> `agent.message` events |
+| Common event format (agent.status ... verification.completed) | Tested | `events.py`, `GET /events` (long poll) |
+| Machines advertise real capabilities | Tested | `peer_link.machine_capabilities` in hello (git, gpu.cuda, model.local-inference, godot.test, blender.inspect, ...) |
+| Mac <-> PC link (signed, LAN) | Implemented, Blocked | `peers.py`; machines are on different networks (192.168.1.x / 192.168.0.x): same network or Tailscale needed |
+| Same version on every machine | Tested | `updater.py`, `tools/ship.py`, CI on macOS + Windows |
+| Leases, retries, recovery if a peer disappears | Proposed | jobs survive restarts locally; cross-machine leases not built |
+| Steam P2P transport | Proposed | not evaluated; the transport is replaceable (peers.py) |
+| School PC / laptop as conditional workers | Proposed | any machine running LOKI can be linked; nothing machine-specific built |
+
+## 3. World: agents as characters
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Real-state API for the world | Tested | `GET /world`, `GET /events`, docs/WORLD.md |
+| Godot client with the existing characters | Proposed | separate Godot project; brief for Ziva in docs/WORLD.md |
+| Characters only act on real events | Tested (engine side) | `events.world` builds agents from jobs/teams/events only |
+| Nordic LOKI identity (L-geometry logo, navy + cyan/emerald) | Proposed | not in the app yet |
+
+## 4. Bridge: integrations
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Godot (optional game capability) | Implemented | `godot_tools.py` (validate, run, probe scenes) when a game project is open |
+| Claude Code / Codex subscriptions | Verified on PC | `cli_agents.py`; PC reports both ready |
+| MCP servers | Implemented | `mcp_servers.json` (time, fetch, sequential, Godot servers off by default) |
+| Browser Use, cua, Crawl4AI, Firecrawl, Scrapling, Perplexity, Vane, Hindsight, Hermes | Implemented | capability manifests, off until enabled; not run for real on either machine |
+| Unreal, Blender, Maya, Substance, Unity adapters | Proposed | only detected (`machine_capabilities`), no adapters |
+| One common creative-tool interface | Proposed | |
+| Obsidian vault | Implemented | `tools/export_obsidian.py`; the Brain tab was removed |
+
+## 5. Evolution: improving safely
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Outcome log and verified examples | Tested | `experience.py` |
+| Fine-tune on the PC's GPU, promote only if better | Implemented | `tools/self_improve.py`, `train_lora.py`; no training run yet (needs examples) |
+| LOKI changes its own code in isolated worktrees, ships only when tests pass | Tested | `improve_loki`, `ship_loki`, `tools/ship.py` (refuses failing tests and conflicts) |
+| Protected areas (policy, evaluator, secrets) need stricter review | Proposed | not enforced yet: ship.py gates on tests only |
+| Evaluation suite (routing, fallback, injection, approvals, recovery) | Implementing | 10 offline suites (~1000 checks); no live model evaluations yet |
+| Dashboard | Implementing | work strip, Settings > Usage / Machines; no single dashboard |
+
+## Research the vision asks for (not code)
+
+Repository catalog (DeepSeek Harness, OpenViking, Graphiti, OpenHub, October Bus, AutoHelix,
+EvoSkill, AgentArena, OpenScreen, ...), free inference comparison, hosting and publishing
+terms, creative-tool bridge options, Steam P2P vs LAN vs Tailscale: **Proposed**. None of it
+has been researched with current sources yet; treat the names in VISION.md as candidates.
+
+## Fixed while checking
+
+- The goal loop could spin forever when a model kept answering "DONE" without changing any
+  file; it now stops after 3 tries with BLOCKED (tests/test_events.py).
+- Automatic routing could pick a paid provider on its own (for example a paid OpenRouter
+  model); it no longer does unless `LOKI_ALLOW_PAID=1`.

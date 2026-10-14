@@ -49,6 +49,18 @@ QUESTIONS = {
     "risk": {"type": "noul",
              "instructions": ("Could carrying out this request delete data, spend money, sign in to "
                               "an account, or send or post anything on the user's behalf?")},
+    "missing": {"type": "noul",
+                "instructions": "Is information missing that the assistant must ask the user for before starting?"},
+}
+
+# What each kind of work needs from LOKI (checked against what is installed by the caller).
+CAPABILITIES = {
+    "question": ["model.chat"], "chat": ["model.chat"],
+    "code": ["repository.read", "code.edit", "tests.run"],
+    "research": ["web.search", "web.read"],
+    "browse": ["browser.use", "approval.human"],
+    "build": ["repository.read", "code.edit", "tests.run", "agents.team"],
+    "ops": ["command.run", "approval.human"],
 }
 
 # How long the first layer may wait for Laya before the rules answer. Laya answers in well
@@ -113,10 +125,14 @@ def _from_laya(answers: dict) -> dict | None:
         return None
     probs = (answers.get("route") or {}).get("probabilities") or {}
     confidence = probs.get(route)
-    return {"kind": kind, "route": route,
-            "difficulty": int(round(float(score))) if isinstance(score, (int, float)) else 1,
-            "risk": round(float(risk), 3) if isinstance(risk, (int, float)) else None,
-            "confidence": round(float(confidence), 3) if isinstance(confidence, (int, float)) else None}
+    missing = (answers.get("missing") or {}).get("noul")
+    out = {"kind": kind, "route": route,
+           "difficulty": int(round(float(score))) if isinstance(score, (int, float)) else 1,
+           "risk": round(float(risk), 3) if isinstance(risk, (int, float)) else None,
+           "confidence": round(float(confidence), 3) if isinstance(confidence, (int, float)) else None}
+    if isinstance(missing, (int, float)):
+        out["missing_info"] = missing >= 0.6
+    return out
 
 
 def triage(message: str, mode: str = "build", wait: bool = True) -> dict:
@@ -146,9 +162,22 @@ def triage(message: str, mode: str = "build", wait: bool = True) -> dict:
         else:
             note = ("Laya is loading its model; using built-in rules" if laya.SERVER.state == "loading"
                     else "Laya is unavailable (%s); using built-in rules" % (laya.SERVER.error or "not ready"))
+    if result is None and which != "http":
+        # Second opinion: Jev (hosted, key-gated) answers the same typed questions.
+        try:
+            import jev  # pylint: disable=import-outside-toplevel
+            if jev.enabled():
+                answers = jev.decide(QUESTIONS, {"request": (message or "")[:4000], "mode": mode})
+                result = _from_laya(answers) if answers else None
+                if result:
+                    source = "jev"
+                    note = (note + "; Jev answered instead").strip("; ")
+        except Exception:  # noqa: BLE001
+            pass
     if result is None:
         result = rules(message)
     result.update({"source": source, "ms": round((time.monotonic() - started) * 1000.0, 1)})
+    _complete(result, message)
     if note:
         result["note"] = note
     if mode in ("ask", "plan") and result["route"] == "team":
@@ -156,10 +185,26 @@ def triage(message: str, mode: str = "build", wait: bool = True) -> dict:
     return result
 
 
+def _complete(t: dict, message: str) -> None:
+    """Fill in the rest of the structured decision (docs/VISION.md section 5)."""
+    t["intent"] = t.get("kind", "")
+    t["capabilities"] = list(CAPABILITIES.get(t.get("kind", ""), ["model.chat"]))
+    if t.get("route") == "team" and "agents.team" not in t["capabilities"]:
+        t["capabilities"].append("agents.team")
+    risk = t.get("risk")
+    t["approval"] = "likely" if isinstance(risk, (int, float)) and risk >= 0.5 else "only for risky tools"
+    if "missing_info" not in t:
+        t["missing_info"] = len((message or "").split()) < 3 and t.get("kind") not in ("chat", "question")
+    t["rationale"] = "%s says: %s request, %s, difficulty %s of 3" % (
+        {"laya": "Laya", "jev": "Jev"}.get(t.get("source"), "The built-in rules"),
+        t.get("kind"), str(t.get("route", "")).replace("_", " "), t.get("difficulty"))
+    t["fallback"] = "built-in rules" if t.get("source") != "rules" else "none needed"
+
+
 def describe(t: dict) -> str:
     """One line for the conversation trace."""
     level = DIFFICULTY[max(0, min(3, int(t.get("difficulty") or 0)))]
-    who = "Laya" if t.get("source") == "laya" else "Rules"
+    who = {"laya": "Laya", "jev": "Jev"}.get(t.get("source"), "Rules")
     text = "%s: %s, %s, %s" % (who, t.get("kind"), t.get("route", "").replace("_", " "), level)
     if isinstance(t.get("risk"), (int, float)) and t["risk"] >= 0.5:
         text += ", may need your approval"
@@ -171,6 +216,9 @@ def describe(t: dict) -> str:
 def guidance(t: dict) -> str:
     """What the agent is told about the triage, or "" when nothing changes."""
     route = t.get("route")
+    if t.get("missing_info") and route != "answer":
+        return ("First-layer triage: important information seems to be missing. Ask the user the "
+                "one or two questions you need before you start.")
     if route == "answer":
         return ("First-layer triage: this looks like a question or conversation. Answer it "
                 "directly; only call a tool if the answer genuinely needs one.")

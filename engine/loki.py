@@ -96,6 +96,7 @@ AUTO_APPROVE = (os.getenv("LOKI_AUTO_APPROVE") or os.getenv("HARNESS_AUTO_APPROV
 
 MAX_OUTPUT = 8000   # characters of command output handed back to the model
 GOAL_STEPS = 0      # 0 = run a goal until it says DONE/BLOCKED (no step limit)
+PREMATURE_DONE_LIMIT = 3   # "DONE" with nothing written: rejected this many times, then BLOCKED
 MAX_TURNS_PER_REQUEST = int(os.getenv("LOKI_MAX_TURNS", "0"))       # model<->tool cycles per request (0 = UNLIMITED)
 REQUEST_DEADLINE_S = float(os.getenv("LOKI_REQUEST_DEADLINE", "0"))    # wall-clock seconds per request (0 = no deadline)
 # Safety nets that hold even when the budgets above are "unlimited": a runaway loop
@@ -272,6 +273,7 @@ import model_setup  # noqa: E402  (offline-first: find, download and warm local 
 import usage  # noqa: E402  (token and cost ledger - the credits meter)
 import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 import first_layer  # noqa: E402  (every request is triaged first: Laya, else built-in rules)
+import events  # noqa: E402  (the event stream: what really happened, for the world and agents)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
 REPO_ROOT = ROOT.parent
@@ -665,6 +667,8 @@ def active_model_name() -> str:
     """The provider actually in use - SMART resolves to the best available."""
     if model_name == "online":
         for candidate in routing_order(ONLINE_ORDER):
+            if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
+                continue
             if candidate not in _SMART_FAILED and provider_configured(candidate):
                 return candidate
         # Nothing is configured yet. Name one anyway so the error tells the user exactly
@@ -678,6 +682,8 @@ def active_model_name() -> str:
     if not online():
         return "local"
     for candidate in routing_order(SMART_ORDER):
+        if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
+            continue   # never switch to a paid provider on its own
         if candidate not in _SMART_FAILED and provider_configured(candidate):
             return candidate
     return "local"
@@ -816,6 +822,25 @@ def redact_secrets(text: str) -> str:
 _METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
                     "ollama-cloud"}
 PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
+# Spending policy (docs/VISION.md 6): automatic routing never picks a paid provider unless
+# LOKI_ALLOW_PAID=1, and paid use stops for the day at LOKI_DAILY_USD_LIMIT (from the usage
+# ledger), even for a paid model you picked yourself.
+ALLOW_PAID = str(os.getenv("LOKI_ALLOW_PAID", "0")).strip().lower() in ("1", "true", "yes", "on")
+try:
+    DAILY_USD_LIMIT = float(os.getenv("LOKI_DAILY_USD_LIMIT", "1.0") or 1.0)
+except ValueError:
+    DAILY_USD_LIMIT = 1.0
+
+
+def paid_spent_today() -> float:
+    try:
+        return round(sum(e.get("cost", 0.0) for e in USAGE.entries(time.time() - 86400)), 4)
+    except Exception:  # noqa: BLE001 - no ledger yet means nothing spent
+        return 0.0
+
+
+def paid_allowed_automatically() -> bool:
+    return ALLOW_PAID and paid_spent_today() < DAILY_USD_LIMIT
 REQUEST_USAGE: dict = {}   # provider -> {"calls", "prompt_tokens", "completion_tokens"}
 
 
@@ -2837,6 +2862,9 @@ def _triage(text: str) -> dict:
         verdict = dict(first_layer.rules(text), source="rules", note="triage failed: %s" % exc)
     LAST_TRIAGE = verdict
     TRIAGE_NOTE = first_layer.guidance(verdict)
+    events.emit("decision.made", "Laya" if verdict.get("source") == "laya" else "LOKI rules",
+                dict(verdict, request=text[:300]))
+    events.emit("agent.status", "LOKI", {"state": "working", "kind": verdict.get("kind", "")})
     refresh_system_prompt()
     _progress("triage", first_layer.describe(verdict))
     return verdict
@@ -2844,6 +2872,7 @@ def _triage(text: str) -> dict:
 
 def _end_triage() -> None:
     global TRIAGE_NOTE
+    events.emit("agent.status", "LOKI", {"state": "idle"})
     if TRIAGE_NOTE:
         TRIAGE_NOTE = ""
         refresh_system_prompt()
@@ -4023,6 +4052,11 @@ async def agent_turn(force_tool: bool = False) -> str:
             # Resolve the provider BEFORE the request, so a failure is pinned on the
             # provider that actually failed (re-resolving afterwards names the next one).
             provider = active_model_name()
+            if is_metered(provider) and paid_spent_today() >= DAILY_USD_LIMIT:
+                raise BudgetExhausted(
+                    "hit the daily paid budget: $%.2f spent in the last 24 hours (limit $%.2f, "
+                    "LOKI_DAILY_USD_LIMIT). Use a free provider, or raise the limit." % (
+                        paid_spent_today(), DAILY_USD_LIMIT))
             if PAID_MAX_CALLS > 0 and is_metered(provider) and _paid_calls() >= PAID_MAX_CALLS:
                 raise BudgetExhausted(
                     "hit the paid-provider budget: %d calls to metered providers this request "
@@ -4273,6 +4307,7 @@ async def _pursue_goal(goal: str) -> str:
     stalls = 0
     force_next = False
     verify_rejections = 0
+    premature_done = 0
     while True:
         step += 1
         if GOAL_STEPS > 0 and step > GOAL_STEPS:
@@ -4298,6 +4333,13 @@ async def _pursue_goal(goal: str) -> str:
             stalls = 0
         head = reply.strip().upper()
         if head.startswith("DONE") and _goal_needs_files(goal) and not _task_modified:
+            premature_done += 1
+            if premature_done > PREMATURE_DONE_LIMIT:
+                message = ("BLOCKED: the model kept saying DONE without changing any file (%d times); "
+                           "stopped instead of looping. Try a stronger model." % premature_done)
+                _progress("done", message)
+                save_history()
+                return message
             _progress("thinking", "Checked: nothing was written yet - not accepting DONE.")
             messages.append({"role": "user", "content": (
                 "Your 'DONE' is premature: NO file was created or changed during this "
@@ -4365,6 +4407,8 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
                 request_id, goal, turns, [u for u in used if u],
                 meta={"kind": kind, "provider": providers[-1] if providers else "",
                       "files": list(_task_files)}) is not None
+        for changed in list(_task_files)[:20]:
+            events.emit("artifact.created", "LOKI", {"path": changed, "outcome": outcome})
         experience.record({
             "id": request_id, "kind": kind, "goal": goal, "status": status, "outcome": outcome,
             "provider": providers[-1] if providers else "", "providers": providers,
@@ -4386,7 +4430,7 @@ def _triage_record(start_index: int = 0) -> dict:
         if isinstance(c, dict)) for m in messages[start_index:])
     t["actual_route"] = first_layer.actual_route(_REQUEST_TOOL_CALLS, delegated)
     return {k: t[k] for k in ("source", "kind", "route", "difficulty", "risk", "confidence", "ms",
-                              "actual_route") if k in t}
+                              "actual_route", "missing_info", "capabilities") if k in t}
 
 
 def _status_of_reply(reply: str) -> str:

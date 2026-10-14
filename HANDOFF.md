@@ -41,6 +41,18 @@ one fix round, stops when a stage cannot finish. Verified offline (tests/test_te
 live on the engine API without a model (the team stopped correctly at the architect).
 Not yet: placing team stages on the PC over the peer link; a real model run end to end.
 
+## Session 13 (2026-10-14): the owner's five-layer vision
+
+- docs/VISION.md (the owner's vision, kept), docs/STATUS.md (every item checked against the
+  code - read it before planning), docs/WORLD.md (world protocol + Ziva brief).
+- `events.py`: one event stream (task.*, agent.*, approval, artifact, verification, decision)
+  emitted by jobs, teams, the first layer, approvals; `/events` long poll, `/world`.
+- First layer returns the full structured decision; Jev answers when Laya cannot.
+- Machines advertise real capabilities in hello.
+- Spending policy: no automatic paid routing unless LOKI_ALLOW_PAID=1; daily dollar cap.
+- Fixed: the goal loop's endless "premature DONE" path.
+- Next for the world: Ziva builds the Godot client from docs/WORLD.md in the world project.
+
 ## Done earlier (see docs/operations/SESSION_LOG.md)
 
 engine/ layout and no Godot files (5.1); Background and Brain tabs replaced by work in the

@@ -70,6 +70,20 @@ team board, and the team only reports "verified" when every check passes (one fi
 then it asks you). You see the team, its stage and its board above the message box. You
 never build agents by hand.
 
+## LOKI World
+
+Your Godot world can show LOKI's real agents as characters: the engine serves `GET /world`
+(who is there and what they do) and `GET /events` (everything that happens, in order). The
+world is its own Godot project; this repository stays Godot-free. Protocol and a brief for
+Ziva: [docs/WORLD.md](docs/WORLD.md).
+
+## Spending
+
+LOKI never switches to a paid provider on its own (`LOKI_ALLOW_PAID=1` allows it), and paid
+use stops for the day at `LOKI_DAILY_USD_LIMIT` (default $1).
+
+Where everything stands against the vision: [docs/STATUS.md](docs/STATUS.md).
+
 ## Link your machines
 
 Run LOKI on your Mac and your PC and let them work together: the PC takes background jobs,
@@ -102,6 +116,7 @@ $PY tests/test_peers.py           # Mac <-> PC link
 $PY tests/test_first_layer.py     # Laya first layer (needs Node 20+ for the Laya part)
 $PY tests/test_updater.py         # same version everywhere: updater, ship.py
 $PY tests/test_team.py            # agent teams: roles, stages, board, fix round
+$PY tests/test_events.py          # event stream, world view, decision-before-model, spending
 $PY tools/ship.py --check         # all of the above
 ```
 
