@@ -42,11 +42,15 @@ How the pieces fit, as built. The direction for the next rounds of work is in
    Codex, Hermes) as jobs: detached on this computer, in herdr, or inside a cua virtual
    computer. Host jobs work in their own git worktree. The chat shows them live above the
    message box.
-7. **Learning.** `experience.py` logs every request (provider, route, triage, outcome) and
+7. **Teams.** For a large job (first layer: "team") Loki calls `start_team`: `team.py` picks
+   the roles (Laya decides, rules otherwise), runs them as background jobs in stages on the
+   project folder, and the agents talk on a shared board (`team_post` / `team_read`). The
+   team is verified when every check passes, or asks for you after one fix round.
+8. **Learning.** `experience.py` logs every request (provider, route, triage, outcome) and
    keeps verified successes as training examples. Routing learns from measured success.
    `tools/self_improve.py` + `tools/train_lora.py` fine-tune a small model on the PC's GPU
    and promote it only if it beats the current one.
-8. **Machines.** `peers.py` / `peer_link.py` link LOKI on the Mac and the PC: signed
+9. **Machines.** `peers.py` / `peer_link.py` link LOKI on the Mac and the PC: signed
    requests, private network only, off by default. The Mac sends jobs and verified work to
    the PC and can use its GPU and its trained model. See
    [operations/MACHINES.md](operations/MACHINES.md).
@@ -61,6 +65,8 @@ How the pieces fit, as built. The direction for the next rounds of work is in
 | `policy.py`, `safe_exec.py`, `skill_scan.py` | what may run, how it runs, untrusted skills |
 | `conductor.py`, `capabilities.py`, `manifests.py`, `interfaces.py`, `runners/` | specialists and optional add-ons (capabilities/*/manifest.json) |
 | `workers.py`, `agents.py`, `cli_agents.py`, `sessions.py` | background agents and coding-agent subscriptions |
+| `team.py` | agent teams: roles chosen per goal, stages (plan, build, check, one fix round), a shared board |
+| `updater.py` | one version everywhere: update from GitHub on start, check while running (publish with `tools/ship.py`) |
 | `experience.py`, `usage.py`, `model_setup.py`, `federation.py` | learning, cost, local models, other machines' Ollama |
 | `peers.py`, `peer_link.py` | the Mac <-> PC link |
 | `knowledge.py`, `brain.py`, `project_state.py`, `repo_review.py`, `api_vault.py`, `ecc_sync.py` | context, memory, project state, skill libraries |

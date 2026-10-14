@@ -231,3 +231,4 @@ table.usage th { color: var(--muted); font-weight: 500; }
 
 .sheet-panel.wide { width: min(860px, 100%); }
 .version.attention { color: var(--warn); }
+.job.team { border-color: var(--tool); }

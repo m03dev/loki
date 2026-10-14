@@ -4,6 +4,17 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 12, part 3) - Agent teams
+
+- `engine/team.py`: roles per goal, staged background jobs on one folder, shared board,
+  fix round, stop on a failed stage; tools start_team/team_post/team_read; /teams; UI.
+- CI fixed for macOS (launcher dialogs) and machines without the skill libraries; tests
+  green on macOS and Windows on GitHub.
+- Verified: tests/test_team.py (35); live: POST /teams on a real engine started a real
+  architect job, the board recorded it, the team stopped with "needs you" (no model here).
+
+---
+
 ## 2026-10-13 (session 12, part 2) - One version on both machines; LOKI ships itself
 
 - Mac: copied the current code into `~/Documents/loki` (it had no git history) and restarted

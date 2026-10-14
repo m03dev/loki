@@ -258,7 +258,9 @@ class LocalBackend(Backend):
             # The child works in the job's folder, shares Loki's data (keys, memory, models)
             # and never inherits the engine's own workspace.
             env = dict(os.environ, LOKI_WORKSPACE=job["run_dir"], LOKI_DATA=str(self.data_dir),
-                       LOKI_MODE="build", PYTHONUNBUFFERED="1", LOKI_JOB_ID=job["id"])
+                       LOKI_MODE="build", PYTHONUNBUFFERED="1", LOKI_JOB_ID=job["id"],
+                       LOKI_TEAM_ID=str(job.get("team") or ""),
+                       LOKI_TEAM_ROLE=str((job.get("profile") or {}).get("name") or ""))
             env.pop("GAME_PROJECT", None)
             if (Path(job["run_dir"]) / "project.godot").is_file():
                 env["GAME_PROJECT"] = job["run_dir"]
@@ -672,6 +674,7 @@ class Supervisor:
             "profile": spec.get("profile") if isinstance(spec.get("profile"), dict) else {},
             "allow_commands": bool(spec.get("allow_commands")),
             "model": str(spec.get("model") or ""),
+            "team": str(spec.get("team") or "")[:40],
         }
         return self.store.add(job)
 

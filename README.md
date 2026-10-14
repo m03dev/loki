@@ -61,6 +61,15 @@ The Mac and the PC always run the same LOKI: GitHub's `master`.
 
 Agents: read [AGENTS.md](AGENTS.md) and [HANDOFF.md](HANDOFF.md) before changing anything.
 
+## Agent teams
+
+Ask for something big ("build a landing page for my bakery and test it in a browser") and
+LOKI builds a team for it: researcher if needed, architect, builder, tester, reviewer and a
+browser tester for web work. They work in stages in your project folder, talk on a shared
+team board, and the team only reports "verified" when every check passes (one fix round,
+then it asks you). You see the team, its stage and its board above the message box. You
+never build agents by hand.
+
 ## Link your machines
 
 Run LOKI on your Mac and your PC and let them work together: the PC takes background jobs,
@@ -92,6 +101,7 @@ $PY tests/test_offline_e2e.py     # full offline run against a fake model server
 $PY tests/test_peers.py           # Mac <-> PC link
 $PY tests/test_first_layer.py     # Laya first layer (needs Node 20+ for the Laya part)
 $PY tests/test_updater.py         # same version everywhere: updater, ship.py
+$PY tests/test_team.py            # agent teams: roles, stages, board, fix round
 $PY tools/ship.py --check         # all of the above
 ```
 

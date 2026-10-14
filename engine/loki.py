@@ -2030,6 +2030,9 @@ LOCAL_TOOLS = {
     "conductor": lambda role, task="", url="": conductor_tool(role, task, url),
     "delegate": lambda agent, task: delegate(agent, task),
     "improve_loki": lambda task: improve_loki(task),
+    "start_team": lambda goal: start_team(goal),
+    "team_post": lambda text, to="all": team_post(text, to),
+    "team_read": lambda: team_read(),
     "ship_loki": lambda message, path="": ship_loki(message, path),
     "knowledge": knowledge_tool,
     "list_files": list_files,
@@ -2088,7 +2091,7 @@ RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", 
 # Writes outside the project (downloads into harness_data) - not "read-only" either.
 NETWORK_WRITES = {"sync_ecc"}
 # Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
-DELEGATING = {"delegate", "improve_loki", "ship_loki"}
+DELEGATING = {"delegate", "improve_loki", "ship_loki", "start_team"}
 
 # LOKI improving its own code (improve_loki / ship_loki): "auto" lets agents change, test
 # and push LOKI without asking (ship.py refuses to push unless every test passes), "ask"
@@ -2096,7 +2099,7 @@ DELEGATING = {"delegate", "improve_loki", "ship_loki"}
 SELF_SHIP = str(os.getenv("LOKI_SELF_SHIP", "auto")).strip().lower()
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
-DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate"}
+DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate", "start_team"}
 if SELF_SHIP == "ask":
     DANGEROUS |= {"improve_loki", "ship_loki"}
 POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
@@ -2134,6 +2137,45 @@ def delegate(agent: str, task: str) -> str:
     threading.Thread(target=JOBS.tick, daemon=True).start()
     return ("started background job %s: %s is working on it. The user sees it above the message box; "
             "you do not need to wait for it." % (job["id"], profile["name"]))
+
+
+import team as teams  # noqa: E402  (agent teams: one sentence in, a team that builds it)
+TEAMS = None  # team.TeamRunner, set by the engine (loki_bridge) next to JOBS
+
+
+def start_team(goal: str) -> str:
+    """Build a team for this goal and start it (roles, specs and stages are chosen for you)."""
+    if TEAMS is None:
+        return "error: agent teams are not running in this Loki"
+    try:
+        team = TEAMS.start(goal, str(WORKSPACE), triage=dict(LAST_TRIAGE or {}), model="")
+    except ValueError as exc:
+        return "error: %s" % exc
+    return ("started team %s (%s) on %s. They plan, build, test and review in turn and talk on a "
+            "shared board; the user sees them above the message box. You do not need to wait."
+            % (team["id"], ", ".join(teams.ROLES[r]["name"] for r in team["roles"]), WORKSPACE))
+
+
+def _my_team() -> str:
+    return os.getenv("LOKI_TEAM_ID", "").strip()
+
+
+def team_post(text: str, to: str = "all") -> str:
+    """Post a note to your team's board (only inside a team)."""
+    team_id = _my_team()
+    if not team_id:
+        return "error: you are not on a team"
+    who = os.getenv("LOKI_TEAM_ROLE", "") or "agent " + os.getenv("LOKI_JOB_ID", "")
+    teams.post(team_id, who, text, to)
+    return "posted to team %s" % team_id
+
+
+def team_read() -> str:
+    """Read your team's board."""
+    team_id = _my_team()
+    if not team_id:
+        return "error: you are not on a team"
+    return teams.board_text(team_id) or "(the board is empty)"
 
 
 SELF_IMPROVE_PROMPT = """You are improving LOKI itself - the app you are part of.
@@ -2291,6 +2333,11 @@ TOOL_SCHEMAS = [
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
     schema("delegate", "Hand a longer task to one of your agents (Researcher, Builder, Reviewer, Tester, or one the user made) as a background job, so you can keep talking. The user approves each one. agent=name, task=what to do.",
            {"agent": {"type": "string"}, "task": {"type": "string"}}, ["agent", "task"]),
+    schema("start_team", "Start a team of agents for a large job (the first layer marks it 'team'): LOKI picks the roles (researcher, architect, builder, tester, reviewer, browser tester), runs them in stages in this workspace, lets them talk on a shared board, and verifies the result. goal=the whole job in one or two sentences.",
+           {"goal": {"type": "string"}}, ["goal"]),
+    schema("team_post", "Post a note to your team's board (only when you are an agent on a team). to='all' or a role name.",
+           {"text": {"type": "string"}, "to": {"type": "string"}}, ["text"]),
+    schema("team_read", "Read your team's board: what teammates found, built and reported (only on a team).", {}, []),
     schema("improve_loki", "Change LOKI's own code (a feature, a fix, a new tool for yourself). A background LOKI agent makes the change in its own git worktree, tests it on the shared Mac/Windows test suites and ships it with ship_loki. task=what to change and why.",
            {"task": {"type": "string"}}, ["task"]),
     schema("ship_loki", "Publish a finished change to LOKI's own code: runs every test suite, commits, catches up with GitHub, pushes to master and tells the other machines to update. Pushes nothing if a test fails. message=one line: what changed and how it was checked; path=the worktree (default: this workspace).",
@@ -2314,7 +2361,7 @@ MODEL_TOOL_NAMES = {
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
-    "improve_loki", "ship_loki",
+    "improve_loki", "ship_loki", "start_team", "team_post", "team_read",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -2331,7 +2378,7 @@ TOOL_CATEGORIES = {
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
-    "specialists": ["conductor", "delegate", "improve_loki", "ship_loki"],
+    "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],

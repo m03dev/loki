@@ -33,6 +33,14 @@ machines link to this one").
   worktree of LOKI) and `ship_loki` (runs ship.py). `LOKI_SELF_SHIP=auto|ask|off`, default
   auto; ship.py refuses to push unless every suite passes.
 
+## Agent teams (done, session 12) - BUILD_BRIEF 5.3, first version
+
+`engine/team.py` + tools `start_team`, `team_post`, `team_read`; `/teams` API; teams in the
+work strip with their board. Roles per goal (Laya or rules), stages plan -> build -> check,
+one fix round, stops when a stage cannot finish. Verified offline (tests/test_team.py) and
+live on the engine API without a model (the team stopped correctly at the architect).
+Not yet: placing team stages on the PC over the peer link; a real model run end to end.
+
 ## Done earlier (see docs/operations/SESSION_LOG.md)
 
 engine/ layout and no Godot files (5.1); Background and Brain tabs replaced by work in the
@@ -41,8 +49,8 @@ conversation (5.7); Laya as the first layer, warm and measured (5.2); docs clean
 ## Next, in order (docs/BUILD_BRIEF.md section 5)
 
 1. Get the link working (network or Tailscale), then verify a job from the Mac runs on the PC.
-2. 5.3 agent team from one sentence: roles chosen per task, shared task board, agents
-   messaging each other, parent verifies; heavy work placed on the PC.
+2. 5.3 next steps: run a team end to end with a real model; place heavy stages on the PC
+   (peer link) and stream their board notes back.
 3. 5.4 the PC alive 24/7 as a service (start at boot, watchdog, apply updates on restart).
 4. 5.5 cua VMs + Browser Use on the PC; 5.6 self-improvement loop running on its own.
 5. 5.8 more model sources; 5.9 Ziva (no public API found as of 2026-10).

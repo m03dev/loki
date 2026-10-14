@@ -175,9 +175,9 @@ def guidance(t: dict) -> str:
         return ("First-layer triage: this looks like a question or conversation. Answer it "
                 "directly; only call a tool if the answer genuinely needs one.")
     if route == "team":
-        return ("First-layer triage: this is a large job. Break it into parts and hand "
-                "independent parts to background agents with the delegate tool (the user "
-                "approves each), then verify their results before reporting DONE.")
+        return ("First-layer triage: this is a large job for a team. Call start_team with the "
+                "whole goal: LOKI builds the team (roles, specs, stages), the agents talk on a "
+                "shared board, and the result is checked. Tell the user the team is on it.")
     return ""
 
 

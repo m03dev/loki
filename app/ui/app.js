@@ -515,6 +515,8 @@ function renderJobs(jobs) {
   const list = $("#job-list");
   const openIds = new Set([...list.querySelectorAll("details[open]")].map((d) => d.dataset.id));
   list.replaceChildren();
+  renderTeams(list);
+  for (const d of list.querySelectorAll("details")) d.open = openIds.has(d.dataset.id);
   for (const job of jobs) {
     const card = el("div", "job");
     const top = el("div", "job-top");
@@ -553,11 +555,12 @@ function renderWork(data) {
   const c = data.counts || {};
   const live = LIVE.reduce((n, k) => n + (c[k] || 0), 0);
   jobsView.live = live;
-  $("#work").hidden = jobs.length === 0;
+  const teamsLive = (jobsView.teams || []).filter((t) => t.status === "working").length;
+  $("#work").hidden = jobs.length === 0 && !(jobsView.teams || []).length;
   const blocked = c.blocked || 0;
-  $("#work-summary").textContent = live
+  $("#work-summary").textContent = (live
     ? (live === 1 ? "1 agent working" : live + " agents working") + (blocked ? " · " + blocked + " waiting for you" : "")
-    : "Background work finished";
+    : "Background work finished") + (teamsLive ? " · " + teamsLive + (teamsLive === 1 ? " team" : " teams") : "");
   $("#work").classList.toggle("attention", blocked > 0);
   $("#work").classList.toggle("collapsed", jobsView.collapsed);
   $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
@@ -568,7 +571,39 @@ function renderWork(data) {
 }
 
 async function refreshJobs() {
-  renderWork(await api("/jobs").catch(() => null));
+  const [jobs, teams] = await Promise.all([api("/jobs").catch(() => null), api("/teams").catch(() => null)]);
+  jobsView.teams = (teams && teams.ok) ? teams.teams || [] : [];
+  renderWork(jobs);
+}
+
+// A team: its stage, its members and the last notes on its board.
+function renderTeams(list) {
+  const recent = (jobsView.teams || []).filter((t) => t.status === "working" || (Date.now() / 1000 - (t.finished || 0)) < 3600);
+  for (const team of recent) {
+    const card = el("div", "job team");
+    const top = el("div", "job-top");
+    top.append(el("span", "pill " + (team.status === "working" ? "working" : "done"), team.status === "working" ? (team.stage || "starting") : "done"),
+               el("span", "job-title", "Team: " + team.goal));
+    if (team.status === "working") {
+      const stop = el("button", "quiet small", "Stop team");
+      stop.type = "button";
+      stop.addEventListener("click", async () => { await api("/teams/cancel", { id: team.id }); refreshJobs(); });
+      top.append(stop);
+    }
+    card.append(top);
+    const who = (team.members || []).map((m) => m.role + (m.round ? " (" + m.round + ")" : "") + ": " + (m.status || "waiting"));
+    card.append(el("div", "job-meta", (team.roles || []).join(" → ") + (who.length ? " · " + who.join(", ") : "")));
+    if (team.verdict) card.append(el("div", "job-meta", team.verdict));
+    if ((team.board || []).length) {
+      const details = el("details");
+      details.dataset.id = "team-" + team.id;
+      details.append(el("summary", "", "Team board (" + team.board.length + ")"));
+      details.append(el("pre", "", team.board.slice(-12).map((m) => m.from + " → " + m.to + ": " + m.text).join("\n\n")));
+      card.append(details);
+    }
+    list.append(card);
+  }
+  return recent.length;
 }
 
 async function sendToBackground(text) {

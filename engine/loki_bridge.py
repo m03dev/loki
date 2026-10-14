@@ -741,6 +741,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/update":
             self._send_json(200, {"ok": True, **update_status()})
             return
+        if route == "/teams":
+            agent = self.server.state.agent
+            runner = getattr(agent, "TEAMS", None)
+            teams_list = [agent.teams.present(t, runner.jobs) for t in runner.all()[:10]] if runner else []
+            self._send_json(200, {"ok": True, "teams": teams_list})
+            return
         if route == "/experience":
             agent = self.server.state.agent
             exp = getattr(agent, "experience", None)
@@ -772,6 +778,24 @@ class BridgeHandler(BaseHTTPRequestHandler):
         state = self.server.state
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
+            return
+        if route in ("/teams", "/teams/cancel"):
+            runner = getattr(state.agent, "TEAMS", None)
+            if runner is None:
+                self._send_json(503, {"ok": False, "error": "agent teams are not running"})
+                return
+            try:
+                if route == "/teams":
+                    team = runner.start(str(data.get("goal") or ""), str(state.project))
+                else:
+                    team = runner.cancel(str(data.get("id") or ""))
+                    if team is None:
+                        self._send_json(404, {"ok": False, "error": "no such team"})
+                        return
+            except ValueError as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+                return
+            self._send_json(200, {"ok": True, "team": state.agent.teams.present(team, runner.jobs)})
             return
         if route == "/update/check":
             try:
@@ -1397,6 +1421,13 @@ async def serve() -> None:
         state.jobs = workers.default_supervisor(Path(loki.DATA_DIR))
         state.jobs.start()
         loki.JOBS = state.jobs
+        try:
+            import laya as _laya  # pylint: disable=import-outside-toplevel
+            loki.TEAMS = loki.teams.TeamRunner(state.jobs, policy=loki.POLICY,
+                                               decide=_laya.decide if _laya.backend() else None)
+            threading.Thread(target=loki.TEAMS.run_forever, daemon=True, name="loki-teams").start()
+        except Exception as exc:  # noqa: BLE001 - teams are optional; jobs still work
+            print(f"[loki-bridge] agent teams unavailable: {exc}", flush=True)
         print("[loki-bridge] background jobs: " + ", ".join(
             "%s %s" % (name, "ready" if info["available"] else "off")
             for name, info in state.jobs.status()["backends"].items()), flush=True)

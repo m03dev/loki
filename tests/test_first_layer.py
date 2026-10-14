@@ -62,7 +62,7 @@ check("Ask and Plan never start a team", first_layer.triage("Build a whole game"
 check("the trace line names who answered", first_layer.describe(first_layer.triage("hi")).startswith("Rules:"))
 check("a question tells the agent to answer directly", "Answer it" in first_layer.guidance({"route": "answer"}))
 check("a large job tells the agent to use background agents",
-      "delegate" in first_layer.guidance({"route": "team"}))
+      "start_team" in first_layer.guidance({"route": "team"}))
 check("a one-step job adds nothing to the prompt", first_layer.guidance({"route": "one_step"}) == "")
 check("actual route: no tools = answer", first_layer.actual_route(0, False) == "answer")
 check("actual route: delegated = team", first_layer.actual_route(9, True) == "team")
