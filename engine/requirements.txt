@@ -1,3 +1,5 @@
 mcp>=2.2.0
 openai>=3.10.0
 pydantic>=2.13.5
+# video/audio for the media specialist (engine/runners/media.py)
+yt-dlp[default]>=2025.11.12

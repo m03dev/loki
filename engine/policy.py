@@ -44,7 +44,7 @@ CAPABILITY_TOOLS: dict[str, str] = {}
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
 # Job backends that need an enabled capability.
 BACKEND_CAPABILITY = {"herdr": "herdr", "cua": "cua"}
-AGENT_CAPABILITY = {"hermes": "hermes-agent"}
+AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode"}
 BACKEND_PERMISSION = {"herdr": "process:agent", "cua": "computer:virtual", "local": "process:agent"}
 
 

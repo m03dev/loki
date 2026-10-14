@@ -388,7 +388,8 @@ function showVersion(u) {
   box.title = u.update_available
     ? "A newer LOKI is on GitHub (" + (u.latest || "").slice(0, 7) + "). Quit and reopen LOKI to use it."
     : (u.note || "Up to date with GitHub");
-  if (u.update_available) box.textContent += " · update waiting (reopen LOKI)";
+  if (u.update_available) box.textContent += " · update waiting";
+  if (typeof checkUpdateBanner === "function") checkUpdateBanner(u);
 }
 
 // ---------------------------------------------------------------- settings
@@ -401,7 +402,12 @@ async function openSettings() {
 function showTab(name) {
   for (const tab of document.querySelectorAll(".tabs button")) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
   for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== name;
-  if (name === "connections") loadConnections();
+  if (name === "connections") { loadConnections(); if (typeof loadPortal === "function") loadPortal(); }
+  if (name === "general" && typeof loadGeneral === "function") loadGeneral();
+  if (name === "agents" && typeof loadAgents === "function") loadAgents();
+  if (name === "world" && typeof showWorldPanel === "function") showWorldPanel();
+  if (name !== "world" && typeof hideWorldPanel === "function") hideWorldPanel();
+  if (name === "machines" && typeof loadUpdatePanel === "function") loadUpdatePanel();
   if (name === "tools") loadCategories();
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
@@ -421,7 +427,7 @@ async function loadConnections() {
   const box = $("#providers");
   box.replaceChildren();
   if (!data.ok) return;
-  for (const p of data.providers || []) box.append(row(p.label, p.status, /configured|detected|installed/i.test(p.status) && !/not/i.test(p.status)));
+  // Providers have their own cards in the portal; this list keeps the local tools LOKI sees.
   for (const t of data.tools || []) box.append(row(t.label, t.status, !/not detected/i.test(t.status)));
 }
 
@@ -667,25 +673,24 @@ function wire() {
     $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
   });
   $("#clear-jobs").addEventListener("click", async () => renderWork(await api("/jobs/clear", {})));
-  $("#close-settings").addEventListener("click", () => { $("#settings").hidden = true; });
+  $("#close-settings").addEventListener("click", () => {
+    $("#settings").hidden = true;
+    if (typeof hideWorldPanel === "function") hideWorldPanel();
+  });
   $("#settings").addEventListener("click", (event) => { if (event.target === $("#settings")) $("#settings").hidden = true; });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { $("#settings").hidden = true; } });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if ($("#qr-modal") && !$("#qr-modal").hidden) { $("#qr-modal").hidden = true; return; }
+    $("#settings").hidden = true;
+    if (typeof hideWorldPanel === "function") hideWorldPanel();
+  });
   for (const tab of document.querySelectorAll(".tabs button")) tab.addEventListener("click", () => showTab(tab.dataset.tab));
   $("#save-memory").addEventListener("click", async () => {
     const data = await api("/memory", { text: $("#memory-text").value });
     $("#save-memory").textContent = data.ok ? "Saved" : "Not saved";
     setTimeout(() => { $("#save-memory").textContent = "Save memory"; }, 1600);
   });
-  $("#connect-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const provider = $("#connect-provider").value.trim();
-    const key = $("#connect-key").value;
-    $("#connect-result").textContent = "Checking the key…";
-    const data = await api("/connect", { provider, key });
-    $("#connect-key").value = "";
-    $("#connect-result").textContent = data.ok ? (data.message || "Connected.") : (data.error || "Could not connect.");
-    if (data.ok) loadConnections();
-  });
+  // Connecting providers lives in the Connections portal now (settings.js).
 }
 
 async function start() {

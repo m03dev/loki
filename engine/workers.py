@@ -44,7 +44,7 @@ from typing import Any, Callable
 STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cancelled")
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
-AGENTS = ("loki", "claude-code", "codex", "hermes")
+AGENTS = ("loki", "claude-code", "codex", "hermes", "opencode")
 # The built-in agent: Loki's own loop, headless, on Loki's model (local by default). It
 # needs nothing installed, so background work always has at least one agent.
 BUILTIN_AGENTS = {"loki"}
@@ -101,6 +101,16 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
         if env.get("LOKI_HERMES_PROVIDER"):
             argv += ["--provider", env["LOKI_HERMES_PROVIDER"]]
         return argv if interactive else argv + ["-z", prompt]
+    if agent == "opencode":
+        # OpenCode (anomalyco/opencode, MIT): `opencode run` is its one-shot mode. Model
+        # follows LOKI_OPENCODE_MODEL (provider/model, e.g. opencode/deepseek-v4-flash-free).
+        argv = ["opencode"]
+        if interactive:
+            return argv
+        argv.append("run")
+        if env.get("LOKI_OPENCODE_MODEL"):
+            argv += ["-m", env["LOKI_OPENCODE_MODEL"]]
+        return argv + [prompt]
     if agent == "codex":
         if interactive:
             return ["codex", "--sandbox", "workspace-write"]
@@ -674,7 +684,11 @@ class Supervisor:
             "profile": spec.get("profile") if isinstance(spec.get("profile"), dict) else {},
             "allow_commands": bool(spec.get("allow_commands")),
             "model": str(spec.get("model") or ""),
+            "fallback": str(spec.get("fallback") or "")[:80],
             "team": str(spec.get("team") or "")[:40],
+            # The agent this job runs as (agent builder) and its colour in LOKI World.
+            "agent_id": str(spec.get("agent_id") or "")[:40],
+            "color": str(spec.get("color") or "")[:7],
         }
         stored = self.store.add(job)
         _emit_job_event(stored, "task.created")
@@ -831,6 +845,8 @@ def present(job: dict) -> dict:
         "exit_code": job.get("exit_code"), "run_dir": job.get("run_dir", ""),
         "pane": handle.get("pane", ""), "screenshot": bool(handle.get("screenshot"))
         and Path(handle.get("screenshot", "")).is_file(),
+        "agent_id": job.get("agent_id", ""), "color": job.get("color", ""),
+        "machine": job.get("machine", ""),
     }
 
 

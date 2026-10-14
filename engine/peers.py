@@ -5,6 +5,7 @@ Each Loki can run a small PEER SERVER on the local network. Another Loki that ho
 same secret can then:
 
     GET  /peer/hello              who are you: name, OS, GPU, models, jobs, training state
+    POST /peer/update/apply       update from GitHub now and restart (Update everything)
     POST /peer/jobs               start a background job here (the built-in Loki agent,
                                   on THIS machine's own project, under THIS machine's policy)
     GET  /peer/jobs/<id>          that job's status and output
@@ -378,6 +379,13 @@ class PeerServer:
             if "check_update" not in cb:
                 return 404, {"ok": False, "error": "updates are not handled here"}
             return 200, {"ok": True, **cb["check_update"]()}
+        if method == "POST" and path == "/peer/update/apply":
+            # "Update everything" on another machine: update from GitHub (fast-forward
+            # only, never over local work) and restart. GitHub decides WHAT version; the
+            # caller can only ask for it to happen now.
+            if "apply_update" not in cb:
+                return 404, {"ok": False, "error": "updates are not handled here"}
+            return 200, {"ok": True, **cb["apply_update"]()}
         if method == "POST" and path == "/peer/experience":
             items = data.get("trajectories")
             if not isinstance(items, list):

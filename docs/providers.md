@@ -26,6 +26,19 @@ Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness_data/.env
 | `claude-code` | Claude Code CLI (your subscription) | no key - flat rate you already pay |
 | `codex` | Codex CLI (your subscription) | no key - flat rate you already pay |
 
+## More providers (2026-10)
+
+Settings > Connections shows every provider below as a card (engine/providers_catalog.py
+has the facts and links). New ids: `codestral`, `opencode-zen`, `vercel`, `pollinations`
+(keyless), `nebius`, `scaleway`, `hyperbolic`, `novita`, `fireworks`, `dashscope`
+(free credits; counted as paid), local servers `lmstudio`, `llamacpp`, `mlx` (port 8082),
+`vllm`, `jan`, `kyojin` (`KYOJIN_BASE_URL`), and the `opencode` CLI agent. GitHub Models
+was retired on 2026-07-30. Switch any provider off with its card (`LOKI_DISABLED_PROVIDERS`).
+
+Models with no native tool calling get tools as text (engine/tool_harness.py). List more
+providers for that with `LOKI_PROMPTED_TOOLS=name,name`; an endpoint that refuses a tools
+list is switched to it automatically.
+
 ## Subscription coding agents
 
 `claude-code` and `codex` are not API clients. Once installed and signed in they run on

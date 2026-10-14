@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-13 (session 12).
+Last updated: 2026-10-14 (session 14).
 
 ## The machines
 
@@ -41,6 +41,22 @@ one fix round, stops when a stage cannot finish. Verified offline (tests/test_te
 live on the engine API without a model (the team stopped correctly at the architect).
 Not yet: placing team stages on the PC over the peer link; a real model run end to end.
 
+## Session 14 (2026-10-14): portal, sign-in, Update everything, agent builder, 3D world
+
+Built in the cloud by Claude; see ZIVA_TASKS.md for the full list and the machine checks.
+- Settings reworked: General, Connections portal (43 providers, switches, Test, model picker,
+  OpenRouter sign-in, QR codes, phone hand-off), Agents (builder), LOKI World (3D),
+  Machines & updates (Update everything), Add-ons.
+- Any model can use tools (engine/tool_harness.py); new providers and OpenCode.
+- Update everything: peers first, then this machine; app restarts the engine (exit 75);
+  a version that fails to start is rolled back and skipped (updater health file in
+  harness_data/app/update_health.json).
+- New specialists: media (yt-dlp, now in requirements), image (Z-Image Turbo / Pollinations),
+  reach (Agent Reach). Optional installs: tools/setup_extras.py.
+- Not run on a real machine yet: everything above. Ziva W1-W10 / M1-M7 are the checks.
+- Not integrated: OBLITERATUS (removes model safety refusals). Kyojin is wired in but needs a
+  Strix Halo machine.
+
 ## Session 13 (2026-10-14): the owner's five-layer vision
 
 - docs/VISION.md (the owner's vision, kept), docs/STATUS.md (every item checked against the
@@ -58,7 +74,7 @@ Not yet: placing team stages on the PC over the peer link; a real model run end 
 engine/ layout and no Godot files (5.1); Background and Brain tabs replaced by work in the
 conversation (5.7); Laya as the first layer, warm and measured (5.2); docs cleaned (9).
 
-## Next, in order (docs/BUILD_BRIEF.md section 5)
+## Next, in order (docs/BUILD_BRIEF.md section 5; Ziva's list is ZIVA_TASKS.md)
 
 1. Get the link working (network or Tailscale), then verify a job from the Mac runs on the PC.
 2. 5.3 next steps: run a team end to end with a real model; place heavy stages on the PC

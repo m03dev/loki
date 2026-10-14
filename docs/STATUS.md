@@ -70,6 +70,19 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Evaluation suite (routing, fallback, injection, approvals, recovery) | Implementing | 10 offline suites (~1000 checks); no live model evaluations yet |
 | Dashboard | Implementing | work strip, Settings > Usage / Machines; no single dashboard |
 
+## Session 14 additions (2026-10-14)
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Connections portal (switch, Test, model picker, default, disconnect) | Tested | `providers_catalog.py`, `portal_api.py`, `settings.js`; tests/test_portal.py |
+| OpenRouter sign-in (PKCE, browser + phone code), device flow, QR, phone hand-off | Tested (offline) | `signin.py`, `qr.py` (decoded by jsQR); not yet on a real phone (ZIVA W3/W4) |
+| Prompted tool harness (any model, any tool) | Tested | `tool_harness.py`, `_model_request`; real MLX/llama.cpp run is ZIVA W8/M4 |
+| Update everything + rollback of a version that does not start | Tested | `update_all.py`, `updater.py` health, `loki_app.py` supervisor; two-machine run is ZIVA W7 |
+| Agent builder (skills, tools, harness, fallback, home machine, draft) | Tested | `agents.py`, `/agents/launch`; peer placement live run pending |
+| media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach) | Implemented | runners + manifests; real runs are ZIVA W5 |
+| LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
+| Godot 3D world client | Proposed | ZIVA W9 |
+
 ## Research the vision asks for (not code)
 
 Repository catalog (DeepSeek Harness, OpenViking, Graphiti, OpenHub, October Bus, AutoHelix,

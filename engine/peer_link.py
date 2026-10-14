@@ -171,8 +171,15 @@ def callbacks(state: Any, agent: Any) -> dict:
         threading.Thread(target=updater.check_now, daemon=True).start()
         return {"checking": True, "version": updater.version()}
 
+    def apply_update() -> dict:
+        import updater  # pylint: disable=import-outside-toplevel
+        import update_all  # pylint: disable=import-outside-toplevel
+        restart = getattr(state, "restart_engine", None) or (lambda: None)
+        return update_all.apply_here(updater, restart)
+
     return {"hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
-            "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update}
+            "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
+            "apply_update": apply_update}
 
 
 def _present(job: dict) -> dict:

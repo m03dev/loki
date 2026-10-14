@@ -1,0 +1,19 @@
+{
+  "name": "agent-reach",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Agent Reach (Panniantong/Agent-Reach): internet reach for agents - web pages, YouTube, RSS, GitHub, and (after you set them up) X, Reddit and more. LOKI's `reach` specialist. Install: pipx install https://github.com/Panniantong/agent-reach/archive/main.zip (not the PyPI package of the same name). Social channels need cookies: use a secondary account.",
+  "license": "MIT",
+  "homepage": "https://github.com/Panniantong/Agent-Reach",
+  "permissions": [
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [
+    "agent-reach"
+  ],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "runners/reach.py"
+}

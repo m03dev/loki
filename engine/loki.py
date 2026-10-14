@@ -134,6 +134,29 @@ PROVIDER_ENV_VARS = {
     "omniroute": "OMNIROUTE_API_KEY",
     "vireonix": "VIREONIX_API_KEY",
     "typesafe": "TYPESAFE_API_KEY",
+    # added with the Connections portal (engine/providers_catalog.py)
+    "cloudflare": "CLOUDFLARE_API_TOKEN",
+    "cohere": "COHERE_API_KEY",
+    "huggingface": "HF_TOKEN",
+    "kilocode": "KILOCODE_API_KEY",
+    "llm7": "LLM7_API_KEY",
+    "modelscope": "MODELSCOPE_API_KEY",
+    "nvidia": "NVIDIA_API_KEY",
+    "ollama-cloud": "OLLAMA_API_KEY",
+    "ovh": "OVH_API_KEY",
+    "siliconflow": "SILICONFLOW_API_KEY",
+    "zai": "ZAI_API_KEY",
+    "aion": "AION_API_KEY",
+    "codestral": "CODESTRAL_API_KEY",
+    "opencode-zen": "OPENCODE_API_KEY",
+    "vercel": "AI_GATEWAY_API_KEY",
+    "pollinations": "POLLINATIONS_API_KEY",
+    "nebius": "NEBIUS_API_KEY",
+    "scaleway": "SCALEWAY_API_KEY",
+    "hyperbolic": "HYPERBOLIC_API_KEY",
+    "novita": "NOVITA_API_KEY",
+    "fireworks": "FIREWORKS_API_KEY",
+    "dashscope": "DASHSCOPE_API_KEY",
 }
 
 
@@ -274,6 +297,7 @@ import usage  # noqa: E402  (token and cost ledger - the credits meter)
 import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 import first_layer  # noqa: E402  (every request is triaged first: Laya, else built-in rules)
 import events  # noqa: E402  (the event stream: what really happened, for the world and agents)
+import tool_harness  # noqa: E402  (any model can use any tool: prompted tool calling)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
 REPO_ROOT = ROOT.parent
@@ -428,7 +452,87 @@ MODELS = {
     "siliconflow": ModelConfig(base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"),
                                api_key=os.getenv("SILICONFLOW_API_KEY", ""),
                                model=os.getenv("SILICONFLOW_MODEL", "Qwen/Qwen3-8B")),
+    # --- Added 2026-10 with the Connections portal (engine/providers_catalog.py describes
+    # each one: free limits, where to get a key, how to sign in). Every base URL and model
+    # is overridable with <PROVIDER>_BASE_URL / <PROVIDER>_MODEL, and the portal's model
+    # picker reads each provider's live /models list.
+    "codestral": ModelConfig(base_url=os.getenv("CODESTRAL_BASE_URL", "https://codestral.mistral.ai/v1"),
+                             api_key=os.getenv("CODESTRAL_API_KEY", ""),
+                             model=os.getenv("CODESTRAL_MODEL", "codestral-latest")),
+    "opencode-zen": ModelConfig(base_url=os.getenv("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1"),
+                                api_key=os.getenv("OPENCODE_API_KEY", ""),
+                                model=os.getenv("OPENCODE_ZEN_MODEL", "deepseek-v4-flash-free")),
+    "vercel": ModelConfig(base_url=os.getenv("VERCEL_BASE_URL", "https://ai-gateway.vercel.sh/v1"),
+                          api_key=os.getenv("AI_GATEWAY_API_KEY", ""),
+                          model=os.getenv("VERCEL_MODEL", "openai/gpt-oss-120b")),
+    # Keyless: a placeholder key so it counts as configured; a real key raises the limits.
+    "pollinations": ModelConfig(base_url=os.getenv("POLLINATIONS_BASE_URL", "https://text.pollinations.ai/openai"),
+                                api_key=os.getenv("POLLINATIONS_API_KEY", "pollinations"),
+                                model=os.getenv("POLLINATIONS_MODEL", "openai")),
+    "nebius": ModelConfig(base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1"),
+                          api_key=os.getenv("NEBIUS_API_KEY", ""),
+                          model=os.getenv("NEBIUS_MODEL", "deepseek-ai/DeepSeek-R1-0528")),
+    "scaleway": ModelConfig(base_url=os.getenv("SCALEWAY_BASE_URL", "https://api.scaleway.ai/v1"),
+                            api_key=os.getenv("SCALEWAY_API_KEY", ""),
+                            model=os.getenv("SCALEWAY_MODEL", "gpt-oss-120b")),
+    "hyperbolic": ModelConfig(base_url=os.getenv("HYPERBOLIC_BASE_URL", "https://api.hyperbolic.xyz/v1"),
+                              api_key=os.getenv("HYPERBOLIC_API_KEY", ""),
+                              model=os.getenv("HYPERBOLIC_MODEL", "Qwen/Qwen3-Coder-480B-A35B-Instruct")),
+    "novita": ModelConfig(base_url=os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/openai"),
+                          api_key=os.getenv("NOVITA_API_KEY", ""),
+                          model=os.getenv("NOVITA_MODEL", "deepseek/deepseek-v3-0324")),
+    "fireworks": ModelConfig(base_url=os.getenv("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1"),
+                             api_key=os.getenv("FIREWORKS_API_KEY", ""),
+                             model=os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/gpt-oss-120b")),
+    "dashscope": ModelConfig(base_url=os.getenv("DASHSCOPE_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+                             api_key=os.getenv("DASHSCOPE_API_KEY", ""),
+                             model=os.getenv("DASHSCOPE_MODEL", "qwen-plus")),
+    # --- Local OpenAI-compatible servers. "auto" = the first model the server lists.
+    "lmstudio": ModelConfig(base_url=os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+                            api_key="local", model=os.getenv("LMSTUDIO_MODEL", "auto")),
+    "llamacpp": ModelConfig(base_url=os.getenv("LLAMACPP_BASE_URL", "http://127.0.0.1:8080/v1"),
+                            api_key="local", model=os.getenv("LLAMACPP_MODEL", "auto")),
+    # mlx_lm.server defaults to 8080 too; LOKI uses 8082 so it can run beside llama.cpp.
+    "mlx": ModelConfig(base_url=os.getenv("MLX_BASE_URL", "http://127.0.0.1:8082/v1"),
+                       api_key="local", model=os.getenv("MLX_MODEL", "auto")),
+    "vllm": ModelConfig(base_url=os.getenv("VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+                        api_key=os.getenv("VLLM_API_KEY", "local"), model=os.getenv("VLLM_MODEL", "auto")),
+    "jan": ModelConfig(base_url=os.getenv("JAN_BASE_URL", "http://127.0.0.1:1337/v1"),
+                       api_key=os.getenv("JAN_API_KEY", "local"), model=os.getenv("JAN_MODEL", "auto")),
+    # Kyojin (github.com/Yamz-Labs/kyojin): ExLlamaV3 server for 100 GB-class packs on an
+    # AMD Strix Halo box. Point KYOJIN_BASE_URL at that machine (its container uses 8731).
+    "kyojin": ModelConfig(base_url=os.getenv("KYOJIN_BASE_URL", "http://127.0.0.1:8731/v1"),
+                          api_key=os.getenv("KYOJIN_API_KEY", "local"), model=os.getenv("KYOJIN_MODEL", "auto")),
+    # OpenCode (github.com/anomalyco/opencode) as a subscription-style coding agent.
+    "opencode": ModelConfig(base_url="cli-agent://opencode", model="opencode"),
 }
+
+# Local OpenAI-compatible servers that are not Ollama: "configured" means the server is up.
+LOCAL_SERVERS = ("lmstudio", "llamacpp", "mlx", "vllm", "jan", "kyojin")
+_LOCAL_UP: dict = {}   # name -> (checked_at, up)
+
+
+def local_server_up(name: str, max_age: float = 30.0) -> bool:
+    """Is this local server answering? Also resolves model "auto" to the first model it lists."""
+    cfg = MODELS.get(name)
+    if cfg is None:
+        return False
+    hit = _LOCAL_UP.get(name)
+    if hit and time.time() - hit[0] < max_age:
+        return hit[1]
+    up = False
+    try:
+        req = urllib.request.Request(cfg.base_url.rstrip("/") + "/models", headers={"User-Agent": "Loki/1.0"})
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            data = json.loads(resp.read().decode("utf-8") or "{}")
+        ids = [m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and m.get("id")]
+        up = True
+        if cfg.model in ("", "auto") and ids:
+            cfg.model = ids[0]
+    except Exception:  # noqa: BLE001 - not running
+        up = False
+    _LOCAL_UP[name] = (time.time(), up)
+    return up
 
 model_name = os.getenv("LOKI_MODEL", "smart")
 
@@ -442,7 +546,8 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
 SMART_ORDER = ("openrouter", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
-               "cloudflare", "together", "nous", "unorouter", "deepseek", "cerebras",
+               "cloudflare", "together", "nous", "unorouter", "opencode-zen", "nvidia",
+               "kilocode", "codestral", "vercel", "deepseek", "cerebras",
                "vireonix", "claude-code", "codex", "local", "local-hermes")
 
 # Providers that need a GPU and a local download. The "online" mode exists so Loki is
@@ -538,10 +643,17 @@ def missing_key_env(name: str) -> str:
     return name.upper().replace("-", "_").replace(".", "_") + "_API_KEY"
 
 
+def provider_disabled(name: str) -> bool:
+    """Switched off in Settings > Connections (LOKI_DISABLED_PROVIDERS): never routed to."""
+    return name in {p.strip().lower() for p in os.getenv("LOKI_DISABLED_PROVIDERS", "").split(",") if p.strip()}
+
+
 def provider_configured(name: str) -> bool:
     cfg = MODELS.get(name)
-    if cfg is None:
+    if cfg is None or provider_disabled(name):
         return False
+    if name in LOCAL_SERVERS:
+        return local_server_up(name)
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         # Counts as configured only once the CLI is actually installed.
         return cli_agents.is_available(cfg.base_url[len(CLI_AGENT_PREFIX):])
@@ -820,7 +932,8 @@ def redact_secrets(text: str) -> str:
 # away: after LOKI_PAID_MAX_CALLS model calls in one request, the request stops and says
 # why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
 _METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
-                    "ollama-cloud"}
+                    "ollama-cloud", "nebius", "scaleway", "hyperbolic", "novita", "fireworks",
+                    "dashscope"}
 PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
 # Spending policy (docs/VISION.md 6): automatic routing never picks a paid provider unless
 # LOKI_ALLOW_PAID=1, and paid use stops for the day at LOKI_DAILY_USD_LIMIT (from the usage
@@ -2149,7 +2262,9 @@ def delegate(agent: str, task: str) -> str:
         names = ", ".join(a["name"] for a in AGENTS.all())
         return "error: no agent called %r. Your agents: %s" % (agent, names)
     try:
-        spec = agent_profiles.job_spec(profile, task, str(WORKSPACE))
+        spec = agent_profiles.job_spec(profile, task, str(WORKSPACE),
+                                       catalog=agent_profiles.skills_catalog(
+                                           agent_profiles.skill_roots(REPO_ROOT, DATA_DIR)))
     except ValueError as exc:
         return "error: %s" % exc
     verdict = POLICY.job(spec["backend"], spec["agent"])
@@ -2266,7 +2381,7 @@ def ship_loki(message: str, path: str = "") -> str:
 
 
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
-    """Hand one step to a specialist: research, read_web, browse, remember, recall."""
+    """Hand one step to a specialist: research, read_web, browse, remember, recall, media, image, reach."""
     return CONDUCTOR.run(str(role).strip().lower(), str(task or ""), str(url or ""))
 
 
@@ -2367,7 +2482,7 @@ TOOL_SCHEMAS = [
            {"task": {"type": "string"}}, ["task"]),
     schema("ship_loki", "Publish a finished change to LOKI's own code: runs every test suite, commits, catches up with GitHub, pushes to master and tells the other machines to update. Pushes nothing if a test fails. message=one line: what changed and how it was checked; path=the worktree (default: this workspace).",
            {"message": {"type": "string"}, "path": {"type": "string"}}, ["message"]),
-    schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory). Only roles listed under 'Specialists you can call' in your instructions are ready.",
+    schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory), 'media' (url=video; task='transcript'|'info'|'audio'|'video'|'search: words'), 'image' (task=what to draw), 'reach' (url=page to read, or task='github: ...' / 'doctor'). Only roles listed under 'Specialists you can call' in your instructions are ready.",
            {"role": {"type": "string"}, "task": {"type": "string"}, "url": {"type": "string"}}, ["role"]),
     schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
            {"action": {"type": "string"}, "uri": {"type": "string"}, "text": {"type": "string"}}, ["uri"]),
@@ -3874,11 +3989,26 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
     `provider` is the MODELS key the request goes to; a failure marks THAT provider.
     """
     attempt = 0
+    full_tools = list(kwargs.get("tools") or [])
     while True:
         try:
+            if kwargs.get("tools") and tool_harness.configured(provider):
+                # This provider cannot take a native tools list: send the tools as text
+                # and turn the <tool_call> blocks in its answer back into tool_calls.
+                prompted = tool_harness.prepare(kwargs)
+                known = prompted.pop("_prompted_tools", [])
+                return tool_harness.attach(await client.chat.completions.create(**prompted), known)
             return await client.chat.completions.create(**kwargs)
         except openai.APIStatusError as exc:
             status = _status_of(exc)
+            if (status in (400, 404, 422) and kwargs.get("tools") and len(kwargs["tools"]) <= 1
+                    and provider and not tool_harness.configured(provider)):
+                # Even one tool was refused: this endpoint has no native tool calling.
+                # Use the prompted harness for it from now on (any model, any tool).
+                tool_harness.learn(provider)
+                _progress("thinking", "%s has no native tool calling; using prompted tools." % provider)
+                kwargs["tools"] = full_tools or kwargs["tools"]
+                continue
             if "tool_choice" in kwargs and 400 <= status < 500:
                 # Backend does not support tool_choice; retry unforced.
                 kwargs.pop("tool_choice", None)
@@ -4576,6 +4706,10 @@ async def run_job(job_path: str) -> int:
     allow_commands = bool(job.get("allow_commands"))
     if job.get("model"):
         model_name = str(job["model"])
+        # The agent builder's fallback: use it when the first choice is not set up here.
+        fallback = str(job.get("fallback") or "")
+        if fallback in MODELS and model_name in MODELS and not provider_configured(model_name):
+            model_name = fallback
 
     async def job_approve(kind: str, detail: str, decidable: bool = True) -> bool:
         if allow_commands and kind in ("run_command", "move_file", "open_godot"):

@@ -8,6 +8,8 @@
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
+<script src="/ui/world.js" defer></script>
+<script src="/ui/settings.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -26,6 +28,12 @@
   </aside>
 
   <main class="main" id="main">
+    <div class="world-bg" aria-hidden="true"><canvas id="world-bg-canvas"></canvas><div id="world-bg-labels" class="world-labels"></div></div>
+    <div id="update-banner" class="update-banner" hidden role="status">
+      <span id="update-banner-text"></span>
+      <button type="button" id="update-banner-go" class="send small">Update everything</button>
+      <button type="button" id="update-banner-later" class="quiet small">Later</button>
+    </div>
     <header class="topbar">
       <h1 id="chat-title" class="chat-title">Loki</h1>
       <div class="topbar-right">
@@ -81,61 +89,95 @@
 </div>
 
 <div id="settings" class="sheet" hidden>
-  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <header class="sheet-head">
+  <div class="sheet-panel settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <nav class="settings-nav" aria-label="Settings sections">
       <h2 id="settings-title">Settings</h2>
-      <button type="button" id="close-settings" class="quiet" aria-label="Close settings">Close</button>
-    </header>
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" data-tab="connections" aria-selected="true">Connections</button>
-      <button type="button" role="tab" data-tab="tools" aria-selected="false">Tools</button>
-      <button type="button" role="tab" data-tab="memory" aria-selected="false">Memory</button>
-      <button type="button" role="tab" data-tab="capabilities" aria-selected="false">Capabilities</button>
-      <button type="button" role="tab" data-tab="models" aria-selected="false">Models</button>
-      <button type="button" role="tab" data-tab="usage" aria-selected="false">Usage</button>
-      <button type="button" role="tab" data-tab="machines" aria-selected="false">Machines</button>
-    </div>
+      <input id="settings-search" class="settings-search" type="search" placeholder="Search settings" aria-label="Search settings">
+      <div class="tabs" role="tablist" aria-orientation="vertical">
+        <button type="button" role="tab" data-tab="general" aria-selected="false"><span class="ico" aria-hidden="true">◎</span>General</button>
+        <button type="button" role="tab" data-tab="connections" aria-selected="true"><span class="ico" aria-hidden="true">⚡</span>Connections<span id="conn-count" class="count"></span></button>
+        <button type="button" role="tab" data-tab="agents" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Agents</button>
+        <button type="button" role="tab" data-tab="world" aria-selected="false"><span class="ico" aria-hidden="true">◈</span>LOKI World</button>
+        <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
+        <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
+        <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
+        <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
+        <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
+        <button type="button" role="tab" data-tab="usage" aria-selected="false"><span class="ico" aria-hidden="true">$</span>Usage</button>
+      </div>
+      <button type="button" id="close-settings" class="quiet close-settings" aria-label="Close settings">Close</button>
+    </nav>
     <div class="tab-body">
+      <section data-panel="general" hidden>
+        <header class="panel-head"><h3>General</h3><p class="note">How LOKI behaves on this computer. Saved in harness_data/.env, live at once.</p></header>
+        <div id="general-panel" class="cards"></div>
+      </section>
       <section data-panel="connections">
-        <p class="note">What Loki can reach right now. Keys are never shown.</p>
-        <div id="providers" class="rows"></div>
-        <form id="connect-form" class="connect">
-          <h3>Connect a provider</h3>
-          <div class="connect-row">
-            <input id="connect-provider" placeholder="Provider, e.g. openrouter" aria-label="Provider">
-            <input id="connect-key" type="password" placeholder="API key" aria-label="API key">
-            <button type="submit">Connect</button>
+        <header class="panel-head">
+          <h3>Connections</h3>
+          <p class="note">Connect model providers. Sign in, paste a key, or scan a QR code with your phone. Switch any of them off and LOKI will not route to it. Keys stay on this computer and are never shown.</p>
+          <div class="portal-tools">
+            <input id="portal-filter" type="search" placeholder="Filter providers" aria-label="Filter providers">
+            <label class="check"><input type="checkbox" id="portal-free"> Free only</label>
+            <label class="check"><input type="checkbox" id="portal-connected"> Connected only</label>
           </div>
-          <p id="connect-result" class="note"></p>
-        </form>
+        </header>
+        <div id="portal" class="portal"></div>
+        <details class="caps-raw"><summary>Other tools LOKI can see</summary><div id="providers" class="rows"></div></details>
+      </section>
+      <section data-panel="agents" hidden>
+        <header class="panel-head"><h3>Agents</h3><p class="note">Build agents you want to keep: a role, skills, tools, a model, a harness and the machine they live on. Teams still assemble themselves; these are your regulars.</p></header>
+        <div id="agents-panel"></div>
+      </section>
+      <section data-panel="world" hidden>
+        <header class="panel-head"><h3>LOKI World</h3><p class="note">Your agents as characters in a small 3D world, moving to their stations as real work happens. It runs behind the home screen, or here.</p></header>
+        <div class="world-frame"><canvas id="world-panel-canvas" aria-label="LOKI World, 3D view of your agents"></canvas><div id="world-panel-labels" class="world-labels"></div></div>
+        <div id="world-legend" class="world-legend"></div>
       </section>
       <section data-panel="tools" hidden>
-        <p class="note">Tool groups Loki may use. Risky tools still ask before they run.</p>
+        <header class="panel-head"><h3>Tools</h3><p class="note">Tool groups Loki may use. Risky tools still ask before they run.</p></header>
         <div id="categories" class="rows"></div>
       </section>
       <section data-panel="memory" hidden>
-        <p class="note">Lasting facts Loki keeps about you and your work.</p>
+        <header class="panel-head"><h3>Memory</h3><p class="note">Lasting facts Loki keeps about you and your work.</p></header>
         <textarea id="memory-text" class="memory" rows="12" aria-label="Memory"></textarea>
         <div class="right"><button type="button" id="save-memory">Save memory</button></div>
       </section>
       <section data-panel="models" hidden>
+        <header class="panel-head"><h3>Local models</h3><p class="note">Models that run on this computer, with no internet.</p></header>
         <div id="models-panel"></div>
       </section>
       <section data-panel="usage" hidden>
-        <p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p>
+        <header class="panel-head"><h3>Usage</h3><p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p></header>
         <div id="usage-panel"></div>
         <div class="right"><button type="button" id="usage-reset" class="quiet">Reset usage</button></div>
       </section>
       <section data-panel="machines" hidden>
-        <p class="note">Your other computers running Loki - for example the PC with the GPU. Linked machines can take background jobs and train on the work this one verifies.</p>
+        <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
+        <div id="update-panel" class="update-panel"></div>
         <div id="machines-panel"></div>
       </section>
       <section data-panel="capabilities" hidden>
-        <p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again.</p>
+        <header class="panel-head"><h3>Add-ons</h3><p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again. Install the optional ones with tools/setup_extras.py.</p></header>
         <div id="manifests" class="rows"></div>
         <details class="caps-raw"><summary>Everything Loki knows about</summary>
         <pre id="capabilities" class="caps"></pre></details>
       </section>
+    </div>
+  </div>
+</div>
+<div id="qr-modal" class="sheet modal" hidden>
+  <div class="sheet-panel qr-panel" role="dialog" aria-modal="true" aria-labelledby="qr-title">
+    <header class="sheet-head"><h2 id="qr-title">Scan with your phone</h2>
+      <button type="button" id="qr-close" class="quiet" aria-label="Close">Close</button></header>
+    <div class="qr-body">
+      <div id="qr-image" class="qr-image"></div>
+      <div class="qr-side">
+        <p id="qr-text" class="qr-text"></p>
+        <div id="qr-steps" class="qr-steps"></div>
+        <div id="qr-actions" class="qr-actions"></div>
+        <p id="qr-status" class="note" role="status" aria-live="polite"></p>
+      </div>
     </div>
   </div>
 </div>

@@ -1,4 +1,4 @@
-"""Claude Code and Codex as first-class Loki providers.
+"""Claude Code, Codex and OpenCode as first-class Loki providers.
 
 These two are not API clients. Once installed and signed in they are complete
 coding agents that run on YOUR subscription allowance instead of per-token
@@ -50,6 +50,20 @@ CLI_AGENTS: dict[str, dict] = {
                  "--color", "never"),
         "parse": "plain",
         "supports_mcp": False,
+    },
+    # OpenCode (github.com/anomalyco/opencode, MIT): open-source coding agent that works
+    # with any provider, including OpenCode Zen's free models. `opencode run` is its
+    # non-interactive mode; LOKI_OPENCODE_MODEL=provider/model picks the model.
+    "opencode": {
+        "label": "OpenCode",
+        "exe": ("opencode", "opencode.cmd", "opencode.exe"),
+        "install": "npm i -g opencode-ai@latest   (or: brew install anomalyco/tap/opencode)",
+        "signin": "opencode auth login   (or use Zen's free models with no sign-in)",
+        "args": ("run",),
+        "parse": "plain",
+        "supports_mcp": False,
+        "system_in_prompt": True,
+        "model_env": "LOKI_OPENCODE_MODEL",
     },
 }
 
@@ -182,9 +196,13 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
         raise CliAgentError(missing_hint(name))
 
     argv = [exe, *spec["args"]]
+    if spec.get("model_env") and os.getenv(spec["model_env"], "").strip():
+        argv += ["-m", os.getenv(spec["model_env"], "").strip()]
     if spec["supports_mcp"]:
         argv += mcp_config_args(Path(__file__).with_name("mcp_servers.json"))
         argv += ["--append-system-prompt", system]
+    if spec.get("system_in_prompt") and system.strip():
+        prompt = system.strip() + "\n\n" + prompt
     argv.append(prompt)
 
     env = dict(os.environ)

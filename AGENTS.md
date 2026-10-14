@@ -32,7 +32,8 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
 ## Before you change anything
 
 1. Read `README.md`, `docs/ARCHITECTURE.md`, the top of `docs/operations/SESSION_LOG.md`,
-   and `HANDOFF.md` (where the work stands right now).
+   and `HANDOFF.md` (where the work stands right now). Ziva: also `ZIVA_TASKS.md`, your inbox
+   and task list (anyone who needs something from the Mac or the PC adds it there).
 2. `git status` and `git log --oneline -5`. If GitHub is ahead, update first.
 3. Run `python tools/ship.py --check` so you know the suites pass before you start.
 

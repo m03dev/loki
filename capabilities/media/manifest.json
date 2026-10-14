@@ -1,0 +1,19 @@
+{
+  "name": "media",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Video and audio with yt-dlp: details, transcripts, search, and downloads into the workspace. LOKI's `media` specialist. Needs yt-dlp (pip install -U \"yt-dlp[default]\"), ffmpeg for merging/converting, and Deno or Node for YouTube. Only download what you have the right to use.",
+  "license": "Unlicense",
+  "homepage": "https://github.com/yt-dlp/yt-dlp",
+  "permissions": [
+    "network",
+    "fs:workspace"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [
+    "yt_dlp"
+  ],
+  "health_endpoint": "",
+  "entrypoint": "runners/media.py"
+}

@@ -60,6 +60,27 @@ The Mac and the PC always run the same LOKI: GitHub's `master`.
   `LOKI_SELF_SHIP=ask` makes it ask you first; `off` turns it off.
 
 Agents: read [AGENTS.md](AGENTS.md) and [HANDOFF.md](HANDOFF.md) before changing anything.
+Ziva: your task list and inbox is [ZIVA_TASKS.md](ZIVA_TASKS.md).
+
+## Settings: connections, agents, world, updates
+
+- **Connections**: one card per provider (local servers, free tiers, no-account services, free
+  credits, your subscriptions, paid). Each has an on/off switch, **Test** (a real 1-token call),
+  a live model picker, **Make default** and **Disconnect**. Connect by **Sign in with
+  OpenRouter**, by pasting a key, or with your phone: **Use my phone** shows a QR code for a
+  one-time page on your Wi-Fi that sends the key to LOKI.
+- **Any model can use tools**: models without native tool calling (MLX, plain llama.cpp,
+  keyless endpoints) get the tools as text and their calls come back as real tool calls
+  (`engine/tool_harness.py`).
+- **Agents**: build agents you want to keep - role, goal, skills (SKILL.md), tools, harness
+  (LOKI, Claude Code, Codex, Hermes, OpenCode), model and fallback, the machine they live on.
+  "Draft it" makes one from a sentence.
+- **LOKI World**: your agents as characters in a small 3D world, behind the home screen and in
+  its own panel, driven only by real state (GET /world).
+- **Machines & updates**: **Update everything** updates every linked machine and restarts it,
+  then this one. A version that does not start is rolled back on that machine.
+- **Add-ons**: `media` (yt-dlp), `image-gen` (Z-Image Turbo / Pollinations), `agent-reach`,
+  `opencode`, `mlx`, `kyojin`. Install the optional ones with `python tools/setup_extras.py`.
 
 ## Agent teams
 
@@ -117,6 +138,7 @@ $PY tests/test_first_layer.py     # Laya first layer (needs Node 20+ for the Lay
 $PY tests/test_updater.py         # same version everywhere: updater, ship.py
 $PY tests/test_team.py            # agent teams: roles, stages, board, fix round
 $PY tests/test_events.py          # event stream, world view, decision-before-model, spending
+$PY tests/test_portal.py          # portal, sign-in, QR, tool harness, update everything, agent builder
 $PY tools/ship.py --check         # all of the above
 ```
 

@@ -4,6 +4,28 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-14 (session 14) - Portal, sign-in, Update everything, agent builder, 3D world
+
+- Connections portal (providers_catalog.py, portal_api.py, settings.js): 43 providers with
+  switches, Test, model picker; OpenRouter OAuth PKCE (browser + phone code), device flow,
+  QR codes (qr.py, no dependencies) and a one-time phone hand-off page (signin.py).
+- More hosts: OpenCode Zen, Codestral, Vercel AI Gateway, Pollinations, Nebius, Scaleway,
+  Hyperbolic, Novita, Fireworks, Alibaba; local LM Studio, llama.cpp, MLX, vLLM, Jan, Kyojin;
+  OpenCode as a CLI agent. GitHub Models is retired (2026-07-30) and left out.
+- tool_harness.py: prompted tool calling for any model (Hermes format), learned per provider.
+- Update everything (update_all.py, peer /peer/update/apply, app supervisor restarts the
+  engine on exit 75, updater health: last_good / pending / skip, rollback).
+- Agent builder (agents.py): skills, tools, harness, fallback, home machine, memory, colour,
+  draft from a sentence, templates; /agents/launch places agents on a peer.
+- Specialists media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach).
+- LOKI World in 3D (world.js, plain WebGL) behind the home screen and in Settings.
+- ZIVA_TASKS.md: tasks for Ziva Mac / Ziva Windows and an inbox for requests.
+- Verified (cloud): tests/test_portal.py 122 checks without the engine packages; QR codes
+  decoded by jsQR; UI rendered in headless Chromium with a stub engine, no console errors.
+  Not verified here: the other suites (no PyPI access in the workspace) - CI and Ziva W1/M1.
+
+---
+
 ## 2026-10-14 (session 13) - The five-layer vision, checked and started
 
 - Saved the owner's vision (docs/VISION.md) and checked every item against the code

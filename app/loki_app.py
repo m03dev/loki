@@ -219,7 +219,9 @@ def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
         TOKEN_FILE.unlink()
     except OSError:
         pass
-    env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1", LOKI_PORT=str(PORT))
+    # LOKI_SUPERVISED: the engine exits with RESTART_EXIT_CODE to be restarted on new code.
+    env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1", LOKI_PORT=str(PORT),
+               LOKI_SUPERVISED="1")
     output = open(STATE / "engine.out", "a", encoding="utf-8")
     log(f"starting the engine for {workspace}" + (f" (Godot: {godot})" if godot else " (no Godot)"))
     return subprocess.Popen(engine_command(python, workspace, godot), cwd=str(REPO), env=env,
@@ -252,6 +254,77 @@ def stop_engine(process: subprocess.Popen | None) -> None:
         process.wait(timeout=8)
     except Exception:
         process.kill()
+
+
+# --------------------------------------------------------------------- restarts
+RESTART_EXIT_CODE = 75          # engine/updater.py: "restart me on the new code"
+WINDOW: dict = {"window": None, "browser": False}
+
+
+def rollback_update() -> dict:
+    """The updated engine did not start: go back to the version that last worked here."""
+    try:
+        sys.path.insert(0, str(HARNESS))
+        import updater  # pylint: disable=import-outside-toplevel
+        result = updater.rollback(REPO)
+        log("rollback: " + (("%s -> %s" % (result.get("from"), result.get("to"))) if result.get("ok")
+                            else result.get("error", "")))
+        return result
+    except Exception as exc:  # noqa: BLE001
+        log("rollback failed: %s" % exc)
+        return {"ok": False, "error": str(exc)}
+
+
+def show_url(url: str) -> None:
+    window = WINDOW.get("window")
+    if window is not None:
+        try:
+            window.load_url(url)
+            return
+        except Exception:  # noqa: BLE001
+            log("could not reload the window:\n" + traceback.format_exc())
+    if WINDOW.get("browser"):
+        webbrowser.open(url)
+
+
+def start_and_wait(python: Path, workspace: Path, godot: str) -> tuple:
+    """Start the engine; if a fresh update keeps it from starting, roll back once and retry."""
+    process = start_engine(python, workspace, godot)
+    token = wait_for_engine(process)
+    if token:
+        return process, token
+    stop_engine(process)
+    if rollback_update().get("ok"):
+        log("starting the previous version again")
+        process = start_engine(python, workspace, godot)
+        token = wait_for_engine(process)
+        if token:
+            return process, token
+        stop_engine(process)
+    return None, ""
+
+
+def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> None:
+    """Restart the engine when it asks to (after Update everything), and reload the window."""
+    while not stop.is_set():
+        process = holder.get("process")
+        if process is None:
+            return
+        code = process.poll()
+        if code is None:
+            stop.wait(1.0)
+            continue
+        if code != RESTART_EXIT_CODE or stop.is_set():
+            log("the engine stopped (exit %s)" % code)
+            return
+        log("the engine is restarting on the updated code")
+        new_process, token = start_and_wait(python, workspace, godot)
+        holder["process"] = new_process
+        if not token:
+            log("the engine did not come back after the update")
+            show_url("about:blank")
+            return
+        show_url(f"{BASE}/#token={token}")
 
 
 # --------------------------------------------------------------------- window
@@ -288,8 +361,8 @@ def open_window(url: str = "", html: str = "") -> bool:
     if html:
         webview.create_window("Loki", html=html, width=720, height=360)
     else:
-        webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520),
-                              background_color="#1f1f24")
+        WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520),
+                                                 background_color="#1f1f24")
     log("opening the Loki window")
     try:
         webview.start(debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
@@ -353,7 +426,8 @@ def self_test() -> int:
     problems = []
     for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
                  "model_setup", "usage", "agents",
-                 "knowledge", "federation", "skill_scan", "loki"):
+                 "knowledge", "federation", "skill_scan", "loki", "providers_catalog", "portal_api",
+                 "signin", "qr", "tool_harness", "update_all"):
         try:
             __import__(name)
         except Exception as exc:  # noqa: BLE001
@@ -391,7 +465,10 @@ def main(argv: list[str] | None = None) -> int:
         settings["workspace"] = str(workspace)
         save_settings(settings)
 
+    import threading  # pylint: disable=import-outside-toplevel
     process: subprocess.Popen | None = None
+    holder: dict = {"process": None}
+    stopping = threading.Event()
     token = read_token()
     status = probe(token) if token else probe("")
     if token and status == 200:
@@ -407,31 +484,39 @@ def main(argv: list[str] | None = None) -> int:
                    else f"cd {REPO} && bash setup.sh")
             return tell("Loki is not set up yet",
                         f"Run this once in a terminal, then open Loki again:\n\n{fix}")
-        process = start_engine(python, workspace, find_godot())
-        token = wait_for_engine(process)
+        godot = find_godot()
+        process, token = start_and_wait(python, workspace, godot)
         if not token:
-            stop_engine(process)
             return tell("The Loki engine did not start",
                         f"Details are in {STATE / 'engine.out'}")
+        holder["process"] = process
+        threading.Thread(target=supervise, args=(holder, python, workspace, godot, stopping),
+                         daemon=True, name="loki-supervisor").start()
 
     url = f"{BASE}/#token={token}"
     try:
+        def alive() -> bool:
+            current = holder.get("process")
+            return current is not None and (current.poll() is None or current.poll() == RESTART_EXIT_CODE)
+
         if args.print_url:
             print(url, flush=True)
-            while process is None or process.poll() is None:
+            while process is None or alive():
                 time.sleep(1)
             return 0
         if not open_window(url):
             log("pywebview is not installed; opening Loki in the browser instead")
+            WINDOW["browser"] = True
             webbrowser.open(url)
-            while process is not None and process.poll() is None:
+            while process is not None and alive():
                 time.sleep(1)
         return 0
     except KeyboardInterrupt:
         return 0
     finally:
         log("the Loki app is shutting down")
-        stop_engine(process)
+        stopping.set()
+        stop_engine(holder.get("process") or process)
 
 
 if __name__ == "__main__":

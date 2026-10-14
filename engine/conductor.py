@@ -10,6 +10,9 @@ the call to whichever enabled capability can do it:
     browse     a real browser does a task (browser-use)        (browser-use) - always asks
     remember   store a lasting fact in Hindsight               (hindsight)
     recall     ask Hindsight what it knows                     (hindsight)
+    media      video/audio: transcripts, details, downloads     (media: yt-dlp)
+    image      make an image                                   (image-gen: Z-Image Turbo / Pollinations)
+    reach      the web through Agent Reach: pages, GitHub      (agent-reach)
 
 Specialists that run for minutes (Claude Code, Codex, Hermes Agent) are background jobs the
 USER starts (workers.py); the model cannot spawn them. Headroom (context compression) and
@@ -52,6 +55,15 @@ ROLES: dict[str, dict] = {
                  "summary": "store a lasting fact in long-term memory (Hindsight)", "ask": False},
     "recall": {"capabilities": ("hindsight",), "permission": "",
                "summary": "ask long-term memory what it knows (Hindsight)", "ask": False},
+    "media": {"capabilities": ("media",), "permission": "network",
+              "summary": "video/audio via yt-dlp: url=..., task='transcript' (default), 'info', "
+                         "'audio', 'video', or 'search: <words>'", "ask": False},
+    "image": {"capabilities": ("image-gen",), "permission": "fs:workspace",
+              "summary": "make an image from task=<prompt> (Z-Image Turbo locally, or Pollinations); "
+                         "saved in images/", "ask": False},
+    "reach": {"capabilities": ("agent-reach",), "permission": "network",
+              "summary": "Agent Reach: url=<page> reads it as text; task='github: <words or repo url>'; "
+                         "task='doctor' lists the channels that work here", "ask": False},
 }
 
 
@@ -125,6 +137,12 @@ class Conductor:
                 return self.browse(task)
             if role in ("remember", "recall"):
                 return self.hindsight("retain" if role == "remember" else "recall", task)
+            if role == "media":
+                return self.media(task, url)
+            if role == "image":
+                return self.image(task)
+            if role == "reach":
+                return self.reach(task, url)
         except Exception as exc:  # noqa: BLE001 - a specialist failing must not end the turn
             return "error: %s failed: %s: %s" % (capability, type(exc).__name__, exc)
         return "error: role %r is not wired" % role
@@ -244,6 +262,68 @@ class Conductor:
         if not result.get("ok"):
             return "error: " + str(result.get("error"))
         return "stored in long-term memory" if op == "retain" else json.dumps(result.get("result"), default=str)[:MAX_TEXT]
+
+
+# ---------------------------------------------------------------- media / image / reach
+def _workspace(env) -> Path:
+    return Path(str(env.get("LOKI_WORKSPACE") or Path.cwd()))
+
+
+def _conductor_media(self, task: str, url: str) -> str:
+    task = (task or "").strip()
+    low = task.lower()
+    if low.startswith("search"):
+        job = {"op": "search", "query": task.split(":", 1)[-1].strip() if ":" in task else task[6:].strip()}
+    else:
+        op = next((o for o in ("info", "audio", "video", "transcript") if low.startswith(o)), "transcript")
+        target = url or next((w for w in task.split() if w.startswith(("http://", "https://"))), "")
+        job = {"op": op, "url": target, "out_dir": str(_workspace(self.env) / "media"), "max_chars": MAX_TEXT}
+    result = self._runner("media", job, timeout=int(self.env.get("LOKI_MEDIA_TIMEOUT", "900") or 900))
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    result.pop("ok", None)
+    if "text" in result:
+        head = "# %s\n" % result.get("title", "")
+        return head + str(result["text"]) + ("\n[truncated]" if result.get("truncated") else "")
+    return json.dumps(result, default=str)[:MAX_TEXT]
+
+
+def _conductor_image(self, task: str) -> str:
+    if not (task or "").strip():
+        return "error: image needs task=<what to draw>"
+    job = {"prompt": task.strip(), "out_dir": str(_workspace(self.env) / "images"),
+           "backend": str(self.env.get("LOKI_IMAGE_BACKEND", "auto"))}
+    result = self._runner("imagegen", job, timeout=int(self.env.get("LOKI_IMAGE_TIMEOUT", "900") or 900))
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    return "made %s with %s%s" % (result.get("file"), result.get("backend"),
+                                  (" (%s)" % result["note"]) if result.get("note") else "")
+
+
+def _conductor_reach(self, task: str, url: str) -> str:
+    task = (task or "").strip()
+    low = task.lower()
+    if low.startswith("doctor") or (not task and not url):
+        job = {"op": "doctor"}
+    elif low.startswith("github"):
+        rest = task.split(":", 1)[-1].strip() if ":" in task else task[6:].strip()
+        job = {"op": "github", "query": rest, "url": url or (rest if rest.startswith("http") else "")}
+    else:
+        target = url or next((w for w in task.split() if w.startswith(("http://", "https://"))), "")
+        if "youtube.com" in target or "youtu.be" in target:
+            return self.media("transcript", target) if self._ready("media").allowed else \
+                "error: turn on the media capability (yt-dlp) for YouTube"
+        job = {"op": "read", "url": target, "max_chars": MAX_TEXT}
+    result = self._runner("reach", job, timeout=180)
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    result.pop("ok", None)
+    return str(result.get("text")) if "text" in result else json.dumps(result, default=str)[:MAX_TEXT]
+
+
+Conductor.media = _conductor_media
+Conductor.image = _conductor_image
+Conductor.reach = _conductor_reach
 
 
 def python_command() -> list:

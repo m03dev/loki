@@ -143,6 +143,7 @@ STATIONS = {
     "LOKI": "hall", "Researcher": "library", "Architect": "drafting table", "Builder": "workshop",
     "Tester": "test bench", "Reviewer": "review desk", "Browser tester": "terminal",
     "Loki agent": "workshop", "claude-code": "workshop", "codex": "workshop", "hermes": "library",
+    "opencode": "workshop",
 }
 JOB_STATE = {"queued": "waiting", "starting": "working", "working": "working", "blocked": "blocked",
              "done": "done", "failed": "failed", "cancelled": "idle"}
@@ -171,7 +172,7 @@ def world(jobs: list, teams: list, chat_busy: bool, last_decision: dict | None =
             "id": "job-" + str(job.get("id")), "name": role, "role": role.lower(),
             "state": JOB_STATE.get(job.get("status", ""), "idle"),
             "station": STATIONS.get(role, "workshop"), "task": title[:120], "team": job.get("team", ""),
-            "machine": machine_name(),
+            "machine": machine_name(), "color": str(job.get("color") or ""),
             "last_message": (msgs.get(role) or {}).get("payload", {}).get("text", ""),
         })
     return {"ok": True, "machine": machine_name(), "time": now, "agents": agents,
@@ -184,5 +185,7 @@ def _role_of(job: dict) -> str:
     title = str(job.get("title") or "")
     if title.startswith("Team ") and "·" in title:
         return title.split("·", 1)[1].split(":", 1)[0].strip()
+    if job.get("agent_id") and ":" in title:
+        return title.split(":", 1)[0].strip()[:40]      # an agent from the builder: its name
     agent = str(job.get("agent") or "")
     return "Loki agent" if agent == "loki" else agent or "agent"

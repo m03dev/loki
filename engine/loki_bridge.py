@@ -193,6 +193,27 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'sel
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+def restart_engine() -> None:
+    """Restart this engine on the code now on disk (after an update).
+
+    Started by the app (LOKI_SUPERVISED=1): exit with updater.RESTART_EXIT_CODE and the app
+    starts a fresh engine and reloads the window. Started on its own (a service, the CLI):
+    start a fresh copy that waits a moment for this one's ports, then exit."""
+    import updater  # pylint: disable=import-outside-toplevel
+    print("[loki-bridge] restarting to apply the update", flush=True)
+    if os.environ.get("LOKI_SUPERVISED") == "1":
+        os._exit(updater.RESTART_EXIT_CODE)
+    env = dict(os.environ, LOKI_START_DELAY="3")
+    argv = [sys.executable, *sys.argv] if not getattr(sys, "frozen", False) else [sys.executable, *sys.argv[1:]]
+    options: dict = {"creationflags": 0x08000000 | 0x00000200} if sys.platform == "win32" else {"start_new_session": True}
+    try:
+        subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, **options)
+    except OSError as exc:
+        print("[loki-bridge] could not restart: %s" % exc, flush=True)
+        return
+    os._exit(0)
+
+
 def update_status() -> dict:
     """This machine's LOKI version and whether GitHub has a newer one (engine/updater.py)."""
     try:
@@ -605,11 +626,48 @@ class BridgeHandler(BaseHTTPRequestHandler):
             pass
         return True
 
+    def _oauth_callback(self, route: str) -> bool:
+        """GET /oauth/openrouter/callback: the browser comes straight back from openrouter.ai.
+        No bearer token here; signin.openrouter_finish only completes a flow this engine
+        started (its random `state`), and the Host must be this machine's loopback."""
+        if route != "/oauth/openrouter/callback":
+            return False
+        import signin  # pylint: disable=import-outside-toplevel
+        import portal_api  # pylint: disable=import-outside-toplevel
+        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+            self._send_json(403, {"ok": False, "error": "Host not allowed."})
+            return True
+        query = parse_qs(urlparse(self.path).query)
+        result = signin.openrouter_finish((query.get("state") or [""])[0], (query.get("code") or [""])[0],
+                                          lambda p, k: portal_api.connect(self.server.state.agent, p, k))
+        body = signin.callback_page(bool(result.get("ok")), result.get("message") or result.get("error", "")).encode()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionError, OSError):
+            pass
+        return True
+
     def do_GET(self) -> None:
         route = urlparse(self.path).path
         if self._serve_ui(route):
             return
+        if self._oauth_callback(route):
+            return
         if not self._authorized():
+            return
+        try:
+            import portal_api  # pylint: disable=import-outside-toplevel
+            handled = portal_api.handle_get(self.server.state, self.path)
+        except Exception as exc:  # noqa: BLE001 - one bad card must not break Settings
+            handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+        if handled is not None:
+            self._send_json(*handled)
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
@@ -800,6 +858,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if data is None:
             return
         state = self.server.state
+        try:
+            import portal_api  # pylint: disable=import-outside-toplevel
+            handled = portal_api.handle_post(state, route, data, port=PORT, job_action=job_action)
+        except Exception as exc:  # noqa: BLE001
+            handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+        if handled is not None:
+            self._send_json(*handled)
+            return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
             return
@@ -1367,6 +1433,10 @@ def start_logging(project: Path) -> None:
 async def serve() -> None:
     global STATE_DIR, UI_DIR
     args = parse_args()
+    try:   # a restart after an update: let the old engine free its ports first
+        time.sleep(min(30.0, float(os.environ.pop("LOKI_START_DELAY", "0") or 0)))
+    except ValueError:
+        pass
     root = Path(args.loki_root).resolve()
     project = resolve_workspace(args.project_dir)
     project.mkdir(parents=True, exist_ok=True)
@@ -1393,6 +1463,7 @@ async def serve() -> None:
     secret = secrets.token_urlsafe(32)
 
     state = BridgeState(loki, secret)
+    state.restart_engine = restart_engine
     state.project = project
     state.session = load_session(project)
     validate_session(state, project)
@@ -1459,6 +1530,7 @@ async def serve() -> None:
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
     try:
         import updater  # pylint: disable=import-outside-toplevel
+        updater.RUNNING_COMMIT = updater.version().get("commit", "")
         threading.Thread(target=updater.run_forever, daemon=True, name="loki-update").start()
         print("[loki-bridge] version " + (updater.version().get("commit") or "(not a git checkout)"), flush=True)
     except Exception as exc:  # noqa: BLE001
@@ -1493,6 +1565,11 @@ async def serve() -> None:
     keeper.start()
     print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        updater.mark_good()   # this version starts and answers here: it is the one to go back to
+    except Exception:  # noqa: BLE001
+        pass
     if hasattr(loki, "smart_report"):
         print(f"[loki-bridge] {loki.smart_report()}", flush=True)
     try:
