@@ -2973,6 +2973,25 @@ for _dir in (_s_root, _s_ws):
 check("the bridge serves what Loki has learned on /experience",
       'route == "/experience"' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
 
+
+section("macOS: the dock can start the bridge")
+_dock_mac = (REPO / "addons" / "loki" / "loki_dock.gd").read_text(encoding="utf-8")
+_unix = _dock_mac[_dock_mac.index("func _spawn_bridge_unix"):]
+_unix = _unix[:_unix.index("\nfunc ", 10)]
+check("on macOS/Linux the dock takes its own launch path", 'if OS.get_name() != "Windows":' in _dock_mac)
+check("it only launches an interpreter that exists (create_process forks first)",
+      "FileAccess.file_exists(interpreter)" in _unix and "OS.create_process(name" not in _unix)
+check("it looks for the project venv's bin/python and Homebrew Python",
+      "harness_data/.venv/bin/python" in _unix and "/opt/homebrew/bin/python3" in _unix)
+check("the macOS system Python (3.9) is the last resort", _unix.rindex("/usr/bin/python3") > _unix.index("/opt/homebrew"))
+check("it says what to install when there is no Python", "brew install python" in _unix)
+
+sys.path.insert(0, str(REPO / "addons" / "loki"))
+import bootstrap as _boot  # noqa: E402
+check("bootstrap needs Python 3.10+ for the mcp package", _boot.MIN_PYTHON == (3, 10))
+check("bootstrap reads an interpreter's version", _boot._version_of(sys.executable) == tuple(sys.version_info[:2]))
+check("bootstrap uses the running Python when it is new enough", _boot.base_python() == sys.executable)
+
 if "--live" in sys.argv:
 
 

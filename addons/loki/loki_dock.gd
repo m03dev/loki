@@ -544,6 +544,8 @@ func _spawn_bridge() -> int:
 		"--godot-exe", OS.get_executable_path(),
 		"--secret-file", _token_path(),
 	])
+	if OS.get_name() != "Windows":
+		return _spawn_bridge_unix(project, args)
 	var bundled: PackedStringArray = PackedStringArray([
 		project.path_join("harness_data/.venv/Scripts/pythonw.exe"),
 		project.path_join("harness_data/.venv/Scripts/python.exe"),
@@ -559,6 +561,32 @@ func _spawn_bridge() -> int:
 		var path_pid: int = OS.create_process(name, args, false)
 		if path_pid > 0:
 			return path_pid
+	return -1
+
+## macOS / Linux. On these systems OS.create_process forks BEFORE it knows whether the
+## program exists, so it returns a pid even for a name that is not installed - the old
+## "try pythonw, then python" loop stopped at the first (dead) guess and the bridge
+## never started. Only launch a path that exists. An app started from Finder also gets
+## a bare PATH, so look in the usual install places explicitly. The macOS system Python
+## (/usr/bin/python3) is 3.9 - too old for the mcp package - so it is the last resort.
+func _spawn_bridge_unix(project: String, args: PackedStringArray) -> int:
+	var home: String = OS.get_environment("HOME")
+	var candidates: PackedStringArray = PackedStringArray([
+		project.path_join("harness_data/.venv/bin/python"),
+		project.path_join(".venv/bin/python"),
+		"/opt/homebrew/bin/python3",
+		"/usr/local/bin/python3",
+		"/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+		home.path_join(".local/bin/python3"),
+		"/usr/bin/python3",
+	])
+	for interpreter in candidates:
+		if FileAccess.file_exists(interpreter):
+			var pid: int = OS.create_process(interpreter, args, false)
+			if pid > 0:
+				return pid
+	_append_log("[color=#bf616a]Loki needs Python 3.10 or newer and could not find it. "
+		+ "Install it (for example: brew install python), then reopen the project.[/color]")
 	return -1
 
 func _on_input_gui(event: InputEvent) -> void:

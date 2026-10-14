@@ -8,6 +8,7 @@ interpreter. The user never installs or configures anything by hand.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -154,16 +155,55 @@ def deps_ok(python: Path) -> bool:
         return False
 
 
+MIN_PYTHON = (3, 10)   # the mcp package needs 3.10+
+
+
+def _version_of(python: str) -> tuple:
+    try:
+        out = subprocess.run([python, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                             capture_output=True, text=True, timeout=20).stdout.split()
+        return int(out[0]), int(out[1])
+    except Exception:
+        return (0, 0)
+
+
+def base_python() -> str | None:
+    """A Python new enough to build the environment from.
+
+    The interpreter that started us may be too old - on macOS the dock can only fall
+    back to /usr/bin/python3, which is 3.9 - so look for a newer one.
+    """
+    if sys.version_info[:2] >= MIN_PYTHON:
+        return sys.executable
+    names = ["python3.%d" % minor for minor in range(14, MIN_PYTHON[1] - 1, -1)] + ["python3"]
+    places = ["/opt/homebrew/bin", "/usr/local/bin",
+              "/Library/Frameworks/Python.framework/Versions/Current/bin",
+              str(Path.home() / ".local" / "bin")]
+    for name in names:
+        for candidate in [str(Path(place) / name) for place in places] + [shutil.which(name) or ""]:
+            if candidate and Path(candidate).is_file() and _version_of(candidate) >= MIN_PYTHON:
+                return candidate
+    return None
+
+
 def ensure_environment() -> Path | None:
     """Return an interpreter that can run the harness, setting one up if needed."""
     python = venv_python()
     if deps_ok(python):
         return python
+    if python.exists() and _version_of(str(python)) < MIN_PYTHON:
+        log(f"the environment at {VENV} uses Python older than 3.10; rebuilding it")
+        shutil.rmtree(VENV, ignore_errors=True)
 
     if not python.exists():
-        log(f"creating a private Python environment at {VENV} (one time)")
+        base = base_python()
+        if base is None:
+            log("Loki needs Python 3.10 or newer and none was found. Install it "
+                "(macOS: `brew install python`, or python.org), then reopen the project.")
+            return None
+        log(f"creating a private Python environment at {VENV} from {base} (one time)")
         try:
-            subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
+            subprocess.run([base, "-m", "venv", str(VENV)], check=True)
         except Exception as exc:
             log(f"could not create the environment: {exc}")
             return None
