@@ -791,88 +791,90 @@ _state = ecc_sync.installed()
 check("the library reports per-source counts", isinstance(_state.get("sources"), dict))
 
 
-check("GodotPrompter skills were fetched",
+_have_vendor = _state["sources"].get("GodotPrompter", {}).get("skills", 0) > 0
+if not _have_vendor:
+    print("  SKIP skill-library checks: the libraries are not downloaded here "
+          "(setup fetches them into harness_data/vendor)")
+else:
+    check("GodotPrompter skills were fetched",
 
 
-      _state["sources"].get("GodotPrompter", {}).get("skills", 0) > 20,
+          _state["sources"].get("GodotPrompter", {}).get("skills", 0) > 20,
 
 
-      _state["sources"].get("GodotPrompter"))
+          _state["sources"].get("GodotPrompter"))
 
 
-check("loki aggregates the libraries", {"ECC", "GodotPrompter"} <= set(loki.LIBRARIES))
+    check("loki aggregates the libraries", {"ECC", "GodotPrompter"} <= set(loki.LIBRARIES))
 
 
-_libs = loki.vendor_library()
+    _libs = loki.vendor_library()
 
 
-check("vendor_library reports ECC and GodotPrompter", {"ECC", "GodotPrompter"} <= set(_libs))
+    check("vendor_library reports ECC and GodotPrompter", {"ECC", "GodotPrompter"} <= set(_libs))
 
 
-_check_skills = loki.list_ecc_skills()
+    _check_skills = loki.list_ecc_skills()
 
 
-check("list_ecc_skills names every library",
+    check("list_ecc_skills names every library",
 
 
-      "ECC" in _check_skills and "GodotPrompter" in _check_skills)
+          "ECC" in _check_skills and "GodotPrompter" in _check_skills)
 
 
-_gp_skill = _libs["GodotPrompter"]["skills"][0]
+    _gp_skill = _libs["GodotPrompter"]["skills"][0]
 
 
-check("a GodotPrompter skill loads", "name:" in loki.load_ecc_skill(_gp_skill))
+    check("a GodotPrompter skill loads", "name:" in loki.load_ecc_skill(_gp_skill))
 
 
-check("an unknown skill is reported, not crashed", loki.load_ecc_skill("__nope__").startswith("no such skill"))
+    check("an unknown skill is reported, not crashed", loki.load_ecc_skill("__nope__").startswith("no such skill"))
 
 
-check("an unknown agent is reported, not crashed", loki.load_ecc_agent("__nope__").startswith("no such agent"))
-
-
-
-
-
-_libs_now = loki.vendor_library()
-
-
-check("the loader finds every library recursively",
-
-
-      {"ECC", "GodotPrompter", "Superpowers", "awesome-gamedev", "gamedev-plugin"} <= set(_libs_now),
-
-
-      sorted(_libs_now))
-
-
-_total_skills = sum(len(v["skills"]) for v in _libs_now.values())
-
-
-check("the library holds hundreds of skills", _total_skills > 400, _total_skills)
-
-
-check("every sync source is loaded (ponytail has no skills)",
-
-
-      (set(ecc_sync.SOURCES) - {"ponytail"}) <= set(loki.LIBRARIES))
-
-
-check("every loaded library is a sync source", set(loki.LIBRARIES) <= set(ecc_sync.SOURCES))
-
-
-check("skill listing filters by query", "awesome-gamedev" in loki.list_ecc_skills("platformer"))
-
-
-check("the unfiltered listing is capped, not dumped",
-
-
-      "+" in loki.list_ecc_skills(), loki.list_ecc_skills()[:80])
-
-
-check("agent listing accepts a query filter", isinstance(loki.list_ecc_agents("architect"), str))
+    check("an unknown agent is reported, not crashed", loki.load_ecc_agent("__nope__").startswith("no such agent"))
 
 
 
+
+
+    _libs_now = loki.vendor_library()
+
+
+    check("the loader finds every library recursively",
+
+
+          {"ECC", "GodotPrompter", "Superpowers", "awesome-gamedev", "gamedev-plugin"} <= set(_libs_now),
+
+
+          sorted(_libs_now))
+
+
+    _total_skills = sum(len(v["skills"]) for v in _libs_now.values())
+
+
+    check("the library holds hundreds of skills", _total_skills > 400, _total_skills)
+
+
+    check("every sync source is loaded (ponytail has no skills)",
+
+
+          (set(ecc_sync.SOURCES) - {"ponytail"}) <= set(loki.LIBRARIES))
+
+
+    check("every loaded library is a sync source", set(loki.LIBRARIES) <= set(ecc_sync.SOURCES))
+
+
+    check("skill listing filters by query", "awesome-gamedev" in loki.list_ecc_skills("platformer"))
+
+
+    check("the unfiltered listing is capped, not dumped",
+
+
+          "+" in loki.list_ecc_skills(), loki.list_ecc_skills()[:80])
+
+
+    check("agent listing accepts a query filter", isinstance(loki.list_ecc_agents("architect"), str))
 
 
 section("optional Godot MCP servers")
