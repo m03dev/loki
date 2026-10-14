@@ -1221,8 +1221,7 @@ func _collect_text(node: Node) -> String:
 	for child in node.get_children():
 		var part: String = _collect_text(child)
 		if not part.strip_edges().is_empty():
-			out += part + "
-"
+			out += part + "\n"
 	return out
 
 
@@ -1386,8 +1385,7 @@ func _poll_editor_ops() -> void:
 	if not FileAccess.file_exists(path):
 		return
 	var text: String = FileAccess.get_file_as_string(path)
-	for line in text.split("
-"):
+	for line in text.split("\n"):
 		var trimmed: String = line.strip_edges()
 		if trimmed.is_empty():
 			continue

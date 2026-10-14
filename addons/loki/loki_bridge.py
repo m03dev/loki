@@ -576,10 +576,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             agent = self.server.state.agent
             resolved = agent.active_model_name() if hasattr(agent, "active_model_name") else agent.model_name
             report = agent.smart_report() if hasattr(agent, "smart_report") else ""
+            route_trace = list(getattr(agent, "ROUTE_TRACE", []))
             self._send_json(200, {"ok": True, "service": "loki", "mode": agent.model_name,
                                   "workspace": os.environ.get("LOKI_WORKSPACE", ""),
                                   "provider": resolved, "model": agent.MODELS[resolved].model,
-                                  "providers": report})
+                                  "providers": report, "route": route_trace,
+                                  "usage": dict(getattr(agent, "REQUEST_USAGE", {}))})
             return
         if route == "/progress":
             try:
@@ -694,6 +696,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             agent = self.server.state.agent
             fleet = getattr(agent, "federation", None)
             self._send_json(200, {"ok": True, "workers": fleet.health() if fleet else []})
+        if route == "/experience":
+            agent = self.server.state.agent
+            exp = getattr(agent, "experience", None)
+            if exp is None:
+                self._send_json(503, {"ok": False, "error": "experience log is not available"})
+                return
+            self._send_json(200, {"ok": True, **exp.summary(), "new_examples": exp.new_examples(),
+                                  "providers": exp.provider_stats(),
+                                  "learned_order": agent.routing_order(agent.SMART_ORDER),
+                                  "tuned_promoted": bool(getattr(agent, "TUNED_PROMOTED", False))})
+            return
             return
         if route == "/capabilities":
             agent = self.server.state.agent

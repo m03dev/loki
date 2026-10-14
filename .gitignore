@@ -59,3 +59,9 @@ build/
 dist/
 # App runtime state (engine stdout, remembered settings)
 harness_data/app/
+
+# Runtime records (never commit): credits ledger, learning log, background jobs
+harness_data/usage.jsonl
+harness_data/experience/
+harness_data/workers/
+harness_data/train_venv/

@@ -83,6 +83,15 @@ installed (`npm install --prefix harness_data/laya @receptron/laya`).
 - Live editor tools through a bundled Godot MCP bridge, with more capability domains
   unlockable on demand.
 
+## Background agents and self-improvement
+
+Loki can hand sub-tasks to background agents (coder, tester, reviewer, researcher) that
+work in parallel and report back - start, watch and message them from the dock's
+**Background agents...** menu. It also logs how every request went, learns which
+providers actually deliver, and can fine-tune a small local model on an NVIDIA GPU from
+its own verified work, promoting it only when it beats the current one. See
+[docs/agents-and-self-improvement.md](docs/agents-and-self-improvement.md).
+
 ## Requirements
 
 - Godot **4.8** (or newer 4.x).

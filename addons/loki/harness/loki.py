@@ -60,7 +60,32 @@ WORKSPACE = Path(
     or GAME_PROJECT
     or str(DATA_DIR / "workspace")
 )
-GODOT_EXE = os.getenv("GODOT_EXE", "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe")
+# Where Godot usually lives when GODOT_EXE is not set. The editor always passes its own
+# executable to the bridge; this only matters for the CLI, the tests and standalone use.
+# (The first entry is the original developer's install, kept so nothing regresses there.)
+_GODOT_GUESSES = (
+    "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe",
+    "/Applications/Godot.app/Contents/MacOS/Godot",
+    "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+)
+
+
+def resolve_godot_exe() -> str:
+    """GODOT_EXE if set, else a Godot on PATH, else a known install path, else ""."""
+    explicit = os.getenv("GODOT_EXE", "").strip()
+    if explicit:
+        return explicit
+    for name in ("godot", "godot4", "Godot"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for guess in _GODOT_GUESSES:
+        if Path(guess).is_file():
+            return guess
+    return ""
+
+
+GODOT_EXE = resolve_godot_exe()
 # MCP servers that drive the engine (Coding-Solo's godot-mcp, Godot Forge) look
 # for GODOT_PATH; Loki already knows the engine as GODOT_EXE, so share it.
 if str(GODOT_EXE or "").strip() and Path(GODOT_EXE).is_file() and not os.getenv("GODOT_PATH"):
@@ -255,6 +280,7 @@ import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 REPO_ROOT = ROOT.parent.parent.parent
 CAPABILITIES = manifests.default_registry(REPO_ROOT, DATA_DIR)
 KNOWLEDGE = knowledge.default_store(REPO_ROOT, DATA_DIR, WORKSPACE)
+import experience  # noqa: E402  (outcome log, learned routing, training data)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -427,8 +453,53 @@ LOCAL_PROVIDERS = ("local", "local-small", "local-coder", "local-hermes",
 
 # ONLINE MODE (LOKI_MODEL=online): everything reached over the network. Free tiers first,
 # then the subscription agents (which need no key and no GPU), and never a local model.
+# The model Loki fine-tuned on its own verified work (tools/self_improve.py). It joins the
+# smart order - just ahead of the stock local model - only once it has been PROMOTED, i.e.
+# it beat the base model on held-out tasks. Until then it does not exist as far as routing
+# is concerned.
+TUNED_MODEL = os.getenv("LOKI_TUNED_MODEL", "loki-tuned").strip() or "loki-tuned"
+TUNED_PROMOTED = str(os.getenv("LOKI_TUNED_PROMOTED", "0")).strip() == "1"
+MODELS["loki-tuned"] = ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama",
+                                   model=TUNED_MODEL)
+LOCAL_PROVIDERS = LOCAL_PROVIDERS + ("loki-tuned",)
+if TUNED_PROMOTED and "local" in SMART_ORDER:
+    _at = SMART_ORDER.index("local")
+    SMART_ORDER = SMART_ORDER[:_at] + ("loki-tuned",) + SMART_ORDER[_at:]
+
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 _SMART_FAILED = set()
+
+# Learned routing: measured success reorders providers WITHIN a cost tier (see
+# experience.learned_order). Free stays ahead of paid whatever the numbers say.
+LEARN_ROUTING = str(os.getenv("LOKI_LEARN_ROUTING", "1")).strip().lower() not in ("0", "false", "off", "no")
+LEARN_MIN_SAMPLES = int(os.getenv("LOKI_LEARN_MIN_SAMPLES", "10"))
+_ROUTING_CACHE = {"t": 0.0, "stats": {}}
+
+
+def provider_tier(name: str) -> str:
+    cfg = MODELS.get(name)
+    if name in LOCAL_PROVIDERS or (cfg is not None and "11434" in cfg.base_url):
+        return "local"
+    if cfg is not None and cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        return "subscription"
+    if is_metered(name):
+        return "paid"
+    return "free"
+
+
+def routing_order(order) -> list:
+    """`order` as routing should try it: learned within tiers when enabled, else as-is."""
+    if not LEARN_ROUTING:
+        return list(order)
+    now = time.time()
+    if now - _ROUTING_CACHE["t"] > 60:
+        try:
+            _ROUTING_CACHE["stats"] = experience.provider_stats()
+        except Exception:
+            _ROUTING_CACHE["stats"] = {}
+        _ROUTING_CACHE["t"] = now
+    return experience.learned_order(order, provider_tier, _ROUTING_CACHE["stats"],
+                                    LEARN_MIN_SAMPLES)
 
 
 def _ollama_reachable() -> bool:
@@ -596,7 +667,7 @@ except Exception:
 def active_model_name() -> str:
     """The provider actually in use - SMART resolves to the best available."""
     if model_name == "online":
-        for candidate in ONLINE_ORDER:
+        for candidate in routing_order(ONLINE_ORDER):
             if candidate not in _SMART_FAILED and provider_configured(candidate):
                 return candidate
         # Nothing is configured yet. Name one anyway so the error tells the user exactly
@@ -609,7 +680,7 @@ def active_model_name() -> str:
         return "local"
     if not online():
         return "local"
-    for candidate in SMART_ORDER:
+    for candidate in routing_order(SMART_ORDER):
         if candidate not in _SMART_FAILED and provider_configured(candidate):
             return candidate
     return "local"
@@ -626,9 +697,18 @@ def smart_report() -> str:
     return "%s | %s" % (headline, ", ".join(marks))
 
 
-def _mark_smart_failure() -> None:
-    if model_name == "smart":
-        _SMART_FAILED.add(active_model_name())
+AUTO_ROUTING_MODES = ("smart", "online")
+
+
+def _mark_smart_failure(provider: str = "") -> None:
+    """Mark the provider that FAILED as used-up (auto-routing modes only).
+
+    Pass the provider the request was actually sent to. Re-resolving it here with
+    active_model_name() is wrong once anything has already been marked: it names the
+    NEXT provider, which then gets marked too and is skipped without ever being tried.
+    """
+    if model_name in AUTO_ROUTING_MODES:
+        _SMART_FAILED.add(provider or active_model_name())
 
 
 # A provider being out of quota or rate-limited must NOT end the run - we move to
@@ -677,21 +757,132 @@ def _is_quota_error(exc) -> bool:
     return any(marker in text for marker in _QUOTA_MARKERS)
 
 
-def failover_target() -> str:
-    """Mark the provider in use as used-up and return the next usable one.
+# A provider whose key is wrong/revoked, or whose endpoint cannot be reached, cannot
+# serve this turn either. In an auto-routing mode that is a reason to move on, not to
+# end the turn while other providers are ready. (A PINNED provider still surfaces the
+# error: the user chose it, and should be told its key is wrong.)
+_AUTH_MARKERS = ("http 401", "http 403", "invalid api key", "incorrect api key",
+                 "invalid_api_key", "unauthorized", "authentication", "permission denied")
 
-    Returns "" when nothing else is available so the caller can surface the
-    original error instead of looping.
+
+def _is_auth_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _AUTH_MARKERS)
+
+
+def _is_unreachable(exc) -> bool:
+    return str(exc).startswith("[model unavailable]")
+
+
+def failover_reason(exc) -> str:
+    """A short, honest label for why a provider was skipped."""
+    if _is_agent_unavailable(exc):
+        return "agent not available"
+    if _is_quota_error(exc):
+        return "quota spent"
+    if _is_auth_error(exc):
+        return "key rejected"
+    if _is_unreachable(exc):
+        return "unreachable"
+    if _is_limit_error(exc):
+        return "rate/size limit"
+    return "error"
+
+
+def should_fail_over(exc, auto_routing: bool) -> bool:
+    """True when the error means 'try another provider', not 'this is a bug'."""
+    if _is_limit_error(exc) or _is_agent_unavailable(exc):
+        return True
+    return auto_routing and (_is_auth_error(exc) or _is_unreachable(exc))
+
+
+# The route each request actually took: which provider failed, why, and where the turn
+# went next. Reset per request, so "why did Loki use X?" has a recorded answer.
+ROUTE_TRACE: list = []
+
+# Provider error bodies sometimes echo part of the key; the trace leaves the process
+# (the bridge serves it on /health), so key-shaped strings are masked first.
+_SECRET_SHAPES = re.compile(r"(sk|gsk|xai|pk|rk|AIza)[-_A-Za-z0-9]{12,}|Bearer\s+[-._A-Za-z0-9]{12,}")
+
+
+def redact_secrets(text: str) -> str:
+    return _SECRET_SHAPES.sub("[redacted]", str(text))
+
+
+# ---------------------------------------------------------------------------
+# Cost: usage per request, and a cap that applies ONLY to metered providers.
+# ---------------------------------------------------------------------------
+# Free tiers, local models and the flat-rate subscription CLIs keep running unbounded
+# (LOKI_MAX_TURNS still applies to everything). A provider billed per token cannot run
+# away: after LOKI_PAID_MAX_CALLS model calls in one request, the request stops and says
+# why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
+_METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
+                    "ollama-cloud"}
+PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
+REQUEST_USAGE: dict = {}   # provider -> {"calls", "prompt_tokens", "completion_tokens"}
+
+
+def is_metered(name: str) -> bool:
+    """True when every call to this provider costs money."""
+    if name in _csv_env("LOKI_FREE_PROVIDERS"):
+        return False
+    if name in _csv_env("LOKI_PAID_PROVIDERS") or name in _METERED_DEFAULT:
+        return True
+    cfg = MODELS.get(name)
+    if cfg is not None and "openrouter.ai" in cfg.base_url:
+        return not str(cfg.model).endswith(":free")
+    return False
+
+
+def _paid_calls() -> int:
+    return sum(u["calls"] for name, u in REQUEST_USAGE.items() if is_metered(name))
+
+
+def _record_request_usage(provider: str, response) -> None:
+    entry = REQUEST_USAGE.setdefault(provider, {"calls": 0, "prompt_tokens": 0,
+                                                "completion_tokens": 0})
+    entry["calls"] += 1
+    usage = getattr(response, "usage", None)
+    for key in ("prompt_tokens", "completion_tokens"):
+        value = getattr(usage, key, None) if usage is not None else None
+        if isinstance(value, int):
+            entry[key] += value
+
+
+def usage_summary() -> str:
+    """'openrouter 3 calls, 4.1k tokens' - one line per request, for the user and the log."""
+    parts = []
+    for name, u in REQUEST_USAGE.items():
+        tokens = u["prompt_tokens"] + u["completion_tokens"]
+        text = "%s %d call%s" % (name, u["calls"], "" if u["calls"] == 1 else "s")
+        if tokens:
+            text += ", %s tokens" % (("%.1fk" % (tokens / 1000)) if tokens >= 1000 else tokens)
+        if is_metered(name):
+            text += " (paid)"
+        parts.append(text)
+    return "; ".join(parts)
+
+
+def failover_target(spent: str = "") -> str:
+    """Mark `spent` (the provider that just failed) used-up; return the next usable one.
+
+    Returns "" when no other CONFIGURED provider is left, so the caller surfaces the
+    original error (e.g. "quota spent") instead of a misleading one from a provider the
+    user never set up (e.g. "Ollama is not running").
+
+    Online mode stays online: it must never fall through to a local model.
     """
     global model_name
-    current = active_model_name()
+    current = spent or active_model_name()
     _SMART_FAILED.add(current)
-    if model_name != "smart":
+    if model_name not in AUTO_ROUTING_MODES:
         # The chosen provider is spent; pick automatically from here so the task
         # keeps going instead of dying on one exhausted key.
         model_name = "smart"
     nxt = active_model_name()
-    return "" if nxt == current else nxt
+    if nxt == current or nxt in _SMART_FAILED or not provider_configured(nxt):
+        return ""
+    return nxt
 
 
 # ---------------------------------------------------------------------------
@@ -1273,10 +1464,30 @@ def build_scene(filename: str, nodes, light: bool = True, camera: bool = False) 
     return "build_scene: %s%s%s" % (written, NL, checked)
 
 
+def godot_available() -> bool:
+    """True when GODOT_EXE names an executable that actually exists."""
+    exe = str(GODOT_EXE or "").strip()
+    return bool(exe) and (Path(exe).is_file() or bool(shutil.which(exe)))
+
+
+# Said instead of a verdict when Godot cannot be started. Without this a missing engine
+# read as "INVALID - fix these errors", and the model "fixed" files that were fine.
+NOT_VERIFIED = "NOT VERIFIED"
+
+
+def _godot_missing(tool: str, filename: str) -> str:
+    return ("%s %s: %s - the Godot executable was not found (%s). This says nothing about "
+            "the file itself; do not change it because of this. Set GODOT_EXE in "
+            "harness_data/.env to enable checks." % (tool, filename, NOT_VERIFIED,
+                                                    GODOT_EXE or "GODOT_EXE is unset"))
+
+
 def validate_scene(filename: str, timeout: int = 90) -> str:
     """Run a scene headless and report whether Godot loaded it without errors."""
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("validate_scene", filename)
     # run_godot uses shlex.split(posix=False), which keeps literal quotes,
     # so the res:// path must be passed unquoted here.
     res = run_godot("--headless --quit-after 1 " + filename, timeout=timeout)
@@ -1297,6 +1508,8 @@ def check_script(filename: str) -> str:
     """Compile-check a GDScript file with Godot and report any parse errors."""
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("check_script", filename)
     cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, "--check-only", "--script", filename]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
@@ -1318,6 +1531,8 @@ def play_scene(filename: str, seconds: int = 5) -> str:
     """
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("play_scene", filename)
     cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, filename]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -1865,7 +2080,18 @@ LOCAL_TOOLS = {
 }
 
 # Tools that change files on disk (used to verify a task really did work).
-MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "move_file", "delete_file", "make_dir"}
+MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "build_scene",
+             "move_file", "delete_file", "make_dir",
+             # these three rewrite project.godot
+             "add_input_action", "set_project_setting", "add_autoload"}
+# Tools that START the game or the editor (scene scripts run, and can do anything a
+# script can). Plan mode is read-only, so it offers none of them. check_script stays:
+# --check-only parses the script without running it.
+RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", "open_in_editor"}
+# Writes outside the project (downloads into harness_data) - not "read-only" either.
+NETWORK_WRITES = {"sync_ecc"}
+# Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
+DELEGATING = {"delegate"}
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate"}
@@ -2145,7 +2371,10 @@ def model_tool_schemas() -> list:
         schemas = [t for t in schemas
                    if t["function"]["name"] in LOCAL_TOOLS
                    and t["function"]["name"] not in MODIFYING
-                   and t["function"]["name"] not in DANGEROUS]
+                   and t["function"]["name"] not in DANGEROUS
+                   and t["function"]["name"] not in RUNS_PROJECT
+                   and t["function"]["name"] not in NETWORK_WRITES
+                   and t["function"]["name"] not in DELEGATING]
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
         TRIMMED_TOOLS_NOTE = local_note
         return schemas
@@ -3019,6 +3248,7 @@ def _toolset_summary(text: str) -> str:
 
 
 async def call_tool(name: str, args: dict) -> str:
+    global _task_modified
     args = _normalize_args(name, args)
     # The git MCP server requires repo_path on every call. Loki already knows the
     # project, so fill it in - the model never has to guess the workspace path.
@@ -3042,9 +3272,9 @@ async def call_tool(name: str, args: dict) -> str:
             result = LOCAL_TOOLS[name](**args)
             if asyncio.iscoroutine(result):
                 result = await result
-            global _task_modified
             if name in MODIFYING:
                 _task_modified = True
+                _record_touched(name, args, result)
             return result
         except Exception as e:
             return f"error: {e}"
@@ -3054,6 +3284,8 @@ async def call_tool(name: str, args: dict) -> str:
             text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
         except Exception as e:
             return f"error: {e}"
+        if _record_mcp_touched(name, args, text):
+            _task_modified = True
         if "toolset" in name:
             # Enabling a toolset changes the server's tool list; without this the
             # model would have to guess at tools it can never see.
@@ -3194,6 +3426,179 @@ _repeat_sig = ""
 _repeat_count = 0
 _task_modified = False
 
+# ---------------------------------------------------------------------------
+# Verification: a model saying it is done is not proof that it is.
+# ---------------------------------------------------------------------------
+# Every project file a request writes is recorded. When the agent finishes, those
+# files - and only those - are checked deterministically (scripts compiled, scenes
+# loaded headless, JSON parsed). Real errors go back to the model a bounded number of
+# times; the final answer always says what was verified, what failed, and what could
+# NOT be verified, so a missing engine is never reported as success.
+_task_files: list = []
+_LAST_VERIFY: dict = {}        # the last verification report of this request
+_REQUEST_TOOL_CALLS = 0        # tool calls made in this request
+EXPERIENCE_ENABLED = str(os.getenv("LOKI_EXPERIENCE", "1")).strip().lower() not in ("0", "false", "off", "no")
+VERIFY_ENABLED = str(os.getenv("LOKI_VERIFY", "1")).strip().lower() not in ("0", "false", "off", "no")
+VERIFY_MAX_FILES = int(os.getenv("LOKI_VERIFY_MAX_FILES", "6"))
+VERIFY_FIX_ROUNDS = int(os.getenv("LOKI_VERIFY_FIX_ROUNDS", "2"))
+_PROJECT_SETTINGS_TOOLS = ("add_input_action", "set_project_setting", "add_autoload")
+
+
+def _touched_path(name: str, args: dict) -> str:
+    """The project file a modifying tool call wrote, or "" when there is none to check."""
+    if name in _PROJECT_SETTINGS_TOOLS:
+        return "project.godot"
+    if name in ("delete_file", "make_dir"):
+        return ""
+    if name == "move_file":
+        return str(args.get("dst") or "")
+    return str(args.get("filename") or args.get("path") or "")
+
+
+def _record_touched(name: str, args: dict, result) -> None:
+    path = _touched_path(name, args)
+    if not path or str(result).lstrip().lower().startswith("error"):
+        return
+    path = path.replace("res://", "", 1).lstrip("/")
+    if path in _task_files:
+        _task_files.remove(path)
+    _task_files.append(path)   # most recent last
+
+
+# MCP tools (godot-editor-mcp and friends) write project files too. Their names vary by
+# server, so recognise them by verb, and take the file from a *_path argument whose
+# value looks like a file. Node paths ("Player/Camera") are tree paths, not files.
+_MCP_WRITE_VERB = re.compile(r"(^|_)(write|patch|create|save|move|scaffold|import|attach)_")
+_MCP_SETTINGS_TOOL = re.compile(r"(^|_)(set_setting|add_input_action|remove_input_action|"
+                                r"add_input_event|clear_input_action_events|register_autoload|"
+                                r"unregister_autoload)$")
+_MCP_FILE_KEYS = ("script_path", "scene_path", "shader_path", "save_path", "resource_path",
+                  "tileset_path", "library_path", "new_path", "path", "file_path", "target_file")
+_FILE_SUFFIX = re.compile(r"\.[A-Za-z0-9]{1,6}$")
+
+
+def mcp_touched_paths(name: str, args: dict) -> list:
+    """Project files an MCP tool call writes (best effort, by name and arguments)."""
+    if not isinstance(args, dict):
+        return []
+    if _MCP_SETTINGS_TOOL.search(name):
+        return ["project.godot"]
+    if not _MCP_WRITE_VERB.search(name):
+        return []
+    found = []
+    for key in _MCP_FILE_KEYS:
+        value = args.get(key)
+        if isinstance(value, str) and _FILE_SUFFIX.search(value.strip()):
+            path = value.strip().replace("res://", "", 1).lstrip("/")
+            if path not in found:
+                found.append(path)
+    return found
+
+
+def _record_mcp_touched(name: str, args: dict, result_text: str) -> bool:
+    head = str(result_text or "")[:200].lower()
+    if head.startswith("error") or '"ok": false' in head or '"error"' in head[:40]:
+        return False
+    paths = mcp_touched_paths(name, args)
+    for path in paths:
+        _record_touched("write_file", {"filename": path}, "ok")
+    return bool(paths)
+
+
+def _verdict(text: str) -> str:
+    """Classify a checker's output: 'ok', 'failed' or 'unverified'."""
+    if NOT_VERIFIED in text:
+        return "unverified"
+    head = text.split(chr(10), 1)[0]
+    if "ERRORS" in head or "INVALID" in head:
+        return "failed"
+    if ": error " in head or "timed out" in head:
+        return "unverified"
+    return "ok"
+
+
+def verify_files(paths) -> dict:
+    """Check each path that has a deterministic checker. Pure apart from running Godot.
+
+    Returns {"ok": [...], "failed": [(path, detail)], "unverified": [(path, why)],
+             "skipped": [...]} - skipped means no checker exists for that file type.
+    """
+    report = {"ok": [], "failed": [], "unverified": [], "skipped": []}
+    seen = []
+    for path in paths:
+        if path and path not in seen:
+            seen.append(path)
+    checked = seen[-VERIFY_MAX_FILES:] if VERIFY_MAX_FILES > 0 else seen
+    for path in checked:
+        lower = path.lower()
+        try:
+            exists = resolve_in_workspace(path).is_file()
+        except Exception:
+            exists = False
+        if not exists:
+            report["unverified"].append((path, "no longer exists"))
+            continue
+        if lower.endswith(".gd"):
+            text = check_script(path)
+        elif lower.endswith((".tscn", ".scn")):
+            text = validate_scene(path)
+        elif lower.endswith(".json"):
+            try:
+                json.loads(resolve_in_workspace(path).read_text(encoding="utf-8"))
+                text = "json %s: parses OK" % path
+            except Exception as exc:
+                text = "json %s: INVALID - %s" % (path, exc)
+        else:
+            report["skipped"].append(path)
+            continue
+        kind = _verdict(text)
+        if kind == "ok":
+            report["ok"].append(path)
+        elif kind == "failed":
+            report["failed"].append((path, _shorten(text)[:1500]))
+        else:
+            first = text.split(chr(10), 1)[0]
+            why = "Godot not found" if NOT_VERIFIED in text else first[:160]
+            report["unverified"].append((path, why))
+    report["skipped"].extend(p for p in seen if p not in checked)
+    return report
+
+
+def verification_summary(report: dict) -> str:
+    """One honest line for the user: what passed, what failed, what was not checked."""
+    parts = []
+    if report["ok"]:
+        parts.append("%d checked OK (%s)" % (len(report["ok"]), ", ".join(report["ok"])))
+    if report["failed"]:
+        parts.append("%d FAILED (%s)" % (len(report["failed"]),
+                                         ", ".join(p for p, _ in report["failed"])))
+    if report["unverified"]:
+        parts.append("%d not verified (%s)" % (len(report["unverified"]), "; ".join(
+            "%s: %s" % (p, why) for p, why in report["unverified"])))
+    if report["skipped"]:
+        parts.append("%d with no automatic check (%s)" % (len(report["skipped"]),
+                                                          ", ".join(report["skipped"])))
+    return "Verification: " + ("; ".join(parts) if parts else "nothing to check") + "."
+
+
+def verification_feedback(report: dict) -> str:
+    """The message that sends real errors back to the model."""
+    lines = ["Automatic verification of the files you changed found errors. The task is NOT "
+             "done. Fix them, then reply 'DONE: <summary>' again:"]
+    for path, detail in report["failed"]:
+        lines.append("")
+        lines.append("--- " + path)
+        lines.append(detail)
+    return chr(10).join(lines)
+
+
+async def _verify_touched() -> dict:
+    _progress("thinking", "Verifying %d changed file(s)..." % len(_task_files))
+    report = await asyncio.to_thread(verify_files, list(_task_files))
+    _LAST_VERIFY.clear()
+    _LAST_VERIFY.update(report)
+    return report
+
 # Loop detection (Jev): a rolling window of recent actions, checked periodically so a
 # model that keeps retrying the same *approach* (not an identical call) gets nudged.
 _jev_loop_window = []
@@ -3270,8 +3675,11 @@ def _status_of(exc) -> int:
     return int(status) if isinstance(status, int) else 0
 
 
-async def _model_request(client, kwargs: dict, cfg):
-    """Ask the model, retrying transient failures so one 429 does not end the task."""
+async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
+    """Ask the model, retrying transient failures so one 429 does not end the task.
+
+    `provider` is the MODELS key the request goes to; a failure marks THAT provider.
+    """
     attempt = 0
     while True:
         try:
@@ -3299,7 +3707,7 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             if status == 404 and ("11434" in cfg.base_url) and "not found" in str(exc.message).lower():
                 # Ollama is up but this model was never pulled. Marked as a limit so a
                 # smart run fails over instead of ending.
@@ -3317,10 +3725,10 @@ async def _model_request(client, kwargs: dict, cfg):
                 _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, MODEL_RETRIES))
                 await asyncio.sleep(delay)
                 continue
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             raise ModelUnavailable(model_down_hint(cfg)) from exc
         except openai.OpenAIError as exc:
-            _mark_smart_failure()
+            _mark_smart_failure(provider)
             raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
 
 
@@ -3448,16 +3856,27 @@ async def agent_turn(force_tool: bool = False) -> str:
         switches = 0
         _t0 = time.monotonic()
         while True:
+            # Resolve the provider BEFORE the request, so a failure is pinned on the
+            # provider that actually failed (re-resolving afterwards names the next one).
+            provider = active_model_name()
+            if PAID_MAX_CALLS > 0 and is_metered(provider) and _paid_calls() >= PAID_MAX_CALLS:
+                raise BudgetExhausted(
+                    "hit the paid-provider budget: %d calls to metered providers this request "
+                    "(%s). Raise LOKI_PAID_MAX_CALLS, or use a free provider." % (
+                        _paid_calls(), usage_summary()))
             try:
-                response = await _model_request(client, kwargs, cfg)
+                response = await _model_request(client, kwargs, cfg, provider)
                 _record_usage(response, kwargs, cfg, _t0)
+                _record_request_usage(provider, response)
                 break
             except ModelUnavailable as exc:
-                if switches >= len(SMART_ORDER) or not (
-                        _is_limit_error(exc) or _is_agent_unavailable(exc)):
+                if switches >= len(SMART_ORDER) or not should_fail_over(
+                        exc, model_name in AUTO_ROUTING_MODES):
                     raise
-                spent = active_model_name()
-                target = failover_target()
+                reason = failover_reason(exc)
+                target = failover_target(provider)
+                ROUTE_TRACE.append({"provider": provider, "reason": reason,
+                                    "next": target or "", "error": redact_secrets(short_error(str(exc), 160))})
                 if not target:
                     raise
                 switches += 1
@@ -3467,8 +3886,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                 kwargs.pop("extra_body", None)
                 if "11434" in cfg.base_url or "ollama" in cfg.api_key:
                     kwargs["extra_body"] = {"think": False}
-                _progress("thinking", "Cannot use %s - switched to %s and continuing."
-                    % (spent, target))
+                _progress("thinking", "Cannot use %s (%s) - switched to %s and continuing."
+                    % (provider, reason, target))
         message = response.choices[0].message
         global _last_turn_had_tools
         _last_turn_had_tools = bool(message.tool_calls)
@@ -3515,6 +3934,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                 })
                 continue
             print("  [tool] %s(%s)" % (call.function.name, json.dumps(args)[:200]))
+            global _REQUEST_TOOL_CALLS
+            _REQUEST_TOOL_CALLS += 1
             result = await call_tool(call.function.name, args)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             # Break a loop where the model repeats an identical failing call forever.
@@ -3557,14 +3978,45 @@ async def agent_turn(force_tool: bool = False) -> str:
                     )})
 
 
-async def run_agent(user_message: str) -> str:
+async def _finish_with_verification(answer: str, rounds: int) -> str:
+    """Verify what this request wrote; send real errors back up to `rounds` times.
+
+    Returns the answer with an honest verification line appended (or unchanged when
+    nothing was written or verification is off). Never raises for a checker problem.
+    """
+    if not (VERIFY_ENABLED and _task_files):
+        return answer
+    try:
+        report = await _verify_touched()
+        attempts = 0
+        while report["failed"] and attempts < rounds:
+            attempts += 1
+            _progress("thinking", "Verification found errors; asking the model to fix them (%d of %d)..."
+                      % (attempts, rounds))
+            messages.append({"role": "user", "content": verification_feedback(report)})
+            answer = await agent_turn()
+            report = await _verify_touched()
+    except (ModelUnavailable, BudgetExhausted):
+        raise
+    except Exception as exc:
+        return (answer or "").rstrip() + chr(10) * 2 + "Verification: could not run (%s)." % exc
+    return (answer or "").rstrip() + chr(10) * 2 + verification_summary(report)
+
+
+async def _run_agent(user_message: str) -> str:
     global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
+    ROUTE_TRACE.clear()
+    REQUEST_USAGE.clear()
+    _task_files.clear()
     messages.append({"role": "user", "content": user_message})
     try:
         answer = await agent_turn()
+        # A chat turn that changed files gets ONE bounded repair round on real errors -
+        # cheap insurance against "I fixed it" when the script does not even compile.
+        answer = await _finish_with_verification(answer, rounds=min(1, VERIFY_FIX_ROUNDS))
         save_history()
         return answer
     except ModelUnavailable:
@@ -3608,12 +4060,15 @@ def is_conversational(goal: str) -> bool:
     return bool(_CONVERSATIONAL.match(text)) or text.rstrip().endswith("?")
 
 
-async def pursue_goal(goal: str) -> str:
+async def _pursue_goal(goal: str) -> str:
     global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     _task_modified = False
+    ROUTE_TRACE.clear()
+    REQUEST_USAGE.clear()
+    _task_files.clear()
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)
     _progress("task", "Goal: %s" % goal[:200])
@@ -3644,6 +4099,7 @@ async def pursue_goal(goal: str) -> str:
     idle = 0
     stalls = 0
     force_next = False
+    verify_rejections = 0
     while True:
         step += 1
         if GOAL_STEPS > 0 and step > GOAL_STEPS:
@@ -3679,6 +4135,17 @@ async def pursue_goal(goal: str) -> str:
             )})
             force_next = True
             continue
+        if head.startswith("DONE") and VERIFY_ENABLED and _task_files:
+            # The model says DONE; check the files it actually wrote before believing it.
+            report = await _verify_touched()
+            if report["failed"] and verify_rejections < VERIFY_FIX_ROUNDS:
+                verify_rejections += 1
+                _progress("thinking", "Checked: %d changed file(s) have errors - not accepting DONE."
+                          % len(report["failed"]))
+                messages.append({"role": "user", "content": verification_feedback(report)})
+                continue
+            save_history()
+            return reply.strip() + chr(10) * 2 + verification_summary(report)
         if head.startswith("DONE") or head.startswith("BLOCKED"):
             save_history()
             return reply.strip()
@@ -3694,6 +4161,81 @@ async def pursue_goal(goal: str) -> str:
             # Stalled in prose. Do NOT inject a "user" nudge - the model just echoes
             # it and loops. Silently force a tool call on the next turn instead.
             force_next = True
+
+
+# ---------------------------------------------------------------------------
+# Every request leaves a record (experience.py), so Loki can learn from outcomes.
+# ---------------------------------------------------------------------------
+
+def _start_request() -> tuple:
+    global _REQUEST_TOOL_CALLS
+    _REQUEST_TOOL_CALLS = 0
+    _LAST_VERIFY.clear()
+    return time.time(), len(messages)
+
+
+def _record_experience(kind: str, goal: str, status: str, started: float, start_index: int) -> None:
+    """Log the request; keep its trajectory when it is a verified success. Never raises."""
+    if not EXPERIENCE_ENABLED:
+        return
+    try:
+        verification = dict(_LAST_VERIFY) if _task_files else {}
+        outcome = experience.outcome_of(status, verification)
+        providers = list(REQUEST_USAGE)
+        request_id = uuid.uuid4().hex[:12]
+        kept = False
+        if outcome == "verified" and status == "done":
+            turns = [m for m in messages[start_index:] if isinstance(m, dict)]
+            used = sorted({c.get("function", {}).get("name", "")
+                           for m in turns for c in (m.get("tool_calls") or []) if isinstance(c, dict)})
+            kept = experience.save_trajectory(
+                request_id, goal, turns, [u for u in used if u],
+                meta={"kind": kind, "provider": providers[-1] if providers else "",
+                      "files": list(_task_files)}) is not None
+        experience.record({
+            "id": request_id, "kind": kind, "goal": goal, "status": status, "outcome": outcome,
+            "provider": providers[-1] if providers else "", "providers": providers,
+            "tool_calls": _REQUEST_TOOL_CALLS, "files": list(_task_files),
+            "usage": dict(REQUEST_USAGE), "route": list(ROUTE_TRACE),
+            "seconds": time.time() - started, "trajectory": kept,
+        })
+    except Exception as exc:  # noqa: BLE001 - learning must never break a request
+        print("  [experience] not recorded: %s" % exc)
+
+
+def _status_of_reply(reply: str) -> str:
+    head = (reply or "").strip().upper()
+    if head.startswith("DONE"):
+        return "done"
+    return "blocked"
+
+
+async def run_agent(user_message: str) -> str:
+    started, start_index = _start_request()
+    status = "error"
+    try:
+        reply = await _run_agent(user_message)
+        status = "done"
+        return reply
+    except BudgetExhausted:
+        status = "budget"
+        raise
+    finally:
+        _record_experience("chat", user_message, status, started, start_index)
+
+
+async def pursue_goal(goal: str) -> str:
+    started, start_index = _start_request()
+    status = "error"
+    try:
+        reply = await _pursue_goal(goal)
+        status = "done" if is_conversational(goal) else _status_of_reply(reply)
+        return reply
+    except BudgetExhausted:
+        status = "budget"
+        raise
+    finally:
+        _record_experience("task", goal, status, started, start_index)
 
 
 # ---------------------------------------------------------------------------

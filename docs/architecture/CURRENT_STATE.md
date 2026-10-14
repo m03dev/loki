@@ -47,8 +47,13 @@ decides which tools are offered. Plan cannot write/run/delete.
 - One common provider model (`ModelConfig`); `smart` mode orders free cloud tiers, then
   subscription coding agents, then local Ollama, and fails over automatically.
 - `_is_limit_error()` distinguishes an out-of-allowance refusal (429/402/413, quota, rate
-  limit) from a real bug; `failover_target()` marks a provider used up and retries the
-  **same turn** on the next provider, so no work is lost.
+  limit) from a real bug; `failover_target(spent)` marks the provider that FAILED used up
+  and retries the **same turn** on the next configured provider, so no work is lost.
+  (Session 9: it used to mark the next provider too, skipping it unseen.)
+- In auto-routing modes (`smart`, `online`) a rejected key or unreachable endpoint also
+  moves on; a pinned provider surfaces its error. Online mode never falls to local.
+- Each switch is recorded in `ROUTE_TRACE` (provider, reason, next; secrets masked) and
+  served on the bridge's `/health` as `route`.
 - Coding CLIs (Claude Code, Codex) are providers (`cli-agent://…`), using an existing
   subscription rather than an API key.
 - Go-to model on the user's account: DeepSeek V4.1-Flash via OpenRouter.
@@ -101,6 +106,24 @@ decides which tools are offered. Plan cannot write/run/delete.
   (`_server_skip_reason`) with `enabled`, `requires_env`, and `requires_cmd` rules.
 - Vendored skills: 519 skills across six libraries plus the Ponytail coding standard.
 
+## 8b. Verification (session 9)
+
+- Files written during a request are recorded (`_task_files`). When the agent finishes -
+  DONE in a task, or the end of a chat turn - they are checked: `.gd` compiled,
+  `.tscn` loaded headless, `.json` parsed. Real errors go back to the model (2 rounds
+  task / 1 chat) and the answer ends with a `Verification:` line.
+- Without Godot every checker says NOT VERIFIED (never INVALID, never OK).
+- Not covered: runtime behaviour, and edits made through MCP tools.
+
+## 8c. Background agents and self-improvement (session 10)
+
+- `harness/workers.py` + `worker.py`: background agents, one process per goal; roles
+  coder/tester (build) and reviewer/researcher (plan); delegation tools for the model;
+  bridge `/workers*`; dock dialog. See `docs/agents-and-self-improvement.md`.
+- `harness/experience.py`: outcome log, learned routing within cost tiers, verified-only
+  trajectories; `tools/self_improve.py` trains/evaluates/promotes a local model.
+- Paid providers are capped per request (`LOKI_PAID_MAX_CALLS`); usage on `/health`.
+
 ## 9. Security posture (what exists)
 
 - **Filesystem sandbox**: every path goes through `resolve_in_workspace()`, which rejects
@@ -132,5 +155,6 @@ decides which tools are offered. Plan cannot write/run/delete.
 - No repository browser or API Vault implementation yet.
 - No distributed-worker layer yet.
 - Scene edits are not yet routed through Godot's undo manager.
+- MCP-driven edits are not yet in the verification set; no default per-task budget.
 - No CI. `godot_omni` MCP backend disabled (port conflict with the `godot_ai`/`godot_omni`
   addons terminates the editor; keep them disabled).
