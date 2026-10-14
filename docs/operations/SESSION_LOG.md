@@ -4,6 +4,22 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-13 (session 12, part 2) - One version on both machines; LOKI ships itself
+
+- Mac: copied the current code into `~/Documents/loki` (it had no git history) and restarted
+  LOKI on it; the engine reported the new layout and the first layer. The Mac refused remote
+  writes to `.env` and clicks in the LOKI window, so linking and keys need the owner.
+- Found: the Mac was set to *listen* instead of linking, and the machines are on different
+  networks (192.168.1.71 vs 192.168.0.101).
+- `engine/updater.py` (update on start, plain copy -> checkout, never overwrites local work,
+  macos-app -> master), `tools/ship.py`, CI on macOS + Windows, peers compare versions and
+  `/peer/update`, version shown in the sidebar and in Machines, `improve_loki`/`ship_loki`,
+  AGENTS.md, CLAUDE.md, HANDOFF.md (now tracked).
+- Verified: 8 suites, 933 checks (new tests/test_updater.py, 42, against real git and a
+  stand-in GitHub). Not verified: the first real update on the Mac and the PC.
+
+---
+
 ## 2026-10-13 (session 12) - LOKI is its own app; Laya first; work in the chat
 
 **PC linked for real:** the PC (`mo`, RTX 3070 Ti, 192.168.0.101) was moved onto GitHub's

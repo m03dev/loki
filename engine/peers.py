@@ -374,6 +374,10 @@ class PeerServer:
             if method == "POST" and rest[1:] == ["cancel"]:
                 job = cb["cancel_job"](job_id)
                 return (200, {"ok": True, "job": job}) if job else (404, {"ok": False, "error": "no such job"})
+        if method == "POST" and path == "/peer/update":
+            if "check_update" not in cb:
+                return 404, {"ok": False, "error": "updates are not handled here"}
+            return 200, {"ok": True, **cb["check_update"]()}
         if method == "POST" and path == "/peer/experience":
             items = data.get("trajectories")
             if not isinstance(items, list):

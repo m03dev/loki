@@ -103,6 +103,26 @@ def choose_workspace(cli_value: str = "", settings: dict | None = None, env: dic
     return (Path.home() / "LOKI Projects" / "Home").resolve()
 
 
+def auto_update() -> dict:
+    """Bring this checkout up to GitHub before the engine starts (engine/updater.py).
+
+    Every machine runs the same LOKI this way: the Mac and the PC both follow `master`.
+    Fast-forward only; local work is never overwritten. Skipped in packaged builds."""
+    if FROZEN:
+        return {}
+    try:
+        sys.path.insert(0, str(HARNESS))
+        import updater  # pylint: disable=import-outside-toplevel
+        if not updater.enabled():
+            return {}
+        result = updater.update(REPO, timeout=float(os.environ.get("LOKI_UPDATE_TIMEOUT", "25") or 25))
+        log("update: " + (result.get("note") or "") + ((" - " + result["error"]) if result.get("error") else ""))
+        return result
+    except Exception as exc:  # noqa: BLE001 - an update problem must never stop LOKI from opening
+        log("update skipped: %s" % exc)
+        return {}
+
+
 def adopt_old_chats(workspace: Path, home: Path | None = None) -> list[str]:
     """Bring chats from the old default workspace (~/Loki/.godot) into <workspace>/.loki.
 
@@ -366,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
     workspace = choose_workspace(args.workspace, settings)
     if adopt_old_chats(workspace):
         log("brought your chats over from ~/Loki")
+    auto_update()
     if args.workspace:
         settings["workspace"] = str(workspace)
         save_settings(settings)

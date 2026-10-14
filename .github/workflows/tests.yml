@@ -1,0 +1,36 @@
+name: Tests (macOS + Windows)
+
+# The Mac and the PC run the same LOKI. Every push is tested on both, so a change made on
+# one machine (by you, Ziva, Claude Code or LOKI's own agents) cannot break the other.
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r engine/requirements.txt
+
+      - name: Run every offline suite (same list as tools/ship.py)
+        run: python tools/ship.py --check

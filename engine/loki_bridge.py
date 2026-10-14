@@ -193,6 +193,15 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'sel
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+def update_status() -> dict:
+    """This machine's LOKI version and whether GitHub has a newer one (engine/updater.py)."""
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        return updater.status()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+
+
 def first_layer_status(agent) -> dict:
     """What answers the first layer right now, and its last verdict (for the UI)."""
     try:
@@ -613,7 +622,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                   "provider": resolved, "model": agent.MODELS[resolved].model,
                                   "providers": report, "route": route_trace,
                                   "usage": dict(getattr(agent, "REQUEST_USAGE", {})),
-                                  "first_layer": first_layer_status(agent)})
+                                  "first_layer": first_layer_status(agent),
+                                  "update": update_status()})
             return
         if route == "/progress":
             try:
@@ -728,6 +738,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             agent = self.server.state.agent
             fleet = getattr(agent, "federation", None)
             self._send_json(200, {"ok": True, "workers": fleet.health() if fleet else []})
+        if route == "/update":
+            self._send_json(200, {"ok": True, **update_status()})
+            return
         if route == "/experience":
             agent = self.server.state.agent
             exp = getattr(agent, "experience", None)
@@ -759,6 +772,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         state = self.server.state
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
+            return
+        if route == "/update/check":
+            try:
+                import updater  # pylint: disable=import-outside-toplevel
+                self._send_json(200, {"ok": True, **updater.check_now()})
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(500, {"ok": False, "error": str(exc)})
             return
         if route in ("/chat", "/task"):
             is_task: bool = route == "/task"
@@ -1382,6 +1402,12 @@ async def serve() -> None:
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        threading.Thread(target=updater.run_forever, daemon=True, name="loki-update").start()
+        print("[loki-bridge] version " + (updater.version().get("commit") or "(not a git checkout)"), flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[loki-bridge] update checks unavailable: {exc}", flush=True)
     try:
         import laya  # pylint: disable=import-outside-toplevel
         laya.warm()  # the first layer asks Laya about every request: load the model now

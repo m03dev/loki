@@ -75,8 +75,14 @@ def hello(state: Any, agent: Any) -> dict:
         summary = experience.summary()
     except Exception:
         pass
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        build = updater.version()
+    except Exception:  # noqa: BLE001
+        build = {}
     return {
         "name": peers.my_name(),
+        "version": build,
         "machine": peers.describe_machine(),
         "listening": peers.listen_enabled(),
         "ollama_models": local_models,
@@ -124,8 +130,13 @@ def callbacks(state: Any, agent: Any) -> dict:
     def receive(origin: str, items: list) -> dict:
         return experience.import_trajectories(origin, items)
 
+    def check_update() -> dict:
+        import updater  # pylint: disable=import-outside-toplevel
+        threading.Thread(target=updater.check_now, daemon=True).start()
+        return {"checking": True, "version": updater.version()}
+
     return {"hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
-            "cancel_job": cancel_job, "receive_experience": receive}
+            "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update}
 
 
 def _present(job: dict) -> dict:
@@ -191,8 +202,37 @@ def adopt_tuned_model(agent: Any, statuses: list) -> str:
 LAST_SYNC: dict = {"t": 0.0, "note": "", "pushed": None, "error": ""}
 
 
+def compare_versions(statuses: list) -> list:
+    """Linked machines on a different LOKI commit than this one. When one differs, check
+    GitHub at once: the machines must run the same version (engine/updater.py)."""
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        mine = updater.version().get("commit", "")
+    except Exception:  # noqa: BLE001
+        return []
+    other = [{"name": p["name"], "commit": ((p.get("hello") or {}).get("version") or {}).get("commit", "")}
+             for p in statuses if p.get("ok")]
+    differ = [o for o in other if o["commit"] and mine and o["commit"] != mine]
+    if differ:
+        threading.Thread(target=updater.check_now, daemon=True).start()
+    return differ
+
+
+def ask_peers_to_check_update() -> list:
+    """Tell every linked machine that a new version was pushed (tools/ship.py)."""
+    told = []
+    for peer in peers.peers():
+        try:
+            peers.call(peer, "POST", "/peer/update", {}, timeout=6.0)
+            told.append(peer["name"])
+        except Exception:  # noqa: BLE001 - an offline machine updates when it next starts
+            pass
+    return told
+
+
 def sync_once(agent: Any) -> dict:
     statuses = peers.status_all()
+    LAST_SYNC["version_differs"] = compare_versions(statuses)
     note = adopt_tuned_model(agent, statuses)
     pushed, error = None, ""
     if os.getenv("LOKI_TRAINER_PEER", "").strip():

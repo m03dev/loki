@@ -2029,6 +2029,8 @@ def knowledge_tool(action: str = "list", uri: str = "viking://memory", text: str
 LOCAL_TOOLS = {
     "conductor": lambda role, task="", url="": conductor_tool(role, task, url),
     "delegate": lambda agent, task: delegate(agent, task),
+    "improve_loki": lambda task: improve_loki(task),
+    "ship_loki": lambda message, path="": ship_loki(message, path),
     "knowledge": knowledge_tool,
     "list_files": list_files,
     "list_tree": list_tree,
@@ -2086,10 +2088,17 @@ RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", 
 # Writes outside the project (downloads into harness_data) - not "read-only" either.
 NETWORK_WRITES = {"sync_ecc"}
 # Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
-DELEGATING = {"delegate"}
+DELEGATING = {"delegate", "improve_loki", "ship_loki"}
+
+# LOKI improving its own code (improve_loki / ship_loki): "auto" lets agents change, test
+# and push LOKI without asking (ship.py refuses to push unless every test passes), "ask"
+# asks you first, "off" disables both tools.
+SELF_SHIP = str(os.getenv("LOKI_SELF_SHIP", "auto")).strip().lower()
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate"}
+if SELF_SHIP == "ask":
+    DANGEROUS |= {"improve_loki", "ship_loki"}
 POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
                              command_check=lambda command: command_policy(command),
                              parse_command=safe_exec.parse, dangerous=DANGEROUS,
@@ -2125,6 +2134,68 @@ def delegate(agent: str, task: str) -> str:
     threading.Thread(target=JOBS.tick, daemon=True).start()
     return ("started background job %s: %s is working on it. The user sees it above the message box; "
             "you do not need to wait for it." % (job["id"], profile["name"]))
+
+
+SELF_IMPROVE_PROMPT = """You are improving LOKI itself - the app you are part of.
+This workspace is a git worktree of LOKI's own repository, on its own branch.
+Read AGENTS.md first and follow it. Then make this change:
+
+{task}
+
+Rules: LOKI runs on macOS and Windows from the same code, so never write code for one
+without the other; add or update tests in tests/; keep docs/ true. When the change is done,
+call ship_loki with a one-line message saying what changed and how you checked it. ship_loki
+runs every test suite and pushes only if they all pass; if it reports failures, fix them and
+call it again. Report DONE with what you shipped, or BLOCKED with why."""
+
+
+def _is_loki_checkout(path: Path) -> bool:
+    return (path / "engine" / "loki.py").is_file() and (path / ".git").exists()
+
+
+def improve_loki(task: str) -> str:
+    """Start a background agent that changes LOKI's own code in an isolated worktree."""
+    if SELF_SHIP == "off":
+        return "error: LOKI may not change its own code here (LOKI_SELF_SHIP=off)"
+    if JOBS is None:
+        return "error: background jobs are not running in this Loki"
+    task = str(task or "").strip()
+    if not task:
+        return "error: say what to change"
+    if not _is_loki_checkout(REPO_ROOT):
+        return "error: %s is not a git checkout of LOKI yet (restart LOKI once)" % REPO_ROOT
+    spec = {"backend": "local", "agent": "loki", "workspace": str(REPO_ROOT), "isolate": True,
+            "timeout_s": 7200, "allow_commands": True, "title": "Improve LOKI: " + task.splitlines()[0][:60],
+            "prompt": SELF_IMPROVE_PROMPT.format(task=task)}
+    verdict = POLICY.job(spec["backend"], spec["agent"])
+    if not verdict.allowed:
+        return "error: %s" % verdict.reason
+    try:
+        job = JOBS.create(spec)
+    except ValueError as exc:
+        return "error: %s" % exc
+    threading.Thread(target=JOBS.tick, daemon=True).start()
+    return ("started job %s: a LOKI agent is making the change in its own worktree and will "
+            "ship it when every test passes. The user sees it above the message box." % job["id"])
+
+
+def ship_loki(message: str, path: str = "") -> str:
+    """Test, commit and push a change to LOKI (tools/ship.py), then tell the other machines."""
+    if SELF_SHIP == "off":
+        return "error: LOKI may not push its own code here (LOKI_SELF_SHIP=off)"
+    message = str(message or "").strip()
+    if not message:
+        return "error: give a one-line message saying what changed"
+    repo = Path(path).expanduser() if path else (WORKSPACE if _is_loki_checkout(WORKSPACE) else REPO_ROOT)
+    if not _is_loki_checkout(repo):
+        return "error: %s is not a git checkout of LOKI" % repo
+    try:
+        proc = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "ship.py"), "-m", message,
+                               "--repo", str(repo)], capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "error: shipping took over an hour and was stopped"
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return ("shipped:\n" if proc.returncode == 0 else "NOT shipped:\n") + out[-3000:]
 
 
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
@@ -2220,6 +2291,10 @@ TOOL_SCHEMAS = [
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
     schema("delegate", "Hand a longer task to one of your agents (Researcher, Builder, Reviewer, Tester, or one the user made) as a background job, so you can keep talking. The user approves each one. agent=name, task=what to do.",
            {"agent": {"type": "string"}, "task": {"type": "string"}}, ["agent", "task"]),
+    schema("improve_loki", "Change LOKI's own code (a feature, a fix, a new tool for yourself). A background LOKI agent makes the change in its own git worktree, tests it on the shared Mac/Windows test suites and ships it with ship_loki. task=what to change and why.",
+           {"task": {"type": "string"}}, ["task"]),
+    schema("ship_loki", "Publish a finished change to LOKI's own code: runs every test suite, commits, catches up with GitHub, pushes to master and tells the other machines to update. Pushes nothing if a test fails. message=one line: what changed and how it was checked; path=the worktree (default: this workspace).",
+           {"message": {"type": "string"}, "path": {"type": "string"}}, ["message"]),
     schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory). Only roles listed under 'Specialists you can call' in your instructions are ready.",
            {"role": {"type": "string"}, "task": {"type": "string"}, "url": {"type": "string"}}, ["role"]),
     schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
@@ -2239,6 +2314,7 @@ MODEL_TOOL_NAMES = {
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
+    "improve_loki", "ship_loki",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -2255,7 +2331,7 @@ TOOL_CATEGORIES = {
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
-    "specialists": ["conductor", "delegate"],
+    "specialists": ["conductor", "delegate", "improve_loki", "ship_loki"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],

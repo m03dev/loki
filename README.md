@@ -44,7 +44,22 @@ local Ollama model). Add keys in `harness_data/.env` or in Settings > Connection
 Your projects live in `~/LOKI Projects/` (default `~/LOKI Projects/Home`). Start with
 `--workspace <folder>` to use another one; it is remembered.
 
-To update: `git pull`, then run setup again.
+## One version on every machine
+
+The Mac and the PC always run the same LOKI: GitHub's `master`.
+
+- **Updating is automatic.** Every LOKI updates itself from GitHub when it starts
+  (fast-forward only; your own edits and unpushed commits are never overwritten). While it
+  runs, the sidebar shows when an update is waiting.
+- **Publishing is one command**, for you and for every agent (Ziva, Claude Code, LOKI's own):
+  `python tools/ship.py -m "what changed"`. It runs every test suite, commits, catches up
+  with GitHub, pushes, and tells your other machines. It pushes nothing if a test fails.
+- **Both platforms are tested** on every push (GitHub Actions, macOS and Windows).
+- **LOKI can improve itself**: ask it to change something about LOKI and it hands the work to
+  a background agent (`improve_loki`) that ships it with `ship_loki` once the tests pass.
+  `LOKI_SELF_SHIP=ask` makes it ask you first; `off` turns it off.
+
+Agents: read [AGENTS.md](AGENTS.md) and [HANDOFF.md](HANDOFF.md) before changing anything.
 
 ## Link your machines
 
@@ -76,6 +91,8 @@ $PY tests/test_workers.py         # background jobs
 $PY tests/test_offline_e2e.py     # full offline run against a fake model server
 $PY tests/test_peers.py           # Mac <-> PC link
 $PY tests/test_first_layer.py     # Laya first layer (needs Node 20+ for the Laya part)
+$PY tests/test_updater.py         # same version everywhere: updater, ship.py
+$PY tools/ship.py --check         # all of the above
 ```
 
 ## Build the Windows app

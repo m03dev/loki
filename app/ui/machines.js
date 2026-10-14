@@ -20,6 +20,11 @@ function machineRow(peer) {
   }
   const facts = [];
   if (hello.machine) facts.push(hello.machine.os + " " + (hello.machine.arch || ""));
+  if (hello.version && hello.version.commit) {
+    const mine = (window.LOKI_VERSION || "");
+    const same = mine && hello.version.commit === mine;
+    facts.push("LOKI " + hello.version.commit.slice(0, 7) + (mine ? (same ? " (same as this machine)" : " (DIFFERENT from this machine - both update from GitHub on their next start)") : ""));
+  }
   if (gpu) facts.push(gpu.name + " - " + gpu.used_mb + "/" + gpu.total_mb + " MB, " + gpu.util + "% busy");
   if (hello.ollama_models && hello.ollama_models.length) facts.push("models: " + hello.ollama_models.slice(0, 6).join(", "));
   const ex = hello.experience || {};

@@ -30,7 +30,6 @@ scenes/
 scripts/
 plugins/
 project.godot
-HANDOFF.md
 .git-rewrite/
 
 # Packaged builds and models

@@ -372,7 +372,23 @@ async function loadHealth() {
   if (!data.ok) return false;
   $("#workspace").textContent = data.workspace || "";
   $("#workspace").title = "Workspace: " + (data.workspace || "");
+  showVersion(data.update || {});
   return true;
+}
+
+// Every machine runs the same LOKI (engine/updater.py). Show the version, and say when
+// GitHub has a newer one that the next start will apply.
+function showVersion(u) {
+  const box = $("#version");
+  if (!box) return;
+  const commit = u.commit ? u.commit.slice(0, 7) : "";
+  window.LOKI_VERSION = u.commit || "";
+  box.textContent = commit ? "LOKI " + commit : "";
+  box.classList.toggle("attention", !!u.update_available);
+  box.title = u.update_available
+    ? "A newer LOKI is on GitHub (" + (u.latest || "").slice(0, 7) + "). Quit and reopen LOKI to use it."
+    : (u.note || "Up to date with GitHub");
+  if (u.update_available) box.textContent += " · update waiting (reopen LOKI)";
 }
 
 // ---------------------------------------------------------------- settings
