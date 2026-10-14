@@ -59,7 +59,32 @@ WORKSPACE = Path(
     or GAME_PROJECT
     or str(DATA_DIR / "workspace")
 )
-GODOT_EXE = os.getenv("GODOT_EXE", "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe")
+# Where Godot usually lives when GODOT_EXE is not set. The editor always passes its own
+# executable to the bridge; this only matters for the CLI, the tests and standalone use.
+# (The first entry is the original developer's install, kept so nothing regresses there.)
+_GODOT_GUESSES = (
+    "G:/Godot_v4.8-dev7_win64.exe/Godot_v4.8-dev7_win64.exe",
+    "/Applications/Godot.app/Contents/MacOS/Godot",
+    "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+)
+
+
+def resolve_godot_exe() -> str:
+    """GODOT_EXE if set, else a Godot on PATH, else a known install path, else ""."""
+    explicit = os.getenv("GODOT_EXE", "").strip()
+    if explicit:
+        return explicit
+    for name in ("godot", "godot4", "Godot"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for guess in _GODOT_GUESSES:
+        if Path(guess).is_file():
+            return guess
+    return ""
+
+
+GODOT_EXE = resolve_godot_exe()
 # MCP servers that drive the engine (Coding-Solo's godot-mcp, Godot Forge) look
 # for GODOT_PATH; Loki already knows the engine as GODOT_EXE, so share it.
 if str(GODOT_EXE or "").strip() and Path(GODOT_EXE).is_file() and not os.getenv("GODOT_PATH"):
@@ -1169,10 +1194,30 @@ def build_scene(filename: str, nodes, light: bool = True, camera: bool = False) 
     return "build_scene: %s%s%s" % (written, NL, checked)
 
 
+def godot_available() -> bool:
+    """True when GODOT_EXE names an executable that actually exists."""
+    exe = str(GODOT_EXE or "").strip()
+    return bool(exe) and (Path(exe).is_file() or bool(shutil.which(exe)))
+
+
+# Said instead of a verdict when Godot cannot be started. Without this a missing engine
+# read as "INVALID - fix these errors", and the model "fixed" files that were fine.
+NOT_VERIFIED = "NOT VERIFIED"
+
+
+def _godot_missing(tool: str, filename: str) -> str:
+    return ("%s %s: %s - the Godot executable was not found (%s). This says nothing about "
+            "the file itself; do not change it because of this. Set GODOT_EXE in "
+            "harness_data/.env to enable checks." % (tool, filename, NOT_VERIFIED,
+                                                    GODOT_EXE or "GODOT_EXE is unset"))
+
+
 def validate_scene(filename: str, timeout: int = 90) -> str:
     """Run a scene headless and report whether Godot loaded it without errors."""
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("validate_scene", filename)
     # run_godot uses shlex.split(posix=False), which keeps literal quotes,
     # so the res:// path must be passed unquoted here.
     res = run_godot("--headless --quit-after 1 " + filename, timeout=timeout)
@@ -1193,6 +1238,8 @@ def check_script(filename: str) -> str:
     """Compile-check a GDScript file with Godot and report any parse errors."""
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("check_script", filename)
     cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, "--check-only", "--script", filename]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
@@ -1214,6 +1261,8 @@ def play_scene(filename: str, seconds: int = 5) -> str:
     """
     if not filename.startswith("res://"):
         filename = "res://" + filename.lstrip("/")
+    if not godot_available():
+        return _godot_missing("play_scene", filename)
     cmd = [GODOT_EXE, "--headless", "--path", GAME_PROJECT, filename]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -1736,7 +1785,16 @@ LOCAL_TOOLS = {
 }
 
 # Tools that change files on disk (used to verify a task really did work).
-MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "move_file", "delete_file", "make_dir"}
+MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "build_scene",
+             "move_file", "delete_file", "make_dir",
+             # these three rewrite project.godot
+             "add_input_action", "set_project_setting", "add_autoload"}
+# Tools that START the game or the editor (scene scripts run, and can do anything a
+# script can). Plan mode is read-only, so it offers none of them. check_script stays:
+# --check-only parses the script without running it.
+RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", "open_in_editor"}
+# Writes outside the project (downloads into harness_data) - not "read-only" either.
+NETWORK_WRITES = {"sync_ecc"}
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file"}
@@ -1938,7 +1996,9 @@ def model_tool_schemas() -> list:
         schemas = [t for t in schemas
                    if t["function"]["name"] in LOCAL_TOOLS
                    and t["function"]["name"] not in MODIFYING
-                   and t["function"]["name"] not in DANGEROUS]
+                   and t["function"]["name"] not in DANGEROUS
+                   and t["function"]["name"] not in RUNS_PROJECT
+                   and t["function"]["name"] not in NETWORK_WRITES]
     if MAX_TOOLS <= 0 or len(schemas) <= MAX_TOOLS:
         TRIMMED_TOOLS_NOTE = ""
         return schemas
@@ -2771,6 +2831,7 @@ async def call_tool(name: str, args: dict) -> str:
             global _task_modified
             if name in MODIFYING:
                 _task_modified = True
+                _record_touched(name, args, result)
             return result
         except Exception as e:
             return f"error: {e}"
@@ -2901,6 +2962,133 @@ _last_turn_had_tools = False
 _repeat_sig = ""
 _repeat_count = 0
 _task_modified = False
+
+# ---------------------------------------------------------------------------
+# Verification: a model saying it is done is not proof that it is.
+# ---------------------------------------------------------------------------
+# Every project file a request writes is recorded. When the agent finishes, those
+# files - and only those - are checked deterministically (scripts compiled, scenes
+# loaded headless, JSON parsed). Real errors go back to the model a bounded number of
+# times; the final answer always says what was verified, what failed, and what could
+# NOT be verified, so a missing engine is never reported as success.
+_task_files: list = []
+VERIFY_ENABLED = str(os.getenv("LOKI_VERIFY", "1")).strip().lower() not in ("0", "false", "off", "no")
+VERIFY_MAX_FILES = int(os.getenv("LOKI_VERIFY_MAX_FILES", "6"))
+VERIFY_FIX_ROUNDS = int(os.getenv("LOKI_VERIFY_FIX_ROUNDS", "2"))
+_PROJECT_SETTINGS_TOOLS = ("add_input_action", "set_project_setting", "add_autoload")
+
+
+def _touched_path(name: str, args: dict) -> str:
+    """The project file a modifying tool call wrote, or "" when there is none to check."""
+    if name in _PROJECT_SETTINGS_TOOLS:
+        return "project.godot"
+    if name in ("delete_file", "make_dir"):
+        return ""
+    if name == "move_file":
+        return str(args.get("dst") or "")
+    return str(args.get("filename") or args.get("path") or "")
+
+
+def _record_touched(name: str, args: dict, result) -> None:
+    path = _touched_path(name, args)
+    if not path or str(result).lstrip().lower().startswith("error"):
+        return
+    path = path.replace("res://", "", 1).lstrip("/")
+    if path in _task_files:
+        _task_files.remove(path)
+    _task_files.append(path)   # most recent last
+
+
+def _verdict(text: str) -> str:
+    """Classify a checker's output: 'ok', 'failed' or 'unverified'."""
+    if NOT_VERIFIED in text:
+        return "unverified"
+    head = text.split(chr(10), 1)[0]
+    if "ERRORS" in head or "INVALID" in head:
+        return "failed"
+    if ": error " in head or "timed out" in head:
+        return "unverified"
+    return "ok"
+
+
+def verify_files(paths) -> dict:
+    """Check each path that has a deterministic checker. Pure apart from running Godot.
+
+    Returns {"ok": [...], "failed": [(path, detail)], "unverified": [(path, why)],
+             "skipped": [...]} - skipped means no checker exists for that file type.
+    """
+    report = {"ok": [], "failed": [], "unverified": [], "skipped": []}
+    seen = []
+    for path in paths:
+        if path and path not in seen:
+            seen.append(path)
+    checked = seen[-VERIFY_MAX_FILES:] if VERIFY_MAX_FILES > 0 else seen
+    for path in checked:
+        lower = path.lower()
+        try:
+            exists = resolve_in_workspace(path).is_file()
+        except Exception:
+            exists = False
+        if not exists:
+            report["unverified"].append((path, "no longer exists"))
+            continue
+        if lower.endswith(".gd"):
+            text = check_script(path)
+        elif lower.endswith((".tscn", ".scn")):
+            text = validate_scene(path)
+        elif lower.endswith(".json"):
+            try:
+                json.loads(resolve_in_workspace(path).read_text(encoding="utf-8"))
+                text = "json %s: parses OK" % path
+            except Exception as exc:
+                text = "json %s: INVALID - %s" % (path, exc)
+        else:
+            report["skipped"].append(path)
+            continue
+        kind = _verdict(text)
+        if kind == "ok":
+            report["ok"].append(path)
+        elif kind == "failed":
+            report["failed"].append((path, _shorten(text)[:1500]))
+        else:
+            first = text.split(chr(10), 1)[0]
+            why = "Godot not found" if NOT_VERIFIED in text else first[:160]
+            report["unverified"].append((path, why))
+    report["skipped"].extend(p for p in seen if p not in checked)
+    return report
+
+
+def verification_summary(report: dict) -> str:
+    """One honest line for the user: what passed, what failed, what was not checked."""
+    parts = []
+    if report["ok"]:
+        parts.append("%d checked OK (%s)" % (len(report["ok"]), ", ".join(report["ok"])))
+    if report["failed"]:
+        parts.append("%d FAILED (%s)" % (len(report["failed"]),
+                                         ", ".join(p for p, _ in report["failed"])))
+    if report["unverified"]:
+        parts.append("%d not verified (%s)" % (len(report["unverified"]), "; ".join(
+            "%s: %s" % (p, why) for p, why in report["unverified"])))
+    if report["skipped"]:
+        parts.append("%d with no automatic check (%s)" % (len(report["skipped"]),
+                                                          ", ".join(report["skipped"])))
+    return "Verification: " + ("; ".join(parts) if parts else "nothing to check") + "."
+
+
+def verification_feedback(report: dict) -> str:
+    """The message that sends real errors back to the model."""
+    lines = ["Automatic verification of the files you changed found errors. The task is NOT "
+             "done. Fix them, then reply 'DONE: <summary>' again:"]
+    for path, detail in report["failed"]:
+        lines.append("")
+        lines.append("--- " + path)
+        lines.append(detail)
+    return chr(10).join(lines)
+
+
+async def _verify_touched() -> dict:
+    _progress("thinking", "Verifying %d changed file(s)..." % len(_task_files))
+    return await asyncio.to_thread(verify_files, list(_task_files))
 
 # Loop detection (Jev): a rolling window of recent actions, checked periodically so a
 # model that keeps retrying the same *approach* (not an identical call) gets nudged.
@@ -3228,15 +3416,44 @@ async def agent_turn(force_tool: bool = False) -> str:
                     )})
 
 
+async def _finish_with_verification(answer: str, rounds: int) -> str:
+    """Verify what this request wrote; send real errors back up to `rounds` times.
+
+    Returns the answer with an honest verification line appended (or unchanged when
+    nothing was written or verification is off). Never raises for a checker problem.
+    """
+    if not (VERIFY_ENABLED and _task_files):
+        return answer
+    try:
+        report = await _verify_touched()
+        attempts = 0
+        while report["failed"] and attempts < rounds:
+            attempts += 1
+            _progress("thinking", "Verification found errors; asking the model to fix them (%d of %d)..."
+                      % (attempts, rounds))
+            messages.append({"role": "user", "content": verification_feedback(report)})
+            answer = await agent_turn()
+            report = await _verify_touched()
+    except (ModelUnavailable, BudgetExhausted):
+        raise
+    except Exception as exc:
+        return (answer or "").rstrip() + chr(10) * 2 + "Verification: could not run (%s)." % exc
+    return (answer or "").rstrip() + chr(10) * 2 + verification_summary(report)
+
+
 async def run_agent(user_message: str) -> str:
     global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     ROUTE_TRACE.clear()
+    _task_files.clear()
     messages.append({"role": "user", "content": user_message})
     try:
         answer = await agent_turn()
+        # A chat turn that changed files gets ONE bounded repair round on real errors -
+        # cheap insurance against "I fixed it" when the script does not even compile.
+        answer = await _finish_with_verification(answer, rounds=min(1, VERIFY_FIX_ROUNDS))
         save_history()
         return answer
     except ModelUnavailable:
@@ -3287,6 +3504,7 @@ async def pursue_goal(goal: str) -> str:
     _jev_loop_window = []
     _task_modified = False
     ROUTE_TRACE.clear()
+    _task_files.clear()
     todo_clear()  # stale items from earlier tasks derail the model
     print("  [goal] working on: %s" % goal)
     _progress("task", "Goal: %s" % goal[:200])
@@ -3317,6 +3535,7 @@ async def pursue_goal(goal: str) -> str:
     idle = 0
     stalls = 0
     force_next = False
+    verify_rejections = 0
     while True:
         step += 1
         if GOAL_STEPS > 0 and step > GOAL_STEPS:
@@ -3352,6 +3571,17 @@ async def pursue_goal(goal: str) -> str:
             )})
             force_next = True
             continue
+        if head.startswith("DONE") and VERIFY_ENABLED and _task_files:
+            # The model says DONE; check the files it actually wrote before believing it.
+            report = await _verify_touched()
+            if report["failed"] and verify_rejections < VERIFY_FIX_ROUNDS:
+                verify_rejections += 1
+                _progress("thinking", "Checked: %d changed file(s) have errors - not accepting DONE."
+                          % len(report["failed"]))
+                messages.append({"role": "user", "content": verification_feedback(report)})
+                continue
+            save_history()
+            return reply.strip() + chr(10) * 2 + verification_summary(report)
         if head.startswith("DONE") or head.startswith("BLOCKED"):
             save_history()
             return reply.strip()

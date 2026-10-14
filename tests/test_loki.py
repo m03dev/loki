@@ -2227,6 +2227,194 @@ check("the bridge reports the route on /health",
       '"route": route_trace' in (REPO / "addons" / "loki" / "loki_bridge.py").read_text(encoding="utf-8"))
 
 
+section("verification: DONE is checked, not believed")
+import tempfile as _vtf  # noqa: E402
+
+# A missing engine used to read as "INVALID - fix these errors", so the model "fixed"
+# files that were fine. It must now say NOT VERIFIED and say it is not the file's fault.
+_v_saved_exe = loki.GODOT_EXE
+loki.GODOT_EXE = str(Path(_vtf.gettempdir()) / "no-such-godot" / "godot.exe")
+try:
+    _vs = loki.validate_scene("main.tscn", timeout=5)
+    check("validate_scene without Godot says NOT VERIFIED, not INVALID",
+          loki.NOT_VERIFIED in _vs and "INVALID" not in _vs, _vs[:120])
+    _vc = loki.check_script("player.gd")
+    check("check_script without Godot says NOT VERIFIED", loki.NOT_VERIFIED in _vc, _vc[:120])
+    _vp = loki.play_scene("main.tscn", 1)
+    check("play_scene without Godot says NOT VERIFIED", loki.NOT_VERIFIED in _vp, _vp[:120])
+    check("a missing engine is classified unverified, never failed", loki._verdict(_vs) == "unverified")
+finally:
+    loki.GODOT_EXE = _v_saved_exe
+
+_v_saved_env = os.environ.get("GODOT_EXE")
+os.environ["GODOT_EXE"] = "/explicit/godot"
+check("GODOT_EXE from the environment wins", loki.resolve_godot_exe() == "/explicit/godot")
+if _v_saved_env is None:
+    del os.environ["GODOT_EXE"]
+else:
+    os.environ["GODOT_EXE"] = _v_saved_env
+check("the Godot default is no longer one developer's G: drive",
+      'os.getenv("GODOT_EXE", "G:/' not in (REPO / "addons" / "loki" / "harness" / "loki.py").read_text(encoding="utf-8"))
+
+check("build_scene counts as modifying (DONE after it is not 'premature')", "build_scene" in loki.MODIFYING)
+check("project.godot editors count as modifying",
+      {"add_input_action", "set_project_setting", "add_autoload"} <= loki.MODIFYING)
+_v_saved_mode = loki.AGENT_MODE
+loki.set_mode("plan")
+_v_plan = {t["function"]["name"] for t in loki.model_tool_schemas()}
+loki.set_mode(_v_saved_mode)
+check("plan mode offers no writing tool", not (_v_plan & loki.MODIFYING), sorted(_v_plan & loki.MODIFYING))
+check("plan mode offers no tool that runs the game", not (_v_plan & loki.RUNS_PROJECT),
+      sorted(_v_plan & loki.RUNS_PROJECT))
+check("plan mode still reads and compile-checks", {"read_file", "search_files", "check_script"} <= _v_plan)
+
+check("touched path: write_file", loki._touched_path("write_file", {"filename": "a.gd"}) == "a.gd")
+check("touched path: move_file records the destination",
+      loki._touched_path("move_file", {"src": "a.gd", "dst": "b.gd"}) == "b.gd")
+check("touched path: settings tools record project.godot",
+      loki._touched_path("add_autoload", {"name": "G", "path": "g.gd"}) == "project.godot")
+check("touched path: delete_file records nothing", loki._touched_path("delete_file", {"path": "a.gd"}) == "")
+
+# Fake checkers: Godot cannot run in every test environment. Everything else is real:
+# the workspace (a temp dir), the files, verify_files, the goal loop and agent_turn.
+_v_saved = (loki.WORKSPACE, loki.check_script, loki.validate_scene, loki.save_history, loki.todo_clear,
+            loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+            set(loki._SMART_FAILED), list(loki.messages), loki.MODEL_RETRIES, loki.AGENT_MODE)
+_v_ws = Path(_vtf.mkdtemp())
+
+
+def _v_check_script(filename):
+    text = loki.resolve_in_workspace(filename).read_text(encoding="utf-8")
+    if "BROKEN" in text:
+        return "check_script res://%s: ERRORS - fix these:\nParse Error: unexpected token" % filename
+    return "check_script res://%s: compiles OK\n" % filename
+
+
+def _v_validate(filename, timeout=90):
+    return "validate_scene res://%s: valid - Godot loaded it cleanly.\n" % filename
+
+
+def _v_turns(script):
+    """A fake model that plays `script`: a list of ("tool", name, args) or ("say", text)."""
+    steps = list(script)
+    seen = []
+
+    class _C:
+        async def create(self, **kwargs):
+            seen.append(len(kwargs["messages"]))
+            step = steps.pop(0) if steps else ("say", "DONE: nothing left")
+            if step[0] == "tool":
+                call = _types.SimpleNamespace(id="c%d" % len(seen), type="function",
+                                              function=_types.SimpleNamespace(
+                                                  name=step[1], arguments=json.dumps(step[2])))
+                msg = _types.SimpleNamespace(role="assistant", content="", tool_calls=[call])
+            else:
+                msg = _types.SimpleNamespace(role="assistant", content=step[1], tool_calls=None)
+            return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=msg)])
+
+    loki.make_client = lambda: _types.SimpleNamespace(chat=_types.SimpleNamespace(completions=_C()))
+    return seen, steps
+
+
+async def _v_noop(*args, **kwargs):
+    return []
+
+
+try:
+    loki.WORKSPACE = _v_ws
+    loki.check_script = _v_check_script
+    loki.validate_scene = _v_validate
+    loki.save_history = lambda: None
+    loki.todo_clear = lambda: "cleared"   # never touch the user's real plan.md
+    loki.refresh_mcp_tools = _v_noop
+    loki.provider_configured = lambda name: name == "openrouter"
+    loki.model_name = "smart"
+    loki._SMART_FAILED.clear()
+    loki.MODEL_RETRIES = 0
+    loki.AGENT_MODE = "build"
+
+    (_v_ws / "ok.gd").write_text("extends Node\n", encoding="utf-8")
+    (_v_ws / "bad.gd").write_text("BROKEN\n", encoding="utf-8")
+    (_v_ws / "data.json").write_text("{not json", encoding="utf-8")
+    (_v_ws / "notes.md").write_text("hi", encoding="utf-8")
+    _vr = loki.verify_files(["ok.gd", "bad.gd", "data.json", "notes.md", "gone.gd"])
+    check("verify_files: a compiling script is ok", _vr["ok"] == ["ok.gd"], _vr)
+    check("verify_files: a broken script and bad JSON fail",
+          [p for p, _ in _vr["failed"]] == ["bad.gd", "data.json"], _vr["failed"])
+    check("verify_files: a deleted file is reported, not passed",
+          ("gone.gd", "no longer exists") in _vr["unverified"], _vr["unverified"])
+    check("verify_files: an uncheckable type is listed as such", _vr["skipped"] == ["notes.md"], _vr)
+    _vsum = loki.verification_summary(_vr)
+    check("the summary names what failed and what was not checked",
+          "FAILED (bad.gd, data.json)" in _vsum and "not verified" in _vsum and "no automatic check" in _vsum, _vsum)
+
+    # The goal loop: the model writes a broken script and claims DONE. The DONE must be
+    # refused with the real error, the model fixes it, and only then is DONE accepted.
+    loki.messages[:] = [{"role": "system", "content": "test"}]
+    _seen, _left = _v_turns([
+        ("tool", "write_file", {"filename": "player.gd", "content": "BROKEN\n"}),
+        ("say", "DONE: added the player"),
+        ("tool", "write_file", {"filename": "player.gd", "content": "extends CharacterBody3D\n"}),
+        ("say", "DONE: added the player (fixed)"),
+    ])
+    _vout = asyncio.run(loki.pursue_goal("create a player controller script"))
+    check("a DONE over a broken script is refused",
+          any("Automatic verification" in str(m.get("content", "")) and "Parse Error" in str(m.get("content", ""))
+              for m in loki.messages if m.get("role") == "user"))
+    check("after the fix, DONE is accepted with a verification line",
+          _vout.startswith("DONE: added the player (fixed)") and "1 checked OK (player.gd)" in _vout, _vout)
+    check("the fix round used the scripted turns, no more", not _left, _left)
+
+    # Bounded: a model that never fixes it is not looped forever; the user is told.
+    loki.messages[:] = [{"role": "system", "content": "test"}]
+    _rounds = loki.VERIFY_FIX_ROUNDS
+    _v_turns([("tool", "write_file", {"filename": "enemy.gd", "content": "BROKEN\n"})]
+             + [("say", "DONE: enemy")] * (_rounds + 1))
+    _vout = asyncio.run(loki.pursue_goal("create an enemy script"))
+    check("an unfixed error ends after the bounded rounds, reported as FAILED",
+          _vout.startswith("DONE: enemy") and "FAILED (enemy.gd)" in _vout, _vout)
+
+    # The chat path gets one repair round.
+    loki.messages[:] = [{"role": "system", "content": "test"}]
+    _v_turns([
+        ("tool", "write_file", {"filename": "hud.gd", "content": "BROKEN\n"}),
+        ("say", "I added the HUD."),
+        ("tool", "edit_file", {"filename": "hud.gd", "old": "BROKEN", "new": "extends Control"}),
+        ("say", "Fixed the HUD script."),
+    ])
+    _vout = asyncio.run(loki.run_agent("add a hud script"))
+    check("a chat turn that broke a script gets one repair round and an honest line",
+          _vout.startswith("Fixed the HUD script.") and "1 checked OK (hud.gd)" in _vout, _vout)
+
+    # A question that wrote nothing gets no verification noise.
+    loki.messages[:] = [{"role": "system", "content": "test"}]
+    _v_turns([("say", "Godot uses GDScript.")])
+    _vout = asyncio.run(loki.run_agent("what language does Godot use"))
+    check("an answer that changed nothing has no verification line", _vout == "Godot uses GDScript.", _vout)
+
+    # Godot missing: DONE is accepted but the user is told it was NOT verified.
+    loki.check_script = _v_saved[1]   # the real one: Godot is missing, so NOT VERIFIED
+    _v_exe = loki.GODOT_EXE
+    loki.GODOT_EXE = ""
+    loki.messages[:] = [{"role": "system", "content": "test"}]
+    _v_turns([("tool", "write_file", {"filename": "door.gd", "content": "extends Node\n"}),
+              ("say", "DONE: door")])
+    _vout = asyncio.run(loki.pursue_goal("create a door script"))
+    loki.GODOT_EXE = _v_exe
+    check("without Godot, DONE says the work was NOT verified (never 'OK')",
+          "not verified (door.gd: Godot not found)" in _vout and "checked OK" not in _vout, _vout)
+finally:
+    (loki.WORKSPACE, loki.check_script, loki.validate_scene, loki.save_history, loki.todo_clear,
+     loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,
+     _v_failed, _v_messages, loki.MODEL_RETRIES, loki.AGENT_MODE) = _v_saved
+    loki._SMART_FAILED.clear()
+    loki._SMART_FAILED.update(_v_failed)
+    loki.messages[:] = _v_messages
+    loki._task_files.clear()
+    import shutil as _vsh  # noqa: E402
+    _vsh.rmtree(_v_ws, ignore_errors=True)
+
+
 
 if "--live" in sys.argv:
 
