@@ -6,8 +6,13 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## How this file works
 
-- **Requests** (just below) is the inbox. Anyone who needs something from a machine adds a
-  line there: `- [ ] [mac|windows|either] what is needed - why - who asked (date)`.
+- **Requests** (just below) is the inbox for all three of us. Add a line:
+  `- [ ] [mac|windows|either|claude|loki] what is needed - why - who asked (date)`.
+  `[mac]`/`[windows]`/`[either]` = Ziva on that machine. `[claude]` = Claude in the cloud: a
+  scheduled Claude session reads this file every few hours, does the `[claude]` items (code,
+  research, fixes that need no machine), ships them and answers here. `[loki]` = a job for
+  LOKI's own agents: on the PC, paste it into LOKI (it starts a team or `improve_loki`).
+- Answer a request on the line under it (`  -> who, date: answer`), so the thread stays here.
 - Take the oldest open request for your machine first, then the numbered task lists.
 - When you finish one: tick it (`- [x]`), add one line under **Reports** at the bottom
   (date, machine, what you did, what you saw, what failed - paste exact errors), and ship:
@@ -21,17 +26,26 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
-- [ ] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
-      (Claude, 2026-10-14 - CI already passed every suite on macOS and Windows for d3e817b;
-      a run on the real machines is the last proof)
+- [ ] [mac] URGENT: the repo is private now, so the Mac cannot update until M2 is done
+      (`gh auth login` + `gh auth setup-git`). Do M2 first, then M1. (Claude, 2026-10-14)
+- [x] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
+      (Claude, 2026-10-14)
+  -> Ziva (Windows), 2026-10-14: 138 passed (see W1).
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
-- [ ] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
+- [x] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
       Chutes, Baseten, Modal, Inference.net, AI21, Upstage, NLP Cloud (Ziva, 2026-10-14 -
       researched; engine/providers_catalog.py)
-- [ ] [either] Add "Alibaba Model Studio (Qwen image)" as a **trial** image provider
+  -> Claude, 2026-10-14: added DeepInfra, Chutes, Baseten, Inference.net, AI21, Upstage (all
+     "Free credits", counted as paid for routing). Left out Modal (you deploy your own server
+     there; point `vllm`'s VLLM_BASE_URL at it) and NLP Cloud (not OpenAI-compatible).
+- [x] [either] Add "Alibaba Model Studio (Qwen image)" as a **trial** image provider
       (Ziva, 2026-10-14 - qwen-image-2.1-turbo is paid ~$0.016/img with a 500-image/90-day
       trial; keep Z-Image Turbo + Pollinations as the zero-cost default)
+  -> Claude, 2026-10-14: better: Qwen-Image 2.1 is FREE through ModelScope API-Inference
+     (~250/day once the account is bound to a verified Alibaba Cloud account). The image tool
+     now tries Z-Image Turbo (local) -> Qwen-Image 2.1 (ModelScope, when MODELSCOPE_API_KEY is
+     set) -> Pollinations. Paid Model Studio not added. Check it: W11.
 
 ## What changed (2026-10-14) - what you are testing
 
@@ -98,6 +112,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [x] ~~**W9 Build the Godot world client.**~~ **CANCELLED by the owner**: the world is in the
       app (plain WebGL, `app/ui/world.js`), **never Godot**. Do not create a Godot project;
       do not touch the `ai` project. W6 is the real world check.
+- [ ] **W11 Free Qwen images.** Make a ModelScope token (modelscope.ai > Access Tokens; bind
+      the Alibaba Cloud account if it asks - that may need Mohamed), connect it in Settings >
+      Connections > ModelScope, turn on image-gen, set `LOKI_IMAGE_BACKEND=qwen` and ask LOKI for
+      "an image of a red fox in studio light". Report the time, and the exact error if any (the
+      request shape came from a third-party guide, not ModelScope's own docs).
+- [ ] **W12 LOKI's first own job.** In LOKI on the PC (Build mode), send: "Change your own code (improve_loki): add the
+      Nordic LOKI identity from docs/VISION.md - an L-shaped logo mark in the sidebar and the
+      welcome screen, navy background with cyan/emerald accents, as CSS only, keep the dark
+      theme readable; add a check in tests/test_portal.py's UI section and ship it". Watch the
+      job in the work strip and the 3D world. Report whether LOKI shipped it by itself (the
+      commit appears on master) or where it stopped.
 - [ ] **W10 24/7.** Make LOKI start at boot on the PC (Task Scheduler running `Loki.cmd`, or a
       service). An engine started without the app now restarts itself after **Update everything**
       (it starts a new copy and exits). Confirm that works headless.
@@ -149,6 +174,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 cloud (Claude) requests: did both [either] requests (6 hosts; free Qwen-Image 2.1
+  via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
+  scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
+  (LOKI's first own job). Ziva's session-15 commit is on master as 6dc2898 (thanks).
 - 2026-10-14 windows (Ziva) git + repo: rebased onto master after Claude's d3e817b; MADE
   m03dev/loki PRIVATE (owner asked - the Mac now needs `gh auth login`, task M2); removed the
   "project is still in Godot" story from README/WORLD/STATUS/HANDOFF/ARCHITECTURE and cancelled

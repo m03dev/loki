@@ -160,6 +160,12 @@ PROVIDER_ENV_VARS = {
     "novita": "NOVITA_API_KEY",
     "fireworks": "FIREWORKS_API_KEY",
     "dashscope": "DASHSCOPE_API_KEY",
+    "deepinfra": "DEEPINFRA_API_KEY",
+    "chutes": "CHUTES_API_KEY",
+    "baseten": "BASETEN_API_KEY",
+    "inference-net": "INFERENCE_API_KEY",
+    "ai21": "AI21_API_KEY",
+    "upstage": "UPSTAGE_API_KEY",
 }
 
 
@@ -490,6 +496,25 @@ MODELS = {
     "dashscope": ModelConfig(base_url=os.getenv("DASHSCOPE_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
                              api_key=os.getenv("DASHSCOPE_API_KEY", ""),
                              model=os.getenv("DASHSCOPE_MODEL", "qwen-plus")),
+    # Requested by Ziva (ZIVA_TASKS.md, 2026-10-14): more hosts with starter credits.
+    "deepinfra": ModelConfig(base_url=os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai"),
+                             api_key=os.getenv("DEEPINFRA_API_KEY", ""),
+                             model=os.getenv("DEEPINFRA_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
+    "chutes": ModelConfig(base_url=os.getenv("CHUTES_BASE_URL", "https://llm.chutes.ai/v1"),
+                          api_key=os.getenv("CHUTES_API_KEY", ""),
+                          model=os.getenv("CHUTES_MODEL", "deepseek-ai/DeepSeek-V3")),
+    "baseten": ModelConfig(base_url=os.getenv("BASETEN_BASE_URL", "https://inference.baseten.co/v1"),
+                           api_key=os.getenv("BASETEN_API_KEY", ""),
+                           model=os.getenv("BASETEN_MODEL", "openai/gpt-oss-120b")),
+    "inference-net": ModelConfig(base_url=os.getenv("INFERENCE_NET_BASE_URL", "https://api.inference.net/v1"),
+                                 api_key=os.getenv("INFERENCE_API_KEY", ""),
+                                 model=os.getenv("INFERENCE_NET_MODEL", "glm-5.2")),
+    "ai21": ModelConfig(base_url=os.getenv("AI21_BASE_URL", "https://api.ai21.com/studio/v1"),
+                        api_key=os.getenv("AI21_API_KEY", ""),
+                        model=os.getenv("AI21_MODEL", "jamba-mini")),
+    "upstage": ModelConfig(base_url=os.getenv("UPSTAGE_BASE_URL", "https://api.upstage.ai/v1"),
+                           api_key=os.getenv("UPSTAGE_API_KEY", ""),
+                           model=os.getenv("UPSTAGE_MODEL", "solar-mini")),
     # --- Local OpenAI-compatible servers. "auto" = the first model the server lists.
     "lmstudio": ModelConfig(base_url=os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
                             api_key="local", model=os.getenv("LMSTUDIO_MODEL", "auto")),
@@ -936,7 +961,7 @@ def redact_secrets(text: str) -> str:
 # why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
 _METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
                     "ollama-cloud", "nebius", "scaleway", "hyperbolic", "novita", "fireworks",
-                    "dashscope"}
+                    "dashscope", "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"}
 PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
 # Spending policy (docs/VISION.md 6): automatic routing never picks a paid provider unless
 # LOKI_ALLOW_PAID=1, and paid use stops for the day at LOKI_DAILY_USD_LIMIT (from the usage

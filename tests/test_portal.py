@@ -138,7 +138,8 @@ check("every key provider names its env var", all(p.get("env") for p in pc.CATAL
 check("every link is https (or the provider's own site)", all(str(p.get(k, "https://")).startswith("https://")
                                                               for p in pc.CATALOG for k in ("signup", "keys", "docs")))
 check("GitHub Models (retired 2026-07-30) is not offered", "github-models" not in ids)
-for wanted in ("opencode-zen", "codestral", "vercel", "nebius", "mlx", "lmstudio", "kyojin", "opencode", "pollinations"):
+for wanted in ("opencode-zen", "codestral", "vercel", "nebius", "mlx", "lmstudio", "kyojin", "opencode", "pollinations",
+               "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"):
     check("the portal offers %s" % wanted, wanted in ids)
 
 
@@ -431,6 +432,39 @@ for name in ("media", "imagegen", "reach"):
                           input=json.dumps({"op": "nope", "prompt": ""}), capture_output=True, text=True, timeout=60)
     line = (proc.stdout.strip().splitlines() or ["{}"])[-1]
     check("runner %s answers bad input with a JSON error" % name, json.loads(line).get("ok") is False)
+sys.path.insert(0, str(REPO / "engine" / "runners"))
+import imagegen  # noqa: E402
+
+_ms_calls = []
+
+
+def _ms_request(url, key, body=None, headers=None, timeout=60):
+    _ms_calls.append((url, body, headers or {}))
+    if body is not None:
+        return {"task_id": "t1"}
+    return {"task_status": "SUCCEED" if len(_ms_calls) > 2 else "RUNNING", "output_images": ["https://img.example/a.png"]}
+
+
+class _Img(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+os.environ["MODELSCOPE_API_KEY"] = "ms-test"
+_saved_urlopen = imagegen.urllib.request.urlopen
+imagegen.urllib.request.urlopen = lambda *a, **k: _Img(b"\x89PNG fake")
+try:
+    _img = imagegen.qwen("a red fox", 1024, 768, str(TMP / "images"), 0, sleep=lambda s: None, request=_ms_request)
+finally:
+    imagegen.urllib.request.urlopen = _saved_urlopen
+    os.environ.pop("MODELSCOPE_API_KEY")
+check("Qwen-Image 2.1 (ModelScope, free) submits an async task and polls it",
+      _ms_calls[0][0].endswith("/v1/images/generations") and _ms_calls[0][2].get("X-ModelScope-Async-Mode") == "true"
+      and _ms_calls[0][1]["model"] == "Qwen/Qwen-Image-2.1" and _ms_calls[0][1]["size"] == "1024x768"
+      and _ms_calls[-1][0].endswith("/v1/tasks/t1") and _img["backend"] == "qwen" and Path(_img["file"]).read_bytes().startswith(b"\x89PNG"))
 check("conductor knows the media, image and reach roles", {"media", "image", "reach"} <= set(conductor.ROLES))
 
 
