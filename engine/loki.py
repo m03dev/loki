@@ -1404,15 +1404,16 @@ def write_file(filename: str, content: str) -> str:
     path = resolve_in_workspace(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    note = chr(10) + check_script(filename) if str(filename).endswith(".gd") else ""
-    return f"wrote {filename}{note}"
+    note = _check_written(filename)
+    return f"wrote {filename}" + (chr(10) + note if note else "")
 
 
 def append_file(filename: str, content: str) -> str:
     path = resolve_in_workspace(filename)
     with path.open("a", encoding="utf-8") as f:
         f.write(content)
-    return f"appended to {filename}"
+    note = _check_written(filename)
+    return f"appended to {filename}" + (chr(10) + note if note else "")
 
 
 def edit_file(filename: str, old: str, new: str) -> str:
@@ -1424,8 +1425,8 @@ def edit_file(filename: str, old: str, new: str) -> str:
     if count == 0:
         return f"error: that exact text was not found in {filename}"
     path.write_text(text.replace(old, new), encoding="utf-8")
-    note = chr(10) + check_script(filename) if str(filename).endswith(".gd") else ""
-    return f"edited {filename} ({count} replacement(s)){note}"
+    note = _check_written(filename)
+    return f"edited {filename} ({count} replacement(s))" + (chr(10) + note if note else "")
 
 
 def search_files(pattern: str, subdir: str = ".", glob: str = "*") -> str:
@@ -1783,11 +1784,49 @@ def validate_scene(filename: str, timeout: int = 90) -> str:
     return chr(10).join(["validate_scene %s: %s" % (filename, verdict), res])
 
 
+def _elide(text: str, limit: int = MAX_OUTPUT) -> str:
+    """Bound a tool result, keeping its head AND tail, and SAY what was dropped.
+
+    SWE-agent's point: the boundary between agent and computer is a design surface. A model
+    handed 40k characters of file loses the thread; a model told exactly what was elided can
+    ask for the rest. The tail is kept because errors and totals live there.
+    """
+    body = str(text)
+    if len(body) <= limit:
+        return body
+    half = max(1, limit // 2)
+    head, tail = body[:half], body[-half:]
+    dropped = body[len(head):len(body) - len(tail)]
+    marker = (chr(10) + "...[%d characters, about %d lines, elided - read a smaller range"
+              " or use search_files to see them]..." + chr(10)) % (len(dropped), dropped.count(chr(10)) + 1)
+    return head + marker + tail
+
+
 def _shorten(text: str) -> str:
-    if len(text) > MAX_OUTPUT:
-        half = MAX_OUTPUT // 2
-        return text[:half] + "\n...[output truncated]...\n" + text[-half:]
-    return text
+    return _elide(text)
+
+
+def _check_written(filename: str) -> str:
+    """An immediate syntax verdict for the file just written, so the model sees its own
+    mistake NOW instead of at DONE (SWE-agent's check-on-edit). In-process and instant for
+    the types LOKI can read back; .gd still goes to Godot."""
+    if str(filename).endswith(".gd"):
+        return check_script(filename)
+    try:
+        text = resolve_in_workspace(filename).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return "could not re-read %s: %s" % (filename, exc)
+    low = str(filename).lower()
+    try:
+        if low.endswith(".json"):
+            json.loads(text)
+            return "json ok"
+        if low.endswith(".py"):
+            ast.parse(text)
+            return "python ok"
+    except Exception as exc:  # noqa: BLE001 - a broken file is exactly what we want to catch
+        return "SYNTAX ERROR in %s: %s" % (filename, str(exc)[:200])
+    return ""
 
 
 def check_script(filename: str) -> str:
@@ -3882,7 +3921,7 @@ async def call_tool(name: str, args: dict) -> str:
                 if name != "make_dir":
                     _task_wrote_file = True
                 _record_touched(name, args, result)
-            return result
+            return _elide(result) if isinstance(result, str) else result
         except Exception as e:
             return f"error: {e}"
     if name in mcp_sessions:
@@ -3910,7 +3949,7 @@ async def call_tool(name: str, args: dict) -> str:
             if newly:
                 text += ("\n\n%d new tool(s) are now available and can be called directly: %s"
                          % (len(newly), ", ".join(sorted(newly)[:40])))
-        return text
+        return _elide(text)
     real = tool_guard.resolve_name(name, set(LOCAL_TOOLS) | set(mcp_sessions))
     if real and real != name:
         return await call_tool(real, args)

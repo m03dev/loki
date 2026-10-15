@@ -2528,6 +2528,31 @@ finally:
 
 
 
+section("the agent/computer boundary: bounded output, and a check at edit time")
+_aci_ws = Path(tempfile.mkdtemp(prefix="loki_aci_"))
+_aci_save = loki.WORKSPACE
+try:
+    loki.WORKSPACE = _aci_ws
+    _big = chr(10).join("line %d" % n for n in range(4000))
+    _bounded = loki._elide(_big)
+    check("a huge tool result is bounded and SAYS what it dropped",
+          len(_bounded) < 9000 and "elided" in _bounded and "lines" in _bounded, len(_bounded))
+    check("the tail is kept (errors and totals live at the end)",
+          _bounded.rstrip().endswith("line 3999"))
+    check("a small result is left exactly as it was", loki._elide("hello") == "hello")
+
+    _res = loki.write_file("broken.py", "def x(:" + chr(10))
+    check("a broken python file is reported in the SAME tool result (check at edit time)",
+          "wrote broken.py" in _res and "SYNTAX ERROR" in _res, _res)
+    check("a good python file says so", "python ok" in loki.write_file("fine.py", "x = 1" + chr(10)))
+    check("bad JSON is caught at edit time too",
+          "SYNTAX ERROR" in loki.write_file("bad.json", "{nope}"))
+    check("a type with no checker stays quiet",
+          loki.write_file("notes.txt", "anything") == "wrote notes.txt")
+    check("edit_file checks the result as well", "python ok" in loki.edit_file("fine.py", "x = 1", "y = 2"))
+finally:
+    loki.WORKSPACE = _aci_save
+
 section("self-improvement: experience, learned routing, training data, promotion gate")
 import tempfile as _stf  # noqa: E402
 import experience as _ex  # noqa: E402

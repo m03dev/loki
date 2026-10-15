@@ -111,9 +111,13 @@ well-bounded outputs, and a linter on every edit so the agent sees its own error
 
 **Ours.** `safe_exec.py` (no shell - keep), and `verify_files` only after DONE.
 
-**Change.** Return tool output **compactly** (head/tail with an explicit elision marker) and run
-the syntax check at edit time, not only at the end. This is the biggest single lever on small
-and local models: shorter, cleaner observations.
+**Change.** **DONE**: `loki._elide()` bounds every tool result (head + tail + a marker saying
+how many characters/lines were dropped) and is applied at the one choke point in `call_tool`, so
+no tool - local or MCP - can blow the context; `MAX_OUTPUT` used to bound only command output, so
+a large `read_file` dumped everything. `loki._check_written()` checks a file the moment it is
+written or edited: `.py` (ast), `.json`, and `.gd` (Godot). Proven live on the PC with the local
+model: a write of `def x(:` came back to the model as
+`wrote scripts/check.py / SYNTAX ERROR in scripts/check.py: invalid syntax (line 1)`.
 
 ## 8. Observability - OpenTelemetry GenAI semconv, Langfuse/Phoenix - ADAPT
 
@@ -150,6 +154,6 @@ the change is to make that state a resume point rather than a status.
 1. **`engine/evals.py` + the local-model trial** - the missing backbone of Evolution, and it
    feeds routing with real numbers. *(harness shipped)*
 2. **Difficulty-aware routing** - small, and it is what "smart" should have meant. *(shipped)*
-3. **Compact tool output + check-on-edit** - the biggest lever on local model quality.
+3. **Compact tool output + check-on-edit** - the biggest lever on local model quality. *(shipped)*
 4. **Memory tiers behind one interface** - the "make it one system" rework.
 5. Skills spec validation, artifact-typed teams, event semconv, durable jobs.
