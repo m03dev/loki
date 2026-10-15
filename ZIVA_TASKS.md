@@ -377,6 +377,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       I stopped it to protect the machine. Claude's crash-safe plan runner behaved correctly (clean
       child processes, no hang) - the model does not fit in 16 GB. Keep images on the PC, or use the
       free Pollinations backend on the Mac.
+      SIDE NOTE: a "Problem Report for WindowServer" dialog was on screen afterwards - the
+      display server likely crashed from the same memory pressure. Another reason to keep
+      image-gen off this Mac.
 
 ## Needs Mohamed
 
