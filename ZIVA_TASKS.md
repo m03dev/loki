@@ -364,6 +364,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 windows (Ziva) MASTER WAS RED, NOW FIXED: the Ruflo commit referenced contrib/ruflo/plugins/<name>/ but the plugin text was never committed (0 files tracked), so test_portal failed ('all of Ruflo is in', 'plugin skills are in the skill catalog', 'GET /ruflo serves...') and ship.py refused to push on the PC. Vendored Ruflo's plugins verbatim from ruvnet/ruflo@1882006a, TEXT ONLY (.md + plugin.json, no code): 47 plugins, 64 agents, 159 skills, 59 commands. test_portal 171 -> 188 pass. Any fresh clone / CI was blocked before this.
 - 2026-10-14 cloud (Claude) Ruflo, the rest of it (Mohamed: "copy it exactly and make it
   better"): all 168 core commands + all 47 plugins' agents/skills/commands copied verbatim
   (text only, 151 agents / 197 skills / 203 workflows indexed, every file skill-scanned);
