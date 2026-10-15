@@ -23,7 +23,10 @@
     <div class="sidebar-foot">
       <div id="workspace" class="workspace" title="Workspace folder"></div>
       <div id="version" class="workspace version"></div>
-      <button type="button" id="open-settings" class="quiet">Settings</button>
+      <div class="foot-row">
+        <button type="button" id="open-settings" class="quiet">Settings</button>
+        <button type="button" id="check-everything" class="link" title="Prove every part of LOKI works together on this computer">Check everything</button>
+      </div>
     </div>
   </aside>
 
@@ -105,6 +108,7 @@
       <h2 id="settings-title">Settings</h2>
       <input id="settings-search" class="settings-search" type="search" placeholder="Search settings" aria-label="Search settings">
       <div class="tabs" role="tablist" aria-orientation="vertical">
+        <button type="button" role="tab" data-tab="system" aria-selected="false"><span class="ico" aria-hidden="true">✓</span>System check<span id="system-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="general" aria-selected="false"><span class="ico" aria-hidden="true">◎</span>General</button>
         <button type="button" role="tab" data-tab="connections" aria-selected="true"><span class="ico" aria-hidden="true">⚡</span>Connections<span id="conn-count" class="count"></span></button>
         <button type="button" role="tab" data-tab="agents" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Agents</button>
@@ -119,6 +123,10 @@
       <button type="button" id="close-settings" class="quiet close-settings" aria-label="Close settings">Close</button>
     </nav>
     <div class="tab-body">
+      <section data-panel="system" hidden>
+        <header class="panel-head"><h3>System check</h3><p class="note">One click proves LOKI's parts work together on this computer: a model answers through the smart route and uses a tool, a background agent runs and shows up in the world, a team plans, the safety rules hold. Anything that does not work says exactly what to do. It never spends money unless you allow paid providers.</p></header>
+        <div id="system-panel" class="sc"></div>
+      </section>
       <section data-panel="general" hidden>
         <header class="panel-head"><h3>General</h3><p class="note">How LOKI behaves on this computer. Saved in harness_data/.env, live at once.</p></header>
         <div id="general-panel" class="cards"></div>

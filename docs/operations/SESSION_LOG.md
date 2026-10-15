@@ -4,6 +4,21 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-15 - System check and positive integration tests
+
+- `engine/system_check.py`: 14 checks that prove LOKI's parts work together on this machine,
+  each with a plain-English detail and one fix (a Settings tab, or a safe engine action).
+  Background thread, short timeouts, nothing paid unless allowed. `/system/check`,
+  `/system/fix` in loki_bridge.py. UI: first Settings tab + "Check everything" in the sidebar
+  (screenshot docs/operations/screens/system-check.png, headless Chromium with a mocked API).
+- Background jobs can run a `selfcheck` job (the built-in agent proves spawn/log/poll/events/
+  world with no model); teams have a dry run and `forget`; the image runner has `--plan`.
+- tests/test_systems.py: 91 checks across five end-to-end scenarios (goal, job, team, dying
+  providers, the check itself), added to tools/ship.py.
+- Fixed: ReasoningBank called every finished chat a failure; no specialist reason in the prompt
+  when none was ready; /fleet double response; check job blocked by the local-model slot.
+- Not run on a real machine yet (ZIVA_TASKS S1).
+
 ## 2026-10-15 - Phone app (iOS + Android) and the phone link
 
 - `mobile/`: Expo / React Native app, one codebase for iPhone and Android: Chat (badge says

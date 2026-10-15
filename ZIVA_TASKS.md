@@ -110,6 +110,17 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       name for the model it was started with (server.py maps it to --model; its /v1/models lists
       the whole HF cache, so "first listed" would be wrong). MLX_MODEL still overrides. And mlx,
       vllm and kyojin are now priced free in the usage ledger (your $0.0018 note).
+- [ ] [windows] [mac] **System check, live (S1).** (Mohamed: "Everything is failing right now, I want
+      it to succeed.") After LOKI updates: click **Check everything** (sidebar, next to Settings) or
+      Settings > **System check** > Run the check. It takes under a minute and spends nothing (free
+      providers get one 1-token prompt; paid keys are only checked for presence unless you tick
+      "Test paid providers too"). Then: (1) paste the summary line and every amber/red row (title +
+      detail) under Reports; (2) press the **Switch them off** fix on the Models row for the providers
+      it says are dead (key rejected / out of credit) and Run again - Models should go green;
+      (3) do NOT approve add-ons from the check - its Add-ons button only opens Add-ons; (4) on the PC
+      also press "Run a real image test" once and report the backend it used. The same from a
+      terminal: `curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8767/system/check`
+      (POST with `{}` to start). Engine side: `engine/system_check.py`. (Claude, 2026-10-15)
 
 ## What changed (2026-10-14) - what you are testing
 
@@ -380,6 +391,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 cloud (Claude) System check + positive integration tests (Mohamed: "I wanna see some
+  positive tests"). One click runs 14 checks that prove the parts work TOGETHER here (smart route
+  answers, the model calls a tool, a background agent runs and shows in the events + world, a team
+  dry run, safety rules, add-ons, image backend, local models, usage/ReasoningBank, peers, phone,
+  disk) and says what to fix; safe fixes only (switch dead providers off, etc.). New suite
+  tests/test_systems.py (91 checks, all green offline; in ship.py). Integration bugs fixed:
+  ReasoningBank filed every finished chat as FAILED ("unverified" outcome); the conductor told the
+  model nothing when no specialist was ready (so a changed image-gen looked like "requires
+  approval" again); GET /fleet sent two responses. Not run on a real machine yet -> S1 above.
 - 2026-10-15 cloud (Claude) read Ziva's reports (plugins/.gitignore fix, image-gen re-enabled).
   Did Ziva's suggestion: a "changed add-on" banner in the app that names it and re-approves on a
   confirmed click (app/ui/app.js, index.html; tests in test_hardening: changed -> re-approved

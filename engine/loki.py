@@ -4913,6 +4913,19 @@ async def main() -> None:
 async def run_job(job_path: str) -> int:
     global approve, model_name
     job = json.loads(Path(job_path).read_text(encoding="utf-8"))
+    if job.get("selfcheck"):
+        # The System check (system_check.py): prove that a background agent starts here, in
+        # its own folder, with LOKI's data, and reports back - without a model or any tool.
+        result = "DONE: system check job ran (Python %s, %s, workspace %s)" % (
+            sys.version.split()[0], sys.platform, WORKSPACE)
+        print("[loki-job] %s | system check" % job.get("id", ""), flush=True)
+        print(result, flush=True)
+        if job.get("result_path"):
+            try:
+                Path(job["result_path"]).write_text(result, encoding="utf-8")
+            except OSError:
+                pass
+        return 0
     allow_commands = bool(job.get("allow_commands"))
     if job.get("model"):
         model_name = str(job["model"])

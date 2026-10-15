@@ -35,21 +35,44 @@ def _out_path(out_dir, prompt, ext="png"):
     return out / ("%s-%s.%s" % (time.strftime("%Y%m%d-%H%M%S"), slug, ext))
 
 
-def zimage_ready():
+def zimage_status():
+    """(ready, why not) for local Z-Image on this machine."""
     try:
         import importlib.util
         if not (importlib.util.find_spec("torch") and importlib.util.find_spec("diffusers")):
-            return False
+            return False, "torch/diffusers are not installed (tools/setup_extras.py adds them)"
         try:
             record = json.loads(_plan_file().read_text(encoding="utf-8"))
             if record.get("works") is None and time.time() - float(record.get("failed_at") or 0) < 7 * 86400:
-                return False          # every plan crashed here recently (LOKI_IMAGE_BACKEND=zimage forces it)
+                # every plan crashed here recently (LOKI_IMAGE_BACKEND=zimage forces it)
+                last = "; ".join(record.get("failures") or [])[:300]
+                return False, "it crashed on this machine recently%s; skipped for a week" % ((": " + last) if last else "")
         except (OSError, ValueError):
             pass
         import diffusers
-        return hasattr(diffusers, "ZImagePipeline")
-    except Exception:  # noqa: BLE001
-        return False
+        if not hasattr(diffusers, "ZImagePipeline"):
+            return False, "this diffusers has no ZImagePipeline (update diffusers)"
+        return True, ""
+    except Exception as exc:  # noqa: BLE001
+        return False, "%s: %s" % (type(exc).__name__, str(exc)[:160])
+
+
+def zimage_ready():
+    return zimage_status()[0]
+
+
+def plan_order(backend=None):
+    """Which backends an image request tries here, in order, and why any are skipped.
+    No image is made and nothing is sent anywhere (LOKI's System check uses this)."""
+    backend = str(backend or os.environ.get("LOKI_IMAGE_BACKEND", "auto")).lower()
+    if backend != "auto":
+        return {"order": [backend], "skipped": {}, "forced": True}
+    ready, why = zimage_status()
+    skipped = {} if ready else {"zimage": why}
+    if not os.environ.get("MODELSCOPE_API_KEY"):
+        skipped["qwen"] = "MODELSCOPE_API_KEY is not set"
+    order = (["zimage"] if ready else []) + (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + ["pollinations"]
+    return {"order": order, "skipped": skipped, "forced": False}
 
 
 # Ways to run Z-Image on a small GPU, safest last. A native crash (segfault / access
@@ -258,9 +281,7 @@ def main():
     try:
         if not prompt:
             raise ValueError("describe the image")
-        order = [backend] if backend != "auto" else ((["zimage"] if zimage_ready() else [])
-                                                     + (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else [])
-                                                     + ["pollinations"])
+        order = plan_order(backend)["order"]
         errors = []
         for name in order:
             try:
@@ -292,5 +313,7 @@ if __name__ == "__main__":
         import faulthandler
         faulthandler.enable()     # a native crash still prints the Python stack to stderr
         _child()
+    elif sys.argv[1:2] == ["--plan"]:
+        print(json.dumps({"ok": True, **plan_order()}))
     else:
         main()

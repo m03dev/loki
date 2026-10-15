@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-14 (session 15).
+Last updated: 2026-10-15 (session 16).
 
 ## The machines
 
@@ -58,6 +58,30 @@ Engine side `engine/phone_link.py` (opt-in, port 8769, per-phone signed keys, As
 a phone message can never approve), the Phone card in Settings > Machines, docs/PHONE.md,
 tests/test_phone_link.py. NOT yet: npm install / prebuild / a run on a real phone (the npm
 registry was unreachable where it was built); see docs/PHONE.md "Not done yet".
+
+## Session 16 (2026-10-15): System check + positive integration tests
+
+The owner saw only red ("systems aren't integrated and working together yet"). Now:
+- **System check** (`engine/system_check.py`, Settings > System check = first tab, and "Check
+  everything" in the sidebar): 14 ordered checks in a background thread, each
+  `{id, title, status ok|warn|fail|skip, detail, fix}` - engine/version/update problem; a model
+  answers through the real smart route (latency, dead providers and why); that model calls
+  `list_tree` through `_model_request` (prompted harness included); first layer; a real
+  background job (built-in agent, `selfcheck` mode: no model, no tools) watched through the jobs
+  API, the event stream and /world; a team dry run (board, events, world, then cleaned up);
+  policy rules; add-ons changed/invalid; image backend (no image unless "Run a real image test");
+  local models; usage + ReasoningBank; peers; phone link; disk + memory. Routes: GET/POST
+  `/system/check`, POST `/system/fix` (safe actions only: provider_off, revive_providers,
+  laya_warm, start_ollama, jobs_start, zimage_retry; never approves add-ons, updates or spends).
+- **tests/test_systems.py** (in ship.py): five scenarios wiring real modules with fakes only at
+  the edges - goal -> first layer -> model -> conductor -> policy -> usage -> ReasoningBank recall;
+  jobs API -> real child process -> events -> world; team plan/build/check/fix -> verified;
+  providers dying mid-run (402/401) -> failover -> the check names them and switches them off;
+  the check all-green / red rows with the right fixes / over the engine's HTTP routes.
+- Bugs found by wiring things together (fixed, tested): ReasoningBank stored every finished chat
+  as a failure; the conductor's prompt section vanished when no specialist was ready; /fleet sent
+  a second 404 response; a check job could wait behind the one local-model slot.
+- Next: ZIVA_TASKS S1 - run it on the PC and the Mac and report the rows.
 
 ## Session 15 (2026-10-14): repo private, Godot story removed, suites hermetic
 

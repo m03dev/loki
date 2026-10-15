@@ -237,7 +237,10 @@ class TeamRunner:
         return self._load().get(team_id)
 
     # lifecycle
-    def start(self, goal: str, workspace: str, triage: dict | None = None, model: str = "") -> dict:
+    def start(self, goal: str, workspace: str, triage: dict | None = None, model: str = "",
+              dry_run: bool = False) -> dict:
+        """Start a team. dry_run (the System check): the board, the events and the world are
+        exercised exactly as for a real team, but no agent is started and no model is asked."""
         goal = str(goal or "").strip()
         if not goal:
             raise ValueError("say what the team should build")
@@ -256,7 +259,7 @@ class TeamRunner:
         team = {"id": uuid.uuid4().hex[:8], "goal": goal, "workspace": str(workspace), "method": method,
                 "roles": roles, "stage": "", "status": "working",
                 "fix_rounds": 0, "jobs": {}, "created": time.time(), "finished": 0, "model": model,
-                "verdict": ""}
+                "verdict": "", "dry_run": bool(dry_run)}
         post(team["id"], "LOKI", "Team started for: %s\nRoles: %s%s" %
              (goal, ", ".join(ROLES[r]["name"] for r in team["roles"]),
               "\nMethod: SPARC (Specification > Pseudocode > Architecture > Refinement > Completion)"
@@ -265,8 +268,37 @@ class TeamRunner:
             teams = self._load()
             teams[team["id"]] = team
             self._save(teams)
+        if dry_run:
+            stages = [s for s in STAGES if self._stage_roles(team, s)]
+            post(team["id"], "LOKI", "Dry run - no agents started. Stages: %s" % " > ".join(
+                "%s (%s)" % (s, ", ".join(ROLES[r]["name"] for r in self._stage_roles(team, s))) for s in stages))
+            with self.lock:
+                teams = self._load()
+                team = teams[team["id"]]
+                team["stage"] = stages[0] if stages else ""
+                self._finish(team, "done", "dry run: the team was planned, nothing was started")
+                self._save(teams)
+            return self.get(team["id"])
         self.tick()
         return self.get(team["id"])
+
+    def forget(self, team_id: str) -> bool:
+        """Remove a finished team and its board (the System check cleans up its dry run)."""
+        with self.lock:
+            teams = self._load()
+            team = teams.get(team_id)
+            if not team or team.get("status") not in FINAL:
+                return False
+            del teams[team_id]
+            self._save(teams)
+        folder = teams_dir() / _safe(team_id)
+        try:
+            for item in folder.glob("*"):
+                item.unlink()
+            folder.rmdir()
+        except OSError:
+            pass
+        return True
 
     def cancel(self, team_id: str) -> dict | None:
         with self.lock:

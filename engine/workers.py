@@ -126,8 +126,8 @@ LOCAL_MODEL_NAMES = {"local", "local-small", "local-coder", "local-hermes", "loc
 def uses_local_model(job: dict, env: dict | None = None) -> bool:
     """Will this job run LOKI's own loop on this machine's local model?"""
     env = env if env is not None else os.environ
-    if job.get("agent") != "loki" or job.get("backend") != "local":
-        return False
+    if job.get("agent") != "loki" or job.get("backend") != "local" or job.get("selfcheck"):
+        return False   # a System check job asks no model, so it never waits for the model slot
     model = str(job.get("model") or env.get("LOKI_MODEL", "smart")).strip().lower()
     if model == "smart":
         return str(env.get("LOKI_PREFER", "local")).strip().lower() == "local"
@@ -202,6 +202,16 @@ class JobStore:
     def all(self) -> list[dict]:
         with self.lock:
             return [dict(j) for j in self._jobs]
+
+    def remove(self, job_id: str) -> bool:
+        """Forget one finished job (the System check cleans up after itself)."""
+        with self.lock:
+            before = len(self._jobs)
+            self._jobs = [j for j in self._jobs if not (j["id"] == job_id and j.get("status") in FINAL)]
+            if len(self._jobs) != before:
+                self.save()
+                return True
+            return False
 
     def remove_finished(self, keep: int = 50) -> int:
         """Drop old finished jobs beyond the newest `keep`."""
@@ -285,6 +295,7 @@ class LocalBackend(Backend):
             job_file.write_text(json.dumps({
                 "id": job["id"], "prompt": job["prompt"], "profile": job.get("profile") or {},
                 "allow_commands": bool(job.get("allow_commands")), "model": job.get("model", ""),
+                "selfcheck": bool(job.get("selfcheck")),
                 "result_path": str(self.data_dir / "jobs" / (job["id"] + ".result.txt")),
             }), encoding="utf-8")
             argv = loki_job_argv(str(job_file))
@@ -712,6 +723,9 @@ class Supervisor:
             # The agent this job runs as (agent builder) and its colour in LOKI World.
             "agent_id": str(spec.get("agent_id") or "")[:40],
             "color": str(spec.get("color") or "")[:7],
+            # LOKI's System check: the built-in agent proves the job path (spawn, log, poll,
+            # events, world) and exits at once - no model, no tools (loki.run_job).
+            "selfcheck": bool(spec.get("selfcheck")) and backend == "local" and agent == "loki",
         }
         stored = self.store.add(job)
         _emit_job_event(stored, "task.created")

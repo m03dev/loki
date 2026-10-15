@@ -816,6 +816,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             agent = self.server.state.agent
             fleet = getattr(agent, "federation", None)
             self._send_json(200, {"ok": True, "workers": fleet.health() if fleet else []})
+            return
+        if route == "/system/check":
+            import system_check  # pylint: disable=import-outside-toplevel
+            self._send_json(200, {"ok": True, **system_check.RUNNER.snapshot()})
+            return
         if route == "/update":
             self._send_json(200, {"ok": True, **update_status()})
             return
@@ -904,6 +909,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
             self._send_json(200, {"ok": True, "team": state.agent.teams.present(team, runner.jobs)})
+            return
+        if route in ("/system/check", "/system/fix"):
+            self._send_json(*system_action(state, route, data))
             return
         if route == "/update/check":
             try:
@@ -1175,6 +1183,23 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /system/check {allow_paid?, image_test?} starts the System check (engine/system_check.py);
+    POST /system/fix {action, args} does one of its SAFE fixes ("recheck" starts it again)."""
+    import system_check  # pylint: disable=import-outside-toplevel
+    action = str(data.get("action") or "")
+    if route == "/system/check" or action == "recheck":
+        options = data if route == "/system/check" else (data.get("args") or {})
+        ctx = system_check.Context(state.agent, state, allow_paid=bool(options.get("allow_paid")),
+                                   image_test=bool(options.get("image_test")), deps={"job_action": job_action})
+        if not system_check.RUNNER.start(ctx):
+            return 409, {"ok": False, "error": "The system check is already running.", **system_check.RUNNER.snapshot()}
+        return 200, {"ok": True, "started": True, **system_check.RUNNER.snapshot()}
+    args = data.get("args") if isinstance(data.get("args"), dict) else {}
+    result = system_check.apply_fix(state, action, args)
+    return (200 if result.get("ok") else 400), result
 
 
 def usage_total(entries: Any) -> dict[str, Any]:

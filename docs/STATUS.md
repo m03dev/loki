@@ -83,6 +83,13 @@ on macOS and Windows in CI. Update this file when a status changes.
 | LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
 | Native (non-web) world client | Not planned | the world stays in the app (WebGL) |
 
+## Session 16 additions (2026-10-15)
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| One-click System check (parts proven together, each red row with its fix) | Tested | `system_check.py`, Settings > System check; tests/test_systems.py; live run is ZIVA S1 |
+| End-to-end integration scenarios (goal, job, team, failover, check) | Tested | tests/test_systems.py (real modules, fakes only for model servers / network / hardware) |
+
 ## Research the vision asks for (not code)
 
 Repository catalog (DeepSeek Harness, OpenViking, Graphiti, OpenHub, October Bus, AutoHelix,

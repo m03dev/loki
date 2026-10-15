@@ -427,7 +427,7 @@ def self_test() -> int:
     for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
                  "model_setup", "usage", "agents",
                  "knowledge", "federation", "skill_scan", "loki", "providers_catalog", "portal_api",
-                 "signin", "qr", "tool_harness", "update_all"):
+                 "signin", "qr", "tool_harness", "update_all", "system_check"):
         try:
             __import__(name)
         except Exception as exc:  # noqa: BLE001

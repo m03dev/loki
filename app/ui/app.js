@@ -494,13 +494,14 @@ function showVersion(u) {
 // ---------------------------------------------------------------- settings
 async function openSettings() {
   $("#settings").hidden = false;
-  showTab("connections");
+  showTab("system");
   $("#close-settings").focus();
 }
 
 function showTab(name) {
   for (const tab of document.querySelectorAll(".tabs button")) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
   for (const panel of document.querySelectorAll("[data-panel]")) panel.hidden = panel.dataset.panel !== name;
+  if (name === "system" && typeof loadSystemCheck === "function") loadSystemCheck();
   if (name === "connections") { loadConnections(); if (typeof loadPortal === "function") loadPortal(); }
   if (name === "general" && typeof loadGeneral === "function") loadGeneral();
   if (name === "agents" && typeof loadAgents === "function") loadAgents();

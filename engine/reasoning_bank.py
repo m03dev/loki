@@ -98,7 +98,10 @@ def remember(goal: str, status: str, outcome: str, messages: list, root: Path | 
         return None
     names, errors = _tool_story(messages)
     final = experience.redact(_final_line(messages))
-    worked = status == "done" and outcome in ("verified", "done", "ok", "answered", "")
+    # experience.outcome_of labels every finished request that wrote no checkable file
+    # "unverified" (a chat answer, an image, a report). That is a request that worked; only a
+    # failed verification or a blocked/errored request is a lesson in what NOT to do.
+    worked = status == "done" and outcome in ("verified", "unverified", "done", "ok", "answered", "")
     if not names and not final:
         return None
     item = {"t": time.time(), "goal": goal[:300], "status": status, "outcome": outcome,

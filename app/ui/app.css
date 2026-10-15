@@ -446,3 +446,52 @@ button.danger:hover { color: var(--err); }
 /* world look: the pixel-art world is brighter than the old one, so its labels get a dark halo */
 .world-labels .wlabel span { color: #e6ecf5; text-shadow: 0 1px 2px #05060f, 0 0 3px #05060f; }
 .world-labels .wlabel b { box-shadow: 0 1px 3px rgba(0,0,0,.45); }
+
+/* ===================================================================== System check (settings.js) */
+.sidebar-foot .foot-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.sidebar-foot .foot-row .link { white-space: nowrap; }
+.sc { display: flex; flex-direction: column; gap: 12px; }
+.sc-head { border: 1px solid var(--line); border-radius: 14px; background: var(--side); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px; }
+.sc-head.ok { border-color: #3b5a45; }
+.sc-head.warn { border-color: #6b5c3a; }
+.sc-head.fail { border-color: #6e3a3a; }
+.sc-summary { display: flex; align-items: center; gap: 14px; }
+.sc-mark { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center;
+  font-size: 20px; font-weight: 700; background: var(--bubble); color: var(--muted); }
+.sc-head.ok .sc-mark { color: var(--ok); background: #2c3a30; }
+.sc-head.warn .sc-mark { color: var(--warn); background: #3d3628; }
+.sc-head.fail .sc-mark { color: var(--err); background: #432a2c; }
+.sc-head.running .sc-mark { color: var(--tool); }
+.sc-words b { display: block; font-size: 16px; font-weight: 600; line-height: 1.35; }
+.sc-words small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.sc-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sc-bar { height: 4px; border-radius: 4px; background: var(--bubble); overflow: hidden; }
+.sc-bar span { display: block; height: 100%; background: var(--tool); transition: width .3s; }
+.sc-note { margin: 0; font-size: 13px; color: var(--accent); }
+.sc-list { display: flex; flex-direction: column; gap: 6px; }
+.sc-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--side);
+  display: flex; flex-direction: column; gap: 4px; }
+.sc-row.fail { border-color: #6e3a3a; }
+.sc-row.warn { border-color: #5a4f36; }
+.sc-row.skip { opacity: .7; }
+.sc-row-head { display: flex; align-items: center; gap: 10px; }
+.sc-title { font-weight: 600; }
+.sc-word { font-size: 10.5px; line-height: 18px; padding: 0 7px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.sc-word.ok { color: var(--ok); } .sc-word.warn { color: var(--warn); } .sc-word.fail { color: var(--err); }
+.sc-ms { margin-left: auto; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sc-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--line); }
+.sc-dot.ok { background: var(--ok); } .sc-dot.warn { background: var(--warn); } .sc-dot.fail { background: var(--err); }
+.sc-detail { margin: 0 0 0 20px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.sc-fix { display: flex; align-items: center; gap: 10px; margin-left: 20px; flex-wrap: wrap; }
+.sc-fix-text { flex: 1; min-width: 200px; font-size: 13px; color: var(--text); }
+.sc-row.fail .sc-fix-text::before { content: "What to do: "; color: var(--err); font-weight: 600; }
+.sc-row.warn .sc-fix-text::before { content: "What to do: "; color: var(--warn); font-weight: 600; }
+.sc-items { margin: 4px 0 0 20px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.sc-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.sc-item .sc-dot { width: 7px; height: 7px; }
+.sc-item b { font-weight: 550; flex: 0 0 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-row.ok .sc-fix { justify-content: flex-end; margin-top: -2px; }
+.settings-nav #system-dot { background: var(--err); }
+.sc-item .muted { flex: 1; min-width: 0; line-height: 1.4; }
+.sc-item button { flex: none; }

@@ -746,8 +746,163 @@ function editAgent(a, isNew) {
   name.focus();
 }
 
+// ---------------------------------------------------------------- System check
+// One click: engine/system_check.py runs every check in the background; we poll
+// GET /system/check and draw the rows. A Fix button either runs one SAFE fix
+// (POST /system/fix) or opens the Settings tab that fixes it.
+const sysCheck = { timer: 0, data: null, paid: false, note: "" };
+const SC_WORD = { ok: "Works", warn: "Look", fail: "Needs you", skip: "Skipped" };
+
+async function loadSystemCheck(start) {
+  const box = $("#system-panel");
+  if (!box) return;
+  let data;
+  if (start) {
+    data = await api("/system/check", start).catch(() => null);
+    if (data && !data.ok && !data.running) addNotice(data.error || "Could not start the check.", true);
+  } else {
+    data = await api("/system/check").catch(() => null);
+  }
+  sysCheck.data = data;
+  renderSystemCheck(data);
+  clearTimeout(sysCheck.timer);
+  if (data && data.running) sysCheck.timer = setTimeout(() => loadSystemCheck(), 700);
+}
+
+function runSystemCheck(extra) {
+  sysCheck.note = "";
+  return loadSystemCheck(Object.assign({ allow_paid: sysCheck.paid }, extra || {}));
+}
+
+async function scFix(f, holder) {
+  if (f.action) {
+    const r = await api("/system/fix", { action: f.action, args: f.args || {} }).catch(() => null);
+    sysCheck.note = r && r.ok ? (r.message || "Done.") : ((r && r.error) || "That did not work.");
+    if (f.action === "recheck" || (r && r.ok && f.action !== "laya_warm" && f.action !== "start_ollama")) {
+      return loadSystemCheck(f.action === "recheck" ? undefined : { allow_paid: sysCheck.paid });
+    }
+    renderSystemCheck(sysCheck.data);
+    return;
+  }
+  const tab = String(f.ui || "").split(":")[1];
+  if (tab) showTab(tab);
+}
+
+const SC_TABS = { connections: "Connections", machines: "Machines & updates", capabilities: "Add-ons", models: "Local models",
+                  general: "General", usage: "Usage", agents: "Agents", system: "System check" };
+
+function scFixButton(f, primary) {
+  const tab = String(f.ui || "").split(":")[1];
+  const label = f.action ? (f.label || "Fix") : (tab && SC_TABS[tab] ? "Open " + SC_TABS[tab] : (f.label || "Open"));
+  const b = button(label + (f.action ? "" : " →"), "small " + (primary ? "primary" : ""), () => scFix(f));
+  b.title = f.text || "";
+  return b;
+}
+
+function scDot(status) {
+  const d = el("span", "sc-dot " + (status || "skip"));
+  d.setAttribute("aria-hidden", "true");
+  return d;
+}
+
+function scRow(r) {
+  const row = el("article", "sc-row " + r.status);
+  const head = el("div", "sc-row-head");
+  const word = el("span", "sc-word " + r.status, SC_WORD[r.status] || r.status);
+  head.append(scDot(r.status), el("b", "sc-title", r.title), word);
+  if (typeof r.ms === "number" && r.ms >= 1000) head.append(el("span", "sc-ms", (r.ms / 1000).toFixed(1) + " s"));
+  row.append(head, el("p", "sc-detail", r.detail));
+  if (r.fix && (r.status === "warn" || r.status === "fail" || r.fix.action || r.fix.ui)) {
+    const fixRow = el("div", "sc-fix");
+    if (r.status !== "ok") fixRow.append(el("span", "sc-fix-text", r.fix.text));
+    fixRow.append(scFixButton(r.fix, r.status === "fail"));
+    row.append(fixRow);
+  }
+  const items = r.items || [];
+  if (items.length) {
+    const list = el("div", "sc-items");
+    for (const it of items) {
+      const line = el("div", "sc-item " + it.status);
+      const said = it.detail + (it.fix && it.status !== "ok" && it.fix.text ? " — " + it.fix.text : "");
+      line.append(scDot(it.status), el("b", "", it.name), el("span", "muted", said));
+      if (it.fix && it.status !== "ok") line.append(scFixButton(it.fix, false));
+      list.append(line);
+    }
+    row.append(list);
+  }
+  return row;
+}
+
+function renderSystemCheck(data) {
+  const box = $("#system-panel");
+  if (!box) return;
+  box.replaceChildren();
+  const running = !!(data && data.running);
+  const report = data && data.report;
+  const progress = (data && data.progress) || {};
+  const summary = (report && report.summary) || null;
+
+  const head = el("div", "sc-head " + (running ? "running" : summary ? summary.state : "none"));
+  const big = el("div", "sc-summary");
+  const mark = el("span", "sc-mark", running ? "…" : !summary ? "?" : summary.state === "ok" ? "✓" : summary.state === "warn" ? "!" : "✗");
+  mark.setAttribute("aria-hidden", "true");
+  const words = el("div", "sc-words");
+  if (running) {
+    words.append(el("b", "", "Checking " + (progress.current || "…")),
+                 el("small", "", "Step " + Math.min((progress.index || 0) + 1, progress.total || 0) + " of " + (progress.total || 0)));
+  } else if (summary) {
+    const when = report.finished ? ago(report.finished) : "";
+    words.append(el("b", "", summary.line),
+                 el("small", "", "Checked " + when + " in " + report.seconds + " s" + (report.options && report.options.allow_paid ? " · paid providers included" : "")));
+  } else {
+    words.append(el("b", "", "LOKI has not checked itself yet."),
+                 el("small", "", "Takes under a minute. Free providers get one tiny test prompt; nothing is bought."));
+  }
+  big.append(mark, words);
+  const actions = el("div", "sc-actions");
+  const go = button(running ? "Checking…" : summary ? "Run again" : "Run the check", "primary", () => runSystemCheck());
+  go.disabled = running;
+  const paid = el("label", "check");
+  const box2 = el("input");
+  box2.type = "checkbox";
+  box2.checked = sysCheck.paid;
+  box2.addEventListener("change", () => { sysCheck.paid = box2.checked; });
+  paid.append(box2, document.createTextNode(" Test paid providers too"));
+  const image = button("Run a real image test", "small quiet", () => runSystemCheck({ image_test: true }));
+  image.disabled = running;
+  image.title = "Makes one small image with the image specialist (free backends first)";
+  actions.append(go, paid, image);
+  head.append(big, actions);
+  if (running) {
+    const bar = el("div", "sc-bar");
+    const fill = el("span");
+    fill.style.width = Math.round(100 * (progress.index || 0) / Math.max(1, progress.total || 1)) + "%";
+    bar.append(fill);
+    head.append(bar);
+  }
+  box.append(head);
+  if (sysCheck.note) box.append(el("p", "sc-note", sysCheck.note));
+
+  const rows = running ? (progress.results || []) : ((report && report.results) || []);
+  const order = { fail: 0, warn: 1, ok: 2, skip: 3 };
+  const sorted = running ? rows : rows.slice().sort((a, b) => (order[a.status] - order[b.status]));
+  const list = el("div", "sc-list");
+  for (const r of sorted) list.append(scRow(r));
+  box.append(list);
+  const dot = $("#system-dot");
+  if (dot) dot.hidden = !(summary && summary.state === "fail");
+}
+
+function checkEverything() {
+  if (typeof openSettings === "function") openSettings();
+  showTab("system");
+  return runSystemCheck();
+}
+
 // ---------------------------------------------------------------- wiring
 function wireSettings() {
+  const checkAll = $("#check-everything");
+  if (checkAll) checkAll.addEventListener("click", checkEverything);
   for (const id of ["#portal-filter", "#portal-free", "#portal-connected"]) {
     const node = $(id);
     if (node) node.addEventListener("input", renderPortal);
