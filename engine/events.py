@@ -133,8 +133,59 @@ def wait(after: int = 0, timeout: float = 20.0, limit: int = 500) -> list:
 
 
 def latest_seq() -> int:
-    events = read(0, limit=1)
-    return events[-1]["seq"] if events else 0
+    return _tail_scan()["last_seq"]
+
+
+# --- a cheap view of the log's end, for the world (polled every few seconds) ------------
+# GET /world used to re-parse the whole log (up to MAX_BYTES) twice per poll, from every
+# open view. The log only grows between rotations, so this keeps a small summary (the last
+# message per agent, the newest seq) and reads only the bytes appended since last time.
+# A rotation (the file got smaller) or a different file starts the summary over.
+_tail_lock = threading.Lock()
+_tail: dict = {}
+
+
+def _tail_scan() -> dict:
+    path = log_path()
+    with _tail_lock:
+        try:
+            st = path.stat()
+        except OSError:
+            _tail.clear()
+            return {"last_seq": 0, "msgs": {}}
+        key = (str(path), getattr(st, "st_ino", 0))
+        if _tail.get("key") != key or st.st_size < _tail.get("pos", 0):
+            _tail.clear()
+            _tail.update({"key": key, "pos": 0, "last_seq": 0, "msgs": {}})
+        if st.st_size > _tail["pos"]:
+            try:
+                with open(path, "rb") as fh:
+                    fh.seek(_tail["pos"])
+                    chunk = fh.read(st.st_size - _tail["pos"])
+            except OSError:
+                chunk = b""
+            end = chunk.rfind(b"\n")          # a half-written last line waits for the next scan
+            if end >= 0:
+                _tail["pos"] += end + 1
+                msgs = _tail["msgs"]
+                for raw in chunk[:end + 1].splitlines():
+                    try:
+                        event = json.loads(raw.decode("utf-8", errors="replace"))
+                    except ValueError:
+                        continue
+                    seq = int(event.get("seq") or 0)
+                    if seq > _tail["last_seq"]:
+                        _tail["last_seq"] = seq
+                    if event.get("type") == "agent.message":
+                        sender = event.get("sender", "")
+                        msgs[("", sender)] = event
+                        if event.get("team"):
+                            msgs[(event["team"], sender)] = event
+                if len(msgs) > 2000:          # many teams over a long run: keep the newest
+                    newest = sorted(msgs.items(), key=lambda kv: kv[1].get("seq", 0))[-1000:]
+                    msgs.clear()
+                    msgs.update(newest)
+        return {"last_seq": _tail["last_seq"], "msgs": dict(_tail["msgs"])}
 
 
 # --- the world: who is there and what they are doing ---------------------------------
@@ -153,32 +204,63 @@ def world(jobs: list, teams: list, chat_busy: bool, last_decision: dict | None =
           recent_seconds: float = 3600.0) -> dict:
     """The agents a visual client should draw right now, from real state only."""
     now = time.time()
-    msgs = {}
-    for event in read(0, limit=400, types=("agent.message",)):
-        msgs[event.get("sender", "")] = event
+    tail = _tail_scan()
+    msgs = tail["msgs"]
+
+    def said(team_id: str, sender: str) -> str:
+        # an agent's own team's board first: two Builders in two teams never swap lines
+        event = (msgs.get((team_id, sender)) if team_id else None) or msgs.get(("", sender)) or {}
+        return str((event.get("payload") or {}).get("text", ""))
+
     agents = [{
         "id": "loki", "name": "LOKI", "role": "conductor", "state": "working" if chat_busy else "idle",
         "station": STATIONS["LOKI"], "task": (last_decision or {}).get("kind", "") if chat_busy else "",
-        "team": "", "machine": machine_name(),
-        "last_message": (msgs.get("LOKI") or {}).get("payload", {}).get("text", ""),
+        "team": "", "machine": machine_name(), "since": 0, "finished": 0, "stage": "",
+        "last_message": said("", "LOKI"),
     }]
+    team_stage = {str(t.get("id")): str(t.get("stage") or "") for t in teams}
+    midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
+    stats = {"working": 0, "waiting": 0, "blocked": 0, "done_today": 0, "failed_today": 0}
     for job in jobs:
         finished = float(job.get("finished") or 0)
-        if job.get("status") in ("done", "failed", "cancelled") and finished and now - finished > recent_seconds:
+        status = job.get("status", "")
+        if finished >= midnight and status in ("done", "failed"):
+            stats["done_today" if status == "done" else "failed_today"] += 1
+        if status in ("done", "failed", "cancelled") and finished and now - finished > recent_seconds:
             continue
         title = str(job.get("title") or "")
         role = _role_of(job)
+        shown = JOB_STATE.get(status, "idle")
+        if shown in ("working", "waiting", "blocked"):
+            stats[shown] += 1
+        team_id = str(job.get("team", "") or "")
         agents.append({
             "id": "job-" + str(job.get("id")), "name": role, "role": role.lower(),
-            "state": JOB_STATE.get(job.get("status", ""), "idle"),
-            "station": STATIONS.get(role, "workshop"), "task": title[:120], "team": job.get("team", ""),
+            "state": shown,
+            "station": STATIONS.get(role, "workshop"), "task": title[:120], "team": team_id,
             "machine": machine_name(), "color": str(job.get("color") or ""),
-            "last_message": (msgs.get(role) or {}).get("payload", {}).get("text", ""),
+            "since": float(job.get("started") or job.get("created") or 0), "finished": finished,
+            "stage": team_stage.get(team_id, ""),
+            "last_message": said(team_id, role),
         })
-    return {"ok": True, "machine": machine_name(), "time": now, "agents": agents,
+    return {"ok": True, "machine": machine_name(), "time": now, "agents": agents, "stats": stats,
             "teams": [{"id": t.get("id"), "goal": t.get("goal"), "status": t.get("status"),
-                       "stage": t.get("stage")} for t in teams[:10]],
-            "cursor": latest_seq()}
+                       "stage": t.get("stage"), "stages": _team_stages(t)} for t in teams[:10]],
+            "cursor": tail["last_seq"]}
+
+
+def _team_stages(team_rec: dict) -> list:
+    """The stages this team really has, in order (plan, build, check, then any fix round)."""
+    try:
+        import team as team_mod  # pylint: disable=import-outside-toplevel
+        roles = team_rec.get("roles") or []
+        stages = [s for s in team_mod.STAGES if any(team_mod.ROLES.get(r, {}).get("stage") == s for r in roles)]
+    except Exception:  # noqa: BLE001
+        stages = ["plan", "build", "check"]
+    stage = str(team_rec.get("stage") or "")
+    if stage.startswith("fix"):
+        stages = stages + ["fix", "fix-check"]
+    return stages or ["plan", "build", "check"]
 
 
 def _role_of(job: dict) -> str:

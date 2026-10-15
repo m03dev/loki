@@ -116,6 +116,46 @@ check("long-finished agents leave the world", not any(a["id"] == "job-" + old["i
       events.world(sup.store.all(), [], False)["agents"]))
 check("the world carries the event cursor for the next poll", world["cursor"] > 0)
 
+section("the world stays cheap and exact as the log grows (the 3D view polls it every few seconds)")
+team.post("team2", "Builder", "built the docs page")
+w2 = events.world(sup.store.all(), [], False)
+b1 = [a for a in w2["agents"] if a["name"] == "Builder" and a["team"] == "team1"]
+check("two Builders in two teams keep their own lines (board message keyed by team)",
+      b1 and b1[0]["last_message"] == "built the order page", b1)
+check("the cursor is the newest seq, read incrementally", w2["cursor"] == events.read(0, limit=1)[-1]["seq"])
+team.post("team1", "Builder", "half")
+with open(events.log_path(), "a", encoding="utf-8") as fh:
+    fh.write('{"seq": 9, "type": "agent.message", "sender": "Builder", "team": "team1", "payload": {"text": "torn')
+check("a half-written last line is not read until it is complete",
+      [a for a in events.world(sup.store.all(), [], False)["agents"] if a["team"] == "team1" and a["name"] == "Builder"][0]["last_message"] == "half")
+with open(events.log_path(), "a", encoding="utf-8") as fh:
+    fh.write('"}}\n')
+team.post("team1", "Builder", "after the torn line")
+check("once it is complete, scanning carries on",
+      [a for a in events.world(sup.store.all(), [], False)["agents"] if a["team"] == "team1" and a["name"] == "Builder"][0]["last_message"] == "after the torn line")
+events._rotate(events.log_path())
+team.post("team1", "Builder", "after rotation")
+check("a rotated (smaller) log is re-read from the start",
+      [a for a in events.world(sup.store.all(), [], False)["agents"] if a["team"] == "team1" and a["name"] == "Builder"][0]["last_message"] == "after rotation")
+calls = {"n": 0}
+real_loads = events.json.loads
+events.json.loads = lambda raw, *a, **k: (calls.__setitem__("n", calls["n"] + 1), real_loads(raw, *a, **k))[1]
+try:
+    events.world(sup.store.all(), [], False)
+    events.world(sup.store.all(), [], False)
+finally:
+    events.json.loads = real_loads
+check("polling with nothing new parses no log lines", calls["n"] == 0, calls)
+w3 = events.world(sup.store.all(), [{"id": "team1", "goal": "g", "status": "working", "stage": "build",
+                                      "roles": ["architect", "builder", "tester"]}], False)
+t1 = w3["teams"][0]
+check("a team carries the stages it really has, in order", t1["stages"] == ["plan", "build", "check"], t1)
+check("agents carry when they started and their team's stage, from the job record",
+      all("since" in a and "stage" in a for a in w3["agents"]) and
+      any(a["team"] == "team1" and a["stage"] == "build" for a in w3["agents"]), w3["agents"][:2])
+check("the world counts real work (working/waiting/blocked, done and failed today)",
+      set(w3["stats"]) == {"working", "waiting", "blocked", "done_today", "failed_today"} and w3["stats"]["done_today"] >= 1, w3["stats"])
+
 section("the decision is made BEFORE the model runs, on every request")
 import loki  # noqa: E402
 
@@ -141,6 +181,31 @@ result = asyncio.run(loki.pursue_goal("add a jump to the player"))
 check("a model that says DONE without writing anything is stopped, not looped forever",
       result.startswith("BLOCKED") and "without changing any file" in result, result)
 check("tasks (the goal loop) are decided first too", len(seen.get("decisions", [])) == 1, seen)
+
+
+async def dir_only_turn(*_a, **_k):   # Ziva's S2 case: only make_dir, then a false DONE
+    await loki.call_tool("make_dir", {"path": "notes"})
+    return "DONE: Created notes/hello.txt with 'hi'"
+
+
+async def failed_write_turn(*_a, **_k):   # a write that errored changed nothing
+    await loki.call_tool("write_file", {"path": "../../outside/x.txt", "content": "hi"})
+    return "DONE: wrote it"
+
+
+loki.agent_turn = dir_only_turn
+result = asyncio.run(loki.pursue_goal("create notes/hello.txt with hi, then list the folder"))
+check("the main task loop does not accept DONE when only the folder was made for a named file",
+      result.startswith("BLOCKED") and "without changing any file" in result, result)
+check("...and the goal parser knows a named file from a folder or a web address",
+      loki._goal_names_file("create notes/hello.txt") and not loki._goal_names_file("make a folder called notes")
+      and not loki._goal_names_file("open https://example.com/a.html") and not loki._goal_names_file("e.g. make it faster"))
+result = asyncio.run(loki.pursue_goal("make a folder called notes"))
+check("a goal that only asks for a folder is done once the folder is made", result.startswith("DONE"), result)
+loki.agent_turn = failed_write_turn
+result = asyncio.run(loki.pursue_goal("create x.txt with hi"))
+check("a tool call that returned an error does not count as a change", result.startswith("BLOCKED"), result)
+loki.agent_turn = fake_turn
 d = seen.get("decisions", [{}])[0].get("payload", {})
 check("the decision is structured: intent, route, capabilities, risk, approval, rationale, fallback",
       all(k in d for k in ("intent", "route", "capabilities", "risk", "approval", "rationale", "fallback")), d)

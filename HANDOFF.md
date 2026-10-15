@@ -4,7 +4,58 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-15 (session 17).
+Last updated: 2026-10-15 (session 19).
+
+## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth
+
+Owner: "go through what's not working, only add, make the LOKI world more like a sim, more
+features, improve the graphics, keep everything running smooth". All 16 suites pass.
+Rendered and checked in headless Chromium (software WebGL) with a mocked /world - screenshots
+docs/operations/screens/world-sim*.png. NOT yet seen on the real Mac/PC GPUs (ZIVA_TASKS W10).
+
+What was not working (fixed, tested):
+- **/world re-parsed the whole event log twice per poll** (up to 4 MB, every 2.5 s, per open
+  view). `engine/events.py _tail_scan()` now reads only what was appended (rotation and
+  half-written lines handled); `latest_seq()` uses it too. test_events proves no lines are
+  parsed when nothing is new.
+- **Two agents with the same role shared one speech line** (messages were keyed by sender
+  only): now by team + sender.
+- **A blocked agent's red light was always dropped** (exactly 10 lamps filled the shader's 10
+  lights): lights are ranked; alerts first.
+- The blocked/selected ground rings z-fought into invisibility (16-bit depth, near 0.1): rings are
+  now opaque dashes and the near plane is 0.5.
+- A lost WebGL context (sleep / GPU switch) left the world black forever: it is rebuilt.
+- Drag could stick (no pointercancel); no pinch zoom; agents stood inside lamps and each other;
+  labels piled on top of each other.
+- **False DONE in the main task loop** (Ziva's [claude] request): `make_dir` - or a write that
+  returned an error - counted as "changed a file", so "create notes/hello.txt" was accepted after
+  only `mkdir notes`. engine/loki.py: errors change nothing; a goal naming a file needs a file.
+
+Added (app/ui/world.js, docs/WORLD.md "The life-sim layer"):
+- Agents walk round the plaza (not through the pool), act out each station's work (book,
+  hammer + sparks, typing + lit screen, bubbling beakers, stamping, drawing), role hats, LOKI's
+  horns, state icons (cube / hourglass / red "!" with a hand up / cheer + confetti / grey cloud).
+- Done/idle agents leave the desk, sit on benches, wander and "chat" (a wordless ···).
+- Team banners in the plaza with one pip per real stage (`teams[].stages` from the engine).
+- Settings > LOKI World: click an agent or legend row -> inspector card (all from /world:
+  task, station, machine, time on task, team + stage, last line), double-click / Follow ->
+  camera follows, Esc, arrows, pinch. A HUD with local time and the real counts (`stats`).
+- Scenery: reflecting pool, pond + waterfall + mist, flowers, grass, benches, crystals under the
+  island, floating islets, birds, fireflies, twinkling stars, chimney smoke when building.
+- /world adds per agent `since`, `finished`, `stage`; per team `stages`; top-level `stats`.
+
+Smooth: the static scene is baked once (3 draws for everything that never moves, +2 for the
+turning clouds/islets) - ~200 draws per frame whatever the scenery, ~1 ms of JS per frame.
+A frame-time watcher steps world pixels one size coarser when frames run late and keeps it only
+if frames really got faster (`World.adaptive = false` pins it). `prefers-reduced-motion` stops
+the ambience.
+
+Libraries: none added on purpose. The UI is offline and CSP-clean, and test_portal forbids
+loading anything external; three.js/OGL/regl would add weight for things this renderer already
+does. If a library is ever wanted, vendor it into app/ui (no CDN).
+
+Next (ZIVA W10): open Settings > LOKI World on both machines, start a team, screenshot, report
+frame feel and `World.views.panel.perf` (ema ms, boost, draws).
 
 ## Session 17 (2026-10-15, cloud): local models that work, and an app that works by itself
 

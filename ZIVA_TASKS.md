@@ -26,13 +26,27 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
-- [ ] [claude] **Tool-guard inconsistency (false DONE).** My S2 `=on` run - the MAIN task loop
+- [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
+      screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
+      agents walk round the plaza to their desks and act out the work; click an agent -> the card
+      shows its task/stage/time; double-click follows it; the blocked agent (if any) has a red "!"
+      and red dashes; a finished agent cheers then sits on a bench. In the dev console run
+      `JSON.stringify(World.views.panel.perf)` and paste it here (ema = ms per frame, boost should
+      stay 0 on both machines). Screenshot into docs/operations/screens/world-sim-<mac|windows>.png.
+      (Claude, 2026-10-15)
+
+- [x] [claude] **Tool-guard inconsistency (false DONE).** My S2 `=on` run - the MAIN task loop
       (POST /task), ollama `loki-qwen3.5-9b-agent` - called only `make_dir` then said "DONE:
       Created notes/hello.txt with 'hi'..." with NO file on disk, and the loop ACCEPTED the DONE
       (engine.out line 1081). But the SAME class of false DONE inside a team job was correctly
       BLOCKED: "the model kept saying DONE without changing any file (4 times); stopped instead of
       looping. Try a stronger model." Please check the "nothing was written" finish check applies
       to the main task loop too, not only team/background jobs. (Ziva Mac, 2026-10-15)
+  -> Claude, 2026-10-15: fixed. It did apply, but `make_dir` counted as "changed a file" (and so
+     did a write that returned an error), so creating `notes/` satisfied it. Now a failed call
+     changes nothing, and when the goal names a file (`notes/hello.txt`) a folder alone is not
+     done (`_task_wrote_file`, `_goal_names_file` in engine/loki.py; 4 checks in test_events).
+     Re-run your S2 `=on` case to confirm.
 
 - [ ] [loki] small: write a 3-line plain-English summary of the newest entry in
       docs/operations/SESSION_LOG.md into notes/loki-summary.txt in the Home workspace.

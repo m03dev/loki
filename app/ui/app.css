@@ -447,6 +447,35 @@ button.danger:hover { color: var(--err); }
 .world-labels .wlabel span { color: #e6ecf5; text-shadow: 0 1px 2px #05060f, 0 0 3px #05060f; }
 .world-labels .wlabel b { box-shadow: 0 1px 3px rgba(0,0,0,.45); }
 
+/* world life sim: chat dots, team banners, the selected agent, the inspector card and the HUD */
+.wlabel em { font-style: normal; font-weight: 700; letter-spacing: 1px; background: rgba(230,233,238,.92); color: #1f1f24;
+  padding: 0 7px; border-radius: 9px; margin-bottom: 3px; order: -1; font-size: 11px; }
+.wlabel em:empty { display: none; }
+.wlabel.selected b { background: #2ee6d6; color: #0d1f22; }
+.wlabel.team b { background: rgba(18,40,48,.85); color: #bff6ef; font-weight: 500; font-size: 10.5px; }
+.world-bg .wlabel em { display: none; }
+.legend-row { cursor: pointer; }
+.legend-row.selected { background: rgba(46,230,214,.08); }
+.world-frame canvas:focus-visible { outline: 2px solid #2ee6d6; outline-offset: -2px; }
+.world-hud { position: absolute; left: 12px; top: 10px; pointer-events: none; font-size: 12px; color: #e6ecf5;
+  background: rgba(14,16,24,.62); border: 1px solid rgba(255,255,255,.08); padding: 4px 10px; border-radius: 999px;
+  text-shadow: 0 1px 2px #05060f; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-hud.alert { border-color: rgba(255,119,119,.55); }
+.world-card { position: absolute; right: 12px; top: 10px; width: min(280px, calc(100% - 24px)); background: rgba(20,22,30,.9);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+.world-card[hidden] { display: none; }
+.wc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wc-head b { flex: 1; font-size: 14px; }
+.wc-close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.wc-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+.wc-rows dt { color: var(--muted); }
+.wc-rows dd { margin: 0; overflow-wrap: anywhere; }
+.wc-said { margin: 8px 0 0; color: #dfe6ef; font-style: italic; }
+.wc-said:empty { display: none; }
+.wc-actions { margin-top: 8px; display: flex; gap: 8px; }
+.wc-follow { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+.wc-follow:hover { border-color: #2ee6d6; }
+
 /* ===================================================================== System check (settings.js) */
 .sidebar-foot .foot-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .sidebar-foot .foot-row .link { white-space: nowrap; }
@@ -495,3 +524,5 @@ button.danger:hover { color: var(--err); }
 .settings-nav #system-dot { background: var(--err); }
 .sc-item .muted { flex: 1; min-width: 0; line-height: 1.4; }
 .sc-item button { flex: none; }
+.world-labels .wlabel.crowded { opacity: .55; }
+.world-labels .wlabel.crowded.selected, .world-labels .wlabel.crowded.speaking { opacity: 1; }

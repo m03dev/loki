@@ -4,6 +4,18 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-15 - LOKI World: a life sim, and cheaper to run
+
+- engine/events.py: /world reads only the new end of the event log (was a full re-parse twice
+  per poll); last lines keyed by team + sender; adds since/finished/stage, team stages, stats.
+- app/ui/world.js: static scene baked into one buffer, adaptive pixel size, context restore,
+  ranked lights; walking routes, station work animations, benches, chat, team banners, inspector
+  card, follow camera, HUD; waterfall, pool, flowers, crystals, islets, birds, fireflies.
+- tests: test_events (+9), test_portal (+8). Headless Chromium screenshots in
+  docs/operations/screens/world-sim*.png. Real-GPU check is ZIVA_TASKS W10.
+
+---
+
 ## 2026-10-15 - Session 18 (Ziva Mac): off-network link, S2/S3, a real-model team, one crashed ship
 
 - M3 off-network link: the peer link only dials private addresses, so a public relay is used

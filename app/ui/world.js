@@ -1,12 +1,20 @@
 // LOKI World: your agents as characters in a small 3D world, drawn with plain WebGL (no
 // libraries, CSP-clean). The engine's GET /world says who is there, where they work and
 // what they are doing - only real state, never invented (engine/events.py world()). This
-// file just animates it: agents walk to their station, bob while they work, glow red when
-// blocked, and show what they last said on the team board.
+// file just animates it: agents walk the paths to their station, act out the work there
+// (reading, hammering, testing, typing), glow red when blocked, cheer when done, and show
+// what they last said on the team board.
+//
+// It plays like a little life sim: idle agents wander the plaza, sit on benches and chat
+// (a "···" bubble - never invented words), each team has a banner with its real stages,
+// and in Settings > LOKI World you can click an agent to inspect it (state, task, team
+// stage, time on task, last message) or follow it with the camera. Ambient life - wander,
+// chat, fireflies, birds, the waterfall - is decoration only; every label is real state.
 //
 // Two views share one renderer: behind the home screen (dim, slowly orbiting, "the world
 // happening in the background") and full size in Settings > LOKI World (drag to orbit,
-// wheel to zoom). LOKI_WORLD (Settings > General) picks background | panel | off.
+// wheel or pinch to zoom, click to inspect, double-click to follow). LOKI_WORLD (Settings >
+// General) picks background | panel | off.
 //
 // The look: a 3D pixel-art, cel-shaded floating island. The scene is drawn into a small
 // low-resolution framebuffer (1/3 - 1/4 of the canvas, an integer scale) and blown up with
@@ -15,6 +23,12 @@
 // station lamps as small point lights), and every solid gets a dark ink outline from an
 // inflated back-face hull. Sky, island, trees, rocks, lamps and little station buildings are
 // all built here from boxes, cylinders, cones and spheres - nothing is loaded.
+//
+// Staying smooth: everything that never moves is baked ONCE into a single vertex buffer
+// (one draw for the solids, one for their outlines, one for their shadows), the clouds and
+// islets are one more buffer turned by one matrix, and a frame-time watcher makes the world
+// pixels coarser when a machine falls behind (and finer again when it catches up) - the
+// pixel-art look hides it. A lost WebGL context (sleep, GPU switch) is rebuilt.
 "use strict";
 
 const World = {
@@ -22,6 +36,8 @@ const World = {
   reduced: window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
+  adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
+  selected: "", particles: [], seats: {},
 };
 
 // ---------------------------------------------------------------- math (column-major 4x4)
@@ -57,6 +73,8 @@ function norm(a) { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l
 function mix3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 function scale3(a, k) { return [a[0] * k, a[1] * k, a[2] * k]; }
 function smooth(e0, e1, x) { const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function angLerp(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 function hexRgb(hex, fallback) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
   if (!m) return fallback;
@@ -66,6 +84,19 @@ function hexRgb(hex, fallback) {
 function seeded(seed) {   // a small deterministic random, so the island is the same every time
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+function hashColor(text) {   // a stable, pleasant colour per team id
+  let h = 2166136261;
+  for (const ch of String(text || "")) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const hue = (h % 360) / 360, k = (n) => (n + hue * 12) % 12;
+  const f = (n) => 0.62 - 0.32 * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [f(0), f(8), f(4)];
+}
+function ago(seconds) {
+  if (!seconds || seconds < 0) return "";
+  if (seconds < 60) return Math.round(seconds) + " s";
+  if (seconds < 3600) return Math.round(seconds / 60) + " min";
+  return (seconds / 3600).toFixed(seconds < 36000 ? 1 : 0) + " h";
 }
 
 // ---------------------------------------------------------------- meshes (all CCW = front)
@@ -126,6 +157,10 @@ function quadMesh() {   // corners in -1..1, for the sky, the blit, shadows and 
   return { p, n: p.map(() => 0) };
 }
 
+// The shapes, built once and shared by every view (and by the baker).
+const MESH_SRC = { box: boxMesh(), cyl: cylinderMesh(), cyl6: cylinderMesh(7), cone: coneMesh(), pyr: coneMesh(4),
+  sph: sphereMesh(), sph4: sphereMesh(4, 6), quad: quadMesh() };
+
 // ---------------------------------------------------------------- shaders
 // Solids. The normal goes through the inverse scale (IS = 1/s^2) so squashed shapes still
 // light correctly.
@@ -133,12 +168,23 @@ const VS = "attribute vec3 p; attribute vec3 n; uniform mat4 M; uniform mat4 VP;
   "varying vec3 vn; varying vec3 wp;" +
   "void main(){ vec4 w = M * vec4(p,1.0); wp = w.xyz; vn = mat3(M) * (n * IS); gl_Position = VP * w; }";
 
+// The baked static scene: positions and normals are already in world space (M only turns
+// the cloud batch), and each vertex carries its colour (c) and its material (x = emission,
+// checker, highlight, water).
+const BAKED_VS = "attribute vec3 p; attribute vec3 n; attribute vec3 c; attribute vec4 x; uniform mat4 M; uniform mat4 VP;" +
+  "varying vec3 vn; varying vec3 wp; varying vec3 C; varying vec4 X;" +
+  "void main(){ vec4 w = M * vec4(p,1.0); wp = w.xyz; vn = mat3(M) * n; C = c; X = x; gl_Position = VP * w; }";
+
 // Cel shading: the sun term is quantized into BANDS hard steps between a cool shadow tone
 // and the lit tone; the hemisphere fill, the station lamps, the rim and a toon highlight are
-// stepped too, so every surface reads as flat painted colour.
-const FS = "precision mediump float; varying vec3 vn; varying vec3 wp;" +
-  "uniform vec3 C; uniform float A; uniform float E; uniform float G; uniform float S;" +
-  "uniform vec3 eye; uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyAmb; uniform vec3 gndAmb;" +
+// stepped too, so every surface reads as flat painted colour. W marks water: 1 = a pool with
+// moving ripple bands, 2 = a falling sheet with bands sliding down.
+function fragmentShader(baked) {
+  const head = baked
+    ? "#define E X.x\n#define G X.y\n#define S X.z\n#define W X.w\nprecision mediump float; varying vec3 vn; varying vec3 wp; varying vec3 C; varying vec4 X; uniform float A;"
+    : "precision mediump float; varying vec3 vn; varying vec3 wp; uniform vec3 C; uniform float A; uniform float E; uniform float G; uniform float S; uniform float W;";
+  return head +
+  "uniform vec3 eye; uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyAmb; uniform vec3 gndAmb; uniform float T;" +
   "uniform vec3 shadeTint; uniform vec3 rimCol; uniform vec3 fogc; uniform vec2 fogr;" +
   "uniform vec3 LP[10]; uniform vec4 LC[10];" +
   "const float BANDS = 3.0;" +
@@ -146,6 +192,9 @@ const FS = "precision mediump float; varying vec3 vn; varying vec3 wp;" +
   "void main(){ vec3 N = normalize(vn); vec3 V = normalize(eye - wp);" +
   " vec3 base = C;" +
   " if (G > 0.0) { float ch = mod(floor(wp.x * G) + floor(wp.z * G), 2.0); base *= 0.9 + 0.1 * ch; }" +
+  " if (W > 1.5) { base = mix(base, base * 1.5 + 0.12, step(0.62, fract(wp.y * 2.2 + T * 1.7 + floor(wp.x * 6.0 + wp.z * 6.0) * 0.37))); }" +
+  " else if (W > 0.5) { float wv = sin(wp.x * 3.1 + T * 1.3) + sin(wp.z * 2.7 - T * 1.1) + sin((wp.x + wp.z) * 2.1 + T * 0.7);" +
+  "  base = mix(base, base * 1.55 + 0.1, step(1.45, wv)); }" +
   " float b = cel(dot(N, sunDir) * 0.55 + 0.42);" +
   " vec3 amb = mix(gndAmb, skyAmb, step(0.0, N.y) * 0.5 + step(0.6, N.y) * 0.5);" +
   " vec3 col = mix(base * amb * shadeTint, base * (amb + sunCol), b);" +
@@ -154,9 +203,13 @@ const FS = "precision mediump float; varying vec3 vn; varying vec3 wp;" +
   "  col += (base * 0.8 + 0.12) * LC[i].rgb * (step(0.15, at) * 0.5 + step(0.5, at) * 0.5); }" +
   " float rim = 1.0 - max(dot(N, V), 0.0); col += rimCol * step(0.72, rim) * (0.3 + 0.7 * b);" +
   " vec3 H = normalize(sunDir + V); col += sunCol * step(0.96, dot(N, H)) * S;" +
-  " col += C * E;" +
+  " col += base * E;" +
   " float f = clamp((length(eye - wp) - fogr.x) / fogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +
   " gl_FragColor = vec4(mix(col, fogc, f * 0.6), A); }";
+}
+const FS = fragmentShader(false);
+const BAKED_FS = fragmentShader(true);
+const LIGHT_UNIFORMS = ["VP", "eye", "sunDir", "sunCol", "skyAmb", "gndAmb", "shadeTint", "rimCol", "fogc", "fogr", "LP", "LC", "T", "A", "M"];
 
 // Ink outlines: the same solid drawn again, back faces only, pushed out along its own
 // direction from the centre by about one low-res pixel (OL grows with distance so the line
@@ -168,6 +221,14 @@ const OUTLINE_VS = "attribute vec3 p; attribute vec3 n; uniform mat4 M; uniform 
 const OUTLINE_FS = "precision mediump float; varying float dist; uniform vec3 OC; uniform vec3 ofog; uniform vec2 ofogr;" +
   "void main(){ float f = clamp((dist - ofogr.x) / ofogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +
   " gl_FragColor = vec4(mix(OC, ofog, f * 0.6), 1.0); }";
+// ...and baked: n carries each solid's centre, c its ink colour.
+const BAKED_OUTLINE_VS = "attribute vec3 p; attribute vec3 n; attribute vec3 c; uniform mat4 M; uniform mat4 VP; uniform vec3 oeye; uniform float OL;" +
+  "varying float dist; varying vec3 ic;" +
+  "void main(){ vec4 w = M * vec4(p,1.0); vec3 ctr = (M * vec4(n,1.0)).xyz; vec3 dir = normalize(w.xyz - ctr + vec3(0.0, 0.0001, 0.0));" +
+  " dist = length(oeye - w.xyz); w.xyz += dir * OL * dist; ic = c; gl_Position = VP * w; }";
+const BAKED_OUTLINE_FS = "precision mediump float; varying float dist; varying vec3 ic; uniform vec3 ofog; uniform vec2 ofogr;" +
+  "void main(){ float f = clamp((dist - ofogr.x) / ofogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +
+  " gl_FragColor = vec4(mix(ic, ofog, f * 0.6), 1.0); }";
 
 // Sky: a gradient by the view ray's height (zenith, a glowing horizon band, the deep below
 // the floating island), a pixel sun/moon and stars that fade in at night.
@@ -175,13 +236,16 @@ const SKY_VS = "attribute vec3 p; uniform vec3 camF; uniform vec3 camR; uniform 
   "varying vec3 ray; void main(){ ray = camF + camR * p.x * tanH.x + camU * p.y * tanH.y; gl_Position = vec4(p.xy, 0.9999, 1.0); }";
 const SKY_FS = "#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n" +
   "varying vec3 ray; uniform vec3 zenith; uniform vec3 horizon; uniform vec3 glow; uniform vec3 deep;" +
-  "uniform vec3 skySun; uniform vec3 skySunCol; uniform float stars;" +
+  "uniform vec3 skySun; uniform vec3 skySunCol; uniform float stars; uniform float T;" +
   "void main(){ vec3 d = normalize(ray); float e = d.y;" +
   " vec3 col = e > 0.0 ? mix(horizon, zenith, pow(clamp(e * 1.6, 0.0, 1.0), 0.7)) : mix(horizon, deep, pow(clamp(-e * 2.2, 0.0, 1.0), 0.6));" +
   " col += glow * exp(-abs(e) * 9.0);" +
   " float s = dot(d, skySun); col = mix(col, skySunCol, step(0.9985, s)); col += skySunCol * step(0.99, s) * 0.18;" +
   " vec3 q = floor(d * 140.0); float h = fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453);" +
-  " col += vec3(0.85, 0.95, 1.0) * step(0.993, h) * stars * smoothstep(-0.25, 0.15, e);" +
+  " float tw = 0.65 + 0.35 * step(0.5, fract(h * 91.0 + T * 0.6));" +
+  " col += vec3(0.85, 0.95, 1.0) * step(0.993, h) * stars * tw * smoothstep(-0.25, 0.15, e);" +
+  " float band = sin(d.x * 3.0 + d.z * 2.0 + T * 0.05) * 0.5 + 0.5;" +
+  " col += vec3(0.10, 0.45, 0.42) * stars * 0.35 * step(0.72, band) * smoothstep(0.25, 0.6, e) * (1.0 - smoothstep(0.6, 0.95, e));" +
   " gl_FragColor = vec4(col, 1.0); }";
 
 // Sprites: soft blob shadows lying on the ground and additive light glows facing the camera,
@@ -193,6 +257,11 @@ const SPRITE_VS = "attribute vec3 p; uniform mat4 VP; uniform vec3 SC; uniform v
 const SPRITE_FS = "precision mediump float; varying vec2 uv; uniform vec3 SK; uniform float SA;" +
   "void main(){ float a = clamp(1.0 - length(uv), 0.0, 1.0); a = floor(a * 3.0 + 0.6) / 3.0; if (a <= 0.0) discard;" +
   " gl_FragColor = vec4(SK * a, a * SA); }";
+// ...and every static shadow in one buffer: p is the ground point, n = (u, v, alpha).
+const SHADOW_VS = "attribute vec3 p; attribute vec3 n; uniform mat4 VP; varying vec3 q; void main(){ q = n; gl_Position = VP * vec4(p, 1.0); }";
+const SHADOW_FS = "precision mediump float; varying vec3 q; uniform vec3 SK;" +
+  "void main(){ float a = clamp(1.0 - length(q.xy), 0.0, 1.0); a = floor(a * 3.0 + 0.6) / 3.0; if (a <= 0.0) discard;" +
+  " gl_FragColor = vec4(SK * a, a * q.z); }";
 
 // Upscale: the low-res scene, NEAREST-sampled onto the canvas, posterized with a 4x4
 // ordered (Bayer) dither in world pixels.
@@ -213,32 +282,57 @@ function makeProgram(gl, vs, fs, uniforms) {
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
-  const loc = { p: gl.getAttribLocation(prog, "p"), n: gl.getAttribLocation(prog, "n") };
+  const loc = { p: gl.getAttribLocation(prog, "p"), n: gl.getAttribLocation(prog, "n"),
+    c: gl.getAttribLocation(prog, "c"), x: gl.getAttribLocation(prog, "x") };
   for (const u of uniforms) loc[u] = gl.getUniformLocation(prog, u);
   return { prog, loc };
+}
+
+function uploadMesh(gl, mesh) {
+  const buf = (data) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data instanceof Float32Array ? data : new Float32Array(data), gl.STATIC_DRAW); return b; };
+  const out = { pb: buf(mesh.p), nb: buf(mesh.n), count: mesh.p.length / 3 };
+  if (mesh.c) out.cb = buf(mesh.c);
+  if (mesh.x) out.xb = buf(mesh.x);
+  return out;
+}
+
+// Build (or rebuild, after a lost context) everything a view keeps on the GPU.
+function initGL(view) {
+  const { gl } = view;
+  const sceneU = ["IS", "C", "E", "G", "S", "W"].concat(LIGHT_UNIFORMS);
+  view.solid = makeProgram(gl, VS, FS, sceneU);
+  if (!view.solid) return false;
+  view.baked = makeProgram(gl, BAKED_VS, BAKED_FS, LIGHT_UNIFORMS);
+  view.outline = makeProgram(gl, OUTLINE_VS, OUTLINE_FS, ["M", "VP", "oeye", "OL", "OC", "ofog", "ofogr"]);
+  view.bakedOutline = makeProgram(gl, BAKED_OUTLINE_VS, BAKED_OUTLINE_FS, ["M", "VP", "oeye", "OL", "ofog", "ofogr"]);
+  view.sky = makeProgram(gl, SKY_VS, SKY_FS, ["camF", "camR", "camU", "tanH", "zenith", "horizon", "glow", "deep", "skySun", "skySunCol", "stars", "T"]);
+  view.sprite = makeProgram(gl, SPRITE_VS, SPRITE_FS, ["VP", "SC", "SS", "SB", "camR", "camU", "SK", "SA"]);
+  view.shadowBatch = makeProgram(gl, SHADOW_VS, SHADOW_FS, ["VP", "SK"]);
+  view.blit = makeProgram(gl, BLIT_VS, BLIT_FS, ["T", "R", "VPX", "Q"]);
+  view.meshes = {};
+  for (const [k, m] of Object.entries(MESH_SRC)) view.meshes[k] = uploadMesh(gl, m);
+  const st = staticScene();
+  view.batches = {
+    land: uploadMesh(gl, st.land.solid), landInk: uploadMesh(gl, st.land.ink),
+    sky: uploadMesh(gl, st.sky.solid), skyInk: uploadMesh(gl, st.sky.ink),
+    shadows: uploadMesh(gl, st.shadows),
+  };
+  view.fb = null; view.fbFailed = false; view.lost = false;
+  return true;
 }
 
 function makeView(canvas, labels, opts) {
   let gl = null;
   try { gl = canvas.getContext("webgl", { antialias: false, alpha: false, premultipliedAlpha: false }); } catch (_) { gl = null; }
   if (!gl) return null;
-  const solid = makeProgram(gl, VS, FS, ["M", "VP", "IS", "C", "A", "E", "G", "S", "eye", "sunDir", "sunCol", "skyAmb",
-    "gndAmb", "shadeTint", "rimCol", "fogc", "fogr", "LP", "LC"]);
-  if (!solid) return null;
-  const outline = makeProgram(gl, OUTLINE_VS, OUTLINE_FS, ["M", "VP", "oeye", "OL", "OC", "ofog", "ofogr"]);
-  const sky = makeProgram(gl, SKY_VS, SKY_FS, ["camF", "camR", "camU", "tanH", "zenith", "horizon", "glow", "deep", "skySun", "skySunCol", "stars"]);
-  const sprite = makeProgram(gl, SPRITE_VS, SPRITE_FS, ["VP", "SC", "SS", "SB", "camR", "camU", "SK", "SA"]);
-  const blit = makeProgram(gl, BLIT_VS, BLIT_FS, ["T", "R", "VPX", "Q"]);
-  const upload = (mesh) => {
-    const pb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.p), gl.STATIC_DRAW);
-    const nb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, nb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.n), gl.STATIC_DRAW);
-    return { pb, nb, count: mesh.p.length / 3 };
-  };
-  const meshes = { box: upload(boxMesh()), cyl: upload(cylinderMesh()), cyl6: upload(cylinderMesh(7)), cone: upload(coneMesh()),
-    pyr: upload(coneMesh(4)), sph: upload(sphereMesh()), quad: upload(quadMesh()) };
-  const view = { canvas, labels, gl, solid, outline, sky, sprite, blit, meshes, opts, yaw: 0.6, pitch: opts.pitch || 0.5,
-    dist: opts.dist || 15, drag: null, labelNodes: {}, visible: false, raf: 0, last: 0, lastDraw: 0, fb: null, fbFailed: false };
+  const view = { canvas, labels, gl, opts, yaw: 0.6, pitch: opts.pitch || 0.5,
+    dist: opts.dist || 15, target: [0, 0.7, 0], drag: null, pointers: {}, labelNodes: {}, visible: false, raf: 0, last: 0,
+    lastDraw: 0, fb: null, fbFailed: false, perf: { ema: 0, boost: 0, slow: 0, fast: 0, draws: 0, ms: 0 }, follow: "" };
+  if (!initGL(view)) return null;
   canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); view.lost = true; });
+  canvas.addEventListener("webglcontextrestored", () => {   // sleep / GPU switch: build it all again
+    if (initGL(view) && view.visible) { view.raf = 0; loop(view); }
+  });
   return view;
 }
 
@@ -274,10 +368,15 @@ function ensureTarget(view, lw, lh) {
   return view.fb;
 }
 
+// Bind a mesh's buffers to whatever attributes this program has; leave every other array off.
 function bindMesh(gl, loc, m) {
-  gl.bindBuffer(gl.ARRAY_BUFFER, m.pb); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(loc.p);
-  if (loc.n >= 0) { gl.bindBuffer(gl.ARRAY_BUFFER, m.nb); gl.vertexAttribPointer(loc.n, 3, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(loc.n); }
-  for (let i = 0; i < 4; i++) if (i !== loc.p && i !== loc.n) gl.disableVertexAttribArray(i);
+  const used = [];
+  const on = (l, b, size) => {
+    if (l < 0 || !b) return;
+    gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(l); used.push(l);
+  };
+  on(loc.p, m.pb, 3); on(loc.n, m.nb, 3); on(loc.c, m.cb, 3); on(loc.x, m.xb, 4);
+  for (let i = 0; i < 6; i++) if (!used.includes(i)) gl.disableVertexAttribArray(i);
 }
 
 // ---------------------------------------------------------------- the place
@@ -292,6 +391,7 @@ const STATION_LAYOUT = {
 };
 const STATE_COLOR = { working: "#8fb3d9", waiting: "#9aa0aa", blocked: "#ff7777", done: "#a3be8c", failed: "#bf616a", idle: "#9aa0aa" };
 const ISLAND = 9.6;   // radius of the island's grass top
+const PLAZA_R = 2.9;  // agents walk round the plaza on this ring (the pool is in the middle)
 
 // Palettes for the night (LOKI's navy/teal) and the day (brighter teal), blended gently by
 // the local clock - it shifts the tint, it never turns the world into a different place.
@@ -310,9 +410,14 @@ function stationPos(name) {
   const s = STATION_LAYOUT[name] || STATION_LAYOUT.workshop;
   return s.pos;
 }
+function stationFrame(name) {   // where a station is, which way is out (u) and along its desk (tg)
+  const [x, z] = stationPos(name), len = Math.hypot(x, z) || 1;
+  const u = [x / len, z / len];
+  return { x, z, u, tg: [u[1], -u[0]], ang: Math.atan2(x, z), len };
+}
 
-// The scenery that never changes: trees, rocks, lamp posts and clouds, scattered once with a
-// fixed seed, kept off the paths, the plaza and the stations.
+// The scenery that never changes: trees, rocks, lamp posts, flowers, benches, the waterfall
+// and clouds, scattered once with a fixed seed, kept off the paths, the plaza and the stations.
 const SCENERY = (function () {
   const rnd = seeded(1729);
   const stations = Object.values(STATION_LAYOUT).map((s) => s.pos);
@@ -325,83 +430,91 @@ const SCENERY = (function () {
     }
     return true;
   };
-  const trees = [], rocks = [], lamps = [], clouds = [];
+  const trees = [], rocks = [], lamps = [], clouds = [], flowers = [], tufts = [], islets = [], crystals = [];
+  // the waterfall: a little pond near the edge in the first clear spot, a stream to the rim
+  let fall = null;
+  for (let i = 0; i < 64 && !fall; i++) {
+    const a = 2.3 + i * 0.37, r = ISLAND - 1.4;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (clear(x, z, 0.5)) fall = { a, x, z };
+  }
   for (let i = 0; i < 400 && trees.length < 16; i++) {
     const a = rnd() * Math.PI * 2, r = 4 + rnd() * (ISLAND - 4.8);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!clear(x, z, 0.2) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 1.3)) continue;
+    if (fall && Math.hypot(fall.x - x, fall.z - z) < 1.6) continue;
     trees.push({ x, z, h: 0.8 + rnd() * 0.6, kind: rnd() < 0.6 ? 0 : 1, ry: rnd() * 6 });
   }
   for (let i = 0; i < 300 && rocks.length < 9; i++) {
     const a = rnd() * Math.PI * 2, r = 3.5 + rnd() * (ISLAND - 4);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!clear(x, z, 0) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 0.9)) continue;
+    if (fall && Math.hypot(fall.x - x, fall.z - z) < 1.6) continue;
     rocks.push({ x, z, s: 0.3 + rnd() * 0.45, ry: rnd() * 6 });
   }
   for (const name of ["library", "review desk", "terminal"]) {   // lamps halfway along three paths
     const [sx, sz] = STATION_LAYOUT[name].pos, len = Math.hypot(sx, sz);
     lamps.push({ x: sx * 0.5 + sz / len * 0.75, z: sz * 0.5 - sx / len * 0.75 });
   }
+  const busy = (x, z, d) => trees.some((t) => Math.hypot(t.x - x, t.z - z) < d) || rocks.some((t) => Math.hypot(t.x - x, t.z - z) < d) ||
+    (fall && Math.hypot(fall.x - x, fall.z - z) < 1.3);
+  const FLOWER = [[1.0, 0.55, 0.75], [1.0, 0.86, 0.35], [0.95, 0.95, 1.0], [0.70, 0.60, 1.0]];
+  for (let i = 0; i < 900 && flowers.length < 34; i++) {
+    const a = rnd() * Math.PI * 2, r = 3.9 + rnd() * (ISLAND - 4.5), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (!clear(x, z, -0.2) || busy(x, z, 0.5)) continue;
+    flowers.push({ x, z, c: FLOWER[Math.floor(rnd() * FLOWER.length)], h: 0.12 + rnd() * 0.1 });
+  }
+  for (let i = 0; i < 900 && tufts.length < 60; i++) {
+    const a = rnd() * Math.PI * 2, r = 3.7 + rnd() * (ISLAND - 4.1), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (!clear(x, z, -0.4) || busy(x, z, 0.35)) continue;
+    tufts.push({ x, z, s: 0.16 + rnd() * 0.14, ry: rnd() * 6 });
+  }
   for (let i = 0; i < 4; i++) clouds.push({ a: i * 1.6 + rnd(), r: 15 + rnd() * 4, y: 6.5 + rnd() * 2.5, s: 0.7 + rnd() * 0.5 });
-  return { trees, rocks, lamps, clouds };
+  for (let i = 0; i < 3; i++) islets.push({ a: i * 2.1 + 0.7 + rnd(), r: 13 + rnd() * 3, y: -1.5 + rnd() * 3, s: 0.8 + rnd() * 0.5 });
+  for (let i = 0; i < 7; i++) {
+    const a = rnd() * Math.PI * 2, r = 2 + rnd() * 5.5;
+    crystals.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: -1.4 - rnd() * (2.6 - r * 0.25), h: 0.6 + rnd() * 0.8, ry: rnd() * 6 });
+  }
+  // plaza life: benches and team banner spots in the gaps between the paths
+  const angs = Object.entries(STATION_LAYOUT).filter(([n]) => n !== "hall").map(([, s]) => Math.atan2(s.pos[1], s.pos[0])).sort((a, b) => a - b);
+  const gaps = angs.map((a, i) => { const b = i + 1 < angs.length ? angs[i + 1] : angs[0] + Math.PI * 2; return (a + b) / 2; });
+  const benches = gaps.filter((_, i) => i % 2 === 0).map((a) => ({ a, x: Math.cos(a) * 2.75, z: Math.sin(a) * 2.75 }));
+  const banners = gaps.map((a, i) => ({ a: a + (i % 2 === 0 ? 0.32 : 0), x: Math.cos(a + (i % 2 === 0 ? 0.32 : 0)) * 3.35, z: Math.sin(a + (i % 2 === 0 ? 0.32 : 0)) * 3.35 }));
+  const spots = gaps.map((a) => [Math.cos(a - 0.25) * 2.35, Math.sin(a - 0.25) * 2.35]);   // where wanderers stand
+  return { trees, rocks, lamps, clouds, flowers, tufts, islets, crystals, fall, benches, banners, spots };
 })();
 
-function syncAgents(list) {
-  const seen = new Set();
-  const counts = {};
-  for (const a of list || []) {
-    seen.add(a.id);
-    const base = stationPos(a.station);
-    const i = counts[a.station] = (counts[a.station] || 0) + 1;
-    const offset = i === 1 ? [0, 1.25] : [Math.cos(i * 2.1) * 1.3, Math.sin(i * 2.1) * 1.3];
-    const target = [base[0] + offset[0], base[1] + offset[1]];
-    let w = World.agents[a.id];
-    if (!w) {
-      const hall = stationPos("hall");
-      w = World.agents[a.id] = { x: hall[0] + (Math.random() - 0.5), z: hall[1] + (Math.random() - 0.5), ry: 0, phase: Math.random() * 6, said: "", saidAt: 0 };
+// ---------------------------------------------------------------- baking the static scene
+// Static solids go through the same description as dynamic ones ({mesh, pos, ry, s, color,
+// e, g, s2, w, line}); bake() transforms them into world space once.
+function bake(list) {
+  const P = [], N = [], C = [], X = [], OP = [], ON = [], OC = [];
+  const inkc = [0.03, 0.03, 0.10];
+  for (const o of list) {
+    const src = MESH_SRC[o.mesh], M = M4.trs(o.pos, o.ry, o.s);
+    const is = [1 / (o.s[0] * o.s[0]), 1 / (o.s[1] * o.s[1]), 1 / (o.s[2] * o.s[2])];
+    const order = o.s[0] * o.s[1] * o.s[2] < 0 ? [0, 2, 1] : [0, 1, 2];   // mirrored: keep it front-facing
+    const mat = [o.e || 0, o.g || 0, o.s2 == null ? 0.3 : o.s2, o.w || 0];
+    const ink = mix3(inkc, o.color, 0.22), lined = o.line !== false;
+    for (let t = 0; t < src.p.length; t += 9) for (const k of order) {
+      const i = t + k * 3, px = src.p[i], py = src.p[i + 1], pz = src.p[i + 2];
+      const wx = M[0] * px + M[4] * py + M[8] * pz + M[12], wy = M[1] * px + M[5] * py + M[9] * pz + M[13], wz = M[2] * px + M[6] * py + M[10] * pz + M[14];
+      const nx = src.n[i] * is[0], ny = src.n[i + 1] * is[1], nz = src.n[i + 2] * is[2];
+      const wn = norm([M[0] * nx + M[4] * ny + M[8] * nz, M[1] * nx + M[5] * ny + M[9] * nz, M[2] * nx + M[6] * ny + M[10] * nz]);
+      P.push(wx, wy, wz); N.push(wn[0], wn[1], wn[2]); C.push(o.color[0], o.color[1], o.color[2]); X.push(mat[0], mat[1], mat[2], mat[3]);
+      if (lined) { OP.push(wx, wy, wz); ON.push(o.pos[0], o.pos[1], o.pos[2]); OC.push(ink[0], ink[1], ink[2]); }
     }
-    w.data = a;
-    w.tx = target[0]; w.tz = target[1];
-    w.color = hexRgb(a.color, hexRgb(a.id === "loki" ? "#2ee6d6" : (STATION_LAYOUT[a.station] || {}).color, [0.6, 0.7, 0.85]));
-    if (a.last_message && a.last_message !== w.said) { w.said = a.last_message; w.saidAt = performance.now(); }
   }
-  for (const id of Object.keys(World.agents)) if (!seen.has(id)) delete World.agents[id];
+  return { solid: { p: new Float32Array(P), n: new Float32Array(N), c: new Float32Array(C), x: new Float32Array(X) },
+    ink: { p: new Float32Array(OP), n: new Float32Array(ON), c: new Float32Array(OC) } };
 }
 
-async function fetchWorld() {
-  if (World.fetching || typeof state === "undefined" || !state.token) return;
-  World.fetching = true;
-  try {
-    const data = await api("/world");
-    if (data && data.ok) { World.data = data; syncAgents(data.agents); renderLegend(); }
-  } catch (_) { /* engine restarting */ }
-  World.fetching = false;
-  World.lastFetch = performance.now();
-}
-
-function renderLegend() {
-  const box = document.getElementById("world-legend");
-  if (!box || !World.data) return;
-  box.replaceChildren();
-  for (const a of World.data.agents) {
-    const row = el("div", "legend-row");
-    const dot = el("span", "agent-dot");
-    dot.style.background = a.color || STATE_COLOR[a.state] || "#8fb3d9";
-    row.append(dot, el("b", "", a.name), el("span", "pill " + (a.state === "working" ? "working" : a.state === "blocked" ? "blocked" : a.state === "done" ? "done" : ""), a.state),
-               el("span", "muted", (a.station || "") + (a.task ? " · " + a.task : "")));
-    box.append(row);
-  }
-}
-
-// ---------------------------------------------------------------- building the scene
-// Each frame collects what to draw (solids, see-through solids, shadows, glows, lights) and
-// then draws it in passes: sky, ink outlines, cel-shaded solids, shadows, glows.
-function sceneList(view, t, dt) {
-  const L = { solids: [], clear: [], shadows: [], glows: [], lights: [] };
-  const solid = (mesh, pos, ry, s, color, o) => (o && o.a < 1 ? L.clear : L.solids).push(Object.assign({ mesh, pos, ry, s, color }, o || {}));
-  const shadow = (x, z, r, a) => L.shadows.push({ x, z, r, a: Math.min(1, (a == null ? 0.5 : a) * 1.3) });
-  const glow = (pos, r, color, a) => L.glows.push({ pos, r, color, a: a == null ? 1 : a });
-  const light = (pos, color, radius) => L.lights.push({ pos, color, radius });
+let STATIC = null;
+function staticScene() {
+  if (STATIC) return STATIC;
+  const land = [], sky = [], shadows = [], lights = [], glows = [];
+  const solid = (mesh, pos, ry, s, color, o) => land.push(Object.assign({ mesh, pos, ry, s, color }, o || {}));
+  const shadow = (x, z, r, a) => shadows.push({ x, z, r, a: Math.min(1, (a == null ? 0.5 : a) * 1.3) });
   const ink = { line: false };
 
   // the island: grass top with a soft checker, a band of earth, a faceted rock cone below
@@ -409,25 +522,22 @@ function sceneList(view, t, dt) {
   solid("cyl6", [0, -0.75, 0], 0.3, [ISLAND * 2 - 0.2, 0.75, ISLAND * 2 - 0.2], [0.55, 0.34, 0.30]);
   solid("cone", [0, -3.6, 0], 0.5, [ISLAND * 1.9, 5.0, ISLAND * 1.9].map((v, i) => (i === 1 ? -v : v)), [0.36, 0.26, 0.42], { line: false });
   solid("cone", [0, -3.4, 0], 2.1, [ISLAND * 1.55, -4.6, ISLAND * 1.55], [0.30, 0.22, 0.40], { line: false });
-  // the plaza and the paths
+  for (const c of SCENERY.crystals) {   // LOKI-teal crystals hanging under the island
+    solid("pyr", [c.x, c.y, c.z], c.ry, [0.45 * c.h, -1.3 * c.h, 0.45 * c.h], [0.25, 0.95, 0.88], { e: 0.75, line: false });
+    glows.push({ pos: [c.x, c.y - 0.4 * c.h, c.z], r: 0.7 * c.h, color: [0.2, 0.9, 0.85], a: 0.45 });
+  }
+  // the plaza, with a reflecting pool round the conductor's spire
   solid("cyl", [0, 0.02, 0], 0, [7.2, 0.06, 7.2], [0.62, 0.62, 0.78], Object.assign({ g: 1.4 }, ink));
-  solid("cyl", [0, 0.05, 0], 0, [3.2, 0.04, 3.2], [0.12, 0.22, 0.42], ink);
+  solid("cyl", [0, 0.05, 0], 0, [3.2, 0.04, 3.2], [0.12, 0.22, 0.42], { w: 1, s2: 0.6 });
+  solid("cyl", [0, 0.045, 0], 0, [3.5, 0.03, 3.5], [0.75, 0.74, 0.86], ink);
+  // the conductor's spire: an L-shaped mark, LOKI's sign (its beacon is dynamic)
+  solid("box", [-0.25, 1.3, 0], 0, [0.36, 2.6, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
+  solid("box", [0.2, 0.2, 0], 0, [1.2, 0.36, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
 
   for (const [name, st] of Object.entries(STATION_LAYOUT)) {
-    const [x, z] = st.pos;
+    if (name === "hall") continue;
+    const f = stationFrame(name), { x, z, ang, len } = f, [ux, uz] = f.u, [tx, tz] = f.tg;
     const c = hexRgb(st.color, [0.5, 0.6, 0.7]);
-    const busy = Object.values(World.agents).some((a) => a.data && a.data.station === name && a.data.state === "working");
-    if (name === "hall") {
-      // the conductor's spire: an L-shaped mark, LOKI's sign, with a beacon on top
-      solid("box", [x - 0.25, 1.3, z], 0, [0.36, 2.6, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
-      solid("box", [x + 0.2, 0.2, z], 0, [1.2, 0.36, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
-      const by = 2.85 + Math.sin(t * 1.4) * 0.08;
-      solid("sph", [x - 0.25, by, z], 0, [0.36, 0.36, 0.36], [0.6, 1, 0.95], { e: 1.1, line: false });
-      glow([x - 0.25, by, z], 1.1, [0.3, 1, 0.9], 0.8);
-      light([x - 0.25, 2.2, z], [0.1, 0.5, 0.48], 3.4);
-      continue;
-    }
-    const len = Math.hypot(x, z), ux = x / len, uz = z / len, ang = Math.atan2(x, z);
     solid("box", [x / 2, 0.015, z / 2], ang, [0.9, 0.03, len], [0.70, 0.66, 0.80], ink);
     for (let k = 1; k < 5; k++) solid("box", [x * k / 5 + uz * 0.55, 0.035, z * k / 5 - ux * 0.55], ang + k, [0.22, 0.03, 0.22], [0.58, 0.55, 0.70], ink);
     solid("cyl", [x, 0.03, z], 0, [2.6, 0.06, 2.6], mix3(c, [0.6, 0.6, 0.75], 0.55), ink);
@@ -438,18 +548,50 @@ function sceneList(view, t, dt) {
     solid("box", [bx - ux * 0.66 + uz * 0.38, 0.62, bz - uz * 0.66 - ux * 0.38], rot, [0.42, 0.34, 0.04], [1.0, 0.82, 0.45], { e: 0.9, line: false });
     solid("box", [bx - ux * 0.66 - uz * 0.3, 0.33, bz - uz * 0.66 + ux * 0.3], rot, [0.34, 0.66, 0.06], [0.36, 0.22, 0.20], { line: false });
     shadow(bx + 0.25, bz - 0.2, 1.4, 0.45);
-    // the desk the agent works at, and the station lamp
+    // the desk the agent works at
     solid("box", [x, 0.48, z], ang, [1.4, 0.12, 0.75], [0.62, 0.38, 0.26]);
-    solid("box", [x - 0.55, 0.22, z], ang, [0.1, 0.44, 0.1], [0.40, 0.25, 0.18]);
-    solid("box", [x + 0.55, 0.22, z], ang, [0.1, 0.44, 0.1], [0.40, 0.25, 0.18]);
+    solid("box", [x - tx * 0.55, 0.22, z - tz * 0.55], ang, [0.1, 0.44, 0.1], [0.40, 0.25, 0.18]);
+    solid("box", [x + tx * 0.55, 0.22, z + tz * 0.55], ang, [0.1, 0.44, 0.1], [0.40, 0.25, 0.18]);
     shadow(x, z, 0.95, 0.35);
+    // the station lamp post (its orb is dynamic: it brightens when someone works here)
     const lx = x - uz * 1.0 + ux * 0.6, lz = z + ux * 1.0 + uz * 0.6;
     solid("cyl6", [lx, 0.7, lz], 0, [0.09, 1.4, 0.09], [0.16, 0.18, 0.28]);
-    const oy = 1.55 + Math.sin(t * 1.4 + x) * 0.05;
-    solid("sph", [lx, oy, lz], 0, [0.32, 0.32, 0.32], mix3(c, [1, 1, 1], 0.25), { e: busy ? 1.1 : 0.55, line: false });
-    glow([lx, oy, lz], busy ? 1.2 : 0.8, c, busy ? 0.9 : 0.55);
-    light([lx, 1.2, lz], scale3(c, busy ? 0.95 : 0.55), busy ? 3.8 : 3.0);
     shadow(lx, lz, 0.3, 0.4);
+    // what each station works with
+    const top = 0.56, at = (along, out, y) => [x + tx * along + ux * out, y, z + tz * along + uz * out];
+    if (name === "library") {
+      const sx = x + tx * 1.35 + ux * 0.4, sz = z + tz * 1.35 + uz * 0.4;
+      solid("box", [sx, 0.6, sz], ang, [0.35, 1.2, 0.9], [0.45, 0.28, 0.20]);
+      const books = [[0.85, 0.3, 0.3], [0.3, 0.55, 0.9], [0.95, 0.8, 0.3], [0.4, 0.8, 0.5]];
+      for (let r = 0; r < 3; r++) for (let b = 0; b < 4; b++) {
+        solid("box", [sx - ux * 0.12 + tx * (b - 1.5) * 0.18, 0.28 + r * 0.33, sz - uz * 0.12 + tz * (b - 1.5) * 0.18], ang,
+          [0.14, 0.24, 0.13], books[(b + r) % 4], { line: false });
+      }
+      shadow(sx, sz, 0.6, 0.35);
+      solid("box", at(0.35, 0.05, top + 0.04), ang + 0.3, [0.32, 0.06, 0.24], [0.9, 0.86, 0.75]);
+    } else if (name === "drafting table") {
+      solid("box", at(0, 0.05, top + 0.02), ang, [1.1, 0.03, 0.55], [0.55, 0.75, 1.0], { e: 0.25, line: false });
+      solid("box", at(0.15, 0.0, top + 0.04), ang + 0.4, [0.5, 0.01, 0.04], [1, 1, 1], { e: 0.6, line: false });
+      solid("box", at(-0.25, 0.1, top + 0.04), ang - 0.2, [0.04, 0.01, 0.4], [1, 1, 1], { e: 0.6, line: false });
+    } else if (name === "workshop") {
+      const ax = x + tx * 1.25, az = z + tz * 1.25;
+      solid("box", [ax, 0.18, az], ang, [0.34, 0.36, 0.3], [0.30, 0.30, 0.38]);
+      solid("box", [ax, 0.42, az], ang, [0.6, 0.14, 0.3], [0.38, 0.40, 0.50]);
+      solid("box", [x - tx * 1.3 + ux * 0.3, 0.25, z - tz * 1.3 + uz * 0.3], ang + 0.4, [0.5, 0.5, 0.5], [0.70, 0.52, 0.30]);
+      shadow(ax, az, 0.45, 0.35);
+      solid("box", [bx + tx * 0.35 + ux * 0.2, 1.8, bz + tz * 0.35 + uz * 0.2], rot, [0.22, 0.6, 0.22], [0.55, 0.40, 0.36]);   // chimney
+    } else if (name === "test bench") {
+      for (let k = 0; k < 4; k++) {
+        solid("cyl6", at(-0.45 + k * 0.3, 0.05, top + 0.12), 0, [0.12, 0.22, 0.12], [[0.4, 1, 0.8], [1, 0.8, 0.3], [0.5, 0.7, 1], [1, 0.5, 0.7]][k], { e: 0.5, line: false });
+      }
+    } else if (name === "review desk") {
+      solid("box", at(-0.35, 0.05, top + 0.08), ang, [0.36, 0.16, 0.26], [0.95, 0.93, 0.85]);
+      solid("box", at(0.3, 0.05, top + 0.05), ang + 0.2, [0.34, 0.06, 0.26], [0.95, 0.93, 0.85]);
+    } else if (name === "terminal") {
+      solid("box", at(0, 0.18, top + 0.3), ang, [0.8, 0.5, 0.08], [0.15, 0.17, 0.25]);
+      solid("box", at(0, 0.13, top + 0.3), ang, [0.68, 0.38, 0.02], [0.3, 0.6, 1.0], { e: 0.9, line: false });
+      solid("box", at(0, -0.1, top + 0.02), ang, [0.55, 0.03, 0.2], [0.25, 0.27, 0.36]);
+    }
   }
 
   for (const tr of SCENERY.trees) {
@@ -472,90 +614,501 @@ function sceneList(view, t, dt) {
     solid("cyl6", [lp.x, 0.75, lp.z], 0, [0.1, 1.5, 0.1], [0.16, 0.18, 0.28]);
     solid("box", [lp.x, 1.55, lp.z], 0, [0.26, 0.26, 0.26], [1.0, 0.78, 0.40], { e: 1.0 });
     solid("pyr", [lp.x, 1.78, lp.z], Math.PI / 4, [0.42, 0.2, 0.42], [0.16, 0.18, 0.28]);
-    glow([lp.x, 1.55, lp.z], 0.85, [1.0, 0.7, 0.35], 0.75);
-    light([lp.x, 1.3, lp.z], [0.7, 0.45, 0.2], 2.3);
+    glows.push({ pos: [lp.x, 1.55, lp.z], r: 0.85, color: [1.0, 0.7, 0.35], a: 0.75 });
+    lights.push({ pos: [lp.x, 1.3, lp.z], color: [0.7, 0.45, 0.2], radius: 2.3, pri: 0 });
     shadow(lp.x, lp.z, 0.3, 0.4);
   }
-  for (const cl of SCENERY.clouds) {
-    const a = cl.a + (World.reduced ? 0 : t * 0.01);
-    const cx = Math.cos(a) * cl.r, cz = Math.sin(a) * cl.r, s = cl.s;
-    solid("sph", [cx, cl.y, cz], a, [1.6 * s, 0.9 * s, 1.2 * s], [0.92, 0.95, 1.0], { e: 0.1 });
-    solid("sph", [cx + 0.8 * s, cl.y - 0.15, cz + 0.2], a, [1.1 * s, 0.7 * s, 0.9 * s], [0.92, 0.95, 1.0], { e: 0.1 });
-    solid("sph", [cx - 0.8 * s, cl.y - 0.2, cz - 0.1], a, [1.0 * s, 0.6 * s, 0.8 * s], [0.92, 0.95, 1.0], { e: 0.1 });
+  for (const f of SCENERY.flowers) {
+    solid("cyl6", [f.x, f.h / 2, f.z], 0, [0.03, f.h, 0.03], [0.2, 0.55, 0.3], ink);
+    solid("sph4", [f.x, f.h + 0.04, f.z], 0, [0.12, 0.09, 0.12], f.c, { e: 0.15, line: false });
+  }
+  for (const t of SCENERY.tufts) solid("pyr", [t.x, t.s * 0.4, t.z], t.ry, [t.s, t.s * 0.9, t.s], [0.14, 0.50, 0.32], ink);
+  for (const b of SCENERY.benches) {
+    const ry = Math.atan2(b.x, b.z) + Math.PI / 2;
+    solid("box", [b.x, 0.3, b.z], ry, [0.9, 0.08, 0.32], [0.62, 0.42, 0.28]);
+    solid("box", [b.x + Math.sin(ry - Math.PI / 2) * 0.14, 0.5, b.z + Math.cos(ry - Math.PI / 2) * 0.14], ry, [0.9, 0.3, 0.06], [0.55, 0.36, 0.24]);
+    for (const s of [-0.36, 0.36]) solid("box", [b.x + Math.sin(ry) * s, 0.14, b.z + Math.cos(ry) * s], ry, [0.07, 0.28, 0.28], [0.28, 0.24, 0.30], ink);
+    shadow(b.x, b.z, 0.55, 0.35);
+  }
+  const fl = SCENERY.fall;
+  if (fl) {   // pond, stream to the rim, and the falling sheet over the edge
+    const ux = Math.cos(fl.a), uz = Math.sin(fl.a), ry = Math.atan2(ux, uz);
+    solid("cyl", [fl.x, 0.02, fl.z], 0, [1.5, 0.05, 1.5], [0.16, 0.36, 0.62], { w: 1, s2: 0.6, line: false });
+    solid("cyl6", [fl.x, 0.01, fl.z], 0.2, [1.75, 0.04, 1.75], [0.58, 0.58, 0.72]);
+    const run = ISLAND - Math.hypot(fl.x, fl.z);
+    solid("box", [fl.x + ux * run / 2, 0.025, fl.z + uz * run / 2], ry, [0.42, 0.04, run], [0.18, 0.40, 0.68], { w: 1, s2: 0.6, line: false });
+    solid("box", [ux * (ISLAND + 0.04), -2.8, uz * (ISLAND + 0.04)], ry, [0.42, 5.6, 0.1], [0.40, 0.70, 0.95], { w: 2, e: 0.15, line: false });
+    glows.push({ pos: [ux * (ISLAND + 0.1), -5.6, uz * (ISLAND + 0.1)], r: 0.9, color: [0.6, 0.85, 1.0], a: 0.4 });
   }
 
+  // the sky batch (turned slowly as one): clouds and little floating islets
+  const ssolid = (mesh, pos, ry, s, color, o) => sky.push(Object.assign({ mesh, pos, ry, s, color }, o || {}));
+  for (const cl of SCENERY.clouds) {
+    const a = cl.a, cx = Math.cos(a) * cl.r, cz = Math.sin(a) * cl.r, s = cl.s;
+    ssolid("sph", [cx, cl.y, cz], a, [1.6 * s, 0.9 * s, 1.2 * s], [0.92, 0.95, 1.0], { e: 0.1 });
+    ssolid("sph", [cx + 0.8 * s, cl.y - 0.15, cz + 0.2], a, [1.1 * s, 0.7 * s, 0.9 * s], [0.92, 0.95, 1.0], { e: 0.1 });
+    ssolid("sph", [cx - 0.8 * s, cl.y - 0.2, cz - 0.1], a, [1.0 * s, 0.6 * s, 0.8 * s], [0.92, 0.95, 1.0], { e: 0.1 });
+  }
+  for (const is of SCENERY.islets) {
+    const x = Math.cos(is.a) * is.r, z = Math.sin(is.a) * is.r, s = is.s;
+    ssolid("cyl6", [x, is.y, z], is.a, [1.6 * s, 0.25 * s, 1.6 * s], [0.12, 0.58, 0.36]);
+    ssolid("cone", [x, is.y - 0.75 * s, z], is.a, [1.5 * s, -1.3 * s, 1.5 * s], [0.36, 0.26, 0.42], { line: false });
+    ssolid("cone", [x + 0.2 * s, is.y + 0.45 * s, z], is.a, [0.6 * s, 0.7 * s, 0.6 * s], [0.24, 0.78, 0.34]);
+  }
+
+  // every static shadow in one buffer of ground quads
+  const sp = [], sn = [];
+  const Q = MESH_SRC.quad.p;
+  for (const s of shadows) for (let i = 0; i < Q.length; i += 3) {
+    sp.push(s.x + Q[i] * s.r, 0.075, s.z + Q[i + 1] * s.r); sn.push(Q[i], Q[i + 1], s.a);
+  }
+  STATIC = { land: bake(land), sky: bake(sky), shadows: { p: new Float32Array(sp), n: new Float32Array(sn) }, lights, glows,
+    count: land.length + sky.length };
+  return STATIC;
+}
+
+// ---------------------------------------------------------------- agents: data -> life
+function seatFor(id) {
+  for (const [k, who] of Object.entries(World.seats)) if (who === id) return Number(k);
+  for (let i = 0; i < SCENERY.benches.length * 2; i++) if (!World.seats[i]) { World.seats[i] = id; return i; }
+  return -1;
+}
+function seatPos(i) {
+  const b = SCENERY.benches[Math.floor(i / 2)], ry = Math.atan2(b.x, b.z) + Math.PI / 2, s = i % 2 ? 0.22 : -0.22;
+  return { x: b.x + Math.sin(ry) * s - Math.sin(ry - Math.PI / 2) * 0.02, z: b.z + Math.cos(ry) * s - Math.cos(ry - Math.PI / 2) * 0.02, face: ry + Math.PI / 2 };
+}
+function freeSeat(id) { for (const k of Object.keys(World.seats)) if (World.seats[k] === id) delete World.seats[k]; }
+
+// Walk round the plaza ring instead of through the pool: from where you are to the ring,
+// along it, then out along the target's path.
+function routeTo(a, tx, tz) {
+  const pts = [];
+  const ra = Math.hypot(a.x, a.z), rb = Math.hypot(tx, tz);
+  let aa = Math.atan2(a.z, a.x);
+  const ab = Math.atan2(tz, tx);
+  if (ra > PLAZA_R + 0.3 || ra < PLAZA_R - 0.6) pts.push([Math.cos(aa) * PLAZA_R, Math.sin(aa) * PLAZA_R]);
+  let d = ab - aa;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const steps = Math.floor(Math.abs(d) / 0.55);
+  for (let i = 1; i <= steps; i++) { aa += d / (steps + 1); pts.push([Math.cos(aa) * PLAZA_R, Math.sin(aa) * PLAZA_R]); }
+  if (rb > PLAZA_R + 0.3) pts.push([Math.cos(ab) * PLAZA_R, Math.sin(ab) * PLAZA_R]);
+  pts.push([tx, tz]);
+  a.route = pts;
+  a.goal = [tx, tz];
+}
+
+function syncAgents(list) {
+  const seen = new Set();
+  const counts = {};
+  const now = performance.now();
+  for (const a of list || []) {
+    seen.add(a.id);
+    let w = World.agents[a.id];
+    if (!w) {
+      const hall = stationPos("hall"), r = Math.random() * 6;
+      w = World.agents[a.id] = { x: hall[0] + Math.cos(r) * 2.4, z: hall[1] + Math.sin(r) * 2.4, ry: 0, phase: Math.random() * 6,
+        said: "", saidAt: 0, route: [], goal: null, wanderAt: 0, stateAt: now, prevState: "" };
+    }
+    if (w.data && w.data.state !== a.state) {
+      w.stateAt = now;
+      if (a.state === "done") w.cheerAt = now;
+    }
+    w.data = a;
+    w.color = hexRgb(a.color, hexRgb(a.id === "loki" ? "#2ee6d6" : (STATION_LAYOUT[a.station] || {}).color, [0.6, 0.7, 0.85]));
+    if (a.last_message && a.last_message !== w.said) { w.said = a.last_message; w.saidAt = now; }
+    // where to be: at the station's desk while the work is live; done or idle agents drift off
+    // to the plaza (after a moment), sit on a bench, or wander - that part is only ambience.
+    const i = counts[a.station] = (counts[a.station] || 0) + 1;
+    const f = stationFrame(a.station);
+    let tx, tz;
+    const atDesk = a.id === "loki" ? a.state === "working" : ["working", "waiting", "blocked"].includes(a.state) ||
+      (a.state !== "idle" && now - w.stateAt < 8000);
+    const mode = atDesk ? "desk" : "free";
+    if (w.mode !== mode && mode === "free") w.wanderAt = 0;   // just finished: head off now
+    w.mode = mode;
+    if (a.id === "loki" && atDesk) {
+      tx = 0.9; tz = 1.75;
+    } else if (atDesk) {
+      const side = i === 1 ? 0 : (i % 2 ? 1 : -1) * Math.ceil((i - 1) / 2) * 0.85;
+      const row = i > 5 ? 0.9 : 0;
+      tx = f.x - f.u[0] * (1.05 + row) + f.tg[0] * side; tz = f.z - f.u[1] * (1.05 + row) + f.tg[1] * side;
+    }
+    if (atDesk) {
+      freeSeat(a.id);
+      w.seat = -1;
+      if (!w.goal || Math.hypot(w.goal[0] - tx, w.goal[1] - tz) > 0.05) routeTo(w, tx, tz);
+    }
+  }
+  for (const id of Object.keys(World.agents)) if (!seen.has(id)) { delete World.agents[id]; freeSeat(id); }
+  if (World.selected && !World.agents[World.selected]) World.selected = "";
+}
+
+// Free agents: sit if there is a seat for "done" (they finished; a breather), otherwise drift
+// between plaza spots now and then. Called per frame; decisions only every few seconds.
+function wander(a, now, rnd) {
+  if (a.mode !== "free" || World.reduced) return;
+  const d = a.data || {};
+  if (now < a.wanderAt) return;
+  a.wanderAt = now + 7000 + rnd() * 9000;
+  if ((d.state === "done" || d.state === "failed") && rnd() < 0.7) {
+    const s = seatFor(a.data.id);
+    if (s >= 0) { const p = seatPos(s); a.seat = s; routeTo(a, p.x, p.z); return; }
+  }
+  freeSeat(a.data.id); a.seat = -1;
+  const spot = SCENERY.spots[Math.floor(rnd() * SCENERY.spots.length)];
+  const j = (rnd() - 0.5) * 0.9;
+  routeTo(a, spot[0] + j, spot[1] - j);
+}
+
+async function fetchWorld() {
+  if (World.fetching || typeof state === "undefined" || !state.token) return;
+  World.fetching = true;
+  try {
+    const data = await api("/world");
+    if (data && data.ok) { World.data = data; syncAgents(data.agents); renderLegend(); }
+  } catch (_) { /* engine restarting */ }
+  World.fetching = false;
+  World.lastFetch = performance.now();
+}
+
+function renderLegend() {
+  const box = document.getElementById("world-legend");
+  if (!box || !World.data) return;
+  box.replaceChildren();
+  for (const a of World.data.agents) {
+    const row = el("div", "legend-row");
+    row.dataset.agent = a.id;
+    if (a.id === World.selected) row.classList.add("selected");
+    const dot = el("span", "agent-dot");
+    dot.style.background = a.color || STATE_COLOR[a.state] || "#8fb3d9";
+    row.append(dot, el("b", "", a.name), el("span", "pill " + (a.state === "working" ? "working" : a.state === "blocked" ? "blocked" : a.state === "done" ? "done" : ""), a.state),
+               el("span", "muted", (a.station || "") + (a.task ? " · " + a.task : "")));
+    row.addEventListener("click", () => selectAgent(a.id, World.views.panel));
+    box.append(row);
+  }
+}
+
+// ---------------------------------------------------------------- particles (ambience)
+function emit(kind, pos, n) {
+  if (World.reduced || World.particles.length > 160) return;
+  for (let i = 0; i < (n || 1); i++) {
+    const r = Math.random, p = { kind, x: pos[0], y: pos[1], z: pos[2], vx: 0, vy: 0, vz: 0, life: 1, age: 0 };
+    if (kind === "spark") { p.vx = (r() - 0.5) * 2.2; p.vy = 1.2 + r() * 1.5; p.vz = (r() - 0.5) * 2.2; p.life = 0.45 + r() * 0.3; p.c = [1, 0.62 + r() * 0.3, 0.25]; }
+    if (kind === "bubble") { p.vx = (r() - 0.5) * 0.15; p.vy = 0.45 + r() * 0.3; p.vz = (r() - 0.5) * 0.15; p.life = 1.2 + r(); p.c = [0.45, 1, 0.85]; }
+    if (kind === "smoke") { p.vx = 0.15 + r() * 0.1; p.vy = 0.5 + r() * 0.2; p.vz = (r() - 0.5) * 0.1; p.life = 2.5 + r(); p.c = [0.62, 0.64, 0.72]; }
+    if (kind === "page") { p.vx = (r() - 0.5) * 0.5; p.vy = 0.6 + r() * 0.3; p.vz = (r() - 0.5) * 0.5; p.life = 1.0; p.c = [1, 0.97, 0.88]; }
+    if (kind === "confetti") { p.vx = (r() - 0.5) * 3; p.vy = 2.2 + r() * 2; p.vz = (r() - 0.5) * 3; p.life = 1.4 + r() * 0.6; p.c = [[1, 0.4, 0.6], [1, 0.85, 0.3], [0.4, 0.9, 1], [0.6, 1, 0.5]][Math.floor(r() * 4)]; p.ry = r() * 6; }
+    if (kind === "mist") { p.vx = (r() - 0.5) * 0.4; p.vy = -0.1 + r() * 0.3; p.vz = (r() - 0.5) * 0.4; p.life = 1.6 + r(); p.c = [0.75, 0.88, 1]; }
+    World.particles.push(p);
+  }
+}
+function stepParticles(dt) {
+  const P = World.particles;
+  for (let i = P.length - 1; i >= 0; i--) {
+    const p = P[i];
+    p.age += dt;
+    if (p.age >= p.life) { P.splice(i, 1); continue; }
+    if (p.kind === "spark" || p.kind === "confetti") p.vy -= 6 * dt;
+    if (p.kind === "confetti") { p.vx *= 0.98; p.vz *= 0.98; p.ry += dt * 8; if (p.y < 0.08) { p.y = 0.08; p.vy = 0; p.vx *= 0.8; p.vz *= 0.8; } }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+  }
+}
+
+// ---------------------------------------------------------------- building the dynamic scene
+// Each frame collects what moves (agents, lamp orbs, banners, particles, lights) and then
+// draws it in passes: sky, ink outlines, cel-shaded solids, shadows, glows.
+function sceneList(view, t, dt, P) {
+  const L = { solids: [], clear: [], shadows: [], glows: [], puffs: [], lights: STATIC.lights.slice() };
+  const solid = (mesh, pos, ry, s, color, o) => (o && o.a < 1 ? L.clear : L.solids).push(Object.assign({ mesh, pos, ry, s, color }, o || {}));
+  const shadow = (x, z, r, a) => L.shadows.push({ x, z, r, a: Math.min(1, (a == null ? 0.5 : a) * 1.3) });
+  const glow = (pos, r, color, a) => L.glows.push({ pos, r, color, a: a == null ? 1 : a });
+  const light = (pos, color, radius, pri) => L.lights.push({ pos, color, radius, pri: pri || 1 });
+  const ring = (x, z, r, color, spin, e) => {   // a dashed ring on the ground: opaque, so it reads at any light
+    for (let k = 0; k < 10; k++) {
+      const an = spin + k * Math.PI / 5;
+      solid("box", [x + Math.cos(an) * r, 0.1, z + Math.sin(an) * r], -an, [0.2, 0.05, 0.08], color, { e, line: false });
+    }
+  };
+  const now = performance.now();
+  const night = 1 - P.dayK;
+  for (const g of STATIC.glows) L.glows.push(g);
+
+  // the conductor's beacon: it pulses when a board message just arrived
+  const fresh = Object.values(World.agents).some((a) => a.said && now - a.saidAt < 1500);
+  const by = 2.85 + Math.sin(t * 1.4) * 0.08;
+  solid("sph", [-0.25, by, 0], 0, [0.36, 0.36, 0.36], [0.6, 1, 0.95], { e: fresh ? 1.6 : 1.1, line: false });
+  glow([-0.25, by, 0], fresh ? 1.5 : 1.1, [0.3, 1, 0.9], 0.8);
+  light([-0.25, 2.2, 0], [0.1, 0.5, 0.48], 3.4, 2);
+
+  for (const [name, st] of Object.entries(STATION_LAYOUT)) {
+    if (name === "hall") continue;
+    const f = stationFrame(name), { x, z } = f, [ux, uz] = f.u;
+    const c = hexRgb(st.color, [0.5, 0.6, 0.7]);
+    const workers = Object.values(World.agents).filter((a) => a.data && a.data.station === name && a.data.state === "working" && a.mode === "desk");
+    const busy = workers.length > 0;
+    const lx = x - uz * 1.0 + ux * 0.6, lz = z + ux * 1.0 + uz * 0.6;
+    const oy = 1.55 + Math.sin(t * 1.4 + x) * 0.05;
+    solid("sph", [lx, oy, lz], 0, [0.32, 0.32, 0.32], mix3(c, [1, 1, 1], 0.25), { e: busy ? 1.1 : 0.55, line: false });
+    glow([lx, oy, lz], busy ? 1.2 : 0.8, c, busy ? 0.9 : 0.55);
+    light([lx, 1.2, lz], scale3(c, busy ? 0.95 : 0.55), busy ? 3.8 : 3.0, busy ? 2 : 1);
+    if (busy && !World.reduced) {   // the work shows: sparks, bubbles, smoke, pages, a lit screen
+      const top = [x, 0.62, z];
+      if (name === "workshop") {
+        const bx = x + ux * 2.1 + f.tg[0] * 0.35 + ux * 0.2, bz = z + uz * 2.1 + f.tg[1] * 0.35 + uz * 0.2;
+        if (Math.random() < dt * 2.2) emit("smoke", [bx, 2.15, bz]);
+      }
+      if (name === "test bench" && Math.random() < dt * 4) emit("bubble", [x + f.tg[0] * (Math.random() - 0.5) * 0.9, 0.85, z + f.tg[1] * (Math.random() - 0.5) * 0.9]);
+      if (name === "library" && Math.random() < dt * 0.6) emit("page", top);
+      if (name === "terminal") glow([x - ux * 0.13, 0.86, z - uz * 0.13], 0.75 + Math.sin(t * 13) * 0.08, [0.3, 0.6, 1.0], 0.6);
+      if (name === "drafting table") glow([x, 0.7, z], 0.8, [0.55, 0.75, 1.0], 0.35 + 0.15 * Math.sin(t * 3));
+    }
+  }
+
+  // team banners in the plaza, one per live team: the flag in the team's colour, a pip per
+  // real stage (lit = done, pulsing = now)
+  const teams = ((World.data && World.data.teams) || []).filter((tm) => tm.status !== "done" && tm.status !== "failed").slice(0, SCENERY.banners.length);
+  view.teamSpots = [];
+  teams.forEach((tm, i) => {
+    const b = SCENERY.banners[i], col = hashColor(tm.id), out = [Math.cos(b.a), Math.sin(b.a)];
+    const ry = Math.atan2(out[0], out[1]) + Math.PI / 2;
+    solid("cyl6", [b.x, 0.85, b.z], 0, [0.07, 1.7, 0.07], [0.20, 0.22, 0.32]);
+    solid("sph4", [b.x, 1.73, b.z], 0, [0.12, 0.12, 0.12], [1, 0.9, 0.5], { e: 0.6, line: false });
+    const wave = World.reduced ? 0 : Math.sin(t * 3 + i) * 0.12;
+    solid("box", [b.x + Math.sin(ry) * 0.3, 1.45, b.z + Math.cos(ry) * 0.3], ry + wave, [0.55, 0.38, 0.03], col);
+    solid("box", [b.x + Math.sin(ry) * 0.62, 1.47, b.z + Math.cos(ry) * 0.62], ry + wave * 2, [0.12, 0.3, 0.03], mix3(col, [0, 0, 0], 0.2));
+    const stages = tm.stages && tm.stages.length ? tm.stages : ["plan", "build", "check"];
+    const cur = stages.indexOf(tm.stage);
+    stages.forEach((sname, k) => {
+      const along = (k - (stages.length - 1) / 2) * 0.17;
+      const pos = [b.x + Math.sin(ry) * along, 0.55, b.z + Math.cos(ry) * along];
+      const lit = cur > k || tm.status === "done", now2 = k === cur;
+      solid("box", pos, ry, [0.12, 0.12, 0.12], lit ? [0.45, 1, 0.55] : now2 ? col : [0.3, 0.32, 0.42],
+        { e: lit ? 0.7 : now2 ? 0.4 + 0.4 * Math.abs(Math.sin(t * 3)) : 0, line: false });
+    });
+    shadow(b.x, b.z, 0.25, 0.4);
+    view.teamSpots.push({ id: tm.id, pos: [b.x, 2.05, b.z], goal: tm.goal || "", stage: tm.stage || "" });
+  });
+
   // agents
-  for (const [id, a] of Object.entries(World.agents)) {
+  const list = Object.entries(World.agents);
+  const rnd = Math.random;
+  for (const [, a] of list) wander(a, now, rnd);
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {   // don't stand inside each other
+    const A = list[i][1], B = list[j][1];
+    if (A.seat >= 0 && A.mode === "free" || B.seat >= 0 && B.mode === "free") continue;
+    const dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz);
+    if (d > 0.001 && d < 0.62) { const k = (0.62 - d) * 0.5 * Math.min(1, dt * 8) / d; A.x -= dx * k; A.z -= dz * k; B.x += dx * k; B.z += dz * k; }
+  }
+  for (const [id, a] of list) {
     const d = a.data || {};
-    const dx = a.tx - a.x, dz = a.tz - a.z, dist = Math.hypot(dx, dz);
-    const walking = dist > 0.05;
-    if (walking) {
-      const step = Math.min(dist, dt * 2.2);
-      a.x += dx / dist * step; a.z += dz / dist * step;
-      a.ry = Math.atan2(dx, dz);
-    } else if (d.station) {
-      const s = stationPos(d.station);
-      a.ry = Math.atan2(s[0] - a.x, s[1] - a.z);
+    let walking = false;
+    if (a.route && a.route.length) {
+      const [px, pz] = a.route[0], dx = px - a.x, dz = pz - a.z, dist = Math.hypot(dx, dz);
+      const speed = d.state === "blocked" ? 2.6 : a.mode === "free" ? 1.3 : 2.2;
+      if (dist < 0.06) a.route.shift();
+      else { const step = Math.min(dist, dt * speed); a.x += dx / dist * step; a.z += dz / dist * step; a.ry = angLerp(a.ry, Math.atan2(dx, dz), Math.min(1, dt * 10)); walking = true; }
+    }
+    const seated = !walking && a.mode === "free" && a.seat >= 0 && a.route.length === 0;
+    if (!walking) {
+      if (seated) a.ry = angLerp(a.ry, seatPos(a.seat).face, Math.min(1, dt * 6));
+      else if (a.mode === "desk" && d.station) { const s = id === "loki" ? [-0.25, 0] : stationPos(d.station); a.ry = angLerp(a.ry, Math.atan2(s[0] - a.x, s[1] - a.z), Math.min(1, dt * 6)); }
+    }
+    // chit-chat: two free agents standing near each other turn to face and "talk" (no words)
+    a.chatting = false;
+    if (!walking && a.mode === "free" && !World.reduced) {
+      for (const [oid, o] of list) {
+        if (oid === id || o.mode !== "free" || (o.route && o.route.length)) continue;
+        if (Math.hypot(o.x - a.x, o.z - a.z) < 1.5) { a.chatting = true; if (!seated) a.ry = angLerp(a.ry, Math.atan2(o.x - a.x, o.z - a.z), Math.min(1, dt * 4)); break; }
+      }
     }
     a.phase += dt * (walking ? 9 : d.state === "working" ? 7 : 2);
-    const bob = walking ? Math.abs(Math.sin(a.phase)) * 0.12 : d.state === "working" ? Math.abs(Math.sin(a.phase)) * 0.06 : Math.sin(a.phase) * 0.02;
+    let bob = walking ? Math.abs(Math.sin(a.phase)) * 0.12 : d.state === "working" ? Math.abs(Math.sin(a.phase)) * 0.06 : Math.sin(a.phase) * 0.02;
+    const cheer = a.cheerAt && now - a.cheerAt < 2400 && !World.reduced;
+    if (cheer) {
+      bob = Math.abs(Math.sin((now - a.cheerAt) / 160)) * 0.45;
+      if (!a.cheered) { a.cheered = true; emit("confetti", [a.x, 1.6, a.z], 26); }
+    } else a.cheered = false;
+    const slump = d.state === "failed" ? 0.85 : 1;
     const col = d.state === "failed" ? [0.75, 0.38, 0.42] : a.color;
-    const big = id === "loki" ? 1.6 : 1.3;
+    const big = (id === "loki" ? 1.6 : 1.3);
     a.big = big;
+    const sit = seated ? -0.2 * big : 0;
+    const y0 = bob + sit;
+    const fwd = [Math.sin(a.ry), Math.cos(a.ry)], side = [Math.cos(a.ry), -Math.sin(a.ry)];
     shadow(a.x + 0.06, a.z - 0.05, 0.42 * big, 0.7);
-    solid("cyl", [a.x, 0.42 * big + bob, a.z], a.ry, [0.42 * big, 0.62 * big, 0.42 * big], col, { s2: 0.25 });
-    solid("sph", [a.x, 0.98 * big + bob, a.z], a.ry, [0.44 * big, 0.44 * big, 0.44 * big], col.map((v) => Math.min(1, v * 1.12 + 0.05)), { s2: 0.4 });
-    const fx = Math.sin(a.ry) * 0.18 * big, fz = Math.cos(a.ry) * 0.18 * big;
-    solid("box", [a.x + fx, 1.02 * big + bob, a.z + fz], a.ry, [0.28 * big, 0.09 * big, 0.08], [0.6, 0.98, 1.0], { e: 0.8, line: false });
+    // body, head, visor
+    solid("cyl", [a.x, 0.42 * big * slump + y0, a.z], a.ry, [0.42 * big, 0.62 * big * slump, 0.42 * big], col, { s2: 0.25 });
+    const hy = (0.98 * slump) * big + y0;
+    solid("sph", [a.x, hy, a.z], a.ry, [0.44 * big, 0.44 * big, 0.44 * big], col.map((v) => Math.min(1, v * 1.12 + 0.05)), { s2: 0.4 });
+    solid("box", [a.x + fwd[0] * 0.18 * big, hy + 0.04 * big, a.z + fwd[1] * 0.18 * big], a.ry, [0.28 * big, 0.09 * big, 0.08], [0.6, 0.98, 1.0], { e: 0.8, line: false });
+    // feet that step while walking, tucked when sitting
+    for (const s of [-1, 1]) {
+      const stride = walking ? Math.sin(a.phase) * s * 0.11 * big : 0;
+      const fy = seated ? 0.16 * big : 0.05;
+      const out = seated ? 0.18 * big : 0;
+      solid("box", [a.x + side[0] * s * 0.11 * big + fwd[0] * (stride + out), fy + Math.max(0, -stride) * 0.4, a.z + side[1] * s * 0.11 * big + fwd[1] * (stride + out)],
+        a.ry, [0.11 * big, 0.08 * big, 0.17 * big], mix3(col, [0.05, 0.05, 0.1], 0.5), { line: false });
+    }
+    // arms: swinging when walking, acting out the work at the desk
+    const st = d.station;
+    const working = d.state === "working" && a.mode === "desk" && !walking;
+    for (const s of [-1, 1]) {
+      let fo = walking ? -Math.sin(a.phase) * s * 0.09 * big : 0, ay = 0.55 * big * slump + y0, so = 0.27 * big;
+      if (working) {
+        if (st === "workshop" && s === 1) { const k = Math.abs(Math.sin(t * 5 + a.phase)); fo = 0.12 * big; ay += k * 0.22 * big; if (k > 0.97 && !a.hit) { a.hit = true; emit("spark", [a.x + fwd[0] * 0.55, 0.62, a.z + fwd[1] * 0.55], 5); } else if (k < 0.5) a.hit = false; }
+        else if (st === "terminal" || st === "test bench") { fo = 0.14 * big; ay += Math.abs(Math.sin(t * 14 + s)) * 0.04 * big; so = 0.2 * big; }
+        else if (st === "library") { fo = 0.16 * big; ay += 0.08 * big; so = 0.18 * big; }
+        else if (st === "drafting table" && s === 1) { fo = 0.15 * big; so = (0.2 + Math.sin(t * 2.2) * 0.1) * big; }
+        else if (st === "review desk" && s === 1) { fo = 0.14 * big; ay += Math.abs(Math.sin(t * 3.4)) * 0.14 * big; }
+        else fo = 0.06 * big;
+      }
+      if (d.state === "blocked" && !walking && s === 1) ay += 0.25 * big;   // a hand up: needs you
+      if (cheer) ay += 0.3 * big;
+      const ap = [a.x + side[0] * s * so + fwd[0] * fo, ay, a.z + side[1] * s * so + fwd[1] * fo];
+      solid("box", ap, a.ry, [0.1 * big, 0.3 * big, 0.1 * big], col.map((v) => v * 0.85), { line: false });
+      if (working && st === "workshop" && s === 1) solid("box", [ap[0] + fwd[0] * 0.08, ap[1] + 0.16 * big, ap[2] + fwd[1] * 0.08], a.ry, [0.22 * big, 0.08 * big, 0.08 * big], [0.55, 0.58, 0.68], { line: false });
+      if (working && st === "library" && s === 1) solid("box", [a.x + fwd[0] * 0.3 * big, ay + 0.05, a.z + fwd[1] * 0.3 * big], a.ry, [0.3 * big, 0.2 * big, 0.06], [0.85, 0.3, 0.3], { line: false });
+    }
+    // a hat per role, so you can tell them apart at a glance
+    const role = (d.role || d.name || "").toLowerCase(), hat = hy + 0.22 * big;
+    if (id === "loki") { for (const s of [-1, 1]) solid("cone", [a.x + side[0] * s * 0.16 * big, hat + 0.02, a.z + side[1] * s * 0.16 * big], a.ry, [0.1 * big, 0.26 * big, 0.1 * big], [0.25, 0.95, 0.85], { e: 0.5 }); }
+    else if (role.includes("builder")) solid("sph4", [a.x, hat - 0.06 * big, a.z], a.ry, [0.48 * big, 0.2 * big, 0.48 * big], [1, 0.8, 0.2]);
+    else if (role.includes("architect")) solid("cyl", [a.x, hat - 0.04 * big, a.z], a.ry, [0.36 * big, 0.07 * big, 0.36 * big], [0.55, 0.3, 0.8]);
+    else if (role.includes("research")) solid("box", [a.x + fwd[0] * 0.21 * big, hy + 0.04 * big, a.z + fwd[1] * 0.21 * big], a.ry, [0.32 * big, 0.04 * big, 0.04], [0.1, 0.1, 0.15], { line: false });
+    else if (role.includes("test")) solid("cyl6", [a.x, hat, a.z], a.ry, [0.12 * big, 0.12 * big, 0.12 * big], [1, 0.5, 0.3], { e: 0.3 });
+    else if (role.includes("review")) solid("pyr", [a.x, hat + 0.02, a.z], a.ry + Math.PI / 4, [0.34 * big, 0.2 * big, 0.34 * big], [0.95, 0.5, 0.3]);
+    // above the head: what state it is in (the same colours as the legend)
+    const top = hy + 0.46 * big;
+    a.labelY = ["working", "blocked", "waiting", "done", "failed"].includes(d.state) ? top + 0.3 : hy + 0.45 * big;
     if (d.state === "working") {
-      const wy = 1.6 * big + Math.sin(t * 3 + a.phase) * 0.05;
+      const wy = top + Math.sin(t * 3 + a.phase) * 0.05;
       solid("box", [a.x, wy, a.z], t * 2.4, [0.16, 0.16, 0.16], [0.56, 0.9, 1], { e: 0.9 });
       glow([a.x, wy, a.z], 0.45, [0.4, 0.85, 1.0], 0.7);
     }
     if (d.state === "blocked") {
-      solid("cyl", [a.x, 0.07, a.z], 0, [1.1, 0.03, 1.1], [1, 0.3, 0.3], { a: 0.5 + 0.3 * Math.sin(t * 5), e: 0.8, line: false });
-      light([a.x, 0.8, a.z], [0.9, 0.15, 0.15], 2.2);
+      const by2 = top + 0.1 + Math.abs(Math.sin(t * 4)) * 0.08;
+      solid("box", [a.x, by2 + 0.12, a.z], 0, [0.09, 0.26, 0.09], [1, 0.3, 0.3], { e: 0.9 });
+      solid("box", [a.x, by2 - 0.08, a.z], 0, [0.09, 0.09, 0.09], [1, 0.3, 0.3], { e: 0.9 });
+      glow([a.x, by2, a.z], 0.55, [1, 0.25, 0.25], 0.6);
+      ring(a.x, a.z, 0.62, [1, 0.28, 0.28], World.reduced ? 0 : -t * 0.8, 0.6 + 0.4 * Math.abs(Math.sin(t * 5)));
+      light([a.x, 0.8, a.z], [0.9, 0.15, 0.15], 2.2, 3);
     }
-    if (d.state === "done") solid("sph", [a.x, 1.6 * big, a.z], 0, [0.18, 0.18, 0.18], [0.5, 1, 0.55], { e: 0.9 });
+    if (d.state === "waiting") {   // an hourglass: queued, it will start
+      const wy = top + 0.05, r = World.reduced ? 0 : t * 1.2;
+      solid("pyr", [a.x, wy + 0.08, a.z], r, [0.16, -0.16, 0.16], [0.85, 0.85, 0.95], { e: 0.4, line: false });
+      solid("pyr", [a.x, wy - 0.08, a.z], r, [0.16, 0.16, 0.16], [0.85, 0.85, 0.95], { e: 0.4, line: false });
+    }
+    if (d.state === "done") solid("sph", [a.x, top, a.z], 0, [0.18, 0.18, 0.18], [0.5, 1, 0.55], { e: 0.9 });
+    if (d.state === "failed") {   // a little grey cloud: it did not work out
+      solid("sph4", [a.x, top + 0.1, a.z], 0, [0.4, 0.2, 0.3], [0.45, 0.47, 0.55], { line: false });
+      if (!World.reduced && Math.random() < dt * 3) emit("bubble", [a.x + (Math.random() - 0.5) * 0.3, top, a.z]);
+    }
+    if (id === World.selected) {
+      ring(a.x, a.z, 0.78, [0.3, 1, 0.9], World.reduced ? 0 : t * 0.6, 0.9);
+      light([a.x, 1.2, a.z], [0.15, 0.5, 0.45], 2.0, 3);
+    }
+  }
+
+  // ambience: fireflies at night, birds by day, mist at the foot of the waterfall
+  if (!World.reduced) {
+    if (night > 0.2) for (let i = 0; i < 18; i++) {
+      const a0 = i * 2.4, r = 4 + (i % 5) * 1.0;
+      const fx = Math.cos(a0 + t * 0.07 * (i % 3 + 1)) * r + Math.sin(t * 0.9 + i) * 0.4, fz = Math.sin(a0 + t * 0.07 * (i % 3 + 1)) * r + Math.cos(t * 0.7 + i) * 0.4;
+      const fy = 0.6 + Math.sin(t * 1.3 + i * 1.7) * 0.4 + (i % 4) * 0.2;
+      const blink = Math.max(0, Math.sin(t * 2.1 + i * 3.3));
+      if (blink > 0.1) glow([fx, fy, fz], 0.22, [0.75, 1, 0.45], blink * night);
+    }
+    if (P.dayK > 0.25) for (let i = 0; i < 3; i++) {
+      const a0 = t * (0.16 + i * 0.03) + i * 2.1, r = 7 + i * 1.6, bx = Math.cos(a0) * r, bz = Math.sin(a0) * r, byy = 5 + i * 0.6 + Math.sin(t + i) * 0.3;
+      const ry = Math.atan2(-Math.sin(a0), Math.cos(a0)), flap = Math.sin(t * 9 + i * 2) * 0.09, sd = [Math.cos(ry), -Math.sin(ry)];
+      solid("box", [bx, byy, bz], ry, [0.08, 0.07, 0.22], [0.15, 0.17, 0.25], { line: false });
+      for (const s of [-1, 1]) solid("box", [bx + sd[0] * s * 0.17, byy + flap, bz + sd[1] * s * 0.17], ry, [0.26, 0.03, 0.12], [0.2, 0.22, 0.3], { line: false });
+    }
+    const fl = SCENERY.fall;
+    if (fl && Math.random() < dt * 5) emit("mist", [Math.cos(fl.a) * (ISLAND + 0.1), -5.4, Math.sin(fl.a) * (ISLAND + 0.1)]);
+  }
+
+  // particles
+  for (const p of World.particles) {
+    const k = 1 - p.age / p.life;
+    if (p.kind === "confetti") solid("box", [p.x, p.y, p.z], p.ry, [0.09, 0.02, 0.06], p.c, { e: 0.4, line: false });
+    else if (p.kind === "smoke" || p.kind === "mist") L.puffs.push({ pos: [p.x, p.y, p.z], r: (p.kind === "smoke" ? 0.18 : 0.35) + (1 - k) * 0.35, color: p.c, a: k * 0.7 });
+    else glow([p.x, p.y, p.z], p.kind === "page" ? 0.12 : 0.1, p.c, k);
   }
   return L;
 }
 
 // ---------------------------------------------------------------- frame
+function setLighting(gl, loc, F) {
+  gl.uniformMatrix4fv(loc.VP, false, F.vp);
+  gl.uniform3fv(loc.eye, F.eye);
+  gl.uniform3fv(loc.sunDir, F.sunDir); gl.uniform3fv(loc.sunCol, F.P.sunCol);
+  gl.uniform3fv(loc.skyAmb, F.P.skyAmb); gl.uniform3fv(loc.gndAmb, F.P.gndAmb); gl.uniform3fv(loc.shadeTint, F.P.shade);
+  gl.uniform3fv(loc.rimCol, F.P.rim); gl.uniform3fv(loc.fogc, F.P.fog); gl.uniform2fv(loc.fogr, F.fogr);
+  gl.uniform3fv(loc.LP, F.lp); gl.uniform4fv(loc.LC, F.lc);
+  gl.uniform1f(loc.T, F.t); gl.uniform1f(loc.A, 1);
+}
+
 function frame(view, now) {
   const { gl, canvas } = view;
   if (view.lost || gl.isContextLost()) return;
+  const t0 = performance.now();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  // one world pixel = `pixel` CSS px, rounded to a whole number of device pixels
-  const scale = Math.max(1, Math.round((World.pixel || view.opts.pixel || 3) * dpr));
+  // one world pixel = `pixel` CSS px, rounded to a whole number of device pixels (plus the
+  // frame-time watcher's boost when this machine is falling behind)
+  const scale = Math.max(1, Math.round((World.pixel || view.opts.pixel || 3) * dpr)) + (World.pixel ? 0 : view.perf.boost);
   const lw = Math.max(1, Math.ceil(w / scale)), lh = Math.max(1, Math.ceil(h / scale));
   const fb = ensureTarget(view, lw, lh);
   const rw = fb ? lw : w, rh = fb ? lh : h;
 
   const dt = Math.min(0.1, (now - (view.last || now)) / 1000);
   view.last = now;
-  if (!view.drag && !World.reduced) view.yaw += dt * (view.opts.spin || 0.05);
+  if (!view.drag && !World.reduced && !view.follow) view.yaw += dt * (view.opts.spin || 0.05);
   const t = now / 1000;
+  stepParticles(dt);
 
   // time of day -> palette (subtle; reduced motion keeps it but it only moves with the clock)
   const d = new Date(), hour = World.hour != null ? World.hour : d.getHours() + d.getMinutes() / 60;
   const day = smooth(5.5, 8.5, hour) * (1 - smooth(17.5, 20.5, hour)) * 0.85;
-  const P = {};
+  const P = { dayK: day };
   for (const k of Object.keys(NIGHT)) P[k] = Array.isArray(NIGHT[k]) ? mix3(NIGHT[k], DAY[k], day) : NIGHT[k] + (DAY[k] - NIGHT[k]) * day;
   const sunAz = 0.9 + (World.reduced ? 0 : t * 0.004);
   const sunDir = norm([Math.cos(sunAz) * 0.6, 0.62 + day * 0.25, Math.sin(sunAz) * 0.6]);
 
-  // camera
-  const fov = view.opts.fov || 0.8, target = [0, 0.7, 0];
-  const eye = [Math.cos(view.yaw) * Math.cos(view.pitch) * view.dist, Math.sin(view.pitch) * view.dist + target[1],
-    Math.sin(view.yaw) * Math.cos(view.pitch) * view.dist];
-  const vp = M4.mul(M4.persp(fov, w / h, 0.1, 90), M4.lookAt(eye, target, [0, 1, 0]));
+  // camera: orbit round a target that eases onto a followed agent
+  const fol = view.follow && World.agents[view.follow];
+  if (view.follow && !fol) view.follow = "";
+  const want = fol ? [fol.x, 0.9, fol.z] : [0, 0.7, 0];
+  const ease = Math.min(1, dt * 3);
+  view.target = [lerp(view.target[0], want[0], ease), lerp(view.target[1], want[1], ease), lerp(view.target[2], want[2], ease)];
+  if (fol && !view.drag) view.dist = lerp(view.dist, Math.min(view.dist, 9.5), ease * 0.5);
+  const fov = view.opts.fov || 0.8, target = view.target;
+  const eye = [target[0] + Math.cos(view.yaw) * Math.cos(view.pitch) * view.dist, Math.sin(view.pitch) * view.dist + target[1],
+    target[2] + Math.sin(view.yaw) * Math.cos(view.pitch) * view.dist];
+  const vp = M4.mul(M4.persp(fov, w / h, 0.5, 90), M4.lookAt(eye, target, [0, 1, 0]));
+  view.lastVP = vp;
   const camF = norm(sub(target, eye)), camR = norm(cross(camF, [0, 1, 0])), camU = cross(camR, camF);
   const fogr = [view.dist + 2, 16];
 
-  const L = sceneList(view, t, dt);
+  const L = sceneList(view, t, dt, P);
+
+  // the 10 lights the shader takes: the ones that say something first (blocked, busy), then
+  // the plain lamps - a blocked agent's red light must never be the one that is dropped
+  const lights = L.lights.slice().sort((a, b) => (b.pri || 0) - (a.pri || 0)).slice(0, 10);
+  const lp = view.lpBuf || (view.lpBuf = new Float32Array(30)), lc = view.lcBuf || (view.lcBuf = new Float32Array(40));
+  lp.fill(0); lc.fill(0);
+  lights.forEach((l, i) => {
+    lp.set(l.pos, i * 3);
+    lc.set([l.color[0] * P.lamps, l.color[1] * P.lamps, l.color[2] * P.lamps, l.radius], i * 4);
+  });
+  for (let i = lights.length; i < 10; i++) lc[i * 4 + 3] = 1;
+  const F = { vp, eye, sunDir, P, fogr, lp, lc, t };
+  const skyM = M4.trs([0, 0, 0], World.reduced ? 0 : -t * 0.01, [1, 1, 1]);
+  const ident = M4.ident();
+  let draws = 0;
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, fb ? fb.fbo : null);
   gl.viewport(0, 0, rw, rh);
@@ -575,60 +1128,74 @@ function frame(view, now) {
     gl.uniform2f(loc.tanH, th * w / h, th);
     gl.uniform3fv(loc.zenith, P.zenith); gl.uniform3fv(loc.horizon, P.horizon); gl.uniform3fv(loc.glow, P.glow);
     gl.uniform3fv(loc.deep, P.deep); gl.uniform3fv(loc.skySun, sunDir); gl.uniform3fv(loc.skySunCol, P.sunSky);
-    gl.uniform1f(loc.stars, P.stars);
+    gl.uniform1f(loc.stars, P.stars); gl.uniform1f(loc.T, t);
     bindMesh(gl, loc, quad);
-    gl.drawArrays(gl.TRIANGLES, 0, quad.count);
+    gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
   }
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
 
-  // 2. ink outlines: inflated back faces (cull the front)
+  // 2. ink outlines: inflated back faces (cull the front) - the baked scene in two draws
+  const OL = 1.15 * 2 * Math.tan(fov / 2) / rh;
+  gl.cullFace(gl.FRONT);
+  if (view.bakedOutline) {
+    const { prog, loc } = view.bakedOutline;
+    gl.useProgram(prog);
+    gl.uniformMatrix4fv(loc.VP, false, vp); gl.uniform3fv(loc.oeye, eye); gl.uniform1f(loc.OL, OL);
+    gl.uniform3fv(loc.ofog, P.fog); gl.uniform2fv(loc.ofogr, fogr);
+    for (const [batch, M] of [[view.batches.landInk, ident], [view.batches.skyInk, skyM]]) {
+      if (!batch.count) continue;
+      gl.uniformMatrix4fv(loc.M, false, M);
+      bindMesh(gl, loc, batch);
+      gl.drawArrays(gl.TRIANGLES, 0, batch.count); draws++;
+    }
+  }
   if (view.outline) {
     const { prog, loc } = view.outline;
     gl.useProgram(prog);
-    gl.cullFace(gl.FRONT);
     gl.uniformMatrix4fv(loc.VP, false, vp);
     gl.uniform3fv(loc.oeye, eye);
-    gl.uniform1f(loc.OL, 1.15 * 2 * Math.tan(fov / 2) / rh);
+    gl.uniform1f(loc.OL, OL);
     gl.uniform3fv(loc.ofog, P.fog); gl.uniform2fv(loc.ofogr, fogr);
     const inkc = [0.03, 0.03, 0.10];
+    let bound = null;
     for (const o of L.solids) {
       if (o.line === false) continue;
       const m = view.meshes[o.mesh];
-      bindMesh(gl, loc, m);
+      if (bound !== m) { bindMesh(gl, loc, m); bound = m; }
       gl.uniformMatrix4fv(loc.M, false, M4.trs(o.pos, o.ry, o.s));
       gl.uniform3fv(loc.OC, mix3(inkc, o.color, 0.22));
-      gl.drawArrays(gl.TRIANGLES, 0, m.count);
+      gl.drawArrays(gl.TRIANGLES, 0, m.count); draws++;
     }
   }
 
-  // 3. cel-shaded solids
+  // 3. cel-shaded solids: the baked scene (land, then the turning sky batch), then what moves
+  gl.cullFace(gl.BACK);
+  if (view.baked) {
+    const { prog, loc } = view.baked;
+    gl.useProgram(prog);
+    setLighting(gl, loc, F);
+    for (const [batch, M] of [[view.batches.land, ident], [view.batches.sky, skyM]]) {
+      gl.uniformMatrix4fv(loc.M, false, M);
+      bindMesh(gl, loc, batch);
+      gl.drawArrays(gl.TRIANGLES, 0, batch.count); draws++;
+    }
+  }
   const { prog, loc } = view.solid;
   gl.useProgram(prog);
-  gl.cullFace(gl.BACK);
-  gl.uniformMatrix4fv(loc.VP, false, vp);
-  gl.uniform3fv(loc.eye, eye);
-  gl.uniform3fv(loc.sunDir, sunDir); gl.uniform3fv(loc.sunCol, P.sunCol);
-  gl.uniform3fv(loc.skyAmb, P.skyAmb); gl.uniform3fv(loc.gndAmb, P.gndAmb); gl.uniform3fv(loc.shadeTint, P.shade);
-  gl.uniform3fv(loc.rimCol, P.rim); gl.uniform3fv(loc.fogc, P.fog); gl.uniform2fv(loc.fogr, fogr);
-  const lp = new Float32Array(30), lc = new Float32Array(40);
-  L.lights.slice(0, 10).forEach((l, i) => {
-    lp.set(l.pos, i * 3);
-    lc.set([l.color[0] * P.lamps, l.color[1] * P.lamps, l.color[2] * P.lamps, l.radius], i * 4);
-  });
-  for (let i = L.lights.length; i < 10; i++) lc[i * 4 + 3] = 1;
-  gl.uniform3fv(loc.LP, lp); gl.uniform4fv(loc.LC, lc);
+  setLighting(gl, loc, F);
+  let bound = null;
   const drawSolid = (o) => {
     const m = view.meshes[o.mesh];
-    bindMesh(gl, loc, m);
+    if (bound !== m) { bindMesh(gl, loc, m); bound = m; }
     gl.uniformMatrix4fv(loc.M, false, M4.trs(o.pos, o.ry, o.s));
     gl.uniform3f(loc.IS, 1 / (o.s[0] * o.s[0]), 1 / (o.s[1] * o.s[1]), 1 / (o.s[2] * o.s[2]));
     gl.uniform3fv(loc.C, o.color); gl.uniform1f(loc.A, o.a == null ? 1 : o.a); gl.uniform1f(loc.E, o.e || 0);
-    gl.uniform1f(loc.G, o.g || 0); gl.uniform1f(loc.S, o.s2 || 0.3);
-    gl.drawArrays(gl.TRIANGLES, 0, m.count);
+    gl.uniform1f(loc.G, o.g || 0); gl.uniform1f(loc.S, o.s2 || 0.3); gl.uniform1f(loc.W, o.w || 0);
+    gl.drawArrays(gl.TRIANGLES, 0, m.count); draws++;
   };
   for (const o of L.solids) {
-    // squashed with a negative y (the rock cone points down): flip the winding for it
+    // squashed with a negative y (an hourglass half points down): flip the winding for it
     gl.frontFace(o.s[0] * o.s[1] * o.s[2] < 0 ? gl.CW : gl.CCW);
     drawSolid(o);
   }
@@ -640,6 +1207,13 @@ function frame(view, now) {
   gl.depthMask(false);
   for (const o of L.clear) drawSolid(o);
   gl.disable(gl.CULL_FACE);
+  if (view.shadowBatch && view.batches.shadows.count) {
+    const { prog: sp, loc: sl } = view.shadowBatch;
+    gl.useProgram(sp);
+    gl.uniformMatrix4fv(sl.VP, false, vp); gl.uniform3fv(sl.SK, [0.02, 0.03, 0.12]);
+    bindMesh(gl, sl, view.batches.shadows);
+    gl.drawArrays(gl.TRIANGLES, 0, view.batches.shadows.count); draws++;
+  }
   if (view.sprite) {
     const sp = view.sprite;
     gl.useProgram(sp.prog);
@@ -651,14 +1225,19 @@ function frame(view, now) {
     for (const s of L.shadows) {
       gl.uniform3f(sp.loc.SC, s.x, 0.075, s.z); gl.uniform2f(sp.loc.SS, s.r, s.r);
       gl.uniform1f(sp.loc.SA, s.a);
-      gl.drawArrays(gl.TRIANGLES, 0, quad.count);
+      gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
+    }
+    gl.uniform1f(sp.loc.SB, 1);
+    for (const g of L.puffs) {   // smoke and mist: soft, not glowing
+      gl.uniform3fv(sp.loc.SC, g.pos); gl.uniform2f(sp.loc.SS, g.r, g.r);
+      gl.uniform3fv(sp.loc.SK, scale3(g.color, 0.55 + 0.45 * P.dayK + 0.3)); gl.uniform1f(sp.loc.SA, g.a);
+      gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);   // glows add light
-    gl.uniform1f(sp.loc.SB, 1);
     for (const g of L.glows) {
       gl.uniform3fv(sp.loc.SC, g.pos); gl.uniform2f(sp.loc.SS, g.r, g.r);
       gl.uniform3fv(sp.loc.SK, g.color); gl.uniform1f(sp.loc.SA, g.a * (0.55 + 0.45 * P.lamps));
-      gl.drawArrays(gl.TRIANGLES, 0, quad.count);
+      gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
     }
   }
   gl.depthMask(true);
@@ -677,54 +1256,207 @@ function frame(view, now) {
     gl.uniform2f(bl.R, lw, lh); gl.uniform2f(bl.VPX, lw * scale, lh * scale);
     gl.uniform1f(bl.Q, view.opts.levels || 20);
     bindMesh(gl, bl, quad);
-    gl.drawArrays(gl.TRIANGLES, 0, quad.count);
+    gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
   }
+  view.perf.draws = draws;
+  view.perf.ms = performance.now() - t0;
+  view.perf.scale = scale;
+  drawLabels(view, vp, now);
+  if (view.opts.detail) updateHud(view, now, hour);
+}
 
-  // the label above each head, and what it last said
-  const proj = (p) => {
-    const v = [vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13],
-      vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15]];
-    if (v[2] <= 0) return null;
-    return [(v[0] / v[2] * 0.5 + 0.5) * canvas.clientWidth, (1 - (v[1] / v[2] * 0.5 + 0.5)) * canvas.clientHeight];
-  };
+// ---------------------------------------------------------------- labels, card, HUD
+function project(view, p) {
+  const vp = view.lastVP, canvas = view.canvas;
+  if (!vp) return null;
+  const v = [vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13],
+    vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15]];
+  if (v[2] <= 0) return null;
+  return [(v[0] / v[2] * 0.5 + 0.5) * canvas.clientWidth, (1 - (v[1] / v[2] * 0.5 + 0.5)) * canvas.clientHeight, v[2]];
+}
+
+// The label above each head, and what it last said. Labels never pile up: the nearest is
+// placed first and any that would overlap it are lifted above.
+function drawLabels(view, vp, now) {
   if (!view.labels) return;
-  const seen = new Set();
+  const seen = new Set(), items = [];
+  const nodeFor = (key, cls) => {
+    let node = view.labelNodes[key];
+    if (!node) {
+      node = view.labelNodes[key] = el("div", cls);
+      node.append(el("b"), el("span"), el("i"), el("em"));
+      view.labels.append(node);
+    }
+    return node;
+  };
+  const setText = (node, k, text) => { if (node.children[k].textContent !== text) { node.children[k].textContent = text; node.dirty = true; } };
   for (const [id, a] of Object.entries(World.agents)) {
     const d2 = a.data || {};
     seen.add(id);
-    let node = view.labelNodes[id];
-    if (!node) {
-      node = view.labelNodes[id] = el("div", "wlabel");
-      node.append(el("b"), el("span"), el("i"));
-      view.labels.append(node);
-    }
-    const at = proj([a.x, 1.6 * (a.big || 1) + 0.35, a.z]);
+    const node = nodeFor(id, "wlabel");
+    const at = project(view, [a.x, a.labelY || 1.6 * (a.big || 1) + 0.35, a.z]);
     node.hidden = !at;
-    if (at) {
-      node.style.transform = "translate(" + Math.round(at[0]) + "px," + Math.round(at[1]) + "px) translate(-50%,-100%)";
-      node.children[0].textContent = d2.name || id;
-      node.children[1].textContent = view.opts.detail ? (d2.state + (d2.task ? " · " + d2.task.slice(0, 48) : "")) : "";
-      const fresh = a.said && performance.now() - a.saidAt < 9000;
-      node.children[2].textContent = fresh ? "“" + a.said.slice(0, 90) + "”" : "";
-      node.classList.toggle("speaking", !!fresh);
+    if (!at) continue;
+    setText(node, 0, d2.name || id);
+    setText(node, 1, view.opts.detail ? (d2.state + (d2.task ? " · " + d2.task.slice(0, 48) : "")) : "");
+    const fresh = a.said && now - a.saidAt < 9000;
+    setText(node, 2, fresh ? "“" + a.said.slice(0, 90) + "”" : "");
+    setText(node, 3, !fresh && a.chatting && Math.floor(now / 900 + a.phase) % 3 !== 0 ? "···" : "");
+    node.classList.toggle("speaking", !!fresh);
+    node.classList.toggle("selected", id === World.selected);
+    items.push({ node, x: at[0], y: at[1], depth: at[2] });
+  }
+  if (view.opts.detail) for (const tm of view.teamSpots || []) {
+    const key = "team:" + tm.id;
+    seen.add(key);
+    const node = nodeFor(key, "wlabel team");
+    const at = project(view, tm.pos);
+    node.hidden = !at;
+    if (!at) continue;
+    setText(node, 0, tm.goal.slice(0, 40) || "team");
+    setText(node, 1, tm.stage);
+    items.push({ node, x: at[0], y: at[1], depth: at[2] + 0.5 });
+  }
+  // agents first (nearest first), then team banners; a label is lifted at most twice and
+  // never more than ~40px from its head - a banner label that still collides just hides
+  items.sort((p, q) => (p.node.classList.contains("team") - q.node.classList.contains("team")) || p.depth - q.depth);
+  const placed = [];
+  for (const it of items) {
+    if (it.node.dirty || !it.node.wh) { it.node.wh = [it.node.offsetWidth || 80, it.node.offsetHeight || 18]; it.node.dirty = false; }
+    const [bw, bh] = it.node.wh;
+    const team = it.node.classList.contains("team");
+    let y = it.y, hit = null;
+    for (let k = 0; k < 3; k++) {
+      hit = placed.find((r) => Math.abs(r.x - it.x) < (r.w + bw) / 2 - 4 && y > r.y - r.h + 4 && y - bh < r.y - 4);
+      if (!hit || k === 2 || team) break;
+      const ny = hit.y - hit.h - 2;
+      if (it.y - ny > 44) break;
+      y = ny;
     }
+    it.node.classList.toggle("crowded", !!hit);
+    if (team && hit) { it.node.hidden = true; continue; }
+    placed.push({ x: it.x, y, w: bw, h: bh });
+    it.node.style.transform = "translate(" + Math.round(it.x) + "px," + Math.round(y) + "px) translate(-50%,-100%)";
   }
   for (const id of Object.keys(view.labelNodes)) if (!seen.has(id)) { view.labelNodes[id].remove(); delete view.labelNodes[id]; }
 }
 
+function selectAgent(id, view) {
+  World.selected = World.selected === id && !view ? "" : id;
+  if (view && !id) view.follow = "";
+  renderLegend();
+  if (view) updateCard(view, true);
+}
+
+// The inspector: everything here is from GET /world - nothing is made up.
+function updateCard(view, force) {
+  const frameBox = view.canvas.parentElement;
+  if (!frameBox) return;
+  let card = view.card;
+  const a = World.selected && World.agents[World.selected];
+  if (!a) { if (card) card.hidden = true; return; }
+  if (!card) {
+    card = view.card = el("div", "world-card");
+    const head = el("div", "wc-head");
+    head.append(el("span", "agent-dot"), el("b"), el("span", "pill"));
+    const close = el("button", "wc-close", "×");
+    close.type = "button"; close.title = "Close";
+    close.addEventListener("click", () => { World.selected = ""; view.follow = ""; renderLegend(); updateCard(view, true); });
+    head.append(close);
+    const rows = el("dl", "wc-rows");
+    const actions = el("div", "wc-actions");
+    const follow = el("button", "wc-follow", "Follow");
+    follow.type = "button";
+    follow.addEventListener("click", () => { view.follow = view.follow === World.selected ? "" : World.selected; updateCard(view, true); });
+    actions.append(follow);
+    card.append(head, rows, el("p", "wc-said"), actions);
+    frameBox.append(card);
+  }
+  if (!force && view.cardAt && performance.now() - view.cardAt < 400) return;
+  view.cardAt = performance.now();
+  card.hidden = false;
+  const d = a.data || {}, nowS = (World.data && World.data.time) || Date.now() / 1000;
+  const [dot, name, pill] = card.firstChild.children;
+  dot.style.background = d.color || STATE_COLOR[d.state] || "#8fb3d9";
+  name.textContent = d.name || d.id;
+  pill.textContent = d.state || "";
+  pill.className = "pill " + (d.state === "working" ? "working" : d.state === "blocked" ? "blocked" : d.state === "done" ? "done" : "");
+  const rows = card.children[1];
+  rows.replaceChildren();
+  const team = ((World.data && World.data.teams) || []).find((tm) => tm.id === d.team);
+  const add = (k, v) => { if (!v) return; rows.append(el("dt", "", k), el("dd", "", v)); };
+  add("Role", d.role);
+  add("Doing", d.task);
+  add("Where", (d.station || "") + (d.machine ? " · " + d.machine : ""));
+  if (d.since) add(d.state === "done" || d.state === "failed" ? "Took" : "On it for", ago((d.finished || nowS) - d.since));
+  if (team) {
+    const stages = team.stages && team.stages.length ? team.stages : ["plan", "build", "check"];
+    const cur = stages.indexOf(team.stage);
+    add("Team", (team.goal || team.id).slice(0, 60));
+    add("Stage", stages.map((s, i) => (i < cur ? "✓ " : i === cur ? "▸ " : "· ") + s).join("   "));
+  }
+  card.children[2].textContent = a.said ? "“" + a.said.slice(0, 220) + "”" : "";
+  card.children[3].firstChild.textContent = view.follow === World.selected ? "Stop following" : "Follow";
+}
+
+function updateHud(view, now, hour) {
+  const frameBox = view.canvas.parentElement;
+  if (!frameBox) return;
+  if (!view.hud) { view.hud = el("div", "world-hud"); frameBox.append(view.hud); }
+  if (view.hudAt && now - view.hudAt < 500) return;
+  view.hudAt = now;
+  const agents = (World.data && World.data.agents) || [];
+  const s = (World.data && World.data.stats) || {};
+  const count = (k) => agents.filter((a) => a.state === k).length;
+  const hh = Math.floor(hour), mm = Math.floor((hour - hh) * 60);
+  const parts = [(hour >= 6.5 && hour < 19 ? "☀ " : "☾ ") + String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"),
+    (s.working != null ? s.working : count("working")) + " working", (s.waiting != null ? s.waiting : count("waiting")) + " waiting"];
+  const blocked = s.blocked != null ? s.blocked : count("blocked");
+  if (blocked) parts.push(blocked + " need you");
+  if (s.done_today != null) parts.push(s.done_today + " done today");
+  if (s.failed_today) parts.push(s.failed_today + " failed");
+  const text = parts.join("  ·  ");
+  if (view.hud.textContent !== text) view.hud.textContent = text;
+  view.hud.classList.toggle("alert", blocked > 0);
+  if (World.selected) updateCard(view);
+}
+
+// ---------------------------------------------------------------- loop
 // Runs while the view is visible and the window is not hidden. The background view is
-// capped (opts.fps, 30) so it stays light behind the home screen.
+// capped (opts.fps, 30) so it stays light behind the home screen. The frame-time watcher:
+// if frames keep arriving late, draw coarser world pixels (up to +3); when they are on time
+// again for a while, step back. Only between whole pixel sizes, so the look holds.
 function loop(view) {
   const tick = (now) => {
     if (!view.visible || document.hidden) { view.visible = false; view.raf = 0; return; }
     view.raf = requestAnimationFrame(tick);
     const fps = view.opts.fps || 0;
     if (fps && view.lastDraw && now - view.lastDraw < 1000 / fps - 2) return;
+    const gap = view.lastDraw ? now - view.lastDraw : 0;
     view.lastDraw = now;
     if (now - World.lastFetch > 2500) fetchWorld();
     frame(view, now);
+    watchFrames(view, gap, fps);
   };
   if (!view.raf) view.raf = requestAnimationFrame(tick);
+}
+
+function watchFrames(view, gap, fps) {
+  const pf = view.perf;
+  if (!gap || gap > 250) return;   // first frame, or the window was asleep: not a measurement
+  pf.ema = pf.ema ? pf.ema * 0.92 + gap * 0.08 : gap;
+  if (!World.adaptive || World.pixel) return;
+  const budget = 1000 / (fps || 60);
+  if (pf.trial) {   // a coarser step only stays if it actually made frames faster
+    if (++pf.trial.frames < 60) return;
+    if (pf.ema > pf.trial.before * 0.88) { pf.boost--; pf.noGain = performance.now(); }
+    pf.trial = null; pf.slow = 0; pf.fast = 0;
+    return;
+  }
+  if (pf.ema > budget * 1.35) { pf.slow++; pf.fast = 0; } else if (pf.ema < budget * 1.1) { pf.fast++; pf.slow = 0; } else { pf.slow = 0; pf.fast = 0; }
+  const cooling = pf.noGain && performance.now() - pf.noGain < 60000;   // pixels are not the bottleneck here
+  if (pf.slow > 40 && pf.boost < 3 && !cooling) { pf.trial = { before: pf.ema, frames: 0 }; pf.boost++; pf.slow = 0; }
+  if (pf.fast > 300 && pf.boost > 0) { pf.boost--; pf.fast = 0; }
 }
 
 function setVisible(view, on) {
@@ -733,17 +1465,76 @@ function setVisible(view, on) {
   if (view.visible) { view.last = 0; view.lastDraw = 0; loop(view); }
 }
 
+function pickAgent(view, cx, cy) {
+  let best = "", bestD = 30;
+  for (const [id, a] of Object.entries(World.agents)) {
+    for (const y of [0.5, 1.0, 1.5]) {
+      const at = project(view, [a.x, y * (a.big || 1.3), a.z]);
+      if (!at) continue;
+      const dd = Math.hypot(at[0] - cx, at[1] - cy);
+      if (dd < bestD) { bestD = dd; best = id; }
+    }
+  }
+  return best;
+}
+
 function attachControls(view) {
   const c = view.canvas;
-  c.addEventListener("pointerdown", (e) => { view.drag = { x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); });
+  c.tabIndex = 0;
+  const end = (e) => {
+    const p = view.pointers[e.pointerId];
+    delete view.pointers[e.pointerId];
+    if (p && !p.moved && e.type === "pointerup" && Object.keys(view.pointers).length === 0) {   // a click: inspect
+      const r = c.getBoundingClientRect();
+      const id = pickAgent(view, e.clientX - r.left, e.clientY - r.top);
+      World.selected = id;
+      if (!id) view.follow = "";
+      renderLegend(); updateCard(view, true);
+    }
+    view.drag = Object.keys(view.pointers).length ? view.drag : null;
+    view.pinch = null;
+  };
+  c.addEventListener("pointerdown", (e) => {
+    view.pointers[e.pointerId] = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+    view.drag = { x: e.clientX, y: e.clientY };
+    try { c.setPointerCapture(e.pointerId); } catch (_) { /* not capturable */ }
+  });
   c.addEventListener("pointermove", (e) => {
-    if (!view.drag) return;
+    const p = view.pointers[e.pointerId];
+    if (!p) return;
+    if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 5) p.moved = true;
+    const ids = Object.keys(view.pointers);
+    if (ids.length === 2) {   // pinch to zoom
+      const [a, b] = ids.map((k) => view.pointers[k]);
+      p.x = e.clientX; p.y = e.clientY;
+      const dd = Math.hypot(a.x - b.x, a.y - b.y);
+      if (view.pinch) view.dist = Math.max(6, Math.min(28, view.dist * view.pinch / Math.max(1, dd)));
+      view.pinch = dd;
+      return;
+    }
+    if (!view.drag || !p.moved) { p.x = e.clientX; p.y = e.clientY; return; }
     view.yaw += (e.clientX - view.drag.x) * 0.008;
     view.pitch = Math.max(0.2, Math.min(1.35, view.pitch + (e.clientY - view.drag.y) * 0.006));
     view.drag = { x: e.clientX, y: e.clientY };
+    p.x = e.clientX; p.y = e.clientY;
   });
-  c.addEventListener("pointerup", () => { view.drag = null; });
-  c.addEventListener("wheel", (e) => { e.preventDefault(); view.dist = Math.max(7, Math.min(28, view.dist + e.deltaY * 0.01)); }, { passive: false });
+  c.addEventListener("pointerup", end);
+  c.addEventListener("pointercancel", end);
+  c.addEventListener("lostpointercapture", (e) => { if (view.pointers[e.pointerId]) end(e); });
+  c.addEventListener("dblclick", (e) => {
+    const r = c.getBoundingClientRect();
+    const id = pickAgent(view, e.clientX - r.left, e.clientY - r.top);
+    World.selected = id; view.follow = id;
+    renderLegend(); updateCard(view, true);
+  });
+  c.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { World.selected = ""; view.follow = ""; renderLegend(); updateCard(view, true); }
+    if (e.key === "ArrowLeft") view.yaw -= 0.15;
+    if (e.key === "ArrowRight") view.yaw += 0.15;
+    if (e.key === "+" || e.key === "=") view.dist = Math.max(6, view.dist - 1);
+    if (e.key === "-") view.dist = Math.min(28, view.dist + 1);
+  });
+  c.addEventListener("wheel", (e) => { e.preventDefault(); view.dist = Math.max(6, Math.min(28, view.dist + e.deltaY * 0.01)); }, { passive: false });
 }
 
 // ---------------------------------------------------------------- the two views
@@ -798,8 +1589,8 @@ async function startWorld() {
   if (settings) new MutationObserver(refreshBackground).observe(settings, { attributes: true, attributeFilter: ["hidden"] });
   document.addEventListener("visibilitychange", () => {
     refreshBackground();
-    if (World.views.panel && !document.getElementById("settings").hidden &&
-        !document.querySelector('[data-panel="world"]').hidden) setVisible(World.views.panel, true);
+    const panel = document.querySelector('[data-panel="world"]');
+    if (World.views.panel && settings && !settings.hidden && panel && !panel.hidden) setVisible(World.views.panel, true);
   });
   refreshBackground();
 }

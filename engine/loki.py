@@ -3835,7 +3835,7 @@ def _toolset_summary(text: str) -> str:
 
 
 async def call_tool(name: str, args: dict) -> str:
-    global _task_modified
+    global _task_modified, _task_wrote_file
     args = _normalize_args(name, args)
     # The git MCP server requires repo_path on every call. Loki already knows the
     # project, so fill it in - the model never has to guess the workspace path.
@@ -3859,8 +3859,11 @@ async def call_tool(name: str, args: dict) -> str:
             result = LOCAL_TOOLS[name](**args)
             if asyncio.iscoroutine(result):
                 result = await result
-            if name in MODIFYING:
+            if name in MODIFYING and not str(result).lstrip().lower().startswith(("error", "denied")):
+                # a failed call changed nothing, and an empty folder is not a written file
                 _task_modified = True
+                if name != "make_dir":
+                    _task_wrote_file = True
                 _record_touched(name, args, result)
             return result
         except Exception as e:
@@ -3873,6 +3876,7 @@ async def call_tool(name: str, args: dict) -> str:
             return f"error: {e}"
         if _record_mcp_touched(name, args, text):
             _task_modified = True
+            _task_wrote_file = True
         if "toolset" in name:
             # Enabling a toolset changes the server's tool list; without this the
             # model would have to guess at tools it can never see.
@@ -4015,6 +4019,7 @@ _last_turn_had_tools = False
 _repeat_sig = ""
 _repeat_count = 0
 _task_modified = False
+_task_wrote_file = False   # a file (not just a folder) was written or changed in this task
 
 # ---------------------------------------------------------------------------
 # Verification: a model saying it is done is not proof that it is.
@@ -4725,6 +4730,16 @@ async def _run_agent(user_message: str) -> str:
         raise
 
 
+_NAMED_FILE = re.compile(r"(?<![\w@])[\w./\\-]*\w\.[A-Za-z][A-Za-z0-9]{0,5}\b")
+
+
+def _goal_names_file(goal: str) -> bool:
+    """True when the goal names a file to produce ("create notes/hello.txt"), so making
+    only its folder is not done. Web addresses and e-mail addresses are not files."""
+    text = re.sub(r"\b\w+://\S+|\bwww\.\S+|\S+@\S+|\b(?:e\.g|i\.e|etc|vs)\.", " ", goal)
+    return bool(_NAMED_FILE.search(text))
+
+
 def _goal_needs_files(goal: str) -> bool:
     words = ("create", "add", "make", "build", "implement", "write", "system",
              "script", "scene", "setup", "set up", "configure", "fix", "update",
@@ -4768,11 +4783,12 @@ def _answer_only(goal: str) -> bool:
 
 
 async def _pursue_goal(goal: str) -> str:
-    global _empty_nudges, _task_modified, _repeat_sig, _repeat_count, _jev_loop_window
+    global _empty_nudges, _task_modified, _task_wrote_file, _repeat_sig, _repeat_count, _jev_loop_window
     _empty_nudges = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     _task_modified = False
+    _task_wrote_file = False
     ROUTE_TRACE.clear()
     REQUEST_USAGE.clear()
     _task_files.clear()
@@ -4832,7 +4848,8 @@ async def _pursue_goal(goal: str) -> str:
         else:
             stalls = 0
         head = reply.strip().upper()
-        if head.startswith("DONE") and _goal_needs_files(goal) and not _task_modified:
+        if head.startswith("DONE") and _goal_needs_files(goal) and (
+                not _task_modified or (not _task_wrote_file and _goal_names_file(goal))):
             premature_done += 1
             if premature_done > PREMATURE_DONE_LIMIT:
                 message = ("BLOCKED: the model kept saying DONE without changing any file (%d times); "

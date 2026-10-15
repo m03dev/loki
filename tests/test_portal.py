@@ -679,6 +679,19 @@ check("the world has a sky, an island, props, shadows and lights", all(s in worl
 check("the background world is frame-capped", "fps: 30" in world_js and "1000 / fps" in world_js)
 check("the world loads nothing from outside and never evals", all(s not in world_js for s in (
     "http://", "https://", "eval(", "new Function", "XMLHttpRequest", "import(")))
+check("the static scene is baked once into a few buffers (land, sky, shadows)", all(s in world_js for s in (
+    "function bake(", "BAKED_VS", "BAKED_OUTLINE_VS", "SHADOW_VS", "view.batches.land", "view.batches.shadows")))
+check("a lost WebGL context is rebuilt, not left black", "webglcontextrestored" in world_js and "initGL(view)" in world_js)
+check("the frame-time watcher coarsens pixels only when it helps", "function watchFrames(" in world_js
+      and "pf.trial" in world_js and "noGain" in world_js and "World.adaptive" in world_js)
+check("lights are ranked so a blocked agent's red light is never dropped",
+      ".sort((a, b) => (b.pri || 0) - (a.pri || 0)).slice(0, 10)" in world_js)
+check("the world can be inspected: click to pick, a card from /world, follow, Esc, pinch",
+      all(s in world_js for s in ("function pickAgent(", "function updateCard(", "view.follow", '"Escape"', "pointercancel", "view.pinch")))
+check("the life-sim layer: paths round the plaza, benches, chat dots, team banners with real stages, a HUD",
+      all(s in world_js for s in ("function routeTo(", "SCENERY.benches", '"···"', "tm.stages", "function updateHud(")))
+check("labels never pile up (nearest first, lifted, crowded fade)", '"crowded"' in world_js)
+check("ambience stops with reduced motion", world_js.count("World.reduced") >= 10)
 check("the world keeps the functions app.js and settings.js call", all(
     ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")) and "window.afterStart" in world_js)
 if shutil.which("node"):
