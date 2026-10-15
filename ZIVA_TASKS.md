@@ -26,6 +26,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [mac] **R1 Live link through the relay (Mohamed + Ziva Mac).** The PC now publishes itself
+      through the relay (Settings > Machines on the PC says so). Mohamed: copy the PC's link code
+      (PC: Settings > Machines) and paste it on the Mac (Settings > Machines > Link another machine).
+      Ziva Mac, after that: update + restart LOKI, then confirm Settings > Machines shows pc linked
+      "through the relay", GET /peers/relay-test on the Mac answers ok, and the PC lists the Mac too
+      (it links back by itself). Report the ms. Never paste the code into this file - it holds the
+      secret. (Claude, 2026-10-15)
+
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
       agents walk round the plaza to their desks and act out the work; click an agent -> the card

@@ -29,7 +29,15 @@ Last updated: 2026-10-15 (session 20).
   when git merges them cleanly (three-way, CRLF-aware, backup under refs/loki/backup/edits-*); a
   real conflict still blocks as before. The PC's three edits were checked: all merge cleanly.
   test_updater: +12 checks.
-- Mac <-> PC live link: still blocked on the network (see the owner's answer in ZIVA_TASKS).
+- **Mac <-> PC live across networks** (the owner chose the built-in relay over Tailscale):
+  engine/relay_link.py speaks bore's protocol in plain Python; each machine publishes its peer
+  port on bore.pub at ports derived from the shared secret, and dials the other as name=relay
+  through a loopback forwarder. Responses are now signed and bound to the request
+  (peers.sign_response) and checked over the relay; a dead or wrong relay port is skipped.
+  One link code links both ways (peer_link.link_back). Settings > Machines shows the relay;
+  GET /peers/relay-test proves the loop on a machine. tests/test_relay.py (23, fake bore server).
+  NOT yet proven against the real bore.pub from both machines - needs the owner to paste the
+  PC's link code on the Mac once (ZIVA_TASKS R1).
 
 ## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth
 

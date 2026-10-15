@@ -108,6 +108,14 @@ async function loadMachines() {
     code.addEventListener("focus", () => code.select());
     listen.append(code, el("div", "why", "Keep this private: it lets a machine on your network use this Loki."));
   }
+  const relay = data.relay || {};
+  if (data.listening && relay.mode !== "off") {
+    // Other networks: published through the public relay (engine/relay_link.py).
+    listen.append(el("div", relay.publishing ? "desc" : "why", relay.publishing
+      ? "Also reachable from other networks through the relay (" + relay.host + "). Requests and answers are signed; " +
+        "the relay could read them, so use Tailscale for a private link."
+      : "Relay to other networks: " + (relay.error || "starting...")));
+  }
   toggle.addEventListener("change", async () => {
     const result = await api("/peers/listen", { on: toggle.checked });
     if (!result.ok) addNotice(result.error || "Could not change that.", true);
@@ -132,7 +140,8 @@ async function loadMachines() {
     event.preventDefault();
     const result = await api("/peers/link", { code: codeIn.value.trim() });
     if (!result.ok) { msg.textContent = result.error || "Could not link."; return; }
-    msg.textContent = result.warning ? "Linked " + result.linked + ", but: " + result.warning : "Linked " + result.linked + ".";
+    msg.textContent = result.warning ? "Linked " + result.linked + ", but: " + result.warning
+      : "Linked " + result.linked + (result.via === "relay" ? " through the relay (different networks)." : ".");
     codeIn.value = "";
     loadMachines();
   });

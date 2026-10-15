@@ -7,6 +7,23 @@ name** - it **refuses a public hostname**. So when the Mac (192.168.1.x) and the
 of the options below. Nothing here changes the link's own safety: every request is still signed
 with the shared secret, and the receiver's policy still decides what may run.
 
+## Built in: the relay link (what LOKI does now, chosen by the owner 2026-10-15)
+
+LOKI publishes its peer port through the public relay **by itself** (`engine/relay_link.py`,
+the bore protocol in plain Python - nothing to install). One link code links both machines:
+
+1. On the PC: Settings > Machines > *Let my other machines link to this one* (already on).
+   The panel says "Also reachable from other networks through the relay (bore.pub)".
+2. Copy its link code to the Mac: Settings > Machines > *Link another machine* > paste > Link.
+   The Mac tries the LAN address first and falls back to the relay ("Linked pc through the
+   relay"). The first signed call makes the PC link back to the Mac on its own.
+3. Check on either machine: `GET /peers/relay-test` (dials its own relay port and does a signed hello).
+
+How it finds the other side: the relay port each machine asks for is derived from the shared
+secret and its name (three candidates, in order), so nothing else is exchanged. Requests AND
+responses are signed and bound together; the relay cannot forge an answer, but it could
+read the traffic. `LOKI_RELAY=off` turns it off; `LOKI_RELAY_HOST` picks another bore server.
+
 ## Option A - Tailscale (recommended: private and encrypted)
 
 Both machines join the same Tailscale network and get a **100.x** address, which the link

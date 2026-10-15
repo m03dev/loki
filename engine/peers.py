@@ -35,6 +35,12 @@ Configuration (harness_data/.env on each machine):
 
 `tools/peer_link.py pair` writes the listening side and prints a LINK CODE; pasting that
 code into the other Loki (Settings > Machines) writes the talking side.
+
+Different networks (the Mac on 192.168.1.x, the PC on 192.168.0.x): relay_link.py publishes
+the peer port through a public bore relay and reaches the other side through a loopback
+forwarder. A peer written as `name=relay` (a relay link code writes that) is dialled that
+way. Over the relay every RESPONSE is signed too (sign_response), bound to its request, and
+checked - an answer that is not signed is refused.
 """
 from __future__ import annotations
 
@@ -61,6 +67,7 @@ MAX_SKEW_S = 120
 MAX_BODY = 8 * 1024 * 1024
 TIMEOUT_S = 10.0
 LINK_PREFIX = "loki-link:"
+RELAY = "relay"          # LOKI_PEERS=pc=relay: reach "pc" through the public relay (relay_link.py)
 
 
 # --- configuration ------------------------------------------------------------------
@@ -100,6 +107,11 @@ def peers(env: dict | None = None) -> list[dict]:
             continue
         name, _, url = item.partition("=") if "=" in item else ("peer%d" % (index + 1), "", item)
         url = url.strip().rstrip("/")
+        if url == RELAY and secret(env):
+            import relay_link  # pylint: disable=import-outside-toplevel
+            nm = name.strip() or "peer%d" % (index + 1)
+            out.append({"name": nm, "url": relay_link.local_url(nm, secret(env)), "relay": True})
+            continue
         parsed = urlparse(url)
         if parsed.scheme == "http" and parsed.hostname and private_host(parsed.hostname):
             out.append({"name": name.strip() or "peer%d" % (index + 1), "url": url})
@@ -142,8 +154,13 @@ def new_secret() -> str:
     return secrets.token_urlsafe(32)
 
 
-def make_link_code(name: str, url: str, shared: str) -> str:
-    raw = json.dumps({"name": name, "url": url, "secret": shared}, separators=(",", ":"))
+def make_link_code(name: str, url: str, shared: str, relay: bool = False) -> str:
+    """relay=True: the other machine may reach this one through the public relay when the
+    LAN address (url) does not answer - for machines on different networks."""
+    data = {"name": name, "url": url, "secret": shared}
+    if relay:
+        data["relay"] = 1
+    raw = json.dumps(data, separators=(",", ":"))
     return LINK_PREFIX + base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
@@ -165,7 +182,7 @@ def parse_link_code(code: str) -> dict:
         raise ValueError("Loki only links machines on your own network")
     if len(shared) < MIN_SECRET:
         raise ValueError("the link code's secret is too short")
-    return {"name": name, "url": url.rstrip("/"), "secret": shared}
+    return {"name": name, "url": url.rstrip("/"), "secret": shared, "relay": bool(data.get("relay"))}
 
 
 def lan_address() -> str:
@@ -188,6 +205,13 @@ def _body_hash(body: bytes) -> str:
 
 def sign(shared: str, method: str, path: str, stamp: str, body: bytes) -> str:
     message = "\n".join([method.upper(), path, stamp, _body_hash(body)]).encode()
+    return hmac.new(shared.encode(), message, hashlib.sha256).hexdigest()
+
+
+def sign_response(shared: str, request_sig: str, body: bytes) -> str:
+    """A response's signature: bound to the request it answers, so it cannot be replayed
+    for another request or forged by whoever carries it (the relay)."""
+    message = "\n".join(["RESPONSE", request_sig, _body_hash(body)]).encode()
     return hmac.new(shared.encode(), message, hashlib.sha256).hexdigest()
 
 
@@ -241,7 +265,25 @@ class PeerError(Exception):
 
 def call(peer: dict, method: str, path: str, payload: dict | None = None,
          env: dict | None = None, timeout: float = TIMEOUT_S, opener=urllib.request.urlopen) -> dict:
-    """Signed request to a peer. Returns its JSON; raises PeerError with a plain reason."""
+    """Signed request to a peer. Returns its JSON; raises PeerError with a plain reason.
+    Through the relay, a dead or wrong relay port moves the forwarder on and tries once more."""
+    try:
+        return _call(peer, method, path, payload, env, timeout, opener)
+    except PeerError:
+        if not peer.get("relay"):
+            raise
+        import relay_link  # pylint: disable=import-outside-toplevel
+        fwd = relay_link.forwarder(peer["name"])
+        if fwd is None:
+            raise
+        fwd.rotate()
+        if method.upper() != "GET":
+            raise          # never send a job or an update twice; the next call uses the next port
+        return _call(peer, method, path, payload, env, timeout, opener)
+
+
+def _call(peer: dict, method: str, path: str, payload: dict | None, env: dict | None,
+          timeout: float, opener) -> dict:
     shared = peer.get("secret") or secret(env)
     if not shared:
         raise PeerError("no LOKI_PEER_SECRET is set on this machine")
@@ -253,7 +295,13 @@ def call(peer: dict, method: str, path: str, payload: dict | None = None,
                                      headers=headers, method=method)
     try:
         with opener(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8") or "{}")
+            raw = response.read()
+            if peer.get("relay"):
+                got = str((getattr(response, "headers", None) or {}).get("X-Loki-Resp-Sig") or "")
+                if not got or not hmac.compare_digest(got, sign_response(shared, headers["X-Loki-Sig"], raw)):
+                    raise PeerError("%s: the answer through the relay was not signed by %s - refused"
+                                    % (peer["name"], peer["name"]))
+            return json.loads(raw.decode("utf-8") or "{}")
     except urllib.error.HTTPError as exc:
         try:
             detail = json.loads(exc.read().decode("utf-8") or "{}").get("error", "")
@@ -305,10 +353,14 @@ class PeerServer:
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
+                request_sig = getattr(self, "_verified_sig", "")
+                if request_sig:
+                    self.send_header("X-Loki-Resp-Sig", sign_response(secret(server.env), request_sig, data))
                 self.end_headers()
                 self.wfile.write(data)
 
             def _handle(self, method: str) -> None:
+                self._verified_sig = ""
                 client = self.client_address[0]
                 if not private_client(client):
                     return self._send(403, {"ok": False, "error": "only your own network may talk to Loki"})
@@ -322,6 +374,13 @@ class PeerServer:
                 server._note(origin, method, path, refused)
                 if refused:
                     return self._send(401, {"ok": False, "error": refused})
+                self._verified_sig = str(self.headers.get("X-Loki-Sig") or "")
+                seen = server.callbacks.get("verified")
+                if seen is not None:
+                    try:
+                        seen(origin, client)
+                    except Exception:  # noqa: BLE001 - bookkeeping must never refuse a good request
+                        pass
                 try:
                     data = json.loads(body.decode("utf-8") or "{}") if body else {}
                     if not isinstance(data, dict):

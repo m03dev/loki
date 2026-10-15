@@ -55,7 +55,7 @@ check("a short secret does not count", peers.secret({"LOKI_PEER_SECRET": "short"
 check("listening needs both the switch and a secret",
       not peers.listen_enabled({"LOKI_PEER_LISTEN": "1"}) and peers.listen_enabled({"LOKI_PEER_LISTEN": "1", "LOKI_PEER_SECRET": SECRET}))
 code = peers.make_link_code("pc", "http://192.168.1.50:8768", SECRET)
-check("a link code round-trips", peers.parse_link_code(code) == {"name": "pc", "url": "http://192.168.1.50:8768", "secret": SECRET})
+check("a link code round-trips", peers.parse_link_code(code) == {"name": "pc", "url": "http://192.168.1.50:8768", "secret": SECRET, "relay": False})
 for bad, why in ((peers.make_link_code("pc", "http://8.8.8.8:8768", SECRET), "public address"),
                  (peers.make_link_code("pc", "http://192.168.1.50:8768", "short"), "short secret"),
                  ("hello", "not a code"), ("loki-link:@@@", "damaged")):

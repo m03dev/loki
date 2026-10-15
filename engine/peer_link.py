@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 import experience
 import peers
+import relay_link
 
 SYNC_EVERY_S = int(os.getenv("LOKI_PEER_SYNC_S", "600"))
 
@@ -140,6 +141,18 @@ def _safe(fn, default):
 
 # --- the server ---------------------------------------------------------------------
 
+def link_back(env_path, origin: str, client: str) -> bool:
+    """A machine holding our secret just reached us through the relay but is not one of our
+    peers yet: add it as name=relay, so one pasted link code links BOTH directions."""
+    name = "".join(ch for ch in str(origin) if ch.isalnum() or ch in "-_.")[:40]
+    if (not name or name == "?" or name == peers.my_name() or client not in ("127.0.0.1", "::1")
+            or not relay_link.STATUS.get("publishing") or any(p["name"] == name for p in peers.peers())):
+        return False
+    write_env(env_path, {"LOKI_PEERS": _peer_entries(peers.peers() + [{"name": name, "relay": True, "url": ""}])})
+    print("[loki-bridge] %s reached this machine through the relay; linked back to it" % name, flush=True)
+    return True
+
+
 def callbacks(state: Any, agent: Any) -> dict:
     def create_job(spec: dict) -> dict:
         jobs = state.jobs
@@ -179,7 +192,8 @@ def callbacks(state: Any, agent: Any) -> dict:
 
     return {"hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
-            "apply_update": apply_update}
+            "apply_update": apply_update,
+            "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 
 
 def _present(job: dict) -> dict:
@@ -195,7 +209,20 @@ def start(state: Any, agent: Any):
     server = peers.PeerServer(callbacks(state, agent)).start()
     print("[loki-bridge] peer link listening on %s:%s as %s" % (
         peers.lan_address(), server.address[1], peers.my_name()), flush=True)
+    if relay_link.publish(server.address[1], peers.secret(), peers.my_name()) is not None:
+        print("[loki-bridge] peer link also published through the relay %s (machines on other networks)"
+              % relay_link.host(), flush=True)
     return server
+
+
+def _peer_entries(items: list) -> str:
+    """LOKI_PEERS text for these peers; relay peers stay written as name=relay."""
+    return ",".join("%s=%s" % (p["name"], peers.RELAY if p.get("relay") else p["url"]) for p in items)
+
+
+def link_code(server) -> str:
+    return peers.make_link_code(peers.my_name(), "http://%s:%s" % (peers.lan_address(), server.address[1]),
+                                peers.secret(), relay=relay_link.mode() != "off")
 
 
 # --- the talking side ---------------------------------------------------------------
@@ -313,11 +340,25 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
                 "last_sync": LAST_SYNC,
                 "tuned": {"promoted": bool(getattr(agent, "TUNED_PROMOTED", False)),
                           "model": agent.MODELS["loki-tuned"].model if "loki-tuned" in agent.MODELS else ""}}
+        info["relay"] = relay_link.status()
         if listening:
             # Only ever shown on this machine, to this machine's own authorised app.
-            info["link_code"] = peers.make_link_code(
-                peers.my_name(), "http://%s:%s" % (peers.lan_address(), server.address[1]), peers.secret())
+            info["link_code"] = link_code(server)
         return 200, info
+    if method == "GET" and route == "/peers/relay-test":
+        # The whole relay loop from this machine: dial our OWN public relay port and make a
+        # signed hello, exactly as the other machine would. Proves the relay works here.
+        if not relay_link.STATUS.get("publishing"):
+            return 200, {"ok": False, "error": "not published through the relay yet: %s"
+                         % (relay_link.STATUS.get("error") or "is the peer link listening?")}
+        me = {"name": peers.my_name(), "relay": True, "url": relay_link.local_url(peers.my_name(), peers.secret())}
+        started = time.time()
+        try:
+            got = peers.call(me, "GET", "/peer/hello", timeout=10)
+            return 200, {"ok": True, "ms": int((time.time() - started) * 1000), "via": relay_link.status(),
+                         "hello": {"name": got.get("name"), "version": got.get("version")}}
+        except peers.PeerError as exc:
+            return 200, {"ok": False, "error": str(exc), "via": relay_link.status()}
     if method != "POST":
         return 404, {"ok": False, "error": "Unknown endpoint."}
     if route == "/peers/listen":
@@ -329,11 +370,11 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
             if getattr(state, "peer_server", None) is None:
                 state.peer_server = start(state, agent)
             server = state.peer_server
-            code = peers.make_link_code(peers.my_name(), "http://%s:%s" % (peers.lan_address(), server.address[1]),
-                                        peers.secret())
+            code = link_code(server)
             return 200, {"ok": True, "listening": True, "link_code": code,
                          "note": "Allow Python through the firewall if your system asks."}
         write_env(env_path, {"LOKI_PEER_LISTEN": None})
+        relay_link.stop()
         if getattr(state, "peer_server", None) is not None:
             state.peer_server.stop()
             state.peer_server = None
@@ -344,20 +385,32 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
         except ValueError as exc:
             return 400, {"ok": False, "error": str(exc)}
         current = [p for p in peers.peers() if p["name"] != link["name"]]
-        entries = ",".join("%s=%s" % (p["name"], p["url"]) for p in current + [link])
+        if link.get("relay"):
+            # Same network? Then the LAN address answers and is used. If not, the relay.
+            try:
+                peers.call(link, "GET", "/peer/hello", timeout=2.5)
+                link = {**link, "relay": False}
+            except peers.PeerError:
+                link = {**link, "url": ""}
+        entries = _peer_entries(current + [link])
         updates = {"LOKI_PEERS": entries, "LOKI_PEER_SECRET": link["secret"]}
         if data.get("trainer", True):
             updates["LOKI_TRAINER_PEER"] = link["name"]
         write_env(env_path, updates)
+        if getattr(state, "peer_server", None) is not None:   # our own side now shares the secret: publish it
+            relay_link.stop()
+            relay_link.publish(state.peer_server.address[1], peers.secret(), peers.my_name())
+        link = peers.find(link["name"]) or link
         try:
-            hello_data = peers.call(link, "GET", "/peer/hello", timeout=5)
-            return 200, {"ok": True, "linked": link["name"], "hello": hello_data}
+            hello_data = peers.call(link, "GET", "/peer/hello", timeout=8)
+            return 200, {"ok": True, "linked": link["name"], "via": "relay" if link.get("relay") else "network",
+                         "hello": hello_data}
         except peers.PeerError as exc:
             return 200, {"ok": True, "linked": link["name"], "warning": str(exc)}
     if route == "/peers/unlink":
         name = str(data.get("name", ""))
         rest = [p for p in peers.peers() if p["name"] != name]
-        updates = {"LOKI_PEERS": ",".join("%s=%s" % (p["name"], p["url"]) for p in rest) or None}
+        updates = {"LOKI_PEERS": _peer_entries(rest) or None}
         if os.getenv("LOKI_TRAINER_PEER", "") == name:
             updates["LOKI_TRAINER_PEER"] = None
         write_env(env_path, updates)
