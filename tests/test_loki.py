@@ -2243,7 +2243,8 @@ loki.set_mode(_v_saved_mode)
 check("plan mode offers no writing tool", not (_v_plan & loki.MODIFYING), sorted(_v_plan & loki.MODIFYING))
 check("plan mode offers no tool that runs the game", not (_v_plan & loki.RUNS_PROJECT),
       sorted(_v_plan & loki.RUNS_PROJECT))
-check("plan mode still reads and compile-checks", {"read_file", "search_files", "check_script"} <= _v_plan)
+check("plan mode still reads (and compile-checks GDScript in a Godot project)",
+      {"read_file", "search_files"} <= _v_plan and (("check_script" in _v_plan) == loki.is_godot_workspace()))
 
 check("touched path: write_file", loki._touched_path("write_file", {"filename": "a.gd"}) == "a.gd")
 check("touched path: move_file records the destination",
