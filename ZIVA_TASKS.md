@@ -110,6 +110,23 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       name for the model it was started with (server.py maps it to --model; its /v1/models lists
       the whole HF cache, so "first listed" would be wrong). MLX_MODEL still overrides. And mlx,
       vllm and kyojin are now priced free in the usage ledger (your $0.0018 note).
+- [ ] [windows] [mac] **New look, live (S2).** (Mohamed, 2026-10-15.) After LOKI updates, in the app:
+      (1) home shows only the 3D world and the word **Loki** with "v0.16 · patch N" under it; click it
+      (or just start typing) and the chat box appears, Esc with an empty box hides it again;
+      (2) the sidebar shows "LOKI v0.16 · patch N" - red "update problem" if updates fail (click it);
+      (3) the model button at the top reads "Smart · <provider>"; its menu groups ready models, hides
+      the not-set-up ones behind "Show N not set up"; pick one and send a message;
+      (4) the world is pixelated cel-shaded on a lit island - screenshot both machines into
+      docs/operations/screens/world-<mac|windows>.png and report the frame rate feel;
+      (5) Settings > Local models: the "This computer" card, then "Set up the best model" - report
+      what it picked and whether "Download & use" worked in one click. (Claude, 2026-10-15)
+- [ ] [mac] **Phone app (P1).** Steps are in docs/PHONE.md and mobile/README.md: `cd mobile && npm
+      install && npx expo install --fix && npm run typecheck`, then `npx expo prebuild` and
+      `npx expo run:ios --device`. Fix only src/brains/cactus.ts if the Cactus package's types differ.
+      Pair it from Settings > Machines > Phone and report each step. (Claude, 2026-10-15)
+- [ ] [windows] **Object tracking (V1).** `harness_data\.venv\Scripts\python.exe tools\setup_extras.py
+      vision`, enable vision-track in Add-ons, ask "track the cars in <a short clip>.mp4 max_frames=150";
+      confirm tracks\<clip>-tracked.mp4 plays and the CSV has rows. (Claude, 2026-10-15)
 - [ ] [windows] [mac] **System check, live (S1).** (Mohamed: "Everything is failing right now, I want
       it to succeed.") After LOKI updates: click **Check everything** (sidebar, next to Settings) or
       Settings > **System check** > Run the check. It takes under a minute and spends nothing (free
@@ -391,6 +408,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 cloud (Claude) Mohamed's list, all built in the cloud and merged: home = world + the
+  word "Loki" (chat on click/typing); version "v0.16 · patch N" (VERSION file + commit count) with
+  update problems shown; one model button with a grouped menu; updater fixes for the Mac (PATH for
+  the gh credential helper, safe.directory, sign-in errors, already-pushed/unpushed commits no
+  longer block, errors reach the window); richer machine scan + one-click "Set up the best model" +
+  better-model prompt; pixel cel-shaded world on a lit island; vision-track add-on (Roboflow
+  trackers); phone app (mobile/, Expo, Cactus/Needle + phone link); System check + test_systems.
+  Research notes: docs/integrations/research-2026-10-15.md. Offline suites green (stub-only
+  failures as before). Not run on a real machine/phone yet -> S1, S2, P1, V1 and the [mac] update check.
 - 2026-10-15 cloud (Claude) System check + positive integration tests (Mohamed: "I wanna see some
   positive tests"). One click runs 14 checks that prove the parts work TOGETHER here (smart route
   answers, the model calls a tool, a background agent runs and shows in the events + world, a team
