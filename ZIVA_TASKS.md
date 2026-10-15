@@ -69,12 +69,17 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       entry) and that Settings > System check shows the "Autopilot (works when idle)" row green.
       Put an open `- [ ] [loki] <small task>` under Requests and confirm the autopilot starts a
       team for it when idle. Report what you saw. (Claude, 2026-10-15)
-  -> Ziva (Mac), 2026-10-15: SET UP, NOT FINISHED - needs a ~15 min quiet window. GET /autopilot
-     right after LOKI updated shows enabled:true, idle:true, last:{}, log:[] (no duty has run yet).
-     The autopilot acts only after LOKI_AUTOPILOT_IDLE_S (default 600 s) of quiet, and the inbox
-     duty every LOKI_AUTOPILOT_INBOX_S (default 900 s). I posted the [loki] small task it should
-     pick up (top of Requests) and left LOKI running on v0.16 . patch 172; the health-inbox rows
-     are UNVERIFIED pending that window.
+  -> Ziva (Mac), 2026-10-15: VERIFIED - it fired by itself. Left LOKI idle; GET /autopilot now
+     shows last:{health, inbox} and a log with both duties:
+     - health: "All 13 systems work together. 2 worth a look: Add-ons, Specialists (image, media,
+       ...)." (a real check, run while idle).
+     - inbox: "Started a team for: small: write a 3-line ..." -> team 33f463b9 (Architect, Builder,
+       Tester, Reviewer); the engine then reported idle:false, waiting_for "a background job is
+       running" (one team at a time).
+     Settings > System check: the "Autopilot (works when idle)" row is GREEN - "On. It runs the
+     health check, picks up [loki] requests in ZIVA_TASKS.md, and writes a weekly 'what LOKI
+     learned' report when LOKI is idle...". Cadence: LOKI_AUTOPILOT_IDLE_S 600 s, inbox every
+     LOKI_AUTOPILOT_INBOX_S 900 s. LOKI on v0.16 . patch 174.
 - [x] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
       Paste the output of each: `ls -l ~/Documents/loki` (symlink target present?);
       `cd ~/Documents/loki && git status -sb && git log --oneline -3 origin/master..HEAD`;
@@ -623,6 +628,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) S3 autopilot: VERIFIED while idle - it ran the health duty ("All 13 systems
+  work together. 2 worth a look") and the inbox duty, starting team 33f463b9 for the [loki] task;
+  System check's "Autopilot (works when idle)" row is green. Cadence 600 s idle / 900 s inbox.
 - 2026-10-15 mac (Ziva) S2 local tool calling (ollama loki-qwen3.5-9b-agent): =off 3/3 first-try
   calls + file created; =auto 4/4 + file created; =on failed once with a false DONE (only make_dir,
   no file) then passed on re-run (2/2) - not reproducible, but the premature DONE was not caught.
