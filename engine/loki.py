@@ -680,6 +680,12 @@ def provider_tier(name: str) -> str:
     return "free"
 
 
+def _model_of(provider: str) -> str:
+    """The actual model name behind a provider (needed to score local models one by one)."""
+    cfg = MODELS.get(provider or "")
+    return str(getattr(cfg, "model", "") or "")
+
+
 def routing_order(order) -> list:
     """`order` as routing should try it: learned within tiers when enabled, else as-is."""
     if not LEARN_ROUTING:
@@ -801,6 +807,37 @@ def resolve_local(force: bool = False) -> dict:
         _LOCAL_LOCK.release()
 
 
+LOCAL_TOOL_MIN_SAMPLES = int(os.getenv("LOKI_TOOL_MIN_SAMPLES", "3"))
+
+
+def _best_local_by_tools(models: list, budget_gb: float) -> dict:
+    """The installed, tool-capable model with the BEST measured tool-calling record.
+
+    Local choice used to be hardware-only (model_setup.best_installed), so a model that
+    narrates instead of acting got picked again and again. Measured tool use now decides -
+    but only with evidence: no data, or too few requests, changes nothing.
+    """
+    try:
+        stats = experience.tool_stats()
+    except Exception:  # noqa: BLE001 - learning must never break model choice
+        return {}
+    scored = []
+    for m in models or []:
+        name = str(m.get("name") or "")
+        if not name or "embed" in name.lower():
+            continue
+        fit = model_setup.best_installed([m], budget_gb)
+        if not fit or not fit.get("tools"):
+            continue
+        score = experience.tool_score("local/" + name, stats, LOCAL_TOOL_MIN_SAMPLES)
+        if score is not None:
+            scored.append((score, name))
+    if not scored:
+        return {}
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    return {"name": scored[0][1], "score": scored[0][0]}
+
+
 def _resolve_local() -> dict:
     LOCAL_STATE["at"] = time.time()
     if os.getenv("LOKI_LOCAL_MODEL"):
@@ -810,16 +847,21 @@ def _resolve_local() -> dict:
     else:
         models = model_setup.ollama_models()
         best = None
+        why = ""
         if models:
             _match_installed_tags([m["name"] for m in models])
             info = HARDWARE if HARDWARE else {"budget_gb": 0}
             best = model_setup.best_installed(models, float(info.get("budget_gb") or 0))
+            proven = _best_local_by_tools(models, float(info.get("budget_gb") or 0))
+            if proven and (not best or proven["name"] != best.get("name")):
+                best = dict(best or {}, name=proven["name"], tools=True)
+                why = "best measured tool caller (score %.2f)" % proven["score"]
         if best and best.get("tools"):
             name = best["name"]
             if not name.startswith(model_setup.DERIVED_PREFIX) and os.getenv("LOKI_LOCAL_CONTEXT", "1") != "0":
                 name = model_setup.ensure_context(name, model_setup.context_for(HARDWARE or {}), models)
             LOCAL_STATE.update(name=name, base_url="http://localhost:11434/v1", source="ollama",
-                               note="best installed: %s" % best["name"])
+                               note=why or ("best installed: %s" % best["name"]))
         else:
             servers = model_setup.other_servers()
             if servers:
@@ -3985,6 +4027,7 @@ _task_modified = False
 _task_files: list = []
 _LAST_VERIFY: dict = {}        # the last verification report of this request
 _REQUEST_TOOL_CALLS = 0        # tool calls made in this request
+_GUARD_AT_START = {"repaired": 0, "rejected": 0}   # tool-guard counters when the request began
 EXPERIENCE_ENABLED = str(os.getenv("LOKI_EXPERIENCE", "1")).strip().lower() not in ("0", "false", "off", "no")
 VERIFY_ENABLED = str(os.getenv("LOKI_VERIFY", "1")).strip().lower() not in ("0", "false", "off", "no")
 VERIFY_MAX_FILES = int(os.getenv("LOKI_VERIFY_MAX_FILES", "6"))
@@ -4842,6 +4885,8 @@ async def _pursue_goal(goal: str) -> str:
 def _start_request() -> tuple:
     global _REQUEST_TOOL_CALLS
     _REQUEST_TOOL_CALLS = 0
+    _GUARD_AT_START["repaired"] = GUARD_STATS["repaired"]
+    _GUARD_AT_START["rejected"] = GUARD_STATS["rejected"]
     _LAST_VERIFY.clear()
     try:
         back = revive_local() if model_name in AUTO_ROUTING_MODES else []
@@ -4876,6 +4921,9 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
             "id": request_id, "kind": kind, "goal": goal, "status": status, "outcome": outcome,
             "provider": providers[-1] if providers else "", "providers": providers,
             "tool_calls": _REQUEST_TOOL_CALLS, "files": list(_task_files),
+            "model": _model_of(providers[-1] if providers else ""),
+            "repaired": GUARD_STATS["repaired"] - _GUARD_AT_START.get("repaired", 0),
+            "rejected": GUARD_STATS["rejected"] - _GUARD_AT_START.get("rejected", 0),
             "usage": dict(REQUEST_USAGE), "route": list(ROUTE_TRACE),
             "triage": _triage_record(start_index),
             "seconds": time.time() - started, "trajectory": kept, "role": JOB_ROLE,

@@ -869,6 +869,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"ok": True, **exp.summary(), "new_examples": exp.new_examples(),
                                   "providers": exp.provider_stats(),
+                                  "tool_stats": exp.tool_stats(),
                                   "learned_order": agent.routing_order(agent.SMART_ORDER),
                                   "tuned_promoted": bool(getattr(agent, "TUNED_PROMOTED", False))})
             return

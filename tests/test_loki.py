@@ -2611,6 +2611,35 @@ try:
     _ps = _ex.provider_stats()
     check("provider stats count verified and failed work",
           _ps["openrouter"]["verified"] == 1 and _ps["openrouter"]["failed"] == 1, _ps)
+
+    _ts = _ex.tool_stats()
+    _row = _ts["by_provider"].get("openrouter") or {}
+    check("tool stats count how often a model actually CALLED a tool (not just wrote files)",
+          _row.get("requests", 0) >= 2 and _row.get("with_tools", 0) >= 1 and _row.get("tool_rate") is not None, _ts["by_provider"])
+    check("a per-model row is kept, so each local model can be scored on its own",
+          any("/" in k for k in _ts["by_model"]), list(_ts["by_model"])[:4])
+    check("too little evidence never invents a tool score", _ex.tool_score("nobody/nothing", _ts) is None)
+    _synthetic = {"by_provider": {"x": {"requests": 5, "with_tools": 4, "calls": 6, "repaired": 1,
+                                        "rejected": 0, "tool_rate": 0.8, "clean_rate": 0.833}}, "by_model": {}}
+    check("the tool score blends how often it calls tools with how clean the calls were",
+          _ex.tool_score("x", _synthetic, 3) == round(0.75 * 0.8 + 0.25 * 0.833, 3),
+          _ex.tool_score("x", _synthetic, 3))
+
+    _save_bi, _save_ts = loki.model_setup.best_installed, _ex.tool_stats
+    loki.model_setup.best_installed = lambda ms, b: {"tools": True, "fits": True}
+    _ex.tool_stats = lambda *a, **k: {"by_provider": {}, "by_model": {
+        "local/small-model": {"requests": 5, "with_tools": 1, "calls": 1, "repaired": 0, "rejected": 0,
+                              "tool_rate": 0.2, "clean_rate": 1.0},
+        "local/good-model": {"requests": 5, "with_tools": 5, "calls": 9, "repaired": 0, "rejected": 0,
+                             "tool_rate": 1.0, "clean_rate": 1.0}}}
+    _pick = loki._best_local_by_tools([{"name": "small-model", "size_gb": 2},
+                                       {"name": "good-model", "size_gb": 5}], 8.0)
+    check("local model choice follows the measured tool record, not just size",
+          _pick.get("name") == "good-model", _pick)
+    _ex.tool_stats = lambda *a, **k: {"by_provider": {}, "by_model": {}}
+    check("with no evidence the local choice is left alone",
+          loki._best_local_by_tools([{"name": "small-model", "size_gb": 2}], 8.0) == {})
+    loki.model_setup.best_installed, _ex.tool_stats = _save_bi, _save_ts
 finally:
     (loki.EXPERIENCE_ENABLED, loki.WORKSPACE, loki.check_script, loki.save_history, loki.todo_clear,
      loki.provider_configured, loki.make_client, loki.refresh_mcp_tools, loki.model_name,

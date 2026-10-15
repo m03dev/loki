@@ -84,6 +84,9 @@ def record(entry: dict, root: Path | None = None) -> dict:
         "provider": entry.get("provider", ""),
         "providers": entry.get("providers", []),
         "tool_calls": int(entry.get("tool_calls", 0) or 0),
+        "model": str(entry.get("model", "") or "")[:80],
+        "repaired": int(entry.get("repaired", 0) or 0),
+        "rejected": int(entry.get("rejected", 0) or 0),
         "files": list(entry.get("files", []))[:30],
         "usage": entry.get("usage", {}),
         "route": entry.get("route", []),
@@ -149,6 +152,63 @@ def provider_stats(root: Path | None = None, window: int = 500) -> dict:
         b["success_rate"] = round(b["verified"] / judged, 3) if judged else None
         b["samples"] = judged
     return stats
+
+
+def tool_stats(root: Path | None = None, window: int = 500) -> dict:
+    """How well each provider, and each provider/model, actually CALLS tools.
+
+    provider_stats() only counts requests that wrote files, so a model that narrates
+    instead of acting looked the same as one that was never asked. This is the signal
+    model selection needed: did it call a tool, and how often did the tool guard have to
+    repair or reject one? Returns {"by_provider": {name: b}, "by_model": {"p/model": b}}.
+    """
+    by_provider: dict = {}
+    by_model: dict = {}
+
+    def bucket(store, key):
+        return store.setdefault(key, {"requests": 0, "with_tools": 0, "calls": 0,
+                                      "repaired": 0, "rejected": 0})
+
+    for line in entries(root, last=window):
+        name = line.get("provider")
+        if not name:
+            continue
+        calls = int(line.get("tool_calls") or 0)
+        repaired = int(line.get("repaired") or 0)
+        rejected = int(line.get("rejected") or 0)
+        keys = [("by_provider", name)]
+        model = str(line.get("model") or "")
+        if model:
+            keys.append(("by_model", name + "/" + model))
+        for store_name, key in keys:
+            b = bucket(by_model if store_name == "by_model" else by_provider, key)
+            b["requests"] += 1
+            if calls:
+                b["with_tools"] += 1
+            b["calls"] += calls
+            b["repaired"] += repaired
+            b["rejected"] += rejected
+    for store in (by_provider, by_model):
+        for b in store.values():
+            b["tool_rate"] = round(b["with_tools"] / b["requests"], 3) if b["requests"] else None
+            bad = b["repaired"] + b["rejected"]
+            b["clean_rate"] = round(1 - bad / b["calls"], 3) if b["calls"] else None
+    return {"by_provider": by_provider, "by_model": by_model}
+
+
+def tool_score(key: str, stats: dict | None = None, min_samples: int = 3,
+               root: Path | None = None) -> float | None:
+    """A 0..1 score of how well `key` calls tools; None means "not enough evidence yet".
+
+    `key` is a provider name, or "provider/model" to score one local model on its own.
+    Nothing is invented: too few requests returns None, and the caller keeps its default.
+    """
+    data = tool_stats(root) if stats is None else stats
+    b = (data.get("by_model") or {}).get(key) or (data.get("by_provider") or {}).get(key)
+    if not b or b.get("requests", 0) < min_samples or b.get("tool_rate") is None:
+        return None
+    clean = b["clean_rate"] if b.get("clean_rate") is not None else 1.0
+    return round(0.75 * float(b["tool_rate"]) + 0.25 * float(clean), 3)
 
 
 def role_stats(root: Path | None = None, window: int = 1000) -> dict:
