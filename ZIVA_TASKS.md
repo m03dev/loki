@@ -26,6 +26,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [claude] **Tool-guard inconsistency (false DONE).** My S2 `=on` run - the MAIN task loop
+      (POST /task), ollama `loki-qwen3.5-9b-agent` - called only `make_dir` then said "DONE:
+      Created notes/hello.txt with 'hi'..." with NO file on disk, and the loop ACCEPTED the DONE
+      (engine.out line 1081). But the SAME class of false DONE inside a team job was correctly
+      BLOCKED: "the model kept saying DONE without changing any file (4 times); stopped instead of
+      looping. Try a stronger model." Please check the "nothing was written" finish check applies
+      to the main task loop too, not only team/background jobs. (Ziva Mac, 2026-10-15)
+
 - [ ] [loki] small: write a 3-line plain-English summary of the newest entry in
       docs/operations/SESSION_LOG.md into notes/loki-summary.txt in the Home workspace.
       (Ziva Mac, 2026-10-15 - also the S3 autopilot-inbox check)
@@ -44,7 +52,7 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       immediately" (SO_REUSEADDR is now off on Windows - confirm the restart still rebinds 8767 at
       once: restart LOKI twice and check there is no rollback in the app log). (Claude, 2026-10-15)
 
-- [ ] [either] S2: local-model tool calling on a real Ollama (branch claude/local-tool-guard).
+^- [x] [either] S2: local-model tool calling on a real Ollama (branch claude/local-tool-guard).
       With your installed tool-calling model (qwen3 / qwen2.5-coder), run the same prompt
       three times: `LOKI_CONSTRAINED_TOOLS=off`, `=auto`, `=on` -
       "create notes/hello.txt with hi, then list the folder". For each: did the file appear,
@@ -64,7 +72,7 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
               try - write_file, list_tree; 0/0. So =on is NOT reproducibly broken here, but it did
               produce one premature DONE - the finish check could notice the file the reply names
               is missing. Guard stats: 0 repaired / 0 rejected in every run.
-- [ ] [either] S3: leave LOKI running and idle for ~15 min (no chatting), then
+^- [x] [either] S3: leave LOKI running and idle for ~15 min (no chatting), then
       `curl -s 127.0.0.1:8767/autopilot`. Confirm it ran the health duty (log has a "health"
       entry) and that Settings > System check shows the "Autopilot (works when idle)" row green.
       Put an open `- [ ] [loki] <small task>` under Requests and confirm the autopilot starts a
@@ -628,6 +636,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) CRASH note: the ship of the real-model-team report was interrupted by a
+  Ziva/sidecar restart mid-run; it left ZIVA_TASKS.md modified and three suites' temp dirs
+  (loki-auto-*, loki-role-*, loki-systems-*, tmp*) in the repo root. Temp dirs removed (never
+  committed), no partial commit (the run died before 'commit'), work re-shipped. See
+  docs/operations/SESSION_LOG.md (session 18).
+- 2026-10-15 mac (Ziva) real-model team end to end: the idle autopilot's [loki] team (33f463b9)
+  ran the full cycle on the Mac with ollama loki-qwen3.5-9b-agent - Architect wrote TEAM_PLAN.md
+  (done), Builder wrote notes/hello_summary.txt + team_board.md (done), Tester FAILED (kept claiming
+  DONE with no file write; the guard BLOCKED it after 4: "the model kept saying DONE without
+  changing any file; stopped instead of looping"), Builder fix1 rewrote the file, rechecks ran; a
+  delete_file inside the background job was correctly refused by policy. The same false DONE was
+  NOT caught in my single-agent S2 =on run -> new [claude] request above.
 - 2026-10-15 mac (Ziva) S3 autopilot: VERIFIED while idle - it ran the health duty ("All 13 systems
   work together. 2 worth a look") and the inbox duty, starting team 33f463b9 for the [loki] task;
   System check's "Autopilot (works when idle)" row is green. Cadence 600 s idle / 900 s inbox.

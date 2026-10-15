@@ -4,6 +4,29 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-15 - Session 18 (Ziva Mac): off-network link, S2/S3, a real-model team, one crashed ship
+
+- M3 off-network link: the peer link only dials private addresses, so a public relay is used
+  behind a loopback forwarder - new `tools/peer_forward.py` and `docs/operations/OFF_NETWORK.md`,
+  tests in `tests/test_peers.py`. Proven live (a signed peer /hello through bore.pub). The
+  Tailscale route is blocked on the owner's admin password (its macOS cask installs with sudo).
+- S2 local tool calling on Ollama (loki-qwen3.5-9b-agent): `=off` 3/3 first-try calls + file,
+  `=auto` 4/4 + file, `=on` failed once with a false DONE (only make_dir, no file) then passed on
+  re-run - not reproducible. 0 repaired / 0 rejected in every run. New [claude] request: the task
+  loop accepted a false DONE the team/background guard had blocked.
+- S3 autopilot: verified while idle - it ran the health duty and the inbox duty (started a team),
+  and the System-check "Autopilot (works when idle)" row is green.
+- A real-model team (the autopilot's 33f463b9) ran the whole cycle: Architect -> Builder ->
+  Tester(failed) -> Builder fix -> recheck; the guard BLOCKED the Tester's repeated DONE with no
+  file change, and policy refused a delete_file inside a background job.
+- **CRASH:** the ship of the team report was interrupted by a Ziva / sidecar restart mid-run. It
+  left a modified ZIVA_TASKS.md and several suites' temp dirs (`loki-auto-*`, `loki-role-*`,
+  `loki-systems-*`, `tmp*`) in the repo root. The temp dirs were removed (they were never
+  committed) and the work was re-shipped. No code was lost and no partial commit was made - the
+  run died before it reached the commit step.
+
+---
+
 ## 2026-10-15 - System check and positive integration tests
 
 - `engine/system_check.py`: 14 checks that prove LOKI's parts work together on this machine,
