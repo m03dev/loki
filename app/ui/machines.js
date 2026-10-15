@@ -157,4 +157,69 @@ async function loadMachines() {
     });
     box.append(sync, note);
   }
+
+  box.append(await phoneCard());
+}
+
+// Phone: the LOKI phone app (mobile/, engine/phone_link.py). Pair -> QR, list, revoke.
+async function phoneCard() {
+  const card = el("div", "row manifest");
+  card.append(el("h3", "", "Phone"));
+  const data = await api("/phones").catch(() => null);
+  if (!data || !data.ok) {
+    card.append(el("p", "why", (data && data.error) || "The phone link did not answer."));
+    return card;
+  }
+  const label = el("label");
+  const toggle = el("input");
+  toggle.type = "checkbox";
+  toggle.checked = Boolean(data.listening);
+  label.append(toggle, document.createTextNode(" Let the LOKI phone app talk to this " + (data.kind || "computer")));
+  card.append(label, el("div", "desc", "The phone chats in Ask or Plan mode only and can never approve anything." +
+    (data.listening ? " Listening on " + (data.addresses || []).join(", ") + " port " + data.port + "." : "")));
+  toggle.addEventListener("change", async () => {
+    const result = await api("/phones/enable", { on: toggle.checked });
+    if (!result.ok) addNotice(result.error || "Could not change that.", true);
+    else if (result.note) addNotice(result.note, false);
+    loadMachines();
+  });
+  if (data.listening) {
+    const pair = el("button", "", "Pair a phone");
+    pair.type = "button";
+    pair.addEventListener("click", async () => {
+      const name = (prompt("Name for this phone:", "My phone") || "").trim();
+      if (!name) return;
+      const r = await api("/phones/pair", { name });
+      if (!r.ok) { addNotice(r.error || "Could not pair.", true); return; }
+      const steps = ["Open LOKI on the phone > Connect > Scan.", "Point it at this code (it works for 15 minutes, once per phone).",
+                     "Phone and computer must be on the same network (or Tailscale)."];
+      if (typeof showQR === "function") {
+        showQR({ title: "Pair " + r.name, text: r.code, svg: r.svg, steps });
+      } else {
+        const holder = el("div");
+        const doc = new DOMParser().parseFromString(r.svg, "image/svg+xml");
+        if (doc.documentElement.tagName.toLowerCase() === "svg") holder.append(document.importNode(doc.documentElement, true));
+        card.append(holder, el("div", "desc", r.code));
+      }
+      loadMachines();
+    });
+    card.append(pair);
+  }
+  for (const phone of data.phones || []) {
+    const row = el("div", "connect-row");
+    const seen = phone.last_seen ? "last seen " + new Date(phone.last_seen * 1000).toLocaleString() : "not used yet";
+    row.append(el("span", "state" + (phone.state === "paired" ? " ready" : ""), phone.name + " - " + phone.state + " (" + seen + ")"));
+    if (phone.state === "paired" || phone.state === "waiting") {
+      const revoke = el("button", "quiet", "Revoke");
+      revoke.type = "button";
+      revoke.addEventListener("click", async () => {
+        if (!confirm("Revoke " + phone.name + "? It will have to pair again.")) return;
+        await api("/phones/revoke", { id: phone.id });
+        loadMachines();
+      });
+      row.append(revoke);
+    }
+    card.append(row);
+  }
+  return card;
 }

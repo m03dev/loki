@@ -49,6 +49,16 @@ one fix round, stops when a stage cannot finish. Verified offline (tests/test_te
 live on the engine API without a model (the team stopped correctly at the architect).
 Not yet: placing team stages on the PC over the peer link; a real model run end to end.
 
+## Phone app (2026-10-15, branch claude/phone, not shipped yet)
+
+The owner asked for iOS + Android and a phone-local model. Built: `mobile/` (one Expo app:
+Chat, Connect, Models) that chats with LOKI on the Mac/PC when reachable, else with a small
+on-phone model (Cactus: Needle for quick actions + Qwen3 0.6B etc.; llama.rn as the swap-in).
+Engine side `engine/phone_link.py` (opt-in, port 8769, per-phone signed keys, Ask/Plan only,
+a phone message can never approve), the Phone card in Settings > Machines, docs/PHONE.md,
+tests/test_phone_link.py. NOT yet: npm install / prebuild / a run on a real phone (the npm
+registry was unreachable where it was built); see docs/PHONE.md "Not done yet".
+
 ## Session 15 (2026-10-14): repo private, Godot story removed, suites hermetic
 
 Ziva (Windows), after pulling the session-14 branch into master:
