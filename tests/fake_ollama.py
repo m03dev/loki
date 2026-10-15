@@ -111,7 +111,10 @@ class FakeOllama:
                     model = body.get("model", "")
                     if model not in fake.models and model + ":latest" not in fake.models:
                         return self._json(404, {"error": {"message": "model '%s' not found" % model}})
-                    return self._json(200, fake.reply(body))
+                    answer = fake.reply(body)
+                    # A scripted reply may ask for an HTTP error: {"__status__": 400, ...}.
+                    status = int(answer.pop("__status__", 200)) if isinstance(answer, dict) else 200
+                    return self._json(status, answer)
                 self._json(404, {"error": "not found"})
 
         self.server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)

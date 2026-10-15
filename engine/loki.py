@@ -307,6 +307,7 @@ import conductor  # noqa: E402  (Loki the conductor: specialists by role)
 import first_layer  # noqa: E402  (every request is triaged first: Laya, else built-in rules)
 import events  # noqa: E402  (the event stream: what really happened, for the world and agents)
 import tool_harness  # noqa: E402  (any model can use any tool: prompted tool calling)
+import tool_guard  # noqa: E402  (repairs and checks tool calls; constrained decoding for local models)
 
 # The repo checkout this addon lives in (capabilities/ and skills/ sit at its root).
 REPO_ROOT = ROOT.parent
@@ -623,6 +624,36 @@ def _is_rate_limit(exc) -> bool:
             and not _is_quota_error(exc))
 
 
+# When each provider was marked used-up. A LOCAL model is never "out of quota": it failed
+# because Ollama was cold-loading the model, restarting, or briefly busy. Before this, one
+# such failure kept local out of routing for the whole session, and every later request
+# silently went to cloud or Claude Code - local looked useless. Now a local provider comes
+# back at the start of the next request once its server answers (LOKI_LOCAL_REVIVE_S,
+# default 20s after the failure).
+_FAILED_AT: dict = {}
+LOCAL_REVIVE_S = float(os.getenv("LOKI_LOCAL_REVIVE_S", "20") or 0)
+
+
+def revive_local(now: float | None = None) -> list:
+    """Put failed local providers back in the running when their server is up again."""
+    now = time.time() if now is None else now
+    back = []
+    for name in sorted(_SMART_FAILED):
+        if name not in LOCAL_PROVIDERS and name not in LOCAL_SERVERS:
+            continue
+        if now - _FAILED_AT.get(name, 0.0) < LOCAL_REVIVE_S:
+            continue
+        try:
+            if name in LOCAL_SERVERS:
+                _LOCAL_UP.pop(name, None)
+            if provider_configured(name):
+                _SMART_FAILED.discard(name)
+                back.append(name)
+        except Exception:  # noqa: BLE001 - a health probe must never break a request
+            continue
+    return back
+
+
 def revive_rate_limited() -> list:
     """Put the rate-limited providers back in the running; returns which ones."""
     back = [name for name in _RATE_LIMITED if provider_configured(name)]
@@ -881,7 +912,9 @@ def _mark_smart_failure(provider: str = "") -> None:
     NEXT provider, which then gets marked too and is skipped without ever being tried.
     """
     if model_name in AUTO_ROUTING_MODES:
-        _SMART_FAILED.add(provider or active_model_name())
+        failed = provider or active_model_name()
+        _SMART_FAILED.add(failed)
+        _FAILED_AT[failed] = time.time()
 
 
 # A provider being out of quota or rate-limited must NOT end the run - we move to
@@ -1068,6 +1101,7 @@ def failover_target(spent: str = "") -> str:
     global model_name
     current = spent or active_model_name()
     _SMART_FAILED.add(current)
+    _FAILED_AT[current] = time.time()
     if model_name not in AUTO_ROUTING_MODES:
         # The chosen provider is spent; pick automatically from here so the task
         # keeps going instead of dying on one exhausted key.
@@ -3646,6 +3680,40 @@ def _normalize_args(name: str, args: dict) -> dict:
     return out
 
 
+# How often the tool guard (tool_guard.py) repaired or rejected a call this session;
+# shown by the System check and the eval so "is local reliable now?" has a number.
+GUARD_STATS = {"repaired": 0, "rejected": 0}
+
+
+def _tool_params() -> dict:
+    """name -> parameters schema for every tool the model can call (LOKI's and MCP's)."""
+    out = {}
+    for entry in TOOL_SCHEMAS:
+        fn = entry.get("function") or {}
+        if fn.get("name"):
+            out[fn["name"]] = fn.get("parameters") or {}
+    for name in mcp_sessions:
+        out.setdefault(name, {})
+    return out
+
+
+def _guard_call(name: str, raw_args):
+    """Repair and check one tool call before it runs (see tool_guard.check_call)."""
+    params = _tool_params()
+    real = tool_guard.resolve_name(name, params.keys()) or name
+    args = tool_guard.repair_json(raw_args)
+    if args is not None:
+        # LOKI's own synonyms (filename -> path, text -> content) first, so validation
+        # does not drop an argument the model named slightly differently.
+        args = _normalize_args(real, args)
+        raw_args = args
+    if real in params and not params[real].get("properties"):
+        # An MCP tool with no schema we can read: only the name and JSON are checked.
+        fix = tool_guard.check_call(name, raw_args, {real: {}})
+        return fix
+    return tool_guard.check_call(name, raw_args, params)
+
+
 # Tools a server starts exposing at runtime, after the model enables a toolset.
 # The allow-list in mcp_servers.json decides what is offered at STARTUP; a toolset the
 # model explicitly unlocks may add to that, because otherwise enabling it would have no
@@ -3762,6 +3830,9 @@ async def call_tool(name: str, args: dict) -> str:
                 text += ("\n\n%d new tool(s) are now available and can be called directly: %s"
                          % (len(newly), ", ".join(sorted(newly)[:40])))
         return text
+    real = tool_guard.resolve_name(name, set(LOCAL_TOOLS) | set(mcp_sessions))
+    if real and real != name:
+        return await call_tool(real, args)
     return f"error: unknown tool {name}"
 
 
@@ -4142,7 +4213,13 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
     attempt = 0
     full_tools = list(kwargs.get("tools") or [])
     while True:
+        constrained = False
         try:
+            if kwargs.get("tools") and _use_constrained(provider, cfg):
+                # A local server with grammar support: the reply can ONLY be a real tool
+                # call or an answer, so a small model can no longer get the shape wrong.
+                constrained = True
+                return await _constrained_request(client, kwargs)
             if kwargs.get("tools") and tool_harness.configured(provider):
                 # This provider cannot take a native tools list: send the tools as text
                 # and turn the <tool_call> blocks in its answer back into tool_calls.
@@ -4152,6 +4229,12 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
             return await client.chat.completions.create(**kwargs)
         except openai.APIStatusError as exc:
             status = _status_of(exc)
+            if constrained and 400 <= status < 500:
+                # This server does not take response_format/json_schema: plain prompted
+                # (or native) tools from now on, and retry this same request.
+                CONSTRAINED_REFUSED.add(provider or cfg.base_url)
+                _progress("thinking", "%s has no structured output; using plain tool calling." % (provider or cfg.model))
+                continue
             if (status in (400, 404, 422) and kwargs.get("tools") and len(kwargs["tools"]) <= 1
                     and provider and not tool_harness.configured(provider)):
                 # Even one tool was refused: this endpoint has no native tool calling.
@@ -4206,6 +4289,54 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
             raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
 
 
+# Providers whose server refused response_format (learned this session).
+CONSTRAINED_REFUSED: set = set()
+
+
+def _cfg_is_local(cfg) -> bool:
+    url = str(getattr(cfg, "base_url", "") or "")
+    return (not url.startswith(CLI_AGENT_PREFIX)
+            and any(h in url for h in ("11434", "127.0.0.1", "localhost", "[::1]")))
+
+
+def _use_constrained(provider: str, cfg) -> bool:
+    """Constrained decoding for this request? LOKI_CONSTRAINED_TOOLS=auto|on|off.
+
+    auto (default): local servers that are in prompted-tools mode (no native tool calling)
+    on:             every local server, instead of its native tool calling too
+    Never for cloud providers (many reject or bill json_schema differently).
+    """
+    mode = tool_guard.constrained_mode()
+    if mode == "off" or not _cfg_is_local(cfg):
+        return False
+    if (provider or cfg.base_url) in CONSTRAINED_REFUSED:
+        return False
+    return mode == "on" or tool_harness.configured(provider)
+
+
+async def _constrained_request(client, kwargs: dict):
+    """One step as constrained JSON, returned as an ordinary response with tool_calls."""
+    tools = kwargs.get("tools") or []
+    prompted = tool_harness.prepare(kwargs)
+    known = prompted.pop("_prompted_tools", [])
+    msgs = prompted.get("messages") or []
+    if msgs and msgs[0].get("role") == "system":
+        msgs[0] = dict(msgs[0], content=str(msgs[0].get("content") or "") + "\n\n" + tool_guard.CONSTRAINED_PROMPT)
+    prompted["response_format"] = tool_guard.constrained_format(tools)
+    response = await client.chat.completions.create(**prompted)
+    try:
+        message = response.choices[0].message
+    except (AttributeError, IndexError):
+        return response
+    calls, text = tool_guard.decode_constrained(message.content or "", known)
+    if calls:
+        message.content = "\n".join("<tool_call>%s</tool_call>" % json.dumps(
+            {"name": name, "arguments": args}, ensure_ascii=False) for name, args in calls)
+        return tool_harness.attach(response, known)
+    message.content = text
+    return response
+
+
 def _json_object_spans(text: str) -> list:
     """Every balanced {...} object in a string (handles nesting)."""
     spans, depth, start = [], 0, -1
@@ -4231,9 +4362,12 @@ def _recover_text_tool_calls(content: str) -> list:
     never emit a structured call, which used to stall the agent. Only names that
     match a real tool are accepted, so ordinary JSON in a reply is ignored.
     """
+    known = set(LOCAL_TOOLS) | set(mcp_sessions)
+    if content and "{" not in content and "(" in content:
+        # Calls written as code: write_file(path="a.txt", content="hi").
+        return tool_guard.parse_function_syntax(content, known)
     if not content or "{" not in content or "name" not in content:
         return []
-    known = set(LOCAL_TOOLS) | set(mcp_sessions)
     calls = []
     for blob in _json_object_spans(content):
         try:
@@ -4245,7 +4379,8 @@ def _recover_text_tool_calls(content: str) -> list:
         if isinstance(data.get("function"), dict):
             data = data["function"]
         name = data.get("name") or data.get("tool")
-        if not isinstance(name, str) or name not in known:
+        name = tool_guard.resolve_name(name, known) if isinstance(name, str) else ""
+        if not name:
             continue
         args = data.get("arguments", data.get("parameters", data.get("args", {})))
         if isinstance(args, str):
@@ -4426,23 +4561,28 @@ async def agent_turn(force_tool: bool = False) -> str:
             return content
         messages.append(_as_dict(message))
         for call in message.tool_calls:
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                print("  [tool] %s(invalid JSON args)" % call.function.name)
-                messages.append({
-                    "role": "tool", "tool_call_id": call.id,
-                    "content": "error: invalid JSON in tool arguments: %r" % (call.function.arguments,),
-                })
+            # The tool guard repairs the call's shape (bad JSON, near-miss tool name, a
+            # number sent as a string) and, when it cannot, answers with one precise
+            # sentence and the schema - what a small model needs to fix it next turn.
+            fix = _guard_call(call.function.name, call.function.arguments)
+            if not fix.ok:
+                print("  [tool] %s rejected: %s" % (call.function.name, fix.error[:200]))
+                GUARD_STATS["rejected"] += 1
+                messages.append({"role": "tool", "tool_call_id": call.id,
+                                 "content": "error: %s" % fix.error})
                 continue
-            print("  [tool] %s(%s)" % (call.function.name, json.dumps(args)[:200]))
+            if fix.notes:
+                GUARD_STATS["repaired"] += 1
+                _progress("thinking", "Fixed the model's tool call: %s." % "; ".join(fix.notes))
+            args = fix.args
+            print("  [tool] %s(%s)" % (fix.name, json.dumps(args)[:200]))
             global _REQUEST_TOOL_CALLS
             _REQUEST_TOOL_CALLS += 1
-            result = await call_tool(call.function.name, args)
+            result = await call_tool(fix.name, args)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             # Break a loop where the model repeats an identical failing call forever.
             global _repeat_sig, _repeat_count
-            signature = "%s|%s" % (call.function.name, json.dumps(args, sort_keys=True)[:400])
+            signature = "%s|%s" % (fix.name, json.dumps(args, sort_keys=True)[:400])
             if "error" in str(result)[:80].lower():
                 if signature == _repeat_sig:
                     _repeat_count += 1
@@ -4463,8 +4603,8 @@ async def agent_turn(force_tool: bool = False) -> str:
             # calls, ask Jev whether the agent is spinning without real progress.
             global _jev_loop_window
             _jev_loop_window.append("%s(%s) -> %s" % (
-                call.function.name, json.dumps(args)[:120], str(result)[:100]))
-            if call.function.name in MODIFYING and "error" not in str(result)[:80].lower():
+                fix.name, json.dumps(args)[:120], str(result)[:100]))
+            if fix.name in MODIFYING and "error" not in str(result)[:80].lower():
                 _jev_loop_window = []   # real progress - start a fresh window
             elif len(_jev_loop_window) > 16:
                 del _jev_loop_window[:-16]
@@ -4690,6 +4830,12 @@ def _start_request() -> tuple:
     global _REQUEST_TOOL_CALLS
     _REQUEST_TOOL_CALLS = 0
     _LAST_VERIFY.clear()
+    try:
+        back = revive_local() if model_name in AUTO_ROUTING_MODES else []
+    except Exception:  # noqa: BLE001
+        back = []
+    if back:
+        _progress("thinking", "Local model back in use: %s answers again." % ", ".join(back))
     return time.time(), len(messages)
 
 
