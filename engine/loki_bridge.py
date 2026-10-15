@@ -722,7 +722,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/models":
             agent = self.server.state.agent
-            self._send_json(200, {"ok": True, "current": agent.model_name, "models": list(agent.MODELS.keys())})
+            self._send_json(200, {"ok": True, "current": agent.model_name, "models": list(agent.MODELS.keys()),
+                                  **model_menu(agent)})
             return
         if route == "/settings":
             self._send_json(200, {"ok": True, **self.server.state.agent.categories_state()})
@@ -1326,6 +1327,52 @@ def write_status_forever(state: "BridgeState") -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"[loki-bridge] status snapshot failed: {exc}", flush=True)
         time.sleep(30)
+
+
+MENU_GROUPS = (("auto", "Automatic"), ("local", "On this computer"), ("free", "Free"),
+               ("subscription", "Your subscriptions"), ("paid", "Pay per use"))
+
+
+def model_menu(agent: Any) -> dict[str, Any]:
+    """The model picker at the top: Smart first (and what it would use right now), then
+    every model LOKI can use RIGHT NOW grouped by cost, then the ones that still need a
+    key or a download. Never raises; a provider whose check fails is listed as not ready."""
+    try:
+        import providers_catalog  # pylint: disable=import-outside-toplevel
+    except Exception:  # noqa: BLE001
+        providers_catalog = None
+    current = getattr(agent, "model_name", "")
+    try:
+        resolved = agent.active_model_name()
+    except Exception:  # noqa: BLE001
+        resolved = current
+    entries = []
+    for name in agent.MODELS:
+        if name in ("smart", "online"):
+            continue
+        card = (providers_catalog.get(name) if providers_catalog else None) or {}
+        try:
+            ready = bool(agent.provider_configured(name))
+        except Exception:  # noqa: BLE001
+            ready = False
+        try:
+            tier = agent.provider_tier(name)
+        except Exception:  # noqa: BLE001
+            tier = "free"
+        cfg = agent.MODELS.get(name)
+        entries.append({"name": name, "label": card.get("name") or name, "group": tier, "ready": ready,
+                        "model": getattr(cfg, "model", "") or "", "blurb": card.get("blurb", "")})
+    entries.sort(key=lambda e: (not e["ready"], [g for g, _ in MENU_GROUPS].index(e["group"])
+                                if e["group"] in dict(MENU_GROUPS) else 9, e["label"].lower()))
+    labels = {e["name"]: e["label"] for e in entries}
+    auto = [{"name": "smart", "label": "Smart", "group": "auto", "ready": True,
+             "blurb": "Picks the best free model for each message and switches when one runs out.",
+             "using": labels.get(resolved, resolved) if current == "smart" else ""},
+            {"name": "online", "label": "Online only", "group": "auto", "ready": True,
+             "blurb": "Like Smart, but never uses a model on this computer."}]
+    return {"entries": auto + entries, "groups": [{"id": g, "label": label} for g, label in MENU_GROUPS],
+            "resolved": resolved, "resolved_label": labels.get(resolved, resolved),
+            "ready_count": sum(1 for e in entries if e["ready"])}
 
 
 def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:

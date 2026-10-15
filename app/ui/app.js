@@ -135,6 +135,8 @@ function showEmpty() {
 function setView(view) {
   const home = view === "home";
   $("#main").classList.toggle("home", home);
+  // Home is just the world and the word "Loki"; the chat box appears when it is clicked.
+  if (home) $("#main").classList.remove("summoned");
   const welcome = $("#welcome");
   if (welcome) welcome.hidden = !home;
   if (home) {
@@ -145,7 +147,13 @@ function setView(view) {
   }
 }
 
-function showHome() { setView("home"); $("#prompt").focus(); }
+function showHome() { setView("home"); }
+
+function summon(open) {
+  const main = $("#main");
+  main.classList.toggle("summoned", open);
+  if (open) setTimeout(() => $("#prompt").focus(), 0);
+}
 function showChat() { setView("chat"); }
 
 function renderMessages(messages) {
@@ -219,7 +227,7 @@ async function newChat() {
   applyConversations(await api("/conversations", { title: "" }));
   showHome();
   renderMessages([]);
-  $("#prompt").focus();
+  summon(true);   // they asked for a new chat: open the box straight away
 }
 
 async function removeChat(id) {
@@ -354,17 +362,100 @@ function markMode(mode) {
   }
 }
 
+// ---------------------------------------------------------------- model picker
+// One button at the top: "Smart · Gemini". It opens a menu with Smart first (and what it
+// would use right now), then the models LOKI can use right now, grouped by cost; models
+// that still need a key or a download are tucked under "Not set up" with one click to
+// Connections. Picking one switches at once.
+const modelMenu = { data: null, showAll: false };
+
 async function loadModels() {
-  const data = await api("/models");
-  if (!data.ok) return;
-  const select = $("#model-select");
-  select.replaceChildren();
-  for (const name of data.models) {
-    const option = el("option", "", name);
-    option.value = name;
-    option.selected = name === data.current;
-    select.append(option);
+  const data = await api("/models").catch(() => null);
+  if (!data || !data.ok) return;
+  modelMenu.data = data;
+  paintModelButton();
+  if (!$("#model-menu").hidden) renderModelMenu();
+}
+
+function modelLabel(name) {
+  const entry = ((modelMenu.data || {}).entries || []).find((e) => e.name === name);
+  return entry ? entry.label : name;
+}
+
+function paintModelButton() {
+  const data = modelMenu.data;
+  if (!data) return;
+  const auto = data.current === "smart" || data.current === "online";
+  const text = auto ? modelLabel(data.current) + (data.resolved_label ? " · " + data.resolved_label : "")
+    : modelLabel(data.current);
+  $("#model-button-text").textContent = text;
+  $("#model-button").title = auto ? "LOKI picks the model. Right now: " + (data.resolved_label || "—") : "Pinned to " + text;
+}
+
+function renderModelMenu() {
+  const data = modelMenu.data || { entries: [], groups: [] };
+  const menu = $("#model-menu");
+  menu.replaceChildren();
+  const item = (entry) => {
+    const b = el("button", "model-item" + (entry.name === data.current ? " current" : "") + (entry.ready ? "" : " not-ready"));
+    b.type = "button";
+    b.setAttribute("role", "menuitemradio");
+    b.setAttribute("aria-checked", String(entry.name === data.current));
+    const top = el("span", "model-item-top");
+    top.append(el("span", "model-item-name", entry.label));
+    if (entry.using) top.append(el("span", "model-item-using", "now: " + entry.using));
+    else if (!entry.ready) top.append(el("span", "model-item-using", "set up"));
+    else if (entry.model && entry.group !== "auto") top.append(el("span", "model-item-using", entry.model));
+    b.append(top);
+    if (entry.blurb && (entry.group === "auto" || !entry.ready)) b.append(el("span", "model-item-blurb", entry.blurb));
+    b.addEventListener("click", () => (entry.ready ? chooseModel(entry.name) : openConnections()));
+    return b;
+  };
+  const entries = data.entries || [];
+  for (const group of data.groups || []) {
+    const rows = entries.filter((e) => e.group === group.id && e.ready);
+    if (!rows.length) continue;
+    menu.append(el("div", "model-group", group.label));
+    for (const e of rows) menu.append(item(e));
   }
+  const rest = entries.filter((e) => !e.ready);
+  if (rest.length) {
+    const more = el("button", "model-more", (modelMenu.showAll ? "Hide" : "Show") + " " + rest.length + " not set up");
+    more.type = "button";
+    more.addEventListener("click", (ev) => { ev.stopPropagation(); modelMenu.showAll = !modelMenu.showAll; renderModelMenu(); });
+    menu.append(more);
+    if (modelMenu.showAll) for (const e of rest) menu.append(item(e));
+  }
+  const foot = el("div", "model-foot");
+  const connect = el("button", "quiet small", "Connect a provider…");
+  connect.type = "button";
+  connect.addEventListener("click", openConnections);
+  const local = el("button", "quiet small", "Local models…");
+  local.type = "button";
+  local.addEventListener("click", () => { closeModelMenu(); openSettings(); showTab("models"); });
+  foot.append(connect, local);
+  menu.append(foot);
+}
+
+function openConnections() { closeModelMenu(); openSettings(); showTab("connections"); }
+
+function toggleModelMenu(force) {
+  const menu = $("#model-menu");
+  const open = force === undefined ? menu.hidden : force;
+  menu.hidden = !open;
+  $("#model-button").setAttribute("aria-expanded", String(open));
+  if (open) { renderModelMenu(); loadModels(); const first = menu.querySelector(".model-item.current, .model-item"); if (first) first.focus(); }
+}
+function closeModelMenu() { toggleModelMenu(false); }
+
+async function chooseModel(name) {
+  closeModelMenu();
+  const data = await api("/model", { model: name }).catch(() => null);
+  if (!data || !data.ok) { addNotice((data && data.error) || "Could not switch model.", true); return; }
+  if (modelMenu.data) { modelMenu.data.current = data.current; modelMenu.data.resolved = data.resolved; modelMenu.data.resolved_label = modelLabel(data.resolved); }
+  paintModelButton();
+  setStatus("Using " + modelLabel(data.resolved || name), true);
+  loadModels();
 }
 
 async function loadHealth() {
@@ -383,12 +474,20 @@ function showVersion(u) {
   if (!box) return;
   const commit = u.commit ? u.commit.slice(0, 7) : "";
   window.LOKI_VERSION = u.commit || "";
-  box.textContent = commit ? "LOKI " + commit : "";
-  box.classList.toggle("attention", !!u.update_available);
-  box.title = u.update_available
-    ? "A newer LOKI is on GitHub (" + (u.latest || "").slice(0, 7) + "). Quit and reopen LOKI to use it."
-    : (u.note || "Up to date with GitHub");
-  if (u.update_available) box.textContent += " · update waiting";
+  // "LOKI v0.16 · patch 412" - the version and the patch, side by side, everywhere.
+  const label = u.label || (commit ? "LOKI " + commit : "");
+  box.textContent = label ? (label.startsWith("v") ? "LOKI " + label : label) : "";
+  const summon = $("#summon-version");
+  if (summon) summon.textContent = label;
+  const problem = u.problem || "";
+  box.classList.toggle("attention", !!u.update_available || !!problem);
+  box.classList.toggle("problem", !!problem);
+  box.title = problem ? "Updates are not working: " + (u.error || problem) + " (click for details)"
+    : u.update_available
+      ? "A newer LOKI is on GitHub (" + (u.latest || "").slice(0, 7) + "). Quit and reopen LOKI to use it."
+      : (u.note || "Up to date with GitHub") + (commit ? " · " + commit : "");
+  if (problem) box.textContent += " · update problem";
+  else if (u.update_available) box.textContent += " · update waiting";
   if (typeof checkUpdateBanner === "function") checkUpdateBanner(u);
 }
 
@@ -697,10 +796,27 @@ function wire() {
       if (data.ok) markMode(data.mode);
     });
   }
-  $("#model-select").addEventListener("change", async (event) => {
-    const data = await api("/model", { model: event.target.value });
-    if (!data.ok) addNotice(data.error || "Could not switch model.", true);
-    else if (data.resolved && data.resolved !== data.current) setStatus("Using " + data.resolved, true);
+  $("#model-button").addEventListener("click", (ev) => { ev.stopPropagation(); toggleModelMenu(); });
+  $("#model-menu").addEventListener("click", (ev) => ev.stopPropagation());
+  document.addEventListener("click", () => { if (!$("#model-menu").hidden) closeModelMenu(); });
+  $("#summon").addEventListener("click", () => summon(true));
+  $("#version").addEventListener("click", () => { openSettings(); showTab("machines"); });
+  document.addEventListener("keydown", (ev) => {
+    // On the home screen, just start typing: the chat box opens with that key in it.
+    const main = $("#main");
+    if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey && main.classList.contains("home")
+        && !main.classList.contains("summoned") && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target || {}).tagName || "")
+        && $("#settings").hidden) {
+      ev.preventDefault();
+      summon(true);
+      const prompt = $("#prompt");
+      prompt.value += ev.key;
+      prompt.focus();
+      return;
+    }
+    if (ev.key !== "Escape") return;
+    if (!$("#model-menu").hidden) { closeModelMenu(); $("#model-button").focus(); return; }
+    if (main.classList.contains("home") && main.classList.contains("summoned") && !$("#prompt").value.trim()) summon(false);
   });
   $("#open-settings").addEventListener("click", openSettings);
   $("#work-toggle").addEventListener("click", () => {
@@ -751,8 +867,7 @@ async function start() {
   wireChangedBanner();
   checkChangedCapabilities();
   if (typeof afterStart === "function") afterStart();
-  showHome();
-  $("#prompt").focus();
+  showHome();     // just the world and the word "Loki" until it is clicked
 }
 
 document.addEventListener("DOMContentLoaded", start);

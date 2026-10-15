@@ -2816,6 +2816,38 @@ _js = (_ui / "app.js").read_text(encoding="utf-8")
 check("the UI escapes model output before rendering", "escapeHtml(part)" in _js and "escapeHtml(body" in _js)
 check("the token travels in the URL fragment, not the query", "location.hash" in _js and "?token" not in _js)
 
+# The model picker at the top (owner: "that smart button and menu needs rework"): Smart
+# first with what it uses now, ready models grouped by cost, the rest tucked away.
+class _MenuAgent:
+    MODELS = {"smart": 1, "online": 1, "local": _types.SimpleNamespace(model="qwen3:8b"),
+              "gemini": _types.SimpleNamespace(model="gemini-x"), "mistral": _types.SimpleNamespace(model="m"),
+              "gpt": _types.SimpleNamespace(model="g"), "broken": _types.SimpleNamespace(model="b")}
+    model_name = "smart"
+    def active_model_name(self): return "gemini"
+    def provider_configured(self, name):
+        if name == "broken":
+            raise RuntimeError("probe failed")
+        return name in ("local", "gemini")
+    def provider_tier(self, name): return {"local": "local", "gpt": "paid"}.get(name, "free")
+_menu = _lb.model_menu(_MenuAgent())
+_names = [e["name"] for e in _menu["entries"]]
+check("the picker lists Smart and Online first", _names[:2] == ["smart", "online"])
+check("Smart says what it uses right now", _menu["entries"][0]["using"] == "Google AI Studio (Gemini)" and _menu["resolved"] == "gemini")
+check("ready models come before the ones that still need setting up",
+      _names.index("local") < _names.index("mistral") and _names.index("gemini") < _names.index("gpt"))
+check("a provider whose check fails is listed as not ready, not an error",
+      [e for e in _menu["entries"] if e["name"] == "broken"][0]["ready"] is False)
+check("ready count and groups are given", _menu["ready_count"] == 2 and _menu["groups"][0]["id"] == "auto")
+_html_ui = (_ui / "index.html").read_text(encoding="utf-8")
+check("the top bar has one model button and a menu (no raw select)",
+      'id="model-button"' in _html_ui and 'id="model-menu"' in _html_ui and 'id="model-select"' not in _html_ui)
+check("picking a model switches at once; a model not set up opens Connections",
+      "chooseModel(entry.name)" in _js and "openConnections()" in _js and 'api("/model"' in _js)
+check("home is just the word Loki until it is clicked or typed into",
+      'id="summon"' in _html_ui and "summon(true)" in _js and 'classList.remove("summoned")' in _js)
+check("the version and patch show side by side", "u.label" in _js and 'id="summon-version"' in _html_ui)
+check("an update problem is shown, not hidden", "u.problem" in _js and "update problem" in _js)
+
 _saved_gp = loki.GAME_PROJECT
 try:
     loki.GAME_PROJECT = ""

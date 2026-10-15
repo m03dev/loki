@@ -57,7 +57,30 @@ button:disabled { opacity: .45; cursor: default; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
 .chat-title { font-size: 15px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
-.model select { background: var(--surface); border: 0; border-radius: 9px; padding: 5px 8px; max-width: 220px; }
+/* model picker: one button, one menu */
+.model-picker { position: relative; }
+.model-button { display: flex; align-items: center; gap: 6px; max-width: 260px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); }
+.model-button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-button .caret { color: var(--muted); font-size: 11px; }
+.model-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 320px; max-height: min(70vh, 560px);
+  overflow-y: auto; background: var(--side); border: 1px solid var(--line); border-radius: 14px; padding: 6px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+.model-group { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 10px 10px 4px; }
+.model-item { display: flex; flex-direction: column; align-items: stretch; width: 100%; text-align: left; background: transparent;
+  border-radius: 9px; padding: 7px 10px; }
+.model-item:hover, .model-item:focus-visible { background: var(--surface); }
+.model-item.current { background: var(--bubble); }
+.model-item.current .model-item-name::before { content: "✓ "; color: var(--ok); }
+.model-item-top { display: flex; justify-content: space-between; gap: 10px; }
+.model-item-name { font-weight: 550; }
+.model-item-using { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.model-item-blurb { color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 2px; }
+.model-item.not-ready .model-item-name { color: var(--muted); }
+.model-more { width: 100%; background: transparent; color: var(--accent); text-align: left; padding: 8px 10px; font-size: 13px; }
+.model-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+.version { cursor: pointer; }
+.version.problem, .version.attention.problem { color: var(--err); }
 .status { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .status.ok::before, .status.bad::before, .status.wait::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .status.ok::before { background: var(--ok); }
@@ -201,6 +224,20 @@ table.usage th { color: var(--muted); font-weight: 500; }
 
 /* Home: empty space on open, instead of dropping straight into a conversation. */
 .main.home .transcript { display: none; }
+/* Home is the world and one word. Clicking "Loki" brings the chat box in. */
+.summon { display: none; }
+.main.home:not(.summoned) .summon { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: auto;
+  background: transparent; border-radius: 22px; padding: 18px 34px; position: relative; z-index: 1; }
+.summon-word { font-size: clamp(44px, 9vw, 92px); font-weight: 700; letter-spacing: .08em; color: var(--text);
+  text-shadow: 0 0 28px rgba(110, 231, 214, .45), 0 2px 0 rgba(0, 0, 0, .5); transition: text-shadow .25s, transform .25s; }
+.summon:hover { background: transparent; }
+.summon:hover .summon-word, .summon:focus-visible .summon-word { text-shadow: 0 0 44px rgba(110, 231, 214, .8), 0 2px 0 rgba(0, 0, 0, .5); transform: scale(1.03); }
+.summon-version { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.main.home:not(.summoned) .welcome, .main.home:not(.summoned) .composer { display: none; }
+.main.home.summoned .welcome { animation: rise .22s ease-out; }
+.main.home.summoned .composer { animation: rise .22s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .summon-word, .main.home.summoned .welcome, .main.home.summoned .composer { transition: none; animation: none; } }
 .main.home .welcome { margin-top: auto; }
 .main.home .composer { margin-bottom: auto; }
 .main.home .composer-box { max-width: 620px; box-shadow: 0 12px 40px rgba(0, 0, 0, .28); }
@@ -369,6 +406,7 @@ button.danger:hover { color: var(--err); }
 /* ===================================================================== LOKI World */
 .main { position: relative; isolation: isolate; }
 .main > :not(.world-bg) { position: relative; z-index: 1; }
+.main > .topbar { z-index: 5; }   /* its model menu opens over the home screen */
 .sheet { z-index: 10; }
 .world-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity .8s; overflow: hidden; }
 .world-bg.on { opacity: .5; }

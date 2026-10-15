@@ -42,15 +42,21 @@
     <header class="topbar">
       <h1 id="chat-title" class="chat-title">Loki</h1>
       <div class="topbar-right">
-        <label class="model">
-          <span class="visually-hidden">Model</span>
-          <select id="model-select" aria-label="Model"></select>
-        </label>
+        <div class="model-picker">
+          <button type="button" id="model-button" class="model-button" aria-haspopup="menu" aria-expanded="false" title="Which model answers">
+            <span id="model-button-text">Smart</span><span class="caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="model-menu" class="model-menu" role="menu" hidden></div>
+        </div>
         <button type="button" id="usage-pill" class="usage-pill" title="What your messages cost - open Usage">—</button>
         <span id="status" class="status" role="status" aria-live="polite">Connecting…</span>
       </div>
     </header>
 
+    <button type="button" id="summon" class="summon" aria-label="Talk to Loki" title="Talk to Loki">
+      <span class="summon-word">Loki</span>
+      <span id="summon-version" class="summon-version"></span>
+    </button>
     <section id="welcome" class="welcome" hidden aria-label="Welcome">
       <div class="welcome-inner">
         <div class="welcome-mark" aria-hidden="true">L</div>
