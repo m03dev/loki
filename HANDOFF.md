@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-15 (session 16).
+Last updated: 2026-10-15 (session 17).
 
 ## The machines
 
@@ -58,6 +58,26 @@ Engine side `engine/phone_link.py` (opt-in, port 8769, per-phone signed keys, As
 a phone message can never approve), the Phone card in Settings > Machines, docs/PHONE.md,
 tests/test_phone_link.py. NOT yet: npm install / prebuild / a run on a real phone (the npm
 registry was unreachable where it was built); see docs/PHONE.md "Not done yet".
+
+## Session 17 (2026-10-15): Mac updates really work; bridge port fix; S1/S2 live; phone typecheck
+
+Ziva (Mac). Shipped as v0.16 · patch 165/166.
+- **The Mac updater worked, but a GOOD version was being rolled back.** On restart the Mac pulled
+  origin/master `fb6f66806db6` and the engine could not bind 127.0.0.1:8767 - `OSError: [Errno 48]
+  Address already in use` - so the app rolled back and recorded the commit in
+  `.git/loki_update_health.json` `skip[]`, leaving the Mac one version behind. Cause:
+  `BridgeHTTPServer.allow_reuse_address = False`, so a just-exited engine leaves the port in TIME_WAIT
+  and macOS refuses the rebind for ~30 s. Fix: `allow_reuse_address = True` + a `port_is_answering()`
+  guard (a live engine is still never overwritten - that matters on Windows). Regression check in
+  `tests/test_systems.py` (fails without the fix).
+- **Two tests were red on the Mac** (CI is off, so nobody saw it): `test_loki`'s status/upgrade check
+  depended on the real models disk, and `test_updater`'s "a missing disk is named" hard-coded
+  `/Volumes/LokiSSD/loki` (which exists here). Both made machine-independent; all 13 suites green.
+- S1 System check (Mac): "All 12 systems work together. 3 worth a look" - no red rows. S2 (Mac):
+  version label / model button / Settings > Local models verified; `world-mac.png` re-captured.
+  P1 phone app: `npm install`, `expo install --fix`, `typecheck` (after fixing
+  `mobile/src/brains/cactus.ts` to the installed Cactus types) and `prebuild`; `run:ios` blocked on
+  Xcode + CocoaPods + an iPhone (Needs Mohamed).
 
 ## Session 16 (2026-10-15): System check + positive integration tests
 
