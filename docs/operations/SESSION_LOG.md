@@ -31,6 +31,10 @@ Concise dated records of meaningful work. Newest at the top.
 - A real-model team (the autopilot's 33f463b9) ran the whole cycle: Architect -> Builder ->
   Tester(failed) -> Builder fix -> recheck; the guard BLOCKED the Tester's repeated DONE with no
   file change, and policy refused a delete_file inside a background job.
+- Tests / offline symbiosis: every suite passes under `PYTHONPATH=tests/cloud_stubs` with the
+  SAME numbers as the real run, and a new `tests/test_stubs.py` runs one contract against both
+  the stubs and the real `openai`/`pydantic`/`mcp`, failing on drift (contract testing is how you
+  keep test doubles honest). Added to `tools/ship.py`.
 - **CRASH:** the ship of the team report was interrupted by a Ziva / sidecar restart mid-run. It
   left a modified ZIVA_TASKS.md and several suites' temp dirs (`loki-auto-*`, `loki-role-*`,
   `loki-systems-*`, `tmp*`) in the repo root. The temp dirs were removed (they were never

@@ -650,6 +650,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) tests / offline symbiosis: ran EVERY suite under PYTHONPATH=tests/cloud_stubs
+  on the Mac - all 16 pass with the SAME numbers as the real run (test_loki 519, hardening 135,
+  integrations 101, workers 72, offline_e2e exit 0, peers 62, first_layer 54, updater 86, team 35,
+  events 33, portal 202, phone_link 74, systems 100, tool_guard 35, autopilot 19, role_routing 10).
+  Added tests/test_stubs.py - a CONTRACT test that runs one contract (the imported names + the
+  chat-completions wire shape) against the stubs AND against the real openai/pydantic/mcp, and fails
+  if the two drift (verified: renaming a stub name turns it red; restoring turns it green). In
+  ship.py; documented in tests/cloud_stubs/README.md.
 - 2026-10-15 mac (Ziva) CRASH note: the ship of the real-model-team report was interrupted by a
   Ziva/sidecar restart mid-run; it left ZIVA_TASKS.md modified and three suites' temp dirs
   (loki-auto-*, loki-role-*, loki-systems-*, tmp*) in the repo root. Temp dirs removed (never
