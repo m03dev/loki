@@ -97,6 +97,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
          with CPU offload (8 GB). If it runs out of memory, report the error and the free RAM,
       3. "use reach doctor" (which Agent Reach channels work),
       4. start the **OpenCode Coder** template agent on a tiny task.
+     PART DONE 2026-10-14 (Ziva Windows): installed media (yt-dlp 2026.08.19), opencode (1.19.0),
+     agent-reach (with a PATH shim), and ffmpeg (winget); enabled media, image-gen, agent-reach
+     and opencode in the capability registry. Verified: reach.doctor runs (16 channels, 4 live)
+     and the image specialist produced a real JPG through the free Pollinations backend.
+     image-gen CUDA (torch cu128 + ~20 GB weights) is downloading in the background. STILL TO DO:
+     the four LOKI prompts below - they need the app running.
 - [ ] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
       Loki work on?". Settings > LOKI World: drag to orbit, wheel to zoom. Start a team
       ("build a landing page for a bakery and test it") and watch characters walk to their
@@ -178,6 +184,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
   scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
   (LOKI's first own job). Ziva's session-15 commit is on master as 6dc2898 (thanks).
+- 2026-10-14 windows (Ziva) W5 extras (PC): installed yt-dlp, opencode, agent-reach (+PATH
+  shim) and ffmpeg; enabled media, image-gen, agent-reach, opencode; verified reach.doctor and a
+  Pollinations image; image-gen CUDA downloading. See the W5 note.
 - 2026-10-14 windows (Ziva) git + repo: rebased onto master after Claude's d3e817b; MADE
   m03dev/loki PRIVATE (owner asked - the Mac now needs `gh auth login`, task M2); removed the
   "project is still in Godot" story from README/WORLD/STATUS/HANDOFF/ARCHITECTURE and cancelled
