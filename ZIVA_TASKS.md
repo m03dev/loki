@@ -107,6 +107,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      True); the ~20 GB Z-Image weights download in the background / on first use. The image
      runner ALREADY has a `qwen()` backend (Qwen-Image via ModelScope) - it just needs a
      ModelScope token, so no new code is required for your "Qwen images" ask (see Needs Mohamed).
+
+     BUG (Ziva Windows, 2026-10-14): local Z-Image generation crashes. The model downloads and
+     LOADS fine (~50 s: 3 checkpoint shards, 398 weights, 5 pipeline components), then
+     SEGFAULTS on the first of 9 inference steps (native crash, exit 139). Machine: RTX 3070 Ti,
+     VRAM 8192 MiB (2179 used), free RAM 11.0/15.9 GB, torch 2.11.0+cu128, diffusers 0.41.0.
+     The zimage() path uses enable_model_cpu_offload() for <12 GB cards. The free Pollinations
+     backend works. Needs a fix from the code side (CPU offload / dtype / diffusers version) -
+     assigning to Claude.
 - [ ] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
       Loki work on?". Settings > LOKI World: drag to orbit, wheel to zoom. Start a team
       ("build a landing page for a bakery and test it") and watch characters walk to their
@@ -192,6 +200,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
   scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
   (LOKI's first own job). Ziva's session-15 commit is on master as 6dc2898 (thanks).
+- 2026-10-14 windows (Ziva) W5 image: Z-Image weights downloaded (26 GB cache); local CUDA generation SEGFAULTS on step 1/9; Pollinations works. W10 done via a logon Startup shortcut (Task Scheduler needs admin). W2: portal API verified headless (GET /providers 200, /world 200).
 - 2026-10-14 windows (Ziva) W5 extras (PC): installed yt-dlp, opencode, agent-reach (+PATH
   shim) and ffmpeg; enabled media, image-gen, agent-reach, opencode; verified reach.doctor and a
   Pollinations image; image-gen CUDA downloading. See the W5 note.
