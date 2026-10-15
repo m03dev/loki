@@ -315,6 +315,7 @@ CAPABILITIES = manifests.default_registry(REPO_ROOT, DATA_DIR)
 KNOWLEDGE = knowledge.default_store(REPO_ROOT, DATA_DIR, WORKSPACE)
 import experience  # noqa: E402  (outcome log, learned routing, training data)
 import reasoning_bank  # noqa: E402  (Ruflo-style lessons from past tasks)
+import memory  # noqa: E402  (one interface over the four memory tiers)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -1182,10 +1183,12 @@ def load_memory() -> str:
 
 
 def save_memory(fact: str) -> str:
-    with MEMORY_FILE.open("a", encoding="utf-8") as f:
-        f.write(f"- {fact}\n")
+    """One lasting fact about the user - the semantic tier of memory.py."""
+    result = memory.remember("semantic", fact, root=DATA_DIR)
+    if not result.get("ok"):
+        return "could not save: %s" % result.get("error", "unknown error")
     refresh_system_prompt()  # take effect this session, not next restart
-    return f"saved: {fact}"
+    return "saved: %s" % result["saved"]
 
 
 def todo_list() -> str:

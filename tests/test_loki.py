@@ -2553,6 +2553,46 @@ try:
 finally:
     loki.WORKSPACE = _aci_save
 
+section("memory: one interface, four tiers (no more guessing which module holds what)")
+import memory  # noqa: E402
+_mroot = Path(tempfile.mkdtemp(prefix="loki_mem_"))
+check("four tiers, each naming the module that REALLY owns the data",
+      list(memory.TIERS) == ["working", "episodic", "semantic", "procedural"]
+      and all(d["module"] and d["owns"] for d in memory.describe()), memory.describe())
+check("stats() reports every tier, even on an empty store",
+      set(memory.stats(_mroot)["tiers"]) == set(memory.TIERS), memory.stats(_mroot))
+check("a fact is remembered and recalled in the semantic tier",
+      memory.remember("semantic", "Mohamed prefers dark mode", root=_mroot)["ok"]
+      and any("dark mode" in r["text"] for r in memory.recall("semantic", "", root=_mroot)))
+check("semantic recall filters by the query",
+      bool([r for r in memory.recall("semantic", "dark", root=_mroot)])
+      and not [r for r in memory.recall("semantic", "banana", root=_mroot)])
+check("the working tier writes into the task state",
+      memory.remember("working", "wrote the parser", root=_mroot, field="completed")["ok"]
+      and "parser" in memory.recall("working", root=_mroot)[0]["text"])
+check("an unknown working field is refused, not silently dropped",
+      not memory.remember("working", "x", root=_mroot, field="nonsense")["ok"])
+check("procedural memory says where to write instead of pretending",
+      "SKILL.md" in memory.remember("procedural", "x").get("error", ""))
+check("an unknown tier is refused", not memory.remember("nonsense", "x")["ok"])
+check("a blank fact is refused rather than written", not memory.remember("semantic", "   ", root=_mroot)["ok"])
+check("a module name maps to its tier",
+      [memory.tier_of(n) for n in ("reasoning_bank", "project_state", "brain", "agents")]
+      == ["episodic", "working", "semantic", "procedural"])
+
+_mem_save = (loki.DATA_DIR, loki.MEMORY_FILE, loki.refresh_system_prompt)
+try:
+    loki.DATA_DIR = _mroot
+    loki.MEMORY_FILE = _mroot / "memory.md"
+    loki.refresh_system_prompt = lambda: None
+    _out = loki.save_memory("LOKI keeps facts in one place")
+    check("save_memory goes through the semantic tier (not its own file writes)",
+          _out.startswith("saved:") and "one place" in (memory.facts_file(_mroot)).read_text(encoding="utf-8"))
+except Exception as _exc:  # noqa: BLE001
+    check("save_memory goes through the semantic tier (not its own file writes)", False, _exc)
+finally:
+    (loki.DATA_DIR, loki.MEMORY_FILE, loki.refresh_system_prompt) = _mem_save
+
 section("self-improvement: experience, learned routing, training data, promotion gate")
 import tempfile as _stf  # noqa: E402
 import experience as _ex  # noqa: E402

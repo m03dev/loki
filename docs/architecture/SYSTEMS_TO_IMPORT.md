@@ -88,10 +88,14 @@ extract durable facts and consolidate them. GraphRAG: an entity graph, answered 
 `project_state.py`, `reasoning_bank.py` (lessons - that is ExpeL, already), `experience.py`, plus
 the `save_memory`/`recall` tools. That is the "pile of tabs" the owner objects to.
 
-**Change.** Define **one** memory interface with named tiers - working (this request), episodic
-(reasoning_bank), semantic (knowledge/brain), procedural (skills) - and make each module an
-implementation of a tier instead of a peer. No new storage engine; the win is one interface and
-one consolidation path.
+**Change.** **DONE**: `engine/memory.py`. Four named tiers - `working` (project_state.py),
+`episodic` (reasoning_bank.py + experience.py), `semantic` (memory.md facts + brain.py vault +
+knowledge.py), `procedural` (agents.skills_catalog) - behind one interface: `remember(tier, ...)`,
+`recall(tier, query)`, `stats()`, `describe()`, `tier_of(module)`. Each tier DELEGATES to the
+module that already owns the bytes: no storage moved, nothing rewritten. `save_memory` writes
+through the semantic tier, and the bridge's status payload carries `memory.stats()`, so all of
+LOKI's memory is visible in one place. A read-only tier (procedural) says so instead of
+pretending to write.
 
 ## 6. Orchestration - MetaGPT / AutoGen / CrewAI - ADAPT
 
@@ -155,5 +159,5 @@ the change is to make that state a resume point rather than a status.
    feeds routing with real numbers. *(harness shipped)*
 2. **Difficulty-aware routing** - small, and it is what "smart" should have meant. *(shipped)*
 3. **Compact tool output + check-on-edit** - the biggest lever on local model quality. *(shipped)*
-4. **Memory tiers behind one interface** - the "make it one system" rework.
+4. **Memory tiers behind one interface** - the "make it one system" rework. *(shipped)*
 5. Skills spec validation, artifact-typed teams, event semconv, durable jobs.
