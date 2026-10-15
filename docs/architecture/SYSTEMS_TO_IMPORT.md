@@ -43,9 +43,11 @@ quality, and it generalises to model pairs it never trained on.
 computes **difficulty 0..3** - but routing ignores it. A trivial request and a hard one take the
 same path.
 
-**Change.** Feed `LAST_TRIAGE["difficulty"]` into routing: 0-1 may stay on a local or free model
-even when something stronger is configured; 2-3 prefers the strongest available. The tiers
-already exist (`provider_tier`), so this is one policy function.
+**Change.** **DONE**: `loki.triage_difficulty()` + `LOKI_HARD_DIFFICULTY` (default 2). `LOKI_PREFER`
+already defaults to `local`, so smart mode was local-first for *everything* - including hard work.
+Now a request the first layer rates 2-3 drops local-first and takes the best configured,
+affordable provider, while easy work stays offline. No triage (or difficulty 0-1) leaves the old
+behaviour exactly as it was.
 
 ## 3. Router mechanics - LiteLLM - ADAPT
 
@@ -147,7 +149,7 @@ the change is to make that state a resume point rather than a status.
 
 1. **`engine/evals.py` + the local-model trial** - the missing backbone of Evolution, and it
    feeds routing with real numbers. *(harness shipped)*
-2. **Difficulty-aware routing** - small, and it is what "smart" should have meant.
+2. **Difficulty-aware routing** - small, and it is what "smart" should have meant. *(shipped)*
 3. **Compact tool output + check-on-edit** - the biggest lever on local model quality.
 4. **Memory tiers behind one interface** - the "make it one system" rework.
 5. Skills spec validation, artifact-typed teams, event semconv, durable jobs.

@@ -2088,6 +2088,30 @@ check("api_vault is offered to the model", "api_vault" in loki.MODEL_TOOL_NAMES)
 check("api_vault has a schema", any(s["function"]["name"] == "api_vault" for s in loki.TOOL_SCHEMAS))
 
 
+section("difficulty-aware routing (hard work does not stay on the weak local model)")
+_r_save = (loki.LAST_TRIAGE, loki.local_ready, loki.provider_configured, loki._SMART_FAILED,
+           loki.PREFER, loki.model_name, loki.online)
+try:
+    loki.model_name = "smart"
+    loki.PREFER = "local"
+    loki.local_ready = lambda: True
+    loki.online = lambda *a, **k: True
+    loki.provider_configured = lambda name: name == "openrouter"
+    loki._SMART_FAILED = set()
+    loki.LAST_TRIAGE = {"difficulty": 0}
+    check("an easy request stays on the local model (unchanged default)",
+          loki.active_model_name() == "local", loki.active_model_name())
+    loki.LAST_TRIAGE = {"difficulty": 3}
+    check("a HARD request does not stay on the local model - it takes the best available",
+          loki.active_model_name() == "openrouter", loki.active_model_name())
+    loki.LAST_TRIAGE = {}
+    check("no triage at all leaves local-first alone (the barrier default is 2)",
+          loki.active_model_name() == "local" and loki.triage_difficulty() == 1,
+          (loki.active_model_name(), loki.triage_difficulty()))
+finally:
+    (loki.LAST_TRIAGE, loki.local_ready, loki.provider_configured, loki._SMART_FAILED,
+     loki.PREFER, loki.model_name, loki.online) = _r_save
+
 section("provider failover inside a real turn (routing regression)")
 # These drive agent_turn itself with a fake model client, because the old tests only
 # called failover_target() alone and missed the bug: _model_request marked the failing

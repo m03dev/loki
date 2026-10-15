@@ -770,6 +770,19 @@ def provider_configured(name: str) -> bool:
 # variant with an agent-sized context window. LOKI_PREFER=local (default) puts it first in
 # smart mode; with no internet, smart uses ONLY local models.
 PREFER = os.getenv("LOKI_PREFER", "local").strip().lower()
+HARD_DIFFICULTY = int(os.getenv("LOKI_HARD_DIFFICULTY", "2"))
+
+
+def triage_difficulty() -> int:
+    """The first layer's 0..3 read on this request (1 when it did not say).
+
+    RouteLLM's idea, on LOKI's own default: local-first is right for easy work, but it must
+    not keep HARD work on the weak offline model.
+    """
+    try:
+        return int((LAST_TRIAGE or {}).get("difficulty"))
+    except (TypeError, ValueError):
+        return 1
 LOCAL_STATE: dict = {"at": 0.0, "name": "", "base_url": "", "source": "", "warm": "", "note": ""}
 _ONLINE: dict = {"at": 0.0, "ok": True}
 
@@ -920,6 +933,10 @@ def active_model_name() -> str:
     if model_name != "smart":
         return model_name
     local_first = PREFER == "local" and "local" not in _SMART_FAILED and local_ready()
+    if local_first and triage_difficulty() >= HARD_DIFFICULTY:
+        # This one is medium/hard: do not spend it on the offline model. Falls through to the
+        # best provider that is configured and affordable.
+        local_first = False
     if local_first or (not online() and local_ready()):
         return "local"
     if not online():
