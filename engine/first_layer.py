@@ -78,6 +78,12 @@ _RESEARCH = re.compile(r"\b(research|find|look up|search|compare|latest|news|pri
 _OPS = re.compile(r"\b(install|run|start|restart|configure|deploy|update|upgrade|fix my|set up)\b", re.I)
 _CODE = re.compile(r"\b(code|function|bug|refactor|test|script|file|class|module|repo|commit|"
                    r"\.py|\.js|\.ts|\.gd|\.go|\.rs)\b", re.I)
+# A request to change LOKI itself (its code, UI, engine, tests). These always go to
+# improve_loki: its own worktree, every test suite, shipped only when green.
+_SELF = re.compile(r"\b(improve_loki|(change|improve|fix|update|edit|upgrade|refactor|rework)\s+"
+                   r"(your\s+own|your|loki'?s?(\s+own)?)\s+(code|ui|app|engine|settings|interface|"
+                   r"tests?|source|codebase)|your\s+own\s+code|loki'?s\s+(own\s+)?(code|codebase|"
+                   r"source|engine|ui))\b", re.I)
 _RISKY = re.compile(r"\b(delete|remove|wipe|drop|pay|purchase|buy|order|send|email|post|publish|tweet|"
                     r"sign ?in|log ?in|password|transfer)\b", re.I)
 
@@ -177,12 +183,18 @@ def triage(message: str, mode: str = "build", wait: bool = True) -> dict:
     if result is None:
         result = rules(message)
     result.update({"source": source, "ms": round((time.monotonic() - started) * 1000.0, 1)})
+    result["self_change"] = is_self_change(message)
     _complete(result, message)
     if note:
         result["note"] = note
     if mode in ("ask", "plan") and result["route"] == "team":
         result["route"] = "plan"  # Ask and Plan never start agents
     return result
+
+
+def is_self_change(message: str) -> bool:
+    """True when the request asks LOKI to change its own code (see _SELF)."""
+    return bool(_SELF.search(message or ""))
 
 
 def _complete(t: dict, message: str) -> None:
@@ -216,6 +228,9 @@ def describe(t: dict) -> str:
 def guidance(t: dict) -> str:
     """What the agent is told about the triage, or "" when nothing changes."""
     route = t.get("route")
+    if t.get("self_change"):
+        return ("First-layer triage: this asks to change LOKI's own code. Call improve_loki with "
+                "the whole request; do not edit files in this workspace yourself.")
     if t.get("missing_info") and route != "answer":
         return ("First-layer triage: important information seems to be missing. Ask the user the "
                 "one or two questions you need before you start.")

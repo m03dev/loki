@@ -2359,6 +2359,9 @@ runs every test suite and pushes only if they all pass; if it reports failures, 
 call it again. Report DONE with what you shipped, or BLOCKED with why."""
 
 
+IMPROVE_MODEL = os.getenv("LOKI_IMPROVE_MODEL", "online").strip() or "online"
+
+
 def _is_loki_checkout(path: Path) -> bool:
     return (path / "engine" / "loki.py").is_file() and (path / ".git").exists()
 
@@ -2376,7 +2379,11 @@ def improve_loki(task: str) -> str:
         return "error: %s is not a git checkout of LOKI yet (restart LOKI once)" % REPO_ROOT
     spec = {"backend": "local", "agent": "loki", "workspace": str(REPO_ROOT), "isolate": True,
             "timeout_s": 7200, "allow_commands": True, "title": "Improve LOKI: " + task.splitlines()[0][:60],
-            "prompt": SELF_IMPROVE_PROMPT.format(task=task)}
+            "prompt": SELF_IMPROVE_PROMPT.format(task=task),
+            # Changing LOKI's own code is long, careful tool work: by default it goes to the best
+            # FREE online model (the "online" mode, never paid unless allowed), not a small local
+            # model that tends to stop after a few turns. LOKI_IMPROVE_MODEL overrides it.
+            "model": IMPROVE_MODEL if IMPROVE_MODEL in MODELS else ""}
     verdict = POLICY.job(spec["backend"], spec["agent"])
     if not verdict.allowed:
         return "error: %s" % verdict.reason
@@ -2551,6 +2558,11 @@ TOOL_CATEGORIES = {
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
+# Tools that only make sense inside a Godot project (the optional game adapter).
+GODOT_ONLY_TOOLS = {"build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor",
+                    "godot_api", "godot_search", "add_input_action", "set_project_setting",
+                    "add_autoload", "play_scene", "check_script", "capture_scene", "probe_scene",
+                    "run_godot", "open_godot"}
 CATEGORY_LABELS = {
     "files": "Files (read/write/edit/search)",
     "scenes": "Scenes (build/validate/open in editor)",
@@ -2645,6 +2657,10 @@ def model_tool_schemas() -> list:
         return []
     schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
                and _tool_enabled(t["function"]["name"])]
+    if not is_godot_workspace():
+        # Outside a Godot project the game tools only mislead a model into writing .tscn
+        # files for a website (seen on the PC, 2026-10-14). LOKI is not a Godot project.
+        schemas = [t for t in schemas if t["function"]["name"] not in GODOT_ONLY_TOOLS]
     local_note = ""
     if _is_local_model():
         # A local model reads every tool schema on every turn: fewer, better-chosen tools
@@ -2977,6 +2993,35 @@ def is_godot_workspace() -> bool:
     return bool(GAME_PROJECT) and (Path(GAME_PROJECT) / "project.godot").is_file()
 
 
+def identity_section() -> str:
+    """Who is answering, on which machine, with which model - so LOKI can say it plainly
+    instead of guessing (it used to answer "I don't know which model I am")."""
+    try:
+        provider = active_model_name()
+        model = MODELS[provider].model if provider in MODELS else provider
+    except Exception:  # noqa: BLE001
+        provider, model = model_name, ""
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        commit = updater.version().get("commit", "")[:7]
+    except Exception:  # noqa: BLE001
+        commit = ""
+    try:
+        import peers  # pylint: disable=import-outside-toplevel
+        machine, linked = peers.my_name(), [p["name"] for p in peers.peers()]
+    except Exception:  # noqa: BLE001
+        machine, linked = "", []
+    lines = ["# Who you are right now",
+             "You are LOKI, a standalone desktop app (macOS and Windows) that runs AI agents on the "
+             "owner's own machines. You are not a Godot project.",
+             "- Answering this message: model %s through provider %s%s." % (
+                 model or "?", provider, " (free)" if not is_metered(provider) else " (paid)"),
+             "- This machine: %s (%s)%s." % (machine or "this computer", sys.platform,
+                                             (", LOKI version " + commit) if commit else ""),
+             "- Linked machines: %s." % (", ".join(linked) if linked else "none yet")]
+    return chr(10).join(lines)
+
+
 def system_prompt() -> str:
     """The system prompt for the current mode, always English-only, plus the ready specialists."""
     try:
@@ -2984,7 +3029,7 @@ def system_prompt() -> str:
     except Exception:
         specialists = ""
     base = _base_system_prompt()
-    text = base + (chr(10) * 2 + specialists if specialists else "")
+    text = base + chr(10) * 2 + identity_section() + (chr(10) * 2 + specialists if specialists else "")
     if TRIAGE_NOTE:
         text += chr(10) * 2 + "# This request" + chr(10) + TRIAGE_NOTE
     return text
@@ -4602,7 +4647,17 @@ async def run_agent(user_message: str) -> str:
     started, start_index = _start_request()
     status = "error"
     try:
-        await asyncio.to_thread(_triage, user_message)
+        verdict = await asyncio.to_thread(_triage, user_message)
+        if verdict.get("self_change") and AGENT_MODE == "build":
+            # A change to LOKI's own code never depends on the model choosing the right tool:
+            # it always goes to improve_loki (its own worktree, tests, ship only when green).
+            result = improve_loki(user_message)
+            status = "done" if result.startswith("started") else "blocked"
+            reply = ("I handed this to a background LOKI agent that changes LOKI's own code: "
+                     + result) if result.startswith("started") else ("I could not start that change: " + result)
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": reply})
+            return reply
         reply = await _run_agent(user_message)
         status = "done"
         return reply

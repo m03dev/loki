@@ -44,23 +44,32 @@ def _data_dir() -> Path:
     return Path(os.getenv("LOKI_DATA") or (REPO / "harness_data"))
 
 
-def _health_file() -> Path:
+def _health_file(repo: Path | None = None) -> Path:
+    """The health record lives with the checkout it describes (inside .git, never committed),
+    so a test that updates a throwaway repo can never touch the real machine's record."""
+    repo = repo or REPO
+    if (repo / ".git").is_dir():
+        return repo / ".git" / "loki_update_health.json"
+    return _legacy_health_file()
+
+
+def _legacy_health_file() -> Path:
     return _data_dir() / "app" / "update_health.json"
 
 
-def health() -> dict:
+def health(repo: Path | None = None) -> dict:
     """{last_good, pending, skip:[...]} - what started fine here, what is on trial, what failed."""
     try:
         import json  # pylint: disable=import-outside-toplevel
-        data = json.loads(_health_file().read_text(encoding="utf-8"))
+        data = json.loads(_health_file(repo).read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def _save_health(data: dict) -> None:
+def _save_health(data: dict, repo: Path | None = None) -> None:
     import json  # pylint: disable=import-outside-toplevel
-    path = _health_file()
+    path = _health_file(repo)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -71,10 +80,10 @@ def _save_health(data: dict) -> None:
 def mark_good(repo: Path | None = None) -> dict:
     """The engine started and answered: this commit is good on this machine."""
     commit = version(repo or REPO).get("commit", "")
-    data = health()
+    data = health(repo)
     if commit:
         data.update({"last_good": commit, "pending": "", "good_at": time.time()})
-        _save_health(data)
+        _save_health(data, repo)
     return data
 
 
@@ -85,7 +94,7 @@ def rollback(repo: Path | None = None) -> dict:
     nothing is pushed. The bad commit is remembered so the next start does not apply it
     again; any NEWER commit on GitHub (the fix) is applied normally."""
     repo = repo or REPO
-    data = health()
+    data = health(repo)
     current = version(repo).get("commit", "")
     good, bad = data.get("last_good", ""), data.get("pending", "")
     if not bad or not current or not bad.startswith(current[:12]):
@@ -101,9 +110,18 @@ def rollback(repo: Path | None = None) -> dict:
     if bad and bad not in skip:
         skip.append(bad)
     data.update({"pending": "", "skip": skip, "rolled_back_at": time.time(), "rolled_back_from": bad})
-    _save_health(data)
+    _save_health(data, repo)
     STATE.update({"note": "went back to %s: %s did not start" % (good, bad)})
     return {"ok": True, "from": bad, "to": good}
+
+
+def is_behind(commit: str, latest: str, repo: Path | None = None) -> bool:
+    """True when `commit` is an older commit of `latest` (a newer or unknown one is not behind)."""
+    repo = repo or REPO
+    if not commit or not latest or latest.startswith(commit[:12]) or commit.startswith(latest[:12]):
+        return False
+    code, _ = git(repo, "merge-base", "--is-ancestor", commit, latest)
+    return code == 0
 
 
 def restart_needed() -> bool:
@@ -309,7 +327,7 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
         if not state["can_update"]:
             STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
             return _done(False, "; ".join(notes + ["update waiting: " + state["reason"]]))
-        if state["latest"] and any(state["latest"].startswith(c[:12]) for c in health().get("skip", []) if c):
+        if state["latest"] and any(state["latest"].startswith(c[:12]) for c in health(repo).get("skip", []) if c):
             return _done(False, "; ".join(notes + ["%s did not start on this machine before; waiting for "
                                                    "a newer version" % state["latest"]]))
         moved = _move_aside_untracked(repo)
@@ -320,9 +338,9 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
             return _done(False, "; ".join(notes), error="update failed: %s" % out[-200:])
         after = version(repo)["commit"]
         notes.append("updated %s -> %s" % (before, after))
-        trial = health()      # `before` is what ran here until now: the version to go back to
+        trial = health(repo)  # `before` is what ran here until now: the version to go back to
         trial.update({"last_good": before or trial.get("last_good", ""), "pending": after})
-        _save_health(trial)
+        _save_health(trial, repo)
         if _requirements_changed(repo, before, after):
             notes.append(_install_requirements(repo))
         STATE.update({"current": after, "latest": after, "behind": 0, "ahead": 0, "dirty": [],

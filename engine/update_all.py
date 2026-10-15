@@ -41,7 +41,8 @@ def _step(name: str, **fields: Any) -> dict:
 def overview(updater: Any, peer_statuses: list) -> dict:
     """Every machine's version against GitHub's newest: who is behind, who is fine."""
     mine = updater.version()
-    latest = updater.STATE.get("latest", "") or ""
+    local = updater.check(fetch=False) if hasattr(updater, "check") else {}
+    latest = (local.get("latest") if local.get("ok") else "") or updater.STATE.get("latest", "") or ""
     machines = [{"machine": "this computer", "self": True, "commit": mine.get("commit", ""),
                  "dirty": mine.get("dirty", False), "online": True}]
     for peer in peer_statuses:
@@ -51,9 +52,15 @@ def overview(updater: Any, peer_statuses: list) -> dict:
                          "commit": version.get("commit", ""), "dirty": bool(version.get("dirty")),
                          "error": peer.get("error", "")})
     commits = {m["commit"] for m in machines if m["online"] and m["commit"]}
+    behind_of = getattr(updater, "is_behind", None)
     for m in machines:
-        m["behind"] = bool(latest and m["commit"] and m["online"] and not latest.startswith(m["commit"][:12])
-                           and not m["commit"].startswith(latest[:12]))
+        if m["self"] and local.get("ok"):
+            m["behind"] = int(local.get("behind") or 0) > 0       # git knows exactly
+        elif behind_of is not None:
+            m["behind"] = bool(m["online"] and behind_of(m["commit"], latest))
+        else:
+            m["behind"] = bool(latest and m["commit"] and m["online"] and not latest.startswith(m["commit"][:12])
+                               and not m["commit"].startswith(latest[:12]))
     return {"latest": latest, "machines": machines, "in_step": len(commits) <= 1 and not any(m["behind"] for m in machines),
             "progress": PROGRESS}
 

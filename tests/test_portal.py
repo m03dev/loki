@@ -362,7 +362,7 @@ if shutil.which("git"):
     sh(seed, "git", "push", "-q", "origin", "master")
     result = updater.update(machine)
     v2 = updater.version(machine)["commit"]
-    h = updater.health()
+    h = updater.health(machine)
     check("an update is put on trial (pending) with the old commit as last good",
           result["updated"] and h["pending"] == v2 and h["last_good"] == v1)
     back = updater.rollback(machine)
@@ -376,8 +376,13 @@ if shutil.which("git"):
     fixed = updater.update(machine)
     check("a newer version (the fix) is applied normally", fixed["updated"] and (machine / "a.txt").read_text() == "v3 fixed\n")
     updater.mark_good(machine)
-    check("a started version is marked good", updater.health()["pending"] == "" and
-          updater.health()["last_good"] == updater.version(machine)["commit"])
+    check("a started version is marked good", updater.health(machine)["pending"] == "" and
+          updater.health(machine)["last_good"] == updater.version(machine)["commit"])
+    check("the health record lives inside that checkout's .git (tests never touch the real one)",
+          (machine / ".git" / "loki_update_health.json").is_file())
+    check("a newer or equal commit is not 'behind'", not updater.is_behind(updater.version(machine)["commit"],
+                                                                           v1, machine)
+          and updater.is_behind(v1, updater.version(machine)["commit"], machine))
     check("a version that is not on trial is never rolled back", not updater.rollback(machine)["ok"])
 else:
     print("  SKIP git checks: git is not installed")
@@ -546,6 +551,34 @@ if loki is not None:
     os.environ.pop("LOKI_DISABLED_PROVIDERS")
     check("a local server that is not running is not configured", not loki.provider_configured("vllm"))
     check("trial-credit providers count as paid", loki.is_metered("nebius") and not loki.is_metered("opencode-zen"))
+    ident = loki.identity_section()
+    check("LOKI's prompt says who it is and which model answers", "You are LOKI" in ident
+          and loki.MODELS[loki.active_model_name()].model in ident and "Linked machines" in ident)
+    check("the identity is part of the system prompt", "# Who you are right now" in loki.system_prompt())
+    import first_layer  # noqa: E402
+    check("a request to change LOKI's own code is recognised", first_layer.is_self_change(
+        "Change your own code with improve_loki: give LOKI a logo") and first_layer.is_self_change("improve LOKI's UI")
+          and not first_layer.is_self_change("change the code in my project"))
+    _saved_mode, _saved_gp = loki.AGENT_MODE, loki.GAME_PROJECT
+    try:
+        loki.set_mode("build")
+        loki.GAME_PROJECT = ""
+        _offered = {t["function"]["name"] for t in loki.model_tool_schemas()}
+        check("outside a Godot project the Godot tools are not offered", not (_offered & loki.GODOT_ONLY_TOOLS)
+              and "write_file" in _offered, sorted(_offered & loki.GODOT_ONLY_TOOLS))
+        _started = []
+        _saved_imp, _saved_triage = loki.improve_loki, loki._triage
+        loki.improve_loki = lambda task: (_started.append(task), "started job ab12: a LOKI agent is on it")[1]
+        loki._triage = lambda text: {"self_change": True, "kind": "code", "route": "plan"}
+        try:
+            _reply = asyncio.run(loki.run_agent("improve LOKI's UI: add a logo"))
+        finally:
+            loki.improve_loki, loki._triage = _saved_imp, _saved_triage
+        check("a self-change goes straight to improve_loki (no model needed)",
+              _started == ["improve LOKI's UI: add a logo"] and "background LOKI agent" in _reply, _reply)
+    finally:
+        loki.AGENT_MODE, loki.GAME_PROJECT = _saved_mode, _saved_gp
+    check("LOKI's own code changes use the best free online model by default", loki.IMPROVE_MODEL == "online")
     import cli_agents  # noqa: E402
     import workers  # noqa: E402
     check("OpenCode is a CLI agent and a background-job agent", "opencode" in cli_agents.CLI_AGENTS

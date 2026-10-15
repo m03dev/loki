@@ -124,7 +124,7 @@ def handle_get(state: Any, path: str) -> tuple | None:
         import update_all  # pylint: disable=import-outside-toplevel
         import updater  # pylint: disable=import-outside-toplevel
         statuses = peers.status_all() if peers.peers() else []
-        return 200, {"ok": True, **update_all.overview(updater, statuses), "health": updater.health()}
+        return 200, {"ok": True, **update_all.overview(updater, statuses), "health": updater.health()}  # this checkout's record
     return None
 
 
