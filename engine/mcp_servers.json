@@ -106,6 +106,18 @@
       ],
       "requires_cmd": "uvx",
       "enabled": false
+    },
+    "ruflo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ruflo@latest",
+        "mcp",
+        "start"
+      ],
+      "requires_cmd": "npx",
+      "enabled": false,
+      "note": "Ruflo (github.com/ruvnet/ruflo, MIT): swarm, memory and agent tools. Opt in with LOKI_MCP_ENABLE=ruflo."
     }
   }
 }

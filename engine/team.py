@@ -55,6 +55,21 @@ ROLE_QUESTIONS = {
 }
 
 
+def _with_playbook(role: str, brief: str) -> str:
+    """LOKI's brief first (it is the rule), then Ruflo's matching playbook as guidance."""
+    if os.getenv("LOKI_TEAM_PLAYBOOKS", "ruflo").strip().lower() in ("", "0", "off", "none"):
+        return brief
+    try:
+        import ruflo_library  # pylint: disable=import-outside-toplevel
+        extra = ruflo_library.playbook(role)
+    except Exception:  # noqa: BLE001 - the library is optional
+        extra = ""
+    if not extra:
+        return brief
+    return (brief + "\n\n## Playbook (from Ruflo, github.com/ruvnet/ruflo; your brief above wins "
+            "where they differ)\n" + extra)
+
+
 def _data_dir() -> Path:
     explicit = os.getenv("LOKI_DATA", "").strip()
     return Path(explicit) if explicit else Path(__file__).resolve().parent.parent / "harness_data"
@@ -243,7 +258,7 @@ class TeamRunner:
             "timeout_s": 3600, "allow_commands": spec["commands"], "model": team.get("model", ""),
             "title": "Team %s · %s: %s" % (team["id"], spec["name"], team["goal"][:50]),
             "prompt": agent_prompt(team, role, extra), "team": team["id"],
-            "profile": {"name": spec["name"], "instructions": spec["brief"]},
+            "profile": {"name": spec["name"], "instructions": _with_playbook(role, spec["brief"])},
         })
         return job["id"]
 

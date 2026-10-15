@@ -116,7 +116,13 @@ def handle_get(state: Any, path: str) -> tuple | None:
         return 200, {"ok": True, "skills": [{k: v for k, v in s.items() if k != "path"} for s in _skills(agent)]}
     if route == "/agents/templates":
         profiles = agent.agent_profiles
-        return 200, {"ok": True, "templates": profiles.TEMPLATES, "engines": profiles.ENGINE_LABELS,
+        try:
+            import ruflo_library  # pylint: disable=import-outside-toplevel
+            library = ruflo_library.templates()
+        except Exception:  # noqa: BLE001
+            library = []
+        return 200, {"ok": True, "templates": profiles.TEMPLATES, "library": library,
+                     "engines": profiles.ENGINE_LABELS,
                      "tools": profiles.TOOL_GROUPS, "memory": list(profiles.MEMORY_SCOPES),
                      "models": [m for m in agent.MODELS if m not in ("smart", "online")]}
     if route == "/update/everywhere":

@@ -157,6 +157,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Connections > ModelScope, turn on image-gen, set `LOKI_IMAGE_BACKEND=qwen` and ask LOKI for
       "an image of a red fox in studio light". Report the time, and the exact error if any (the
       request shape came from a third-party guide, not ModelScope's own docs).
+- [ ] **W14 Ruflo.** (Mohamed asked: ruvnet/ruflo in LOKI.) Its 95 agents and 38 skills are now
+      built in (contrib/ruflo, engine/ruflo_library.py). Check: Settings > Agents > "Ruflo library"
+      search "security" -> pick "Security Auditor" -> Save -> Run it on a small task. Then turn on
+      Ruflo's MCP server: add `LOKI_MCP_ENABLE=ruflo` to harness_data\.env, restart LOKI, and report
+      the "[mcp] connected 'ruflo': N tools" line from harness_data\app\engine.out (or its error).
 - [ ] **W13 Z-Image again.** After LOKI updates: ask for "an image of a red fox in studio
       light" with `LOKI_IMAGE_BACKEND=zimage`. Report which plan worked (the reply names it)
       and the time, or every plan's error if all crash (paste them).

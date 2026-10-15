@@ -427,6 +427,30 @@ check("drafting a builder lets it run commands", agents.draft("fix bugs and run 
 check("every template is a valid agent", all(agents.validate(t) for t in agents.TEMPLATES))
 check("the app-idea template is there (Appidea)", any(t["id"] == "app-idea" for t in agents.TEMPLATES))
 
+section("Ruflo, built in (engine/ruflo_library.py, contrib/ruflo)")
+import ruflo_library  # noqa: E402
+
+_rs = ruflo_library.summary()
+check("Ruflo's agents and skills are in the repo with its MIT licence and provenance",
+      _rs["agents"] >= 90 and _rs["skills"] >= 35 and (REPO / "contrib" / "ruflo" / "LICENSE").is_file()
+      and "1882006a" in (REPO / "contrib" / "ruflo" / "PROVENANCE.md").read_text(encoding="utf-8"), _rs)
+_rt = ruflo_library.templates()
+check("every Ruflo agent becomes a valid LOKI agent template", _rt and all(agents.validate(t) for t in _rt))
+check("Ruflo's coder playbook backs LOKI's builder role", "Code Implementation" in ruflo_library.playbook("builder"))
+_roots = agents.skill_roots(REPO, TMP)
+_cat = agents.skills_catalog(_roots)
+check("Ruflo skills are in the skill catalog", any(s["source"] == "ruflo" for s in _cat))
+check("a Ruflo skill that tries to override LOKI's rules is never offered",
+      not any(s["id"] == "github-project-management" for s in _cat))
+check("no Ruflo file is executable code (LOKI only reads them)",
+      not [p for p in (REPO / "contrib" / "ruflo").rglob("*") if p.is_file() and p.suffix not in (".md", "") and p.name != "LICENSE"])
+_mcp = json.loads((REPO / "engine" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
+check("Ruflo's MCP server is there, opt-in", _mcp.get("ruflo", {}).get("enabled") is False
+      and _mcp["ruflo"]["args"][-2:] == ["mcp", "start"])
+import team as team_mod  # noqa: E402
+check("team roles get Ruflo's playbook after LOKI's own brief",
+      team_mod._with_playbook("builder", "BRIEF").startswith("BRIEF") and "Ruflo" in team_mod._with_playbook("builder", "BRIEF"))
+
 # --------------------------------------------------------------------------- runners + conductor
 section("new specialists: media (yt-dlp), image, reach (engine/conductor.py)")
 import conductor  # noqa: E402
@@ -522,7 +546,7 @@ check("reach: github goes to gh", runs[-1][1]["op"] == "github")
 section("capability manifests")
 import manifests  # noqa: E402
 
-for name in ("opencode", "agent-reach", "media", "image-gen", "mlx", "kyojin"):
+for name in ("opencode", "agent-reach", "media", "image-gen", "mlx", "kyojin", "ruflo"):
     data = json.loads((REPO / "capabilities" / name / "manifest.json").read_text(encoding="utf-8"))
     check("manifest %s is valid" % name, manifests.validate(data) == [], manifests.validate(data))
 check("OpenCode jobs need the opencode capability", policy_mod.AGENT_CAPABILITY.get("opencode") == "opencode")

@@ -79,6 +79,10 @@ Ziva: your task list and inbox is [ZIVA_TASKS.md](ZIVA_TASKS.md).
   its own panel, driven only by real state (GET /world).
 - **Machines & updates**: **Update everything** updates every linked machine and restarts it,
   then this one. A version that does not start is rolled back on that machine.
+- **Ruflo, built in**: Ruflo's 95 agents and 38 skills (github.com/ruvnet/ruflo, MIT) are in
+  `contrib/ruflo/` - searchable templates in Settings > Agents, skills for any agent, and
+  playbooks for team roles. Every text passes LOKI's skill scan first. Ruflo's own MCP server
+  (swarms, memory) is opt-in: `LOKI_MCP_ENABLE=ruflo`.
 - **Add-ons**: `media` (yt-dlp), `image-gen` (Z-Image Turbo / Pollinations), `agent-reach`,
   `opencode`, `mlx`, `kyojin`. Install the optional ones with `python tools/setup_extras.py`.
 

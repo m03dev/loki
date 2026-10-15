@@ -243,7 +243,8 @@ def _frontmatter(text: str) -> dict:
 
 
 def skill_roots(repo: Path, data_dir: Path) -> list:
-    return [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills")]
+    return [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills"),
+            ("ruflo", Path(repo) / "contrib" / "ruflo" / "skills")]
 
 
 def skills_catalog(roots: list) -> list[dict]:
@@ -262,6 +263,12 @@ def skills_catalog(roots: list) -> list[dict]:
             except OSError:
                 continue
             meta = _frontmatter(text)
+            try:   # skills are untrusted text: one that tries to override LOKI's rules is never offered
+                import skill_scan  # pylint: disable=import-outside-toplevel
+                if skill_scan.scan(skill_md).get("verdict") == "blocked":
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
             seen.add(sid)
             found.append({"id": sid, "name": meta.get("name", sid), "description": meta.get("description", "")[:300],
                           "source": source, "path": str(skill_md)})

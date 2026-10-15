@@ -527,6 +527,33 @@ async function loadAgents() {
   create.querySelector(".right").append(button("Blank", "quiet", () => editAgent({ name: "", engine: "loki", tools: ["files"] }, true)), draft);
   box.append(create);
 
+  // Ruflo's agent library (github.com/ruvnet/ruflo), built in: search, pick, adjust, save.
+  const library = builder.meta.library || [];
+  if (library.length) {
+    const lib = el("div", "builder-create library");
+    const head = el("div", "lib-head");
+    head.append(el("b", "", "Ruflo library"), el("small", "muted", library.length + " ready-made agents, checked by LOKI's skill scan"));
+    const search = el("input");
+    search.type = "search";
+    search.placeholder = "Search: security, api, pr, swarm, sparc, docs…";
+    search.setAttribute("aria-label", "Search the Ruflo agent library");
+    const results = el("div", "chips");
+    const show = () => {
+      const q = search.value.toLowerCase().trim();
+      const hits = library.filter((t) => !q || (t.name + " " + t.goal + " " + t.family).toLowerCase().includes(q)).slice(0, 24);
+      results.replaceChildren(...hits.map((t) => {
+        const b = button(t.name, "chip", () => editAgent(Object.assign({}, t, { id: "" }), true));
+        b.title = t.family + ": " + t.goal;
+        return b;
+      }));
+      if (!hits.length) results.append(el("small", "muted", "No match."));
+    };
+    search.addEventListener("input", show);
+    lib.append(head, search, results);
+    box.append(lib);
+    show();
+  }
+
   const grid = el("div", "agent-grid");
   for (const a of (list && list.ok ? list.agents : [])) grid.append(agentCard(a));
   box.append(grid, el("div", "", ""));
