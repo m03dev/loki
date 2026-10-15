@@ -304,6 +304,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M3 Link the machines.** They are on different networks (192.168.1.x / 192.168.0.x).
       Install Tailscale on both (same account), then on the Mac: Settings > Machines &
       updates > Link another machine, with the PC's link code. Report `ms` from the Machines panel.
+      BLOCKED on Mohamed 2026-10-14 (Ziva Mac): needs a Tailscale account signed in on BOTH machines
+      (and the PC's link code). Moved to Needs Mohamed; continuing with M7 while blocked.
 - [x] **M4 MLX.** `harness_data/.venv/bin/python tools/setup_extras.py mlx`, then keep
       `mlx_lm.server --model mlx-community/Qwen3-4B-4bit --port 8082` running. The MLX card should
       say **Running**. Make it the default and ask LOKI to "list the files here and read README.md".
@@ -335,12 +337,23 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       does expose executionProviders/sessionOptions, so it is a one-line env to revisit later.
 - [ ] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
       `docs/operations/screens/world-mac.png`.
-- [ ] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
+- [x] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
       one 768x768 image and report the time and memory pressure. If it is too heavy for this Mac,
       say so: LOKI will keep using the PC (agents with "Lives on: Best machine") or Pollinations.
+      RESULT 2026-10-14 (Ziva Mac, M4 / 16 GB): TOO HEAVY - do not run image-gen on this Mac.
+      torch(MPS) + diffusers installed and the Z-Image-Turbo weights downloaded (33 GB, on the SSD
+      image), but one 768x768 generation exhausted memory: swap hit 100% (6.9 GB used, 0 free) and
+      free RAM fell to ~9%; the four plan-degradation child plans cycled without producing a file and
+      I stopped it to protect the machine. Claude's crash-safe plan runner behaved correctly (clean
+      child processes, no hang) - the model does not fit in 16 GB. Keep images on the PC, or use the
+      free Pollinations backend on the Mac.
 
 ## Needs Mohamed
 
+- [ ] **M3 Tailscale account** - the Mac and PC are on different networks (192.168.1.x / 192.168.0.x)
+      so the peer link needs Tailscale: install and sign in with the SAME account on both machines,
+      then give Ziva the PC's link code (Mac: Settings > Machines & updates > Link another machine).
+      (Ziva Mac, 2026-10-14)
 - [ ] **GitHub Actions is not starting jobs** (account billing). CI on push is off until it is
       fixed in github.com/settings/billing. Meanwhile every change is checked by ship.py on the
       machine (Ziva) and by the offline suites in the cloud (`PYTHONPATH=tests/cloud_stubs`).
@@ -371,6 +384,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) M7 result: local image-gen is TOO HEAVY on the M4/16 GB Mac - torch MPS +
+  Z-Image-Turbo (33 GB) install fine, but a 768x768 generation exhausted swap (100%, 0 free) and no
+  plan produced an image; stopped it to protect the machine. Use the PC or Pollinations for images
+  on the Mac. M3 flagged for Mohamed (Tailscale).
 - 2026-10-15 cloud (Claude) read Ziva's reports (plugins/.gitignore fix, image-gen re-enabled).
   Did Ziva's suggestion: a "changed add-on" banner in the app that names it and re-approves on a
   confirmed click (app/ui/app.js, index.html; tests in test_hardening: changed -> re-approved
