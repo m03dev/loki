@@ -337,7 +337,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       RECONFIRMED 2026-10-14 (Ziva Mac) after upstream addd8db: MLX works with NO MLX_MODEL override.
       `/health` model "default_model"; usage line "default_model * 3.8k in / 244 out * 12.6 tok/s *
       free" (cost 0.0). Tool harness fired on the earlier run (`list_tree`).
-- [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
+- [x] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
       latency now; then, if `@receptron/laya` lets you pass ONNX session options, try
@@ -347,7 +347,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       calls after load). With CoreML: `LOKI_LAYA_EP="coreml,cpu"` median 177 ms (163-270 ms) -
       SLOWER (CoreML compiles the graph for a tiny model). NOT shipped; cpu stays. @receptron/laya
       does expose executionProviders/sessionOptions, so it is a one-line env to revisit later.
-- [ ] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
+      DONE (numbers reported, as the task asks - not shipped).
+- [x] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
       `docs/operations/screens/world-mac.png`.
       PART DONE 2026-10-14 (Ziva Mac): the world DATA path works - `GET /world` shows LOKI idle at
       hall (machine mohameds-Mac-mini.local); `POST /teams {"goal":"build a landing page for a
@@ -359,6 +360,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       APP SMOKE 2026-10-14 (Ziva Mac): `python app/loki_app.py --print-url` from the SSD works - the
       updater says "up to date (391036368c76)", the engine starts on 8767, and the UI is served
       (`<title>Loki</title>`, `/ui/world.js`). So the rebuilt app launches fine from the APFS image.
+      SCREENSHOT 2026-10-14 (Ziva Mac): `docs/operations/screens/world-mac.png` (1024x648, window-only
+      capture of the Loki app; no desktop content). The shot looks like the Windows one
+      (`world-windows.png`, mean RGB 34/35/39 vs 36/36/41) because the world is drawn at 50% opacity
+      (`app.css`: `.world-bg.on { opacity: .5 }`) over a deliberately dark palette (clear transparent,
+      fog 0.12, ground 0.17) behind the home screen. CAVEAT: this capture cannot by itself prove the
+      WebGL canvas is drawing (a dark world and a not-drawing world look the same in a screenshot), so
+      a human should glance at the app window once to confirm the agents/characters are visible.
 - [x] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
       one 768x768 image and report the time and memory pressure. If it is too heavy for this Mac,
       say so: LOKI will keep using the PC (agents with "Lives on: Best machine") or Pollinations.
@@ -372,6 +380,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Needs Mohamed
 
+- [ ] **M6 glance** - open Loki on the Mac and confirm the 3D world (agent characters at their
+      stations) is visible behind the home screen. The Mac screenshot is dark by design (world at 50%
+      opacity), so Ziva could not confirm the WebGL draw from pixels alone. (Ziva Mac, 2026-10-14)
 - [ ] **M3 Tailscale account** - the Mac and PC are on different networks (192.168.1.x / 192.168.0.x)
       so the peer link needs Tailscale: install and sign in with the SAME account on both machines,
       then give Ziva the PC's link code (Mac: Settings > Machines & updates > Link another machine).
@@ -406,6 +417,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) M6: captured the Loki app window on the Mac to
+  docs/operations/screens/world-mac.png (window-only; no desktop). M5 ticked (numbers reported).
+  Needs the owner to glance at the window once - the world is dark by design so pixels alone can't
+  confirm the WebGL draw.
 - 2026-10-14 mac (Ziva) MLX re-verified after upstream addd8db: MLX now runs with no MLX_MODEL
   override ("default_model") and reports "free"/0.0 cost. M4 fully done on the Mac (tool harness
   fired `list_tree` earlier, 12.6-17.2 tok/s).
