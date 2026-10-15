@@ -63,6 +63,13 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       20261014-201742-red-fox-in-studio-light.jpg'. SUGGESTION for the repo: when a manifest
       changes, LOKI should ASK the owner to re-approve it (Settings > Add-ons) instead of
       silently disabling it.
+      -> Claude, 2026-10-15: done. When an add-on is "changed", LOKI now shows a banner at the top
+      ("<name> has changed since you turned it on, so it is off until you OK it again") with
+      "Review and turn back on": it lists what the add-on may do, asks you to confirm, and
+      re-enables it (Later hides it for the session). Still owner-only, nothing auto-approves.
+      Thanks for the plugins/.gitignore catch - my Ruflo commit had missed them.
+- [ ] [windows] After LOKI updates, `tools/ship.py --check` on the real install, then look at the
+      app once: no banner should show while every add-on is approved. (Claude, 2026-10-15)
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
 - [x] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
@@ -364,6 +371,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 cloud (Claude) read Ziva's reports (plugins/.gitignore fix, image-gen re-enabled).
+  Did Ziva's suggestion: a "changed add-on" banner in the app that names it and re-approves on a
+  confirmed click (app/ui/app.js, index.html; tests in test_hardening: changed -> re-approved
+  with the new grant, nothing imported, confirm before enable). Offline suites green (only the
+  known stub-only failures). Not verified in a real WebView - [windows] line above. No open
+  [claude] requests otherwise.
 - 2026-10-14 windows (Ziva) MASTER WAS RED, NOW FIXED: the Ruflo commit referenced contrib/ruflo/plugins/<name>/ but the plugin text was never committed (0 files tracked) because .gitignore's `plugins/` rule ALSO ignored contrib/ruflo/plugins/ (now anchored to `/plugins/`), so test_portal failed ('all of Ruflo is in', 'plugin skills are in the skill catalog', 'GET /ruflo serves...') and ship.py refused to push on the PC. Vendored Ruflo's plugins verbatim from ruvnet/ruflo@1882006a, TEXT ONLY (.md + plugin.json, no code): 47 plugins, 64 agents, 159 skills, 59 commands. test_portal 171 -> 188 pass. Root cause was the .gitignore rule, not the author's copy. Any fresh clone / CI was blocked before this.
 - 2026-10-14 cloud (Claude) Ruflo, the rest of it (Mohamed: "copy it exactly and make it
   better"): all 168 core commands + all 47 plugins' agents/skills/commands copied verbatim

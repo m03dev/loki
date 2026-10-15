@@ -478,6 +478,7 @@ async function loadManifests() {
       const result = await api("/capabilities/enable", { name: cap.name, enabled: toggle.checked });
       if (!result.ok) addNotice(result.error || "Could not change that capability.", true);
       loadManifests();
+      checkChangedCapabilities();
     });
     label.append(toggle, document.createTextNode(" " + cap.name + (cap.version ? " " + cap.version : "")));
     top.append(label, el("span", "state" + (cap.status === "enabled" ? " ready" : ""), cap.status));
@@ -488,6 +489,41 @@ async function loadManifests() {
     if (cap.errors && cap.errors.length) r.append(el("div", "why", cap.errors.join("; ")));
     box.append(r);
   }
+}
+
+// An add-on whose manifest changed after it was turned on is off until the owner OKs it
+// again (engine/manifests.py). Say so up front instead of leaving it to be found in
+// Settings > Add-ons: a banner names it, and one click shows what it may do and re-approves.
+const changedCaps = { list: [], dismissed: false };
+
+async function checkChangedCapabilities() {
+  const data = await api("/capabilities/manifests").catch(() => null);
+  const banner = $("#changed-banner");
+  if (!banner) return;
+  changedCaps.list = data && data.ok ? (data.capabilities || []).filter((c) => c.status === "changed") : [];
+  if (!changedCaps.list.length || changedCaps.dismissed) { banner.hidden = true; return; }
+  const names = changedCaps.list.map((c) => c.name).join(", ");
+  $("#changed-banner-text").textContent = names + (changedCaps.list.length > 1 ? " have" : " has")
+    + " changed since you turned it on, so it is off until you OK it again.";
+  banner.hidden = false;
+}
+
+async function reapproveChangedCapabilities() {
+  for (const cap of changedCaps.list) {
+    const list = (cap.permissions || []).map((p) => "- " + p.text).join("\n") || "- (no special permissions)";
+    if (!confirm(cap.name + " changed since you turned it on. Turn it back on? It will be allowed to:\n" + list)) continue;
+    const result = await api("/capabilities/enable", { name: cap.name, enabled: true }).catch(() => null);
+    if (!result || !result.ok) addNotice((result && result.error) || ("Could not turn " + cap.name + " back on."), true);
+  }
+  await checkChangedCapabilities();
+  if (!$("#settings").hidden) loadManifests();
+}
+
+function wireChangedBanner() {
+  const go = $("#changed-banner-go");
+  if (go) go.addEventListener("click", reapproveChangedCapabilities);
+  const later = $("#changed-banner-later");
+  if (later) later.addEventListener("click", () => { changedCaps.dismissed = true; $("#changed-banner").hidden = true; });
 }
 
 async function loadCapabilities() {
@@ -712,6 +748,8 @@ async function start() {
   await Promise.all([loadModels(), loadMode(), loadConversations()]);
   setInterval(pollApproval, 1500);
   refreshJobs();
+  wireChangedBanner();
+  checkChangedCapabilities();
   if (typeof afterStart === "function") afterStart();
   showHome();
   $("#prompt").focus();

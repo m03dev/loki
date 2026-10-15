@@ -517,6 +517,22 @@ check("enabling through the engine still imports nothing", not evil_marker.exist
 check("toggling an unknown capability is a 400", loki_bridge.capability_toggle(state, {"name": "zz", "enabled": True})[0] == 400)
 ui = (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8")
 check("the app shows capability toggles", "/capabilities/enable" in ui and "loadManifests" in ui)
+# Ziva (W, 2026-10-14): a changed add-on was switched off silently. The app now says so up
+# front and the owner re-approves with one click - the same user-only endpoint, after a confirm.
+write_manifest(user_dir, "evil-cap", entrypoint="evil_cap", permissions=["network"])
+check("a user add-on that gains a permission is listed as changed",
+      {r["name"]: r for r in registry.present()}["evil-cap"]["status"] == "changed")
+code, body = loki_bridge.capability_toggle(state, {"name": "evil-cap", "enabled": True})
+check("re-approving through the app turns it back on with the new grant",
+      code == 200 and registry.get("evil-cap")["status"] == "enabled" and "network" in registry.granted("evil-cap"))
+check("re-approving still imports nothing", not evil_marker.exists())
+html = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
+check("the app shows a banner for changed add-ons", 'id="changed-banner"' in html
+      and "checkChangedCapabilities()" in ui and 'c.status === "changed"' in ui)
+_reapprove = ui.split("async function reapproveChangedCapabilities", 1)[1].split("\nfunction ", 1)[0]
+check("the banner re-approves only after the owner confirms, listing the permissions",
+      "confirm(" in _reapprove and "permissions" in _reapprove
+      and _reapprove.index("confirm(") < _reapprove.index("/capabilities/enable"))
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
