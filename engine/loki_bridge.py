@@ -1194,7 +1194,8 @@ def setup_status(state: "BridgeState") -> dict[str, Any]:
 
 
 def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    """POST /setup/pull {tags:[...]} | /setup/install-ollama | /setup/use {model} | /setup/prefer {prefer}."""
+    """POST /setup/pull {tags:[...]} | /setup/install-ollama | /setup/use {model} | /setup/prefer {prefer}
+    | /setup/auto (one click) | /setup/upgrade {tag?}."""
     agent = state.agent
     ms = agent.model_setup
     if route == "/setup/pull":
@@ -1216,13 +1217,38 @@ def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tupl
         if not ms.start_in_background(ms.install_ollama):
             return 409, {"ok": False, "error": "Already busy - wait for it to finish."}
         return 200, {"ok": True, "progress": ms.PROGRESS.snapshot()}
-    if route == "/setup/use":
-        model = str(data.get("model", "")).strip()
+
+    def use(model: str) -> dict:
         if model:
             os.environ["LOKI_LOCAL_MODEL"] = model
         else:
             os.environ.pop("LOKI_LOCAL_MODEL", None)
-        state_now = agent.resolve_local(force=True)
+        return agent.resolve_local(force=True)
+    if route in ("/setup/auto", "/setup/upgrade"):
+        # One click: Ollama -> best fitting model -> long context -> switch -> keep warm.
+        snap = ms.status(info=agent.HARDWARE or None)
+        if route == "/setup/upgrade":
+            upgrade = snap.get("upgrade") or {}
+            tag = str(data.get("tag") or upgrade.get("tag") or "").strip()
+            if not tag:
+                return 409, {"ok": False, "error": "No better model fits this computer right now."}
+            names = [m["name"] for m in snap["ollama"]["models"]]
+            row = next((r for r in ms.plan(snap["scan"], names)["rows"] if r["tag"] == tag), None)
+            if row is None:
+                return 409, {"ok": False, "error": "%s does not fit this computer's memory." % tag}
+            if not row["fits_disk"] and not row["installed"]:
+                return 409, {"ok": False, "error": "Not enough free disk space for %s: free up %s GB first."
+                             % (tag, row["free_up_gb"])}
+            tags = [tag]
+        else:
+            tags = list(snap["auto"].get("tags") or [])
+            if not tags:
+                return 409, {"ok": False, "error": snap["auto"].get("error") or "No model fits this computer."}
+        if not ms.start_in_background(ms.run_auto, tags, snap["scan"], use):
+            return 409, {"ok": False, "error": "Already busy - wait for it to finish."}
+        return 200, {"ok": True, "tags": tags, "progress": ms.PROGRESS.snapshot()}
+    if route == "/setup/use":
+        state_now = use(str(data.get("model", "")).strip())
         return 200, {"ok": True, "local": state_now.get("name", "")}
     if route == "/setup/prefer":
         prefer = str(data.get("prefer", "local")).strip().lower()

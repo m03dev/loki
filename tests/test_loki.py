@@ -2907,6 +2907,201 @@ check("an ordinary message is untouched", loki.ruflo_command("hello there") == (
 _msg, _ = loki.ruflo_command("/ruflo nosuchthing-xyz do it")
 check("an unknown workflow is reported, not run", "no Ruflo command" in _msg, _msg)
 
+section("model setup: richer scan, picks per role, one click (no network)")
+import model_setup as _ms  # noqa: E402
+import loki_bridge as _msb  # noqa: E402
+
+
+class _MsResp:
+    def __init__(self, payload=None, lines=None):
+        self.raw = json.dumps(payload if payload is not None else {}).encode()
+        self.lines = [json.dumps(x).encode() + b"\n" for x in (lines or [])]
+        self.headers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+    def read(self, _n=-1):
+        raw, self.raw = self.raw, b""
+        return raw
+
+    def __iter__(self):
+        return iter(self.lines)
+
+
+class _MsOllama:
+    """A fake Ollama behind an opener: nothing else (LM Studio, MLX...) answers."""
+
+    def __init__(self, models, pullable=()):
+        self.models, self.pullable, self.calls = list(models), set(pullable), []
+
+    def __call__(self, req, timeout=None):
+        url = req if isinstance(req, str) else req.full_url
+        body = {} if isinstance(req, str) else json.loads(req.data or b"{}")
+        if not url.startswith(_ms.OLLAMA):
+            raise OSError("connection refused")
+        path = url[len(_ms.OLLAMA):]
+        self.calls.append(path)
+        if path == "/api/tags":
+            return _MsResp({"models": [{"name": n, "size": 5 * 2**30, "details": {}} for n in self.models]})
+        if path == "/api/show":
+            return _MsResp({"capabilities": ["completion", "tools"]})
+        if path == "/api/pull":
+            if body.get("model") in self.pullable:
+                self.models.append(body["model"])
+                return _MsResp(lines=[{"status": "pulling", "completed": 5, "total": 10}, {"status": "success"}])
+            return _MsResp(lines=[{"error": "pull model manifest: file does not exist"}])
+        if path == "/api/create":
+            self.models.append(body["model"] + ":latest")
+            return _MsResp({"status": "success"})
+        if path == "/api/generate":
+            return _MsResp({})
+        raise OSError("unexpected " + path)
+
+
+_PC = {"os": "win32", "ram_gb": 16.0, "vram_gb": 8.0, "gpu": "NVIDIA GeForce RTX 3070 Ti", "unified": False,
+       "disk_free_gb": 300.0}
+_M4 = {"os": "darwin", "ram_gb": 16.0, "vram_gb": 0.0, "unified": True, "chip": "Apple M4", "disk_free_gb": 5.0,
+       "mlx_installed": True}
+_LAPTOP = {"os": "win32", "ram_gb": 8.0, "vram_gb": 0.0, "unified": False, "gpu": "", "disk_free_gb": 100.0}
+
+_pc = _ms.plan(_PC, [])
+_a = _pc["picks"]["agent"]
+check("8 GB NVIDIA: the agent pick fits the GPU fully and says so",
+      _a and _a["need_gb"] <= 7 and _a["speed"] == "fast" and "8 GB GPU" in _a["why"], _a)
+check("8 GB NVIDIA: a fast pick and a coding pick are offered",
+      _pc["picks"]["fast"]["size_gb"] <= 4 and _pc["picks"]["code"] and _pc["picks"]["code"]["need_gb"] <= 7,
+      _pc["picks"])
+check("8 GB NVIDIA: one click falls back through more than one tag", len(_pc["auto"]["tags"]) >= 2, _pc["auto"])
+check("8 GB NVIDIA: no MLX suggestion off the Mac", _pc["picks"]["mlx"] is None)
+_pc_inst = ["qwen3:8b", "hermes3:8b", "qwen3.5:9b", "loki-qwen3-8b:latest"]
+_pc2 = _ms.plan(_PC, _pc_inst)
+_best = _ms.best_installed([{"name": n, "size_gb": 5.2} for n in _pc_inst], 7.0, caps=lambda _n: ["tools"])
+check("8 GB NVIDIA with qwen3:8b installed: the pick is already installed, no upgrade nagging",
+      _pc2["picks"]["agent"]["installed"] and _ms.upgrade_for(_best, _pc2["picks"]) is None,
+      (_pc2["picks"]["agent"], _best))
+check("a loki-* long-context copy counts as installed", _ms.is_installed("qwen3:8b", ["loki-qwen3-8b:latest"]))
+
+_m4 = _ms.plan(_M4, [])
+_picked = [p for k, p in _m4["picks"].items() if p and k != "mlx"]
+check("M4 with 5 GB free: every pick leaves 2 GB free on the disk",
+      _picked and all(p["size_gb"] + _ms.DISK_MARGIN_GB <= 5.0 for p in _picked), _picked)
+check("M4 with 5 GB free: the better model is shown as 'free up N GB first', not offered",
+      _m4["blocked"] and _m4["blocked"]["free_up_gb"] > 0 and "Free up" in _m4["blocked"]["message"]
+      and _m4["blocked"]["tag"] not in _m4["auto"]["tags"], _m4["blocked"])
+check("M4 with MLX installed: an MLX model that fits the disk is suggested too",
+      _m4["picks"]["mlx"] and _m4["picks"]["mlx"]["repo"].startswith("mlx-community/")
+      and _m4["picks"]["mlx"]["size_gb"] + _ms.DISK_MARGIN_GB <= 5.0 and "--port 8082" in _m4["picks"]["mlx"]["command"],
+      _m4["picks"]["mlx"])
+_m4_big = _ms.plan(dict(_M4, disk_free_gb=200.0), [])
+check("M4 16 GB with room: the 9B Qwen3.5 is the agent pick", _m4_big["picks"]["agent"]["tag"] == "qwen3.5:9b",
+      _m4_big["picks"]["agent"])
+_full = _ms.plan(dict(_M4, disk_free_gb=1.0), [])
+check("a full disk: one click is refused with how much to free",
+      _full["auto"]["tags"] == [] and "Free up" in _full["auto"]["error"], _full["auto"])
+
+_lap = _ms.plan(_LAPTOP, [])
+_la = _lap["picks"]["agent"]
+check("8 GB CPU-only laptop: a small model, honest about running on the processor",
+      _la and _la["need_gb"] <= 4 and _la["speed"] != "fast" and "processor" in _la["why"], _la)
+check("8 GB CPU-only laptop: nothing too big is suggested", all(r["need"] <= 4 for r in _lap["rows"]), _lap["rows"])
+
+_up = _ms.upgrade_for({"name": "loki-qwen3-4b", "score": 68, "tools": True}, _m4_big["picks"])
+check("upgrade: a clearly better model that fits is offered (gap >= 8)",
+      _up and _up["tag"] == "qwen3.5:9b" and _up["current"] == "qwen3-4b" and _up["gain"] >= 8 and _up["why"], _up)
+check("upgrade: a small gain is not worth a download",
+      _ms.upgrade_for({"name": "gemma4:12b", "score": 83}, _m4_big["picks"]) is None)
+
+_fake = _MsOllama(["qwen3:4b"])
+_sc = _ms.scan({"os": sys.platform, "ram_gb": 16.0, "vram_gb": 0.0, "unified": False, "gpu": "", "chip": "x",
+                "budget_gb": 8.0}, opener=_fake, servers=[], env={"OLLAMA_MODELS": str(REPO / "no-such-dir")})
+check("scan: free disk is measured where models go (OLLAMA_MODELS honoured)",
+      _sc["disk"]["path"].endswith("no-such-dir") and (_sc["disk_free_gb"] or 0) > 0, _sc["disk"])
+check("scan: CPU cores, OS name and what runs", _sc["cpu_cores"] > 0 and _sc["os_name"]
+      and _sc["running"][0]["label"] == "Ollama" and _sc["running"][0]["models"] == ["qwen3:4b"], _sc)
+check("scan: MLX and llama.cpp presence are reported", "installed" in _sc["mlx"] and "installed" in _sc["llamacpp"])
+check("models dir defaults to ~/.ollama/models", _ms.models_dir({}) == Path.home() / ".ollama" / "models")
+_st = _ms.status(env={}, opener=_fake, info={"os": sys.platform, "ram_gb": 16.0, "vram_gb": 8.0, "gpu": "RTX",
+                                               "unified": False, "chip": "", "budget_gb": 7.0})
+check("status() carries scan, picks, blocked, auto and upgrade",
+      all(k in _st for k in ("scan", "picks", "blocked", "auto", "upgrade")) and _st["upgrade"]
+      and _st["upgrade"]["current"] == "qwen3:4b", {k: _st.get(k) for k in ("auto", "upgrade")})
+
+_fake2 = _MsOllama([], pullable=["qwen3.5:9b"])
+_used: list = []
+_prog = _ms.Progress()
+_name = _ms.run_auto(["nope:1b", "qwen3.5:9b"], dict(_M4, disk_free_gb=200.0), _used.append, progress=_prog,
+                     opener=_fake2)
+_snap = _prog.snapshot()
+check("one click: a missing tag falls through, the model is pulled, given a long context and switched to",
+      _name.startswith("loki-qwen3.5-9b") and _used == [_name] and "/api/create" in _fake2.calls, (_name, _used))
+check("one click: kept warm and ends with a plain-English success",
+      "/api/generate" in _fake2.calls and _snap["done"] and _snap["status"] == "success" and "All set" in _snap["message"],
+      _snap)
+_fake3 = _MsOllama(["qwen3.5:9b"])
+_used3: list = []
+_ms.run_auto(["qwen3.5:9b"], _PC, _used3.append, progress=_ms.Progress(), opener=_fake3)
+check("one click: an installed model is not downloaded again", "/api/pull" not in _fake3.calls and _used3, _fake3.calls)
+
+
+def _ms_stub(machine, upgrade=None, models=()):
+    advice = _ms.plan(machine, list(models))
+    started: list = []
+    fake = _MsOllama(list(models), pullable=["qwen3.5:9b", "qwen3.5:4b", "granite4.1:3b"])
+
+    def run(fn, *args):
+        started.append(args)
+        fn(*args, progress=_ms.Progress(), opener=fake)
+        return True
+    stub = _types.SimpleNamespace(
+        status=lambda info=None: {"scan": machine, "auto": advice["auto"], "upgrade": upgrade,
+                                  "ollama": {"models": [{"name": n} for n in models]}},
+        plan=_ms.plan, run_auto=_ms.run_auto, start_in_background=run, PROGRESS=_ms.Progress())
+    agent = _types.SimpleNamespace(model_setup=stub, HARDWARE={},
+                                   resolve_local=lambda force=False: {"name": os.environ.get("LOKI_LOCAL_MODEL", "")})
+    return _types.SimpleNamespace(agent=agent), started
+
+
+_saved_pin = os.environ.get("LOKI_LOCAL_MODEL")
+_bs, _started = _ms_stub(dict(_M4, disk_free_gb=1.0))
+_code, _body = _msb.setup_action(_bs, "/setup/auto", {})
+check("/setup/auto refuses clearly when the disk has no room",
+      _code == 409 and "Free up" in _body["error"] and not _started, _body)
+_bs, _started = _ms_stub(dict(_M4, disk_free_gb=200.0))
+_code, _body = _msb.setup_action(_bs, "/setup/auto", {})
+check("/setup/auto runs the whole flow and switches LOKI to the prepared model",
+      _code == 200 and _started and os.environ.get("LOKI_LOCAL_MODEL", "").startswith("loki-qwen3.5-9b"),
+      (_code, _body, os.environ.get("LOKI_LOCAL_MODEL")))
+_bs, _started = _ms_stub(_M4, upgrade={"tag": "qwen3.5:9b"})
+_code, _body = _msb.setup_action(_bs, "/setup/upgrade", {})
+check("/setup/upgrade refuses a download that does not fit the free disk",
+      _code == 409 and "free up" in _body["error"].lower() and not _started, _body)
+_bs, _started = _ms_stub(dict(_M4, disk_free_gb=200.0), upgrade={"tag": "qwen3.5:9b"}, models=["qwen3:4b"])
+_code, _body = _msb.setup_action(_bs, "/setup/upgrade", {})
+check("/setup/upgrade pulls and switches to the better model",
+      _code == 200 and _body["tags"] == ["qwen3.5:9b"] and os.environ.get("LOKI_LOCAL_MODEL", "").startswith("loki-qwen3.5"),
+      (_code, _body))
+_code, _body = _msb.setup_action(_bs, "/setup/upgrade", {"tag": "qwen3.8:27b"})
+check("/setup/upgrade refuses a model too big for this computer's memory", _code == 409, _body)
+if _saved_pin is None:
+    os.environ.pop("LOKI_LOCAL_MODEL", None)
+else:
+    os.environ["LOKI_LOCAL_MODEL"] = _saved_pin
+
+_setup_js = (REPO / "app" / "ui" / "setup.js").read_text(encoding="utf-8")
+check("setup.js wires the one-click setup and the upgrade",
+      'api("/setup/auto"' in _setup_js and 'api("/setup/upgrade"' in _setup_js, "")
+check("setup.js shows 'This computer', role picks with Download & use, and a dismissible better-model prompt",
+      all(s in _setup_js for s in ("This computer", "Download & use", "Set up the best model for this computer",
+                                   "update-banner", "insertBefore", "Not now", "localStorage")))
+import shutil as _ms_shutil  # noqa: E402
+if _ms_shutil.which("node"):
+    _nc = subprocess.run(["node", "--check", str(REPO / "app" / "ui" / "setup.js")], capture_output=True, text=True)
+    check("setup.js parses (node --check)", _nc.returncode == 0, _nc.stderr)
+
 
 if "--live" in sys.argv:
 
