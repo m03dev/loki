@@ -3065,6 +3065,7 @@ check("status() carries scan, picks, blocked, auto and upgrade",
 _fake2 = _MsOllama([], pullable=["qwen3.5:9b"])
 _used: list = []
 _prog = _ms.Progress()
+_ms._WARMED.clear()   # the keep-warm throttle is process-wide; an earlier test warmed this tag
 _name = _ms.run_auto(["nope:1b", "qwen3.5:9b"], dict(_M4, disk_free_gb=200.0), _used.append, progress=_prog,
                      opener=_fake2)
 _snap = _prog.snapshot()

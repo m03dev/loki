@@ -261,8 +261,12 @@ try:
 finally:
     sys.platform = real_platform
 parts = mac_path.split(":")
-check("on macOS Homebrew and ~/.local/bin come first", parts[:3] == ["/opt/homebrew/bin", "/usr/local/bin",
-      os.path.expanduser("~/.local/bin")] and "/usr/bin" in parts, mac_path)
+# Compare normalised: on a Windows CI box the real home is C:\Users\... and its drive colon
+# breaks a plain ":" split, which is not what this test is about.
+_norm = mac_path.replace("\\", "/")
+_home_bin = os.path.expanduser("~/.local/bin").replace("\\", "/")
+check("on macOS Homebrew and ~/.local/bin come first",
+      _norm.startswith("/opt/homebrew/bin:/usr/local/bin:") and _home_bin in _norm and "/usr/bin" in parts, mac_path)
 check("...the bare Finder PATH is kept, once each", parts.count("/usr/bin") == 1, mac_path)
 check("...and is what git runs with", mac_env["PATH"].startswith("/opt/homebrew/bin:"), mac_env["PATH"][:80])
 check("on Windows PATH is left as it is", updater.tool_path(r"C:\Git\cmd;C:\Windows", platform="win32") == r"C:\Git\cmd;C:\Windows")

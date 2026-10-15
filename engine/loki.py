@@ -4296,6 +4296,7 @@ async def agent_turn(force_tool: bool = False) -> str:
         pass
     started = time.monotonic()
     turns = 0
+    prompted_forced = False
     while True:
         if _cancel_event.is_set():
             raise BudgetExhausted("cancelled by the user")
@@ -4398,6 +4399,16 @@ async def agent_turn(force_tool: bool = False) -> str:
                     notes.append("Result of %s(%s):\n%s" % (tool_name, json.dumps(tool_args)[:200], tool_result))
                 messages.append({"role": "user", "content": "\n\n".join(notes)})
                 _last_turn_had_tools = True
+                continue
+            if not content.strip() and force_tool and not prompted_forced                     and not tool_harness.configured(provider):
+                # A FORCED native tool call came back completely empty: this provider
+                # cannot be trusted with a native tools list (weak local models do this
+                # instead of calling a tool). Switch it to the prompted text harness for
+                # the rest of this session and retry the turn as a text tool call.
+                prompted_forced = True
+                tool_harness.learn(provider)
+                _progress("thinking", "%s gave nothing when a tool call was required; "
+                          "using prompted tools for it." % provider)
                 continue
             if not content.strip():
                 global _empty_nudges

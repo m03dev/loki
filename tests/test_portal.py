@@ -123,6 +123,12 @@ os.environ["LOKI_PROMPTED_TOOLS"] = "myserver"
 check("LOKI_PROMPTED_TOOLS puts a provider on prompted tools", tool_harness.configured("myserver"))
 check("catalog tools=false providers are prompted (MLX)", tool_harness.configured("mlx"))
 check("native providers are not", not tool_harness.configured("groq"))
+tool_harness.learn("weaklocal")
+check("a provider that fails a forced call is moved onto prompted tools",
+      tool_harness.configured("weaklocal"))
+_r = tool_harness.prepare({"model": "m", "messages": msgs, "tools": TOOLS, "tool_choice": "required"})
+check("its forced turn becomes text tools (no native tools/tool_choice)",
+      "tools" not in _r and "tool_choice" not in _r and "<tools>" in _r["messages"][0]["content"])
 tool_harness.learn("some-endpoint")
 check("a provider that refused tools is learned", tool_harness.configured("some-endpoint"))
 

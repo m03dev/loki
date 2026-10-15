@@ -504,7 +504,21 @@ class FakeToolClient:
 
 listener = socket.socket()
 listener.bind(("127.0.0.1", 0))
-listener.listen(1)
+listener.listen(8)
+# The phone check opens a connection once per report. A listen(1) backlog that is never
+# accepted fills up, and on Windows the NEXT connect then times out - so a healthy machine
+# was reported as "the phone link does not answer" on the second run. Drain accepts instead.
+def _drain_listener(sock):
+    while True:
+        try:
+            conn, _ = sock.accept()
+        except OSError:
+            return
+        try:
+            conn.close()
+        except OSError:
+            pass
+threading.Thread(target=_drain_listener, args=(listener,), daemon=True).start()
 STATE.phone_server = ns(address=("0.0.0.0", listener.getsockname()[1]))
 STATE.phone_registry = ns(present=lambda: [{"id": "p1", "name": "Mohamed's iPhone"}])
 fake_peers = ns(peers=lambda: [{"name": "mac", "url": "http://192.168.1.71:8768"}],
