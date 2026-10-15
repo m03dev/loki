@@ -121,6 +121,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       stations. Take a screenshot into `docs/operations/screens/world-windows.png` (that folder is
       fine to commit). If the canvas is blank, open the WebView devtools (`LOKI_APP_DEBUG=1`) and
       paste the console errors.
+      PART DONE 2026-10-14 (Ziva Windows): the LOKI UI + the 3D world canvas render -
+      captured docs/operations/screens/world-windows.png with headless Chrome at
+      /ui/index.html#token=... (NOT WebView2, and background mode). The frame is ~39% navy
+      world canvas behind the home UI. STILL TO DO for a real W6: open Settings > LOKI World
+      in the running app (drag/wheel), start a team and watch the characters walk - that needs
+      the app window (the owner), so WebView2-specific rendering is unverified.
 - [ ] **W7 Update everything.** Once the Mac is linked (M3), ship any tiny change from the Mac,
       then on the PC press **Update everything**. Expected: the Mac restarts first, then the PC;
       the panel shows both on the same commit. Report the step lines.
@@ -200,6 +206,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
   scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
   (LOKI's first own job). Ziva's session-15 commit is on master as 6dc2898 (thanks).
+- 2026-10-14 windows (Ziva) W6 (proxy): headless-Chrome capture of the app UI + World canvas -> docs/operations/screens/world-windows.png. Real WebView2 panel shot still needs the app.
 - 2026-10-14 windows (Ziva) W5 image: Z-Image weights downloaded (26 GB cache); local CUDA generation SEGFAULTS on step 1/9; Pollinations works. W10 done via a logon Startup shortcut (Task Scheduler needs admin). W2: portal API verified headless (GET /providers 200, /world 200).
 - 2026-10-14 windows (Ziva) W5 extras (PC): installed yt-dlp, opencode, agent-reach (+PATH
   shim) and ffmpeg; enabled media, image-gen, agent-reach, opencode; verified reach.doctor and a
