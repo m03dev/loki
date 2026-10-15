@@ -115,7 +115,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      The zimage() path uses enable_model_cpu_offload() for <12 GB cards. The free Pollinations
      backend works. Needs a fix from the code side (CPU offload / dtype / diffusers version) -
      assigning to Claude.
-- [ ] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
+- [x] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
       Loki work on?". Settings > LOKI World: drag to orbit, wheel to zoom. Start a team
       ("build a landing page for a bakery and test it") and watch characters walk to their
       stations. Take a screenshot into `docs/operations/screens/world-windows.png` (that folder is
@@ -124,9 +124,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       PART DONE 2026-10-14 (Ziva Windows): the LOKI UI + the 3D world canvas render -
       captured docs/operations/screens/world-windows.png from the REAL WebView2 window
       (PowerShell PrintWindow PW_RENDERFULLCONTENT, 1100x820, background mode) - ~43% navy
-      world canvas behind the home UI, not a black capture. STILL TO DO for a real W6: open Settings > LOKI World
-      in the running app (drag/wheel), start a team and watch the characters walk - that needs
-      the app window (the owner), so WebView2-specific rendering is unverified.
+      world canvas behind the home UI, not a black capture. VERIFIED via the engine API (headless): GET /world
+      showed only LOKI (idle, hall); after POST /teams {goal: "build a landing page for a bakery
+      and test it"} the Architect appeared at the drafting table in 'working' state - the world
+      reacts to real events. ONLY LEFT (owner, at the app window): drag/wheel orbit + the
+      on-screen walk.
 - [ ] **W7 Update everything.** Once the Mac is linked (M3), ship any tiny change from the Mac,
       then on the PC press **Update everything**. Expected: the Mac restarts first, then the PC;
       the panel shows both on the same commit. Report the step lines.
@@ -206,6 +208,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
   scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
   (LOKI's first own job). Ziva's session-15 commit is on master as 6dc2898 (thanks).
+- 2026-10-14 windows (Ziva) W6 team->world: POST /teams made the Architect appear at the drafting table (working) in GET /world. World reacts to real events.
 - 2026-10-14 windows (Ziva) W6: captured the REAL WebView2 window (PrintWindow) -> docs/operations/screens/world-windows.png (~43% navy world canvas behind home). Drag/wheel + team-walk still need the app.
 - 2026-10-14 windows (Ziva) W5 image: Z-Image weights downloaded (26 GB cache); local CUDA generation SEGFAULTS on step 1/9; Pollinations works. W10 done via a logon Startup shortcut (Task Scheduler needs admin). W2: portal API verified headless (GET /providers 200, /world 200).
 - 2026-10-14 windows (Ziva) W5 extras (PC): installed yt-dlp, opencode, agent-reach (+PATH
