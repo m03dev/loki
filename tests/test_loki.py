@@ -2889,6 +2889,13 @@ check("Windows scripts are checked out with CRLF",
       "*.bat text eol=crlf" in (REPO / ".gitattributes").read_text(encoding="utf-8"))
 check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
+section("MLX (Ziva Mac's request)")
+check("MLX asks mlx_lm.server for the model it was started with, never 'auto'",
+      loki.MODELS["mlx"].model == "default_model" or bool(os.getenv("MLX_MODEL", "").strip() not in ("", "auto")))
+import usage as _usage_mod  # noqa: E402
+check("a local MLX / vLLM / Kyojin model is never priced as paid",
+      all(_usage_mod.price_for(p, "mlx-community/Qwen3-4B-4bit")[:2] == (0.0, 0.0) for p in ("mlx", "vllm", "kyojin")))
+
 section("/ruflo in chat (Ruflo commands as LOKI workflows)")
 _lst, _none = loki.ruflo_command("/ruflo list swarm")
 check("/ruflo list <word> lists matching workflows without calling a model",

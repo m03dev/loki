@@ -323,6 +323,11 @@ godot_tools.WORKSPACE = WORKSPACE
 CLI_AGENT_PREFIX = "cli-agent://"
 
 
+def _mlx_model() -> str:
+    value = os.getenv("MLX_MODEL", "").strip()
+    return "default_model" if value in ("", "auto") else value
+
+
 MODELS = {
     # Offline default. qwen3:8b is the ONLY local model verified to emit real
     # structured tool_calls through Ollama; qwen2.5-coder only *writes* the call
@@ -522,8 +527,11 @@ MODELS = {
     "llamacpp": ModelConfig(base_url=os.getenv("LLAMACPP_BASE_URL", "http://127.0.0.1:8080/v1"),
                             api_key="local", model=os.getenv("LLAMACPP_MODEL", "auto")),
     # mlx_lm.server defaults to 8080 too; LOKI uses 8082 so it can run beside llama.cpp.
+    # Its /v1/models lists the whole Hugging Face cache, not the model it serves, and a
+    # request for model "auto" makes it look up huggingface.co/api/models/auto (404). Its own
+    # name for "the model I was started with" is "default_model", so that is the default.
     "mlx": ModelConfig(base_url=os.getenv("MLX_BASE_URL", "http://127.0.0.1:8082/v1"),
-                       api_key="local", model=os.getenv("MLX_MODEL", "auto")),
+                       api_key="local", model=_mlx_model()),
     "vllm": ModelConfig(base_url=os.getenv("VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
                         api_key=os.getenv("VLLM_API_KEY", "local"), model=os.getenv("VLLM_MODEL", "auto")),
     "jan": ModelConfig(base_url=os.getenv("JAN_BASE_URL", "http://127.0.0.1:1337/v1"),

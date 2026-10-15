@@ -32,7 +32,7 @@ PRICES: list[tuple[str, float, float]] = [
 # Providers that never bill per token.
 FREE_PROVIDERS = {"local", "local-small", "local-coder", "local-hermes", "local-reasoning",
                   "local-tools", "local-fast", "vireonix", "llm7", "claude-code", "codex",
-                  "lmstudio", "llamacpp", "jan", "omniroute"}
+                  "lmstudio", "llamacpp", "jan", "omniroute", "mlx", "vllm", "kyojin"}
 # Providers whose default use is a free tier (cost shown as 0 but tokens still counted).
 FREE_TIER = {"gemini", "groq", "cerebras", "sambanova", "cloudflare", "nous", "huggingface",
              "openrouter-free", "kilocode", "modelscope", "nvidia"}

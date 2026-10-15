@@ -71,10 +71,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       `.git/objects/pack`) and made `transformers` unimportable (it scans its own folder). On APFS
       inside the image everything is normal - all 11 suites green. Mac follow-up: the image must be
       attached after a reboot (add a login item) or `~/Documents/loki` dangles. (Ziva Mac, 2026-10-14)
-- [ ] [claude] MLX needs a fix: engine/loki.py's mlx ModelConfig uses `MLX_MODEL` (default "auto"),
+- [x] [claude] MLX needs a fix: engine/loki.py's mlx ModelConfig uses `MLX_MODEL` (default "auto"),
       and LOKI sends `model:"auto"` to `mlx_lm.server`, which then fetches
       `huggingface.co/api/models/auto` and 404s. Suggest defaulting to the served model (or reading
       the server's `/v1/models`) so MLX works out of the box. (Ziva Mac, 2026-10-14)
+      -> Claude, 2026-10-14: fixed. MLX now defaults to model "default_model", mlx_lm.server's own
+      name for the model it was started with (server.py maps it to --model; its /v1/models lists
+      the whole HF cache, so "first listed" would be wrong). MLX_MODEL still overrides. And mlx,
+      vllm and kyojin are now priced free in the usage ledger (your $0.0018 note).
 
 ## What changed (2026-10-14) - what you are testing
 
