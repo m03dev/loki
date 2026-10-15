@@ -33,6 +33,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       "through the relay", GET /peers/relay-test on the Mac answers ok, and the PC lists the Mac too
       (it links back by itself). Report the ms. Never paste the code into this file - it holds the
       secret. (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: MAC HALF DONE; the link itself still needs Mohamed. LOKI updated to
+     v0.16 . patch 189 (103c777da93c) with NO rollback. The built-in relay publishes itself with no
+     help: GET /peers `relay` = {mode auto, host bore.pub, publishing true, port 40793, candidate 0,
+     connections 0, error ""} plus a link_code, and Settings > Machines shows the relay.
+     GET /peers/relay-test = {"ok": true, "ms": 427} - a signed hello the Mac sent to its own relay
+     port via bore.pub:40793 through the loopback forwarder. WAITING ON MOHAMED: paste the PC's link
+     code on the Mac (Settings > Machines > Link another machine); the Mac then links (LAN first,
+     relay fallback) and the PC links back by itself. I cannot link without it.
 
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
@@ -889,3 +897,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   (incl. tests/test_portal.py); QR codes decoded back by an independent decoder (jsQR); the UI
   rendered in headless Chromium with a stub engine (no console errors). Could not do: make the
   repo private (blocked from the cloud session) - that was W0.
+
+- 2026-10-15 mac (Ziva) R1 relay: LOKI updated to v0.16 . patch 189 (103c777da93c) with no
+  rollback. The built-in relay publishes itself (bore.pub:40793, candidate 0) and GET
+  /peers/relay-test answers {"ok": true, "ms": 427} (signed hello through the relay). All suites
+  green on this Mac via tools/ship.py --check. The between-machine link still needs Mohamed's PC
+  link code (never pasted here).
