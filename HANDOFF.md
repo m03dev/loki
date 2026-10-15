@@ -4,8 +4,50 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-15 (session 20).
+Last updated: 2026-10-15 (session 21, the PC).
 
+## Session 21 (2026-10-15, the PC - Ziva Windows): the agent/computer boundary, and one memory
+
+All 19 suites green on the real PC (`tools/ship.py --check`), including test_systems "the bridge
+rebinds the same port immediately" (SO_REUSEADDR off on Windows) - the `[windows]` signal Claude
+asked for. `macos-app` and `origin/macos-app` are 0 ahead of master: **master really is the one
+branch.** The old gap `backup/pc-merge-c25660f` is REVIEWED below.
+
+- **ACI: bound EVERY tool result, and check a file the moment it is written** (ecc2558).
+  `MAX_OUTPUT` bounded only COMMAND output, so a large `read_file` dumped a whole file into a local
+  model's context. Now one choke point (`call_tool`, local and MCP): `loki._elide()` keeps the head
+  AND the tail (errors and totals live at the end) and inserts a marker naming what was dropped.
+  `loki._check_written()` checks a file the instant write/edit/append returns - `.py` (ast), `.json`,
+  `.gd` (Godot). To SEE what a model really received, read `GET /progress?after=0` (bearer token):
+  it carries `tool_result` events. Proof: a local model wrote a broken file and got "SYNTAX ERROR in
+  scripts/check.py: invalid syntax (line 1)" in the same result.
+- **`engine/memory.py`: ONE interface over the four tiers LOKI actually has** (272d30d). `working`
+  (project_state) / `episodic` (reasoning_bank + experience) / `semantic` (memory.md facts + brain
+  vault + knowledge) / `procedural` (agents.skills_catalog), behind `remember` / `recall` / `stats` /
+  `describe` / `tier_of`, each DELEGATING to the module that already owns the bytes - no storage moved.
+  `save_memory` writes through the semantic tier; the status payload carries `memory.stats()`. A
+  read-only tier says so (procedural -> "write a SKILL.md instead").
+- **Difficulty-aware routing** (d6c2db6). `LOKI_PREFER` defaults to `local`, so smart mode was
+  local-first for EVERYTHING - hard work stayed on the weak offline model. `loki.triage_difficulty()`
+  + `LOKI_HARD_DIFFICULTY` (default 2) now drops local-first for a hard request.
+- **Local models are chosen by MEASURED tool calling** (0cd6012). `experience.tool_stats`/`tool_score`
+  score each model on tool rate + clean rate; `loki._best_local_by_tools` picks the best record. The
+  note explaining the pick is surfaced as `local_note`; `/status` carries `tool_stats`.
+- **The literal `<tool_call>` tag crashes Qwen3.5's Ollama runner** (eb1919d, found on the PC).
+  Ollama dies with `HTTP 500 {"message":"EOF"}` - reproduced on `loki-qwen3.5-9b` and `qwen3.5:9b`;
+  `qwen3:8b`/`hermes3:8b` are fine. The harness now teaches a fenced ```json block and `parse()`
+  still accepts `<tool_call>`. The old `_FENCE_RE` was non-greedy, truncating at the first `}` - so
+  every real file write failed to parse; it now captures to the closing fence.
+- **`engine/evals.py` (from Inspect) + `docs/architecture/SYSTEMS_TO_IMPORT.md`** (575e21d): Task =
+  dataset + solver + scorer; scorers `wrote_file`/`called_tool`/`answered`; `record()` feeds the
+  routing scorecard. The doc is the open-source deep dive (9 systems, verdicts, a "deliberately NOT
+  taken" table, a priority list). Items 1-4 of that list are shipped: evals, difficulty routing,
+  check-on-edit, memory tiers.
+- **Ruflo's plugins are really committed, and image-gen is really on** (68882cc, a260f1a, 73043ee).
+  `.gitignore`'s unanchored `plugins/` rule hid `contrib/ruflo/plugins` (0 files tracked), which made
+  master red on a fresh clone; anchored to `/plugins/`. A changed image-gen manifest had silently
+  flipped it to `changed` (= off); re-enabled and re-saved all 10 capabilities with the new `trust`
+  field - live, an agent made an image in 24.8 s.
 ## Session 20 (2026-10-15, cloud + the PC): real water, and local models' long tool calls
 
 - **Water** (app/ui/world.js `WATER_FS`, app/ui/world_noise.js): its own shader with an exact
@@ -298,6 +340,9 @@ conversation (5.7); Laya as the first layer, warm and measured (5.2); docs clean
 ## Known gaps
 
 - The real Laya model is verified on the PC only.
-- `backup/pc-merge-c25660f` on the PC holds an old merge with `jobs.py`/`worker.py` that
-  look superseded by `engine/workers.py`; not reviewed.
+- ~~`backup/pc-merge-c25660f` ... not reviewed.~~ REVIEWED (Ziva Windows, 2026-10-15): the branch is
+  local-only and holds exactly ONE commit master lacks - the pre-restructure merge whose content is
+  the old `addons/loki/harness/` layout (`jobs.py`, `worker.py`, `workers.py`). That layout was
+  deliberately replaced by the top-level `engine/` + `engine/workers.py`; jobs.py and worker.py do not
+  exist on master. Nothing master lacks, safe to delete (kept as a backup branch on purpose).
 - A running engine does not restart itself after an update; the next start applies it.

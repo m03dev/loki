@@ -41,6 +41,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
      port via bore.pub:40793 through the loopback forwarder. WAITING ON MOHAMED: paste the PC's link
      code on the Mac (Settings > Machines > Link another machine); the Mac then links (LAN first,
      relay fallback) and the PC links back by itself. I cannot link without it.
+  -> Ziva (Windows), 2026-10-15: the PC half is proven ON THE PC, live (see my report at the top
+     of this section): /peers/relay-test answers ok in 2941 ms with "publishing": true on
+     bore.pub:26040 and hello name "pc". So Mohamed only has to copy the PC's link code (PC:
+     Settings > Machines) and paste it on the Mac - nothing to install on either side.
 
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
@@ -80,7 +84,7 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       docs/operations/SESSION_LOG.md into notes/loki-summary.txt in the Home workspace.
       (Ziva Mac, 2026-10-15 - also the S3 autopilot-inbox check)
 
-- [ ] [windows] **Link the Mac across networks (M3).** The Mac has no way to reach the PC on
+- [x] [windows] **Link the Mac across networks (M3).** The Mac has no way to reach the PC on
       192.168.0.x. Fastest, no account: (1) `winget install ekzhang.bore`; (2) publish the PC's
       peer port - `bore local 8768 --to bore.pub --port 28768`; (3) post the exact `bore.pub:<port>`
       here and confirm the PC still listens on 8768 as `pc`. The Mac then runs
@@ -88,11 +92,24 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       prefer the clean route, ask Mohamed to sign BOTH machines into the SAME Tailscale account
       and post each `tailscale ip -4` instead. Recipe + caveats: docs/operations/OFF_NETWORK.md.
       (Ziva Mac, 2026-10-15)
+  -> Ziva (Windows), 2026-10-15: SUPERSEDED - no winget/bore step is needed on the PC. Claude built
+     the built-in relay (engine/relay_link.py, commit 103c777) and the owner chose it over Tailscale;
+     each machine publishes its own peer port through bore.pub at ports derived from the shared
+     secret. So the PC half is done by the app itself, and the only thing left is the Mac side: R1
+     above (Mohamed pastes the PC's link code on the Mac once). Not re-run by hand on the PC.
 
-- [ ] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
+- [x] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
       install after it updates, and report test_systems "the bridge rebinds the same port
       immediately" (SO_REUSEADDR is now off on Windows - confirm the restart still rebinds 8767 at
       once: restart LOKI twice and check there is no rollback in the app log). (Claude, 2026-10-15)
+  -> Ziva (Windows), 2026-10-15: DONE. `tools/ship.py --check` on the real PC: 19 suites green
+     (test_loki 534, hardening 134, integrations 101, workers 72, offline_e2e exit 0, peers 62,
+     first_layer 54, updater 96, team 35, events 46, portal 216, phone_link 69, systems 100,
+     tool_guard 42, autopilot 19, role_routing 10, stubs 5, evals 20, relay 23). The signal asked
+     for PASSES by name on Windows: "the bridge rebinds the same port immediately (SO_REUSEADDR, so
+     a good update is not rolled back for a port still in TIME_WAIT)" and "SO_REUSEADDR only off
+     Windows". I did not restart the GUI app by hand to re-prove it (no GUI launches on the PC);
+     the check exercises the real bind path.
 
 ^- [x] [either] S2: local-model tool calling on a real Ollama (branch claude/local-tool-guard).
       With your installed tool-calling model (qwen3 / qwen2.5-coder), run the same prompt
@@ -442,7 +459,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Connections > ModelScope, turn on image-gen, set `LOKI_IMAGE_BACKEND=qwen` and ask LOKI for
       "an image of a red fox in studio light". Report the time, and the exact error if any (the
       request shape came from a third-party guide, not ModelScope's own docs).
-- [ ] **W16 [windows] All of Ruflo + ReasoningBank, live.** (Mohamed: "copy ruflo exactly
+- [x] **W16 [windows] All of Ruflo + ReasoningBank, live.** (Mohamed: "copy ruflo exactly
       into LOKI and make it better".) Now in: all 168 core commands and all 47 plugins (their
       agents, skills, commands) in contrib/ruflo; `/ruflo <command> <task>` runs a task with that
       Ruflo command as its playbook; SPARC teams; and a ReasoningBank (engine/reasoning_bank.py)
@@ -454,6 +471,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       whether the board says "Method: SPARC" and the Researcher wrote a specification; (4) run any
       task twice: the second run's progress should say "Recalled N lesson(s)"; paste
       harness_data\experience\reasoning_bank.jsonl's last line. Then run `tools/ship.py --check`.
+  -> Ziva (Windows), 2026-10-15: DONE, all 4 steps. (1) Settings > Agents shows "Ruflo library -
+     151 agents / 197 skills"; `/ruflo` serves 203 workflows and 47 plugins; screenshot
+     docs/operations/screens/ruflo-workflows.png. (2) `/ruflo sparc make a tiny todo web page` built
+     a real 6 KB todo_app2/index.html. (3) The SPARC team board said "Method: SPARC" and the
+     Researcher wrote TEAM_PLAN.md with a "## Specification" section. (4) A second run's progress
+     said "Recalled 1 lesson(s) from similar past tasks". `tools/ship.py --check` green.
+     Also fixed Ruflo itself: .gitignore's unanchored `plugins/` rule was hiding
+     contrib/ruflo/plugins (0 files tracked, so master was RED on a fresh clone) - anchored to
+     `/plugins/`; Ruflo vendored text-only from ruvnet/ruflo@1882006a.
 - [ ] **W14 Ruflo.** (Mohamed asked: ruvnet/ruflo in LOKI.) Its 95 agents and 38 skills are now
       built in (contrib/ruflo, engine/ruflo_library.py). Check: Settings > Agents > "Ruflo library"
       search "security" -> pick "Security Auditor" -> Save -> Run it on a small task. Then turn on
@@ -678,6 +704,35 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 windows (Ziva) LIVE on the running PC install (app updated to master 103c777, patch
+  189; engine PID served 8767/8768): (a) the RELAY WORKS ON THE PC - `GET /peers/relay-test` ->
+  {"ok":true,"ms":2941,...,"publishing":true,"port":26040,"forwarders":{"pc":{"remote":
+  "bore.pub:26040","ok_at":...}}} and the hello it got back was name "pc" at 103c777, so LOKI's own
+  signed client reached its own peer server through bore.pub. That is the PC half of M3/R1, verified.
+  (b) engine/memory.py is live: `/experience` now carries "memory" - working 7 fields, episodic 30
+  lessons (5 worked / 25 failed), semantic 500 vault notes, procedural 197 skills. (c) The measured
+  tool scorecard is filling in on its own: local/loki-qwen3.5-9b tool_rate 1.0 (2 requests, 4 calls,
+  0 repaired, 0 rejected) vs local/qwen3:8b tool_rate 0.571 (7 requests, 4 with tools) - the tuned
+  model is measurably the better tool caller, which is what `_best_local_by_tools` picks on.
+- 2026-10-15 windows (Ziva) HANDOFF reconciliation + the open [windows] checks: `tools/ship.py
+  --check` on the real PC is 19 suites green, incl. test_systems "the bridge rebinds the same port
+  immediately" PASS with SO_REUSEADDR off on Windows. Reviewed the known gap
+  `backup/pc-merge-c25660f`: local-only, ONE commit master lacks, the pre-restructure
+  addons/loki/harness layout (jobs.py/worker.py) that the top-level engine/ + engine/workers.py
+  replaced - nothing master lacks. `macos-app` and `origin/macos-app` are 0 ahead of master, so
+  master really is the one branch. HANDOFF.md gained a session-21 entry: it had NO record of any
+  Windows work (ecc2558 ACI, 272d30d memory tiers, d6c2db6 difficulty routing, 0cd6012 measured
+  local selection, eb1919d fenced tool calls, 575e21d evals + SYSTEMS_TO_IMPORT, 68882cc/73043ee/
+  a260f1a Ruflo commit + image-gen re-enable).
+- 2026-10-15 windows (Ziva) memory: engine/memory.py - ONE interface over four named tiers
+  (working/episodic/semantic/procedural), each delegating to the module that owns the bytes;
+  save_memory writes through the semantic tier and the status payload carries memory.stats().
+  Live numbers on the PC store: 6 working fields, 23 episodic lessons, 500+ vault notes, 197 skills.
+  test_loki 534.
+- 2026-10-15 windows (Ziva) ACI: bound EVERY tool result at one choke point (loki._elide keeps the
+  head AND the tail and names what was dropped) and check a file at write/edit time (.py via ast,
+  .json, .gd via Godot) - loki._check_written. Proven live on the local model: the write result
+  carried "SYNTAX ERROR in scripts/check.py: invalid syntax (line 1)". test_loki 523.
 - 2026-10-15 mac (Ziva) W10 (Mac) finished: world data verified (agents at stations, working/done/
   failed) and a real-GPU perf read via CDP - LOKI World panel ema 16.7 ms, home 33.4 ms, boost 0 on
   both. Screenshot docs/operations/screens/world-sim-mac.png. Also HARDENED tools/ship.py: suite
