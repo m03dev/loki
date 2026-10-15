@@ -83,7 +83,7 @@ on macOS and Windows in CI. Update this file when a status changes.
 | LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
 | Native (non-web) world client | Not planned | the world stays in the app (WebGL) |
 
-## Session 17 additions (2026-10-15, branch claude/local-tool-guard, not on master)
+## Session 17 additions (2026-10-15, on master)
 
 | Item | Status | Where / evidence |
 | --- | --- | --- |
