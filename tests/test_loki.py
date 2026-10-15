@@ -2889,6 +2889,17 @@ check("Windows scripts are checked out with CRLF",
       "*.bat text eol=crlf" in (REPO / ".gitattributes").read_text(encoding="utf-8"))
 check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
+section("/ruflo in chat (Ruflo commands as LOKI workflows)")
+_lst, _none = loki.ruflo_command("/ruflo list swarm")
+check("/ruflo list <word> lists matching workflows without calling a model",
+      _none is None and "/ruflo " in _lst and "swarm" in _lst.lower(), _lst[:200])
+_none2, _rw = loki.ruflo_command("/ruflo sparc build a todo app")
+check("/ruflo <command> <task> turns into the task with Ruflo's playbook",
+      _none2 is None and _rw.startswith("## Task\nbuild a todo app"), (_rw or "")[:120])
+check("an ordinary message is untouched", loki.ruflo_command("hello there") == (None, "hello there"))
+_msg, _ = loki.ruflo_command("/ruflo nosuchthing-xyz do it")
+check("an unknown workflow is reported, not run", "no Ruflo command" in _msg, _msg)
+
 
 if "--live" in sys.argv:
 

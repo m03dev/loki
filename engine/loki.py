@@ -313,6 +313,7 @@ REPO_ROOT = ROOT.parent
 CAPABILITIES = manifests.default_registry(REPO_ROOT, DATA_DIR)
 KNOWLEDGE = knowledge.default_store(REPO_ROOT, DATA_DIR, WORKSPACE)
 import experience  # noqa: E402  (outcome log, learned routing, training data)
+import reasoning_bank  # noqa: E402  (Ruflo-style lessons from past tasks)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -3112,6 +3113,13 @@ def _triage(text: str) -> dict:
         verdict = dict(first_layer.rules(text), source="rules", note="triage failed: %s" % exc)
     LAST_TRIAGE = verdict
     TRIAGE_NOTE = first_layer.guidance(verdict)
+    try:   # what worked / failed on similar past tasks (reasoning_bank.py); advice only
+        lessons = reasoning_bank.prompt_for(text) if EXPERIENCE_ENABLED else ""
+    except Exception:  # noqa: BLE001
+        lessons = ""
+    if lessons:
+        TRIAGE_NOTE = (TRIAGE_NOTE + chr(10) * 2 + lessons).strip()
+        _progress("thinking", "Recalled %d lesson(s) from similar past tasks." % (lessons.count(chr(10) + "- ")))
     events.emit("decision.made", "Laya" if verdict.get("source") == "laya" else "LOKI rules",
                 dict(verdict, request=text[:300]))
     events.emit("agent.status", "LOKI", {"state": "working", "kind": verdict.get("kind", "")})
@@ -4694,6 +4702,9 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
             "triage": _triage_record(start_index),
             "seconds": time.time() - started, "trajectory": kept,
         })
+        reasoning_bank.remember(goal, status, outcome, [m for m in messages[start_index:] if isinstance(m, dict)],
+                                extra={"kind": kind, "provider": providers[-1] if providers else "",
+                                       "seconds": round(time.time() - started, 1)})
     except Exception as exc:  # noqa: BLE001 - learning must never break a request
         print("  [experience] not recorded: %s" % exc)
 
@@ -4717,10 +4728,44 @@ def _status_of_reply(reply: str) -> str:
     return "blocked"
 
 
+def ruflo_command(user_message: str) -> tuple:
+    """`/ruflo <command> <task>` -> (None, task with Ruflo's playbook); `/ruflo [list] [word]` ->
+    (a list of commands, None). Anything else -> (None, the message unchanged)."""
+    text = (user_message or "").strip()
+    if not re.match(r"^/ruflo(\s|$)", text, flags=re.IGNORECASE):
+        return None, user_message
+    try:
+        import ruflo_library  # pylint: disable=import-outside-toplevel
+    except Exception as exc:  # noqa: BLE001
+        return "The Ruflo library is not available here: %s" % exc, None
+    parts = text.split(None, 2)
+    name = parts[1] if len(parts) > 1 else "list"
+    task = parts[2] if len(parts) > 2 else ""
+    if name.lower() in ("list", "help", "commands") or not task:
+        word = (task or ("" if name.lower() in ("list", "help", "commands") else name)).lower()
+        items = [c for c in ruflo_library.commands() if not c["blocked"]
+                 and (not word or word in c["id"] or word in c["group"] or word in c["description"].lower())]
+        lines = ["- /ruflo %s <task>  (%s) %s" % (c["id"], c["group"], c["description"][:90]) for c in items[:40]]
+        more = "" if len(items) <= 40 else "\n...and %d more (add a word to narrow: /ruflo list swarm)" % (len(items) - 40)
+        return ("Ruflo commands%s - run one with `/ruflo <command> <task>`:\n%s%s"
+                % ((" matching '%s'" % word) if word else "", "\n".join(lines) or "(none match)", more)), None
+    try:
+        return None, ruflo_library.command_prompt(name, task)
+    except (KeyError, PermissionError) as exc:
+        return str(exc).strip("'\""), None
+
+
 async def run_agent(user_message: str) -> str:
     started, start_index = _start_request()
     status = "error"
     try:
+        listed, rewritten = ruflo_command(user_message)
+        if listed is not None:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": listed})
+            status = "done"
+            return listed
+        user_message = rewritten
         verdict = await asyncio.to_thread(_triage, user_message)
         if verdict.get("self_change") and AGENT_MODE == "build":
             # A change to LOKI's own code never depends on the model choosing the right tool:

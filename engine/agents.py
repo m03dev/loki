@@ -243,8 +243,12 @@ def _frontmatter(text: str) -> dict:
 
 
 def skill_roots(repo: Path, data_dir: Path) -> list:
-    return [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills"),
-            ("ruflo", Path(repo) / "contrib" / "ruflo" / "skills")]
+    roots = [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills")]
+    try:   # Ruflo's core skills and every plugin's (contrib/ruflo)
+        import ruflo_library  # pylint: disable=import-outside-toplevel
+        return roots + ruflo_library.skill_roots(Path(repo) / "contrib" / "ruflo")
+    except Exception:  # noqa: BLE001
+        return roots + [("ruflo", Path(repo) / "contrib" / "ruflo" / "skills")]
 
 
 def skills_catalog(roots: list) -> list[dict]:

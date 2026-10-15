@@ -125,6 +125,13 @@ def handle_get(state: Any, path: str) -> tuple | None:
                      "engines": profiles.ENGINE_LABELS,
                      "tools": profiles.TOOL_GROUPS, "memory": list(profiles.MEMORY_SCOPES),
                      "models": [m for m in agent.MODELS if m not in ("smart", "online")]}
+    if route == "/ruflo":
+        import ruflo_library  # pylint: disable=import-outside-toplevel
+        import reasoning_bank  # pylint: disable=import-outside-toplevel
+        return 200, {"ok": True, "summary": ruflo_library.summary(), "plugins": ruflo_library.plugins(),
+                     "reasoning_bank": reasoning_bank.summary(),
+                     "commands": [{k: v for k, v in c.items() if k != "path"}
+                                  for c in ruflo_library.commands() if not c["blocked"]]}
     if route == "/update/everywhere":
         import peers  # pylint: disable=import-outside-toplevel
         import update_all  # pylint: disable=import-outside-toplevel

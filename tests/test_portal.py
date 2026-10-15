@@ -443,13 +443,76 @@ check("Ruflo skills are in the skill catalog", any(s["source"] == "ruflo" for s 
 check("a Ruflo skill that tries to override LOKI's rules is never offered",
       not any(s["id"] == "github-project-management" for s in _cat))
 check("no Ruflo file is executable code (LOKI only reads them)",
-      not [p for p in (REPO / "contrib" / "ruflo").rglob("*") if p.is_file() and p.suffix not in (".md", "") and p.name != "LICENSE"])
+      not [p for p in (REPO / "contrib" / "ruflo").rglob("*") if p.is_file() and p.suffix not in (".md", "")
+           and p.name not in ("LICENSE", "plugin.json")])
 _mcp = json.loads((REPO / "engine" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
 check("Ruflo's MCP server is there, opt-in", _mcp.get("ruflo", {}).get("enabled") is False
       and _mcp["ruflo"]["args"][-2:] == ["mcp", "start"])
 import team as team_mod  # noqa: E402
 check("team roles get Ruflo's playbook after LOKI's own brief",
       team_mod._with_playbook("builder", "BRIEF").startswith("BRIEF") and "Ruflo" in team_mod._with_playbook("builder", "BRIEF"))
+check("all of Ruflo is in: core + plugin agents, skills, commands, plugins",
+      _rs["agents"] >= 140 and _rs["skills"] >= 180 and _rs["commands"] >= 190 and _rs["plugins"] >= 45, _rs)
+check("plugin skills are in the skill catalog too",
+      any(str(s.get("path", "")).replace("\\", "/").count("/plugins/") for s in _cat if s["source"] == "ruflo"))
+_sp = ruflo_library.command_prompt("sparc", "build a todo app")
+check("a Ruflo command becomes a playbook for a LOKI task (task first, LOKI's rules win)",
+      _sp.startswith("## Task\nbuild a todo app") and "LOKI's rules" in _sp and "SPARC" in _sp)
+try:
+    ruflo_library.command_prompt("no-such-command-xyz", "x")
+    _bad = False
+except KeyError:
+    _bad = True
+check("an unknown Ruflo command is reported", _bad)
+_pl = {p["name"]: p for p in ruflo_library.plugins()}
+check("each plugin is listed with what it brings", _pl.get("ruflo-swarm", {}).get("agents", 0) >= 2
+      and "topolog" in _pl["ruflo-swarm"]["description"], _pl.get("ruflo-swarm"))
+import portal_api  # noqa: E402
+_code, _rf = portal_api.handle_get(types.SimpleNamespace(agent=None), "/ruflo")
+check("GET /ruflo serves the commands, plugins and the ReasoningBank count",
+      _code == 200 and len(_rf["commands"]) >= 190 and "reasoning_bank" in _rf and "path" not in _rf["commands"][0])
+
+section("SPARC teams (Ruflo's method on LOKI's team stages)")
+check("'sparc: <goal>' picks the SPARC method and strips the prefix",
+      team_mod.team_method("SPARC: build a todo app") == ("sparc", "build a todo app"))
+check("a plain goal stays standard", team_mod.team_method("build a todo app")[0] == "standard")
+_spt = {"id": "t1", "goal": "build a todo app", "roles": ["researcher", "architect", "builder"], "method": "sparc"}
+check("each SPARC role gets its phase", "Specification" in team_mod.agent_prompt(_spt, "researcher")
+      and "TDD anchors" in team_mod.agent_prompt(_spt, "architect")
+      and "test-first" in team_mod.agent_prompt(_spt, "builder"))
+check("a standard team gets no SPARC text",
+      "SPARC" not in team_mod.agent_prompt(dict(_spt, method="standard"), "builder"))
+
+section("ReasoningBank (lessons from past tasks, engine/reasoning_bank.py)")
+import reasoning_bank  # noqa: E402
+_rb = TMP / "rb"
+_bad_run = [{"role": "user", "content": "give LOKI its Nordic identity logo in the sidebar"}]
+for _i in range(5):
+    _bad_run.append({"role": "assistant", "content": "", "tool_calls": [
+        {"id": "c%d" % _i, "function": {"name": "conductor", "arguments": "{}"}}]})
+    _bad_run.append({"role": "tool", "tool_call_id": "c%d" % _i, "content": "not allowed in a background job: conductor"})
+_bad_run.append({"role": "assistant", "content": "BLOCKED: every provider is out"})
+reasoning_bank.remember("give LOKI its Nordic identity logo in the sidebar", "blocked", "failed", _bad_run, root=_rb)
+_good = [{"role": "assistant", "content": "", "tool_calls": [{"id": "a", "function": {"name": "search_files"}},
+          {"id": "b", "function": {"name": "edit_file"}}, {"id": "c", "function": {"name": "check_loki"}}]},
+         {"role": "tool", "tool_call_id": "a", "content": "app/ui/app.css:10"},
+         {"role": "assistant", "content": "DONE: added the L mark to the sidebar CSS"}]
+reasoning_bank.remember("add an L logo mark to the sidebar css", "done", "verified", _good, root=_rb)
+reasoning_bank.remember("what is the weather in oslo", "done", "", [{"role": "assistant", "content": "DONE: sunny"}], root=_rb)
+_rc = reasoning_bank.recall("change the sidebar logo to the Nordic L mark", root=_rb)
+check("similar past tasks are recalled, an unrelated one is not",
+      len(_rc) == 2 and not any("weather" in i["goal"] for i in _rc), _rc)
+_note = reasoning_bank.prompt_for("change the sidebar logo to the Nordic L mark", root=_rb)
+check("the lesson names the repeated error of the failure",
+      "FAILED" in _note and "conductor: not allowed in a background job" in _note and "(x5)" in _note, _note)
+check("and what worked, step by step", "WORKED" in _note and "search_files > edit_file > check_loki" in _note, _note)
+check("nothing is recalled for a new kind of task", reasoning_bank.prompt_for("compose a haiku about rain", root=_rb) == "")
+os.environ["LOKI_REASONING_BANK"] = "off"
+check("LOKI_REASONING_BANK=off turns it off",
+      reasoning_bank.prompt_for("change the sidebar logo to the Nordic L mark", root=_rb) == "")
+os.environ.pop("LOKI_REASONING_BANK")
+reasoning_bank.remember("sk-abcdefghijklmnop1234 key setup for groq", "done", "", _good, root=_rb)
+check("secrets are masked in the bank", "sk-abcdefghijklmnop1234" not in (_rb / "experience" / "reasoning_bank.jsonl").read_text())
 
 # --------------------------------------------------------------------------- runners + conductor
 section("new specialists: media (yt-dlp), image, reach (engine/conductor.py)")

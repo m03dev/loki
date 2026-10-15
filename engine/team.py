@@ -55,6 +55,36 @@ ROLE_QUESTIONS = {
 }
 
 
+# SPARC (Ruflo's method: Specification, Pseudocode, Architecture, Refinement, Completion) on
+# LOKI's own team stages. Start a team with "sparc: <goal>" or set LOKI_TEAM_METHOD=sparc.
+SPARC_PHASES = {
+    "researcher": "SPARC phase S - Specification. Pin down the goal: users, inputs and outputs, "
+                  "constraints, edge cases and acceptance criteria (each one testable). No secrets "
+                  "or environment values hard-coded. Post the specification to the team board.",
+    "architect": "SPARC phases P + A - Pseudocode and Architecture. In TEAM_PLAN.md write the "
+                 "pseudocode of each part with TDD anchors (the test that proves it), then the "
+                 "architecture: files, modules, boundaries and how data flows between them.",
+    "builder": "SPARC phase R - Refinement. Work test-first: write the tests from the TDD anchors, "
+               "watch them fail, implement until they pass, then refactor. Keep files small.",
+    "tester": "SPARC phase C - Completion (verify). Run every test and the acceptance criteria from "
+              "the specification. Report each criterion PASS or FAIL with the exact output.",
+    "reviewer": "SPARC phase C - Completion (review). Check the code against the specification and "
+                "TEAM_PLAN.md: correctness, security (input checks, no secrets), and that it is "
+                "documented enough to run. Report FAIL (file, line, why) or PASS.",
+    "browser": "SPARC phase C - Completion (in use). Use the result like a real user would and "
+               "check the acceptance criteria that can be seen. Report PASS or FAIL.",
+}
+
+
+def team_method(goal: str) -> tuple:
+    """(method, goal without its prefix): 'sparc' for "sparc: ..." or LOKI_TEAM_METHOD=sparc."""
+    match = re.match(r"^\s*sparc\s*[:\-]\s*", goal or "", flags=re.IGNORECASE)
+    if match:
+        return "sparc", goal[match.end():].strip()
+    method = os.getenv("LOKI_TEAM_METHOD", "").strip().lower()
+    return ("sparc" if method == "sparc" else "standard"), goal
+
+
 def _with_playbook(role: str, brief: str) -> str:
     """LOKI's brief first (it is the rule), then Ruflo's matching playbook as guidance."""
     if os.getenv("LOKI_TEAM_PLAYBOOKS", "ruflo").strip().lower() in ("", "0", "off", "none"):
@@ -163,6 +193,8 @@ def agent_prompt(team: dict, role: str, extra: str = "") -> str:
         "add a note (to='all' or a role name)." % mates,
         "Your job: %s" % spec["brief"],
     ]
+    if team.get("method") == "sparc" and role in SPARC_PHASES:
+        parts.append(SPARC_PHASES[role])
     history = board_text(team["id"])
     if history:
         parts.append("The team board so far:\n" + history)
@@ -215,12 +247,20 @@ class TeamRunner:
             verdict = self.policy.job("local", "loki")
             if not verdict.allowed:
                 raise ValueError(verdict.reason)
-        team = {"id": uuid.uuid4().hex[:8], "goal": goal, "workspace": str(workspace),
-                "roles": choose_roles(goal, triage, self.decide), "stage": "", "status": "working",
+        method, goal = team_method(goal)
+        if not goal:
+            raise ValueError("say what the team should build")
+        roles = choose_roles(goal, triage, self.decide)
+        if method == "sparc" and "researcher" not in roles:
+            roles.insert(0, "researcher")       # SPARC always starts with the Specification
+        team = {"id": uuid.uuid4().hex[:8], "goal": goal, "workspace": str(workspace), "method": method,
+                "roles": roles, "stage": "", "status": "working",
                 "fix_rounds": 0, "jobs": {}, "created": time.time(), "finished": 0, "model": model,
                 "verdict": ""}
-        post(team["id"], "LOKI", "Team started for: %s\nRoles: %s" %
-             (goal, ", ".join(ROLES[r]["name"] for r in team["roles"])))
+        post(team["id"], "LOKI", "Team started for: %s\nRoles: %s%s" %
+             (goal, ", ".join(ROLES[r]["name"] for r in team["roles"]),
+              "\nMethod: SPARC (Specification > Pseudocode > Architecture > Refinement > Completion)"
+              if method == "sparc" else ""))
         with self.lock:
             teams = self._load()
             teams[team["id"]] = team
@@ -371,7 +411,7 @@ def _reports_failure(job: dict) -> bool:
 
 
 def present(team: dict, jobs=None) -> dict:
-    out = {k: team.get(k) for k in ("id", "goal", "status", "stage", "verdict", "created", "finished", "fix_rounds")}
+    out = {k: team.get(k) for k in ("id", "goal", "status", "stage", "verdict", "created", "finished", "fix_rounds", "method")}
     out["roles"] = [ROLES[r]["name"] for r in team.get("roles", [])]
     members = []
     for key, job_id in (team.get("jobs") or {}).items():

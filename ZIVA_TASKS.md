@@ -190,6 +190,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Connections > ModelScope, turn on image-gen, set `LOKI_IMAGE_BACKEND=qwen` and ask LOKI for
       "an image of a red fox in studio light". Report the time, and the exact error if any (the
       request shape came from a third-party guide, not ModelScope's own docs).
+- [ ] **W16 [windows] All of Ruflo + ReasoningBank, live.** (Mohamed: "copy ruflo exactly
+      into LOKI and make it better".) Now in: all 168 core commands and all 47 plugins (their
+      agents, skills, commands) in contrib/ruflo; `/ruflo <command> <task>` runs a task with that
+      Ruflo command as its playbook; SPARC teams; and a ReasoningBank (engine/reasoning_bank.py)
+      that puts "what worked / what failed on similar tasks" into the prompt. Check on the PC,
+      after LOKI updates: (1) Settings > Agents shows "Ruflo workflows" with ~200 workflows and
+      47 plugins (screenshot to docs/operations/screens/ruflo-workflows.png); (2) in chat send
+      `/ruflo list sparc`, then `/ruflo sparc make a tiny todo web page in a new folder`, and
+      report what it built; (3) start a team with goal `sparc: a one-page bakery site` and report
+      whether the board says "Method: SPARC" and the Researcher wrote a specification; (4) run any
+      task twice: the second run's progress should say "Recalled N lesson(s)"; paste
+      harness_data\experience\reasoning_bank.jsonl's last line. Then run `tools/ship.py --check`.
 - [ ] **W14 Ruflo.** (Mohamed asked: ruvnet/ruflo in LOKI.) Its 95 agents and 38 skills are now
       built in (contrib/ruflo, engine/ruflo_library.py). Check: Settings > Agents > "Ruflo library"
       search "security" -> pick "Security Auditor" -> Save -> Run it on a small task. Then turn on
@@ -333,6 +345,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 cloud (Claude) Ruflo, the rest of it (Mohamed: "copy it exactly and make it
+  better"): all 168 core commands + all 47 plugins' agents/skills/commands copied verbatim
+  (text only, 151 agents / 197 skills / 203 workflows indexed, every file skill-scanned);
+  `/ruflo <command> <task>` and "Ruflo workflows" in Settings > Agents; SPARC teams
+  ("sparc: <goal>"); ReasoningBank - lessons from past tasks in the prompt, built only from
+  what really happened (it would have warned the 37-turn W12 job off its repeated conductor
+  calls). Not copied: Ruflo's TypeScript/Rust runtime (its MCP server stays opt-in). Offline
+  suites green (stub-only failures as before) -> W16.
 - 2026-10-14 mac (Ziva) M4 DONE: MLX verified end to end - `mlx_lm.server` serving
   mlx-community/Qwen3-4B-4bit, LOKI routing to it, the tool harness fired (`list_tree`), 17.2 tok/s;
   found the MLX_MODEL "auto" bug (request above). Also added a login LaunchAgent

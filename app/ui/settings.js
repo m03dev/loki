@@ -553,6 +553,7 @@ async function loadAgents() {
     box.append(lib);
     show();
   }
+  box.append(rufloWorkflows());
 
   const grid = el("div", "agent-grid");
   for (const a of (list && list.ok ? list.agents : [])) grid.append(agentCard(a));
@@ -561,6 +562,56 @@ async function loadAgents() {
   editor.id = "agent-editor";
   editor.hidden = true;
   box.append(editor);
+}
+
+// Ruflo's commands (sparc, swarm, hive-mind, github, ...) as workflows, and its plugins.
+function rufloWorkflows() {
+  const lib = el("div", "builder-create library");
+  const head = el("div", "lib-head");
+  const count = el("small", "muted", "loading…");
+  head.append(el("b", "", "Ruflo workflows"), count);
+  const search = el("input");
+  search.type = "search";
+  search.placeholder = "Search: sparc, swarm, tdd, review, release, hive…";
+  search.setAttribute("aria-label", "Search Ruflo workflows");
+  const results = el("div", "chips");
+  const plugins = el("details", "ruflo-plugins");
+  lib.append(head, search, results, plugins);
+  let data = { commands: [], plugins: [] };
+  const show = () => {
+    const q = search.value.toLowerCase().trim();
+    const hits = data.commands.filter((c) => !q || (c.id + " " + c.group + " " + c.description).toLowerCase().includes(q)).slice(0, 24);
+    results.replaceChildren(...hits.map((c) => {
+      const b = button(c.id, "chip", () => {
+        const prompt = document.getElementById("prompt");
+        document.getElementById("settings").hidden = true;
+        prompt.value = "/ruflo " + c.id + " ";
+        prompt.focus();
+      });
+      b.title = c.group + ": " + c.description;
+      return b;
+    }));
+    if (!hits.length) results.append(el("small", "muted", "No match."));
+  };
+  search.addEventListener("input", show);
+  api("/ruflo").then((r) => {
+    if (!r || !r.ok) { count.textContent = "not available"; return; }
+    data = r;
+    const s = r.summary || {};
+    count.textContent = r.commands.length + " workflows · " + (s.plugins || 0) + " plugins · " + (s.agents || 0) +
+      " agents · " + (s.skills || 0) + " skills. Pick one, then type the task: /ruflo <workflow> <task>";
+    plugins.replaceChildren(el("summary", "", "Ruflo plugins (" + r.plugins.length + ")"));
+    for (const p of r.plugins) {
+      const row = el("div", "ruflo-plugin");
+      row.append(el("b", "", p.name.replace("ruflo-", "")),
+        el("small", "muted", [p.agents && p.agents + " agents", p.skills && p.skills + " skills",
+          p.commands && p.commands + " workflows"].filter(Boolean).join(" · ")),
+        el("p", "pcard-blurb", p.description));
+      plugins.append(row);
+    }
+    show();
+  }).catch(() => { count.textContent = "not available"; });
+  return lib;
 }
 
 function agentCard(a) {
