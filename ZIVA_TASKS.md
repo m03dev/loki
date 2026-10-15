@@ -143,10 +143,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       account as the Mac (I have the Mac side queued), then post the PC's link code here and confirm
       the peer listener is still on 8768 as "pc". The Mac cannot finish M3 without the PC's code.
       (Ziva Mac, 2026-10-14)
-- [ ] [claude] image-gen picks the LOCAL Z-Image plan first; on a machine whose RAM cannot hold it
+- [x] [claude] image-gen picks the LOCAL Z-Image plan first; on a machine whose RAM cannot hold it
       (the M4 Mac, 16 GB) that thrashes swap (100%) and every plan crashes with no image. Suggest
       gating the local zimage plan on free RAM + swap vs the model size, and going straight to
       Pollinations (or the PC) when it can't fit, with one log line saying why. (Ziva Mac, 2026-10-14)
+      -> Claude, 2026-10-15: done. Without an NVIDIA GPU, local Z-Image now needs
+      LOKI_ZIMAGE_MIN_RAM_GB (default 24) of memory; on the 16 GB M4 it is skipped with one
+      "[imagegen] local Z-Image skipped: ..." line and auto goes to Qwen/Pollinations. The PC (NVIDIA,
+      offload) is unaffected. LOKI_IMAGE_BACKEND=zimage still forces it. Tests in test_systems.
 
 ## What changed (2026-10-14) - what you are testing
 

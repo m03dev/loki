@@ -35,12 +35,62 @@ def _out_path(out_dir, prompt, ext="png"):
     return out / ("%s-%s.%s" % (time.strftime("%Y%m%d-%H%M%S"), slug, ext))
 
 
+def total_ram_gb():
+    """Physical memory in GB (0 when unknown). Standard library only, both platforms."""
+    try:
+        if sys.platform == "darwin":
+            import subprocess
+            out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5).stdout
+            return round(int(out.strip()) / 2**30, 1)
+        if sys.platform == "win32":
+            import ctypes
+
+            class _Mem(ctypes.Structure):  # MEMORYSTATUSEX
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            mem = _Mem()
+            mem.dwLength = ctypes.sizeof(_Mem)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):  # type: ignore[attr-defined]
+                return round(mem.ullTotalPhys / 2**30, 1)
+            return 0.0
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+        match = re.search(r"MemTotal:\s+(\d+)", text)
+        return round(int(match.group(1)) / 2**20, 1) if match else 0.0
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def memory_gate(ram_gb=None, nvidia=None):
+    """(ok, why not): can this machine hold Z-Image Turbo? With an NVIDIA GPU the model is
+    offloaded piece by piece and 16 GB of RAM is enough (verified on the PC). Without one
+    (Apple MPS or CPU) the whole pipeline sits in memory: a 16 GB M4 filled its swap to 100%
+    and crashed every plan, so ask for LOKI_ZIMAGE_MIN_RAM_GB (default 24)."""
+    import shutil
+    ram = total_ram_gb() if ram_gb is None else float(ram_gb)
+    has_nvidia = bool(shutil.which("nvidia-smi")) if nvidia is None else bool(nvidia)
+    if has_nvidia or not ram:
+        return True, ""
+    need = float(os.environ.get("LOKI_ZIMAGE_MIN_RAM_GB", "24") or 24)
+    if ram < need:
+        return False, ("this computer has %.0f GB of memory and no NVIDIA GPU; local Z-Image needs about "
+                       "%.0f GB here, so images go to the next backend (set LOKI_IMAGE_BACKEND=zimage "
+                       "to force it)" % (ram, need))
+    return True, ""
+
+
 def zimage_status():
     """(ready, why not) for local Z-Image on this machine."""
     try:
         import importlib.util
         if not (importlib.util.find_spec("torch") and importlib.util.find_spec("diffusers")):
             return False, "torch/diffusers are not installed (tools/setup_extras.py adds them)"
+        fits, why = memory_gate()
+        if not fits:
+            print("[imagegen] local Z-Image skipped: " + why, file=sys.stderr, flush=True)
+            return False, why
         try:
             record = json.loads(_plan_file().read_text(encoding="utf-8"))
             if record.get("works") is None and time.time() - float(record.get("failed_at") or 0) < 7 * 86400:

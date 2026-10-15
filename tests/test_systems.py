@@ -635,6 +635,14 @@ import imagegen  # noqa: E402
 
 check("the image runner's own plan matches what auto really tries", imagegen.plan_order("pollinations")["order"] == ["pollinations"]
       and imagegen.plan_order("auto")["order"][-1] == "pollinations")
+# Ziva (Mac): a 16 GB M4 filled its swap and crashed every Z-Image plan. Gate it on memory.
+ok16, why16 = imagegen.memory_gate(ram_gb=16, nvidia=False)
+check("a 16 GB Mac without an NVIDIA GPU skips local Z-Image, saying why",
+      not ok16 and "16 GB" in why16 and "LOKI_IMAGE_BACKEND=zimage" in why16)
+check("the 16 GB PC with an NVIDIA GPU keeps local Z-Image (offload fits)", imagegen.memory_gate(ram_gb=16, nvidia=True)[0])
+check("a 32 GB Mac keeps local Z-Image", imagegen.memory_gate(ram_gb=32, nvidia=False)[0])
+check("unknown memory never blocks", imagegen.memory_gate(ram_gb=0, nvidia=False)[0])
+check("the machine's own memory is read", imagegen.total_ram_gb() > 0)
 
 row = system_check.check_peers(healthy(peers=ns(peers=lambda: [{"name": "mac", "url": "http://192.168.1.71:8768"}],
                                                 status_all=lambda: [{"name": "mac", "ok": False, "ms": 4000,
