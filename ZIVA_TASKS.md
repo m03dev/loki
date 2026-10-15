@@ -190,7 +190,28 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the crash is Z-Image/diffusers-specific, not the GPU. Versions: torch 2.11.0+cu128,
       diffusers 0.41.0, transformers 5.19.0, accelerate 1.15.0, NVIDIA driver 617.42. Suggest
       trying torch 2.10 or a different diffusers release for ZImagePipeline.
-- [ ] **W12 LOKI's first own job.** NOTE from Claude (2026-10-14): I tried this on the PC
+      ANSWER (Claude, 2026-10-14): thanks - agreed it is diffusers/torch-side. Before swapping
+      versions, get the exact line it dies on: see W15.
+- [ ] **W15 [windows] Z-Image: find the crashing line, then try one version swap.** After LOKI
+      updates, the child now runs with `faulthandler` on and reports the last stage (load /
+      place / denoise / save) and the innermost Python frame, e.g. "crashed (exit 3221225477)
+      during denoise at attention.py:88 in forward". There is also a 5th plan that loads the
+      weights without mmap. Steps: (1) delete `harness_data\app\imagegen_plan.json` (it holds the
+      week-long skip); (2) ask for "an image of a red fox in studio light" with
+      `LOKI_IMAGE_BACKEND=zimage`; (3) paste every plan's line here. (4) Only if all still crash
+      at the same frame: in a COPY of the venv (never the live one), try
+      `pip install "torch==2.10.*" --index-url https://download.pytorch.org/whl/cu128` and run
+      the same request with that python; report which combination works. Do not change the
+      live install's versions without telling Claude here first.
+- [ ] **W12 LOKI's first own job.** UPDATE (Claude, 2026-10-14 19:4x): job cf7dd344 ran on the
+      code from BEFORE the check_loki fix: it called conductor/improve_loki/ship_loki("test") in a
+      loop, used ~55k input tokens EVERY turn, spent every free quota in 37 turns (then $0.03 on
+      paid OpenRouter deepseek-v4.1-flash, since paid is allowed on the PC), and ended on an
+      OpenRouter 402. Nothing shipped. Since then: check_loki tool, improve_loki refuses inside its
+      own worktree, and providers that hit a 429 now come back after a 20 s cooldown instead of
+      being dropped for the run (LOKI_RATE_LIMIT_WAIT, default 90 s per turn). RE-RUN it on the
+      current master and report turns, tokens per turn and the outcome.
+      ORIGINAL: NOTE from Claude (2026-10-14): I tried this on the PC
       through LOKI's own UI before the fix below. The local 9B model did NOT call improve_loki;
       it edited the Home workspace and stopped after 6 turns. Now a request like this is
       recognised by the first layer and handed straight to improve_loki (no model choice), and
@@ -246,6 +267,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Needs Mohamed
 
+- [ ] **GitHub Actions is not starting jobs** (account billing). CI on push is off until it is
+      fixed in github.com/settings/billing. Meanwhile every change is checked by ship.py on the
+      machine (Ziva) and by the offline suites in the cloud (`PYTHONPATH=tests/cloud_stubs`).
+- [ ] DeepSeek has no credit ("Insufficient Balance"), and the OpenRouter balance is nearly
+      empty (a 402 "exceed your available credits"). Top up, or set `LOKI_ALLOW_PAID=0` on the
+      PC so LOKI never reaches for paid models on its own. Note: the OpenRouter card's model on the
+      PC is `deepseek/deepseek-v4.1-flash`, which is PAID; pick a `:free` model there (Settings >
+      Connections > OpenRouter > model) to keep OpenRouter free.
+- [ ] Ziva's W2 test: the **Mistral, Together and Cerebras keys are rejected** - replace them in
+      Settings > Connections (or Disconnect those cards).
+
 - [ ] A **ModelScope** token (modelscope.cn/my/myaccesstoken) to turn on the `qwen()` image
       backend (Qwen-Image 2.1). Without it, images use local Z-Image Turbo or free Pollinations.
       (Ziva Windows, 2026-10-14 - the backend already exists in engine/runners/imagegen.py.)
@@ -265,6 +297,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 cloud (Claude) read Ziva's check-in (window close = update restart, agreed; W8
+  verified - thanks; W13 all plans crash). Landed: (1) self-improvement that can test itself -
+  check_loki tool (ship.py --check --only), improve_loki refuses inside its own worktree, one
+  local-model job at a time on a machine (LOKI_LOCAL_MODEL_JOBS); (2) tests/cloud_stubs so the
+  offline suites run without PyPI; (3) Z-Image crash reports now name the stage and the code line
+  (faulthandler), plus a no-mmap plan -> W15; (4) rate-limited providers come back after a
+  cooldown instead of ending the run (found on the PC: job cf7dd344 died after every free quota
+  was marked spent) -> W12 re-run. Ruflo (W14): 95 agents + 38 skills built in, MCP opt-in.
+  GitHub Actions is blocked by billing - see Needs Mohamed. Mirror macos-app = master.
 - 2026-10-14 windows (Ziva) W2: portal Test via the app engine - openrouter OK 361ms, groq OK 192ms; gemini 503, mistral/together/cerebras key rejected, deepseek no credit. Pickers load.
 - 2026-10-14 windows (Ziva) W8: prompted tool harness verified on real local models via Ollama - hermes3:8b and qwen3:8b both called list_files/read_file through the <tool_call> harness.
 - 2026-10-14 mac (Ziva) M2+M1: the Mac can reach the private repo again. `brew install gh`;

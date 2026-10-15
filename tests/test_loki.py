@@ -2180,6 +2180,31 @@ try:
     _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"},
                                  status=400, text="KeyError: objects")
     check("an HTTP 400 still fails over (existing behaviour kept)", _out == "answer from gemini", (_t, _out))
+
+    class _BusyOnce:
+        """Every provider answers 429 the first time it is asked, then works."""
+        def __init__(self):
+            self.seen = set()
+
+        def __contains__(self, name):
+            if name in self.seen:
+                return False
+            self.seen.add(name)
+            return True
+
+    _cool_saved = loki.RATE_LIMIT_COOLDOWN_S
+    loki.RATE_LIMIT_COOLDOWN_S = 0.01
+    try:
+        _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, _BusyOnce(),
+                                     text="HTTP 429: Too Many Requests (rate limit)")
+        check("when every provider is rate-limited, Loki waits and retries instead of ending the run",
+              _out.startswith("answer from") and _t[:2] == ["openrouter", "gemini"] and len(_t) == 3, (_t, _out))
+        _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter", "gemini"})
+        check("a spent QUOTA is not waited for (the run reports it)", _out.startswith("ERROR:") and len(_t) == 2,
+              (_t, _out))
+    finally:
+        loki.RATE_LIMIT_COOLDOWN_S = _cool_saved
+        loki._RATE_LIMITED.clear()
 finally:
     (loki.provider_configured, loki.make_client, loki.refresh_mcp_tools,
      loki.model_name, _fo_failed, _fo_messages, loki.MODEL_RETRIES,

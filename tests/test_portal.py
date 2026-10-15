@@ -501,7 +501,11 @@ def _fake_child(argv, input, **kw):
     plan = json.loads(input)["plan"]["name"]
     _plans_tried.append(plan)
     if plan == "offload-bf16":
-        return types.SimpleNamespace(stdout="", stderr="Segmentation fault", returncode=-11)   # native crash
+        return types.SimpleNamespace(stdout="", stderr="stage: import torch\nstage: denoise\nFatal Python error: Segmentation fault\n\n"
+                                     'Current thread 0x1 (most recent call first):\n'
+                                     '  File "C:\\py\\diffusers\\models\\attention.py", line 88 in forward\n'
+                                     '  File "C:\\py\\torch\\nn\\module.py", line 1 in _call_impl\n',
+                                     returncode=-11)   # native crash
     return types.SimpleNamespace(stdout=json.dumps({"ok": True, "file": "x.png", "backend": "zimage", "plan": plan}),
                                  stderr="", returncode=0)
 
@@ -510,6 +514,9 @@ os.environ["LOKI_DATA"] = str(TMP / "data")
 _z = imagegen.zimage("a fox", 768, 768, str(TMP / "images"), 0, run=_fake_child)
 check("a Z-Image crash (segfault) falls back to the next, safer plan", _plans_tried == ["offload-bf16",
       "offload-bf16-math-attn"] and _z["plan"] == "offload-bf16-math-attn" and "crashed" in _z.get("note", ""), _z)
+check("a crash says which stage it died in", "during denoise" in _z.get("note", ""), _z)
+check("and the line of code it died on", "attention.py:88 in forward" in _z.get("note", ""), _z)
+check("there is a plan that loads weights without mmap", any(p.get("mmap") is False for p in imagegen.ZIMAGE_PLANS))
 _plans_tried.clear()
 imagegen.zimage("a fox", 768, 768, str(TMP / "images"), 0, run=_fake_child)
 check("the plan that worked is tried first next time", _plans_tried == ["offload-bf16-math-attn"], _plans_tried)

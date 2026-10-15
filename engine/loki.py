@@ -600,6 +600,27 @@ if TUNED_PROMOTED and "local" in SMART_ORDER:
 
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 _SMART_FAILED = set()
+# Providers skipped for a TEMPORARY rate limit (HTTP 429), not a spent quota. When every
+# provider is out, these come back after a short cooldown instead of the run ending;
+# LOKI_RATE_LIMIT_WAIT caps the total wait per turn (seconds, 0 turns it off).
+_RATE_LIMITED: dict = {}
+RATE_LIMIT_WAIT_S = float(os.getenv("LOKI_RATE_LIMIT_WAIT", "90") or 0)
+RATE_LIMIT_COOLDOWN_S = 20.0
+
+
+def _is_rate_limit(exc) -> bool:
+    text = str(exc).lower()
+    return (("429" in text or "rate limit" in text or "rate_limit" in text or "too many requests" in text)
+            and not _is_quota_error(exc))
+
+
+def revive_rate_limited() -> list:
+    """Put the rate-limited providers back in the running; returns which ones."""
+    back = [name for name in _RATE_LIMITED if provider_configured(name)]
+    for name in back:
+        _SMART_FAILED.discard(name)
+    _RATE_LIMITED.clear()
+    return back
 
 # Learned routing: measured success reorders providers WITHIN a cost tier (see
 # experience.learned_order). Free stays ahead of paid whatever the numbers say.
@@ -4291,6 +4312,7 @@ async def agent_turn(force_tool: bool = False) -> str:
         # A limit is not a failure: mark the provider used-up and continue this SAME
         # turn on the next provider rather than ending the run.
         switches = 0
+        waited = 0.0
         _t0 = time.monotonic()
         while True:
             # Resolve the provider BEFORE the request, so a failure is pinned on the
@@ -4316,7 +4338,18 @@ async def agent_turn(force_tool: bool = False) -> str:
                         exc, model_name in AUTO_ROUTING_MODES):
                     raise
                 reason = failover_reason(exc)
+                if _is_rate_limit(exc):
+                    _RATE_LIMITED[provider] = time.monotonic()
                 target = failover_target(provider)
+                if not target and _RATE_LIMITED and waited < RATE_LIMIT_WAIT_S:
+                    pause = min(RATE_LIMIT_COOLDOWN_S, RATE_LIMIT_WAIT_S - waited)
+                    _progress("thinking", "Every provider is busy or spent; %s hit a rate limit, so "
+                              "waiting %ds for it to recover." % (", ".join(sorted(_RATE_LIMITED)), int(pause)))
+                    await asyncio.sleep(pause)
+                    waited += pause
+                    revive_rate_limited()
+                    nxt = active_model_name()
+                    target = nxt if provider_configured(nxt) and nxt not in _SMART_FAILED else ""
                 ROUTE_TRACE.append({"provider": provider, "reason": reason,
                                     "next": target or "", "error": redact_secrets(short_error(str(exc), 160))})
                 if not target:

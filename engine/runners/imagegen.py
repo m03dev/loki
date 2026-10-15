@@ -58,6 +58,10 @@ def zimage_ready():
 ZIMAGE_PLANS = [
     {"name": "offload-bf16", "offload": "model", "dtype": "bfloat16", "sdpa": "default"},
     {"name": "offload-bf16-math-attn", "offload": "model", "dtype": "bfloat16", "sdpa": "math"},
+    # Loading memory-mapped safetensors is a known access-violation source on Windows when
+    # RAM + page file are tight; read the weights into memory instead.
+    {"name": "offload-bf16-math-attn-nommap", "offload": "model", "dtype": "bfloat16", "sdpa": "math",
+     "mmap": False},
     {"name": "sequential-bf16-math-attn", "offload": "sequential", "dtype": "bfloat16", "sdpa": "math"},
     {"name": "sequential-fp16-math-attn", "offload": "sequential", "dtype": "float16", "sdpa": "math"},
 ]
@@ -68,9 +72,35 @@ def _plan_file():
     return base / "app" / "imagegen_plan.json"
 
 
+def _stage(name):
+    """Breadcrumb on stderr: when a native crash kills the child, the parent reports the last stage."""
+    try:
+        sys.stderr.write("stage: %s\n" % name)
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _last_stage(stderr):
+    stages = [l.strip()[7:] for l in (stderr or "").splitlines() if l.strip().startswith("stage: ")]
+    return stages[-1] if stages else ""
+
+
+def _crash_frame(stderr):
+    """The innermost frame faulthandler printed ('File "...attention.py", line 88 in forward')."""
+    frames = [l.strip() for l in (stderr or "").splitlines() if l.strip().startswith('File "')]
+    if not frames:
+        return ""
+    frame = frames[0]          # faulthandler lists the most recent call first
+    match = re.match(r'File "(.+)", line (\d+) in (\S+)', frame)
+    return ("%s:%s in %s" % (re.split(r"[\\/]", match.group(1))[-1], match.group(2), match.group(3))) if match else frame[:120]
+
+
 def _zimage_once(prompt, width, height, out_dir, seed, plan):
     """One generation with one plan, in THIS process (called in a child by zimage())."""
+    _stage("import torch")
     import torch
+    _stage("import diffusers")
     from diffusers import ZImagePipeline
     dtype = getattr(torch, plan.get("dtype", "bfloat16"))
     if torch.cuda.is_available():
@@ -85,7 +115,16 @@ def _zimage_once(prompt, width, height, out_dir, seed, plan):
         device, vram_gb = "mps", 0.0
     else:
         device, dtype, vram_gb = "cpu", torch.float32, 0.0
-    pipe = ZImagePipeline.from_pretrained(ZIMAGE_ID, torch_dtype=dtype)
+    _stage("load weights (%s, mmap %s)" % (plan.get("dtype"), "off" if plan.get("mmap") is False else "on"))
+    load = {"torch_dtype": dtype}
+    if plan.get("mmap") is False:
+        load["disable_mmap"] = True
+    try:
+        pipe = ZImagePipeline.from_pretrained(ZIMAGE_ID, **load)
+    except TypeError:                      # an older diffusers without disable_mmap
+        load.pop("disable_mmap", None)
+        pipe = ZImagePipeline.from_pretrained(ZIMAGE_ID, **load)
+    _stage("place on %s (%s offload)" % (device, plan.get("offload")))
     if device == "cuda" and vram_gb < 12:
         if plan.get("offload") == "sequential":
             pipe.enable_sequential_cpu_offload()   # lowest VRAM: one layer on the GPU at a time
@@ -94,8 +133,10 @@ def _zimage_once(prompt, width, height, out_dir, seed, plan):
     else:
         pipe.to(device)
     generator = torch.Generator("cpu").manual_seed(int(seed)) if seed else None
+    _stage("denoise")
     image = pipe(prompt=prompt, width=width, height=height, num_inference_steps=9,
                  guidance_scale=0.0, generator=generator).images[0]
+    _stage("save")
     path = _out_path(out_dir, prompt)
     image.save(path)
     return {"file": str(path), "backend": "zimage", "device": device, "plan": plan["name"]}
@@ -133,6 +174,12 @@ def zimage(prompt, width, height, out_dir, seed, run=None):
                 result["note"] = "earlier plans failed: " + "; ".join(failures)
             return result
         why = result.get("error") or ("crashed (exit %s)" % proc.returncode)
+        stage = _last_stage(getattr(proc, "stderr", ""))
+        if stage and not result.get("error"):
+            why += " during " + stage
+        frame = _crash_frame(getattr(proc, "stderr", ""))
+        if frame and not result.get("error"):
+            why += " at " + frame
         failures.append("%s: %s" % (plan["name"], str(why)[:160]))
     try:   # every plan failed: skip local Z-Image for a week (auto goes straight to the next backend)
         _plan_file().parent.mkdir(parents=True, exist_ok=True)
@@ -242,6 +289,8 @@ def _child() -> None:
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["--zimage-child"]:
+        import faulthandler
+        faulthandler.enable()     # a native crash still prints the Python stack to stderr
         _child()
     else:
         main()
