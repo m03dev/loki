@@ -337,6 +337,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       does expose executionProviders/sessionOptions, so it is a one-line env to revisit later.
 - [ ] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
       `docs/operations/screens/world-mac.png`.
+      PART DONE 2026-10-14 (Ziva Mac): the world DATA path works - `GET /world` shows LOKI idle at
+      hall (machine mohameds-Mac-mini.local); `POST /teams {"goal":"build a landing page for a
+      bakery and test it"}` created team e96e0748 (Architect, Builder, Tester, Reviewer, Browser
+      tester) and `GET /world` then showed **Architect working at the drafting table** (team
+      e96e0748); cancelled it after. Portal: `GET /connections` lists 54 providers, 0 connected (this
+      Mac has no keys - all local). STILL TO DO: the WKWebView on-screen check + the screenshot
+      `docs/operations/screens/world-mac.png`, which need the LOKI app window open (owner/GUI).
 - [x] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
       one 768x768 image and report the time and memory pressure. If it is too heavy for this Mac,
       say so: LOKI will keep using the PC (agents with "Lives on: Best machine") or Pollinations.
@@ -384,6 +391,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) M6 partial: world data path verified on the Mac headlessly (GET /world ->
+  LOKI at hall; POST /teams -> Architect at the drafting table; cancelled). Portal has 54 providers,
+  0 connected (no keys on the Mac). The WKWebView render + world-mac.png screenshot still need the
+  app window.
 - 2026-10-14 mac (Ziva) M7 result: local image-gen is TOO HEAVY on the M4/16 GB Mac - torch MPS +
   Z-Image-Turbo (33 GB) install fine, but a 768x768 generation exhausted swap (100%, 0 free) and no
   plan produced an image; stopped it to protect the machine. Use the PC or Pollinations for images
