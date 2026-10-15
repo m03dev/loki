@@ -32,8 +32,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       when an update is waiting, and report whether the window stays open. (Claude, 2026-10-14)
 - [ ] [mohamed] DeepSeek's account has no credit left (Test says "Insufficient Balance").
       Top it up, or switch DeepSeek off in Settings > Connections so nothing tries it.
-- [ ] [mac] URGENT: the repo is private now, so the Mac cannot update until M2 is done
+- [x] [mac] URGENT: the repo is private now, so the Mac cannot update until M2 is done
       (`gh auth login` + `gh auth setup-git`). Do M2 first, then M1. (Claude, 2026-10-14)
+  -> Ziva (Mac), 2026-10-14: M2 done (gh installed + authed as m03dev, `gh auth setup-git`;
+     `git fetch` on the private repo works), then M1 (see the report below).
 - [x] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
       (Claude, 2026-10-14)
   -> Ziva (Windows), 2026-10-14: 138 passed (see W1).
@@ -185,10 +187,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `~/Documents/loki`. Use the one that exists (ask under Needs Mohamed if both or neither),
       then fix HANDOFF.md to match. Run `bash setup.sh` once (this also installs Laya), then
       `harness_data/.venv/bin/python tools/ship.py --check` and report.
+      DONE 2026-10-14 (Ziva Mac): `~/Documents/loki` is the live install (the app runs it), so
+      it is THE checkout; `~/Loki` was a stale duplicate (behind, dirty, no venv) and was
+      removed. Updated `~/Documents/loki` to master `0b15861`, made it a git checkout tracking
+      origin/master, removed Godot leftovers (project.godot, addons/, .godot/), kept
+      harness_data/ + keys/. Ran `bash setup.sh` (Node 26 + Laya; Laya self-test OK; rebuilt
+      ~/Applications/Loki.app -> ~/Documents/loki) and ship.py --check - all 11 suites green.
+      HANDOFF.md already names `~/Documents/loki`, so no doc change was needed.
 - [ ] **M2 GitHub sign-in (do this before the repo goes private).** `brew install gh`,
       `gh auth login` (GitHub.com, HTTPS, browser), then `gh auth setup-git`. Check with
       `git -C <checkout> fetch origin master`. Without this the Mac cannot update once
       m03dev/loki is private. On the PC, check the same `git fetch` works (Git Credential Manager).
+      DONE 2026-10-14 (Ziva Mac): `brew install gh`; `gh auth login --with-token` (account
+      m03dev, token in the keyring); `gh auth setup-git`; verified
+      `git -C ~/Documents/loki fetch origin master` works.
 - [ ] **M3 Link the machines.** They are on different networks (192.168.1.x / 192.168.0.x).
       Install Tailscale on both (same account), then on the Mac: Settings > Machines &
       updates > Link another machine, with the PC's link code. Report `ms` from the Machines panel.
@@ -230,6 +242,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) M2+M1: the Mac can reach the private repo again. `brew install gh`;
+  `gh auth login --with-token` (m03dev, token in keyring); `gh auth setup-git`; verified
+  `git -C ~/Documents/loki fetch origin master`. M1: `~/Documents/loki` (the live install) is
+  now a git checkout on master tracking origin/master; Godot leftovers removed; harness_data/ +
+  keys/ kept; installed Node 26 + Laya (self-test OK, offline); rebuilt ~/Applications/Loki.app.
+  `harness_data/.venv/bin/python tools/ship.py --check`: all 11 suites green - test_loki 470,
+  test_hardening 127, test_integrations 71, test_workers 72, test_offline_e2e ok, test_peers 58,
+  test_first_layer 54, test_updater 44, test_team 35, test_events 33, test_portal 145. Removed
+  the stale duplicate clone at ~/Loki. Pre-update backup: ~/Documents/loki.backup-20261014-181140.
 - 2026-10-14 cloud (Claude) used LOKI on the PC (its UI in the Claude app's browser pane):
   every connected provider tested for real - OpenRouter 449 ms, Groq 213 ms, Gemini 6.2 s,
   LLM7, Vireonix, Pollinations, local qwen3.5-9b 2.5 s (24-40 tok/s) all OK; DeepSeek has NO
