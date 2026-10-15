@@ -649,6 +649,25 @@ check("the portal tests, signs in, hands off and updates everywhere", all(s in s
 check("the world draws with WebGL from /world only", "getContext(\"webgl\"" in world_js and 'api("/world")' in world_js
       and "fetch(" not in world_js)
 check("the world pauses when it cannot be seen", "document.hidden" in world_js and "requestAnimationFrame" in world_js)
+check("the world draws pixelated: a low-res framebuffer blown up with NEAREST",
+      "createFramebuffer" in world_js and "gl.TEXTURE_MAG_FILTER, gl.NEAREST" in world_js
+      and "checkFramebufferStatus" in world_js and "Math.ceil(w / scale)" in world_js)
+check("the pixel upscale uses a whole-number scale and handles devicePixelRatio and resize",
+      "devicePixelRatio" in world_js and "Math.round((World.pixel || view.opts.pixel" in world_js
+      and "canvas.width !== w" in world_js)
+check("without a framebuffer the world still draws (straight to the canvas)", "fbFailed = true" in world_js
+      and "fb ? fb.fbo : null" in world_js)
+check("the world dithers its colours (ordered Bayer dither)", "bayer4(" in world_js)
+check("the world is cel-shaded: lighting quantized into bands", "const float BANDS" in world_js
+      and "floor(clamp(x,0.0,1.0) * BANDS)" in world_js and "sunDir" in world_js and "rimCol" in world_js)
+check("the world has ink outlines (inflated back-face hull)", "OUTLINE_VS" in world_js and "gl.cullFace(gl.FRONT)" in world_js)
+check("the world has a sky, an island, props, shadows and lights", all(s in world_js for s in (
+    "SKY_FS", "ISLAND", "SCENERY.trees", "SCENERY.rocks", "SCENERY.lamps", "L.shadows", "L.glows", "LP[10]")))
+check("the background world is frame-capped", "fps: 30" in world_js and "1000 / fps" in world_js)
+check("the world loads nothing from outside and never evals", all(s not in world_js for s in (
+    "http://", "https://", "eval(", "new Function", "XMLHttpRequest", "import(")))
+check("the world keeps the functions app.js and settings.js call", all(
+    ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")) and "window.afterStart" in world_js)
 if shutil.which("node"):
     for name in ("app.js", "settings.js", "world.js", "setup.js", "machines.js"):
         proc = subprocess.run(["node", "--check", str(ui / name)], capture_output=True, text=True)

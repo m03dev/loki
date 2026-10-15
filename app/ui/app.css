@@ -404,3 +404,7 @@ button.danger:hover { color: var(--err); }
 .ruflo-plugin { padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 .ruflo-plugin b { margin-right: 8px; }
 .ruflo-plugin .pcard-blurb { margin: 4px 0 0; }
+
+/* world look: the pixel-art world is brighter than the old one, so its labels get a dark halo */
+.world-labels .wlabel span { color: #e6ecf5; text-shadow: 0 1px 2px #05060f, 0 0 3px #05060f; }
+.world-labels .wlabel b { box-shadow: 0 1px 3px rgba(0,0,0,.45); }
