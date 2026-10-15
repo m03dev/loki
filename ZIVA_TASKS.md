@@ -26,6 +26,12 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] At 18:39:31 the engine restarted for an update and at 18:39:40 "the Loki window
+      closed" (harness_data/app/loki_app.log). Did you close it, or did it close by itself?
+      If by itself, repeat: Settings > Machines & updates > Check now, then POST /update/apply
+      when an update is waiting, and report whether the window stays open. (Claude, 2026-10-14)
+- [ ] [mohamed] DeepSeek's account has no credit left (Test says "Insufficient Balance").
+      Top it up, or switch DeepSeek off in Settings > Connections so nothing tries it.
 - [ ] [mac] URGENT: the repo is private now, so the Mac cannot update until M2 is done
       (`gh auth login` + `gh auth setup-git`). Do M2 first, then M1. (Claude, 2026-10-14)
 - [x] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
@@ -115,6 +121,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      The zimage() path uses enable_model_cpu_offload() for <12 GB cards. The free Pollinations
      backend works. Needs a fix from the code side (CPU offload / dtype / diffusers version) -
      assigning to Claude.
+  -> Claude, 2026-10-14: fixed in a way that survives a native crash: each attempt now runs in
+     its own child process and LOKI walks down 4 plans (model offload bf16 -> same with plain
+     "math" attention, the usual Windows crash source -> sequential offload -> fp16). The plan
+     that works is remembered (harness_data/app/imagegen_plan.json); if all 4 crash, local
+     Z-Image is skipped for a week and auto goes to Qwen/Pollinations. RE-TEST (W13).
 - [x] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
       Loki work on?". Settings > LOKI World: drag to orbit, wheel to zoom. Start a team
       ("build a landing page for a bakery and test it") and watch characters walk to their
@@ -143,7 +154,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Connections > ModelScope, turn on image-gen, set `LOKI_IMAGE_BACKEND=qwen` and ask LOKI for
       "an image of a red fox in studio light". Report the time, and the exact error if any (the
       request shape came from a third-party guide, not ModelScope's own docs).
-- [ ] **W12 LOKI's first own job.** In LOKI on the PC (Build mode), send: "Change your own code (improve_loki): add the
+- [ ] **W13 Z-Image again.** After LOKI updates: ask for "an image of a red fox in studio
+      light" with `LOKI_IMAGE_BACKEND=zimage`. Report which plan worked (the reply names it)
+      and the time, or every plan's error if all crash (paste them).
+- [ ] **W12 LOKI's first own job.** NOTE from Claude (2026-10-14): I tried this on the PC
+      through LOKI's own UI before the fix below. The local 9B model did NOT call improve_loki;
+      it edited the Home workspace and stopped after 6 turns. Now a request like this is
+      recognised by the first layer and handed straight to improve_loki (no model choice), and
+      improve_loki jobs use the best FREE online model (LOKI_IMPROVE_MODEL=online). Re-run it. In LOKI on the PC (Build mode), send: "Change your own code (improve_loki): add the
       Nordic LOKI identity from docs/VISION.md - an L-shaped logo mark in the sidebar and the
       welcome screen, navy background with cyan/emerald accents, as CSS only, keep the dark
       theme readable; add a check in tests/test_portal.py's UI section and ship it". Watch the
@@ -204,6 +222,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 cloud (Claude) used LOKI on the PC (its UI in the Claude app's browser pane):
+  every connected provider tested for real - OpenRouter 449 ms, Groq 213 ms, Gemini 6.2 s,
+  LLM7, Vireonix, Pollinations, local qwen3.5-9b 2.5 s (24-40 tok/s) all OK; DeepSeek has NO
+  CREDIT ("Insufficient Balance"). Found and fixed: (1) "change your own code" did not reach
+  improve_loki; (2) a bakery-website team wrote Godot .tscn files because the Godot tools were
+  offered outside a Godot project - now they are only offered inside one; (3) LOKI could not
+  say which model it is - its prompt now names model, provider, machine, version, peers; (4)
+  Machines & updates called this PC "behind" while it was ahead; (5) test_updater could write
+  the real update-health record - it now lives in the checkout's .git; (6) Z-Image crash
+  (above). All suites green in CI. Noticed, not fixed yet: at 18:39 the app's window closed 9 s
+  after an engine restart ("restarting on the updated code") - Ziva, did you close it, or did it
+  close by itself? Answer under the request below.
 - 2026-10-14 cloud (Claude) requests: did both [either] requests (6 hosts; free Qwen-Image 2.1
   via ModelScope), 129 offline checks pass. Added the [claude]/[loki] request tags and a
   scheduled Claude check of this file every few hours. New tasks: W11 (Qwen images), W12
