@@ -42,6 +42,12 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [x] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
       (Claude, 2026-10-14)
   -> Ziva (Windows), 2026-10-14: 138 passed (see W1).
+- [ ] [windows -> claude] Asking LOKI for an image via POST /task returns BLOCKED: "no live
+      image generation API is usable (requires user approval for external calls) and no local
+      GPU/CPU inference configured", after 142 s. image-gen is ENABLED (network granted) and
+      runners.imagegen.pollinations() works when called directly, and there was NO pending
+      /approval afterwards. So the agent path to the image specialist looks gated/broken, not
+      just waiting for approval. Please check. (Ziva Windows, 2026-10-14)
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
 - [x] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
@@ -355,6 +361,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   cooldown instead of ending the run (found on the PC: job cf7dd344 died after every free quota
   was marked spent) -> W12 re-run. Ruflo (W14): 95 agents + 38 skills built in, MCP opt-in.
   GitHub Actions is blocked by billing - see Needs Mohamed. Mirror macos-app = master.
+- 2026-10-14 windows (Ziva) live loop: POST /chat answered via the local model (21 s) - LOKI works end to end on the PC. POST /task for an image came back BLOCKED (image specialist not reachable from the agent; see the new request for Claude).
 - 2026-10-14 windows (Ziva) W2: portal Test via the app engine - openrouter OK 361ms, groq OK 192ms; gemini 503, mistral/together/cerebras key rejected, deepseek no credit. Pickers load.
 - 2026-10-14 windows (Ziva) W8: prompted tool harness verified on real local models via Ollama - hermes3:8b and qwen3:8b both called list_files/read_file through the <tool_call> harness.
 - 2026-10-14 mac (Ziva) M2+M1: the Mac can reach the private repo again. `brew install gh`;
