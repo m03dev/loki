@@ -204,6 +204,22 @@ check("a manifest that changes after enabling drops to 'changed'", registry.get(
 check("a changed capability grants nothing", registry.granted("alpha") == set())
 registry.set_enabled("alpha", True)
 check("re-approving records the new permissions", registry.granted("alpha") == {"process:agent", "network"})
+_m = json.loads((builtin_dir / "alpha" / "manifest.json").read_text(encoding="utf-8"))
+_m.update(description="reworded by an update", version="9.9.9")
+(builtin_dir / "alpha" / "manifest.json").write_text(json.dumps(_m), encoding="utf-8")
+check("rewording a description or bumping a version keeps it enabled", registry.get("alpha")["status"] == "enabled")
+_legacy = json.loads((TMP / "enabled.json").read_text(encoding="utf-8"))
+_legacy["alpha"].pop("trust", None)
+_legacy["alpha"]["fingerprint"] = "0000old00000000"
+(TMP / "enabled.json").write_text(json.dumps(_legacy), encoding="utf-8")
+check("a built-in capability enabled before this change survives an update that asks for nothing new",
+      registry.get("alpha")["status"] == "enabled" and registry.granted("alpha") == {"process:agent", "network"})
+_m["permissions"] = ["process:agent", "network", "computer:host"]
+(builtin_dir / "alpha" / "manifest.json").write_text(json.dumps(_m), encoding="utf-8")
+check("but one that asks for a NEW permission still drops to 'changed'", registry.get("alpha")["status"] == "changed")
+_m["permissions"] = ["process:agent", "network"]
+(builtin_dir / "alpha" / "manifest.json").write_text(json.dumps(_m), encoding="utf-8")
+registry.set_enabled("alpha", True)
 registry.set_enabled("local-model", False)
 check("a default-on capability can be switched off", registry.get("local-model")["status"] == "disabled")
 try:

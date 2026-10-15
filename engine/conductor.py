@@ -118,6 +118,10 @@ class Conductor:
                  "You are the conductor. For these steps call the `conductor` tool with a role "
                  "instead of guessing:"]
         lines += ["- %s: %s (via %s)" % (r["role"], r["summary"], r["via"]) for r in ready]
+        off = [r for r in self.roster() if not r["ready"]]
+        if off:   # so the model tells the user the real reason instead of inventing one
+            lines.append("Not available right now (say this reason if the user asks for one of these):")
+            lines += ["- %s: %s" % (r["role"], r["why"][:160]) for r in off]
         return "\n".join(lines)
 
     def needs_approval(self, role: str) -> bool:

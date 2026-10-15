@@ -17,7 +17,9 @@ Discovery scans the repo's `capabilities/` (trusted, ships with Loki) and the us
 executed, and a capability is unusable until the user enables it. Enabling records the
 manifest's fingerprint and the permissions granted at that moment: if the manifest later
 changes (new permission, new entrypoint) it drops back to "changed" and must be
-re-approved - a capability cannot grant itself more.
+re-approved - a capability cannot grant itself more. Rewording its description or bumping
+its version does not count, and a built-in capability (shipped in the repo) stays enabled
+across updates while it asks for no permission beyond what was granted.
 
 Standard library only; pure functions plus one small JSON enablement store.
 """
@@ -101,9 +103,30 @@ def validate(data: object) -> list[str]:
 
 
 def fingerprint(data: dict) -> str:
-    """Stable hash of everything that matters for trust (all fields, canonical JSON)."""
+    """Stable hash of every field (canonical JSON)."""
     canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+# Fields that only describe a capability. Rewording a description or bumping a version does
+# not change what it may do, so it must not switch an enabled capability off.
+COSMETIC = ("description", "version", "license", "homepage")
+
+
+def trust_fingerprint(data: dict) -> str:
+    """Hash of what matters for trust: permissions, requirements, entrypoint, endpoints, kind."""
+    return fingerprint({k: v for k, v in data.items() if k not in COSMETIC})
+
+
+def _still_trusted(entry: dict, record: dict) -> bool:
+    """Enabled earlier, manifest edited since: does the earlier approval still cover it?"""
+    manifest = entry["manifest"]
+    if record.get("trust") and record["trust"] == trust_fingerprint(manifest):
+        return True                       # only cosmetic fields changed
+    # A capability that ships with LOKI (repo capabilities/, published through ship.py's
+    # tests) stays on after an update as long as it asks for nothing beyond what was granted.
+    perms = set(p for p in manifest.get("permissions", []) if isinstance(p, str))
+    return entry.get("source") == "builtin" and "granted" in record and perms <= set(record["granted"])
 
 
 def discover(roots: list[tuple[str, Path]]) -> list[dict]:
@@ -161,7 +184,7 @@ class Enablement:
         manifest = entry["manifest"]
         with self.lock:
             data = self.load()
-            data[entry["name"]] = {"fingerprint": fingerprint(manifest),
+            data[entry["name"]] = {"fingerprint": fingerprint(manifest), "trust": trust_fingerprint(manifest),
                                    "granted": list(manifest.get("permissions", [])),
                                    "at": time.strftime("%Y-%m-%d %H:%M:%S")}
             self._save(data)
@@ -203,7 +226,8 @@ def status_of(entry: dict, enabled: dict, env: dict | None = None, which=shutil.
         and not (set(entry["manifest"].get("permissions", [])) & HIGH_RISK)
     if record is None and not builtin_default:
         return "disabled"
-    if record is not None and record.get("fingerprint") != fingerprint(entry["manifest"]):
+    if record is not None and record.get("fingerprint") != fingerprint(entry["manifest"]) \
+            and not _still_trusted(entry, record):
         return "changed"
     if missing_requirements(entry["manifest"], env, which):
         return "missing"

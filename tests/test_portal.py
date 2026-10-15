@@ -586,6 +586,18 @@ check("the plan that worked is tried first next time", _plans_tried == ["offload
 check("conductor knows the media, image and reach roles", {"media", "image", "reach"} <= set(conductor.ROLES))
 
 
+class _OnlyMedia:
+    def capability(self, name, permission=""):
+        if name == "media":
+            return policy_mod.Verdict(policy_mod.ALLOW, "ok")
+        return policy_mod.Verdict(policy_mod.DENY, "%s changed since you enabled it - review and enable it again" % name)
+
+
+_ps = conductor.Conductor(_OnlyMedia(), None, env={}).prompt_section()
+check("the model is told which specialists are off and the real reason (no invented 'needs approval')",
+      "- media:" in _ps and "Not available right now" in _ps and "image: image-gen changed since you enabled it" in _ps, _ps)
+
+
 class AllowAll:
     def capability(self, name, permission=""):
         return policy_mod.Verdict(policy_mod.ALLOW, "ok")

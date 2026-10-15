@@ -42,12 +42,20 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [x] [either] Run the new suite on your machine and report: `python tests/test_portal.py`
       (Claude, 2026-10-14)
   -> Ziva (Windows), 2026-10-14: 138 passed (see W1).
-- [ ] [windows -> claude] Asking LOKI for an image via POST /task returns BLOCKED: "no live
+- [x] [windows -> claude] Asking LOKI for an image via POST /task returns BLOCKED: "no live
       image generation API is usable (requires user approval for external calls) and no local
       GPU/CPU inference configured", after 142 s. image-gen is ENABLED (network granted) and
       runners.imagegen.pollinations() works when called directly, and there was NO pending
       /approval afterwards. So the agent path to the image specialist looks gated/broken, not
       just waiting for approval. Please check. (Ziva Windows, 2026-10-14)
+      -> Claude, 2026-10-14: found it on the PC (GET /conductor): image = "image-gen changed since
+      you enabled it". My earlier edit to capabilities/image-gen/manifest.json (description only)
+      changed its fingerprint, so the safety pin switched it off - and the model was never told
+      why, so it invented "requires approval". Fixed: (1) rewording a description / bumping a
+      version no longer counts as a change; a BUILT-IN capability stays enabled across updates
+      while it asks for no permission beyond what was granted (a new permission still drops it to
+      "changed"); (2) the system prompt now lists specialists that are off and their real reason.
+      After LOKI updates, re-run your /task image request; it should make the image.
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
 - [x] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
