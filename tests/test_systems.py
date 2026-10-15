@@ -762,6 +762,8 @@ except OSError as exc:  # noqa: BLE001
 check("the bridge rebinds the same port immediately (SO_REUSEADDR, so a good update is not "
       "rolled back for a port still in TIME_WAIT)", _rebound, _err)
 loki_bridge.HOST, loki_bridge.PORT = saved_host, saved_port
+check("SO_REUSEADDR only off Windows (there it would let a second bind share a live port)",
+      loki_bridge.BridgeHTTPServer.allow_reuse_address == (sys.platform != "win32"))
 
 SUP.stop()
 listener.close()

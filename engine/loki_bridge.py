@@ -1468,9 +1468,12 @@ class BridgeHTTPServer(ThreadingHTTPServer):
     # previous instance that just exited leaves the port in TIME_WAIT, and macOS/Linux then
     # refuse the bind (Errno 48) for ~30 s - which the app reads as "this version did not
     # start" and rolls back, so a good update looks broken. With SO_REUSEADDR the bind still
-    # fails over a live listener on macOS/Linux; on Windows it would not, so port_is_answering()
-    # refuses a port that already accepts connections before we bind (see start_bridge_server).
-    allow_reuse_address = True
+    # fails over a live listener on macOS/Linux. On Windows SO_REUSEADDR means "share a port
+    # that is in use" (a second process could bind over a live engine), and Windows already lets
+    # a listener rebind a port that only has TIME_WAIT connections, so it stays off there.
+    # port_is_answering() refuses a port that already accepts connections on every platform
+    # before we bind (see start_bridge_server).
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(self, state: BridgeState) -> None:
         super().__init__((HOST, PORT), BridgeHandler)
