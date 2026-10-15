@@ -58,12 +58,17 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
      now tries Z-Image Turbo (local) -> Qwen-Image 2.1 (ModelScope, when MODELSCOPE_API_KEY is
      set) -> Pollinations. Paid Model Studio not added. Check it: W11.
 
-- [ ] [claude] The Mac's LOKI checkout now lives on an exFAT SSD (`/Volumes/xero`), reached via
-      a symlink at `~/Documents/loki`. It works (all 11 suites green) but exFAT has no permission
-      bits or symlinks and macOS drops `._` AppleDouble sidecars (one under `.git/objects/pack`
-      broke git until cleaned; they are now in `.git/info/exclude`). Prefer an APFS sparse image on
-      the SSD (`hdiutil create -type SPARSEBUNDLE -fs APFS`, mount at login), or is exFAT fine?
-      (Ziva Mac, 2026-10-14)
+- [x] [claude] The Mac's LOKI checkout lives on the 2 TB SSD via an **APFS sparse image** at
+      `/Volumes/LokiSSD` (a single file `/Volumes/xero/LokiSSD.sparseimage`), reached through the
+      symlink `~/Documents/loki`. Raw exFAT was tried first and broke things: no permission bits or
+      symlinks, and macOS `._` AppleDouble sidecars corrupted `.git` (a `._` idx under
+      `.git/objects/pack`) and made `transformers` unimportable (it scans its own folder). On APFS
+      inside the image everything is normal - all 11 suites green. Mac follow-up: the image must be
+      attached after a reboot (add a login item) or `~/Documents/loki` dangles. (Ziva Mac, 2026-10-14)
+- [ ] [claude] MLX needs a fix: engine/loki.py's mlx ModelConfig uses `MLX_MODEL` (default "auto"),
+      and LOKI sends `model:"auto"` to `mlx_lm.server`, which then fetches
+      `huggingface.co/api/models/auto` and 404s. Suggest defaulting to the served model (or reading
+      the server's `/v1/models`) so MLX works out of the box. (Ziva Mac, 2026-10-14)
 
 ## What changed (2026-10-14) - what you are testing
 
@@ -263,6 +268,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       BLOCKED then UNBLOCKED 2026-10-14 (Ziva Mac): the internal disk was full (191 MB free) so
       `setup_extras.py mlx` died with "No space left on device" (mlx installed, mlx-lm did not).
       The Mac checkout now lives on the 2 TB SSD (internal disk freed) - retrying M4; will report.
+      RESULTS 2026-10-14 (Ziva Mac): mlx-lm installed; `mlx_lm.server --model
+      mlx-community/Qwen3-4B-4bit --port 8082` running (weights on the APFS image). LOKI reports MLX
+      as the provider. BUG found: MLX_MODEL defaults to "auto" and LOKI sends `model:"auto"` -> the
+      server 404s on `huggingface.co/api/models/auto`; setting MLX_MODEL to the served id fixes it
+      (see the [claude] request). With MLX_MODEL set, the engine starts and routes to MLX; finishing
+      the tool-call check and tokens/s.
 - [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
@@ -311,6 +322,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) storage FINAL + M4: LOKI lives on the 2 TB SSD. Raw exFAT broke git (`._`
+  sidecars in `.git/objects/pack`) and `transformers` (it scans its folder and hit `._` files), so
+  the checkout is on an **APFS sparse image** `/Volumes/LokiSSD` (single file on `/Volumes/xero`),
+  symlinked from `~/Documents/loki`; venv/Laya/Loki.app rebuilt; all 11 suites green; internal disk
+  0.2 GB -> 3.5 GB free. Shipped 029010e (skill_scan no longer counts its own SKILL.md as
+  executable; M5 CoreML 177 ms vs CPU 52 ms -> NOT shipped). M4: MLX installed + server running +
+  engine routing to MLX; found the MLX_MODEL "auto" bug (see request).
 - 2026-10-14 mac (Ziva) moved LOKI to the 2 TB SSD, + M5 numbers: found `/Volumes/xero`
   (2 TB, 1.3 TB free); copied the checkout there and made `~/Documents/loki` a symlink to it, so
   every launcher and path keeps working; re-ran setup.sh (venv recreated, Laya OK, Loki.app
