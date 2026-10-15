@@ -143,6 +143,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **W7 Update everything.** Once the Mac is linked (M3), ship any tiny change from the Mac,
       then on the PC press **Update everything**. Expected: the Mac restarts first, then the PC;
       the panel shows both on the same commit. Report the step lines.
+      PART DONE 2026-10-14 (Ziva Windows): the PC side is READY - it listens on port 8768
+      as peer "pc" (LOKI_PEER_LISTEN=1 in harness_data/.env). The two-machine run only waits on
+      the Mac being linked (M3).
 - [ ] **W8 Prompted tools on a local model.** Start llama.cpp *without* `--jinja` (or LM Studio)
       with a small model, set it as default in the portal, and ask LOKI to "list the files here
       and read README.md". Report whether tools ran ("tools via harness" shows on the card).
