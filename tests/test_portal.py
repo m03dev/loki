@@ -470,6 +470,25 @@ check("Qwen-Image 2.1 (ModelScope, free) submits an async task and polls it",
       _ms_calls[0][0].endswith("/v1/images/generations") and _ms_calls[0][2].get("X-ModelScope-Async-Mode") == "true"
       and _ms_calls[0][1]["model"] == "Qwen/Qwen-Image-2.1" and _ms_calls[0][1]["size"] == "1024x768"
       and _ms_calls[-1][0].endswith("/v1/tasks/t1") and _img["backend"] == "qwen" and Path(_img["file"]).read_bytes().startswith(b"\x89PNG"))
+_plans_tried = []
+
+
+def _fake_child(argv, input, **kw):
+    plan = json.loads(input)["plan"]["name"]
+    _plans_tried.append(plan)
+    if plan == "offload-bf16":
+        return types.SimpleNamespace(stdout="", stderr="Segmentation fault", returncode=-11)   # native crash
+    return types.SimpleNamespace(stdout=json.dumps({"ok": True, "file": "x.png", "backend": "zimage", "plan": plan}),
+                                 stderr="", returncode=0)
+
+
+os.environ["LOKI_DATA"] = str(TMP / "data")
+_z = imagegen.zimage("a fox", 768, 768, str(TMP / "images"), 0, run=_fake_child)
+check("a Z-Image crash (segfault) falls back to the next, safer plan", _plans_tried == ["offload-bf16",
+      "offload-bf16-math-attn"] and _z["plan"] == "offload-bf16-math-attn" and "crashed" in _z.get("note", ""), _z)
+_plans_tried.clear()
+imagegen.zimage("a fox", 768, 768, str(TMP / "images"), 0, run=_fake_child)
+check("the plan that worked is tried first next time", _plans_tried == ["offload-bf16-math-attn"], _plans_tried)
 check("conductor knows the media, image and reach roles", {"media", "image", "reach"} <= set(conductor.ROLES))
 
 
