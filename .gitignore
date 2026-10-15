@@ -44,3 +44,9 @@ dist/
 /loki-systems-*/
 /loki-tests-*/
 /tmp*/
+
+# Any test-suite temp dir in the repo root (covers future prefixes too).
+/loki-*/
+
+# test-suite temp dirs (underscore form: loki_eval_* etc.)
+/loki_*/
