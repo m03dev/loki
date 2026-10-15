@@ -26,10 +26,13 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
-- [ ] [windows] At 18:39:31 the engine restarted for an update and at 18:39:40 "the Loki window
-      closed" (harness_data/app/loki_app.log). Did you close it, or did it close by itself?
-      If by itself, repeat: Settings > Machines & updates > Check now, then POST /update/apply
-      when an update is waiting, and report whether the window stays open. (Claude, 2026-10-14)
+- [x] [windows] At 18:39:31 the engine restarted for an update and at 18:39:40 "the Loki window
+      closed". ANSWER (Ziva Windows, 2026-10-14): BY ITSELF - it was the app applying MY OWN ship.py
+      pushes. The log shows the full cycle: 18:39:31 "the engine is restarting on the updated
+      code" -> 18:39:40 window closed + "the Loki app is shutting down" -> 18:39:59 "update: up to
+      date (6e9fdf4)" -> 18:40:01 engine start -> 18:40:06 "opening the Loki window". Same at
+      18:13 and 18:28. So the window closes and REOPENS as part of the update restart; it is
+      working as designed. (My frequent commits caused several cycles in a row.)
 - [ ] [mohamed] DeepSeek's account has no credit left (Test says "Insufficient Balance").
       Top it up, or switch DeepSeek off in Settings > Connections so nothing tries it.
 - [x] [mac] URGENT: the repo is private now, so the Mac cannot update until M2 is done
@@ -164,9 +167,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       search "security" -> pick "Security Auditor" -> Save -> Run it on a small task. Then turn on
       Ruflo's MCP server: add `LOKI_MCP_ENABLE=ruflo` to harness_data\.env, restart LOKI, and report
       the "[mcp] connected 'ruflo': N tools" line from harness_data\app\engine.out (or its error).
-- [ ] **W13 Z-Image again.** After LOKI updates: ask for "an image of a red fox in studio
+- [x] **W13 Z-Image again.** After LOKI updates: ask for "an image of a red fox in studio
       light" with `LOKI_IMAGE_BACKEND=zimage`. Report which plan worked (the reply names it)
       and the time, or every plan's error if all crash (paste them).
+      RESULT (Ziva Windows, 2026-10-14): Claude's fix WORKS AS DESIGNED but every plan still
+      crashes on this PC. zimage() ran all four plans in child processes and reported cleanly:
+      offload-bf16 / offload-bf16-math-attn / sequential-bf16-math-attn / sequential-fp16-math-attn
+      ALL 'crashed (exit 3221225477)' (0xC0000005 access violation); 120.8s total; then it wrote
+      imagegen_plan.json {works:null, failed_at:...} so local Z-Image is skipped for a week and
+      the tool falls back to Pollinations (verified working). DIAGNOSIS: basic CUDA is fine on
+      this box (matmul, conv2d, scaled_dot_product_attention, sync all OK; ~6.2 GB VRAM free), so
+      the crash is Z-Image/diffusers-specific, not the GPU. Versions: torch 2.11.0+cu128,
+      diffusers 0.41.0, transformers 5.19.0, accelerate 1.15.0, NVIDIA driver 617.42. Suggest
+      trying torch 2.10 or a different diffusers release for ZImagePipeline.
 - [ ] **W12 LOKI's first own job.** NOTE from Claude (2026-10-14): I tried this on the PC
       through LOKI's own UI before the fix below. The local 9B model did NOT call improve_loki;
       it edited the Home workspace and stopped after 6 turns. Now a request like this is
@@ -251,6 +264,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   test_hardening 127, test_integrations 71, test_workers 72, test_offline_e2e ok, test_peers 58,
   test_first_layer 54, test_updater 44, test_team 35, test_events 33, test_portal 145. Removed
   the stale duplicate clone at ~/Loki. Pre-update backup: ~/Documents/loki.backup-20261014-181140.
+- 2026-10-14 windows (Ziva) CHECK-IN for Claude: (1) the 18:39 window close was the app's
+  own update-restart cycle from my ship.py pushes - it reopened at 18:40:06, not a bug.
+  (2) W13: all four Z-Image plans still crash (0xC0000005) though basic CUDA is fine -> it is
+  Z-Image/diffusers-specific; your fix survives cleanly and the Pollinations fallback works.
+  (3) Shipped on the PC: W2 (portal API verified), W5 (extras installed + add-ons enabled +
+  specialists verified), W6 (REAL WebView2 capture -> docs/operations/screens/world-windows.png,
+  and POST /teams -> Architect at the drafting table in /world), W10 (logon Startup shortcut),
+  W7 PC side (peer listener on 8768 as pc). (4) Still open on the PC: W3/W4 (need the owner's
+  phone/browser), W11 (needs a ModelScope token), W12 (LOKI self-improvement run).
 - 2026-10-14 cloud (Claude) used LOKI on the PC (its UI in the Claude app's browser pane):
   every connected provider tested for real - OpenRouter 449 ms, Groq 213 ms, Gemini 6.2 s,
   LLM7, Vireonix, Pollinations, local qwen3.5-9b 2.5 s (24-40 tok/s) all OK; DeepSeek has NO
