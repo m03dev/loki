@@ -23,6 +23,12 @@ Last updated: 2026-10-15 (session 20).
   `tool_guard.json_object_spans`, `close_truncated` (only adds missing closers at the very end),
   and `loki._unfinished_call`: a cut-off call is kept and the model is asked to continue it,
   then the two parts are joined. 7 checks in test_tool_guard built from that run.
+- **Why the PC fell behind the Mac all day** (harness_data/app/loki_app.log on the PC): every start
+  said "update waiting: local changes to 3 file(s)" - an agent's unfinished edits (a new memory
+  interface) blocked EVERY update. engine/updater.py now carries uncommitted edits across an update
+  when git merges them cleanly (three-way, CRLF-aware, backup under refs/loki/backup/edits-*); a
+  real conflict still blocks as before. The PC's three edits were checked: all merge cleanly.
+  test_updater: +12 checks.
 - Mac <-> PC live link: still blocked on the network (see the owner's answer in ZIVA_TASKS).
 
 ## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth

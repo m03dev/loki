@@ -124,6 +124,43 @@ check("...and it says why", "local changes" in result["note"], result["note"])
 sh(MAC, "git", "checkout", "--", "engine/loki.py")
 check("once the edit is gone it updates", updater.update(MAC)["updated"])
 
+section("an agent's unfinished edits are carried across an update when they merge cleanly")
+# The PC fell behind the Mac all day because an agent's uncommitted edits stopped every update.
+publish("A = 1\nB = 2\nC = 3\nD = 4\nE = 5\n")
+updater.update(MAC)
+(MAC / "engine" / "loki.py").write_text("A = 'edited here'\nB = 2\nC = 3\nD = 4\nE = 5\n", encoding="utf-8")
+(MAC / "README.md").write_text("my notes\n", encoding="utf-8")            # a file GitHub does not change
+publish("A = 1\nB = 2\nC = 3\nD = 4\nE = 'from github'\n")
+result = updater.update(MAC)
+text = (MAC / "engine" / "loki.py").read_text()
+check("the update goes ahead", result["updated"], result)
+check("...with GitHub's change AND the local edit in the same file", "edited here" in text and "from github" in text, text)
+check("...a file GitHub did not touch keeps its edit", (MAC / "README.md").read_text() == "my notes\n")
+check("...the edits stay uncommitted (still the agent's to ship)",
+      set(updater.dirty_files(MAC)) == {"engine/loki.py", "README.md"}, updater.dirty_files(MAC))
+check("...it says so and keeps a backup ref", "carried 2 edited file(s)" in result["note"]
+      and "refs/loki/backup/edits-" in sh(MAC, "git", "for-each-ref", "--format=%(refname)", "refs/loki/backup/")[1], result["note"])
+sh(MAC, "git", "checkout", "--", "engine/loki.py", "README.md")
+
+(MAC / "engine" / "loki.py").write_bytes(b"A = 1\r\nB = 2\r\nC = 3\r\nD = 'crlf edit'\r\nE = 'from github'\r\n")
+publish("A = 'next'\nB = 2\nC = 3\nD = 4\nE = 'from github'\n")
+result = updater.update(MAC)
+raw = (MAC / "engine" / "loki.py").read_bytes()
+check("a Windows (CRLF) file merges line by line, not as one big conflict", result["updated"]
+      and b"crlf edit" in raw and b"next" in raw, (result, raw))
+check("...and keeps its CRLF line endings", raw.count(b"\r\n") == 5, raw)
+sh(MAC, "git", "checkout", "--", "engine/loki.py")
+
+(MAC / "engine" / "loki.py").write_text("A = 'mine'\nB = 2\nC = 3\nD = 4\nE = 'from github'\n", encoding="utf-8")
+publish("A = 'theirs'\nB = 2\nC = 3\nD = 4\nE = 'from github'\n")
+before = (MAC / "engine" / "loki.py").read_text()
+result = updater.update(MAC)
+check("a real conflict still blocks and changes nothing", not result["updated"]
+      and (MAC / "engine" / "loki.py").read_text() == before, result)
+check("...and names the file and why", "same place" in result["note"] and "engine/loki.py" in result["note"], result["note"])
+sh(MAC, "git", "checkout", "--", "engine/loki.py")
+check("once that edit is gone it updates", updater.update(MAC)["updated"])
+
 (MAC / "local.txt").write_text("x\n", encoding="utf-8")
 sh(MAC, "git", "add", "local.txt")
 sh(MAC, "git", "commit", "-q", "-m", "unpushed")
@@ -183,9 +220,9 @@ check("stale, deleted and already-new files do not block", result["updated"]
 check("...and are reported as restored", "restored 3 file(s)" in result["note"], result["note"])
 check("...the deleted file is back", (MAC / "README.md").is_file())
 (MAC / "engine" / "loki.py").write_text("VERSION = 'hand edited'\n", encoding="utf-8")
-publish("VERSION = 'one more'\n", path="README.md")
+publish("VERSION = 'one more'\n")                                   # GitHub changed the same line
 result = updater.update(MAC)
-check("a genuinely edited file blocks the update", not result["updated"]
+check("a genuinely edited file that conflicts blocks the update", not result["updated"]
       and "hand edited" in (MAC / "engine" / "loki.py").read_text(), result)
 check("...naming the file", "engine/loki.py" in result["error"] and result["problem"] == "local edits block the update", result)
 check("...the outcome is kept for the engine's /health", updater.last_result(MAC).get("problem") == "local edits block the update",

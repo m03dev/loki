@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -472,6 +473,71 @@ def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) 
             "restorable": restorable, "can_update": can, "reason": reason}
 
 
+def _carry_plan(repo: Path, edited: list, target: str) -> tuple:
+    """({path: merged bytes} for edited files GitHub also changed, "") when every one merges
+    cleanly, or (None, why). Files GitHub did not touch need nothing: the fast-forward keeps
+    them. Line endings are normalised for the merge and put back as the file had them."""
+    _, changed = git(repo, "diff", "--name-only", "HEAD", target)
+    upstream = set(changed.split())
+    plan = {}
+    for path in edited:
+        if path not in upstream:
+            continue
+        if _deleted(repo, path):
+            return None, "%s was deleted here and changed on GitHub" % path
+        try:
+            ours = (repo / path).read_bytes()
+        except OSError as exc:
+            return None, "cannot read %s (%s)" % (path, exc)
+        code_b, base = _blob(repo, "HEAD", path)
+        code_t, theirs = _blob(repo, target, path)
+        if code_b != 0 or code_t != 0:
+            return None, "%s is new or removed on one side" % path
+        crlf = b"\r\n" in ours
+        lf = lambda b: b.replace(b"\r\n", b"\n")   # noqa: E731
+        merged = _merge3(lf(ours), lf(base), lf(theirs))
+        if merged is None:
+            return None, "%s was changed here AND on GitHub in the same place" % path
+        plan[path] = merged.replace(b"\n", b"\r\n") if crlf else merged
+    return plan, ""
+
+
+def _blob(repo: Path, rev: str, path: str) -> tuple:
+    try:
+        proc = subprocess.run([git_exe(), "-C", str(repo), "-c", "safe.directory=*", "show", "%s:%s" % (rev, path)],
+                              capture_output=True, timeout=60, env=git_env())
+        return proc.returncode, proc.stdout
+    except (OSError, subprocess.SubprocessError):
+        return 1, b""
+
+
+def _merge3(ours: bytes, base: bytes, theirs: bytes) -> bytes | None:
+    """git merge-file on three byte strings; None when there is a conflict."""
+    with tempfile.TemporaryDirectory(prefix="loki-merge-") as tmp:
+        files = []
+        for name, data in (("ours", ours), ("base", base), ("theirs", theirs)):
+            target = Path(tmp) / name
+            target.write_bytes(data)
+            files.append(str(target))
+        try:
+            proc = subprocess.run([git_exe(), "merge-file", "-p", *files], capture_output=True, timeout=60, env=git_env())
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return proc.stdout if proc.returncode == 0 else None
+
+
+def _backup_edits(repo: Path) -> str:
+    """Keep the uncommitted edits as a commit object under refs/loki/backup/ (the work tree
+    is not touched), so carrying them can never lose anything."""
+    code, sha = git(repo, "stash", "create", "LOKI: edits before an update")
+    sha = sha.strip()
+    if code != 0 or not sha:
+        return ""
+    ref = "refs/loki/backup/edits-%d" % int(time.time())
+    code, _ = git(repo, "update-ref", ref, sha)
+    return ref if code == 0 else ""
+
+
 def _names(files: list, most: int = 5) -> str:
     shown = ", ".join(files[:most])
     return shown + (" and %d more" % (len(files) - most) if len(files) > most else "")
@@ -628,6 +694,20 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
             if code == 0:
                 notes.append("restored %d file(s) that only held another LOKI version (%s)"
                              % (len(state["restorable"]), _names(state["restorable"])))
+        carried = {}
+        if not state["can_update"] and state.get("blocking") and not state["ahead"]:
+            # Uncommitted edits (an agent mid-task on this machine) used to stop EVERY update,
+            # so this machine fell behind the other one all day. Carry them across instead when
+            # git can merge them cleanly; a real conflict still blocks, exactly as before.
+            carried, why = _carry_plan(repo, state["blocking"], target)
+            if carried is not None:
+                backup = _backup_edits(repo)
+                git(repo, "checkout", "HEAD", "--", *carried.keys())   # clean them for the move
+                state["can_update"] = True
+                notes.append("carried %d edited file(s) across the update (%s; old state kept as %s)"
+                             % (len(state["blocking"]), _names(state["blocking"]), backup or "-"))
+            else:
+                state["reason"] += "; " + why
         if not state["can_update"]:
             STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
             STATE["update_available"] = True
@@ -670,6 +750,11 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 return _done(False, "; ".join(notes), repo=repo,
                              problem="update failed" if problem == "GitHub unreachable" else problem,
                              error="update failed: %s" % " ".join(out.split())[-200:])
+        for path, data in carried.items():   # the merged edits go back on top of the new version
+            try:
+                (repo / path).write_bytes(data)
+            except OSError as exc:
+                notes.append("could not put back %s (%s); it is in the backup ref" % (path, exc))
         after = version(repo)["commit"]
         notes.append("updated %s -> %s" % (before, after))
         trial = health(repo)  # `before` is what ran here until now: the version to go back to
