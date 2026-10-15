@@ -2374,6 +2374,24 @@ def delegate(agent: str, task: str) -> str:
 
 import team as teams  # noqa: E402  (agent teams: one sentence in, a team that builds it)
 TEAMS = None  # team.TeamRunner, set by the engine (loki_bridge) next to JOBS
+JOB_ROLE = ""  # the team role a background job runs as (set by run_job; "" for chat)
+ROLE_MIN_SAMPLES = int(os.getenv("LOKI_ROLE_MIN_SAMPLES", "5"))
+
+
+def model_for_role(role: str) -> str:
+    """The agent factory's model pick for a team role: the ready provider that has done
+    this role best (experience.best_for_role), within the spending policy; "" = smart."""
+    try:
+        candidates = []
+        for name in dict.fromkeys(list(SMART_ORDER) + list(LOCAL_PROVIDERS)):
+            if name in _SMART_FAILED or not provider_configured(name):
+                continue
+            if provider_tier(name) == "paid" and not paid_allowed_automatically():
+                continue
+            candidates.append(name)
+        return experience.best_for_role(role, candidates, provider_tier, min_samples=ROLE_MIN_SAMPLES)
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def start_team(goal: str) -> str:
@@ -4370,10 +4388,7 @@ def _recover_text_tool_calls(content: str) -> list:
         return []
     calls = []
     for blob in _json_object_spans(content):
-        try:
-            data = json.loads(blob)
-        except (ValueError, TypeError):
-            continue
+        data = tool_guard.repair_json(blob)   # tolerates single quotes, trailing commas, fences
         if not isinstance(data, dict):
             continue
         if isinstance(data.get("function"), dict):
@@ -4384,10 +4399,7 @@ def _recover_text_tool_calls(content: str) -> list:
             continue
         args = data.get("arguments", data.get("parameters", data.get("args", {})))
         if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except (ValueError, TypeError):
-                args = {}
+            args = tool_guard.repair_json(args) or {}
         calls.append((name, args if isinstance(args, dict) else {}))
     return calls
 
@@ -4525,6 +4537,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                 content = getattr(message, "reasoning", None) or ""
             recovered = _recover_text_tool_calls(content)
             if recovered:
+                GUARD_STATS["repaired"] += len(recovered)  # calls the model wrote as text
                 _progress("thinking", "Model wrote %d tool call(s) as text; running them." % len(recovered))
                 messages.append({"role": "assistant", "content": content})
                 notes = []
@@ -4865,7 +4878,7 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
             "tool_calls": _REQUEST_TOOL_CALLS, "files": list(_task_files),
             "usage": dict(REQUEST_USAGE), "route": list(ROUTE_TRACE),
             "triage": _triage_record(start_index),
-            "seconds": time.time() - started, "trajectory": kept,
+            "seconds": time.time() - started, "trajectory": kept, "role": JOB_ROLE,
         })
         reasoning_bank.remember(goal, status, outcome, [m for m in messages[start_index:] if isinstance(m, dict)],
                                 extra={"kind": kind, "provider": providers[-1] if providers else "",
@@ -5099,6 +5112,7 @@ async def run_job(job_path: str) -> int:
         return False
 
     approve = job_approve
+    globals()["JOB_ROLE"] = str((job.get("profile") or {}).get("role") or "")
     globals()["loki_progress_callback"] = lambda event, text: print("  [%s] %s" % (event, text[:300]), flush=True)
     system = system_prompt()
     profile = job.get("profile") or {}

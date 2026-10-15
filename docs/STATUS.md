@@ -83,6 +83,18 @@ on macOS and Windows in CI. Update this file when a status changes.
 | LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
 | Native (non-web) world client | Not planned | the world stays in the app (WebGL) |
 
+## Session 17 additions (2026-10-15, branch claude/local-tool-guard, not on master)
+
+| Item | Status | Where / evidence |
+| --- | --- | --- |
+| Local model comes back after a transient failure (not dropped for the session) | Tested | `loki.revive_local`, `_FAILED_AT`; tests/test_tool_guard.py |
+| Tool-call guard: repair bad JSON / near-miss names / type slips, precise error otherwise | Tested | `engine/tool_guard.py`, wired in `agent_turn`; tests/test_tool_guard.py (38 checks) |
+| Constrained decoding (json_schema) for local servers, with fallback | Tested | `loki._use_constrained`/`_constrained_request`; tests/test_tool_guard.py |
+| Agent factory picks the best model per team role (measured), cheaper tier wins ties | Tested | `experience.role_stats`/`best_for_role`, `team.py`; tests/test_role_routing.py |
+| Autopilot: when idle, health fixes + [loki] inbox + weekly learned report | Tested | `engine/autopilot.py`, `GET /autopilot`, System check row; tests/test_autopilot.py (19) |
+| Cloud suites run for real against the fake Ollama | Tested | `tests/cloud_stubs/openai` speaks HTTP; all 16 suites green in the cloud |
+| S2/S3: a real-Ollama run and an idle-autopilot run on the machines | Proposed | ZIVA_TASKS Requests S2/S3 |
+
 ## Session 16 additions (2026-10-15)
 
 | Item | Status | Where / evidence |

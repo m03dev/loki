@@ -6,6 +6,54 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-15 (session 17).
 
+## Session 17 (2026-10-15, cloud): local models that work, and an app that works by itself
+
+Shipped to master at the owner's direction once both machines were online. All 16 suites
+pass (cloud + CI on macOS and Windows). The two real-hardware checks (S2 local-model tool
+calling, S3 idle autopilot) are open in ZIVA_TASKS - they confirm behaviour on a real
+Ollama, they do not gate the code. Kill switches: `LOKI_AUTOPILOT=off`,
+`LOKI_CONSTRAINED_TOOLS=off`.
+
+- **Found why local felt useless** (`engine/loki.py`): a local provider that failed ONE
+  request (a cold model load timing out, a brief restart) was marked used-up for the whole
+  session, so every later request silently went to cloud or Claude Code until a restart.
+  Now `revive_local()` brings a local provider back at the start of the next request once
+  its server answers again (`LOKI_LOCAL_REVIVE_S`, default 20s). test_tool_guard proves it.
+- **Tool-call guard** (`engine/tool_guard.py`, wired into `agent_turn`, text recovery and
+  `call_tool`): repairs the calls small models get wrong - bad JSON (single quotes,
+  trailing commas, fences), near-miss tool names (create_file->write_file, ls, cat, bash),
+  numbers sent as strings, calls written as code - and when it cannot, returns ONE precise
+  sentence naming the missing argument and the signature. GUARD_STATS counts repairs/rejects.
+- **Constrained decoding for local servers** (`_use_constrained`/`_constrained_request`):
+  sends a json_schema response_format so Ollama/llama.cpp can only produce a real tool call
+  or an answer; falls back automatically if a server refuses it. `LOKI_CONSTRAINED_TOOLS=
+  auto|on|off` (auto = on for local servers already in prompted-tool mode).
+- **Agent factory picks a model per role** (`experience.role_stats`/`best_for_role`,
+  `team.py`, `loki.model_for_role`): each team role (builder, tester, reviewer...) gets the
+  model that has measurably done THAT job best, within the spending policy; a cheaper tier
+  wins a near-tie; a pinned team model always wins. Jobs now record their role so outcomes
+  can be scored. This is BUILD_BRIEF 5.3 "best spec per role", first real version.
+- **Autopilot** (`engine/autopilot.py`, started by the bridge, `GET /autopilot`, a System
+  check row): when LOKI is idle (no request in flight, no job, quiet for
+  `LOKI_AUTOPILOT_IDLE_S`=600s) it does ONE duty per pass - **health** (run the System
+  check, apply only the always-safe fixes, never approve/spend/update), **inbox** (start the
+  oldest open `[loki]` request in ZIVA_TASKS.md as a team, one at a time), **report** (weekly
+  "what LOKI learned": verified work, best model per role, routing changes, tool repairs,
+  training readiness, in harness_data/reports/). `LOKI_AUTOPILOT=off` turns it all off. This
+  is the first piece of BUILD_BRIEF 5.4/5.6 "alive and improving on its own".
+- **Cloud testing is real now**: `tests/cloud_stubs/openai` used to fail every call, so the
+  offline e2e and HTTP-400 checks were skipped in the cloud. It now speaks the
+  chat-completions wire format over urllib, so every suite runs against the fake Ollama for
+  real. Register it once per sandbox (see tests/cloud_stubs/README.md). The Mac/PC use the
+  real openai package, unchanged.
+
+Next (ZIVA): S2 - on the Mac and PC with real Ollama, run "create notes/hello.txt with hi,
+then list the folder" with LOKI_CONSTRAINED_TOOLS=off/auto/on on your installed models,
+record valid-call rate + GUARD_STATS. S3 - leave LOKI idle and confirm the autopilot's
+health row and a weekly report appear (GET /autopilot).
+
+## Session 16 (2026-10-15): System check + positive integration tests
+
 ## The machines
 
 | | Mac mini | Windows PC |

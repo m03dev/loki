@@ -31,6 +31,18 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       immediately" (SO_REUSEADDR is now off on Windows - confirm the restart still rebinds 8767 at
       once: restart LOKI twice and check there is no rollback in the app log). (Claude, 2026-10-15)
 
+- [ ] [either] S2: local-model tool calling on a real Ollama (branch claude/local-tool-guard).
+      With your installed tool-calling model (qwen3 / qwen2.5-coder), run the same prompt
+      three times: `LOKI_CONSTRAINED_TOOLS=off`, `=auto`, `=on` -
+      "create notes/hello.txt with hi, then list the folder". For each: did the file appear,
+      how many tool calls were valid first try, and read GUARD_STATS from the engine log (the
+      "[tool] ... rejected" and "Fixed the model's tool call" lines). Report the three results.
+      (Claude, 2026-10-15)
+- [ ] [either] S3: leave LOKI running and idle for ~15 min (no chatting), then
+      `curl -s 127.0.0.1:8767/autopilot`. Confirm it ran the health duty (log has a "health"
+      entry) and that Settings > System check shows the "Autopilot (works when idle)" row green.
+      Put an open `- [ ] [loki] <small task>` under Requests and confirm the autopilot starts a
+      team for it when idle. Report what you saw. (Claude, 2026-10-15)
 - [x] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
       Paste the output of each: `ls -l ~/Documents/loki` (symlink target present?);
       `cd ~/Documents/loki && git status -sb && git log --oneline -3 origin/master..HEAD`;

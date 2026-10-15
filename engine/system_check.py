@@ -900,6 +900,30 @@ def free_memory_gb() -> float | None:
     return None
 
 
+def check_autopilot(ctx: Context) -> dict:
+    """Is the autopilot on, and what has it done? (health fixes, the [loki] inbox, reports)"""
+    auto = getattr(ctx.state, "autopilot", None) if ctx.state is not None else None
+    if auto is None:
+        return result("autopilot", "Autopilot (works when idle)", WARN,
+                      "The autopilot is not running in this engine; LOKI only works when you ask it to.",
+                      fix("Restart LOKI to start the autopilot", action="recheck", label="Re-run"))
+    try:
+        status = auto.status()
+    except Exception as exc:  # noqa: BLE001
+        return result("autopilot", "Autopilot (works when idle)", WARN, "Could not read it: %s" % exc)
+    if not status.get("enabled"):
+        return result("autopilot", "Autopilot (works when idle)", WARN,
+                      "Switched off (LOKI_AUTOPILOT=off). LOKI only acts when you ask it to.",
+                      items=[])
+    log = status.get("log") or []
+    recent = "; ".join("%s: %s" % (e.get("duty"), e.get("text", "")) for e in log[-3:]) or "nothing yet"
+    detail = ("On. It runs the health check, picks up [loki] requests in ZIVA_TASKS.md, and writes a "
+              "weekly 'what LOKI learned' report when LOKI is idle. %s. Recently: %s" % (
+                  ("Idle now" if status.get("idle") else "Waiting: %s" % status.get("waiting_for", "")), recent))
+    return result("autopilot", "Autopilot (works when idle)", OK, detail,
+                  items=[{"duty": e.get("duty"), "text": e.get("text")} for e in log[-6:]])
+
+
 def check_disk(ctx: Context) -> dict:
     title = "Disk & memory"
     agent = ctx.agent
@@ -944,6 +968,7 @@ CHECKS: list = [
     ("usage", "Usage & memory", check_usage),
     ("peers", "Linked machines", check_peers),
     ("phone", "Phone link", check_phone),
+    ("autopilot", "Autopilot (works when idle)", check_autopilot),
     ("disk", "Disk & memory", check_disk),
 ]
 

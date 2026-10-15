@@ -76,6 +76,8 @@ def record(entry: dict, root: Path | None = None) -> dict:
         "t": time.time(),
         "id": entry.get("id") or hashlib.sha1(str(time.time_ns()).encode()).hexdigest()[:12],
         "kind": entry.get("kind", "chat"),
+        # The team role this request was done in (builder, tester, ...); "" for a chat.
+        "role": str(entry.get("role", "") or "")[:40],
         "goal": redact(entry.get("goal", ""))[:300],
         "status": entry.get("status", ""),
         "outcome": entry.get("outcome", ""),
@@ -147,6 +149,65 @@ def provider_stats(root: Path | None = None, window: int = 500) -> dict:
         b["success_rate"] = round(b["verified"] / judged, 3) if judged else None
         b["samples"] = judged
     return stats
+
+
+def role_stats(root: Path | None = None, window: int = 1000) -> dict:
+    """{role: {provider: stats}} - the same evidence as provider_stats, split by team role.
+
+    A model that is a strong builder can be a weak reviewer; the agent factory (team.py)
+    uses this to give each role the model that has done THAT job best.
+    """
+    out: dict = {}
+    for line in entries(root, last=window):
+        role = line.get("role")
+        name = line.get("provider")
+        if not role or not name:
+            continue
+        b = out.setdefault(role, {}).setdefault(name, {"requests": 0, "verified": 0, "failed": 0,
+                                                       "blocked": 0, "done": 0})
+        b["requests"] += 1
+        outcome, status = line.get("outcome"), line.get("status")
+        if outcome == "verified":
+            b["verified"] += 1
+        elif outcome == "failed":
+            b["failed"] += 1
+        elif outcome == "blocked" or status == "blocked":
+            b["blocked"] += 1
+        if status == "done":
+            b["done"] += 1
+    for providers in out.values():
+        for b in providers.values():
+            # Roles that do not write files (researcher, reviewer) have no verification;
+            # for them a DONE that the team accepted is the evidence.
+            good = b["verified"] if (b["verified"] + b["failed"]) else b["done"]
+            b["success_rate"] = round(good / b["requests"], 3) if b["requests"] else None
+    return out
+
+
+TIER_RANK = {"local": 0, "free": 1, "subscription": 2, "paid": 3}
+
+
+def best_for_role(role: str, candidates, tier_of, stats: dict | None = None,
+                  min_samples: int = 5, root: Path | None = None) -> str:
+    """The candidate provider with the best measured success for `role`, or "".
+
+    Only providers with at least `min_samples` jobs in that role count. Ties and close
+    calls (within 5 points) go to the cheaper tier, so a free model that is nearly as good
+    beats a paid one. "" means "not enough evidence yet": the caller keeps its default.
+    """
+    stats = role_stats(root) if stats is None else stats
+    per = stats.get(role) or {}
+    ranked = []
+    for name in candidates:
+        b = per.get(name)
+        if not b or b["requests"] < min_samples or b.get("success_rate") is None:
+            continue
+        ranked.append((b["success_rate"], name))
+    if not ranked:
+        return ""
+    top = max(rate for rate, _ in ranked)
+    close = [name for rate, name in ranked if rate >= top - 0.05]
+    return min(close, key=lambda n: (TIER_RANK.get(tier_of(n), 9), -per[n]["success_rate"]))
 
 
 def learned_order(order, tier_of, stats: dict, min_samples: int = 10) -> list:

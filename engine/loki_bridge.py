@@ -296,6 +296,8 @@ class BridgeState:
         self.chat_lock: asyncio.Lock | None = None
         self.chat_request_lock = threading.Lock()
         self.task_request_lock = threading.Lock()
+        self.last_request_at = 0.0  # when the owner last asked something (the autopilot waits for quiet)
+        self.autopilot = None       # autopilot.Autopilot, set when the engine starts
         self.lock = threading.Lock()
         self.pending: dict[str, Any] | None = None
         self.mcp_stack: AsyncExitStack | None = None
@@ -321,6 +323,10 @@ class BridgeState:
                     held.release()
                 return None
         return got
+
+    def note_request(self) -> None:
+        """A real request from the owner just started: the autopilot stays quiet after it."""
+        self.last_request_at = time.time()
 
     @staticmethod
     def release_busy(locks: list) -> None:
@@ -757,6 +763,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             text = agent.project_state_text() if hasattr(agent, "project_state_text") else ""
             self._send_json(200, {"ok": True, "state": text})
             return
+        if route == "/autopilot":
+            auto = getattr(self.server.state, "autopilot", None)
+            self._send_json(200, {"ok": True, **(auto.status() if auto is not None else {"enabled": False})})
+            return
         if route == "/sessions":
             agent = self.server.state.agent
             text = agent.agent_sessions() if hasattr(agent, "agent_sessions") else ""
@@ -935,6 +945,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if not request_lock.acquire(blocking=False):
                 self._send_json(409, {"ok": False, "error": "Loki is already handling a request."})
                 return
+            state.note_request()
             try:
                 if is_task:
                     try:
@@ -1661,10 +1672,30 @@ async def serve() -> None:
         try:
             import laya as _laya  # pylint: disable=import-outside-toplevel
             loki.TEAMS = loki.teams.TeamRunner(state.jobs, policy=loki.POLICY,
-                                               decide=_laya.decide if _laya.backend() else None)
+                                               decide=_laya.decide if _laya.backend() else None,
+                                               choose_model=loki.model_for_role)
             threading.Thread(target=loki.TEAMS.run_forever, daemon=True, name="loki-teams").start()
         except Exception as exc:  # noqa: BLE001 - teams are optional; jobs still work
             print(f"[loki-bridge] agent teams unavailable: {exc}", flush=True)
+        try:
+            import autopilot as _autopilot  # pylint: disable=import-outside-toplevel
+            import system_check as _sc  # pylint: disable=import-outside-toplevel
+
+            def _run_check() -> dict:
+                ctx = _sc.Context(loki, state=state, allow_paid=False, image_test=False)
+                return _sc.run(ctx)
+
+            def _apply(action: str, args: dict) -> dict:
+                return _sc.apply_fix(state, action, args)
+
+            state.autopilot = _autopilot.Autopilot(
+                state=state, agent=loki, data_dir=Path(loki.DATA_DIR),
+                run_check=_run_check, apply_fix=_apply, start_team=loki.start_team)
+            if _autopilot.Autopilot.enabled():
+                threading.Thread(target=state.autopilot.run_forever, daemon=True, name="loki-autopilot").start()
+                print("[loki-bridge] autopilot on: LOKI works when idle (health, inbox, weekly report)", flush=True)
+        except Exception as exc:  # noqa: BLE001 - the autopilot is optional
+            print(f"[loki-bridge] autopilot unavailable: {exc}", flush=True)
         print("[loki-bridge] background jobs: " + ", ".join(
             "%s %s" % (name, "ready" if info["available"] else "off")
             for name, info in state.jobs.status()["backends"].items()), flush=True)

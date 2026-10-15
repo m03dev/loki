@@ -520,6 +520,9 @@ def _drain_listener(sock):
             pass
 threading.Thread(target=_drain_listener, args=(listener,), daemon=True).start()
 STATE.phone_server = ns(address=("0.0.0.0", listener.getsockname()[1]))
+STATE.autopilot = ns(status=lambda: {"enabled": True, "idle": True, "waiting_for": "",
+                                      "log": [{"duty": "health", "text": "All systems work together."}],
+                                      "last": {}, "started": {}})
 STATE.phone_registry = ns(present=lambda: [{"id": "p1", "name": "Mohamed's iPhone"}])
 fake_peers = ns(peers=lambda: [{"name": "mac", "url": "http://192.168.1.71:8768"}],
                 status_all=lambda: [{"name": "mac", "ok": True, "ms": 12, "hello": {"commit": "abc1234"}}])
@@ -547,6 +550,8 @@ check("every check runs, in order, with progress", [r["id"] for r in report["res
 check("healthy machine: every system is green", not not_ok, not_ok)
 check("the summary says so", report["summary"]["line"] == "All %d systems work together." % len(system_check.CHECKS),
       report["summary"])
+check("the autopilot row shows it is on and what it did",
+      rows["autopilot"]["status"] == "ok" and "On." in rows["autopilot"]["detail"], rows.get("autopilot"))
 check("the smart route answered and the latency is reported", "answered a tiny prompt" in rows["models"]["detail"]
       and "140 ms" in rows["models"]["detail"], rows["models"]["detail"])
 check("the model called the tool through the real request path and read the result back",

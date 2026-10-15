@@ -211,10 +211,14 @@ class TeamRunner:
 
     `jobs` is a workers.Supervisor (or anything with create/store.get/tick)."""
 
-    def __init__(self, jobs, policy=None, decide=None):
+    def __init__(self, jobs, policy=None, decide=None, choose_model=None):
         self.jobs = jobs
         self.policy = policy
         self.decide = decide
+        # role -> provider name ("" = smart routing). The agent factory: each role gets the
+        # model that has measurably done THAT job best (experience.best_for_role). A model
+        # the user pinned for the team always wins.
+        self.choose_model = choose_model
         self.lock = threading.Lock()
         self.path = teams_dir() / "teams.json"
 
@@ -316,21 +320,35 @@ class TeamRunner:
         post(team_id, "LOKI", "Team cancelled.")
         return team
 
+    def model_for(self, team: dict, role: str) -> str:
+        if team.get("model"):
+            return team["model"]
+        if self.choose_model is None:
+            return ""
+        try:
+            return str(self.choose_model(role) or "")
+        except Exception:  # noqa: BLE001 - a bad pick must never stop a team
+            return ""
+
     def _spawn(self, team: dict, role: str, extra: str = "") -> str:
         spec = ROLES[role]
+        model = self.model_for(team, role)
+        team.setdefault("models", {})[role] = model or "smart"
         try:
             import events  # pylint: disable=import-outside-toplevel
             events.emit("task.assigned", "LOKI", {"role": spec["name"], "goal": team["goal"],
-                        "stage": team.get("stage", "")}, team=team["id"], recipient=spec["name"])
+                        "stage": team.get("stage", ""), "model": model or "smart"},
+                        team=team["id"], recipient=spec["name"])
         except Exception:  # noqa: BLE001
             pass
         job = self.jobs.create({
             "backend": "local", "agent": "loki", "workspace": team["workspace"],
             "isolate": False,               # one shared folder; stages never write at once
-            "timeout_s": 3600, "allow_commands": spec["commands"], "model": team.get("model", ""),
+            "timeout_s": 3600, "allow_commands": spec["commands"], "model": model,
             "title": "Team %s · %s: %s" % (team["id"], spec["name"], team["goal"][:50]),
             "prompt": agent_prompt(team, role, extra), "team": team["id"],
-            "profile": {"name": spec["name"], "instructions": _with_playbook(role, spec["brief"])},
+            "profile": {"name": spec["name"], "role": role,
+                        "instructions": _with_playbook(role, spec["brief"])},
         })
         return job["id"]
 
