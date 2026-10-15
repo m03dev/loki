@@ -17,6 +17,7 @@ How the pieces fit, as built. The direction for the next rounds of work is in
         workers.py ── background agents (local / herdr / cua VMs), isolated git worktrees
         experience.py ── outcome log ─> learned routing, training data ─> tools/train_lora.py
         peers.py + peer_link.py ── signed LAN link to your other machines (port 8768)
+        phone_link.py ── signed LAN link for the LOKI phone app, mobile/ (port 8769, opt-in)
 ```
 
 ## Request path
@@ -70,6 +71,7 @@ How the pieces fit, as built. The direction for the next rounds of work is in
 | `updater.py` | one version everywhere: update from GitHub on start, check while running (publish with `tools/ship.py`) |
 | `experience.py`, `usage.py`, `model_setup.py`, `federation.py` | learning, cost, local models, other machines' Ollama |
 | `peers.py`, `peer_link.py` | the Mac <-> PC link |
+| `phone_link.py` | the phone app (`mobile/`) <-> this machine: signed per-phone keys, Ask/Plan only, never approves ([PHONE.md](PHONE.md)) |
 | `knowledge.py`, `brain.py`, `project_state.py`, `repo_review.py`, `api_vault.py`, `ecc_sync.py` | context, memory, project state, skill libraries |
 | `godot_tools.py`, `godot_assets.py` | the optional Godot capability for game projects |
 

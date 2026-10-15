@@ -306,6 +306,7 @@ class BridgeState:
         self.jobs: Any = None  # workers.Supervisor - background jobs (local / herdr / cua)
         self.brain: dict[str, Any] = {}  # last brain-map graph (its note ids are the only readable files)
         self.peer_server: Any = None  # peers.PeerServer when this machine listens for your other machines
+        self.phone_server: Any = None  # phone_link.PhoneServer when the phone app may talk to this machine
 
     def try_busy(self) -> list | None:
         # acquire both request locks, or None when a request is in flight
@@ -497,6 +498,16 @@ def peer_ui(state: "BridgeState", method: str, route: str, data: dict[str, Any])
     return result if result is not None else (404, {"ok": False, "error": "Unknown endpoint."})
 
 
+def phone_ui(state: "BridgeState", method: str, route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Settings > Machines > Phone: pair the LOKI phone app (engine/phone_link.py)."""
+    try:
+        import phone_link  # pylint: disable=import-outside-toplevel
+        result = phone_link.ui_route(state, state.agent, method, route, data)
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"ok": False, "error": f"phone link failed: {type(exc).__name__}: {exc}"}
+    return result if result is not None else (404, {"ok": False, "error": "Unknown endpoint."})
+
+
 def initial_ecc_sync(agent) -> None:
     """Fetch the agent/skill libraries on first run so their tools work with no setup."""
     try:
@@ -671,6 +682,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
+            return
+        if route.startswith("/phones"):
+            self._send_json(*phone_ui(self.server.state, "GET", route, {}))
             return
         if route == "/connections":
             self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
@@ -868,6 +882,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
+            return
+        if route.startswith("/phones"):
+            self._send_json(*phone_ui(state, "POST", route, data))
             return
         if route in ("/teams", "/teams/cancel"):
             runner = getattr(state.agent, "TEAMS", None)
@@ -1551,6 +1568,11 @@ async def serve() -> None:
         print(f"[loki-bridge] peer link could not listen: {exc}", flush=True)
     except Exception as exc:  # noqa: BLE001 - the link is optional; chat must still start
         print(f"[loki-bridge] peer link unavailable: {exc}", flush=True)
+    try:
+        import phone_link  # pylint: disable=import-outside-toplevel
+        state.phone_server = phone_link.start(state, loki)
+    except Exception as exc:  # noqa: BLE001 - the phone link is optional; chat must still start
+        print(f"[loki-bridge] phone link unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
@@ -1580,6 +1602,8 @@ async def serve() -> None:
             state.jobs.stop()
         if state.peer_server is not None:
             state.peer_server.stop()
+        if state.phone_server is not None:
+            state.phone_server.stop()
         server.shutdown()
         server.server_close()
         await stack.aclose()

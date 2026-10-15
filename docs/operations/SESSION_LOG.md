@@ -4,6 +4,21 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-15 - Phone app (iOS + Android) and the phone link
+
+- `mobile/`: Expo / React Native app, one codebase for iPhone and Android: Chat (badge says
+  Mac / PC / On phone (model)), Connect (scan or paste the pairing code, saved machines),
+  Models (download/delete with progress, RAM-based suggestion). Router: paired machines
+  first (2.5 s, last good first), else the on-phone model; manual switch.
+- On-phone brains behind `LocalBrain`: Cactus (cactus-react-native; Needle for quick
+  actions, Qwen3/LFM2/Gemma 3 for chat) and llama.rn (GGUF).
+- `engine/phone_link.py`: opt-in phone server (LOKI_PHONE_LINK=1, port 8769), random key per
+  phone shown as a QR, stored derived, HMAC-signed requests, replay/age checks, expiry,
+  revocation, rate limits, Ask/Plan only, approvals always denied during a phone message.
+  Wired into loki_bridge.py (/phones routes, start/stop) and Settings > Machines (Phone card).
+- tests/test_phone_link.py (incl. the app's TypeScript protocol run in Node vs Python).
+  Not run on a real phone yet (no npm registry access when built).
+
 ## 2026-10-14 (session 15) - Repo private, Godot story gone, hermetic suites
 
 - master fast-forwarded onto the session-14 branch (portal, sign-in/QR, agent builder, 3D
