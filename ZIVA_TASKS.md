@@ -260,7 +260,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M3 Link the machines.** They are on different networks (192.168.1.x / 192.168.0.x).
       Install Tailscale on both (same account), then on the Mac: Settings > Machines &
       updates > Link another machine, with the PC's link code. Report `ms` from the Machines panel.
-- [ ] **M4 MLX.** `harness_data/.venv/bin/python tools/setup_extras.py mlx`, then keep
+- [x] **M4 MLX.** `harness_data/.venv/bin/python tools/setup_extras.py mlx`, then keep
       `mlx_lm.server --model mlx-community/Qwen3-4B-4bit --port 8082` running. The MLX card should
       say **Running**. Make it the default and ask LOKI to "list the files here and read README.md".
       MLX tool calls go through the prompted harness: report whether the tools ran and how fast
@@ -274,6 +274,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       server 404s on `huggingface.co/api/models/auto`; setting MLX_MODEL to the served id fixes it
       (see the [claude] request). With MLX_MODEL set, the engine starts and routes to MLX; finishing
       the tool-call check and tokens/s.
+      DONE 2026-10-14 (Ziva Mac): tools ran. With `MLX_MODEL=mlx-community/Qwen3-4B-4bit` and MLX
+      as the engine's model, "list the files here and read README.md" ran the agent loop and called
+      `list_tree(...)` through the tool harness; reply: the workspace folder is empty, no README.md.
+      Usage line: `mlx-community/Qwen3-4B-4bit * 7.3k in / 561 out * 17.2 tok/s * $0.0018`. NOTE:
+      it prices a LOCAL MLX model as paid ($0.0018) - minor, worth a look in the portal.
 - [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
@@ -322,6 +327,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) M4 DONE: MLX verified end to end - `mlx_lm.server` serving
+  mlx-community/Qwen3-4B-4bit, LOKI routing to it, the tool harness fired (`list_tree`), 17.2 tok/s;
+  found the MLX_MODEL "auto" bug (request above). Also added a login LaunchAgent
+  (`sh.loki.attach-image`) so the APFS image reattaches after a reboot.
 - 2026-10-14 mac (Ziva) storage FINAL + M4: LOKI lives on the 2 TB SSD. Raw exFAT broke git (`._`
   sidecars in `.git/objects/pack`) and `transformers` (it scans its folder and hit `._` files), so
   the checkout is on an **APFS sparse image** `/Volumes/LokiSSD` (single file on `/Volumes/xero`),
