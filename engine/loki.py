@@ -2480,7 +2480,7 @@ def ship_loki(message: str, path: str = "") -> str:
 
 
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
-    """Hand one step to a specialist: research, read_web, browse, remember, recall, media, image, reach."""
+    """Hand one step to a specialist: research, read_web, browse, remember, recall, media, image, reach, track."""
     return CONDUCTOR.run(str(role).strip().lower(), str(task or ""), str(url or ""))
 
 
@@ -2583,7 +2583,7 @@ TOOL_SCHEMAS = [
            {"suite": {"type": "string"}, "path": {"type": "string"}}, []),
     schema("ship_loki", "Publish a finished change to LOKI's own code: runs every test suite, commits, catches up with GitHub, pushes to master and tells the other machines to update. Pushes nothing if a test fails. message=one line: what changed and how it was checked; path=the worktree (default: this workspace).",
            {"message": {"type": "string"}, "path": {"type": "string"}}, ["message"]),
-    schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory), 'media' (url=video; task='transcript'|'info'|'audio'|'video'|'search: words'), 'image' (task=what to draw), 'reach' (url=page to read, or task='github: ...' / 'doctor'). Only roles listed under 'Specialists you can call' in your instructions are ready.",
+    schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory), 'media' (url=video; task='transcript'|'info'|'audio'|'video'|'search: words'), 'image' (task=what to draw), 'reach' (url=page to read, or task='github: ...' / 'doctor'), 'track' (url=video file in the workspace; task=what to track, e.g. 'car'; writes an annotated video and a per-track JSON/CSV to tracks/). Only roles listed under 'Specialists you can call' in your instructions are ready.",
            {"role": {"type": "string"}, "task": {"type": "string"}, "url": {"type": "string"}}, ["role"]),
     schema("knowledge", "Loki's context store, addressed as viking:// URIs: viking://memory/ and viking://state/ (read/write), viking://skills/ and viking://project/ (read-only docs). action='list' (default), 'read' or 'write' (with text).",
            {"action": {"type": "string"}, "uri": {"type": "string"}, "text": {"type": "string"}}, ["uri"]),

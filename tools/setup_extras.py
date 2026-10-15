@@ -3,6 +3,7 @@
     python tools/setup_extras.py list            what is installed and what is not
     python tools/setup_extras.py media           yt-dlp (+ checks ffmpeg and a JS runtime)
     python tools/setup_extras.py imagegen        torch + diffusers + Z-Image Turbo weights (~20 GB)
+    python tools/setup_extras.py vision          object tracking: Roboflow trackers + supervision + RF-DETR
     python tools/setup_extras.py mlx             mlx-lm (Mac with Apple Silicon only)
     python tools/setup_extras.py agent-reach     Agent Reach CLI (from GitHub, not PyPI)
     python tools/setup_extras.py opencode        OpenCode CLI (npm)
@@ -64,12 +65,15 @@ def media() -> bool:
     return ok
 
 
-def imagegen() -> bool:
+def torch_for_this_machine() -> bool:
     if nvidia():
         # CUDA build of torch (the default PyPI wheel on Windows is CPU-only).
-        ok = pip("torch", "torchvision", index="https://download.pytorch.org/whl/cu128")
-    else:
-        ok = pip("torch", "torchvision")
+        return pip("torch", "torchvision", index="https://download.pytorch.org/whl/cu128")
+    return pip("torch", "torchvision")      # macOS wheels include MPS; elsewhere CPU
+
+
+def imagegen() -> bool:
+    ok = torch_for_this_machine()
     ok = ok and pip("diffusers>=0.36", "transformers", "accelerate", "safetensors", "huggingface_hub")
     if ok:
         print("  downloading %s (about 20 GB, once)" % ZIMAGE)
@@ -77,6 +81,22 @@ def imagegen() -> bool:
                   "print(snapshot_download(%r))" % ZIMAGE])
     if ok:
         print("  done. Test: echo '{\"prompt\":\"a red fox, studio light\"}' | %s engine/runners/imagegen.py" % sys.executable)
+    return ok
+
+
+def vision() -> bool:
+    """vision-track: Roboflow trackers (Apache-2.0) + supervision (MIT) + RF-DETR (rfdetr,
+    Apache-2.0) as the detector. torch first, so an NVIDIA PC gets the CUDA build and a Mac
+    uses MPS. Ultralytics YOLO also works with `trackers` but is AGPL-3.0, so it is not the
+    default. The detector downloads its weights (~100 MB) on first use."""
+    if sys.version_info < (3, 10):
+        print("  trackers needs Python 3.10 or newer; this is %d.%d" % sys.version_info[:2])
+        return False
+    ok = torch_for_this_machine()
+    ok = ok and pip("trackers", "supervision", "rfdetr", "opencv-python-headless")
+    if ok:
+        print("  done. Turn on vision-track in Settings > Capabilities, then ask LOKI:")
+        print("    \"track the cars in clips/street.mp4\"")
     return ok
 
 
@@ -114,13 +134,14 @@ def opencode() -> bool:
 def listing() -> None:
     rows = [("media (yt-dlp)", has("yt_dlp")), ("ffmpeg", bool(shutil.which("ffmpeg"))),
             ("imagegen (diffusers)", has("diffusers") and has("torch")),
+            ("vision (trackers)", has("trackers") and has("supervision") and has("rfdetr")),
             ("mlx-lm", bool(shutil.which("mlx_lm.server")) or has("mlx_lm")),
             ("agent-reach", bool(shutil.which("agent-reach"))), ("opencode", bool(shutil.which("opencode")))]
     for name, ok in rows:
         print("  %-22s %s" % (name, "installed" if ok else "not installed"))
 
 
-STEPS = {"media": media, "imagegen": imagegen, "mlx": mlx, "agent-reach": agent_reach, "opencode": opencode}
+STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "agent-reach": agent_reach, "opencode": opencode}
 
 
 def main(argv: list) -> int:

@@ -42,6 +42,8 @@ ALWAYS_ASK = {"delete_file", "delegate"}
 # Tools that need an enabled capability (tool -> capability name).
 CAPABILITY_TOOLS: dict[str, str] = {}
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
+# conductor roles whose url= is a workspace path, not a web address.
+CONDUCTOR_PATH_ROLES = {"track"}
 # Job backends that need an enabled capability.
 BACKEND_CAPABILITY = {"herdr": "herdr", "cua": "cua"}
 AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode"}
@@ -105,6 +107,14 @@ class PolicyEngine:
             verdict = self.capability(capability)
             if not verdict.allowed:
                 return verdict
+        if name == "conductor" and str(args.get("role", "")).strip().lower() in CONDUCTOR_PATH_ROLES:
+            # A role that reads a workspace file (track: url=<video>) must not reach outside it.
+            value = str(args.get("url", "") or "").strip()
+            if value:
+                try:
+                    self.path_check(value)
+                except Exception as exc:  # noqa: BLE001
+                    return Verdict(DENY, "refused: url is outside the workspace (%s)" % exc)
         if name == "conductor" and str(args.get("role", "")).strip().lower() == "browse":
             # A browser acting on live websites always asks; no recommendation skips it.
             return Verdict(ASK, "a browser will act on websites", decidable=False)

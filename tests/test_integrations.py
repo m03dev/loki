@@ -185,6 +185,213 @@ for script in ("web_read", "browse", "hindsight"):
     check("runner %s reports a missing library instead of crashing" % script,
           out["ok"] is False and "not installed" in out["error"], out)
 
+# ------------------------------------------------------------------ vision-track
+section("vision-track: object tracking in videos (Roboflow trackers + RF-DETR)")
+import importlib.util  # noqa: E402
+import subprocess  # noqa: E402
+
+sys.path.insert(0, str(REPO / "engine" / "runners"))
+import track  # noqa: E402
+
+vt = rows.get("vision-track", {})
+check("vision-track has a valid built-in manifest", vt and not vt["errors"], vt.get("errors"))
+check("vision-track is off until the user turns it on", vt.get("status") == "disabled", vt.get("status"))
+vt_manifest = json.loads((REPO / "capabilities" / "vision-track" / "manifest.json").read_text(encoding="utf-8"))
+check("it needs trackers + supervision and points at its runner",
+      vt_manifest["requires_python"] == ["trackers", "supervision"] and vt_manifest["entrypoint"] == "runners/track.py"
+      and "fs:workspace" in vt_manifest["permissions"] and "weights" in vt_manifest["description"])
+check("the runner imports nothing heavy at load time",
+      not any(m in sys.modules for m in ("supervision", "trackers", "rfdetr", "cv2")))
+
+ws = TMP / "vt-ws"
+(ws / "clips").mkdir(parents=True)
+(ws / "clips" / "street.mp4").write_bytes(b"\x00fake")
+(TMP / "outside.mp4").write_bytes(b"\x00fake")
+for bad in ("../outside.mp4", str(TMP / "outside.mp4")):
+    try:
+        track.track({"workspace": str(ws), "video": bad}, kit_factory=lambda *a: None)
+        check("the runner refuses a video outside the workspace (%s)" % bad, False)
+    except ValueError as exc:
+        check("the runner refuses a video outside the workspace (%s)" % bad, "escapes workspace" in str(exc), exc)
+try:
+    track.track({"workspace": str(ws), "video": "clips/street.mp4", "out_dir": "../elsewhere"}, kit_factory=lambda *a: None)
+    check("the runner refuses to write outside the workspace", False)
+except ValueError as exc:
+    check("the runner refuses to write outside the workspace", "escapes workspace" in str(exc), exc)
+
+
+def missing_kit(*a):
+    track._need("definitely_not_a_module_xyz", "trackers")
+
+
+try:
+    track.track({"workspace": str(ws), "video": "clips/street.mp4"}, kit_factory=missing_kit)
+    check("a missing package says how to turn vision-track on", False)
+except track.MissingPackage as exc:
+    check("a missing package says how to turn vision-track on",
+          "pip install trackers" in str(exc) and "setup_extras.py vision" in str(exc), exc)
+if importlib.util.find_spec("supervision") is None:
+    proc = subprocess.run([sys.executable, "-I", str(conductor.RUNNERS / "track.py")],
+                          input=json.dumps({"workspace": str(ws), "video": "clips/street.mp4"}),
+                          capture_output=True, text=True, timeout=60)
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    check("the runner process reports the missing packages as JSON",
+          out["ok"] is False and "setup_extras.py vision" in out["error"], out)
+
+
+class FakeDets:
+    """Just enough of supervision.Detections: len, boolean-mask indexing, xyxy/class_id/tracker_id/data."""
+    def __init__(self, xyxy, class_id, tracker_id=None, names=None):
+        self.xyxy, self.class_id, self.tracker_id = list(xyxy), list(class_id), tracker_id
+        self.data = {"class_name": list(names)} if names is not None else {}
+
+    def __len__(self):
+        return len(self.xyxy)
+
+    def __getitem__(self, mask):
+        pick = [i for i, m in enumerate(mask) if m]
+        names = self.data.get("class_name")
+        return FakeDets([self.xyxy[i] for i in pick], [self.class_id[i] for i in pick],
+                        None if self.tracker_id is None else [self.tracker_id[i] for i in pick],
+                        None if names is None else [names[i] for i in pick])
+
+
+class FakeTracker:
+    """Gives each object the id of its class slot; confirms a track from its second frame on."""
+    def __init__(self):
+        self.calls = 0
+
+    def update(self, detections, frame=None):
+        self.calls += 1
+        ids = [(-1 if self.calls == 1 else int(c) + 1) for c in detections.class_id]
+        return FakeDets(detections.xyxy, detections.class_id, ids)
+
+
+class FakeSink:
+    def __init__(self, path):
+        self.path, self.frames = path, []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        Path(self.path).write_bytes(b"MP4" * len(self.frames))
+        return False
+
+    def write_frame(self, frame):
+        self.frames.append(frame)
+
+
+def fake_detect(index):
+    # three objects: car 0 crosses left->right, car 1 stays put, a person (class 2) stays put
+    x = 10 + index * 20
+    return FakeDets([[x, 40, x + 10, 50], [100, 100, 110, 110], [150, 10, 160, 30]], [0, 1, 2])
+
+
+names = {0: "car", 1: "car", 2: "person"}
+fake_tracker = FakeTracker()
+annotated = []
+
+
+def fake_kit(video, tracker_name, model, threshold, max_frames):
+    fake_kit.args = (video, tracker_name, model, threshold, max_frames)
+
+    def keep(dets, wanted):
+        return dets[[names[c] in wanted for c in dets.class_id]] if wanted else dets
+    return track.Kit(frames=iter(range(12)), fps=10.0, width=200, height=200, detect=fake_detect,
+                     tracker=fake_tracker, keep=keep, sink=FakeSink,
+                     annotate=lambda frame, tracked: annotated.append(list(tracked.tracker_id)) or frame, names=names)
+
+
+result = track.track({"workspace": str(ws), "video": "clips/street.mp4", "classes": "cars", "max_frames": 10},
+                     kit_factory=fake_kit)
+check("the pipeline runs detector -> class filter -> tracker -> annotator frame by frame",
+      fake_tracker.calls == 10 and len(annotated) == 10 and annotated[-1] == [1, 2], (fake_tracker.calls, annotated[-1:]))
+check("'cars' means the detector's 'car' class and the tracker defaults to ByteTrack",
+      fake_kit.args[1] == "bytetrack" and result["tracker"] == "bytetrack")
+check("a plain-English summary comes back", result["summary"] == "Found 2 cars; 1 crossed the frame (10 frames).",
+      result["summary"])
+data = json.loads(Path(result["json"]).read_text(encoding="utf-8"))
+first = {t["track_id"]: t for t in data["tracks"]}
+check("the JSON has one row per track with class, first/last frame and frames seen",
+      sorted(first) == [1, 2] and first[1]["class"] == "car" and first[1]["first_frame"] == 1
+      and first[1]["last_frame"] == 9 and first[1]["frames_seen"] == 9 and first[1]["crossed"]
+      and not first[2]["crossed"], data["tracks"])
+csv_text = Path(result["csv"]).read_text(encoding="utf-8")
+check("a CSV is written beside it", csv_text.startswith("track_id,class,first_frame") and csv_text.count("\n") == 3, csv_text)
+check("the annotated MP4 and summaries land in the workspace's tracks/ folder",
+      all(Path(result[k]).parent == (ws / "tracks").resolve() for k in ("video", "json", "csv"))
+      and Path(result["video"]).name == "street-tracked.mp4" and Path(result["video"]).stat().st_size > 0)
+fake_tracker = FakeTracker()
+result = track.track({"workspace": str(ws), "video": "clips/street.mp4", "classes": "zebra"}, kit_factory=fake_kit)
+check("nothing found is said plainly", result["summary"] == "Found no zebras in 12 frames.", result["summary"])
+try:
+    track.track({"workspace": str(ws), "video": "clips/street.mp4", "tracker": "magic"}, kit_factory=fake_kit)
+    check("an unknown tracker is refused", False)
+except ValueError as exc:
+    check("an unknown tracker is refused", "tracker must be one of" in str(exc), exc)
+check("tracker names match the trackers package",
+      track.TRACKERS == {"sort": "SORTTracker", "bytetrack": "ByteTrackTracker", "ocsort": "OCSORTTracker",
+                         "botsort": "BoTSORTTracker", "cbiou": "CBIoUTracker"})
+
+# the conductor role, gated by the capability policy
+c = make({})
+check("with vision-track off, track is not offered and says why",
+      "vision-track is not enabled" in c.run("track", "car", "clips/street.mp4")
+      and "- track:" not in c.prompt_section())
+track_jobs = []
+
+
+def track_runner(argv, **kw):
+    track_jobs.append((argv, json.loads(kw["input"]), kw))
+    return types.SimpleNamespace(returncode=0, stderr="", stdout=json.dumps({
+        "ok": True, "summary": "Found 7 cars; 5 crossed the frame (300 frames).", "video": "tracks/street-tracked.mp4",
+        "json": "tracks/street-tracks.json", "csv": "tracks/street-tracks.csv"}))
+
+
+c = make({"vision-track": ["fs:workspace", "network"]}, env={"LOKI_WORKSPACE": str(ws)}, runner=track_runner)
+answer = c.run("track", "track the cars tracker=ocsort max_frames=300", "clips/street.mp4")
+job = track_jobs[-1][1] if track_jobs else {}
+check("with it on, track runs the isolated runner with the parsed job",
+      track_jobs and track_jobs[-1][0][-1].endswith("track.py") and track_jobs[-1][0][1] == "-I"
+      and job["video"] == "clips/street.mp4" and job["classes"] == ["cars"] and job["tracker"] == "ocsort"
+      and job["max_frames"] == 300 and Path(job["workspace"]) == ws.resolve()
+      and Path(job["out_dir"]) == ws.resolve() / "tracks", job)
+check("and answers in plain English with the files", answer.startswith("Found 7 cars; 5 crossed the frame")
+      and "street-tracked.mp4" in answer, answer)
+check("the track role is advertised once enabled", "- track:" in c.prompt_section())
+check("the conductor refuses a video outside the workspace before starting anything",
+      "outside the workspace" in c.run("track", "car", "../../secret.mp4") and len(track_jobs) == 1)
+check("track without a video asks for one", "needs url=" in c.run("track", "car"))
+c = make({"vision-track": ["network"]}, env={"LOKI_WORKSPACE": str(ws)}, runner=track_runner)
+check("track without the granted fs:workspace permission is refused", "not granted fs:workspace" in c.run("track", "car", "a.mp4"))
+
+
+def _escape_check(path):
+    if ".." in str(path) or str(path).startswith("/"):
+        raise ValueError("path escapes workspace: %s" % path)
+
+
+engine = policy.PolicyEngine(_escape_check, lambda x: (True, ""), safe_exec.parse, set(), Reg({}), env={})
+check("the policy denies conductor track with a url outside the workspace",
+      engine.tool_call("conductor", {"role": "track", "url": "../../etc/x.mp4"}).decision == policy.DENY)
+check("a workspace video passes the policy", engine.tool_call("conductor", {"role": "track", "url": "clips/a.mp4"}).allowed)
+check("web roles keep their http url", engine.tool_call("conductor", {"role": "read_web", "url": "https://e.com"}).allowed)
+sys.path.insert(0, str(REPO / "tools"))
+import setup_extras  # noqa: E402
+
+check("setup_extras has a vision step", "vision" in setup_extras.STEPS and "vision" in (setup_extras.__doc__ or ""))
+_pips = []
+_saved_pip, _saved_nvidia = setup_extras.pip, setup_extras.nvidia
+setup_extras.pip = lambda *p, index="": _pips.append((p, index)) or True
+for gpu in (True, False):
+    setup_extras.nvidia = lambda gpu=gpu: gpu
+    setup_extras.vision()
+setup_extras.pip, setup_extras.nvidia = _saved_pip, _saved_nvidia
+check("vision installs CUDA torch on an NVIDIA PC, the default wheel elsewhere, then the tracking stack",
+      _pips[0][1].startswith("https://download.pytorch.org/") and _pips[2] == (("torch", "torchvision"), "")
+      and set(_pips[1][0]) == {"trackers", "supervision", "rfdetr", "opencv-python-headless"}, _pips)
+
 # ------------------------------------------------------------------ in-loop helpers
 section("Headroom and SkillSpector")
 msgs = [{"role": "user", "content": "x" * 100}]

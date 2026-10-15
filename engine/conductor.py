@@ -13,6 +13,7 @@ the call to whichever enabled capability can do it:
     media      video/audio: transcripts, details, downloads     (media: yt-dlp)
     image      make an image                                   (image-gen: Z-Image Turbo / Pollinations)
     reach      the web through Agent Reach: pages, GitHub      (agent-reach)
+    track      track objects in a workspace video (RF-DETR + Roboflow trackers)  (vision-track)
 
 Specialists that run for minutes (Claude Code, Codex, Hermes Agent) are background jobs the
 USER starts (workers.py); the model cannot spawn them. Headroom (context compression) and
@@ -64,6 +65,10 @@ ROLES: dict[str, dict] = {
     "reach": {"capabilities": ("agent-reach",), "permission": "network",
               "summary": "Agent Reach: url=<page> reads it as text; task='github: <words or repo url>'; "
                          "task='doctor' lists the channels that work here", "ask": False},
+    "track": {"capabilities": ("vision-track",), "permission": "fs:workspace",
+              "summary": "track objects in a video in the workspace: url=<video path>, task='car' (what to "
+                         "track; empty = everything; optional 'tracker=ocsort' 'max_frames=300'); writes an "
+                         "annotated MP4 and a JSON/CSV per track into tracks/", "ask": False},
 }
 
 
@@ -147,6 +152,8 @@ class Conductor:
                 return self.image(task)
             if role == "reach":
                 return self.reach(task, url)
+            if role == "track":
+                return self.track(task, url)
         except Exception as exc:  # noqa: BLE001 - a specialist failing must not end the turn
             return "error: %s failed: %s: %s" % (capability, type(exc).__name__, exc)
         return "error: role %r is not wired" % role
@@ -328,6 +335,56 @@ def _conductor_reach(self, task: str, url: str) -> str:
 Conductor.media = _conductor_media
 Conductor.image = _conductor_image
 Conductor.reach = _conductor_reach
+
+
+# ---------------------------------------------------------------- track (vision-track)
+VIDEO_EXT = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg", ".wmv")
+_TRACK_FILLER = {"track", "tracking", "follow", "count", "the", "a", "an", "all", "in", "on", "of", "from",
+                 "this", "that", "my", "video", "clip", "footage", "file", "please", "every", "and", "with"}
+
+
+def parse_track_task(task: str, url: str = "") -> dict:
+    """'track the cars in clips/a.mp4 tracker=ocsort max_frames=300' -> job fields."""
+    job: dict = {"video": (url or "").strip(), "classes": [], "tracker": "bytetrack", "max_frames": 0}
+    for word in (task or "").replace(",", " , ").split():
+        low = word.lower().strip(".!?")
+        if "=" in low:
+            key, _, value = low.partition("=")
+            if key in ("tracker", "model"):
+                job[key] = value
+            elif key in ("max_frames", "frames"):
+                job["max_frames"] = int(value) if value.isdigit() else 0
+            elif key in ("threshold", "confidence"):
+                try:
+                    job["threshold"] = float(value)
+                except ValueError:
+                    pass
+            continue
+        if low.endswith(VIDEO_EXT):
+            job["video"] = job["video"] or word.strip("\"'")
+            continue
+        if low and low != "," and low not in _TRACK_FILLER:
+            job["classes"].append(low)
+    return job
+
+
+def _conductor_track(self, task: str, url: str) -> str:
+    job = parse_track_task(task, url)
+    if not job["video"]:
+        return "error: track needs url=<video file in the workspace>, e.g. url=clips/street.mp4"
+    workspace = _workspace(self.env).resolve()
+    candidate = (workspace / job["video"]).resolve()
+    if candidate != workspace and workspace not in candidate.parents:
+        return "error: refused: %s is outside the workspace" % job["video"]
+    job.update({"workspace": str(workspace), "out_dir": str(workspace / "tracks")})
+    result = self._runner("track", job, timeout=int(self.env.get("LOKI_TRACK_TIMEOUT", "1800") or 1800))
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    return "%s\nAnnotated video: %s\nPer-track summary: %s and %s" % (
+        result.get("summary"), result.get("video"), result.get("json"), result.get("csv"))
+
+
+Conductor.track = _conductor_track
 
 
 def python_command() -> list:
