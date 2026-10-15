@@ -81,7 +81,8 @@ def run(updater: Any, peer_list: list, call: Callable[..., dict], hello: Callabl
     try:
         state = updater.check(fetch=True)
         if not state.get("ok"):
-            PROGRESS["note"] = "cannot reach GitHub: " + str(state.get("error", ""))
+            # updater's error already says what to do (sign in, network, missing disk, ...)
+            PROGRESS["note"] = str(state.get("error") or "cannot reach GitHub")
             return PROGRESS
         target = state.get("latest", "")
         PROGRESS["target"] = target

@@ -7,9 +7,13 @@ The Mac and the PC must never drift apart. Each LOKI updates itself from GitHub:
     linked machine reports a different version, and tells you an update is waiting (a
     running engine never swaps its own code; the next start applies it).
 
-An update is a fast-forward only. It never overwrites your work: if this checkout has
-uncommitted changes to tracked files, or commits that are not on GitHub yet, it stops and
-says so (commit and push them with tools/ship.py first). A folder that is a plain copy with
+An update never overwrites your work. Genuinely edited tracked files stop it (named in the
+reason; commit and push them with tools/ship.py first); files that only hold another LOKI
+version are restored. Local commits that GitHub already has are dropped, other local
+commits are replayed on top of GitHub's version and stay unpushed (a conflict undoes that
+and is reported); a backup ref refs/loki/backup/<time> is kept either way. Why the last
+attempt failed (sign-in, network, missing disk, ...) is in status()["error"/"problem"],
+which /health shows. A folder that is a plain copy with
 no git history (how the Mac's copy started) is turned into a checkout in place: the files
 stay, missing ones are restored, and nothing is deleted.
 
@@ -32,7 +36,10 @@ BRANCH = os.getenv("LOKI_BRANCH", "master")
 OLD_BRANCHES = ("macos-app", "integrate")   # branches older checkouts may still be on
 
 STATE = {"checked": 0.0, "current": "", "latest": "", "behind": 0, "ahead": 0, "dirty": [],
-         "updated_to": "", "update_available": False, "note": "", "error": ""}
+         "updated_to": "", "update_available": False, "note": "", "error": "", "problem": ""}
+# Problems a later successful fetch shows are gone (the next start will update).
+TRANSIENT_PROBLEMS = ("GitHub sign-in needed", "GitHub unreachable", "git missing", "folder ownership",
+                      "update failed")
 _lock = threading.Lock()
 # The commit this process started on. A running engine never swaps its own code, so when
 # the checkout moves past this, a restart is what applies it (restart_needed()).
@@ -133,8 +140,61 @@ def enabled() -> bool:
     return str(os.getenv("LOKI_AUTO_UPDATE", "1")).strip().lower() not in ("0", "false", "off", "no")
 
 
-def git_exe() -> str:
-    return shutil.which("git") or ""
+# Finder, launchd and login items start apps with a bare PATH (/usr/bin:/bin:...). git
+# itself is then /usr/bin/git (fine), but the credential helper that `gh auth setup-git`
+# configured (`gh auth git-credential`) lives in Homebrew's bin and may not be found:
+# fetch then fails with "could not read Username" although it works in Terminal.
+EXTRA_TOOL_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin")
+UNIX_BASE_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
+WINDOWS_GIT = (r"%ProgramFiles%\Git\cmd\git.exe", r"%ProgramFiles(x86)%\Git\cmd\git.exe",
+               r"%LocalAppData%\Programs\Git\cmd\git.exe")
+# Command-line config is protected config (git >= 2.38 honours safe.directory given with
+# `-c`; checked with 2.43): a checkout on an external volume, a disk image or a folder
+# owned by another account must never stop updates with "detected dubious ownership"
+# (also when it is reached through a symlink). It applies to LOKI's own git calls only.
+SAFE_DIRECTORY = ("-c", "safe.directory=*")
+
+
+def tool_path(base: str | None = None, platform: str | None = None) -> str:
+    """PATH for git and its helpers: on macOS/Linux the usual tool folders come first (as
+    tools/macos/launcher.sh does); on Windows PATH is left exactly as it is."""
+    platform = platform or sys.platform
+    base = os.environ.get("PATH", "") if base is None else base
+    if platform.startswith("win"):
+        return base
+    parts = [os.path.expanduser(d) for d in EXTRA_TOOL_DIRS]
+    parts += [p for p in base.split(":") if p]
+    parts += list(UNIX_BASE_DIRS)
+    seen, out = set(), []
+    for part in parts:
+        if part not in seen:
+            seen.add(part)
+            out.append(part)
+    return ":".join(out)
+
+
+def git_env(platform: str | None = None) -> dict:
+    platform = platform or sys.platform
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="", LC_ALL="C")
+    env["PATH"] = tool_path(env.get("PATH", ""), platform)
+    if not env.get("HOME") and not platform.startswith("win"):
+        env["HOME"] = str(Path.home())   # git and gh read their config from HOME
+    return env
+
+
+def git_exe(platform: str | None = None) -> str:
+    platform = platform or sys.platform
+    found = shutil.which("git")
+    if not found and not platform.startswith("win"):
+        found = shutil.which("git", path=tool_path("", platform))
+    if found:
+        return found
+    if platform.startswith("win"):
+        for raw in WINDOWS_GIT:
+            candidate = os.path.expandvars(raw)
+            if "%" not in candidate and Path(candidate).is_file():
+                return candidate
+    return ""
 
 
 def git(repo: Path, *args: str, timeout: float = 60.0) -> tuple:
@@ -142,10 +202,10 @@ def git(repo: Path, *args: str, timeout: float = 60.0) -> tuple:
     exe = git_exe()
     if not exe:
         return 127, "git is not installed"
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="", LC_ALL="C")
     try:
-        proc = subprocess.run([exe, "-C", str(repo), *args], capture_output=True, text=True,
-                              timeout=timeout, env=env)
+        proc = subprocess.run([exe, *SAFE_DIRECTORY, "-C", str(repo), *args], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=timeout,
+                              env=git_env(), stdin=subprocess.DEVNULL)
         return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).rstrip()
     except subprocess.TimeoutExpired:
         return 124, "git %s timed out" % args[0]
@@ -155,24 +215,134 @@ def git(repo: Path, *args: str, timeout: float = 60.0) -> tuple:
 
 def is_checkout(repo: Path | None = None) -> bool:
     repo = repo or REPO
-    return (repo / ".git").exists()
+    try:
+        return (repo / ".git").exists()
+    except OSError:
+        return False
+
+
+def unreachable(repo: Path | None = None) -> str:
+    """Why the checkout folder cannot be reached ("" when it can). On the Mac the checkout
+    sits on a disk image that must be attached after a reboot, or the path dangles."""
+    repo = Path(repo or REPO)
+    try:
+        if repo.is_dir():
+            return ""
+    except OSError:
+        pass
+    target = ""
+    try:
+        if repo.is_symlink():
+            target = os.readlink(str(repo))
+    except OSError:
+        pass
+    parts = Path(target or str(repo)).parts
+    disk = (" (is the disk %s attached?)" % parts[2]) if len(parts) > 2 and parts[1] == "Volumes" else ""
+    if target:
+        return "the LOKI folder %s points to %s, which is missing%s" % (repo, target, disk)
+    return "the LOKI folder %s is missing%s" % (repo, disk)
+
+
+def read_version_file(repo: Path | None = None) -> str:
+    """The human version from VERSION at the repo root (e.g. "0.16")."""
+    try:
+        lines = ((repo or REPO) / "VERSION").read_text(encoding="utf-8").strip().splitlines()
+        return lines[0].strip() if lines else ""
+    except OSError:
+        return ""
+
+
+_PATCH_CACHE: dict = {}
+
+
+def patch_number(repo: Path, commit: str = "") -> int:
+    """How many commits lead to HEAD (the 412 in "patch 412"). 0 when unknown or when the
+    checkout is shallow (a shallow clone counts only what it downloaded)."""
+    key = (str(repo), commit)
+    if commit and key in _PATCH_CACHE:
+        return _PATCH_CACHE[key]
+    count = 0
+    code, shallow = git(repo, "rev-parse", "--is-shallow-repository")
+    if code == 0 and shallow.strip() == "false":
+        code, out = git(repo, "rev-list", "--count", "HEAD")
+        try:
+            count = int(out.strip()) if code == 0 else 0
+        except ValueError:
+            count = 0
+    if commit:
+        _PATCH_CACHE[key] = count
+    return count
+
+
+def version_label(ver: str, patch: int, commit: str = "") -> str:
+    """"v0.16 · patch 412" (U+00B7 middle dot); without a patch number, the commit."""
+    head = ("v" + ver) if ver else "LOKI"
+    if patch:
+        return "%s · patch %d" % (head, patch)
+    return ("%s · %s" % (head, commit[:7])) if commit else head
 
 
 def version(repo: Path | None = None) -> dict:
-    """What this machine runs: commit, branch, local changes. Cheap; no network."""
+    """What this machine runs: commit, branch, local changes and the human label
+    ("v0.16 · patch 412" = VERSION file + commits on HEAD). Cheap; no network."""
     repo = repo or REPO
+    ver = read_version_file(repo)
     if not is_checkout(repo):
-        return {"git": False, "commit": "", "branch": "", "dirty": False}
-    _, commit = git(repo, "rev-parse", "--short=12", "HEAD")
+        return {"git": False, "commit": "", "branch": "", "dirty": False, "version": ver,
+                "patch": 0, "label": version_label(ver, 0)}
+    code, commit = git(repo, "rev-parse", "--short=12", "HEAD")
+    commit = commit.strip()[:12] if code == 0 else ""
     _, branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
-    return {"git": True, "commit": commit.strip()[:12], "branch": branch.strip(),
-            "dirty": bool(dirty_files(repo))}
+    patch = patch_number(repo, commit) if commit else 0
+    return {"git": True, "commit": commit, "branch": branch.strip(),
+            "dirty": bool(dirty_files(repo)), "version": ver, "patch": patch,
+            "label": version_label(ver, patch, commit)}
 
 
 def dirty_files(repo: Path | None = None) -> list:
     repo = repo or REPO
-    code, out = git(repo, "status", "--porcelain", "--untracked-files=no")
-    return [line[3:] for line in out.splitlines() if line.strip()] if code == 0 else []
+    code, out = git(repo, "status", "--porcelain", "-z", "--untracked-files=no")
+    if code != 0:
+        return []
+    files, entries = [], out.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        files.append(entry[3:])
+        if entry[0] in "RC":     # a rename/copy is followed by its old name
+            i += 1
+    return files
+
+
+def _deleted(repo: Path, path: str) -> bool:
+    try:
+        return not (repo / path).exists() and not (repo / path).is_symlink()
+    except OSError:
+        return False
+
+
+def classify_dirty(repo: Path, new: str = "") -> tuple:
+    """(restorable, kept): changed tracked files that hold nothing of the user's - a file
+    that is byte-identical to GitHub's NEW version (`new`) or to any OLDER committed one,
+    or a tracked file that was deleted - versus genuine edits, which are never touched."""
+    restorable, kept = [], []
+    for path in dirty_files(repo):
+        if _deleted(repo, path) or _is_old_version(repo, path) or (new and _same_as(repo, path, new)):
+            restorable.append(path)
+        else:
+            kept.append(path)
+    return restorable, kept
+
+
+def _same_as(repo: Path, path: str, rev: str) -> bool:
+    code, blob = git(repo, "hash-object", "--", path)
+    if code != 0 or not blob.strip():
+        return False
+    code, theirs = git(repo, "rev-parse", "--verify", "--quiet", "%s:%s" % (rev, path))
+    return code == 0 and theirs.strip() == blob.strip()
 
 
 def _is_old_version(repo: Path, path: str) -> bool:
@@ -224,15 +394,62 @@ def ensure_checkout(repo: Path | None = None) -> str:
              if changed else ""))
 
 
+AUTH_SIGNS = ("authentication failed", "could not read username", "could not read password",
+              "terminal prompts disabled", "repository not found", "invalid username or password",
+              "permission denied (publickey)", "requested url returned error: 401",
+              "requested url returned error: 403", "403 forbidden", "bad credentials",
+              "support for password authentication was removed")
+NETWORK_SIGNS = ("could not resolve host", "failed to connect", "connection timed out",
+                 "connection refused", "network is unreachable", "timed out", "operation timed out",
+                 "ssl", "unable to access")
+
+
+def sign_in_hint(platform: str | None = None) -> str:
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return ("GitHub sign-in needed on this Mac: in Terminal run `gh auth login` then "
+                "`gh auth setup-git`, then restart LOKI")
+    if platform.startswith("win"):
+        return ("GitHub sign-in needed on this PC: run `gh auth login` then `gh auth setup-git` "
+                "(or `git fetch` in the LOKI folder once and sign in), then restart LOKI")
+    return "GitHub sign-in needed on this machine: run `gh auth login` then `gh auth setup-git`, then restart LOKI"
+
+
+def explain_git_error(out: str, platform: str | None = None) -> tuple:
+    """(problem, error): a short label for the UI and an actionable sentence for a failed
+    fetch/merge, from git's own output."""
+    platform = platform or sys.platform
+    text = (out or "").lower()
+    tail = " ".join((out or "").split())[-200:]
+    if "git is not installed" in text or "invalid active developer path" in text:
+        fix = ("install Apple's command line tools: `xcode-select --install`" if platform == "darwin"
+               else "install Git for Windows (https://git-scm.com)" if platform.startswith("win")
+               else "install git")
+        return "git missing", "git was not found; %s" % fix
+    if "dubious ownership" in text:
+        return ("folder ownership", "git refuses this folder (owned by another account): run "
+                "`git config --global --add safe.directory '*'` - %s" % tail)
+    if any(sign in text for sign in AUTH_SIGNS):
+        return "GitHub sign-in needed", "%s (git said: %s)" % (sign_in_hint(platform), tail)
+    if any(sign in text for sign in NETWORK_SIGNS):
+        return "GitHub unreachable", "cannot reach GitHub (no network?): %s" % tail
+    return "update failed", "cannot reach GitHub: %s" % tail
+
+
 def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) -> dict:
     """How this checkout compares with GitHub. Fetches unless fetch=False."""
     repo = repo or REPO
+    gone = unreachable(repo)
+    if gone:
+        return {"ok": False, "error": gone, "problem": "LOKI folder missing", "can_update": False}
     if not is_checkout(repo):
-        return {"ok": False, "error": "not a git checkout", "can_update": False}
+        return {"ok": False, "error": "not a git checkout", "problem": "not a git checkout",
+                "can_update": False}
     if fetch:
         code, out = git(repo, "fetch", "--quiet", "origin", BRANCH, timeout=timeout)
         if code != 0:
-            return {"ok": False, "error": "cannot reach GitHub: %s" % out[-200:], "can_update": False}
+            problem, error = explain_git_error(out)
+            return {"ok": False, "error": error, "problem": problem, "can_update": False}
     target = "origin/" + BRANCH
     _, counts = git(repo, "rev-list", "--left-right", "--count", "HEAD..." + target)
     try:
@@ -241,15 +458,23 @@ def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) 
         ahead, behind = 0, 0
     _, latest = git(repo, "rev-parse", "--short=12", target)
     dirty = dirty_files(repo)
+    restorable, kept = classify_dirty(repo, target) if (dirty and behind) else ([], dirty)
     info = version(repo)
-    can = behind > 0 and ahead == 0 and not dirty
+    # Local commits do not block: update() replays them on top of GitHub's version (or drops
+    # them when GitHub already has the same changes). Only genuine local edits block.
+    can = behind > 0 and not kept
     reason = ""
-    if behind and dirty:
-        reason = "local changes to %d file(s); commit and push them (tools/ship.py) first" % len(dirty)
-    elif behind and ahead:
-        reason = "this machine has %d commit(s) GitHub does not; push them (tools/ship.py) first" % ahead
+    if behind and kept:
+        reason = ("local changes to %d file(s) (%s); commit and push them (tools/ship.py) first"
+                  % (len(kept), _names(kept)))
     return {"ok": True, "current": info["commit"], "branch": info["branch"], "latest": latest.strip()[:12],
-            "ahead": ahead, "behind": behind, "dirty": dirty, "can_update": can, "reason": reason}
+            "ahead": ahead, "behind": behind, "dirty": dirty, "blocking": kept if behind else [],
+            "restorable": restorable, "can_update": can, "reason": reason}
+
+
+def _names(files: list, most: int = 5) -> str:
+    shown = ", ".join(files[:most])
+    return shown + (" and %d more" % (len(files) - most) if len(files) > most else "")
 
 
 def _move_aside_untracked(repo: Path) -> list:
@@ -291,21 +516,82 @@ def _install_requirements(repo: Path) -> str:
     return "dependencies updated" if not any(code_all) else "some dependencies did not install"
 
 
+def _in_progress(repo: Path) -> str:
+    """A rebase or merge someone left half-done (it needs a person: it may hold their work)."""
+    code, gitdir = git(repo, "rev-parse", "--git-dir")
+    if code != 0:
+        return ""
+    base = Path(gitdir.strip())
+    if not base.is_absolute():
+        base = repo / base
+    for name, what in (("rebase-merge", "rebase"), ("rebase-apply", "rebase"), ("MERGE_HEAD", "merge")):
+        if (base / name).exists():
+            return what
+    return ""
+
+
+def _backup(repo: Path, label: str = "") -> str:
+    """Keep the current commit reachable before LOKI moves the branch: refs/loki/backup/<time>."""
+    stamp = time.strftime("%Y%m%d-%H%M%S") + (("-" + label) if label else "")
+    ref = "refs/loki/backup/" + stamp
+    code, _ = git(repo, "update-ref", ref, "HEAD")
+    return ref if code == 0 else ""
+
+
+def _identity_args(repo: Path) -> tuple:
+    """A rebase writes commits; without user.name/email git refuses. Supply a neutral one
+    for that command only (the author of each commit is kept)."""
+    _, email = git(repo, "config", "user.email")
+    _, name = git(repo, "config", "user.name")
+    args = []
+    if not name.strip():
+        args += ["-c", "user.name=LOKI updater"]
+    if not email.strip():
+        args += ["-c", "user.email=loki-updater@localhost"]
+    return tuple(args)
+
+
+def _local_commits(repo: Path, target: str) -> tuple:
+    """(unique, already_upstream): local commits GitHub does not have, split by whether an
+    identical change is already on GitHub (`git cherry` marks those with '-')."""
+    code, out = git(repo, "cherry", target, "HEAD")
+    if code != 0:
+        return [], []
+    unique = [line[2:].strip() for line in out.splitlines() if line.startswith("+")]
+    same = [line[2:].strip() for line in out.splitlines() if line.startswith("-")]
+    return unique, same
+
+
 def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
-    """Bring this checkout up to GitHub's BRANCH, fast-forward only. Never raises."""
+    """Bring this checkout up to GitHub's BRANCH. Never raises; never loses local work.
+
+    - files that only hold an older (or the new) LOKI version, or tracked files that were
+      deleted, are restored; genuinely edited files stop the update, named in the reason;
+    - local commits whose changes GitHub already has are dropped (a backup ref is kept);
+    - other local commits are replayed on top of GitHub's version (rebase; backup ref kept)
+      and stay unpushed; a conflict undoes the rebase and is reported;
+    - otherwise it is a fast-forward."""
     repo = repo or REPO
     with _lock:
         notes = []
+        gone = unreachable(repo)
+        if gone:
+            return _done(False, "", error=gone, problem="LOKI folder missing", repo=repo)
         boot = ensure_checkout(repo)
         if boot:
             notes.append(boot)
             if not is_checkout(repo):
-                return _done(False, "; ".join(notes), error=boot)
+                return _done(False, "; ".join(notes), error=boot, problem="not a git checkout", repo=repo)
+        busy = _in_progress(repo)
+        if busy:
+            return _done(False, "; ".join(notes), repo=repo, problem="unfinished %s" % busy,
+                         error="a %s was left unfinished in %s; finish it or run `git %s --abort` there"
+                               % (busy, repo, busy))
         # Older checkouts sit on macos-app; move them to the one branch when that is safe.
         _, branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
         branch = branch.strip()
         if branch != BRANCH:
-            git(repo, "fetch", "--quiet", "origin", BRANCH, timeout=120)
+            git(repo, "fetch", "--quiet", "origin", BRANCH, timeout=timeout)
             code, _ = git(repo, "merge-base", "--is-ancestor", "HEAD", "origin/" + BRANCH)
             if branch in OLD_BRANCHES and code == 0 and not dirty_files(repo):
                 code, out = git(repo, "checkout", "-q", "-B", BRANCH, "origin/" + BRANCH)
@@ -313,29 +599,77 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                     git(repo, "branch", "--set-upstream-to=origin/" + BRANCH, BRANCH)
                     notes.append("moved from %s to %s" % (branch, BRANCH))
                 else:
-                    return _done(False, "could not switch to %s: %s" % (BRANCH, out[-200:]))
+                    return _done(False, "could not switch to %s" % BRANCH, repo=repo, problem="wrong branch",
+                                 error="could not switch to %s: %s" % (BRANCH, out[-200:]))
             else:
-                return _done(False, "on branch %s, not %s; left alone" % (branch, BRANCH))
+                return _done(False, "on branch %s, not %s; left alone" % (branch, BRANCH), repo=repo,
+                             problem="not on %s" % BRANCH,
+                             error="this checkout is on %s, not %s; switch with `git checkout %s` to get updates"
+                                   % (branch or "no branch", BRANCH, BRANCH))
         before = version(repo)["commit"]
         state = check(repo, timeout=timeout)
         if not state.get("ok"):
-            return _done(False, "; ".join(notes), error=state.get("error", ""))
+            return _done(False, "; ".join(notes), error=state.get("error", ""),
+                         problem=state.get("problem", "update failed"), repo=repo)
+        target = "origin/" + BRANCH
         if not state["behind"]:
             STATE.update({"current": state["current"], "latest": state["latest"], "ahead": state["ahead"],
-                          "behind": 0, "dirty": state["dirty"]})
-            return _done(False, "; ".join(notes + ["up to date (%s)" % state["current"]]))
-        if not state["can_update"]:
-            STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
-            return _done(False, "; ".join(notes + ["update waiting: " + state["reason"]]))
+                          "behind": 0, "dirty": state["dirty"], "update_available": False})
+            if state["ahead"]:
+                notes.append("%d local commit(s) are not on GitHub yet; publish them with tools/ship.py"
+                             % state["ahead"])
+            return _done(False, "; ".join(notes + ["up to date (%s)" % state["current"]]), repo=repo)
         if state["latest"] and any(state["latest"].startswith(c[:12]) for c in health(repo).get("skip", []) if c):
             return _done(False, "; ".join(notes + ["%s did not start on this machine before; waiting for "
-                                                   "a newer version" % state["latest"]]))
+                                                   "a newer version" % state["latest"]]), repo=repo)
+        # Files that hold nothing of the user's are put back first, so they never block.
+        if state.get("restorable"):
+            code, out = git(repo, "checkout", "HEAD", "--", *state["restorable"])
+            if code == 0:
+                notes.append("restored %d file(s) that only held another LOKI version (%s)"
+                             % (len(state["restorable"]), _names(state["restorable"])))
+        if not state["can_update"]:
+            STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
+            STATE["update_available"] = True
+            return _done(False, "; ".join(notes + ["update waiting: " + state["reason"]]), repo=repo,
+                         problem="local edits block the update",
+                         error="update waiting: " + state["reason"])
         moved = _move_aside_untracked(repo)
         if moved:
             notes.append("kept your untracked %s as *.before-update" % ", ".join(moved))
-        code, out = git(repo, "merge", "--ff-only", "--quiet", "origin/" + BRANCH)
-        if code != 0:
-            return _done(False, "; ".join(notes), error="update failed: %s" % out[-200:])
+        if state["ahead"]:
+            unique, same = _local_commits(repo, target)
+            backup = _backup(repo)
+            if not unique:
+                # Every local commit is already on GitHub (e.g. ship.py pushed a rebased copy):
+                # nothing of the user's is lost by moving to GitHub's version.
+                code, out = git(repo, "reset", "--keep", "--quiet", target)
+                if code != 0:
+                    return _done(False, "; ".join(notes), repo=repo, problem="update failed",
+                                 error="could not move past %d already-published local commit(s): %s"
+                                       % (len(same), out[-200:]))
+                notes.append("%d local commit(s) were already on GitHub; moved to GitHub's version "
+                             "(old state kept as %s)" % (len(same), backup or "-"))
+            else:
+                code, out = git(repo, *_identity_args(repo), "rebase", "--quiet", target, timeout=timeout)
+                if code != 0:
+                    git(repo, "rebase", "--abort")
+                    STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
+                    STATE["update_available"] = True
+                    return _done(False, "; ".join(notes), repo=repo, problem="local commits conflict",
+                                 error="%d local commit(s) that are not on GitHub conflict with GitHub's version; "
+                                       "nothing was changed. Resolve with `git rebase origin/%s` in %s, then "
+                                       "publish with tools/ship.py (%s)"
+                                       % (len(unique), BRANCH, repo, " ".join(out.split())[-160:]))
+                notes.append("kept %d local commit(s) that are not on GitHub yet on top of GitHub's version "
+                             "(publish them with tools/ship.py; old state kept as %s)" % (len(unique), backup or "-"))
+        else:
+            code, out = git(repo, "merge", "--ff-only", "--quiet", target)
+            if code != 0:
+                problem, error = explain_git_error(out)
+                return _done(False, "; ".join(notes), repo=repo,
+                             problem="update failed" if problem == "GitHub unreachable" else problem,
+                             error="update failed: %s" % " ".join(out.split())[-200:])
         after = version(repo)["commit"]
         notes.append("updated %s -> %s" % (before, after))
         trial = health(repo)  # `before` is what ran here until now: the version to go back to
@@ -343,19 +677,67 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
         _save_health(trial, repo)
         if _requirements_changed(repo, before, after):
             notes.append(_install_requirements(repo))
-        STATE.update({"current": after, "latest": after, "behind": 0, "ahead": 0, "dirty": [],
+        _, ahead = git(repo, "rev-list", "--count", "%s..HEAD" % target)
+        STATE.update({"current": after, "latest": state["latest"], "behind": 0,
+                      "ahead": int(ahead.strip()) if ahead.strip().isdigit() else 0, "dirty": dirty_files(repo),
                       "updated_to": after, "update_available": False})
-        return _done(True, "; ".join(notes))
+        return _done(True, "; ".join(notes), repo=repo)
 
 
-def _done(updated: bool, note: str, error: str = "") -> dict:
-    STATE.update({"checked": time.time(), "note": note, "error": error})
-    print("[loki-update] %s%s" % (note, (" - " + error) if error else ""), flush=True)
-    return {"updated": updated, "note": note, "error": error}
+def _last_file(repo: Path | None = None) -> Path | None:
+    repo = repo or REPO
+    try:
+        if (repo / ".git").is_dir():
+            return repo / ".git" / "loki_update_last.json"
+    except OSError:
+        pass
+    return None
+
+
+def last_result(repo: Path | None = None) -> dict:
+    """The last update attempt on this checkout. The app updates in its own process before
+    the engine starts, so the engine reads the outcome from here to show it in /health."""
+    path = _last_file(repo)
+    if not path:
+        return {}
+    try:
+        import json  # pylint: disable=import-outside-toplevel
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _done(updated: bool, note: str, error: str = "", problem: str = "", repo: Path | None = None) -> dict:
+    if error and not problem:
+        problem = "update failed"
+    now = time.time()
+    STATE.update({"checked": now, "note": note, "error": error, "problem": problem})
+    print("[loki-update] %s%s" % (note, (" - " + error) if error and error not in note else ""), flush=True)
+    path = _last_file(repo)
+    if path:
+        try:
+            import json  # pylint: disable=import-outside-toplevel
+            path.write_text(json.dumps({"at": now, "updated": updated, "note": note, "error": error,
+                                        "problem": problem}, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+    return {"updated": updated, "note": note, "error": error, "problem": problem}
 
 
 def status() -> dict:
-    return {"enabled": enabled(), "branch": BRANCH, **version(REPO), **{k: v for k, v in STATE.items()}}
+    """Version + update state for /health. `error`/`problem` say why the last update attempt
+    (at start, in the app's process, or a later check) did not work; both are "" when fine."""
+    state = {k: v for k, v in STATE.items()}
+    last = last_result(REPO)
+    if last and float(last.get("at") or 0) > float(state.get("checked") or 0):
+        state.update({"checked": float(last.get("at") or 0), "note": last.get("note", ""),
+                      "error": last.get("error", ""), "problem": last.get("problem", "")})
+    gone = unreachable(REPO)
+    if gone:
+        state.update({"error": gone, "problem": "LOKI folder missing"})
+    state.setdefault("problem", "")
+    return {"enabled": enabled(), "branch": BRANCH, **version(REPO), **state}
 
 
 def check_now() -> dict:
@@ -367,12 +749,29 @@ def check_now() -> dict:
         state = check(REPO)
     if state.get("ok"):
         STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
-        STATE.update({"checked": time.time(), "error": "",
-                      "update_available": bool(state["behind"]),
-                      "note": ("update %s -> %s waiting; restart LOKI to use it" % (state["current"], state["latest"])
-                               if state["behind"] and state["can_update"] else state.get("reason") or "up to date")})
+        blocked = bool(state["behind"] and not state["can_update"])
+        note = "up to date"
+        if state["behind"] and state["can_update"]:
+            note = "update %s -> %s waiting; restart LOKI to use it" % (state["current"], state["latest"])
+            if state["ahead"]:
+                note += " (your %d unpublished commit(s) stay on top)" % state["ahead"]
+        elif blocked:
+            note = state.get("reason") or "update blocked"
+        elif state["ahead"]:
+            note = "up to date; %d local commit(s) are not on GitHub yet" % state["ahead"]
+        error, problem = (("update waiting: " + state["reason"]), "local edits block the update") if blocked else ("", "")
+        last = last_result(REPO)
+        if (not blocked and state["behind"] and last.get("error")
+                and last.get("problem") not in TRANSIENT_PROBLEMS):
+            # e.g. local commits that conflict: fetching works, but the start-up update
+            # still cannot apply, so keep saying why.
+            error, problem = last.get("error", ""), last.get("problem", "")
+            note = last.get("note") or note
+        STATE.update({"checked": time.time(), "update_available": bool(state["behind"]), "note": note,
+                      "error": error, "problem": problem})
     else:
-        STATE.update({"checked": time.time(), "error": state.get("error", "")})
+        STATE.update({"checked": time.time(), "error": state.get("error", ""),
+                      "problem": state.get("problem", "update failed")})
     return status()
 
 

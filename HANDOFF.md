@@ -27,6 +27,14 @@ machines link to this one").
 - `engine/updater.py`: every LOKI fast-forwards to GitHub `master` when it starts; a plain
   folder copy is turned into a checkout in place; local edits and unpushed commits are never
   overwritten; while running it only checks and shows "update waiting".
+  2026-10-15 (Mac updates not working): git now runs with Homebrew/~/.local/bin on PATH (the
+  `gh auth git-credential` helper was invisible from Finder/launchd) and `-c safe.directory=*`;
+  stuck states fixed instead of blocking forever (already-published local commits dropped,
+  real ones rebased and kept unpushed, backup in refs/loki/backup/*; stale/deleted files
+  restored; real edits block and are named); failures are mapped to an actionable message and
+  persisted in `.git/loki_update_last.json`, so `/health` `update.error`/`update.problem` show
+  the start-up result. Version label: `VERSION` file + commit count -> `update.label`
+  "v0.16 · patch N" (UI still has to display it: app/ui/app.js showVersion).
 - `tools/ship.py`: the one way to publish (tests, commit, rebase, re-test, push, tell peers).
 - `.github/workflows/tests.yml`: every push is tested on macOS and Windows.
 - LOKI can change and ship its own code: tools `improve_loki` (a background agent in a git

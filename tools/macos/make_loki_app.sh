@@ -39,6 +39,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 chmod 755 "$APP/Contents/MacOS/Loki"
 
 VERSION="$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo dev)"
+# The human version (VERSION at the repo root, e.g. 0.16); the build number is the commit.
+SHORT_VERSION="$(tr -d '[:space:]' <"$REPO/VERSION" 2>/dev/null || true)"
+SHORT_VERSION="${SHORT_VERSION:-0.1}"
 cat >"$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,7 +52,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>dev.m03.loki</string>
   <key>CFBundleExecutable</key><string>Loki</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleShortVersionString</key><string>${SHORT_VERSION}</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>

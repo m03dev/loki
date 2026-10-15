@@ -26,6 +26,15 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
+      Paste the output of each: `ls -l ~/Documents/loki` (symlink target present?);
+      `cd ~/Documents/loki && git status -sb && git log --oneline -3 origin/master..HEAD`;
+      `git cherry origin/master HEAD`; `git config --show-origin --get-all credential.https://github.com.helper`;
+      `env -i HOME=$HOME PATH=/usr/bin:/bin git -C ~/Documents/loki fetch origin master` (bare
+      Finder PATH: fails = the helper was not found); `grep "update" harness_data/app/loki_app.log | tail -5`;
+      `cat .git/loki_update_last.json`; `curl -s 127.0.0.1:8767/health` (the app's engine) and look at `update.problem`,
+      `update.error`, `update.label`. Then restart LOKI and report whether it updated.
+
 - [x] [windows] At 18:39:31 the engine restarted for an update and at 18:39:40 "the Loki window
       closed". ANSWER (Ziva Windows, 2026-10-14): BY ITSELF - it was the app applying MY OWN ship.py
       pushes. The log shows the full cycle: 18:39:31 "the engine is restarting on the updated

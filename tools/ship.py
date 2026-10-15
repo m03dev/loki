@@ -74,6 +74,16 @@ def run_tests(repo: Path, say=print) -> bool:
     return ok
 
 
+def version_label(repo: Path) -> str:
+    """"v0.16 · patch 412" for what was shipped (engine/updater.py's label)."""
+    sys.path.insert(0, str(HERE.parent / "engine"))
+    try:
+        import updater  # noqa: E402  pylint: disable=import-outside-toplevel
+        return updater.version(repo).get("label", "")
+    except Exception:  # noqa: BLE001 - a label must never stop a ship
+        return ""
+
+
 def tell_peers(repo: Path, say=print) -> list:
     """Ask linked machines to check for the new version (best effort)."""
     sys.path.insert(0, str(repo / "engine"))
@@ -143,10 +153,12 @@ def ship(repo: Path, message: str, tests: bool = True, say=print) -> int:
     for mirror in MIRRORS:
         git(repo, "push", "-q", "origin", "HEAD:refs/heads/" + mirror.strip(), timeout=300)
     _, short = git(repo, "rev-parse", "--short=12", "HEAD")
-    say("  pushed %s to %s" % (short.strip(), BRANCH))
+    label = version_label(repo)
+    say("  pushed %s%s to %s" % (short.strip(), (" (%s)" % label) if label else "", BRANCH))
     say("6. tell the other machines")
     tell_peers(repo, say)
-    say("Shipped %s. Every machine runs it after its next LOKI start." % short.strip())
+    say("Shipped %s%s. Every machine runs it after its next LOKI start."
+        % ((label + ", ") if label else "", short.strip()))
     return 0
 
 
