@@ -2200,6 +2200,7 @@ LOCAL_TOOLS = {
     "team_post": lambda text, to="all": team_post(text, to),
     "team_read": lambda: team_read(),
     "ship_loki": lambda message, path="": ship_loki(message, path),
+    "check_loki": lambda suite="", path="": check_loki(suite, path),
     "knowledge": knowledge_tool,
     "list_files": list_files,
     "list_tree": list_tree,
@@ -2353,10 +2354,14 @@ Read AGENTS.md first and follow it. Then make this change:
 {task}
 
 Rules: LOKI runs on macOS and Windows from the same code, so never write code for one
-without the other; add or update tests in tests/; keep docs/ true. When the change is done,
-call ship_loki with a one-line message saying what changed and how you checked it. ship_loki
-runs every test suite and pushes only if they all pass; if it reports failures, fix them and
-call it again. Report DONE with what you shipped, or BLOCKED with why."""
+without the other; add or update tests in tests/; keep docs/ true. You cannot run shell
+commands, and the conductor's roles are not a way to run them: to test, call check_loki
+(suite="test_portal" for a quick check, or no suite for all). You ARE the agent that changes
+LOKI - never call improve_loki yourself. Read only the parts of big files you need
+(search_files first). When the change is done and check_loki passes, call ship_loki with a
+one-line message saying what changed and how you checked it. ship_loki runs every suite again
+and pushes only if they all pass; if it reports failures, fix them and call it again. Report
+DONE with what you shipped, or BLOCKED with why."""
 
 
 IMPROVE_MODEL = os.getenv("LOKI_IMPROVE_MODEL", "online").strip() or "online"
@@ -2366,8 +2371,37 @@ def _is_loki_checkout(path: Path) -> bool:
     return (path / "engine" / "loki.py").is_file() and (path / ".git").exists()
 
 
+def _in_loki_worktree() -> bool:
+    """True inside a LOKI job's own worktree (harness_data/worktrees/<job>)."""
+    try:
+        return WORKSPACE.resolve() != REPO_ROOT.resolve() and _is_loki_checkout(WORKSPACE) \
+            and "worktrees" in WORKSPACE.resolve().parts
+    except OSError:
+        return False
+
+
+def check_loki(suite: str = "", path: str = "") -> str:
+    """Run LOKI's test suites (tools/ship.py --check) in a LOKI checkout or worktree."""
+    repo = Path(path).expanduser() if path else (WORKSPACE if _is_loki_checkout(WORKSPACE) else REPO_ROOT)
+    if not _is_loki_checkout(repo):
+        return "error: %s is not a LOKI checkout" % repo
+    argv = [sys.executable, str(REPO_ROOT / "tools" / "ship.py"), "--check", "--repo", str(repo)]
+    suite = re.sub(r"[^a-z_,]", "", str(suite or "").lower())
+    if suite:
+        argv += ["--only", suite]
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "error: the tests took over an hour and were stopped"
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return ("ALL PASSED\n" if proc.returncode == 0 else "SOME FAILED\n") + out[-3000:]
+
+
 def improve_loki(task: str) -> str:
     """Start a background agent that changes LOKI's own code in an isolated worktree."""
+    if _in_loki_worktree():
+        return ("error: you are already the agent changing LOKI (this is its worktree). Make the "
+                "change here, test it with check_loki and ship it with ship_loki.")
     if SELF_SHIP == "off":
         return "error: LOKI may not change its own code here (LOKI_SELF_SHIP=off)"
     if JOBS is None:
@@ -2515,6 +2549,8 @@ TOOL_SCHEMAS = [
     schema("team_read", "Read your team's board: what teammates found, built and reported (only on a team).", {}, []),
     schema("improve_loki", "Change LOKI's own code (a feature, a fix, a new tool for yourself). A background LOKI agent makes the change in its own git worktree, tests it on the shared Mac/Windows test suites and ships it with ship_loki. task=what to change and why.",
            {"task": {"type": "string"}}, ["task"]),
+    schema("check_loki", "Run LOKI's own test suites in this LOKI worktree (you cannot run shell commands; this is how you test a change to LOKI). suite=one suite name like test_portal for a quick check, empty for all of them. Returns each suite's PASS/FAIL lines.",
+           {"suite": {"type": "string"}, "path": {"type": "string"}}, []),
     schema("ship_loki", "Publish a finished change to LOKI's own code: runs every test suite, commits, catches up with GitHub, pushes to master and tells the other machines to update. Pushes nothing if a test fails. message=one line: what changed and how it was checked; path=the worktree (default: this workspace).",
            {"message": {"type": "string"}, "path": {"type": "string"}}, ["message"]),
     schema("conductor", "You are the conductor: hand one step to a specialist. role='research' (a cited answer from the live web; task=question), 'read_web' (one page as markdown; url=...), 'browse' (a real browser does task on websites - asks the user), 'remember' (task=fact to keep long-term), 'recall' (task=question for long-term memory), 'media' (url=video; task='transcript'|'info'|'audio'|'video'|'search: words'), 'image' (task=what to draw), 'reach' (url=page to read, or task='github: ...' / 'doctor'). Only roles listed under 'Specialists you can call' in your instructions are ready.",
@@ -2536,7 +2572,7 @@ MODEL_TOOL_NAMES = {
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
-    "improve_loki", "ship_loki", "start_team", "team_post", "team_read",
+    "improve_loki", "ship_loki", "check_loki", "start_team", "team_post", "team_read",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -2553,7 +2589,8 @@ TOOL_CATEGORIES = {
     "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
-    "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki"],
+    "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
+                    "check_loki"],
     "capabilities": ["list_capabilities"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],

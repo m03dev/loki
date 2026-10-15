@@ -155,10 +155,17 @@ def main(argv=None) -> int:
     ap.add_argument("-m", "--message", default="")
     ap.add_argument("--repo", default=str(DEFAULT_REPO), help="checkout or agent worktree to ship from")
     ap.add_argument("--check", action="store_true", help="only run the tests")
+    ap.add_argument("--only", default="", help="with --check: just these suites (comma list, e.g. test_portal)")
     ap.add_argument("--no-tests", action="store_true", help="skip the tests (not for agents)")
     args = ap.parse_args(argv)
     repo = Path(args.repo).resolve()
     if args.check:
+        if args.only.strip():
+            wanted = [s.strip() for s in args.only.split(",") if s.strip()]
+            unknown = [s for s in wanted if s not in SUITES]
+            if unknown:
+                ap.error("unknown suite(s): %s (known: %s)" % (", ".join(unknown), ", ".join(SUITES)))
+            SUITES[:] = wanted
         return 0 if run_tests(repo) else 1
     if not args.message.strip():
         ap.error("-m/--message is required: say what changed")

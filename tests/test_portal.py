@@ -622,6 +622,26 @@ if loki is not None:
     finally:
         loki.AGENT_MODE, loki.GAME_PROJECT = _saved_mode, _saved_gp
     check("LOKI's own code changes use the best free online model by default", loki.IMPROVE_MODEL == "online")
+    check("the improving agent can test with check_loki (it cannot run shell commands)",
+          "check_loki" in loki.MODEL_TOOL_NAMES and "check_loki" in loki.SELF_IMPROVE_PROMPT
+          and "never call improve_loki" in loki.SELF_IMPROVE_PROMPT)
+    _saved_ws = loki.WORKSPACE
+    _wt = TMP / "harness_data" / "worktrees" / "job1"
+    (_wt / "engine").mkdir(parents=True, exist_ok=True)
+    (_wt / "engine" / "loki.py").write_text("# loki\n", encoding="utf-8")
+    (_wt / ".git").write_text("gitdir: x\n", encoding="utf-8")
+    try:
+        loki.WORKSPACE = _wt
+        check("an improving agent cannot start another improving agent (no recursion)",
+              loki.improve_loki("again").startswith("error: you are already the agent"))
+    finally:
+        loki.WORKSPACE = _saved_ws
+    check("ship.py can run one suite for a quick check", "--only" in (REPO / "tools" / "ship.py").read_text(encoding="utf-8"))
+    import workers as _w  # noqa: E402
+    check("jobs on the local model take turns (one GPU), cloud-model jobs do not",
+          _w.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, {"LOKI_PREFER": "local"})
+          and not _w.uses_local_model({"agent": "loki", "backend": "local", "model": "online"}, {})
+          and not _w.uses_local_model({"agent": "claude-code", "backend": "local"}, {}) and _w.local_model_limit({}) == 1)
     import cli_agents  # noqa: E402
     import workers  # noqa: E402
     check("OpenCode is a CLI agent and a background-job agent", "opencode" in cli_agents.CLI_AGENTS

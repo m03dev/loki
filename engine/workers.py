@@ -119,6 +119,29 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
     raise ValueError("unknown agent: %s" % agent)
 
 
+LOCAL_MODEL_NAMES = {"local", "local-small", "local-coder", "local-hermes", "local-reasoning", "local-tools",
+                     "local-fast", "loki-tuned", "smart", "lmstudio", "llamacpp", "mlx", "vllm", "jan"}
+
+
+def uses_local_model(job: dict, env: dict | None = None) -> bool:
+    """Will this job run LOKI's own loop on this machine's local model?"""
+    env = env if env is not None else os.environ
+    if job.get("agent") != "loki" or job.get("backend") != "local":
+        return False
+    model = str(job.get("model") or env.get("LOKI_MODEL", "smart")).strip().lower()
+    if model == "smart":
+        return str(env.get("LOKI_PREFER", "local")).strip().lower() == "local"
+    return model in LOCAL_MODEL_NAMES
+
+
+def local_model_limit(env: dict | None = None) -> int:
+    env = env if env is not None else os.environ
+    try:
+        return max(1, int(env.get("LOKI_LOCAL_MODEL_JOBS", "1") or 1))
+    except ValueError:
+        return 1
+
+
 def _shell_join(argv: list[str]) -> str:
     if sys.platform == "win32":
         return subprocess.list2cmdline(argv)
@@ -764,17 +787,25 @@ class Supervisor:
                     self._set(job["id"], **changed)
             jobs = self.store.all()
             active = {name: 0 for name in self.backends}
+            local_model_jobs = 0
             for job in jobs:
                 if job["status"] in ACTIVE and job["backend"] in active:
                     active[job["backend"]] += 1
+                    local_model_jobs += uses_local_model(job)
+            local_limit = local_model_limit()
             for job in sorted(jobs, key=lambda j: j.get("created", 0)):
                 if job["status"] != "queued":
                     continue
                 name = job["backend"]
                 if active.get(name, 0) >= self.limits.get(name, 1):
                     continue
+                if uses_local_model(job) and local_model_jobs >= local_limit:
+                    # One GPU, one local model: two agents on it at once crawl (0.2 tok/s seen on
+                    # the 8 GB PC) and stall. Wait for the slot; cloud-model jobs still run.
+                    continue
                 self._launch(job)
                 active[name] = active.get(name, 0) + 1
+                local_model_jobs += uses_local_model(job)
 
     def _launch(self, job: dict) -> None:
         backend = self.backends[job["backend"]]
