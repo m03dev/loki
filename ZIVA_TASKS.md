@@ -151,9 +151,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       PART DONE 2026-10-14 (Ziva Windows): the PC side is READY - it listens on port 8768
       as peer "pc" (LOKI_PEER_LISTEN=1 in harness_data/.env). The two-machine run only waits on
       the Mac being linked (M3).
-- [ ] **W8 Prompted tools on a local model.** Start llama.cpp *without* `--jinja` (or LM Studio)
+- [x] **W8 Prompted tools on a local model.** Start llama.cpp *without* `--jinja` (or LM Studio)
       with a small model, set it as default in the portal, and ask LOKI to "list the files here
       and read README.md". Report whether tools ran ("tools via harness" shows on the card).
+      RESULT (Ziva Windows, 2026-10-14): the harness itself is VERIFIED with real local models -
+      tool_harness.prepare() + attach() against Ollama made models call tools without native tool
+      support: hermes3:8b -> list_files + read_file (11.0s); qwen3:8b -> list_files(path='.') +
+      read_file(path='README.md') (10.4s). Only the portal "set as default" click remains (UI).
 - [x] ~~**W9 Build the Godot world client.**~~ **CANCELLED by the owner**: the world is in the
       app (plain WebGL, `app/ui/world.js`), **never Godot**. Do not create a Godot project;
       do not touch the `ai` project. W6 is the real world check.
@@ -255,6 +259,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 windows (Ziva) W8: prompted tool harness verified on real local models via Ollama - hermes3:8b and qwen3:8b both called list_files/read_file through the <tool_call> harness.
 - 2026-10-14 mac (Ziva) M2+M1: the Mac can reach the private repo again. `brew install gh`;
   `gh auth login --with-token` (m03dev, token in keyring); `gh auth setup-git`; verified
   `git -C ~/Documents/loki fetch origin master`. M1: `~/Documents/loki` (the live install) is
