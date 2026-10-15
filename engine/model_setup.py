@@ -24,6 +24,7 @@ the user asked for, with timeouts.
 from __future__ import annotations
 
 import ctypes
+import importlib.util
 import json
 import os
 import platform
@@ -45,23 +46,60 @@ LOCAL_SERVERS = (
     ("llamacpp", "llama.cpp server", "http://127.0.0.1:8080/v1"),
     ("jan", "Jan", "http://127.0.0.1:1337/v1"),
 )
-# Download candidates, best first within each memory budget. `need` is the memory the
-# model needs to run comfortably (weights + an agent-sized context), in GB. Tags are
-# verified at pull time; a missing tag falls through to the next candidate.
+# Download candidates, best first. `size` is the download (and disk) size in GB, `need` the
+# memory the model needs to run comfortably (weights + an agent-sized context), `score` a
+# quality estimate for agent work (tool calling, following instructions), `roles` what it
+# is good for ("agent", "fast", "code"), `moe` = mixture-of-experts (only a few billion
+# parameters active per token, so it runs much faster than its size suggests). Tags were
+# checked on ollama.com/library (October 2026); a tag that disappears falls through to the
+# next candidate at pull time.
 CATALOG = [
-    {"tag": "qwen3:30b", "size": 19.0, "need": 24, "score": 92, "why": "MoE (3B active): big-model quality at small-model speed"},
-    {"tag": "gpt-oss:20b", "size": 14.0, "need": 16, "score": 88, "why": "MoE (3.6B active), strong tool use, fast"},
-    {"tag": "qwen3:14b", "size": 9.3, "need": 12, "score": 85, "why": "reliable tool calling, good reasoning"},
-    {"tag": "qwen3.5:9b", "size": 6.6, "need": 9, "score": 82, "why": "newest small Qwen, tool calling"},
-    {"tag": "qwen3:8b", "size": 5.2, "need": 7, "score": 78, "why": "the proven 8 GB agent model"},
-    {"tag": "qwen3:4b", "size": 2.6, "need": 4, "score": 68, "why": "fast on modest hardware"},
-    {"tag": "llama3.2:3b", "size": 2.0, "need": 3, "score": 55, "why": "smallest that still calls tools"},
+    {"tag": "qwen3.8:27b", "size": 18.0, "need": 22, "score": 94, "roles": ["agent", "code"],
+     "why": "the newest Qwen: the strongest open agent and coding model a home computer can run"},
+    {"tag": "qwen3.5:35b-a3b", "size": 22.0, "need": 26, "score": 91, "roles": ["agent", "code"], "moe": True,
+     "why": "big-model quality, but only 3B active so it answers quickly"},
+    {"tag": "gemma4:26b", "size": 17.0, "need": 21, "score": 89, "roles": ["agent"], "moe": True,
+     "why": "Google's Gemma 4: strong tool use, sees images"},
+    {"tag": "qwen3-coder:30b", "size": 19.0, "need": 23, "score": 88, "roles": ["code"], "moe": True,
+     "why": "built for coding agents, 256K context, 3B active so it is quick"},
+    {"tag": "gpt-oss:20b", "size": 14.0, "need": 16, "score": 88, "roles": ["agent", "code"], "moe": True,
+     "why": "OpenAI's open model: dependable tool calls, fast for its size"},
+    {"tag": "qwen3:14b", "size": 9.3, "need": 12, "score": 85, "roles": ["agent", "code"],
+     "why": "reliable tool calling and good reasoning"},
+    {"tag": "qwen3.5:9b", "size": 6.6, "need": 8.5, "score": 84, "roles": ["agent", "code"],
+     "why": "the best small all-rounder: tools, coding, 256K context"},
+    {"tag": "gemma4:12b", "size": 8.0, "need": 10, "score": 83, "roles": ["agent"],
+     "why": "Gemma 4 mid-size: good tool use, sees images"},
+    {"tag": "qwen3:8b", "size": 5.2, "need": 7, "score": 78, "roles": ["agent", "code"],
+     "why": "the proven 8 GB agent model"},
+    {"tag": "granite4.1:8b", "size": 5.3, "need": 7, "score": 74, "roles": ["agent", "code"],
+     "why": "IBM Granite 4.1: steady tool calls and clean JSON"},
+    {"tag": "qwen3.5:4b", "size": 3.4, "need": 5, "score": 72, "roles": ["fast", "agent"],
+     "why": "small and quick, still calls tools well"},
+    {"tag": "granite4.1:3b", "size": 2.1, "need": 3, "score": 60, "roles": ["fast"],
+     "why": "tiny and very fast, calls tools"},
+    {"tag": "qwen3.5:2b", "size": 2.7, "need": 3.5, "score": 58, "roles": ["fast"],
+     "why": "tiny and fast, for quick answers on modest hardware"},
+    {"tag": "llama3.2:3b", "size": 2.0, "need": 3, "score": 55, "roles": ["fast"],
+     "why": "smallest that still calls tools"},
 ]
-# Quality hints for models already installed (substring of the tag -> score).
-KNOWN_SCORES = [("qwen3:30b", 92), ("qwen3.8", 90), ("gpt-oss:20b", 88), ("gemma4:26b", 90),
-                ("qwen3:32b", 90), ("qwen3:14b", 85), ("gemma4", 84), ("qwen3.5:9b", 82),
-                ("qwen3.5", 80), ("qwen3:8b", 78), ("qwen2.5-coder:14b", 76), ("llama3.1:8b", 72),
-                ("hermes3", 70), ("qwen3:4b", 68), ("qwen2.5", 65), ("llama3.2", 55)]
+# MLX alternatives on Apple Silicon (served by mlx_lm.server on port 8082, provider "mlx").
+MLX_CATALOG = [
+    {"repo": "mlx-community/Qwen3.5-9B-OptiQ-4bit", "size": 6.6, "need": 9, "score": 84,
+     "why": "Qwen3.5 9B tuned for Apple Silicon"},
+    {"repo": "mlx-community/Qwen3.5-4B-MLX-4bit", "size": 3.0, "need": 4.5, "score": 72,
+     "why": "Qwen3.5 4B, quick on any Apple Silicon Mac"},
+    {"repo": "mlx-community/Qwen3-4B-4bit", "size": 2.3, "need": 4, "score": 68,
+     "why": "the small model LOKI's MLX setup started with"},
+]
+# Quality hints for models already installed (first substring of the tag that matches).
+KNOWN_SCORES = [("qwen3.8", 94), ("qwen3.5:122b", 93), ("qwen3.5:35b", 91), ("qwen3.5:27b", 91),
+                ("gemma4:31b", 90), ("gemma4:26b", 89), ("qwen3-coder", 88), ("gpt-oss:20b", 88),
+                ("qwen3:30b", 87), ("qwen3:32b", 87), ("qwen3:14b", 85), ("qwen3.5:9b", 84),
+                ("gemma4:12b", 83), ("gemma4", 80), ("qwen3.5:4b", 72), ("qwen3.5:2b", 58),
+                ("qwen3.5", 80), ("qwen3:8b", 78), ("qwen2.5-coder:14b", 76), ("granite4.1:8b", 74),
+                ("granite4.1:3b", 60), ("granite4", 70), ("llama3.1:8b", 72), ("hermes3", 70),
+                ("qwen3:4b", 68), ("qwen2.5", 65), ("llama3.2", 55)]
 DERIVED_PREFIX = "loki-"
 TIMEOUT = 3.0
 
@@ -100,11 +138,16 @@ def hardware(runner=subprocess.run) -> dict:
         pass
     if shutil.which("nvidia-smi"):
         try:
-            out = runner(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            out = runner(["nvidia-smi", "--query-gpu=name,memory.total,memory.free,driver_version",
+                          "--format=csv,noheader,nounits"],
                          capture_output=True, text=True, timeout=8).stdout.strip().splitlines()
             if out:
-                name, mib = [p.strip() for p in out[0].split(",")[:2]]
-                info.update(gpu=name, vram_gb=round(float(mib) / 1024, 1))
+                parts = [p.strip() for p in out[0].split(",")]
+                info.update(gpu=parts[0], vram_gb=round(float(parts[1]) / 1024, 1))
+                if len(parts) > 2 and re.match(r"^[\d.]+$", parts[2]):
+                    info["vram_free_gb"] = round(float(parts[2]) / 1024, 1)
+                if len(parts) > 3:
+                    info["driver"] = parts[3]
         except Exception:
             pass
     info["budget_gb"] = memory_budget(info)
@@ -302,10 +345,12 @@ class Progress:
 PROGRESS = Progress()
 
 
-def pull(tags: list[str], progress: Progress = PROGRESS, opener=urllib.request.urlopen) -> str:
-    """Pull the first tag that exists; stream progress. Returns the pulled tag or ""."""
+def pull(tags: list[str], progress: Progress = PROGRESS, opener=urllib.request.urlopen,
+         final: bool = True, op: str = "pull") -> str:
+    """Pull the first tag that exists; stream progress. Returns the pulled tag or "".
+    `final=False` leaves the progress open for the steps that follow (one-click setup)."""
     for tag in tags:
-        progress.update(op="pull", target=tag, status="starting", completed=0, total=0,
+        progress.update(op=op, target=tag, status="starting", completed=0, total=0,
                         message="Downloading %s" % tag, error="", done=False, started=time.time())
         request = urllib.request.Request(OLLAMA + "/api/pull", data=json.dumps({"model": tag, "stream": True}).encode(),
                                          headers={"Content-Type": "application/json"})
@@ -327,7 +372,8 @@ def pull(tags: list[str], progress: Progress = PROGRESS, opener=urllib.request.u
                                     completed=int(event.get("completed") or 0) or progress.state["completed"],
                                     total=int(event.get("total") or 0) or progress.state["total"])
                     if event.get("status") == "success":
-                        progress.update(done=True, status="success", message="%s is ready" % tag)
+                        progress.update(done=final, status="success" if final else "downloaded",
+                                        message=("%s is ready" if final else "%s is downloaded") % tag)
                         return tag
                 if failed:
                     progress.update(error=failed, message="%s: %s - trying the next model" % (tag, failed))
@@ -394,6 +440,315 @@ def install_ollama(progress: Progress = PROGRESS, opener=urllib.request.urlopen,
         return False
 
 
+# --------------------------------------------------------------------- the richer scan
+DISK_MARGIN_GB = 2.0  # always leave this much free: a full disk once broke an install on the Mac
+MLX_URL = os.environ.get("MLX_BASE_URL", "http://127.0.0.1:8082/v1").rstrip("/")
+_UNSET = object()
+
+
+def models_dir(env: dict | None = None) -> Path:
+    """Where Ollama keeps its models: $OLLAMA_MODELS, else ~/.ollama/models (on Windows
+    %USERPROFILE%\\.ollama\\models, which is the same path)."""
+    env = env if env is not None else os.environ
+    custom = str(env.get("OLLAMA_MODELS", "") or "").strip()
+    return Path(custom).expanduser() if custom else Path.home() / ".ollama" / "models"
+
+
+def disk_space(path: Path) -> dict:
+    """{path, free_gb, total_gb} for the disk that holds `path` (or its nearest existing
+    parent, e.g. your home folder before Ollama ever ran). free_gb is None when unknown."""
+    probe = Path(path)
+    while not probe.exists() and probe.parent != probe:
+        probe = probe.parent
+    try:
+        usage = shutil.disk_usage(str(probe))
+        return {"path": str(path), "free_gb": round(usage.free / 2**30, 1), "total_gb": round(usage.total / 2**30, 1)}
+    except OSError:
+        return {"path": str(path), "free_gb": None, "total_gb": None}
+
+
+def os_name() -> str:
+    """'macOS 15.3', 'Windows 11 (build 26100)', 'Ubuntu 24.04 LTS'."""
+    try:
+        if sys.platform == "darwin":
+            ver = platform.mac_ver()[0]
+            return ("macOS " + ver) if ver else "macOS"
+        if sys.platform == "win32":
+            release, version = platform.release(), platform.version()
+            last = version.split(".")[-1]
+            build = int(last) if last.isdigit() else 0
+            name = "11" if release == "10" and build >= 22000 else release
+            return "Windows %s%s" % (name, " (build %d)" % build if build else "")
+        try:
+            return platform.freedesktop_os_release().get("PRETTY_NAME") or "Linux"
+        except (OSError, AttributeError):
+            return "Linux " + platform.release()
+    except Exception:  # noqa: BLE001 - a name is a nicety
+        return sys.platform
+
+
+def mlx_status(opener=urllib.request.urlopen, which=shutil.which, find_spec=importlib.util.find_spec) -> dict:
+    """MLX (Apple Silicon): is mlx_lm installed, and is mlx_lm.server answering on 8082?"""
+    installed = False
+    if sys.platform == "darwin":
+        try:
+            installed = find_spec("mlx_lm") is not None
+        except (ImportError, ValueError):
+            installed = False
+        installed = installed or bool(which("mlx_lm.server"))
+    try:
+        data = _get_json(MLX_URL + "/models", timeout=1.0, opener=opener)
+        models = [m.get("id", "") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+        running = True
+    except Exception:  # noqa: BLE001 - not running
+        models, running = [], False
+    return {"installed": installed or running, "running": running, "models": models, "base_url": MLX_URL}
+
+
+def scan(info: dict | None = None, opener=urllib.request.urlopen, servers=_UNSET, models=_UNSET,
+         env: dict | None = None, which=shutil.which) -> dict:
+    """Everything worth knowing about this computer for local models, in a second or two:
+    the hardware() fields plus OS version, CPU cores, free disk where models go, MLX and
+    llama.cpp presence, and which local servers run which models."""
+    info = dict(info or hardware())
+    models = ollama_models(opener=opener) if models is _UNSET else models
+    servers = other_servers(opener=opener) if servers is _UNSET else servers
+    disk = disk_space(models_dir(env))
+    mlx = mlx_status(opener=opener, which=which)
+    running = []
+    if models is not None:
+        running.append({"label": "Ollama", "base_url": OLLAMA,
+                        "models": [m["name"] for m in models if not m["name"].startswith(DERIVED_PREFIX)]})
+    if mlx["running"]:
+        running.append({"label": "MLX", "base_url": MLX_URL, "models": mlx["models"]})
+    for server in servers or []:
+        running.append({"label": server["label"], "base_url": server["base_url"], "models": server["models"]})
+    accel = "nvidia" if info.get("vram_gb") else "apple" if info.get("unified") else "cpu"
+    return {**info,
+            "os_name": os_name(), "cpu_cores": os.cpu_count() or 0, "chip": str(info.get("chip") or "").strip(),
+            "accel": accel, "vram_free_gb": info.get("vram_free_gb"), "driver": info.get("driver", ""),
+            "disk": disk, "disk_free_gb": disk["free_gb"],
+            "mlx": mlx, "mlx_installed": mlx["installed"],
+            "llamacpp": {"installed": bool(which("llama-server") or which("llama-cli")),
+                         "running": any(s.get("key") == "llamacpp" for s in servers or [])},
+            "ollama_installed": ollama_installed(which) or models is not None,
+            "running": running}
+
+
+# --------------------------------------------------------------------- suggestions
+SPEED_PENALTY = {"fast": 0, "good": 6, "slow": 14}
+
+
+def _gb(n: float) -> str:
+    n = float(n)
+    return ("%d" % round(n)) if n >= 10 or n.is_integer() else ("%.1f" % n)
+
+
+def fit(entry: dict, machine: dict) -> dict | None:
+    """How a catalog entry runs on this machine: {speed, reason}, or None when it does not
+    fit in memory. GPU memory is fastest, Apple unified memory next, plain RAM slowest."""
+    ram = float(machine.get("ram_gb") or 0)
+    vram = float(machine.get("vram_gb") or 0)
+    need = float(entry["need"])
+    moe = bool(entry.get("moe"))
+    if vram:
+        room = max(vram - 1.0, 0.0)
+        if need <= room:
+            return {"speed": "fast", "reason": "Fits your %s GB GPU fully, so it runs fast" % _gb(vram)}
+        if need <= room + ram * 0.4:
+            return {"speed": "good" if moe else "slow",
+                    "reason": "Bigger than your %s GB GPU, so part of it runs on the processor%s"
+                              % (_gb(vram), " - it only uses a few billion parameters at a time, so it stays usable"
+                                 if moe else " and replies are slower")}
+        return None
+    if machine.get("unified"):
+        if need <= ram * 0.65:
+            return {"speed": "fast", "reason": "Fits in your Mac's %s GB of unified memory with room to spare, so "
+                                               "it runs smoothly" % _gb(ram)}
+        return None
+    if ram and need <= ram * 0.5:
+        quick = need <= 4 or moe
+        return {"speed": "good" if quick else "slow",
+                "reason": "There is no graphics card for AI, so it runs on the processor%s"
+                          % (" - small enough to stay responsive" if quick else ", which is slow")}
+    return None
+
+
+def _disk(size_gb: float, machine: dict) -> tuple[bool, float]:
+    """(fits, GB to free) for a download of `size_gb`, keeping DISK_MARGIN_GB free."""
+    free = machine.get("disk_free_gb")
+    if free is None:
+        return True, 0.0
+    short = round(float(size_gb) + DISK_MARGIN_GB - float(free), 1)
+    return short <= 0, max(short, 0.0)
+
+
+def is_installed(tag: str, installed: list[str]) -> bool:
+    derived = derived_name(tag)
+    return any(n == tag or n.startswith(tag + "-") or n.split(":")[0] == derived or n.startswith(derived + "-")
+               for n in installed)
+
+
+def plan(machine: dict, installed: list[str] | None = None) -> dict:
+    """Per-role picks for this machine: {rows, picks: {agent, fast, code, mlx}, blocked, auto}.
+    Nothing that does not fit the free disk is ever picked; `blocked` says how much to free."""
+    installed = installed or []
+    rows = []
+    for entry in CATALOG:
+        how = fit(entry, machine)
+        if not how:
+            continue
+        fits_disk, short = _disk(entry["size"], machine)
+        rows.append({**entry, **how, "fit": entry["score"] - SPEED_PENALTY[how["speed"]],
+                     "fits_disk": fits_disk, "free_up_gb": short, "installed": is_installed(entry["tag"], installed)})
+    ok = [r for r in rows if r["fits_disk"] or r["installed"]]
+
+    def pick(role: str, cands: list[dict], key, title: str) -> dict | None:
+        if not cands:
+            return None
+        cands = sorted(cands, key=key, reverse=True)
+        top = cands[0]
+        return {"role": role, "title": title, "tag": top["tag"], "size_gb": top["size"], "need_gb": top["need"],
+                "speed": top["speed"], "score": top["score"], "fit": top["fit"], "installed": top["installed"],
+                "why": "%s. %s." % (top["reason"], top["why"][0].upper() + top["why"][1:]),
+                "tags": [c["tag"] for c in cands[:3]]}
+
+    def by_fit(r: dict) -> tuple:
+        return (r["fit"], r["installed"], -r["size"])
+
+    agent = pick("agent", [r for r in ok if "agent" in r["roles"]] or ok, by_fit, "Best overall agent model")
+    fast = pick("fast", [r for r in ok if "fast" in r["roles"]] or ok,
+                lambda r: (-SPEED_PENALTY[r["speed"]], r["score"]), "Fastest")
+    code = pick("code", [r for r in ok if "code" in r["roles"]], by_fit, "Coding")
+    picks = {"agent": agent, "fast": fast, "code": code, "mlx": None}
+    if machine.get("unified") and machine.get("mlx_installed"):
+        ram = float(machine.get("ram_gb") or 0)
+        for entry in MLX_CATALOG:
+            if entry["need"] <= ram * 0.65 and _disk(entry["size"], machine)[0]:
+                picks["mlx"] = {"role": "mlx", "title": "Apple MLX alternative", "repo": entry["repo"],
+                                "size_gb": entry["size"],
+                                "why": "MLX is installed on this Mac: %s." % entry["why"],
+                                "command": "mlx_lm.server --model %s --port 8082" % entry["repo"]}
+                break
+    blocked = None
+    better = sorted([r for r in rows if not r["fits_disk"] and not r["installed"]
+                     and (not agent or r["fit"] > agent["fit"])], key=by_fit, reverse=True)
+    if better:
+        top = better[0]
+        blocked = {"tag": top["tag"], "size_gb": top["size"], "free_up_gb": top["free_up_gb"],
+                   "message": "Free up %s GB of disk space first to get %s, the best model for this computer."
+                              % (_gb(top["free_up_gb"]), top["tag"])}
+    if agent:
+        auto = {"tag": agent["tag"], "size_gb": agent["size_gb"], "installed": agent["installed"],
+                "tags": agent["tags"], "error": ""}
+    else:
+        free = machine.get("disk_free_gb")
+        if rows and free is not None:
+            smallest = min(r["size"] for r in rows)
+            error = ("There is not enough free disk space for a model (%s GB free). Free up %s GB first, then try "
+                     "again." % (_gb(float(free)), _gb(max(round(smallest + DISK_MARGIN_GB - float(free), 1), 0.1))))
+        else:
+            error = "This computer does not have enough memory for a local model. Use a cloud provider instead."
+        auto = {"tag": "", "size_gb": 0, "installed": False, "tags": [], "error": error}
+    return {"rows": rows, "picks": picks, "blocked": blocked, "auto": auto}
+
+
+def upgrade_for(best: dict | None, picks: dict) -> dict | None:
+    """A clearly better model that fits (score gap >= 8) than the best installed one."""
+    agent = (picks or {}).get("agent")
+    if not best or not agent or agent["installed"]:
+        return None
+    name = str(best.get("name", ""))
+    current = name[len(DERIVED_PREFIX):] if name.startswith(DERIVED_PREFIX) else name
+    gain = int(agent["fit"] - int(best.get("score") or 0))
+    if gain < 8:
+        return None
+    return {"tag": agent["tag"], "why": agent["why"], "size_gb": agent["size_gb"], "current": current, "gain": gain}
+
+
+# --------------------------------------------------------------------- one click
+def start_ollama(runner=subprocess.run) -> None:
+    """Open the installed Ollama app (best effort, both platforms)."""
+    try:
+        if sys.platform == "darwin":
+            runner(["open", "-a", "Ollama"], timeout=30)
+        elif sys.platform == "win32":
+            app = Path(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama app.exe")
+            if app.exists():
+                subprocess.Popen([str(app)])
+            elif shutil.which("ollama"):
+                subprocess.Popen([shutil.which("ollama") or "ollama", "serve"])
+        elif shutil.which("ollama"):
+            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001 - the caller waits and reports
+        pass
+
+
+def _wait_for_ollama(opener, seconds: float) -> list[dict] | None:
+    end = time.time() + seconds
+    while True:
+        models = ollama_models(opener=opener)
+        if models is not None or time.time() >= end:
+            return models
+        time.sleep(2)
+
+
+def run_auto(tags: list[str], machine: dict, use, progress: Progress = PROGRESS, opener=urllib.request.urlopen,
+             install=None, start=None, wait_s: float = 60.0) -> str:
+    """One click: get Ollama running (install it if missing), download the best fitting model
+    (falling back through `tags`), give it a long context window, switch LOKI to it and keep
+    it loaded. Plain-English progress throughout. Returns the model name LOKI now uses."""
+    progress.update(op="auto", target=tags[0] if tags else "", status="starting", completed=0, total=0,
+                    error="", done=False, started=time.time(), message="Checking this computer")
+
+    def fail(message: str, error: str = "") -> str:
+        progress.update(done=True, status="failed", error=error or message, message=message)
+        return ""
+
+    if not tags:
+        return fail("No model fits this computer right now.")
+    try:
+        models = ollama_models(opener=opener)
+        if models is None:
+            if not ollama_installed():
+                progress.update(message="Installing Ollama, the free app that runs models on this computer")
+                if not (install or install_ollama)(progress=progress, opener=opener):
+                    snap = progress.snapshot()
+                    progress.update(op="auto")
+                    return fail(snap.get("message") or "Could not install Ollama.", snap.get("error", ""))
+                progress.update(op="auto", target=tags[0], done=False, error="")
+            else:
+                progress.update(status="starting Ollama", message="Starting Ollama")
+                (start or start_ollama)()
+            models = _wait_for_ollama(opener, wait_s)
+            if models is None:
+                return fail("Ollama is installed but not running yet. Open the Ollama app once, then click the "
+                            "button again.")
+        names = [m["name"] for m in models]
+        tag = next((t for t in tags if is_installed(t, names)), "")
+        if tag:
+            progress.update(target=tag, status="installed", message="%s is already on this computer" % tag)
+        else:
+            tag = pull(tags, progress=progress, opener=opener, final=False, op="auto")
+            if not tag:
+                return ""  # pull() already said what went wrong
+            models = ollama_models(opener=opener) or models
+        names = [m["name"] for m in models]
+        base = next((n for n in names if n == tag), next((n for n in names if n.startswith(tag + "-")), tag))
+        progress.update(op="auto", target=tag, status="preparing",
+                        message="Giving %s a long memory for big tasks" % tag)
+        name = ensure_context(base, context_for(machine), models, opener=opener)
+        progress.update(status="switching", message="Switching LOKI to %s" % tag)
+        use(name)
+        progress.update(status="warming", message="Loading %s so the first reply is quick" % tag)
+        keep_warm(name, opener=opener)
+        progress.update(done=True, status="success", completed=0, total=0,
+                        message="All set: LOKI now runs %s on this computer - offline, free and private." % tag)
+        return name
+    except Exception as exc:  # noqa: BLE001 - reported to the UI
+        return fail("Setup stopped: %s" % str(exc)[:160], str(exc)[:200])
+
+
 # --------------------------------------------------------------------- the whole picture
 def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | None = None) -> dict:
     """Everything the first-run screen needs, in one call."""
@@ -402,15 +757,28 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
     models = ollama_models(opener=opener)
     best = best_installed(models, info["budget_gb"], caps=lambda n: capabilities(n, opener=opener)) if models else None
     servers = other_servers(opener=opener)
+    machine = scan(info, opener=opener, servers=servers, models=models, env=env)
+    names = [m["name"] for m in models or []]
+    advice = plan(machine, names)
     cloud_keys = sorted(k for k, v in env.items() if k.endswith("_API_KEY") and str(v).strip())
     ready = bool(best and best.get("tools")) or bool(servers)
+    recs = recommend(info, names)
+    fitting = {r["tag"] for r in advice["rows"]}
+    recs = [r for r in recs if r["tag"] in fitting] or recs
+    for rec in recs:
+        rec["fits_disk"], rec["free_up_gb"] = _disk(rec["size"], machine)
     return {
         "hardware": info,
+        "scan": machine,
         "ollama": {"installed": ollama_installed() or models is not None, "running": models is not None,
                    "models": models or []},
         "best": best,
         "servers": servers,
-        "recommend": recommend(info, [m["name"] for m in models or []]),
+        "recommend": recs,
+        "picks": advice["picks"],
+        "blocked": advice["blocked"],
+        "auto": advice["auto"],
+        "upgrade": upgrade_for(best, advice["picks"]) if best and best.get("tools") else None,
         "context": context_for(info),
         "cloud_keys": cloud_keys,
         "ready_offline": ready,

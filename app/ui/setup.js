@@ -58,11 +58,69 @@ async function loadUsageTab() {
 }
 
 // ---------------------------------------------------------------- model setup
+function button(cls, text, onClick) {
+  const b = el("button", cls, text);
+  b.type = "button";
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+// A warning line (styled from here: app.css belongs to another change).
+function warnNote(text) {
+  const n = el("p", "note warn", text);
+  n.style.color = "var(--warn)";
+  return n;
+}
+
+// "This computer": chip/GPU, memory, free disk and what is running, in plain words.
+function machineCard(data) {
+  const sc = data.scan || data.hardware || {};
+  const card = el("div", "setup-step machine-card");
+  card.append(el("h3", "", "This computer"));
+  let chip;
+  if (sc.accel === "nvidia" || sc.vram_gb) {
+    chip = (sc.gpu || "NVIDIA GPU") + " with " + gb(sc.vram_gb) + " of graphics memory" +
+      (sc.vram_free_gb ? " (" + gb(sc.vram_free_gb) + " free right now)" : "");
+  } else if (sc.unified) {
+    chip = (sc.chip || "Apple Silicon") + " with " + gb(sc.ram_gb) + " of unified memory (shared by the chip and the AI)";
+  } else {
+    chip = (sc.chip || "Processor") + " - no graphics card for AI, so models run on the processor";
+  }
+  card.append(el("p", "note", chip));
+  const facts = [gb(sc.ram_gb) + " memory"];
+  if (sc.cpu_cores) facts.push(sc.cpu_cores + " CPU cores");
+  if (sc.os_name) facts.push(sc.os_name);
+  card.append(el("p", "note", facts.join(" · ")));
+  const disk = sc.disk || {};
+  if (disk.free_gb !== null && disk.free_gb !== undefined) {
+    const low = disk.free_gb < 10;
+    const line = "Free disk space for models: " + gb(disk.free_gb);
+    card.append(low ? warnNote(line + " - that is tight. Models need several GB, and a full disk can break things.")
+      : el("p", "note", line));
+  }
+  const running = sc.running || [];
+  const lines = running.map((r) => r.label + (r.models && r.models.length ? " (" + r.models.slice(0, 3).join(", ") + (r.models.length > 3 ? ", …" : "") + ")" : ""));
+  card.append(el("p", "note", lines.length ? "Running now: " + lines.join(" · ") : "No local model app is running yet."));
+  const extras = [];
+  if (sc.mlx && sc.mlx.installed && !sc.mlx.running) extras.push("MLX is installed");
+  if (sc.llamacpp && sc.llamacpp.installed && !sc.llamacpp.running) extras.push("llama.cpp is installed");
+  if (sc.ollama_installed && !running.some((r) => r.label === "Ollama")) extras.push("Ollama is installed but not open");
+  if (extras.length) card.append(el("p", "note", extras.join(" · ") + "."));
+  return card;
+}
+
+// Download (if needed) and switch to one model, in one click.
+async function downloadAndUse(tag, box, compact) {
+  const r = await api("/setup/upgrade", { tag });
+  if (!r.ok) { addNotice(r.error || "Could not start the download.", true); return false; }
+  if (box) watchProgress(box, compact);
+  return true;
+}
+
 function renderSetup(box, data, compact) {
   box.replaceChildren();
-  const hw = data.hardware || {};
-  const mem = hw.vram_gb ? gb(hw.vram_gb) + " GPU memory (" + (hw.gpu || "GPU") + ")" : gb(hw.ram_gb) + " memory" + (hw.unified ? " (Apple Silicon)" : "");
-  box.append(el("p", "setup-hw", "This computer: " + mem + " · room for a model up to about " + gb(hw.budget_gb) + "."));
+  box.append(machineCard(data));
+  const busy = (data.progress || {}).op && !(data.progress || {}).done;
 
   const active = data.active || {};
   if (active.local) {
@@ -82,18 +140,47 @@ function renderSetup(box, data, compact) {
     box.append(ok);
   }
 
-  // Step 1: a local model server
+  // The one big button: everything (Ollama, download, long context, switch, warm) in one click.
+  const auto = data.auto || {};
+  const picks = data.picks || {};
+  const local = active.local || "";
+  const usingBest = auto.tag && auto.installed && (local === auto.tag || local.includes(auto.tag.replace(/[:]/g, "-")));
+  const hero = el("div", "setup-step" + (usingBest ? " ok" : ""));
+  if (usingBest) {
+    hero.append(el("h3", "", "You are using the best model for this computer: " + auto.tag));
+  } else if (auto.tag) {
+    const label = auto.installed ? "Use the best model for this computer (" + auto.tag + ", already downloaded)"
+      : "Set up the best model for this computer (" + auto.tag + ", " + gb(auto.size_gb) + ")";
+    const go = button("send big", label, async () => {
+      go.disabled = true;
+      const r = await api("/setup/auto", {});
+      if (!r.ok) { go.disabled = false; addNotice(r.error || "Could not start the setup.", true); return; }
+      watchProgress(box, compact);
+    });
+    go.disabled = busy;
+    go.style.width = "100%";
+    go.style.padding = "12px 16px";
+    go.style.fontSize = "15px";
+    go.style.margin = "4px 0 10px";
+    hero.append(el("h3", "", "One click setup"), go);
+    if (picks.agent && picks.agent.why) hero.append(el("p", "note", picks.agent.why));
+    hero.append(el("p", "note", "Loki installs Ollama if needed, downloads the model, gives it a long memory and switches to it. You can keep chatting meanwhile."));
+  } else {
+    hero.append(el("h3", "", "No local model fits right now"), el("p", "note", auto.error || "Use a cloud provider in Settings > Connections."));
+  }
+  if (data.blocked) hero.append(warnNote(data.blocked.message));
+  box.append(hero);
+
+  // Install or open Ollama (the big button does this too).
   const ol = data.ollama || {};
   const servers = data.servers || [];
-  const s1 = el("div", "setup-step" + (ol.running || servers.length ? " ok" : ""));
-  s1.append(el("h3", "", ol.running ? "Ollama is running" : servers.length ? "Found " + servers.map((s) => s.label).join(", ") : "Install a local model runner"));
-  if (!ol.running && !servers.length) {
-    s1.append(el("p", "note", ol.installed ? "Ollama is installed but not running. Open the Ollama app, then come back." :
-      "Loki runs models through Ollama (free, open source). It downloads from ollama.com and installs like any app."));
+  if (!ol.running && !servers.length && !compact) {
+    const s1 = el("div", "setup-step");
+    s1.append(el("h3", "", ol.installed ? "Ollama is installed but not running" : "Ollama runs the models"),
+              el("p", "note", ol.installed ? "Open the Ollama app, or use the button above - Loki starts it for you." :
+                "Ollama is free and open source. The button above installs it from ollama.com, or do just that step here."));
     if (!ol.installed) {
-      const install = el("button", "send", "Install Ollama for me");
-      install.type = "button";
-      install.addEventListener("click", async () => {
+      const install = button("quiet", "Only install Ollama", async () => {
         install.disabled = true;
         const r = await api("/setup/install-ollama", {});
         if (!r.ok) addNotice(r.error || "Could not start the install.", true);
@@ -101,50 +188,80 @@ function renderSetup(box, data, compact) {
       });
       s1.append(install);
     }
+    box.append(s1);
   }
-  box.append(s1);
 
-  // Step 2: installed models / recommendations
-  const s2 = el("div", "setup-step" + (data.best && data.best.tools ? " ok" : ""));
-  s2.append(el("h3", "", data.best && data.best.tools ? "Model ready: " + data.best.name : "Download a model that fits"));
-  // loki-* are Loki's own long-context copies of a model (no extra download): not listed.
-  const installed = (ol.models || []).filter((m) => !/embed/i.test(m.name) && !/^loki-/.test(m.name));
-  for (const m of installed) {
+  // Suggestions for this computer, by role, each one click.
+  const roles = el("div", "setup-step");
+  roles.append(el("h3", "", "Suggested for this computer"));
+  const shown = new Set();
+  for (const key of ["agent", "fast", "code"]) {
+    const p = picks[key];
+    if (!p) continue;
     const row = el("div", "model-row");
     const info = el("div", "grow");
-    info.append(document.createTextNode(m.name), el("small", "", (m.params || "") + " · " + gb(m.size_gb) + " · installed"));
-    const use = el("button", "quiet", active.local === m.name || (active.local || "").includes(m.name.replace(/[:]/g, "-")) ? "In use" : "Use");
-    use.type = "button";
-    use.addEventListener("click", async () => {
-      const r = await api("/setup/use", { model: m.name });
-      if (r.ok) { setStatus("Local model: " + r.local, true); openSetup(true); }
-    });
-    row.append(info, use);
-    s2.append(row);
+    info.append(document.createTextNode(p.title + ": " + p.tag),
+                el("small", "", p.why + " · " + gb(p.size_gb) + (p.installed ? " · downloaded" : " download")));
+    const inUse = local === p.tag || local.includes(p.tag.replace(/[:]/g, "-"));
+    const act = button(inUse ? "quiet" : "send", inUse ? "In use" : p.installed ? "Use" : "Download & use",
+      async () => { act.disabled = true; if (!(await downloadAndUse(p.tag, box, compact))) act.disabled = false; });
+    act.disabled = inUse || busy;
+    row.append(info, act);
+    roles.append(row);
+    shown.add(p.tag);
   }
-  if (ol.running || !servers.length) {
-    for (const rec of data.recommend || []) {
-      if (rec.installed) continue;
+  if (picks.mlx) {
+    const row = el("div", "model-row");
+    const info = el("div", "grow");
+    info.append(document.createTextNode(picks.mlx.title + ": " + picks.mlx.repo),
+                el("small", "", picks.mlx.why + " Run: " + picks.mlx.command));
+    const copy = button("quiet", "Copy command", async () => {
+      try { await navigator.clipboard.writeText(picks.mlx.command); setStatus("Command copied", true); }
+      catch (_) { addNotice(picks.mlx.command); }
+    });
+    row.append(info, copy);
+    roles.append(row);
+  }
+  if (roles.querySelector(".model-row")) box.append(roles);
+
+  // Installed models (loki-* are Loki's own long-context copies: not listed).
+  const installed = (ol.models || []).filter((m) => !/embed/i.test(m.name) && !/^loki-/.test(m.name));
+  if (installed.length) {
+    const s2 = el("div", "setup-step" + (data.best && data.best.tools ? " ok" : ""));
+    s2.append(el("h3", "", "On this computer"));
+    for (const m of installed) {
       const row = el("div", "model-row");
       const info = el("div", "grow");
-      info.append(document.createTextNode(rec.tag), el("small", "", rec.why + " · " + gb(rec.size) + " download · needs ~" + gb(rec.need)));
-      const get = el("button", "send", "Download");
-      get.type = "button";
-      get.disabled = !ol.running;
-      get.title = ol.running ? "" : "Install or open Ollama first";
-      get.addEventListener("click", async () => {
-        const rest = (data.recommend || []).filter((r) => !r.installed).map((r) => r.tag);
-        const tags = [rec.tag, ...rest.filter((t) => t !== rec.tag)].slice(0, 3);
-        const r = await api("/setup/pull", { tags });
-        if (!r.ok) addNotice(r.error || "Could not start the download.", true);
-        watchProgress(box, compact);
+      info.append(document.createTextNode(m.name), el("small", "", (m.params || "") + " · " + gb(m.size_gb) + " · downloaded"));
+      const inUse = local === m.name || local.includes(m.name.replace(/[:]/g, "-"));
+      const use = button("quiet", inUse ? "In use" : "Use", async () => {
+        const r = await api("/setup/use", { model: m.name });
+        if (r.ok) { setStatus("Local model: " + r.local, true); compact ? loadModelsTab() : openSetup(true); }
       });
-      row.append(info, get);
+      use.disabled = inUse;
+      row.append(info, use);
       s2.append(row);
-      if (compact && s2.querySelectorAll(".model-row").length >= 4) break;
     }
+    box.append(s2);
   }
-  box.append(s2);
+
+  // More models that fit, for people who want to choose.
+  const more = (data.recommend || []).filter((r) => !r.installed && !shown.has(r.tag));
+  if (more.length && !compact) {
+    const s3 = el("div", "setup-step");
+    s3.append(el("h3", "", "Other models that fit"));
+    for (const rec of more.slice(0, 5)) {
+      const row = el("div", "model-row");
+      const info = el("div", "grow");
+      info.append(document.createTextNode(rec.tag), el("small", "", rec.why + " · " + gb(rec.size) + " download · needs ~" + gb(rec.need) + " memory"));
+      const get = button("quiet", rec.fits_disk === false ? "Free up " + gb(rec.free_up_gb) + " first" : "Download & use",
+        async () => { get.disabled = true; if (!(await downloadAndUse(rec.tag, box, compact))) get.disabled = false; });
+      get.disabled = rec.fits_disk === false || busy;
+      row.append(info, get);
+      s3.append(row);
+    }
+    box.append(s3);
+  }
 
   const p = data.progress || {};
   if (p.op && !p.done) appendProgress(box, p);
@@ -155,18 +272,23 @@ function renderSetup(box, data, compact) {
   }
 }
 
+function progressTitle(p) {
+  return p.op === "install" ? "Installing " + (p.target || "") : p.op === "auto" ? "Setting up " + (p.target || "your model")
+    : "Downloading " + (p.target || "");
+}
+
 function appendProgress(box, p) {
   const wrap = el("div", "setup-step");
   wrap.id = "setup-progress";
-  wrap.append(el("h3", "", (p.op === "install" ? "Installing " : "Downloading ") + (p.target || "")),
+  wrap.append(el("h3", "", progressTitle(p)),
               el("p", "note", (p.message || p.status || "") + (p.total ? " · " + p.percent + "%" : "")));
   const bar = el("div", "bar");
   const fill = el("i");
-  fill.style.width = (p.percent || 0) + "%";
+  fill.style.width = (p.done ? 100 : p.percent || 0) + "%";
   bar.append(fill);
   wrap.append(bar);
   const old = box.querySelector("#setup-progress");
-  if (old) old.replaceWith(wrap); else box.append(wrap);
+  if (old) old.replaceWith(wrap); else box.prepend(wrap);
 }
 
 function watchProgress(box, compact) {
@@ -177,17 +299,62 @@ function watchProgress(box, compact) {
     appendProgress(box, r.progress);
     if (r.progress.done) {
       clearInterval(setupView.timer);
-      if (r.progress.error && r.progress.status === "failed") addNotice(r.progress.message, true);
+      if (r.progress.status === "failed") addNotice(r.progress.message, true);
+      else if (r.progress.op === "auto" && r.progress.status === "success") setStatus(r.progress.message, true);
       setTimeout(() => (compact ? loadModelsTab() : openSetup(true)), 800);
       if (typeof loadModels === "function") loadModels();
     }
   }, 1000);
 }
 
+// ---------------------------------------------------------------- better-model prompt
+function upgradeLaterKey(tag) { return "loki-upgrade-later-" + tag; }
+
+function showUpgradeBanner(data) {
+  const up = data && data.upgrade;
+  const old = document.getElementById("model-upgrade-banner");
+  if (!up || !up.tag) { if (old) old.remove(); return; }
+  try { if (localStorage.getItem(upgradeLaterKey(up.tag))) return; } catch (_) { /* no storage */ }
+  const main = document.getElementById("main");
+  const top = main && main.querySelector(".topbar");
+  if (!top) return;
+  const bar = el("div", "update-banner");
+  bar.id = "model-upgrade-banner";
+  bar.setAttribute("role", "status");
+  const text = el("span", "", "A better model fits this computer: " + up.tag + " (you use " + up.current + "). " +
+    gb(up.size_gb) + " download.");
+  text.title = up.why || "";
+  const go = button("send small", "Download & switch", async () => {
+    go.disabled = true;
+    later.hidden = true;
+    const r = await api("/setup/upgrade", { tag: up.tag });
+    if (!r.ok) { addNotice(r.error || "Could not start the download.", true); bar.remove(); return; }
+    const timer = setInterval(async () => {
+      const s = await api("/setup/progress").catch(() => null);
+      if (!s || !s.ok) return;
+      const p = s.progress;
+      text.textContent = (p.message || p.status || "Working") + (p.total && !p.done ? " · " + p.percent + "%" : "");
+      if (p.done) {
+        clearInterval(timer);
+        if (p.status === "failed") addNotice(p.message, true);
+        if (typeof loadModels === "function") loadModels();
+        setTimeout(() => bar.remove(), 5000);
+      }
+    }, 1000);
+  });
+  const later = button("quiet small", "Not now", () => {
+    try { localStorage.setItem(upgradeLaterKey(up.tag), String(Date.now())); } catch (_) { /* no storage */ }
+    bar.remove();
+  });
+  bar.append(text, go, later);
+  if (old) old.replaceWith(bar); else main.insertBefore(bar, top);
+}
+
 async function openSetup(force) {
   const data = await api("/setup").catch(() => null);
   if (!data || !data.ok) return;
   setupView.last = data;
+  showUpgradeBanner(data);
   if (!force) {
     if (!data.needs_setup) return;
     let later = "";
@@ -202,6 +369,7 @@ async function loadModelsTab() {
   const data = await api("/setup").catch(() => null);
   const box = $("#models-panel");
   if (!data || !data.ok) { box.replaceChildren(el("p", "note", "Model setup is not available.")); return; }
+  showUpgradeBanner(data);
   renderSetup(box, data, true);
 }
 
