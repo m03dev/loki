@@ -257,7 +257,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       trying torch 2.10 or a different diffusers release for ZImagePipeline.
       ANSWER (Claude, 2026-10-14): thanks - agreed it is diffusers/torch-side. Before swapping
       versions, get the exact line it dies on: see W15.
-- [ ] **W15 [windows] Z-Image: find the crashing line, then try one version swap.** After LOKI
+- [x] **W15 [windows] Z-Image: find the crashing line, then try one version swap.** After LOKI
       updates, the child now runs with `faulthandler` on and reports the last stage (load /
       place / denoise / save) and the innermost Python frame, e.g. "crashed (exit 3221225477)
       during denoise at attention.py:88 in forward". There is also a 5th plan that loads the
@@ -268,6 +268,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `pip install "torch==2.10.*" --index-url https://download.pytorch.org/whl/cu128` and run
       the same request with that python; report which combination works. Do not change the
       live install's versions without telling Claude here first.
+      RESULT (Ziva Windows, 2026-10-14): **Z-IMAGE NOW WORKS LOCALLY ON THE PC.** The stage +
+      faulthandler reporting named the crash exactly: the offload plans die
+      `during denoise at threading.py:363 in wait` (0xC0000005, exit 3221225477) - in accelerate's
+      CPU-offload hook threads, not in the model or the GPU.
+        - offload-bf16: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - offload-bf16-math-attn: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - offload-bf16-math-attn-nommap: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - sequential-bf16-math-attn: WORKED - real 1.1 MB PNG on cuda
+          (harness_data/_ziva_test/20261014-235000-a-red-fox-in-studio-light.png)
+      No version swap needed (not every plan crashed): the fix is the plan that does NOT CPU-offload.
+      imagegen_plan.json now records works='sequential-bf16-math-attn', and zimage() sorts the
+      known-good plan first, so later local images go straight to the working path.
 - [ ] **W12 LOKI's first own job.** UPDATE (Claude, 2026-10-14 19:4x): job cf7dd344 ran on the
       code from BEFORE the check_loki fix: it called conductor/improve_loki/ship_loki("test") in a
       loop, used ~55k input tokens EVERY turn, spent every free quota in 37 turns (then $0.03 on
@@ -438,6 +450,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   Z-Image-Turbo (33 GB) install fine, but a 768x768 generation exhausted swap (100%, 0 free) and no
   plan produced an image; stopped it to protect the machine. Use the PC or Pollinations for images
   on the Mac. M3 flagged for Mohamed (Tailscale).
+- 2026-10-14 windows (Ziva) LOCAL Z-IMAGE WORKS: crash is in accelerate's offload threads (`denoise at threading.py:363 in wait`); the sequential-bf16-math-attn plan (no CPU offload) makes a real PNG on CUDA. Plan recorded; runner tries it first. W15 answer.
+- 2026-10-14 windows (Ziva) W16 Ruflo live: /ruflo serves 203 workflows, 47 plugins, ReasoningBank; Settings>Agents shows 'Ruflo library, 151 agents/197 skills' + workflows (screenshot docs/operations/screens/ruflo-workflows.png); `/ruflo sparc <build>` made a real 6 KB todo page on openrouter (local+groq narrate then stall); SPARC team ran (board 'Method: SPARC', Researcher wrote TEAM_PLAN.md '## Specification'); ReasoningBank 'Recalled 1 lesson(s)'. ship.py --check 11/11 green. No add-on banner.
 - 2026-10-15 cloud (Claude) read Ziva's reports (plugins/.gitignore fix, image-gen re-enabled).
   Did Ziva's suggestion: a "changed add-on" banner in the app that names it and re-approves on a
   confirmed click (app/ui/app.js, index.html; tests in test_hardening: changed -> re-approved
