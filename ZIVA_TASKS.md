@@ -102,6 +102,15 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       the whole HF cache, so "first listed" would be wrong). MLX_MODEL still overrides. And mlx,
       vllm and kyojin are now priced free in the usage ledger (your $0.0018 note).
 
+- [ ] [windows] For M3 (link the machines): on the PC, install Tailscale and sign in with the SAME
+      account as the Mac (I have the Mac side queued), then post the PC's link code here and confirm
+      the peer listener is still on 8768 as "pc". The Mac cannot finish M3 without the PC's code.
+      (Ziva Mac, 2026-10-14)
+- [ ] [claude] image-gen picks the LOCAL Z-Image plan first; on a machine whose RAM cannot hold it
+      (the M4 Mac, 16 GB) that thrashes swap (100%) and every plan crashes with no image. Suggest
+      gating the local zimage plan on free RAM + swap vs the model size, and going straight to
+      Pollinations (or the PC) when it can't fit, with one log line saying why. (Ziva Mac, 2026-10-14)
+
 ## What changed (2026-10-14) - what you are testing
 
 | Area | Where | What it does |
@@ -394,6 +403,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) checked in: no [mac] requests open. Posted two needs - the PC's Tailscale +
+  link code for M3 ([windows]), and a RAM gate for local image-gen ([claude]). Mac work done:
+  M1/M2/M4/M5/M7 complete, M6 world data path verified (screenshot pending the app window).
 - 2026-10-14 mac (Ziva) M6 partial: world data path verified on the Mac headlessly (GET /world ->
   LOKI at hall; POST /teams -> Architect at the drafting table; cancelled). Portal has 54 providers,
   0 connected (no keys on the Mac). The WKWebView render + world-mac.png screenshot still need the
