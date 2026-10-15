@@ -58,6 +58,13 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
      now tries Z-Image Turbo (local) -> Qwen-Image 2.1 (ModelScope, when MODELSCOPE_API_KEY is
      set) -> Pollinations. Paid Model Studio not added. Check it: W11.
 
+- [ ] [claude] The Mac's LOKI checkout now lives on an exFAT SSD (`/Volumes/xero`), reached via
+      a symlink at `~/Documents/loki`. It works (all 11 suites green) but exFAT has no permission
+      bits or symlinks and macOS drops `._` AppleDouble sidecars (one under `.git/objects/pack`
+      broke git until cleaned; they are now in `.git/info/exclude`). Prefer an APFS sparse image on
+      the SSD (`hdiutil create -type SPARSEBUNDLE -fs APFS`, mount at login), or is exFAT fine?
+      (Ziva Mac, 2026-10-14)
+
 ## What changed (2026-10-14) - what you are testing
 
 | Area | Where | What it does |
@@ -253,12 +260,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       say **Running**. Make it the default and ask LOKI to "list the files here and read README.md".
       MLX tool calls go through the prompted harness: report whether the tools ran and how fast
       (tokens/s from the usage line). Try one bigger model if memory allows and report.
+      BLOCKED then UNBLOCKED 2026-10-14 (Ziva Mac): the internal disk was full (191 MB free) so
+      `setup_extras.py mlx` died with "No space left on device" (mlx installed, mlx-lm did not).
+      The Mac checkout now lives on the 2 TB SSD (internal disk freed) - retrying M4; will report.
 - [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
       latency now; then, if `@receptron/laya` lets you pass ONNX session options, try
       `executionProviders: ["coreml", "cpu"]` in `engine/laya_server.mjs` and measure again.
       Ship it only if it is faster and every suite passes; otherwise report the numbers.
+      RESULT 2026-10-14 (Ziva Mac): CPU baseline median 52 ms/decision (M4 chip, 50-62 ms over 5
+      calls after load). With CoreML: `LOKI_LAYA_EP="coreml,cpu"` median 177 ms (163-270 ms) -
+      SLOWER (CoreML compiles the graph for a tiny model). NOT shipped; cpu stays. @receptron/laya
+      does expose executionProviders/sessionOptions, so it is a one-line env to revisit later.
 - [ ] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
       `docs/operations/screens/world-mac.png`.
 - [ ] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
@@ -297,6 +311,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) moved LOKI to the 2 TB SSD, + M5 numbers: found `/Volumes/xero`
+  (2 TB, 1.3 TB free); copied the checkout there and made `~/Documents/loki` a symlink to it, so
+  every launcher and path keeps working; re-ran setup.sh (venv recreated, Laya OK, Loki.app
+  rebuilt); deleted the old internal copy -> internal disk 0.2 GB -> 3.5 GB free. All 11 suites
+  green on the SSD. ONE code fix: engine/skill_scan.py counted its own `SKILL.md` as an
+  executable (exFAT marks every file executable - no permission bits); now the definition file is
+  skipped, since it is read, never run - correct on any filesystem. M5: Laya CPU median 52 ms vs
+  CoreML 177 ms -> CoreML NOT shipped. M4 was blocked by the full disk, now unblocked and retrying.
 - 2026-10-14 cloud (Claude) read Ziva's check-in (window close = update restart, agreed; W8
   verified - thanks; W13 all plans crash). Landed: (1) self-improvement that can test itself -
   check_loki tool (ship.py --check --only), improve_loki refuses inside its own worktree, one
