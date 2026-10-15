@@ -692,10 +692,21 @@ check("the life-sim layer: paths round the plaza, benches, chat dots, team banne
       all(s in world_js for s in ("function routeTo(", "SCENERY.benches", '"···"', "tm.stages", "function updateHud(")))
 check("labels never pile up (nearest first, lifted, crowded fade)", '"crowded"' in world_js)
 check("ambience stops with reduced motion", world_js.count("World.reduced") >= 10)
+noise_js = (ui / "world_noise.js").read_text(encoding="utf-8")
+check("the water noise is the MIT webgl-noise code, credited, with its licence",
+      "stegu/webgl-noise" in noise_js and "Permission is hereby granted" in noise_js and "float snoise(vec2 v)" in noise_js
+      and "vec2 cellular(vec2 P)" in noise_js and noise_js.count("vec3 permute(vec3 x)") == 1)
+check("index.html loads the noise before the world", html.index("/ui/world_noise.js") < html.index("/ui/world.js"))
+check("water has its own shader: exact shore distance, Beer-Lambert depth, foam, caustics, fresnel, ripples, a falling sheet",
+      all(x in world_js for x in ("WATER_FS", "float shore(vec2 p)", "exp(-max(s, 0.0) * beer)", "cellular(", "pow(1.0 - max(dot(N, V), 0.0), 5.0)",
+                                  "rip[4]", "vec4 sheet()", "function drawWater(")))
+check("without the noise (or a shader that will not compile) the world still draws", "typeof WORLD_NOISE_GLSL" in world_js
+      and "if (view.water)" in world_js)
+check("the water's noise time wraps, so float precision holds in a long session", "t % 600" in world_js)
 check("the world keeps the functions app.js and settings.js call", all(
     ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")) and "window.afterStart" in world_js)
 if shutil.which("node"):
-    for name in ("app.js", "settings.js", "world.js", "setup.js", "machines.js"):
+    for name in ("app.js", "settings.js", "world.js", "world_noise.js", "setup.js", "machines.js"):
         proc = subprocess.run(["node", "--check", str(ui / name)], capture_output=True, text=True)
         check("%s parses" % name, proc.returncode == 0, proc.stderr)
 

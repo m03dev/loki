@@ -1,0 +1,19 @@
+# Third-party code in LOKI
+
+| Where | What | Licence |
+| --- | --- | --- |
+| `app/ui/world_noise.js` | GLSL 2D simplex noise (`noise2D.glsl`, Ian McEwan, Ashima Arts) and 2D cellular noise (`cellular2D.glsl`, Stefan Gustavson) from [stegu/webgl-noise](https://github.com/stegu/webgl-noise), used unchanged except one duplicate helper removed | MIT - full text at the top of the file |
+| `app/ui/world.js` (water shader) | The depth fade (Beer-Lambert) and noise-displaced shoreline foam are adapted from [paddy-exe/Godot-3D-Stylized-Water](https://github.com/paddy-exe/Godot-3D-Stylized-Water) by Patrick Exner (Godot shading language, rewritten here as WebGL 1 GLSL with an analytic shore distance instead of a depth texture) | MIT, Copyright (c) 2021 Patrick Exner |
+| `contrib/ruflo/` | see that folder | see that folder |
+
+MIT notice for Godot-3D-Stylized-Water (adapted code in app/ui/world.js):
+
+    Copyright (c) 2021 Patrick Exner
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this
+    software and associated documentation files (the "Software"), to deal in the Software
+    without restriction, including without limitation the rights to use, copy, modify, merge,
+    publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+    to whom the Software is furnished to do so, subject to the following conditions:
+    The above copyright notice and this permission notice shall be included in all copies or
+    substantial portions of the Software.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.

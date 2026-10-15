@@ -186,6 +186,37 @@ else:
     finally:
         fake.stop()
 
+# --------------------------------------------------------------------------- long text calls
+# From a real PC run (2026-10-15, harness_data/_engine_ziva6.log): a local model wrote a whole
+# web page as a TEXT write_file call. The CSS/JS braces inside the content and one missing
+# final "}" made LOKI drop the call, and a reply cut off mid-call was lost too; the task
+# looped to the step limit with no file.
+tool_guard = tg
+print("\nlong write_file calls written as text")
+page = "<style>* { box-sizing: border-box; } li { color: red; }</style><script>(function() { if (x) { go(); } })();</script>"
+call = json.dumps({"name": "write_file", "arguments": {"filename": "fence2/index.html", "content": page}})
+reply = "Now I'll write the page.\n\n```json\n" + call[:-1] + "\n```"     # the model forgot the last }
+check("braces inside a call's strings do not break the scan",
+      tool_guard.json_object_spans("x " + call + " y") == [call])
+check("a call missing its final } is closed, nothing else changed",
+      json.loads(tool_guard.close_truncated(call[:-1]))["arguments"]["content"] == page)
+check("broken text is not guessed at (open string, wrong closer)",
+      tool_guard.close_truncated('{"a": "open') is None and tool_guard.close_truncated('{"a": ]') is None)
+try:
+    import loki  # noqa: E402
+except ImportError:
+    loki = None
+if loki is not None:
+    got = loki._recover_text_tool_calls(reply)
+    check("LOKI recovers that call and runs write_file with the whole page",
+          got and got[0][0] == "write_file" and got[0][1].get("content") == page, got)
+    cut = 'Writing it.\n```json\n' + call[:len(call) // 2]
+    check("a reply cut off mid-call is recognised as unfinished", loki._unfinished_call(cut))
+    check("...and joined with the next reply it is recovered whole",
+          loki._recover_text_tool_calls(cut + call[len(call) // 2:])[0][1].get("content") == page)
+    check("a finished call or a plain answer is not 'unfinished'",
+          not loki._unfinished_call(call) and not loki._unfinished_call("All done, the page works."))
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

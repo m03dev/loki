@@ -80,18 +80,100 @@ def repair_json(raw: Any) -> dict | None:
         return value if isinstance(value, dict) else None
     except (ValueError, TypeError):
         pass
-    # The object is buried in prose: take the first balanced {...}.
+    # The object is buried in prose: take the first balanced {...} (braces inside strings
+    # - CSS, JS, code in a write_file - do not count).
     start = text.find("{")
     if start > 0:
-        depth = 0
-        for index in range(start, len(text)):
-            if text[index] == "{":
-                depth += 1
-            elif text[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    return repair_json(text[start:index + 1])
+        spans = json_object_spans(text[start:])
+        if spans:
+            return repair_json(spans[0])
+    # The model stopped before the last closing braces (common on long write_file calls):
+    # close what is open. Nothing is invented - only the missing } / ] at the very end.
+    closed = close_truncated(text)
+    if closed and closed != text:
+        try:
+            value = json.loads(closed)
+            return value if isinstance(value, dict) else None
+        except (ValueError, TypeError):
+            pass
     return None
+
+
+def _scan(text: str):
+    """Walk JSON-ish text, yielding (index, char, quoted): quoted is True for every
+    character of a "string", its quotes included. Backslash escapes are honoured."""
+    in_str, esc = False, False
+    for index, char in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif char == "\\":
+                esc = True
+            elif char == '"':
+                in_str = False
+            yield index, char, True
+        elif char == '"':
+            in_str = True
+            yield index, char, True
+        else:
+            yield index, char, False
+
+
+def _string_left_open(text: str) -> bool:
+    in_str, esc = False, False
+    for char in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif char == "\\":
+                esc = True
+            elif char == '"':
+                in_str = False
+        elif char == '"':
+            in_str = True
+    return in_str
+
+
+def json_object_spans(text: str) -> list:
+    """Every balanced top-level {...} in a string; braces inside "strings" are ignored."""
+    spans, depth, start = [], 0, -1
+    for index, char, quoted in _scan(text):
+        if quoted:
+            continue
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0:
+                spans.append(text[start:index + 1])
+                start = -1
+    return spans
+
+
+def close_truncated(text: str) -> str | None:
+    """The object with the closers it is missing at its very end, or None.
+
+    Only for text that starts an object, has every string closed, closes in the right
+    order as far as it goes, and lacks at most four closers - so a truncated call is
+    finished, and nothing that is merely broken is guessed at."""
+    text = text.strip()
+    if not text.startswith("{") or _string_left_open(text):
+        return None
+    stack = []
+    for _, char, quoted in _scan(text):
+        if quoted:
+            continue
+        if char in "{[":
+            stack.append("}" if char == "{" else "]")
+        elif char in "}]":
+            if not stack or stack[-1] != char:
+                return None
+            stack.pop()
+    if not stack or len(stack) > 4:
+        return None
+    return text + "".join(reversed(stack))
 
 
 # --------------------------------------------------------------------------- tool names

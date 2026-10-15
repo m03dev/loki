@@ -37,7 +37,7 @@ const World = {
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
   adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
-  selected: "", particles: [], seats: {},
+  selected: "", particles: [], seats: {}, ripples: [], fish: null, fishAt: 0,
 };
 
 // ---------------------------------------------------------------- math (column-major 4x4)
@@ -157,9 +157,33 @@ function quadMesh() {   // corners in -1..1, for the sky, the blit, shadows and 
   return { p, n: p.map(() => 0) };
 }
 
+// Water surfaces are fine grids so the vertex waves have something to move: a polar disc
+// (pool, pond), a flat strip (stream) and an upright sheet (waterfall), all in -0.5..0.5.
+function discGrid(rings = 6, seg = 40) {
+  const p = [], n = [];
+  const at = (r, s) => { const a = (s / seg) * Math.PI * 2, k = (r / rings) * 0.5; return [Math.cos(a) * k, 0, Math.sin(a) * k]; };
+  for (let r = 0; r < rings; r++) for (let k = 0; k < seg; k++) {
+    const a = at(r, k), b = at(r + 1, k), c = at(r + 1, k + 1), d = at(r, k + 1);
+    for (const v of [a, c, b, a, d, c]) { p.push(...v); n.push(0, 1, 0); }
+  }
+  return { p, n };
+}
+function planeGrid(nx, nz, upright) {
+  const p = [], n = [];
+  const at = (i, j) => { const u = i / nx - 0.5, v = j / nz - 0.5; return upright ? [u, v, 0] : [u, 0, v]; };
+  const nn = upright ? [0, 0, 1] : [0, 1, 0];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+    const tri = upright ? [a, b, c, a, c, d] : [a, c, b, a, d, c];
+    for (const v of tri) { p.push(...v); n.push(...nn); }
+  }
+  return { p, n };
+}
+
 // The shapes, built once and shared by every view (and by the baker).
 const MESH_SRC = { box: boxMesh(), cyl: cylinderMesh(), cyl6: cylinderMesh(7), cone: coneMesh(), pyr: coneMesh(4),
-  sph: sphereMesh(), sph4: sphereMesh(4, 6), quad: quadMesh() };
+  sph: sphereMesh(), sph4: sphereMesh(4, 6), quad: quadMesh(),
+  wdisc: discGrid(), wstrip: planeGrid(3, 24, false), wsheet: planeGrid(4, 40, true) };
 
 // ---------------------------------------------------------------- shaders
 // Solids. The normal goes through the inverse scale (IS = 1/s^2) so squashed shapes still
@@ -177,12 +201,11 @@ const BAKED_VS = "attribute vec3 p; attribute vec3 n; attribute vec3 c; attribut
 
 // Cel shading: the sun term is quantized into BANDS hard steps between a cool shadow tone
 // and the lit tone; the hemisphere fill, the station lamps, the rim and a toon highlight are
-// stepped too, so every surface reads as flat painted colour. W marks water: 1 = a pool with
-// moving ripple bands, 2 = a falling sheet with bands sliding down.
+// stepped too, so every surface reads as flat painted colour.
 function fragmentShader(baked) {
   const head = baked
-    ? "#define E X.x\n#define G X.y\n#define S X.z\n#define W X.w\nprecision mediump float; varying vec3 vn; varying vec3 wp; varying vec3 C; varying vec4 X; uniform float A;"
-    : "precision mediump float; varying vec3 vn; varying vec3 wp; uniform vec3 C; uniform float A; uniform float E; uniform float G; uniform float S; uniform float W;";
+    ? "#define E X.x\n#define G X.y\n#define S X.z\nprecision mediump float; varying vec3 vn; varying vec3 wp; varying vec3 C; varying vec4 X; uniform float A;"
+    : "precision mediump float; varying vec3 vn; varying vec3 wp; uniform vec3 C; uniform float A; uniform float E; uniform float G; uniform float S;";
   return head +
   "uniform vec3 eye; uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyAmb; uniform vec3 gndAmb; uniform float T;" +
   "uniform vec3 shadeTint; uniform vec3 rimCol; uniform vec3 fogc; uniform vec2 fogr;" +
@@ -192,9 +215,6 @@ function fragmentShader(baked) {
   "void main(){ vec3 N = normalize(vn); vec3 V = normalize(eye - wp);" +
   " vec3 base = C;" +
   " if (G > 0.0) { float ch = mod(floor(wp.x * G) + floor(wp.z * G), 2.0); base *= 0.9 + 0.1 * ch; }" +
-  " if (W > 1.5) { base = mix(base, base * 1.5 + 0.12, step(0.62, fract(wp.y * 2.2 + T * 1.7 + floor(wp.x * 6.0 + wp.z * 6.0) * 0.37))); }" +
-  " else if (W > 0.5) { float wv = sin(wp.x * 3.1 + T * 1.3) + sin(wp.z * 2.7 - T * 1.1) + sin((wp.x + wp.z) * 2.1 + T * 0.7);" +
-  "  base = mix(base, base * 1.55 + 0.1, step(1.45, wv)); }" +
   " float b = cel(dot(N, sunDir) * 0.55 + 0.42);" +
   " vec3 amb = mix(gndAmb, skyAmb, step(0.0, N.y) * 0.5 + step(0.6, N.y) * 0.5);" +
   " vec3 col = mix(base * amb * shadeTint, base * (amb + sunCol), b);" +
@@ -229,6 +249,87 @@ const BAKED_OUTLINE_VS = "attribute vec3 p; attribute vec3 n; attribute vec3 c; 
 const BAKED_OUTLINE_FS = "precision mediump float; varying float dist; varying vec3 ic; uniform vec3 ofog; uniform vec2 ofogr;" +
   "void main(){ float f = clamp((dist - ofogr.x) / ofogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +
   " gl_FragColor = vec4(mix(ic, ofog, f * 0.6), 1.0); }";
+
+// Water: its own program, drawn after the solids and before the see-through things.
+// Every body of water knows its shape (a disc with up to two blocks standing in it, or a
+// strip), so the distance to its shore is exact in the shader - no depth texture needed,
+// which keeps it working on every WebGL 1 driver. From that distance:
+//   - depth colour with a Beer-Lambert falloff, shallow teal at the edge to deep in the middle
+//     (the depth fade of paddy-exe/Godot-3D-Stylized-Water, MIT, Patrick Exner);
+//   - a shoreline foam band whose edge wobbles with noise, plus a second foam line breathing
+//     in and out (that shader's noise-displaced foam edge, again);
+//   - caustics on the shallow floor from cellular noise (F2 - F1 lines);
+// and from a normal built from two scrolling simplex layers (stegu/webgl-noise, MIT): a
+// Schlick fresnel mix with the sky colour, a stepped sun/moon glint, the station lamps
+// reflected as streaks at night, flow-aligned whitecaps on the stream, and expanding ripple
+// rings (a fish jumping, LOKI's beacon pinging the pool). The waterfall is the same program
+// in sheet mode: streaks sliding down, a white lip at the top, fading into mist below.
+// The result is quantized into bands, so it stays pixel-art like the rest.
+const WATER_VS = "attribute vec3 p; uniform mat4 M; uniform mat4 VP; uniform float T; uniform vec4 shape;" +
+  "varying vec3 wp; varying vec2 lp;" +
+  "void main(){ vec4 w = M * vec4(p,1.0); lp = shape.w > 1.5 ? p.xy : p.xz;" +
+  " if (shape.w < 1.5) w.y += (sin(w.x * 2.3 + T * 1.6) + sin(w.z * 2.9 - T * 1.3)) * 0.006;" +
+  " wp = w.xyz; gl_Position = VP * w; }";
+const WATER_FS = "#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n" +
+  "varying vec3 wp; varying vec2 lp;" +
+  "uniform float T; uniform vec4 shape; uniform vec4 rect; uniform vec4 obs0; uniform vec4 obs1; uniform vec2 flow; uniform float beer;" +
+  "uniform vec3 eye; uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 zenith; uniform vec3 horizon; uniform float dayK;" +
+  "uniform vec3 fogc; uniform vec2 fogr; uniform vec3 LP[10]; uniform vec4 LC[10];" +
+  "uniform vec3 shallow; uniform vec3 deep; uniform vec3 foamCol; uniform vec4 rip[4];" +
+  "\n" + (typeof WORLD_NOISE_GLSL === "string" ? WORLD_NOISE_GLSL : "") + "\n" +
+  "float boxd(vec2 p, vec4 b){ vec2 d = abs(p - b.xy) - b.zw; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }" +
+  "float shore(vec2 p){ float d;" +
+  " if (shape.w < 0.5) d = shape.z - length(p - shape.xy);" +
+  " else { vec2 l = p - shape.xy; d = rect.z - abs(dot(l, vec2(-rect.y, rect.x))); }" +
+  " if (obs0.z > 0.0) d = min(d, boxd(p, obs0));" +
+  " if (obs1.z > 0.0) d = min(d, boxd(p, obs1));" +
+  " return d; }" +
+  "float hgt(vec2 p){ return snoise(p * 0.9 - flow * T + vec2(T * 0.08, T * 0.05)) * 0.6" +
+  " + snoise(p * 1.9 - flow * T * 1.4 + vec2(-T * 0.09, T * 0.12)) * 0.28; }" +
+  "vec3 quant(vec3 c){ return floor(c * 9.0 + 0.5) / 9.0; }" +
+  "vec4 fogged(vec3 col, float a){ float f = clamp((length(eye - wp) - fogr.x) / fogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +
+  " return vec4(mix(quant(col), fogc, f * 0.6), a); }" +
+  "vec4 sheet(){" +
+  " float n1 = snoise(vec2(lp.x * 9.0, wp.y * 0.9 + T * 2.6)); float n2 = snoise(vec2(lp.x * 17.0 + 3.0, wp.y * 1.7 + T * 4.1));" +
+  " vec3 col = mix(deep, shallow, 0.6 + 0.2 * n1);" +
+  " col = mix(col, foamCol, step(0.42, n1 * 0.6 + n2 * 0.4));" +
+  " col = mix(col, foamCol, step(0.44, lp.y + n2 * 0.015));" +
+  " col += sunCol * 0.12 * dayK;" +
+  " float a = (1.0 - step(0.9, abs(lp.x) * 2.0 + n2 * 0.06)) * 0.88 * smoothstep(-0.5, -0.28, lp.y);" +
+  " if (a <= 0.01) discard;" +
+  " return fogged(col, a); }" +
+  "void main(){" +
+  " if (shape.w > 1.5) { gl_FragColor = sheet(); return; }" +
+  " vec2 q = wp.xz; float s = shore(q);" +
+  " if (s < -0.02) discard;" +
+  " float h0 = hgt(q); float e = 0.07;" +
+  " vec2 g = vec2(hgt(q + vec2(e, 0.0)) - h0, hgt(q + vec2(0.0, e)) - h0) / e;" +
+  " float ring = 0.0;" +
+  " for (int i = 0; i < 4; i++) { if (rip[i].w > 0.0) {" +
+  "  vec2 dv = q - rip[i].xy; float d = length(dv); float r = rip[i].z * 0.85;" +
+  "  float k = exp(-abs(d - r) * 16.0) * rip[i].w * max(0.0, 1.0 - rip[i].z / 2.2);" +
+  "  g += dv / max(d, 0.001) * k * 2.2; ring += k; } }" +
+  " vec3 N = normalize(vec3(-g.x * 0.2, 1.0, -g.y * 0.2));" +
+  " float depth = 1.0 - exp(-max(s, 0.0) * beer);" +
+  " vec3 col = mix(shallow, deep, depth);" +
+  " vec2 F = cellular(q * 1.35 + g * 0.15 + vec2(T * 0.04, -T * 0.03));" +
+  " col += vec3(0.55, 0.95, 1.0) * step(F.y - F.x, 0.11) * (1.0 - depth * 0.85) * (0.16 + 0.2 * dayK);" +
+  " vec3 V = normalize(eye - wp); vec3 R = reflect(-V, N);" +
+  " float fr = 0.06 + 0.94 * pow(1.0 - max(dot(N, V), 0.0), 5.0);" +
+  " vec3 sky = mix(horizon, zenith, clamp(R.y * 1.4, 0.0, 1.0));" +
+  " col = mix(col, sky, clamp(fr, 0.0, 0.7));" +
+  " float sp = max(dot(R, sunDir), 0.0); col += sunCol * (step(0.988, sp) * 0.9 + step(0.95, sp) * 0.12);" +
+  " for (int i = 0; i < 10; i++) { vec3 L = LP[i] - wp; float dl = length(L);" +
+  "  float k = pow(max(dot(R, L / max(dl, 0.001)), 0.0), 14.0) * clamp(1.0 - dl / (LC[i].w * 2.4), 0.0, 1.0);" +
+  "  col += LC[i].rgb * (step(0.25, k) * 0.7 + step(0.6, k) * 0.7); }" +
+  " float wob = snoise(q * 3.1 + vec2(T * 0.3, -T * 0.25)) * 0.05 + snoise(q * 7.0 - vec2(T * 0.5)) * 0.025;" +
+  " float sd = s + wob;" +
+  " float foam = step(sd, 0.12) + step(abs(sd - 0.24 - 0.035 * sin(T * 1.5)), 0.02) * 0.75 + step(0.45, ring) * 0.85;" +
+  " foam = max(foam, step(0.62, h0) * 0.65 * step(0.05, length(flow)));" +
+  " foam = clamp(foam, 0.0, 1.0);" +
+  " col = mix(col, foamCol, foam);" +
+  " float a = max(mix(0.62, 0.94, depth), foam);" +
+  " gl_FragColor = fogged(col, a); }";
 
 // Sky: a gradient by the view ray's height (zenith, a glowing horizon band, the deep below
 // the floating island), a pixel sun/moon and stars that fade in at night.
@@ -299,7 +400,7 @@ function uploadMesh(gl, mesh) {
 // Build (or rebuild, after a lost context) everything a view keeps on the GPU.
 function initGL(view) {
   const { gl } = view;
-  const sceneU = ["IS", "C", "E", "G", "S", "W"].concat(LIGHT_UNIFORMS);
+  const sceneU = ["IS", "C", "E", "G", "S"].concat(LIGHT_UNIFORMS);
   view.solid = makeProgram(gl, VS, FS, sceneU);
   if (!view.solid) return false;
   view.baked = makeProgram(gl, BAKED_VS, BAKED_FS, LIGHT_UNIFORMS);
@@ -309,6 +410,9 @@ function initGL(view) {
   view.sprite = makeProgram(gl, SPRITE_VS, SPRITE_FS, ["VP", "SC", "SS", "SB", "camR", "camU", "SK", "SA"]);
   view.shadowBatch = makeProgram(gl, SHADOW_VS, SHADOW_FS, ["VP", "SK"]);
   view.blit = makeProgram(gl, BLIT_VS, BLIT_FS, ["T", "R", "VPX", "Q"]);
+  view.water = typeof WORLD_NOISE_GLSL === "string" ? makeProgram(gl, WATER_VS, WATER_FS, ["M", "VP", "T", "shape", "rect", "obs0",
+    "obs1", "flow", "beer", "eye", "sunDir", "sunCol", "zenith", "horizon", "dayK", "fogc", "fogr", "LP", "LC", "shallow", "deep",
+    "foamCol", "rip"]) : null;   // a driver that cannot compile it keeps the plain water floor
   view.meshes = {};
   for (const [k, m] of Object.entries(MESH_SRC)) view.meshes[k] = uploadMesh(gl, m);
   const st = staticScene();
@@ -484,6 +588,38 @@ const SCENERY = (function () {
   return { trees, rocks, lamps, clouds, flowers, tufts, islets, crystals, fall, benches, banners, spots };
 })();
 
+// The water in the world: where each body is, its shape for the shore distance (disc with
+// blocks standing in it, or a strip), how fast it flows and how quickly it gets deep.
+const WATER = (function () {
+  const out = [];
+  out.push({ id: "pool", mesh: "wdisc", pos: [0, 0.088, 0], ry: 0, s: [3.24, 1, 3.24], shape: [0, 0, 1.62, 0], rect: [0, 0, 0, 0],
+    obs: [[-0.25, 0, 0.2, 0.2], [0.2, 0, 0.62, 0.2]], flow: [0, 0], beer: 1.15 });
+  const fl = SCENERY.fall;
+  if (fl) {
+    const ux = Math.cos(fl.a), uz = Math.sin(fl.a), ry = Math.atan2(ux, uz), run = ISLAND - Math.hypot(fl.x, fl.z);
+    out.push({ id: "pond", mesh: "wdisc", pos: [fl.x, 0.078, fl.z], ry: 0, s: [1.56, 1, 1.56], shape: [fl.x, fl.z, 0.78, 0], rect: [0, 0, 0, 0],
+      obs: [], flow: [ux * 0.04, uz * 0.04], beer: 2.6 });
+    const len = run - 0.55, cx = fl.x + ux * (0.55 + len / 2), cz = fl.z + uz * (0.55 + len / 2);
+    out.push({ id: "stream", mesh: "wstrip", pos: [cx, 0.06, cz], ry, s: [0.46, 1, len + 0.1], shape: [cx, cz, 0, 1], rect: [ux, uz, 0.23, len / 2],
+      obs: [], flow: [ux * 0.55, uz * 0.55], beer: 6.0 });
+    out.push({ id: "fall", mesh: "wsheet", pos: [ux * (ISLAND + 0.05), -2.72, uz * (ISLAND + 0.05)], ry, s: [0.46, 5.6, 1], shape: [0, 0, 0, 2],
+      rect: [0, 0, 0, 0], obs: [], flow: [0, 0], beer: 1 });
+  }
+  return out;
+})();
+const WATER_LOOK = {   // shallow, deep and foam colours, blended night -> day like the rest
+  night: { shallow: [0.16, 0.56, 0.66], deep: [0.06, 0.18, 0.40], foam: [0.78, 0.95, 1.0] },
+  day: { shallow: [0.24, 0.78, 0.80], deep: [0.06, 0.30, 0.56], foam: [0.95, 1.0, 1.0] },
+};
+
+// Ripples: rings spreading on a body of water. Real events make some (LOKI's beacon pings
+// the pool when a board message arrives); the pond's fish make the rest (ambience).
+function addRipple(body, x, z, strength) {
+  if (World.reduced) return;
+  World.ripples.push({ body, x, z, t0: performance.now() / 1000, k: strength || 1 });
+  if (World.ripples.length > 12) World.ripples.shift();
+}
+
 // ---------------------------------------------------------------- baking the static scene
 // Static solids go through the same description as dynamic ones ({mesh, pos, ry, s, color,
 // e, g, s2, w, line}); bake() transforms them into world space once.
@@ -516,6 +652,13 @@ function staticScene() {
   const solid = (mesh, pos, ry, s, color, o) => land.push(Object.assign({ mesh, pos, ry, s, color }, o || {}));
   const shadow = (x, z, r, a) => shadows.push({ x, z, r, a: Math.min(1, (a == null ? 0.5 : a) * 1.3) });
   const ink = { line: false };
+  const curb = (cx, cz, r, n, size, color) => {   // a ring of stone blocks round a pool
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2, j = (k % 3) * 0.012;
+      solid("box", [cx + Math.cos(a) * r, 0.075 + j, cz + Math.sin(a) * r], -a - Math.PI / 2, [size[0], size[1] + j, size[2]],
+        mix3(color, [0.5, 0.5, 0.62], (k % 2) * 0.18));
+    }
+  };
 
   // the island: grass top with a soft checker, a band of earth, a faceted rock cone below
   solid("cyl", [0, -0.2, 0], 0, [ISLAND * 2, 0.4, ISLAND * 2], [0.10, 0.60, 0.36], { g: 0.9 });
@@ -528,8 +671,9 @@ function staticScene() {
   }
   // the plaza, with a reflecting pool round the conductor's spire
   solid("cyl", [0, 0.02, 0], 0, [7.2, 0.06, 7.2], [0.62, 0.62, 0.78], Object.assign({ g: 1.4 }, ink));
-  solid("cyl", [0, 0.05, 0], 0, [3.2, 0.04, 3.2], [0.12, 0.22, 0.42], { w: 1, s2: 0.6 });
   solid("cyl", [0, 0.045, 0], 0, [3.5, 0.03, 3.5], [0.75, 0.74, 0.86], ink);
+  solid("cyl", [0, 0.062, 0], 0, [3.22, 0.012, 3.22], [0.16, 0.30, 0.42], Object.assign({ g: 2.6 }, ink));   // tiled floor under the water
+  curb(0, 0, 1.7, 22, [0.5, 0.1, 0.2], [0.74, 0.74, 0.86]);
   // the conductor's spire: an L-shaped mark, LOKI's sign (its beacon is dynamic)
   solid("box", [-0.25, 1.3, 0], 0, [0.36, 2.6, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
   solid("box", [0.2, 0.2, 0], 0, [1.2, 0.36, 0.36], [0.18, 0.86, 0.82], { e: 0.12 });
@@ -633,11 +777,20 @@ function staticScene() {
   const fl = SCENERY.fall;
   if (fl) {   // pond, stream to the rim, and the falling sheet over the edge
     const ux = Math.cos(fl.a), uz = Math.sin(fl.a), ry = Math.atan2(ux, uz);
-    solid("cyl", [fl.x, 0.02, fl.z], 0, [1.5, 0.05, 1.5], [0.16, 0.36, 0.62], { w: 1, s2: 0.6, line: false });
     solid("cyl6", [fl.x, 0.01, fl.z], 0.2, [1.75, 0.04, 1.75], [0.58, 0.58, 0.72]);
+    solid("cyl", [fl.x, 0.035, fl.z], 0, [1.52, 0.02, 1.52], [0.14, 0.26, 0.30], ink);   // the pond bed
     const run = ISLAND - Math.hypot(fl.x, fl.z);
-    solid("box", [fl.x + ux * run / 2, 0.025, fl.z + uz * run / 2], ry, [0.42, 0.04, run], [0.18, 0.40, 0.68], { w: 1, s2: 0.6, line: false });
-    solid("box", [ux * (ISLAND + 0.04), -2.8, uz * (ISLAND + 0.04)], ry, [0.42, 5.6, 0.1], [0.40, 0.70, 0.95], { w: 2, e: 0.15, line: false });
+    solid("box", [fl.x + ux * (run + 0.75) / 2, 0.02, fl.z + uz * (run + 0.75) / 2], ry, [0.5, 0.04, run - 0.75], [0.30, 0.26, 0.30], ink);
+    curb(fl.x, fl.z, 0.86, 12, [0.46, 0.1, 0.17], [0.66, 0.66, 0.78]);
+    for (const [k, rr, sz] of [[0.6, 0.38, 0.26], [2.4, 0.42, 0.2], [4.1, 0.3, 0.17]]) {   // lily pads
+      const lx = fl.x + Math.cos(k) * rr, lz = fl.z + Math.sin(k) * rr;
+      solid("cyl6", [lx, 0.088, lz], k, [sz, 0.015, sz], [0.20, 0.62, 0.36], ink);
+      if (k > 2) solid("sph4", [lx, 0.11, lz], 0, [0.08, 0.06, 0.08], [1.0, 0.62, 0.80], { e: 0.3, line: false });
+    }
+    for (let k = 0; k < 5; k++) {   // wet rocks at the lip of the fall
+      const side = (k - 2) * 0.17, rx = ux * (ISLAND - 0.1) + uz * side * 1.9, rz = uz * (ISLAND - 0.1) - ux * side * 1.9;
+      if (Math.abs(side) > 0.12) solid("box", [rx, 0.06, rz], k, [0.2, 0.12, 0.18], [0.42, 0.44, 0.56]);
+    }
     glows.push({ pos: [ux * (ISLAND + 0.1), -5.6, uz * (ISLAND + 0.1)], r: 0.9, color: [0.6, 0.85, 1.0], a: 0.4 });
   }
 
@@ -836,6 +989,32 @@ function sceneList(view, t, dt, P) {
 
   // the conductor's beacon: it pulses when a board message just arrived
   const fresh = Object.values(World.agents).some((a) => a.said && now - a.saidAt < 1500);
+  for (const a of Object.values(World.agents)) {   // a new board line: the beacon pings the pool
+    if (a.said && a.saidAt !== a.rippled && now - a.saidAt < 1500) {
+      a.rippled = a.saidAt;
+      const ang = Math.random() * Math.PI * 2;
+      addRipple("pool", Math.cos(ang) * 0.85, Math.sin(ang) * 0.85, 1);
+    }
+  }
+  const fl = SCENERY.fall;
+  if (fl && !World.reduced) {   // now and then a fish jumps in the pond
+    if (!World.fish && now > World.fishAt) {
+      const a0 = Math.random() * 6.28, r0 = 0.15 + Math.random() * 0.3;
+      World.fish = { x: fl.x + Math.cos(a0) * r0, z: fl.z + Math.sin(a0) * r0, dir: a0 + 1.6 + Math.random(), t0: t };
+      addRipple("pond", World.fish.x, World.fish.z, 0.8);
+    }
+    if (World.fish) {
+      const f = World.fish, k = (t - f.t0) / 0.7;
+      if (k >= 1) {
+        addRipple("pond", f.x + Math.cos(f.dir) * 0.32, f.z + Math.sin(f.dir) * 0.32, 0.9);
+        World.fish = null; World.fishAt = now + 5000 + Math.random() * 7000;
+      } else {
+        const fx = f.x + Math.cos(f.dir) * 0.32 * k, fz = f.z + Math.sin(f.dir) * 0.32 * k, fy = 0.09 + Math.sin(k * Math.PI) * 0.3;
+        const ry = Math.atan2(Math.cos(f.dir), Math.sin(f.dir));
+        solid("sph4", [fx, fy, fz], ry, [0.07, 0.07 + 0.03 * Math.cos(k * Math.PI), 0.16], [1.0, 0.55, 0.25], { e: 0.2, line: false });
+      }
+    }
+  }
   const by = 2.85 + Math.sin(t * 1.4) * 0.08;
   solid("sph", [-0.25, by, 0], 0, [0.36, 0.36, 0.36], [0.6, 1, 0.95], { e: fresh ? 1.6 : 1.1, line: false });
   glow([-0.25, by, 0], fresh ? 1.5 : 1.1, [0.3, 1, 0.9], 0.8);
@@ -1081,7 +1260,7 @@ function frame(view, now) {
   // camera: orbit round a target that eases onto a followed agent
   const fol = view.follow && World.agents[view.follow];
   if (view.follow && !fol) view.follow = "";
-  const want = fol ? [fol.x, 0.9, fol.z] : [0, 0.7, 0];
+  const want = fol ? [fol.x, 0.9, fol.z] : view.focus || [0, 0.7, 0];   // view.focus: look at a place
   const ease = Math.min(1, dt * 3);
   view.target = [lerp(view.target[0], want[0], ease), lerp(view.target[1], want[1], ease), lerp(view.target[2], want[2], ease)];
   if (fol && !view.drag) view.dist = lerp(view.dist, Math.min(view.dist, 9.5), ease * 0.5);
@@ -1191,7 +1370,7 @@ function frame(view, now) {
     gl.uniformMatrix4fv(loc.M, false, M4.trs(o.pos, o.ry, o.s));
     gl.uniform3f(loc.IS, 1 / (o.s[0] * o.s[0]), 1 / (o.s[1] * o.s[1]), 1 / (o.s[2] * o.s[2]));
     gl.uniform3fv(loc.C, o.color); gl.uniform1f(loc.A, o.a == null ? 1 : o.a); gl.uniform1f(loc.E, o.e || 0);
-    gl.uniform1f(loc.G, o.g || 0); gl.uniform1f(loc.S, o.s2 || 0.3); gl.uniform1f(loc.W, o.w || 0);
+    gl.uniform1f(loc.G, o.g || 0); gl.uniform1f(loc.S, o.s2 || 0.3);
     gl.drawArrays(gl.TRIANGLES, 0, m.count); draws++;
   };
   for (const o of L.solids) {
@@ -1201,10 +1380,12 @@ function frame(view, now) {
   }
   gl.frontFace(gl.CCW);
 
-  // 4. see-through solids, shadows, glows: blended, depth-tested, not depth-written
+  // 4. see-through: water first (its own shader), then glass, shadows, glows - blended,
+  // depth-tested, not depth-written
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
+  if (view.water) draws += drawWater(view, F, P, t);
   for (const o of L.clear) drawSolid(o);
   gl.disable(gl.CULL_FACE);
   if (view.shadowBatch && view.batches.shadows.count) {
@@ -1263,6 +1444,41 @@ function frame(view, now) {
   view.perf.scale = scale;
   drawLabels(view, vp, now);
   if (view.opts.detail) updateHud(view, now, hour);
+}
+
+function drawWater(view, F, P, t) {
+  const { gl } = view, { prog, loc } = view.water;
+  gl.useProgram(prog);
+  gl.disable(gl.CULL_FACE);
+  const T = t % 600;   // keep the noise inputs small (float precision); a jump every 10 min
+  gl.uniformMatrix4fv(loc.VP, false, F.vp); gl.uniform3fv(loc.eye, F.eye); gl.uniform1f(loc.T, T);
+  gl.uniform3fv(loc.sunDir, F.sunDir); gl.uniform3fv(loc.sunCol, P.sunCol); gl.uniform1f(loc.dayK, P.dayK);
+  gl.uniform3fv(loc.zenith, P.zenith); gl.uniform3fv(loc.horizon, P.horizon);
+  gl.uniform3fv(loc.fogc, P.fog); gl.uniform2fv(loc.fogr, F.fogr);
+  gl.uniform3fv(loc.LP, F.lp); gl.uniform4fv(loc.LC, F.lc);
+  gl.uniform3fv(loc.shallow, mix3(WATER_LOOK.night.shallow, WATER_LOOK.day.shallow, P.dayK));
+  gl.uniform3fv(loc.deep, mix3(WATER_LOOK.night.deep, WATER_LOOK.day.deep, P.dayK));
+  gl.uniform3fv(loc.foamCol, mix3(WATER_LOOK.night.foam, WATER_LOOK.day.foam, P.dayK));
+  const nowS = performance.now() / 1000;
+  World.ripples = World.ripples.filter((r) => nowS - r.t0 < 2.4);
+  const rip = view.ripBuf || (view.ripBuf = new Float32Array(16));
+  let draws = 0;
+  for (const w of WATER) {
+    rip.fill(0);
+    let k = 0;
+    for (const r of World.ripples) if (r.body === w.id && k < 4) { rip.set([r.x, r.z, nowS - r.t0, r.k], k * 4); k++; }
+    gl.uniform4fv(loc.rip, rip);
+    gl.uniform4fv(loc.shape, w.shape); gl.uniform4fv(loc.rect, w.rect);
+    gl.uniform4fv(loc.obs0, w.obs[0] || [0, 0, 0, 0]); gl.uniform4fv(loc.obs1, w.obs[1] || [0, 0, 0, 0]);
+    gl.uniform2fv(loc.flow, w.flow); gl.uniform1f(loc.beer, w.beer);
+    gl.uniformMatrix4fv(loc.M, false, M4.trs(w.pos, w.ry, w.s));
+    const m = view.meshes[w.mesh];
+    bindMesh(gl, loc, m);
+    gl.drawArrays(gl.TRIANGLES, 0, m.count);
+    draws++;
+  }
+  gl.enable(gl.CULL_FACE);
+  return draws;
 }
 
 // ---------------------------------------------------------------- labels, card, HUD

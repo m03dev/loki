@@ -4460,20 +4460,30 @@ async def _constrained_request(client, kwargs: dict):
 
 
 def _json_object_spans(text: str) -> list:
-    """Every balanced {...} object in a string (handles nesting)."""
-    spans, depth, start = [], 0, -1
-    for index, char in enumerate(text):
-        if char == "{":
-            if depth == 0:
-                start = index
-            depth += 1
-        elif char == "}":
-            if depth > 0:
-                depth -= 1
-                if depth == 0 and start >= 0:
-                    spans.append(text[start:index + 1])
-                    start = -1
+    """Every balanced {...} object in a string (nesting handled; braces inside strings -
+    the CSS and JS of a write_file call - do not count). A last object the model left
+    unclosed at the very end of its reply is closed (tool_guard.close_truncated)."""
+    spans = tool_guard.json_object_spans(text)
+    tail = text.rfind('{"name"')
+    if tail >= 0 and not any(text[tail:].startswith(sp) for sp in spans):
+        end = text.rfind("}")
+        closed = tool_guard.close_truncated(text[tail:end + 1]) if end > tail else None
+        if closed:
+            spans.append(closed)
     return spans
+
+
+_partial_call = ""     # a reply that stopped in the middle of a text tool call
+_partial_rounds = 0
+
+
+def _unfinished_call(content: str) -> bool:
+    """True when the text ends inside a tool call the model was writing ({"name": ...
+    with no complete object after it)."""
+    tail = (content or "").rfind('{"name"')
+    if tail < 0:
+        return False
+    return not tool_guard.json_object_spans(content[tail:]) and tool_guard.close_truncated(content[tail:].rstrip("` \n")) is None
 
 
 def _recover_text_tool_calls(content: str) -> list:
@@ -4639,7 +4649,24 @@ async def agent_turn(force_tool: bool = False) -> str:
             if not content.strip():
                 # Some local models finish a turn with only hidden reasoning; recover it.
                 content = getattr(message, "reasoning", None) or ""
+            global _partial_call, _partial_rounds
+            if _partial_call:
+                # the previous reply stopped in the middle of a tool call: this one carries on
+                content = _partial_call + content
+                _partial_call = ""
             recovered = _recover_text_tool_calls(content)
+            if not recovered and _unfinished_call(content) and _partial_rounds < 3:
+                # Cut off mid-call (the output limit, a long write_file): keep what came and
+                # ask for the rest, instead of losing the whole call and looping.
+                _partial_rounds += 1
+                _partial_call = content
+                _progress("thinking", "The model's tool call was cut off; asking it to finish it.")
+                messages.append({"role": "assistant", "content": content})
+                messages.append({"role": "user", "content": (
+                    "Your last message stopped in the middle of the tool call. Continue it EXACTLY "
+                    "from the last character you wrote: no repetition, no explanation, no code fence.")})
+                continue
+            _partial_rounds = 0
             if recovered:
                 GUARD_STATS["repaired"] += len(recovered)  # calls the model wrote as text
                 _progress("thinking", "Model wrote %d tool call(s) as text; running them." % len(recovered))

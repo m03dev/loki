@@ -4,7 +4,26 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-15 (session 19).
+Last updated: 2026-10-15 (session 20).
+
+## Session 20 (2026-10-15, cloud + the PC): real water, and local models' long tool calls
+
+- **Water** (app/ui/world.js `WATER_FS`, app/ui/world_noise.js): its own shader with an exact
+  shore distance per body (no depth texture, works on every WebGL 1 driver): Beer-Lambert depth
+  colour, wobbling shoreline foam + a breathing second line, cellular caustics, Schlick fresnel
+  sky reflection, stepped sun/moon glint, station lamps reflected at night, whitecaps on the
+  stream, ripple rings (LOKI's beacon pings the pool on every new board line; a fish jumps in
+  the pond), a waterfall sheet with sliding streaks and a white lip. Stone curbs, lily pads, a
+  tiled pool floor. Credits: docs/THIRD_PARTY.md (stegu/webgl-noise MIT; paddy-exe stylized
+  water MIT). Screens: docs/operations/screens/world-water-*.png.
+- **Found on the PC** (harness_data/_engine_ziva6.log, 10:37 today): a local model wrote a whole
+  todo page as a TEXT write_file call; LOKI dropped it because the scanner counted the CSS/JS
+  braces inside the content and the model left off the final "}". Then a reply was cut off
+  mid-call and lost; the task looped to the step limit with no file. Fixed: string-aware
+  `tool_guard.json_object_spans`, `close_truncated` (only adds missing closers at the very end),
+  and `loki._unfinished_call`: a cut-off call is kept and the model is asked to continue it,
+  then the two parts are joined. 7 checks in test_tool_guard built from that run.
+- Mac <-> PC live link: still blocked on the network (see the owner's answer in ZIVA_TASKS).
 
 ## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth
 
