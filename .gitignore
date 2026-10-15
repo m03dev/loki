@@ -28,7 +28,7 @@ engine/package-lock.json
 addons/
 scenes/
 scripts/
-plugins/
+/plugins/
 project.godot
 .git-rewrite/
 
