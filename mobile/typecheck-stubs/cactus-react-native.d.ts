@@ -2,7 +2,16 @@
 // init(), complete({ messages, options, tools, onToken }) -> { response, functionCalls }, getModels(), destroy().
 // Field names of CactusModel (slug, isDownloaded, sizeMb) are not confirmed by the docs page:
 // check them against the installed package's types (npm run typecheck) on first install.
-export interface CactusModel { slug: string; name?: string; sizeMb?: number; isDownloaded?: boolean }
+export interface CactusModel {
+  slug: string;
+  capabilities?: string[];
+  quantization?: { int4: { sizeMb: number; url: string }; int8: { sizeMb: number; url: string } };
+}
+export interface CactusLMTool {
+  name: string;
+  description: string;
+  parameters: { type: "object"; properties: Record<string, { type: string; description: string }>; required: string[] };
+}
 export interface CactusMessage { role: "system" | "user" | "assistant"; content: string }
 export interface CactusCompleteResult {
   success?: boolean;
@@ -16,7 +25,7 @@ export class CactusLM {
   complete(params: {
     messages: CactusMessage[];
     options?: { maxTokens?: number; temperature?: number; stopSequences?: string[] };
-    tools?: unknown[];
+    tools?: CactusLMTool[];
     onToken?: (token: string) => void;
   }): Promise<CactusCompleteResult>;
   getModels(): Promise<CactusModel[]>;

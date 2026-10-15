@@ -4,7 +4,7 @@
 //   -> { response, functionCalls }   .getModels()   .destroy()
 // Model slugs are checked against getModels() at run time, so a slug this Cactus version
 // does not know shows as "not offered" instead of failing on download.
-import { CactusLM } from "cactus-react-native";
+import { CactusLM, type CactusLMTool, type CactusModel } from "cactus-react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import type { ModelInfo } from "../models";
 import { LocalBrain, Message, Tool, ToolCall, stripThinking } from "./LocalBrain";
@@ -32,7 +32,17 @@ export class CactusBrain implements LocalBrain {
     if (this.catalog && !refresh) return this.catalog;
     try {
       const models = await new CactusLM().getModels();
-      this.catalog = models.map((m) => ({ slug: m.slug, isDownloaded: m.isDownloaded, sizeMb: m.sizeMb }));
+      this.catalog = models.map((m) => {
+        // The installed CactusModel type exposes slug + quantization only; at run time the object
+        // also carries the download state and a plain size (the fields docs.cactuscompute.com
+        // shows), so read those through a narrow cast and fall back to the typed size.
+        const extra = m as CactusModel & { isDownloaded?: boolean; sizeMb?: number };
+        return {
+          slug: m.slug,
+          isDownloaded: extra.isDownloaded,
+          sizeMb: extra.sizeMb ?? m.quantization?.int4?.sizeMb,
+        };
+      });
     } catch {
       this.catalog = [];
     }
@@ -88,7 +98,20 @@ export class CactusBrain implements LocalBrain {
 
   async callTools(model: ModelInfo, text: string, tools: Tool[]): Promise<ToolCall[]> {
     const lm = await this.ready(model);
-    const result = await lm.complete({ messages: [{ role: "user", content: text }], tools, options: { maxTokens: 128, temperature: 0 } });
+    // The app's tools are OpenAI-shaped; CactusLMTool wants { name, description, parameters }.
+    const cactusTools: CactusLMTool[] = tools.map((t) => {
+      const params = (t.function.parameters || {}) as { properties?: unknown; required?: unknown };
+      return {
+        name: t.function.name,
+        description: t.function.description,
+        parameters: {
+          type: "object" as const,
+          properties: (params.properties as Record<string, { type: string; description: string }>) || {},
+          required: Array.isArray(params.required) ? (params.required as string[]) : [],
+        },
+      };
+    });
+    const result = await lm.complete({ messages: [{ role: "user", content: text }], tools: cactusTools, options: { maxTokens: 128, temperature: 0 } });
     return (result.functionCalls || []).map((call) => ({
       name: String(call.name),
       arguments: typeof call.arguments === "string" ? safeJson(call.arguments) : (call.arguments || {}),

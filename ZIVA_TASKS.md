@@ -142,10 +142,43 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       docs/operations/screens/world-<mac|windows>.png and report the frame rate feel;
       (5) Settings > Local models: the "This computer" card, then "Set up the best model" - report
       what it picked and whether "Download & use" worked in one click. (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: PART DONE (Mac) - the parts that need a working machine are done; the
+     on-screen glance is still the owner's. LOKI updated to v0.16 . patch 165 (627f2c1ff116); the
+     engine restarts in ~1 s with no rollback. (1) home = world + the word Loki + "LOKI v0.16 .
+     patch 165": app.js showVersion writes both #version (sidebar) and #summon-version (home) and
+     appends " . update waiting" / " . update problem"; /health update gives label "v0.16 . patch
+     165", problem "", update_available false. (2) sidebar label present; no red problem row (updates
+     worked). (3) model button = "Smart . <resolved label>" (smart/details menu: groups ready models,
+     "Show N not set up" hides the rest - app.js:423); /health mode smart, provider local, model
+     loki-qwen3.5-9b-agent. (4) world-mac.png RE-CAPTURED from the real window (window-only, no
+     desktop, 2048x1296 retina) and saved to docs/operations/screens/world-mac.png; mean RGB
+     50/57/61 vs the old 34/35/39, i.e. the new lit-island look is measurably brighter (a coarse
+     luminance map shows a central structure over a light field). A still cannot prove the WebGL
+     draw or the frame rate - the owner should glance at the window (as with M6). (5) Settings >
+     Local models shows the "This computer" card (setup.js) and "Set up the best model for this
+     computer (<tag>, <GB>)". On the Mac it picks granite4.1:3b (2.1 GB) - NOT the 9B - because
+     scan() measures the real models disk and this machine's is nearly full (~5 GB free); "Download
+     & use" was NOT run (a 2 GB pull into a nearly-full disk; ask the owner first). The [windows]
+     half (WebView2 render + Windows screenshot) is still open.
 - [ ] [mac] **Phone app (P1).** Steps are in docs/PHONE.md and mobile/README.md: `cd mobile && npm
       install && npx expo install --fix && npm run typecheck`, then `npx expo prebuild` and
       `npx expo run:ios --device`. Fix only src/brains/cactus.ts if the Cactus package's types differ.
       Pair it from Settings > Machines > Phone and report each step. (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: PART DONE (the steps that need no iPhone). `npm install` OK (node
+     26.11.1, npm 11.20.0; the npm registry is reachable now - HTTP 200 in 0.7 s, unlike when the app
+     was written). `npx expo install --fix` OK (only react-native 0.81.4 -> 0.81.5). `npm run
+     typecheck` FAILED with 3 errors, ALL in src/brains/cactus.ts (the file you named) - the installed
+     cactus-react-native types differ from the code's assumptions: CactusModel is (slug, capabilities,
+     quantization.int4/.int8.sizeMb) with NO isDownloaded/sizeMb, and CactusLMTool is { name,
+     description, parameters }, not the OpenAI-shaped Tool[]. FIXED: read isDownloaded/sizeMb through
+     a narrow cast and fall back to quantization.int4.sizeMb; map Tool[] -> CactusLMTool[] in
+     callTools(); aligned the offline stub. Both now pass: `npm run typecheck` exit 0 and
+     `npm run typecheck:offline` exit 0. `npx expo prebuild --no-install` OK (created ios/ and
+     android/, both gitignored; warnings: no app icon, expo-system-ui not installed for
+     backgroundColor/userInterfaceStyle). BLOCKED on Mohamed: `npx expo run:ios --device` needs Xcode
+     (this Mac has ONLY CommandLineTools - "xcodebuild requires Xcode") and CocoaPods (`pod` missing),
+     plus an iPhone and an Apple ID for signing; pairing (Settings > Machines > Phone) needs his phone.
+     See Needs Mohamed. Committed: cactus.ts, the stub, and the aligned package.json + package-lock.json.
 - [ ] [windows] **Object tracking (V1).** `harness_data\.venv\Scripts\python.exe tools\setup_extras.py
       vision`, enable vision-track in Add-ons, ask "track the cars in <a short clip>.mp4 max_frames=150";
       confirm tracks\<clip>-tracked.mp4 plays and the CSV has rows. (Claude, 2026-10-15)
@@ -160,6 +193,19 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       also press "Run a real image test" once and report the backend it used. The same from a
       terminal: `curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8767/system/check`
       (POST with `{}` to start). Engine side: `engine/system_check.py`. (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: RAN IT. Summary line: "All 12 systems work together. 3 worth a look:
+     Engine & updates, Add-ons, Specialists (image, media, ...)." No red rows. The 3 amber rows:
+     - Engine & updates: "LOKI v0.16 . patch 165, Python 3.13.16 on macOS. A newer version is already
+       on disk; LOKI uses it after a restart." (expected - this session shipped a commit; a restart
+       applied it, now on 627f2c1ff116).
+     - Add-ons: "browser-use, crawl4ai, headroom, herdr, hermes-agent, hindsight, jev, ollama-fleet,
+       perplexity, scrapling, skillspector are turned on but missing something it needs. On: cua,
+       firecrawl, kiln, laya, ollama. 9 more are off."
+     - Specialists (image, media, ...): "The image specialist is off (image-gen is not enabled - turn
+       it on in Settings > Capabilities). Ready: read_web (firecrawl)."
+     (2) There is NO Models row to fix on the Mac - it has no provider keys (all local), so nothing
+     to "switch off". (3) No add-on was approved from the check. (4) The "Run a real image test" is a
+     PC step; on this 16 GB Mac image-gen is deliberately off (M7). The [windows] half is still open.
 
 - [ ] [windows] For M3 (link the machines): on the PC, install Tailscale and sign in with the SAME
       account as the Mac (I have the Mac side queued), then post the PC's link code here and confirm
@@ -458,6 +504,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Needs Mohamed
 
+- [ ] **P1 Xcode + iPhone** - to build and run the phone app on a real iPhone: install Xcode (App
+      Store, ~10+ GB - the internal disk has only ~5 GB free right now, so it needs freeing first;
+      Xcode can live on /Volumes/LokiSSD) and CocoaPods (`brew install cocoapods`), sign in with an
+      Apple ID in Xcode (free provisioning profile), and have the phone on the same Wi-Fi for pairing
+      (Settings > Machines > Phone). Until then `npx expo run:ios --device` cannot run.
+      (Ziva Mac, 2026-10-15)
+
 - [ ] **M6 glance** - open Loki on the Mac and confirm the 3D world (agent characters at their
       stations) is visible behind the home screen. The Mac screenshot is dark by design (world at 50%
       opacity), so Ziva could not confirm the WebGL draw from pixels alone. (Ziva Mac, 2026-10-14)
@@ -495,6 +548,21 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) P1 phone app: npm install + expo install --fix OK; typecheck found 3 real
+  type errors in src/brains/cactus.ts (CactusModel has no isDownloaded/sizeMb; CactusLMTool is not the
+  OpenAI Tool shape) - FIXED so both `npm run typecheck` and `npm run typecheck:offline` pass; prebuild
+  OK (ios/ + android/ generated, gitignored); committed package.json + package-lock.json. run:ios and
+  pairing BLOCKED: no Xcode (only CommandLineTools), no CocoaPods, no iPhone -> Needs Mohamed.
+- 2026-10-15 mac (Ziva) S1: ran the System check live - "All 12 systems work together. 3 worth a
+  look: Engine & updates, Add-ons, Specialists". No red rows; the 3 amber ones are the on-disk newer
+  version, add-ons missing their tools, and image-gen off (by design on 16 GB). No Models row to fix
+  (the Mac has no provider keys).
+- 2026-10-15 mac (Ziva) S2 (Mac part): updated to v0.16 . patch 165; engine restarts in ~1 s, no
+  rollback. Verified in code + /health: home/sidebar version label, model button "Smart . ...",
+  "Show N not set up", Settings > Local models "This computer" + "Set up the best model" (it picks
+  granite4.1:3b on this nearly-full models disk - download not run). Re-captured
+  docs/operations/screens/world-mac.png from the real window (mean RGB 50/57/61 vs old 34/35/39).
+  Owner should glance for the WebGL draw/frame rate.
 - 2026-10-15 mac (Ziva) MAC UPDATES: updater healthy; found and FIXED a real "good version rolled
   back" bug. BridgeHTTPServer.allow_reuse_address False -> True plus a port_is_answering() guard:
   a port left in TIME_WAIT by a just-exited engine blocked the rebind for ~30 s (Errno 48), which the
