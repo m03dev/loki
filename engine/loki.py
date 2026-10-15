@@ -3011,11 +3011,15 @@ def identity_section() -> str:
         machine, linked = peers.my_name(), [p["name"] for p in peers.peers()]
     except Exception:  # noqa: BLE001
         machine, linked = "", []
+    try:
+        cost = " (paid)" if is_metered(provider) else " (free)"
+    except Exception:  # noqa: BLE001 - also built once at import, before the metering helpers exist
+        cost = ""
     lines = ["# Who you are right now",
              "You are LOKI, a standalone desktop app (macOS and Windows) that runs AI agents on the "
              "owner's own machines. You are not a Godot project.",
              "- Answering this message: model %s through provider %s%s." % (
-                 model or "?", provider, " (free)" if not is_metered(provider) else " (paid)"),
+                 model or "?", provider, cost),
              "- This machine: %s (%s)%s." % (machine or "this computer", sys.platform,
                                              (", LOKI version " + commit) if commit else ""),
              "- Linked machines: %s." % (", ".join(linked) if linked else "none yet")]
