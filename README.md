@@ -83,7 +83,8 @@ Ziva: your task list and inbox is [ZIVA_TASKS.md](ZIVA_TASKS.md).
   `contrib/ruflo/` - searchable templates in Settings > Agents, skills for any agent, and
   playbooks for team roles. Every text passes LOKI's skill scan first. Ruflo's own MCP server
   (swarms, memory) is opt-in: `LOKI_MCP_ENABLE=ruflo`.
-- **Add-ons**: `media` (yt-dlp), `image-gen` (Z-Image Turbo / Pollinations), `agent-reach`,
+- **Add-ons**: `media` (yt-dlp), `image-gen` (Z-Image Turbo / Pollinations), `vision-track`
+  (track objects in a video: Roboflow trackers + RF-DETR), `agent-reach`,
   `opencode`, `mlx`, `kyojin`. Install the optional ones with `python tools/setup_extras.py`.
 
 ## Agent teams
