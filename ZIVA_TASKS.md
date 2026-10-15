@@ -26,6 +26,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [loki] small: write a 3-line plain-English summary of the newest entry in
+      docs/operations/SESSION_LOG.md into notes/loki-summary.txt in the Home workspace.
+      (Ziva Mac, 2026-10-15 - also the S3 autopilot-inbox check)
+
 - [ ] [windows] **Link the Mac across networks (M3).** The Mac has no way to reach the PC on
       192.168.0.x. Fastest, no account: (1) `winget install ekzhang.bore`; (2) publish the PC's
       peer port - `bore local 8768 --to bore.pub --port 28768`; (3) post the exact `bore.pub:<port>`
@@ -47,11 +51,30 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       how many tool calls were valid first try, and read GUARD_STATS from the engine log (the
       "[tool] ... rejected" and "Fixed the model's tool call" lines). Report the three results.
       (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: RAN IT on the Mac's installed tool-calling model (ollama
+     loki-qwen3.5-9b-agent, local route), same prompt, one mode per engine start (the engine loads
+     harness_data/.env at start and reads LOKI_CONSTRAINED_TOOLS per request):
+     - =off : file CREATED; 3 tool calls, all valid first try - make_dir, write_file, list_tree;
+              0 repaired, 0 rejected.
+     - =auto: file CREATED; 4 tool calls, all valid first try - make_dir, write_file, list_files,
+              list_tree; 0 repaired, 0 rejected.
+     - =on  : FIRST RUN FAILED - only make_dir ran, then the model claimed "DONE: Created
+              notes/hello.txt with 'hi'..." with NO file on disk (a false DONE the guard did not
+              catch); 0 repaired/rejected logged. RE-RUN: file CREATED; 2 tool calls valid first
+              try - write_file, list_tree; 0/0. So =on is NOT reproducibly broken here, but it did
+              produce one premature DONE - the finish check could notice the file the reply names
+              is missing. Guard stats: 0 repaired / 0 rejected in every run.
 - [ ] [either] S3: leave LOKI running and idle for ~15 min (no chatting), then
       `curl -s 127.0.0.1:8767/autopilot`. Confirm it ran the health duty (log has a "health"
       entry) and that Settings > System check shows the "Autopilot (works when idle)" row green.
       Put an open `- [ ] [loki] <small task>` under Requests and confirm the autopilot starts a
       team for it when idle. Report what you saw. (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: SET UP, NOT FINISHED - needs a ~15 min quiet window. GET /autopilot
+     right after LOKI updated shows enabled:true, idle:true, last:{}, log:[] (no duty has run yet).
+     The autopilot acts only after LOKI_AUTOPILOT_IDLE_S (default 600 s) of quiet, and the inbox
+     duty every LOKI_AUTOPILOT_INBOX_S (default 900 s). I posted the [loki] small task it should
+     pick up (top of Requests) and left LOKI running on v0.16 . patch 172; the health-inbox rows
+     are UNVERIFIED pending that window.
 - [x] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
       Paste the output of each: `ls -l ~/Documents/loki` (symlink target present?);
       `cd ~/Documents/loki && git status -sb && git log --oneline -3 origin/master..HEAD`;
@@ -600,6 +623,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) S2 local tool calling (ollama loki-qwen3.5-9b-agent): =off 3/3 first-try
+  calls + file created; =auto 4/4 + file created; =on failed once with a false DONE (only make_dir,
+  no file) then passed on re-run (2/2) - not reproducible, but the premature DONE was not caught.
+  0 repaired / 0 rejected in every run. S3: autopilot enabled+idle, needs the ~15-min quiet window;
+  [loki] inbox task posted, not yet verified.
 - 2026-10-15 mac (Ziva) M3 off-network link: the peer link only dials private addresses (a public
   hostname is refused), so I built and PROVED the no-account route - a public bore relay behind a
   loopback forwarder (tools/peer_forward.py, + tests). Live: this Mac's 8768 published at
