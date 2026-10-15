@@ -183,7 +183,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Mac) - the Mac mini
 
-- [ ] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
+- [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
       `~/Documents/loki`. Use the one that exists (ask under Needs Mohamed if both or neither),
       then fix HANDOFF.md to match. Run `bash setup.sh` once (this also installs Laya), then
       `harness_data/.venv/bin/python tools/ship.py --check` and report.
@@ -194,7 +194,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       harness_data/ + keys/. Ran `bash setup.sh` (Node 26 + Laya; Laya self-test OK; rebuilt
       ~/Applications/Loki.app -> ~/Documents/loki) and ship.py --check - all 11 suites green.
       HANDOFF.md already names `~/Documents/loki`, so no doc change was needed.
-- [ ] **M2 GitHub sign-in (do this before the repo goes private).** `brew install gh`,
+- [x] **M2 GitHub sign-in (do this before the repo goes private).** `brew install gh`,
       `gh auth login` (GitHub.com, HTTPS, browser), then `gh auth setup-git`. Check with
       `git -C <checkout> fetch origin master`. Without this the Mac cannot update once
       m03dev/loki is private. On the PC, check the same `git fetch` works (Git Credential Manager).
