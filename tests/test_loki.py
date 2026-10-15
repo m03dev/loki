@@ -3058,9 +3058,13 @@ check("scan: MLX and llama.cpp presence are reported", "installed" in _sc["mlx"]
 check("models dir defaults to ~/.ollama/models", _ms.models_dir({}) == Path.home() / ".ollama" / "models")
 _st = _ms.status(env={}, opener=_fake, info={"os": sys.platform, "ram_gb": 16.0, "vram_gb": 8.0, "gpu": "RTX",
                                                "unified": False, "chip": "", "budget_gb": 7.0})
+# scan() measures the real free space of this machine's model disk, so the picks - and any
+# upgrade offered - differ per machine. Expect what upgrade_for() makes of THIS machine's picks,
+# not a fixed tag (it was red on the Mac, whose models disk is nearly full).
+_expected_up = _ms.upgrade_for(_st["best"], _st["picks"]) if _st["best"] and _st["best"].get("tools") else None
 check("status() carries scan, picks, blocked, auto and upgrade",
-      all(k in _st for k in ("scan", "picks", "blocked", "auto", "upgrade")) and _st["upgrade"]
-      and _st["upgrade"]["current"] == "qwen3:4b", {k: _st.get(k) for k in ("auto", "upgrade")})
+      all(k in _st for k in ("scan", "picks", "blocked", "auto", "upgrade")) and _st["upgrade"] == _expected_up
+      and (_st["upgrade"] is None or _st["upgrade"]["current"]), {k: _st.get(k) for k in ("best", "auto", "upgrade")})
 
 _fake2 = _MsOllama([], pullable=["qwen3.5:9b"])
 _used: list = []

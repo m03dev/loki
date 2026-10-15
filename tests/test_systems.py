@@ -732,6 +732,37 @@ check("the panel polls /system/check and runs safe fixes through /system/fix",
 ship = (REPO / "tools" / "ship.py").read_text(encoding="utf-8")
 check("tools/ship.py runs this suite", '"test_systems"' in ship)
 
+
+section("the bridge can rebind its port at once after a restart (time-wait)")
+saved_host, saved_port = loki_bridge.HOST, loki_bridge.PORT
+_free = socket.socket()
+_free.bind(("127.0.0.1", 0))
+_free_port = _free.getsockname()[1]
+_free.close()
+loki_bridge.HOST, loki_bridge.PORT = "127.0.0.1", _free_port
+bstate2 = loki_bridge.BridgeState(loki, "rebind-secret")
+_first = loki_bridge.BridgeHTTPServer(bstate2)
+threading.Thread(target=_first.serve_forever, daemon=True).start()
+try:
+    _conn = http.client.HTTPConnection("127.0.0.1", _free_port, timeout=5)
+    _conn.request("GET", "/health", headers={"Authorization": "Bearer rebind-secret"})
+    _conn.getresponse().read()
+    _conn.close()
+finally:
+    _first.shutdown()
+    _first.server_close()
+check("a port left in TIME_WAIT reads as free (a live bridge still reads as answering)",
+      not loki_bridge.port_is_answering("127.0.0.1", _free_port))
+_rebound, _err = True, ""
+try:
+    _second = loki_bridge.BridgeHTTPServer(bstate2)
+    _second.server_close()
+except OSError as exc:  # noqa: BLE001
+    _rebound, _err = False, str(exc)
+check("the bridge rebinds the same port immediately (SO_REUSEADDR, so a good update is not "
+      "rolled back for a port still in TIME_WAIT)", _rebound, _err)
+loki_bridge.HOST, loki_bridge.PORT = saved_host, saved_port
+
 SUP.stop()
 listener.close()
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

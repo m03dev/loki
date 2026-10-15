@@ -237,7 +237,9 @@ if linked:
     result = updater.update(GONE)
     check("a dangling checkout link is reported clearly", not result["updated"]
           and "points to" in result["error"] and result["problem"] == "LOKI folder missing", result)
-check("a missing disk is named", "is the disk LokiSSD attached" in updater.unreachable(Path("/Volumes/LokiSSD/loki")))
+# A /Volumes path that is certainly not attached (the Mac checkout itself IS /Volumes/LokiSSD/loki).
+_absent = Path("/Volumes") / ("LokiSSD-absent-%d" % os.getpid()) / "loki"
+check("a missing disk is named", ("is the disk %s attached" % _absent.parts[2]) in updater.unreachable(_absent))
 check("a reachable folder is fine", updater.unreachable(MAC) == "")
 
 section("git finds its helpers and never refuses the folder")

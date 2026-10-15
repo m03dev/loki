@@ -26,7 +26,7 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
-- [ ] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
+- [x] [mac] "Mac updates seem to not be working" - check the updater fix (Claude, 2026-10-15).
       Paste the output of each: `ls -l ~/Documents/loki` (symlink target present?);
       `cd ~/Documents/loki && git status -sb && git log --oneline -3 origin/master..HEAD`;
       `git cherry origin/master HEAD`; `git config --show-origin --get-all credential.https://github.com.helper`;
@@ -34,6 +34,28 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       Finder PATH: fails = the helper was not found); `grep "update" harness_data/app/loki_app.log | tail -5`;
       `cat .git/loki_update_last.json`; `curl -s 127.0.0.1:8767/health` (the app's engine) and look at `update.problem`,
       `update.error`, `update.label`. Then restart LOKI and report whether it updated.
+  -> Ziva (Mac), 2026-10-15: the updater is HEALTHY, but a GOOD version was being rolled back - FOUND AND FIXED.
+     (1) Updater: `git status -sb` clean, 0 ahead/0 behind origin/master; the credential helper is
+     `!/opt/homebrew/bin/gh auth git-credential`; `env -i HOME=$HOME PATH=/usr/bin:/bin git -C
+     ~/Documents/loki fetch origin master` SUCCEEDS - the bare Finder PATH is fine because the helper
+     is an absolute path. `loki_app.log` shows real updates ("00:27:01 update: updated c25e401f3d80 ->
+     a7e35572b9f7"). `/health` update block: commit a7e35572b9f7, label "v0.16 . patch 163", behind 0,
+     ahead 0, note "up to date", problem "", error "". NOTE `.git/loki_update_last.json` only exists
+     when a failure is mapped; the live record is `.git/loki_update_health.json`.
+     (2) THE BUG: on restart the Mac pulled origin/master fb6f66806db6 and ROLLED IT BACK. engine.out:
+     "OSError: [Errno 48] Address already in use" -> "Bridge port 8767 is already occupied" - for the
+     new version AND the rollback attempt, ending in "The Loki engine did not start". ROOT CAUSE,
+     proved with an isolated socket test: BridgeHTTPServer had allow_reuse_address = False (no
+     SO_REUSEADDR), so a just-exited engine leaves port 8767 in TIME_WAIT and macOS refuses the rebind
+     for ~30 s. The app reads that as "this version did not start", rolls back and records the commit
+     in `.git/loki_update_health.json` skip[] - so a GOOD update is skipped and the Mac sits one behind.
+     That is the whole "Mac updates seem to not be working".
+     (3) FIX (shipped this session): `allow_reuse_address = True` + a `port_is_answering()` guard in
+     engine/loki_bridge.py, so the port can be rebound at once after a restart while a live engine is
+     still never overwritten (on Windows SO_REUSEADDR would otherwise let a second bind through). New
+     check in tests/test_systems.py: FAILS without the fix (Errno 48), PASSES with it. Live re-verified:
+     engine #2 starts 1 s after engine #1 is killed (previously Errno 48 + rollback). The Mac now runs
+     fb6f66806db6, `/health` "up to date", problem "".
 
 - [x] [windows] At 18:39:31 the engine restarted for an update and at 18:39:40 "the Loki window
       closed". ANSWER (Ziva Windows, 2026-10-14): BY ITSELF - it was the app applying MY OWN ship.py
@@ -473,6 +495,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) MAC UPDATES: updater healthy; found and FIXED a real "good version rolled
+  back" bug. BridgeHTTPServer.allow_reuse_address False -> True plus a port_is_answering() guard:
+  a port left in TIME_WAIT by a just-exited engine blocked the rebind for ~30 s (Errno 48), which the
+  app read as "this version did not start" and skipped fb6f66806db6 - a good update, so the Mac sat
+  one behind. New check in tests/test_systems.py fails without the fix and passes with it; live
+  re-verified (engine restarts 1 s after kill, no rollback). Mac now on fb6f66806db6. See the answered
+  [mac] update request.
 - 2026-10-15 cloud (Claude) Mohamed's list, all built in the cloud and merged: home = world + the
   word "Loki" (chat on click/typing); version "v0.16 · patch N" (VERSION file + commit count) with
   update problems shown; one model button with a grouped menu; updater fixes for the Mac (PATH for

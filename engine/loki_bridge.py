@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import json
 import os
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -1462,7 +1464,13 @@ def job_screenshot(state: "BridgeState", query: dict[str, list[str]]) -> tuple[i
 
 class BridgeHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = False
+    # SO_REUSEADDR: the engine must be able to rebind its port at once after a restart. A
+    # previous instance that just exited leaves the port in TIME_WAIT, and macOS/Linux then
+    # refuse the bind (Errno 48) for ~30 s - which the app reads as "this version did not
+    # start" and rolls back, so a good update looks broken. With SO_REUSEADDR the bind still
+    # fails over a live listener on macOS/Linux; on Windows it would not, so port_is_answering()
+    # refuses a port that already accepts connections before we bind (see start_bridge_server).
+    allow_reuse_address = True
 
     def __init__(self, state: BridgeState) -> None:
         super().__init__((HOST, PORT), BridgeHandler)
@@ -1480,7 +1488,23 @@ def keep_secret_alive(secret_path: Path, secret: str, stop: threading.Event) -> 
         stop.wait(2.0)
 
 
+def port_is_answering(host: str, port: int) -> bool:
+    """True when something already accepts connections on host:port (a live bridge).
+
+    A port left in TIME_WAIT by a just-exited engine refuses connections, so it reads as free
+    here and the bind is allowed - exactly what we want after a restart. Only a port that still
+    answers (a running engine) is refused, on every platform.
+    """
+    if port == 0:
+        return False
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.5)
+        return probe.connect_ex((host, port)) == 0
+
+
 def start_bridge_server(state: BridgeState, secret_path: Path, secret: str) -> tuple[BridgeHTTPServer, threading.Thread]:
+    if port_is_answering(HOST, PORT):
+        raise OSError(errno.EADDRINUSE, f"port {PORT} is already serving a bridge")
     server = BridgeHTTPServer(state)
     write_secret_atomic(secret_path, secret)
     server_thread = threading.Thread(target=server.serve_forever, name="loki-loopback-http", daemon=True)
