@@ -338,6 +338,10 @@ section("tools/ship.py: test, commit, catch up, push")
 sys.path.insert(1, str(REPO / "tools"))
 import ship  # noqa: E402
 
+_suite_tmp = Path(ship._suite_env()["TMPDIR"]).resolve()
+check("suite temp dirs are pinned outside the checkout",
+      _suite_tmp != REPO.resolve() and REPO.resolve() not in _suite_tmp.parents, _suite_tmp)
+
 ship.SUITES = ["test_loki"]
 ship.MIRRORS = []
 ship.tell_peers = lambda repo, say=print: []

@@ -22,11 +22,13 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_REPO = HERE.parent
+REPO_DEFAULT = DEFAULT_REPO  # alias used by _suite_env()
 BRANCH = os.getenv("LOKI_BRANCH", "master")
 MIRRORS = [b for b in os.getenv("LOKI_MIRROR_BRANCHES", "macos-app").split(",") if b.strip()]
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
@@ -35,8 +37,24 @@ SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals"]
 
 
-def run(repo: Path, *args: str, timeout: float = 300.0) -> tuple:
+def _suite_env() -> dict:
+    """The environment a suite runs in, with the temp dir pinned to a safe absolute path.
+
+    The suites make their scratch work with tempfile.mkdtemp(). If TMPDIR is missing or points
+    into the checkout (seen after a killed run), that work lands in the tree and `git add -A`
+    would commit it - so never let a suite inherit a temp dir inside REPO.
+    """
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    root = (os.environ.get("TEMP") or "") if os.name == "nt" else "/tmp"
+    if not root or not os.path.isdir(root) or not os.access(root, os.W_OK):
+        root = tempfile.gettempdir()
+    if os.path.abspath(root) != os.path.abspath(str(REPO_DEFAULT)) and not str(root).startswith(str(REPO_DEFAULT)):
+        env["TMPDIR"] = env["TEMP"] = env["TMP"] = root
+    return env
+
+
+def run(repo: Path, *args: str, timeout: float = 300.0) -> tuple:
+    env = _suite_env()
     try:
         proc = subprocess.run(list(args), cwd=str(repo), capture_output=True, text=True,
                               timeout=timeout, env=env)

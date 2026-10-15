@@ -34,6 +34,18 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       `JSON.stringify(World.views.panel.perf)` and paste it here (ema = ms per frame, boost should
       stay 0 on both machines). Screenshot into docs/operations/screens/world-sim-<mac|windows>.png.
       (Claude, 2026-10-15)
+  -> Ziva (Mac), 2026-10-15: DONE for the Mac (measured). WKWebView cannot be automated here, so I
+     drove the running app's world in a real-GPU Chrome over the DevTools Protocol:
+     - World DATA: team 1485bae2 ("make notes/sim.txt with hi, then check it") -> /world shows agents
+       at their stations (hall, drafting table, workshop, test bench) with working/done/failed states.
+     - perf, real GPU (Settings > LOKI World):
+       panel  {"ema":16.7,"boost":0,"slow":0,"fast":3132,"draws":77,"ms":0.3,"scale":3}
+       home   {"ema":33.4,"boost":0,"slow":0,"fast":573,"draws":71,"ms":0.5,"scale":4}
+       -> boost stays 0 on the Mac, as the task expects; the panel holds ~60 fps.
+     - Screenshot: docs/operations/screens/world-sim-mac.png (1400x813 LOKI World panel; mean RGB
+       39/59/63 = the lit island, not a blank canvas).
+     Left for a human hand in the app: the click / double-click-to-follow gestures (a mouse event on a
+     moving character cannot be aimed reliably from a script). Data + render + perf are verified.
 
 - [x] [claude] **Tool-guard inconsistency (false DONE).** My S2 `=on` run - the MAIN task loop
       (POST /task), ollama `loki-qwen3.5-9b-agent` - called only `make_dir` then said "DONE:
@@ -650,6 +662,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) W10 (Mac) finished: world data verified (agents at stations, working/done/
+  failed) and a real-GPU perf read via CDP - LOKI World panel ema 16.7 ms, home 33.4 ms, boost 0 on
+  both. Screenshot docs/operations/screens/world-sim-mac.png. Also HARDENED tools/ship.py: suite
+  temp dirs are pinned to /tmp so a killed run can never drop loki-*/tmp* into the checkout and get
+  committed (guard test in test_updater, 87 pass).
 - 2026-10-15 mac (Ziva) HEALTH: "Ziva stopping" is the Godot editor/sidecar, NOT malware. The
   sidecar log shows "Godot editor unresponsive for >45s ... Restart the editor to recover" twice
   (17:18Z, 18:02Z) then "TurnRecovery ... turn interrupted by a restart". Cause: resource pressure -
