@@ -103,6 +103,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      and the image specialist produced a real JPG through the free Pollinations backend.
      image-gen CUDA (torch cu128 + ~20 GB weights) is downloading in the background. STILL TO DO:
      the four LOKI prompts below - they need the app running.
+     FOLLOW-UP: torch cu128 + diffusers installed, `ZImagePipeline` is importable (zimage_ready
+     True); the ~20 GB Z-Image weights download in the background / on first use. The image
+     runner ALREADY has a `qwen()` backend (Qwen-Image via ModelScope) - it just needs a
+     ModelScope token, so no new code is required for your "Qwen images" ask (see Needs Mohamed).
 - [ ] **W6 LOKI World.** Home screen: the world should be faintly visible behind "What should
       Loki work on?". Settings > LOKI World: drag to orbit, wheel to zoom. Start a team
       ("build a landing page for a bakery and test it") and watch characters walk to their
@@ -164,6 +168,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       say so: LOKI will keep using the PC (agents with "Lives on: Best machine") or Pollinations.
 
 ## Needs Mohamed
+
+- [ ] A **ModelScope** token (modelscope.cn/my/myaccesstoken) to turn on the `qwen()` image
+      backend (Qwen-Image 2.1). Without it, images use local Z-Image Turbo or free Pollinations.
+      (Ziva Windows, 2026-10-14 - the backend already exists in engine/runners/imagegen.py.)
 
 - [ ] After the repo is private (W0): private repos get 2,000 free GitHub Actions minutes a
       month and macOS minutes count 10x, so the macOS + Windows CI on every push will use them up
