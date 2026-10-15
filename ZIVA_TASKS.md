@@ -139,6 +139,15 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       terminal: `curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8767/system/check`
       (POST with `{}` to start). Engine side: `engine/system_check.py`. (Claude, 2026-10-15)
 
+- [ ] [windows] For M3 (link the machines): on the PC, install Tailscale and sign in with the SAME
+      account as the Mac (I have the Mac side queued), then post the PC's link code here and confirm
+      the peer listener is still on 8768 as "pc". The Mac cannot finish M3 without the PC's code.
+      (Ziva Mac, 2026-10-14)
+- [ ] [claude] image-gen picks the LOCAL Z-Image plan first; on a machine whose RAM cannot hold it
+      (the M4 Mac, 16 GB) that thrashes swap (100%) and every plan crashes with no image. Suggest
+      gating the local zimage plan on free RAM + swap vs the model size, and going straight to
+      Pollinations (or the PC) when it can't fit, with one log line saying why. (Ziva Mac, 2026-10-14)
+
 ## What changed (2026-10-14) - what you are testing
 
 | Area | Where | What it does |
@@ -285,7 +294,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       trying torch 2.10 or a different diffusers release for ZImagePipeline.
       ANSWER (Claude, 2026-10-14): thanks - agreed it is diffusers/torch-side. Before swapping
       versions, get the exact line it dies on: see W15.
-- [ ] **W15 [windows] Z-Image: find the crashing line, then try one version swap.** After LOKI
+- [x] **W15 [windows] Z-Image: find the crashing line, then try one version swap.** After LOKI
       updates, the child now runs with `faulthandler` on and reports the last stage (load /
       place / denoise / save) and the innermost Python frame, e.g. "crashed (exit 3221225477)
       during denoise at attention.py:88 in forward". There is also a 5th plan that loads the
@@ -296,6 +305,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `pip install "torch==2.10.*" --index-url https://download.pytorch.org/whl/cu128` and run
       the same request with that python; report which combination works. Do not change the
       live install's versions without telling Claude here first.
+      RESULT (Ziva Windows, 2026-10-14): **Z-IMAGE NOW WORKS LOCALLY ON THE PC.** The stage +
+      faulthandler reporting named the crash exactly: the offload plans die
+      `during denoise at threading.py:363 in wait` (0xC0000005, exit 3221225477) - in accelerate's
+      CPU-offload hook threads, not in the model or the GPU.
+        - offload-bf16: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - offload-bf16-math-attn: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - offload-bf16-math-attn-nommap: crashed (exit 3221225477) during denoise at threading.py:363 in wait
+        - sequential-bf16-math-attn: WORKED - real 1.1 MB PNG on cuda
+          (harness_data/_ziva_test/20261014-235000-a-red-fox-in-studio-light.png)
+      No version swap needed (not every plan crashed): the fix is the plan that does NOT CPU-offload.
+      imagegen_plan.json now records works='sequential-bf16-math-attn', and zimage() sorts the
+      known-good plan first, so later local images go straight to the working path.
 - [ ] **W12 LOKI's first own job.** UPDATE (Claude, 2026-10-14 19:4x): job cf7dd344 ran on the
       code from BEFORE the check_loki fix: it called conductor/improve_loki/ship_loki("test") in a
       loop, used ~55k input tokens EVERY turn, spent every free quota in 37 turns (then $0.03 on
@@ -341,6 +362,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M3 Link the machines.** They are on different networks (192.168.1.x / 192.168.0.x).
       Install Tailscale on both (same account), then on the Mac: Settings > Machines &
       updates > Link another machine, with the PC's link code. Report `ms` from the Machines panel.
+      BLOCKED on Mohamed 2026-10-14 (Ziva Mac): needs a Tailscale account signed in on BOTH machines
+      (and the PC's link code). Moved to Needs Mohamed; continuing with M7 while blocked.
 - [x] **M4 MLX.** `harness_data/.venv/bin/python tools/setup_extras.py mlx`, then keep
       `mlx_lm.server --model mlx-community/Qwen3-4B-4bit --port 8082` running. The MLX card should
       say **Running**. Make it the default and ask LOKI to "list the files here and read README.md".
@@ -360,7 +383,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `list_tree(...)` through the tool harness; reply: the workspace folder is empty, no README.md.
       Usage line: `mlx-community/Qwen3-4B-4bit * 7.3k in / 561 out * 17.2 tok/s * $0.0018`. NOTE:
       it prices a LOCAL MLX model as paid ($0.0018) - minor, worth a look in the portal.
-- [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
+      RECONFIRMED 2026-10-14 (Ziva Mac) after upstream addd8db: MLX works with NO MLX_MODEL override.
+      `/health` model "default_model"; usage line "default_model * 3.8k in / 244 out * 12.6 tok/s *
+      free" (cost 0.0). Tool harness fired on the earlier run (`list_tree`).
+- [x] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
       latency now; then, if `@receptron/laya` lets you pass ONNX session options, try
@@ -370,14 +396,49 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       calls after load). With CoreML: `LOKI_LAYA_EP="coreml,cpu"` median 177 ms (163-270 ms) -
       SLOWER (CoreML compiles the graph for a tiny model). NOT shipped; cpu stays. @receptron/laya
       does expose executionProviders/sessionOptions, so it is a one-line env to revisit later.
-- [ ] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
+      DONE (numbers reported, as the task asks - not shipped).
+- [x] **M6 World + portal on WKWebView.** Same checks as W2 and W6 on the Mac; screenshot to
       `docs/operations/screens/world-mac.png`.
-- [ ] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
+      PART DONE 2026-10-14 (Ziva Mac): the world DATA path works - `GET /world` shows LOKI idle at
+      hall (machine mohameds-Mac-mini.local); `POST /teams {"goal":"build a landing page for a
+      bakery and test it"}` created team e96e0748 (Architect, Builder, Tester, Reviewer, Browser
+      tester) and `GET /world` then showed **Architect working at the drafting table** (team
+      e96e0748); cancelled it after. Portal: `GET /connections` lists 54 providers, 0 connected (this
+      Mac has no keys - all local). STILL TO DO: the WKWebView on-screen check + the screenshot
+      `docs/operations/screens/world-mac.png`, which need the LOKI app window open (owner/GUI).
+      APP SMOKE 2026-10-14 (Ziva Mac): `python app/loki_app.py --print-url` from the SSD works - the
+      updater says "up to date (391036368c76)", the engine starts on 8767, and the UI is served
+      (`<title>Loki</title>`, `/ui/world.js`). So the rebuilt app launches fine from the APFS image.
+      SCREENSHOT 2026-10-14 (Ziva Mac): `docs/operations/screens/world-mac.png` (1024x648, window-only
+      capture of the Loki app; no desktop content). The shot looks like the Windows one
+      (`world-windows.png`, mean RGB 34/35/39 vs 36/36/41) because the world is drawn at 50% opacity
+      (`app.css`: `.world-bg.on { opacity: .5 }`) over a deliberately dark palette (clear transparent,
+      fog 0.12, ground 0.17) behind the home screen. CAVEAT: this capture cannot by itself prove the
+      WebGL canvas is drawing (a dark world and a not-drawing world look the same in a screenshot), so
+      a human should glance at the app window once to confirm the agents/characters are visible.
+- [x] **M7 Images on the Mac.** `tools/setup_extras.py imagegen` installs torch for MPS. Generate
       one 768x768 image and report the time and memory pressure. If it is too heavy for this Mac,
       say so: LOKI will keep using the PC (agents with "Lives on: Best machine") or Pollinations.
+      RESULT 2026-10-14 (Ziva Mac, M4 / 16 GB): TOO HEAVY - do not run image-gen on this Mac.
+      torch(MPS) + diffusers installed and the Z-Image-Turbo weights downloaded (33 GB, on the SSD
+      image), but one 768x768 generation exhausted memory: swap hit 100% (6.9 GB used, 0 free) and
+      free RAM fell to ~9%; the four plan-degradation child plans cycled without producing a file and
+      I stopped it to protect the machine. Claude's crash-safe plan runner behaved correctly (clean
+      child processes, no hang) - the model does not fit in 16 GB. Keep images on the PC, or use the
+      free Pollinations backend on the Mac.
+      SIDE NOTE: a "Problem Report for WindowServer" dialog was on screen afterwards - the
+      display server likely crashed from the same memory pressure. Another reason to keep
+      image-gen off this Mac.
 
 ## Needs Mohamed
 
+- [ ] **M6 glance** - open Loki on the Mac and confirm the 3D world (agent characters at their
+      stations) is visible behind the home screen. The Mac screenshot is dark by design (world at 50%
+      opacity), so Ziva could not confirm the WebGL draw from pixels alone. (Ziva Mac, 2026-10-14)
+- [ ] **M3 Tailscale account** - the Mac and PC are on different networks (192.168.1.x / 192.168.0.x)
+      so the peer link needs Tailscale: install and sign in with the SAME account on both machines,
+      then give Ziva the PC's link code (Mac: Settings > Machines & updates > Link another machine).
+      (Ziva Mac, 2026-10-14)
 - [ ] **GitHub Actions is not starting jobs** (account billing). CI on push is off until it is
       fixed in github.com/settings/billing. Meanwhile every change is checked by ship.py on the
       machine (Ziva) and by the offline suites in the cloud (`PYTHONPATH=tests/cloud_stubs`).
@@ -426,6 +487,26 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   ReasoningBank filed every finished chat as FAILED ("unverified" outcome); the conductor told the
   model nothing when no specialist was ready (so a changed image-gen looked like "requires
   approval" again); GET /fleet sent two responses. Not run on a real machine yet -> S1 above.
+- 2026-10-14 mac (Ziva) M6: captured the Loki app window on the Mac to
+  docs/operations/screens/world-mac.png (window-only; no desktop). M5 ticked (numbers reported).
+  Needs the owner to glance at the window once - the world is dark by design so pixels alone can't
+  confirm the WebGL draw.
+- 2026-10-14 mac (Ziva) MLX re-verified after upstream addd8db: MLX now runs with no MLX_MODEL
+  override ("default_model") and reports "free"/0.0 cost. M4 fully done on the Mac (tool harness
+  fired `list_tree` earlier, 12.6-17.2 tok/s).
+- 2026-10-14 mac (Ziva) checked in: no [mac] requests open. Posted two needs - the PC's Tailscale +
+  link code for M3 ([windows]), and a RAM gate for local image-gen ([claude]). Mac work done:
+  M1/M2/M4/M5/M7 complete, M6 world data path verified (screenshot pending the app window).
+- 2026-10-14 mac (Ziva) M6 partial: world data path verified on the Mac headlessly (GET /world ->
+  LOKI at hall; POST /teams -> Architect at the drafting table; cancelled). Portal has 54 providers,
+  0 connected (no keys on the Mac). The WKWebView render + world-mac.png screenshot still need the
+  app window.
+- 2026-10-14 mac (Ziva) M7 result: local image-gen is TOO HEAVY on the M4/16 GB Mac - torch MPS +
+  Z-Image-Turbo (33 GB) install fine, but a 768x768 generation exhausted swap (100%, 0 free) and no
+  plan produced an image; stopped it to protect the machine. Use the PC or Pollinations for images
+  on the Mac. M3 flagged for Mohamed (Tailscale).
+- 2026-10-14 windows (Ziva) LOCAL Z-IMAGE WORKS: crash is in accelerate's offload threads (`denoise at threading.py:363 in wait`); the sequential-bf16-math-attn plan (no CPU offload) makes a real PNG on CUDA. Plan recorded; runner tries it first. W15 answer.
+- 2026-10-14 windows (Ziva) W16 Ruflo live: /ruflo serves 203 workflows, 47 plugins, ReasoningBank; Settings>Agents shows 'Ruflo library, 151 agents/197 skills' + workflows (screenshot docs/operations/screens/ruflo-workflows.png); `/ruflo sparc <build>` made a real 6 KB todo page on openrouter (local+groq narrate then stall); SPARC team ran (board 'Method: SPARC', Researcher wrote TEAM_PLAN.md '## Specification'); ReasoningBank 'Recalled 1 lesson(s)'. ship.py --check 11/11 green. No add-on banner.
 - 2026-10-15 cloud (Claude) read Ziva's reports (plugins/.gitignore fix, image-gen re-enabled).
   Did Ziva's suggestion: a "changed add-on" banner in the app that names it and re-approves on a
   confirmed click (app/ui/app.js, index.html; tests in test_hardening: changed -> re-approved
