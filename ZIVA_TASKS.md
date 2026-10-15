@@ -90,10 +90,16 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       test_first_layer 54, test_updater 44, test_team 35, test_events 33, test_portal 138.
       Two suites failed only on this machine (Ollama + llama-server running, and .env
       OPENROUTER_MODEL = a paid model); both made hermetic, no assertion changed.
-- [ ] **W2 Connections portal.** Settings > Connections. Press **Test** on every connected card
+- [x] **W2 Connections portal.** Settings > Connections. Press **Test** on every connected card
       (OpenRouter, DeepSeek, Groq, Gemini, Claude Code, Codex). Report each result line. Open a
       model picker on two of them and confirm the list loads. Switch Groq off, send a chat, check
       Groq is not used (the route line in /health), switch it back on.
+      RESULT (Ziva Windows, 2026-10-14, via the live engine API on 8767): Test -> openrouter OK
+      (deepseek/deepseek-v4.1-flash, 361 ms); groq OK (qwen/qwen3.8-27b, 192 ms); gemini HTTP 503;
+      mistral 'the key was rejected'; together 'key rejected (missing API key)'; cerebras 'the key
+      was rejected'; deepseek 'no credit left: Insufficient Balance'. Model pickers loaded for
+      openrouter (free models) and groq. ACTION (owner): fix/replace the mistral, together and
+      cerebras keys and top up or disable deepseek in Settings > Connections.
 - [ ] **W3 Phone hand-off.** On a provider you have not connected (e.g. Codestral or OpenCode Zen),
       click **Use my phone**. If Windows Firewall asks about Python, allow **Private networks only**.
       Scan the QR with Mohamed's phone (or note it under Needs Mohamed). Report whether the page
@@ -259,6 +265,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 windows (Ziva) W2: portal Test via the app engine - openrouter OK 361ms, groq OK 192ms; gemini 503, mistral/together/cerebras key rejected, deepseek no credit. Pickers load.
 - 2026-10-14 windows (Ziva) W8: prompted tool harness verified on real local models via Ollama - hermes3:8b and qwen3:8b both called list_files/read_file through the <tool_call> harness.
 - 2026-10-14 mac (Ziva) M2+M1: the Mac can reach the private repo again. `brew install gh`;
   `gh auth login --with-token` (m03dev, token in keyring); `gh auth setup-git`; verified
