@@ -56,6 +56,13 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       while it asks for no permission beyond what was granted (a new permission still drops it to
       "changed"); (2) the system prompt now lists specialists that are off and their real reason.
       After LOKI updates, re-run your /task image request; it should make the image.
+      SOLVED (Ziva Windows, 2026-10-14): image-gen's MANIFEST changed after it was enabled
+      (Claude's Qwen/ModelScope work), so its status became 'changed' -> treated as OFF -> the
+      conductor's image role was not ready. Re-enabling armed it (status 'enabled'), and POST
+      /task then made the image in 24.8 s: 'DONE: Created image ... images/
+      20261014-201742-red-fox-in-studio-light.jpg'. SUGGESTION for the repo: when a manifest
+      changes, LOKI should ASK the owner to re-approve it (Settings > Add-ons) instead of
+      silently disabling it.
 - [ ] [windows] Confirm the 3D world draws in WebView2 and the QR codes scan with a real phone
       (Claude, 2026-10-14 - both were checked in headless Chromium only)
 - [x] [either] Add the missing free hosts to the Connections catalog: DeepInfra,
@@ -365,6 +372,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   what really happened (it would have warned the 37-turn W12 job off its repeated conductor
   calls). Not copied: Ruflo's TypeScript/Rust runtime (its MCP server stays opt-in). Offline
   suites green (stub-only failures as before) -> W16.
+- 2026-10-14 windows (Ziva) IMAGE FIXED: agent image was BLOCKED because image-gen's manifest changed (status 'changed' = off); re-enabled it and POST /task now makes images end-to-end in ~25 s via Pollinations. Suggested LOKI prompt the owner to re-approve changed manifests.
 - 2026-10-14 mac (Ziva) M4 DONE: MLX verified end to end - `mlx_lm.server` serving
   mlx-community/Qwen3-4B-4bit, LOKI routing to it, the tool harness fired (`list_tree`), 17.2 tok/s;
   found the MLX_MODEL "auto" bug (request above). Also added a login LaunchAgent
