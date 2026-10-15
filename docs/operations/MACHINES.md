@@ -19,6 +19,10 @@ Loki on one computer can talk to Loki on another on your home network. The usual
 
 ## Link them (once)
 
+> **On different networks?** (the Mac on 192.168.1.x and the PC on 192.168.0.x cannot
+> reach each other.) The link only dials private addresses, so use Tailscale, or a public
+> relay behind a loopback forwarder - see [OFF_NETWORK.md](OFF_NETWORK.md).
+
 **1. On the PC** (Windows), in the Loki checkout `C:\Users\macul\Documents\loki`:
 
 ```bat

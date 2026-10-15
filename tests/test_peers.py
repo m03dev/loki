@@ -27,6 +27,8 @@ sys.path.insert(0, str(REPO / "engine"))
 import experience  # noqa: E402
 import peers  # noqa: E402
 import peer_link  # noqa: E402
+sys.path.insert(0, str(REPO / "tools"))
+import peer_forward  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -242,6 +244,51 @@ code_line = next((l for l in run.stdout.splitlines() if l.startswith("loki-link:
 check("peer_link.py pair prints a link code", run.returncode == 0 and code_line, run.stdout + run.stderr)
 check("its code carries the given address", code_line and peers.parse_link_code(code_line)["url"] == "http://192.168.1.50:8768")
 check("pair saves listening + the secret", "LOKI_PEER_LISTEN=1" in (cli_data / ".env").read_text() and "LOKI_PEER_SECRET=" in (cli_data / ".env").read_text())
+
+section("peer_forward: a machine reached through a relay looks local")
+
+# The point: Loki only dials private addresses, so a relay has to sit behind a loopback
+# forwarder (peers.private_host() accepts 127.0.0.1 but refuses a public hostname).
+check("Loki accepts a loopback peer address", peers.private_host("127.0.0.1"))
+check("Loki refuses a public hostname, so a relay is reached through the forwarder",
+      not peers.private_host("bore.pub"))
+
+import socket as _socket
+import threading as _threading
+
+_echo = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+_echo.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+_echo.bind(("127.0.0.1", 0))
+_echo.listen(8)
+
+
+def _echo_once():
+    try:
+        conn, _ = _echo.accept()
+    except OSError:
+        return
+    try:
+        conn.sendall(conn.recv(65536))
+    finally:
+        conn.close()
+
+
+_threading.Thread(target=_echo_once, daemon=True).start()
+_forwarder = peer_forward.Forwarder("127.0.0.1", 0, "127.0.0.1", _echo.getsockname()[1]).start()
+_reply = b""
+try:
+    _client = _socket.create_connection(_forwarder.address, timeout=5)
+    _client.sendall(b"loki-forward-check")
+    _reply = _client.recv(65536)
+    _client.close()
+except OSError as exc:  # noqa: BLE001
+    _reply = ("error: %s" % exc).encode()
+_forwarder.stop()
+_echo.close()
+check("the forwarder pipes bytes to the target and back", _reply == b"loki-forward-check", _reply)
+check("'host:port' and a bare port both parse",
+      peer_forward.parse_address("bore.pub:28768") == ("bore.pub", 28768)
+      and peer_forward.parse_address("8768") == ("127.0.0.1", 8768))
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
