@@ -36,7 +36,10 @@ from typing import Any
 LEARNED: set = set()
 
 _CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S | re.I)
-_FENCE_RE = re.compile(r"```(?:json|tool_call|tool)?\s*(\{.*?\})\s*```", re.S | re.I)
+# Capture up to the CLOSING fence, not the first "}": a tool-call argument can itself
+# contain braces (CSS, JSON, code), and a non-greedy \}..\} truncates the object so it
+# never parses.
+_FENCE_RE = re.compile(r"```(?:json|tool_call|tool)?\s*(\{.*?)\s*```", re.S | re.I)
 
 
 def configured(provider: str) -> bool:
@@ -99,7 +102,8 @@ def tools_prompt(tools: list) -> str:
         "You can call tools. Available tools (one JSON object per line):\n"
         "<tools>\n" + "\n".join(lines) + "\n</tools>\n\n"
         "To call a tool, reply with one or more blocks exactly like this and nothing else:\n"
-        "<tool_call>\n{\"name\": \"TOOL_NAME\", \"arguments\": {\"arg\": \"value\"}}\n</tool_call>\n"
+        "To call a tool, reply with one fenced json block and nothing else:\n"
+        "```json\n{\"name\": \"TOOL_NAME\", \"arguments\": {\"arg\": \"value\"}}\n```\n"
         "Results come back inside <tool_response>...</tool_response>. Use only the tools above, "
         "with valid JSON arguments. When you need no tool, answer normally in plain text.")
 
@@ -111,7 +115,9 @@ def _call_text(call: dict) -> str:
         parsed = json.loads(args) if isinstance(args, str) else (args or {})
     except (ValueError, TypeError):
         parsed = {}
-    return "<tool_call>\n%s\n</tool_call>" % json.dumps({"name": fn.get("name", ""), "arguments": parsed},
+    # A fenced block, NOT <tool_call>: Qwen3.5's chat template collides with that literal
+    # tag and Ollama crashes the runner (HTTP 500 / EOF). The parser still accepts both.
+    return "```json\n%s\n```" % json.dumps({"name": fn.get("name", ""), "arguments": parsed},
                                                        ensure_ascii=False)
 
 

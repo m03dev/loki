@@ -89,17 +89,24 @@ msgs = [{"role": "system", "content": "You are LOKI."}, {"role": "user", "conten
 out = tool_harness.to_prompted(msgs, TOOLS)
 check("tools are described in the system prompt", "<tools>" in out[0]["content"] and "read_file" in out[0]["content"]
       and out[0]["content"].startswith("You are LOKI."))
-check("an earlier tool call becomes <tool_call> text", "<tool_call>" in out[2]["content"] and "a.txt" in out[2]["content"])
+check("an earlier tool call becomes a fenced json block", "```json" in out[2]["content"] and "a.txt" in out[2]["content"])
 check("a tool result becomes a <tool_response> user turn", out[3]["role"] == "user" and "<tool_response>" in out[3]["content"])
 check("no message keeps tool_calls or role=tool", all("tool_calls" not in m and m["role"] != "tool" for m in out))
 prepared = tool_harness.prepare({"model": "m", "messages": msgs, "tools": TOOLS, "tool_choice": "required"})
 check("prepare() drops tools and tool_choice", "tools" not in prepared and "tool_choice" not in prepared
       and prepared["_prompted_tools"] == ["read_file", "list_files"])
+check("the taught format avoids <tool_call> (Qwen3.5 crashes the runner on that tag)",
+      "<tool_call>" not in out[0]["content"] and "```json" in out[0]["content"])
 calls, rest = tool_harness.parse('Sure.\n<tool_call>\n{"name": "read_file", "arguments": {"path": "b.md"}}\n</tool_call>',
                                  ["read_file"])
 check("a <tool_call> block is parsed", calls == [("read_file", {"path": "b.md"})] and rest == "Sure.")
 calls, _ = tool_harness.parse('```json\n{"name": "list_files", "arguments": {}}\n```', ["read_file", "list_files"])
 check("a ```json fence is parsed", calls == [("list_files", {})])
+_braces = "body { color: red; }\n.x { margin: 0; }"
+_fenced = "```json\n" + json.dumps({"name": "write_file", "arguments": {"filename": "a.css", "content": _braces}}) + "\n```"
+calls, _ = tool_harness.parse(_fenced, ["write_file"])
+check("a fenced call whose arguments contain braces still parses whole (CSS/JSON/code)",
+      calls == [("write_file", {"filename": "a.css", "content": _braces})], calls)
 calls, _ = tool_harness.parse("{'name': 'read_file', 'arguments': {'path': 'c',},}", ["read_file"])
 check("small-model slips (single quotes, trailing commas) are forgiven", calls == [("read_file", {"path": "c"})])
 calls, _ = tool_harness.parse('{"name": "rm_rf", "arguments": {}}', ["read_file"])
