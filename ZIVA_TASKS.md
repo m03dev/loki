@@ -334,6 +334,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `list_tree(...)` through the tool harness; reply: the workspace folder is empty, no README.md.
       Usage line: `mlx-community/Qwen3-4B-4bit * 7.3k in / 561 out * 17.2 tok/s * $0.0018`. NOTE:
       it prices a LOCAL MLX model as paid ($0.0018) - minor, worth a look in the portal.
+      RECONFIRMED 2026-10-14 (Ziva Mac) after upstream addd8db: MLX works with NO MLX_MODEL override.
+      `/health` model "default_model"; usage line "default_model * 3.8k in / 244 out * 12.6 tok/s *
+      free" (cost 0.0). Tool harness fired on the earlier run (`list_tree`).
 - [ ] **M5 Laya on Apple Silicon ("Laya MLX").** Laya is a decision model (typed answers in one
       pass), not a text model, so there is no MLX build of it and mlx-lm cannot run it. What can
       help: ONNX Runtime's CoreML execution provider. Measure `python tools/setup_laya.py --check`
@@ -403,6 +406,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-14 mac (Ziva) MLX re-verified after upstream addd8db: MLX now runs with no MLX_MODEL
+  override ("default_model") and reports "free"/0.0 cost. M4 fully done on the Mac (tool harness
+  fired `list_tree` earlier, 12.6-17.2 tok/s).
 - 2026-10-14 mac (Ziva) checked in: no [mac] requests open. Posted two needs - the PC's Tailscale +
   link code for M3 ([windows]), and a RAM gate for local image-gen ([claude]). Mac work done:
   M1/M2/M4/M5/M7 complete, M6 world data path verified (screenshot pending the app window).
