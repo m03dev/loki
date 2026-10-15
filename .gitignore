@@ -37,3 +37,10 @@ build/
 dist/
 *.gguf
 *.safetensors
+
+# A test suite cleans up its own temp dirs; a killed run must never be committed.
+/loki-auto-*/
+/loki-role-*/
+/loki-systems-*/
+/loki-tests-*/
+/tmp*/

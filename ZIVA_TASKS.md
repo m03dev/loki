@@ -650,6 +650,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-15 mac (Ziva) HEALTH: "Ziva stopping" is the Godot editor/sidecar, NOT malware. The
+  sidecar log shows "Godot editor unresponsive for >45s ... Restart the editor to recover" twice
+  (17:18Z, 18:02Z) then "TurnRecovery ... turn interrupted by a restart". Cause: resource pressure -
+  swap 6.65/6.9 GB used (~96%), Jump Desktop Connect ~80% CPU, Time Machine backupd ~26%, Godot
+  736 MB + WebKit. Persistence/cron/listeners/processes/Login Items all normal (Google, Steam,
+  Autodesk, Jump, VirtualDesktop, CleanMyMac, sh.loki.attach-image). See
+  ~/Library/Application Support/Godot/app_userdata/ai/ziva/logs/*_sidecar.log.
+- 2026-10-15 mac (Ziva) W10 (Mac part): world DATA verified live - team 1485bae2 ("make
+  notes/sim.txt with hi, then check it") -> /world shows agents at their stations (hall, drafting
+  table, workshop, test bench) with working/done/failed states, team + stage. Captured the real
+  WKWebView window into docs/operations/screens/world-sim-mac.png (home screen with the world
+  behind; mean RGB 46/51/56). The click/double-click/follow checks and the World.views.panel.perf
+  JSON need a browser session in the app (WKWebView cannot be automated here); a real-GPU Chrome
+  CDP probe was started but stopped while the Mac was under memory pressure.
 - 2026-10-15 mac (Ziva) tests / offline symbiosis: ran EVERY suite under PYTHONPATH=tests/cloud_stubs
   on the Mac - all 16 pass with the SAME numbers as the real run (test_loki 519, hardening 135,
   integrations 101, workers 72, offline_e2e exit 0, peers 62, first_layer 54, updater 86, team 35,
