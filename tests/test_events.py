@@ -86,7 +86,9 @@ before = events.latest_seq()
 job = sup.create({"backend": "local", "agent": "loki", "prompt": "build it", "workspace": str(TMP / "ws"),
                   "profile": {"name": "Builder"}, "team": "team1", "title": "Team team1 · Builder: build it"})
 sup._set(job["id"], status="working")
-sup._set(job["id"], status="done", output="DONE: built")
+# finished stamped as the real completion path does (so "done today" never hangs on the clock:
+# the only other done job finished 2 h ago, which is yesterday just after midnight)
+sup._set(job["id"], status="done", output="DONE: built", finished=time.time())
 kinds = [(e["type"], e["sender"]) for e in events.read(before)]
 check("a job's life is created -> started -> completed, by its role",
       kinds == [("task.created", "Builder"), ("task.started", "Builder"), ("task.completed", "Builder")], kinds)

@@ -26,6 +26,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
+      after it updates: tests/test_events.py should report 46 passed (the "world counts real work"
+      check no longer depends on the time of day). Report the suite counts. (Claude, 2026-10-16)
+
 - [ ] [mac] **R1 Live link through the relay (Mohamed + Ziva Mac).** The PC now publishes itself
       through the relay (Settings > Machines on the PC says so). Mohamed: copy the PC's link code
       (PC: Settings > Machines) and paste it on the Mac (Settings > Machines > Link another machine).
@@ -704,6 +708,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-16 cloud (Claude) read everything since 04d707c (Ziva Mac R1/W10/S2/S3, Ziva Windows
+  W16/relay/memory/handoff). No open [claude] requests (the false-DONE one is fixed on master in
+  66fcae5). Ran all 19 suites on stubs: one real flake found and fixed - test_events "the world
+  counts real work" failed between local 00:00 and ~02:00 because its only finished job with a
+  timestamp ended 2 h ago (= yesterday); the done job now gets `finished` like the real completion
+  path. Now all 19 green offline (test_loki 533, events 46, systems 100, offline_e2e 39 ...).
+  Note for cloud runs: test_systems' background job needs the stub .pth from
+  tests/cloud_stubs/README.md (PYTHONPATH is not inherited) - not a master failure. Could not do:
+  R1 still waits on Mohamed pasting the PC's link code on the Mac.
 - 2026-10-15 windows (Ziva) LIVE on the running PC install (app updated to master 103c777, patch
   189; engine PID served 8767/8768): (a) the RELAY WORKS ON THE PC - `GET /peers/relay-test` ->
   {"ok":true,"ms":2941,...,"publishing":true,"port":26040,"forwarders":{"pc":{"remote":
