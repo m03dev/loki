@@ -78,8 +78,10 @@ branch.** The old gap `backup/pc-merge-c25660f` is REVIEWED below.
   (peers.sign_response) and checked over the relay; a dead or wrong relay port is skipped.
   One link code links both ways (peer_link.link_back). Settings > Machines shows the relay;
   GET /peers/relay-test proves the loop on a machine. tests/test_relay.py (23, fake bore server).
-  NOT yet proven against the real bore.pub from both machines - needs the owner to paste the
-  PC's link code on the Mac once (ZIVA_TASKS R1).
+  PROVEN LIVE on the PC against the real bore.pub (2026-10-16): the owner pasted the Mac's own
+  link code into the PC's Settings > Machines, so the pair is linked both ways - the PC reaches
+  mohameds-mac-mini through the relay in 423-425 ms (relay-test ok 2935 ms), and link_back adds
+  the PC on the Mac by itself. ZIVA_TASKS R1 is done; nothing left for the owner.
 
 ## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth
 

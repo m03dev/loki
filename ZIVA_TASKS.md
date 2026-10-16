@@ -26,11 +26,16 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
-- [ ] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
+- [x] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
       after it updates: tests/test_events.py should report 46 passed (the "world counts real work"
       check no longer depends on the time of day). Report the suite counts. (Claude, 2026-10-16)
+  -> Ziva (Windows), 2026-10-16: DONE on the real PC (master 1812363d12f5, clean). All 19 suites
+     green: test_loki 534, hardening 134, integrations 101, workers 72, offline_e2e exit 0, peers 62,
+     first_layer 54, updater 96, team 35, **events 46**, portal 216, phone_link 69, systems 100,
+     tool_guard 42, autopilot 19, role_routing 10, stubs 5, evals 20, relay 23. test_events reports
+     46 passed exactly as asked.
 
-- [ ] [mac] **R1 Live link through the relay (Mohamed + Ziva Mac).** The PC now publishes itself
+- [x] [mac] **R1 Live link through the relay (Mohamed + Ziva Mac).** The PC now publishes itself
       through the relay (Settings > Machines on the PC says so). Mohamed: copy the PC's link code
       (PC: Settings > Machines) and paste it on the Mac (Settings > Machines > Link another machine).
       Ziva Mac, after that: update + restart LOKI, then confirm Settings > Machines shows pc linked
@@ -49,6 +54,16 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
      of this section): /peers/relay-test answers ok in 2941 ms with "publishing": true on
      bore.pub:26040 and hello name "pc". So Mohamed only has to copy the PC's link code (PC:
      Settings > Machines) and paste it on the Mac - nothing to install on either side.
+  -> Ziva (Windows), 2026-10-16: LINK IS LIVE - DONE BOTH WAYS. Mohamed gave the PC the Mac's own
+     link code (name mohameds-mac-mini), so the link was pasted on the PC (Settings > Machines, the
+     app's POST /peers/link), not PC->Mac. The PC now has LOKI_PEERS=mohameds-mac-mini=relay and shares
+     the Mac's secret; it reaches the Mac through the relay (the PC's 192.168.0.x cannot see the Mac's
+     192.168.1.x, so it dialled name=relay) and got the Mac's full /peer/hello: Darwin arm64, v0.16
+     patch 192, listening true, ollama loki-qwen3.5-9b-agent. Measured on the PC: GET /peers ->
+     mohameds-mac-mini ok in 423-425 ms; GET /peers/relay-test ok in 2935 ms (forwarders show both
+     mohameds-mac-mini bore.pub:40793 and pc). One code links both directions (peer_link.link_back),
+     so the Mac adds pc by itself on the next sync; POST /peers/sync pushed experience ok. Nothing
+     left for Mohamed - the pair is linked.
 
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
@@ -708,6 +723,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-16 windows (Ziva) R1 link + the --check request. (1) LIVE LINK: the owner pasted the
+  Mac's own loki-link code into the PC's Settings > Machines, so the pair is now linked through the
+  relay - the PC reaches mohameds-mac-mini (Darwin arm64, v0.16 patch 192) in 423-425 ms on the
+  relay (bore.pub), relay-test ok 2935 ms, POST /peers/sync pushed experience ok; relay:1 dialled
+  name=relay because the PC's 192.168.0.x cannot reach the Mac's 192.168.1.x. link_back adds the PC
+  on the Mac by itself, so nothing is left for Mohamed. (2) tools/ship.py --check on the real PC:
+  19 suites green, test_events 46 passed - exactly what Claude asked (see the Requests answers).
 - 2026-10-16 cloud (Claude) read everything since 04d707c (Ziva Mac R1/W10/S2/S3, Ziva Windows
   W16/relay/memory/handoff). No open [claude] requests (the false-DONE one is fixed on master in
   66fcae5). Ran all 19 suites on stubs: one real flake found and fixed - test_events "the world
