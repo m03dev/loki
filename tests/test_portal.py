@@ -674,6 +674,11 @@ check("the app offers Install for pip add-ons (plan + endpoint + UI wiring)",
       addons_install.pip_specs("browser-use") == ["browser-use"] and bool(addons_install.pip_specs("vision-track"))
       and "/capabilities/install" in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
       and "capabilities/install" in (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8"))
+
+import os as _os  # noqa: E402
+_sentinel = _os.path.basename(sys.executable)
+check("a console script in LOKI's own venv counts as installed (it is not on PATH)",
+      manifests._which(_sentinel, which=lambda _c: None) == _os.path.join(_os.path.dirname(sys.executable), _sentinel))
 check("OBLITERATUS is not integrated", not (REPO / "capabilities" / "obliteratus").exists())
 
 # --------------------------------------------------------------------------- UI

@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import threading
 import time
 import urllib.error
@@ -208,10 +209,20 @@ def _module_present(name: str) -> bool:
         return False
 
 
+def _which(cmd: str, which=shutil.which) -> str | None:
+    """PATH, then LOKI's own venv bin: a console script pip installed for an add-on (agent-reach,
+    hermes, ...) is in harness_data/.venv/bin, which is not on the app process's PATH."""
+    found = which(cmd)
+    if found:
+        return found
+    candidate = os.path.join(os.path.dirname(sys.executable), cmd)
+    return candidate if os.path.exists(candidate) else None
+
+
 def missing_requirements(manifest: dict, env: dict | None = None, which=shutil.which,
                          module_present=_module_present) -> list[str]:
     env = env if env is not None else os.environ
-    missing = ["command `%s`" % c for c in manifest.get("requires_cmd", []) if not which(c)]
+    missing = ["command `%s`" % c for c in manifest.get("requires_cmd", []) if not _which(c, which)]
     missing += ["python package `%s`" % m for m in manifest.get("requires_python", []) if not module_present(m)]
     missing += ["env %s" % e for e in manifest.get("requires_env", []) if not str(env.get(e, "")).strip()]
     return missing

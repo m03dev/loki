@@ -900,7 +900,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   the file + a regression check. (3) NEW, makes installs easy: Settings > Add-ons shows an
   Install button on any add-on that is on but missing its packages; POST /capabilities/install
   runs pip in LOKI's own venv (no shell). (4) test_integrations made hermetic - its "missing
-  library" checks only run when the library is absent.
+  library" checks only run when the library is absent. (5) a console script pip installs into
+  LOKI's own venv now counts as installed (its bin/ is not on the app's PATH), so agent-reach
+  and the like no longer read as missing.
 - 2026-10-16 mac (Ziva) M8+M9: memory pressure WARN (level 2, 20% free), swap 2693/4096 MB, top
   RSS llama-server 6.8 GB (Ollama) > node 509 MB > WebKit 221 MB - LOKI itself is ~50 MB. The bare
   /health curl needs the bearer token (ok true with it). Quit+reopen came back in ~10 s, no
