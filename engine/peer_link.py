@@ -132,6 +132,105 @@ def hello(state: Any, agent: Any) -> dict:
     }
 
 
+def _tail(path, lines: int = 40) -> list:
+    """The last lines of a log, secrets redacted. [] when it is not there."""
+    try:
+        from pathlib import Path as _P  # noqa: N814
+        data = _P(path).read_bytes()[-64000:].decode("utf-8", errors="replace").splitlines()[-lines:]
+    except OSError:
+        return []
+    try:
+        import loki  # pylint: disable=import-outside-toplevel
+        return [loki.redact_secrets(line)[:400] for line in data]
+    except Exception:  # noqa: BLE001
+        return [line[:400] for line in data]
+
+
+def _memory_pressure() -> dict:
+    """RAM and swap, from the OS's own tools (no extra packages)."""
+    import subprocess  # pylint: disable=import-outside-toplevel
+    import sys  # pylint: disable=import-outside-toplevel
+    out: dict = {}
+    try:
+        if sys.platform == "darwin":
+            swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True, timeout=5).stdout
+            out["swap"] = swap.strip()
+            level = subprocess.run(["sysctl", "-n", "kern.memorystatus_level"], capture_output=True, text=True,
+                                   timeout=5).stdout.strip()
+            out["free_percent"] = int(level) if level.isdigit() else None
+        elif sys.platform == "win32":
+            import ctypes  # pylint: disable=import-outside-toplevel
+
+            class MEM(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("total", "avail", "pagefile", "availpage", "virt", "availvirt", "ext")]
+            m = MEM()
+            m.dwLength = ctypes.sizeof(MEM)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+            out.update({"load_percent": int(m.dwMemoryLoad), "free_gb": round(m.avail / 2 ** 30, 1)})
+        else:
+            for line in open("/proc/meminfo", encoding="utf-8"):
+                if line.startswith(("MemAvailable", "SwapFree", "SwapTotal")):
+                    key, value = line.split(":", 1)
+                    out[key] = value.strip()
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = str(exc)[:200]
+    return out
+
+
+def diagnose(state: Any, agent: Any) -> dict:
+    """Why might this machine's LOKI not be responding? Everything a remote helper needs,
+    read-only and redacted: a request stuck in flight, the System check, the loaded local
+    models, memory pressure, and the last log lines."""
+    now = time.time()
+    chat_lock = getattr(state, "chat_lock", None)
+    busy = {"chat_request": bool(getattr(state, "chat_request_lock", None) and state.chat_request_lock.locked()),
+            "task_request": bool(getattr(state, "task_request_lock", None) and state.task_request_lock.locked()),
+            "agent_running": bool(chat_lock is not None and chat_lock.locked()),
+            "since_last_request_s": int(now - getattr(state, "last_request_at", 0)) if getattr(state, "last_request_at", 0) else None}
+    progress = [{"kind": p.get("kind") or p.get("type"), "text": str(p.get("text", ""))[:200], "t": p.get("t")}
+                for p in list(getattr(state, "progress", []) or [])[-10:]]
+    check = {}
+    try:
+        import system_check  # pylint: disable=import-outside-toplevel
+        snap = system_check.RUNNER.snapshot()
+        report = snap.get("report") or {}
+        check = {"running": snap.get("running"), "summary": (report.get("summary") or {}).get("line", ""),
+                 "rows": [{k: r.get(k) for k in ("id", "status", "detail", "fix")} for r in report.get("results", [])
+                          if r.get("status") != "ok"][:20]}
+    except Exception as exc:  # noqa: BLE001
+        check = {"error": str(exc)[:200]}
+    loaded = []
+    try:
+        import json as _json  # pylint: disable=import-outside-toplevel
+        import urllib.request  # pylint: disable=import-outside-toplevel
+        base = agent.MODELS["local"].base_url.split("/v1")[0]
+        with urllib.request.urlopen(base + "/api/ps", timeout=4) as resp:
+            loaded = [{"name": m.get("name"), "size_gb": round((m.get("size") or 0) / 2 ** 30, 1),
+                       "vram_gb": round((m.get("size_vram") or 0) / 2 ** 30, 1), "until": m.get("expires_at")}
+                      for m in _json.loads(resp.read().decode()).get("models", [])]
+    except Exception as exc:  # noqa: BLE001
+        loaded = [{"error": "local model server: %s" % str(exc)[:160]}]
+    logs = {}
+    try:
+        import loki_bridge  # pylint: disable=import-outside-toplevel
+        state_dir = loki_bridge.STATE_DIR
+        if state_dir is not None:
+            logs["bridge"] = _tail(state_dir / "loki_bridge.log", 60)
+            logs["app"] = _tail(state_dir / "loki_app.log", 25)
+            logs["engine_out"] = _tail(state_dir / "engine.out", 25)
+    except Exception as exc:  # noqa: BLE001
+        logs["error"] = str(exc)[:200]
+    try:
+        import updater  # pylint: disable=import-outside-toplevel
+        update = updater.status()
+    except Exception:  # noqa: BLE001
+        update = {}
+    return {"name": peers.my_name(), "time": now, "busy": busy, "progress": progress, "system_check": check,
+            "local_models_loaded": loaded, "model": str(getattr(agent, "model_name", "")),
+            "memory": _memory_pressure(), "update": update, "logs": logs}
+
+
 def _safe(fn, default):
     try:
         return fn()
@@ -192,8 +291,17 @@ def callbacks(state: Any, agent: Any) -> dict:
 
     return {"hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
-            "apply_update": apply_update,
+            "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
+            "restart": lambda: _restart_soon(state),
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
+
+
+def _restart_soon(state: Any) -> dict:
+    restart = getattr(state, "restart_engine", None)
+    if restart is None:
+        return {"restarting": False, "error": "this engine cannot restart itself"}
+    threading.Timer(1.0, restart).start()   # answer first, then restart
+    return {"restarting": True}
 
 
 def _present(job: dict) -> dict:
@@ -361,6 +469,16 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
             return 200, {"ok": False, "error": str(exc), "via": relay_link.status()}
     if method != "POST":
         return 404, {"ok": False, "error": "Unknown endpoint."}
+    if route in ("/peers/diagnose", "/peers/restart"):
+        peer = peers.find(str(data.get("peer", "")))
+        if peer is None:
+            return 404, {"ok": False, "error": "no linked machine by that name"}
+        try:
+            if route == "/peers/diagnose":
+                return 200, peers.call(peer, "GET", "/peer/diagnose", timeout=20)
+            return 200, peers.call(peer, "POST", "/peer/restart", {}, timeout=10)
+        except peers.PeerError as exc:
+            return 200, {"ok": False, "error": str(exc)}
     if route == "/peers/listen":
         if data.get("on", True):
             updates = {"LOKI_PEER_LISTEN": "1"}

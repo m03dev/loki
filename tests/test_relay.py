@@ -229,6 +229,30 @@ before = relay_link.STATUS["since"]
 pub.control.shutdown(socket.SHUT_RDWR)                # the relay drops the control connection
 check("it reconnects by itself", wait_for(lambda: relay_link.STATUS.get("publishing") and relay_link.STATUS["since"] > before, 12),
       relay_link.STATUS)
+section("one machine can see why the other is not responding")
+diag = {"name": "pc", "busy": {"agent_running": True, "since_last_request_s": 900}, "logs": {"bridge": ["x"]}}
+pc_server.callbacks["diagnose"] = lambda: diag
+pc_server.callbacks["restart"] = lambda: {"restarting": True}
+os.environ["LOKI_PEER_NAME"] = "mac"
+os.environ["LOKI_PEERS"] = "pc=relay"
+got = peers.call(peers.find("pc"), "GET", "/peer/diagnose", timeout=8)
+check("GET /peer/diagnose comes back through the relay, signed", got.get("ok") and got["busy"]["agent_running"], got)
+got = peers.call(peers.find("pc"), "POST", "/peer/restart", {}, timeout=8)
+check("POST /peer/restart asks it to restart", got.get("restarting") is True, got)
+try:
+    peers.call({**peers.find("pc"), "secret": peers.new_secret()}, "GET", "/peer/diagnose", timeout=8)
+    check("nobody without the secret can read the diagnosis", False, "accepted")
+except peers.PeerError as exc:
+    check("nobody without the secret can read the diagnosis", "401" in str(exc), exc)
+os.environ["LOKI_PEER_NAME"] = "pc"
+import peer_link as _pl  # noqa: E402
+real = _pl.diagnose(types.SimpleNamespace(chat_lock=None, chat_request_lock=threading.Lock(), task_request_lock=threading.Lock(),
+                                          last_request_at=0, progress=[{"kind": "assistant", "text": "hi"}]),
+                    types.SimpleNamespace(MODELS={"local": types.SimpleNamespace(base_url="http://127.0.0.1:9/v1")}, model_name="local"))
+check("the real diagnosis runs anywhere and says what it could not reach",
+      set(real) >= {"busy", "system_check", "local_models_loaded", "memory", "logs", "update"}
+      and "error" in real["local_models_loaded"][0], {k: real[k] for k in ("busy", "local_models_loaded")})
+
 section("the self-test dials this machine's own relay port")
 os.environ["LOKI_PEER_SECRET"] = SECRET
 fake_agent = types.SimpleNamespace(env_file_path=lambda: TMP / ".env")
