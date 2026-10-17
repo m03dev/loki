@@ -85,14 +85,18 @@ class Evolve:
     def ideas(self) -> list:
         return self._read(self.ideas_path, [])
 
-    def add_idea(self, text: str, by: str = "owner") -> dict:
-        """The owner's ideas are approved by being added; LOKI's own (by="loki") wait for approve()."""
+    def add_idea(self, text: str, by: str = "owner", approved: bool | None = None, kind: str = "") -> dict:
+        """The owner's ideas are approved by being added; LOKI's own (by="loki") wait for approve()
+        unless the caller says otherwise (approved=True: the speed watch's measured speed-ups).
+        kind tags where a LOKI idea came from ("review", "speed"), for the Lab and for de-duplication."""
         text = " ".join(str(text or "").split())[:600]
         if len(text) < 8:
             return {"ok": False, "error": "say a little more about the idea"}
         ideas = self.ideas()
         item = {"id": "I%d" % (len(ideas) + 1), "title": text, "done": False, "source": by,
-                "approved": by == "owner", "t": self.clock()}
+                "approved": (by == "owner") if approved is None else bool(approved), "t": self.clock()}
+        if kind:
+            item["kind"] = str(kind)[:20]
         ideas.append(item)
         self._write(self.ideas_path, ideas)
         return {"ok": True, "idea": item}

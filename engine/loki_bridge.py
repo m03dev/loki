@@ -29,6 +29,8 @@ import urllib.request
 import urllib.error
 import webbrowser
 
+ENGINE_T0 = time.monotonic()   # speed watch (E6): engine start -> bridge ready
+
 
 MAX_BODY_BYTES = 32_000
 MAX_PROMPT_CHARS = 16_000
@@ -903,6 +905,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
+        if route in ("/speed", "/jobs/stats", "/user_tools"):   # session 28: LOKI improving itself
+            import self_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*self_api.route(self.server.state, "GET", self.path, {}))
+            return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
             return
@@ -1032,7 +1038,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if jobs is None:
                 self._send_json(503, {"ok": False, "error": "Background jobs are not running."})
             else:
-                self._send_json(200, {"ok": True, **jobs.status()})
+                payload = {"ok": True, **jobs.status()}
+                try:   # session 28: queued jobs carry a duration + failure-risk forecast (job_stats.py)
+                    import job_stats  # pylint: disable=import-outside-toplevel
+                    payload = job_stats.annotate(payload, jobs.store.all(),
+                                                 Path(getattr(self.server.state.agent, "DATA_DIR", ".") or "."))
+                except Exception:  # noqa: BLE001
+                    pass
+                self._send_json(200, payload)
             return
         if route == "/jobs/screenshot":
             self._send_json(*job_screenshot(self.server.state, parse_qs(urlparse(self.path).query)))
@@ -1178,6 +1191,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
         if handled is not None:
             self._send_json(*handled)
+            return
+        import self_api  # pylint: disable=import-outside-toplevel - session 28: LOKI improving itself
+        if self_api.handles("POST", route):
+            self._send_json(*self_api.route(state, "POST", route, data, job_action))
             return
         if route in ("/world/presence", "/world/retry"):
             self._send_json(*world_action(state, route, data))
@@ -2349,6 +2366,11 @@ async def serve() -> None:
     keeper.start()
     print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    try:   # speed watch (E6): how long the engine took to answer
+        import speed_watch  # pylint: disable=import-outside-toplevel
+        speed_watch.record("startup", (time.monotonic() - ENGINE_T0) * 1000, root=Path(loki.DATA_DIR))
+    except Exception:  # noqa: BLE001
+        pass
     try:
         import updater  # pylint: disable=import-outside-toplevel
         if os.environ.get("LOKI_SUPERVISED") == "1" and updater.on_trial():

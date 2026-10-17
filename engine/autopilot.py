@@ -23,6 +23,12 @@ Duties, each on its own interval:
   schedules  (session 27, engine/schedules.py - Hermes Agent's cron) the owner's scheduled tasks
            ("every weekday at 9am ...", tool `schedule_task`): a due one becomes a background job
            at its time, idle or not (one per pass; a schedule never runs twice at once).
+  review   (session 28, engine/self_review.py, where evolve is on) once a week, read what LOKI learned
+           and add up to 3 "LOKI's idea" proposals to Settings > Lab; they wait for the owner's OK.
+  speed    (session 28, engine/speed_watch.py, where evolve is on) once a week, the slowest measured
+           step becomes an evolve idea.
+  selftest (session 28, engine/selftest.py, LOKI_SELFTEST auto = the PC) once a day, 3 cheap background
+           jobs checked from their files; settled every pass; a worse run is a regression.
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -297,6 +303,86 @@ class Autopilot:
             self._log("evolve", line)
         return line
 
+    # ------------------------------------------------------------ session 28: LOKI improving itself
+    def _store_jobs(self) -> list:
+        jobs = getattr(self.state, "jobs", None)
+        try:
+            return list(jobs.store.all()) if jobs is not None else []
+        except Exception:  # noqa: BLE001
+            return []
+
+    def _data_dir(self) -> Path:
+        return self.path.parent
+
+    def selftest_settle(self) -> str:
+        """Close the open daily self-test run once its jobs finished (every pass, idle or not)."""
+        jobs = getattr(self.state, "jobs", None)
+        if jobs is None:
+            return ""
+        import selftest as _selftest  # pylint: disable=import-outside-toplevel
+        run = _selftest.Selftest(self._data_dir(), clock=self.clock).settle(jobs.store.get)
+        if not run:
+            return ""
+        good = sum(1 for r in run["results"] if r["ok"])
+        line = "Daily self-test: %d of %d jobs worked%s." % (
+            good, len(run["results"]), " - a REGRESSION (fewer than last time)" if run.get("regression") else "")
+        bad = [r for r in run["results"] if not r["ok"]]
+        if bad:
+            line += " Failed: " + "; ".join("%s (%s)" % (r["task"], r.get("why", "")[:80]) for r in bad)
+        self._log("selftest", line, rate=run["rate"], regression=bool(run.get("regression")))
+        return line
+
+    def duty_selftest(self) -> str:
+        """Once a day: three cheap background jobs on the usual job model (engine/selftest.py)."""
+        jobs = getattr(self.state, "jobs", None)
+        if jobs is None or not hasattr(jobs, "create"):
+            return ""
+        import selftest as _selftest  # pylint: disable=import-outside-toplevel
+        line = _selftest.Selftest(self._data_dir(), clock=self.clock).start(jobs.create)
+        if line:
+            self._log("selftest", line)
+            if hasattr(jobs, "tick"):
+                threading.Thread(target=jobs.tick, daemon=True).start()
+        return line
+
+    def _ask_model(self):
+        """One plain model call for the self-review (agent._port_ask), or None (rules only)."""
+        fn = getattr(self.agent, "_port_ask", None)
+        if fn is None or not _env_on("LOKI_SELF_REVIEW_MODEL"):
+            return None
+
+        def ask(prompt: str) -> str:
+            import asyncio  # pylint: disable=import-outside-toplevel
+            return asyncio.run(asyncio.wait_for(fn(prompt, max_tokens=1200), 180))
+        return ask
+
+    def duty_review(self) -> str:
+        """Once a week (EVOLVE E8): read what LOKI learned, propose up to 3 changes ("LOKI's idea")."""
+        if self.evolve is None:
+            return ""
+        import self_review  # pylint: disable=import-outside-toplevel
+        out = self_review.review(self.evolve, self._data_dir(), jobs=self._store_jobs(), ask=self._ask_model(),
+                                 now=self.clock())
+        titles = [i["id"] for i in out["added"]]
+        line = ("Self-review: proposed %s in Settings > Lab (waiting for your OK)." % ", ".join(titles)
+                if titles else "Self-review: nothing new to propose this week.")
+        self._log("review", line, added=titles, source=out.get("source", ""))
+        return line
+
+    def duty_speed(self) -> str:
+        """Once a week (EVOLVE E6): the slowest measured step becomes an evolve idea."""
+        if self.evolve is None:
+            return ""
+        import speed_watch  # pylint: disable=import-outside-toplevel
+        out = speed_watch.propose(self.evolve, self._data_dir(), jobs=self._store_jobs())
+        if out.get("added"):
+            line = "Speed watch: the slowest step is %s - added %s to the Lab." % (
+                out["slowest"]["label"], out["added"]["id"])
+        else:
+            line = "Speed watch: %s." % out.get("why", "nothing to add")
+        self._log("speed", line)
+        return line
+
     def _team_running(self, team_id: str) -> bool:
         runner = getattr(self.agent, "TEAMS", None)
         try:
@@ -344,6 +430,12 @@ class Autopilot:
                 return [("schedules", fired)]
         except Exception as exc:  # noqa: BLE001
             self._log("schedules", "failed: %s: %s" % (type(exc).__name__, exc))
+        try:   # the daily self-test is checked as soon as its jobs finish, idle or not
+            with self.lock:
+                if self.selftest_settle():
+                    self._save()
+        except Exception as exc:  # noqa: BLE001
+            self._log("selftest", "failed: %s: %s" % (type(exc).__name__, exc))
         ok, _why = self.idle()
         if not ok:
             return []
@@ -355,6 +447,16 @@ class Autopilot:
             if _evolve.enabled():
                 duties.append(("evolve", _env_s("LOKI_EVOLVE_S", 14400), self.duty_evolve))
         duties.append(("report", _env_s("LOKI_AUTOPILOT_REPORT_S", 604800), self.duty_report))
+        if self.evolve is not None and __import__("evolve").enabled():
+            # session 28: LOKI reviews itself and its speed every week - where evolve builds the ideas
+            duties.append(("review", _env_s("LOKI_AUTOPILOT_REVIEW_S", 604800), self.duty_review))
+            duties.append(("speed", _env_s("LOKI_AUTOPILOT_SPEED_S", 604800), self.duty_speed))
+        try:
+            import selftest as _selftest  # pylint: disable=import-outside-toplevel
+            if _selftest.enabled():
+                duties.append(("selftest", _env_s("LOKI_SELFTEST_S", 86400), self.duty_selftest))
+        except Exception:  # noqa: BLE001
+            pass
         with self.lock:
             for name, every, fn in duties:
                 if not self.due(name, every):

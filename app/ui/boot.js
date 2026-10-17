@@ -52,4 +52,25 @@
     else if (!css) rescue("The stylesheets did not load.");
   }, 20000);
   setTimeout(() => rescue("The window never connected to the LOKI engine (it waited 2.5 minutes)."), 150000);
+
+  // Speed watch (EVOLVE E6): once the window is ready, tell the engine how long the first paint and
+  // the connection took (Settings > Lab shows them). One small POST per window start; never retried.
+  const timing = setInterval(() => {
+    if (!window.LOKI_READY) { if (performance.now() > 150000) clearInterval(timing); return; }
+    clearInterval(timing);
+    let auth = token;
+    try { auth = auth || sessionStorage.getItem("loki-token") || ""; } catch (_) { /* private mode */ }
+    if (!auth) return;
+    let paint = 0;
+    try {
+      const p = performance.getEntriesByType("paint").find((e) => e.name === "first-contentful-paint")
+        || performance.getEntriesByType("paint")[0];
+      paint = p ? p.startTime : 0;
+    } catch (_) { /* older WebKit: no paint timing */ }
+    try {
+      fetch("/ui/timing", { method: "POST", headers: { Authorization: "Bearer " + auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ first_paint_ms: Math.round(paint), ready_ms: Math.round(performance.now()), ua: navigator.userAgent.slice(0, 40) }) })
+        .catch(() => {});
+    } catch (_) { /* nothing else to do */ }
+  }, 500);
 })();

@@ -249,6 +249,43 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(14
 .lab-right { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .lab-lessons { margin-top: 12px; }
 .lab-lessons pre { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
+/* session 28: speed watch, jobs view, LOKI's own tools */
+.lab-row.loki-idea b { color: #c7b8ea; }
+.lab-card { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.lab-card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.lab-card h5 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.lab-card .note { margin: 0 0 8px; }
+.lab-card button, .lab-head button { white-space: nowrap; }
+.lab-kpis { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 10px; }
+.lab-kpis .kpi { display: flex; flex-direction: column; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.04); min-width: 140px; }
+.lab-kpis .kpi b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lab-kpis .kpi span { font-size: 12px; color: var(--muted); }
+.lab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.lab-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.lab-table th { text-align: left; font-weight: 500; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.lab-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.lab-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lab-reasons { margin: 0; padding-left: 20px; font-size: 12.5px; }
+.lab-reasons li { padding: 2px 0; }
+.lab-reasons b { color: var(--muted); font-weight: 500; }
+.lab-slowest { margin: 4px 0 8px; font-size: 13px; }
+.lab-slowest b { color: #ebcb8b; }
+.daybars { width: 100%; height: 106px; display: block; }
+.daybars .bar-good { fill: #8ccfc4; }
+.daybars .bar-mid { fill: #ebcb8b; }
+.daybars .bar-bad { fill: #ff8a80; }
+.daybars .bar-none { fill: rgba(255,255,255,.12); }
+.daybars .bar-label { fill: var(--muted); font-size: 11px; }
+.meter { display: inline-block; width: 80px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; vertical-align: middle; }
+.meter-fill { display: block; height: 100%; background: var(--muted); }
+.meter-fill.good { background: #8ccfc4; }
+.meter-fill.mid { background: #ebcb8b; }
+.meter-fill.bad { background: #ff8a80; }
+.spark { display: block; }
+.spark .spark-line { fill: none; stroke: #8ccfc4; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark .spark-dot { fill: #e4e4e7; }
+.spark .spark-empty { stroke: rgba(255,255,255,.15); stroke-dasharray: 3 3; }
+.job-meta.forecast { color: #a9c7e8; }
 
 /* Settings > Play (play_panel.js) */
 .play { display: grid; grid-template-columns: 200px 1fr; gap: 12px; min-height: 420px; }

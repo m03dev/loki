@@ -523,7 +523,7 @@ function showTab(name) {
   if (name === "world" && typeof showWorldPanel === "function") showWorldPanel();
   if (name !== "world" && typeof hideWorldPanel === "function") hideWorldPanel();
   if (name === "machines" && typeof loadUpdatePanel === "function") loadUpdatePanel();
-  if (name === "tools") loadCategories();
+  if (name === "tools") { loadCategories(); if (typeof loadUserTools === "function") loadUserTools(); }
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
   if (name === "crm" && typeof loadCrm === "function") loadCrm();
@@ -740,6 +740,7 @@ function renderJobs(jobs) {
     }
     card.append(top, el("div", "job-meta", jobWhere(job) + " · started " + (job.started || "—") + (job.finished ? " · finished " + job.finished : "")));
     if (job.note) card.append(el("div", "job-meta", job.note));
+    if (job.forecast && job.forecast.line) card.append(el("div", "job-meta forecast", job.forecast.line));
     if (job.error) card.append(el("div", "err", job.error));
     if (job.output || job.screenshot) {
       const details = el("details");

@@ -3923,6 +3923,69 @@ MODIFYING |= {"apply_edits", "deep_research", "make_music", "speak"}
 # find_tools is how a local model reaches every other tool; repo_map is how it finds its way in code.
 LOCAL_TOOL_PRIORITY[5:5] = ["find_tools", "repo_map"]
 
+# --- Session 28: tools LOKI writes for itself (EVOLVE E9, engine/user_tools.py) + speed watch (E6) ---
+import speed_watch  # noqa: E402
+import user_tools  # noqa: E402
+
+
+def _user_tool_runner(tool_name: str):
+    """LOCAL_TOOLS entry for a tool LOKI wrote: ask first (like run_command, never auto-decided), then
+    run it in its own sandboxed python process in the workspace."""
+    async def run(**args) -> str:
+        path = user_tools.folder(tool_name, DATA_DIR)
+        meta = user_tools.read_meta(path)
+        if not meta.get("enabled"):
+            return "error: the tool %s is switched off (Settings > Tools)" % tool_name
+        detail = "%s(%s)" % (tool_name, json.dumps(args, ensure_ascii=False, default=str)[:300])
+        if not await approve("user_tool", detail, decidable=False):
+            return ("DENIED: running your own tool %s was not approved (a background job may run it only when it "
+                    "was started with commands allowed). Do it with other tools, or reply 'BLOCKED: <reason>'." % tool_name)
+        _ok, out = await asyncio.to_thread(user_tools.execute, path, args, WORKSPACE, int(meta.get("timeout") or 30))
+        return out
+    return run
+
+
+USER_TOOLS = user_tools.Registry(sys.modules[__name__], lambda: DATA_DIR, _user_tool_runner)
+
+
+def make_tool(name: str, description: str, code: str, parameters=None, required=None, tests=None,
+              timeout: int = 30, network: bool = False) -> str:
+    """Write a new tool for yourself (harness_data/tools/<name>/), check it, and load it at once."""
+    out = user_tools.make(name, description, code, parameters=parameters, required=required, tests=tests,
+                          timeout=timeout, network=network, by="loki", root=DATA_DIR, reserved=USER_TOOLS.builtin())
+    USER_TOOLS.sync()
+    if out.get("ok"):
+        tool_select.promote(LOCAL_TOOL_PRIORITY, [out["name"]], anchor="find_tools", unlocked=FOUND_TOOLS)
+        return ("made tool %s: its check passed (%s) and it is callable from your next step. Every call asks the "
+                "owner first." % (out["name"], out["check"].get("detail") or "tests ok"))
+    return "error: %s" % out.get("error")
+
+
+LOCAL_TOOLS["make_tool"] = make_tool
+_E9_SCHEMA = schema(
+    "make_tool", "Write a small tool for yourself when you need the same kind of work again and no tool does it: "
+    "Python with `def run(args: dict) -> str` (standard library; no subprocess/eval/deleting files; network only "
+    "with network=true), its parameters as JSON Schema properties, and tests [{\"args\": {...}, \"expect\": "
+    "\"text the output must contain\"}]. It is checked (compiled, scanned, tests run in a sandbox) and, when it "
+    "passes, loaded at once; every call asks the owner first.",
+    {"name": {"type": "string"}, "description": {"type": "string"}, "code": {"type": "string"},
+     "parameters": {"type": "object"}, "required": {"type": "array", "items": {"type": "string"}},
+     "tests": {"type": "array", "items": {"type": "object"}}, "timeout": {"type": "integer"},
+     "network": {"type": "boolean"}}, ["name", "description", "code", "tests"])
+TOOL_SCHEMAS.append(_E9_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_E9_SCHEMA)
+MODEL_TOOL_NAMES.add("make_tool")
+TOOL_CATEGORIES["planning"] += ["make_tool"]
+TOOL_CATEGORIES["my_tools"] = []
+CATEGORY_LABELS["my_tools"] = "Tools LOKI wrote for itself (each call asks first)"
+CATEGORIES.setdefault("my_tools", True)
+DANGEROUS.add("make_tool")          # writing code that is then run asks first, like run_command
+POLICY.dangerous.add("make_tool")
+try:
+    USER_TOOLS.sync()
+except Exception as _exc:  # noqa: BLE001 - a broken tool folder must never stop LOKI starting
+    print("[loki] tools LOKI wrote could not be loaded: %s" % _exc)
+
 
 def _local_rank(name: str) -> int:
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
@@ -4346,6 +4409,7 @@ TRIAGE_NOTE = ""
 def _triage(text: str) -> dict:
     """Run the first layer for one request: show it, steer the agent, keep it for the log."""
     global LAST_TRIAGE, TRIAGE_NOTE
+    _speed_t0 = time.monotonic()   # speed watch (E6): the triage phase
     try:
         verdict = first_layer.triage(text, AGENT_MODE)
     except Exception as exc:  # noqa: BLE001 - the first layer must never break a request
@@ -4375,6 +4439,7 @@ def _triage(text: str) -> dict:
     events.emit("agent.status", "LOKI", {"state": "working", "kind": verdict.get("kind", "")})
     refresh_system_prompt()
     _progress("triage", first_layer.describe(verdict))
+    speed_watch.since(_speed_t0, "triage", str(verdict.get("source", "")))
     return verdict
 
 
@@ -5021,9 +5086,11 @@ async def call_tool(name: str, args: dict) -> str:
                     "Make progress with file tools (build_3d_scene, write_file, edit_file, "
                     "play_scene, validate_scene) instead, or reply 'BLOCKED: <reason>'.")
         try:
+            _speed_t0 = time.monotonic()   # speed watch (E6): one tool call
             result = LOCAL_TOOLS[name](**args)
             if asyncio.iscoroutine(result):
                 result = await result
+            speed_watch.since(_speed_t0, "tools", name)
             if name in MODIFYING and not str(result).lstrip().lower().startswith(("error", "denied")):
                 # a failed call changed nothing, and an empty folder is not a written file
                 _task_modified = True
@@ -5394,7 +5461,9 @@ def verification_feedback(report: dict) -> str:
 
 async def _verify_touched() -> dict:
     _progress("thinking", "Verifying %d changed file(s)..." % len(_task_files))
+    _speed_t0 = time.monotonic()   # speed watch (E6): verification
     report = await asyncio.to_thread(verify_files, list(_task_files))
+    speed_watch.since(_speed_t0, "verification", "%d file(s)" % len(_task_files))
     _LAST_VERIFY.clear()
     _LAST_VERIFY.update(report)
     return report
@@ -5878,6 +5947,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                 response = await _model_request(client, kwargs, cfg, provider)
                 _record_usage(response, kwargs, cfg, _t0)
                 _record_request_usage(provider, response)
+                speed_watch.since(_t0, "model_call", provider)   # speed watch (E6)
                 break
             except ModelUnavailable as exc:
                 if condenser.is_context_error(str(exc)) and not condensed_for_error:
@@ -6339,6 +6409,7 @@ def _start_request() -> tuple:
 
 def _record_experience(kind: str, goal: str, status: str, started: float, start_index: int) -> None:
     """Log the request; keep its trajectory when it is a verified success. Never raises."""
+    speed_watch.record("request", (time.time() - started) * 1000, note=kind)   # speed watch (E6)
     if not EXPERIENCE_ENABLED:
         return
     try:
@@ -6608,7 +6679,7 @@ async def run_job(job_path: str) -> int:
             model_name = fallback
 
     async def job_approve(kind: str, detail: str, decidable: bool = True) -> bool:
-        if allow_commands and kind in ("run_command", "move_file", "open_godot"):
+        if allow_commands and kind in ("run_command", "move_file", "open_godot", "make_tool", "user_tool"):
             print("  [job] allowed %s: %s" % (kind, detail[:200]), flush=True)
             return True
         print("  [job] not allowed in a background job: %s %s" % (kind, detail[:200]), flush=True)

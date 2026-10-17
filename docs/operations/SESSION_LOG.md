@@ -4,6 +4,18 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
+
+- E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before
+  enabled, loaded without restart, sandboxed process, asks before every call, denied in jobs unless allowed; Settings > Tools.
+- E6 engine/speed_watch.py: startup, first paint (boot.js), triage, model calls, tools, verification, requests, jobs;
+  Lab sparklines; weekly slowest-step idea. Queued jobs get duration + failure-risk forecasts (job_stats + forecast.py).
+- E8 engine/self_review.py: weekly up to 3 "LOKI's idea" proposals waiting for the owner's OK.
+- Jobs dashboard (success over time / model / kind, failure reasons, retry on a stronger model) and a daily
+  3-job self-test on the PC (engine/selftest.py), checked from files, regressions flagged.
+- tests/test_self_systems.py (120) incl. autopilot -> evolve -> improve_loki -> run_job -> check_loki -> ship proof.
+  Screenshots via tests/lab_preview/shot.py. Real machines: ZIVA W27 (PC), M19 (Mac).
+
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 
 - game/loki-world: you, islands per device, bridges, flying; cel/ink/pixel look; full MMO HUD; agents as NPCs,

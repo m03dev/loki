@@ -853,6 +853,21 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       LOKI running - it must find the token by itself (harness_data\app\engine.token) and say "LOKI (MMO API)".
       (5) With the Mac (M17) in the game at the same time: you see the Mac's player walk on its island; chat
       lines reach each other. Report what you saw under Reports.
+- [ ] **W28 LOKI improving itself on the PC (session 28, 2026-10-17) - self-test, jobs view, speed watch, own tools.**
+      Built in the cloud with fakes only (tests/test_self_systems.py); none of it has met a real model yet.
+      (1) `ship.py --check`: report the test_self_systems line. (2) Restart LOKI, open Settings > Lab: there is a
+      **Jobs** card (success per day, by kind, by model, top failure reasons, recent failures with "Retry on a
+      stronger model") and a **Speed watch** card (a row per step with a sparkline). Screenshot both into
+      docs/operations/screens/lab-*-windows.png. (3) Click "Run the self-test now": 3 small jobs start on the usual
+      job model (qwen3:8b). When they finish (refresh the Lab), report the self-test % and, for any that failed,
+      the job's log (harness_data\jobs\<id>.log) - this is exactly the job loop that used to fail. The autopilot
+      runs it daily by itself on the PC (LOKI_SELFTEST=auto). (4) Click "Retry on a stronger model" on one failed
+      job: it must start a new job on a free online model (say which). (5) Queue a picture job from Creations while
+      another job runs: its card above the message box must show "Forecast: ~N min · failure risk N%".
+      (6) Ask in chat: "make yourself a tool that counts the words in a text, with a test" - LOKI should call
+      make_tool (it asks first), then Settings > Tools lists "word_count" with check passed; ask it to use the
+      tool on a sentence (it asks again before running it). Disable / Enable / Check / Delete must work.
+      (7) Settings > Lab > "Review now": up to 3 "LOKI's idea" rows appear, waiting for Build it / No. Report them.
 
 - [ ] **W27 Updates are health-gated (2026-10-17).** After LOKI updates: Settings > Machines & updates shows
       "Update history on this computer" with this update marked "works here (engine + window)". Report the
@@ -1186,6 +1201,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       appear after an update, say so. Then run `harness_data/.venv/bin/python tools/ship.py --check` and
       report each suite line. Bonsai 2: chats on it now get Qwen's /no_think (empty replies were its
       thinking) - report a 3-message chat and one background job on Bonsai.
+- [ ] **M20 Speed watch and the Lab in WKWebView (session 28, 2026-10-17).** After M18 is settled: quit and
+      reopen LOKI, then Settings > Lab: the Jobs card and the Speed watch card must draw (bars, sparklines). The
+      rows "Window first paint" and "Window ready" must have a number - that is boot.js posting /ui/timing from
+      WebKit (if they stay empty, paste any "window error" line from engine.out). Report "Engine start" too (the
+      Mac's start-up time). Settings > Tools must show the "Tools LOKI wrote for itself" card (empty is fine).
+      Screenshot into docs/operations/screens/lab-*-mac.png. Evolve, the weekly review and the daily self-test
+      stay off on the Mac (they run on the PC).
 
 - [ ] **M19 Updates are health-gated (2026-10-17).** Same as W27 on the Mac. Also: if the white window comes back
       at all, LOKI should now go back to the previous version by itself within 5 minutes and say why in that

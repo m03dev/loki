@@ -102,6 +102,64 @@ fleshed out yet"). Only the **engine side of progression** was finished and is c
   windows, party frames, /invite /who, Settings > Creations heart button, Steam folder/GodotSteam hook.
   The Godot client ignores the new state fields. Sync was tested on loopback with two pretend machines
   over a real signed peer link, never between the real Mac and PC.
+Last updated: 2026-10-17 (session 28 self-improvement systems, Claude worktree).
+
+## Session 28 self-improvement systems (worktree)
+
+The owner: "keep working and implementing systems"; LOKI must improve and learn by itself, and jobs must
+SUCCEED. Built in a Claude worktree, committed there (not pushed). EVOLVE E6, E8, E9 ticked.
+**All offline, with fakes: nothing here has run against a real model or on the real PC/Mac yet** (ZIVA W27/M19).
+
+- **E9 Tools LOKI writes for itself** (`engine/user_tools.py`): `harness_data/tools/<name>/` = `tool.json`
+  (description, JSON-Schema parameters, required, tests `[{args, expect}]`, timeout, network) + `tool.py`
+  (`def run(args)`). The `make_tool` tool (asks first: in DANGEROUS) writes one, CHECKS it (compiles, a static
+  scan refuses subprocess/ctypes/eval/exec/os.system/rmtree/os.remove..., network only with `"network": true`,
+  then its own tests run in the sandbox) and loads it at once (`USER_TOOLS.sync()`; offered to a local model via
+  find_tools' list). Each call: `approve("user_tool", ..., decidable=False)` - the window always asks; a
+  background job only with `allow_commands` (job_approve now also accepts make_tool/user_tool) - then a separate
+  `python -I` process in the workspace with a minimal environment (no keys, no LOKI_*), a timeout and an output
+  cap. A tool changed since its check is off until it passes again. Settings > Tools: list, Enable/Disable,
+  Check, Delete (`GET /user_tools`, `POST /user_tools/{toggle,check,delete}`); a "my_tools" category toggle.
+- **E6 Speed watch** (`engine/speed_watch.py`): `harness_data/speed/timings.jsonl` - engine start (bridge),
+  window first paint + ready (`app/ui/boot.js` -> `POST /ui/timing`), triage, every model call, every tool
+  call (named), verification, the whole request (timing hooks in loki.py only), background jobs (from the job
+  store). Settings > Lab "Speed watch": median / 90% / last / n + a sparkline per step, the slowest tools.
+  Weekly autopilot duty `speed`: the slowest step becomes an evolve idea (approved at once - measured and
+  narrow; `LOKI_SPEED_IDEAS=ask` makes it wait). `LOKI_SPEED_WATCH=off` stops recording.
+- **Forecasts on queued jobs** (`engine/job_stats.py` + forecast.py: TimesFM-3 when installed, else
+  statistical): `GET /jobs` adds `forecast` (duration median/q90 from similar jobs, Laplace-smoothed failure
+  risk by kind) to queued/starting jobs; the job strip shows "Forecast: ~6 min · failure risk 42%".
+- **Jobs dashboard** (Settings > Lab "Jobs", `GET /jobs/stats`): success per day (30 bars), by kind
+  (picture/research/build/team/selftest/other), by model (the model the job REALLY ran on, from its log line),
+  top failure reasons (normalised from job errors, result files, logs; escalations "escalated from the small model
+  to X" counted), recent failures with **Retry on a stronger model** (`POST /jobs/retry_stronger`: same prompt,
+  first FREE online provider set up that it did not already use, through job_action/policy; never paid alone).
+- **Daily self-test** (`engine/selftest.py`, autopilot duty `selftest`, `LOKI_SELFTEST=auto` = PC only): 3 cheap
+  jobs (write an exact line / add numbers from a file / a markdown list) on the usual job model in
+  `harness_data/selftest/<day>/`, checked FROM THE FILES (not the model's words); settled on the next autopilot
+  pass after they finish; a run worse than the last is flagged REGRESSION (Lab + autopilot log).
+  "Run the self-test now" in the Lab.
+- **E8 Self-review** (`engine/self_review.py`, autopilot duty `review`, weekly, where evolve is on; Lab
+  "Review now" = rules only): reads the newest learned report, the experience log, reflexion/evolve lessons in
+  memory_core, the job dashboard, the speed watch and the self-test; adds up to 3 proposals as "LOKI's idea"
+  (`approved: False`, `kind: review`) that wait for Build it / No; no repeats; at most 6 open. With
+  `agent._port_ask` (LOKI_SELF_REVIEW_MODEL, on by default) one model call writes them; an unusable answer
+  falls back to fixed rules.
+- **Evolve end to end** (item 5): tests/test_self_systems.py drives autopilot -> evolve -> the REAL
+  improve_loki -> the job through the real `loki.run_job` + goal loop on a scripted model (task_tracker, read,
+  tick the roadmap line, check_loki, ship_loki with ship.py faked at subprocess level) -> ship proof -> the next
+  autopilot pass records SHIPPED, moves to the next step, lesson in memory, dashboard counts it.
+- Files: new engine/{user_tools,speed_watch,job_stats,selftest,self_review,self_api}.py; small hooks in
+  loki.py (one tool block + timing lines + job_approve tuple), loki_bridge.py (2 route hooks, /jobs annotate,
+  start-up timing), autopilot.py (3 duties + settle), evolve.py (`add_idea(approved=, kind=)`), app/ui
+  lab.js (rewritten views), boot.js (timing), app.js (2 lines), index.html (#user-tools), glass.css.
+- Tests: tests/test_self_systems.py (120, in SUITES). Screenshots: `python tests/lab_preview/shot.py <dir>`
+  (headless Chromium against the real engine modules with seeded data) -> docs/operations/screens/lab-jobs.png,
+  lab-speed.png, tools-loki-tools.png.
+- **Not verified / needs a machine:** a real local model writing a tool with make_tool; the self-test on
+  qwen3:8b on the PC; the weekly review's model call; first-paint timing in WebView2/WKWebView; TimesFM
+  forecasts (only the statistical path ran). The sandbox is a separate process with a static scan, not an OS
+  jail - the approval before each call is the real gate.
 
 ## Session 27 (cont.): the Mac's white window
 

@@ -1,0 +1,3 @@
+body { background: var(--bg); color: var(--text); font-family: var(--sans); margin: 0; }
+.preview { max-width: 980px; margin: 0 auto; padding: 24px; }
+.preview section { margin-bottom: 36px; }
