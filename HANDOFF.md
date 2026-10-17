@@ -4,7 +4,41 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-16 (session 22, the PC + the Mac + Claude).
+Last updated: 2026-10-16 (session 23, Claude in the cloud).
+
+## Session 23 (2026-10-16, Claude in the cloud): options, drawing pad, world fixes, softer GUI, add-ons
+
+All 22 suites pass. The owner asked: fix world assets that made no sense, 3-4 suggestions for an open
+request, a way to draw for LOKI, OpenHuman/Remotion/OpenHands/PersonaLive/MuMuAINovel/marketing
+skills/scraper/CRM, a less blue GUI, and Ziva's instructions in git only (not in chat).
+
+- **"Which do you mean?"** (`engine/options.py`, `POST /options`, `Workbench.offerOptions`): an open
+  request ("make me a game") gets 3-4 different readings as cards - title, meaning, what LOKI would
+  do - and the pick is sent as a precise request ("Just do it as I wrote it" too). The decision is a
+  local heuristic (`looks_open`), so specific requests cost nothing; only open ones make one model
+  call. `LOKI_OPTIONS` auto|always|off in Settings > General; `/options <text>` forces it.
+- **Drawing pad** (`app/ui/sketch.js`, `POST /sketch`): "✎ Draw" in the composer - pen with
+  pressure (tablet/Apple Pencil), marker, eraser, colours, undo/redo. The PNG is saved to
+  `sketches/` in the workspace and the next message tells LOKI to read it with `view_image`
+  (whose default prompt now describes a drawing, not a Godot screenshot). PenEcho (a full AI canvas,
+  AGPL) is the optional add-on for more.
+- **World assets fixed** (`app/ui/world.js`): benches were built rotated 90 degrees (seat pointing
+  at the pool, back sideways, legs along the wrong axis) - now `benchFrame()` builds slats, back
+  rails, posts, legs and arm rests along the ring, facing the pool. Team banners had the same bug
+  (flag edge-on): now a crossbar, a flag along the ring with its stage pips sewn on, and a hem.
+  Library books stuck out of the shelf sideways: now they stand in it. Agents were 1.5x too big and
+  sank into the ground when sitting: people-sized now (about 1 unit; LOKI a head taller), seated on
+  the bench seat with feet on the ground; doors are taller than people. Bloom and glow sprites
+  toned down (threshold 0.9, strength 0.38) so lamps and visors stop blowing out.
+- **Softer GUI** (`app/ui/glass.css`): navy glass -> neutral graphite, cyan/blue/violet accent ->
+  low-saturation sage/slate/lilac, lower text contrast (#e4e4e7 on graphite), body glow cut to a hint.
+- **Add-ons** (see the section below, built in a worktree and merged): built-in CRM, Scrapling
+  scraper, 50 marketing skills (MIT), OpenHands harness, PenEcho / OpenHuman MCP, Remotion videos,
+  PersonaLive card, Novel Writer template. MuMuAINovel (GPL) and OpenHuman (GPL) are NOT vendored:
+  the novel workflow was written from scratch; OpenHuman runs as a separate program over MCP.
+- **OpenHuman vs LOKI:** OpenHuman (tinyhumansai/openhuman) is a Rust desktop agent harness in early
+  beta - a peer, not a replacement: LOKI has the Mac+PC link, the world, teams, the workbench and
+  self-shipping. It can be used as a tool server.
 
 ## Ziva (Mac), 2026-10-16: Bonsai 2 fixed, add-on packages installed, one-click add-on install
 

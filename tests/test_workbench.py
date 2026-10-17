@@ -93,6 +93,52 @@ if shutil.which("node"):
     proc = subprocess.run(["node", "--check", str(ui / "workbench.js")], capture_output=True, text=True)
     check("workbench.js parses", proc.returncode == 0, proc.stderr)
 
+section("options: 3-4 readings of an open request (engine/options.py)")
+import asyncio  # noqa: E402
+import options  # noqa: E402
+check("an open request looks open", options.looks_open("make me a game") and options.looks_open("improve the website"))
+check("a specific one does not", not options.looks_open("fix the bug in src/app.py line 40")
+      and not options.looks_open("read https://example.com and summarise it"))
+check("a plain question gets a plain answer", not options.looks_open("what is the capital of France?"))
+check("asking for ideas always offers", options.looks_open("give me some ideas"))
+check("off means never, force means yes", not options.should_offer("make me a game", env={"LOKI_OPTIONS": "off"})
+      and options.should_offer("fix line 40 in a.py", force=True))
+good = ('<think>hmm</think> Sure: {"options": [{"title": "Browser game", "meaning": "m", "plan": "p", "prompt": "Build a browser game"},'
+        ' {"title": "Godot prototype", "prompt": "Make a Godot 3D prototype"}, {"title": "dup", "prompt": "build a browser game"},'
+        ' {"title": "GDD", "prompt": "Write a design doc"}, {"title": "Fifth", "prompt": "e"}, {"title": "Sixth", "prompt": "f"}]}')
+got = options.parse(good)
+check("the reply is parsed, duplicates dropped, at most 4", [o["title"] for o in got] == ["Browser game", "Godot prototype", "GDD", "Fifth"], got)
+check("one option is not a choice", options.parse('{"options": [{"title": "a", "prompt": "b"}]}') == [])
+check("garbage gives none", options.parse("I think you mean a game.") == [])
+
+
+async def _fake(prompt_text):
+    assert "make me a game" in prompt_text
+    return good
+
+
+async def _boom(prompt_text):
+    raise RuntimeError("no model")
+check("suggest() asks once and returns the options", len(asyncio.run(options.suggest("make me a game", _fake))["options"]) == 4)
+check("a failing model just means no options", asyncio.run(options.suggest("make me a game", _boom))["options"] == [])
+check("the window offers them before sending", "Workbench.offerOptions(text, false)" in app_js and "offerOptions" in js)
+check("/options is a command", 'name: "options"' in js)
+
+section("the drawing pad (app/ui/sketch.js)")
+sk = (ui / "sketch.js").read_text(encoding="utf-8")
+check("index.html loads sketch.js", "/ui/sketch.js" in html)
+check("pen pressure, undo, attach", "e.pressure" in sk and "Undo" in sk and "/sketch" in sk)
+check("the drawing rides along with the next message", "Sketch.take(text)" in app_js)
+bridge_src = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+check("the engine saves it as a PNG in the workspace", 'route == "/sketch"' in bridge_src and 'b"\\x89PNG"' in bridge_src)
+if shutil.which("node"):
+    proc = subprocess.run(["node", "--check", str(ui / "sketch.js")], capture_output=True, text=True)
+    check("sketch.js parses", proc.returncode == 0, proc.stderr)
+
+section("LOKI World: benches face the pool")
+wj = (ui / "world.js").read_text(encoding="utf-8")
+check("benches are built in their own frame (length along the ring)", "function benchFrame(b)" in wj and "benchFrame(b)" in wj.split("function seatPos")[1][:200])
+
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

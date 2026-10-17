@@ -32,6 +32,7 @@ const Workbench = (function () {
     { name: "check", hint: "prove every part of LOKI works", run: () => settings("system") },
     { name: "usage", hint: "what your requests cost", run: () => settings("usage") },
     { name: "memory", hint: "what LOKI remembers", run: () => settings("memory") },
+    { name: "options", hint: "show 3-4 readings of a request, then pick one", arg: "request", run: (a) => offerOptions(a, true) },
     { name: "image", hint: "make an image with Higgsfield (uses your credits)", arg: "prompt", run: (a) => media(a) },
   ];
 
@@ -72,6 +73,41 @@ const Workbench = (function () {
     if (typeof showChat === "function") showChat();
     if (data.ok) addLoki("Started a team on: **" + goal + "**. Watch it in the work strip and in LOKI World.");
     else addNotice(data.error || "Could not start the team.", true);
+  }
+
+  // ---------------------------------------------------------------- "which do you mean?"
+  // An open request gets 3-4 readings first (engine/options.py; LOKI_OPTIONS auto|always|off).
+  // Returns true when it showed them (the caller then waits for a pick instead of sending).
+  async function offerOptions(text, force) {
+    if (typeof showChat === "function" && force) showChat();
+    if (typeof setStatus === "function") setStatus("Thinking about what you might mean…");
+    const data = await api("/options", { text, force: !!force }).catch(() => null);
+    if (typeof setStatus === "function") setStatus("Ready", true);
+    if (!data || !data.offer || !(data.options || []).length) {
+      if (force) addNotice((data && data.error) || "No different readings came up - send it as it is.", !data);
+      return false;
+    }
+    addUser(text);
+    const card = el("div", "options-card");
+    card.append(el("div", "options-head", "A few ways to read this - pick one:"));
+    const grid = el("div", "options-grid");
+    const done = () => card.classList.add("picked");
+    data.options.forEach((o, i) => {
+      const b = el("button", "option");
+      b.type = "button";
+      b.append(el("span", "option-n", String(i + 1)), el("b", "", o.title));
+      if (o.meaning) b.append(el("span", "option-meaning", o.meaning));
+      if (o.plan) b.append(el("span", "option-plan", o.plan));
+      b.addEventListener("click", () => { if (card.classList.contains("picked")) return; done(); b.classList.add("chosen"); send(o.prompt, { direct: true }); });
+      grid.append(b);
+    });
+    const asis = el("button", "option-asis", "Just do it as I wrote it");
+    asis.type = "button";
+    asis.addEventListener("click", () => { if (card.classList.contains("picked")) return; done(); send(text, { direct: true, quiet: true }); });
+    card.append(grid, asis);
+    document.getElementById("transcript").append(card);
+    card.scrollIntoView({ block: "end", behavior: "smooth" });
+    return true;
   }
 
   async function media(prompt) {
@@ -279,6 +315,6 @@ const Workbench = (function () {
   }
 
   document.addEventListener("DOMContentLoaded", wire);
-  return { handleSlash, afterReply, review, rewindList, COMMANDS };
+  return { handleSlash, afterReply, review, rewindList, offerOptions, COMMANDS };
 })();
 window.Workbench = Workbench;

@@ -708,7 +708,7 @@ function staticScene() {
     solid("box", [bx, 0.55, bz], rot, [1.5, 1.1, 1.3], [0.93, 0.86, 0.74]);
     solid("pyr", [bx, 1.55, bz], rot + Math.PI / 4, [2.25, 0.9, 2.0], c);
     solid("box", [bx - ux * 0.66 + uz * 0.38, 0.62, bz - uz * 0.66 - ux * 0.38], rot, [0.42, 0.34, 0.04], [1.0, 0.82, 0.45], { e: 0.9, line: false });
-    solid("box", [bx - ux * 0.66 - uz * 0.3, 0.33, bz - uz * 0.66 + ux * 0.3], rot, [0.34, 0.66, 0.06], [0.36, 0.22, 0.20], { line: false });
+    solid("box", [bx - ux * 0.66 - uz * 0.3, 0.45, bz - uz * 0.66 + ux * 0.3], rot, [0.4, 0.9, 0.06], [0.36, 0.22, 0.20], { line: false });
     shadow(bx + 0.25, bz - 0.2, 1.4, 0.45);
     // the desk the agent works at
     solid("box", [x, 0.48, z], ang, [1.4, 0.12, 0.75], [0.62, 0.38, 0.26]);
@@ -726,8 +726,10 @@ function staticScene() {
       solid("box", [sx, 0.6, sz], ang, [0.35, 1.2, 0.9], [0.45, 0.28, 0.20]);
       const books = [[0.85, 0.3, 0.3], [0.3, 0.55, 0.9], [0.95, 0.8, 0.3], [0.4, 0.8, 0.5]];
       for (let r = 0; r < 3; r++) for (let b = 0; b < 4; b++) {
-        solid("box", [sx - ux * 0.12 + tx * (b - 1.5) * 0.18, 0.28 + r * 0.33, sz - uz * 0.12 + tz * (b - 1.5) * 0.18], ang,
-          [0.14, 0.24, 0.13], books[(b + r) % 4], { line: false });
+        // the shelf is deep along the desk (local x) and wide outward (local z): books stand in a
+        // row along its width with their spines showing on the side that faces the desk
+        solid("box", [sx - tx * 0.08 + ux * (b - 1.5) * 0.19, 0.28 + r * 0.33, sz - tz * 0.08 + uz * (b - 1.5) * 0.19], ang,
+          [0.22, 0.24, 0.14], books[(b + r) % 4], { line: false });
       }
       shadow(sx, sz, 0.6, 0.35);
       solid("box", at(0.35, 0.05, top + 0.04), ang + 0.3, [0.32, 0.06, 0.24], [0.9, 0.86, 0.75]);
@@ -786,11 +788,17 @@ function staticScene() {
   }
   for (const t of SCENERY.tufts) solid("pyr", [t.x, t.s * 0.4, t.z], t.ry, [t.s, t.s * 0.9, t.s], [0.14, 0.50, 0.32], ink);
   for (const b of SCENERY.benches) {
-    const ry = Math.atan2(b.x, b.z) + Math.PI / 2;
-    solid("box", [b.x, 0.3, b.z], ry, [0.9, 0.08, 0.32], [0.62, 0.42, 0.28]);
-    solid("box", [b.x + Math.sin(ry - Math.PI / 2) * 0.14, 0.5, b.z + Math.cos(ry - Math.PI / 2) * 0.14], ry, [0.9, 0.3, 0.06], [0.55, 0.36, 0.24]);
-    for (const s of [-0.36, 0.36]) solid("box", [b.x + Math.sin(ry) * s, 0.14, b.z + Math.cos(ry) * s], ry, [0.07, 0.28, 0.28], [0.28, 0.24, 0.30], ink);
-    shadow(b.x, b.z, 0.55, 0.35);
+    // A park bench along the plaza ring, facing the pool: its length runs along the ring (local x
+    // = the tangent), its back is on the outer side (local z = outward), legs at both ends.
+    const f = benchFrame(b), [ox, oz] = f.out, [tx, tz] = f.tan, wood = [0.62, 0.42, 0.28], dark = [0.50, 0.33, 0.22];
+    for (const k of [-1, 0, 1]) solid("box", [b.x + ox * k * 0.1, 0.32, b.z + oz * k * 0.1], f.ry, [0.96, 0.05, 0.09], wood);   // seat slats
+    for (const yb of [0.5, 0.64]) solid("box", [b.x + ox * 0.17, yb, b.z + oz * 0.17], f.ry, [0.96, 0.08, 0.04], dark);   // back rails
+    for (const s2 of [-0.4, 0.4]) {
+      solid("box", [b.x + tx * s2, 0.15, b.z + tz * s2], f.ry, [0.06, 0.3, 0.3], [0.26, 0.24, 0.30], ink);                    // legs
+      solid("box", [b.x + tx * s2 + ox * 0.17, 0.45, b.z + tz * s2 + oz * 0.17], f.ry, [0.06, 0.34, 0.05], [0.26, 0.24, 0.30], ink);   // back posts
+      solid("box", [b.x + tx * s2 * 1.05, 0.42, b.z + tz * s2 * 1.05], f.ry, [0.05, 0.04, 0.3], [0.26, 0.24, 0.30], ink);   // arm rests
+    }
+    shadow(b.x, b.z, 0.6, 0.35);
   }
   const fl = SCENERY.fall;
   if (fl) {   // pond, stream to the rim, and the falling sheet over the edge
@@ -844,9 +852,16 @@ function seatFor(id) {
   for (let i = 0; i < SCENERY.benches.length * 2; i++) if (!World.seats[i]) { World.seats[i] = id; return i; }
   return -1;
 }
+// A bench's frame: ry turns a box so its local x runs along the plaza ring and local z points
+// outward (M4.trs maps local x -> (cos ry, -sin ry), local z -> (sin ry, cos ry) in x/z).
+function benchFrame(b) {
+  const len = Math.hypot(b.x, b.z) || 1, out = [b.x / len, b.z / len];
+  return { ry: Math.atan2(out[0], out[1]), out, tan: [out[1], -out[0]] };
+}
 function seatPos(i) {
-  const b = SCENERY.benches[Math.floor(i / 2)], ry = Math.atan2(b.x, b.z) + Math.PI / 2, s = i % 2 ? 0.22 : -0.22;
-  return { x: b.x + Math.sin(ry) * s - Math.sin(ry - Math.PI / 2) * 0.02, z: b.z + Math.cos(ry) * s - Math.cos(ry - Math.PI / 2) * 0.02, face: ry + Math.PI / 2 };
+  const b = SCENERY.benches[Math.floor(i / 2)], f = benchFrame(b), s = i % 2 ? 0.22 : -0.22;
+  // sit on the seat (slightly forward of the back), facing the pool (agents face local +z)
+  return { x: b.x + f.tan[0] * s - f.out[0] * 0.02, z: b.z + f.tan[1] * s - f.out[1] * 0.02, face: f.ry + Math.PI };
 }
 function freeSeat(id) { for (const k of Object.keys(World.seats)) if (World.seats[k] === id) delete World.seats[k]; }
 
@@ -1068,19 +1083,22 @@ function sceneList(view, t, dt, P) {
   view.teamSpots = [];
   teams.forEach((tm, i) => {
     const b = SCENERY.banners[i], col = hashColor(tm.id), out = [Math.cos(b.a), Math.sin(b.a)];
-    const ry = Math.atan2(out[0], out[1]) + Math.PI / 2;
+    // the flag hangs from the pole along the plaza ring (local x = the tangent), so it reads
+    // face-on from the plaza and from the camera's usual orbit
+    const ry = Math.atan2(out[0], out[1]), tan = [out[1], -out[0]];
     solid("cyl6", [b.x, 0.85, b.z], 0, [0.07, 1.7, 0.07], [0.20, 0.22, 0.32]);
     solid("sph4", [b.x, 1.73, b.z], 0, [0.12, 0.12, 0.12], [1, 0.9, 0.5], { e: 0.6, line: false });
-    const wave = World.reduced ? 0 : Math.sin(t * 3 + i) * 0.12;
-    solid("box", [b.x + Math.sin(ry) * 0.3, 1.45, b.z + Math.cos(ry) * 0.3], ry + wave, [0.55, 0.38, 0.03], col);
-    solid("box", [b.x + Math.sin(ry) * 0.62, 1.47, b.z + Math.cos(ry) * 0.62], ry + wave * 2, [0.12, 0.3, 0.03], mix3(col, [0, 0, 0], 0.2));
+    solid("box", [b.x + tan[0] * 0.3, 1.66, b.z + tan[1] * 0.3], ry, [0.62, 0.03, 0.03], [0.20, 0.22, 0.32]);   // crossbar
+    const wave = World.reduced ? 0 : Math.sin(t * 3 + i) * 0.06;
+    solid("box", [b.x + tan[0] * 0.32, 1.42, b.z + tan[1] * 0.32], ry + wave, [0.56, 0.44, 0.03], col);
+    solid("box", [b.x + tan[0] * 0.32, 1.17, b.z + tan[1] * 0.32], ry + wave, [0.56, 0.06, 0.035], mix3(col, [0, 0, 0], 0.3), { line: false });   // hem
     const stages = tm.stages && tm.stages.length ? tm.stages : ["plan", "build", "check"];
     const cur = stages.indexOf(tm.stage);
     stages.forEach((sname, k) => {
-      const along = (k - (stages.length - 1) / 2) * 0.17;
-      const pos = [b.x + Math.sin(ry) * along, 0.55, b.z + Math.cos(ry) * along];
+      const along = 0.32 + (k - (stages.length - 1) / 2) * 0.14;
+      const pos = [b.x + tan[0] * along - out[0] * 0.03, 1.42, b.z + tan[1] * along - out[1] * 0.03];   // pips sewn on the flag
       const lit = cur > k || tm.status === "done", now2 = k === cur;
-      solid("box", pos, ry, [0.12, 0.12, 0.12], lit ? [0.45, 1, 0.55] : now2 ? col : [0.3, 0.32, 0.42],
+      solid("box", pos, ry, [0.09, 0.09, 0.03], lit ? [0.45, 1, 0.55] : now2 ? [1, 1, 1] : [0.3, 0.32, 0.42],
         { e: lit ? 0.7 : now2 ? 0.4 + 0.4 * Math.abs(Math.sin(t * 3)) : 0, line: false });
     });
     shadow(b.x, b.z, 0.25, 0.4);
@@ -1170,9 +1188,10 @@ function sceneList(view, t, dt, P) {
     } else a.cheered = false;
     const slump = d.state === "failed" ? 0.85 : 1;
     const col = d.state === "failed" ? [0.75, 0.38, 0.42] : a.color;
-    const big = (id === "loki" ? 1.6 : 1.3);
+    // People-sized next to the benches, desks and doors (about 1 unit tall; LOKI a head taller).
+    const big = (id === "loki" ? 1.0 : 0.82);
     a.big = big;
-    const sit = seated ? -0.2 * big : 0;
+    const sit = seated ? 0.345 - 0.11 * big : 0;    // the body's base rests on the bench seat (0.345)
     const y0 = bob + sit;
     const fwd = [Math.sin(a.ry), Math.cos(a.ry)], side = [Math.cos(a.ry), -Math.sin(a.ry)];
     shadow(a.x + 0.06, a.z - 0.05, 0.42 * big, 0.7);
@@ -1180,12 +1199,12 @@ function sceneList(view, t, dt, P) {
     solid("cyl", [a.x, 0.42 * big * slump + y0, a.z], a.ry, [0.42 * big, 0.62 * big * slump, 0.42 * big], col, { s2: 0.25 });
     const hy = (0.98 * slump) * big + y0;
     solid("sph", [a.x, hy, a.z], a.ry, [0.44 * big, 0.44 * big, 0.44 * big], col.map((v) => Math.min(1, v * 1.12 + 0.05)), { s2: 0.4 });
-    solid("box", [a.x + fwd[0] * 0.18 * big, hy + 0.04 * big, a.z + fwd[1] * 0.18 * big], a.ry, [0.28 * big, 0.09 * big, 0.08], [0.6, 0.98, 1.0], { e: 0.8, line: false });
+    solid("box", [a.x + fwd[0] * 0.18 * big, hy + 0.04 * big, a.z + fwd[1] * 0.18 * big], a.ry, [0.28 * big, 0.09 * big, 0.08], [0.6, 0.98, 1.0], { e: 0.45, line: false });
     // feet that step while walking, tucked when sitting
     for (const s of [-1, 1]) {
       const stride = walking ? Math.sin(a.phase) * s * 0.11 * big : 0;
-      const fy = seated ? 0.16 * big : 0.05;
-      const out = seated ? 0.18 * big : 0;
+      const fy = 0.05;                                // feet stay on the ground, also when seated
+      const out = seated ? 0.3 * big : 0;
       solid("box", [a.x + side[0] * s * 0.11 * big + fwd[0] * (stride + out), fy + Math.max(0, -stride) * 0.4, a.z + side[1] * s * 0.11 * big + fwd[1] * (stride + out)],
         a.ry, [0.11 * big, 0.08 * big, 0.17 * big], mix3(col, [0.05, 0.05, 0.1], 0.5), { line: false });
     }

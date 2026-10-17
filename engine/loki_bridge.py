@@ -1083,6 +1083,53 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
             return
+        if route == "/sketch":
+            # a drawing from the composer's pad: saved as a PNG in the workspace for view_image
+            import base64  # pylint: disable=import-outside-toplevel
+            raw = str(data.get("png", ""))
+            if not raw.startswith("data:image/png;base64,") or len(raw) > 8_000_000:
+                self._send_json(400, {"ok": False, "error": "send a PNG data URL (up to about 6 MB)"})
+                return
+            try:
+                blob = base64.b64decode(raw.split(",", 1)[1], validate=True)
+            except ValueError:
+                self._send_json(400, {"ok": False, "error": "that is not valid PNG data"})
+                return
+            if not blob.startswith(b"\x89PNG"):
+                self._send_json(400, {"ok": False, "error": "that is not a PNG"})
+                return
+            folder = Path(getattr(state.agent, "WORKSPACE", ".")) / "sketches"
+            folder.mkdir(parents=True, exist_ok=True)
+            name = "sketch-%s.png" % time.strftime("%Y%m%d-%H%M%S")
+            (folder / name).write_bytes(blob)
+            self._send_json(200, {"ok": True, "path": "sketches/" + name})
+            return
+        if route == "/options":
+            # "Which do you mean?": 3-4 readings of an open request (engine/options.py). Quick
+            # "no" when the request is specific; one model call when it is open.
+            import options  # pylint: disable=import-outside-toplevel
+            text = str(data.get("text", ""))
+            if not options.should_offer(text, force=bool(data.get("force"))):
+                self._send_json(200, {"ok": True, "offer": False, "options": []})
+                return
+            if state.loop is None:
+                self._send_json(200, {"ok": True, "offer": False, "options": [], "error": "the agent is not ready"})
+                return
+            agent = state.agent
+
+            async def complete(prompt_text: str) -> str:
+                client = agent.make_client()
+                reply = await client.chat.completions.create(
+                    model=agent.MODELS[agent.active_model_name()].model, max_tokens=900, temperature=0.7,
+                    messages=[{"role": "user", "content": prompt_text}])
+                return str(reply.choices[0].message.content or "")
+            context = "workspace: %s" % os.environ.get("LOKI_WORKSPACE", "")
+            try:
+                found = asyncio.run_coroutine_threadsafe(options.suggest(text, complete, context), state.loop).result(timeout=90)
+            except Exception as exc:  # noqa: BLE001 - no options: the request just goes ahead
+                found = {"options": [], "error": str(exc)[:200]}
+            self._send_json(200, {"ok": True, "offer": bool(found["options"]), **found})
+            return
         if route == "/media/generate":
             # Spends the user's Higgsfield credits: only ever from an explicit request.
             import higgsfield  # pylint: disable=import-outside-toplevel

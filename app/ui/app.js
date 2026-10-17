@@ -246,7 +246,8 @@ function setBusy(busy) {
   if (busy) state.startedAt = Date.now();
 }
 
-async function send(text) {
+async function send(text, opts) {
+  opts = opts || {};
   if (state.busy || !text.trim()) return;
   const background = $("#in-background") && $("#in-background").checked;
   if ($("#main").classList.contains("home")) {
@@ -258,7 +259,20 @@ async function send(text) {
     $("#transcript").replaceChildren();
   }
   if (background) { $("#in-background").checked = false; return sendToBackground(text); }
-  addUser(text);
+  // an open request first gets 3-4 readings to pick from (workbench.js / engine/options.py)
+  if (!opts.direct && window.Workbench && Workbench.offerOptions) {
+    state.busy = true;
+    const shown = await Workbench.offerOptions(text, false).catch(() => false);
+    state.busy = false;
+    if (shown) return;
+  }
+  let thumbs = [];
+  if (window.Sketch) { const t = Sketch.take(text); thumbs = t.thumbs; if (thumbs.length) text = t.text; }   // drawings ride along
+  if (!opts.quiet || thumbs.length) addUser(thumbs.length ? text.split("\n\n[The user drew")[0] : text);
+  if (thumbs.length) {
+    const bubble = [...document.querySelectorAll("#transcript .turn.user .bubble")].pop();
+    for (const src of thumbs) { const img = el("img", "sketch-thumb"); img.src = src; img.alt = "your drawing"; if (bubble) bubble.append(img); }
+  }
   setBusy(true);
   state.cursor = 0;
   state.chatId = "";

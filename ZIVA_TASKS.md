@@ -610,6 +610,24 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      (5) `GET /forecast` -> backend "statistical" (timesfm_installed false). TimesFM was NOT installed.
      (6) /peers/diagnose JSON is pasted under Reports.
 
+- [ ] **W18 Session 23 on the real PC (2026-10-16).** After LOKI updates (v0.17+):
+      (1) `tools\ship.py --check` - report the 22 suite lines.
+      (2) LOKI World, close up on the plaza: benches run along the ring and face the pool, people
+      sit ON them (not in the ground), team flags face you, books stand in the library shelf, lamps
+      do not blow out. Screenshot it. Report the fps at high quality.
+      (3) The window: is it calmer now (graphite, not blue)? Screenshot home and a chat.
+      (4) Type "make me a game" - 3 or 4 option cards should appear; pick one and check the request
+      it sends. Then "fix the typo in README.md" - NO cards. Report how long the cards took and which
+      model made them.
+      (5) "✎ Draw": draw a box with an arrow and the word "login", attach, send "build this page".
+      Report whether LOKI called view_image on sketches/... and what it understood. A pen tablet,
+      if there is one: does the line get thicker when you press harder?
+      (6) Settings > CRM: add a company, a contact, a deal; ask "show my CRM pipeline".
+      (7) Settings > Add-ons: the new cards (OpenHands, PenEcho, OpenHuman, Remotion, PersonaLive)
+      are there, all off. Then `harness_data\.venv\Scripts\python.exe tools\setup_extras.py scrapling`,
+      turn Scrapling on, ask "scrape https://example.com". Report.
+      (8) Optional, only with Mohamed's OK: `npm i -g penecho`, turn PenEcho on, "Open drawing canvas".
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -768,6 +786,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      - Method: WKWebView cannot be clicked from a script, so the panel shot + the perf/quality read came
      from the same UI driven in a real-GPU Chrome over the DevTools Protocol (the W10 method); the home
      shot is the actual app window.
+
+- [ ] **M10 Session 23 on the Mac (2026-10-16).** After M8: the same checks as W18 (2)-(6) on the
+      Mac. For (5) use the trackpad, and an Apple Pencil via Sidecar if one is around. Watch memory
+      pressure while the world runs and while option cards are made (local model) - report both.
 
 ## Needs Mohamed
 

@@ -4,6 +4,17 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-16 - Session 23 (Claude): options, drawing pad, world fixes, softer GUI, add-ons
+
+- engine/options.py + /options + offerOptions: 3-4 readings of an open request, pick one.
+- app/ui/sketch.js + /sketch: draw for LOKI (pressure pen), saved to sketches/, read with view_image.
+- world.js: benches, banners and books rebuilt in the right frame; people-sized agents that really
+  sit; taller doors; calmer bloom. glass.css: graphite glass, low-saturation accent.
+- Add-ons (worktree): CRM, Scrapling, marketing skills, OpenHands, PenEcho/OpenHuman MCP,
+  Remotion, PersonaLive card, Novel Writer. tests: test_addons (120), test_workbench (+18).
+
+---
+
 ## 2026-10-16 - Session 22 (Claude): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield
 
 - Mac hangs: /peer/diagnose + /peer/restart; forecast.memory_tick unloads idle Ollama models

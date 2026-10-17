@@ -255,7 +255,7 @@ function create(canvas, ctx) {
   // post-processing
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.45, 0.82);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.35, 0.9);
   composer.addPass(bloom);
   const output = new OutputPass();
   composer.addPass(output);
@@ -309,10 +309,10 @@ function create(canvas, ctx) {
       if (!g) { s.visible = false; continue; }
       s.visible = true;
       s.position.set(g.pos[0], g.pos[1], g.pos[2]);
-      const r = g.r * (puff ? 2.0 : 2.4);
+      const r = g.r * (puff ? 2.0 : 1.7);      // bloom already haloes bright things: keep the sprite halo modest
       s.scale.set(r, r, 1);
       s.material.color.setRGB(g.color[0], g.color[1], g.color[2], THREE.SRGBColorSpace);
-      s.material.opacity = Math.min(1, g.a == null ? 1 : g.a) * (puff ? 0.6 : 0.9);
+      s.material.opacity = Math.min(1, g.a == null ? 1 : g.a) * (puff ? 0.6 : 0.55);
     }
   }
 

@@ -2460,9 +2460,15 @@ async def view_image(filename: str, question: str = "") -> str:
     size = path.stat().st_size
     if size > 6_000_000:
         return "error: image is %d bytes; too large to send" % size
-    prompt = question or ("Describe exactly what is visible in this Godot game screenshot. "
-                          "Then list anything that looks wrong: black or empty viewport, missing "
-                          "meshes, the camera looking at nothing, objects floating or clipping.")
+    if question:
+        prompt = question
+    elif "sketch" in path.name.lower():
+        prompt = ("The user drew this for you. Describe exactly what it shows: shapes, layout, arrows, "
+                  "labels and handwriting (transcribe it), and what it most likely means or asks for.")
+    else:
+        prompt = ("Describe exactly what is visible in this image or screenshot. Then list anything "
+                  "that looks wrong: an empty or black view, missing parts, things floating, clipping "
+                  "or overlapping, unreadable text.")
     payload = base64.b64encode(path.read_bytes()).decode()
     client = make_client()
     try:

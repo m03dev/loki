@@ -62,6 +62,8 @@ GENERAL = {
                           "label": "LOKI World renderer: three.js (full quality) or classic (lightest)"},
     "LOKI_PROMPTED_TOOLS": {"kind": "text", "default": "", "label": "Providers that get tools as text (comma list)"},
     "LOKI_OPENCODE_MODEL": {"kind": "text", "default": "", "label": "OpenCode model (provider/model)"},
+    "LOKI_OPTIONS": {"kind": "choice", "default": "auto", "choices": ["auto", "always", "off"],
+                     "label": "Offer 3-4 readings of an open request before starting (auto: only when it looks open)"},
     "HIGGSFIELD_KEY": {"kind": "secret", "default": "",
                "label": "Higgsfield key for images and video (KEY:SECRET from cloud.higgsfield.ai)"},
 }
