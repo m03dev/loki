@@ -247,6 +247,78 @@ a clean account; VoiceOver/NVDA; the translations' quality (machine-drafted). ZI
 Mohamed**: the GPL/AGPL ports must go before anyone else gets an installer; a public release feed; who holds the
 release signing key.
 
+## Session 29 documents & data (worktree)
+
+The owner: "a useful app that can help people and can turn into anything". This is what most people need help
+with: DOCUMENTS, FILES AND DATA. Built in a Claude worktree, committed there, not pushed; the parent merges and
+ships. **tests/test_documents.py (143 offline checks, ~20 s; every sample file is generated in the test) and tests/test_files_ui.py (15 checks, ~13 s: the Files view in headless
+Chromium against the real files_api, with a screenshot) are in SUITES.**
+
+- **Read anything** (`engine/doc_read.py`, `convert(path)` -> Markdown + sections with ANCHORS: `p3` PDF page,
+  `slide-4`, `sheet-sales`, `s2-introduction` heading, `ch-5` e-book chapter, `msg`/`att-1` e-mail, `img`; the
+  Markdown carries them as `## Page 3 {#p3}`; a citation is `report.pdf#p3`). Built-in standard-library readers
+  for DOCX (headings, lists, bold/italic, links, tables, alt text, page breaks -> page numbers), XLSX (shared/rich
+  strings, dates, cached formula values + the formulas), PPTX (presentation order, shapes top-left first, tables,
+  charts as tables, alt text, notes - MarkItDown's logic, ported), CSV/TSV, HTML (web_reader), EPUB, EML (body +
+  attachments read too), notebooks, text. PDF: docling (opt-in) > pdfplumber (text + tables) > pypdf > pypdfium2 >
+  a small built-in reader. A page with no text is a scan: rendered (pypdfium2/PyMuPDF) and OCR'd (RapidOCR >
+  the tesseract program). Pictures: OCR + `describe=true` asks the vision model (LOKI_VISION_MODEL). .doc/.xls/
+  .ppt/.rtf/.odt via LibreOffice when installed; anything else via MarkItDown when the documents add-on is on.
+  Zip-bomb and XML-entity guards. Conversions cached in harness_data/documents/cache/ (size + mtime).
+- **Write anything** (`engine/doc_write.py`): Word (python-docx, from Markdown; edit = replace keeping run
+  formatting + append), Excel (openpyxl: `=SUM()` cells are formulas, numbers/dates typed, header styled, frozen,
+  auto widths, bar/column/line/pie/scatter/area charts; edit cells/rows/charts), PowerPoint (python-pptx: title
+  slide, bullets with levels, table or picture beside them, notes; edit = replace text + add slides), PDF (pypdf:
+  info, fields, fill text + checkboxes, merge, split by ranges, **sign_ready** = a signature page with one empty
+  `/Sig` field per signer), Markdown -> PDF: Chromium (chromium add-on) > reportlab > LOKI's own small PDF writer
+  (standard library: headings, wrapped text, lists, code, tables, JPEG pictures, page numbers; WinAnsi only).
+  python-docx, openpyxl, python-pptx, pypdf added to engine/requirements.txt (small, pure Python).
+- **Data** (`engine/data_sandbox.py`): `analyze` runs pandas in a CHILD process - an audit hook refuses sockets/DNS,
+  subprocess, os.system/exec/spawn/fork, ctypes, and any write/remove outside its run folder (workspace/analysis/
+  <time>/, also its TMPDIR); time limit kills the process group; memory limit = RLIMIT_AS on Linux + an RSS
+  watchdog on every OS (Windows via K32GetProcessMemoryInfo); only a few env vars. No code -> a profile (missing
+  values, totals, top group, trend over the date column, strongest correlation) + up to 4 charts; with code -> `df`,
+  `dfs`, `show()`, `chart()`, `finding`. Without pandas a standard-library profile still answers. `sql`: DuckDB
+  (tables loaded, then external access off + configuration locked) else SQLite in memory (query_only, progress
+  handler deadline); one SELECT/WITH only.
+- **Agent tools** (loki.py, ONE block before the agent loop): `read_document` (pages=/section=, parts with "read
+  on with..."), `write_document` (.docx/.xlsx/.pptx/.pdf/.md/.html; no silent overwrite), `edit_document`,
+  `pdf_tools`, `analyze_data` (answers with `![chart](analysis/...png)` lines), `data_sql` (errors list tables +
+  columns), `documents` (collections: search/add/remove/index/collections). Category "documents"; the writers are
+  MODIFYING. `read_file` on a PDF/Office/picture/e-mail now goes through read_document (it used to crash on decode).
+  Local-model priority: read_document, write_document, analyze_data after read_web.
+- **Files view** (`app/ui/files.js` + `files.css`, a folder icon above Settings, `engine/files_api.py`, bridge routes
+  `/files/*` + a raw-body `POST /files/upload`): browse the workspace (no dot folders, no harness_data, nothing
+  outside), drag & drop onto Files (into the folder shown) or onto the chat (into uploads/, the message box names
+  it), "Add files" picker, preview: PDF page picture + text with ◀ ▶ (picture needs pypdfium2), pictures, tables
+  (CSV/XLSX with sheet chips), Markdown for the rest; Ask LOKI about this file, Open (default app, documents/
+  pictures/data only - never programs), Save as Markdown; recent files; places = Workspace + collections; "Chat
+  with this folder". Icons with tooltips (data-icon). In the chat: pipe tables render as tables (app.js
+  renderMarkdown, 6 lines), file paths in replies open in Files, picture paths and `![..](analysis/..png)` show
+  the picture inline.
+- **Chat with your documents** (knowledge.py, no second index): documents are a SOURCE of the same ProjectIndex -
+  the workspace index now converts PDFs/Office/EPUB/EML/CSV too (cached, budgeted, OCR off), chunks per page/
+  section, and cites `file#anchor`. A collection = a folder (harness_data/documents/collections.json) indexed by
+  the same class (OCR when asked); `knowledge.search_documents`; `memory.knowledge_hits` adds collection hits, so
+  memory.pack() (chat, jobs, teams) carries them as `[Contracts/lease.pdf#p3] ...`.
+- **Add-ons** (capabilities/ + addons_install.PIP): documents (pypdfium2, pdfplumber, markitdown), ocr (rapidocr,
+  onnxruntime), data-analysis (pandas, matplotlib, duckdb, pyarrow), docling (~2 GB, opt-in).
+- **Research**: MarkItDown 0.1.8 (MIT, cloned) - ported its table, numbering-merge and PPTX logic; Docling (MIT)
+  is the best PDF layout/table engine but needs PyTorch (~2 GB) - an add-on card only; RapidOCR (Apache-2.0) is the
+  pip-installable OCR that works on Windows + macOS without a system program; Tesseract used when on PATH. PyMuPDF
+  (AGPL) is used when present but not installed by LOKI (pypdfium2 does the rendering).
+- **Verified here (Linux cloud box, Python 3.13):** test_documents with python-docx/openpyxl/python-pptx/pypdf/
+  pdfplumber/pypdfium2/pandas/matplotlib/reportlab/Playwright + tesseract present: the scanned PDF and picture really
+  OCR'd with tesseract, Markdown -> PDF really through Chromium, the sandbox really refusing network/writes/
+  subprocess/os.remove and stopping a runaway loop and a 3 GB allocation; the Files view in headless Chromium
+  (open, PDF preview, CSV table, a real DataTransfer drop, Ask LOKI, chat table/inline picture/file link,
+  screenshot). One full `ship.py --check` with this work: every suite green except test_harvest (my tool-priority insert pushed web_search out of the first ten - fixed, test_harvest 149/149); the confirming full run was stopped by the new 1-minute rule; after the split: --self-test OK, test_documents 143/143 (19 s), test_files_ui 15/15 (13 s), test_ui_smoke 7/7, test_harvest 149/149.
+- **NOT verified (needs the real machines - ZIVA W35 PC, M26 Mac):** pip installs (pypi is blocked here) - RapidOCR
+  and DuckDB were NOT available, so the rapidocr path and the DuckDB SQL path are untested (written to their
+  docs); WebView2/WKWebView drag & drop (pywebview may swallow file drops on macOS - the Add files picker is the
+  fallback); the Windows memory watchdog and `os.startfile`; Docling; LibreOffice conversion of .doc/.xls; real
+  user PDFs/spreadsheets; a live model using the tools and citing pages.
+
 ## Session 28 task success (worktree)
 
 The owner: "do not focus on the game, the core systems aren't fleshed out yet" - #1: **agents finish real

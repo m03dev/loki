@@ -41,6 +41,8 @@
 <script src="/ui/i18n.js" defer></script>
 <script src="/ui/gallery.js" defer></script>
 <script src="/ui/onboarding.js" defer></script>
+<link rel="stylesheet" href="/ui/files.css">
+<script src="/ui/files.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -55,6 +57,7 @@
       <div id="workspace" class="workspace" title="Workspace folder"></div>
       <div id="version" class="workspace version"></div>
       <div class="foot-row">
+        <button type="button" id="open-files" class="quiet" data-icon="folder" data-tip-name="Files" data-tip-what="Your workspace: drop files in, preview PDFs, pictures and spreadsheets, ask LOKI about one, chat with a folder of documents.">Files</button>
         <button type="button" id="open-settings" class="quiet">Settings</button>
         <button type="button" id="check-everything" class="link" title="Prove every part of LOKI works together on this computer">Check everything</button>
       </div>
@@ -261,6 +264,33 @@
         <pre id="capabilities" class="caps"></pre></details>
       </section>
     </div>
+  </div>
+</div>
+<div id="files" class="sheet" hidden>
+  <div class="sheet-panel files-panel" role="dialog" aria-modal="true" aria-labelledby="files-title">
+    <header class="sheet-head">
+      <h2 id="files-title">Files</h2>
+      <button type="button" id="close-files" class="quiet" data-icon="close" data-tip-name="Close" data-tip-what="Close Files (Esc).">Close</button>
+    </header>
+    <div class="files-body">
+      <div class="files-side">
+        <div class="files-bar">
+          <button type="button" id="files-up" class="mini icon-mini" data-icon="up" data-tip-name="Up" data-tip-what="Go to the folder above.">Up</button>
+          <nav id="files-crumbs" class="files-crumbs" aria-label="Folder"></nav>
+          <button type="button" id="files-upload" class="mini icon-mini" data-icon="upload" data-tip-name="Add files" data-tip-what="Copy files from this computer into the folder shown.">Add files</button>
+          <button type="button" id="files-refresh" class="mini icon-mini" data-icon="refresh" data-tip-name="Refresh" data-tip-what="Show what is in the folder now.">Refresh</button>
+          <input type="file" id="files-pick" multiple hidden>
+        </div>
+        <div id="files-list" class="files-list" aria-label="Files in this folder"></div>
+        <div id="files-drop" class="files-drop">Drop files here - they are copied into the workspace</div>
+        <div class="files-sub">Recent</div>
+        <div id="files-recent" class="files-chips"></div>
+        <div class="files-sub">Places and document collections</div>
+        <div id="files-collections" class="files-chips"></div>
+      </div>
+      <section id="files-preview" class="files-preview" aria-live="polite"><p class="note">Pick a file to see it here.</p></section>
+    </div>
+    <p id="files-note" class="files-note" role="status"></p>
   </div>
 </div>
 <div id="qr-modal" class="sheet modal" hidden>

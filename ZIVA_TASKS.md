@@ -34,6 +34,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [ ] [either] **Session 29 "LOKI for anyone": build and install the installers on a clean account.** W35 (PC: the
       Windows setup .exe) and M26 (Mac: the .dmg). Answer here with what installed, how long the first-run setup took
       and anything that needed a manual step. (Claude, 2026-10-17)
+- [ ] [either] **Session 29 documents & data: install the add-ons, convert a REAL PDF, analyze a REAL spreadsheet.**
+      W35 (PC) and M26 (Mac) are the steps; the cloud box had no real documents, no WebView2/WKWebView and no
+      pip (the ocr / DuckDB paths are tested only where installed). Answer here with the test_documents line and
+      whether the scanned PDF read with rapidocr. (Claude, 2026-10-17)
 
 - [ ] [either] **Session 28 memory & knowledge: teach LOKI a fact on one machine, ask on the other.** W28 (PC) and
       M20 (Mac) are the steps; they must run at the same time on both machines. Answer here with the two eval lines
@@ -1163,6 +1167,27 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       asks to restart the engine, Approve once. Report: how many steps, minutes, whether the diff is right, and the
       test result. Do NOT press Ship it - paste the diff under Reports; Mohamed or the Mac decides. Then press
       Discard. (8) Continue with the highest open W tasks.
+- [ ] **W39 Documents & data on the PC (2026-10-17, session 29).** HANDOFF "Session 29 documents & data". After LOKI
+      updates: (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - report the test_documents and test_files_ui lines
+      (it also takes a headless-Chromium screenshot of the Files view; say if that part skipped). (2) The updater
+      should have installed python-docx, openpyxl, python-pptx, pypdf from engine/requirements.txt: run
+      `harness_data\.venv\Scripts\python.exe -c "import docx, openpyxl, pptx, pypdf; print('ok')"`; if it fails,
+      `harness_data\.venv\Scripts\python.exe -m pip install -r engine\requirements.txt` and paste the error.
+      (3) Settings > Add-ons: press Install on **documents**, **ocr** and **data-analysis** (not docling unless the
+      owner wants 2 GB); report each result line. (4) The Files view (folder icon at the bottom left): drag a REAL
+      PDF from Explorer onto the chat - it must be copied into uploads\ and the message box must name it; open
+      Files, pick the PDF: page pictures with ◀ ▶, text under them. Ask in the chat "summarize `uploads\<name>.pdf`
+      with page citations" and paste the first lines of the answer (it must cite name.pdf#pN). (5) A SCANNED PDF
+      (a phone scan or any image-only PDF): read_document must say "+ocr:rapidocr" in its header line (ask "read
+      `uploads\scan.pdf`"). (6) A REAL SPREADSHEET (any .xlsx with a date column and numbers): "analyze
+      `uploads\<file>.xlsx`" -> a finding, a table and charts that show in the chat (pictures under the answer);
+      then "with SQL: which month had the highest total?" (data_sql, DuckDB once data-analysis is installed). Report
+      the seconds the analysis took and any error. (7) "Make a Word report and a PowerPoint from that analysis" ->
+      both open in Word/PowerPoint from the Files view's Open button; and "make it a PDF with signature lines for
+      Mohamed" (pdf_tools sign_ready) -> open it in Acrobat/Edge and check the signature field is clickable.
+      (8) Files view: "Chat with this folder" on a folder with a few PDFs -> a collection; ask a question only one
+      of them answers; the reply must cite <collection>/<file>#pN. Screenshots of the Files view and of the chat
+      with the chart, please (WebView2 is the real target; only headless Chromium was tested).
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1780,6 +1805,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       404s, try `LOKI_UV_VERSION=<newest>` and report. (4) The tour, Arabic RTL, high contrast, 130% text, F1 help,
       keyboard Tab order in WKWebView - screenshots. (5) VoiceOver (Cmd+F5) on the tour: it reads the step title,
       the language radio buttons and the buttons by name - report anything it reads badly.
+- [ ] **M30 Documents & data on the Mac (2026-10-17, session 29).** Same as W35 (1)-(8) with
+      `harness_data/.venv/bin/python`. Mac specifics: (a) drag a PDF from Finder onto the chat and onto the Files
+      view in the REAL window (WKWebView) - does the drop reach the page at all? pywebview on macOS may swallow
+      file drops; if nothing happens, say so (the "Add files" upload icon in Files is the fallback - test it too).
+      (b) Install the ocr add-on: does `rapidocr`/`onnxruntime` install on Apple Silicon with Python 3.13? Paste
+      pip's last lines if not; `brew install tesseract` is the other OCR LOKI uses. (c) Open (the external-app icon)
+      must open the PDF in Preview and the .docx in Pages/Word. (d) A Markdown -> PDF: without the chromium add-on
+      LOKI uses reportlab or its own writer - say which one the reply names and how the PDF looks.
+      (e) `.doc`/`.xls` files need LibreOffice (`brew install --cask libreoffice`) - only if the owner wants it.
 
 ## Needs Mohamed
 

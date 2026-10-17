@@ -1,0 +1,15 @@
+{
+  "name": "data-analysis",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Analyze spreadsheets: pandas runs in a sandbox (no network, time and memory limits) and draws charts with matplotlib; data_sql uses DuckDB. Without it LOKI still profiles data and answers SQL with SQLite, without charts.",
+  "license": "pandas: BSD-3-Clause; matplotlib: PSF-based; DuckDB: MIT; pyarrow: Apache-2.0",
+  "homepage": "https://pandas.pydata.org",
+  "permissions": ["fs:workspace"],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": ["pandas", "matplotlib", "duckdb"],
+  "install": "pip install pandas matplotlib duckdb pyarrow (the Install button does it, about 150 MB)",
+  "health_endpoint": "",
+  "entrypoint": "data_sandbox.analyze"
+}

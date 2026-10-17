@@ -5869,6 +5869,423 @@ LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("peer_files") + 1:LOCAL_TOOL_PRIOR
 # (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)
 
 
+# --- Session 29: documents, files and data (worktree) -----------------------------------------------
+# Read anything (doc_read.py), write Word/Excel/PowerPoint/PDF (doc_write.py), analyze data in a sandbox and
+# SQL over spreadsheets (data_sandbox.py), chat with document collections (knowledge.py collections, the same
+# index memory.pack() already uses). Registration only; read_file hands documents to read_document.
+import data_sandbox  # noqa: E402
+import doc_read  # noqa: E402
+import doc_write  # noqa: E402
+import files_api  # noqa: E402
+
+DOC_CACHE = DATA_DIR / "documents" / "cache"
+DOC_READ_CHARS = int(os.getenv("LOKI_DOC_READ_CHARS", "12000") or 12000)
+
+
+def _doc_path(name: str) -> Path:
+    """A workspace path, or a file inside one of the owner's document collections ("<collection>/<file>" or
+    an absolute path inside its folder)."""
+    import knowledge  # pylint: disable=import-outside-toplevel
+    raw = str(name or "").strip().strip('"').strip("'")
+    try:
+        path = resolve_in_workspace(raw)
+        if path.exists() or not raw:
+            return path
+    except ValueError:
+        path = None
+    for coll in knowledge.list_collections(DATA_DIR):
+        folder = Path(coll["folder"]).resolve()
+        cand = Path(raw).expanduser()
+        if not cand.is_absolute() and raw.lower().startswith(coll["name"].lower() + "/"):
+            cand = folder / raw[len(coll["name"]) + 1:]
+        cand = cand.resolve() if cand.is_absolute() else cand
+        if cand.is_absolute() and (cand == folder or folder in cand.parents) and cand.exists():
+            return cand
+    if path is None:
+        raise ValueError("path escapes workspace: %s" % name)
+    return path
+
+
+def _ws_rel(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(WORKSPACE.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _vision_sync(png: bytes, prompt: str) -> str:
+    return asyncio.run(_vision_ask(png, prompt))   # read_document runs in a worker thread: its own loop
+
+
+async def read_document(path: str, pages: str = "", section: str = "", ocr: str = "auto", describe: bool = False,
+                        password: str = "") -> str:
+    """Any document as Markdown with page/section anchors; long ones in parts."""
+    try:
+        p = _doc_path(path)
+    except ValueError as exc:
+        return "error: %s" % exc
+    if not p.is_file():
+        return "error: no %s (list_tree shows what is there; dropped files land in uploads/)" % path
+    opts = {"ocr": ocr or "auto", "password": password or ""}
+    if describe:
+        doc = await asyncio.to_thread(doc_read.convert, p, describe=True, vision=_vision_sync, **opts)
+    else:
+        doc = await asyncio.to_thread(doc_read.convert_cached, p, DOC_CACHE, **opts)
+    if not doc.get("ok"):
+        return "error: %s" % doc.get("error")
+    files_api.touch(DATA_DIR, _ws_rel(p), "", "read by LOKI")
+    every = doc.get("sections") or []
+    chosen = doc_read.select(doc, pages, section) if (pages or section) else every
+    if (pages or section) and not chosen:
+        return "error: no such page/section. It has: %s" % ", ".join(s["anchor"] for s in every[:60])
+    shown, size = [], 0
+    for s in chosen:
+        piece = len(s.get("text") or "") + len(s.get("title") or "") + 20
+        if shown and size + piece > DOC_READ_CHARS:
+            break
+        shown.append(s)
+        size += piece
+    body = doc_read.build_markdown("", shown)
+    if len(body) > DOC_READ_CHARS:
+        body = body[:DOC_READ_CHARS] + "\n...(cut)"
+    head = "%s - %s, %d %s, read with %s. Cite it as %s#<anchor> (anchors: %s%s)." % (
+        _ws_rel(p), doc.get("format"), doc.get("pages") or len(every),
+        "pages" if doc.get("format") == "pdf" else "sections", doc.get("backend"), p.name,
+        ", ".join(s["anchor"] for s in every[:12]), " ..." if len(every) > 12 else "")
+    if doc.get("warnings"):
+        head += "\nNote: " + "; ".join(doc["warnings"])
+    if len(shown) < len(chosen):
+        nxt = chosen[len(shown)]
+        head += ("\nShowing %d of %d parts - read on with pages='%s-' or section='%s'." % (
+            len(shown), len(chosen), nxt.get("page") or (every.index(nxt) + 1), nxt["anchor"]))
+    return head + "\n\n" + body
+
+
+_read_file_text = LOCAL_TOOLS["read_file"]
+
+
+async def read_file_any(filename: str, start_line: int = 0, end_line: int = 0) -> str:
+    """read_file, but a PDF/Word/Excel/PowerPoint/picture/e-mail goes through read_document (a text read of a
+    binary file used to fail with a decode error)."""
+    if Path(str(filename)).suffix.lower() in (doc_read.DOCUMENT_SUFFIXES - doc_read.HTML):
+        return await read_document(filename)
+    return _read_file_text(filename, start_line, end_line)
+
+
+def _out_path(path: str, overwrite: bool) -> Path:
+    p = resolve_in_workspace(path)
+    if p.exists() and not overwrite:
+        raise ValueError("%s already exists - edit_document changes it, or pass overwrite=true" % path)
+    return p
+
+
+def _made(p: Path, what: str) -> str:
+    rel = _ws_rel(p)
+    files_api.touch(DATA_DIR, rel, "", "made by LOKI")
+    return "made %s (%s). The owner opens it from the chat or the Files view; name it as `%s` in your answer." % (rel, what, rel)
+
+
+def _slides_from_markdown(markdown: str) -> list:
+    slides, cur = [], None
+    for b in doc_write.blocks(markdown):
+        if b["type"] == "heading" and b["level"] <= 2:
+            cur = {"title": b["text"], "bullets": []}
+            slides.append(cur)
+            continue
+        if cur is None:
+            cur = {"title": "", "bullets": []}
+            slides.append(cur)
+        if b["type"] in ("bullet", "number"):
+            cur["bullets"].append("  " * b["level"] + "- " + b["text"] if b["level"] else b["text"])
+        elif b["type"] in ("para", "quote", "heading"):
+            cur["bullets"].append(b["text"])
+        elif b["type"] == "table":
+            cur["table"] = b["rows"]
+        elif b["type"] == "image":
+            cur["image"] = b["path"]
+    return slides
+
+
+async def write_document(path: str, content: str = "", title: str = "", sheets=None, charts=None, slides=None,
+                         overwrite: bool = False, paper: str = "a4") -> str:
+    """Make a .docx / .xlsx / .pptx / .pdf / .md / .html in the workspace."""
+    try:
+        p = _out_path(path, bool(overwrite))
+        suffix = p.suffix.lower()
+        if suffix == ".docx":
+            out = await asyncio.to_thread(doc_write.write_docx, p, content, title, WORKSPACE)
+            return _made(p, "%d blocks" % out["blocks"])
+        if suffix == ".xlsx":
+            if not sheets and content:   # a Markdown table becomes the sheet
+                tables = [b["rows"] for b in doc_write.blocks(content) if b["type"] == "table"]
+                sheets = [{"name": title[:31] or "Sheet%d" % (i + 1), "rows": t} for i, t in enumerate(tables)]
+            out = await asyncio.to_thread(doc_write.write_xlsx, p, sheets or [], charts or [])
+            return _made(p, "sheets %s, %d formulas, %d charts" % (", ".join(out["sheets"]), out["formulas"], len(out["charts"])))
+        if suffix == ".pptx":
+            out = await asyncio.to_thread(doc_write.write_pptx, p, slides or _slides_from_markdown(content), title, WORKSPACE)
+            return _made(p, "%d slides" % out["slides"])
+        if suffix == ".pdf":
+            out = await asyncio.to_thread(doc_write.markdown_to_pdf, content, p, title, WORKSPACE, "", paper)
+            return _made(p, "PDF via %s" % out["engine"])
+        if suffix in (".md", ".markdown", ".txt"):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(("# %s\n\n" % title if title and not content.lstrip().startswith("#") else "") + content, encoding="utf-8")
+            return _made(p, "%d characters" % len(content))
+        if suffix in (".html", ".htm"):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(doc_write.markdown_to_html(content, title, WORKSPACE, paper), encoding="utf-8")
+            return _made(p, "HTML page")
+        return "error: write_document makes .docx, .xlsx, .pptx, .pdf, .md or .html (got %s)" % (suffix or "no extension")
+    except (ValueError, doc_write.WriteError, OSError, KeyError) as exc:
+        return "error: %s" % exc
+
+
+async def edit_document(path: str, replace=None, append: str = "", cells=None, append_rows=None, charts=None,
+                        slides=None, save_as: str = "") -> str:
+    """Change an existing .docx (replace text, append Markdown), .xlsx (cells, rows, charts), .pptx
+    (replace text, add slides) or text file."""
+    try:
+        p = resolve_in_workspace(path)
+        if not p.is_file():
+            return "error: no %s" % path
+        out = resolve_in_workspace(save_as) if save_as else None
+        suffix = p.suffix.lower()
+        replace = replace if isinstance(replace, dict) else {}
+        if suffix == ".docx":
+            got = await asyncio.to_thread(doc_write.edit_docx, p, replace, append, out, WORKSPACE)
+        elif suffix in (".xlsx", ".xlsm"):
+            got = await asyncio.to_thread(doc_write.edit_xlsx, p, cells or {}, append_rows or {}, charts or [], out)
+        elif suffix == ".pptx":
+            got = await asyncio.to_thread(doc_write.edit_pptx, p, replace, slides or [], out, WORKSPACE)
+        elif suffix in doc_read.TEXT:
+            text = p.read_text(encoding="utf-8")
+            counts = {k: text.count(k) for k in replace}
+            for k, v in replace.items():
+                text = text.replace(k, str(v))
+            text += ("\n\n" + append) if append else ""
+            (out or p).write_text(text, encoding="utf-8")
+            got = {"ok": True, "path": str(out or p), "replaced": counts, "not_found": [k for k, v in counts.items() if not v]}
+        else:
+            return "error: edit_document changes .docx, .xlsx, .pptx and text files (a PDF: pdf_tools)"
+    except (ValueError, doc_write.WriteError, OSError, KeyError) as exc:
+        return "error: %s" % exc
+    done = _made(Path(got["path"]), "edited")
+    if got.get("not_found"):
+        done += " Not found (unchanged): %s" % ", ".join(repr(k) for k in got["not_found"])
+    return done
+
+
+async def pdf_tools(action: str, path: str = "", paths=None, out: str = "", ranges: str = "", values=None,
+                    signers=None, flatten: bool = False, markdown: str = "", title: str = "") -> str:
+    """info | fields | fill | merge | split | sign_ready | from_markdown"""
+    action = str(action or "").lower().strip()
+    try:
+        src = resolve_in_workspace(path) if path else None
+        if action not in ("merge", "from_markdown") and (src is None or not src.is_file()):
+            return "error: give path= an existing PDF in the workspace"
+        stem = _ws_rel(src.with_suffix("")) if src else "document"   # outputs land next to the source
+        if action == "info":
+            return json.dumps(await asyncio.to_thread(doc_write.pdf_info, src))
+        if action == "fields":
+            got = await asyncio.to_thread(doc_write.pdf_fields, src)
+            return json.dumps(got["fields"])[:MAX_OUTPUT] if got["fields"] else "this PDF has no form fields"
+        if action == "fill":
+            target = _out_path(out or "%s_filled.pdf" % stem, True)
+            got = await asyncio.to_thread(doc_write.pdf_fill, src, target, values or {}, bool(flatten))
+            return _made(target, "filled %s%s" % (", ".join(got["filled"]) or "nothing",
+                                                  "; unknown fields: %s" % ", ".join(got["unknown"]) if got["unknown"] else ""))
+        if action == "merge":
+            items = paths if isinstance(paths, list) else [x.strip() for x in str(paths or "").split(",") if x.strip()]
+            inputs = [resolve_in_workspace(x) for x in items]
+            missing = [x for x, q in zip(items, inputs) if not q.is_file()]
+            if missing:
+                return "error: no such file: %s" % ", ".join(missing)
+            target = _out_path(out or "merged.pdf", True)
+            got = await asyncio.to_thread(doc_write.pdf_merge, inputs, target)
+            return _made(target, "%d PDFs, %d pages" % (got["inputs"], got["pages"]))
+        if action == "split":
+            folder = resolve_in_workspace(out or "%s_split" % stem)
+            got = await asyncio.to_thread(doc_write.pdf_split, src, folder, ranges)
+            return "made %d PDFs: %s" % (len(got["files"]), ", ".join(_ws_rel(Path(f)) for f in got["files"][:30]))
+        if action == "sign_ready":
+            target = _out_path(out or "%s_to_sign.pdf" % stem, True)
+            names = signers if isinstance(signers, list) else [x.strip() for x in str(signers or "").split(",") if x.strip()]
+            got = await asyncio.to_thread(doc_write.pdf_sign_ready, src, target, names)
+            return _made(target, "a signature page with signature fields for %s" % ", ".join(got["signature_fields"]))
+        if action == "from_markdown":
+            target = _out_path(out or "document.pdf", True)
+            got = await asyncio.to_thread(doc_write.markdown_to_pdf, markdown, target, title, WORKSPACE)
+            return _made(target, "PDF via %s" % got["engine"])
+    except (ValueError, doc_write.WriteError, OSError) as exc:
+        return "error: %s" % exc
+    return "error: action must be info, fields, fill, merge, split, sign_ready or from_markdown"
+
+
+def _data_files(path) -> list:
+    items = path if isinstance(path, list) else [x.strip() for x in str(path or "").split(",") if x.strip()]
+    return [_doc_path(x) for x in items]
+
+
+async def analyze_data(path, question: str = "", code: str = "", sheet: str = "") -> str:
+    """Profile / analyze CSV, Excel or JSON in the data sandbox; charts land in analysis/<time>/."""
+    try:
+        files = _data_files(path)
+    except ValueError as exc:
+        return "error: %s" % exc
+    if not files:
+        return "error: give path= the data file(s)"
+    got = await asyncio.to_thread(data_sandbox.analyze, files, question, code, WORKSPACE, sheet)
+    if not got.get("ok"):
+        return "error: %s%s" % (got.get("error"), ("\n" + got["trace"]) if got.get("trace") else "")
+    for c in got.get("charts") or []:
+        files_api.touch(DATA_DIR, c, "", "made by LOKI")
+    parts = []
+    if got.get("finding"):
+        parts.append("Finding:\n" + got["finding"])
+    if got.get("stdout") and not got.get("tables"):
+        parts.append("Printed:\n" + got["stdout"][:3000])
+    for t in (got.get("tables") or [])[:3]:
+        parts.append(t[:2500])
+    if got.get("charts"):
+        parts.append("Charts saved (show them in your answer as ![chart](path) so the owner sees them):\n" +
+                     "\n".join("![%s](%s)" % (Path(c).stem.replace("_", " "), c) for c in got["charts"]))
+    if got.get("note"):
+        parts.append("Note: " + got["note"])
+    return "\n\n".join(parts)[:MAX_OUTPUT] or "the analysis ran and printed nothing - print() or show() the result"
+
+
+async def data_sql(query: str, files) -> str:
+    """One read-only SQL query over CSV/XLSX/JSON files (each file = a table named after it)."""
+    try:
+        paths = _data_files(files)
+    except ValueError as exc:
+        return "error: %s" % exc
+    got = await asyncio.to_thread(data_sandbox.sql, query, paths)
+    if got.get("ok"):
+        return "%s\n\n(%d rows, %s)" % (got["markdown"][:MAX_OUTPUT - 200], got["total"], got["engine"])
+    schema_lines = []
+    used: set = set()
+    for p in paths:
+        try:
+            cols, _rows = data_sandbox.load_rows(p)
+            schema_lines.append("%s(%s)" % (data_sandbox.table_name(p, used), ", ".join(cols)))
+        except Exception:  # noqa: BLE001
+            continue
+    return "error: %s%s" % (got.get("error"), ("\nTables: " + "; ".join(schema_lines)) if schema_lines else "")
+
+
+async def documents(action: str = "search", query: str = "", folder: str = "", name: str = "", ocr: bool = False,
+                    top: int = 6) -> str:
+    """search | collections | add | remove | index - the owner's document collections."""
+    import knowledge  # pylint: disable=import-outside-toplevel
+    action = str(action or "search").lower()
+    if action == "collections":
+        items = knowledge.list_collections(DATA_DIR)
+        if not items:
+            return "no document collections yet - add one with action='add', folder='<folder>'"
+        return "\n".join("- %s: %s (%d files indexed)" % (c["name"], c["folder"], knowledge.collection_index(DATA_DIR, c).status()["files"])
+                         for c in items)
+    if action == "add":
+        target = Path(folder).expanduser()
+        try:
+            target = target if target.is_absolute() else resolve_in_workspace(folder)
+        except ValueError as exc:
+            return "error: %s" % exc
+        got = knowledge.add_collection(DATA_DIR, target, name, bool(ocr))
+        if not got.get("ok"):
+            return "error: %s" % got.get("error")
+        idx = await asyncio.to_thread(knowledge.collection_index(DATA_DIR, got["collection"]).refresh, 20.0)
+        return "added the collection %s (%d files, %d passages%s)" % (
+            got["collection"]["name"], idx.get("files", 0), idx.get("chunks", 0), "" if idx.get("complete") else "; still indexing")
+    if action == "remove":
+        got = knowledge.remove_collection(DATA_DIR, name)
+        return "removed %s" % name if got.get("ok") else "error: %s" % got.get("error")
+    if action == "index":
+        out = []
+        for c in knowledge.list_collections(DATA_DIR):
+            if name and c["name"].lower() != name.lower():
+                continue
+            st = await asyncio.to_thread(knowledge.collection_index(DATA_DIR, c).refresh, 60.0)
+            out.append("%s: %d files, %d passages%s" % (c["name"], st.get("files", 0), st.get("chunks", 0),
+                                                         "" if st.get("complete") else " (more next time)"))
+        return "\n".join(out) or "no such collection"
+    hits = await asyncio.to_thread(knowledge.search_documents, DATA_DIR, query, int(top or 6), name, True, True)
+    if not knowledge.list_collections(DATA_DIR):   # no collections yet: the workspace's own documents
+        index = knowledge.project_index(WORKSPACE, DATA_DIR)
+        await asyncio.to_thread(index.refresh, 8.0)
+        hits = await asyncio.to_thread(index.search, query, int(top or 6))
+    if not hits:
+        return "nothing in the documents matches %r - try other words, or read_document a file directly" % query
+    return ("Passages (answer from them and cite each fact as [cite]):\n\n" +
+            "\n\n".join("[%s]\n%s" % (h["cite"], " ".join(h["text"].split())[:900]) for h in hits))[:MAX_OUTPUT]
+
+
+LOCAL_TOOLS.update({"read_document": read_document, "read_file": read_file_any, "write_document": write_document,
+                    "edit_document": edit_document, "pdf_tools": pdf_tools, "analyze_data": analyze_data,
+                    "data_sql": data_sql, "documents": documents})
+_S29_SCHEMAS = [
+    schema("read_document", "Read any document as Markdown with page/section anchors: PDF (scans via OCR), Word, Excel, "
+           "PowerPoint, CSV, e-mail (.eml), EPUB, HTML, pictures (text by OCR; describe=true asks a vision model what it "
+           "shows). Long files come in parts: pages='3-5' or section='<anchor>'. Cite as file#anchor, e.g. report.pdf#p3. "
+           "Example: {\"path\": \"uploads/contract.pdf\", \"pages\": \"1-2\"}",
+           {"path": {"type": "string"}, "pages": {"type": "string"}, "section": {"type": "string"},
+            "ocr": {"type": "string", "enum": ["auto", "off"]}, "describe": {"type": "boolean"},
+            "password": {"type": "string"}}, ["path"]),
+    schema("write_document", "Make a document from Markdown: .docx (Word), .pdf (a clean PDF), .pptx (each ## heading = a "
+           "slide, or slides=[{title, bullets, image, notes, table}]), .xlsx (sheets=[{name, rows: [[...]]}] - a cell "
+           "'=SUM(B2:B9)' is a real formula; charts=[{sheet, type: bar|line|pie|scatter, title, data: 'B1:C9', "
+           "categories: 'A2:A9'}]), .md or .html. Example: {\"path\": \"reports/q3.docx\", \"title\": \"Q3\", "
+           "\"content\": \"# Q3\\n\\n| Region | Sales |\\n|---|---|\\n| North | 10 |\"}",
+           {"path": {"type": "string"}, "content": {"type": "string"}, "title": {"type": "string"},
+            "sheets": {"type": "array", "items": {"type": "object"}}, "charts": {"type": "array", "items": {"type": "object"}},
+            "slides": {"type": "array", "items": {"type": "object"}}, "overwrite": {"type": "boolean"},
+            "paper": {"type": "string", "enum": ["a4", "letter"]}}, ["path"]),
+    schema("edit_document", "Change an existing .docx (replace={old: new}, append=Markdown), .xlsx (cells={'Sheet1!B2': 5, "
+           "'C3': '=B2*2'}, append_rows={'Sheet1': [[...]]}, charts=[...]) or .pptx (replace, slides to add). save_as "
+           "keeps the original. Example: {\"path\": \"letter.docx\", \"replace\": {\"[NAME]\": \"Mia\"}}",
+           {"path": {"type": "string"}, "replace": {"type": "object"}, "append": {"type": "string"},
+            "cells": {"type": "object"}, "append_rows": {"type": "object"}, "charts": {"type": "array", "items": {"type": "object"}},
+            "slides": {"type": "array", "items": {"type": "object"}}, "save_as": {"type": "string"}}, ["path"]),
+    schema("pdf_tools", "PDF work: info, fields (list the form's fields), fill (values={field: value}, flatten), merge "
+           "(paths=[a.pdf, b.pdf], out), split (ranges='1-3,5', or one PDF per page), sign_ready (adds a signature page "
+           "with signature fields for signers=['Ann Lee', 'Bo Chan']), from_markdown (markdown -> out.pdf). "
+           "Example: {\"action\": \"fill\", \"path\": \"form.pdf\", \"values\": {\"Name\": \"Mia\"}}",
+           {"action": {"type": "string", "enum": ["info", "fields", "fill", "merge", "split", "sign_ready", "from_markdown"]},
+            "path": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"},
+            "ranges": {"type": "string"}, "values": {"type": "object"}, "signers": {"type": "array", "items": {"type": "string"}},
+            "flatten": {"type": "boolean"}, "markdown": {"type": "string"}, "title": {"type": "string"}}, ["action"]),
+    schema("analyze_data", "Analyze a spreadsheet/CSV/JSON with pandas in a sandbox (no network, time and memory limits). "
+           "Without code: a profile (sizes, missing values, totals, top groups, trend, strongest correlation) and charts. "
+           "With code: `df` (first file) and `dfs` are loaded; show(frame) prints a table, chart('name') saves the current "
+           "matplotlib figure, set finding='...' for the summary. Charts are saved in analysis/<time>/. "
+           "Example: {\"path\": \"sales.xlsx\", \"code\": \"show(df.groupby('Region').Sales.sum())\"}",
+           {"path": {"type": "string"}, "question": {"type": "string"}, "code": {"type": "string"},
+            "sheet": {"type": "string"}}, ["path"]),
+    schema("data_sql", "Answer a question over CSV/Excel/JSON files with ONE read-only SQL query; each file is a table named "
+           "after it (sales.csv -> sales). DuckDB when installed, else SQLite. Example: {\"files\": [\"sales.csv\"], "
+           "\"query\": \"SELECT region, SUM(units) AS u FROM sales GROUP BY region ORDER BY u DESC\"}",
+           {"query": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}}, ["query", "files"]),
+    schema("documents", "The owner's document collections (folders indexed for questions): search (query -> passages "
+           "with citations like Contracts/lease.pdf#p3 - answer from them and cite), collections (list), add "
+           "(folder, name, ocr), remove (name), index (re-read changed files). Example: {\"action\": \"search\", "
+           "\"query\": \"notice period for ending the lease\"}",
+           {"action": {"type": "string", "enum": ["search", "collections", "add", "remove", "index"]},
+            "query": {"type": "string"}, "folder": {"type": "string"}, "name": {"type": "string"},
+            "ocr": {"type": "boolean"}, "top": {"type": "integer"}}, ["action"]),
+]
+TOOL_SCHEMAS.extend(_S29_SCHEMAS)
+MODEL_TOOL_SCHEMAS.extend(_S29_SCHEMAS)
+MODEL_TOOL_NAMES.update(s["function"]["name"] for s in _S29_SCHEMAS)
+TOOL_CATEGORIES["documents"] = ["read_document", "write_document", "edit_document", "pdf_tools", "analyze_data",
+                                "data_sql", "documents"]
+CATEGORY_LABELS["documents"] = "Documents & data (read any file, write Word/Excel/PowerPoint/PDF, analyze spreadsheets)"
+CATEGORIES.setdefault("documents", True)
+MODIFYING |= {"write_document", "edit_document", "pdf_tools", "analyze_data"}
+if "read_web" in LOCAL_TOOL_PRIORITY:   # after the web tools, which stay in the first ten
+    _at = LOCAL_TOOL_PRIORITY.index("read_web") + 1
+    LOCAL_TOOL_PRIORITY[_at:_at] = ["read_document", "write_document", "analyze_data"]
+
+
 # ---------------------------------------------------------------------------
 # The agent loop: one turn = keep calling tools until the model stops asking.
 # ---------------------------------------------------------------------------

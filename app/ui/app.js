@@ -76,7 +76,13 @@ function renderMarkdown(source) {
       const lines = trimmed.split("\n");
       const inline = (t) => t.replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
       const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
-      if (heading && lines.length === 1) {
+      if (lines.length >= 2 && lines.every((l) => /^\s*\|.*\|\s*$/.test(l)) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[1])) {
+        // a pipe table (session 29: tables render in the chat); cells are already escaped
+        const cells = (l) => l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => inline(c.trim().replace(/\\\|/g, "|")));
+        html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' + cells(lines[0]).map((c) => "<th>" + c + "</th>").join("") +
+          "</tr></thead><tbody>" + lines.slice(2).map((l) => "<tr>" + cells(l).map((c) => "<td>" + c + "</td>").join("") + "</tr>").join("") +
+          "</tbody></table></div>";
+      } else if (heading && lines.length === 1) {
         const level = heading[1].length;
         html += `<h${level}>${inline(heading[2])}</h${level}>`;
       } else if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {

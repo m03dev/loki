@@ -1,0 +1,45 @@
+/* Files view (session 29, app/ui/files.js) */
+.sheet-panel.files-panel { width: min(1180px, 100%); height: min(820px, 92vh); max-height: none; }
+.files-body { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: 0; flex: 1; border-top: 1px solid var(--line); }
+.files-side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); padding: 10px; gap: 8px; }
+.files-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.files-crumbs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; font-size: 12.5px; flex: 1; min-width: 0; }
+.crumb { background: transparent; padding: 2px 6px; color: var(--muted); }
+.crumb:last-child { color: var(--text); }
+.crumb-sep { color: var(--muted); }
+.files-list { overflow: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
+.file-row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; text-align: left; background: transparent; padding: 5px 8px; border-radius: 8px; }
+.file-row .icon { color: var(--accent); }
+.file-row.on { background: var(--bubble); }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta { color: var(--muted); font-size: 11.5px; }
+.files-drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px; text-align: center; color: var(--muted); font-size: 12.5px; }
+.files-drop.over { border-color: var(--accent); color: var(--text); background: rgba(143, 179, 217, .08); }
+.files-sub { margin: 6px 0 2px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.files-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.files-chips .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; }
+.files-chips .chip .icon { width: 14px; height: 14px; }
+.files-chips .chip.on { background: var(--bubble); color: var(--text); }
+.files-preview { overflow: auto; padding: 14px 18px; min-height: 0; }
+.fp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fp-name { font-size: 15px; }
+.fp-tools { margin-left: auto; display: flex; gap: 4px; }
+.fp-pages { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fp-img { max-width: 100%; border-radius: 8px; background: #fff; display: block; }
+.fp-img.page { box-shadow: 0 2px 14px rgba(0, 0, 0, .35); margin-bottom: 12px; }
+.fp-text { white-space: pre-wrap; font: 12.5px/1.5 var(--mono); color: var(--muted); background: var(--surface); padding: 10px 12px; border-radius: 8px; }
+.fp-table { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 8px; }
+.fp-table table, .text table.md-table { border-collapse: collapse; font-size: 12.5px; }
+.fp-table th, .fp-table td, .text table.md-table th, .text table.md-table td { border-bottom: 1px solid var(--line); padding: 4px 10px; text-align: left; white-space: nowrap; }
+.fp-table th, .text table.md-table th { position: sticky; top: 0; background: var(--surface); font-weight: 600; }
+.text .md-table-wrap { overflow-x: auto; margin: 8px 0; }
+.text table.md-table td { white-space: normal; }
+.note.warn { color: var(--warn); }
+.files-note { font-size: 12px; color: var(--muted); min-height: 16px; padding: 0 18px 10px; }
+.files-note.error { color: var(--err); }
+.icon-mini { padding: 4px 6px; }
+code.file-link { cursor: pointer; text-decoration: underline dotted; }
+code.file-link:hover { color: var(--accent); }
+img.chat-img { display: block; max-width: min(560px, 100%); border-radius: 10px; margin: 8px 0; background: #fff; cursor: zoom-in; }
+body.file-drag .main { outline: 2px dashed var(--accent); outline-offset: -8px; }
+@media (max-width: 760px) { .files-body { grid-template-columns: 1fr; } .files-side { max-height: 40vh; border-right: 0; } }

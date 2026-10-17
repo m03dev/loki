@@ -933,6 +933,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import self_api  # pylint: disable=import-outside-toplevel
             self._send_json(*self_api.route(self.server.state, "GET", self.path, {}))
             return
+        if route.startswith("/files/"):   # session 29: the Files view (engine/files_api.py)
+            import files_api  # pylint: disable=import-outside-toplevel
+            try:
+                self._send_json(*files_api.handle(self.server.state, "GET", self.path, {}))
+            except Exception as exc:  # noqa: BLE001 - a broken preview must not break the window
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
         if route.startswith(("/tools/health", "/connectors", "/computer")):   # Settings > Tools (engine/tools_api.py)
             import tools_api  # pylint: disable=import-outside-toplevel
             try:
@@ -1237,6 +1244,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if body is not None:
                 self._send_json(*assist_api.route(self.server.state, "POST", self.path, body))
             return
+        if route == "/files/upload":   # session 29: a dropped file's raw bytes (not JSON; engine/files_api.py)
+            import files_api  # pylint: disable=import-outside-toplevel
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = -1
+            self._send_json(*files_api.save_upload(self.server.state, urlparse(self.path).query, self.rfile, length))
+            return
         data = self._read_json()
         if data is None:
             return
@@ -1260,6 +1275,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         import self_api  # pylint: disable=import-outside-toplevel - session 28: LOKI improving itself
         if self_api.handles("POST", route):
             self._send_json(*self_api.route(state, "POST", route, data, job_action))
+            return
+        if route.startswith("/files/"):   # session 29: the Files view (engine/files_api.py)
+            import files_api  # pylint: disable=import-outside-toplevel
+            try:
+                self._send_json(*files_api.handle(state, "POST", self.path, data))
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
         if route.startswith(("/tools/health", "/connectors", "/computer")):   # Settings > Tools (engine/tools_api.py)
             import tools_api  # pylint: disable=import-outside-toplevel

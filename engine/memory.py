@@ -327,9 +327,18 @@ def knowledge_hits(query: str, workspace: Path | None, root: Path | None = None,
         import knowledge  # pylint: disable=import-outside-toplevel
         index = knowledge.project_index(Path(workspace), data_dir(root))
         index.ensure_fresh(background=not wait)
-        return index.search(query, top=top)
+        hits = index.search(query, top=top)
     except Exception:  # noqa: BLE001
-        return []
+        hits = []
+    try:   # session 29: the owner's document collections are a source of the same retrieval
+        import knowledge  # pylint: disable=import-outside-toplevel
+        if knowledge.list_collections(data_dir(root)):
+            hits += knowledge.search_documents(data_dir(root), query, top=top, wait=wait)
+            hits.sort(key=lambda h: -float(h.get("score", 0)))
+            hits = hits[:max(1, int(top))]
+    except Exception:  # noqa: BLE001
+        pass
+    return hits
 
 
 def retrieve(query: str, root: Path | None = None, repo: Path | None = None, workspace: Path | None = None,
@@ -393,7 +402,8 @@ def pack(query: str, root: Path | None = None, repo: Path | None = None, workspa
                 sources.append(hit["cite"])
                 cost += memory_search.tokens_of(line)
             if lines:
-                parts.append("# From the project's own files (cite them as path:line when you use them)\n"
+                parts.append("# From the project's own files and the owner's documents (cite them as given - path:line "
+                             "or file#page - when you use them)\n"
                              + "\n".join(lines))
     text = "\n\n".join(p for p in parts if p).strip()
     return {"text": text, "used": used, "skills": skills, "lessons": lesson_count, "sources": sources,

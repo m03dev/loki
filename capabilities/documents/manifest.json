@@ -1,0 +1,15 @@
+{
+  "name": "documents",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Better document reading: PDF page pictures in the Files view and for OCR (pypdfium2), PDF tables (pdfplumber), and more formats through Microsoft MarkItDown (.xls, Outlook .msg and others). LOKI already reads PDF, Word, Excel, PowerPoint, CSV, e-mail, EPUB and HTML without it.",
+  "license": "pypdfium2: Apache-2.0 / BSD-3-Clause; pdfplumber: MIT; MarkItDown: MIT",
+  "homepage": "https://github.com/microsoft/markitdown",
+  "permissions": ["fs:workspace"],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": ["pypdfium2", "pdfplumber", "markitdown"],
+  "install": "pip install pypdfium2 pdfplumber markitdown (the Install button does it)",
+  "health_endpoint": "",
+  "entrypoint": "doc_read.convert"
+}

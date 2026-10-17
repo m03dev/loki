@@ -26,6 +26,11 @@ PIP: dict = {
     "chromium": ["playwright"],
     # research round 3: remove a picture's background on this computer (engine/image_tools.py)
     "rembg": ["rembg[cpu]"],
+    # session 29: documents & data (engine/doc_read.py, data_sandbox.py)
+    "documents": ["pypdfium2", "pdfplumber", "markitdown"],
+    "ocr": ["rapidocr", "onnxruntime"],
+    "data-analysis": ["pandas", "matplotlib", "duckdb", "pyarrow"],
+    "docling": ["docling"],
 }
 # add-on name -> {sys.platform: [pip requirements]} where only some machines need a package
 PIP_PLATFORM: dict = {

@@ -49,6 +49,21 @@ Concise dated records of meaningful work. Newest at the top.
   (bootstrap + launcher), .github/workflows/installers.yml (manual); engine/release_update.py = signed release-zip
   updates with the same pre-flight/trial/rollback. docs/INSTALL.md.
 - tests/test_usability.py (137 quick, 166 with LOKI_SUITE_SLOW=1) in SUITES. Real machines: ZIVA W35 (PC), M26 (Mac). Needs Mohamed: licence, feed, key.
+## 2026-10-17 - Session 29 (Claude, worktree): documents, files and data
+
+- engine/doc_read.py: any file -> Markdown with anchors (PDF pages incl. OCR of scans, DOCX, XLSX, PPTX, CSV, HTML,
+  EPUB, EML + attachments, pictures with OCR / vision description, notebooks; LibreOffice/MarkItDown for the rest),
+  standard-library OOXML readers, MarkItDown (MIT) logic ported, conversion cache.
+- engine/doc_write.py: Word, Excel (formulas + charts), PowerPoint, PDF fill/merge/split/sign-ready, Markdown -> PDF
+  (Chromium > reportlab > own writer). python-docx/openpyxl/python-pptx/pypdf in requirements.txt.
+- engine/data_sandbox.py: pandas in an audited child process (no network/subprocess/outside writes, time + memory
+  limits), auto profile + charts, SQL via DuckDB or SQLite (read-only).
+- Tools read_document/write_document/edit_document/pdf_tools/analyze_data/data_sql/documents; read_file reads
+  documents. Files view (app/ui/files.js, engine/files_api.py, /files/* routes, drag & drop), tables + charts in the
+  chat. Document collections are a source of the one knowledge index; memory.pack cites file#page.
+- Add-ons documents, ocr, data-analysis, docling. tests/test_documents.py + tests/test_files_ui.py (Files view screenshot) in SUITES.
+  Real machines: ZIVA W35 (PC), M26 (Mac).
+
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 
 - E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before
