@@ -83,6 +83,60 @@ lines in index.html, 1 in app.js, 4 CSS lines; lab.js untouched).
 The real numbers for qwen3:8b, Bonsai 2 and smart are ZIVA W28. The nightly duty is tested with a fake process
 only; the Lab section was not seen in a real window (UI smoke test covers that index.html loads).
 
+## Ziva (Mac), 2026-10-17: the task-success bench now runs on a Mac (the third real fix)
+
+`tests/test_task_success.py` failed deterministically on the Mac (90 passed / 4 failed; `build-todo` and
+`team-primes` ended BLOCKED) and `tools/task_bench.py --scripted` gave 29/31 - so `ship.py` refused to push
+anything. Root cause, straight from the job log: the tasks' scripted models run commands such as
+`python todo.py add buy milk`, and **macOS has no `python`** (only `python3`), so `safe_exec` rightly refused it
+("program not found on PATH: python"); todo.py therefore never produced `todos.json`, the loop rightly rejected
+the DONE claim ("the DONE line names todos.json, which does not exist"), the script ran out of steps and the job
+halted BLOCKED. The checks already swapped in `sys.executable`; the scripts did not. Fixed in
+`tests/tasks/base.py` (`PY_BIN` + `pycmd()`) and `tests/tasks/catalog.py` (9 scripted run_command steps):
+`--scripted` is **31/31** on the Mac and the suite is 94 passed / 0 failed. Worth remembering for the PC too -
+the bench must run on whichever machine it is pointed at.
+
+## Ziva (Mac), 2026-10-17: two flaky suites fixed at the source - the MMO "sold on one machine" tie, and the peer link refusing its own retries
+
+- **The peer link refused its own retries, and that is very likely the "link flaps" report.** A request's
+  signature was HMAC(method, path, `"%.3f" % time.time()`, body) and the replay guard refuses any signature it
+  has seen before, so **two identical requests inside the same millisecond** - a retry through the relay, or two
+  parts of the engine polling the same endpoint - made the second one come back as "replayed request" (HTTP
+  401). That reads as the other machine being down. Fixed with a fresh `X-Loki-Nonce` per request inside the
+  signed message; a verifier that finds no nonce still checks the old form, so the two machines keep talking
+  while one is still on the previous build, and a genuine verbatim replay is still refused. tests/test_peers.py
+  grew 6 checks; 6 green runs in a row. **The same shape exists in engine/phone_link.py (line ~307) - worth the
+  same fix.**
+- **The shared MMO profile dropped changes made in the same millisecond.** `mmo_state` stamped last-writer-wins
+  fields with `round(time.time(), 3)` and merged with a strict "newer wins", so a sale performed in the same
+  millisecond as the change it replaced was silently ignored - intermittently the sword sold on one machine
+  stayed in the bags on the other (tests/test_mmo_systems.py flaked: 1 failure in 2 runs). Now
+  `STAMP_DECIMALS = 6` via a `stamp()` helper, with 4 new checks; 6 green runs (125 passed).
+
+## Ziva (Mac), 2026-10-17 (patch 224): M14-M17 (session-27 ports) - two findings worth acting on
+
+- **M15 voice works, M16 research works, M14's API works.** `say` wrote the aiff; after `brew install
+  espeak-ng` and **`pip install --only-binary=:all: kokoro soundfile`** (the plain form FAILS on this Mac -
+  Python 3.13 tries to build blis/spacy from source and dies in Cython), Kokoro produces a real 24 kHz wav:
+  60.4 s the first time (weights + spacy model download), **1.7 s warm per sentence**. web_search and
+  research_web answer with real, numbered sources (no SSL error), browse_page drove Wikipedia end to end, and
+  the skills catalog lists 583 skills / 91 agents including all six anthropic ones.
+- **THE PEER LINK FLAPS.** `GET /peers` gave ok true / 3484 ms earlier the same session and ok false / 835 ms
+  later (the world drew the PC island as offline). Presence/MMO checks must look at /peers first; a flapping
+  relay is the most likely reason "the other machine did not answer" reports come and go.
+- **The Godot world (`game/loki-world`) loads on Godot 4.8, but its own headless tests are FLAKY.** A fresh
+  checkout needs `godot --headless --path game/loki-world --import` first, otherwise the first run throws a
+  cascade of bogus "Could not find type \"IslandBuilder\"/\"Actor\"/\"FakeWorld\"" parse errors (the global
+  class cache does not exist yet). After that: 0 script errors, but
+  `godot --headless --path game/loki-world res://tests/run_tests.tscn` gave "105 passed, 2 failed" once and
+  "101 passed, 1 failed" twice, failing **"failed jobs are monsters"** and then crashing at
+  tests/run_tests.gd:146 (`monsters_alive()` is EMPTY, so the fight/XP/loot checks never run). It happens with
+  a dead `--loki-url` too, so it is a timing/order race in the first sync, not the engine connection - worth
+  fixing before the MMO is called done. `test_godot_world` passed 75 but only did static checks (no Godot
+  binary on PATH), which is why this went unseen.
+- The interactive halves (Play in the app window, the Godot editor window) are left to a human hand on
+  purpose: no window was opened on the owner's screen.
+
 ## Ziva (Mac), 2026-10-17 (patch 219): the Babylon world verified in the app's own WebKit - and the connection-drop bug behind broken windows
 
 Read with session 27/28 below: this is a *cause* of the same family of complaints, found on the Mac.

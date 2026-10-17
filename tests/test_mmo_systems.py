@@ -324,8 +324,25 @@ try:
     mmo_state.sell(mac, sword["id"])
     mmo_state.merge_doc(pc, mmo_state.export_doc(mac))
     check("selling on one machine removes it on the other (newest change wins per item)", pc.data["bags"][sword["id"]].get("gone")
+
           and not pc.data["equipped"]["weapon"]["id"])
     check("...and the gold from the sale counts there too", mmo_state.gold_of(pc.data) == mmo_state.gold_of(mac.data))
+    section("LWW stamps: two changes in the same millisecond must not tie (the intermittent 'sold on one machine, still in the bags on the other')")
+    check("stamps keep sub-millisecond precision", mmo_state.STAMP_DECIMALS >= 6, mmo_state.STAMP_DECIMALS)
+    _seq = fresh_profile("stamps", "probe")
+    _it = {"id": "gprobe1", "kind": "gear", "name": "Probe Blade", "slot": "weapon", "look": "sword",
+           "rarity": "rare", "level": 3, "stats": {"power": 4}, "value": 10, "src": "test", "t": 0.0, "ts": 0.0}
+    mmo_state.add_to_bags(_seq, _it)
+    _before = _it["ts"]
+    mmo_state.sell(_seq, "gprobe1")
+    check("a sell made in the same millisecond is strictly newer than the item it stamps",
+          float(_seq.data["bags"]["gprobe1"]["ts"]) > float(_before),
+          (_before, _seq.data["bags"]["gprobe1"]["ts"]))
+    check("and a 0.0005s-newer gone marker wins the merge (ms stamps could not tell them apart)",
+          mmo_state.merge_doc(_seq, {"v": mmo_state.SYNC_VERSION, "machine": "twin", "bags": {
+              "gprobe1": dict(_it, ts=float(_seq.data["bags"]["gprobe1"]["ts"]) + 0.0005, gone=True)}}))
+    check("...without accepting an OLDER one", not mmo_state.merge_doc(_seq, {"v": mmo_state.SYNC_VERSION, "machine": "twin", "bags": {
+        "gprobe1": dict(_it, ts=float(_seq.data["bags"]["gprobe1"]["ts"]) - 1.0, gone=False)}}))
     wiped = fresh_profile("wiped", "mac")
     mmo_state.merge_doc(wiped, mmo_state.export_doc(pc))
     check("a reinstalled machine gets its own progress back from its twin", wiped.data["xp"] == 300 and mmo_state.total_xp(wiped.data) == 500

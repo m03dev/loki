@@ -75,6 +75,26 @@ sig = peers.sign(SECRET, "POST", "/peer/jobs", stamp, b'{"a":1}')
 headers = {"X-Loki-Time": stamp, "X-Loki-Sig": sig}
 check("a signed request verifies", peers.verify(SECRET, "POST", "/peer/jobs", headers, b'{"a":1}', guard, now) == "")
 check("the same request twice is a replay", "replayed" in peers.verify(SECRET, "POST", "/peer/jobs", headers, b'{"a":1}', guard, now))
+check("a request WITHOUT a nonce still verifies (a machine that has not updated yet keeps working)",
+      peers.verify(SECRET, "POST", "/peer/legacy", {"X-Loki-Time": stamp,
+      "X-Loki-Sig": peers.sign(SECRET, "POST", "/peer/legacy", stamp, b'{"a":1}')}, b'{"a":1}', peers.ReplayGuard(), now) == "")
+_n1, _n2 = "".join(["n1"]), "".join(["n2"])
+_s1 = peers.sign(SECRET, "POST", "/peer/jobs", stamp, b'{"a":1}', _n1)
+_s2 = peers.sign(SECRET, "POST", "/peer/jobs", stamp, b'{"a":1}', _n2)
+check("two identical requests in the same millisecond get DIFFERENT signatures (the replay guard used "
+      "to refuse the second one, so a relay retry or a double poll looked like the link was down)",
+      _s1 != _s2)
+_g = peers.ReplayGuard()
+check("...and the second one is accepted", peers.verify(SECRET, "POST", "/peer/jobs",
+      {"X-Loki-Time": stamp, "X-Loki-Nonce": _n1, "X-Loki-Sig": _s1}, b'{"a":1}', _g, now) == ""
+      and peers.verify(SECRET, "POST", "/peer/jobs",
+      {"X-Loki-Time": stamp, "X-Loki-Nonce": _n2, "X-Loki-Sig": _s2}, b'{"a":1}', _g, now) == "")
+check("...while a nonce swapped onto another request fails the signature",
+      "signature" in peers.verify(SECRET, "POST", "/peer/jobs",
+      {"X-Loki-Time": stamp, "X-Loki-Nonce": _n2, "X-Loki-Sig": _s1}, b'{"a":1}', peers.ReplayGuard(), now))
+check("...and the same nonce replayed verbatim is still a replay",
+      "replayed" in peers.verify(SECRET, "POST", "/peer/jobs",
+      {"X-Loki-Time": stamp, "X-Loki-Nonce": _n1, "X-Loki-Sig": _s1}, b'{"a":1}', _g, now))
 check("a changed body fails", "signature" in peers.verify(SECRET, "POST", "/peer/jobs", headers, b'{"a":2}', peers.ReplayGuard(), now))
 check("another path fails", "signature" in peers.verify(SECRET, "POST", "/peer/experience", headers, b'{"a":1}', peers.ReplayGuard(), now))
 check("the wrong secret fails", "signature" in peers.verify(OTHER, "POST", "/peer/jobs", headers, b'{"a":1}', peers.ReplayGuard(), now))

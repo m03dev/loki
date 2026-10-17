@@ -205,9 +205,21 @@ def _body_hash(body: bytes) -> str:
     return hashlib.sha256(body or b"").hexdigest()
 
 
-def sign(shared: str, method: str, path: str, stamp: str, body: bytes) -> str:
-    message = "\n".join([method.upper(), path, stamp, _body_hash(body)]).encode()
-    return hmac.new(shared.encode(), message, hashlib.sha256).hexdigest()
+def sign(shared: str, method: str, path: str, stamp: str, body: bytes, nonce: str = "") -> str:
+    """HMAC over the request. `stamp` proves freshness; `nonce` makes each request unique.
+
+    The nonce matters: without it the signature was a pure function of (method, path, millisecond,
+    body), so two IDENTICAL requests in the same millisecond - a retry through the relay, or two
+    parts of the engine polling the same endpoint - produced the same signature and the second was
+    refused as a "replayed request" (which reads as the link being down, and made test_peers flake).
+    A verifier that finds no nonce still checks the old form, so a machine that has not updated yet
+    keeps working.
+    """
+    parts = [method.upper(), path, stamp]
+    if nonce:
+        parts.append(nonce)
+    parts.append(_body_hash(body))
+    return hmac.new(shared.encode(), "\n".join(parts).encode(), hashlib.sha256).hexdigest()
 
 
 def sign_response(shared: str, request_sig: str, body: bytes) -> str:
@@ -244,6 +256,7 @@ def verify(shared: str, method: str, path: str, headers: dict, body: bytes,
         return "peer link is not configured"
     stamp = str(headers.get("X-Loki-Time") or "")
     given = str(headers.get("X-Loki-Sig") or "")
+    nonce = str(headers.get("X-Loki-Nonce") or "")[:64]
     if not stamp or not given:
         return "unsigned request"
     try:
@@ -252,7 +265,7 @@ def verify(shared: str, method: str, path: str, headers: dict, body: bytes,
         return "bad timestamp"
     if skew > MAX_SKEW_S:
         return "request too old (check both clocks)"
-    if not hmac.compare_digest(given, sign(shared, method, path, stamp, body)):
+    if not hmac.compare_digest(given, sign(shared, method, path, stamp, body, nonce)):
         return "bad signature (the secrets do not match)"
     if not guard.first_time(given):
         return "replayed request"
@@ -291,8 +304,9 @@ def _call(peer: dict, method: str, path: str, payload: dict | None, env: dict | 
         raise PeerError("no LOKI_PEER_SECRET is set on this machine")
     body = json.dumps(payload).encode() if payload is not None else b""
     stamp = "%.3f" % time.time()
+    nonce = secrets.token_urlsafe(9)   # one per request: two identical requests must never share a signature
     headers = {"Content-Type": "application/json", "X-Loki-Peer": my_name(env), "X-Loki-Time": stamp,
-               "X-Loki-Sig": sign(shared, method, path, stamp, body)}
+               "X-Loki-Nonce": nonce, "X-Loki-Sig": sign(shared, method, path, stamp, body, nonce)}
     request = urllib.request.Request(peer["url"] + path, data=body if method != "GET" else None,
                                      headers=headers, method=method)
     try:

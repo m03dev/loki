@@ -19,6 +19,7 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -196,6 +197,21 @@ def py_compiles(*paths: str) -> Callable:
         return ""
     check.__name__ = "py_compiles(%s)" % ", ".join(paths)
     return check
+
+
+# The Python that exists ON THIS MACHINE. macOS (and modern Linux) have no `python`, only
+# `python3` - and LOKI's safe_exec refuses a program that is not on PATH ("program not found on
+# PATH: python"), so a scripted job that ran "python todo.py add buy milk" never produced its
+# evidence, the DONE claim was rightly rejected for missing todos.json, the script ran out of steps
+# and the run ended BLOCKED: that is why tests/test_task_success.py failed on the Mac (build-todo,
+# team-primes) while passing in the cloud. `runs()` already used sys.executable for its checks;
+# `pycmd()` gives the scripted models the same interpreter.
+PY_BIN = shutil.which("python") or sys.executable or "python3"
+
+
+def pycmd(command: str) -> str:
+    """A run_command string with a Python the machine actually has (see PY_BIN)."""
+    return re.sub(r"(?<![\w./-])python(?![\w./-])", PY_BIN, str(command))
 
 
 def runs(argv: list, expect_in: str = "", timeout: float = 60.0) -> Callable:

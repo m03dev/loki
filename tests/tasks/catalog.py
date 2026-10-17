@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from .base import (Task, blocked, bounded_context, call, calls, contains, cut, done, empty, exists, final_mentions, huge,
+from .base import (Task, blocked, bounded_context, call, calls, contains, cut, done, empty, exists, final_mentions, huge, pycmd,
                    json_block, min_words, missing, py_compiles, py_text, real_picture, runs, say, slow,
                    sources, team_verified, think_only, told, unchanged, valid_json)
 
@@ -347,7 +347,7 @@ TASKS = [
                                       call("write_file", filename="test_textutil.py", content=TEST_TEXTUTIL),
                                       done("added slugify to textutil.py with a test"),
                                       call("write_file", filename="textutil.py", content=TEXTUTIL_FIXED),
-                                      call("run_command", command="python -m unittest test_textutil"),
+                                      call("run_command", command=pycmd("python -m unittest test_textutil")),
                                       done("added slugify to textutil.py (fixed a missing colon); tests pass")]}}),
     Task("code-rename", "code", "Rename the function get_usr to get_user everywhere in the app/ folder and keep the "
          "tests in test_app.py green.",
@@ -359,7 +359,7 @@ TASKS = [
                                       py_text("edit_file", filename="app/users.py", old="def get_usr(", new="def get_user("),
                                       py_text("edit_file", filename="app/main.py", old="import get_usr", new="import get_user"),
                                       py_text("edit_file", filename="app/main.py", old="+ get_usr(", new="+ get_user("),
-                                      call("run_command", command="python -m unittest test_app"),
+                                      call("run_command", command=pycmd("python -m unittest test_app")),
                                       done("renamed get_usr to get_user in app/users.py and app/main.py; tests pass")]}}),
     Task("code-json-config", "code", "Create config/settings.json with the keys name (\"loki-app\"), version (\"1.0.0\") "
          "and debug (false).",
@@ -377,7 +377,7 @@ TASKS = [
          checks=[runs(["python", "wordcount.py", "sample.txt"], expect_in="9"), bounded_context(60000)],
          behaviour="a 120,000-character prose reply before acting",
          scripts={"small": {"small": [huge(120000), call("write_file", filename="wordcount.py", content=WORDCOUNT),
-                                      call("run_command", command="python wordcount.py sample.txt"),
+                                      call("run_command", command=pycmd("python wordcount.py sample.txt")),
                                       done("wrote wordcount.py; it prints 9 for sample.txt")]}}),
 
     # --- research with sources -----------------------------------------------------------
@@ -505,7 +505,7 @@ TASKS = [
                             + [call("write_file", filename="mathx/stats.py", content=STATS),
                                call("write_file", filename="tests/__init__.py", content=""),
                                call("write_file", filename="tests/test_stats.py", content=TEST_STATS),
-                               call("run_command", command="python -m unittest tests.test_stats"),
+                               call("run_command", command=pycmd("python -m unittest tests.test_stats")),
                                done("created mathx (mean, median) and tests/test_stats.py; the tests pass")]}}),
     Task("build-todo", "build", "Build todo.py, a command-line todo list that keeps its items in todos.json, with add, "
          "list and done commands, and show that it works.", allow_commands=True,
@@ -514,8 +514,8 @@ TASKS = [
          scripts={"small": {"small": [blocked("the Builder role is unavailable in this environment."),
                                       _until_pushed(call("write_file", filename="todo.py", content=TODO_PY),
                                                     blocked("the Builder role is unavailable.")),
-                                      call("run_command", command="python todo.py add buy milk"),
-                                      call("run_command", command="python todo.py done 1"),
+                                      call("run_command", command=pycmd("python todo.py add buy milk")),
+                                      call("run_command", command=pycmd("python todo.py done 1")),
                                       done("built todo.py (add, list, done; items in todos.json); added and finished "
                                            "'buy milk' to show it works")]}}),
 
@@ -547,11 +547,11 @@ TASKS = [
                          call("write_file", filename="test_primes.py", content=TEST_PRIMES),
                          done("wrote primes.py and test_primes.py")],
              "builder#fix": [call("team_read"), call("write_file", filename="primes.py", content=PRIMES_OK),
-                             call("run_command", command="python -m unittest test_primes"),
+                             call("run_command", command=pycmd("python -m unittest test_primes")),
                              done("fixed is_prime for n < 2; the tests pass")],
-             "tester": [call("run_command", command="python -m unittest test_primes"),
+             "tester": [call("run_command", command=pycmd("python -m unittest test_primes")),
                         done("FAIL: test_primes fails - is_prime(1) returns True")],
-             "tester#recheck": [call("run_command", command="python -m unittest test_primes"),
+             "tester#recheck": [call("run_command", command=pycmd("python -m unittest test_primes")),
                                 done("PASS: python -m unittest test_primes is OK")],
              "reviewer": [call("read_file", filename="primes.py"), done("PASS: the code is short and clear")],
          }}),

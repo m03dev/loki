@@ -140,6 +140,18 @@ DAILY_XP = 60
 DAY_KEEP = 3
 SYNC_VERSION = 1
 
+# Last-writer-wins stamps (name/class, worn gear, "sold" markers on an item). Three decimals was too
+# coarse: two changes inside the same millisecond produced the SAME stamp, so merge_doc's strict
+# "newer wins" comparison dropped the newer one - the owner sells a sword on one machine and it stays
+# in the bags on the other, intermittently (tests/test_mmo_systems.py caught it as a flake). Micro-
+# seconds make a tie impossible in practice and cost nothing.
+STAMP_DECIMALS = 6
+
+
+def stamp() -> float:
+    """The current last-writer-wins stamp (see STAMP_DECIMALS)."""
+    return round(time.time(), STAMP_DECIMALS)
+
 
 def _clean(value: Any, limit: int) -> str:
     return re.sub(r"[\x00-\x1f\x7f]", " ", str(value or "")).strip()[:limit]
@@ -400,7 +412,7 @@ def make_item(seed: str, level: int, source: str = "", affix: str = "", rarity: 
         name += " of LOKI"
     return {"id": "g" + hashlib.sha1(seed.encode("utf-8")).hexdigest()[:10], "kind": "gear", "name": name[:60], "slot": slot,
             "look": look, "rarity": rarity, "level": lv, "stats": stats, "value": int(SELL_BASE[rarity] * (1 + lv / 10.0)),
-            "src": _clean(source, 80), "t": round(time.time(), 3), "ts": round(time.time(), 3)}
+            "src": _clean(source, 80), "t": stamp(), "ts": stamp()}
 
 
 def painting_rarity(hearts: int) -> str:
@@ -415,7 +427,7 @@ def painting_item(creation: dict, hearts: int) -> dict:
     return {"id": "painting:" + path, "kind": "painting", "name": ("Painting: " + str(creation.get("title") or path))[:60],
             "slot": "relic", "look": "painting", "rarity": rarity, "level": 1, "stats": {"power": power, "hp": hp},
             "value": 0, "src": "LOKI made it", "hearts": int(_num(hearts, 0, 5)), "path": path,
-            "url": "/creations/" + path, "t": float(creation.get("t") or 0), "ts": round(time.time(), 3)}
+            "url": "/creations/" + path, "t": float(creation.get("t") or 0), "ts": stamp()}
 
 
 _ID_RE = re.compile(r"[A-Za-z0-9:_./ -]{1,200}")
@@ -985,7 +997,7 @@ def build_state(prof: Profile, jobs: list, creations: list, agents: list, self_i
 # ------------------------------------------------------------------ actions
 def set_profile(prof: Profile, data: dict) -> dict:
     with prof.lock:
-        now = round(time.time(), 3)
+        now = stamp()
         if "name" in data:
             name = _clean(data.get("name"), 24)
             if not name:
@@ -1122,7 +1134,7 @@ def equip(prof: Profile, item_id: str, slot: str = "", creations: list | None = 
     slot off."""
     with prof.lock:
         d = prof.data
-        now = round(time.time(), 3)
+        now = stamp()
         if not item_id:
             if slot not in GEAR_SLOTS:
                 raise ValueError("say which slot to take off (%s)" % ", ".join(GEAR_SLOTS))
@@ -1156,7 +1168,7 @@ def sell(prof: Profile, item_id: str) -> dict:
         if any((e or {}).get("id") == item_id for e in d["equipped"].values() if isinstance(e, dict)):
             raise ValueError("take it off before you sell it")
         item["gone"] = True
-        item["ts"] = round(time.time(), 3)
+        item["ts"] = stamp()
         _gold(prof, item.get("value", 0))
         _stat(prof, "sold")
         out = _reward(prof, {"sold": item_id, "gold_got": int(item.get("value", 0))})
