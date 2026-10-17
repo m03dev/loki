@@ -475,7 +475,25 @@ async function loadUpdatePanel() {
   }
   box.append(list);
   const health = data.health || {};
-  if (health.rolled_back_from) box.append(el("p", "why", "Rolled back from " + health.rolled_back_from + " here: it did not start. LOKI waits for a newer version."));
+  if (health.rolled_back_from) {
+    const why = (health.skip_reasons || {})[String(health.rolled_back_from).slice(0, 12)] || "it did not start";
+    box.append(el("p", "why", "Rolled back from " + String(health.rolled_back_from).slice(0, 7) + " here: " + why + ". LOKI waits for a newer version."));
+  }
+  if (health.pending) box.append(el("p", "note", "On trial: " + String(health.pending).slice(0, 7) + " - it is kept once the engine AND this window work on it, otherwise LOKI goes back by itself."));
+  const hist = (health.history || []).slice(-8).reverse();
+  if (hist.length) {   // every update on this machine, so nothing about one is a mystery
+    const log = el("div", "update-history");
+    log.append(el("b", "", "Update history on this computer"));
+    for (const h of hist) {
+      const when = new Date((h.t || 0) * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      const what = h.event === "updated" ? "updated " + String(h.from || "").slice(0, 7) + " → " + String(h.to || "").slice(0, 7)
+        : h.event === "rolled back" ? "went back " + String(h.from || "").slice(0, 7) + " → " + String(h.to || "").slice(0, 7) + ": " + (h.why || "")
+        : h.event === "refused" ? "did not apply " + String(h.commit || "").slice(0, 7) + ": " + (h.why || "")
+        : h.event === "good" ? String(h.commit || "").slice(0, 7) + " works here (engine + window)" : h.event;
+      log.append(el("div", "update-history-row " + String(h.event || "").replace(/\s+/g, "-"), when + " · " + what));
+    }
+    box.append(log);
+  }
   if (progress.running) {
     clearTimeout(updates.timer);
     updates.timer = setTimeout(loadUpdatePanel, 2000);

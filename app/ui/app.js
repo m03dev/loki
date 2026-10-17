@@ -933,6 +933,8 @@ async function start() {
   }
   state.connected = true;
   window.LOKI_READY = true;   // boot.js: the window started; no rescue screen
+  // tell the engine: a fresh update is only kept once the window works on it
+  api("/ui/ready", { ua: navigator.userAgent.slice(0, 200), version: (window.LOKI_VERSION || "") }).catch(() => {});
   setStatus("Ready", true);
   await Promise.all([loadModels(), loadMode(), loadConversations()]);
   setInterval(pollApproval, 1500);

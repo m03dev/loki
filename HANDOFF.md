@@ -4,7 +4,27 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 27 research ports, Claude worktree).
+Last updated: 2026-10-17 (session 28, Claude in the cloud).
+
+## Session 28: patching and updating clients, overhauled (after the Mac's white window)
+
+The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now
+reaches a machine (engine/updater.py, app/loki_app.py, engine/loki_bridge.py):
+1. **Pre-flight before switching.** The new commit is checked out into a throwaway git worktree and LOKI's own
+   `--self-test` runs there with the ENGINE's Python (LOKI_ENGINE_PYTHON), after installing any new requirements;
+   every file index.html loads must exist (`updater.ui_missing`). A failing version is NEVER applied: it goes on
+   the skip list with its reason (`skip_reasons`), the machine stays on what works, and the next newer commit is
+   tried. LOKI_UPDATE_PREFLIGHT=0 turns it off (suites set it off; tests/test_update_overhaul.py turns it on).
+2. **On trial until the window works.** After an update the version is "pending". The engine marks it good only
+   when the window reports ready (`POST /ui/ready` from app.js) - not merely when the engine answers (the Mac's
+   engine was healthy behind a white window). The rescue screen (boot.js) or no ready within LOKI_TRIAL_UI_S
+   (300 s) -> automatic rollback to the last good commit (skipped with the reason) and a full app restart.
+   Only when the app supervises the engine (LOKI_SUPERVISED=1); a headless engine is marked good at once.
+3. **A history.** Every update/refusal/rollback/good is recorded (`health()["history"]`) and shown in Settings >
+   Machines & updates, with the trial state and the reason a version was skipped.
+4. **Before it ships at all:** tests/test_ui_smoke.py loads the real window in headless Chromium against a fake
+   engine (no script error, no missing file, reaches ready); skipped where Playwright is not installed.
+Together with session 27's boot.js rescue screen, the full-app relaunch and the no-about:blank rule.
 
 ## Session 27 (cont.): the Mac's white window
 

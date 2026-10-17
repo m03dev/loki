@@ -116,6 +116,9 @@ def auto_update() -> dict:
         import updater  # pylint: disable=import-outside-toplevel
         if not updater.enabled():
             return {}
+        python = engine_python()
+        if python is not None:   # the update's pre-flight runs the new version with the engine's Python
+            os.environ["LOKI_ENGINE_PYTHON"] = str(python)
         result = updater.update(REPO, timeout=float(os.environ.get("LOKI_UPDATE_TIMEOUT", "25") or 25))
         log("update: " + (result.get("note") or "") + ((" - " + result["error"]) if result.get("error") else ""))
         return result

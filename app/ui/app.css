@@ -603,3 +603,9 @@ button.danger:hover { color: var(--err); }
   .icons-first .sheet-panel.settings-panel { grid-template-columns: 1fr; }
   .icons-first .settings-nav .tabs { flex-direction: row; }
 }
+
+.update-history { margin-top: 12px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.update-history b { font-size: 12.5px; margin-bottom: 2px; }
+.update-history-row { color: var(--muted); }
+.update-history-row.rolled-back, .update-history-row.refused { color: var(--warn); }
+.update-history-row.good { color: var(--ok); }

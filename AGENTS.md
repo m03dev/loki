@@ -47,6 +47,10 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
   Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder anywhere else in the repo.
   The owner's own game projects live in `~/LOKI Projects/<name>`.
 - Never commit anything from `harness_data/` (keys, memory, logs, venvs, models).
+- Updates are health-gated (HANDOFF session 28): a machine only takes a version that passes
+  `python app/loki_app.py --self-test` and whose window files all exist, and keeps it only once
+  its window reports ready. So: every script index.html loads must be committed, `--self-test`
+  must stay green, and app.js must keep posting `/ui/ready`. Never bypass this to "just ship".
 - Safety stays: `engine/policy.py`, approvals for risky actions, the signed peer link.
 
 ## When you are done

@@ -235,6 +235,32 @@ _USAGE_CACHE: dict = {"t": 0.0, "today": {}}
 UI_ERRORS: list = []   # the window's script errors (boot.js), newest last; also in /health
 
 
+UI_STATE = {"ready": threading.Event(), "rescue": "", "ready_info": {}}
+
+
+def update_trial_watch(updater, wait_s: float | None = None, restart=None) -> str:
+    """After an update: the window must report ready within LOKI_TRIAL_UI_S seconds (default 300).
+    Ready -> this version is good. The rescue screen, or silence -> roll back to the last good
+    version (it goes on the skip list with the reason) and restart the whole app on it."""
+    wait_s = float(os.getenv("LOKI_TRIAL_UI_S", "300") or 300) if wait_s is None else wait_s
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        if UI_STATE["ready"].wait(2.0):
+            updater.mark_good()
+            print("[loki-bridge] update trial passed: the window is ready on the new version", flush=True)
+            return "good"
+        if UI_STATE["rescue"]:
+            break
+    why = ("its window showed an error: " + UI_STATE["rescue"][:300]) if UI_STATE["rescue"] else \
+        "its window did not become ready in %d s" % wait_s
+    result = updater.rollback(why=why)
+    print("[loki-bridge] update trial FAILED (%s); rollback: %s" % (why, result), flush=True)
+    if result.get("ok"):
+        (restart or restart_engine)()
+        return "rolled back"
+    return "failed"
+
+
 def redact_line(text: str) -> str:
     """No tokens or keys from a client error line go into the log."""
     import re as _re  # pylint: disable=import-outside-toplevel
@@ -1255,12 +1281,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
             return
+        if route == "/ui/ready":
+            # app.js: the window started and connected (an update on trial is now good)
+            UI_STATE["ready_info"] = {"t": time.time(), "ua": str(data.get("ua", ""))[:200],
+                                      "version": str(data.get("version", ""))[:40]}
+            UI_STATE["ready"].set()
+            self._send_json(200, {"ok": True})
+            return
         if route == "/ui/error":
             # boot.js: a script error or the rescue screen in the window - kept in engine.out, where a
             # blank or broken window on a machine nobody is watching can be diagnosed later.
             text = redact_line(str(data.get("error", "")))[:2000]
             ua = str(data.get("ua", ""))[:200]
             UI_ERRORS.append({"t": time.time(), "error": text, "ua": ua})
+            if text.startswith("rescue screen shown"):
+                UI_STATE["rescue"] = text
             del UI_ERRORS[:-30]
             print("[loki-bridge] window error: %s  (%s)" % (text, ua), flush=True)
             self._send_json(200, {"ok": True})
@@ -2298,7 +2333,12 @@ async def serve() -> None:
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
     try:
         import updater  # pylint: disable=import-outside-toplevel
-        updater.mark_good()   # this version starts and answers here: it is the one to go back to
+        if os.environ.get("LOKI_SUPERVISED") == "1" and updater.on_trial():
+            # A fresh update is only good once the WINDOW works too (the Mac's white window had a
+            # healthy engine): wait for the window to say it is ready, else go back.
+            threading.Thread(target=update_trial_watch, args=(updater,), daemon=True, name="loki-update-trial").start()
+        else:
+            updater.mark_good()   # this version starts and answers here: it is the one to go back to
     except Exception:  # noqa: BLE001
         pass
     if hasattr(loki, "smart_report"):

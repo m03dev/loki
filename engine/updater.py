@@ -91,12 +91,22 @@ def mark_good(repo: Path | None = None) -> dict:
     commit = version(repo or REPO).get("commit", "")
     data = health(repo)
     if commit:
+        was_trial = bool(data.get("pending"))
         data.update({"last_good": commit, "pending": "", "good_at": time.time()})
         _save_health(data, repo)
+        if was_trial:
+            note_history("good", repo, commit=commit)
     return data
 
 
-def rollback(repo: Path | None = None) -> dict:
+def on_trial(repo: Path | None = None) -> bool:
+    """This machine runs a fresh update that has not proved itself yet (engine AND window)."""
+    data = health(repo)
+    current = version(repo or REPO).get("commit", "")
+    return bool(data.get("pending") and current and data["pending"].startswith(current[:12]))
+
+
+def rollback(repo: Path | None = None, why: str = "it did not start") -> dict:
     """The new version did not start: go back to the last good commit and skip the bad one.
 
     Only this checkout moves (`git reset --keep`, which refuses to touch local edits);
@@ -119,8 +129,12 @@ def rollback(repo: Path | None = None) -> dict:
     if bad and bad not in skip:
         skip.append(bad)
     data.update({"pending": "", "skip": skip, "rolled_back_at": time.time(), "rolled_back_from": bad})
+    reasons = dict(data.get("skip_reasons", {}))
+    reasons[bad[:12]] = why[:400]
+    data["skip_reasons"] = reasons
     _save_health(data, repo)
-    STATE.update({"note": "went back to %s: %s did not start" % (good, bad)})
+    note_history("rolled back", repo, **{"from": bad, "to": good, "why": why})
+    STATE.update({"note": "went back to %s: %s %s" % (good, bad, why)})
     return {"ok": True, "from": bad, "to": good}
 
 
@@ -602,7 +616,7 @@ def _requirements_changed(repo: Path, old: str, new: str) -> bool:
 
 
 def _install_requirements(repo: Path) -> str:
-    python = sys.executable
+    python = os.getenv("LOKI_ENGINE_PYTHON") or sys.executable
     code_all = []
     for req in ("engine/requirements.txt", "app/requirements.txt"):
         try:
@@ -612,6 +626,92 @@ def _install_requirements(repo: Path) -> str:
         except (OSError, subprocess.SubprocessError):
             code_all.append(1)
     return "dependencies updated" if not any(code_all) else "some dependencies did not install"
+
+
+def preflight(repo: Path, target: str, timeout: float = 240.0) -> tuple:
+    """(ok, why) - try the NEW version before this machine switches to it.
+
+    The target commit is checked out into a throwaway git worktree and LOKI's own self-test runs
+    there with this machine's Python (every engine module imports, the app starts its checks, every
+    script the window loads exists). If the new version needs packages it lists in its
+    requirements, they are installed first (installs only add). A version that fails is never
+    applied here: it goes on the skip list with the reason, and the next newer one is tried.
+    LOKI_UPDATE_PREFLIGHT=0 turns this off."""
+    if str(os.getenv("LOKI_UPDATE_PREFLIGHT", "1")).strip().lower() in ("0", "off", "false", "no"):
+        return True, "pre-flight off"
+    python = os.getenv("LOKI_ENGINE_PYTHON") or sys.executable   # the engine's own venv, not the app's
+    tmp = Path(tempfile.mkdtemp(prefix="loki-preflight-"))
+    tree = tmp / "tree"
+    try:
+        code, out = git(repo, "worktree", "add", "--detach", "--force", str(tree), target, timeout=120)
+        if code != 0:
+            return True, "pre-flight skipped (could not check out %s: %s)" % (target, out[-120:])
+        if not (tree / "app" / "loki_app.py").is_file():
+            return True, "pre-flight skipped (not a LOKI app checkout)"
+        for req in ("engine/requirements.txt", "app/requirements.txt"):
+            new_req, old_req = tree / req, repo / req
+            try:
+                if new_req.is_file() and (not old_req.is_file() or new_req.read_bytes() != old_req.read_bytes()):
+                    subprocess.run([python, "-m", "pip", "install", "-q", "-r", str(new_req)],
+                                   capture_output=True, text=True, timeout=600)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("LOKI_", "HARNESS_"))}
+        env.update(LOKI_DATA=str(tmp / "data"), LOKI_WORKSPACE=str(tmp / "ws"), LOKI_TIMESFM_APPROVED="0",
+                   PYTHONDONTWRITEBYTECODE="1")
+        (tmp / "ws").mkdir(exist_ok=True)
+        try:
+            proc = subprocess.run([python, str(tree / "app" / "loki_app.py"), "--self-test"], cwd=str(tree),
+                                  env=env, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False, "the new version's self-test did not finish in %ds" % timeout
+        except OSError as exc:
+            return True, "pre-flight skipped (%s)" % exc
+        text = (proc.stdout + proc.stderr).strip()
+        if proc.returncode != 0 or "FAILED" in text:
+            return False, "the new version failed its self-test here: " + " ".join(text.split())[-400:]
+        missing = ui_missing(tree)
+        if missing:
+            return False, "the new version's window would not load: missing " + ", ".join(missing[:5])
+        return True, "pre-flight passed"
+    finally:
+        git(repo, "worktree", "remove", "--force", str(tree))
+        git(repo, "worktree", "prune")
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def ui_missing(tree: Path) -> list:
+    """Every /ui/... file the window's index.html loads, that is not in the tree."""
+    import re as _re  # pylint: disable=import-outside-toplevel
+    index = tree / "app" / "ui" / "index.html"
+    try:
+        html = index.read_text(encoding="utf-8")
+    except OSError:
+        return ["app/ui/index.html"]
+    wanted = set(_re.findall(r'(?:src|href)="/ui/([^"?#]+)"', html))
+    return sorted(w for w in wanted if not (tree / "app" / "ui" / w).is_file())
+
+
+def note_history(event: str, repo: Path | None = None, **info) -> None:
+    """The last 30 update events on this machine (updated, rolled back, refused, good) - shown in
+    Settings > Machines & updates so nothing about an update is ever a mystery."""
+    data = health(repo)
+    hist = [h for h in data.get("history", []) if isinstance(h, dict)][-29:]
+    hist.append(dict(info, event=event, t=time.time()))
+    data["history"] = hist
+    _save_health(data, repo)
+
+
+def skip_commit(commit: str, why: str, repo: Path | None = None) -> None:
+    data = health(repo)
+    skip = [c for c in data.get("skip", []) if c][-20:]
+    if commit and commit not in skip:
+        skip.append(commit)
+    data["skip"] = skip
+    reasons = dict(data.get("skip_reasons", {}))
+    reasons[commit[:12]] = why[:400]
+    data["skip_reasons"] = dict(list(reasons.items())[-20:])
+    _save_health(data, repo)
 
 
 def _in_progress(repo: Path) -> str:
@@ -720,6 +820,17 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
         if state["latest"] and any(state["latest"].startswith(c[:12]) for c in health(repo).get("skip", []) if c):
             return _done(False, "; ".join(notes + ["%s did not start on this machine before; waiting for "
                                                    "a newer version" % state["latest"]]), repo=repo)
+        # Try the new version before switching to it: a version that cannot start here (a missing
+        # package, a broken import, a window file missing) is never applied - the Mac's white window.
+        ok, why = preflight(repo, target)
+        if not ok:
+            skip_commit(state["latest"], why, repo)
+            note_history("refused", repo, commit=state["latest"], why=why)
+            STATE.update({"update_available": False})
+            return _done(False, "; ".join(notes + ["did not apply %s: %s" % (state["latest"][:12], why)]), repo=repo,
+                         problem="new version failed its pre-flight", error="did not apply %s: %s"
+                         % (state["latest"][:12], why))
+        notes.append(why)
         # Files that hold nothing of the user's are put back first, so they never block.
         if state.get("restorable"):
             code, out = git(repo, "checkout", "HEAD", "--", *state["restorable"])
@@ -790,8 +901,9 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
         after = version(repo)["commit"]
         notes.append("updated %s -> %s" % (before, after))
         trial = health(repo)  # `before` is what ran here until now: the version to go back to
-        trial.update({"last_good": before or trial.get("last_good", ""), "pending": after})
+        trial.update({"last_good": before or trial.get("last_good", ""), "pending": after, "pending_at": time.time()})
         _save_health(trial, repo)
+        note_history("updated", repo, **{"from": before, "to": after})
         if _requirements_changed(repo, before, after):
             notes.append(_install_requirements(repo))
         _, ahead = git(repo, "rev-list", "--count", "%s..HEAD" % target)

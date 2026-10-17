@@ -854,6 +854,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (5) With the Mac (M17) in the game at the same time: you see the Mac's player walk on its island; chat
       lines reach each other. Report what you saw under Reports.
 
+- [ ] **W27 Updates are health-gated (2026-10-17).** After LOKI updates: Settings > Machines & updates shows
+      "Update history on this computer" with this update marked "works here (engine + window)". Report the
+      lines. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (two new suites:
+      test_update_overhaul, test_ui_smoke - the smoke test skips without Playwright; say if it skipped).
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -1085,6 +1090,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       appear after an update, say so. Then run `harness_data/.venv/bin/python tools/ship.py --check` and
       report each suite line. Bonsai 2: chats on it now get Qwen's /no_think (empty replies were its
       thinking) - report a 3-message chat and one background job on Bonsai.
+
+- [ ] **M19 Updates are health-gated (2026-10-17).** Same as W27 on the Mac. Also: if the white window comes back
+      at all, LOKI should now go back to the previous version by itself within 5 minutes and say why in that
+      history - report exactly what happened.
 
 ## Needs Mohamed
 
