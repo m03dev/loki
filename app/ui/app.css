@@ -526,3 +526,5 @@ button.danger:hover { color: var(--err); }
 .sc-item button { flex: none; }
 .world-labels .wlabel.crowded { opacity: .55; }
 .world-labels .wlabel.crowded.selected, .world-labels .wlabel.crowded.speaking { opacity: 1; }
+.wlabel.machine b { background: linear-gradient(135deg, rgba(46,230,214,.85), rgba(77,124,255,.85)); color: #071417; }
+.wlabel.machine span { color: #dff8f4; }

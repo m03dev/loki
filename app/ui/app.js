@@ -270,6 +270,7 @@ async function send(text) {
     if (data.ok) {
       const reply = String(data.response || "").trim();
       if (reply) addLoki(reply);
+      if (window.Workbench) Workbench.afterReply(data);   // files changed: Review / Rewind
       if (data.usage && typeof showMeter === "function") showMeter(data.usage);
       setStatus("Ready", true);
     } else {
@@ -774,6 +775,7 @@ function wire() {
     const text = $("#prompt").value;
     $("#prompt").value = "";
     autosize();
+    if (window.Workbench && Workbench.handleSlash(text)) return;   // /commands (workbench.js)
     send(text);
   });
   $("#prompt").addEventListener("keydown", (event) => {
@@ -813,6 +815,7 @@ function wire() {
       const prompt = $("#prompt");
       prompt.value += ev.key;
       prompt.focus();
+      prompt.dispatchEvent(new Event("input"));   // so "/" opens the command palette at once
       return;
     }
     if (ev.key !== "Escape") return;

@@ -1,0 +1,199 @@
+/* LOKI glass - the seamless look (loaded after app.css, overrides it).
+   The 3D world runs full-window behind everything; every surface is frosted glass over it:
+   translucent fills, backdrop blur, soft gradient edges, no hard boxes. One accent gradient
+   (LOKI teal -> blue -> violet) marks what is live or actionable. */
+:root {
+  --bg: #0b0f1a;
+  --side: rgba(14, 18, 30, .55);
+  --surface: rgba(255, 255, 255, .055);
+  --bubble: rgba(255, 255, 255, .09);
+  --line: rgba(255, 255, 255, .08);
+  --text: #eef2f8;
+  --muted: #9ba6b8;
+  --accent: #6fd8ff;
+  --radius: 18px;
+  --glass: rgba(16, 20, 34, .52);
+  --glass-strong: rgba(14, 18, 30, .78);
+  --glass-edge: rgba(255, 255, 255, .10);
+  --glass-hi: rgba(255, 255, 255, .16);
+  --grad: linear-gradient(135deg, #2ee6d6 0%, #4d9bff 52%, #9d6bff 100%);
+  --grad-soft: linear-gradient(135deg, rgba(46, 230, 214, .22), rgba(77, 155, 255, .18) 55%, rgba(157, 107, 255, .2));
+  --blur: blur(22px) saturate(150%);
+  --shadow: 0 18px 60px rgba(0, 0, 0, .38), 0 2px 10px rgba(0, 0, 0, .2);
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+body {
+  background:
+    radial-gradient(1200px 800px at 75% -10%, rgba(77, 155, 255, .20), transparent 60%),
+    radial-gradient(900px 700px at -10% 110%, rgba(46, 230, 214, .16), transparent 60%),
+    radial-gradient(800px 600px at 110% 100%, rgba(157, 107, 255, .14), transparent 60%),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* the world fills the whole window, behind the glass */
+.world-bg { position: fixed; inset: 0; }
+.world-bg.on { opacity: .92; }
+.world-bg::after {
+  background:
+    radial-gradient(ellipse at 60% 45%, rgba(8, 10, 20, 0) 0%, rgba(8, 10, 20, .18) 55%, rgba(8, 10, 20, .62) 100%);
+}
+.main:not(.home) .world-bg.on { opacity: .55; filter: blur(2px) saturate(120%); }
+.shell { position: relative; background: transparent; }
+.sidebar { position: relative; z-index: 2; }
+
+/* every surface is glass */
+.sidebar, .topbar, .composer-box, .model-menu, .sheet-panel, .work, .approval, .update-banner,
+.world-card, .world-hud, .welcome-inner, .setup-panel, .card, .pcard, .panel-head {
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+.sidebar {
+  background: linear-gradient(180deg, rgba(16, 20, 34, .62), rgba(12, 15, 26, .5));
+  border-right: 1px solid var(--glass-edge);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .03);
+}
+.topbar {
+  background: linear-gradient(180deg, rgba(14, 18, 30, .55), rgba(14, 18, 30, .25));
+  border-bottom: 1px solid var(--line);
+}
+.brand-mark { background: var(--grad); color: #061317; box-shadow: 0 4px 16px rgba(46, 230, 214, .35); border-radius: 10px; }
+.brand-name { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
+
+/* controls: soft, translucent, with a gentle lift */
+button {
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease), box-shadow .18s var(--ease), color .18s;
+}
+button:hover { background: rgba(255, 255, 255, .1); border-color: var(--glass-edge); }
+button:active { transform: translateY(1px) scale(.99); }
+.quiet { background: transparent; }
+.send, button.send {
+  background: var(--grad); color: #04121a; font-weight: 650; border: 0;
+  box-shadow: 0 6px 22px rgba(77, 155, 255, .32), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+.send:hover, button.send:hover { filter: brightness(1.08); box-shadow: 0 8px 28px rgba(77, 155, 255, .45), inset 0 1px 0 rgba(255, 255, 255, .4); }
+.new-chat { background: var(--grad-soft); border: 1px solid var(--glass-edge); }
+.convo button.open { border-radius: 12px; }
+.convo.active button.open { background: var(--grad-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--glass-edge); }
+.model-button, .usage-pill {
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--glass-edge); border-radius: 999px;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+}
+.model-menu, .sheet-panel {
+  background: linear-gradient(160deg, rgba(20, 26, 44, .82), rgba(12, 15, 26, .78));
+  border: 1px solid var(--glass-edge); border-radius: 22px; box-shadow: var(--shadow);
+}
+.sheet { background: rgba(4, 6, 12, .35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+input, select, textarea {
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--glass-edge); border-radius: 12px;
+  transition: border-color .18s, box-shadow .18s, background .18s;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(111, 216, 255, .55); box-shadow: 0 0 0 4px rgba(111, 216, 255, .12); }
+
+/* the conversation: floating, readable, never boxed in */
+.transcript { mask-image: linear-gradient(180deg, transparent 0, #000 28px, #000 calc(100% - 24px), transparent 100%); }
+.turn.user .bubble {
+  background: linear-gradient(135deg, rgba(46, 230, 214, .20), rgba(77, 155, 255, .20));
+  border: 1px solid rgba(111, 216, 255, .22); border-radius: 20px 20px 6px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .2); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+}
+.turn.loki .text {
+  background: linear-gradient(160deg, rgba(16, 20, 34, .55), rgba(16, 20, 34, .38));
+  border: 1px solid var(--line); border-radius: 6px 20px 20px 20px; padding: 12px 16px; margin: 4px 0 10px;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+}
+.turn.loki .text pre, .event pre { background: rgba(4, 6, 12, .55); border: 1px solid var(--line); }
+.turn.loki .text code { background: rgba(255, 255, 255, .08); }
+
+/* the composer: one floating pill with a living gradient edge */
+.composer { padding: 10px 22px 18px; background: transparent; }
+.composer-box {
+  position: relative; background: linear-gradient(160deg, rgba(18, 22, 38, .7), rgba(12, 15, 26, .62));
+  border: 1px solid var(--glass-edge); border-radius: 24px; box-shadow: var(--shadow);
+  transition: box-shadow .25s var(--ease), border-color .25s var(--ease);
+}
+.composer-box::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: var(--grad); opacity: 0; transition: opacity .25s var(--ease);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.composer-box:focus-within::before { opacity: .9; }
+.composer-box:focus-within { box-shadow: 0 18px 60px rgba(0, 0, 0, .4), 0 0 40px rgba(77, 155, 255, .18); }
+.composer-box textarea { background: transparent; border: 0; box-shadow: none; }
+.modes { background: rgba(255, 255, 255, .05); border-radius: 999px; padding: 3px; border: 1px solid var(--line); }
+.modes button { border-radius: 999px; background: transparent; }
+.modes button[aria-checked="true"] { background: var(--grad-soft); box-shadow: inset 0 0 0 1px rgba(111, 216, 255, .35); color: var(--text); }
+
+/* the home: the world and one word */
+.summon-word {
+  background: linear-gradient(135deg, #ffffff 0%, #bff6ef 35%, #8fc8ff 70%, #c9b2ff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 6px 30px rgba(77, 155, 255, .35));
+}
+.welcome-inner { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 26px; box-shadow: var(--shadow); padding: 28px; }
+.welcome-mark { background: var(--grad); color: #061317; }
+.chip { background: rgba(255, 255, 255, .06); border: 1px solid var(--glass-edge); border-radius: 999px; }
+.chip:hover { background: var(--grad-soft); }
+
+/* work strip, approvals, banners, world UI */
+.work, .approval, .update-banner {
+  background: linear-gradient(160deg, rgba(18, 22, 38, .72), rgba(12, 15, 26, .6)); border: 1px solid var(--glass-edge);
+  border-radius: 18px; box-shadow: var(--shadow);
+}
+.approval { border-left: 0; box-shadow: var(--shadow), inset 3px 0 0 var(--warn); }
+.world-frame { border-radius: 22px; border: 1px solid var(--glass-edge); box-shadow: var(--shadow); }
+.world-card { background: linear-gradient(160deg, rgba(20, 26, 44, .78), rgba(12, 15, 26, .7)); border-radius: 18px; border-color: var(--glass-edge); }
+.world-hud { background: rgba(10, 14, 24, .5); border-color: var(--glass-edge); }
+.wlabel b { background: rgba(12, 16, 28, .66); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--line); }
+.pill { border-radius: 999px; }
+
+/* settings: a glass sheet with a soft navigation rail */
+.settings-nav { background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .01)); border-right: 1px solid var(--line); }
+.settings-nav .tabs button[aria-selected="true"] { background: var(--grad-soft); box-shadow: inset 0 0 0 1px var(--glass-edge); }
+
+/* thin, quiet scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: rgba(16, 20, 34, .94); --side: rgba(14, 18, 30, .96); }
+  .sidebar, .topbar, .composer-box, .model-menu, .sheet-panel, .turn.loki .text, .turn.user .bubble { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* workbench: the / and @ palette, the changes bar, the diff viewer */
+.composer { position: relative; }
+.wb-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); max-height: 300px; overflow-y: auto; z-index: 30;
+  background: linear-gradient(160deg, rgba(20, 26, 44, .9), rgba(12, 15, 26, .86)); border: 1px solid var(--glass-edge);
+  border-radius: 18px; padding: 6px; box-shadow: var(--shadow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.wb-item { display: flex; gap: 12px; align-items: baseline; padding: 7px 12px; border-radius: 12px; cursor: pointer; }
+.wb-item b { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.wb-item span { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-item.on, .wb-item:hover { background: var(--grad-soft); }
+.changes-bar { max-width: 704px; margin: 6px auto 12px; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  border-radius: 16px; background: linear-gradient(160deg, rgba(18, 22, 38, .7), rgba(12, 15, 26, .58)); border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); font-size: 13px; }
+.changes-bar.rewound { opacity: .55; }
+.changes-sum { font-weight: 600; }
+.changes-add { color: #7ee2a8; font-family: var(--mono); font-size: 12px; }
+.changes-rem { color: #ff8a8a; font-family: var(--mono); font-size: 12px; }
+.changes-names { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(4, 6, 12, .4);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.wb-panel { width: min(960px, 92vw); max-height: 86vh; overflow: auto; padding: 18px 20px; border-radius: 22px;
+  background: linear-gradient(160deg, rgba(20, 26, 44, .9), rgba(12, 15, 26, .88)); border: 1px solid var(--glass-edge); box-shadow: var(--shadow); }
+.wb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.wb-head h3 { margin: 0; font-size: 15px; }
+.wb-files { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.wb-file { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .03); }
+.wb-path { flex: 1; font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-diff { font: 12px/1.5 var(--mono); background: rgba(4, 6, 12, .6); border: 1px solid var(--line); border-radius: 14px; padding: 12px; overflow-x: auto; margin: 0; }
+.wb-diff .a { color: #8ff0b5; background: rgba(46, 230, 140, .07); display: block; }
+.wb-diff .r { color: #ff9b9b; background: rgba(255, 90, 90, .07); display: block; }
+.wb-diff .c { color: #8fc8ff; display: block; }
+.wb-diff .h { color: var(--muted); display: block; }
+.wb-actions { display: flex; justify-content: flex-end; margin-top: 12px; }

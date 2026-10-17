@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | `app/ui/world_noise.js` | GLSL 2D simplex noise (`noise2D.glsl`, Ian McEwan, Ashima Arts) and 2D cellular noise (`cellular2D.glsl`, Stefan Gustavson) from [stegu/webgl-noise](https://github.com/stegu/webgl-noise), used unchanged except one duplicate helper removed | MIT - full text at the top of the file |
 | `app/ui/world.js` (water shader) | The depth fade (Beer-Lambert) and noise-displaced shoreline foam are adapted from [paddy-exe/Godot-3D-Stylized-Water](https://github.com/paddy-exe/Godot-3D-Stylized-Water) by Patrick Exner (Godot shading language, rewritten here as WebGL 1 GLSL with an analytic shore distance instead of a depth texture) | MIT, Copyright (c) 2021 Patrick Exner |
+| `app/ui/vendor/three/` | [three.js](https://github.com/mrdoob/three.js) r186: the core and the add-ons EffectComposer, RenderPass, UnrealBloomPass, OutputPass, FXAAPass, ShaderPass, Sky, Reflector (+ their shaders), with `'three'` imports rewritten to local paths because the UI's CSP allows no import map | MIT - `app/ui/vendor/three/LICENSE` |
 | `contrib/ruflo/` | see that folder | see that folder |
 
 MIT notice for Godot-3D-Stylized-Water (adapted code in app/ui/world.js):

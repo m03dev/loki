@@ -58,7 +58,7 @@ async function loadUsageTab() {
 }
 
 // ---------------------------------------------------------------- model setup
-function button(cls, text, onClick) {
+function setupButton(cls, text, onClick) {
   const b = el("button", cls, text);
   b.type = "button";
   b.addEventListener("click", onClick);
@@ -151,7 +151,7 @@ function renderSetup(box, data, compact) {
   } else if (auto.tag) {
     const label = auto.installed ? "Use the best model for this computer (" + auto.tag + ", already downloaded)"
       : "Set up the best model for this computer (" + auto.tag + ", " + gb(auto.size_gb) + ")";
-    const go = button("send big", label, async () => {
+    const go = setupButton("send big", label, async () => {
       go.disabled = true;
       const r = await api("/setup/auto", {});
       if (!r.ok) { go.disabled = false; addNotice(r.error || "Could not start the setup.", true); return; }
@@ -180,7 +180,7 @@ function renderSetup(box, data, compact) {
               el("p", "note", ol.installed ? "Open the Ollama app, or use the button above - Loki starts it for you." :
                 "Ollama is free and open source. The button above installs it from ollama.com, or do just that step here."));
     if (!ol.installed) {
-      const install = button("quiet", "Only install Ollama", async () => {
+      const install = setupButton("quiet", "Only install Ollama", async () => {
         install.disabled = true;
         const r = await api("/setup/install-ollama", {});
         if (!r.ok) addNotice(r.error || "Could not start the install.", true);
@@ -203,7 +203,7 @@ function renderSetup(box, data, compact) {
     info.append(document.createTextNode(p.title + ": " + p.tag),
                 el("small", "", p.why + " · " + gb(p.size_gb) + (p.installed ? " · downloaded" : " download")));
     const inUse = local === p.tag || local.includes(p.tag.replace(/[:]/g, "-"));
-    const act = button(inUse ? "quiet" : "send", inUse ? "In use" : p.installed ? "Use" : "Download & use",
+    const act = setupButton(inUse ? "quiet" : "send", inUse ? "In use" : p.installed ? "Use" : "Download & use",
       async () => { act.disabled = true; if (!(await downloadAndUse(p.tag, box, compact))) act.disabled = false; });
     act.disabled = inUse || busy;
     row.append(info, act);
@@ -215,7 +215,7 @@ function renderSetup(box, data, compact) {
     const info = el("div", "grow");
     info.append(document.createTextNode(picks.mlx.title + ": " + picks.mlx.repo),
                 el("small", "", picks.mlx.why + " Run: " + picks.mlx.command));
-    const copy = button("quiet", "Copy command", async () => {
+    const copy = setupButton("quiet", "Copy command", async () => {
       try { await navigator.clipboard.writeText(picks.mlx.command); setStatus("Command copied", true); }
       catch (_) { addNotice(picks.mlx.command); }
     });
@@ -234,7 +234,7 @@ function renderSetup(box, data, compact) {
       const info = el("div", "grow");
       info.append(document.createTextNode(m.name), el("small", "", (m.params || "") + " · " + gb(m.size_gb) + " · downloaded"));
       const inUse = local === m.name || local.includes(m.name.replace(/[:]/g, "-"));
-      const use = button("quiet", inUse ? "In use" : "Use", async () => {
+      const use = setupButton("quiet", inUse ? "In use" : "Use", async () => {
         const r = await api("/setup/use", { model: m.name });
         if (r.ok) { setStatus("Local model: " + r.local, true); compact ? loadModelsTab() : openSetup(true); }
       });
@@ -254,7 +254,7 @@ function renderSetup(box, data, compact) {
       const row = el("div", "model-row");
       const info = el("div", "grow");
       info.append(document.createTextNode(rec.tag), el("small", "", rec.why + " · " + gb(rec.size) + " download · needs ~" + gb(rec.need) + " memory"));
-      const get = button("quiet", rec.fits_disk === false ? "Free up " + gb(rec.free_up_gb) + " first" : "Download & use",
+      const get = setupButton("quiet", rec.fits_disk === false ? "Free up " + gb(rec.free_up_gb) + " first" : "Download & use",
         async () => { get.disabled = true; if (!(await downloadAndUse(rec.tag, box, compact))) get.disabled = false; });
       get.disabled = rec.fits_disk === false || busy;
       row.append(info, get);
@@ -324,7 +324,7 @@ function showUpgradeBanner(data) {
   const text = el("span", "", "A better model fits this computer: " + up.tag + " (you use " + up.current + "). " +
     gb(up.size_gb) + " download.");
   text.title = up.why || "";
-  const go = button("send small", "Download & switch", async () => {
+  const go = setupButton("send small", "Download & switch", async () => {
     go.disabled = true;
     later.hidden = true;
     const r = await api("/setup/upgrade", { tag: up.tag });
@@ -342,7 +342,7 @@ function showUpgradeBanner(data) {
       }
     }, 1000);
   });
-  const later = button("quiet small", "Not now", () => {
+  const later = setupButton("quiet small", "Not now", () => {
     try { localStorage.setItem(upgradeLaterKey(up.tag), String(Date.now())); } catch (_) { /* no storage */ }
     bar.remove();
   });

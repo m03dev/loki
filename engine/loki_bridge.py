@@ -195,6 +195,35 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'sel
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+_USAGE_CACHE: dict = {"t": 0.0, "today": {}}
+
+
+def world_extras(agent: Any) -> dict:
+    """What LOKI World shows besides the agents: your other machines, the model answering
+    right now, and today's usage. Cheap: cached, never waits on the network."""
+    out: dict = {}
+    try:
+        import peer_link  # pylint: disable=import-outside-toplevel
+        out["machines"] = peer_link.world_machines()
+    except Exception:  # noqa: BLE001
+        out["machines"] = []
+    try:
+        name = agent.active_model_name()
+        cfg = agent.MODELS[name]
+        out["model"] = {"provider": name, "model": cfg.model,
+                        "local": "11434" in cfg.base_url or "127.0.0.1" in cfg.base_url or "localhost" in cfg.base_url}
+    except Exception:  # noqa: BLE001
+        out["model"] = {}
+    if time.time() - _USAGE_CACHE["t"] > 30:
+        try:
+            _USAGE_CACHE["today"] = agent.USAGE.summary().get("today", {})
+        except Exception:  # noqa: BLE001
+            _USAGE_CACHE["today"] = {}
+        _USAGE_CACHE["t"] = time.time()
+    out["usage"] = _USAGE_CACHE["today"]
+    return out
+
+
 def restart_engine() -> None:
     """Restart this engine on the code now on disk (after an update).
 
@@ -852,14 +881,34 @@ class BridgeHandler(BaseHTTPRequestHandler):
             runner = getattr(state.agent, "TEAMS", None)
             raw_jobs = state.jobs.store.all() if state.jobs is not None else []
             busy = bool(state.chat_lock is not None and state.chat_lock.locked())
-            self._send_json(200, events.world(raw_jobs, runner.all() if runner else [], busy,
-                                              dict(getattr(state.agent, "LAST_TRIAGE", {}) or {})))
+            payload = events.world(raw_jobs, runner.all() if runner else [], busy,
+                                   dict(getattr(state.agent, "LAST_TRIAGE", {}) or {}))
+            payload.update(world_extras(state.agent))
+            self._send_json(200, payload)
             return
         if route == "/teams":
             agent = self.server.state.agent
             runner = getattr(agent, "TEAMS", None)
             teams_list = [agent.teams.present(t, runner.jobs) for t in runner.all()[:10]] if runner else []
             self._send_json(200, {"ok": True, "teams": teams_list})
+            return
+        if route in ("/checkpoints", "/checkpoints/changes", "/workbench/files"):
+            query = dict(part.split("=", 1) for part in urlparse(self.path).query.split("&") if "=" in part)
+            from urllib.parse import unquote  # pylint: disable=import-outside-toplevel
+            state = self.server.state
+            cps = getattr(state, "checkpoints", None)
+            if route == "/workbench/files":
+                import workbench  # pylint: disable=import-outside-toplevel
+                self._send_json(200, {"ok": True, "files": workbench.search_files(state.project or Path("."),
+                                                                                    unquote(query.get("q", "")))})
+                return
+            if cps is None:
+                self._send_json(503, {"ok": False, "error": "checkpoints are not available"})
+                return
+            if route == "/checkpoints":
+                self._send_json(200, {"ok": True, "checkpoints": cps.list()})
+            else:
+                self._send_json(200, cps.changes(unquote(query.get("id", ""))))
             return
         if route == "/experience":
             agent = self.server.state.agent
@@ -948,6 +997,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(409, {"ok": False, "error": "Loki is already handling a request."})
                 return
             state.note_request()
+            extra: dict = {}
+            try:
+                # Claude Code habits: @file attaches that file; a request that may change files
+                # is checkpointed first, so its changes can be reviewed and rewound.
+                import workbench  # pylint: disable=import-outside-toplevel
+                prompt, attached = workbench.expand_mentions(prompt, state.project or Path("."))
+                if attached:
+                    extra["attached"] = attached
+                cps = getattr(state, "checkpoints", None)
+                if cps is not None and (is_task or state.agent.mode_state().get("mode") == "build"):
+                    point = cps.take(prompt.strip().splitlines()[0][:120] if prompt.strip() else "request")
+                    if point.get("id"):
+                        extra["checkpoint"] = point["id"]
+            except Exception as exc:  # noqa: BLE001
+                extra["checkpoint_error"] = str(exc)[:200]
             try:
                 if is_task:
                     try:
@@ -962,11 +1026,38 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     future = asyncio.run_coroutine_threadsafe(state.request_task(prompt.strip(), steps), state.loop)
                 else:
                     future = asyncio.run_coroutine_threadsafe(state.request_chat(prompt.strip()), state.loop)
-                self._send_json(200, future.result())  # wait as long as the task needs
+                result = future.result()  # wait as long as the task needs
+                if isinstance(result, dict) and extra:
+                    result = {**result, **extra}
+                    if extra.get("checkpoint") and getattr(state, "checkpoints", None) is not None:
+                        try:
+                            changed = state.checkpoints.changes(extra["checkpoint"])
+                            result["changed_files"] = changed.get("files", [])[:50]
+                        except Exception:  # noqa: BLE001
+                            pass
+                self._send_json(200, result)
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"Bridge request failed: {type(exc).__name__}: {exc}"})
             finally:
                 request_lock.release()
+            return
+        if route in ("/checkpoints/rewind", "/checkpoints/take"):
+            cps = getattr(state, "checkpoints", None)
+            if cps is None:
+                self._send_json(503, {"ok": False, "error": "checkpoints are not available"})
+                return
+            busy = state.try_busy()
+            if busy is None:
+                self._send_json(409, {"ok": False, "error": "Loki is working; stop it first, then rewind."})
+                return
+            try:
+                if route == "/checkpoints/take":
+                    point = cps.take(str(data.get("label", "saved by you"))[:200], kind="manual")
+                    self._send_json(200 if point.get("id") else 500, {"ok": bool(point.get("id")), **point})
+                else:
+                    self._send_json(200, cps.rewind(str(data.get("id", ""))))
+            finally:
+                state.release_busy(busy)
             return
         if route == "/cancel":
             if state.loop is None:
@@ -1620,6 +1711,12 @@ async def serve() -> None:
     state = BridgeState(loki, secret)
     state.restart_engine = restart_engine
     state.project = project
+    try:
+        import workbench  # pylint: disable=import-outside-toplevel
+        state.checkpoints = workbench.Checkpoints(project, (STATE_DIR or project / ".loki") / "checkpoints.git")
+    except Exception as exc:  # noqa: BLE001 - checkpoints are a convenience, never a reason not to start
+        state.checkpoints = None
+        print("[loki-bridge] checkpoints are off: %s" % exc, flush=True)
     state.session = load_session(project)
     validate_session(state, project)
     # Hosted mode: model calls go through Loki Cloud (key stays server-side).

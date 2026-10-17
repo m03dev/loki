@@ -408,6 +408,41 @@ def ask_peers_to_check_update() -> list:
     return told
 
 
+_WORLD_MACHINES: dict = {"t": 0.0, "list": [], "busy": False}
+
+
+def world_machines(max_age_s: float = 30.0) -> list:
+    """Your other machines for LOKI World: name, online, latency, live jobs, version. Cached;
+    refreshed in the background, so GET /world (polled every few seconds) never waits on the
+    network."""
+    if not peers.peers():
+        return []
+    state = _WORLD_MACHINES
+    if time.time() - state["t"] > max_age_s and not state["busy"]:
+        state["busy"] = True
+
+        def refresh() -> None:
+            try:
+                out = []
+                for st in peers.status_all():
+                    hello = st.get("hello") or {}
+                    jobs = hello.get("jobs") or {}
+                    out.append({"name": st["name"], "ok": bool(st.get("ok")), "ms": st.get("ms"),
+                                "relay": bool(st.get("relay")), "error": str(st.get("error", ""))[:160],
+                                "os": (hello.get("machine") or {}).get("os", ""),
+                                "version": (hello.get("version") or {}).get("label", ""),
+                                "working": int(jobs.get("working", 0) or 0) + int(jobs.get("starting", 0) or 0),
+                                "queued": int(jobs.get("queued", 0) or 0), "blocked": int(jobs.get("blocked", 0) or 0),
+                                "models": len(hello.get("ollama_models") or [])})
+                state["list"] = out
+            except Exception:  # noqa: BLE001 - the world must never break on the network
+                pass
+            finally:
+                state["t"], state["busy"] = time.time(), False
+        threading.Thread(target=refresh, daemon=True, name="loki-world-machines").start()
+    return state["list"]
+
+
 def sync_once(agent: Any) -> dict:
     statuses = peers.status_all()
     LAST_SYNC["version_differs"] = compare_versions(statuses)

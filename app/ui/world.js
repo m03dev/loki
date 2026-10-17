@@ -37,6 +37,7 @@ const World = {
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
   adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
+  engine: "",       // "classic" forces the hand-written WebGL 1 renderer; otherwise three.js when possible
   selected: "", particles: [], seats: {}, ripples: [], fish: null, fishAt: 0,
 };
 
@@ -426,6 +427,23 @@ function initGL(view) {
 }
 
 function makeView(canvas, labels, opts) {
+  // The three.js renderer (world_three.js) when this machine has WebGL 2 and nobody asked
+  // for the classic one (World.engine = "classic" or LOKI_WORLD_ENGINE=classic).
+  if (window.WorldThree && World.engine !== "classic") {
+    let three = null;
+    try {
+      three = window.WorldThree.create(canvas, { staticScene, meshes: MESH_SRC, water: WATER,
+        noise: typeof WORLD_NOISE_GLSL === "string" ? WORLD_NOISE_GLSL : "" });
+    } catch (err) { three = null; console.warn("LOKI World: three.js renderer failed, using the classic one", err); }
+    if (three) {
+      staticScene();
+      const view = { canvas, labels, gl: three.renderer.getContext(), three, opts, yaw: 0.6, pitch: opts.pitch || 0.5,
+        dist: opts.dist || 15, target: [0, 0.7, 0], drag: null, pointers: {}, labelNodes: {}, visible: false, raf: 0, last: 0,
+        lastDraw: 0, perf: { ema: 0, boost: 0, slow: 0, fast: 0, draws: 0, ms: 0, engine: "three" }, follow: "" };
+      three.setQuality(opts.quality || "high");
+      return view;
+    }
+  }
   let gl = null;
   try { gl = canvas.getContext("webgl", { antialias: false, alpha: false, premultipliedAlpha: false }); } catch (_) { gl = null; }
   if (!gl) return null;
@@ -1069,6 +1087,48 @@ function sceneList(view, t, dt, P) {
     view.teamSpots.push({ id: tm.id, pos: [b.x, 2.05, b.z], goal: tm.goal || "", stage: tm.stage || "" });
   });
 
+  // your other machines: each its own small island off the edge, joined by a bridge of light
+  // (the peer link - LAN or relay). Packets run along it while the machine answers; it goes
+  // dark and grey when it does not. Little figures stand round its tower for its running jobs.
+  view.machineSpots = [];
+  const machines = ((World.data && World.data.machines) || []).slice(0, 4);
+  machines.forEach((m, i) => {
+    const ang = 2.55 + (i - (machines.length - 1) / 2) * 0.75, r = 17.5, y = -0.9;
+    const cx = Math.cos(ang) * r, cz = Math.sin(ang) * r, ok = m.ok;
+    const tone = ok ? [0.25, 0.95, 0.85] : [0.55, 0.55, 0.62];
+    const bob = World.reduced ? 0 : Math.sin(t * 0.6 + i) * 0.12;
+    solid("cyl6", [cx, y + bob, cz], i, [4.4, 0.5, 4.4], [0.12, 0.58, 0.38]);
+    solid("cone", [cx, y - 1.6 + bob, cz], i + 0.4, [4.0, -2.8, 4.0], [0.36, 0.26, 0.42], { line: false });
+    solid("box", [cx + 0.7, y + 0.75 + bob, cz - 0.4], ang, [1.2, 1.0, 1.0], [0.92, 0.86, 0.76]);
+    solid("pyr", [cx + 0.7, y + 1.6 + bob, cz - 0.4], ang + Math.PI / 4, [1.8, 0.75, 1.6], m.os === "Darwin" ? [0.75, 0.78, 0.86] : [0.30, 0.55, 0.95]);
+    solid("cyl6", [cx - 0.6, y + 1.3 + bob, cz + 0.4], 0, [0.22, 2.2, 0.22], [0.18, 0.2, 0.3]);
+    const beacon = [cx - 0.6, y + 2.6 + bob + (ok && !World.reduced ? Math.sin(t * 2 + i) * 0.06 : 0), cz + 0.4];
+    solid("sph", beacon, 0, [0.42, 0.42, 0.42], tone, { e: ok ? 1.3 : 0.15, line: false });
+    if (ok) { glow(beacon, 1.3, tone, 0.8); light([beacon[0], beacon[1] - 0.4, beacon[2]], scale3(tone, 0.7), 4, 1); }
+    for (let k = 0; k < Math.min(4, m.working || 0); k++) {   // its running jobs
+      const a2 = (World.reduced ? 0 : t * 0.4) + k * 1.57, fx = cx - 0.6 + Math.cos(a2) * 1.1, fz = cz + 0.4 + Math.sin(a2) * 1.1;
+      solid("cyl", [fx, y + 0.55 + bob, fz], a2, [0.32, 0.5, 0.32], [0.55, 0.75, 1.0]);
+      solid("sph", [fx, y + 0.98 + bob, fz], a2, [0.34, 0.34, 0.34], [0.65, 0.85, 1.0]);
+    }
+    // the bridge: an arc of lights from this island's edge to that one's
+    const a0 = [Math.cos(ang) * (ISLAND - 0.3), 0.3, Math.sin(ang) * (ISLAND - 0.3)];
+    const a1 = [cx - Math.cos(ang) * 2.3, y + 0.4 + bob, cz - Math.sin(ang) * 2.3];
+    const N = 14;
+    for (let k = 0; k <= N; k++) {
+      const u = k / N, p = mix3(a0, a1, u);
+      p[1] += Math.sin(u * Math.PI) * 1.4;
+      solid("box", p, ang, [0.12, 0.05, 0.12], tone, { e: ok ? 0.9 : 0.05, line: false });
+    }
+    if (ok && !World.reduced) for (let k = 0; k < 3; k++) {   // packets travelling both ways
+      const u = ((t * 0.35 + k / 3) % 1), dir = k % 2 ? u : 1 - u, p = mix3(a0, a1, dir);
+      p[1] += Math.sin(dir * Math.PI) * 1.4 + 0.12;
+      glow(p, 0.35, k % 2 ? [0.4, 1, 0.9] : [1, 0.85, 0.4], 0.95);
+    }
+    view.machineSpots.push({ key: "machine:" + m.name, pos: [cx, y + 3.4 + bob, cz], name: m.name,
+      sub: ok ? (m.relay ? "via relay · " : "") + (m.ms != null ? m.ms + " ms" : "") + (m.working ? " · " + m.working + " working" : "") +
+        (m.blocked ? " · " + m.blocked + " need you" : "") : "offline" + (m.error ? " · " + m.error.slice(0, 60) : "") });
+  });
+
   // agents
   const list = Object.entries(World.agents);
   const rnd = Math.random;
@@ -1235,12 +1295,12 @@ function frame(view, now) {
   const t0 = performance.now();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  if (!view.three && (canvas.width !== w || canvas.height !== h)) { canvas.width = w; canvas.height = h; }
   // one world pixel = `pixel` CSS px, rounded to a whole number of device pixels (plus the
   // frame-time watcher's boost when this machine is falling behind)
   const scale = Math.max(1, Math.round((World.pixel || view.opts.pixel || 3) * dpr)) + (World.pixel ? 0 : view.perf.boost);
   const lw = Math.max(1, Math.ceil(w / scale)), lh = Math.max(1, Math.ceil(h / scale));
-  const fb = ensureTarget(view, lw, lh);
+  const fb = view.three ? null : ensureTarget(view, lw, lh);
   const rw = fb ? lw : w, rh = fb ? lh : h;
 
   const dt = Math.min(0.1, (now - (view.last || now)) / 1000);
@@ -1285,6 +1345,20 @@ function frame(view, now) {
   });
   for (let i = lights.length; i < 10; i++) lc[i * 4 + 3] = 1;
   const F = { vp, eye, sunDir, P, fogr, lp, lc, t };
+  if (view.three) {   // the three.js renderer draws the same scene description
+    const nowS = performance.now() / 1000;
+    World.ripples = World.ripples.filter((r) => nowS - r.t0 < 2.4);
+    const scaleDown = [1, 0.85, 0.7][view.perf.boost] || 1;
+    view.perf.draws = view.three.render({ L, lights, eye, target, fov, P, sunDir, t, w: canvas.clientWidth || 1,
+      h: canvas.clientHeight || 1, dpr: dpr * scaleDown, skyRot: World.reduced ? 0 : -t * 0.01, ripples: World.ripples,
+      waterLook: { shallow: mix3(WATER_LOOK.night.shallow, WATER_LOOK.day.shallow, P.dayK),
+        deep: mix3(WATER_LOOK.night.deep, WATER_LOOK.day.deep, P.dayK), foam: mix3(WATER_LOOK.night.foam, WATER_LOOK.day.foam, P.dayK) } });
+    view.perf.ms = performance.now() - t0;
+    view.perf.quality = view.three.quality;
+    drawLabels(view, vp, now);
+    if (view.opts.detail) updateHud(view, now, hour);
+    return;
+  }
   const skyM = M4.trs([0, 0, 0], World.reduced ? 0 : -t * 0.01, [1, 1, 1]);
   const ident = M4.ident();
   let draws = 0;
@@ -1535,6 +1609,16 @@ function drawLabels(view, vp, now) {
   }
   // agents first (nearest first), then team banners; a label is lifted at most twice and
   // never more than ~40px from its head - a banner label that still collides just hides
+  for (const ms of view.machineSpots || []) {
+    seen.add(ms.key);
+    const node = nodeFor(ms.key, "wlabel machine");
+    const at = project(view, ms.pos);
+    node.hidden = !at;
+    if (!at) continue;
+    setText(node, 0, ms.name);
+    setText(node, 1, ms.sub);
+    items.push({ node, x: at[0], y: at[1], depth: at[2] });
+  }
   items.sort((p, q) => (p.node.classList.contains("team") - q.node.classList.contains("team")) || p.depth - q.depth);
   const placed = [];
   for (const it of items) {
@@ -1630,6 +1714,12 @@ function updateHud(view, now, hour) {
   const blocked = s.blocked != null ? s.blocked : count("blocked");
   if (blocked) parts.push(blocked + " need you");
   if (s.done_today != null) parts.push(s.done_today + " done today");
+  const model = (World.data && World.data.model) || {};
+  if (model.model) parts.push("◆ " + model.model + (model.local ? " (local)" : ""));
+  const usage = (World.data && World.data.usage) || {};
+  if (usage.calls) parts.push(usage.calls + " calls" + (usage.cost ? " · $" + Number(usage.cost).toFixed(2) : ""));
+  const machinesUp = ((World.data && World.data.machines) || []).filter((m) => m.ok).length;
+  if ((World.data && World.data.machines || []).length) parts.push(machinesUp + "/" + World.data.machines.length + " machines linked");
   if (s.failed_today) parts.push(s.failed_today + " failed");
   const text = parts.join("  ·  ");
   if (view.hud.textContent !== text) view.hud.textContent = text;
@@ -1671,8 +1761,13 @@ function watchFrames(view, gap, fps) {
   }
   if (pf.ema > budget * 1.35) { pf.slow++; pf.fast = 0; } else if (pf.ema < budget * 1.1) { pf.fast++; pf.slow = 0; } else { pf.slow = 0; pf.fast = 0; }
   const cooling = pf.noGain && performance.now() - pf.noGain < 60000;   // pixels are not the bottleneck here
-  if (pf.slow > 40 && pf.boost < 3 && !cooling) { pf.trial = { before: pf.ema, frames: 0 }; pf.boost++; pf.slow = 0; }
+  const most = view.three ? 2 : 3;
+  if (pf.slow > 40 && pf.boost < most && !cooling) { pf.trial = { before: pf.ema, frames: 0 }; pf.boost++; pf.slow = 0; }
   if (pf.fast > 300 && pf.boost > 0) { pf.boost--; pf.fast = 0; }
+  if (view.three) {   // three.js: coarser rendering = fewer shadows/bloom first, then fewer pixels
+    const want = ["high", "medium", "low"][pf.boost] || "high";
+    if (view.three.quality !== want) view.three.setQuality(want);
+  }
 }
 
 function setVisible(view, on) {
@@ -1792,13 +1887,16 @@ function setWorldMode(mode) {
 }
 
 async function startWorld() {
-  const canvas = document.getElementById("world-bg-canvas");
-  if (canvas) World.views.bg = makeView(canvas, document.getElementById("world-bg-labels"),
-    { dist: 19, pitch: 0.46, spin: 0.045, detail: false, pixel: 4, fps: 30 });
   try {
     const data = await api("/settings/general");
-    if (data && data.ok) World.mode = data.values.LOKI_WORLD || "background";
+    if (data && data.ok) {
+      World.mode = data.values.LOKI_WORLD || "background";
+      World.engine = (data.values.LOKI_WORLD_ENGINE || "").toLowerCase() === "classic" ? "classic" : World.engine;
+    }
   } catch (_) { /* default */ }
+  const canvas = document.getElementById("world-bg-canvas");
+  if (canvas) World.views.bg = makeView(canvas, document.getElementById("world-bg-labels"),
+    { dist: 19, pitch: 0.46, spin: 0.045, detail: false, pixel: 4, fps: 30, quality: "medium" });
   const main = document.getElementById("main");
   if (main) new MutationObserver(refreshBackground).observe(main, { attributes: true, attributeFilter: ["class"] });
   const settings = document.getElementById("settings");
