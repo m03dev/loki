@@ -13,8 +13,15 @@ what.
 
     working     the task in hand          project_state.py    (objective, files, decisions)
     episodic    what happened last time   reasoning_bank.py   (lessons) + experience.py (log)
+                                          + memory_core.py episodic learnings
     semantic    lasting facts and notes   memory.md facts + brain.py vault + knowledge.py
-    procedural  how to do things          agents.skills_catalog (SKILL.md folders)
+                                          + memory_core.py learnings (the `memory` tool)
+    procedural  how to do things          agents.skills_catalog (SKILL.md folders, including
+                                          the skills LOKI learned itself: skill_learning.py)
+
+memory_core.py (session 26, OpenHuman's design) adds learn / recall / forget with relevance
+scoring and the bounded per-request memory pack; `learn`, `forget` and `pack` below are its
+entry points, and recall/stats here include what it holds.
 
 Read-only tiers (procedural) say so instead of pretending to write.
 """
@@ -32,10 +39,11 @@ MANIFEST: dict = {
                                            "tests", "known_issues", "decisions", "blockers",
                                            "next_actions")},
     "episodic": {"owns": "what worked and what failed on similar past tasks",
-                 "module": "reasoning_bank.py + experience.py", "writes": True, "fields": ("goal",)},
+                 "module": "reasoning_bank.py + experience.py + memory_core.py", "writes": True, "fields": ("goal",)},
     "semantic": {"owns": "lasting facts about the user and the project",
-                 "module": "memory.md + brain.py + knowledge.py", "writes": True, "fields": ("fact",)},
-    "procedural": {"owns": "how to do things (skills)", "module": "agents.skills_catalog",
+                 "module": "memory.md + brain.py + knowledge.py + memory_core.py", "writes": True, "fields": ("fact",)},
+    "procedural": {"owns": "how to do things (skills, including learned ones)",
+                   "module": "agents.skills_catalog + skill_learning.py",
                    "writes": False, "fields": ()},
 }
 
@@ -151,6 +159,7 @@ def recall(tier: str, query: str = "", limit: int = 5, root: Path | None = None,
                 out.append({"tier": tier, "text": str(item.get("goal", "")),
                             "worked": bool(item.get("worked")),
                             "steps": item.get("steps", ""), "when": item.get("t")})
+            out += _core(tier, needle, limit - len(out), root)
         elif tier == "semantic":
             path = facts_file(root)
             if path.is_file():
@@ -160,6 +169,8 @@ def recall(tier: str, query: str = "", limit: int = 5, root: Path | None = None,
                         out.append({"tier": tier, "text": body, "source": str(path)})
                         if len(out) >= limit:
                             break
+            if len(out) < limit:
+                out += _core(tier, needle, limit - len(out), root)
         elif tier == "procedural":
             import agents  # pylint: disable=import-outside-toplevel
 
@@ -174,6 +185,42 @@ def recall(tier: str, query: str = "", limit: int = 5, root: Path | None = None,
     except Exception:  # noqa: BLE001 - memory is advice; it must never break a caller
         return out
     return out[:limit]
+
+
+def _core(tier: str, needle: str, limit: int, root: Path | None) -> list:
+    """memory_core.py items of a tier that contain `needle` (newest first)."""
+    if limit <= 0:
+        return []
+    import memory_core  # pylint: disable=import-outside-toplevel
+
+    found = []
+    for item in reversed(memory_core.items(data_dir(root), tier)):
+        if not needle or needle in item.get("text", "").lower():
+            found.append({"tier": tier, "text": item["text"], "id": item["id"], "source": "memory_core",
+                          "when": item.get("t")})
+            if len(found) >= limit:
+                break
+    return found
+
+
+def learn(text: str, tier: str = "semantic", root: Path | None = None, **meta) -> dict:
+    """Store a learning in memory_core (secrets scrubbed; host facts stamped)."""
+    import memory_core  # pylint: disable=import-outside-toplevel
+
+    return memory_core.learn(text, tier=tier, root=data_dir(root), tags=meta.pop("tags", None), meta=meta)
+
+
+def forget(item_id: str = "", query: str = "", root: Path | None = None, all_matches: bool = False) -> dict:
+    import memory_core  # pylint: disable=import-outside-toplevel
+
+    return memory_core.forget(item_id, query, root=data_dir(root), all_matches=all_matches)
+
+
+def pack(query: str, root: Path | None = None, repo: Path | None = None) -> dict:
+    """The bounded memory pack for one request (what LOKI recalls before it starts)."""
+    import memory_core  # pylint: disable=import-outside-toplevel
+
+    return memory_core.pack(query, root=data_dir(root), repo=repo)
 
 
 def stats(root: Path | None = None, repo: Path | None = None) -> dict:
@@ -203,6 +250,14 @@ def stats(root: Path | None = None, repo: Path | None = None) -> dict:
         facts = sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
                     if line.strip().startswith("- "))
     out["tiers"]["semantic"] = {"facts": facts, "vault_notes": _count_files(_vault_dir(data))}
+    try:
+        import memory_core  # pylint: disable=import-outside-toplevel
+
+        core = memory_core.stats(data)
+        out["tiers"]["semantic"]["learned"] = core["by_tier"].get("semantic", 0)
+        out["tiers"]["episodic"]["learned"] = core["by_tier"].get("episodic", 0)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         import agents  # pylint: disable=import-outside-toplevel
 

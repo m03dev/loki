@@ -115,11 +115,13 @@ TEMPLATES = STARTERS + [
      "role": "build", "goal": "code with OpenHands on this computer's local Ollama model",
      "tools": ["files", "commands"], "color": "#5e81ac",
      "instructions": "Implement the task in small steps, run the project's tests, and summarise what changed."},
-    # Written for LOKI (the stage-by-stage idea follows the common novel-writing workflow that
-    # tools such as MuMuAINovel use; no text or prompt from any of them is copied here).
+    # The stages and rules follow MuMuAINovel's long-story pipeline; its prompts, translated to
+    # English, are the novel-writer skill (skills/novel-writer, GPL-3.0 - LICENSE beside it).
     {"id": "novel-writer", "name": "Novel Writer", "engine": "loki", "allow_commands": False,
      "role": "create", "goal": "write a novel stage by stage, from idea to revised chapters, in novel/",
      "tools": ["files"], "memory": "project", "max_minutes": 240, "color": "#b48ead",
+     "skills": ["novel-writer", "novel-world", "novel-characters", "novel-outline", "novel-chapter",
+                "novel-analysis"],
      "instructions": (
          "You write long fiction in stages and keep every stage in files under novel/ so the work "
          "survives restarts and can be edited by the author between stages. Before each stage, read "
@@ -141,6 +143,12 @@ TEMPLATES = STARTERS + [
          "who knows what) with chapter and line, and how to fix it.\n"
          "7. Rewrite pass - fix what the continuity check found, tighten prose, cut repetition, and "
          "note what changed in novel/06-revisions.md.\n"
+         "The novel-writer skill holds the prompt for each stage (world, characters and organizations, "
+         "opening outline, outline continuation, chapter, chapter analysis): follow it. Keep a "
+         "foreshadowing ledger in novel/foreshadows.md (id, title, category, the chapter it should pay "
+         "off; mark it resolved when it does), and give every chapter its context: its outline, the "
+         "previous chapter's summary and full text, the recent summaries, its characters and the "
+         "foreshadowing due. Analyse each chapter into novel/05-analysis.md with honest scores.\n"
          "Work one stage per run unless the task asks for more, and end with a DONE line naming the "
          "files you wrote and the next stage.")},
 ]
@@ -280,6 +288,9 @@ def _frontmatter(text: str) -> dict:
 def skill_roots(repo: Path, data_dir: Path) -> list:
     # skills/marketing: coreyhaines31/marketingskills (MIT, vendored; LICENSE beside it).
     roots = [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills"),
+             ("learned", Path(data_dir) / "skills" / "learned"),   # skill_learning.py (roadmap E2)
+             # the novel pipeline's stage prompts (MuMuAINovel, GPL-3.0 - LICENSE in skills/novel-writer)
+             ("novel", Path(repo) / "skills" / "novel-writer" / "stages"),
              ("marketing", Path(repo) / "skills" / "marketing")]
     try:   # Ruflo's core skills and every plugin's (contrib/ruflo)
         import ruflo_library  # pylint: disable=import-outside-toplevel

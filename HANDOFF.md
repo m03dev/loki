@@ -33,6 +33,95 @@ Last updated: 2026-10-17 (session 26, Claude in the cloud).
 - Still open (owner to answer): remove the Godot code (AGENTS.md says nothing Godot; the owner also said
   "don't take anything off").
 
+## Session 26 core upgrade (worktree)
+
+The owner: "take all these plugins and take their code and parts of it and make LOKI better - not
+so it calls out to them. It's not improving itself right now because it doesn't have those." Built
+in a Claude worktree (branch `worktree-agent-a503d5a5908a26e4b`), committed there; the parent
+session merges and ships. **25 suites pass** (`tests/test_core_upgrade.py` is new, 150+ checks).
+
+**LICENCE: LOKI MUST STAY PRIVATE.** Code ported from GPL-3.0 projects is now in LOKI:
+OpenHuman (`engine/memory_core.py`, `engine/subagent.py`) and MuMuAINovel (`skills/novel-writer/`).
+The owner allowed any licence because the repo is private and LOKI is not distributed. The root
+LICENSE (MIT) does not cover those parts; publishing LOKI would require removing/rewriting them or
+releasing all of LOKI as GPL-3.0. Licences sit next to the code (`engine/licenses/`,
+`skills/novel-writer/`); docs/THIRD_PARTY.md lists every port.
+
+**Why LOKI was not improving itself (found and fixed):**
+1. An improve job ran on `LOKI_IMPROVE_MODEL=online`; with no online key on the machine that name
+   resolves to an unconfigured provider, so the job could only answer BLOCKED. Now
+   `improve_model()`: online when a free online provider is set up, else `smart` (local).
+2. On a local model the tool list is trimmed to 22 by `LOCAL_TOOL_PRIORITY` - `check_loki` and
+   `ship_loki` were not on it, so a local improve job could neither test nor ship. Inside a LOKI
+   worktree `SELF_IMPROVE_PRIORITY` now puts them first.
+3. A job that ended "done" counted as **shipped** even when the model said DONE without calling
+   ship_loki (or ship_loki refused). `ship_loki` now leaves proof (`harness_data/jobs/<job>.shipped.json`)
+   and `Evolve.settle(..., shipped=, detail=)` records "finished without shipping: <its last line>"
+   as a failure (retried in 3 days with that reason in the prompt).
+4. A shipped roadmap step was offered again until this checkout updated (the tick lives in the
+   pushed commit). `next_item` now skips a step whose last outcome is shipped.
+5. Test runs inherited the engine/job environment (`LOKI_DATA` = the live data folder,
+   `LOKI_WORKSPACE`, `LOKI_JOB_ID`, keys): the suites behaved unlike CI and could write into the
+   owner's real data. `check_loki`/`ship_loki` now use `check_env()` and `tools/ship.py` strips
+   `LOKI_*`/`HARNESS_*` from the suites' environment (`LOKI_SUITE_*` stays).
+6. `check_loki` ran the MAIN checkout's ship.py, so a suite the change added never ran: it now runs
+   the worktree's own `tools/ship.py`.
+7. Long jobs had no context management (`LOKI_MAX_CONTEXT=0` = keep everything) and overflowed:
+   the OpenHands condenser now sends the model a condensed view (see below).
+8. Nothing fed outcomes back except one line in evolve.json: every settled attempt is now also an
+   episodic memory (`memory_core`), recalled into the next improve job's memory pack.
+9. Loop nudges were appended between an assistant's tool calls and their results (providers reject
+   that); they now wait until the whole tool batch is answered.
+The whole loop is tested with fakes: autopilot -> evolve -> improve job -> (no ship) failure with
+reason + lesson -> next step -> (ship proof) shipped -> not rebuilt; and a scripted improve job
+through the real goal loop (task_tracker, ranged read, edit, check_loki, ship_loki, DONE).
+Still true: `LOKI_EVOLVE` auto = on only on the Windows PC; `LOKI_SELF_SHIP=ask` blocks shipping
+from a background job (nobody can approve there).
+
+**Built in (engine/, tools in loki.py LOCAL_TOOLS / schema / MODEL_TOOL_NAMES / TOOL_CATEGORIES):**
+- `memory_core.py` (OpenHuman): `memory` tool learn | recall | fetch | forget; secrets scrubbed
+  before storing; host-stamped metadata; IDF + recency + usefulness relevance; evidence capped
+  OpenHuman-style; 8 calls per request. Every request gets a bounded **memory pack** (1800 chars,
+  `LOKI_MEMORY_PACK_CHARS`) in its "This request" note - never in the transcript - and the reply
+  metadata says which were used (`memories_used`, `skills_used`, `learned_skill` on /chat).
+  `memory.py` keeps its API and adds learn/forget/pack; recall/stats include the core.
+  Settings > Memory lists, searches, edits and forgets learned memories and skills
+  (`app/ui/memory_panel.js`, `GET/POST /memory/core`).
+- `skill_learning.py` (E2): a verified request with more than 5 tool calls writes
+  `harness_data/skills/learned/<slug>/SKILL.md` (steps in order with the file that mattered,
+  files changed, pitfalls, result); similar requests refresh it; the pack offers it next time and
+  the reply says "used learned skill ...". Listed by the skills catalog as "learned".
+- `subagent.py` (E3, OpenHuman): `run_subagent(task | tasks[], tools, max_turns)` - own small
+  context, narrowed tools (never run_subagent/delegate/improve_loki/ship_loki/start_team), same
+  model routing, one collapsed result, up to 4 side by side, stuck-stopped, turn cap 12 (40 in a job).
+- `condenser.py` (OpenHands LLMSummarizingCondenser + its prompt): over 160 messages or 280k chars
+  (60k on a local model; `LOKI_CONDENSE_*`) the MODEL gets head + one rolling summary + recent tail;
+  the chat history the window shows is never cut. A "context too long" error condenses and retries
+  once. Model down -> a summary built from the events.
+- `stuck.py` (OpenHands StuckDetector): same call+result x4, same failing call, alternating pair,
+  monologue -> one nudge, then the request stops with "BLOCKED: I was stuck in a loop".
+- `file_editor.py` (OpenHands file_editor): `read_file(filename, start_line, end_line)` numbered
+  ranges (a big file read whole shows its first lines numbered + the line count), `edit_file` needs a
+  UNIQUE match unless `replace_all` (it used to replace every copy silently), `insert_lines`,
+  `undo_edit`; CRLF files stay CRLF.
+- `web_reader.py` (Scrapling core on the standard library): `read_web(url)` - main content as
+  markdown, hidden/aria-hidden/template text and zero-width characters removed (prompt-injection
+  sanitizer), browser-like headers. Used when no reader add-on is on; `scrape` and
+  `conductor read_web` fall back to it. Local/private hosts refused (LOKI_NET_ALLOW to allow).
+- `command_risk.py` (OpenHands PatternSecurityAnalyzer + normalizer): HIGH-risk run_command is
+  refused in a background job and always asks a human in the window.
+- `task_tracker.py` (OpenHands): `task_tracker` view/plan with todo/in_progress/done, mirrored to plan.md.
+- Novel Writer (MuMuAINovel): the pipeline prompts translated to English as skills
+  (`skills/novel-writer/` + `stages/novel-world|characters|outline|chapter|analysis`), with the
+  foreshadowing ledger and chapter analysis; the template loads all six.
+- Drawing pad (PenEcho's idea, no code): `sketch_reply(shapes)` - LOKI draws back on the pad
+  (sketches/loki-*.json, `GET /sketch/reply`, drawn under the user's strokes, toggle "LOKI's drawing").
+- docs/EVOLVE.md: E1, E2, E3 ticked.
+
+**Not done / check on a machine:** OpenHuman channels (that is roadmap E10, Telegram); no live
+model has run these paths yet (all fakes) - watch the PC's next evolve step in Settings > Lab and the
+Memory tab in WebKit (window.prompt for Edit); the pad's "LOKI's drawing" on a tablet.
+
 ## Session 25 (2026-10-17, Claude in the cloud): LOKI's own game engine + Play, the Brain map back, an audit
 
 - **LOKI Pixel Engine** (`app/ui/engine/pixel_engine.js`): LOKI's own small WebGL 1 game engine in LOKI

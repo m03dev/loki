@@ -316,6 +316,17 @@ KNOWLEDGE = knowledge.default_store(REPO_ROOT, DATA_DIR, WORKSPACE)
 import experience  # noqa: E402  (outcome log, learned routing, training data)
 import reasoning_bank  # noqa: E402  (Ruflo-style lessons from past tasks)
 import memory  # noqa: E402  (one interface over the four memory tiers)
+# Session 26 core upgrade - ported from OpenHuman (GPL-3), OpenHands (MIT) and Scrapling (BSD-3);
+# see docs/THIRD_PARTY.md and engine/licenses/.
+import memory_core  # noqa: E402  (learn / recall / forget + the per-request memory pack)
+import skill_learning  # noqa: E402  (verified multi-step work becomes a learned SKILL.md)
+import condenser  # noqa: E402  (summarize old turns so long tasks never overflow)
+import stuck  # noqa: E402  (loop / stuck detection)
+import subagent  # noqa: E402  (run_subagent: a short-lived helper with its own context)
+import file_editor  # noqa: E402  (view ranges, unique str_replace, insert, undo)
+import web_reader  # noqa: E402  (read a web page natively, no add-on)
+import command_risk  # noqa: E402  (LOW / MEDIUM / HIGH for shell commands)
+import task_tracker  # noqa: E402  (a plan with statuses that survives condensing)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -1227,6 +1238,9 @@ def todo_list() -> str:
 def todo_clear() -> str:
     if PLAN_FILE.is_file():
         PLAN_FILE.unlink()
+    tracker = DATA_DIR / "task_tracker.json"
+    if tracker.is_file():
+        tracker.unlink()
     return "plan cleared"
 
 
@@ -1457,8 +1471,15 @@ def crm_pipeline() -> str:
 # --- scraping (conductor.scrape: Scrapling, else read_web) and Remotion videos ------------
 def scrape(url: str, crawl: bool = False, max_pages: int = 20, dynamic: bool = False) -> str:
     """One page as markdown, or crawl a site into scraped/<domain>/ in the workspace."""
-    return CONDUCTOR.scrape(str(url or ""), "", crawl=bool(crawl), max_pages=int(max_pages or 20),
-                            workspace=WORKSPACE, dynamic=bool(dynamic))
+    out = CONDUCTOR.scrape(str(url or ""), "", crawl=bool(crawl), max_pages=int(max_pages or 20),
+                           workspace=WORKSPACE, dynamic=bool(dynamic))
+    if str(out).startswith("error: no scraper is ready") and not _private_host(str(url or "")):
+        # No add-on: LOKI reads the page itself (web_reader.py, Scrapling's core ported).
+        text = web_reader.read(str(url or ""))
+        if not text.startswith("error:"):
+            return text + ("\n(Crawling a whole site needs the Scrapling add-on; only this page was read.)"
+                           if crawl else "")
+    return out
 
 
 def video_project(name: str) -> str:
@@ -1575,9 +1596,31 @@ def list_tree(subdir: str = ".", max_depth: int = 3) -> str:
     return "\n".join(lines) if lines else "(empty)"
 
 
-def read_file(filename: str) -> str:
+def read_file(filename: str, start_line: int = 0, end_line: int = 0) -> str:
+    """The file's text; with start_line/end_line (end -1 = to the end) numbered lines of that
+    range (OpenHands' view). A big file read whole shows its first lines numbered, with the
+    line count, so the model can ask for exactly the range it needs."""
     path = resolve_in_workspace(filename)
-    return path.read_text(encoding="utf-8") if path.is_file() else f"error: no {filename}"
+    if not path.is_file():
+        return f"error: no {filename}"
+    try:
+        if int(start_line or 0) or int(end_line or 0):
+            return file_editor.view(path, int(start_line or 1), int(end_line or -1), label=filename)
+    except (file_editor.EditError, ValueError) as exc:
+        return "error: %s" % exc
+    text = path.read_text(encoding="utf-8")
+    if len(text) <= MAX_OUTPUT:
+        return text
+    lines = text.splitlines()
+    shown, size = [], 0
+    for i, line in enumerate(lines, 1):
+        size += len(line) + 8
+        if size > MAX_OUTPUT - 400:
+            break
+        shown.append("%6d\t%s" % (i, line))
+    return ("%s has %d lines (%d characters) - too long to show whole. Lines 1-%d below; read the "
+            "rest with start_line/end_line, or search_files for what you need:\n%s"
+            % (filename, len(lines), len(text), len(shown), "\n".join(shown)))
 
 
 def write_file(filename: str, content: str) -> str:
@@ -1596,17 +1639,41 @@ def append_file(filename: str, content: str) -> str:
     return f"appended to {filename}" + (chr(10) + note if note else "")
 
 
-def edit_file(filename: str, old: str, new: str) -> str:
+def edit_file(filename: str, old: str, new: str, replace_all: bool = False) -> str:
+    """Replace text that appears EXACTLY ONCE (OpenHands str_replace); replace_all=true for every one."""
     path = resolve_in_workspace(filename)
     if not path.is_file():
         return f"error: no {filename}"
-    text = path.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count == 0:
-        return f"error: that exact text was not found in {filename}"
-    path.write_text(text.replace(old, new), encoding="utf-8")
+    try:
+        snippet, count = file_editor.str_replace(path, old, new, replace_all=str(replace_all).lower()
+                                                 in ("1", "true", "yes"), label=filename)
+    except file_editor.EditError as exc:
+        return "error: %s" % exc
     note = _check_written(filename)
-    return f"edited {filename} ({count} replacement(s))" + (chr(10) + note if note else "")
+    return (f"edited {filename} ({count} replacement(s))" + (chr(10) + note if note else "")
+            + chr(10) + snippet + "Review the change; edit again if it is not right (undo_edit reverts it).")
+
+
+def insert_lines(filename: str, insert_line: int, text: str) -> str:
+    """Insert text after line N (0 = at the top) - OpenHands insert."""
+    path = resolve_in_workspace(filename)
+    if not path.is_file():
+        return f"error: no {filename}"
+    try:
+        snippet = file_editor.insert(path, int(insert_line), text, label=filename)
+    except (file_editor.EditError, ValueError) as exc:
+        return "error: %s" % exc
+    note = _check_written(filename)
+    return (f"inserted into {filename} after line {int(insert_line)}" + (chr(10) + note if note else "")
+            + chr(10) + snippet + "Check the indentation and that no line is doubled.")
+
+
+def undo_edit(filename: str) -> str:
+    """Put a file back as it was before the last edit_file / insert_lines made in this session."""
+    try:
+        return file_editor.undo(resolve_in_workspace(filename), label=filename)
+    except file_editor.EditError as exc:
+        return "error: %s" % exc
 
 
 def search_files(pattern: str, subdir: str = ".", glob: str = "*") -> str:
@@ -2603,10 +2670,12 @@ LOCAL_TOOLS = {
     "todo_list": todo_list,
     "todo_done": todo_done,
     "save_memory": save_memory,
+    "insert_lines": insert_lines,
+    "undo_edit": undo_edit,
 }
 
 # Tools that change files on disk (used to verify a task really did work).
-MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "build_scene",
+MODIFYING = {"write_file", "append_file", "edit_file", "insert_lines", "undo_edit", "build_3d_scene", "build_scene",
              "move_file", "delete_file", "make_dir",
              # these three rewrite project.godot
              "add_input_action", "set_project_setting", "add_autoload",
@@ -2620,6 +2689,8 @@ RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", 
 NETWORK_WRITES = {"sync_ecc", "crm_add", "crm_update", "crm_log", "scrape"}
 # Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
 DELEGATING = {"delegate", "improve_loki", "ship_loki", "start_team"}
+# Starts a helper that may write if it is given write tools: never offered in Plan mode either.
+DELEGATING |= {"run_subagent"}
 
 # LOKI improving its own code (improve_loki / ship_loki): "auto" lets agents change, test
 # and push LOKI without asking (ship.py refuses to push unless every test passes), "ask"
@@ -2739,13 +2810,65 @@ without the other; add or update tests in tests/; keep docs/ true. You cannot ru
 commands, and the conductor's roles are not a way to run them: to test, call check_loki
 (suite="test_portal" for a quick check, or no suite for all). You ARE the agent that changes
 LOKI - never call improve_loki yourself. Read only the parts of big files you need
-(search_files first). When the change is done and check_loki passes, call ship_loki with a
-one-line message saying what changed and how you checked it. ship_loki runs every suite again
-and pushes only if they all pass; if it reports failures, fix them and call it again. Report
-DONE with what you shipped, or BLOCKED with why."""
+(search_files first, then read_file with start_line/end_line). Edit with edit_file (the old text
+must be unique - copy a few surrounding lines) or insert_lines; undo_edit reverts a bad edit.
+Plan the steps with task_tracker and keep it up to date. Hand a side question ("where is X
+defined?", "what does this module do?") to run_subagent so your own context stays small. Use
+memory recall for what earlier attempts learned, and memory learn for a lesson worth keeping.
+When the change is done and check_loki passes, call ship_loki with a one-line message saying
+what changed and how you checked it. ship_loki runs every suite again and pushes only if they
+all pass; if it reports failures, fix them and call it again. You are not done until ship_loki
+says "shipped". Report DONE with what you shipped, or BLOCKED with why."""
 
 
 IMPROVE_MODEL = os.getenv("LOKI_IMPROVE_MODEL", "online").strip() or "online"
+
+
+def improve_model(preferred: str = "") -> str:
+    """The model an improve job runs on. "online" (the best FREE online model) when one is set up -
+    changing LOKI is long tool work a small local model tends to drop - else "smart" (the local
+    model, which still works), never a model that is not configured (the job would only report
+    BLOCKED at once - the reason evolve never finished a step on a machine without an online key)."""
+    wanted = (preferred or IMPROVE_MODEL or "online").strip()
+    if wanted not in MODELS:
+        return ""
+    if wanted == "online":
+        for candidate in ONLINE_ORDER:
+            if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
+                continue
+            if provider_configured(candidate):
+                return "online"
+        return "smart"
+    if wanted not in AUTO_ROUTING_MODES and not provider_configured(wanted):
+        return "smart"
+    return wanted
+
+
+# Variables a LOKI test run must NOT inherit from the engine or a background job: they point the
+# suites at the live data folder (keys, memory, settings) or the job's worktree, so a check run
+# inside an improve job behaved differently from CI - and could write into the owner's real data.
+_CHECK_ENV_DROP = ("GAME_PROJECT",)
+
+
+def check_env(base: dict | None = None) -> dict:
+    """The environment for tools/ship.py runs: like CI - no LOKI_* settings, no job variables, no keys."""
+    env = dict(base if base is not None else os.environ)
+    keys = set(PROVIDER_ENV_VARS.values())
+    for name in list(env):
+        if name.startswith(("LOKI_", "HARNESS_")) or name in keys or name in _CHECK_ENV_DROP:
+            env.pop(name, None)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
+def _ship_script(repo: Path) -> Path:
+    """The checkout's OWN tools/ship.py, so a suite the change adds is run too."""
+    own = Path(repo) / "tools" / "ship.py"
+    return own if own.is_file() else REPO_ROOT / "tools" / "ship.py"
+
+
+def ship_marker(job_id: str) -> Path:
+    return DATA_DIR / "jobs" / ("%s.shipped.json" % re.sub(r"[^A-Za-z0-9_-]", "", str(job_id or "")))
 
 
 def _is_loki_checkout(path: Path) -> bool:
@@ -2766,12 +2889,12 @@ def check_loki(suite: str = "", path: str = "") -> str:
     repo = Path(path).expanduser() if path else (WORKSPACE if _is_loki_checkout(WORKSPACE) else REPO_ROOT)
     if not _is_loki_checkout(repo):
         return "error: %s is not a LOKI checkout" % repo
-    argv = [sys.executable, str(REPO_ROOT / "tools" / "ship.py"), "--check", "--repo", str(repo)]
+    argv = [sys.executable, str(_ship_script(repo)), "--check", "--repo", str(repo)]
     suite = re.sub(r"[^a-z_,]", "", str(suite or "").lower())
     if suite:
         argv += ["--only", suite]
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=3600)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=3600, cwd=str(repo), env=check_env())
     except subprocess.TimeoutExpired:
         return "error: the tests took over an hour and were stopped"
     out = ((proc.stdout or "") + (proc.stderr or "")).strip()
@@ -2797,8 +2920,9 @@ def improve_loki(task: str) -> str:
             "prompt": SELF_IMPROVE_PROMPT.format(task=task),
             # Changing LOKI's own code is long, careful tool work: by default it goes to the best
             # FREE online model (the "online" mode, never paid unless allowed), not a small local
-            # model that tends to stop after a few turns. LOKI_IMPROVE_MODEL overrides it.
-            "model": IMPROVE_MODEL if IMPROVE_MODEL in MODELS else ""}
+            # model that tends to stop after a few turns - but only when one is set up; else the
+            # local model (improve_model). LOKI_IMPROVE_MODEL overrides it.
+            "model": improve_model()}
     verdict = POLICY.job(spec["backend"], spec["agent"])
     if not verdict.allowed:
         return "error: %s" % verdict.reason
@@ -2821,18 +2945,244 @@ def ship_loki(message: str, path: str = "") -> str:
     repo = Path(path).expanduser() if path else (WORKSPACE if _is_loki_checkout(WORKSPACE) else REPO_ROOT)
     if not _is_loki_checkout(repo):
         return "error: %s is not a git checkout of LOKI" % repo
+    env = check_env()
+    # ship.py tells the linked machines with LOKI's own peer settings (harness_data/.env)
+    env["LOKI_DATA"] = str(DATA_DIR)
     try:
-        proc = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "ship.py"), "-m", message,
-                               "--repo", str(repo)], capture_output=True, text=True, timeout=3600)
+        proc = subprocess.run([sys.executable, str(_ship_script(repo)), "-m", message,
+                               "--repo", str(repo)], capture_output=True, text=True, timeout=3600,
+                              cwd=str(repo), env=env)
     except subprocess.TimeoutExpired:
         return "error: shipping took over an hour and was stopped"
     out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    job_id = os.getenv("LOKI_JOB_ID", "")
+    if proc.returncode == 0 and job_id and ("pushed" in out or "Shipped" in out):
+        # Proof for evolve/autopilot that this job really shipped (a job that merely ended is not).
+        try:
+            marker = ship_marker(job_id)
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(json.dumps({"t": time.time(), "message": message[:300],
+                                          "out": out[-600:]}), encoding="utf-8")
+        except OSError:
+            pass
     return ("shipped:\n" if proc.returncode == 0 else "NOT shipped:\n") + out[-3000:]
 
 
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
     """Hand one step to a specialist: research, read_web, browse, remember, recall, media, image, reach, track."""
-    return CONDUCTOR.run(str(role).strip().lower(), str(task or ""), str(url or ""))
+    role = str(role).strip().lower()
+    out = CONDUCTOR.run(role, str(task or ""), str(url or ""))
+    if role == "read_web" and str(out).startswith("error: no specialist") and not _private_host(str(url or task or "")):
+        return web_reader.read(str(url or task or "").strip())   # no add-on: read it natively
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Session 26 core upgrade: memory, sub-agents, native web reading, the task tracker.
+# ---------------------------------------------------------------------------
+
+MEMORY_BUDGET = memory_core.Budget()
+LAST_RECALL: list = []      # memories this request used: the pack's citations + the memory tool's recalls
+LAST_SKILLS: list = []      # learned skills offered to this request
+LAST_LEARNED: dict = {}     # the skill learned from the last request, if any
+
+
+def _cite(citations: list) -> None:
+    for c in citations or []:
+        if c.get("id") and all(c["id"] != x.get("id") for x in LAST_RECALL):
+            LAST_RECALL.append({"id": c["id"], "tier": c.get("tier", ""), "text": str(c.get("text", ""))[:160]})
+
+
+def memory_tool(action: str = "recall", text: str = "", query: str = "", id: str = "",  # noqa: A002
+                tier: str = "semantic", tags: str = "", cursor: int = 0, all: bool = False) -> str:  # noqa: A002
+    """LOKI's memory (OpenHuman's single memory tool): learn | recall | fetch | forget."""
+    refusal = MEMORY_BUDGET.take()
+    if refusal:
+        return "error: " + refusal
+    action = str(action or "recall").strip().lower()
+    if action in ("learn", "save", "remember", "store"):
+        out = memory_core.learn(text or query, tier=tier or "semantic", tags=tags, root=DATA_DIR,
+                                meta={"workspace": str(WORKSPACE)})
+        return ("learned (%s): %s" % (out["id"], out["status"])) if out.get("ok") else "error: " + out["error"]
+    if action in ("recall", "search"):
+        out = memory_core.recall(query or text, root=DATA_DIR, repo=REPO_ROOT)
+        _cite(out.get("citations"))
+        return out["evidence"] or out.get("note", "Nothing relevant is stored in memory.")
+    if action == "fetch":
+        out = memory_core.fetch(query or text, cursor=int(cursor or 0), root=DATA_DIR, repo=REPO_ROOT)
+        _cite(out["items"])
+        lines = ["[%s %s] %s" % (i["tier"], i["id"], i["text"]) for i in out["items"]]
+        more = ("\n(next_cursor=%d of %d)" % (out["next_cursor"], out["total"])) if out["next_cursor"] is not None else ""
+        return ("\n".join(lines) or "Nothing relevant is stored in memory.") + more
+    if action in ("forget", "delete", "remove"):
+        out = memory_core.forget(id, query or text, root=DATA_DIR, all_matches=str(all).lower() in ("1", "true", "yes"))
+        if out.get("ok"):
+            return "forgot %d memor%s" % (out["forgotten"], "y" if out["forgotten"] == 1 else "ies")
+        extra = "".join("\n- %s: %s" % (m["id"], m["text"]) for m in out.get("matches") or [])
+        return "error: %s%s" % (out.get("error"), extra)
+    return "error: action is learn, recall, fetch or forget"
+
+
+def _private_host(url: str) -> bool:
+    import ipaddress  # pylint: disable=import-outside-toplevel
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    allow = {h.strip().lower() for h in os.getenv("LOKI_NET_ALLOW", "").split(",") if h.strip()}
+    if host in allow:
+        return False
+    if host in ("localhost", "") or host.endswith(".local") or host.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+
+
+def read_web(url: str, max_chars: int = 20000) -> str:
+    """One web page as markdown. An installed reader add-on (crawl4ai, Scrapling, Firecrawl) is used
+    when it is on; otherwise LOKI reads it natively (web_reader.py, ported from Scrapling's core)."""
+    url = str(url or "").strip()
+    if _private_host(url):
+        return ("error: %s is on this computer or the local network; read_web only reads public pages "
+                "(add the host to LOKI_NET_ALLOW to allow it)" % url)
+    via, _why = ("", "")
+    try:
+        via, _why = CONDUCTOR.pick("read_web")
+    except Exception:  # noqa: BLE001
+        via = ""
+    if via:
+        text = CONDUCTOR.read_web(via, url)
+        if not str(text).startswith("error:"):
+            return text
+    return web_reader.read(url, max_chars=max(1000, min(int(max_chars or 20000), 60000)))
+
+
+SKETCH_SHAPES = ("line", "arrow", "rect", "circle", "text", "path")
+SKETCH_MAX_SHAPES = 200
+
+
+def sketch_reply(shapes, note: str = "") -> str:
+    """Draw back on the user's drawing pad (the canvas <-> agent loop PenEcho is built on: the
+    answer appears ON the canvas, beside what the user drew). shapes: a list of
+    {type: line|arrow|rect|circle|text|path, x1,y1,x2,y2 | x,y,w,h | cx,cy,r | x,y,text | points:[[x,y],...],
+    color}; coordinates 0..1000 across and down the pad. Saved to sketches/loki-<time>.json in the
+    workspace; the pad (✎ Draw) shows the newest one under the user's own strokes."""
+    if isinstance(shapes, str):
+        try:
+            shapes = json.loads(shapes)
+        except ValueError:
+            return "error: shapes must be a JSON list"
+    if not isinstance(shapes, list) or not shapes:
+        return "error: give a list of shapes to draw"
+
+    def num(v) -> float:
+        try:
+            return max(-100.0, min(1100.0, float(v)))
+        except (TypeError, ValueError):
+            return 0.0
+    clean = []
+    for shape in shapes[:SKETCH_MAX_SHAPES]:
+        if not isinstance(shape, dict) or shape.get("type") not in SKETCH_SHAPES:
+            continue
+        out = {"type": shape["type"]}
+        color = str(shape.get("color", "#8ccfc4"))
+        out["color"] = color if re.fullmatch(r"#[0-9a-fA-F]{3,8}", color) else "#8ccfc4"
+        for key in ("x1", "y1", "x2", "y2", "x", "y", "w", "h", "cx", "cy", "r"):
+            if key in shape:
+                out[key] = num(shape[key])
+        if shape["type"] == "text":
+            out["text"] = str(shape.get("text", ""))[:200]
+        if shape["type"] == "path":
+            pts = [[num(p[0]), num(p[1])] for p in (shape.get("points") or [])[:400]
+                   if isinstance(p, (list, tuple)) and len(p) >= 2]
+            if len(pts) < 2:
+                continue
+            out["points"] = pts
+        clean.append(out)
+    if not clean:
+        return "error: none of those shapes could be drawn (types: %s)" % ", ".join(SKETCH_SHAPES)
+    folder = WORKSPACE / "sketches"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = "loki-%s.json" % time.strftime("%Y%m%d-%H%M%S")
+    (folder / name).write_text(json.dumps({"t": time.time(), "note": str(note or "")[:500], "shapes": clean}),
+                               encoding="utf-8")
+    return ("drew %d shape(s) on the drawing pad (sketches/%s); the user sees them when they open ✎ Draw, "
+            "under their own strokes." % (len(clean), name))
+
+
+def task_tracker_tool(command: str = "view", task_list=None) -> str:
+    """OpenHands' task tracker: view, or plan with the FULL list [{title, notes, status}]."""
+    return task_tracker.run(command, task_list, path=DATA_DIR / "task_tracker.json", plan_file=PLAN_FILE)
+
+
+SUBAGENT_DEPTH = 0
+
+
+async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: int = 0) -> str:
+    """A short-lived helper with a narrow tool set and its own small context; returns one result.
+    `tasks` (a list) runs several side by side. Same model routing as this request."""
+    global SUBAGENT_DEPTH
+    if SUBAGENT_DEPTH > 0:
+        return "error: a sub-agent cannot start another sub-agent"
+    if isinstance(tasks, str):
+        try:
+            tasks = json.loads(tasks)
+        except ValueError:
+            tasks = [t for t in tasks.split("\n") if t.strip()]
+    todo = [str(t).strip() for t in (tasks or []) if str(t).strip()][:subagent.MAX_PARALLEL] or \
+        ([str(task).strip()] if str(task or "").strip() else [])
+    if not todo:
+        return "error: give the sub-agent a task"
+    offered = model_tool_schemas()
+    names = subagent.narrow(tools, [s["function"]["name"] for s in offered])
+    if not names:
+        return "error: none of those tools can be given to a sub-agent here (try: %s)" % ", ".join(subagent.DEFAULT_TOOLS)
+    provider = active_model_name()
+    cfg = MODELS[provider]
+    client = make_client()
+
+    async def request(msgs: list, schemas: list):
+        kwargs = {"model": cfg.model, "messages": msgs, "max_tokens": int(os.getenv("LOKI_SUBAGENT_TOKENS", "4096"))}
+        if schemas:
+            kwargs["tools"] = schemas
+        if "11434" in cfg.base_url or "ollama" in cfg.api_key:
+            kwargs["extra_body"] = {"think": False}
+        started = time.monotonic()
+        response = await _model_request(client, kwargs, cfg, provider)
+        _record_usage(response, kwargs, cfg, started)
+        _record_request_usage(provider, response)
+        msg = response.choices[0].message
+        if not getattr(msg, "tool_calls", None):
+            recovered = _recover_text_tool_calls(getattr(msg, "content", "") or "")
+            if recovered:
+                return {"content": "", "tool_calls": [
+                    {"id": "sub%d" % i, "type": "function", "function": {"name": n, "arguments": json.dumps(a)}}
+                    for i, (n, a) in enumerate(recovered[:4])]}
+        return msg
+
+    async def run_tool(name: str, args: dict) -> str:
+        fix = _guard_call(name, json.dumps(args))
+        if not fix.ok:
+            return "error: %s" % fix.error
+        return await call_tool(fix.name, fix.args)
+
+    _progress("thinking", "Starting %d sub-agent(s) with %s." % (len(todo), ", ".join(names)))
+    SUBAGENT_DEPTH += 1
+    try:
+        cap = subagent.iter_cap(autonomous=bool(os.getenv("LOKI_JOB_ID")), requested=int(max_turns or 0))
+        results = await subagent.run_many(todo, names, offered, request, run_tool, max_turns=cap)
+    finally:
+        SUBAGENT_DEPTH -= 1
+    try:
+        events.emit("agent.message", "LOKI sub-agent", {"subagents": [t[:200] for t in todo],
+                                                         "ok": [bool(r.get("ok")) for r in results]})
+    except Exception:  # noqa: BLE001
+        pass
+    return subagent.format_results(todo, results)
+
+
+LOCAL_TOOLS.update({"memory": memory_tool, "read_web": read_web, "run_subagent": run_subagent,
+                    "task_tracker": task_tracker_tool, "sketch_reply": sketch_reply})
 
 
 def schema(name, description, properties=None, required=None) -> dict:
@@ -2854,14 +3204,33 @@ TOOL_SCHEMAS = [
     schema("list_files", "List the files at the top of the game project."),
     schema("list_tree", "Show the project as a tree.",
            {"subdir": {"type": "string"}, "max_depth": {"type": "integer"}}),
-    schema("read_file", "Read one file.", {"filename": {"type": "string"}}, ["filename"]),
+    schema("read_file", "Read one file. For a big file pass start_line and end_line (1-based, end_line -1 = to the end) to get those lines numbered - read only the part you need.",
+           {"filename": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, ["filename"]),
     schema("write_file", "Write (overwrite) a file.",
            {"filename": {"type": "string"}, "content": {"type": "string"}}, ["filename", "content"]),
     schema("append_file", "Append text to the end of a file.",
            {"filename": {"type": "string"}, "content": {"type": "string"}}, ["filename", "content"]),
-    schema("edit_file", "Replace an exact snippet of text in a file. Prefer this over rewriting a whole file.",
-           {"filename": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}},
+    schema("edit_file", "Replace an exact snippet of text in a file. Prefer this over rewriting a whole file. `old` must appear EXACTLY ONCE (copy enough surrounding lines to make it unique) unless replace_all=true; the result shows the edited lines numbered.",
+           {"filename": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"},
+            "replace_all": {"type": "boolean"}},
            ["filename", "old", "new"]),
+    schema("insert_lines", "Insert text into a file after line insert_line (0 = at the top). Use read_file with a line range first to find the line.",
+           {"filename": {"type": "string"}, "insert_line": {"type": "integer"}, "text": {"type": "string"}},
+           ["filename", "insert_line", "text"]),
+    schema("undo_edit", "Put a file back as it was before your last edit_file or insert_lines on it.",
+           {"filename": {"type": "string"}}, ["filename"]),
+    schema("memory", "LOKI's long-term memory. action='recall' (query: what you need to know - returns the most relevant memories), 'learn' (text: one short lasting learning worth keeping, e.g. a fix that worked or a fact about this machine; tier 'semantic' for facts, 'episodic' for what happened), 'fetch' (query + cursor: page through all matches), 'forget' (id, or query with all=true). Relevant memories are already recalled into your instructions at the start of each request.",
+           {"action": {"type": "string"}, "query": {"type": "string"}, "text": {"type": "string"}, "id": {"type": "string"},
+            "tier": {"type": "string"}, "tags": {"type": "string"}, "cursor": {"type": "integer"}, "all": {"type": "boolean"}}, ["action"]),
+    schema("read_web", "Read one public web page as markdown (main content only; hidden text removed). Works without any add-on.",
+           {"url": {"type": "string"}, "max_chars": {"type": "integer"}}, ["url"]),
+    schema("run_subagent", "Hand ONE focused sub-task to a short-lived helper agent with its own small context and a narrow tool set; it returns one result, so your own context stays small. Good for: searching the code for something, reading a few files and summarizing them, reading web pages. tools = comma list (default read_file, search_files, list_tree, list_files, read_web, memory). tasks = a list of several tasks to run side by side (at most 4).",
+           {"task": {"type": "string"}, "tools": {"type": "string"}, "tasks": {"type": "array", "items": {"type": "string"}},
+            "max_turns": {"type": "integer"}}, []),
+    schema("sketch_reply", "Draw back on the user's drawing pad, so your answer appears on the canvas beside their sketch (a corrected layout, an arrow to the spot, labels, a diagram). shapes = list of {type: line|arrow|rect|circle|text|path, x1,y1,x2,y2 (line/arrow) | x,y,w,h (rect) | cx,cy,r (circle) | x,y,text (text) | points [[x,y],...] (path), color '#rrggbb'}; coordinates 0..1000 across and down. The user sees it when they open the pad.",
+           {"shapes": {"type": "array", "items": {"type": "object"}}, "note": {"type": "string"}}, ["shapes"]),
+    schema("task_tracker", "Your plan for a multi-step task, with statuses. command='view' shows it; command='plan' with task_list = the FULL list [{title, notes, status: todo|in_progress|done}] replaces it. Mark a task in_progress before you start it and done when it is verified.",
+           {"command": {"type": "string"}, "task_list": {"type": "array", "items": {"type": "object"}}}, ["command"]),
     schema("search_files", "Search file contents with a regular expression, with line numbers.",
            {"pattern": {"type": "string"}, "subdir": {"type": "string"}, "glob": {"type": "string"}}, ["pattern"]),
     schema("make_dir", "Create a directory (and parents).", {"path": {"type": "string"}}, ["path"]),
@@ -2997,6 +3366,7 @@ MODEL_TOOL_NAMES = {
     "improve_loki", "ship_loki", "check_loki", "start_team", "team_post", "team_read",
     "forecast_series", "generate_media", "game_engine_guide",
     "crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline", "scrape", "video_project", "render_video",
+    "insert_lines", "undo_edit", "memory", "read_web", "run_subagent", "task_tracker", "sketch_reply",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -3005,20 +3375,20 @@ MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_
 # --- tool categories (toggleable from the editor Settings dialog) ------------
 TOOL_CATEGORIES = {
     "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
-              "edit_file", "search_files", "make_dir", "move_file", "delete_file"],
+              "edit_file", "insert_lines", "undo_edit", "search_files", "make_dir", "move_file", "delete_file"],
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done", "forecast_series", "project_state", "list_capabilities",
-                 "agent_sessions", "api_vault"],
-    "memory": ["save_memory", "knowledge"],
+                 "agent_sessions", "api_vault", "task_tracker"],
+    "memory": ["save_memory", "knowledge", "memory"],
     "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
-                    "check_loki"],
+                    "check_loki", "run_subagent"],
     "capabilities": ["list_capabilities"],
-    "creative": ["generate_media", "video_project", "render_video", "game_engine_guide"],
+    "creative": ["generate_media", "video_project", "render_video", "game_engine_guide", "sketch_reply"],
     "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
-    "web": ["scrape"],
+    "web": ["scrape", "read_web"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
@@ -3097,9 +3467,15 @@ LOCAL_TOOL_PRIORITY = ["list_tree", "read_file", "edit_file", "write_file", "sea
                        "knowledge", "save_memory", "todo_add", "todo_list", "todo_done",
                        "project_state", "append_file", "validate_scene", "play_scene",
                        "check_script", "build_scene", "read_scene", "godot_search"]
+# Inside a LOKI worktree (an improve_loki / evolve job) the job is changing LOKI itself: testing
+# and shipping are the tools it cannot do without, so they lead the local model's short list.
+SELF_IMPROVE_PRIORITY = ["check_loki", "ship_loki", "read_file", "edit_file", "insert_lines", "search_files",
+                         "write_file", "list_tree", "run_subagent", "memory", "task_tracker", "undo_edit"]
 
 
 def _local_rank(name: str) -> int:
+    if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
+        return SELF_IMPROVE_PRIORITY.index(name) - len(SELF_IMPROVE_PRIORITY) - 1
     try:
         return LOCAL_TOOL_PRIORITY.index(name)
     except ValueError:
@@ -3532,6 +3908,17 @@ def _triage(text: str) -> dict:
     if lessons:
         TRIAGE_NOTE = (TRIAGE_NOTE + chr(10) * 2 + lessons).strip()
         _progress("thinking", "Recalled %d lesson(s) from similar past tasks." % (lessons.count(chr(10) + "- ")))
+    try:   # OpenHuman's memory pack: the few memories that matter for this request (memory_core.py)
+        mem = memory_core.pack(text, root=DATA_DIR, repo=REPO_ROOT)
+    except Exception:  # noqa: BLE001
+        mem = {"text": "", "used": [], "skills": []}
+    if mem.get("text"):
+        TRIAGE_NOTE = (TRIAGE_NOTE + chr(10) * 2 + mem["text"]).strip()
+        _cite(mem.get("used"))
+        LAST_SKILLS[:] = list(mem.get("skills") or [])
+        _progress("thinking", "Recalled %d memor%s%s." % (
+            len(mem["used"]), "y" if len(mem["used"]) == 1 else "ies",
+            (" and learned skill " + ", ".join(LAST_SKILLS)) if LAST_SKILLS else ""))
     events.emit("decision.made", "Laya" if verdict.get("source") == "laya" else "LOKI rules",
                 dict(verdict, request=text[:300]))
     events.emit("agent.status", "LOKI", {"state": "working", "kind": verdict.get("kind", "")})
@@ -4167,8 +4554,18 @@ async def call_tool(name: str, args: dict) -> str:
             print("  [policy] %s: %s" % (name, verdict.reason))
             return ("DENIED by Loki's policy: %s. Do NOT retry the same call; change the approach "
                     "or reply 'BLOCKED: <reason>'." % verdict.reason)
+        decidable = verdict.decidable
+        if name == "run_command":
+            # OpenHands' security analyzer (command_risk.py): a HIGH-risk command is refused in an
+            # unattended job and always asks a human in the window - no provider may wave it through.
+            risk = command_risk.assess(str(args.get("command", "")))
+            if risk["risk"] == command_risk.HIGH:
+                if os.getenv("LOKI_JOB_ID"):
+                    return ("DENIED: HIGH-risk command (%s) - a background job may not run it. Do it another "
+                            "way, or reply 'BLOCKED: <reason>'." % "; ".join(risk["reasons"]))
+                decidable = False
         if verdict.decision == policy.ASK and not await approve(
-                name, json.dumps(args)[:400], decidable=verdict.decidable):
+                name, json.dumps(args)[:400], decidable=decidable):
             return ("DENIED: the user did not approve this tool. Do NOT request it again. "
                     "Make progress with file tools (build_3d_scene, write_file, edit_file, "
                     "play_scene, validate_scene) instead, or reply 'BLOCKED: <reason>'.")
@@ -4335,6 +4732,10 @@ _empty_nudges = 0
 _last_turn_had_tools = False
 _repeat_sig = ""
 _repeat_count = 0
+_stuck_hits = 0         # stuck patterns seen in this request (stuck.py)
+STUCK_DETECTION = str(os.getenv("LOKI_STUCK_DETECTION", "on")).strip().lower() not in ("0", "off", "false", "no")
+STUCK_STOP_AFTER = int(os.getenv("LOKI_STUCK_STOP_AFTER", "2") or 2)
+CONDENSE_STATS = {"runs": 0, "forgot": 0, "fallback": 0}
 _task_modified = False
 _task_wrote_file = False   # a file (not just a folder) was written or changed in this task
 
@@ -4806,6 +5207,80 @@ def _record_usage(response, kwargs: dict, cfg, started: float) -> None:
         pass
 
 
+async def _summarize_for_condenser(summary_messages: list) -> str:
+    """One model call that writes the condenser's state summary (no tools)."""
+    provider = active_model_name()
+    cfg = MODELS[provider]
+    kwargs = {"model": cfg.model, "messages": summary_messages,
+              "max_tokens": int(os.getenv("LOKI_CONDENSE_TOKENS", "1500"))}
+    if "11434" in cfg.base_url or "ollama" in cfg.api_key:
+        kwargs["extra_body"] = {"think": False}
+    started = time.monotonic()
+    response = await _model_request(make_client(), kwargs, cfg, provider)
+    _record_usage(response, kwargs, cfg, started)
+    return str(response.choices[0].message.content or "")
+
+
+# The condensed VIEW of the conversation (OpenHands keeps every event and condenses only what the
+# model sees). LOKI's `messages` is also the chat history the window shows and saves, so it is
+# never cut: the model gets head + one summary + the recent tail, cached until the history grows
+# past the limits again (then the old summary is folded into a new one - a rolling summary).
+_CONDENSE_CACHE: dict = {}
+
+
+def _history_sig(items: list) -> str:
+    import hashlib  # pylint: disable=import-outside-toplevel
+    h = hashlib.sha1()
+    for m in items:
+        if isinstance(m, dict):
+            h.update(str(m.get("role", "")).encode())
+            h.update(str(m.get("content", ""))[:200].encode("utf-8", "replace"))
+            h.update(str(m.get("tool_call_id", "")).encode())
+    return h.hexdigest()
+
+
+async def _model_view(requested: bool = False) -> list:
+    """What the model is sent: the whole conversation, or - when it is too long - a condensed view."""
+    if not condenser.enabled() or len(messages) < 6:
+        return messages
+    max_messages, max_chars = condenser.limits(local=_is_local_model())
+    if MAX_CONTEXT_MESSAGES > 0:
+        max_messages = min(max_messages, MAX_CONTEXT_MESSAGES) if max_messages else MAX_CONTEXT_MESSAGES
+    cache = _CONDENSE_CACHE
+    view = messages
+    if cache and cache.get("end", 0) <= len(messages) and cache.get("sig") == _history_sig(messages[:cache["end"]]):
+        view = messages[:cache["start"]] + [cache["note"]] + messages[cache["end"]:]
+    elif cache:
+        cache.clear()
+    if not requested and not condenser.reasons(view, max_messages, max_chars):
+        return view
+    _progress("thinking", "The conversation is long; summarizing the older part so the model keeps the thread...")
+    work = list(view)
+    try:
+        out = await condenser.condense(work, _summarize_for_condenser, max_messages, max_chars,
+                                       keep_first=1, requested=requested)
+    except Exception as exc:  # noqa: BLE001 - condensing must never be why a task stops
+        print("  [condenser] skipped: %s" % exc)
+        return view
+    if not out.get("condensed"):
+        return view
+
+    def to_history(index: int) -> int:     # a view index -> the same message's index in `messages`
+        if cache and index > cache["start"]:
+            return index - cache["start"] - 1 + cache["end"]
+        return index
+    hist_end = to_history(out["end"])
+    cache.clear()
+    cache.update({"start": out["start"], "end": hist_end, "note": out["note"],
+                  "sig": _history_sig(messages[:hist_end])})
+    CONDENSE_STATS["runs"] += 1
+    CONDENSE_STATS["forgot"] += out["forgot"]
+    CONDENSE_STATS["fallback"] += 1 if out.get("how") == "fallback" else 0
+    _progress("thinking", "Condensed %d older messages into a summary for the model (%s); the history is kept."
+              % (out["forgot"], out.get("how")))
+    return work
+
+
 async def agent_turn(force_tool: bool = False) -> str:
     cfg = MODELS[active_model_name()]
     client = make_client()
@@ -4832,14 +5307,15 @@ async def agent_turn(force_tool: bool = False) -> str:
             raise BudgetExhausted("hit the %ds safety ceiling (LOKI_HARD_DEADLINE)" % int(HARD_DEADLINE_S))
         turns += 1
         _trim_context()
+        view = await _model_view()
         _progress("thinking", "Turn %d: asking the model..." % turns)
         # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so
         # give them headroom or the tool call gets truncated away.
-        kwargs = {"model": cfg.model, "messages": messages, "tools": model_tool_schemas(),
+        kwargs = {"model": cfg.model, "messages": view, "tools": model_tool_schemas(),
                   "max_tokens": int(os.getenv("LOKI_MAX_TOKENS", "8192"))}
         if CAPABILITIES.is_enabled("headroom"):
             # Headroom compresses a copy; the conversation itself is never rewritten.
-            kwargs["messages"], _saved = conductor.compress_messages(list(messages), cfg.model)
+            kwargs["messages"], _saved = conductor.compress_messages(list(view), cfg.model)
             if _saved:
                 _progress("thinking", _saved)
         if "11434" in cfg.base_url or "ollama" in cfg.api_key:
@@ -4851,6 +5327,7 @@ async def agent_turn(force_tool: bool = False) -> str:
         # A limit is not a failure: mark the provider used-up and continue this SAME
         # turn on the next provider rather than ending the run.
         switches = 0
+        condensed_for_error = False
         waited = 0.0
         _t0 = time.monotonic()
         while True:
@@ -4873,6 +5350,14 @@ async def agent_turn(force_tool: bool = False) -> str:
                 _record_request_usage(provider, response)
                 break
             except ModelUnavailable as exc:
+                if condenser.is_context_error(str(exc)) and not condensed_for_error:
+                    # The provider says the conversation is too long for it: condense now (a hard
+                    # request, as in OpenHands) and send the same turn again.
+                    smaller = await _model_view(requested=True)
+                    if len(smaller) < len(kwargs["messages"]):
+                        condensed_for_error = True
+                        kwargs["messages"] = smaller
+                        continue
                 if switches >= len(SMART_ORDER) or not should_fail_over(
                         exc, model_name in AUTO_ROUTING_MODES):
                     raise
@@ -4965,6 +5450,9 @@ async def agent_turn(force_tool: bool = False) -> str:
             messages.append({"role": "assistant", "content": content})
             return content
         messages.append(_as_dict(message))
+        # Nudges wait until every tool result of this batch is in: a user message between an
+        # assistant's tool calls and their results is rejected by most providers.
+        batch_nudges: list = []
         for call in message.tool_calls:
             # The tool guard repairs the call's shape (bad JSON, near-miss tool name, a
             # number sent as a string) and, when it cannot, answers with one precise
@@ -4995,7 +5483,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                     _repeat_sig, _repeat_count = signature, 1
                 if _repeat_count >= 3:
                     _repeat_count = 0
-                    messages.append({"role": "user", "content": (
+                    batch_nudges.append({"role": "user", "content": (
                         "You have now made this exact call %d times with identical arguments and it "
                         "keeps failing. Do NOT repeat it. Read the error text, then change approach: "
                         "use a different tool or different arguments, or do something simpler. If the "
@@ -5018,11 +5506,29 @@ async def agent_turn(force_tool: bool = False) -> str:
                 if _spinning:
                     _jev_loop_window = []
                     _progress("thinking", "A decision provider flagged a likely loop (p=%s); nudging." % _spinning)
-                    messages.append({"role": "user", "content": (
+                    batch_nudges.append({"role": "user", "content": (
                         "You appear to be repeating the same approach without progress. Stop and "
                         "reassess: name what is blocking you, then try a materially different tool "
                         "or arguments, or reply 'BLOCKED: <reason>'. Do not repeat the last action."
                     )})
+        # OpenHands stuck detection (stuck.py): the same call and result over and over, the same
+        # failing call, or two calls taking turns. First time: a precise nudge. If it loops again
+        # after that, the request stops honestly instead of burning turns.
+        global _stuck_hits
+        pattern = stuck.detect(messages) if STUCK_DETECTION else ""
+        if pattern:
+            _stuck_hits += 1
+            if _stuck_hits >= STUCK_STOP_AFTER:
+                content = ("BLOCKED: I was stuck in a loop (%s) and stopped instead of repeating it. %s"
+                           % (pattern.replace("_", " "), stuck.MESSAGES.get(pattern, "")))
+                _progress("thinking", "Stuck in a loop (%s) twice - stopping." % pattern)
+                messages.extend(batch_nudges)
+                messages.append({"role": "user", "content": "(LOKI stopped this loop.)"})
+                messages.append({"role": "assistant", "content": content})
+                return content
+            _progress("thinking", "Looks stuck (%s); nudging the model to change approach." % pattern)
+            batch_nudges = [{"role": "user", "content": stuck.advice(pattern)}]
+        messages.extend(batch_nudges)
 
 
 async def _finish_with_verification(answer: str, rounds: int) -> str:
@@ -5051,8 +5557,9 @@ async def _finish_with_verification(answer: str, rounds: int) -> str:
 
 
 async def _run_agent(user_message: str) -> str:
-    global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window
+    global _empty_nudges, _repeat_sig, _repeat_count, _jev_loop_window, _stuck_hits
     _empty_nudges = 0
+    _stuck_hits = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     ROUTE_TRACE.clear()
@@ -5127,8 +5634,9 @@ def _answer_only(goal: str) -> bool:
 
 
 async def _pursue_goal(goal: str) -> str:
-    global _empty_nudges, _task_modified, _task_wrote_file, _repeat_sig, _repeat_count, _jev_loop_window
+    global _empty_nudges, _task_modified, _task_wrote_file, _repeat_sig, _repeat_count, _jev_loop_window, _stuck_hits
     _empty_nudges = 0
+    _stuck_hits = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     _task_modified = False
@@ -5246,6 +5754,10 @@ async def _pursue_goal(goal: str) -> str:
 def _start_request() -> tuple:
     global _REQUEST_TOOL_CALLS
     _REQUEST_TOOL_CALLS = 0
+    MEMORY_BUDGET.reset()
+    LAST_RECALL.clear()
+    LAST_SKILLS.clear()
+    LAST_LEARNED.clear()
     _GUARD_AT_START["repaired"] = GUARD_STATS["repaired"]
     _GUARD_AT_START["rejected"] = GUARD_STATS["rejected"]
     _LAST_VERIFY.clear()
@@ -5292,6 +5804,14 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
         reasoning_bank.remember(goal, status, outcome, [m for m in messages[start_index:] if isinstance(m, dict)],
                                 extra={"kind": kind, "provider": providers[-1] if providers else "",
                                        "seconds": round(time.time() - started, 1)})
+        # Roadmap E2: a verified success that took more than a few tool calls becomes a learned skill.
+        learned = skill_learning.learn_from(goal, [m for m in messages[start_index:] if isinstance(m, dict)],
+                                            status, outcome, _REQUEST_TOOL_CALLS, root=DATA_DIR)
+        if learned:
+            LAST_LEARNED.clear()
+            LAST_LEARNED.update(learned)
+            _progress("thinking", "Learned a skill from this: %s (%s)." % (
+                learned["id"], "refreshed" if learned.get("refreshed") else "new"))
     except Exception as exc:  # noqa: BLE001 - learning must never break a request
         print("  [experience] not recorded: %s" % exc)
 
@@ -5306,6 +5826,13 @@ def _triage_record(start_index: int = 0) -> dict:
     t["actual_route"] = first_layer.actual_route(_REQUEST_TOOL_CALLS, delegated)
     return {k: t[k] for k in ("source", "kind", "route", "difficulty", "risk", "confidence", "ms",
                               "actual_route", "missing_info", "capabilities") if k in t}
+
+
+def _skill_note(reply: str) -> str:
+    """Roadmap E2: when a learned skill was offered for this request, the reply says so."""
+    if LAST_SKILLS and "learned skill" not in str(reply or "").lower():
+        return str(reply or "").rstrip() + "\n\n(used learned skill: %s)" % ", ".join(LAST_SKILLS)
+    return reply
 
 
 def _status_of_reply(reply: str) -> str:
@@ -5364,7 +5891,7 @@ async def run_agent(user_message: str) -> str:
             messages.append({"role": "user", "content": user_message})
             messages.append({"role": "assistant", "content": reply})
             return reply
-        reply = await _run_agent(user_message)
+        reply = _skill_note(await _run_agent(user_message))
         status = "done"
         return reply
     except BudgetExhausted:
@@ -5382,7 +5909,7 @@ async def pursue_goal(goal: str) -> str:
         await asyncio.to_thread(_triage, goal)
         reply = await _pursue_goal(goal)
         status = "done" if _answer_only(goal) else _status_of_reply(reply)
-        return reply
+        return _skill_note(reply)
     except BudgetExhausted:
         status = "budget"
         raise

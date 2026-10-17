@@ -577,6 +577,7 @@ async function loadCategories() {
 async function loadMemory() {
   const data = await api("/memory");
   if (data.ok) $("#memory-text").value = data.memory || "";
+  if (typeof loadMemoryCore === "function") loadMemoryCore();
 }
 
 async function loadManifests() {

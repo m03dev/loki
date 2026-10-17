@@ -31,7 +31,7 @@ ALLOW, ASK, DENY = "allow", "ask", "deny"
 # Which arguments of which local tools are workspace paths.
 PATH_ARGS = {
     "read_file": ("filename",), "write_file": ("filename",), "append_file": ("filename",),
-    "edit_file": ("filename",), "make_dir": ("path",), "move_file": ("src", "dst"),
+    "edit_file": ("filename",), "insert_lines": ("filename",), "undo_edit": ("filename",), "make_dir": ("path",), "move_file": ("src", "dst"),
     "delete_file": ("path",), "build_3d_scene": ("filename",), "list_tree": ("subdir",),
     "search_files": ("subdir",), "review_repository": ("path",),
     "render_video": ("project_dir", "out"), "video_project": ("name",),

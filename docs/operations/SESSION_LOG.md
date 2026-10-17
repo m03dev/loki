@@ -11,6 +11,16 @@ Concise dated records of meaningful work. Newest at the top.
 - world.js: self island + one island per linked machine (stable slots, fly-to, back home); creations hall.
 - engine/creations.py, GET /creations, /creations/<kind>/<file>; app/ui/creations.js, Settings > Creations.
 - tests: test_portal (Babylon, islands, self), test_play (Creations).
+## 2026-10-17 - Session 26 (Claude, worktree): core upgrade from OpenHuman, OpenHands, Scrapling, MuMuAINovel
+
+- Self-improvement blockers fixed: improve model falls back to smart, check_loki/ship_loki kept for
+  local models in a worktree, ship proof + honest evolve settle, hermetic test env, worktree's own
+  ship.py, condensed model view, outcomes as memories, nudges after the tool batch.
+- New engine modules: memory_core, skill_learning, subagent, condenser, stuck, file_editor,
+  web_reader, command_risk, task_tracker; tools memory, run_subagent, read_web, task_tracker,
+  insert_lines, undo_edit, sketch_reply. Settings > Memory lists learned memories/skills.
+- Novel Writer: MuMuAINovel pipeline prompts in English (skills/novel-writer). GPL code -> LOKI stays private.
+- tests/test_core_upgrade.py; all 25 suites pass.
 
 ---
 

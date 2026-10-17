@@ -160,7 +160,8 @@ check("every new tool is a local tool with a schema, offered to the model",
 check("the CRM tools are the 'business' tool category",
       set(loki.TOOL_CATEGORIES["business"]) == {"crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"}
       and "business" in loki.CATEGORY_LABELS)
-check("scrape is in the web category, videos in creative", loki.TOOL_CATEGORIES["web"] == ["scrape"]
+check("scrape (and the native read_web) are the web category, videos in creative",
+      loki.TOOL_CATEGORIES["web"] == ["scrape", "read_web"]
       and {"video_project", "render_video"} <= set(loki.TOOL_CATEGORIES["creative"]))
 check("Plan mode stays read-only: CRM writes and scrape are not offered there",
       {"crm_add", "crm_update", "crm_log", "scrape"} <= loki.NETWORK_WRITES)

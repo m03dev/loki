@@ -26,6 +26,18 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] **Session 26: watch LOKI improve itself for real.** After the PC updates past the
+      session-26 core upgrade, restart LOKI and leave it idle. In Settings > Lab: the next step
+      (E4 or an owner idea) should start, its job should end, and the row should say shipped - or
+      "did not ship" WITH a reason (no longer a silent "shipped"). Report: the job's model
+      (`[loki-job] ... | model ...` in harness_data/jobs/<id>.log), whether check_loki/ship_loki
+      were called, whether `harness_data/jobs/<id>.shipped.json` exists, and the Lab line. Also open
+      Settings > Memory: the "What LOKI learned" list should show the evolve lessons. (Claude, 2026-10-17)
+- [ ] [mac] **Session 26 UI check (WebKit).** Settings > Memory: the "What LOKI learned" list, Search,
+      Edit (a prompt dialog) and Forget work. ✎ Draw: ask LOKI "draw an arrow from the top-left to the
+      middle on my pad" - after its reply, open the pad: the arrow shows under your strokes and the
+      "LOKI's drawing" button hides/shows it. Report what worked. (Claude, 2026-10-17)
+
 - [x] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
       after it updates: tests/test_events.py should report 46 passed (the "world counts real work"
       check no longer depends on the time of day). Report the suite counts. (Claude, 2026-10-16)

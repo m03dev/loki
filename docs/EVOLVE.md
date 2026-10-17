@@ -13,15 +13,16 @@ Rules for every step: never remove a feature to make room; keep the window fast 
 dependency without need); macOS and Windows; a test for what is built; the world keeps its
 pixel cel-shaded look.
 
-Reference, not code: OpenHuman (tinyhumansai/openhuman, GPL-3.0) shows what a personal agent
-core has. LOKI writes its own versions; nothing is copied from it.
+Since session 26 LOKI also carries code ported from OpenHuman (memory, sub-agents), OpenHands
+(condenser, stuck detection, file editing, task tracker, command risk) and Scrapling (native web
+reading) - see docs/THIRD_PARTY.md. The owner allows any licence while LOKI stays private.
 
 ## Roadmap
 
-- [ ] E1 Memory you can see and edit - Settings > Memory lists what LOKI remembers (facts, past work, skills) with search, edit and forget; at the start of a request LOKI recalls the few memories that matter and the reply says which it used.
+- [x] E1 Memory you can see and edit (session 26: engine/memory_core.py, the memory tool, Settings > Memory, reply metadata `memories_used`) - Settings > Memory lists what LOKI remembers (facts, past work, skills) with search, edit and forget; at the start of a request LOKI recalls the few memories that matter and the reply says which it used.
 - [ ] E11 LOKI's own game engine, step 2 - the engine (app/ui/engine/pixel_engine.js), the Play panel and the first game (Fox & Berries) exist. Next: LOKI World itself drawn by the same engine (one renderer, not two), plus sprites/particles and a simple tilemap/terrain in the engine, and two more games LOKI makes on its own (games/<name>/game.js, via game_engine_guide).
-- [ ] E2 Learn skills from its own work - after a request that was verified done and took more than 5 tool calls, write a SKILL.md of the procedure to harness_data/skills/learned/ and use it the next time a similar request comes (the reply says "used learned skill ...").
-- [ ] E3 Subagents - a run_subagent tool: a short-lived helper with a narrow tool set and its own small context that returns one result, so research and file searches run side by side.
+- [x] E2 Learn skills from its own work (session 26: engine/skill_learning.py) - after a request that was verified done and took more than 5 tool calls, write a SKILL.md of the procedure to harness_data/skills/learned/ and use it the next time a similar request comes (the reply says "used learned skill ...").
+- [x] E3 Subagents (session 26: engine/subagent.py, the run_subagent tool) - a run_subagent tool: a short-lived helper with a narrow tool set and its own small context that returns one result, so research and file searches run side by side.
 - [ ] E4 More island life - animals in LOKI World in the pixel cel-shaded style with ink lines, like the fox: ducks in the pond, a cat that naps by the library, a deer at the island edge; each with a few believable behaviours.
 - [ ] E5 Creations hall - a small gallery building on the island that shows what LOKI made (images/, videos/, sketches/, games) as framed pictures on its walls; clicking one opens it.
 - [ ] E6 Speed watch - time startup, first paint and each request phase; Settings > Lab shows the numbers; once a week find the slowest step and make it faster.

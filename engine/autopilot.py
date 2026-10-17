@@ -215,13 +215,40 @@ class Autopilot:
             return ""
         jobs = getattr(self.state, "jobs", None)
 
-        def job_status(job_id: str):
+        def job_of(job_id: str):
             try:
-                job = jobs.store.get(job_id) if jobs is not None else None
+                return jobs.store.get(job_id) if jobs is not None else None
             except Exception:  # noqa: BLE001
-                job = None
+                return None
+
+        def job_status(job_id: str):
+            job = job_of(job_id)
             return job.get("status") if job else None
-        for item_id, outcome in self.evolve.settle(job_status):
+
+        def shipped(job_id: str):
+            """True when ship_loki left its marker for this job; None when this engine cannot tell."""
+            marker = getattr(self.agent, "ship_marker", None)
+            if marker is None:
+                return None
+            try:
+                return Path(marker(job_id)).is_file()
+            except Exception:  # noqa: BLE001
+                return None
+
+        def detail(job_id: str) -> str:
+            job = job_of(job_id) or {}
+            text = str(job.get("error") or "")
+            result = Path(getattr(self.agent, "DATA_DIR", ".")) / "jobs" / ("%s.result.txt" % job_id)
+            try:
+                text = (result.read_text(encoding="utf-8") or text) if result.is_file() else text
+            except OSError:
+                pass
+            if not text:
+                text = str(job.get("output") or "")[-400:]
+            lines = [ln for ln in text.strip().splitlines() if ln.strip()]
+            final = next((ln for ln in reversed(lines) if ln.strip().upper().startswith(("DONE", "BLOCKED"))), "")
+            return final or (lines[-1] if lines else "")
+        for item_id, outcome in self.evolve.settle(job_status, shipped=shipped, detail=detail):
             self._log("evolve", "%s %s" % (item_id, "shipped" if outcome == "shipped" else "did not ship; it will be tried again"))
         line = self.evolve.step(self.improve)
         if line:

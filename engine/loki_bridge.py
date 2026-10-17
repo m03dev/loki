@@ -487,7 +487,8 @@ class BridgeState:
             try:
                 answer = await self.agent.run_agent(prompt)
                 self.push_progress(chat_id, "done", "Response ready.")
-                return {"ok": True, "response": answer, "chat_id": chat_id, "usage": usage_total(spent)}
+                return {"ok": True, "response": answer, "chat_id": chat_id, "usage": usage_total(spent),
+                        **memory_metadata(self.agent)}
             except self.agent.BudgetExhausted as exc:
                 self.push_progress(chat_id, "done", "Stopped: %s." % exc.reason)
                 return {"ok": True, "response": "Stopped early: %s." % exc.reason, "chat_id": chat_id, "stopped": True}
@@ -922,6 +923,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/memory":
             self._send_json(200, {"ok": True, "memory": self.server.state.agent.get_memory()})
+            return
+        if route == "/memory/core":
+            self._send_json(*memory_core_api(self.server.state, "GET", parse_qs(urlparse(self.path).query)))
+            return
+        if route == "/sketch/reply":
+            self._send_json(200, sketch_reply_latest(self.server.state))
             return
         if route == "/state":
             agent = self.server.state.agent
@@ -1406,6 +1413,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 state.release_busy(busy)
             self._send_json(200, {"ok": True, "conversations": state.agent.list_conversations()})
             return
+        if route == "/memory/core":
+            self._send_json(*memory_core_api(state, "POST", data))
+            return
         if route.startswith("/conversations") or route == "/memory":
             busy = state.try_busy()
             if busy is None:
@@ -1552,6 +1562,68 @@ def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tup
     args = data.get("args") if isinstance(data.get("args"), dict) else {}
     result = system_check.apply_fix(state, action, args)
     return (200 if result.get("ok") else 400), result
+
+
+def sketch_reply_latest(state: Any) -> dict[str, Any]:
+    """GET /sketch/reply: the newest drawing LOKI made on the pad (sketches/loki-*.json), or none."""
+    folder = Path(getattr(state.agent, "WORKSPACE", ".")) / "sketches"
+    try:
+        newest = max(folder.glob("loki-*.json"), key=lambda p: p.stat().st_mtime, default=None)
+        if newest is None:
+            return {"ok": True, "shapes": []}
+        data = json.loads(newest.read_text(encoding="utf-8"))
+        return {"ok": True, "name": newest.name, "note": str(data.get("note", ""))[:500],
+                "shapes": list(data.get("shapes") or [])[:200], "t": data.get("t", 0)}
+    except (OSError, ValueError):
+        return {"ok": True, "shapes": []}
+
+
+def memory_core_api(state: Any, method: str, data: Any) -> tuple[int, dict[str, Any]]:
+    """GET /memory/core[?q=] lists (or recalls) LOKI's learned memories and skills; POST
+    {action: learn|edit|forget, text, id, tier} changes them (engine/memory_core.py)."""
+    import memory_core  # pylint: disable=import-outside-toplevel
+    import skill_learning  # pylint: disable=import-outside-toplevel
+    root = Path(getattr(state.agent, "DATA_DIR", "") or memory_core.data_dir())
+    if method == "GET":
+        query = ((data or {}).get("q") or [""])[0] if isinstance(data, dict) else ""
+        if query:
+            found = memory_core.fetch(query, root=root)
+            items = found["items"]
+        else:
+            items = list(reversed(memory_core.items(root)))[:200]
+        return 200, {"ok": True, "items": items, "skills": skill_learning.learned(root),
+                     "stats": memory_core.stats(root)}
+    data = data if isinstance(data, dict) else {}
+    action = str(data.get("action", "")).lower()
+    if action == "learn":
+        out = memory_core.learn(str(data.get("text", "")), tier=str(data.get("tier", "semantic")), root=root,
+                                source="owner")
+    elif action == "edit":
+        out = memory_core.edit(str(data.get("id", "")), str(data.get("text", "")), root=root)
+    elif action == "forget":
+        out = memory_core.forget(str(data.get("id", "")), root=root)
+    else:
+        return 400, {"ok": False, "error": "action is learn, edit or forget"}
+    return (200 if out.get("ok") else 400), out
+
+
+def memory_metadata(agent: Any) -> dict[str, Any]:
+    """Which memories and learned skills this reply used (memory_core pack + memory tool), and the
+    skill it learned - the reply metadata the window shows under the answer. {} when none."""
+    out: dict[str, Any] = {}
+    try:
+        used = [dict(m) for m in (getattr(agent, "LAST_RECALL", None) or [])][:12]
+        skills = list(getattr(agent, "LAST_SKILLS", None) or [])
+        learned = dict(getattr(agent, "LAST_LEARNED", None) or {})
+    except Exception:  # noqa: BLE001
+        return out
+    if used:
+        out["memories_used"] = used
+    if skills:
+        out["skills_used"] = skills
+    if learned:
+        out["learned_skill"] = {"id": learned.get("id", ""), "refreshed": bool(learned.get("refreshed"))}
+    return out
 
 
 def usage_total(entries: Any) -> dict[str, Any]:

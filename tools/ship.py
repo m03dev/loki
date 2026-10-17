@@ -34,7 +34,7 @@ MIRRORS = [b for b in os.getenv("LOKI_MIRROR_BRANCHES", "macos-app").split(",") 
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
-          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons"]
+          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade"]
 
 
 def _suite_env() -> dict:
@@ -45,7 +45,13 @@ def _suite_env() -> dict:
     would commit it - so never let a suite inherit a temp dir inside REPO.
     """
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-    root = (os.environ.get("TEMP") or "") if os.name == "nt" else "/tmp"
+    # Suites run like CI: no LOKI_* settings or job variables inherited from an engine or a
+    # background job (LOKI_DATA would point them at the live data folder, LOKI_WORKSPACE at the
+    # job's worktree). LOKI_SUITE_* stays, for options meant for the suites themselves.
+    for name in list(env):
+        if (name.startswith("LOKI_") and not name.startswith("LOKI_SUITE_")) or name.startswith("HARNESS_"):
+            env.pop(name, None)
+    root =(os.environ.get("TEMP") or "") if os.name == "nt" else "/tmp"
     if not root or not os.path.isdir(root) or not os.access(root, os.W_OK):
         root = tempfile.gettempdir()
     if os.path.abspath(root) != os.path.abspath(str(REPO_DEFAULT)) and not str(root).startswith(str(REPO_DEFAULT)):

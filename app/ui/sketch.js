@@ -4,7 +4,10 @@
 // Apple Pencil via pointer events), marker, eraser, colours, undo/redo, clear. "Attach" saves
 // the drawing as a PNG in the workspace (POST /sketch -> sketches/sketch-<time>.png) and the next
 // message carries it: LOKI is told where it is and looks at it with its view_image tool.
-// For a full AI canvas there is the optional PenEcho add-on (Settings > Add-ons).
+// LOKI can draw back (the canvas <-> agent loop PenEcho is built on): its sketch_reply tool saves
+// shapes to sketches/loki-<time>.json and the pad shows the newest one under your own strokes
+// (GET /sketch/reply; "LOKI's drawing" hides it). For a full AI canvas there is the optional
+// PenEcho add-on (Settings > Add-ons).
 "use strict";
 
 const Sketch = (function () {
@@ -12,6 +15,7 @@ const Sketch = (function () {
   let pending = [];                 // [{path, url}] attached to the next message
   let modal = null, canvas = null, ctx = null, strokes = [], redo = [], current = null;
   let tool = "pen", color = COLORS[0];
+  let reply = null, showReply = true;   // LOKI's newest drawing on the pad (sketch_reply)
 
   function node(tag, cls, text) {
     const n = document.createElement(tag);
@@ -31,7 +35,49 @@ const Sketch = (function () {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#1c1c20";
     ctx.fillRect(0, 0, r.width, r.height);
+    if (reply && showReply) drawReply(r.width, r.height);
     for (const s of strokes) drawStroke(s);
+  }
+
+  // LOKI's shapes use 0..1000 across and down the pad.
+  function drawReply(w, h) {
+    const X = (v) => (Number(v) || 0) * w / 1000, Y = (v) => (Number(v) || 0) * h / 1000;
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 2.5;
+    ctx.font = "15px system-ui, sans-serif";
+    for (const s of reply.shapes || []) {
+      ctx.strokeStyle = ctx.fillStyle = s.color || "#8ccfc4";
+      ctx.beginPath();
+      if (s.type === "line" || s.type === "arrow") {
+        const x1 = X(s.x1), y1 = Y(s.y1), x2 = X(s.x2), y2 = Y(s.y2);
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        if (s.type === "arrow") {
+          const a = Math.atan2(y2 - y1, x2 - x1), k = 12;
+          ctx.beginPath(); ctx.moveTo(x2, y2);
+          ctx.lineTo(x2 - k * Math.cos(a - 0.45), y2 - k * Math.sin(a - 0.45));
+          ctx.lineTo(x2 - k * Math.cos(a + 0.45), y2 - k * Math.sin(a + 0.45));
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (s.type === "rect") {
+        ctx.strokeRect(X(s.x), Y(s.y), X(s.w), Y(s.h));
+      } else if (s.type === "circle") {
+        ctx.arc(X(s.cx), Y(s.cy), Math.max(1, X(s.r)), 0, Math.PI * 2); ctx.stroke();
+      } else if (s.type === "text") {
+        ctx.fillText(String(s.text || ""), X(s.x), Y(s.y));
+      } else if (s.type === "path" && (s.points || []).length > 1) {
+        ctx.moveTo(X(s.points[0][0]), Y(s.points[0][1]));
+        for (const p of s.points.slice(1)) ctx.lineTo(X(p[0]), Y(p[1]));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  async function loadReply(button) {
+    const data = await api("/sketch/reply").catch(() => null);
+    reply = data && data.ok && (data.shapes || []).length ? data : null;
+    if (button) { button.hidden = !reply; button.title = reply ? (reply.note || reply.name || "") : ""; }
+    if (canvas) redraw();
   }
 
   function drawStroke(s) {
@@ -81,7 +127,7 @@ const Sketch = (function () {
 
   // ---------------------------------------------------------------- the pad
   function open() {
-    if (modal) { modal.hidden = false; size(); return; }
+    if (modal) { modal.hidden = false; size(); loadReply(modal.querySelector(".sketch-reply")); return; }
     modal = node("div", "sketch-modal");
     const panel = node("div", "sketch-panel");
     const bar = node("div", "sketch-bar");
@@ -101,7 +147,10 @@ const Sketch = (function () {
     }
     const act = (label, fn, cls) => { const b = node("button", cls || "quiet", label); b.type = "button"; b.addEventListener("click", fn); return b; };
     const actions = node("div", "sketch-actions");
+    const replyBtn = act("LOKI's drawing", () => { showReply = !showReply; replyBtn.classList.toggle("on", showReply); redraw(); }, "quiet sketch-tool sketch-reply on");
+    replyBtn.hidden = true;
     actions.append(
+      replyBtn,
       act("Undo", () => { if (strokes.length) { redo.push(strokes.pop()); redraw(); } }),
       act("Redo", () => { if (redo.length) { strokes.push(redo.pop()); redraw(); } }),
       act("Clear", () => { strokes = []; redo = []; redraw(); }),
@@ -126,6 +175,7 @@ const Sketch = (function () {
     window.addEventListener("resize", () => { if (modal && !modal.hidden) size(); });
     modal.tabIndex = -1;
     requestAnimationFrame(() => { size(); modal.focus(); });
+    loadReply(replyBtn);
   }
 
   function close() { if (modal) modal.hidden = true; }
@@ -165,7 +215,7 @@ const Sketch = (function () {
     if (!pending.length) return { text, thumbs: [] };
     const list = pending.map((s) => s.path).join(", ");
     const out = { text: text + "\n\n[The user drew " + (pending.length === 1 ? "a sketch" : "sketches") + " for this message: " + list +
-      ". Look at " + (pending.length === 1 ? "it" : "them") + " with view_image first.]", thumbs: pending.map((s) => s.url) };
+      ". Look at " + (pending.length === 1 ? "it" : "them") + " with view_image first; you can answer on the pad itself with sketch_reply.]", thumbs: pending.map((s) => s.url) };
     pending = [];
     renderChips();
     return out;

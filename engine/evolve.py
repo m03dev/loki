@@ -142,6 +142,10 @@ class Evolve:
             if item["done"] or item.get("approved") is False:
                 continue
             last = item.get("last")
+            if last and last["outcome"] == "shipped":
+                # It shipped; this checkout's roadmap is ticked only after the next update, so
+                # do not build the same step again in the meantime.
+                continue
             if last and last["outcome"] in ("started", "failed") and now - last["t"] < RETRY_S:
                 continue
             return item
@@ -185,9 +189,14 @@ class Evolve:
             last[a["id"]] = a
         return any(a["outcome"] == "started" for a in last.values())
 
-    def settle(self, job_status) -> list:
+    def settle(self, job_status, shipped=None, detail=None) -> list:
         """Close started attempts whose job finished: job_status(job_id) -> status or None.
-        A job that ended "done" shipped (ship_loki only pushes when every suite passes)."""
+
+        shipped(job_id) -> True/False/None says whether the job REALLY pushed (ship_loki leaves a
+        marker); a job that only ended "done" - the model said DONE without shipping, or ship_loki
+        refused - is a failure with its reason, not a success. detail(job_id) -> the job's last
+        words (its DONE/BLOCKED line or error), kept as the lesson for the next attempt.
+        Without `shipped` (older callers), a job that ended "done" counts as shipped."""
         closed = []
         last = {}
         for a in self.state()["attempts"]:
@@ -195,15 +204,42 @@ class Evolve:
         for item_id, a in last.items():
             if a["outcome"] != "started":
                 continue
-            st = job_status(a.get("job", "")) if a.get("job") else None
+            job = a.get("job", "")
+            st = job_status(job) if job else None
+            why = ""
+            if detail is not None and job:
+                try:
+                    why = " ".join(str(detail(job) or "").split())[:300]
+                except Exception:  # noqa: BLE001
+                    why = ""
             if st in ("done", "finished", "succeeded"):
-                self.record(item_id, "shipped", "the job finished", job=a.get("job", ""))
+                really = shipped(job) if (shipped is not None and job) else True
+                if really is False:
+                    self.record(item_id, "failed", "the job finished without shipping" + (": " + why if why else ""), job=job)
+                    self._lesson(item_id, "failed", "finished without shipping. " + why)
+                    closed.append((item_id, "failed"))
+                    continue
+                self.record(item_id, "shipped", "shipped" + (": " + why if why else ""), job=job)
+                self._lesson(item_id, "shipped", why)
                 closed.append((item_id, "shipped"))
             elif st in ("failed", "error", "cancelled", "canceled", "stopped") or (
                     st is None and self.clock() - a["t"] > 6 * 3600):
-                self.record(item_id, "failed", "the job ended as %s" % (st or "lost"), job=a.get("job", ""))
+                self.record(item_id, "failed", "the job ended as %s" % (st or "lost") + (": " + why if why else ""), job=job)
+                self._lesson(item_id, "failed", "the job ended as %s. %s" % (st or "lost", why))
                 closed.append((item_id, "failed"))
         return closed
+
+    def _lesson(self, item_id: str, outcome: str, why: str) -> None:
+        """Keep the outcome in LOKI's memory too (memory_core, episodic), so the next improve job
+        recalls it in its memory pack - not only the evolve prompt's last-outcomes list."""
+        try:
+            import memory_core  # pylint: disable=import-outside-toplevel
+            title = next((i["title"] for i in self.items() if i["id"] == item_id), item_id)
+            memory_core.learn("Self-improvement step %s (%s) %s. %s" % (item_id, title[:140], outcome, why[:300]),
+                              tier="episodic", tags="evolve,self-improvement,%s" % item_id.lower(),
+                              root=self.path.parent, source="evolve")
+        except Exception:  # noqa: BLE001 - learning must never break the duty
+            pass
 
     def status(self) -> dict:
         return {"ok": True, "enabled": enabled(), "items": self.items(), "lessons": self.lessons(),
