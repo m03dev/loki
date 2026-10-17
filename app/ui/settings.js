@@ -136,6 +136,24 @@ async function loadPortal() {
   renderPortal();
 }
 
+async function routingDoctor() {
+  const box = $("#routing-report");
+  if (!box) return;
+  box.hidden = false;
+  box.textContent = "Asking the model doctor…";
+  const data = await api("/models/doctor").catch((e) => ({ ok: false, error: String(e) }));
+  box.textContent = data.ok ? data.text : ("Could not explain the routing: " + (data.error || ""));
+}
+
+async function routingRecheck(event) {
+  const b = event && event.target;
+  if (b) b.disabled = true;
+  await api("/providers/probe", {}).catch(() => null);
+  if (b) b.disabled = false;
+  await loadPortal();
+  if (!$("#routing-report").hidden) routingDoctor();
+}
+
 function renderPortal() {
   const data = portal.data;
   if (!data) return;
@@ -189,6 +207,12 @@ function providerCard(p) {
   const result = el("div", "pcard-result");
   result.setAttribute("role", "status");
   if (p.test) result.textContent = (p.test.ok ? "✓ " : "✗ ") + p.test.detail + " · " + ago(p.test.at);
+  if (p.health && p.health.state && p.health.state !== "unknown" && (p.configured || p.has_key)) {
+    // The live state routing uses (engine/provider_health.py) and one line on what to do about it.
+    const h = el("p", "pcard-health " + (p.health.live ? "ok" : "bad"), (p.health.live ? "● " : "○ ") + (p.health.line || p.health.label || p.health.state));
+    if (!p.health.live && p.health.fix) h.append(el("span", "pcard-fix", " Fix: " + p.health.fix));
+    card.append(h);
+  }
   const auth = p.auth || [];
 
   if (auth.includes("oauth") && !p.has_key) {
@@ -937,6 +961,10 @@ function wireSettings() {
     const node = $(id);
     if (node) node.addEventListener("input", renderPortal);
   }
+  const doctor = $("#routing-doctor");
+  if (doctor) doctor.addEventListener("click", routingDoctor);
+  const recheck = $("#routing-recheck");
+  if (recheck) recheck.addEventListener("click", routingRecheck);
   const close = $("#qr-close");
   if (close) close.addEventListener("click", closeQR);
   const modal = $("#qr-modal");

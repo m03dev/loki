@@ -2,7 +2,10 @@
 settings, the agent builder, and Update everything. Kept out of loki_bridge.py so that file
 only has to route here:
 
-  GET  /providers                         every provider card (providers_catalog.present)
+  GET  /providers                         every provider card (providers_catalog.present), with health
+  GET  /models/doctor                     the routing in plain words (routing.doctor)
+  GET  /providers/health                  the provider health registry (provider_health)
+  POST /providers/probe      {id?}        re-check one/all providers now (free /models calls only)
   POST /providers/test       {id}         one real 1-token request
   POST /providers/models     {id}         its live model list
   POST /providers/model      {id, model}  use this model for it
@@ -58,6 +61,8 @@ GENERAL = {
                        "label": "LOKI may ship changes to its own code"},
     "LOKI_PREFER": {"kind": "choice", "default": "local", "choices": ["local", "cloud"],
                     "label": "Prefer local models or the cloud"},
+    "LOKI_LOCAL_ONLY": {"kind": "bool", "default": "0",
+                        "label": "Private: only models on this computer (nothing is sent to a cloud model)"},
     "LOKI_WORLD": {"kind": "choice", "default": "background", "choices": ["background", "panel", "off"],
                    "label": "LOKI World (3D): behind the home screen, only in its panel, or off"},
     "LOKI_WORLD_ENGINE": {"kind": "choice", "default": "babylon", "choices": ["babylon", "godot", "classic", "three"],
@@ -115,6 +120,12 @@ def handle_get(state: Any, path: str) -> tuple | None:
     q = _query(path)
     if route == "/providers":
         return 200, {"ok": True, **providers_catalog.present(agent)}
+    if route == "/models/doctor":
+        import routing  # pylint: disable=import-outside-toplevel
+        return 200, routing.doctor(agent)
+    if route == "/providers/health":
+        import provider_health  # pylint: disable=import-outside-toplevel
+        return 200, {"ok": True, "providers": provider_health.registry().snapshot()}
     if route == "/signin/status":
         return 200, signin.flow_status(q.get("state", ""))
     if route == "/handoff/status":
@@ -185,6 +196,17 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
         return 200, {"ok": True}
     if route == "/providers/test":
         return 200, providers_catalog.test(agent, pid)
+    if route == "/providers/probe":
+        import provider_health  # pylint: disable=import-outside-toplevel
+        if pid:
+            cfg = agent.MODELS.get(pid)
+            if cfg is None or not str(cfg.base_url).startswith("https://"):
+                return 400, {"ok": False, "error": "only remote providers are probed"}
+            reg = provider_health.registry()
+            reg.record_probe(pid, provider_health.probe(pid, cfg.base_url, str(cfg.api_key or ""), cfg.model,
+                                                        clock=reg.clock), key=str(cfg.api_key or ""))
+            return 200, {"ok": True, "probed": [pid], "health": reg.snapshot().get(pid)}
+        return 200, {"ok": True, "probed": provider_health.refresh_once(agent, force=True)}
     if route == "/providers/models":
         return 200, providers_catalog.list_models(agent, pid)
     if route == "/providers/model":

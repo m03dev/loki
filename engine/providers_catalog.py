@@ -221,6 +221,11 @@ def present(agent: Any, env: dict | None = None) -> dict:
     except Exception:  # noqa: BLE001
         resolved = current
     order = list(getattr(agent, "SMART_ORDER", ()))
+    try:
+        import provider_health  # pylint: disable=import-outside-toplevel
+        health = provider_health.registry().snapshot()
+    except Exception:  # noqa: BLE001 - the cards work without it
+        provider_health, health = None, {}
     cards = []
     for entry in CATALOG:
         pid = entry["id"]
@@ -242,6 +247,13 @@ def present(agent: Any, env: dict | None = None) -> dict:
             "test": _TESTS.get(pid),
             "prompted_tools": _prompted(pid),
         })
+        h = health.get(pid)
+        if h and provider_health is not None:
+            # The live state routing uses: "free quota used up (back in 40 min)" + a one-line fix.
+            card["health"] = {"state": h.get("state"), "label": h.get("label"), "line": h.get("line"),
+                              "live": h.get("live"), "fix": provider_health.fix_for(pid, h, entry),
+                              "latency_ms": h.get("latency_ms"), "model_info": h.get("model_info") or {},
+                              "probe_at": h.get("probe_at"), "at": h.get("at")}
         cards.append(card)
     connected = sum(1 for c in cards if c["configured"] and c["enabled"])
     return {"providers": cards, "groups": [{"id": g, "label": label} for g, label in GROUPS],
@@ -312,6 +324,13 @@ def test(agent: Any, pid: str, timeout: float = 20.0, opener=urllib.request.urlo
                                           "messages": [{"role": "user", "content": "Say OK"}]}, opener=opener)
             model = data.get("model", cfg.model) if isinstance(data, dict) else cfg.model
             result = {"ok": 200 <= status < 300, "detail": "answered with %s" % model}
+            if result["ok"]:
+                try:
+                    import provider_health  # pylint: disable=import-outside-toplevel
+                    provider_health.registry().record_success(pid, (time.monotonic() - started) * 1000,
+                                                              key=str(cfg.api_key or ""))
+                except Exception:  # noqa: BLE001
+                    pass
         except urllib.error.HTTPError as exc:
             detail = ""
             try:
@@ -324,6 +343,12 @@ def test(agent: Any, pid: str, timeout: float = 20.0, opener=urllib.request.urlo
                     404: "the model name is not available here", 429: "rate limited right now (the key works)",
                     402: "no credit left"}.get(exc.code, "HTTP %d" % exc.code)
             result = {"ok": exc.code == 429, "detail": (hint + (": " + str(detail)[:140] if detail else ""))}
+            try:   # what the Test button learned steers routing too (provider_health)
+                import provider_health  # pylint: disable=import-outside-toplevel
+                provider_health.registry().record_failure(pid, "HTTP %d: %s" % (exc.code, detail), exc.code,
+                                                          key=str(cfg.api_key or ""), session=False)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "detail": "could not reach %s (%s)" % (cfg.base_url, type(exc).__name__)}
     result.update({"at": time.time(), "ms": int((time.monotonic() - started) * 1000)})

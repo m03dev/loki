@@ -208,6 +208,104 @@ def ollama_installed(which=shutil.which) -> bool:
     return False
 
 
+# Bonsai 2's Q2_0 weights (ggml type 42) load on Ollama 0.40.6 / llama.cpp b11669 and newer;
+# an older Ollama pulls them and then prints gibberish (the PC's 0.40.5 did).
+BONSAI_MIN_OLLAMA = (0, 40, 6)
+
+
+def parse_version(text: str) -> tuple:
+    """'0.40.5' / 'ollama version is 0.40.5-rc1' -> (0, 40, 5); () when there is none."""
+    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", str(text or ""))
+    return tuple(int(x or 0) for x in m.groups()) if m else ()
+
+
+def ollama_version(opener=urllib.request.urlopen) -> str:
+    """The running Ollama's version (GET /api/version), '' when it is not answering."""
+    try:
+        return str(_get_json(OLLAMA + "/api/version", opener=opener).get("version") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def version_at_least(version: str, minimum: tuple) -> bool | None:
+    """None when the version is unknown (then nothing is blocked on a guess)."""
+    got = parse_version(version)
+    return None if not got else got >= tuple(minimum)
+
+
+def is_bonsai(name: str) -> bool:
+    return "bonsai" in str(name or "").lower()
+
+
+def ollama_upgrade(platform_name: str | None = None) -> dict:
+    """How to update Ollama on this OS, in one command (shown to the owner, never run by LOKI)."""
+    plat = platform_name or sys.platform
+    if plat == "win32":
+        return {"command": "winget upgrade --id Ollama.Ollama -e",
+                "how": "Open PowerShell and run: winget upgrade --id Ollama.Ollama -e (or download the new "
+                       "OllamaSetup.exe from ollama.com/download), then restart Ollama from the tray.",
+                "url": "https://ollama.com/download/windows"}
+    if plat == "darwin":
+        return {"command": "brew upgrade ollama",
+                "how": "If you installed it with Homebrew: brew upgrade ollama. The Ollama app updates itself: "
+                       "click its menu-bar icon > Restart to update (or download it again from ollama.com/download).",
+                "url": "https://ollama.com/download/mac"}
+    return {"command": "curl -fsSL https://ollama.com/install.sh | sh",
+            "how": "Run the official installer again in a terminal: curl -fsSL https://ollama.com/install.sh | sh",
+            "url": "https://ollama.com/download/linux"}
+
+
+def bonsai_support(version: str, platform_name: str | None = None) -> dict:
+    """{ok, version, needs, message, upgrade} - can this Ollama run Bonsai 2 (Q2_0)?"""
+    ok = version_at_least(version, BONSAI_MIN_OLLAMA)
+    need = ".".join(str(x) for x in BONSAI_MIN_OLLAMA)
+    up = ollama_upgrade(platform_name)
+    if ok is None:
+        msg = "Ollama's version is unknown (is it running?); Bonsai 2 needs %s or newer." % need
+    elif ok:
+        msg = "Ollama %s runs Bonsai 2." % version
+    else:
+        msg = "Ollama %s cannot run Bonsai 2 (needs %s+). Update: %s" % (version, need, up["how"])
+    return {"ok": ok, "version": version, "needs": need, "message": msg, "upgrade": up}
+
+
+def model_context(model: str, opener=urllib.request.urlopen) -> dict:
+    """{num_ctx, trained, loaded}: the context window an installed model really runs with.
+
+    num_ctx  the Modelfile parameter (what LOKI's loki-* variants set) - 0 when unset, which
+             means Ollama's default (2k-4k on older versions: far too small for LOKI's prompt)
+    trained  the model's own maximum (model_info *.context_length)
+    loaded   what the running instance uses right now (/api/ps context_length, newer Ollama)
+    """
+    out = {"num_ctx": 0, "trained": 0, "loaded": 0}
+    try:
+        show = _post_json(OLLAMA + "/api/show", {"model": model}, timeout=TIMEOUT, opener=opener)
+    except Exception:  # noqa: BLE001
+        return out
+    m = re.search(r"(?m)^\s*num_ctx\s+(\d+)", str(show.get("parameters") or ""))
+    if m:
+        out["num_ctx"] = int(m.group(1))
+    for key, value in (show.get("model_info") or {}).items():
+        if str(key).endswith(".context_length") and isinstance(value, (int, float)):
+            out["trained"] = int(value)
+    try:
+        for item in (_get_json(OLLAMA + "/api/ps", opener=opener).get("models") or []):
+            if isinstance(item, dict) and item.get("name") in (model, model + ":latest") and item.get("context_length"):
+                out["loaded"] = int(item["context_length"])
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def required_context(prompt_tokens: int, info: dict | None = None, headroom: int = 4096) -> int:
+    """The window LOKI asks for: what this machine affords (context_for), but never less than
+    the system prompt + tools + room to work, rounded up to 4k; capped at 32k."""
+    base = context_for(info) if info else 8192
+    need = int(prompt_tokens) + headroom
+    need = ((need + 4095) // 4096) * 4096
+    return min(32768, max(base, need))
+
+
 def ollama_models(opener=urllib.request.urlopen) -> list[dict] | None:
     """[{name, size_gb, family, params}] or None when Ollama is not answering."""
     try:
@@ -240,8 +338,9 @@ def capabilities(model: str, opener=urllib.request.urlopen) -> list[str]:
     return caps
 
 
-def other_servers(opener=urllib.request.urlopen) -> list[dict]:
-    """Running LM Studio / llama.cpp / Jan servers and their models."""
+def other_servers(opener=urllib.request.urlopen, include_mlx: bool = False) -> list[dict]:
+    """Running LM Studio / llama.cpp / Jan servers and their models (and MLX when asked:
+    LOKI's local fallback on a Mac with no Ollama tool model)."""
     found = []
     for key, label, base in LOCAL_SERVERS:
         try:
@@ -251,6 +350,14 @@ def other_servers(opener=urllib.request.urlopen) -> list[dict]:
         models = [m.get("id", "") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
         if models:
             found.append({"key": key, "label": label, "base_url": base, "models": models})
+    if include_mlx and (sys.platform == "darwin" or os.environ.get("MLX_BASE_URL")):
+        # mlx_lm.server / mlx_vlm.server: /models lists the whole Hugging Face cache, not what it
+        # serves; "default_model" is its own name for the model it was started with.
+        try:
+            _get_json(MLX_URL + "/models", timeout=1.0, opener=opener)
+            found.append({"key": "mlx", "label": "MLX", "base_url": MLX_URL, "models": ["default_model"]})
+        except Exception:  # noqa: BLE001
+            pass
     return found
 
 
@@ -264,13 +371,17 @@ def score(name: str) -> int:
     return 50
 
 
-def best_installed(models: list[dict], budget_gb: float, caps=capabilities) -> dict | None:
+def best_installed(models: list[dict], budget_gb: float, caps=capabilities, version: str = "") -> dict | None:
     """The best installed Ollama model that calls tools and fits. Derived loki-* variants
-    are preferred over their base (same weights, bigger window)."""
+    are preferred over their base (same weights, bigger window). With the Ollama `version`
+    known, a model this Ollama cannot run (Bonsai 2 before 0.40.6) is never picked."""
     ranked = []
+    too_old = version_at_least(version, BONSAI_MIN_OLLAMA) is False
     for m in models:
         name = m["name"]
         if "embed" in name.lower():
+            continue
+        if too_old and is_bonsai(name):
             continue
         tools = "tools" in caps(name)
         fits = not budget_gb or not m.get("size_gb") or m["size_gb"] <= budget_gb * 0.9
@@ -325,7 +436,10 @@ def ensure_context(model: str, num_ctx: int, models: list[dict], opener=urllib.r
         return model
     target = derived_name(model)
     if any(m["name"].split(":")[0] == target or m["name"] == target for m in models):
-        return target
+        have = model_context(target, opener=opener).get("num_ctx", 0)
+        if not have or have >= int(num_ctx):
+            return target
+        # an older loki-* variant with a smaller window: make it again with the bigger one
     try:
         _post_json(OLLAMA + "/api/create", {"model": target, "from": model,
                                             "parameters": {"num_ctx": int(num_ctx)}, "stream": False},
@@ -531,14 +645,26 @@ def mlx_status(opener=urllib.request.urlopen, which=shutil.which, find_spec=impo
             installed = find_spec("mlx_lm") is not None
         except (ImportError, ValueError):
             installed = False
-        installed = installed or bool(which("mlx_lm.server"))
+        try:
+            vlm = find_spec("mlx_vlm") is not None
+        except (ImportError, ValueError):
+            vlm = False
+        installed = installed or vlm or bool(which("mlx_lm.server"))
     try:
         data = _get_json(MLX_URL + "/models", timeout=1.0, opener=opener)
         models = [m.get("id", "") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
         running = True
     except Exception:  # noqa: BLE001 - not running
         models, running = [], False
-    return {"installed": installed or running, "running": running, "models": models, "base_url": MLX_URL}
+    vlm_ok = False
+    if sys.platform == "darwin":
+        try:
+            vlm_ok = find_spec("mlx_vlm") is not None
+        except (ImportError, ValueError):
+            vlm_ok = False
+    return {"installed": installed or running, "running": running, "models": models, "base_url": MLX_URL,
+            "mlx_vlm": vlm_ok,
+            "bonsai_command": "python -m mlx_vlm.server --model prism-ml/Ternary-Bonsai-2-9B-mlx-2bit --port 8082"}
 
 
 def scan(info: dict | None = None, opener=urllib.request.urlopen, servers=_UNSET, models=_UNSET,
@@ -568,6 +694,7 @@ def scan(info: dict | None = None, opener=urllib.request.urlopen, servers=_UNSET
             "llamacpp": {"installed": bool(which("llama-server") or which("llama-cli")),
                          "running": any(s.get("key") == "llamacpp" for s in servers or [])},
             "ollama_installed": ollama_installed(which) or models is not None,
+            "ollama_version": ollama_version(opener=opener) if models is not None else "",
             "running": running}
 
 
@@ -631,7 +758,10 @@ def plan(machine: dict, installed: list[str] | None = None) -> dict:
     Nothing that does not fit the free disk is ever picked; `blocked` says how much to free."""
     installed = installed or []
     rows = []
+    too_old = version_at_least(str(machine.get("ollama_version") or ""), BONSAI_MIN_OLLAMA) is False
     for entry in CATALOG:
+        if too_old and entry.get("family") == "bonsai":
+            continue   # this Ollama cannot run it: never suggest or auto-download it
         how = fit(entry, machine)
         if not how:
             continue
@@ -764,6 +894,11 @@ def run_auto(tags: list[str], machine: dict, use, progress: Progress = PROGRESS,
                 return fail("Ollama is installed but not running yet. Open the Ollama app once, then click the "
                             "button again.")
         names = [m["name"] for m in models]
+        if version_at_least(ollama_version(opener=opener), BONSAI_MIN_OLLAMA) is False:
+            runnable = [t for t in tags if not is_bonsai(t)]
+            if not runnable:
+                return fail(bonsai_support(ollama_version(opener=opener))["message"])
+            tags = runnable
         tag = next((t for t in tags if is_installed(t, names)), "")
         if tag:
             progress.update(target=tag, status="installed", message="%s is already on this computer" % tag)
@@ -818,7 +953,9 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
     env = env if env is not None else os.environ
     info = info or hardware()
     models = ollama_models(opener=opener)
-    best = best_installed(models, info["budget_gb"], caps=lambda n: capabilities(n, opener=opener)) if models else None
+    version = ollama_version(opener=opener) if models is not None else ""
+    best = best_installed(models, info["budget_gb"], caps=lambda n: capabilities(n, opener=opener),
+                          version=version) if models else None
     servers = other_servers(opener=opener)
     machine = scan(info, opener=opener, servers=servers, models=models, env=env)
     names = [m["name"] for m in models or []]
@@ -834,7 +971,8 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
         "hardware": info,
         "scan": machine,
         "ollama": {"installed": ollama_installed() or models is not None, "running": models is not None,
-                   "models": models or []},
+                   "models": models or [], "version": version},
+        "bonsai": bonsai_support(version),
         "best": best,
         "servers": servers,
         "recommend": recs,

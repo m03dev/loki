@@ -45,6 +45,16 @@ Concise dated records of meaningful work. Newest at the top.
   replies filling context, no job deadline / empty result files. All fixed in the goal loop (HANDOFF).
 - Autopilot duty task_bench (nightly, PC on, Mac off), GET /bench, Settings > Lab "Task success" (bench.js).
 - tests/test_task_success.py (94) in SUITES; all 33 suites pass. Real models: ZIVA W28.
+## 2026-10-17 - Session 28 (Claude, worktree): models & routing - the core system
+
+- engine/provider_health.py: each provider's live state (key rejected, no credit, quota until, rate limited,
+  size/context limits, unreachable, model missing), persisted across processes, free background probes.
+- engine/routing.py: task-aware order (needs x abilities x health x learned success per task kind) and
+  `/models doctor`; loki.active_model_name uses it; background jobs get the best free capable model.
+- Local: Ollama version + Bonsai gate + winget/brew guidance, num_ctx made and verified, condenser sized to
+  the real window, MLX fallback. Failover: empty choices, timeouts, 429s without long back-off, SDK retries off.
+- Settings > Connections: health + fix per card, Explain routing, Re-check; General > Private (local only).
+- tests/test_routing_core.py (142) in SUITES. Real machines: ZIVA W28 / M20.
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 

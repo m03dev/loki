@@ -357,6 +357,11 @@ button.danger:hover { color: var(--err); }
 .pill-state.ok { color: var(--ok); } .pill-state.bad { color: var(--err); } .pill-state.off { color: var(--muted); text-decoration: line-through; }
 .pcard-blurb { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .pcard-warn { margin: 0; color: var(--warn); font-size: 12px; }
+.pcard-health { margin: 0; font-size: 12px; color: var(--muted, inherit); }
+.pcard-health.bad { color: var(--warn); }
+.pcard-fix { opacity: 0.85; }
+.routing-report { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 0 0 12px; padding: 10px 12px;
+  border-radius: 8px; background: rgba(127, 127, 127, 0.08); max-height: 320px; overflow: auto; }
 .pcard-body { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
 .pcard-actions, .pcard-links, .pcard-foot { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .pcard-foot { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }

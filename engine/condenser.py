@@ -88,11 +88,20 @@ def is_context_error(text: str) -> bool:
     return bool(_CONTEXT_ERROR.search(str(text or "")))
 
 
+# The local model's real context window in tokens (set by loki._resolve_local from Ollama's
+# num_ctx). A local model's view must fit it: past the window Ollama silently drops the START
+# of the prompt - the system prompt and the tools - which is why small models "forgot" how to act.
+LOCAL_WINDOW_TOKENS = 0
+
+
 def limits(local: bool = False, env: dict | None = None) -> tuple:
     """(max_messages, max_chars) - smaller for a local model with a small window."""
     env = env if env is not None else os.environ
     msgs = int(env.get("LOKI_CONDENSE_MESSAGES", "160") or 160)
     chars = int(env.get("LOKI_CONDENSE_CHARS", "") or (60000 if local else 280000))
+    if local and LOCAL_WINDOW_TOKENS and not env.get("LOKI_CONDENSE_CHARS"):
+        # ~3.5 characters per token, minus room for the reply
+        chars = min(chars, max(8000, int((LOCAL_WINDOW_TOKENS - 2048) * 3.5)))
     return msgs, chars
 
 

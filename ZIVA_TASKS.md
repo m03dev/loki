@@ -940,6 +940,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the new "Task success" table shows the runs (screenshot). (6) The nightly run: LOKI_TASK_BENCH is auto =
       on on the PC; after one night (01:00-06:59, idle) `harness_data\autopilot.json` has a `task_bench` entry
       and `harness_data\bench\autopilot.log` the output - report whether it ran.
+- [ ] **W32 Models & routing doctor on the PC (2026-10-17, session 28).** After LOKI updates: (1) `ship.py --check`
+      (new suite test_routing_core). (2) Settings > Connections > **Explain routing** (or type `/models doctor`):
+      paste the whole text under Reports - which provider each task goes to, what is skipped and why. Expected
+      on the PC today: mistral/together/cerebras "key rejected", deepseek "out of credit", gemini/groq skipped
+      while their quota/rate limit lasts, background jobs NOT on the local qwen3:8b when a free online model is
+      set up. (3) **Re-check** once and say whether each card's health line matches the Test button. (4) Ollama:
+      the doctor should say "Ollama 0.40.5 ... needs 0.40.6+" with `winget upgrade --id Ollama.Ollama -e`; do
+      NOT upgrade yourself (Needs Mohamed) - but if Mohamed has, report that Bonsai 2 9B became the local model.
+      (5) The local model's context: `ollama show <the loki-* model LOKI uses>` must list `num_ctx` 8192 or more,
+      and `ollama ps` while a chat runs shows its context. (6) Start one background job ("list the files in this
+      project and write notes/files.txt") and report the `[loki-job] ... | model ...` line and whether it finished.
+      Also `type harness_data\provider_health.json` (no keys are in it; paste the states, not the file).
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1352,6 +1364,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (5) Video on the Mac: Animate this must be greyed out with "no local video on this machine ... Higgsfield key"
       unless a Higgsfield key is set; with a key, report whether `higgsfield-ai/dop/standard` is accepted.
       (6) Daily creation is OFF on the Mac by default: confirm no "daily" picture appears. Report under Reports.
+- [ ] **M23 Models & routing doctor on the Mac (2026-10-17, session 28).** Same as W28 (1)-(3), (5), (6) on the
+      Mac. Plus MLX: the doctor's "On this computer" lists MLX; start Bonsai 2 for Apple Silicon with the command
+      it shows (`python -m mlx_vlm.server --model prism-ml/Ternary-Bonsai-2-9B-mlx-2bit --port 8082`, needs
+      mlx-vlm >= 0.7.8) and report whether LOKI's local route uses it when Ollama is stopped (Settings >
+      Connections > MLX card "Running", doctor's chat line). Mac Ollama: report its version (`ollama -v`).
 
 ## Needs Mohamed
 
@@ -1399,6 +1416,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Connections > OpenRouter > model) to keep OpenRouter free.
 - [ ] Ziva's W2 test: the **Mistral, Together and Cerebras keys are rejected** - replace them in
       Settings > Connections (or Disconnect those cards).
+  -> Claude, 2026-10-17 (session 28): LOKI now remembers this itself (engine/provider_health.py): a rejected
+     key is skipped with no failed request first, and Settings > Connections shows "key rejected. Fix: paste a
+     new key ..." on the card until a NEW key is pasted. Still needs you: new keys for Mistral
+     (console.mistral.ai/api-keys), Together (api.together.ai/settings/api-keys), Cerebras (cloud.cerebras.ai
+     - needs a verified payment method) - or Disconnect them. DeepSeek: top up or leave it (it is skipped as
+     "out of credit"). `/models doctor` lists all of these under "Needs you".
+- [ ] **Update Ollama on the PC for Bonsai 2 (session 28).** The PC runs Ollama 0.40.5; Bonsai 2's Q2_0 needs
+      0.40.6+. In PowerShell: `winget upgrade --id Ollama.Ollama -e` (or reinstall from ollama.com/download),
+      then restart Ollama. Until then LOKI never picks or downloads Bonsai there (it would answer gibberish).
 
 - [ ] A **ModelScope** token (modelscope.cn/my/myaccesstoken) to turn on the `qwen()` image
       backend (Qwen-Image 2.1). Without it, images use local Z-Image Turbo or free Pollinations.

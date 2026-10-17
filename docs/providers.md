@@ -39,6 +39,63 @@ Models with no native tool calling get tools as text (engine/tool_harness.py). L
 providers for that with `LOKI_PROMPTED_TOOLS=name,name`; an endpoint that refuses a tools
 list is switched to it automatically.
 
+## How LOKI picks a model (session 28: models & routing)
+
+Smart mode (and online mode) choose per TASK, not once. Ask LOKI to explain it any time:
+type `/models doctor` (or Settings > Connections > **Explain routing**). It answers in plain
+words, e.g. "Pictures -> gemini, because free, sees pictures; Background jobs -> openrouter,
+because background jobs get the best free model that calls tools reliably", lists what is
+skipped right now with a one-line fix, and the local side (Ollama version, Bonsai, context).
+
+1. **Provider health** (`engine/provider_health.py`). Every failure is classified and
+   remembered in `harness_data/provider_health.json` (no keys - a short hash only), so the
+   engine, every background job (its own process) and the next start all know:
+   `key_rejected` (401/403; until you paste a NEW key), `no_credit` (402, "insufficient
+   balance"; 12 h), `quota` (a spent free quota: until the provider's `retryDelay`, the next
+   day for per-day quotas, else 1 h), `rate_limited` (429: as long as it said, min 30 s),
+   `size_limited` (Groq's 413 "Limit 6000, Requested 9133": only bigger requests skip it),
+   a context-too-long error (its window is remembered), `unreachable` (timeouts),
+   `model_missing`, empty replies. A background refresher re-checks connected providers every
+   30 min with **free** calls only (`GET /models`, OpenRouter `/key` for a negative balance,
+   DeepSeek `/user/balance`) - never a completion. It also reads each model's context window,
+   tool calling and vision from the provider's own model list. `LOKI_HEALTH_PROBES=0` turns the
+   probes off; `LOKI_HEALTH_EVERY_S` sets the period. Settings > Connections shows the state
+   and the fix on each card; **Re-check** probes now.
+2. **Task-aware order** (`engine/routing.py`). Needs: kind + difficulty (the first layer),
+   background job, tool-heavy (code/build/ops/browse/research, every background job), pictures in
+   the message, size in tokens, local only. Abilities: tools native / prompted / measured
+   (`experience.tool_score`), vision, context window, code. A provider that cannot do the task
+   (cannot call tools reliably for tool-heavy work, cannot see a picture, too small a window)
+   goes to the END of the order - never removed, so there is no dead end. Within one cost tier
+   the provider with the best record for THIS kind of task goes first (a success table per
+   provider/model x task kind from the experience log: verified/done = good; a provider switched
+   away from mid-request = bad; 5 samples before it moves anything). Free never loses its place
+   to paid; paid is only automatic with `LOKI_ALLOW_PAID=1`.
+3. **Background jobs** get the best FREE capable online model, not the local 8B just because the
+   triage said "easy" (subscription agents are not used up by unattended jobs; they stay in the
+   smart order after the free tiers). Anonymous keyless routes (vireonix, llm7, pollinations) must earn it first
+   (a measured tool score). `LOKI_LOCAL_ONLY=1` (Settings > General > "Private") keeps everything,
+   jobs included, on this computer.
+4. **Failover mid-task keeps the conversation**: 429 / 402 / 401 / context too long / timeout /
+   empty choices / 413 all move the SAME turn to the next provider. With another provider ready a
+   429 gets one quick retry (not four, and never a long Retry-After wait), a timeout one retry;
+   the OpenAI SDK's own hidden retries are off (`max_retries=0`). When everything is spent, the
+   provider whose limit ends soonest is tried rather than a local model that is not there.
+5. **Local models**: Ollama's OpenAI endpoint ignores `num_ctx`, so LOKI makes a `loki-<model>`
+   variant (`/api/create` with `num_ctx`, metadata only) big enough for its prompt + tools
+   + room (`model_setup.required_context`: >= 8k, 16k on 10 GB+, 32k on 24 GB+), re-makes an
+   older smaller one, reads the real window back (`/api/show` num_ctx, `/api/ps`), and sizes the
+   local condenser to it - past the window Ollama silently drops the START of the prompt (the
+   system prompt and tools), a main cause of small-model failures. The same applies to
+   `local-hermes`/`loki-tuned` and to a pinned `LOKI_LOCAL_MODEL`. Bonsai 2 (Q2_0) needs Ollama
+   0.40.6+: on an older one it is never picked or downloaded, and the doctor gives the one update
+   command (Windows `winget upgrade --id Ollama.Ollama -e`, Mac `brew upgrade ollama` or the app's
+   own "Restart to update"). On a Mac with no Ollama tool model an MLX server on 8082
+   (`python -m mlx_vlm.server --model prism-ml/Ternary-Bonsai-2-9B-mlx-2bit --port 8082`) is the
+   local fallback.
+
+Routes: `GET /models/doctor`, `GET /providers/health`, `POST /providers/probe {id?}`.
+
 ## Subscription coding agents
 
 `claude-code` and `codex` are not API clients. Once installed and signed in they run on

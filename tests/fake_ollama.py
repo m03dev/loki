@@ -19,8 +19,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class FakeOllama:
     def __init__(self, models: list[str] | None = None, port: int = 11434, tools: bool = True,
-                 pullable: list[str] | None = None) -> None:
+                 pullable: list[str] | None = None, version: str = "") -> None:
         self.models = {name: 6.6e9 for name in (models or [])}
+        self.version = version          # GET /api/version answers it when set (404 otherwise, like old servers)
+        self.loaded_context: dict = {}  # model -> context_length that /api/ps reports
         self.port = port
         self.tools = tools
         self.pullable = set(pullable or [])
@@ -73,7 +75,11 @@ class FakeOllama:
 
             def do_GET(self) -> None:  # noqa: N802
                 fake.calls.append(("GET " + self.path, {}))
-                if self.path == "/api/tags":
+                if self.path == "/api/version" and fake.version:
+                    self._json(200, {"version": fake.version})
+                elif self.path == "/api/ps":
+                    self._json(200, {"models": [{"name": n, "context_length": c} for n, c in fake.loaded_context.items()]})
+                elif self.path == "/api/tags":
                     self._json(200, {"models": [{"name": n, "size": int(s), "details": {
                         "family": n.split(":")[0], "parameter_size": "9B"}} for n, s in fake.models.items()]})
                 else:
@@ -84,10 +90,13 @@ class FakeOllama:
                 fake.calls.append(("POST " + self.path, body))
                 if self.path == "/api/show":
                     name = body.get("model", "")
-                    if name not in fake.models:
+                    if name not in fake.models and name + ":latest" not in fake.models:
                         return self._json(404, {"error": "model '%s' not found" % name})
                     caps = ["completion"] + (["tools"] if fake.tools else [])
-                    return self._json(200, {"capabilities": caps})
+                    made = fake.created.get(name) or fake.created.get(name.split(":")[0]) or {}
+                    params = "".join("%s %s\n" % kv for kv in (made.get("parameters") or {}).items())
+                    return self._json(200, {"capabilities": caps, "parameters": params,
+                                            "model_info": {"qwen3.context_length": 40960}})
                 if self.path == "/api/create":
                     fake.created[body.get("model", "")] = body
                     fake.models[body.get("model", "") + ":latest"] = fake.models.get(body.get("from", ""), 1e9)

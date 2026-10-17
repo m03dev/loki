@@ -327,6 +327,8 @@ import file_editor  # noqa: E402  (view ranges, unique str_replace, insert, undo
 import web_reader  # noqa: E402  (read a web page natively, no add-on)
 import command_risk  # noqa: E402  (LOW / MEDIUM / HIGH for shell commands)
 import task_tracker  # noqa: E402  (a plan with statuses that survives condensing)
+import provider_health  # noqa: E402  (each provider's live state, remembered across processes)
+import routing  # noqa: E402  (task-aware model choice, learned per task kind, /models doctor)
 
 godot_tools.ROOT = ROOT
 godot_tools.WORKSPACE = WORKSPACE
@@ -621,7 +623,29 @@ if TUNED_PROMOTED and "local" in SMART_ORDER:
     SMART_ORDER = SMART_ORDER[:_at] + ("loki-tuned",) + SMART_ORDER[_at:]
 
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
-_SMART_FAILED = set()
+
+
+class _FailedSet(set):
+    """Providers used up in THIS process. Reviving one here (clear/discard) also forgets the
+    provider-health mark this process made for it, so the in-process truth wins; marks from
+    other processes and from probes expire on their own (provider_health.py)."""
+
+    def clear(self) -> None:
+        super().clear()
+        try:
+            provider_health.registry().forget_session()
+        except Exception:  # noqa: BLE001 - health must never break routing
+            pass
+
+    def discard(self, name) -> None:
+        super().discard(name)
+        try:
+            provider_health.registry().forget(name, session_only=True)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+_SMART_FAILED = _FailedSet()
 # Providers skipped for a TEMPORARY rate limit (HTTP 429), not a spent quota. When every
 # provider is out, these come back after a short cooldown instead of the run ending;
 # LOKI_RATE_LIMIT_WAIT caps the total wait per turn (seconds, 0 turns it off).
@@ -821,7 +845,8 @@ def triage_difficulty() -> int:
         return int((LAST_TRIAGE or {}).get("difficulty"))
     except (TypeError, ValueError):
         return 1
-LOCAL_STATE: dict = {"at": 0.0, "name": "", "base_url": "", "source": "", "warm": "", "note": ""}
+LOCAL_STATE: dict = {"at": 0.0, "name": "", "base_url": "", "source": "", "warm": "", "note": "",
+                     "version": "", "context": 0, "wanted_context": 0, "skipped": ""}
 _ONLINE: dict = {"at": 0.0, "ok": True}
 
 
@@ -889,11 +914,58 @@ def _best_local_by_tools(models: list, budget_gb: float) -> dict:
     return {"name": scored[0][1], "score": scored[0][0]}
 
 
+# Characters of LOKI's own prompt a local model must hold besides the conversation: the system
+# prompt (~2.7k chars), the "This request" note with memories (~2k) and the trimmed tool list
+# (~9k for LOCAL_MAX_TOOLS=22). Measured 2026-10; the window is sized from it (required_context).
+LOCAL_PROMPT_CHARS = int(os.getenv("LOKI_LOCAL_PROMPT_CHARS", "14000") or 14000)
+_CTX_DONE: dict = {}   # (model, wanted) -> the name with that window (made once per process)
+
+
+def _with_context(name: str, models: list) -> str:
+    """`name` with a context window that holds LOKI's prompt + tools + room to work (a loki-*
+    variant made with /api/create num_ctx - Ollama's OpenAI endpoint ignores num_ctx per
+    request, so the Modelfile parameter is the only reliable way). LOKI_LOCAL_CONTEXT=0: off."""
+    if os.getenv("LOKI_LOCAL_CONTEXT", "1") == "0":
+        return name
+    wanted = model_setup.required_context(LOCAL_PROMPT_CHARS // 4, HARDWARE or None)
+    LOCAL_STATE["wanted_context"] = wanted
+    key = (name, wanted)
+    if key not in _CTX_DONE:
+        _CTX_DONE[key] = model_setup.ensure_context(name, wanted, models)
+    return _CTX_DONE[key]
+
+
+def _note_context(name: str) -> None:
+    """Read the window the chosen model really has and size the local condenser to it."""
+    try:
+        ctx = model_setup.model_context(name)
+    except Exception:  # noqa: BLE001
+        ctx = {}
+    real = int(ctx.get("loaded") or ctx.get("num_ctx") or 0)
+    LOCAL_STATE["context"] = real
+    LOCAL_STATE["context_source"] = ("loaded" if ctx.get("loaded") else "num_ctx" if ctx.get("num_ctx")
+                                     else "default")
+    if not real and name.startswith(model_setup.DERIVED_PREFIX):
+        real = int(LOCAL_STATE.get("wanted_context") or 0)   # our own variant: made with that window
+    window = real or 4096   # a base model with no num_ctx: Ollama's default, small on most versions
+    condenser.LOCAL_WINDOW_TOKENS = max(2048, window - LOCAL_PROMPT_CHARS // 4)
+
+
 def _resolve_local() -> dict:
     LOCAL_STATE["at"] = time.time()
+    try:
+        LOCAL_STATE["version"] = model_setup.ollama_version()
+    except Exception:  # noqa: BLE001
+        LOCAL_STATE["version"] = ""
+    version = LOCAL_STATE["version"]
+    LOCAL_STATE["skipped"] = ""
     if os.getenv("LOKI_LOCAL_MODEL"):
-        # The user pinned a model: use it as-is.
-        LOCAL_STATE.update(name=os.environ["LOKI_LOCAL_MODEL"], base_url="http://localhost:11434/v1",
+        # The user pinned a model: use it, with a window big enough for LOKI's prompt.
+        pinned = os.environ["LOKI_LOCAL_MODEL"]
+        models = model_setup.ollama_models() or []
+        if models and any(m["name"] == pinned or m["name"].startswith(pinned + ":") for m in models):
+            pinned = _with_context(pinned, models)
+        LOCAL_STATE.update(name=pinned, base_url="http://localhost:11434/v1",
                            source="pinned", note="LOKI_LOCAL_MODEL")
     else:
         models = model_setup.ollama_models()
@@ -902,19 +974,31 @@ def _resolve_local() -> dict:
         if models:
             _match_installed_tags([m["name"] for m in models])
             info = HARDWARE if HARDWARE else {"budget_gb": 0}
-            best = model_setup.best_installed(models, float(info.get("budget_gb") or 0))
-            proven = _best_local_by_tools(models, float(info.get("budget_gb") or 0))
+            usable = models
+            if model_setup.version_at_least(version, model_setup.BONSAI_MIN_OLLAMA) is False:
+                usable = [m for m in models if not model_setup.is_bonsai(m["name"])]
+                if len(usable) != len(models):
+                    LOCAL_STATE["skipped"] = model_setup.bonsai_support(version)["message"]
+            best = model_setup.best_installed(usable, float(info.get("budget_gb") or 0), version=version)
+            proven = _best_local_by_tools(usable, float(info.get("budget_gb") or 0))
             if proven and (not best or proven["name"] != best.get("name")):
                 best = dict(best or {}, name=proven["name"], tools=True)
                 why = "best measured tool caller (score %.2f)" % proven["score"]
         if best and best.get("tools"):
             name = best["name"]
-            if not name.startswith(model_setup.DERIVED_PREFIX) and os.getenv("LOKI_LOCAL_CONTEXT", "1") != "0":
-                name = model_setup.ensure_context(name, model_setup.context_for(HARDWARE or {}), models)
+            if not name.startswith(model_setup.DERIVED_PREFIX):
+                name = _with_context(name, models)
             LOCAL_STATE.update(name=name, base_url="http://localhost:11434/v1", source="ollama",
                                note=why or ("best installed: %s" % best["name"]))
+            # The other local entries smart mode may use get the same window.
+            for other in ("local-hermes", "loki-tuned"):
+                cfg = MODELS.get(other)
+                if cfg is not None and "11434" in cfg.base_url and not cfg.model.startswith(model_setup.DERIVED_PREFIX) \
+                        and any(m["name"] == cfg.model for m in models):
+                    MODELS[other] = ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key,
+                                                model=_with_context(cfg.model, models))
         else:
-            servers = model_setup.other_servers()
+            servers = model_setup.other_servers(include_mlx=True)
             if servers:
                 server = servers[0]
                 LOCAL_STATE.update(name=server["models"][0], base_url=server["base_url"],
@@ -928,11 +1012,54 @@ def _resolve_local() -> dict:
         api_key = "ollama" if "11434" in LOCAL_STATE["base_url"] else "local"
         MODELS["local"] = ModelConfig(base_url=LOCAL_STATE["base_url"], api_key=api_key,
                                       model=LOCAL_STATE["name"])
+        if "11434" in LOCAL_STATE["base_url"]:
+            _note_context(LOCAL_STATE["name"])
         if "11434" in LOCAL_STATE["base_url"] and LOCAL_STATE["warm"] != LOCAL_STATE["name"]:
             LOCAL_STATE["warm"] = LOCAL_STATE["name"]
             threading.Thread(target=model_setup.keep_warm, args=(LOCAL_STATE["name"],),
                              daemon=True, name="loki-warm").start()
     return LOCAL_STATE
+
+
+def local_report() -> dict:
+    """The local side for /models doctor: Ollama's version, Bonsai, the model and its real
+    context window, MLX - with what to do about each problem."""
+    state = resolve_local()
+    lines, needs_you = [], []
+    version = state.get("version") or ""
+    if state.get("name"):
+        ctx = int(state.get("context") or 0)
+        wanted = int(state.get("wanted_context") or 0)
+        src = state.get("context_source") or ""
+        lines.append("Local model: %s (%s)%s." % (state["name"], state.get("note") or state.get("source"),
+                                                    ", context %d tokens (%s)" % (ctx, src) if ctx else ""))
+        if "11434" in str(state.get("base_url")) and ctx and wanted and ctx < wanted:
+            lines.append("Its context window (%d) is smaller than LOKI's prompt needs (%d): the start of the prompt "
+                         "would be cut off. LOKI condenses earlier to fit." % (ctx, wanted))
+        elif "11434" in str(state.get("base_url")) and not ctx:
+            lines.append("Its context window is Ollama's default (no num_ctx set) - LOKI could not make its "
+                         "loki-* variant; the conversation is condensed to fit ~4k tokens.")
+    else:
+        lines.append("No local model: %s." % (state.get("note") or "none"))
+    if version:
+        bon = model_setup.bonsai_support(version)
+        lines.append("Ollama %s. %s" % (version, "Runs Bonsai 2." if bon["ok"] else ""))
+        if bon["ok"] is False:
+            needs_you.append("Update Ollama for Bonsai 2 (%s has %s, needs %s+): %s" % (
+                "this computer", version, bon["needs"], bon["upgrade"]["command"]))
+    elif state.get("source") in ("", "ollama"):
+        lines.append("Ollama is not answering on 127.0.0.1:11434.")
+    if state.get("skipped"):
+        lines.append(state["skipped"])
+    if sys.platform == "darwin":
+        try:
+            mlx = model_setup.mlx_status()
+            lines.append("MLX: %s%s." % ("running on 8082" if mlx.get("running") else "not running",
+                                         "" if mlx.get("running") else " (start Bonsai 2 for Apple Silicon: %s)" % mlx.get("bonsai_command")))
+        except Exception:  # noqa: BLE001
+            pass
+    return {"name": state.get("name", ""), "version": version, "context": state.get("context", 0),
+            "wanted_context": state.get("wanted_context", 0), "lines": lines, "needs_you": needs_you}
 
 
 def _match_installed_tags(installed: list) -> None:
@@ -957,34 +1084,159 @@ except Exception:
     HARDWARE = {}
 
 
-def active_model_name() -> str:
-    """The provider actually in use - SMART resolves to the best available."""
-    if model_name == "online":
-        for candidate in routing_order(ONLINE_ORDER):
-            if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
-                continue
-            if candidate not in _SMART_FAILED and provider_configured(candidate):
-                return candidate
-        # Nothing is configured yet. Name one anyway so the error tells the user exactly
-        # what to set, instead of silently reaching for a local model they may not have.
-        return ONLINE_ORDER[0]
-    if model_name != "smart":
-        return model_name
-    local_first = PREFER == "local" and "local" not in _SMART_FAILED and local_ready()
-    if local_first and triage_difficulty() >= HARD_DIFFICULTY:
-        # This one is medium/hard: do not spend it on the offline model. Falls through to the
-        # best provider that is configured and affordable.
-        local_first = False
-    if local_first or (not online() and local_ready()):
-        return "local"
-    if not online():
-        return "local"
-    for candidate in routing_order(SMART_ORDER):
+_TOOL_CHARS: dict = {"n": 0}
+_NEEDS_OVERRIDE: list = []   # route_for() pins the needs while it asks active_model_name
+
+
+def _tool_chars() -> int:
+    """Size of the tool list a request carries (static, measured once)."""
+    if not _TOOL_CHARS["n"]:
+        try:
+            _TOOL_CHARS["n"] = len(json.dumps(MODEL_TOOL_SCHEMAS))
+        except Exception:  # noqa: BLE001 - before the schemas exist
+            return 8000
+    return _TOOL_CHARS["n"]
+
+
+def current_needs() -> dict:
+    """What the request in flight needs from a model (routing.needs_for)."""
+    if _NEEDS_OVERRIDE:
+        return _NEEDS_OVERRIDE[-1]
+    try:
+        msgs = messages
+    except NameError:
+        msgs = []
+    return routing.needs_for(LAST_TRIAGE if "LAST_TRIAGE" in globals() else {},
+                             background=bool(os.getenv("LOKI_JOB_ID")), messages=msgs,
+                             local_only=routing.local_only_setting(),
+                             est_tokens=routing.estimate_tokens(msgs, _tool_chars()) if msgs else 0)
+
+
+ROUTE_NOTES: dict = {}   # provider -> why routing skipped it for the last pick (for /models doctor)
+
+
+def _route_pick(order, needs: dict, allow_local: bool = True) -> str:
+    """The first provider in `order` that is configured, not used up, healthy, affordable and
+    (when any is) able to do this task. "" when none is."""
+    ordered, notes = routing.order_for(sys.modules[__name__], routing_order(order), needs)
+    ROUTE_NOTES.clear()
+    ROUTE_NOTES.update(notes)
+    for candidate in ordered:
+        if not allow_local and candidate in LOCAL_PROVIDERS:
+            continue
         if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
             continue   # never switch to a paid provider on its own
         if candidate not in _SMART_FAILED and provider_configured(candidate):
             return candidate
-    return "local"
+    # Never a dead end: everything healthy is used up, so try the configured provider whose
+    # limit ends soonest (it may be back) rather than one that is certainly not set up.
+    reg = provider_health.registry()
+    waiting = []
+    for candidate in order:
+        if candidate not in notes or (not allow_local and candidate in LOCAL_PROVIDERS):
+            continue
+        entry = reg.get(candidate)
+        if entry.get("state") in ("key_rejected", "no_credit") or needs.get("local_only"):
+            continue
+        if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
+            continue
+        if candidate not in _SMART_FAILED and provider_configured(candidate):
+            waiting.append((float(entry.get("until") or 0), candidate))
+    return min(waiting)[1] if waiting else ""
+
+
+def _free_capable_online(needs: dict) -> str:
+    """The best FREE online provider that can do this task, or "". Subscription agents (Claude
+    Code, Codex) are not counted here: an unattended job should not use up the owner's plan when
+    the local model may do; they stay in the smart order after the free tiers."""
+    order = [p for p in SMART_ORDER if p not in LOCAL_PROVIDERS and provider_tier(p) == "free"]
+    ordered, _notes = routing.order_for(sys.modules[__name__], routing_order(order), dict(needs, local_only=False))
+    for candidate in ordered:
+        if candidate in _SMART_FAILED or not provider_configured(candidate):
+            continue
+        ab = routing.abilities(sys.modules[__name__], candidate)
+        if ab.get("keyless") and ab.get("tool_score") is None:
+            continue   # an anonymous third-party route has not earned an unattended job yet
+        if routing.fits(ab, needs)[0]:
+            return candidate
+    return ""
+
+
+def _local_fits(needs: dict) -> tuple:
+    if not needs.get("vision") and not needs.get("long"):
+        return True, ""
+    ab = routing.abilities(sys.modules[__name__], "local")
+    return routing.fits(ab, dict(needs, tool_heavy=False))
+
+
+def _smart_pick(needs: dict) -> tuple:
+    """(provider, why) in smart mode."""
+    if needs.get("local_only"):
+        if local_ready():
+            return "local", "local only is on (LOKI_LOCAL_ONLY): this computer's model"
+        for name in LOCAL_SERVERS:
+            if name not in _SMART_FAILED and provider_configured(name):
+                return name, "local only is on: the local server that is running"
+        return "local", "local only is on, but no local model is running"
+    local_first = PREFER == "local" and "local" not in _SMART_FAILED and local_ready()
+    why_not_local = ""
+    job_pick = ""
+    if local_first and int(needs.get("difficulty") or 1) >= HARD_DIFFICULTY:
+        # This one is medium/hard: do not spend it on the offline model. Falls through to the
+        # best provider that is configured and affordable.
+        local_first, why_not_local = False, "hard work goes past the offline model"
+    if local_first and needs.get("background") and online():
+        # A background job is tool-heavy and unattended: the best FREE capable model, not just
+        # 'local' (session 27: jobs on qwen3:8b came back empty or BLOCKED).
+        job_pick = _free_capable_online(needs)
+        if job_pick:
+            local_first, why_not_local = False, "background jobs get the best free model that calls tools reliably"
+    if local_first:
+        ok, why = _local_fits(needs)
+        if not ok and online() and _free_capable_online(needs):
+            local_first, why_not_local = False, "the local model " + why
+    if local_first or (not online() and local_ready()):
+        return "local", ("local first (LOKI_PREFER=local) for easy work" if local_first else "offline: the local model")
+    if not online():
+        return "local", "offline, and no local model is ready"
+    pick = job_pick or _route_pick(SMART_ORDER, needs)
+    if pick:
+        why = routing.why_line(sys.modules[__name__], pick, needs)
+        return pick, (why_not_local + "; " if why_not_local else "") + why
+    return "local", "no other provider is ready"
+
+
+def route_for(needs: dict) -> tuple:
+    """(provider, why) routing would choose for a task with these needs - the same decision
+    active_model_name() makes, used by /models doctor to explain it."""
+    if model_name not in AUTO_ROUTING_MODES:
+        return model_name, "you picked it (pinned); routing steps in only when it fails"
+    _NEEDS_OVERRIDE.append(needs)
+    try:
+        if model_name == "online":
+            pick = _route_pick(ONLINE_ORDER, needs, allow_local=False)
+            return (pick, routing.why_line(sys.modules[__name__], pick, needs)) if pick else \
+                (ONLINE_ORDER[0], "nothing online is set up yet - add a key for it")
+        pick, why = _smart_pick(needs)
+        if pick in MODELS:
+            fit, short = routing.fits(routing.abilities(sys.modules[__name__], pick), needs)
+            if not fit:
+                why += "; but it %s - no ready model does better (set one up in Settings > Connections)" % short
+        return pick, why
+    finally:
+        _NEEDS_OVERRIDE.pop()
+
+
+def active_model_name() -> str:
+    """The provider actually in use - SMART resolves to the best available for THIS task."""
+    if model_name == "online":
+        pick = _route_pick(ONLINE_ORDER, current_needs(), allow_local=False)
+        # Nothing is configured yet. Name one anyway so the error tells the user exactly
+        # what to set, instead of silently reaching for a local model they may not have.
+        return pick or ONLINE_ORDER[0]
+    if model_name != "smart":
+        return model_name
+    return _smart_pick(current_needs())[0]
 
 
 def smart_report() -> str:
@@ -1077,6 +1329,12 @@ def _is_unreachable(exc) -> bool:
     return str(exc).startswith("[model unavailable]")
 
 
+def _is_flaky(exc) -> bool:
+    """An answer with nothing in it, or no answer in time: another provider may do better."""
+    text = str(exc).lower()
+    return "empty reply" in text or "no choices" in text or "timed out" in text
+
+
 def failover_reason(exc) -> str:
     """A short, honest label for why a provider was skipped."""
     if _is_agent_unavailable(exc):
@@ -1087,6 +1345,10 @@ def failover_reason(exc) -> str:
         return "key rejected"
     if _is_unreachable(exc):
         return "unreachable"
+    if condenser.is_context_error(str(exc)):
+        return "context too long"
+    if _is_flaky(exc):
+        return "empty reply" if "empty" in str(exc).lower() else "no answer in time"
     if _is_limit_error(exc):
         return "rate/size limit"
     return "error"
@@ -1096,7 +1358,8 @@ def should_fail_over(exc, auto_routing: bool) -> bool:
     """True when the error means 'try another provider', not 'this is a bug'."""
     if _is_limit_error(exc) or _is_agent_unavailable(exc):
         return True
-    return auto_routing and (_is_auth_error(exc) or _is_unreachable(exc))
+    return auto_routing and (_is_auth_error(exc) or _is_unreachable(exc) or _is_flaky(exc)
+                             or condenser.is_context_error(str(exc)))
 
 
 # The route each request actually took: which provider failed, why, and where the turn
@@ -5258,7 +5521,9 @@ def make_client():
                 print("  [fleet] " + note)
         except Exception:
             base_url = cfg.base_url
-    return AsyncOpenAI(base_url=base_url, api_key=cfg.api_key, timeout=MODEL_TIMEOUT_S)
+    # max_retries=0: LOKI retries itself (_model_request) and fails over to another provider;
+    # the SDK's own hidden retries (up to 60 s on a 429's Retry-After, twice) only delayed that.
+    return AsyncOpenAI(base_url=base_url, api_key=cfg.api_key, timeout=MODEL_TIMEOUT_S, max_retries=0)
 
 
 def short_error(text, limit: int = 240) -> str:
@@ -5597,30 +5862,105 @@ def _status_of(exc) -> int:
     return int(status) if isinstance(status, int) else 0
 
 
+def _retry_header(exc):
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    try:
+        return headers.get("retry-after") if headers is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _has_alternative(provider: str) -> bool:
+    """Is another provider ready, so a struggling one is not worth a long back-off?"""
+    if model_name not in AUTO_ROUTING_MODES:
+        return False
+    order = ONLINE_ORDER if model_name == "online" else SMART_ORDER
+    try:
+        return any(p != provider and p not in _SMART_FAILED and provider_configured(p)
+                   and (provider_tier(p) != "paid" or paid_allowed_automatically())
+                   and provider_health.registry().usable(p)[0] for p in order)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _health_failure(provider: str, cfg, text: str, status: int = 0, exc=None) -> None:
+    """Remember why this provider failed (provider_health), for every process. Never raises."""
+    try:
+        header = _retry_header(exc)
+        provider_health.registry().record_failure(provider or active_model_name(), text, status,
+                                                  key=str(getattr(cfg, "api_key", "") or ""), header_retry=header)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _health_success(provider: str, cfg, started: float, kwargs: dict) -> None:
+    try:
+        provider_health.registry().record_success(
+            provider, (time.monotonic() - started) * 1000, key=str(getattr(cfg, "api_key", "") or ""),
+            request_tokens=routing.estimate_tokens(kwargs.get("messages") or [], len(json.dumps(kwargs.get("tools") or []))))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _no_choices(response) -> bool:
+    try:
+        return not list(getattr(response, "choices", None) or [])
+    except TypeError:
+        return False
+
+
+# In smart/online mode another provider is ready, so a rate limit or a timeout is not worth
+# the full back-off on THIS one: one quick retry, then fail over (LOKI_AUTO_RETRIES).
+AUTO_RETRIES = int(os.getenv("LOKI_AUTO_RETRIES", "1") or 1)
+
+
 async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
     """Ask the model, retrying transient failures so one 429 does not end the task.
 
-    `provider` is the MODELS key the request goes to; a failure marks THAT provider.
+    `provider` is the MODELS key the request goes to; a failure marks THAT provider, and
+    provider_health remembers why (for routing, the next job and Settings > Connections).
     """
     attempt = 0
+    empty = 0
     full_tools = list(kwargs.get("tools") or [])
+    auto = model_name in AUTO_ROUTING_MODES
+    retries = min(MODEL_RETRIES, AUTO_RETRIES) if auto else MODEL_RETRIES   # used when another provider is ready
     while True:
         constrained = False
+        started = time.monotonic()
         try:
             if kwargs.get("tools") and _use_constrained(provider, cfg):
                 # A local server with grammar support: the reply can ONLY be a real tool
                 # call or an answer, so a small model can no longer get the shape wrong.
                 constrained = True
-                return await _constrained_request(client, kwargs)
-            if kwargs.get("tools") and tool_harness.configured(provider):
+                response = await _constrained_request(client, kwargs)
+            elif kwargs.get("tools") and tool_harness.configured(provider):
                 # This provider cannot take a native tools list: send the tools as text
                 # and turn the <tool_call> blocks in its answer back into tool_calls.
                 prompted = tool_harness.prepare(kwargs)
                 known = prompted.pop("_prompted_tools", [])
-                return tool_harness.attach(await client.chat.completions.create(**prompted), known)
-            sent = _small_model_kwargs(kwargs, cfg)
-            response = await client.chat.completions.create(**sent)
-            return _salvage_reply(response, kwargs)
+                response = await client.chat.completions.create(**prompted)
+                if not _no_choices(response):
+                    response = tool_harness.attach(response, known)
+            else:
+                sent = _small_model_kwargs(kwargs, cfg)
+                response = await client.chat.completions.create(**sent)
+                if not _no_choices(response):
+                    response = _salvage_reply(response, kwargs)
+            if _no_choices(response):
+                # An answer with no choices at all (seen from overloaded free routes): retry once,
+                # then treat it like any other provider failure - never an IndexError later.
+                empty += 1
+                if empty <= 1:
+                    _progress("thinking", "%s returned an empty reply; asking again..." % (provider or cfg.model))
+                    continue
+                text = "[model error] %s returned an empty reply (no choices)" % cfg.model
+                _mark_smart_failure(provider)
+                _health_failure(provider, cfg, text)
+                raise ModelUnavailable(text)
+            if provider:
+                _health_success(provider, cfg, started, kwargs)
+            return response
         except openai.APIStatusError as exc:
             status = _status_of(exc)
             if constrained and 400 <= status < 500:
@@ -5641,7 +5981,8 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 # Backend does not support tool_choice; retry unforced.
                 kwargs.pop("tool_choice", None)
                 continue
-            if status in (400, 422) and kwargs.get("tools") and attempt < 3:
+            if (status in (400, 422) and kwargs.get("tools") and attempt < 3
+                    and not condenser.is_context_error(str(exc.message))):
                 # The provider refused the request - most often because the tool
                 # list is longer than it allows (Gemini and Groq both reject a long
                 # one). Halve it and try again on this provider; if it still fails
@@ -5651,14 +5992,16 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 _progress("thinking", "Model refused the tool list (HTTP %s); retrying with %d tools..."
                           % (status, len(kwargs["tools"])))
                 continue
-            if (status in _TRANSIENT_STATUS and attempt < MODEL_RETRIES
-                    and not _is_quota_error(exc)):
+            wait_hint = provider_health.retry_after(str(exc.message), _retry_header(exc))
+            if (status in _TRANSIENT_STATUS and attempt < (retries if _has_alternative(provider) else MODEL_RETRIES)
+                    and not _is_quota_error(exc) and not (auto and wait_hint > RETRY_MAX_S and _has_alternative(provider))):
                 attempt += 1
                 delay = _retry_delay(attempt)
-                _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, MODEL_RETRIES))
+                _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, retries))
                 await asyncio.sleep(delay)
                 continue
             _mark_smart_failure(provider)
+            _health_failure(provider, cfg, "HTTP %s: %s" % (status, exc.message), status, exc)
             if status == 404 and ("11434" in cfg.base_url) and "not found" in str(exc.message).lower():
                 # Ollama is up but this model was never pulled. Marked as a limit so a
                 # smart run fails over instead of ending.
@@ -5670,16 +6013,24 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 "[model error] %s answered HTTP %s: %s" % (cfg.model, status, short_error(exc.message))
             ) from exc
         except openai.APIConnectionError as exc:
-            if attempt < MODEL_RETRIES:
+            timed_out = isinstance(exc, getattr(openai, "APITimeoutError", ())) or "timed out" in str(exc).lower()
+            # A timeout already cost MODEL_TIMEOUT_S; four more would cost minutes. One retry.
+            limit = min(retries, 1) if timed_out else (retries if _has_alternative(provider) else MODEL_RETRIES)
+            if attempt < limit:
                 attempt += 1
                 delay = _retry_delay(attempt)
-                _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, MODEL_RETRIES))
+                _progress("thinking", "Model connection failed; retrying in %.1fs (attempt %d of %d)..." % (delay, attempt, limit))
                 await asyncio.sleep(delay)
                 continue
             _mark_smart_failure(provider)
+            _health_failure(provider, cfg, ("timed out: " if timed_out else "[model unavailable] ") + str(exc), 0, exc)
+            if timed_out and not _cfg_is_local(cfg):
+                raise ModelUnavailable("[model unavailable] %s timed out (no answer in %ds)."
+                                       % (provider or cfg.model, int(MODEL_TIMEOUT_S))) from exc
             raise ModelUnavailable(model_down_hint(cfg)) from exc
         except openai.OpenAIError as exc:
             _mark_smart_failure(provider)
+            _health_failure(provider, cfg, "%s: %s" % (type(exc).__name__, exc), 0, exc)
             raise ModelUnavailable("[model error] %s: %s" % (type(exc).__name__, exc)) from exc
 
 
@@ -6860,7 +7211,9 @@ def handle_command(line: str) -> bool:
     if not line.startswith("/"):
         return False
     cmd, _, arg = line.partition(" ")
-    if cmd == "/models":
+    if cmd == "/models" and arg.strip().lower() == "doctor":
+        print(routing.doctor(sys.modules[__name__])["text"])
+    elif cmd == "/models":
         print(ollama_status())
         for name, cfg in MODELS.items():
             marker = "*" if name == model_name else " "
@@ -6889,7 +7242,7 @@ def handle_command(line: str) -> bool:
     elif cmd == "/quit":
         raise SystemExit
     else:
-        print("  commands: /models /model <name> /tools /memory /plan /clear /goal <text> /status /quit")
+        print("  commands: /models [doctor] /model <name> /tools /memory /plan /clear /goal <text> /status /quit")
     return True
 
 

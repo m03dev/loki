@@ -2438,6 +2438,10 @@ async def serve() -> None:
         print(f"[loki-bridge] channels unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
+    try:   # each provider's live state for routing and Settings > Connections (free /models probes only)
+        loki.provider_health.start_background(loki)
+    except Exception as exc:  # noqa: BLE001 - routing works without it
+        print(f"[loki-bridge] provider health probes unavailable: {exc}", flush=True)
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
     threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
     try:

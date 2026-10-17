@@ -160,8 +160,11 @@
             <input id="portal-filter" type="search" placeholder="Filter providers" aria-label="Filter providers">
             <label class="check"><input type="checkbox" id="portal-free"> Free only</label>
             <label class="check"><input type="checkbox" id="portal-connected"> Connected only</label>
+            <button type="button" id="routing-doctor" class="small" title="Which model LOKI picks for each kind of task, what is skipped and why (/models doctor)">Explain routing</button>
+            <button type="button" id="routing-recheck" class="small quiet" title="Check every connected provider again now (free model-list calls, nothing is bought)">Re-check</button>
           </div>
         </header>
+        <pre id="routing-report" class="routing-report" hidden></pre>
         <div id="portal" class="portal"></div>
         <details class="caps-raw"><summary>Other tools LOKI can see</summary><div id="providers" class="rows"></div></details>
       </section>

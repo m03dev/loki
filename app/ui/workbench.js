@@ -26,6 +26,7 @@ const Workbench = (function () {
     { name: "test", hint: "run the project's tests and fix what fails", run: (a) => buildSend("Run this project's tests. Fix what fails, then run them again and report." + (a ? " Focus: " + a : "")) },
     { name: "commit", hint: "commit the current changes with a good message", run: () => buildSend("Review the uncommitted changes in this project, then commit them with a short, accurate message. Do not push.") },
     { name: "model", hint: "switch model (name)", arg: "name", run: (a) => model(a) },
+    { name: "models", hint: "doctor: which model LOKI picks for each kind of task, and why", run: () => modelsDoctor() },
     { name: "clear", hint: "start a new chat", run: () => { if (typeof newChat === "function") newChat(); } },
     { name: "world", hint: "open LOKI World", run: () => settings("world") },
     { name: "machines", hint: "your linked machines", run: () => settings("machines") },
@@ -116,6 +117,14 @@ const Workbench = (function () {
     const data = await api("/media/generate", { prompt, kind: "image" }).catch((e) => ({ ok: false, error: String(e) }));
     if (data.ok) addLoki("Made with Higgsfield: " + ((data.files || []).map((f) => "`" + f + "`").join(", ") || (data.urls || []).join(", ")));
     else addNotice(data.error || "Higgsfield did not make it.", true);
+  }
+
+  // /models doctor - the routing in plain words (engine: routing.doctor via GET /models/doctor)
+  async function modelsDoctor() {
+    if (typeof showChat === "function") showChat();
+    const data = await api("/models/doctor").catch((e) => ({ ok: false, error: String(e) }));
+    if (!data.ok) { addNotice(data.error || "Could not ask the model doctor.", true); return; }
+    addLoki("**How LOKI picks models right now**\n\n" + String(data.text || "").split("\n").map((l) => l.startsWith("- ") || !l ? l : "**" + l + "**").join("\n"));
   }
 
   async function model(name) {

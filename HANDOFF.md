@@ -138,6 +138,46 @@ Read with session 27/28 below: this is a *cause* of the same family of complaint
   Chrome over CDP; **one human click on Settings > Play in the app closes M12/M13's last gap**. M14/M15/M16/M17
   (session 27) are untouched.
 
+## Session 28 models & routing (worktree)
+
+The owner: "the core systems aren't fleshed out yet" - MODELS & ROUTING: always the right model per task, never a
+dead end. From the reports: Gemini quota / Groq rate+size limits mid-task, rejected keys (mistral/together/
+cerebras), deepseek out of credit, the PC's Ollama 0.40.5 cannot load Bonsai, background jobs on the local 8B
+after an 'easy' triage, Claude Code argv limits (fixed in session 27: long prompts on stdin). Built:
+1. **Provider health registry** (`engine/provider_health.py`): every error shape -> state + until + reason + a
+   one-line fix, persisted in `harness_data/provider_health.json` (key hash only) so jobs and restarts know;
+   free background probes (GET /models, OpenRouter /key, DeepSeek /user/balance - never a completion) every
+   30 min, started by the bridge; model metadata (context, tools, vision) from the provider's list. Marks made
+   in-process are forgotten when routing revives a provider (`loki._FailedSet`); others expire or end on a new key.
+2. **Task-aware routing** (`engine/routing.py` + `loki.active_model_name/_smart_pick/_route_pick/route_for`):
+   needs (kind, difficulty, background, tool-heavy, pictures, tokens, local only) x abilities (tools
+   native/prompted/measured, vision, context, code) x health x a learned success table per (provider[/model],
+   task kind) from the experience log. Incapable providers go last (no dead end); never across cost tiers;
+   paid only when allowed. **Background jobs** skip local-first when a free capable online model exists
+   (keyless anonymous routes must earn it). `LOKI_LOCAL_ONLY=1` (General > Private) keeps all on this computer.
+3. **Local models**: `model_setup.ollama_version/bonsai_support/ollama_upgrade` (winget / brew), Bonsai never
+   picked/planned/downloaded on Ollama < 0.40.6; `required_context` + `ensure_context` re-makes a smaller loki-*
+   variant; `model_context` reads num_ctx / trained / loaded (`/api/ps`); `loki._with_context` for local,
+   local-hermes, loki-tuned and a pinned LOKI_LOCAL_MODEL; `condenser.LOCAL_WINDOW_TOKENS` keeps a local
+   conversation inside the real window (Ollama drops the START of an over-long prompt = the system prompt +
+   tools). MLX (8082, `default_model`) is the local fallback on a Mac with no Ollama tool model; mlx-vlm
+   detected (Bonsai 2 MLX).
+4. **Failover** (`_model_request` only): health recorded on every failure/success; empty choices retried once
+   then failed over (was an IndexError); timeouts one retry; with another provider ready a 429 gets one quick
+   retry and a long Retry-After is not waited on; `make_client` sets `max_retries=0` (the SDK's hidden retries
+   waited up to 60 s); `should_fail_over` covers empty replies, timeouts and context-too-long in auto mode.
+5. **`/models doctor`** (window `/models`, terminal `/models doctor`, Settings > Connections > Explain routing,
+   `GET /models/doctor`): "Chat -> local ..., Code -> ..., Pictures -> ..., Long documents -> ..., Background
+   jobs -> ..., Hard tasks -> ..., because ...", skipped providers + fixes, the local side, Needs you. Cards
+   show the health line + fix; Re-check = `POST /providers/probe`.
+tests/test_routing_core.py (142, fakes only: a fake OpenAI-compatible HTTP server for 429/402/401/context/
+timeout/empty/413 and a chain of them; a second Python process reading the health file; FakeOllama now answers
+/api/version, /api/ps and num_ctx in /api/show) is in SUITES; ship.py gives each suite its own
+LOKI_HEALTH_FILE and turns probes off. **Not verified on a real machine:** real provider error bodies beyond the
+documented shapes, real `/models` metadata, a real Ollama's `/api/create num_ctx` + `/api/ps context_length`,
+MLX - ZIVA W28 (PC) and M20 (Mac). Needs Mohamed: new mistral/together/cerebras keys, deepseek credit, the
+PC's Ollama update.
+
 ## Session 28: patching and updating clients, overhauled (after the Mac's white window)
 
 The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now
