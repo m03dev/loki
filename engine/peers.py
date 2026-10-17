@@ -415,7 +415,7 @@ class PeerServer:
             def do_POST(self):  # noqa: N802
                 self._handle("POST")
 
-        self.httpd = ThreadingHTTPServer((host, port_number or port(self.env)), Handler)
+        self.httpd = ThreadingHTTPServer((host, port(self.env) if port_number is None else port_number), Handler)
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 
