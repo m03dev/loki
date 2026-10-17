@@ -70,6 +70,28 @@ reaches a machine (engine/updater.py, app/loki_app.py, engine/loki_bridge.py):
    engine (no script error, no missing file, reaches ready); skipped where Playwright is not installed.
 Together with session 27's boot.js rescue screen, the full-app relaunch and the no-about:blank rule.
 
+## Session 28 MMO systems (worktree) - stopped early
+
+The owner stopped the game work mid-session ("do not focus on the game, the core systems aren't
+fleshed out yet"). Only the **engine side of progression** was finished and is committed; nothing in
+`game/loki-world/` changed and no new game system was started.
+
+- **Done (engine only, tests/test_mmo_systems.py 121, in SUITES):** `engine/mmo_state.py` profile
+  extended - gold, bags, gear slots (head/chest/weapon/offhand/trinket/relic) with stats, seeded gear
+  drops from monsters and some quests, Trader Fenn's vendor (sell/buy), paintings from LOKI's pictures
+  whose rarity is the owner's hearts, 21 achievements with Steam ids (ACH_*), 3 daily quests a day from
+  real use, the guild of the owner's machines. New routes `/mmo/equip`, `/mmo/vendor/sell|buy`,
+  `/mmo/daily/claim`, `/mmo/like`, `GET /mmo/likes`, `/mmo/guild` (docs/MMO_API.md section 8).
+  The shared profile syncs between machines on the existing signed `/peer/presence` exchange
+  (`engine/presence.py`: hash first, document only when different, works with the world closed;
+  LWW for name/class/guild, per-machine counters for XP/gold/stats, per-item merge for bags/gear).
+  Presence chat lines carry a channel (say/guild/party/...). `engine/creations.py`: hearts storage
+  (`<data>/creations/likes.json`).
+- **Not done:** every client part - procedural sound, island wildlife, gear/vendor/achievement/daily
+  windows, party frames, /invite /who, Settings > Creations heart button, Steam folder/GodotSteam hook.
+  The Godot client ignores the new state fields. Sync was tested on loopback with two pretend machines
+  over a real signed peer link, never between the real Mac and PC.
+
 ## Session 27 (cont.): the Mac's white window
 
 The owner reported the Mac shows only a white window (Ziva Mac was looking into it; this session has no access to

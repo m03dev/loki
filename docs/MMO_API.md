@@ -183,3 +183,50 @@ minimap, the chat box, a 9-slot hotbar (1 Strike, 2 Bolt, 3 Mend, 4 Picture, 5 R
 frame, cast bars, cooldowns, damage numbers, a quest log + tracker, bags (loot), a character
 sheet, a loot window, level-up effects, zones (islands) with a banner, day/night, emotes, sound
 - in LOKI World's look: pixel cel shading, black ink outlines, the fox and the rabbits.
+
+## 8. Progression on the engine (session 28): one character on every machine
+
+Engine only so far - **no client uses these yet** (the Godot client ignores the extra fields).
+`engine/mmo_state.py`, tests `tests/test_mmo_systems.py`.
+
+`GET /mmo/state` also carries: `profile.gold`, `profile.gear` (bonus power %/hp/en from worn gear,
+already in `hp_max`/`en_max`/`power`), `profile.guild`; `gear` {slots: head, chest, weapon, offhand,
+trinket, relic; equipped: slot -> item; bags: items (`equipped` marked); bag_max 60; rarities: colours};
+`vendor` {name, stock: today's 4 pieces with `price`}; `achievements` [{id, title, about, steam
+(ACH_*), unlocked, t, progress, need}]; `new_achievements` (ids unlocked by this call); `daily`
+{date, quests: [{id, title, metric, need, progress, done, claimed, gold, xp}], resets_in_s};
+`guild` {name, members: [{machine, name, cls, level, online, self, zone, linked}], online}; `sync`.
+
+An **item**: `{id, kind: gear|painting, name, slot, look, rarity: common|uncommon|rare|epic|legendary,
+level, stats: {power?, hp?, en?}, value, src, t, ts}`. Gear drops from beaten monsters (seeded by the
+job id), from 1 in 4 turned-in quests, and is sold by the vendor. A **painting** is one of LOKI's
+pictures (`painting:<creation path>`, relic slot): its rarity is the owner's hearts on it (0 common,
+1 uncommon, 2 rare, 3-4 epic, 5 legendary); not for sale.
+
+| Endpoint | Body | Does |
+| --- | --- | --- |
+| `POST /mmo/equip` | `{"id": "<bag item id or painting:path>"}`, or `{"id": "", "slot": "head"}` | wear / take off |
+| `POST /mmo/vendor/sell` | `{"id"}` | sell for its value (not while worn); answers `gold_got`, `gold` |
+| `POST /mmo/vendor/buy` | `{"id": "<today's stock id>"}` | buy once at `price` (400 without the gold) |
+| `POST /mmo/daily/claim` | `{"id": "<YYYY-MM-DD>:<quest>"}` | once, when done: gold + XP |
+| `POST /mmo/like` | `{"path": "images/x.png", "hearts": 0-5}` | hearts on a creation (`<data>/creations/likes.json`) |
+| `GET /mmo/likes` | | `{likes: {path: hearts}, max: 5}` |
+| `POST /mmo/guild` | `{"name"}` | rename the guild |
+| `POST /mmo/note` | also `{"visit": "<zone>"}`, `{"chat": "guild"}` | island visits and guild chat count for dailies/achievements |
+
+Turn-in and defeat answers also carry `gold_got`, `gold` and `new_achievements`.
+
+**Daily quests** (3 a day, picked from the local date so every machine shows the same) count real
+use: pictures made today, background / research jobs finished, quests turned in, monsters beaten,
+other islands visited, creations liked, guild chat lines. Progress adds up over machines.
+
+**Sync.** The shared part of the profile rides on the signed `/peer/presence` exchange: each side
+sends `mmo_v` (a hash) and the whole document `mmo` only when the other side's hash differs; the
+reply does the same, so one call syncs both ways. It runs even with the world closed (within ~1 s
+of a change, else every 60 s while the pusher runs; any `/mmo/*` call starts it). Merge rules:
+name, class and guild - **last writer wins** by time; XP, gold (earned/spent) and stats - each
+machine's own counters, which add up (a reinstalled machine gets its counters back from its twin);
+bags and worn slots - newest change per item/slot (a sale is a tombstone); achievements - earliest
+unlock; claimed dailies - union. Everything from a peer is sanitised (`clean_item`, clamped numbers).
+Presence chat lines carry `ch`: say, guild, party, invite, accept, leave (`POST /world/presence`
+takes `"channel"`).

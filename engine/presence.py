@@ -20,6 +20,12 @@ removed, numbers clamped); the app shows it with textContent. Positions are mach
 `zone` is the name of the island (machine) the avatar stands on and `u`/`v` are its place on
 that island as a fraction of the island's radius, so each machine can draw it on its own map
 of the sky.
+
+The same exchange carries the owner's SHARED PROFILE (level, XP, class, bags, worn gear, gold,
+achievements: engine/mmo_state.py export_doc/merge_doc) so it is the same on every machine: each
+side sends a short version hash, and the whole document only when the other side's hash differs.
+Chat lines carry a channel: say, guild (the owner's machines are one guild), party, and the party
+invite/accept/leave notes the clients act on.
 """
 from __future__ import annotations
 
@@ -35,7 +41,10 @@ PUSH_IDLE_S = 15.0        # push only while this machine's world was open this r
 PUSH_MOVE_S = 0.35        # while moving
 PUSH_HEARTBEAT_S = 2.0    # while standing
 BACKOFF_S = 8.0           # after a peer did not answer
+SYNC_MIN_S = 1.0          # the shared profile changed: tell the peers this soon (even with the world closed)
+SYNC_EVERY_S = 60.0       # and look in on them this often while a client plays (their changes come back)
 CHAT_KEEP = 120
+CHANNELS = ("say", "guild", "party", "invite", "accept", "leave")
 CHAT_SEND_MAX = 20
 TEXT_MAX = 200
 
@@ -84,9 +93,12 @@ def clean_player(data: Any) -> dict | None:
 class Presence:
     """One machine's presence hub. The engine uses HUB; tests make one per pretend machine."""
 
-    def __init__(self, name_fn: Callable[[], str], clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, name_fn: Callable[[], str], clock: Callable[[], float] = time.time, sync: Any = None) -> None:
         self.name_fn = name_fn
         self.clock = clock
+        self.sync = sync                              # version()/export()/merge(doc) of the shared profile
+        self.sent_v: dict[str, str] = {}              # peer -> the profile version it has from us
+        self.synced = 0
         self.lock = threading.Lock()
         self.local: dict | None = None
         self.local_t = 0.0
@@ -110,6 +122,7 @@ class Presence:
         """POST /world/presence: the app's own avatar (and maybe a chat line). Returns the snapshot."""
         player = clean_player(data.get("player")) if isinstance(data, dict) else None
         line = _text(data.get("chat"), TEXT_MAX) if isinstance(data, dict) else ""
+        channel = _channel((data or {}).get("channel")) if isinstance(data, dict) else "say"
         with self.lock:
             now = self.clock()
             if player is not None:
@@ -122,7 +135,7 @@ class Presence:
                 me = self.name_fn()
                 self._add_line({"id": "%s:%d" % (me, self.oseq), "oseq": self.oseq, "machine": me,
                                 "from": (player or self.local or {}).get("name", "player"), "text": line, "t": now,
-                                "own": True})
+                                "ch": channel, "own": True})
                 self.dirty = True
         try:
             after = int((data or {}).get("after") or 0)
@@ -165,9 +178,38 @@ class Presence:
             since = int((data or {}).get("since") or 0)
         except (TypeError, ValueError):
             since = 0
-        return self._outgoing(since)
+        out = self._outgoing(since)
+        mine = self._sync_v()
+        if mine:
+            out["mmo_v"] = mine
+            if str((data or {}).get("mmo_v") or "") != mine:
+                out["mmo"] = self._sync_doc()
+        return out
+
+    def _sync_v(self) -> str:
+        if self.sync is None:
+            return ""
+        try:
+            return str(self.sync.version() or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _sync_doc(self) -> dict | None:
+        try:
+            return self.sync.export() if self.sync is not None else None
+        except Exception:  # noqa: BLE001
+            return None
 
     def _take(self, machine: str, data: dict) -> None:
+        doc = (data or {}).get("mmo")
+        if isinstance(doc, dict) and self.sync is not None:
+            try:
+                if self.sync.merge(doc):
+                    with self.lock:
+                        self.synced += 1
+            except Exception as exc:  # noqa: BLE001 - a bad document must never break presence
+                with self.lock:
+                    self.errors["sync"] = str(exc)[:200]
         player = clean_player((data or {}).get("player"))
         lines = (data or {}).get("chat") or []
         with self.lock:
@@ -183,14 +225,15 @@ class Presence:
                     if not oseq or not text:
                         continue
                     self._add_line({"id": "%s:%d" % (machine, oseq), "oseq": oseq, "machine": machine,
-                                    "from": _text(raw.get("from"), 24) or machine, "text": text, "t": now})
+                                    "from": _text(raw.get("from"), 24) or machine, "text": text, "t": now,
+                                    "ch": _channel(raw.get("ch"))})
                     self.recv[machine] = max(self.recv.get(machine, 0), oseq)
 
     def _outgoing(self, since: int) -> dict:
         """Our avatar (when this machine's world is open) and our own chat lines after `since`."""
         with self.lock:
             now = self.clock()
-            mine = [{"oseq": x["oseq"], "from": x["from"], "text": x["text"]}
+            mine = [{"oseq": x["oseq"], "from": x["from"], "text": x["text"], "ch": x.get("ch", "say")}
                     for x in self.chat if x.get("own") and x["oseq"] > since][-CHAT_SEND_MAX:]
             return {"machine": self.name_fn(), "player": self.local if self._fresh(now) else None, "chat": mine}
 
@@ -206,6 +249,13 @@ class Presence:
         try:
             out = self._outgoing(self.sent.get(name, 0))
             out["since"] = since
+            mine = self._sync_v()
+            if mine:
+                out["mmo_v"] = mine
+                if self.sent_v.get(name) != mine:
+                    doc = self._sync_doc()
+                    if doc is not None:
+                        out["mmo"] = doc
             reply = call(peer, "POST", "/peer/presence", out, timeout=4.0)
             if out["chat"]:
                 self.sent[name] = max(x["oseq"] for x in out["chat"])
@@ -213,6 +263,12 @@ class Presence:
             if machine != name and name in self.recv:
                 self.recv.setdefault(machine, self.recv[name])
             self._take(machine, reply or {})
+            if mine:
+                # it has ours if we sent it or it already had the same; else send it next time
+                theirs = str((reply or {}).get("mmo_v") or "")
+                self.sent_v[name] = mine if ("mmo" in out or theirs == mine) else ""
+                if theirs and self._sync_v() == theirs:   # their reply made us equal: nothing left to send
+                    self.sent_v[name] = theirs
             if machine != name:   # remember what we have from it under the name we dial it by, too
                 self.recv[name] = self.recv.get(machine, 0)
             with self.lock:
@@ -231,17 +287,21 @@ class Presence:
 
     def due(self, peer_names: list) -> list:
         """Which peers to exchange with now (and clears the moved flag when any is due)."""
+        mine = self._sync_v()
         with self.lock:
             now = self.clock()
-            if not self._fresh(now):
+            fresh = self._fresh(now)
+            if not fresh and not mine:
                 return []
             out = []
             for name in peer_names:
                 if name in self.busy or self.backoff.get(name, 0) > now:
                     continue
                 gap = now - self.last_push.get(name, 0)
-                if (self.dirty and gap >= PUSH_MOVE_S) or gap >= PUSH_HEARTBEAT_S:
+                if fresh and ((self.dirty and gap >= PUSH_MOVE_S) or gap >= PUSH_HEARTBEAT_S):
                     out.append(name)
+                elif mine and ((self.sent_v.get(name) != mine and gap >= SYNC_MIN_S) or gap >= SYNC_EVERY_S):
+                    out.append(name)   # the world is closed: only the shared profile goes (no avatar)
             if out:
                 self.dirty = False
             return out
@@ -268,7 +328,7 @@ class Presence:
     def status(self) -> dict:
         with self.lock:
             return {"pushes": self.pushes, "errors": dict(self.errors), "remote": sorted(self.remote),
-                    "open": self._fresh(self.clock())}
+                    "open": self._fresh(self.clock()), "synced": self.synced, "sent_v": dict(self.sent_v)}
 
 
 def _my_name() -> str:
@@ -279,7 +339,30 @@ def _my_name() -> str:
         return "this computer"
 
 
-HUB = Presence(_my_name)
+class _EngineSync:
+    """The running engine's shared profile (engine/mmo_state.py), found lazily."""
+
+    @staticmethod
+    def _adapter() -> Any:
+        import mmo_state  # pylint: disable=import-outside-toplevel
+        return mmo_state.SyncAdapter(mmo_state.active_profile)
+
+    def version(self) -> str:
+        return self._adapter().version()
+
+    def export(self) -> dict | None:
+        return self._adapter().export()
+
+    def merge(self, doc: dict) -> bool:
+        return self._adapter().merge(doc)
+
+
+def _channel(value: Any) -> str:
+    ch = _text(value, 10).lower()
+    return ch if ch in CHANNELS else "say"
+
+
+HUB = Presence(_my_name, sync=_EngineSync())
 
 
 def app_post(data: dict) -> dict:

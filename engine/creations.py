@@ -114,3 +114,58 @@ def make_image(agent, prompt: str) -> dict:
 
     threading.Thread(target=work, daemon=True, name="loki-make-image").start()
     return {"ok": True, "id": key}
+
+
+# ----------------------------------------------------------------------------- likes (hearts)
+# Settings > Creations: the owner gives a creation 0-5 hearts. LOKI World turns a picture's hearts
+# into its painting's rarity (engine/mmo_state.py). Kept in <data>/creations/likes.json.
+LIKES_MAX = 5
+_LIKES_LOCK = threading.Lock()
+
+
+def _likes_file(data_dir: Path) -> Path:
+    return Path(data_dir) / "creations" / "likes.json"
+
+
+def get_likes(data_dir: Path) -> dict:
+    """{"images/fox.png": 3, ...} - only creations with at least one heart."""
+    import json  # pylint: disable=import-outside-toplevel
+    try:
+        raw = json.loads(_likes_file(data_dir).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for path, n in raw.items():
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(path, str) and 0 < n:
+            out[path[:300]] = min(LIKES_MAX, n)
+    return out
+
+
+def set_likes(data_dir: Path, path: str, hearts: int) -> int:
+    """Set a creation's hearts (0 removes them). Returns how many it had before."""
+    import json  # pylint: disable=import-outside-toplevel
+    import os  # pylint: disable=import-outside-toplevel
+    path = str(path or "")[:300]
+    parts = path.split("/")
+    if len(parts) != 2 or parts[0] not in KINDS or not parts[1] or ".." in path or "\\" in path:
+        raise ValueError("not a creation path")
+    hearts = max(0, min(LIKES_MAX, int(hearts)))
+    with _LIKES_LOCK:
+        likes = get_likes(data_dir)
+        before = likes.get(path, 0)
+        if hearts:
+            likes[path] = hearts
+        else:
+            likes.pop(path, None)
+        target = _likes_file(data_dir)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(likes, indent=1, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, target)
+    return before

@@ -214,7 +214,7 @@ check("skills: 9 slots, LOKI actions are real jobs", [s["slot"] for s in st["ski
 
 r = mmo_state.turn_in(prof, JOBS, CRE2, "n2")
 check("turning in: XP and the picture made while the job ran", r["turned_in"] == ["n2"] and r["xp"] >= 100
-      and [i["id"] for i in r["loot"]] == ["images/cat.png"], r)
+      and [i["id"] for i in r["loot"] if i.get("kind") != "gear"] == ["images/cat.png"], r)
 try:
     mmo_state.turn_in(prof, JOBS, CRE2, "n2")
     check("a quest cannot be turned in twice", False)
@@ -249,7 +249,8 @@ try:
     check("unknown class refused", False)
 except ValueError:
     check("unknown class refused", True)
-check("profile update", mmo_state.set_profile(prof, {"name": "Mo", "cls": "Archer"}) == {"name": "Mo", "cls": "Archer"})
+upd = mmo_state.set_profile(prof, {"name": "Mo", "cls": "Archer"})
+check("profile update", upd["name"] == "Mo" and upd["cls"] == "Archer")
 
 # ------------------------------------------------------------------------------------------
 section("the bridge routes (a fake engine state)")
