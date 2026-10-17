@@ -6,6 +6,24 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 27 research ports, Claude worktree).
 
+## Ziva (Windows), 2026-10-17: the PC session-26/27 checks, and a duplicate fix dropped
+
+Ran the [windows] inbox item and W21/W20/W19/W18/W10/W23 on the real PC. All 28 suites green. Highlights:
+`POST /peers/diagnose {peer: mohameds-mac-mini}` works over the live relay and is REDACTED (no stuck
+request, empty log tails); the Babylon pixel world is the default and holds ~60 fps (panel ema 16.7 ms,
+boost 0); the Mac linked and /world.machines shows it ("1/1 machines linked"); Settings > Creations makes
+a real ~1 MB picture with zimage in ~7 min; three/classic/babylon all switch; the option cards and CRM
+work. Not done: Ollama upgrade (0.40.5, needs the owner), the fox close-up, W22 (MMO) and W24 (research
+ports).
+
+I started fixing the weak-model "Make it" bug (the model invented a tool `image`, wrote the prompt text
+into the PNG and called it DONE) and then found Claude's session-27 commit (a5deaad) had already fixed it
+the same day and better - call_tool now routes a role name like `image` to conductor, `_salvage_reply`
+keeps text tool calls, `_specialist_made` counts a specialist-written file, and Creations makes pictures
+DIRECTLY (POST /creations/make, no model). So I dropped my duplicate patch (no code shipped from this
+session) and VERIFIED the upstream fix on the PC instead: /creations/make made a real 1,056,903-byte PNG
+via zimage. Details, fps and screenshots are in ZIVA_TASKS.md (W21/W23).
+
 ## Session 27 (2026-10-17, Claude in the cloud): why every LOKI job failed, and the fixes
 
 From the PC's job logs (harness_data/jobs): background jobs run on qwen3:8b (PREFER=local, easy triage) and

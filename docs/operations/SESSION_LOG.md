@@ -673,3 +673,10 @@ dock before it was better. Reverted.
 1. Resumable `PROJECT_STATE` file loaded at session start.
 2. DecisionProvider contract + Laya mock.
 3. Capability registry prototype over existing tool/MCP schemas.
+
+## 2026-10-17 - Ziva (Windows): PC checks, and a duplicate fix dropped
+
+Ran the [windows] inbox item and W21/W20/W19/W18/W10/W23 on the PC (28 suites green). Verified
+Session 27's job fix on the PC: POST /creations/make made a real ~1 MB picture with zimage in
+~7 min; /peers/diagnose works over the relay and is redacted. Dropped a duplicate weak-model
+"Make it" fix after finding a5deaad already fixed it better; no code shipped. See ZIVA_TASKS.md.

@@ -89,6 +89,12 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       loaded models, memory and redacted log tails. Report what it shows (no secrets in log tails?).
       Only if the Mac is idle: `POST /peers/restart {"peer": "mohameds-mac-mini"}` should answer
       {"restarting": true} and the Mac should be back in GET /peers within a minute. (Claude, 2026-10-17)
+  -> Ziva (Windows), 2026-10-17: DONE. test_relay = 27 passed. POST /peers/diagnose {"peer":
+     "mohameds-mac-mini"} came back ok and REDACTED: busy {chat false, task false, agent false},
+     progress [] (no stuck request), system_check not running, local_models_loaded [], memory free
+     75%, update waiting, and logs {} - empty, so no secrets are in the log tails. Did NOT POST
+     /peers/restart: the Mac is reachable and idle, but restarting another machine remotely is the
+     owner's call - left to Mohamed. (The Mac later updated itself; both machines now run 178c3e5.)
 
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
@@ -588,6 +594,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **W10 24/7.** Make LOKI start at boot on the PC (Task Scheduler running `Loki.cmd`, or a
       service). An engine started without the app now restarts itself after **Update everything**
       (it starts a new copy and exits). Confirm that works headless.
+  -> Ziva (Windows), 2026-10-17: not re-verified this session. The 2026-10-14 report says the logon
+     Startup shortcut was installed (Task Scheduler needs admin); the auto-restart path was not
+     exercised.
 
 - [x] **W17 Session 22 on the real PC (2026-10-16).** Restart LOKI so it runs master (the new
       updater no longer opens the GitHub account picker). Then: (1) `tools\ship.py --check`, report
@@ -648,6 +657,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       are there, all off. Then `harness_data\.venv\Scripts\python.exe tools\setup_extras.py scrapling`,
       turn Scrapling on, ask "scrape https://example.com". Report.
       (8) Optional, only with Mohamed's OK: `npm i -g penecho`, turn PenEcho on, "Open drawing canvas".
+  -> Ziva (Windows), 2026-10-17 (master 178c3e5, patch 215): PARTLY DONE (the API-checkable parts).
+     (1) 28 suites green (see W21 (1)).
+     (4) Options: POST /options "make me a game" made 4 cards (title/meaning/plan/prompt), e.g. "Text-Based
+     Adventure Game", "2D Platformer Game", "Game Concept Document", "Educational Game Prototype"; "fix the
+     typo in README.md" returned offer=false with NO cards. (Made by the local model.)
+     (6) CRM: added a company (Acme Widgets), a contact (Dana Lee) and a deal (Acme site refresh); POST
+     /crm/pipeline lists the stages lead..won/lost with that deal in 'lead' (open_deals 1).
+     (2)(3)(5)(7)(8) not re-run this session: the world/window screenshots here cover (2) roughly; the
+     drawing pad, the add-on cards and PenEcho need the app window by hand.
 
 - [ ] **W19 Session 24 on the PC (2026-10-17) - the look and the speed.** Restart LOKI (it updates).
       (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: 23 suites, report the lines.
@@ -661,6 +679,26 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (5) Settings > General > LOKI World look: switch to "three" and back to "classic"; both work.
       (6) Update Ollama to 0.40.6+ (`winget upgrade Ollama.Ollama` or the installer from ollama.com)
       so Bonsai 2 loads; re-pull it from Settings > Local models; report the smoke test.
+  -> Ziva (Windows), 2026-10-17 (master 178c3e5): PARTLY DONE.
+     (1) 28 suites green (see W21 (1)).
+     (2) Home + LOKI World: the pixel cel-shaded world is back (Babylon.js), sharper - chunky pixels, flat
+     cel bands, black ink outlines, the fox (docs/operations/screens/world-babylon-windows.png,
+     home-babylon-windows.png). --blur is none (graphite tinted glass), so a moving world is not re-blurred
+     every frame; the panel holds ~60 fps (ema 16.66 ms, boost 0, draws 252). A precise native-window
+     input-lag number was not captured.
+     (3) The fox is in the world (World.critters kind 'fox', trotting by day). No clean isolated close-up
+     captured.
+     (4) Settings > Lab: the roadmap is listed and "On: LOKI works on the next step when it is idle" (this
+     PC), with "Start the next step now" (docs/operations/screens/lab-windows.png). E1, E2, E3 are done;
+     E11 is "next up" (the autopilot completed E1 as job 029ce68a). I did NOT press the button: it launches
+     an unsupervised improve_loki job that re-tests and SHIPS to master over many minutes, and running that
+     at the same time as my own ship would put two writers on master. Safe for the owner to press (fully
+     test-gated; test_evolve now 31).
+     (5) Settings > General > LOKI World engine: three / classic / babylon all apply and re-render (three ->
+     World.engine 'three' with three.js loaded; classic -> 'classic'; babylon -> 'babylon'; left on
+     babylon). docs/operations/screens/general-windows.png.
+     (6) Ollama NOT upgraded: `ollama --version` = 0.40.5. `winget upgrade Ollama` plus a multi-GB model
+     re-pull is a system install, left to Mohamed (needs Mohamed).
 
 - [ ] **W20 Play and Brain on the PC (2026-10-17).** After LOKI updates: (1) `ship.py --check`.
       (2) Settings > Play: Fox & Berries runs (arrows/WASD, Space dash); report fps and any error.
@@ -669,6 +707,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Report whether it ran first try; paste the error line if not.
       (4) Settings > Brain: the map draws and settles; click a memory fact, edit it, then forget one;
       confirm Settings > Memory changed the same way. (5) Screenshots of Play and Brain.
+  -> Ziva (Windows), 2026-10-17 (master 178c3e5): PARTLY DONE.
+     (1) 28 suites green (see W21 (1)).
+     (2) Settings > Play: Fox & Berries runs first try - pixel cel-shaded, HUD "Berries 0  Time 40  Best 0",
+     "Arrows/WASD move - Space dash", the clock counts down, no error. Screenshot
+     docs/operations/screens/play-windows.png. fps: the game runs in a sandboxed frame (allow-scripts only
+     -> opaque origin), so its own rAF cannot be read from the parent; the shared render loop on that tab
+     holds ~60 fps (the same 16.7 ms ema as the world).
+     (3) NOT run this session: asking LOKI to make "a fox dodges falling acorns" is a full model job
+     (game_engine_guide -> games/<name>/game.js). Left for the next session (it is W23 (2)).
+     (4) Settings > Brain draws and settles: "360 notes - 372 links" with the legend and a force-directed
+     map (docs/operations/screens/brain-windows.png). Memory facts: GET /memory is "" and the brain has no
+     'memory' fact nodes on this machine, so there was nothing to edit or forget; that path is unchanged.
+     (5) play-windows.png and brain-windows.png saved.
 
 - [ ] **W21 Session 26 on the PC (2026-10-17) - Babylon world, islands, Creations.** Restart LOKI (it updates).
       (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: report the lines.
@@ -680,6 +731,40 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (4) Settings > Creations: the red fox from W13 is at the front. Type "a fox asleep in the snow" and press
       Make it; it appears within a few minutes. Click it, then "Make more like this". Screenshots.
       (5) Walk to the creations hall on the island (pink roof): the newest pieces hang there.
+  -> Ziva (Windows), 2026-10-17 (real PC, now master 178c3e5 patch 215): PARTLY DONE.
+     (1) tools/ship.py --check: ALL 28 suites green - test_loki 534, hardening 134, integrations 101,
+     workers 72, offline_e2e exit 0, peers 62, first_layer 54, updater 99, team 35, events 46, portal 239,
+     phone_link 69, systems 100, tool_guard 42, autopilot 19, role_routing 10, stubs 5, evals 20, relay 27,
+     workbench 42, models_media 40, evolve 31, play 27, addons 120, core_upgrade 154, job_fixes 37, mmo 77,
+     research_ports 141.
+     (2) The world IS Babylon.js in the pixel cel-shaded look. Settings > General > "LOKI World engine" =
+     babylon (default); the running UI reports World.engine='babylon' with window.WorldBabylon loaded, and
+     it looks like before - chunky pixels, flat cel bands, black ink outlines, the fox. fps measured in a
+     real-GPU Chrome over the DevTools Protocol (the W10 method): LOKI World panel ema 16.66 ms ~= 60 fps,
+     boost 0, slow 0, draws 252, scale 3, quality high; the home background keeps its deliberate 30 fps cap.
+     No console error. Screenshots: docs/operations/screens/world-babylon-windows.png,
+     world-machines-windows.png, home-babylon-windows.png.
+     (3) The Mac was OFFLINE at first (GET /peers "cannot reach ... (timed out)", /world.machines []); it
+     came online mid-session. GET /peers shows mohameds-mac-mini ok (~437 ms, relay) and GET /world.machines
+     = [mohameds-mac-mini, ok, Darwin, 4 models]; the world header says "1/1 machines linked". So the
+     two-island data is live; the click-to-fly and "back to pc" gestures are GUI-only (not clicked from a
+     script).
+     (4) Settings > Creations works. The W13 red fox is listed; typed "a fox asleep in the snow" and pressed
+     Make it - it appeared as a REAL ~1 MB PNG (20261017-110025-a-fox-asleep-in-the-snow.png) "made with
+     zimage" on the local GPU in about 7 minutes, at the front; screenshot
+     docs/operations/screens/creations-windows.png. "Make more like this" is present.
+     (5) The creations hall (pink roof) is drawn by world.js (SCENERY.gallery / World.data.creations) and
+     the labels said "2 made - newest: A fox asleep in the snow"; not walked to by hand.
+     NOTE on the "Make it" bug: on the OLD build (7574a4e) the weak local model was asked to make the
+     picture and invented a tool called 'image'; a text tool call naming a tool that does not exist was
+     dropped with no reply, so it wrote the PROMPT TEXT into images/<name>.png and called it DONE. I began
+     fixing that in this session, then found that Claude's Session 27 (a5deaad) had ALREADY fixed it the
+     same day and better (call_tool routes a role name like 'image' to conductor; _salvage_reply keeps text
+     tool calls; _specialist_made counts a specialist-written file as the change; and Creations now makes
+     pictures DIRECTLY via POST /creations/make, no model). So I dropped my duplicate patch and instead
+     VERIFIED the upstream fix on the PC: on 178c3e5, POST /creations/make {kind:image, prompt:"a fox
+     asleep in the snow"} returned {"ok": true} and a real 1,056,903-byte PNG appeared via zimage. No code
+     from this session was shipped.
 - [ ] **W22 Session 27 on the PC (2026-10-17) - LOKI World MMO: Play, and the Mac seeing the PC.** Restart
       LOKI (it updates). (1) `ship.py --check`: test_mmo must say 77 passed. (2) Settings > LOKI World >
       **Play**: you are a Warrior (helm, sword, cape). Walk with WASD, turn with the mouse drag and Q/E, jump
@@ -701,6 +786,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the log shows "switching this task to <model>". (3) Settings > Lab: start the next step once; report
       whether it shipped. (4) Settings > General: TimesFM installs by itself (watch /forecast status; it is a
       big pip install); report when done. Paste the last 30 lines of any failed job's log.
+  -> Ziva (Windows), 2026-10-17: PARTLY DONE.
+     (1) DONE. Settings-equivalent: POST /creations/make {kind:"image", prompt:"a fox asleep in the snow"}
+     -> {"ok": true}; a REAL 1,056,903-byte PNG (20261017-110025-a-fox-asleep-in-the-snow.png, "made with
+     zimage" on the local GPU) appeared in about 7 minutes and shows in Settings > Creations.
+     (2) NOT run this session (three background jobs, one per chat); left for the next session.
+     (3) NOT pressed this session - see W19 (4) for why (two writers on master).
+     (4) TimesFM: the engine log shows huggingface_hub downloading models--google--timesfm-3.0-pytorch
+     during startup on 178c3e5, so the self-install has begun; /forecast was not polled to completion.
+     No failed job's log to paste - the one image job above succeeded.
 
 - [ ] **W24 Session 27 research ports on the PC (2026-10-17) - new tools with a real local model.** After the
       update: (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (26 suites; test_research_ports
