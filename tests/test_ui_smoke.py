@@ -2,7 +2,13 @@
 and check there is no script error, no missing file, and app.js reaches "ready" (the check that
 would have caught the Mac's white window before it shipped).
 
-Skips (passes) where Playwright + a Chromium are not installed - CI and Claude's workspace have them.
+Skips (passes) where Playwright is not installed, or where it has no browser downloaded yet.
+
+`loKI_SUITE_CHROMIUM` (or /opt/pw-browsers/chromium, which exists only in the Linux container) names an
+explicit browser. Without one, Playwright's OWN browser is used - it lives in a per-user cache
+(~/Library/Caches/ms-playwright on macOS, %USERPROFILE%/AppData/Local/ms-playwright on Windows), not in
+/opt, so the old form skipped on every machine but Linux - including the Mac, the one machine that
+actually had the white window this suite exists to catch.
 
     python tests/test_ui_smoke.py
 """
@@ -25,6 +31,7 @@ def check(name, ok, detail=""):
 
 
 def chromium_path() -> str:
+    """An explicit browser to use, or "" to let Playwright find its own (see the docstring)."""
     for p in (os.getenv("LOKI_SUITE_CHROMIUM", ""), "/opt/pw-browsers/chromium"):
         if p and os.path.exists(p):
             return p
@@ -36,8 +43,8 @@ try:
 except ImportError:
     async_playwright = None
 
-if async_playwright is None or not chromium_path():
-    print("SKIP: no Playwright/Chromium here")
+if async_playwright is None:
+    print("SKIP: no Playwright here")
     print("\n0 passed, 0 failed")
     sys.exit(0)
 
@@ -50,8 +57,14 @@ FAKE = {
 
 async def main() -> None:
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=chromium_path(),
-                                          args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        exe = chromium_path()
+        args = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+        try:
+            browser = await (p.chromium.launch(executable_path=exe, args=args) if exe
+                             else p.chromium.launch(args=args))
+        except Exception as exc:  # noqa: BLE001 - Playwright with no browser downloaded: skip, not fail
+            print("SKIP: Playwright has no Chromium yet (%s)" % str(exc)[:160])
+            return
         page = await browser.new_page(viewport={"width": 1240, "height": 820})
         errors, missing, ui_posts = [], [], []
         page.on("pageerror", lambda e: errors.append(str(e)))

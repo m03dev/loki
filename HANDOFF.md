@@ -83,6 +83,36 @@ lines in index.html, 1 in app.js, 4 CSS lines; lab.js untouched).
 The real numbers for qwen3:8b, Bonsai 2 and smart are ZIVA W28. The nightly duty is tested with a fake process
 only; the Lab section was not seen in a real window (UI smoke test covers that index.html loads).
 
+## Ziva (Mac), 2026-10-18: computer use on macOS - works, but both TCC grants are missing
+
+The computer-use add-on works on the Mac (Quartz mouse/keyboard, `open_app`, the approval prompt, the kill
+switch, the action log) - what is missing is the two macOS permissions, which only Mohamed can grant:
+**System Settings > Privacy & Security > Accessibility** (no accessibility tree until then, proved by
+`computer(action=elements)` answering "(no accessibility tree for this window...)") and **Screen Recording**
+(`computer(action=screenshot)` -> "screencapture failed - give the app running LOKI Screen Recording
+permission"). Grant them to `/Users/mohamed/Applications/Loki.app` and to the Python that Loki.app launches
+(`/opt/homebrew/Cellar/python@3.13/13.3.16/.../Resources/Python.app/Contents/MacOS/Python`), then restart.
+
+Two things to fix in the code once the tree works, both seen live: (1) **after `open_app` the app is not
+brought to the front** - TextEdit opened with no window and the next action targeted `python`, i.e. LOKI's
+own window, where typing would have gone; activate and verify the frontmost app before typing. (2) LOKI
+should refuse to drive its own process - typing into its own chat box is never right.
+
+The approval flow itself is fully scriptable: `GET /approval` returns the pending ticket and
+`POST /approval {"id":..., "approved":bool}` answers it, which is how these tests said Yes and No. The kill
+switch works exactly as documented: Ctrl+Option+Esc (a real Quartz key event) tripped it
+(`armed: false`, `tripped: "kill hotkey pressed"`), every later action was refused in the same chat, the
+recent-actions log showed the whole run, and `POST /computer/arm {}` re-armed it (a body is required - a
+bare POST gets "Request body is empty or too large.").
+
+Also on the Mac, all in this session: Settings > Tools health map "86 work · 17 need setup · 28 off" with
+no Broken/Failing row (docs/operations/screens/tools-health-mac.png); GitHub connector -> "signed in as
+m03dev", a real issues call, and the create-issue approval appeared and was declined (nothing created);
+Chromium add-on on and verified directly (Hacker News 228 numbered elements in 1.7s, react.dev 105 in
+2.8s); email/calendar/Google still unset (Needs Mohamed); peer_files not run because the PC link is down
+("cannot reach pc at http://127.0.0.1:49952 - Connection reset by peer" with relay true - the PC needs to
+start/update LOKI).
+
 ## Ziva (Mac), 2026-10-17: the task-success bench now runs on a Mac (the third real fix)
 
 `tests/test_task_success.py` failed deterministically on the Mac (90 passed / 4 failed; `build-todo` and

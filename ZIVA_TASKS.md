@@ -1477,6 +1477,73 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      - Bonsai 2 with /no_think (a 3-message chat + a background job): NOT DONE - Ollama was not running on this
      Mac this session (and Bonsai 2 is the PC's model; the Mac's local model is the Ollama qwen3:8b, which
      answered a chat in ~30 s at 1.4 tok/s).
+  -> Ziva (Mac), 2026-10-18 (patch 234): computer use WORKS, but macOS is missing BOTH grants, so the
+     "open TextEdit and type hello" walk-through cannot pass yet - and that is the whole result. The
+     approval, kill-switch and connector machinery all worked, so this is one System Settings trip away.
+     (a) DONE: the computer-use add-on was OFF; turned it on (POST /capabilities/enable {name:"computer-use"}).
+     GET /computer then reported backend "macos", available true, armed true.
+     (b) **BOTH macOS permissions are missing**, and only Mohamed can grant them. Proof, from LOKI's own
+     process (the Homebrew Python 3.13 that Loki.app launches: /opt/homebrew/Cellar/python@3.13/3.13.16/
+     Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python):
+       - Accessibility: GET /computer's own detail says "the accessibility tree needs Accessibility
+         permission for the app running LOKI", and computer(action=elements) really answered
+         "(no accessibility tree for this window - use action='look' to see it, or click text='...')".
+       - Screen Recording: computer(action=screenshot) answered "error: screenshot failed: screencapture
+         failed - give the app running LOKI Screen Recording permission (System Settings > Privacy &
+         Security > Screen Recording)".
+     To grant: System Settings > Privacy & Security > Accessibility and > Screen Recording: add
+     /Users/mohamed/Applications/Loki.app (and the Python binary above), then restart LOKI. On macOS
+     nothing has to be installed for computer use - the add-on is LOKI's own code.
+     (c) NOT PASSED (diagnosed completely): chat "open TextEdit and type hello" -> the approval really
+     appeared - "LOKI wants to control textedit on this computer (first action: open TextEdit). Allow for
+     this app until LOKI restarts?" - and it is answerable over HTTP (POST /approval {id, approved}), which
+     is how I said Yes -> "computer: opened TextEdit" -> elements -> the no-tree message above -> the model
+     then asked to type hello, and the app it wanted to control was **python, not textedit**: TextEdit
+     opened with NO window and did not come to the front, so the frontmost app was LOKI's own window. Two
+     real fixes live here: after open_app the app must be activated and verified frontmost before any
+     typing, and LOKI should refuse to drive its own process (typing "hello" into your own chat box is
+     never right). I denied that approval (never type blind into an unknown window) and the model answered
+     honestly: "BLOCKED: I don't have permission to control the TEXTEDIT app (automation denied)". Cost:
+     24.3k in / 260 out, 47s, local qwen3.5-9b.
+     (d) NOT PASSED - Screen Recording missing (exact message above). No PNG in screens/.
+     (e) **PASSED, both halves, for real.** Pressed Ctrl+Option+Esc as a real Quartz key event while the
+     engine's kill watcher was live: GET /computer went armed false, tripped "kill hotkey pressed", and
+     the recent-actions log showed the run (approved textedit -> open_app TextEdit ok -> approved the
+     desktop -> elements). The very next chat was refused on the spot: "DENIED: the computer-use kill
+     switch is on (kill hotkey pressed). The owner re-arms it in Settings > Tools > Computer use. Do not
+     retry." -> the model answered "BLOCKED: computer screenshots are disabled by the owner's kill switch".
+     POST /computer/arm re-armed it (sends {} - a bare POST is refused with "Request body is empty or too
+     large.", which cost me a minute and is worth knowing for scripts).
+     (f) Cannot be judged without (b): the accessibility tree is exactly what `click text=...` lands from.
+     (1) `harness_data/.venv/bin/python tools/ship.py --check` (patch 234, **41 suites**): all green.
+     test_tools_core **204 passed / 0 failed**; test_ui_smoke **7 passed / 0 failed** - and it really RAN
+     here, because I fixed its browser detection (see Reports; it skipped on every non-Linux machine, i.e.
+     on the Mac - the machine that actually had the white window it exists to catch).
+     (2) Settings > Tools health map (Chrome over CDP): "**86 work · 17 need setup · 28 off**" with the
+     Needs attention / Connectors / Everything / Check again views, the hidden-from-the-model list
+     (calendar, email, generate_media, notes) and a fix button per row; **no row says Broken or Failing**.
+     Screenshot: docs/operations/screens/tools-health-mac.png.
+     (3) GitHub: `gh auth status` = signed in as m03dev; the connector now has default repo m03dev/loki and
+     Test said "signed in as m03dev". Chat "list the open issues in m03dev/loki" -> a real
+     github({"action":"issues","state":"open"}) call -> "open issues in m03dev/loki: (none)". Then "open an
+     issue titled 'LOKI test - delete me'" -> **the approval prompt appeared** with the exact payload ->
+     I said No -> "DENIED: the user did not approve this tool" -> the model answered BLOCKED. `gh issue
+     list --state all` is still empty: **nothing was created**.
+     (4) Email: NOT SET UP ("no email address yet") - needs Mohamed (account + app password).
+     (5) Calendar and Google: NOT SET UP ("sign in on the Google account card" / "no OAuth client id").
+     (8) Chromium: Playwright 1.64 was already in the venv and its browsers are in
+     ~/Library/Caches/ms-playwright (581 MB), so the install action had nothing to fetch ("Requirement
+     already satisfied"); the add-on is now ON. Verified DIRECTLY against the engine's own browser module,
+     with no model in the loop: available() -> "Chromium ready"; Hacker News -> **228 numbered interactive
+     elements in 1.7s**, react.dev -> **105 in 2.8s**, both "Current Page (Chromium)". Through chat,
+     engine=auto answered both from the TEXT browser (it only switches when the text result looks like it
+     needs JS - react.dev is server-rendered) and my forced engine=chromium request was routed to the
+     browse specialist instead of browse_page, so the chat half is inconclusive while the module half is
+     proof. Worth a look later: the tool takes engine=chromium, but the model prefers conductor(role=browse).
+     (9) peer_files: NOT RUN - the Mac <-> PC link is down on the Mac side: GET /peers says
+     pc ok false, "cannot reach pc at http://127.0.0.1:49952 ([Errno 54] Connection reset by peer)" while
+     relay is true, and the island shows "pc offline". Needs the PC to start/update LOKI (then this is the
+     first thing to re-run).
 - [ ] **M21 The mic button and spoken replies in WKWebView; Telegram stays quiet on the Mac (2026-10-17,
       session 28).** (1) Rebuild Loki.app (`tools/macos/make_loki_app.sh`) - its Info.plist now has
       NSMicrophoneUsageDescription; without it macOS refuses (or kills) microphone access. Open LOKI from Loki.app.
@@ -1619,6 +1686,16 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       it is wired in for when a third machine like that joins (set `KYOJIN_BASE_URL`).
 
 ## Reports
+- 2026-10-18 mac (Ziva): tests/test_ui_smoke.py **never ran on macOS or Windows** - its chromium_path()
+  looked only at $LOKI_SUITE_CHROMIUM and /opt/pw-browsers/chromium, a path that exists in the Linux
+  container and nowhere else, so the suite printed "SKIP: no Playwright/Chromium here" and passed with 0
+  checks even with Playwright and its browsers installed. That is the one suite written to catch the Mac's
+  white window, skipping on the Mac. Now an empty override means "use Playwright's own browser" (it lives
+  in ~/Library/Caches/ms-playwright on macOS, %LOCALAPPDATA%/ms-playwright on Windows) and a missing
+  browser is a skip, not a failure: **7 passed, 0 failed on the Mac** (every file the window loads exists,
+  no script errors, app.js reaches ready, the window tells the engine it is ready, no rescue screen,
+  Settings opens, still no errors). See also the tests/tasks python fix above - new suites are written on
+  Linux and need a Mac/Windows pass before they mean anything.
 - 2026-10-17 cloud (Claude) read everything since 4f5624d: Ziva Mac's M14-M17 report and its three fixes (task
   bench python3, peers nonce, mmo_state stamps), plus the other Claude sessions' session-28 commits. No open
   [claude] requests. Did Ziva's open note: the phone link had the same same-millisecond "replayed request" bug
