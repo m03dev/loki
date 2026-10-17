@@ -3987,6 +3987,33 @@ except Exception as _exc:  # noqa: BLE001 - a broken tool folder must never stop
     print("[loki] tools LOKI wrote could not be loaded: %s" % _exc)
 
 
+# ---------------------------------------------------------------------------
+# Session 28 creative pipelines (engine/creative.py): a short video made on this machine
+# (Wan2GP on the PC; Higgsfield when its key is set), from words or from a picture.
+# ---------------------------------------------------------------------------
+async def make_local_video(prompt: str, image: str = "", seconds: float = 3) -> str:
+    """Wan2GP (LTX-Video distilled, 8 GB profile) or Higgsfield: a short video into videos/."""
+    import creative  # pylint: disable=import-outside-toplevel
+    if image and not (WORKSPACE / image).resolve().is_relative_to(WORKSPACE.resolve()):
+        return "error: the picture must be in the workspace"
+    out = await asyncio.to_thread(creative.make_video, prompt, WORKSPACE, image, float(seconds or 3))
+    return ("made %s with %s%s" % (out["file"], out["backend"], (" (%s)" % out["note"]) if out.get("note") else "")
+            if out.get("ok") else "error: %s" % out.get("error"))
+
+
+LOCAL_TOOLS["make_local_video"] = make_local_video
+_VIDEO_SCHEMA = schema("make_local_video", "Make a short video (1-10 s) on this computer for free: Wan2GP on the PC "
+                       "(text-to-video, or image-to-video when image = a picture in the workspace, e.g. "
+                       "images/fox.png - 'animate this'); falls back to Higgsfield when its key is set. Saved in videos/.",
+                       {"prompt": {"type": "string"}, "image": {"type": "string"}, "seconds": {"type": "number"}},
+                       ["prompt"])
+TOOL_SCHEMAS.append(_VIDEO_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_VIDEO_SCHEMA)
+MODEL_TOOL_NAMES.add("make_local_video")
+TOOL_CATEGORIES["creative"] += ["make_local_video"]
+MODIFYING |= {"make_local_video"}
+
+
 def _local_rank(name: str) -> int:
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
         return SELF_IMPROVE_PRIORITY.index(name) - len(SELF_IMPROVE_PRIORITY) - 1

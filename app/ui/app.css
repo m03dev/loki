@@ -559,13 +559,35 @@ button.danger:hover { color: var(--err); }
 .creation { display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 3px; padding: 6px; border-radius: 12px;
   background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); cursor: pointer; min-width: 0; }
 .creation:hover { border-color: rgba(46,230,214,.6); }
-.creation img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #111; }
+.creation img, .creation video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #111; }
 .creation .creation-ico { display: grid; place-items: center; aspect-ratio: 1; border-radius: 8px; background: #16202a; font-size: 34px; color: #7fe8dc; }
-.creation b { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.creation span:not(.creation-ico) { font-size: 11px; color: var(--muted); }
+.creation > b { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creation > span { font-size: 11px; color: var(--muted); }
 .creation-view { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .creation-view img, .creation-view video { max-width: 100%; max-height: 62vh; object-fit: contain; border-radius: 12px; background: #0b0d12; }
-.creation-actions { display: flex; gap: 8px; }
+.creation-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* session 28: prompt on hover, the star, sounds that play on the tile, filters, the Make box's options */
+.creation-frame { position: relative; border-radius: 8px; overflow: hidden; }
+.creation-prompt { position: absolute; inset: auto 0 0 0; max-height: 100%; overflow: hidden; padding: 22px 8px 7px; font-size: 11px;
+  line-height: 1.35; color: #f2f5f7; background: linear-gradient(to top, rgba(8,10,14,.92) 55%, rgba(8,10,14,0));
+  opacity: 0; transform: translateY(6px); transition: opacity .16s, transform .16s; pointer-events: none;
+  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
+.creation:hover .creation-prompt, .creation:focus-visible .creation-prompt { opacity: 1; transform: none; }
+.creation-star { position: absolute; top: 5px; right: 5px; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  font-size: 16px; line-height: 28px; color: #fff; background: rgba(8,10,14,.55); opacity: 0; transition: opacity .16s; }
+.creation:hover .creation-star, .creation-star.on, .creation-star:focus-visible { opacity: 1; }
+.creation-star.on { color: #ffd166; }
+.creation-badge { position: absolute; left: 6px; top: 6px; font-size: 11px; padding: 1px 6px; border-radius: 6px; color: #fff; background: rgba(8,10,14,.6); }
+.creation audio { width: 100%; height: 30px; margin-top: 2px; }
+.creation.audio .creation-ico { aspect-ratio: 2 / 1; }
+.creations-make select { max-width: 150px; }
+.creations-toggle { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.creations-backend { font-size: 11.5px; margin: 2px 0 8px; }
+.creations-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.creations-filter .chip { font-size: 11.5px; padding: 3px 10px; }
+.creations-filter .chip.on { background: rgba(46,230,214,.18); border-color: rgba(46,230,214,.55); color: var(--text); }
+.creation-full-prompt { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.creation-actions .danger { color: var(--err); }
 
 /* Icons in favour of words: icon buttons, an icon rail for Settings, and the hover tooltip */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0; min-width: 34px; min-height: 32px; padding: 6px; }

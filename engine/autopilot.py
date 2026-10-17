@@ -29,6 +29,9 @@ Duties, each on its own interval:
            step becomes an evolve idea.
   selftest (session 28, engine/selftest.py, LOKI_SELFTEST auto = the PC) once a day, 3 cheap background
            jobs checked from their files; settled every pass; a worse run is a regression.
+  creation (session 28, engine/creative.py) one picture a day from the owner's starred styles and
+           subjects (a fox by default) - LOKI_DAILY_CREATION on|off|auto (auto: on with an NVIDIA GPU,
+           off on the Mac).
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -416,6 +419,29 @@ class Autopilot:
         self._log("report", "Wrote what LOKI learned this week (%s)." % (name or "not saved"), file=name)
         return text
 
+    @staticmethod
+    def _daily_on() -> bool:
+        try:
+            import creative  # pylint: disable=import-outside-toplevel
+            return creative.daily_enabled()
+        except Exception:  # noqa: BLE001
+            return False
+
+    def duty_creation(self) -> str:
+        """Session 28: one picture a day from the owner's starred styles and subjects (a fox by
+        default), when idle. LOKI_DAILY_CREATION on/off; auto = on with an NVIDIA GPU (the PC), off
+        on the Mac. engine/creative.py daily_creation; the picture lands in Settings > Creations."""
+        if self.agent is None or not hasattr(self.agent, "WORKSPACE"):
+            return ""
+        import creations  # pylint: disable=import-outside-toplevel
+        import creative  # pylint: disable=import-outside-toplevel
+        ws = Path(self.agent.WORKSPACE)
+        out = creative.daily_creation(lambda prompt, **kw: creations.make_image(self.agent, prompt, **kw),
+                                      creations.liked_meta(ws), clock=self.clock)
+        if out:
+            self._log("creation", out)
+        return out
+
     # ------------------------------------------------------------ the loop
     def tick(self) -> list:
         """One pass: at most one duty. Returns [(duty, result)] for what ran."""
@@ -457,6 +483,8 @@ class Autopilot:
                 duties.append(("selftest", _env_s("LOKI_SELFTEST_S", 86400), self.duty_selftest))
         except Exception:  # noqa: BLE001
             pass
+        if self.agent is not None and hasattr(self.agent, "WORKSPACE") and self._daily_on():
+            duties.append(("creation", _env_s("LOKI_DAILY_CREATION_CHECK_S", 3600), self.duty_creation))
         with self.lock:
             for name, every, fn in duties:
                 if not self.due(name, every):

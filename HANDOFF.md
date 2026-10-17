@@ -218,6 +218,57 @@ The owner: "keep working and implementing systems" - this one is TALKING TO LOKI
   and WKWebView's real microphone prompts, whether WKWebView in pywebview exposes webkitSpeechRecognition and
   grants getUserMedia (M19), Kokoro spoken replies.
 
+## Session 28 creative pipelines (worktree)
+
+The owner loves the fox picture and wants "more of that stuff". Built in a Claude worktree, committed there, not
+pushed (the parent session merges and ships). **31 suites pass** (`tests/test_creative.py` is new: 93 offline checks,
+fakes only - no download, no GPU, no model). Screens (fake data): `docs/operations/screens/creations-s28-*.png`.
+
+- **Local pictures on the owner's own hardware** (`engine/creative.py`, runner `engine/runners/imagegen.py`):
+  - the PC: **stable-diffusion.cpp** (`sd-cli`, CUDA 12 build + cudart DLLs; Vulkan without NVIDIA) running
+    **Z-Image Turbo GGUF** - `z_image_turbo-Q4_K.gguf` (3.9 GB) + `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` (text encoder)
+    + `ae.safetensors`, cfg 1.0, 8 steps, `--offload-to-cpu --diffusion-fa` (sd.cpp's wiki runs this on 4 GB).
+    Q3_K under 6 GB, Q6_K at 12+ GB (`LOKI_SDCPP_MODEL`). A batch of 4 is one run (`-b 4`).
+  - the Mac: **mflux** (MLX) `mflux-generate-z-image-turbo --model filipstrand/Z-Image-Turbo-mflux-4bit --steps 9`
+    (pre-quantized ~6 GB in all; diffusers Z-Image had crashed the 16 GB M4), `--low-ram` at 16 GB.
+  - auto order is now: local (sdcpp/mflux, once installed) -> diffusers Z-Image -> Qwen (ModelScope) -> Pollinations.
+    Every picture now has a real seed (random when none is given, reported back).
+  - **Install**: Settings > Add-ons > `local-image` / `local-video` cards show the steps and an Install button
+    (`addons_install.plan/install` -> `creative.start_install`, background thread, progress in
+    `harness_data/app/creative.json`, shown on the Creations wall). Same from the command line:
+    `python tools/setup_extras.py local-image|local-video`. Everything goes to `harness_data/tools` and
+    `harness_data/models/imagegen`. sd.cpp: latest GitHub release (`LOKI_SDCPP_TAG` pins one; assets of
+    master-920-2f88688 checked), zips extracted with a path check.
+- **Creations upgrades** (`engine/creations.py`, `app/ui/creations.js`, `app.css`): Make box with a style picker
+  (Fooocus' 25 styles, pixel art first), Enhance (LOKI's model writes the prompt, offline expansion without one),
+  aspect ratio (1:1 ... 16:9, ~1 MP), x4 variations. Every piece made there gets a sidecar
+  `<kind>/.meta/<file>.json` {idea, prompt, negative, style, backend, seed, aspect, liked, daily, parent, model}.
+  Tiles show the prompt on hover and a star; filters (Pictures, Videos, Music & voice, Starred); the viewer has
+  Make more like this (same prompt/negative/style/aspect, 4 variations from seed+1), Animate this, Favourite and
+  Delete (moves file + sidecar to `<workspace>/trash/<kind>/`, never a hard delete). `music/` and `voice/` are on
+  the wall with an audio player on the tile. Bridge: POST /creations/make (style, enhance, aspect, count, seed;
+  kind=video), /creations/like, /creations/delete, /creations/more, /creations/animate; GET /creations adds
+  styles, aspects, `creative` (which maker this machine has, installs). `list_creations`, `creation_file` and
+  `make_image(agent, prompt)` kept compatible (new arguments are keywords) for the MMO.
+- **Video**: Wan2GP on the PC, headless `wgp.py --process <settings.json> --output-dir ... --profile 4 --attention
+  sdpa`, default model_type `ltxv_distilled` (LTX-Video distilled; 3 s = 73 frames at 24 fps), image-to-video with
+  the creation as `image_start`. A template exported from Wan2GP's own UI ("Export Settings") saved as
+  `harness_data/app/wan2gp_template.json` wins (LOKI fills prompt, seed, length, start image) - **the key names
+  are unverified**, so W27 asks Ziva for that template. Wan2GP install: git clone + own venv (`py -3.11` on
+  Windows, `LOKI_WAN2GP_PYTHON`) + torch cu128 + requirements. Fallback: Higgsfield (key set;
+  `LOKI_HIGGSFIELD_VIDEO_APP`, default `higgsfield-ai/dop/standard` - unverified; it gets the prompt only, not the
+  picture). Agent tool `make_local_video(prompt, image, seconds)` (one small block in loki.py).
+- **Daily creation**: autopilot duty `creation` - one picture a day when idle, from the starred styles/subjects
+  (a fox by default), Enhanced, marked `daily`. `LOKI_DAILY_CREATION` on|off|auto; auto = on with an NVIDIA GPU
+  (the PC), off on the Mac. The duty is only listed where it is on.
+
+**Not verified (no GPU, no downloads here):** no sd.cpp/mflux/Wan2GP binary ever ran; sd.cpp's batch file names
+(`out_2.png`), mflux's `--output`/`--low-ram` flags, Wan2GP's settings keys and `--profile` with `--process`,
+the Higgsfield video app id. ZIVA W27 (PC) and M19 (Mac) run them for real and report times and VRAM.
+
+**Next:** a "Remix" (img2img with sd.cpp `-i` / mflux `--image-path`) on the viewer; LoRA styles (sd.cpp
+`--lora-model-dir`); Wan2GP's ACE-Step for music on the PC; the MMO "like" hook can call `creations.set_liked`.
+
 ## Session 27 (cont.): the Mac's white window
 
 The owner reported the Mac shows only a white window (Ziva Mac was looking into it; this session has no access to

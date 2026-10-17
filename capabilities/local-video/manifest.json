@@ -1,0 +1,20 @@
+{
+  "name": "local-video",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Short videos made on the PC: Wan2GP (deepbeepmeep, for small GPUs) run headless, LTX-Video distilled by default, with an 8 GB profile (model parts loaded as needed). Text-to-video and 'Animate this' (image-to-video) in Settings > Creations. Without it, video falls back to Higgsfield when its key is set.",
+  "license": "Wan2GP: see its LICENSE.txt (free for local use); LTX-Video: LTXV Open Weights licence; Wan 2.x Apache-2.0",
+  "homepage": "https://github.com/deepbeepmeep/Wan2GP",
+  "permissions": [
+    "network",
+    "process:spawn",
+    "fs:workspace"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "platforms": ["win32", "linux"],
+  "install": "Install (here) or: python tools/setup_extras.py local-video. Needs git and an NVIDIA GPU; makes its own Python venv in harness_data/tools/Wan2GP (about 5 GB, then the model with the first video).",
+  "setup_extras": "local-video"
+}

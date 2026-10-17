@@ -15,6 +15,8 @@ Opt-in add-ons (never part of `all`; each one only when you ask for it by name):
     python tools/setup_extras.py penecho         PenEcho drawing canvas (npm; AGPL-3.0, separate program)
     python tools/setup_extras.py openhuman       how to get OpenHuman (GPL-3.0; no installer here)
     python tools/setup_extras.py remotion        checks Node/npx for Remotion videos (custom licence)
+    python tools/setup_extras.py local-image     stable-diffusion.cpp + Z-Image Turbo GGUF (PC), mflux (Mac)
+    python tools/setup_extras.py local-video     Wan2GP in its own venv (PC with an NVIDIA GPU)
 
 Use LOKI's own Python (harness_data/.venv) so the engine finds what you install:
     macOS:   harness_data/.venv/bin/python tools/setup_extras.py all
@@ -221,11 +223,34 @@ def listing() -> None:
         print("  %-22s %s" % (name, "installed" if ok else "not installed"))
 
 
+def _creative_install(name: str) -> bool:
+    """local-image / local-video through engine/creative.py (the same code as Settings > Add-ons)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
+    import creative  # pylint: disable=import-outside-toplevel
+    plan = creative.install_plan(name)
+    if not plan.get("supported"):
+        print("  " + str(plan.get("why") or "not available on this machine"))
+        return False
+    for line in plan["steps"]:
+        print("  - " + line)
+    out = creative.start_install(name, thread=False)
+    print("  " + ("installed" if out.get("ok") else "failed: %s" % out.get("error")))
+    return bool(out.get("ok"))
+
+
+def local_image() -> bool:
+    return _creative_install("local-image")
+
+
+def local_video() -> bool:
+    return _creative_install("local-video")
+
+
 STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "agent-reach": agent_reach, "opencode": opencode}
 # Installed only when named: licences that need a decision (AGPL/GPL/custom), separate programs,
 # or big downloads. `all` never includes them.
 OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman,
-          "remotion": remotion}
+          "remotion": remotion, "local-image": local_image, "local-video": local_video}
 
 
 def main(argv: list) -> int:

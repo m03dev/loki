@@ -1140,7 +1140,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import creations  # pylint: disable=import-outside-toplevel
             ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
             self._send_json(200, {"ok": True, "items": creations.list_creations(ws), "games": list_games(UI_DIR, ws),
-                                  "ideas": creations.IDEAS, "making": creations.making()})
+                                  "ideas": creations.IDEAS, "making": creations.making(),
+                                  "styles": creations.styles(), "aspects": list(creations.ASPECTS),
+                                  "creative": creative_summary()})
             return
         if route == "/games/list":
             ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
@@ -1344,7 +1346,29 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if not what:
                 self._send_json(400, {"ok": False, "error": "say what to make"})
                 return
-            self._send_json(200, creations.make_image(state.agent, what))
+            if data.get("kind") == "video":   # session 28: a local video (Wan2GP) or Higgsfield
+                self._send_json(200, creations.make_video(state.agent, what, seconds=_num(data.get("seconds"), 3.0)))
+                return
+            self._send_json(200, creations.make_image(
+                state.agent, what, style=str(data.get("style", ""))[:60], enhance=bool(data.get("enhance")),
+                aspect=str(data.get("aspect", "1:1"))[:8], count=int(_num(data.get("count"), 1)),
+                seed=int(_num(data.get("seed"), 0))))
+            return
+        if route in ("/creations/like", "/creations/delete", "/creations/more", "/creations/animate"):
+            # session 28: the star, delete (to the trash folder), make more like this, animate this
+            import creations  # pylint: disable=import-outside-toplevel
+            rel = str(data.get("path", ""))[:300]
+            ws = Path(getattr(state.agent, "WORKSPACE", "."))
+            if route == "/creations/like":
+                out = creations.set_liked(ws, rel, bool(data.get("liked", True)))
+            elif route == "/creations/delete":
+                out = creations.delete_creation(ws, rel)
+            elif route == "/creations/more":
+                out = creations.more_like(state.agent, rel, count=int(_num(data.get("count"), 4)))
+            else:
+                out = creations.animate(state.agent, rel, str(data.get("prompt", ""))[:600],
+                                        seconds=_num(data.get("seconds"), 3.0))
+            self._send_json(200 if out.get("ok") else 400, out)
             return
         if route == "/sketch":
             # a drawing from the composer's pad: saved as a PNG in the workspace for view_image
@@ -2013,6 +2037,22 @@ def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, 
     if state.jobs is not None:
         state.jobs._avail.clear()  # pylint: disable=protected-access
     return 200, {"ok": True, "capabilities": registry.present()}
+
+
+def _num(value: Any, default: float) -> float:
+    try:
+        return float(value) if value not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def creative_summary() -> dict:
+    """Settings > Creations: which local picture/video maker this machine has (engine/creative.py)."""
+    try:
+        import creative  # pylint: disable=import-outside-toplevel
+        return creative.summary()
+    except Exception as exc:  # noqa: BLE001 - the wall still works without it
+        return {"error": "%s: %s" % (type(exc).__name__, str(exc)[:160])}
 
 
 def capability_install(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:

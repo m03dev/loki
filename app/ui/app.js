@@ -609,6 +609,23 @@ async function loadManifests() {
     if (cap.license) r.append(el("div", "perm", "Licence: " + cap.license));
     if (cap.notice) r.append(el("div", "why", cap.notice));
     for (const p of cap.permissions) r.append(el("div", "perm" + (p.high_risk ? " high" : ""), "• " + p.text));
+    // download installers (local-image / local-video, engine/creative.py): the steps are shown, one click
+    // starts them in the background, Settings > Creations shows the progress
+    const steps = (cap.install || {}).steps || [];
+    if (steps.length && cap.install.supported && !cap.install.installed) {
+      const list = el("div", "perm install", "Install does: " + steps.join("; ") + ".");
+      const go = el("button", "mini", "Install");
+      go.type = "button";
+      go.title = steps.join("\n");
+      go.addEventListener("click", async () => {
+        go.disabled = true;
+        const result = await api("/capabilities/install", { name: cap.name }).catch(() => null);
+        addNotice((result && (result.message || result.error)) || ("Could not install " + cap.name + "."), !(result && result.ok));
+      });
+      r.append(list, go);
+    } else if (steps.length && cap.install.installed) {
+      r.append(el("div", "perm", "Installed on this machine."));
+    }
     if (cap.missing && cap.missing.length) {
       r.append(el("div", "why", "Needs " + cap.missing.join(", ")));
       const plan = cap.install || {};

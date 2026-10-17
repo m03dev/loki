@@ -63,7 +63,8 @@ ROLES: dict[str, dict] = {
               "summary": "video/audio via yt-dlp: url=..., task='transcript' (default), 'info', "
                          "'audio', 'video', or 'search: <words>'", "ask": False},
     "image": {"capabilities": ("image-gen",), "permission": "fs:workspace",
-              "summary": "make an image from task=<prompt> (Z-Image Turbo locally, or Pollinations); "
+              "summary": "make an image from task=<prompt> (locally: stable-diffusion.cpp on the PC, mflux on "
+                         "the Mac, or Z-Image Turbo; else Pollinations); "
                          "saved in images/", "ask": False},
     "reach": {"capabilities": ("agent-reach",), "permission": "network",
               "summary": "Agent Reach: url=<page> reads it as text; task='github: <words or repo url>'; "
@@ -317,6 +318,27 @@ def _conductor_media(self, task: str, url: str) -> str:
     return json.dumps(result, default=str)[:MAX_TEXT]
 
 
+IMAGE_OPTIONS = ("width", "height", "seed", "count", "negative", "backend")
+
+
+def _conductor_make_image(self, task: str, options: dict | None = None) -> dict:
+    """The image specialist as data: {"ok", "file", "files", "seed", "seeds", "backend"} or
+    {"ok": False, "error"}. options: width, height, seed, count (1-4), negative, backend
+    (Settings > Creations passes them; the policy check is the same as the tool's)."""
+    if not (task or "").strip():
+        return {"ok": False, "error": "image needs task=<what to draw>"}
+    capability, why = self.pick("image")
+    if not capability:
+        return {"ok": False, "error": "no specialist for 'image' is ready - %s" % why}
+    job = {"prompt": task.strip(), "out_dir": str(_workspace(self.env) / "images"),
+           "backend": str(self.env.get("LOKI_IMAGE_BACKEND", "auto"))}
+    for key, value in (options or {}).items():
+        if key in IMAGE_OPTIONS and value not in (None, ""):
+            job[key] = value
+    timeout = int(self.env.get("LOKI_IMAGE_TIMEOUT", "900") or 900) * max(1, min(int(job.get("count") or 1), 4))
+    return self._runner("imagegen", job, timeout=timeout)
+
+
 def _conductor_image(self, task: str) -> str:
     if not (task or "").strip():
         return "error: image needs task=<what to draw>"
@@ -352,6 +374,7 @@ def _conductor_reach(self, task: str, url: str) -> str:
 
 Conductor.media = _conductor_media
 Conductor.image = _conductor_image
+Conductor.make_image = _conductor_make_image
 Conductor.reach = _conductor_reach
 
 

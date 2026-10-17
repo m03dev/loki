@@ -1,9 +1,14 @@
 """Make one image. stdin/stdout JSON, like every runner.
 
     {"prompt": "...", "width": 1024, "height": 1024, "out_dir": "<workspace>/images",
-     "backend": "auto" | "zimage" | "pollinations", "seed": 0}
+     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "pollinations", "seed": 0,
+     "count": 1-4, "negative": "..."}
+    -> {"ok", "file", "files", "seed", "seeds", "backend", ...}   (seed 0 = a random one, reported)
 
 Backends, in "auto" order:
+  sdcpp / mflux this machine's own local backend once installed (engine/creative.py, session 28):
+                stable-diffusion.cpp with Z-Image Turbo GGUF on the PC (8 GB), mflux with
+                Z-Image Turbo 4-bit on the Mac (MLX). A batch of 4 is one run.
   zimage        Z-Image Turbo (Tongyi-MAI/Z-Image-Turbo, Apache-2.0, 6B, 8-9 steps) through
                 diffusers on CUDA or Apple MPS. On a GPU with less than 12 GB (the RTX 3070 Ti
                 has 8 GB) the model is offloaded to system RAM piece by piece: slower, but it
@@ -16,6 +21,7 @@ Backends, in "auto" order:
 """
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -111,17 +117,40 @@ def zimage_ready():
     return zimage_status()[0]
 
 
+def _creative():
+    """engine/creative.py (session 28: stable-diffusion.cpp on the PC, mflux on the Mac). The
+    runner starts with `python -I`, so the engine folder is added to the path by hand."""
+    engine_dir = str(Path(__file__).resolve().parents[1])
+    if engine_dir not in sys.path:
+        sys.path.insert(0, engine_dir)
+    import creative  # pylint: disable=import-outside-toplevel
+    return creative
+
+
+def local_status():
+    """(name, ready, why) of this machine's own local backend: sdcpp (PC) or mflux (Mac)."""
+    try:
+        status = _creative().local_image_status()
+        return status["backend"], bool(status["ready"]), status.get("why", "")
+    except Exception as exc:  # noqa: BLE001
+        return "sdcpp", False, "%s: %s" % (type(exc).__name__, str(exc)[:160])
+
+
 def plan_order(backend=None):
     """Which backends an image request tries here, in order, and why any are skipped.
     No image is made and nothing is sent anywhere (LOKI's System check uses this)."""
     backend = str(backend or os.environ.get("LOKI_IMAGE_BACKEND", "auto")).lower()
     if backend != "auto":
         return {"order": [backend], "skipped": {}, "forced": True}
-    ready, why = zimage_status()
-    skipped = {} if ready else {"zimage": why}
+    local, local_ready, local_why = local_status()
+    skipped = {} if local_ready else {local: local_why}
+    ready, why = zimage_status()     # diffusers Z-Image stays the next try (the PC has it from session 22)
+    if not ready:
+        skipped["zimage"] = why
     if not os.environ.get("MODELSCOPE_API_KEY"):
         skipped["qwen"] = "MODELSCOPE_API_KEY is not set"
-    order = (["zimage"] if ready else []) + (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + ["pollinations"]
+    order = ([local] if local_ready else []) + (["zimage"] if ready else []) + \
+        (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + ["pollinations"]
     return {"order": order, "skipped": skipped, "forced": False}
 
 
@@ -320,13 +349,37 @@ def pollinations(prompt, width, height, out_dir, seed):
     return {"file": str(path), "backend": "pollinations", "note": "made by a free third-party service"}
 
 
+def local(prompt, width, height, out_dir, seed, count=1, negative=""):
+    """sd.cpp (PC) or mflux (Mac) through engine/creative.py; a whole batch in one go."""
+    return _creative().run_local_image(prompt, negative, width, height, seed, count, Path(out_dir))
+
+
+def one_by_one(fn, prompt, width, height, out_dir, seed, count):
+    """A batch from a backend that makes one picture per call: seeds seed, seed+1, ..."""
+    files, seeds, first = [], [], {}
+    for i in range(count):
+        try:
+            result = fn(prompt, width, height, out_dir, seed + i)
+        except Exception:  # noqa: BLE001 - keep what was made; fail only when nothing was
+            if files:
+                break
+            raise
+        first = first or result
+        files.append(result["file"])
+        seeds.append(seed + i)
+    return {**first, "file": files[0], "files": files, "seeds": seeds, "seed": seeds[0]}
+
+
 def main():
     job = json.loads(sys.stdin.read() or "{}")
     prompt = str(job.get("prompt") or "").strip()
     width = max(256, min(int(job.get("width") or 1024), 2048)) // 16 * 16
     height = max(256, min(int(job.get("height") or 1024), 2048)) // 16 * 16
     out_dir = str(job.get("out_dir") or "images")
-    seed = int(job.get("seed") or 0)
+    # Always a real seed, so a creation can be remade or varied later ("make more like this").
+    seed = int(job.get("seed") or 0) or random.randint(1, 2**31 - 1)
+    count = max(1, min(int(job.get("count") or 1), 4))
+    negative = str(job.get("negative") or "").strip()
     backend = str(job.get("backend") or os.environ.get("LOKI_IMAGE_BACKEND", "auto")).lower()
     try:
         if not prompt:
@@ -335,10 +388,14 @@ def main():
         errors = []
         for name in order:
             try:
+                if name in ("sdcpp", "mflux", "local"):
+                    result = local(prompt, width, height, out_dir, seed, count, negative)
+                    print(json.dumps({"ok": True, **result}))
+                    return
                 fn = {"zimage": zimage, "qwen": qwen, "pollinations": pollinations}.get(name)
                 if fn is None:
-                    raise ValueError("unknown backend %r (zimage, qwen, pollinations)" % name)
-                result = fn(prompt, width, height, out_dir, seed)
+                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, pollinations)" % name)
+                result = one_by_one(fn, prompt, width, height, out_dir, seed, count)
                 print(json.dumps({"ok": True, **result}))
                 return
             except Exception as exc:  # noqa: BLE001 - try the next backend

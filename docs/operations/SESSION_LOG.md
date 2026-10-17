@@ -26,6 +26,14 @@ Concise dated records of meaningful work. Newest at the top.
   whisper add-on, CSP media-src, Loki.app NSMicrophoneUsageDescription. Discord not built (needs a gateway).
 - tests/test_channels.py (fake Telegram on loopback) in SUITES; tests/voice_preview/shot.py (headless Chromium,
   fake mic -> WAV -> text). Real machines: ZIVA W27 (PC), M19 (Mac); Needs Mohamed: a bot from @BotFather.
+## 2026-10-17 - Session 28 (Claude, worktree): creative pipelines - local pictures, video, a better Creations
+
+- engine/creative.py: stable-diffusion.cpp + Z-Image Turbo GGUF (PC, 8 GB) and mflux 4-bit (Mac) as the image
+  runner's first backend, chosen per machine; installers for local-image / local-video (Wan2GP) from Settings >
+  Add-ons or setup_extras.py; Wan2GP headless video (LTX distilled) with Higgsfield fallback; the daily creation.
+- Creations: styles, Enhance, aspect, x4, metadata sidecars, prompt on hover, star, filters, make more like this,
+  animate this, delete to trash, music/voice tiles. Autopilot duty `creation`; tool make_local_video.
+- tests/test_creative.py (93, fakes) in SUITES; all 31 suites pass. Real machines: ZIVA W27 (PC), M19 (Mac).
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 

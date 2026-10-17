@@ -44,18 +44,39 @@ def manual_hint(name: str) -> str:
     return MANUAL.get(str(name or "").strip(), "")
 
 
+# Add-ons LOKI installs itself with downloads (engine/creative.py, session 28): local-image =
+# stable-diffusion.cpp + Z-Image Turbo GGUF (PC) or mflux (Mac); local-video = Wan2GP (PC).
+# They run in the background; Settings > Creations shows the progress.
+STEPS_INSTALLERS = ("local-image", "local-video")
+
+
 def plan(name: str) -> dict:
-    """What installing `name` means: {"pip": [...], "manual": "..."} (one or both empty)."""
-    return {"pip": pip_specs(name), "manual": manual_hint(name)}
+    """What installing `name` means: {"pip": [...], "manual": "..."} (one or both empty), plus
+    {"steps", "installed"} for the download installers."""
+    out = {"pip": pip_specs(name), "manual": manual_hint(name)}
+    if str(name or "").strip() in STEPS_INSTALLERS:
+        try:
+            import creative  # pylint: disable=import-outside-toplevel
+            steps = creative.install_plan(str(name).strip())
+            out.update(steps=steps.get("steps", []), installed=bool(steps.get("installed")),
+                       supported=bool(steps.get("supported")))
+            if not steps.get("supported") and steps.get("why"):
+                out["manual"] = steps["why"]
+        except Exception as exc:  # noqa: BLE001
+            out.update(steps=[], installed=False, supported=False, manual="%s: %s" % (type(exc).__name__, exc))
+    return out
 
 
 def installable(name: str) -> bool:
-    return bool(pip_specs(name))
+    return bool(pip_specs(name)) or str(name or "").strip() in STEPS_INSTALLERS
 
 
 def install(name: str, python: str = "", run: Callable | None = None, timeout: float = 1800.0) -> dict:
     """pip-install this add-on's requirements into LOKI's venv. Returns {ok, specs, log, error}."""
     name = str(name or "").strip()
+    if name in STEPS_INSTALLERS:
+        import creative  # pylint: disable=import-outside-toplevel
+        return creative.start_install(name)
     specs = pip_specs(name)
     if not specs:
         hint = manual_hint(name)

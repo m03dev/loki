@@ -894,6 +894,35 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       speech service: the notice must point to Add-ons > whisper). (8) The speaker button next to the mic: on,
       ask something - the reply is read aloud (the window's voice; Kokoro when `pip install kokoro soundfile`
       is in the venv). Screenshot docs/operations/screens/voice-windows.png. Report under Reports.
+- [ ] **W30 Session 28 creative pipelines on the PC (2026-10-17) - local pictures with stable-diffusion.cpp, a 3 s
+      video with Wan2GP.** Built in the cloud with fakes only; nothing here has run on a GPU. After the update:
+      (1) `ship.py --check` (test_creative: report the line).
+      (2) Settings > Add-ons > **local-image** > Install (or `harness_data\.venv\Scripts\python.exe
+      tools\setup_extras.py local-image`). It downloads the sd.cpp CUDA 12 build + cudart into
+      harness_data\tools\sdcpp\ and z_image_turbo-Q4_K.gguf, Qwen3-4B-Instruct-2507-Q4_K_M.gguf, ae.safetensors into
+      harness_data\models\imagegen\ (~7 GB). Settings > Creations shows the progress line. Report: how long, and the
+      `harness_data\app\creative.json` "sdcpp" record. If the GitHub asset names changed, paste the release's list.
+      (3) Settings > Creations: "a red fox curled up asleep in fresh snow", style **Pixel Art**, 1:1, Make it. The
+      backend line must say "Pictures: Z-Image Turbo Q4_K ... on this computer". Report: seconds per picture, peak
+      VRAM (`nvidia-smi --query-gpu=memory.used --format=csv -l 1` in another window), and whether the tile's hover
+      shows the prompt. Then the same with **x4** (one sd.cpp run with `-b 4`: are there 4 files? sd.cpp names them
+      out.png, out_2.png...; if the names differ, paste `dir images`), with **Enhance** on, and 16:9.
+      Run the sd-cli line by hand if it fails (the argv is in engine/creative.py `sdcpp_argv`) and paste its error.
+      (4) Star one, open it: **Make more like this** (4 more, same style, next seeds), **Delete** one (it must be in
+      workspace\trash\images\). Music: if ACE-Step runs, `make_music` a lofi fox song - it must play on its tile.
+      (5) Settings > Add-ons > **local-video** > Install (git clone Wan2GP into harness_data\tools\Wan2GP, its own
+      venv with `py -3.11` - install Python 3.11 first if `py -3.11 --version` fails - torch cu128, requirements).
+      Then start Wan2GP's UI once by hand (`harness_data\tools\Wan2GP\.venv\Scripts\python.exe wgp.py`), pick
+      **LTX Video distilled** image-to-video, make one 3 s clip there, and **Export Settings** to
+      `harness_data\app\wan2gp_template.json` (LOKI only fills prompt, seed, video_length, image_start). Report the
+      exact `model_type` and key names in that file - LOKI's built-in defaults (`ltxv_distilled`, `image_start`,
+      `image_prompt_type: "S"`, `video_length`) are guesses.
+      (6) In Creations open the fox picture > **Animate this**: a 3 s video must appear on the wall. Report the time,
+      peak VRAM, Wan2GP's errors if any (`wgp.py --process` output is in the job's error line), and whether
+      `--profile 4` works with `--process`.
+      (7) Daily creation: it is ON for the PC by default. Leave LOKI idle; the next day Creations should have one
+      new picture marked "daily" (autopilot log line "started today's picture"). Report the template's keys under
+      Reports (never commit harness_data); screenshots to docs/operations/screens/creations-pc-*.png.
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1292,6 +1321,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       W27): Settings > General card on the Mac says "This machine answers: no - auto: only the Windows PC
       answers", and a Telegram message is answered exactly once (by the PC). Screenshot
       docs/operations/screens/voice-mac.png. Report under Reports.
+- [ ] **M22 Session 28 creative pipelines on the Mac (2026-10-17) - local pictures with mflux.** (After M18.)
+      (1) `harness_data/.venv/bin/python tools/ship.py --check` (test_creative line).
+      (2) Settings > Add-ons > **local-image** > Install (or `tools/setup_extras.py local-image`): pip-installs mflux
+      into harness_data/.venv. Check `harness_data/.venv/bin/mflux-generate-z-image-turbo --help` and paste the
+      lines for `--output`, `--low-ram`, `--steps`, `--model` (LOKI passes those; engine/creative.py `mflux_argv`).
+      (3) Settings > Creations: "a red fox curled up asleep in fresh snow", style Pixel Art, Make it. The first run
+      downloads filipstrand/Z-Image-Turbo-mflux-4bit (~6 GB). Report: download time, seconds per picture after
+      that, Activity Monitor's memory pressure and swap during it (the 16 GB M4 crashed with diffusers Z-Image - it
+      must NOT here), and the backend line ("Z-Image Turbo 4-bit on MLX"). Then x4 and Enhance.
+      (4) Star, Make more like this, Delete (-> workspace/trash/images/), the hover prompt, music/voice tiles (`speak`
+      something: it must play on its tile).
+      (5) Video on the Mac: Animate this must be greyed out with "no local video on this machine ... Higgsfield key"
+      unless a Higgsfield key is set; with a key, report whether `higgsfield-ai/dop/standard` is accepted.
+      (6) Daily creation is OFF on the Mac by default: confirm no "daily" picture appears. Report under Reports.
 
 ## Needs Mohamed
 

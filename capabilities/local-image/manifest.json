@@ -1,0 +1,20 @@
+{
+  "name": "local-image",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Pictures made on this computer, free and private. The PC: stable-diffusion.cpp (one C++ binary, CUDA 12 build; Vulkan without NVIDIA) running Z-Image Turbo as GGUF (Q4_K + Qwen3-4B text encoder, fits 8 GB with CPU offload). The Mac: mflux (MLX) running Z-Image Turbo 4-bit. Once installed, the image specialist and Settings > Creations use it first.",
+  "license": "stable-diffusion.cpp MIT; mflux MIT; Z-Image Turbo Apache-2.0; Qwen3-4B Apache-2.0",
+  "homepage": "https://github.com/leejet/stable-diffusion.cpp",
+  "permissions": [
+    "network",
+    "process:spawn",
+    "fs:workspace"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "runners/imagegen.py",
+  "install": "Install (here) or: python tools/setup_extras.py local-image. Downloads about 7 GB into harness_data/ (the PC), or pip-installs mflux and fetches about 6 GB with the first picture (the Mac).",
+  "setup_extras": "local-image"
+}
