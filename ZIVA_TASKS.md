@@ -572,7 +572,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       service). An engine started without the app now restarts itself after **Update everything**
       (it starts a new copy and exits). Confirm that works headless.
 
-- [ ] **W17 Session 22 on the real PC (2026-10-16).** Restart LOKI so it runs master (the new
+- [x] **W17 Session 22 on the real PC (2026-10-16).** Restart LOKI so it runs master (the new
       updater no longer opens the GitHub account picker). Then: (1) `tools\ship.py --check`, report
       the 21 suite lines; (2) LOKI World: Settings > LOKI World - is it the three.js world (soft
       shadows, bloom, the Mac as an island with a light bridge)? Report the fps in the HUD at high
@@ -583,6 +583,32 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       token): report the backend line. Do NOT install TimesFM unless Mohamed says so (its weights
       are non-commercial); (6) **read the Mac's diagnosis:** `POST /peers/diagnose
       {"peer":"mohameds-mac-mini"}` and paste the whole JSON under Reports (it is redacted).
+  -> Ziva (Windows), 2026-10-16: DONE, all six. THE UPDATE BUG: the PC had NO git credential
+     helper, so Git Credential Manager opened its account picker (cancelled -> 403) and the
+     fetch failed - `loki_app.log` showed repeated "GitHub sign-in needed on this PC". Fixed with
+     `gh auth setup-git` (wires the gh token as the helper); `git fetch` now succeeds silently and
+     LOKI updated itself. Then restarted LOKI onto master (v0.16).
+     (1) `tools/ship.py --check` on the real PC: ALL 21 suites green - test_loki 534, hardening
+     134, integrations 101, workers 72, offline_e2e exit 0, peers 62, first_layer 54, updater 99,
+     team 35, events 46, portal 225, phone_link 69, systems 100, tool_guard 42, autopilot 19,
+     role_routing 10, stubs 5, evals 20, relay 27, workbench 24, models_media 39.
+     (2) three.js: it WAS the classic renderer (world.js fell back silently) because .gitignore's
+     unanchored `addons/` had hidden the vendored three add-ons - I found this independently the
+     same way M8 did and then adopted M8's fix (dcf966f) to keep one version. After it: the panel
+     is three.js (rev 187dev) on WebGL 2, real GPU (ANGLE / RTX 3070 Ti D3D11), soft PCF shadow
+     maps (2048 at high) + UnrealBloom + ACES, and the Mac is an island joined by a light bridge
+     (World.data.machines = mohameds-mac-mini, ok, relay, ~0.5 s). HUD fps at HIGH quality on the
+     3070 Ti: 60 fps (perf.ema 16.67 ms, 77 draws). Screenshot docs/operations/screens/
+     world-three-windows.png (1544x600, real render).
+     (3) `/` opens the palette (20 commands incl /review and /rewind). `/review` after a change
+     showed a real unified diff; `/rewind` put it back - "Rewound to f8796cb7f814 (removed 1 new
+     file(s)). Undo with /rewind -> 5c1e857259c0".
+     (4) pulled hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0 via Settings > Local models: download
+     SUCCEEDED (3.0 GB). The smoke test FAILS TO LOAD, though: Ollama returns "read GGUF metadata
+     ...: unsupported tensor 'output.weight' size overflows" - this Ollama cannot
+     run the ternary weights (update Ollama). `ollama --version` = 0.40.5.
+     (5) `GET /forecast` -> backend "statistical" (timesfm_installed false). TimesFM was NOT installed.
+     (6) /peers/diagnose JSON is pasted under Reports.
 
 ## Ziva (Mac) - the Mac mini
 
@@ -802,6 +828,67 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-16 windows (Ziva) W17, session 22 - all six done. THE UPDATE BUG was on the PC: no git
+  credential helper, so Git Credential Manager opened its account picker and the fetch failed
+  (log: "GitHub sign-in needed on this PC"); `gh auth setup-git` wired the gh token and `git fetch`
+  now works silently. 21 suites green. LOKI World is three.js once M8's fix (dcf966f) is on the
+  PC - 60 fps at high quality on the RTX 3070 Ti, screenshot docs/operations/screens/
+  world-three-windows.png. / palette + /review diff + /rewind verified in a real Chromium.
+  Ternary-Bonsai pulled (3.0 GB) but Ollama 0.40.5 cannot load it (unsupported tensor
+  'output.weight'); /forecast backend = statistical. The Mac's own diagnosis, pasted in full:
+```json
+{
+  "ok": true,
+  "name": "mohameds-mac-mini",
+  "time": 1792211679.59887,
+  "busy": {
+    "chat_request": false,
+    "task_request": false,
+    "agent_running": false,
+    "since_last_request_s": null
+  },
+  "progress": [],
+  "system_check": {
+    "running": false,
+    "summary": "",
+    "rows": []
+  },
+  "local_models_loaded": [
+    {
+      "name": "loki-qwen3.5-9b-agent:latest",
+      "size_gb": 6.2,
+      "vram_gb": 6.2,
+      "until": "2026-10-16T22:56:23.393012-06:00"
+    }
+  ],
+  "model": "smart",
+  "memory": {
+    "swap": "total = 4096.00M  used = 2854.06M  free = 1241.94M  (encrypted)",
+    "free_percent": 66
+  },
+  "update": {
+    "enabled": true,
+    "branch": "master",
+    "git": true,
+    "commit": "dcf966f32d4f",
+    "dirty": [],
+    "version": "0.16",
+    "patch": 200,
+    "label": "v0.16 \u00b7 patch 200",
+    "checked": 1792211504.1492538,
+    "current": "dcf966f32d4f",
+    "latest": "dcf966f32d4f",
+    "behind": 0,
+    "ahead": 0,
+    "updated_to": "",
+    "update_available": false,
+    "note": "up to date",
+    "error": "",
+    "problem": ""
+  },
+  "logs": {}
+}
+```
 - 2026-10-16 mac (Ziva) M8+M9: memory pressure WARN (level 2, 20% free), swap 2693/4096 MB, top
   RSS llama-server 6.8 GB (Ollama) > node 509 MB > WebKit 221 MB - LOKI itself is ~50 MB. The bare
   /health curl needs the bearer token (ok true with it). Quit+reopen came back in ~10 s, no

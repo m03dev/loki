@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-16 (session 22, Claude in the cloud).
+Last updated: 2026-10-16 (session 22, the PC + the Mac + Claude).
 
 ## Ziva (Mac), 2026-10-16: the three.js world was dead in every checkout - fixed
 
@@ -22,6 +22,23 @@ Last updated: 2026-10-16 (session 22, Claude in the cloud).
   home 34.7 ms - higher quality and faster than the classic fallback (14.6 / 48 ms). Glass text
   contrast 9.7:1 (home) / 11.5:1 (World panel) over the lit world = WCAG AAA. Screens:
   `docs/operations/screens/glass-home-mac.png`, `world-three-mac.png`. Tasks M8/M9 answered in ZIVA_TASKS.
+
+## Ziva (Windows), 2026-10-16: the PC's update bug fixed, and W17 verified
+
+- The PC had NO git credential helper at all, so Git Credential Manager opened its interactive
+  account picker (cancelled -> 403) and the fetch failed - `harness_data/app/loki_app.log` showed
+  repeated "GitHub sign-in needed on this PC", and LOKI could not update. Fixed on the machine
+  with `gh auth setup-git` (wires the gh token as the credential helper); `git fetch` now works
+  with no prompt and LOKI updated itself. (Claude's Mac-side updater fix bdfba9b was already on
+  master; this was the PC's own missing piece.)
+- Pulled master and ran W17 end to end: 21 suites green; LOKI World is three.js once M8's fix is
+  on the PC (60 fps at high quality on the RTX 3070 Ti, WebGL 2 via ANGLE/D3D11, so the earlier
+  silent classic fallback is gone); the "/" command palette, /review (a real unified diff) and
+  /rewind (removed the file) were verified in a real Chromium over CDP;
+  hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0 pulls (3.0 GB) but Ollama 0.40.5 cannot load it
+  ("unsupported tensor 'output.weight' size overflows"); GET /forecast backend = statistical
+  (TimesFM deliberately not installed). Screenshot docs/operations/screens/world-three-windows.png.
+  Details and the Mac's diagnosis JSON are in ZIVA_TASKS.md (W17 + Reports).
 
 ## Session 22 (2026-10-16, Claude in the cloud): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield, Mac hangs
 
