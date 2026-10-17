@@ -19,6 +19,15 @@ Concise dated records of meaningful work. Newest at the top.
 - engine/presence.py + /world/presence, /peer/presence: the owner's avatars and chat between machines.
 - app/ui/mmo/mmo_core.js: Play in Settings > LOKI World (WASD, camera, jump, zones over the bridges).
 - tests/test_mmo.py (77) in SUITES; tests/mmo_preview/ screenshot harness.
+## 2026-10-17 - Session 27 (Claude, worktree): research ports - aider, bigtool, instructor, ReWOO, Reflexion, STORM, Fooocus, ACE-Step, Kokoro
+
+- docs/integrations/research-2026-10-17.md: 36 new open-source projects ranked (licence, stars, what to take,
+  decision, sources), incl. MMO notes (Colyseus, snapshot interpolation, bitECS/miniplex).
+- New engine modules: repo_map, edit_blocks, tool_select, structured, rewoo, reflexion, deep_research,
+  image_prompt (+ data/image_styles.json), music, voice; licences in engine/licenses/.
+- New tools: repo_map, apply_edits, find_tools, extract_structured, plan_and_solve, reflect, web_search,
+  deep_research, enhance_image_prompt, make_music, speak (one registration block in loki.py).
+- tests/test_research_ports.py (141, offline); all 26 suites pass. Live checks: ZIVA W22 / M14.
 
 ---
 

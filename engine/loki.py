@@ -3508,6 +3508,288 @@ SELF_IMPROVE_PRIORITY = ["check_loki", "ship_loki", "read_file", "edit_file", "i
                          "write_file", "list_tree", "run_subagent", "memory", "task_tracker", "undo_edit"]
 
 
+# --- Session 27 research ports (docs/integrations/research-2026-10-17.md) --------------------
+# aider (repo map, SEARCH/REPLACE edits), langgraph-bigtool (find_tools), instructor (structured
+# output), ReWOO (plan_and_solve), Reflexion (reflect), STORM (deep_research + web_search),
+# Fooocus (image prompt styles), ACE-Step (make_music), Kokoro (speak). Licences: engine/licenses/.
+import deep_research  # noqa: E402
+import edit_blocks  # noqa: E402
+import image_prompt  # noqa: E402
+import music  # noqa: E402
+import reflexion  # noqa: E402
+import repo_map  # noqa: E402
+import rewoo  # noqa: E402
+import structured  # noqa: E402
+import tool_select  # noqa: E402
+import voice  # noqa: E402
+
+FOUND_TOOLS: list = []          # tools find_tools added to a local model's list (newest last)
+REWOO_TOOLS = {                 # what plan_and_solve may run: read-only tools only
+    "search_files": {"description": "Search the project's files with a regular expression. Input: the pattern.",
+                     "arg": "pattern"},
+    "read_file": {"description": "Read a file. Input: the path, or {\"filename\": ..., \"start_line\": n, "
+                                 "\"end_line\": m}.", "arg": "filename"},
+    "list_tree": {"description": "Show the project's folders. Input: a sub-folder or '.'.", "arg": "subdir"},
+    "repo_map": {"description": "The most important functions and classes of the code, ranked for a topic. "
+                                "Input: the topic.", "arg": "focus"},
+    "web_search": {"description": "Search the web. Input: the query.", "arg": "query"},
+    "read_web": {"description": "Read a web page as text. Input: the URL.", "arg": "url"},
+    "memory": {"description": "Recall what LOKI remembers. Input: what to recall.", "arg": "query"},
+}
+
+
+async def _port_ask(prompt: str, system: str = "", schema: dict | None = None, max_tokens: int = 0) -> str:
+    """One plain model call for the research-port tools, on the model this request uses. With a schema
+    a local server gets it as response_format (constrained JSON); a server that refuses it is asked again
+    without. <think> blocks are removed from the answer."""
+    provider = active_model_name()
+    cfg = MODELS[provider]
+    client = make_client()
+    msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+    kwargs = {"model": cfg.model, "messages": msgs,
+              "max_tokens": int(max_tokens or os.getenv("LOKI_PORT_TOKENS", "2048"))}
+    if "11434" in cfg.base_url or "ollama" in cfg.api_key:
+        kwargs["extra_body"] = {"think": False}
+    if schema and _cfg_is_local(cfg) and (provider or cfg.base_url) not in CONSTRAINED_REFUSED:
+        kwargs["response_format"] = structured.response_format(schema)
+    started = time.monotonic()
+    try:
+        response = await _model_request(client, kwargs, cfg, provider)
+    except Exception:  # noqa: BLE001 - e.g. a server without json_schema: plain request once
+        if "response_format" not in kwargs:
+            raise
+        kwargs.pop("response_format", None)
+        CONSTRAINED_REFUSED.add(provider or cfg.base_url)
+        response = await _model_request(client, kwargs, cfg, provider)
+    _record_usage(response, kwargs, cfg, started)
+    _record_request_usage(provider, response)
+    return structured.strip_thinking(response.choices[0].message.content or "")
+
+
+def repo_map_tool(focus: str = "", subdir: str = ".", max_chars: int = 6000, files: str = "") -> str:
+    """aider's repo map of the workspace, ranked for `focus` (a question, symbol names or file names)."""
+    base = resolve_in_workspace(subdir or ".")
+    chat = [f.strip() for f in str(files or "").split(",") if f.strip()]
+    return repo_map.build(WORKSPACE, focus=str(focus or ""), chat_files=chat,
+                          max_chars=max(500, min(int(max_chars or 6000), 20000)),
+                          subdir=str(base.relative_to(WORKSPACE.resolve())) if base != WORKSPACE.resolve() else ".")
+
+
+def apply_edits(blocks: str) -> str:
+    """aider's SEARCH/REPLACE blocks, several files in one call; undo_edit reverts a file."""
+    out = edit_blocks.apply(str(blocks or ""), resolve_in_workspace)
+    for name in out["applied"]:
+        try:
+            note = _check_written(name)
+        except Exception:  # noqa: BLE001
+            note = ""
+        if note:
+            out["report"] += "\n" + note
+    return out["report"]
+
+
+def _findable_schemas() -> list:
+    schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
+               and _tool_enabled(t["function"]["name"])]
+    schemas = [t for t in schemas if not policy.CAPABILITY_TOOLS.get(t["function"]["name"])
+               or CAPABILITIES.is_enabled(policy.CAPABILITY_TOOLS[t["function"]["name"]])]
+    if not is_godot_workspace():
+        schemas = [t for t in schemas if t["function"]["name"] not in GODOT_ONLY_TOOLS]
+    return [t for t in schemas if t["function"]["name"] != "find_tools"]
+
+
+def find_tools(query: str, limit: int = 3) -> str:
+    """langgraph-bigtool's retrieve_tools: the best tools for a need; they join a local model's list."""
+    schemas = _findable_schemas()
+    found = [name for name, _score in tool_select.rank(query, schemas, limit=max(1, min(int(limit or 3), 6)))]
+    if not found:
+        return "No tool matches '%s'. Try other words (what you want to do, not how)." % query
+    tool_select.promote(LOCAL_TOOL_PRIORITY, found, anchor="find_tools", unlocked=FOUND_TOOLS)
+    return ("These tools can do it and are available from your next step on - call them directly:\n"
+            + tool_select.describe(schemas, found))
+
+
+async def plan_and_solve(task: str) -> str:
+    """ReWOO: one plan with all tool calls, the tools run, then one answer from the evidence."""
+    if not str(task or "").strip():
+        return "error: say what to find out"
+
+    async def ask(prompt):
+        return await _port_ask(prompt)
+
+    async def run_tool(name, args):
+        if name == "memory":
+            args = {"action": "recall", **args}
+        fix = _guard_call(name, json.dumps(args))
+        if not fix.ok:
+            return "error: %s" % fix.error
+        return await call_tool(fix.name, fix.args)
+
+    workers = {k: v for k, v in REWOO_TOOLS.items() if k in LOCAL_TOOLS}
+    out = await rewoo.run(str(task), ask, workers, run_tool, progress=lambda t: _progress("thinking", t))
+    steps = "\n".join("%s = %s[%s] -> %s" % (s["var"], s["tool"] or "-", s["input"][:120],
+                                            " ".join(str(s.get("result", "")).split())[:160]) for s in out["steps"])
+    return "%s\n\n(plan and evidence)\n%s" % (str(out["answer"]).strip(), steps or "(no tool steps)")
+
+
+async def reflect_tool(task: str, attempt: str = "", feedback: str = "") -> str:
+    """Reflexion: diagnose a failed attempt + a new plan, kept as an episodic memory."""
+    if not str(task or "").strip():
+        return "error: say which task failed"
+
+    def learn(text, tags):
+        return memory_core.learn(text, tier="episodic", tags=tags, root=DATA_DIR, source="reflexion",
+                                 meta={"workspace": str(WORKSPACE)})
+
+    out = await reflexion.reflect(task, attempt, feedback, _port_ask, learn)
+    if not out.get("ok"):
+        return "error: %s" % out.get("error")
+    return ("Reflection (kept in memory%s; use it now):\n%s"
+            % ((" as " + out["stored"]) if out.get("stored") else "", out["reflection"]))
+
+
+async def extract_structured(text: str = "", schema=None, instruction: str = "") -> str:
+    """instructor-style: JSON that matches `schema`, validated and re-asked; constrained on local models."""
+    if isinstance(schema, str):
+        try:
+            schema = json.loads(schema)
+        except ValueError:
+            return "error: schema must be a JSON Schema object"
+    if not isinstance(schema, dict) or not schema:
+        return "error: give a JSON Schema, e.g. {\"type\": \"object\", \"properties\": {...}, \"required\": [...]}"
+    what = str(instruction or "Extract the information as JSON.")
+    if str(text or "").strip():
+        what += "\n\nText:\n" + str(text)[:12000]
+    out = await structured.ask_structured(lambda prompt, schema=None: _port_ask(prompt, schema=schema), what, schema)
+    if out["ok"]:
+        return json.dumps(out["value"], ensure_ascii=False, indent=1)
+    return "error: no valid JSON after %d tries: %s" % (out["attempts"], "; ".join(out["errors"][:5]))
+
+
+async def web_search(query: str, max_results: int = 8) -> str:
+    """Search the web without a key (DuckDuckGo, or SearXNG at LOKI_SEARXNG_URL): titles, links, snippets."""
+    try:
+        results = await asyncio.to_thread(deep_research.search, query, max(1, min(int(max_results or 8), 15)))
+    except Exception as exc:  # noqa: BLE001
+        return "error: web search failed: %s" % exc
+    return deep_research.format_results(results)
+
+
+async def deep_research_tool(question: str, depth: int = 1) -> str:
+    """STORM: perspectives -> questions -> searches -> read pages -> cited report in research/."""
+    if not str(question or "").strip():
+        return "error: say what to research"
+
+    async def search_fn(query):
+        return await asyncio.to_thread(deep_research.search, query, 6)
+
+    async def read_fn(url):
+        return await asyncio.to_thread(read_web, url, deep_research.READ_CHARS)
+
+    out = await deep_research.run(str(question), _port_ask, search_fn, read_fn,
+                                  depth=max(1, min(int(depth or 1), 3)),
+                                  progress=lambda t: _progress("thinking", "research: " + t))
+    if not out.get("report"):
+        return "error: %s" % out.get("error", "no report")
+    folder = WORKSPACE / "research"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / ("%s-%s.md" % (time.strftime("%Y%m%d-%H%M"), deep_research.slug(question)))
+    path.write_text(out["report"], encoding="utf-8")
+    rel = path.relative_to(WORKSPACE).as_posix()
+    return ("wrote %s (%d sources, %d questions researched). The report:\n\n%s"
+            % (rel, len(out["sources"]), len(out["questions"]), out["report"][:6000]))
+
+
+async def enhance_image_prompt(prompt: str, style: str = "", seed: int = 0) -> str:
+    """Fooocus: a short idea -> a rich image prompt in a named style (+ negative prompt)."""
+    if str(style or "").strip().lower() in ("list", "styles", "?"):
+        return "Styles: " + ", ".join(sorted(image_prompt.styles()))
+    out = await image_prompt.enhance(prompt, style, ask=_port_ask, seed=int(seed or 0))
+    if not out.get("ok"):
+        return "error: %s" % out.get("error")
+    return ("prompt: %s\nnegative: %s\nstyle: %s\n(pass the prompt to generate_media or the image specialist)"
+            % (out["prompt"], out["negative"] or "-", out["style"] or "none"))
+
+
+async def make_music(prompt: str = "", lyrics: str = "", duration: float = 0, bpm: int = 0, key: str = "") -> str:
+    """ACE-Step 1.5 on this computer (or LOKI_ACESTEP_URL): a song into music/."""
+    out = await asyncio.to_thread(music.make, prompt, WORKSPACE / "music", lyrics, duration, bpm, key)
+    if not out.get("ok"):
+        return "error: %s" % out["error"]
+    return "made %s" % ", ".join(Path(p).relative_to(WORKSPACE).as_posix() for p in out["files"])
+
+
+async def speak(text: str, voice_name: str = "") -> str:
+    """Kokoro (or the OS voice): text read aloud into voice/<file>."""
+    out = await asyncio.to_thread(voice.speak, text, WORKSPACE / "voice", voice_name)
+    if not out.get("ok"):
+        return "error: %s" % out["error"]
+    return "spoke it with %s: %s" % (out["engine"], Path(out["file"]).relative_to(WORKSPACE).as_posix())
+
+
+LOCAL_TOOLS.update({"repo_map": repo_map_tool, "apply_edits": apply_edits, "find_tools": find_tools,
+                    "plan_and_solve": plan_and_solve, "reflect": reflect_tool,
+                    "extract_structured": extract_structured, "web_search": web_search,
+                    "deep_research": deep_research_tool, "enhance_image_prompt": enhance_image_prompt,
+                    "make_music": make_music, "speak": speak})
+_PORT_SCHEMAS = [
+    schema("repo_map", "A map of the code: the most important files, classes and functions, with the line that "
+           "defines each, ranked by how much the code depends on them and by `focus` (the question, symbol names "
+           "or file names you care about). Read it before searching a project you do not know.",
+           {"focus": {"type": "string"}, "subdir": {"type": "string"}, "max_chars": {"type": "integer"},
+            "files": {"type": "string"}}),
+    schema("apply_edits", "Edit one or more files with SEARCH/REPLACE blocks (no JSON escaping of code). blocks = "
+           "text with, for each edit: the file path alone on a line, then '<<<<<<< SEARCH', the exact current "
+           "lines, '=======', the new lines, '>>>>>>> REPLACE'. An empty SEARCH creates the file. Failed blocks "
+           "come back with the closest real lines; resend only those.",
+           {"blocks": {"type": "string"}}, ["blocks"]),
+    schema("find_tools", "Find a tool you do not see in your list: describe what you need (e.g. 'make a song', "
+           "'search the web', 'map the code'); the best matches are shown and become callable from your next step.",
+           {"query": {"type": "string"}, "limit": {"type": "integer"}}, ["query"]),
+    schema("plan_and_solve", "Answer a question that needs several lookups in ONE go: you get a plan of tool calls "
+           "(search_files, read_file, list_tree, repo_map, web_search, read_web, memory), they run, and one answer "
+           "comes back with the evidence. Cheaper and steadier than many separate calls.",
+           {"task": {"type": "string"}}, ["task"]),
+    schema("reflect", "After something failed (a test, a refused call, the user said it is wrong): write a short "
+           "diagnosis and a new plan, kept in memory so this and later similar tasks avoid the same mistake. "
+           "attempt = what you did, feedback = the error or what was wrong.",
+           {"task": {"type": "string"}, "attempt": {"type": "string"}, "feedback": {"type": "string"}}, ["task"]),
+    schema("extract_structured", "Get data out of text as JSON that matches a JSON Schema - validated, and fixed "
+           "automatically when it does not match.",
+           {"text": {"type": "string"}, "schema": {"type": "object"}, "instruction": {"type": "string"}}, ["schema"]),
+    schema("web_search", "Search the web (no key needed): titles, links and snippets. Read a result with read_web.",
+           {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"]),
+    schema("deep_research", "Research a topic on the web and write a report with numbered citations and a "
+           "reference list (saved in research/). depth 1 (quick) to 3 (thorough). Takes a few minutes.",
+           {"question": {"type": "string"}, "depth": {"type": "integer"}}, ["question"]),
+    schema("enhance_image_prompt", "Turn a short picture idea into a rich image prompt (+ negative prompt) in a "
+           "style: pixel art, cinematic, anime, photographic, fantasy art, digital art, comic book, lowpoly, "
+           "isometric, analog film, neonpunk, craft clay, origami, line art, 3d-model... (style='list' lists them). "
+           "Then make the picture with the enhanced prompt.",
+           {"prompt": {"type": "string"}, "style": {"type": "string"}, "seed": {"type": "integer"}}, ["prompt"]),
+    schema("make_music", "Make a song or a piece of music on this computer (ACE-Step, free). prompt = genre, mood, "
+           "instruments, voice; lyrics optional ([verse]/[chorus] lines); duration in seconds.",
+           {"prompt": {"type": "string"}, "lyrics": {"type": "string"}, "duration": {"type": "number"},
+            "bpm": {"type": "integer"}, "key": {"type": "string"}}, []),
+    schema("speak", "Read text aloud into an audio file (Kokoro voice when installed, else the computer's own "
+           "voice). voice_name e.g. af_heart, am_michael, bf_emma.",
+           {"text": {"type": "string"}, "voice_name": {"type": "string"}}, ["text"]),
+]
+TOOL_SCHEMAS.extend(_PORT_SCHEMAS)
+MODEL_TOOL_SCHEMAS.extend(_PORT_SCHEMAS)
+MODEL_TOOL_NAMES.update(LOCAL_TOOLS.keys() & {s["function"]["name"] for s in _PORT_SCHEMAS})
+TOOL_CATEGORIES["files"] += ["repo_map", "apply_edits"]
+TOOL_CATEGORIES["planning"] += ["find_tools", "plan_and_solve", "extract_structured"]
+TOOL_CATEGORIES["memory"] += ["reflect"]
+TOOL_CATEGORIES["research"] = ["web_search", "deep_research"]
+CATEGORY_LABELS["research"] = "Research (web search without a key, cited deep-research reports)"
+CATEGORIES.setdefault("research", True)
+TOOL_CATEGORIES["creative"] += ["enhance_image_prompt", "make_music", "speak"]
+MODIFYING |= {"apply_edits", "deep_research", "make_music", "speak"}
+# find_tools is how a local model reaches every other tool; repo_map is how it finds its way in code.
+LOCAL_TOOL_PRIORITY[5:5] = ["find_tools", "repo_map"]
+
+
 def _local_rank(name: str) -> int:
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
         return SELF_IMPROVE_PRIORITY.index(name) - len(SELF_IMPROVE_PRIORITY) - 1

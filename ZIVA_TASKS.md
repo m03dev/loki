@@ -697,6 +697,23 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       whether it shipped. (4) Settings > General: TimesFM installs by itself (watch /forecast status; it is a
       big pip install); report when done. Paste the last 30 lines of any failed job's log.
 
+- [ ] **W24 Session 27 research ports on the PC (2026-10-17) - new tools with a real local model.** After the
+      update: (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (26 suites; test_research_ports
+      141). (2) With qwen3:8b as the model, ask in chat, one at a time, and report what tools it called and
+      whether the result was right: "map the code of this project and tell me where tools are picked for a local
+      model" (repo_map); "make me a song about a fox in the snow" (it should call find_tools, then make_music -
+      expected error with the ACE-Step install hint until step 4); "search the web for ACE-Step 1.5" (web_search
+      - this is the first live DuckDuckGo test, Claude's sandbox could not reach it; paste the first 3 results);
+      "research the best local video models for an 8 GB GPU" (deep_research, depth 1: time it, open
+      research/<file>.md, are the [n] citations real pages?). (3) Coding: in a scratch project ask "rename the
+      function X to Y everywhere using apply_edits" - did the SEARCH/REPLACE blocks apply first try? (4) Install
+      ACE-Step (8 GB: 2B turbo + 0.6B LM): `git clone https://github.com/ace-step/ACE-Step-1.5`,
+      `cd ACE-Step-1.5`, `uv sync`, `uv run acestep-api` (leave it running), then ask LOKI for the fox song
+      again: report the time and whether music/<file>.mp3 plays. (5) `harness_data\.venv\Scripts\pip install
+      kokoro soundfile` then "read this aloud: hello from LOKI" (speak): which engine (kokoro or powershell),
+      does voice/<file>.wav play? Without Kokoro the Windows SAPI voice must still work.
+      (6) "make a pixel art picture of a fox" - does LOKI call enhance_image_prompt before the image? Screenshot.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -887,6 +904,16 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       same time): `GET /world/presence` on the Mac lists the PC's player (`machine` = the PC's name) with
       `age` under ~1 s while the PC walks; report the ages. If it stays empty: is the link up (Settings >
       Machines) and does the PC's LOKI have session 27 (an older one answers /peer/presence with 404)?
+
+- [ ] **M15 Session 27 research ports on the Mac (2026-10-17).** After the update: (1) `ship.py --check`
+      (26 suites). (2) "read this aloud: hello from LOKI" (speak) - without Kokoro it must use `say` and write
+      voice/<file>.aiff; play it. Then `harness_data/.venv/bin/pip install kokoro soundfile` (+ `brew install
+      espeak-ng`) and ask again: engine kokoro, voice/<file>.wav. Report the time for one sentence.
+      (3) "search the web for Kokoro TTS" (web_search) - paste the first 3 results. (4) Optional, only if the
+      Mac stays responsive: ACE-Step on Apple Silicon (MPS/MLX) - `git clone
+      https://github.com/ace-step/ACE-Step-1.5 && cd ACE-Step-1.5 && uv sync && uv run acestep-api`; then "make
+      a 30 second lo-fi song" (make_music). Report time, memory pressure, and whether the mp3 plays. If it
+      is too heavy, say so and point LOKI_ACESTEP_URL at the PC instead (http://<pc>:8001 on the LAN).
 
 ## Needs Mohamed
 

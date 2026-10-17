@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 26, Claude in the cloud).
+Last updated: 2026-10-17 (session 27 research ports, Claude worktree).
 
 ## Session 27 (2026-10-17, Claude in the cloud): why every LOKI job failed, and the fixes
 
@@ -99,6 +99,59 @@ So this worktree built the **engine side every client uses** plus the first in-a
   more like this". On the island a **creations hall** hangs the newest five pieces; its name opens Creations.
 - Still open (owner to answer): remove the Godot code (AGENTS.md says nothing Godot; the owner also said
   "don't take anything off").
+
+## Session 27 research ports (worktree)
+
+The owner: "take code from open-source repos to improve LOKI natively - not the ones we have, but also
+research for me". Researched ~36 NEW projects (none already in LOKI) and ported the best nine as native
+engine modules + 11 tools. Full ranked table with sources: `docs/integrations/research-2026-10-17.md`.
+Built in a Claude worktree, committed there, not pushed; the parent session merges and ships.
+**26 suites pass** (`tests/test_research_ports.py` is new: 141 offline checks, fakes only).
+
+Licences sit in `engine/licenses/` (Aider Apache-2.0, ReWOO/Reflexion/STORM/bigtool/instructor/ACE-Step MIT,
+Kokoro Apache-2.0, Fooocus GPL-3.0); rows in docs/THIRD_PARTY.md. **Fooocus is GPL-3.0**: like OpenHuman and
+MuMuAINovel, `engine/image_prompt.py` + `engine/data/image_styles.json` must go before LOKI is ever published.
+
+**New tools (loki.py: one registration block after SELF_IMPROVE_PRIORITY; nothing in agent_turn, the goal loop,
+_model_request, the parser or the DONE gate was changed):**
+- `repo_map(focus, subdir, max_chars, files)` - aider's repo map (`engine/repo_map.py`): ast/regex tags,
+  def/ref graph with aider's weights, personalized PageRank, budget fit. LOKI additions: `module.name` refs go to
+  module.py only; a file's own copy of a common name is no cross-file edge; symbols named in `focus` come first.
+- `apply_edits(blocks)` - aider's SEARCH/REPLACE blocks (`engine/edit_blocks.py`): several files per call,
+  whitespace-forgiving + `...` matching, did-you-mean on failure, partial success, CRLF kept, `undo_edit` works.
+- `find_tools(query)` - langgraph-bigtool (`engine/tool_select.py`): BM25 over all offered tools; the matches are
+  inserted after `find_tools` in LOCAL_TOOL_PRIORITY (at most 6, oldest drops), so a local model sees them next
+  step. `find_tools` and `repo_map` were added to LOCAL_TOOL_PRIORITY (index 5-6).
+- `extract_structured(text, schema, instruction)` - instructor (`engine/structured.py`): JSON Schema validation,
+  re-ask with the errors, constrained `response_format` on local servers (falls back once if refused).
+- `plan_and_solve(task)` - ReWOO (`engine/rewoo.py`): one plan with `#E` variables, read-only tools run through
+  `call_tool` (policy applies - a path outside the workspace is DENIED, tested), one solve call.
+- `reflect(task, attempt, feedback)` - Reflexion (`engine/reflexion.py`): diagnosis + new plan stored as an
+  episodic memory tagged `reflexion`, so the memory pack offers it on similar later tasks. `trial_loop` is there
+  for callers with an evaluator (not wired into evolve yet - see Next).
+- `web_search(query)` - keyless: DuckDuckGo HTML, or SearXNG when `LOKI_SEARXNG_URL` is set.
+- `deep_research(question, depth 1-3)` - STORM (`engine/deep_research.py`): editors -> questions -> queries ->
+  read_web -> cited answers -> outline -> sections -> `research/<date>-<slug>.md` with references.
+- `enhance_image_prompt(prompt, style)` - Fooocus styles (25: pixel art, cinematic, anime, ...) + expansion by the
+  model or a seeded offline fallback. The image path (conductor/generate_media) is unchanged; the model passes
+  the enhanced prompt on.
+- `make_music(prompt, lyrics, duration, bpm, key)` - ACE-Step 1.5 REST client (`engine/music.py`), to
+  `music/`. Needs `uv run acestep-api` on the machine (or `LOKI_ACESTEP_URL`).
+- `speak(text, voice_name)` - Kokoro when `pip install kokoro soundfile` was run, else macOS `say`, Windows SAPI
+  (text via env vars, never in the script), espeak-ng (`engine/voice.py`), to `voice/`.
+- New settings category "research" (web_search, deep_research); the others joined files/planning/memory/creative.
+  `apply_edits`, `deep_research`, `make_music`, `speak` are MODIFYING (not offered in Plan mode).
+- Shared model call `_port_ask` (active model, `think: false` on Ollama, usage recorded, `<think>` stripped).
+
+**Not verified (no machine, no network here):** no live model has driven any of these tools; DuckDuckGo was
+blocked by the sandbox proxy (the parser is tested on a saved page); ACE-Step and Kokoro never ran; `say` / SAPI /
+espeak argv shapes are tested with fake runners only. ZIVA_TASKS W22 (PC) and M14 (Mac) ask for all of it.
+
+**Next (from the research):** a "fix this bug" pipeline (Agentless: repo_map localize -> apply_edits candidates ->
+check) and Reflexion's `trial_loop` around it; stable-diffusion.cpp (PC) / mflux (Mac) as local image backends fed
+by enhance_image_prompt; Wan2GP as the PC's video add-on; Playwright MCP (accessibility snapshot) for text-only
+browser control; arXiv/Wikipedia/GitHub sources in deep_research; MMO notes for the world agent are in the
+research doc (Colyseus + snapshot interpolation + bitECS/miniplex).
 
 ## Session 26 core upgrade (worktree)
 
