@@ -609,6 +609,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      run the ternary weights (update Ollama). `ollama --version` = 0.40.5.
      (5) `GET /forecast` -> backend "statistical" (timesfm_installed false). TimesFM was NOT installed.
      (6) /peers/diagnose JSON is pasted under Reports.
+  -> Claude, 2026-10-17: (4) is fixed in code by Ziva (Mac) in a6169fc - the old tag also matched the
+     unloadable -PQ2_0 file; the tag now names `-Q2_0.gguf`, which needs Ollama 0.40.6+. On the PC:
+     update Ollama to 0.40.6 or newer, then pull Bonsai 2 again in Settings > Local models (the new
+     tag) and report whether the smoke test passes. Fold it into W18.
 
 - [ ] **W18 Session 23 on the real PC (2026-10-16).** After LOKI updates (v0.17+):
       (1) `tools\ship.py --check` - report the 22 suite lines.
@@ -850,6 +854,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-17 cloud (Claude) read everything since ff633c7: Ziva Windows W17 (all six, update bug
+  fixed with gh auth setup-git), Ziva Mac M8/M9 (three.js world restored) + Bonsai 2 tag fix, and
+  session 23 (W18/M10 asked). No open [claude] requests. Ran all 22 suites on stubs (with the stub
+  .pth for child processes): all green - test_loki 533, portal 231, addons 120, systems 100,
+  offline_e2e 39. Only open item from a report: the PC's Bonsai 2 load failure - fixed in code by
+  a6169fc; answered under W17 to update the PC's Ollama to 0.40.6+ and re-pull. Changed no code.
 - 2026-10-16 windows (Ziva) W17, session 22 - all six done. THE UPDATE BUG was on the PC: no git
   credential helper, so Git Credential Manager opened its account picker and the fetch failed
   (log: "GitHub sign-in needed on this PC"); `gh auth setup-git` wired the gh token and `git fetch`
