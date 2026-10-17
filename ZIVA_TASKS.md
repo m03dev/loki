@@ -676,6 +676,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       Make it; it appears within a few minutes. Click it, then "Make more like this". Screenshots.
       (5) Walk to the creations hall on the island (pink roof): the newest pieces hang there.
 
+- [ ] **W22 Jobs that succeed (2026-10-17).** Every background job had failed (see HANDOFF session 27). After
+      LOKI updates: (1) Settings > Creations: Make it "a fox asleep in the snow" (picture) - it must appear as a
+      REAL picture within a few minutes; report the time. (2) Start 3 background jobs from the chat ("in the
+      background: write a 5-line poem to poem.md", "...research the best free image models and write
+      notes.md", "...make a small game where the fox dodges acorns"); report each result line and whether
+      the log shows "switching this task to <model>". (3) Settings > Lab: start the next step once; report
+      whether it shipped. (4) Settings > General: TimesFM installs by itself (watch /forecast status; it is a
+      big pip install); report when done. Paste the last 30 lines of any failed job's log.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -865,8 +874,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the ones this account can reach. What is its exact GitHub name (owner/repo)?
 - [ ] **Higgsfield key (2026-10-16).** Paste KEY:SECRET from cloud.higgsfield.ai into Settings >
       General > "Higgsfield key" on the PC (and the Mac if wanted). Then `/image a lake at dawn`.
-- [ ] **TimesFM-3 (2026-10-16).** Its weights are licensed for non-commercial use only. Say yes
-      if LOKI may install it (`POST /forecast/install`); until then the statistical forecaster runs.
+- [x] **TimesFM-3 (2026-10-16).** ANSWERED 2026-10-17: yes ("give those loki agents the timem3 google
+      thing"). Recorded in engine/data/owner_approvals.json; each engine installs it at start-up.
 
 - [ ] **M3 Tailscale (clean route) needs your admin password + sign-in.** Install the
       Tailscale app on the Mac (it asks for your password - Ziva cannot sudo) and on the PC,

@@ -8,6 +8,8 @@ from the media specialist, games/ from the Pixel Engine). Nothing is copied or i
 from __future__ import annotations
 
 import re
+import threading
+import time
 from pathlib import Path
 
 KINDS = {
@@ -78,3 +80,37 @@ IDEAS = [
     "a cosy workshop full of little robots building a sky ship",
 ]
 
+
+
+# ----------------------------------------------------------------------------- making pictures
+_MAKING: dict = {}
+_LOCK = threading.Lock()
+
+
+def making() -> list:
+    """Pictures being made right now, and the last few results (for the wall's status line)."""
+    with _LOCK:
+        cutoff = time.time() - 600
+        for key in [k for k, v in _MAKING.items() if v.get("end") and v["end"] < cutoff]:
+            _MAKING.pop(key, None)
+        return [dict(v) for v in _MAKING.values()]
+
+
+def make_image(agent, prompt: str) -> dict:
+    """Start the image specialist on `prompt` in a thread; returns at once."""
+    key = "%d" % (time.time() * 1000)
+    with _LOCK:
+        if sum(1 for v in _MAKING.values() if not v.get("end")) >= 3:
+            return {"ok": False, "error": "three pictures are already being made - wait for one"}
+        _MAKING[key] = {"id": key, "prompt": prompt, "start": time.time(), "end": 0, "result": ""}
+
+    def work():
+        try:
+            out = str(agent.conductor_tool("image", prompt))
+        except Exception as exc:  # noqa: BLE001
+            out = "error: %s" % exc
+        with _LOCK:
+            _MAKING[key].update(end=time.time(), result=out[:300], ok=out.startswith("made "))
+
+    threading.Thread(target=work, daemon=True, name="loki-make-image").start()
+    return {"ok": True, "id": key}

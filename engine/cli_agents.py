@@ -36,6 +36,9 @@ CLI_AGENTS: dict[str, dict] = {
         "args": ("-p", "--output-format", "json"),
         "parse": "json_result",
         "supports_mcp": True,
+        # `claude -p` reads the prompt from stdin when none is given: long prompts go that way,
+        # because Windows caps a whole command line at 32,767 characters.
+        "stdin_prompt": True,
     },
     "codex": {
         "label": "Codex",
@@ -200,6 +203,14 @@ def mcp_config_args(servers_path: Path) -> list[str]:
     return ["--mcp-config", str(out)]
 
 
+ARGV_LIMIT = 24000   # characters; Windows allows 32,767 for the whole command line
+
+
+def _clean_arg(text: str) -> str:
+    """Text safe to pass as one command-line argument: no NUL or other control bytes."""
+    return "".join(ch for ch in str(text or "") if ch in "\t\n\r" or ord(ch) >= 32)
+
+
 def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900) -> str:
     """Run the CLI once, non-interactively, and return its final text."""
     spec = CLI_AGENTS.get(name)
@@ -209,6 +220,11 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
     if not exe:
         raise CliAgentError(missing_hint(name))
 
+    # A NUL byte (from a binary file the agent read) makes CreateProcess raise "embedded null
+    # character" on Windows and kills the whole job: drop them (and other C0 controls but tabs
+    # and newlines) from everything that goes on the command line.
+    system = _clean_arg(system)
+    prompt = _clean_arg(prompt)
     argv = [exe, *spec["args"]]
     if spec.get("model_env") and os.getenv(spec["model_env"], "").strip():
         argv += ["-m", os.getenv(spec["model_env"], "").strip()]
@@ -217,7 +233,17 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
         argv += ["--append-system-prompt", system]
     if spec.get("system_in_prompt") and system.strip():
         prompt = system.strip() + "\n\n" + prompt
-    argv.append(prompt)
+    stdin_text = None
+    if spec.get("stdin_prompt") and (len(prompt) + sum(len(a) for a in argv)) > ARGV_LIMIT:
+        if "--append-system-prompt" in argv and sum(len(a) for a in argv) > ARGV_LIMIT:
+            at = argv.index("--append-system-prompt")   # a huge system prompt rides in the prompt too
+            prompt = argv[at + 1] + "\n\n" + prompt
+            del argv[at:at + 2]
+        stdin_text = prompt
+    else:
+        if len(prompt) + sum(len(a) for a in argv) > ARGV_LIMIT:
+            prompt = prompt[-max(2000, ARGV_LIMIT - sum(len(a) for a in argv)):]   # keep the newest part
+        argv.append(prompt)
 
     env = dict(os.environ)
     if spec.get("llm_env"):
@@ -236,12 +262,13 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
             text=True,
             encoding="utf-8",
             errors="replace",
-            stdin=subprocess.DEVNULL,
+            input=stdin_text,
+            stdin=None if stdin_text is not None else subprocess.DEVNULL,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise CliAgentError("%s ran longer than %ds and was stopped." % (spec["label"], timeout)) from exc
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise CliAgentError("%s could not be started: %s" % (spec["label"], exc)) from exc
 
     stdout = (proc.stdout or "").strip()

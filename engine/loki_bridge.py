@@ -1051,7 +1051,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import creations  # pylint: disable=import-outside-toplevel
             ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
             self._send_json(200, {"ok": True, "items": creations.list_creations(ws), "games": list_games(UI_DIR, ws),
-                                  "ideas": creations.IDEAS})
+                                  "ideas": creations.IDEAS, "making": creations.making()})
             return
         if route == "/games/list":
             ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
@@ -1212,6 +1212,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
+            return
+        if route == "/creations/make":
+            # A picture is made straight by the image specialist - no chat model in between to
+            # misunderstand it (the cause of the failed fox jobs). Videos and games still go to a
+            # background job (they need an agent). Runs in a thread; the wall polls /creations.
+            import creations  # pylint: disable=import-outside-toplevel
+            what = str(data.get("prompt", "")).strip()[:600]
+            if not what:
+                self._send_json(400, {"ok": False, "error": "say what to make"})
+                return
+            self._send_json(200, creations.make_image(state.agent, what))
             return
         if route == "/sketch":
             # a drawing from the composer's pad: saved as a PNG in the workspace for view_image
@@ -2060,6 +2071,11 @@ async def serve() -> None:
     state.restart_engine = restart_engine
     state.project = project
     threading.Thread(target=memory_guard, args=(state,), daemon=True, name="loki-memory-guard").start()
+    try:   # the owner said yes to TimesFM-3 (2026-10-17): install it once where it is missing
+        import forecast  # pylint: disable=import-outside-toplevel
+        forecast.install_if_approved()
+    except Exception:  # noqa: BLE001
+        pass
     try:
         import workbench  # pylint: disable=import-outside-toplevel
         state.checkpoints = workbench.Checkpoints(project, (STATE_DIR or project / ".loki") / "checkpoints.git")

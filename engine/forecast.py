@@ -19,6 +19,7 @@ LOKI_FORECAST=off turns every forecast-driven decision off.
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import os
 import platform
@@ -26,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 CHECKPOINT = "google/timesfm-3.0-pytorch"
 _MODEL: dict = {"state": "idle", "model": None, "kind": "", "error": "", "loaded_at": 0.0}
@@ -289,6 +291,30 @@ def install(python: str = sys.executable) -> dict:
             INSTALL.update(running=False, done=True)
     threading.Thread(target=work, daemon=True, name="loki-timesfm-install").start()
     return {"ok": True, "running": True}
+
+
+APPROVALS = Path(__file__).with_name("data") / "owner_approvals.json"
+
+
+def approved() -> bool:
+    """The owner allowed TimesFM-3 (its weights are non-commercial; LOKI is his private tool):
+    engine/data/owner_approvals.json, or LOKI_TIMESFM_APPROVED=1. LOKI_TIMESFM_APPROVED=0 says no."""
+    flag = os.getenv("LOKI_TIMESFM_APPROVED", "").strip().lower()
+    if flag in ("0", "no", "false", "off"):
+        return False
+    if flag in ("1", "yes", "true", "on"):
+        return True
+    try:
+        return bool(json.loads(APPROVALS.read_text(encoding="utf-8")).get("timesfm"))
+    except (OSError, ValueError):
+        return False
+
+
+def install_if_approved() -> dict:
+    """At start-up: install TimesFM once, in the background, if approved and not there yet."""
+    if not approved() or timesfm_available() or INSTALL["running"] or INSTALL["done"]:
+        return {"ok": True, "skipped": True}
+    return install()
 
 
 def status() -> dict:

@@ -1623,7 +1623,42 @@ def read_file(filename: str, start_line: int = 0, end_line: int = 0) -> str:
             % (filename, len(lines), len(text), len(shown), "\n".join(shown)))
 
 
+MEDIA_TOOL_ALIASES = {"generate_image": "image", "make_image": "image", "create_image": "image", "image_gen": "image",
+                      "draw": "image", "text_to_image": "image", "web_search": "research", "search_web": "research"}
+MEDIA_SUFFIXES = {".png": (b"\x89PNG",), ".jpg": (b"\xff\xd8\xff",), ".jpeg": (b"\xff\xd8\xff",),
+                  ".gif": (b"GIF8",), ".webp": (b"RIFF",), ".mp4": (), ".mov": (), ".webm": (b"\x1a\x45\xdf\xa3",),
+                  ".mp3": (b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"), ".wav": (b"RIFF",), ".pdf": (b"%PDF",),
+                  ".zip": (b"PK",)}
+
+
+def media_check(filename: str) -> str:
+    """'media x: OK' when a picture/video/sound file really is one, 'media x: INVALID - ...' when
+    it is text with a picture's name (a small model 'saving an image' with write_file)."""
+    path = resolve_in_workspace(filename)
+    suffix = path.suffix.lower()
+    try:
+        head = path.read_bytes()[:16]
+    except OSError as exc:
+        return "media %s: INVALID - cannot read it (%s)" % (filename, exc)
+    if len(head) < 4:
+        return "media %s: INVALID - the file is empty" % filename
+    magics = MEDIA_SUFFIXES.get(suffix, ())
+    if suffix in (".mp4", ".mov"):
+        ok = head[4:8] == b"ftyp"
+    else:
+        ok = not magics or any(head.startswith(m) for m in magics)
+    if ok:
+        return "media %s: OK (a real %s file)" % (filename, suffix.lstrip("."))
+    return ("media %s: INVALID - this is not a real %s file (it holds text). Pictures are made with "
+            "conductor(role='image', task='<what to draw>'), not write_file." % (filename, suffix.lstrip(".").upper()))
+
+
 def write_file(filename: str, content: str) -> str:
+    if Path(str(filename)).suffix.lower() in MEDIA_SUFFIXES:
+        return ("error: write_file writes text, so %s would not be a real %s. To make a picture call "
+                "conductor(role='image', task='<what to draw>') - it saves the real file in images/ and "
+                "says where. Videos, sounds and PDFs come from their own tools too."
+                % (filename, Path(str(filename)).suffix.lstrip(".").upper()))
     path = resolve_in_workspace(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -4579,6 +4614,14 @@ async def call_tool(name: str, args: dict) -> str:
                 if name != "make_dir":
                     _task_wrote_file = True
                 _record_touched(name, args, result)
+            made = _specialist_made(name, result)
+            if made:
+                # A specialist (the image maker...) wrote a real file: that is the work done, so
+                # DONE is accepted and the file is verified (a picture must be a real picture).
+                _task_modified = _task_wrote_file = True
+                if made in _task_files:
+                    _task_files.remove(made)
+                _task_files.append(made)
             return _elide(result) if isinstance(result, str) else result
         except Exception as e:
             return f"error: {e}"
@@ -4611,6 +4654,15 @@ async def call_tool(name: str, args: dict) -> str:
     real = tool_guard.resolve_name(name, set(LOCAL_TOOLS) | set(mcp_sessions))
     if real and real != name:
         return await call_tool(real, args)
+    role = MEDIA_TOOL_ALIASES.get(name, name)
+    if role in conductor.ROLES and "conductor" in LOCAL_TOOLS:
+        # A small model called a specialist by its role name (image, research, ...): that is
+        # what conductor(role=...) is for, so do it rather than failing the step.
+        args = dict(args or {})
+        if "task" not in args:
+            args["task"] = str(args.pop("prompt", "") or args.pop("query", "") or args.pop("description", "") or "")
+        args["role"] = role
+        return await call_tool("conductor", args)
     return f"error: unknown tool {name}"
 
 
@@ -4769,6 +4821,22 @@ def _touched_path(name: str, args: dict) -> str:
     return str(args.get("filename") or args.get("path") or "")
 
 
+def _specialist_made(name: str, result) -> str:
+    """The workspace path a conductor specialist reported making ("made <file> with <backend>"),
+    or ""."""
+    if name != "conductor" or not isinstance(result, str):
+        return ""
+    m = re.match(r"\s*made (.+?) with ", result)
+    if not m:
+        return ""
+    raw = m.group(1).strip().strip("'\"")
+    try:
+        rel = Path(raw).resolve().relative_to(Path(WORKSPACE).resolve())
+        return rel.as_posix()
+    except (ValueError, OSError):
+        return raw if not os.path.isabs(raw) else ""
+
+
 def _record_touched(name: str, args: dict, result) -> None:
     path = _touched_path(name, args)
     if not path or str(result).lstrip().lower().startswith("error"):
@@ -4862,6 +4930,8 @@ def verify_files(paths) -> dict:
                 text = "json %s: parses OK" % path
             except Exception as exc:
                 text = "json %s: INVALID - %s" % (path, exc)
+        elif lower.endswith(tuple(MEDIA_SUFFIXES)):
+            text = media_check(path)
         else:
             report["skipped"].append(path)
             continue
@@ -5010,7 +5080,9 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 prompted = tool_harness.prepare(kwargs)
                 known = prompted.pop("_prompted_tools", [])
                 return tool_harness.attach(await client.chat.completions.create(**prompted), known)
-            return await client.chat.completions.create(**kwargs)
+            sent = _small_model_kwargs(kwargs, cfg)
+            response = await client.chat.completions.create(**sent)
+            return _salvage_reply(response, kwargs)
         except openai.APIStatusError as exc:
             status = _status_of(exc)
             if constrained and 400 <= status < 500:
@@ -5075,6 +5147,46 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
 
 # Providers whose server refused response_format (learned this session).
 CONSTRAINED_REFUSED: set = set()
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+
+def _small_model_kwargs(kwargs: dict, cfg) -> dict:
+    """Qwen3 on a local server: the '/no_think' soft switch on the system message (the
+    `think: false` body field is not honoured by every OpenAI-compatible endpoint). Without it
+    qwen3:8b often spends the whole reply thinking and returns an empty answer - the
+    "model returned an empty reply" failures. A copy; the conversation is not changed."""
+    if not _cfg_is_local(cfg) or "qwen3" not in str(getattr(cfg, "model", "")).lower():
+        return kwargs
+    msgs = list(kwargs.get("messages") or [])
+    if msgs and msgs[0].get("role") == "system" and isinstance(msgs[0].get("content"), str):
+        if "/no_think" not in msgs[0]["content"]:
+            msgs[0] = dict(msgs[0], content=msgs[0]["content"] + "\n\n/no_think")
+            return dict(kwargs, messages=msgs)
+    return kwargs
+
+
+def _salvage_reply(response, kwargs: dict):
+    """Small models often write the tool call as text (a ```json block, a bare object, a
+    <tool_call>) instead of calling it, and leave <think> tags in the answer. Turn such text
+    into a real call, so the job acts instead of narrating; drop the think tags."""
+    try:
+        message = response.choices[0].message
+    except (AttributeError, IndexError, TypeError):
+        return response
+    content = getattr(message, "content", None)
+    if isinstance(content, str) and "think>" in content.lower():
+        content = _THINK_RE.sub("", content).replace("</think>", "").replace("<think>", "").strip()
+        try:
+            message.content = content
+        except Exception:  # noqa: BLE001
+            pass
+    if kwargs.get("tools") and not getattr(message, "tool_calls", None) and content and "{" in content:
+        names = [((t.get("function") or t).get("name")) for t in kwargs["tools"] if isinstance(t, dict)]
+        names += [r for r in conductor.ROLES if "conductor" in names]   # "image" -> conductor(role=image)
+        response = tool_harness.attach(response, names)
+    return response
 
 
 def _cfg_is_local(cfg) -> bool:
@@ -5591,6 +5703,31 @@ def _goal_names_file(goal: str) -> bool:
     return bool(_NAMED_FILE.search(text))
 
 
+def _escalate_model(why: str) -> bool:
+    """A job on the small local model is failing: carry on with the best online model that is
+    set up and free (never a paid one on its own), instead of ending the task as failed. Once
+    per task; True when it switched."""
+    global model_name
+    if (not os.getenv("LOKI_JOB_ID") or globals().get("_ESCALATED") or active_model_name() != "local"
+            or os.getenv("LOKI_NO_ESCALATE")):   # background jobs only (each is its own process)
+        return False
+    target = ""
+    for candidate in routing_order(SMART_ORDER):
+        if candidate == "local" or (provider_tier(candidate) == "paid" and not paid_allowed_automatically()):
+            continue
+        if candidate not in _SMART_FAILED and provider_configured(candidate):
+            target = candidate
+            break
+    if not target:
+        return False
+    globals()["_ESCALATED"] = True
+    model_name = target
+    _progress("thinking", "The local model is stuck (%s) - switching this task to %s." % (why, target))
+    messages.append({"role": "user", "content": "A stronger model takes over now. Continue the task from "
+                     "here with real tool calls, then reply DONE: <what you did> or BLOCKED: <why>."})
+    return True
+
+
 def _goal_needs_files(goal: str) -> bool:
     words = ("create", "add", "make", "build", "implement", "write", "system",
              "script", "scene", "setup", "set up", "configure", "fix", "update",
@@ -5692,6 +5829,9 @@ async def _pursue_goal(goal: str) -> str:
             _progress("assistant", reply.strip()[:300])
         if reply.strip().startswith("(the model stopped responding"):
             stalls += 1
+            if stalls >= 2 and _escalate_model("it kept returning empty replies"):
+                stalls = 0
+                continue
             if stalls >= 2:
                 message = "The model returned empty replies repeatedly; task halted. Try again or use a stronger model."
                 _progress("done", message)
@@ -5703,6 +5843,9 @@ async def _pursue_goal(goal: str) -> str:
         if head.startswith("DONE") and _goal_needs_files(goal) and (
                 not _task_modified or (not _task_wrote_file and _goal_names_file(goal))):
             premature_done += 1
+            if premature_done > PREMATURE_DONE_LIMIT and _escalate_model("it kept saying DONE without doing it"):
+                premature_done = 0
+                continue
             if premature_done > PREMATURE_DONE_LIMIT:
                 message = ("BLOCKED: the model kept saying DONE without changing any file (%d times); "
                            "stopped instead of looping. Try a stronger model." % premature_done)
@@ -5712,10 +5855,11 @@ async def _pursue_goal(goal: str) -> str:
             _progress("thinking", "Checked: nothing was written yet - not accepting DONE.")
             messages.append({"role": "user", "content": (
                 "Your 'DONE' is premature: NO file was created or changed during this "
-                "task, so the goal is not actually done. Implement it now with real tool "
-                "calls (build_3d_scene for a scene, write_file for a script, edit_file for "
-                "a change). After writing, verify with validate_scene or play_scene, and "
-                "only then reply 'DONE'."
+                "task, so the goal is not actually done. Do it now with a real tool call: "
+                "a picture -> conductor(role='image', task='<what to draw>'); a document or "
+                "code -> write_file / edit_file; research -> conductor(role='research', ...). "
+                "Never write a description into an image file. Check the result, and only "
+                "then reply 'DONE'."
             )})
             force_next = True
             continue
@@ -5730,6 +5874,8 @@ async def _pursue_goal(goal: str) -> str:
                 continue
             save_history()
             return reply.strip() + chr(10) * 2 + verification_summary(report)
+        if head.startswith("BLOCKED") and _escalate_model("it gave up: " + reply.strip()[8:90]):
+            continue   # a small model's BLOCKED is often a guess ("Builder's role unavailable")
         if head.startswith("DONE") or head.startswith("BLOCKED"):
             save_history()
             return reply.strip()
@@ -5737,6 +5883,9 @@ async def _pursue_goal(goal: str) -> str:
             idle = 0
         else:
             idle += 1
+            if idle >= 12 and _escalate_model("it stopped calling tools"):
+                idle = 0
+                continue
             if idle >= 12:
                 message = "The model stopped calling tools after several nudges. Say 'continue' to resume."
                 _progress("done", message)

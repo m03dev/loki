@@ -4,6 +4,15 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 27 (Claude): every job failed - fixed
+
+- loki.py: qwen3 /no_think, text tool calls salvaged, role-name tools -> conductor, write_file refuses media,
+  media verification, specialist output counts, generic DONE nudge, escalation to a free online model.
+- cli_agents.py: no NUL bytes, long prompts on stdin. creations: /creations/make (image maker direct).
+- forecast.py: TimesFM approved by the owner, installed at start-up. tests/test_job_fixes.py.
+
+---
+
 ## 2026-10-17 - Session 26 (Claude): Babylon.js world, an island per device, Creations
 
 - app/ui/vendor/babylon (Babylon 8.9.1 from source, Apache-2.0), app/ui/world_babylon.js, tools/babylon/.

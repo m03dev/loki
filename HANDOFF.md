@@ -6,6 +6,31 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 26, Claude in the cloud).
 
+## Session 27 (2026-10-17, Claude in the cloud): why every LOKI job failed, and the fixes
+
+From the PC's job logs (harness_data/jobs): background jobs run on qwen3:8b (PREFER=local, easy triage) and
+1. it returned EMPTY replies - qwen3's thinking ate the answer (`think: false` is not honoured on Ollama's
+   OpenAI-compatible endpoint) -> `_small_model_kwargs` adds Qwen3's `/no_think` switch to the system message;
+2. it wrote tool calls as text (```json blocks) and called the image maker as a tool named "image" ->
+   `_salvage_reply` turns text calls into real calls on every provider and drops <think> tags; an unknown
+   tool named like a conductor role (image, research, generate_image...) runs conductor(role=...);
+3. a real image it made did not count as work, so "DONE is premature" told it to write_file (a Godot-era
+   nudge) and it wrote "a fox asleep in the snow" into images/fox_asleep_in_snow.png, which the checker
+   passed -> a specialist's "made <file>" counts as written work; write_file refuses .png/.jpg/.mp4/...;
+   verification checks a media file's magic bytes (a text "png" FAILS); the nudge is generic;
+4. a stuck small model ended the job (empty replies, DONE without work, "BLOCKED: Builder's role
+   unavailable", no tool calls) -> `_escalate_model`: once per background job, carry on with the first
+   free, set-up online model (never paid on its own); LOKI_NO_ESCALATE=1 turns it off;
+5. the self-improvement job crashed: Claude Code's argv held a NUL byte (from a binary read) and ~21k
+   tokens (Windows caps a command line at 32,767 chars) -> cli_agents cleans control bytes and sends long
+   prompts on stdin; a ValueError is a CliAgentError, not a traceback.
+Creations' "Make it" for a picture now calls the image specialist directly (POST /creations/make, a
+thread; the wall shows "Making..." and failures) - no chat model in between.
+TimesFM-3: the owner said yes (engine/data/owner_approvals.json); each engine installs it once at start-up
+where missing (LOKI_TIMESFM_APPROVED=0 says no; suites never install). It forecasts numbers (usage, cost,
+trends) for the forecast_series tool - it does not make jobs succeed; the fixes above do.
+tests/test_job_fixes.py (33).
+
 ## Session 26 (2026-10-17, Claude in the cloud): Babylon.js world, one island per device, Creations
 
 - **Babylon.js is LOKI World's engine** (owner's choice, over Godot/Panda3D: it runs inside the app's

@@ -83,8 +83,11 @@ async function loadCreations() {
       const text = (what.value || what.placeholder).trim();
       if (!text) return;
       go.disabled = true;
-      const r = await api("/jobs", { backend: "local", agent: "loki", prompt: creationPrompt(kind.value, text), isolate: true, timeout_s: 1800 })
-        .catch((err) => ({ ok: false, error: String(err) }));
+      // a picture goes straight to the image maker; a video or a game needs an agent (a background job)
+      const r = kind.value === "image"
+        ? await api("/creations/make", { kind: "image", prompt: text }).catch((err) => ({ ok: false, error: String(err) }))
+        : await api("/jobs", { backend: "local", agent: "loki", prompt: creationPrompt(kind.value, text), isolate: true, timeout_s: 1800 })
+          .catch((err) => ({ ok: false, error: String(err) }));
       go.disabled = false;
       note.textContent = r.ok ? "LOKI is making it - it appears here when done." : (r.error || "Could not start it.");
       if (r.ok) { what.value = ""; creationsTimer = setTimeout(loadCreations, 8000); }
@@ -111,10 +114,17 @@ async function loadCreations() {
     tile.addEventListener("click", () => { if (typeof showTab === "function") showTab("play"); if (typeof loadPlay === "function") loadPlay(g.name); });
     wall.append(tile);
   }
+  // pictures being made right now (and how the last ones went)
+  const note = box.querySelector(".creations-note");
+  const making = data.making || [];
+  const busy = making.filter((m) => !m.end);
+  const failed = making.filter((m) => m.end && !m.ok).pop();
+  if (note && busy.length) note.textContent = "Making " + busy.length + " picture" + (busy.length > 1 ? "s" : "") + ": " + busy[0].prompt.slice(0, 50) + "…";
+  else if (note && failed && note.textContent.startsWith("Making")) note.textContent = "That one failed: " + failed.result.replace(/^error:\s*/, "").slice(0, 160);
   // still making something: look again in a while (stops once the panel is closed)
   const newest = items.length ? items[0].t : 0;
-  const waiting = box.querySelector(".creations-note") && box.querySelector(".creations-note").textContent.startsWith("LOKI is making");
-  if (waiting && newest > creationsSeen && creationsSeen) box.querySelector(".creations-note").textContent = "New: " + items[0].title;
+  const waiting = busy.length > 0 || (note && note.textContent.startsWith("LOKI is making"));
+  if (newest > creationsSeen && creationsSeen && note) note.textContent = "New: " + items[0].title;
   if (!creationsSeen || newest > creationsSeen) creationsSeen = newest;
   const panel = box.closest("[data-panel]");
   if (waiting && panel && !panel.hidden) creationsTimer = setTimeout(loadCreations, 8000);
