@@ -653,6 +653,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (4) Settings > Brain: the map draws and settles; click a memory fact, edit it, then forget one;
       confirm Settings > Memory changed the same way. (5) Screenshots of Play and Brain.
 
+- [ ] **W21 Session 26 on the PC (2026-10-17) - Babylon world, islands, Creations.** Restart LOKI (it updates).
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: report the lines.
+      (2) Home screen: the world is drawn by Babylon.js now (Settings > General > LOKI World look = babylon).
+      It must look like before - pixels, cel bands, black outlines, the fox. Report fps (the HUD) and any
+      console error; screenshot. If it looks wrong or is slow, switch to "classic" and say so.
+      (3) With the Mac linked: you stand on the PC's island (its name + "you are here"), the Mac floats out in
+      space as its own island. Click the Mac's name: the camera flies there; "back to <PC name>" comes home.
+      (4) Settings > Creations: the red fox from W13 is at the front. Type "a fox asleep in the snow" and press
+      Make it; it appears within a few minutes. Click it, then "Make more like this". Screenshots.
+      (5) Walk to the creations hall on the island (pink roof): the newest pieces hang there.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -828,6 +839,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       a sandboxed iframe (allow-scripts, no same-origin) whose page loads /ui/engine/*.js under
       `script-src 'self'` - if WebKit blocks those scripts, the frame shows "the engine did not load" or stays
       blank: report the console errors (Develop menu / Web Inspector if enabled). Also Settings > Brain.
+
+- [ ] **M13 Session 26 on the Mac (2026-10-17) - Babylon world in WebKit, islands, Creations.** Quit and
+      reopen LOKI. (1) `harness_data/.venv/bin/python tools/ship.py --check`. (2) The world is drawn by
+      Babylon.js in WKWebView: same pixel cel-shaded look? fps? Activity Monitor CPU %? Console errors (WebGL2
+      vs WebGL1 - Babylon falls back by itself)? Screenshot. (3) You stand on the Mac's island; the PC is its
+      own island out there; click its name to fly there and back. (4) Settings > Creations shows the Mac's
+      own creations; make one picture. Report all of it under Reports.
 
 ## Needs Mohamed
 

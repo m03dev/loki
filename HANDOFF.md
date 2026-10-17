@@ -4,7 +4,34 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 25, Claude in the cloud).
+Last updated: 2026-10-17 (session 26, Claude in the cloud).
+
+## Session 26 (2026-10-17, Claude in the cloud): Babylon.js world, one island per device, Creations
+
+- **Babylon.js is LOKI World's engine** (owner's choice, over Godot/Panda3D: it runs inside the app's
+  webview on both machines with no extra install). `app/ui/vendor/babylon/babylon.loki.js` is Babylon 8.9.1
+  built from source (Apache-2.0; rebuild steps in `tools/babylon/README.md`, CellMaterial patched by
+  `tools/babylon/patch_cell.py`). `app/ui/world_babylon.js` draws the same scene description world.js makes
+  every frame, in the SAME pixel cel-shaded look the owner likes: CellMaterial bands, ink outlines (an
+  inverted hull), a hardware pixel grid (setHardwareScalingLevel + `image-rendering: pixelated`), the Bayer
+  posterize as a post-process, blob shadows, halos, the water shader. Thin instances: ~14 draw calls a frame.
+  Lazy-loaded; if it cannot load, the world falls back to LOKI's own renderer ("classic"). Settings > General
+  > LOKI World look: babylon (default) / classic / three. Nothing was taken off.
+- **Every device has its own island.** `/world` now says which machine it is (`self`: name + OS). The island
+  you stand on is THIS machine ("<name> - you are here" over the spire); each linked machine is a full island
+  of its own out in the space around it (its house in its colours - a Mac silver, a PC blue - trees, a beacon
+  lit while it answers, a figure per job, a bridge of light with packets). Slots come from the machine's name
+  so islands never jump or overlap. Click a machine's name to fly there; "back to <name>" brings you home.
+  So on the Mac you stand on the Mac island and see the PC's island out there, and the other way round.
+- **Creations - more of the fox.** The fox picture the owner loved was made by LOKI's image specialist
+  (conductor `image`, free Pollinations backend) on 2026-10-14 20:17 when Ziva Windows ran W13
+  ("make an image of a red fox in studio light"); it is `images/20261014-201742-red-fox-in-studio-light.jpg`
+  in the PC's workspace. New: Settings > **Creations** (`creations.js`, `engine/creations.py`, GET
+  /creations, files at /creations/<kind>/<file> - this machine only, sandboxed) shows everything LOKI made,
+  newest first and big, with a "Make it" box (picture / video / game, starts a background job) and "Make
+  more like this". On the island a **creations hall** hangs the newest five pieces; its name opens Creations.
+- Still open (owner to answer): remove the Godot code (AGENTS.md says nothing Godot; the owner also said
+  "don't take anything off").
 
 ## Session 25 (2026-10-17, Claude in the cloud): LOKI's own game engine + Play, the Brain map back, an audit
 

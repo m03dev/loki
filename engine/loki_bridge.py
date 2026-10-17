@@ -236,6 +236,19 @@ def world_extras(agent: Any) -> dict:
         out["machines"] = peer_link.world_machines()
     except Exception:  # noqa: BLE001
         out["machines"] = []
+    try:   # the creations hall: how many things LOKI made, and the newest few
+        import creations  # pylint: disable=import-outside-toplevel
+        made = creations.list_creations(Path(getattr(agent, "WORKSPACE", ".")), limit=400)
+        out["creations"] = {"count": len(made), "latest": [{"title": c["title"], "kind": c["kind"], "show": c["show"]}
+                                                           for c in made[:5]]}
+    except Exception:  # noqa: BLE001
+        out["creations"] = {"count": 0, "latest": []}
+    try:   # the island you stand on is this machine: its name and OS
+        import platform  # pylint: disable=import-outside-toplevel
+        import peers  # pylint: disable=import-outside-toplevel
+        out["self"] = {"name": peers.my_name(), "os": platform.system()}
+    except Exception:  # noqa: BLE001
+        out["self"] = {}
     try:
         name = agent.active_model_name()
         cfg = agent.MODELS[name]
@@ -764,6 +777,35 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._send_static(found)
         return True
 
+    def _serve_creation(self, route: str) -> bool:
+        """GET /creations/<kind>/<file>: a picture, video, sketch or sound LOKI made in the
+        workspace, for Settings > Creations (an <img>/<video> cannot send the bearer token).
+        Only those folders and file types, and only for this machine's own host name."""
+        if not route.startswith("/creations/"):
+            return False
+        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+            self._send_json(403, {"ok": False, "error": "Host not allowed."})
+            return True
+        import creations  # pylint: disable=import-outside-toplevel
+        found = creations.creation_file(Path(getattr(self.server.state.agent, "WORKSPACE", ".")), route)
+        if found is None:
+            self._send_json(404, {"ok": False, "error": "Not found."})
+            return True
+        body = found.read_bytes()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", creations.TYPES.get(found.suffix.lower(), "application/octet-stream"))
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=300")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionError, OSError):
+            pass
+        return True
+
     def _oauth_callback(self, route: str) -> bool:
         """GET /oauth/openrouter/callback: the browser comes straight back from openrouter.ai.
         No bearer token here; signin.openrouter_finish only completes a flow this engine
@@ -796,6 +838,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self._serve_ui(route):
             return
         if self._serve_game(route):
+            return
+        if self._serve_creation(route):
             return
         if self._oauth_callback(route):
             return
@@ -995,6 +1039,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/crm":
             self._send_json(*crm_route(self.server.state, "GET", route, {}))
+            return
+        if route == "/creations":
+            import creations  # pylint: disable=import-outside-toplevel
+            ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
+            self._send_json(200, {"ok": True, "items": creations.list_creations(ws), "games": list_games(UI_DIR, ws),
+                                  "ideas": creations.IDEAS})
             return
         if route == "/games/list":
             ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))

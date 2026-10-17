@@ -4,6 +4,16 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 26 (Claude): Babylon.js world, an island per device, Creations
+
+- app/ui/vendor/babylon (Babylon 8.9.1 from source, Apache-2.0), app/ui/world_babylon.js, tools/babylon/.
+  World engine default "babylon"; classic/three kept.
+- world.js: self island + one island per linked machine (stable slots, fly-to, back home); creations hall.
+- engine/creations.py, GET /creations, /creations/<kind>/<file>; app/ui/creations.js, Settings > Creations.
+- tests: test_portal (Babylon, islands, self), test_play (Creations).
+
+---
+
 ## 2026-10-17 - Session 25 (Claude): Pixel Engine + Play + Fox & Berries, Brain map (editable memory), audit
 
 - app/ui/engine/pixel_engine.js, play.html/play.js, games/fox_berries, Settings > Play (sandboxed),

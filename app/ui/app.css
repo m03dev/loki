@@ -467,6 +467,14 @@ button.danger:hover { color: var(--err); }
 .wlabel.selected b { background: #2ee6d6; color: #0d1f22; }
 .wlabel.team b { background: rgba(18,40,48,.85); color: #bff6ef; font-weight: 500; font-size: 10.5px; }
 .world-bg .wlabel em { display: none; }
+/* every device has its own island: its name is a button that flies you there (yours brings you home) */
+.world-labels .wlabel.machine { pointer-events: auto; cursor: pointer; }
+.world-labels .wlabel.machine b { background: rgba(20,46,64,.88); color: #bff0ff; }
+.world-labels .wlabel.machine.home b { background: rgba(46,230,214,.9); color: #0d1f22; }
+.world-bg .wlabel.machine { pointer-events: none; }
+.world-home { position: absolute; left: 12px; bottom: 12px; pointer-events: auto; cursor: pointer; border: 0; border-radius: 999px;
+  padding: 5px 12px; background: rgba(46,230,214,.9); color: #0d1f22; font-weight: 600; font-size: 12px; }
+.world-bg .world-home { display: none; }
 .legend-row { cursor: pointer; }
 .legend-row.selected { background: rgba(46,230,214,.08); }
 .world-frame canvas:focus-visible { outline: 2px solid #2ee6d6; outline-offset: -2px; }
@@ -541,3 +549,20 @@ button.danger:hover { color: var(--err); }
 .world-labels .wlabel.crowded.selected, .world-labels .wlabel.crowded.speaking { opacity: 1; }
 .wlabel.machine b { background: linear-gradient(135deg, rgba(46,230,214,.85), rgba(77,124,255,.85)); color: #071417; }
 .wlabel.machine span { color: #dff8f4; }
+
+/* Settings > Creations: what LOKI made, big */
+.creations-make { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.creations-make input { flex: 1 1 260px; min-width: 0; }
+.creations-ideas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.creations-ideas .chip { font-size: 11.5px; padding: 3px 10px; border-radius: 999px; }
+.creations-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.creation { display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 3px; padding: 6px; border-radius: 12px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); cursor: pointer; min-width: 0; }
+.creation:hover { border-color: rgba(46,230,214,.6); }
+.creation img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #111; }
+.creation .creation-ico { display: grid; place-items: center; aspect-ratio: 1; border-radius: 8px; background: #16202a; font-size: 34px; color: #7fe8dc; }
+.creation b { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creation span:not(.creation-ico) { font-size: 11px; color: var(--muted); }
+.creation-view { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.creation-view img, .creation-view video { max-width: 100%; max-height: 62vh; object-fit: contain; border-radius: 12px; background: #0b0d12; }
+.creation-actions { display: flex; gap: 8px; }

@@ -753,11 +753,27 @@ check("three.js loads only from LOKI itself (no CDN), and only on demand (LOKI_W
 vendored = [p for p in (ui / "vendor" / "three").rglob("*.js")]
 check("vendored add-ons import three by a local path, never the bare 'three' specifier",
       not any(("from 'three'" in p.read_text(encoding="utf-8") or 'from "three"' in p.read_text(encoding="utf-8")) for p in vendored))
-check("LOKI's own pixel cel-shaded renderer is the default look; three.js only when asked",
-      'engine: "classic"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js)
+check("Babylon.js draws the pixel cel-shaded world by default; LOKI's own renderer stays as the fallback",
+      'engine: "babylon"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js
+      and 'World.engine = "classic"' in world_js)
+bjs = ui / "vendor" / "babylon" / "babylon.loki.js"
+babylon_js = (ui / "world_babylon.js").read_text(encoding="utf-8")
+check("Babylon.js is vendored (Apache-2.0, built from source), loads from LOKI itself and only on demand",
+      bjs.is_file() and (ui / "vendor" / "babylon" / "LICENSE").is_file() and "https://" not in babylon_js
+      and 'src="/ui/world_babylon.js"' not in html and '"/ui/vendor/babylon/babylon.loki.js"' in world_js
+      and (REPO / "tools" / "babylon" / "patch_cell.py").is_file())
+check("the Babylon world keeps the look: cel shading, ink outlines, the pixel grid, posterized colour, blob shadows",
+      all(x in babylon_js for x in ("CellMaterial", "INK_VS", "setHardwareScalingLevel", "bayer4", "SHADOW_VS", "thinInstanceSetBuffer")))
+check("every device has its own island: yours is home, each linked machine floats in the space with its own island",
+      all(x in world_js for x in ("World.data.self", "machine:self", "you are here", "function machineIsland(", "machineSlots(",
+                                  "view.homeBtn", "back to ")))
 check("denser pixels and more colour bits than the first pixel look",
       '"const float BANDS = 4.0;"' in world_js and "view.opts.levels || 32" in world_js and "pixel: 2, fps: 0" in world_js)
 check("island life: the fox and the rabbits", "function critters(" in world_js and 'kind: "fox"' in world_js)
+import loki_bridge as _lb_world  # noqa: E402
+_wx = _lb_world.world_extras(type("A", (), {"active_model_name": lambda self: "m"})())
+check("the world knows which machine it is on (its island is home)",
+      isinstance(_wx.get("self"), dict) and bool(_wx["self"].get("name")) and "os" in _wx["self"])
 check("the world shows your other machines, the model and today's usage",
       all(x in world_js for x in ("World.data.machines", "machineSpots", "model.local", "usage.calls")))
 glass = (ui / "glass.css").read_text(encoding="utf-8")

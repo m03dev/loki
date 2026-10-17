@@ -38,7 +38,7 @@ const World = {
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
   adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
-  engine: "classic",   // LOKI's own pixel cel-shaded engine (the look); "three" = the optional three.js renderer
+  engine: "babylon",   // Babylon.js in the pixel cel-shaded look (default); "classic" = the hand-written WebGL one; "three" = three.js
   selected: "", particles: [], seats: {}, ripples: [], fish: null, fishAt: 0,
 };
 
@@ -430,17 +430,18 @@ function initGL(view) {
 function makeView(canvas, labels, opts) {
   // LOKI's own pixel cel-shaded renderer is the world's look. The three.js renderer
   // (world_three.js) is only used when asked for: LOKI_WORLD_ENGINE=three (Settings > General).
-  if (window.WorldThree && World.engine === "three") {
-    let three = null;
+  const engineMod = World.engine === "babylon" ? window.WorldBabylon : World.engine === "three" ? window.WorldThree : null;
+  if (engineMod) {
+    let three = null;   // (the slot is called "three" for history: any engine that draws world.js's scene description)
     try {
-      three = window.WorldThree.create(canvas, { staticScene, meshes: MESH_SRC, water: WATER,
+      three = engineMod.create(canvas, { staticScene, meshes: MESH_SRC, water: WATER,
         noise: typeof WORLD_NOISE_GLSL === "string" ? WORLD_NOISE_GLSL : "" });
-    } catch (err) { three = null; console.warn("LOKI World: three.js renderer failed, using the classic one", err); }
+    } catch (err) { three = null; console.warn("LOKI World: the " + World.engine + " renderer failed, using the classic one", err); }
     if (three) {
       staticScene();
       const view = { canvas, labels, gl: three.renderer.getContext(), three, opts, yaw: 0.6, pitch: opts.pitch || 0.5,
         dist: opts.dist || 15, target: [0, 0.7, 0], drag: null, pointers: {}, labelNodes: {}, visible: false, raf: 0, last: 0,
-        lastDraw: 0, perf: { ema: 0, boost: 0, slow: 0, fast: 0, draws: 0, ms: 0, engine: "three" }, follow: "" };
+        lastDraw: 0, perf: { ema: 0, boost: 0, slow: 0, fast: 0, draws: 0, ms: 0, engine: three.kind || "three" }, follow: "" };
       three.setQuality(opts.quality || "high");
       return view;
     }
@@ -561,11 +562,19 @@ const SCENERY = (function () {
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (clear(x, z, 0.5)) fall = { a, x, z };
   }
+  // the creations hall: a little open gallery near the edge, where what LOKI made hangs
+  let gallery = null;
+  for (let i = 0; i < 192 && !gallery; i++) {
+    const a = 0.9 + i * 0.41, r = ISLAND - 2.2 - (i % 3) * 0.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (clear(x, z, 0.6) && !(fall && Math.hypot(fall.x - x, fall.z - z) < 3.2)) gallery = { a, x, z };
+  }
+  const nearGallery = (x, z, d) => gallery && Math.hypot(gallery.x - x, gallery.z - z) < d;
   for (let i = 0; i < 400 && trees.length < 16; i++) {
     const a = rnd() * Math.PI * 2, r = 4 + rnd() * (ISLAND - 4.8);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!clear(x, z, 0.2) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 1.3)) continue;
     if (fall && Math.hypot(fall.x - x, fall.z - z) < 1.6) continue;
+    if (nearGallery(x, z, 2.4)) continue;
     trees.push({ x, z, h: 0.8 + rnd() * 0.6, kind: rnd() < 0.6 ? 0 : 1, ry: rnd() * 6 });
   }
   for (let i = 0; i < 300 && rocks.length < 9; i++) {
@@ -573,6 +582,7 @@ const SCENERY = (function () {
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!clear(x, z, 0) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 0.9)) continue;
     if (fall && Math.hypot(fall.x - x, fall.z - z) < 1.6) continue;
+    if (nearGallery(x, z, 2.2)) continue;
     rocks.push({ x, z, s: 0.3 + rnd() * 0.45, ry: rnd() * 6 });
   }
   for (const name of ["library", "review desk", "terminal"]) {   // lamps halfway along three paths
@@ -580,7 +590,7 @@ const SCENERY = (function () {
     lamps.push({ x: sx * 0.5 + sz / len * 0.75, z: sz * 0.5 - sx / len * 0.75 });
   }
   const busy = (x, z, d) => trees.some((t) => Math.hypot(t.x - x, t.z - z) < d) || rocks.some((t) => Math.hypot(t.x - x, t.z - z) < d) ||
-    (fall && Math.hypot(fall.x - x, fall.z - z) < 1.3);
+    (fall && Math.hypot(fall.x - x, fall.z - z) < 1.3) || nearGallery(x, z, 1.9);
   const FLOWER = [[1.0, 0.55, 0.75], [1.0, 0.86, 0.35], [0.95, 0.95, 1.0], [0.70, 0.60, 1.0]];
   for (let i = 0; i < 900 && flowers.length < 34; i++) {
     const a = rnd() * Math.PI * 2, r = 3.9 + rnd() * (ISLAND - 4.5), x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -604,7 +614,7 @@ const SCENERY = (function () {
   const benches = gaps.filter((_, i) => i % 2 === 0).map((a) => ({ a, x: Math.cos(a) * 2.75, z: Math.sin(a) * 2.75 }));
   const banners = gaps.map((a, i) => ({ a: a + (i % 2 === 0 ? 0.32 : 0), x: Math.cos(a + (i % 2 === 0 ? 0.32 : 0)) * 3.35, z: Math.sin(a + (i % 2 === 0 ? 0.32 : 0)) * 3.35 }));
   const spots = gaps.map((a) => [Math.cos(a - 0.25) * 2.35, Math.sin(a - 0.25) * 2.35]);   // where wanderers stand
-  return { trees, rocks, lamps, clouds, flowers, tufts, islets, crystals, fall, benches, banners, spots };
+  return { trees, rocks, lamps, clouds, flowers, tufts, islets, crystals, fall, gallery, benches, banners, spots };
 })();
 
 // The water in the world: where each body is, its shape for the shore distance (disc with
@@ -1002,6 +1012,31 @@ function stepParticles(dt) {
   }
 }
 
+// ---------------------------------------------------------------- other machines' islands
+// Where a linked machine's island floats: a stable spot from its name (so it never jumps when
+// another machine joins), spread round your island at different heights.
+function machineIsland(name, slot) {
+  let h = 2166136261;
+  for (const ch of String(name)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const ang = MACHINE_SLOTS[slot] + (((h >>> 8) % 100) / 100 - 0.5) * 0.18;
+  const r = 21 + (h >>> 12) % 4, y = -1.5 + ((h >>> 20) % 40) / 12.5;
+  return { cx: Math.cos(ang) * r, cz: Math.sin(ang) * r, y, ang, R: 3.4, seed: h % 100000 };
+}
+// the far side of your island from where the camera starts (yaw 0.6), fanned out so islands
+// never overlap; a machine keeps its slot (picked from its name) unless another already has it
+const MACHINE_SLOTS = [3.74, 3.14, 4.34, 2.54, 4.94, 1.94];
+function machineSlots(names) {
+  const used = new Set(), out = {};
+  for (const n of names.slice().sort()) {
+    let h = 2166136261;
+    for (const ch of String(n)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+    let k = h % MACHINE_SLOTS.length;
+    while (used.has(k)) k = (k + 1) % MACHINE_SLOTS.length;
+    used.add(k); out[n] = k;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- critters
 // Island life the owner asked for more of: a fox (LOKI's favourite) trots between the flower
 // patches, sits to watch the agents, follows LOKI now and then and curls up asleep at night;
@@ -1187,47 +1222,108 @@ function sceneList(view, t, dt, P) {
     view.teamSpots.push({ id: tm.id, pos: [b.x, 2.05, b.z], goal: tm.goal || "", stage: tm.stage || "" });
   });
 
-  // your other machines: each its own small island off the edge, joined by a bridge of light
-  // (the peer link - LAN or relay). Packets run along it while the machine answers; it goes
-  // dark and grey when it does not. Little figures stand round its tower for its running jobs.
+  // Every device that runs LOKI has its own island in the same sky. The island you stand on is
+  // THIS machine (its name floats over the spire: "you are here"); each linked machine is a
+  // whole island of its own out in the space around it - its own houses in its colours (a Mac
+  // is silver, a PC blue), its own trees, a beacon that is lit while it answers, a little
+  // figure for each job running there - joined to yours by a bridge of light (the peer link,
+  // LAN or relay) with packets travelling both ways. Click a machine's name to fly there.
   view.machineSpots = [];
-  const machines = ((World.data && World.data.machines) || []).slice(0, 4);
+  const self = (World.data && World.data.self) || {};
+  const selfName = self.name || "this computer";
+  view.machineSpots.push({ key: "machine:self", pos: [-0.25, 3.4, 0], name: selfName, sub: "you are here", home: true });
+  const machines = ((World.data && World.data.machines) || []).filter((m) => m.name !== self.name).slice(0, 6);
+  const slots = machineSlots(machines.map((m) => m.name));
   machines.forEach((m, i) => {
-    const ang = 2.55 + (i - (machines.length - 1) / 2) * 0.75, r = 17.5, y = -0.9;
-    const cx = Math.cos(ang) * r, cz = Math.sin(ang) * r, ok = m.ok;
+    const isl = machineIsland(m.name, slots[m.name]);
+    const { cx, cz, y: y0, ang, R } = isl, ok = m.ok;
+    const mac = /darwin|mac/i.test(m.os || "") || /mac/i.test(m.name);
+    const roof = mac ? [0.80, 0.82, 0.90] : /windows|win/i.test(m.os || "") || /pc|win/i.test(m.name) ? [0.30, 0.55, 0.95] : [0.55, 0.85, 0.55];
     const tone = ok ? [0.25, 0.95, 0.85] : [0.55, 0.55, 0.62];
-    const bob = World.reduced ? 0 : Math.sin(t * 0.6 + i) * 0.12;
-    solid("cyl6", [cx, y + bob, cz], i, [4.4, 0.5, 4.4], [0.12, 0.58, 0.38]);
-    solid("cone", [cx, y - 1.6 + bob, cz], i + 0.4, [4.0, -2.8, 4.0], [0.36, 0.26, 0.42], { line: false });
-    solid("box", [cx + 0.7, y + 0.75 + bob, cz - 0.4], ang, [1.2, 1.0, 1.0], [0.92, 0.86, 0.76]);
-    solid("pyr", [cx + 0.7, y + 1.6 + bob, cz - 0.4], ang + Math.PI / 4, [1.8, 0.75, 1.6], m.os === "Darwin" ? [0.75, 0.78, 0.86] : [0.30, 0.55, 0.95]);
-    solid("cyl6", [cx - 0.6, y + 1.3 + bob, cz + 0.4], 0, [0.22, 2.2, 0.22], [0.18, 0.2, 0.3]);
-    const beacon = [cx - 0.6, y + 2.6 + bob + (ok && !World.reduced ? Math.sin(t * 2 + i) * 0.06 : 0), cz + 0.4];
-    solid("sph", beacon, 0, [0.42, 0.42, 0.42], tone, { e: ok ? 1.3 : 0.15, line: false });
-    if (ok) { glow(beacon, 1.3, tone, 0.8); light([beacon[0], beacon[1] - 0.4, beacon[2]], scale3(tone, 0.7), 4, 1); }
-    for (let k = 0; k < Math.min(4, m.working || 0); k++) {   // its running jobs
-      const a2 = (World.reduced ? 0 : t * 0.4) + k * 1.57, fx = cx - 0.6 + Math.cos(a2) * 1.1, fz = cz + 0.4 + Math.sin(a2) * 1.1;
-      solid("cyl", [fx, y + 0.55 + bob, fz], a2, [0.32, 0.5, 0.32], [0.55, 0.75, 1.0]);
-      solid("sph", [fx, y + 0.98 + bob, fz], a2, [0.34, 0.34, 0.34], [0.65, 0.85, 1.0]);
+    const bob = World.reduced ? 0 : Math.sin(t * 0.5 + i) * 0.15, y = y0 + bob;
+    const rnd = seeded(isl.seed);
+    // the island itself: grass, a band of earth, a rock cone with crystals underneath
+    solid("cyl6", [cx, y - 0.2, cz], isl.seed % 7, [R * 2, 0.4, R * 2], ok ? [0.12, 0.6, 0.38] : [0.28, 0.42, 0.36], { g: 0.9 });
+    solid("cyl6", [cx, y - 0.65, cz], isl.seed % 5, [R * 2 - 0.2, 0.6, R * 2 - 0.2], [0.55, 0.34, 0.30]);
+    solid("cone", [cx, y - 2.6, cz], isl.seed % 3, [R * 1.9, -3.6, R * 1.9], [0.36, 0.26, 0.42], { line: false });
+    solid("pyr", [cx + R * 0.3, y - 3.3, cz - R * 0.2], 0.4, [0.5, -1.2, 0.5], tone, { e: ok ? 0.7 : 0.1, line: false });
+    // its house (in the machine's colours), a path, a lamp
+    const hx = cx + Math.cos(ang + 0.6) * R * 0.35, hz = cz + Math.sin(ang + 0.6) * R * 0.35, hr = Math.atan2(cx - hx, cz - hz);
+    solid("box", [hx, y + 0.55, hz], hr, [1.5, 1.1, 1.3], [0.93, 0.86, 0.74]);
+    solid("pyr", [hx, y + 1.55, hz], hr + Math.PI / 4, [2.25, 0.9, 2.0], roof);
+    solid("box", [hx + Math.sin(hr) * 0.66, y + 0.6, hz + Math.cos(hr) * 0.66], hr, [0.42, 0.34, 0.04], [1.0, 0.82, 0.45], { e: ok ? 0.9 : 0.1, line: false });
+    shadow(hx + 0.2, hz - 0.2, 1.3, 0.45);
+    for (let k = 0; k < 4; k++) {   // trees, from the machine's own seed
+      const a2 = rnd() * Math.PI * 2, r2 = R * (0.55 + rnd() * 0.3), tx = cx + Math.cos(a2) * r2, tz = cz + Math.sin(a2) * r2, h = 0.8 + rnd() * 0.5;
+      if (Math.hypot(tx - hx, tz - hz) < 1.3) continue;
+      solid("cyl6", [tx, y + 0.3 * h, tz], 0, [0.22, 0.6 * h, 0.22], [0.48, 0.30, 0.22]);
+      solid("cone", [tx, y + 0.95 * h, tz], k, [1.1 * h, 1.0 * h, 1.1 * h], k % 2 ? [0.24, 0.78, 0.34] : [0.12, 0.66, 0.52]);
+      shadow(tx + 0.15, tz - 0.1, 0.65 * h, 0.45);
     }
-    // the bridge: an arc of lights from this island's edge to that one's
-    const a0 = [Math.cos(ang) * (ISLAND - 0.3), 0.3, Math.sin(ang) * (ISLAND - 0.3)];
-    const a1 = [cx - Math.cos(ang) * 2.3, y + 0.4 + bob, cz - Math.sin(ang) * 2.3];
-    const N = 14;
+    // the beacon tower: lit while this machine answers
+    const bx = cx - Math.cos(ang + 0.6) * R * 0.3, bz = cz - Math.sin(ang + 0.6) * R * 0.3;
+    solid("cyl6", [bx, y + 1.3, bz], 0, [0.24, 2.6, 0.24], [0.18, 0.2, 0.3]);
+    const beacon = [bx, y + 2.85 + (ok && !World.reduced ? Math.sin(t * 2 + i) * 0.06 : 0), bz];
+    solid("sph", beacon, 0, [0.45, 0.45, 0.45], tone, { e: ok ? 1.3 : 0.15, line: false });
+    if (ok) { glow(beacon, 1.4, tone, 0.8); light([beacon[0], beacon[1] - 0.4, beacon[2]], scale3(tone, 0.7), 4.5, 1); }
+    // a figure for each job running there (blue: working, red: needs you)
+    const people = Math.min(5, (m.working || 0) + (m.blocked || 0));
+    for (let k = 0; k < people; k++) {
+      const a2 = (World.reduced ? 0 : t * 0.35) + k * (Math.PI * 2 / Math.max(1, people)), fx = bx + Math.cos(a2) * 1.3, fz = bz + Math.sin(a2) * 1.3;
+      const col = k < (m.working || 0) ? [0.55, 0.75, 1.0] : [1.0, 0.45, 0.45];
+      solid("cyl", [fx, y + 0.35, fz], a2, [0.3, 0.45, 0.3], col);
+      solid("sph", [fx, y + 0.72, fz], a2, [0.3, 0.3, 0.3], col.map((v) => Math.min(1, v * 1.1)));
+      shadow(fx, fz, 0.3, 0.5);
+    }
+    // the bridge of light from your island's edge to theirs
+    const dir = norm([cx, 0, cz]);
+    const a0 = [dir[0] * (ISLAND - 0.3), 0.3, dir[2] * (ISLAND - 0.3)];
+    const a1 = [cx - dir[0] * (R - 0.3), y + 0.2, cz - dir[2] * (R - 0.3)];
+    const N = 22, lift = 1.6 + Math.abs(y0) * 0.3;
     for (let k = 0; k <= N; k++) {
       const u = k / N, p = mix3(a0, a1, u);
-      p[1] += Math.sin(u * Math.PI) * 1.4;
-      solid("box", p, ang, [0.12, 0.05, 0.12], tone, { e: ok ? 0.9 : 0.05, line: false });
+      p[1] += Math.sin(u * Math.PI) * lift;
+      solid("box", p, Math.atan2(dir[0], dir[2]), [0.12, 0.05, 0.12], tone, { e: ok ? 0.9 : 0.05, line: false });
     }
     if (ok && !World.reduced) for (let k = 0; k < 3; k++) {   // packets travelling both ways
-      const u = ((t * 0.35 + k / 3) % 1), dir = k % 2 ? u : 1 - u, p = mix3(a0, a1, dir);
-      p[1] += Math.sin(dir * Math.PI) * 1.4 + 0.12;
+      const u = ((t * 0.3 + k / 3) % 1), d2 = k % 2 ? u : 1 - u, p = mix3(a0, a1, d2);
+      p[1] += Math.sin(d2 * Math.PI) * lift + 0.12;
       glow(p, 0.35, k % 2 ? [0.4, 1, 0.9] : [1, 0.85, 0.4], 0.95);
     }
-    view.machineSpots.push({ key: "machine:" + m.name, pos: [cx, y + 3.4 + bob, cz], name: m.name,
+    view.machineSpots.push({ key: "machine:" + m.name, pos: [bx, y + 3.7, bz], focus: [cx, y + 0.6, cz], name: m.name,
       sub: ok ? (m.relay ? "via relay · " : "") + (m.ms != null ? m.ms + " ms" : "") + (m.working ? " · " + m.working + " working" : "") +
         (m.blocked ? " · " + m.blocked + " need you" : "") : "offline" + (m.error ? " · " + m.error.slice(0, 60) : "") });
   });
+
+  // the creations hall: what LOKI made hangs here - one lit frame per newest piece (a picture's
+  // frame in its own colour, a video's with a play mark), and its name opens Settings > Creations
+  const gal = SCENERY.gallery, made = (World.data && World.data.creations) || { count: 0, latest: [] };
+  if (gal) {
+    const face = Math.atan2(-gal.x, -gal.z);   // the open side looks at the plaza
+    const fx = Math.sin(face), fz = Math.cos(face), sx = Math.cos(face), sz = -Math.sin(face);
+    const at = (u, v, h) => [gal.x + sx * u + fx * v, h, gal.z + sz * u + fz * v];
+    solid("box", at(0, 0, 0.08), face, [3.4, 0.16, 2.0], [0.82, 0.78, 0.72]);            // floor
+    solid("box", at(0, -0.85, 1.05), face, [3.4, 1.9, 0.18], [0.95, 0.92, 0.86]);         // back wall
+    for (const u of [-1.6, 1.6]) solid("box", at(u, 0.2, 1.05), face, [0.16, 1.9, 0.16], [0.66, 0.5, 0.38]);
+    solid("box", at(0, -0.1, 2.08), face, [3.8, 0.16, 2.3], [0.62, 0.36, 0.42]);         // roof slab
+    solid("pyr", at(0, -0.1, 2.5), face + Math.PI / 4, [3.2, 0.7, 3.2], [0.85, 0.45, 0.5]);
+    shadow(gal.x, gal.z, 2.2, 0.5);
+    const hung = (made.latest || []).slice(0, 5);
+    hung.forEach((c, k) => {
+      const u = (k - (hung.length - 1) / 2) * 0.62, y = 1.15 + (k % 2) * 0.12;
+      let h = 0;
+      for (const ch of c.title || "") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      const hue = (h % 360) / 360, col = [0.5 + 0.45 * Math.cos(6.283 * hue), 0.5 + 0.45 * Math.cos(6.283 * (hue - 0.33)),
+        0.5 + 0.45 * Math.cos(6.283 * (hue - 0.67))];
+      solid("box", at(u, -0.74, y), face, [0.52, 0.52, 0.05], [0.25, 0.18, 0.12]);        // the frame
+      solid("box", at(u, -0.71, y), face, [0.42, 0.42, 0.04], col, { e: 0.6, line: false }); // the piece
+      if (c.show === "video") solid("pyr", at(u, -0.68, y), face, [0.14, 0.02, 0.14], [1, 1, 1], { e: 1, line: false });
+    });
+    if (hung.length) light(at(0, 0.3, 1.6), [1.0, 0.85, 0.6], 3.2, 0);
+    view.machineSpots.push({ key: "creations", pos: at(0, 0, 3.2), name: "Creations",
+      sub: made.count ? made.count + " made · newest: " + ((made.latest[0] || {}).title || "").slice(0, 34) : "ask LOKI to make something",
+      gallery: true });
+  }
 
   // agents
   const list = Object.entries(World.agents);
@@ -1432,7 +1528,9 @@ function frame(view, now) {
   const vp = M4.mul(M4.persp(fov, w / h, 0.5, 90), M4.lookAt(eye, target, [0, 1, 0]));
   view.lastVP = vp;
   const camF = norm(sub(target, eye)), camR = norm(cross(camF, [0, 1, 0])), camU = cross(camR, camF);
-  const fogr = [view.dist + 2, 16];
+  // the fog reaches further when other machines' islands float out in the space around you
+  const far = ((World.data && World.data.machines) || []).some((m) => !World.data.self || m.name !== World.data.self.name);
+  const fogr = [view.dist + 2, far ? 34 : 16];
 
   const L = sceneList(view, t, dt, P);
 
@@ -1452,7 +1550,7 @@ function frame(view, now) {
     World.ripples = World.ripples.filter((r) => nowS - r.t0 < 2.4);
     const scaleDown = [1, 0.85, 0.7][view.perf.boost] || 1;
     view.perf.draws = view.three.render({ L, lights, eye, target, fov, P, sunDir, t, w: canvas.clientWidth || 1,
-      h: canvas.clientHeight || 1, dpr: dpr * scaleDown, skyRot: World.reduced ? 0 : -t * 0.01, ripples: World.ripples,
+      h: canvas.clientHeight || 1, dpr: view.three.kind === "babylon" ? dpr : dpr * scaleDown, pixel: scale, levels: view.opts.levels || 32, fogr, skyRot: World.reduced ? 0 : -t * 0.01, ripples: World.ripples,
       waterLook: { shallow: mix3(WATER_LOOK.night.shallow, WATER_LOOK.day.shallow, P.dayK),
         deep: mix3(WATER_LOOK.night.deep, WATER_LOOK.day.deep, P.dayK), foam: mix3(WATER_LOOK.night.foam, WATER_LOOK.day.foam, P.dayK) } });
     view.perf.ms = performance.now() - t0;
@@ -1713,13 +1811,41 @@ function drawLabels(view, vp, now) {
   // never more than ~40px from its head - a banner label that still collides just hides
   for (const ms of view.machineSpots || []) {
     seen.add(ms.key);
-    const node = nodeFor(ms.key, "wlabel machine");
+    const node = nodeFor(ms.key, "wlabel machine" + (ms.home ? " home" : "") + (ms.gallery ? " gallery" : ""));
+    if (!node.flyTo) {   // click a machine's name: fly there; click your own island's name: come home
+      node.flyTo = true;
+      node.title = ms.gallery ? "Open what LOKI made" : ms.home ? "This computer - click to come home" : "Click to fly to " + ms.name;
+      node.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (ms.gallery) {   // the creations hall opens Settings > Creations
+          const sheet = document.getElementById("settings");
+          if (sheet && typeof showTab === "function") { sheet.hidden = false; showTab("creations"); }
+          return;
+        }
+        const spot = (view.machineSpots || []).find((x) => x.key === ms.key);
+        view.follow = "";
+        view.focus = spot && spot.focus ? spot.focus : null;
+        view.dist = spot && spot.focus ? 13 : Math.max(view.dist, 16);
+      });
+    }
     const at = project(view, ms.pos);
     node.hidden = !at;
     if (!at) continue;
     setText(node, 0, ms.name);
     setText(node, 1, ms.sub);
     items.push({ node, x: at[0], y: at[1], depth: at[2] });
+  }
+  // away visiting another machine's island: a button to come home
+  if (!view.homeBtn && view.labels) {
+    view.homeBtn = el("button", "world-home");
+    view.homeBtn.addEventListener("click", (e) => { e.stopPropagation(); view.focus = null; view.dist = Math.max(view.dist, 16); });
+    view.labels.append(view.homeBtn);
+  }
+  if (view.homeBtn) {
+    const away = !!(view.focus && Math.hypot(view.focus[0], view.focus[2]) > 12);
+    view.homeBtn.hidden = !away;
+    const txt = "\u2302 back to " + (((World.data && World.data.self) || {}).name || "this computer");
+    if (view.homeBtn.textContent !== txt) view.homeBtn.textContent = txt;
   }
   items.sort((p, q) => (p.node.classList.contains("team") - q.node.classList.contains("team")) || p.depth - q.depth);
   const placed = [];
@@ -2001,15 +2127,30 @@ function loadThree() {
   });
 }
 
+// Babylon.js (2.9 MB, LOKI's own slim build) and its renderer, loaded when the world starts.
+function loadScript(src) {
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = () => resolve(true); s.onerror = () => resolve(false);
+    document.head.append(s);
+  });
+}
+async function loadBabylon() {
+  if (window.WorldBabylon && window.BABYLON) return true;
+  return (await loadScript("/ui/vendor/babylon/babylon.loki.js")) && (await loadScript("/ui/world_babylon.js")) && !!window.WorldBabylon;
+}
+
 async function startWorld() {
   try {
     const data = await api("/settings/general");
     if (data && data.ok) {
       World.mode = data.values.LOKI_WORLD || "background";
-      World.engine = (data.values.LOKI_WORLD_ENGINE || "").toLowerCase() === "three" ? "three" : "classic";
+      const want = (data.values.LOKI_WORLD_ENGINE || "babylon").toLowerCase();
+      World.engine = ["babylon", "three", "classic"].includes(want) ? want : "babylon";
     }
   } catch (_) { /* default */ }
   if (World.engine === "three") await loadThree();   // only then is the 2 MB three.js parsed at all
+  if (World.engine === "babylon" && !(await loadBabylon())) World.engine = "classic";
   const canvas = document.getElementById("world-bg-canvas");
   if (canvas) World.views.bg = makeView(canvas, document.getElementById("world-bg-labels"),
     { dist: 19, pitch: 0.46, spin: 0.045, detail: false, pixel: 3, fps: 30, quality: "medium" });

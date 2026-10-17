@@ -15,6 +15,7 @@
 <script src="/ui/crm.js" defer></script>
 <script src="/ui/lab.js" defer></script>
 <script src="/ui/play_panel.js" defer></script>
+<script src="/ui/creations.js" defer></script>
 <script src="/ui/brain.js" defer></script>
 <script src="/ui/workbench.js" defer></script>
 <script src="/ui/sketch.js" defer></script>
@@ -124,6 +125,7 @@
         <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
         <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
+        <button type="button" role="tab" data-tab="creations" aria-selected="false"><span class="ico" aria-hidden="true">✿</span>Creations</button>
         <button type="button" role="tab" data-tab="brain" aria-selected="false"><span class="ico" aria-hidden="true">✺</span>Brain</button>
         <button type="button" role="tab" data-tab="play" aria-selected="false"><span class="ico" aria-hidden="true">▶</span>Play</button>
         <button type="button" role="tab" data-tab="lab" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Lab</button>
@@ -187,6 +189,10 @@
         <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
         <div id="update-panel" class="update-panel"></div>
         <div id="machines-panel"></div>
+      </section>
+      <section data-panel="creations" hidden>
+        <header class="panel-head"><h3>Creations</h3><p class="note">Everything LOKI made for you - pictures, videos, sketches, sounds and games - newest first. Ask for the next one here; LOKI makes it in the background (pictures use the free image maker unless you connected a better one).</p></header>
+        <div id="creations-panel" class="creations"></div>
       </section>
       <section data-panel="brain" hidden>
         <header class="panel-head"><h3>Brain</h3><p class="note">Everything LOKI knows, as one map: LOKI and its specialists, their tools, memory, skills, recent jobs, your project's docs and your Obsidian vault (read only), joined by their links and #tags.</p></header>

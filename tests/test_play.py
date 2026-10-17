@@ -81,6 +81,34 @@ check("game_engine_guide gives the API, the workflow and a full example",
       "games/<name>/game.js" in guide and "PixelEngine.create" in guide and "Fox & Berries" in guide)
 check("it is offered to the model", "game_engine_guide" in loki.MODEL_TOOL_NAMES and "game_engine_guide" in loki.TOOL_CATEGORIES["creative"])
 
+section("Creations: what LOKI made, front and centre")
+import creations  # noqa: E402
+TMP2 = Path(tempfile.mkdtemp())
+(TMP2 / "images").mkdir()
+(TMP2 / "images" / "20261014-201742-red-fox-in-studio-light.jpg").write_bytes(b"\xff\xd8\xff")
+(TMP2 / "images" / "notes.txt").write_text("no", encoding="utf-8")
+(TMP2 / "sketches").mkdir()
+(TMP2 / "sketches" / "sketch-20261015-101010.png").write_bytes(b"\x89PNG")
+(TMP2 / "secret.jpg").write_bytes(b"x")
+made = creations.list_creations(TMP2)
+check("the fox shows with a readable title", any(c["title"] == "Red fox in studio light" and c["show"] == "image" for c in made), made)
+check("only pictures, videos, sketches and sounds are listed", not any(c["path"].endswith(".txt") for c in made) and len(made) == 2, made)
+check("a creation is served from its folder", creations.creation_file(TMP2, "/creations/images/20261014-201742-red-fox-in-studio-light.jpg") is not None)
+check("nothing outside those folders", creations.creation_file(TMP2, "/creations/../secret.jpg") is None
+      and creations.creation_file(TMP2, "/creations/images/../secret.jpg") is None
+      and creations.creation_file(TMP2, "/creations/images/notes.txt") is None
+      and creations.creation_file(TMP2, "/creations/games/x.js") is None)
+check("the bridge lists them (token) and serves the files (this machine only, sandboxed)",
+      'route == "/creations"' in bridge and "def _serve_creation(" in bridge and "default-src 'none'; sandbox" in bridge)
+creations_js = (ui / "creations.js").read_text(encoding="utf-8")
+check("Settings > Creations: the wall, a 'make it' box that starts a background job, more like this",
+      'data-tab="creations"' in html and "/ui/creations.js" in html and 'api("/jobs"' in creations_js
+      and "Make more like this" in creations_js)
+world_src = (ui / "world.js").read_text(encoding="utf-8")
+check("the island has a creations hall that hangs the newest pieces and opens Creations",
+      "SCENERY.gallery" in world_src and 'showTab("creations")' in world_src and "World.data.creations" in world_src)
+shutil.rmtree(TMP2, ignore_errors=True)
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))
