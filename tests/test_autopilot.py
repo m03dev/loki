@@ -18,6 +18,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(REPO / "engine")]
 
 import autopilot  # noqa: E402
+import selftest  # noqa: E402
 
 PASS: list = []
 FAIL: list = []
@@ -167,7 +168,9 @@ ran = auto.tick()
 check("the first pass runs exactly one duty", len(ran) == 1, ran)
 drained = [auto.tick() for _ in range(5)]
 done_duties = [r[0][0] for r in [ran] + drained if r]
-check("across passes each duty runs once, then nothing", sorted(done_duties) == ["health", "inbox", "report"]
+# selftest is a duty only where it is enabled (auto = on for the PC), so the expected set moves
+_expected = ["health", "inbox", "report"] + (["selftest"] if selftest.enabled() else [])
+check("across passes each duty runs once, then nothing", sorted(done_duties) == sorted(_expected)
       and drained[-1] == [], (done_duties, drained[-1]))
 
 # ---------------------------------------------------------------------------- report
