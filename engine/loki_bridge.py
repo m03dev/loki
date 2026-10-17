@@ -307,6 +307,45 @@ def resolve_workspace(project_dir: str = "") -> Path:
     return Path(chosen).expanduser().resolve() if chosen else (Path.home() / "LOKI Projects" / "Home").resolve()
 
 
+GAME_TYPES = (".js", ".json", ".png", ".svg")
+
+
+def game_file(workspace: Path, route: str) -> Path | None:
+    """Map /games/<name>/<file> to workspace/games/<name>/<file>, refusing anything else."""
+    relative = route[len("/games/"):]
+    if not relative or "\\" in relative or relative.startswith("/") or ".." in relative.split("/"):
+        return None
+    root = (Path(workspace) / "games").resolve()
+    try:
+        candidate = (root / relative).resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    if candidate.suffix not in GAME_TYPES or not candidate.is_file():
+        return None
+    return candidate
+
+
+def list_games(ui_dir: Path | None, workspace: Path) -> list:
+    """Every playable game: the ones that ship with LOKI and the ones LOKI built in the workspace."""
+    out = []
+    for src, root in (("builtin", Path(ui_dir) / "games" if ui_dir else None), ("workspace", Path(workspace) / "games")):
+        if root is None or not root.is_dir():
+            continue
+        for folder in sorted(root.iterdir()):
+            script = folder / "game.js"
+            if not script.is_file():
+                continue
+            try:
+                first = script.read_text(encoding="utf-8", errors="replace").splitlines()[0]
+            except (OSError, IndexError):
+                first = ""
+            title = first.lstrip("/ ").split(" - ")[0].strip() or folder.name
+            out.append({"name": folder.name, "title": title[:80], "src": src,
+                        "about": first.lstrip("/ ")[len(title):].lstrip(" -")[:200], "t": script.stat().st_mtime})
+    return out
+
+
 def ui_file(ui_dir: Path, route: str) -> Path | None:
     """Map a UI route to a file inside ui_dir, refusing anything that escapes it."""
     relative = "index.html" if route == "/" else route[len("/ui/"):]
@@ -688,6 +727,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
             return True
+        self._send_static(found, framed=(route == "/ui/play.html"))
+        return True
+
+    def _send_static(self, found: Path, framed: bool = False) -> None:
+        """One static file. `framed`: the Play page, which LOKI's own window shows in a sandboxed
+        frame - it may be framed by LOKI itself (same origin) and nothing else."""
         body = found.read_bytes()
         try:
             self.send_response(200)
@@ -695,12 +740,28 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Content-Security-Policy", UI_CSP)
+            self.send_header("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
+            self.send_header("Content-Security-Policy",
+                             UI_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") if framed else UI_CSP)
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionError, OSError):
             pass
+
+    def _serve_game(self, route: str) -> bool:
+        """GET /games/<name>/<file>: a game LOKI built in the workspace (games/<name>/), for the
+        Play page's sandboxed frame. Only .js/.json/.png/.svg, only inside workspace/games, and
+        only for this machine's own host name (like the UI)."""
+        if not route.startswith("/games/") or route == "/games/list":
+            return False
+        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+            self._send_json(403, {"ok": False, "error": "Host not allowed."})
+            return True
+        found = game_file(Path(getattr(self.server.state.agent, "WORKSPACE", ".")), route)
+        if found is None:
+            self._send_json(404, {"ok": False, "error": "Not found."})
+            return True
+        self._send_static(found)
         return True
 
     def _oauth_callback(self, route: str) -> bool:
@@ -733,6 +794,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         route = urlparse(self.path).path
         if self._serve_ui(route):
+            return
+        if self._serve_game(route):
             return
         if self._oauth_callback(route):
             return
@@ -932,6 +995,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/crm":
             self._send_json(*crm_route(self.server.state, "GET", route, {}))
+            return
+        if route == "/games/list":
+            ws = Path(getattr(self.server.state.agent, "WORKSPACE", "."))
+            self._send_json(200, {"ok": True, "games": list_games(UI_DIR, ws)})
             return
         if route == "/media/status":
             import higgsfield  # pylint: disable=import-outside-toplevel

@@ -4,6 +4,15 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 25 (Claude): Pixel Engine + Play + Fox & Berries, Brain map (editable memory), audit
+
+- app/ui/engine/pixel_engine.js, play.html/play.js, games/fox_berries, Settings > Play (sandboxed),
+  /games/<name>/<file>, /games/list, tool game_engine_guide. tests/test_play.py (20).
+- app/ui/brain.js, Settings > Brain: map + search + read + edit/forget memory facts.
+- Ziva on the PC: "Use Main Screen Tab" off (the tab was off-screen on the portrait monitor).
+
+---
+
 ## 2026-10-17 - Session 24 (Claude): pixel look back, lag removed, fox, crash restart, LOKI grows itself
 
 - world.js: classic pixel cel-shaded renderer is the default again, denser (2/3 px) with 32 colour

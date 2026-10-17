@@ -223,7 +223,7 @@ function fragmentShader(baked) {
   " for (int i = 0; i < 10; i++) { vec3 d = LP[i] - wp; float r = length(d);" +
   "  float at = clamp(1.0 - r / LC[i].w, 0.0, 1.0) * (0.35 + 0.65 * max(dot(N, d / max(r, 0.001)), 0.0));" +
   "  col += (base * 0.8 + 0.12) * LC[i].rgb * (step(0.15, at) * 0.5 + step(0.5, at) * 0.5); }" +
-  " float rim = 1.0 - max(dot(N, V), 0.0); col += rimCol * step(0.72, rim) * (0.3 + 0.7 * b);" +
+  " float rim = 1.0 - max(dot(N, V), 0.0); col += rimCol * step(0.72, rim) * (0.3 + 0.7 * b) * (1.0 - step(0.8, N.y));" +
   " vec3 H = normalize(sunDir + V); col += sunCol * step(0.96, dot(N, H)) * S;" +
   " col += base * E;" +
   " float f = clamp((length(eye - wp) - fogr.x) / fogr.y, 0.0, 1.0); f = floor(f * 4.0) / 4.0;" +

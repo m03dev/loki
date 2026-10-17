@@ -4,7 +4,33 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 24, Claude in the cloud).
+Last updated: 2026-10-17 (session 25, Claude in the cloud).
+
+## Session 25 (2026-10-17, Claude in the cloud): LOKI's own game engine + Play, the Brain map back, an audit
+
+- **LOKI Pixel Engine** (`app/ui/engine/pixel_engine.js`): LOKI's own small WebGL 1 game engine in LOKI
+  World's look - low-res framebuffer, Bayer posterize, 4 cel bands, ink outlines, flat-normal box/sphere/
+  cylinder/cone/pyramid meshes, entities made of parts, camera, keys/pointer, HUD, beeps, collisions; the
+  world's critters and props as models (fox, rabbit, tree, rock, berry, person, island). No libraries.
+- **Play** (Settings > Play, `play_panel.js`, `/ui/play.html`): games run in a sandboxed frame
+  (`allow-scripts` only - no token, storage or engine access). Built-in game: **Fox & Berries**. Games LOKI
+  makes live in `<workspace>/games/<name>/game.js`, served by `GET /games/<name>/<file>` (only that folder,
+  only .js/.json/.png/.svg) and listed by `GET /games/list`. Agent tool `game_engine_guide` gives the model
+  the API + workflow + a full example. Only `/ui/play.html` may be framed, and only by LOKI itself.
+  CHECK ON THE MAC: WebKit and a sandboxed frame's `'self'` scripts (ZIVA M12).
+- **Brain map back** (Settings > Brain, `brain.js`): BUILD_BRIEF 5.7 said remove it "unless it becomes
+  genuinely useful (browsing and correcting what LOKI knows)" - it now is: force-directed map of /brain
+  (settles, then stops - no idle CPU), search, read any note, and **edit or forget a remembered fact** in
+  place (memory.md via /memory). The Obsidian vault can be added there.
+- Shading: no rim highlight on flat ground (it lit distant grass cyan at low camera angles) - world and engine.
+- **Ziva on the PC** (the owner's Godot, not LOKI): its panel had vanished because Ziva was set to "Use Main
+  Screen Tab" and the PC's portrait screen at 125% fits only two main-screen tabs. Switched it to a dock in
+  Editor Settings > Ziva > UI; it shows on the left again.
+- **Audit (all owner goals)**: none fully finished. Biggest gaps after this session: Godot code still in the
+  repo (godot_tools.py, godot_assets.py, ~150 refs in loki.py, Godot MCP servers, the first-run Godot API
+  step) although the owner wants nothing Godot; the PC as a real 24/7 worker (start at boot, cua VMs, Browser
+  Use, a first LoRA run); evolve has not finished a step yet; the phone app never ran on a phone and cannot
+  reach the computer through the relay; most add-ons only tested with fakes. Next session: remove Godot.
 
 ## Session 24 (2026-10-17, Claude in the cloud): the pixel look is back, the lag is gone, LOKI grows itself
 

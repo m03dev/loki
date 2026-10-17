@@ -645,6 +645,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (6) Update Ollama to 0.40.6+ (`winget upgrade Ollama.Ollama` or the installer from ollama.com)
       so Bonsai 2 loads; re-pull it from Settings > Local models; report the smoke test.
 
+- [ ] **W20 Play and Brain on the PC (2026-10-17).** After LOKI updates: (1) `ship.py --check`.
+      (2) Settings > Play: Fox & Berries runs (arrows/WASD, Space dash); report fps and any error.
+      (3) In chat ask LOKI: "make a small game where the fox dodges falling acorns" - it should call
+      game_engine_guide, write games/<name>/game.js in the workspace, and the game appears in Play.
+      Report whether it ran first try; paste the error line if not.
+      (4) Settings > Brain: the map draws and settles; click a memory fact, edit it, then forget one;
+      confirm Settings > Memory changed the same way. (5) Screenshots of Play and Brain.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -815,6 +823,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       re-blurred every panel each frame). Report fps and CPU.
       (3) Screenshot the fox. (4) Settings > Lab shows "Off on this machine" (auto = PC only) -
       leave it off; the Mac has 16 GB.
+
+- [ ] **M12 Play on the Mac (WebKit) (2026-10-17).** Settings > Play must run Fox & Berries. The game runs in
+      a sandboxed iframe (allow-scripts, no same-origin) whose page loads /ui/engine/*.js under
+      `script-src 'self'` - if WebKit blocks those scripts, the frame shows "the engine did not load" or stays
+      blank: report the console errors (Develop menu / Web Inspector if enabled). Also Settings > Brain.
 
 ## Needs Mohamed
 

@@ -14,6 +14,8 @@
 <script src="/ui/settings.js" defer></script>
 <script src="/ui/crm.js" defer></script>
 <script src="/ui/lab.js" defer></script>
+<script src="/ui/play_panel.js" defer></script>
+<script src="/ui/brain.js" defer></script>
 <script src="/ui/workbench.js" defer></script>
 <script src="/ui/sketch.js" defer></script>
 </head>
@@ -122,6 +124,8 @@
         <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
         <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
+        <button type="button" role="tab" data-tab="brain" aria-selected="false"><span class="ico" aria-hidden="true">✺</span>Brain</button>
+        <button type="button" role="tab" data-tab="play" aria-selected="false"><span class="ico" aria-hidden="true">▶</span>Play</button>
         <button type="button" role="tab" data-tab="lab" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Lab</button>
         <button type="button" role="tab" data-tab="crm" aria-selected="false"><span class="ico" aria-hidden="true">☷</span>CRM</button>
         <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
@@ -183,6 +187,14 @@
         <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
         <div id="update-panel" class="update-panel"></div>
         <div id="machines-panel"></div>
+      </section>
+      <section data-panel="brain" hidden>
+        <header class="panel-head"><h3>Brain</h3><p class="note">Everything LOKI knows, as one map: LOKI and its specialists, their tools, memory, skills, recent jobs, your project's docs and your Obsidian vault (read only), joined by their links and #tags.</p></header>
+        <div id="brain-panel" class="brain"></div>
+      </section>
+      <section data-panel="play" hidden>
+        <header class="panel-head"><h3>Play</h3><p class="note">Games made with LOKI's own Pixel Engine, in LOKI World's pixel cel-shaded look. Ask LOKI to make one ("make a game where the fox...") and it appears here. Games run sealed off from LOKI: they cannot see your files or keys.</p></header>
+        <div id="play-panel" class="play"></div>
       </section>
       <section data-panel="lab" hidden>
         <header class="panel-head"><h3>Lab - LOKI grows itself</h3><p class="note">LOKI builds its own personal-agent core here, one change at a time, when it is idle: your ideas first, then the roadmap in docs/EVOLVE.md. Each change is made in its own copy of the code, tested on every suite and shipped only if all pass; what worked and what did not is kept and used for the next try.</p></header>

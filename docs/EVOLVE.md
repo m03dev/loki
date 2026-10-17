@@ -19,7 +19,7 @@ core has. LOKI writes its own versions; nothing is copied from it.
 ## Roadmap
 
 - [ ] E1 Memory you can see and edit - Settings > Memory lists what LOKI remembers (facts, past work, skills) with search, edit and forget; at the start of a request LOKI recalls the few memories that matter and the reply says which it used.
-- [ ] E11 LOKI's own game engine - turn the world's pixel cel-shaded renderer (app/ui/world.js) into a small engine in app/ui/engine/ (scene, entities, input, game loop, sound) that the world itself uses, plus a Play panel in the window where games LOKI builds run inside the app, in the same look.
+- [ ] E11 LOKI's own game engine, step 2 - the engine (app/ui/engine/pixel_engine.js), the Play panel and the first game (Fox & Berries) exist. Next: LOKI World itself drawn by the same engine (one renderer, not two), plus sprites/particles and a simple tilemap/terrain in the engine, and two more games LOKI makes on its own (games/<name>/game.js, via game_engine_guide).
 - [ ] E2 Learn skills from its own work - after a request that was verified done and took more than 5 tool calls, write a SKILL.md of the procedure to harness_data/skills/learned/ and use it the next time a similar request comes (the reply says "used learned skill ...").
 - [ ] E3 Subagents - a run_subagent tool: a short-lived helper with a narrow tool set and its own small context that returns one result, so research and file searches run side by side.
 - [ ] E4 More island life - animals in LOKI World in the pixel cel-shaded style with ink lines, like the fox: ducks in the pond, a cat that naps by the library, a deer at the island edge; each with a few believable behaviours.

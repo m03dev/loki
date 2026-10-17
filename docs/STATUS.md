@@ -57,7 +57,7 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Browser Use, cua, Crawl4AI, Firecrawl, Scrapling, Perplexity, Vane, Hindsight, Hermes | Implemented | capability manifests, off until enabled; not run for real on either machine |
 | Unreal, Blender, Maya, Substance, Unity adapters | Proposed | only detected (`machine_capabilities`), no adapters |
 | One common creative-tool interface | Proposed | |
-| Obsidian vault | Implemented | `tools/export_obsidian.py`; the Brain tab was removed |
+| Obsidian vault | Implemented | `tools/export_obsidian.py`; Settings > Brain maps it (read-only) with LOKI's memory, which you can correct or forget there |
 
 ## 5. Evolution: improving safely
 

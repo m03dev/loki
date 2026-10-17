@@ -1494,6 +1494,23 @@ def render_video(project_dir: str, composition: str, out: str = "", props=None, 
     return "rendered %s (%d bytes)" % (result.get("file"), int(result.get("bytes") or 0))
 
 
+def game_engine_guide() -> str:
+    """How to make a game with LOKI's own Pixel Engine: the API, the workflow and a full example."""
+    ui = REPO_ROOT.parent / "app" / "ui" if (REPO_ROOT.parent / "app" / "ui").is_dir() else REPO_ROOT / "app" / "ui"
+    try:
+        src = (ui / "engine" / "pixel_engine.js").read_text(encoding="utf-8")
+        api = src.split('"use strict";', 1)[0]
+        example = (ui / "games" / "fox_berries" / "game.js").read_text(encoding="utf-8")
+    except OSError as exc:
+        return "error: the game engine files are missing (%s)" % exc
+    return ("LOKI PIXEL ENGINE - make games that run inside LOKI (Settings > Play), in LOKI World's pixel "
+            "cel-shaded look.\n\nWORKFLOW: write ONE file games/<name>/game.js in the workspace (name: lowercase "
+            "letters, digits, _ or -). Its FIRST line must be a comment '// <Title> - <one line about it>'. Wrap "
+            "everything in an IIFE, get the canvas with document.getElementById(\"game\"), only use window.PixelEngine "
+            "(no imports, no network, no other files). Keep it small and fun; controls on the HUD. Then tell the user "
+            "to open Settings > Play.\n\nAPI:\n" + api + "\nFULL EXAMPLE (games/fox_berries/game.js):\n" + example)
+
+
 def todo_add(item: str) -> str:
     with PLAN_FILE.open("a", encoding="utf-8") as f:
         f.write(f"- [ ] {item}\n")
@@ -2570,6 +2587,7 @@ LOCAL_TOOLS = {
     "todo_add": todo_add,
     "forecast_series": forecast_series,
     "generate_media": generate_media,
+    "game_engine_guide": game_engine_guide,
     "crm_add": crm_add,
     "crm_update": crm_update,
     "crm_find": crm_find,
@@ -2939,6 +2957,8 @@ TOOL_SCHEMAS = [
            "composition). Asks the user first.",
            {"project_dir": {"type": "string"}, "composition": {"type": "string"}, "out": {"type": "string"},
             "props": {"type": "string", "description": "JSON object of input props"}, "entry": {"type": "string"}}, ["project_dir", "composition"]),
+    schema("game_engine_guide", "Before making a game: how to build one with LOKI's own Pixel Engine so it runs "
+           "inside LOKI (Settings > Play) - the API, the workflow (one file games/<name>/game.js) and a full example.", {}, []),
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
@@ -2975,7 +2995,7 @@ MODEL_TOOL_NAMES = {
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
     "improve_loki", "ship_loki", "check_loki", "start_team", "team_post", "team_read",
-    "forecast_series", "generate_media",
+    "forecast_series", "generate_media", "game_engine_guide",
     "crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline", "scrape", "video_project", "render_video",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
@@ -2996,7 +3016,7 @@ TOOL_CATEGORIES = {
     "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
                     "check_loki"],
     "capabilities": ["list_capabilities"],
-    "creative": ["generate_media", "video_project", "render_video"],
+    "creative": ["generate_media", "video_project", "render_video", "game_engine_guide"],
     "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
     "web": ["scrape"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],

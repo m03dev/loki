@@ -536,8 +536,9 @@ check("GET /brain/note serves a mapped note", code == 200 and "Build Loki" in bo
 check("GET /brain/note refuses an unmapped id", loki_bridge.brain_note(state, {"id": ["../../etc"]})[0] == 404)
 check("POST /brain/vault refuses a bad folder", loki_bridge.brain_vault(state, {"path": "/no/such/dir"})[0] == 400)
 ui = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
-check("the Brain tab is gone (knowledge stays reachable over the API)",
-      "brain" not in ui.lower() and not (REPO / "app" / "ui" / "brain.js").exists())
+brain_js = (REPO / "app" / "ui" / "brain.js").read_text(encoding="utf-8")
+check("the Brain tab is back only because it is useful: you can correct and forget what LOKI knows (BUILD_BRIEF 5.7)",
+      'data-tab="brain"' in ui and "Forget it" in brain_js and 'api("/memory", { text:' in brain_js)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
