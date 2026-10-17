@@ -2,7 +2,7 @@
   "name": "scrapling",
   "version": "0.1.0",
   "kind": "tool",
-  "description": "Scrapling: adaptive, fast page fetching and text extraction. A `read_web` specialist.",
+  "description": "Scrapling: adaptive, fast page fetching as markdown and whole-site crawls into scraped/<domain>/. A `read_web` and `scrape` specialist (never bypasses bot checks).",
   "license": "BSD-3-Clause",
   "homepage": "https://github.com/D4Vinci/Scrapling",
   "permissions": [
@@ -15,5 +15,7 @@
     "scrapling"
   ],
   "health_endpoint": "",
-  "entrypoint": "runners/web_read.py"
+  "entrypoint": "runners/web_read.py",
+  "install": "python tools/setup_extras.py scrapling   (pip install \"scrapling[rag]\", then `scrapling install` for the browsers)",
+  "setup_extras": "scrapling"
 }

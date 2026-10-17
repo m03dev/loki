@@ -512,6 +512,7 @@ function showTab(name) {
   if (name === "tools") loadCategories();
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
+  if (name === "crm" && typeof loadCrm === "function") loadCrm();
   if (name === "models" && typeof loadModelsTab === "function") loadModelsTab();
   if (name === "usage" && typeof loadUsageTab === "function") loadUsageTab();
   if (name === "machines" && typeof loadMachines === "function") loadMachines();
@@ -570,7 +571,7 @@ async function loadManifests() {
     const toggle = el("input");
     toggle.type = "checkbox";
     toggle.checked = cap.status === "enabled" || cap.status === "missing";
-    toggle.disabled = cap.status === "invalid";
+    toggle.disabled = cap.status === "invalid" || Boolean(cap.card_only);
     toggle.addEventListener("change", async () => {
       if (toggle.checked && cap.permissions.some((p) => p.high_risk)) {
         const list = cap.permissions.map((p) => "- " + p.text).join("\n");
@@ -584,6 +585,8 @@ async function loadManifests() {
     label.append(toggle, document.createTextNode(" " + cap.name + (cap.version ? " " + cap.version : "")));
     top.append(label, el("span", "state" + (cap.status === "enabled" ? " ready" : ""), cap.status));
     r.append(top, el("div", "desc", cap.description));
+    if (cap.license) r.append(el("div", "perm", "Licence: " + cap.license));
+    if (cap.notice) r.append(el("div", "why", cap.notice));
     for (const p of cap.permissions) r.append(el("div", "perm" + (p.high_risk ? " high" : ""), "• " + p.text));
     if (cap.missing && cap.missing.length) {
       r.append(el("div", "why", "Needs " + cap.missing.join(", ")));
@@ -606,6 +609,30 @@ async function loadManifests() {
         r.append(el("div", "why", plan.manual));
       }
     }
+    // Install hints for add-ons without a one-click pip plan (npm, uv, desktop apps): shown, never run.
+    const hasPip = cap.install && cap.install.pip && cap.install.pip.length;
+    if (cap.install_hint && !hasPip && (cap.status !== "enabled" || (cap.missing && cap.missing.length))) {
+      r.append(el("div", "perm install", "Install: " + cap.install_hint));
+    }
+    const links = el("div", "addon-actions");
+    for (const action of cap.actions || []) {
+      const b = el("button", "quiet", action.label);
+      b.type = "button";
+      b.disabled = cap.status !== "enabled";
+      b.title = cap.status === "enabled" ? action.url : "Turn " + cap.name + " on first";
+      b.addEventListener("click", async () => {
+        const result = await api("/open", { url: action.url }).catch(() => null);
+        if (!result || !result.ok) addNotice((result && result.error) || "Could not open " + action.url, true);
+      });
+      links.append(b);
+    }
+    if (cap.homepage) {
+      const home = el("button", "quiet", "Homepage");
+      home.type = "button";
+      home.addEventListener("click", () => api("/open", { url: cap.homepage }));
+      links.append(home);
+    }
+    if (links.childElementCount) r.append(links);
     if (cap.status === "changed") r.append(el("div", "why", "Changed since you turned it on - toggle to re-approve."));
     if (cap.errors && cap.errors.length) r.append(el("div", "why", cap.errors.join("; ")));
     box.append(r);

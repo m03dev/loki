@@ -195,7 +195,20 @@ button:disabled { opacity: .45; cursor: default; }
 .manifest .perm { font-size: 12px; color: var(--muted); }
 .manifest .perm.high { color: var(--warn); }
 .manifest .why { font-size: 12px; color: var(--warn); }
+.manifest .install { font-family: var(--mono); }
+.addon-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .caps-raw { margin-top: 14px; }
+
+/* Settings > CRM */
+.crm-summary { margin-bottom: 6px; }
+.crm-stages { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.crm-section { margin-top: 14px; }
+.crm-section h4 { font-size: 13.5px; margin: 0 0 4px; }
+.crm-row-actions { display: flex; gap: 8px; align-items: center; }
+.crm-row.done label { color: var(--muted); text-decoration: line-through; }
+.crm-form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.crm-form input, .crm-form select, .crm-row select { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 5px 8px; color: var(--text); min-width: 0; }
+.crm-form input { flex: 1 1 120px; }
 .caps-raw summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 
 

@@ -13,6 +13,7 @@
 <script type="module" src="/ui/world_three.js"></script>
 <script src="/ui/world.js" defer></script>
 <script src="/ui/settings.js" defer></script>
+<script src="/ui/crm.js" defer></script>
 <script src="/ui/workbench.js" defer></script>
 </head>
 <body>
@@ -120,6 +121,7 @@
         <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
         <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
+        <button type="button" role="tab" data-tab="crm" aria-selected="false"><span class="ico" aria-hidden="true">☷</span>CRM</button>
         <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
         <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
         <button type="button" role="tab" data-tab="usage" aria-selected="false"><span class="ico" aria-hidden="true">$</span>Usage</button>
@@ -179,6 +181,10 @@
         <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
         <div id="update-panel" class="update-panel"></div>
         <div id="machines-panel"></div>
+      </section>
+      <section data-panel="crm" hidden>
+        <header class="panel-head"><h3>CRM</h3><p class="note">Your contacts, companies, deals and tasks, kept on this computer (harness_data/crm.sqlite3). LOKI can read and update them too: ask it to log a call, move a deal or show the pipeline.</p></header>
+        <div id="crm-panel" class="crm"></div>
       </section>
       <section data-panel="capabilities" hidden>
         <header class="panel-head"><h3>Add-ons</h3><p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again. Install the optional ones with tools/setup_extras.py.</p></header>

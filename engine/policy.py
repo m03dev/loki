@@ -34,19 +34,20 @@ PATH_ARGS = {
     "edit_file": ("filename",), "make_dir": ("path",), "move_file": ("src", "dst"),
     "delete_file": ("path",), "build_3d_scene": ("filename",), "list_tree": ("subdir",),
     "search_files": ("subdir",), "review_repository": ("path",),
+    "render_video": ("project_dir", "out"), "video_project": ("name",),
 }
 # Asks the human, but a confident decision provider may skip the prompt.
 DECIDABLE = {"run_command", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
 ALWAYS_ASK = {"delete_file", "delegate"}
 # Tools that need an enabled capability (tool -> capability name).
-CAPABILITY_TOOLS: dict[str, str] = {}
+CAPABILITY_TOOLS: dict[str, str] = {"render_video": "remotion", "video_project": "remotion"}
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
 # conductor roles whose url= is a workspace path, not a web address.
 CONDUCTOR_PATH_ROLES = {"track"}
 # Job backends that need an enabled capability.
 BACKEND_CAPABILITY = {"herdr": "herdr", "cua": "cua"}
-AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode"}
+AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode", "openhands": "openhands"}
 BACKEND_PERMISSION = {"herdr": "process:agent", "cua": "computer:virtual", "local": "process:agent"}
 
 
@@ -138,6 +139,10 @@ class PolicyEngine:
             return Verdict(DENY, "%s changed since you enabled it - review and enable it again" % name)
         if status == "invalid":
             return Verdict(DENY, "%s has an invalid manifest" % name)
+        if status == "reference":
+            return Verdict(DENY, "%s is listed for reference only; LOKI cannot run it" % name)
+        if status != "enabled" and status != "missing":
+            return Verdict(DENY, "%s is %s" % (name, status))
         if status == "missing":
             return Verdict(DENY, "%s is missing %s" % (name, ", ".join(entry.get("missing", []))))
         if permission and permission not in self.registry.granted(name):

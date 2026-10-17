@@ -924,6 +924,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/forecast":
             self._send_json(200, forecast_report(self.server.state.agent))
             return
+        if route == "/crm":
+            self._send_json(*crm_route(self.server.state, "GET", route, {}))
+            return
         if route == "/media/status":
             import higgsfield  # pylint: disable=import-outside-toplevel
             self._send_json(200, {"ok": True, **higgsfield.status()})
@@ -1076,6 +1079,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(500, {"ok": False, "error": f"Bridge request failed: {type(exc).__name__}: {exc}"})
             finally:
                 request_lock.release()
+            return
+        if route.startswith("/crm/"):
+            self._send_json(*crm_route(state, "POST", route, data))
             return
         if route == "/media/generate":
             # Spends the user's Higgsfield credits: only ever from an explicit request.
@@ -1556,6 +1562,20 @@ def model_menu(agent: Any) -> dict[str, Any]:
     return {"entries": auto + entries, "groups": [{"id": g, "label": label} for g, label in MENU_GROUPS],
             "resolved": resolved, "resolved_label": labels.get(resolved, resolved),
             "ready_count": sum(1 for e in entries if e["ready"])}
+
+
+def crm_route(state: "BridgeState", method: str, route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """GET /crm (pipeline + lists) and POST /crm/<op> (add, update, delete, find, log, list,
+    pipeline, history). The database is the engine's own (loki.crm_store: DATA_DIR/crm.sqlite3)."""
+    import crm  # pylint: disable=import-outside-toplevel
+    agent = getattr(state, "agent", None)
+    try:
+        store = agent.crm_store() if hasattr(agent, "crm_store") else \
+            crm.CRM(Path(getattr(agent, "DATA_DIR", ".") or ".") / "crm.sqlite3")
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"ok": False, "error": "the CRM could not be opened: %s" % exc}
+    op = route[len("/crm/"):].strip("/") if route.startswith("/crm/") else ""
+    return crm.handle(store, method, op, data)
 
 
 def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:

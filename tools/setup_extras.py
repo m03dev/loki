@@ -7,7 +7,14 @@
     python tools/setup_extras.py mlx             mlx-lm (Mac with Apple Silicon only)
     python tools/setup_extras.py agent-reach     Agent Reach CLI (from GitHub, not PyPI)
     python tools/setup_extras.py opencode        OpenCode CLI (npm)
-    python tools/setup_extras.py all             everything that fits this machine
+    python tools/setup_extras.py all             everything above that fits this machine
+
+Opt-in add-ons (never part of `all`; each one only when you ask for it by name):
+    python tools/setup_extras.py scrapling       Scrapling + its browsers (scrape / crawl sites)
+    python tools/setup_extras.py openhands       OpenHands CLI (uv tool install, Python 3.12)
+    python tools/setup_extras.py penecho         PenEcho drawing canvas (npm; AGPL-3.0, separate program)
+    python tools/setup_extras.py openhuman       how to get OpenHuman (GPL-3.0; no installer here)
+    python tools/setup_extras.py remotion        checks Node/npx for Remotion videos (custom licence)
 
 Use LOKI's own Python (harness_data/.venv) so the engine finds what you install:
     macOS:   harness_data/.venv/bin/python tools/setup_extras.py all
@@ -21,6 +28,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 ZIMAGE = "Tongyi-MAI/Z-Image-Turbo"
 AGENT_REACH = "https://github.com/Panniantong/agent-reach/archive/main.zip"
@@ -131,17 +139,93 @@ def opencode() -> bool:
     return run([npm, "i", "-g", "opencode-ai@latest"])
 
 
+def scrapling() -> bool:
+    """Scrapling (D4Vinci/Scrapling, BSD-3-Clause): the "rag" extra adds markdown output; then
+    `scrapling install` downloads the browsers DynamicFetcher uses (a few hundred MB)."""
+    ok = pip("scrapling[rag]")
+    exe = shutil.which("scrapling")
+    if not exe:
+        folder = Path(sys.executable).parent
+        exe = next((str(folder / n) for n in ("scrapling", "scrapling.exe") if (folder / n).is_file()), "")
+    if ok and exe:
+        ok = run([exe, "install"])
+    elif ok:
+        print("  run `scrapling install` once to download its browsers (needed for dynamic pages)")
+    if ok:
+        print("  done. Turn on scrapling in Settings > Add-ons, then ask LOKI to scrape or crawl a site.")
+    return ok
+
+
+def openhands() -> bool:
+    """OpenHands CLI (MIT). It wants Python 3.12, so it gets its own tool environment through uv
+    (or pipx), never LOKI's venv. The standalone CLI is no longer actively maintained."""
+    uv = shutil.which("uv")
+    if uv:
+        ok = run([uv, "tool", "install", "openhands", "--python", "3.12"])
+    elif shutil.which("pipx"):
+        ok = run([shutil.which("pipx"), "install", "--python", "3.12", "openhands"])
+    else:
+        print("  uv is missing. Install it first, then run this again:")
+        print("    macOS: brew install uv        Windows: winget install astral-sh.uv")
+        return False
+    if ok:
+        print("  done. LOKI points it at your local Ollama model (LLM_MODEL=openai/<model>,")
+        print("  LLM_BASE_URL=http://localhost:11434/v1). Turn on openhands in Settings > Add-ons.")
+    return ok
+
+
+def penecho() -> bool:
+    """PenEcho (AGPL-3.0) runs as its own program; LOKI only talks to it over MCP / localhost."""
+    npm = shutil.which("npm") or shutil.which("npm.cmd")
+    if not npm:
+        print("  npm is missing: install Node 20+ first (https://nodejs.org)")
+        return False
+    ok = run([npm, "i", "-g", "penecho"])
+    if ok:
+        print("  done. Start it with `penecho` (http://localhost:3888), then turn on penecho in Settings > Add-ons.")
+    return ok
+
+
+def openhuman() -> bool:
+    print("  OpenHuman (GPL-3.0) has no installer here. Get it from")
+    print("    https://github.com/tinyhumansai/openhuman/releases")
+    print("  so that `openhuman-core` is on PATH, then turn on openhuman in Settings > Add-ons.")
+    found = bool(shutil.which("openhuman-core"))
+    print("  openhuman-core is %s" % ("on PATH" if found else "not on PATH yet"))
+    return True
+
+
+def remotion() -> bool:
+    print("  Remotion licence: free for individuals and companies with up to 3 employees;")
+    print("  larger companies need a company licence (https://www.remotion.dev/license).")
+    npx = shutil.which("npx") or shutil.which("npx.cmd")
+    if not npx:
+        print("  npx is missing: install Node 18+ (https://nodejs.org). Nothing else is installed globally;")
+        print("  each video project gets Remotion through npx.")
+        return False
+    print("  npx found (%s). Turn on remotion in Settings > Add-ons; LOKI's video_project and" % npx)
+    print("  render_video tools then scaffold and render videos in the workspace (they ask first).")
+    return True
+
+
 def listing() -> None:
     rows = [("media (yt-dlp)", has("yt_dlp")), ("ffmpeg", bool(shutil.which("ffmpeg"))),
             ("imagegen (diffusers)", has("diffusers") and has("torch")),
             ("vision (trackers)", has("trackers") and has("supervision") and has("rfdetr")),
             ("mlx-lm", bool(shutil.which("mlx_lm.server")) or has("mlx_lm")),
-            ("agent-reach", bool(shutil.which("agent-reach"))), ("opencode", bool(shutil.which("opencode")))]
+            ("agent-reach", bool(shutil.which("agent-reach"))), ("opencode", bool(shutil.which("opencode"))),
+            ("scrapling", has("scrapling")), ("openhands", bool(shutil.which("openhands"))),
+            ("penecho", bool(shutil.which("penecho"))), ("openhuman", bool(shutil.which("openhuman-core"))),
+            ("remotion (npx)", bool(shutil.which("npx") or shutil.which("npx.cmd")))]
     for name, ok in rows:
         print("  %-22s %s" % (name, "installed" if ok else "not installed"))
 
 
 STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "agent-reach": agent_reach, "opencode": opencode}
+# Installed only when named: licences that need a decision (AGPL/GPL/custom), separate programs,
+# or big downloads. `all` never includes them.
+OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman,
+          "remotion": remotion}
 
 
 def main(argv: list) -> int:
@@ -154,11 +238,12 @@ def main(argv: list) -> int:
         names.remove("imagegen")
     failed = []
     for name in names:
-        if name not in STEPS:
+        step = STEPS.get(name) or OPT_IN.get(name)
+        if step is None:
             print(__doc__)
             return 2
         print("== %s" % name)
-        if not STEPS[name]():
+        if not step():
             failed.append(name)
     print("failed: " + ", ".join(failed) if failed else "all done")
     return 1 if failed else 0

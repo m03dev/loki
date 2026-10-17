@@ -158,6 +158,15 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
         # catalog names, or OpenRouter's sign-in page, so this cannot open arbitrary URLs.
         url = str(data.get("url") or "")
         known = {u for p in providers_catalog.CATALOG for k in ("signup", "keys", "docs") for u in [p.get(k)] if u}
+        # ...and each add-on's homepage and its card buttons (PenEcho's "Open drawing canvas").
+        registry = getattr(agent, "CAPABILITIES", None)
+        try:
+            for cap in (registry.present() if registry is not None else []):
+                known |= {a.get("url") for a in cap.get("actions", []) if a.get("url")}
+                if cap.get("homepage"):
+                    known.add(cap["homepage"])
+        except Exception:  # noqa: BLE001 - a broken manifest never widens what can be opened
+            pass
         if url not in known and not url.startswith(signin.OPENROUTER_AUTH + "?"):
             return 400, {"ok": False, "error": "LOKI only opens the pages listed for each provider"}
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()

@@ -1385,6 +1385,115 @@ def generate_media(prompt: str, kind: str = "image", model: str = "", aspect_rat
     return "made with Higgsfield (%s): %s" % (r["application"], where or "no files came back")
 
 
+# --- built-in CRM (engine/crm.py; the database is DATA_DIR/crm.sqlite3) ---------------
+_CRM_STORE = None
+
+
+def crm_store():
+    """The CRM, opened on first use (tests replace loki._CRM_STORE with a temporary one)."""
+    global _CRM_STORE
+    if _CRM_STORE is None:
+        import crm  # pylint: disable=import-outside-toplevel
+        _CRM_STORE = crm.CRM(DATA_DIR / "crm.sqlite3")
+    return _CRM_STORE
+
+
+def _crm_fields(fields) -> dict:
+    if isinstance(fields, str):
+        try:
+            fields = json.loads(fields or "{}")
+        except ValueError:
+            raise ValueError("fields must be a JSON object like {\"name\": \"Ada\"}") from None
+    if not isinstance(fields, dict):
+        raise ValueError("fields must be an object like {\"name\": \"Ada\"}")
+    return fields
+
+
+def _crm_call(fn) -> str:
+    import crm  # pylint: disable=import-outside-toplevel
+    try:
+        return fn(crm)
+    except (crm.CRMError, ValueError, TypeError) as exc:
+        return "error: %s" % exc
+
+
+def crm_add(type: str, fields=None) -> str:  # noqa: A002 - the model's word for it
+    """Add a contact, company, deal, interaction or task to LOKI's CRM."""
+    return _crm_call(lambda crm: "added " + crm.render_rows(
+        [dict(crm_store().add(type, _crm_fields(fields)), type=crm.table_name(type))]))
+
+
+def crm_update(type: str, id: int, fields=None) -> str:  # noqa: A002
+    """Change fields of one CRM record (e.g. a deal's stage, a task's done)."""
+    return _crm_call(lambda crm: "updated " + crm.render_rows(
+        [dict(crm_store().update(type, int(id), _crm_fields(fields)), type=crm.table_name(type))]))
+
+
+def crm_find(query: str = "", type: str = "", limit: int = 25) -> str:  # noqa: A002
+    """Search the CRM; with no query, list the records of one type."""
+    def go(crm):
+        if not str(query or "").strip():
+            if not type:
+                return "error: give a query, or a type to list"
+            table = crm.table_name(type)
+            return crm.render_rows([dict(r, type=table) for r in crm_store().list(table, limit)])
+        return crm.render_rows(crm_store().find(query, type, int(limit or 25)))
+    return _crm_call(go)
+
+
+def crm_log(summary: str, kind: str = "note", contact_id: int = 0, company_id: int = 0, deal_id: int = 0,
+            at: str = "") -> str:
+    """Record a note, call, email or meeting against a contact, company or deal."""
+    return _crm_call(lambda crm: "logged " + crm.render_rows([dict(crm_store().log(
+        {"summary": summary, "kind": kind, "contact_id": contact_id, "company_id": company_id,
+         "deal_id": deal_id, "at": at}), type="interactions")]))
+
+
+def crm_pipeline() -> str:
+    """Deals per stage, open and won value, win rate and overdue tasks."""
+    return _crm_call(lambda crm: crm.render_pipeline(crm_store().pipeline()))
+
+
+# --- scraping (conductor.scrape: Scrapling, else read_web) and Remotion videos ------------
+def scrape(url: str, crawl: bool = False, max_pages: int = 20, dynamic: bool = False) -> str:
+    """One page as markdown, or crawl a site into scraped/<domain>/ in the workspace."""
+    return CONDUCTOR.scrape(str(url or ""), "", crawl=bool(crawl), max_pages=int(max_pages or 20),
+                            workspace=WORKSPACE, dynamic=bool(dynamic))
+
+
+def video_project(name: str) -> str:
+    """Scaffold a blank Remotion project in videos/<name> (npx create-video)."""
+    try:
+        target = resolve_in_workspace(str(Path("videos") / Path(str(name or "video")).name))
+    except ValueError as exc:
+        return "error: %s" % exc
+    result = CONDUCTOR._runner("video", {"op": "scaffold", "dir": str(target)}, timeout=1800)  # pylint: disable=protected-access
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    return "Remotion project ready in %s (entry %s)%s. Licence: free for individuals and companies up to 3 " \
+           "employees (remotion.dev/license)." % (result.get("dir"), result.get("entry", "src/index.ts"),
+                                                  ("; " + result["note"]) if result.get("note") else "")
+
+
+def render_video(project_dir: str, composition: str, out: str = "", props=None, entry: str = "") -> str:
+    """Render a Remotion composition to an MP4 in the workspace."""
+    try:
+        project = resolve_in_workspace(project_dir)
+        target = resolve_in_workspace(out or str(Path("videos") / (str(composition or "video") + ".mp4")))
+        if isinstance(props, str) and props.strip():
+            props = json.loads(props)
+    except ValueError as exc:
+        return "error: %s" % exc
+    if not str(composition or "").strip():
+        return "error: render_video needs the composition id (see src/Root.tsx)"
+    job = {"op": "render", "project_dir": str(project), "composition": str(composition).strip(),
+           "out": str(target), "props": props if isinstance(props, dict) else {}, "entry": str(entry or "")}
+    result = CONDUCTOR._runner("video", job, timeout=int(os.getenv("LOKI_VIDEO_TIMEOUT", "1800") or 1800))  # pylint: disable=protected-access
+    if not result.get("ok"):
+        return "error: " + str(result.get("error"))
+    return "rendered %s (%d bytes)" % (result.get("file"), int(result.get("bytes") or 0))
+
+
 def todo_add(item: str) -> str:
     with PLAN_FILE.open("a", encoding="utf-8") as f:
         f.write(f"- [ ] {item}\n")
@@ -2455,6 +2564,14 @@ LOCAL_TOOLS = {
     "todo_add": todo_add,
     "forecast_series": forecast_series,
     "generate_media": generate_media,
+    "crm_add": crm_add,
+    "crm_update": crm_update,
+    "crm_find": crm_find,
+    "crm_log": crm_log,
+    "crm_pipeline": crm_pipeline,
+    "scrape": scrape,
+    "video_project": video_project,
+    "render_video": render_video,
     "project_state": project_state_update,
     "review_repository": review_repository,
     "agent_sessions": agent_sessions,
@@ -2468,13 +2585,15 @@ LOCAL_TOOLS = {
 MODIFYING = {"write_file", "append_file", "edit_file", "build_3d_scene", "build_scene",
              "move_file", "delete_file", "make_dir",
              # these three rewrite project.godot
-             "add_input_action", "set_project_setting", "add_autoload"}
+             "add_input_action", "set_project_setting", "add_autoload",
+             "video_project", "render_video"}
 # Tools that START the game or the editor (scene scripts run, and can do anything a
 # script can). Plan mode is read-only, so it offers none of them. check_script stays:
 # --check-only parses the script without running it.
 RUNS_PROJECT = {"play_scene", "probe_scene", "capture_scene", "validate_scene", "open_in_editor"}
-# Writes outside the project (downloads into harness_data) - not "read-only" either.
-NETWORK_WRITES = {"sync_ecc"}
+# Writes outside the project (downloads into harness_data, the CRM database) or saves what it
+# fetched (scrape) - not "read-only" either.
+NETWORK_WRITES = {"sync_ecc", "crm_add", "crm_update", "crm_log", "scrape"}
 # Starting or steering another agent: a delegated coder writes, so Plan mode cannot.
 DELEGATING = {"delegate", "improve_loki", "ship_loki", "start_team"}
 
@@ -2485,6 +2604,8 @@ SELF_SHIP = str(os.getenv("LOKI_SELF_SHIP", "auto")).strip().lower()
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
 DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate", "start_team"}
+# video_project/render_video run npx and the video project's own code (Remotion).
+DANGEROUS |= {"video_project", "render_video"}
 if SELF_SHIP == "ask":
     DANGEROUS |= {"improve_loki", "ship_loki"}
 POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
@@ -2781,6 +2902,37 @@ TOOL_SCHEMAS = [
            "only when the user asks for it.",
            {"prompt": {"type": "string"}, "kind": {"type": "string"}, "model": {"type": "string"},
             "aspect_ratio": {"type": "string"}}, ["prompt"]),
+    schema("crm_add", "Add a record to LOKI's built-in CRM. type='contact' (name, email, phone, title, "
+           "company_id, notes, tags), 'company' (name, website, industry, notes), 'deal' (title, company_id, "
+           "contact_id, stage=lead|qualified|proposal|negotiation|won|lost, value, currency, close_date), 'task' "
+           "(title, due=YYYY-MM-DD, contact_id/company_id/deal_id) or 'interaction'. fields is a JSON object of those fields.",
+           {"type": {"type": "string"}, "fields": {"type": "string", "description": "a JSON object, e.g. {\"name\": \"Ada\", \"email\": \"ada@example.com\"}"}}, ["type", "fields"]),
+    schema("crm_update", "Change fields of one CRM record by type and id, e.g. move a deal to stage 'won' or "
+           "mark a task done (fields={\"done\": true}).",
+           {"type": {"type": "string"}, "id": {"type": "integer"}, "fields": {"type": "string", "description": "a JSON object, e.g. {\"name\": \"Ada\", \"email\": \"ada@example.com\"}"}},
+           ["type", "id", "fields"]),
+    schema("crm_find", "Search the CRM (names, emails, titles, notes). With no query, list the records of "
+           "one type (contacts, companies, deals, tasks, interactions).",
+           {"query": {"type": "string"}, "type": {"type": "string"}, "limit": {"type": "integer"}}),
+    schema("crm_log", "Log a note, call, email, meeting or message against a contact, company or deal "
+           "(give at least one of contact_id, company_id, deal_id). at=YYYY-MM-DD HH:MM, default now.",
+           {"summary": {"type": "string"}, "kind": {"type": "string"}, "contact_id": {"type": "integer"},
+            "company_id": {"type": "integer"}, "deal_id": {"type": "integer"}, "at": {"type": "string"}},
+           ["summary"]),
+    schema("crm_pipeline", "Summarise the sales pipeline: deals per stage, open and won value, win rate, "
+           "open and overdue tasks."),
+    schema("scrape", "Read a web page as clean markdown, or crawl=true to save a whole site (same domain, "
+           "max_pages) as markdown files under scraped/<domain>/ in the workspace. dynamic=true renders "
+           "JavaScript first. Uses Scrapling when installed, otherwise reads the one page another way.",
+           {"url": {"type": "string"}, "crawl": {"type": "boolean"}, "max_pages": {"type": "integer"},
+            "dynamic": {"type": "boolean"}}, ["url"]),
+    schema("video_project", "Create a blank Remotion video project (videos made with React code) in "
+           "videos/<name>. Asks the user first.", {"name": {"type": "string"}}, ["name"]),
+    schema("render_video", "Render a Remotion composition to MP4: project_dir (e.g. videos/intro), "
+           "composition id, out (default videos/<composition>.mp4), props (object passed to the "
+           "composition). Asks the user first.",
+           {"project_dir": {"type": "string"}, "composition": {"type": "string"}, "out": {"type": "string"},
+            "props": {"type": "string", "description": "JSON object of input props"}, "entry": {"type": "string"}}, ["project_dir", "composition"]),
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
@@ -2818,6 +2970,7 @@ MODEL_TOOL_NAMES = {
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
     "improve_loki", "ship_loki", "check_loki", "start_team", "team_post", "team_read",
     "forecast_series", "generate_media",
+    "crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline", "scrape", "video_project", "render_video",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -2837,7 +2990,9 @@ TOOL_CATEGORIES = {
     "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
                     "check_loki"],
     "capabilities": ["list_capabilities"],
-    "creative": ["generate_media"],
+    "creative": ["generate_media", "video_project", "render_video"],
+    "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
+    "web": ["scrape"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
@@ -2853,7 +3008,9 @@ CATEGORY_LABELS = {
     "planning": "Planning (todo list)",
     "memory": "Memory (save facts)",
     "capabilities": "Capabilities (what Loki can use right now)",
-    "creative": "Creative (Higgsfield images and video - uses your credits)",
+    "creative": "Creative (Higgsfield images and video - uses your credits; Remotion videos)",
+    "business": "Business (LOKI's CRM: contacts, companies, deals, tasks)",
+    "web": "Web (scrape pages and crawl sites into the workspace)",
     "skills": "Skills (ECC agents and skills)",
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",
@@ -2941,6 +3098,10 @@ def model_tool_schemas() -> list:
         return []
     schemas = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES
                and _tool_enabled(t["function"]["name"])]
+    # A tool that needs an add-on (policy.CAPABILITY_TOOLS, e.g. render_video -> remotion) is
+    # only offered while that add-on is on: offering a tool that is always refused wastes a turn.
+    schemas = [t for t in schemas if not policy.CAPABILITY_TOOLS.get(t["function"]["name"])
+               or CAPABILITIES.is_enabled(policy.CAPABILITY_TOOLS[t["function"]["name"]])]
     if not is_godot_workspace():
         # Outside a Godot project the game tools only mislead a model into writing .tscn
         # files for a website (seen on the PC, 2026-10-14). LOKI is not a Godot project.
@@ -3681,6 +3842,13 @@ def _server_skip_reason(spec: dict, name: str = "") -> str:
     if name and name in _csv_env("LOKI_MCP_DISABLE"):
         return "disabled by LOKI_MCP_DISABLE"
     forced_on = bool(name) and name in _csv_env("LOKI_MCP_ENABLE")
+    # "capability": NAME - an opt-in server that the owner turns on as an add-on (Settings >
+    # Add-ons, engine/manifests.py) starts while that add-on is enabled.
+    if not forced_on and spec.get("capability"):
+        try:
+            forced_on = CAPABILITIES.is_enabled(str(spec["capability"]))
+        except Exception:  # noqa: BLE001 - a broken registry never starts a server
+            forced_on = False
     if spec.get("enabled", True) is False and not forced_on:
         return "disabled in mcp_servers.json (enable with LOKI_MCP_ENABLE=%s)" % name
     required = spec.get("requires_env")

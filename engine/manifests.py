@@ -9,7 +9,14 @@ memory or decision provider, a worker) is described by `capabilities/<name>/mani
       "permissions": ["process:agent"],
       "requires_cmd": ["herdr"], "requires_env": [],
       "health_endpoint": "",            # optional http(s) URL probed with a timeout
-      "entrypoint": "workers.HerdrBackend"   # informational; discovery never imports it
+      "entrypoint": "workers.HerdrBackend",  # informational; discovery never imports it
+      # optional, shown on the Add-ons card (never acted on by LOKI itself):
+      "install": "npm i -g herdr",           # how to install it
+      "setup_extras": "herdr",               # the tools/setup_extras.py step, when there is one
+      "notice": "...",                       # a licence or hardware warning
+      "actions": [{"label": "Open", "url": "http://localhost:1234"}],   # buttons the user clicks
+      "platforms": ["win32"],                # only usable on these sys.platform values
+      "card_only": true                      # listed for reference; cannot be turned on
     }
 
 Discovery scans the repo's `capabilities/` (trusted, ships with Loki) and the user's
@@ -99,6 +106,14 @@ def validate(data: object) -> list[str]:
     for env in data.get("requires_env", []) if isinstance(data.get("requires_env"), list) else []:
         if isinstance(env, str) and not ENV_RE.match(env):
             errors.append("bad env name %r" % env)
+    actions = data.get("actions", [])
+    if not isinstance(actions, list) or not all(
+            isinstance(a, dict) and str(a.get("label", "")).strip()
+            and urlparse(str(a.get("url", ""))).scheme in ("http", "https") for a in actions):
+        errors.append("actions must be a list of {label, url} with an http(s) url")
+    platforms = data.get("platforms", [])
+    if not isinstance(platforms, list) or not all(p in ("darwin", "win32", "linux") for p in platforms):
+        errors.append("platforms must be a list of darwin, win32, linux")
     health = str(data.get("health_endpoint", "") or "")
     if health and urlparse(health).scheme not in ("http", "https"):
         errors.append("health_endpoint must be an http(s) URL")
@@ -113,7 +128,7 @@ def fingerprint(data: dict) -> str:
 
 # Fields that only describe a capability. Rewording a description or bumping a version does
 # not change what it may do, so it must not switch an enabled capability off.
-COSMETIC = ("description", "version", "license", "homepage")
+COSMETIC = ("description", "version", "license", "homepage", "install", "setup_extras", "notice", "actions")
 
 
 def trust_fingerprint(data: dict) -> str:
@@ -220,18 +235,25 @@ def _which(cmd: str, which=shutil.which) -> str | None:
 
 
 def missing_requirements(manifest: dict, env: dict | None = None, which=shutil.which,
-                         module_present=_module_present) -> list[str]:
+                         module_present=_module_present, platform: str = "") -> list[str]:
     env = env if env is not None else os.environ
-    missing = ["command `%s`" % c for c in manifest.get("requires_cmd", []) if not _which(c, which)]
+    platform = platform or sys.platform
+    platforms = manifest.get("platforms") or []
+    names = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}
+    missing = (["%s (this is %s)" % (" or ".join(names.get(p, p) for p in platforms), names.get(platform, platform))]
+               if platforms and platform not in platforms else [])
+    missing += ["command `%s`" % c for c in manifest.get("requires_cmd", []) if not _which(c, which)]
     missing += ["python package `%s`" % m for m in manifest.get("requires_python", []) if not module_present(m)]
     missing += ["env %s" % e for e in manifest.get("requires_env", []) if not str(env.get(e, "")).strip()]
     return missing
 
 
 def status_of(entry: dict, enabled: dict, env: dict | None = None, which=shutil.which) -> str:
-    """invalid | disabled | changed | missing | enabled"""
+    """invalid | reference (card_only) | disabled | changed | missing | enabled"""
     if entry.get("errors"):
         return "invalid"
+    if entry["manifest"].get("card_only"):
+        return "reference"           # listed so the owner knows it exists; nothing to turn on
     record = enabled.get(entry["name"])
     if record is not None and record.get("disabled"):
         return "disabled"
@@ -291,6 +313,8 @@ class Registry:
         entry = self.get(name)
         if entry is None:
             raise ValueError("no capability named %r" % name)
+        if on and entry["manifest"].get("card_only"):
+            raise ValueError("%s is listed for reference only; LOKI cannot run it" % name)
         if on:
             self.enablement.enable(entry)
         else:
@@ -310,6 +334,10 @@ class Registry:
                                 for p in m.get("permissions", []) if isinstance(p, str)],
                 "missing": entry.get("missing", []), "errors": entry.get("errors", []),
                 "install": addons_install.plan(entry["name"]),
+                "install_hint": str(m.get("install", "") or ""), "setup_extras": str(m.get("setup_extras", "") or ""),
+                "notice": str(m.get("notice", "") or ""), "card_only": bool(m.get("card_only")),
+                "actions": [a for a in m.get("actions", []) if isinstance(a, dict)]
+                if isinstance(m.get("actions"), list) else [],
             })
         return rows
 

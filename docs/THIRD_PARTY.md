@@ -9,6 +9,14 @@
 | `engine/model_setup.py` catalog | [Ternary Bonsai 2](https://huggingface.co/prism-ml) GGUF/MLX weights - downloaded by Ollama/mlx-vlm on the user's machine, never stored in the repo | Apache-2.0 |
 | `engine/forecast.py` (optional) | [TimesFM-3](https://github.com/google-research/timesfm) via `pip install timesfm[torch|mlx]`, only when the owner installs it | code Apache-2.0; weights non-commercial |
 | `contrib/ruflo/` | see that folder | see that folder |
+| `skills/marketing/` | 50 marketing skills (`SKILL.md` + `references/`, evals left out) from [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) at commit `365b412`, unchanged; about 2.8 MB | MIT, Copyright (c) 2025 Corey Haines - `skills/marketing/LICENSE` |
+| `engine/runners/scrape.py` (optional) | [Scrapling](https://github.com/D4Vinci/Scrapling) via `pip install "scrapling[rag]"` + `scrapling install`, only when the owner runs `tools/setup_extras.py scrapling`; never its stealth/Cloudflare features | BSD-3-Clause |
+| `engine/cli_agents.py`, `engine/workers.py` (optional) | [OpenHands](https://github.com/OpenHands/OpenHands) CLI, run as a separate program (`uv tool install openhands`); the standalone CLI is no longer actively maintained | MIT |
+| `capabilities/penecho/`, `engine/mcp_servers.json` (optional) | [PenEcho](https://github.com/penecho/penecho), a separate program (`npm i -g penecho`) LOKI talks to over MCP and http://localhost:3888; no PenEcho code is in LOKI | AGPL-3.0 |
+| `capabilities/openhuman/`, `engine/mcp_servers.json` (optional) | [OpenHuman](https://github.com/tinyhumansai/openhuman) `openhuman-core mcp`, a separate program on PATH; no OpenHuman code is in LOKI | GPL-3.0 |
+| `engine/runners/video.py` (optional) | [Remotion](https://github.com/remotion-dev/remotion), fetched by `npx` into each video project the owner asks for; never vendored | Remotion License: free for individuals and companies with up to 3 employees, a company licence otherwise (remotion.dev/license) |
+| `capabilities/personalive/` | [PersonaLive](https://github.com/GVCLab/PersonaLive) - an Add-ons card with a link only; LOKI does not install or run it | academic research use only |
+| `engine/agents.py` Novel Writer template | Written for LOKI from scratch; the stage-by-stage idea follows the common novel workflow (as in MuMuAINovel), with none of its GPL prompts or code | LOKI's own |
 
 MIT notice for Godot-3D-Stylized-Water (adapted code in app/ui/world.js):
 

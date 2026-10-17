@@ -118,6 +118,26 @@
       "requires_cmd": "npx",
       "enabled": false,
       "note": "Ruflo (github.com/ruvnet/ruflo, MIT): swarm, memory and agent tools. Opt in with LOKI_MCP_ENABLE=ruflo."
+    },
+    "penecho": {
+      "command": "penecho",
+      "args": [
+        "mcp"
+      ],
+      "requires_cmd": "penecho",
+      "enabled": false,
+      "capability": "penecho",
+      "note": "PenEcho (github.com/penecho/penecho, AGPL-3.0, a separate program): shared drawing canvas on http://localhost:3888. Starts when penecho is installed (npm i -g penecho) and turned on in Settings > Add-ons, or with LOKI_MCP_ENABLE=penecho."
+    },
+    "openhuman": {
+      "command": "openhuman-core",
+      "args": [
+        "mcp"
+      ],
+      "requires_cmd": "openhuman-core",
+      "enabled": false,
+      "capability": "openhuman",
+      "note": "OpenHuman (github.com/tinyhumansai/openhuman, GPL-3.0, a separate program): stdio MCP server. Starts when openhuman-core is on PATH and turned on in Settings > Add-ons, or with LOKI_MCP_ENABLE=openhuman."
     }
   }
 }

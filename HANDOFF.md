@@ -56,6 +56,45 @@ Last updated: 2026-10-16 (session 22, the PC + the Mac + Claude).
   (TimesFM deliberately not installed). Screenshot docs/operations/screens/world-three-windows.png.
   Details and the Mac's diagnosis JSON are in ZIVA_TASKS.md (W17 + Reports).
 
+## Session 23 add-ons (worktree)
+
+Built in a worktree by a Claude subagent; the parent merges and ships. New suite
+`tests/test_addons.py` (in ship.py SUITES). Nothing below has run against the real programs
+(no Scrapling, OpenHands, PenEcho, OpenHuman or Remotion was installed): command lines and
+fallbacks are tested with fakes.
+
+- **Built-in CRM** (`engine/crm.py`, SQLite at `harness_data/crm.sqlite3`): companies, contacts,
+  deals (stage lead..won/lost, value, currency), interactions (note/call/email/meeting), tasks (due,
+  done), find, history and a pipeline summary (per stage, open/won value, win rate, overdue tasks).
+  Agent tools `crm_add/crm_update/crm_find/crm_log/crm_pipeline` (category "business"; writes are
+  hidden in Plan mode). Bridge `GET /crm`, `POST /crm/<add|update|delete|find|log|list|pipeline|history>`.
+  Settings > CRM tab (`app/ui/crm.js`): pipeline line, deals (stage picker), contacts, companies,
+  tasks, add forms.
+- **Scrape** (`engine/runners/scrape.py`, conductor role `scrape` + agent tool `scrape(url, crawl,
+  max_pages, dynamic)`): Scrapling Fetcher/DynamicFetcher markdown, or a SiteToMarkdownSpider crawl
+  into `scraped/<domain>/` (+ pages.jsonl), max 200 pages. No StealthyFetcher / Cloudflare solving.
+  Without Scrapling it reads the one page via read_web (crawl4ai / Firecrawl) and says
+  `python tools/setup_extras.py scrapling`.
+- **Marketing skills**: 50 skills from coreyhaines31/marketingskills (MIT, commit 365b412) in
+  `skills/marketing/` (SKILL.md + references/, no evals; 2.8 MB) with its LICENSE;
+  `agents.skill_roots` has a "marketing" root, and `list_ecc_skills` sees them too.
+- **OpenHands** harness: worker agent + agent-builder engine + CLI agent (`openhands --headless
+  --json --override-with-envs -t <task>` in the workspace). `workers.openhands_env` sets
+  LLM_MODEL=openai/<LOKI's local model> (LOKI_LOCAL_MODEL, else the resolved LOCAL_STATE),
+  LLM_BASE_URL=http://localhost:11434/v1, LLM_API_KEY=ollama; `LOKI_OPENHANDS_MODEL/_BASE_URL/_API_KEY`
+  override. Needs the `openhands` add-on (process:agent). Template "OpenHands Coder".
+- **Add-ons** (all off, never auto-installed; `setup_extras.py <name>` only when named, not in `all`):
+  `penecho` (AGPL, MCP `penecho mcp`, card button "Open drawing canvas" -> http://localhost:3888),
+  `openhuman` (GPL, MCP `openhuman-core mcp`), `remotion` (custom licence; tools `video_project` /
+  `render_video`, ask first, `engine/runners/video.py`), `personalive` (card only: Windows/NVIDIA,
+  academic licence, cannot be turned on), `openhands`, and `scrapling` got an install hint. Manifests
+  gained optional card fields (`install`, `setup_extras`, `notice`, `actions`, `platforms`,
+  `card_only`; the first four are cosmetic for trust). An MCP entry with `"capability": NAME` starts
+  while that add-on is on. `/open` also allows add-on homepages and card buttons.
+- **Novel Writer** template (`agents.TEMPLATES`, written from scratch): idea -> world -> characters ->
+  outline -> chapters -> continuity check -> rewrite, all in `novel/`.
+- Not done: the Twenty CRM connector (not needed now); no real install/run of any add-on.
+
 ## Session 22 (2026-10-16, Claude in the cloud): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield, Mac hangs
 
 Two commits. All 21 suites pass (`tools/ship.py --check`).

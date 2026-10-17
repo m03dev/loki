@@ -65,6 +65,20 @@ CLI_AGENTS: dict[str, dict] = {
         "system_in_prompt": True,
         "model_env": "LOKI_OPENCODE_MODEL",
     },
+    # OpenHands CLI (OpenHands/OpenHands, MIT). Headless one-shot: --json prints JSON events,
+    # -t is the task. The model is LOKI's local Ollama model unless LOKI_OPENHANDS_MODEL says
+    # otherwise (workers.openhands_env sets LLM_MODEL / LLM_BASE_URL / LLM_API_KEY).
+    "openhands": {
+        "label": "OpenHands",
+        "exe": ("openhands", "openhands.exe", "openhands.cmd"),
+        "install": "uv tool install openhands --python 3.12   (or: python tools/setup_extras.py openhands)",
+        "signin": "nothing to sign in to: it uses LOKI's local Ollama model (set LOKI_OPENHANDS_MODEL for another)",
+        "args": ("--headless", "--json", "--override-with-envs", "-t"),
+        "parse": "jsonl_last",
+        "supports_mcp": False,
+        "system_in_prompt": True,
+        "llm_env": True,
+    },
 }
 
 
@@ -206,6 +220,9 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
     argv.append(prompt)
 
     env = dict(os.environ)
+    if spec.get("llm_env"):
+        import workers  # pylint: disable=import-outside-toplevel  (stdlib only, no cycle)
+        env = workers.openhands_env(env)
     env["LOKI_CLI_AGENT"] = name
     # A cwd that does not exist makes CreateProcess fail with WinError 267 before the
     # CLI ever runs, so only pass a directory we have actually confirmed.
@@ -235,6 +252,8 @@ def run(name: str, system: str, prompt: str, workspace: str, timeout: int = 900)
 
     if spec["parse"] == "json_result":
         text = _extract_json_result(stdout) or stdout or stderr
+    elif spec["parse"] == "jsonl_last":
+        text = extract_jsonl_message(stdout) or stdout or stderr
     else:
         text = stdout or stderr
 
@@ -260,6 +279,29 @@ def _extract_json_result(stdout: str) -> str:
                 value = data.get(key)
                 if isinstance(value, str) and value.strip():
                     return
+
+
+def extract_jsonl_message(stdout: str) -> str:
+    """The last thing the agent said, from a JSON-events stream (OpenHands --json)."""
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        for node in (data, data.get("message") if isinstance(data.get("message"), dict) else None,
+                     data.get("args") if isinstance(data.get("args"), dict) else None):
+            if not isinstance(node, dict):
+                continue
+            for key in ("final_thought", "content", "message", "text", "result"):
+                value = node.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return ""
 
 
 # --- OpenAI-shaped face so Loki's turn loop cannot tell a CLI agent from an API ---

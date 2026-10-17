@@ -14,6 +14,8 @@ the call to whichever enabled capability can do it:
     image      make an image                                   (image-gen: Z-Image Turbo / Pollinations)
     reach      the web through Agent Reach: pages, GitHub      (agent-reach)
     track      track objects in a workspace video (RF-DETR + Roboflow trackers)  (vision-track)
+    scrape     one page as markdown, or crawl a site into scraped/<domain>/ (scrapling);
+               without Scrapling it falls back to read_web and says how to install it
 
 Specialists that run for minutes (Claude Code, Codex, Hermes Agent) are background jobs the
 USER starts (workers.py); the model cannot spawn them. Headroom (context compression) and
@@ -28,6 +30,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -69,7 +72,12 @@ ROLES: dict[str, dict] = {
               "summary": "track objects in a video in the workspace: url=<video path>, task='car' (what to "
                          "track; empty = everything; optional 'tracker=ocsort' 'max_frames=300'); writes an "
                          "annotated MP4 and a JSON/CSV per track into tracks/", "ask": False},
+    "scrape": {"capabilities": ("scrapling",), "permission": "network",
+               "summary": "Scrapling: url=<page> as markdown; task='crawl max_pages=20' crawls the site into "
+                          "scraped/<domain>/; task='dynamic' renders JavaScript first", "ask": False},
 }
+SCRAPE_INSTALL = ("install Scrapling for full scraping and crawling: python tools/setup_extras.py scrapling "
+                  "(then turn on scrapling in Settings > Add-ons)")
 
 
 class Conductor:
@@ -142,6 +150,8 @@ class Conductor:
 
     # ------------------------------------------------------------- dispatch
     def run(self, role: str, task: str = "", url: str = "") -> str:
+        if role == "scrape":   # has its own fallback, so it never stops at pick()
+            return self.scrape(url or task, task)
         capability, why = self.pick(role)
         if not capability:
             return "error: no specialist for %r is ready - %s" % (role, why)
@@ -393,6 +403,73 @@ def _conductor_track(self, task: str, url: str) -> str:
 
 
 Conductor.track = _conductor_track
+
+
+# ---------------------------------------------------------------- scrape (Scrapling)
+def parse_scrape_task(task: str) -> dict:
+    """'crawl max_pages=30 dynamic' -> {"crawl": True, "max_pages": 30, "dynamic": True}."""
+    low = str(task or "").lower()
+    pages = re.search(r"(?:max_pages|pages)\s*=\s*(\d+)", low)
+    return {"crawl": bool(re.search(r"\bcrawl\b", low)), "dynamic": bool(re.search(r"\b(dynamic|javascript|js)\b", low)),
+            "max_pages": int(pages.group(1)) if pages else 20}
+
+
+def _conductor_scrape(self, url: str, task: str = "", crawl: bool | None = None, max_pages: int | None = None,
+                      workspace: Path | None = None, dynamic: bool | None = None) -> str:
+    """Scrapling when it is on and installed; otherwise one page through read_web (crawl4ai /
+    a self-hosted Firecrawl / LOKI's own) with a line saying how to get Scrapling."""
+    url = next((w for w in str(url or "").split() if w.startswith(("http://", "https://"))), str(url or "").strip())
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return "error: scrape needs an http(s) url"
+    opts = parse_scrape_task(task)
+    if crawl is not None:
+        opts["crawl"] = bool(crawl)
+    if max_pages:
+        opts["max_pages"] = int(max_pages)
+    if dynamic is not None:
+        opts["dynamic"] = bool(dynamic)
+    opts["max_pages"] = max(1, min(int(opts["max_pages"]), 200))
+    ws = Path(workspace) if workspace else _workspace(self.env)
+    host = (parsed.hostname or "site").lower()
+    out_dir = ws / "scraped" / re.sub(r"[^a-z0-9.-]+", "-", host)
+    capability, why = self.pick("scrape")
+    note = ""
+    if capability:
+        job = {"url": url, "crawl": opts["crawl"], "max_pages": opts["max_pages"], "dynamic": opts["dynamic"],
+               "out_dir": str(out_dir), "max_chars": MAX_TEXT}
+        timeout = int(self.env.get("LOKI_SCRAPE_TIMEOUT", "900" if opts["crawl"] else "180") or 180)
+        result = self._runner("scrape", job, timeout=timeout)
+        if result.get("ok"):
+            if result.get("crawl"):
+                return ("crawled %d page(s) of %s into %s%s" % (
+                    result.get("pages", 0), host, result.get("out_dir"),
+                    ("; index " + result["jsonl"]) if result.get("jsonl") else ""))
+            return str(result.get("text", "")) + ("\n[truncated]" if result.get("truncated") else "")
+        if not result.get("missing"):
+            return "error: scrapling failed: " + str(result.get("error"))
+        note = str(result.get("error"))
+    else:
+        note = why
+    # Fallback: one page through the read_web specialist (never Scrapling itself here).
+    fallback = ""
+    for backend in [c for c in READ_BACKENDS if c != "scrapling"]:
+        if self._ready(backend).allowed:
+            fallback = backend
+            break
+    hint = "note: %s; %s" % (note or "Scrapling is not ready", SCRAPE_INSTALL)
+    if opts["crawl"]:
+        hint += ". Crawling needs Scrapling, so only the first page was read"
+    if not fallback:
+        return "error: no scraper is ready (%s). Turn on crawl4ai or firecrawl in Settings > Add-ons, or %s" % (
+            note or "Scrapling is not ready", SCRAPE_INSTALL)
+    text = self.read_web(fallback, url)
+    if text.startswith("error:"):
+        return text + "\n" + hint
+    return text + "\n\n[read with %s] %s" % (fallback, hint)
+
+
+Conductor.scrape = _conductor_scrape
 
 
 def python_command() -> list:

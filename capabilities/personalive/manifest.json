@@ -1,0 +1,22 @@
+{
+  "name": "personalive",
+  "version": "0.1.0",
+  "kind": "model",
+  "description": "PersonaLive (GVCLab): real-time portrait animation for live streaming. Listed for reference only - LOKI does not install or run it.",
+  "license": "Academic research use only (not for commercial use)",
+  "homepage": "https://github.com/GVCLab/PersonaLive",
+  "permissions": [],
+  "requires_cmd": [
+    "nvidia-smi"
+  ],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "",
+  "platforms": [
+    "win32"
+  ],
+  "card_only": true,
+  "install": "No installer: Windows with an NVIDIA GPU (12 GB+ VRAM) only. Follow the project's README.",
+  "notice": "Academic research use only. Needs Windows and an NVIDIA GPU with 12 GB or more."
+}

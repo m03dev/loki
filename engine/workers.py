@@ -44,7 +44,7 @@ from typing import Any, Callable
 STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cancelled")
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
-AGENTS = ("loki", "claude-code", "codex", "hermes", "opencode")
+AGENTS = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands")
 # The built-in agent: Loki's own loop, headless, on Loki's model (local by default). It
 # needs nothing installed, so background work always has at least one agent.
 BUILTIN_AGENTS = {"loki"}
@@ -111,12 +111,49 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
         if env.get("LOKI_OPENCODE_MODEL"):
             argv += ["-m", env["LOKI_OPENCODE_MODEL"]]
         return argv + [prompt]
+    if agent == "openhands":
+        # OpenHands CLI (OpenHands/OpenHands, MIT; the standalone CLI is no longer actively
+        # maintained but works). Headless one-shot with JSON events; the model comes from the
+        # LLM_* variables (openhands_env), so --override-with-envs makes them win over its config.
+        if interactive:
+            return ["openhands", "--override-with-envs"]
+        return ["openhands", "--headless", "--json", "--override-with-envs", "-t", prompt]
     if agent == "codex":
         if interactive:
             return ["codex", "--sandbox", "workspace-write"]
         return ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
                 "--color", "never", prompt]
     raise ValueError("unknown agent: %s" % agent)
+
+
+def current_local_model(env: dict | None = None) -> tuple[str, str]:
+    """(model, base_url) of the local model LOKI is using now: LOKI_LOCAL_MODEL when pinned,
+    else what the running engine resolved (loki.LOCAL_STATE), else the stock qwen3:8b."""
+    env = env if env is not None else os.environ
+    base = "http://localhost:11434/v1"
+    pinned = str(env.get("LOKI_LOCAL_MODEL", "") or "").strip()
+    if pinned:
+        return pinned, base
+    engine = sys.modules.get("loki")
+    state = getattr(engine, "LOCAL_STATE", None) if engine is not None else None
+    if isinstance(state, dict) and state.get("name"):
+        return str(state["name"]), str(state.get("base_url") or base)
+    return "qwen3:8b", base
+
+
+def openhands_env(env: dict | None = None) -> dict:
+    """OpenHands' LLM_* settings: LOKI's current local Ollama model unless the owner chose one
+    (LOKI_OPENHANDS_MODEL / _BASE_URL / _API_KEY, or LLM_* already set)."""
+    env = dict(env if env is not None else os.environ)
+    model, base = current_local_model(env)
+    out = {
+        "LLM_MODEL": str(env.get("LOKI_OPENHANDS_MODEL") or env.get("LLM_MODEL") or ("openai/" + model)),
+        "LLM_BASE_URL": str(env.get("LOKI_OPENHANDS_BASE_URL") or env.get("LLM_BASE_URL") or base),
+        # A local server ignores the key, but OpenHands refuses to start without one.
+        "LLM_API_KEY": str(env.get("LOKI_OPENHANDS_API_KEY") or env.get("LLM_API_KEY") or "ollama"),
+    }
+    env.update(out)
+    return env
 
 
 LOCAL_MODEL_NAMES = {"local", "local-small", "local-coder", "local-hermes", "local-reasoning", "local-tools",
@@ -310,6 +347,8 @@ class LocalBackend(Backend):
                 env["GAME_PROJECT"] = job["run_dir"]
         else:
             argv = agent_argv(job["agent"], job["prompt"])
+            if job["agent"] == "openhands":
+                env = openhands_env(os.environ)
             exe = self.which(argv[0])
             if not exe:
                 raise RuntimeError("%s is not installed" % argv[0])

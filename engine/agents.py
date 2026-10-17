@@ -5,7 +5,7 @@ An agent is a profile:
     name, role, goal         who it is and what it is for (the goal also routes work to it)
     instructions             how it works, in its own words
     engine (harness)         loki (LOKI's own loop: works offline, any model via the
-                             prompted tool harness), claude-code, codex, hermes, opencode
+                             prompted tool harness), claude-code, codex, hermes, opencode, openhands
     model, fallback          which provider it uses first, and which one if that fails
     skills                   SKILL.md folders it loads (skills/ in the repo, or your own in
                              harness_data/skills); their text is added to its instructions
@@ -33,9 +33,10 @@ import time
 import uuid
 from pathlib import Path
 
-ENGINES = ("loki", "claude-code", "codex", "hermes", "opencode")
+ENGINES = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands")
 ENGINE_LABELS = {"loki": "LOKI (built in, works offline)", "claude-code": "Claude Code (subscription)",
-                 "codex": "Codex (subscription)", "hermes": "Hermes Agent", "opencode": "OpenCode"}
+                 "codex": "Codex (subscription)", "hermes": "Hermes Agent", "opencode": "OpenCode",
+                 "openhands": "OpenHands (local Ollama model by default)"}
 TOOL_GROUPS = {
     "files": "read and edit files in its workspace",
     "commands": "run commands (tests, builds) in its workspace",
@@ -110,6 +111,38 @@ TEMPLATES = STARTERS + [
      "role": "build", "goal": "code with OpenCode on any provider (Zen's free models work)",
      "tools": ["files", "commands"], "color": "#a3be8c",
      "instructions": "Implement the task, run the tests, and summarise the change."},
+    {"id": "openhands-coder", "name": "OpenHands Coder", "engine": "openhands", "allow_commands": True,
+     "role": "build", "goal": "code with OpenHands on this computer's local Ollama model",
+     "tools": ["files", "commands"], "color": "#5e81ac",
+     "instructions": "Implement the task in small steps, run the project's tests, and summarise what changed."},
+    # Written for LOKI (the stage-by-stage idea follows the common novel-writing workflow that
+    # tools such as MuMuAINovel use; no text or prompt from any of them is copied here).
+    {"id": "novel-writer", "name": "Novel Writer", "engine": "loki", "allow_commands": False,
+     "role": "create", "goal": "write a novel stage by stage, from idea to revised chapters, in novel/",
+     "tools": ["files"], "memory": "project", "max_minutes": 240, "color": "#b48ead",
+     "instructions": (
+         "You write long fiction in stages and keep every stage in files under novel/ so the work "
+         "survives restarts and can be edited by the author between stages. Before each stage, read "
+         "what already exists and continue from it; never silently overwrite the author's edits.\n"
+         "1. Idea - novel/00-idea.md: premise in two sentences, genre, audience, tone, length target, "
+         "and the central question the story answers. If the request is vague, propose three premises "
+         "and pick the strongest, saying why.\n"
+         "2. World - novel/01-world.md: setting, time, rules (technology, magic, society), places that "
+         "matter, and the limits the plot must respect.\n"
+         "3. Characters - novel/02-characters.md: for each main character a want, a need, a flaw, a "
+         "secret, how they speak, and how they change; plus the relationships between them.\n"
+         "4. Outline - novel/03-outline.md: acts, then one line per chapter (goal, conflict, turn, "
+         "what the reader learns), ending with the climax and resolution.\n"
+         "5. Chapters - novel/chapters/NN-title.md, one file per chapter, written from the outline. "
+         "Show through scenes and dialogue, keep each character's voice, end chapters with momentum. "
+         "After each chapter append a short summary to novel/04-summaries.md.\n"
+         "6. Continuity check - novel/05-continuity.md: compare the chapters against the world, "
+         "character sheets and summaries; list every contradiction (names, ages, timeline, rules, "
+         "who knows what) with chapter and line, and how to fix it.\n"
+         "7. Rewrite pass - fix what the continuity check found, tighten prose, cut repetition, and "
+         "note what changed in novel/06-revisions.md.\n"
+         "Work one stage per run unless the task asks for more, and end with a DONE line naming the "
+         "files you wrote and the next stage.")},
 ]
 
 # Words in a description -> what the agent needs. Used by draft().
@@ -245,7 +278,9 @@ def _frontmatter(text: str) -> dict:
 
 
 def skill_roots(repo: Path, data_dir: Path) -> list:
-    roots = [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills")]
+    # skills/marketing: coreyhaines31/marketingskills (MIT, vendored; LICENSE beside it).
+    roots = [("loki", Path(repo) / "skills"), ("yours", Path(data_dir) / "skills"),
+             ("marketing", Path(repo) / "skills" / "marketing")]
     try:   # Ruflo's core skills and every plugin's (contrib/ruflo)
         import ruflo_library  # pylint: disable=import-outside-toplevel
         return roots + ruflo_library.skill_roots(Path(repo) / "contrib" / "ruflo")
