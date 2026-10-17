@@ -31,6 +31,9 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       X-Loki-Nonce; a phone without it still verifies in the old form; a verbatim replay is still refused).
       Green on the cloud stubs (test_phone_link 81 passed incl. the TypeScript check on Node 22). Please confirm
       on the PC; if a phone is paired, open the phone app once and check Settings > Machines still shows it. (Claude, 2026-10-17)
+- [ ] [either] **Session 29 "LOKI for anyone": build and install the installers on a clean account.** W35 (PC: the
+      Windows setup .exe) and M26 (Mac: the .dmg). Answer here with what installed, how long the first-run setup took
+      and anything that needed a manual step. (Claude, 2026-10-17)
 
 - [ ] [either] **Session 28 memory & knowledge: teach LOKI a fact on one machine, ask on the other.** W28 (PC) and
       M20 (Mac) are the steps; they must run at the same time on both machines. Answer here with the two eval lines
@@ -1100,6 +1103,26 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       and `ollama ps` while a chat runs shows its context. (6) Start one background job ("list the files in this
       project and write notes/files.txt") and report the `[loki-job] ... | model ...` line and whether it finished.
       Also `type harness_data\provider_health.json` (no keys are in it; paste the states, not the file).
+- [ ] **W38 The Windows installer on a clean user account (session 29 "LOKI for anyone", 2026-10-17).** HANDOFF
+      "Session 29 usable by anyone (worktree)", docs/INSTALL.md. After LOKI updates:
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - new suite test_usability (its headless part
+      runs only where Playwright + Chromium are installed; say if it ran). Report the line.
+      (2) Build: `harness_data\.venv\Scripts\python.exe tools\make_release.py --out dist\release` (no --feed is fine
+      for this test), install Inno Setup 6 if missing (`winget install JRSoftware.InnoSetup`), then
+      `iscc /DLokiVersion=<the version it printed> packaging\windows\loki.iss` -> `dist\Loki-Setup-<v>.exe`.
+      Report any iscc error verbatim (the .iss was written without iscc to try it).
+      (3) Make a NEW standard (not admin) Windows user, log in as it, copy the .exe there and run it. Report: the
+      SmartScreen prompt (expected, unsigned), whether the install step "Downloading LOKI's Python..." finishes
+      (time it), and `%LOCALAPPDATA%\Loki\app\bootstrap.log` + `launcher.log`. If uv 0.8.0's download URL 404s,
+      set `LOKI_UV_VERSION` to the newest uv release and say which works - then fix the default in
+      packaging/installer/bootstrap.ps1 + bootstrap.sh + docs/INSTALL.md and ship.
+      (4) LOKI opens with the welcome tour. Go through it: pick Español, then English again; "Set it up for me"
+      (local) OR paste a free Groq key; pick 2 interests; run one example. Screenshot each step. Then Start menu >
+      LOKI again: no tour, no setup.
+      (5) Settings > General > Language and accessibility: Arabic (the window flips right to left), 130% text, high
+      contrast, reduce motion - screenshot each in the real WebView2 window. Press F1 (help), Tab through the
+      window (the first Tab shows "Skip to the message box").
+      (6) Uninstall from Settings > Apps: %LOCALAPPDATA%\Loki stays (chats/keys), the program folder goes.
 - [ ] **W33 One memory on both machines (2026-10-17, session 28 memory & knowledge).** Do this together with M20
       (the Mac); both machines must run the version with `engine/memory_sync.py` and be linked (Settings > Machines).
       (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: report the test_memory_core2 line (its
@@ -1747,6 +1770,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the health-gated updater - say whether it did). Otherwise Discard. Also try Roll back only if a version is on
       trial; never on a healthy LOKI. Continue with the highest open M tasks.
 
+- [ ] **M29 The macOS .dmg (session 29 "LOKI for anyone", 2026-10-17).** HANDOFF "Session 29 usable by anyone
+      (worktree)", docs/INSTALL.md. (1) `harness_data/.venv/bin/python tools/ship.py --check`: report the
+      test_usability line (headless part ran or skipped). (2) `harness_data/.venv/bin/python tools/make_release.py
+      --out dist/release` then `bash tools/macos/make_dmg.sh` -> dist/Loki-<v>.dmg (ad-hoc signed). (3) Make a new
+      macOS user (System Settings > Users & Groups), log in, open the .dmg, drag LOKI to Applications, right-click >
+      Open. Report: the first-run notification, how long setup takes, `~/Library/Application Support/Loki/app/
+      bootstrap.log` + `launcher.log`, and whether the window opens with the welcome tour in WKWebView. If uv 0.8.0
+      404s, try `LOKI_UV_VERSION=<newest>` and report. (4) The tour, Arabic RTL, high contrast, 130% text, F1 help,
+      keyboard Tab order in WKWebView - screenshots. (5) VoiceOver (Cmd+F5) on the tour: it reads the step title,
+      the language radio buttons and the buttons by name - report anything it reads badly.
+
 ## Needs Mohamed
 
 - [ ] **NVIDIA key (2026-10-17, session 29) - makes DeepSeek V4.1 Flash LOKI's main driver, free.** Open
@@ -1759,6 +1793,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (e.g. http://homeassistant.local:8123) and a long-lived token (HA profile > Security > Long-lived access
       tokens) go in Settings > Tools > Home on the PC. Then LOKI can see and switch your devices (every change asks).
 
+- [ ] **LOKI for other people - three decisions (session 29, 2026-10-17).** (a) **Licence:** docs/THIRD_PARTY.md
+      says LOKI may not be given to anyone while it contains the GPL/AGPL ports (engine/memory_core.py,
+      engine/subagent.py, skills/novel-writer/, engine/site_map.py). Handing out the installers IS distributing -
+      remove/rewrite those first, or decide to publish under GPL/AGPL. (b) **Where updates live:** the repo is
+      private, so installed copies need a public release feed (e.g. a public `m03dev/loki-releases` repo's GitHub
+      Releases) - say where. (c) **Signing:** the release-feed signing key (its public half is keys/loki_public.pem;
+      who holds the private key?), and optionally a Windows code-signing certificate and an Apple Developer ID
+      (both paid - LOKI never buys them). Until (b) and the key exist, installed copies run fine but do not update.
 - [ ] **Telegram bot (2026-10-17) - talk to LOKI from your phone.** In Telegram, open **@BotFather**, send
       `/newbot`, pick a name and a username ending in "bot". It gives you a token (digits:letters). Paste it in
       LOKI on the **PC**: Settings > General > "Telegram bot token" (it is saved in harness_data/.env, never

@@ -36,6 +36,19 @@ Concise dated records of meaningful work. Newest at the top.
   LibreChat, Markdown), prompt library, compare models + Elo, Home Assistant connector (writes ask), weather/
   news/clock/translate with no key, picture edits (Pillow, rembg add-on, Real-ESRGAN), Settings > Your data
   (inventory, backup/restore, clear). tests/test_research3.py (154) in SUITES. Real machines: ZIVA W35, M26.
+## 2026-10-17 - Session 29 (Claude, worktree): LOKI usable by anyone
+
+- Welcome tour (app/ui/onboarding.js): language, a free model (local one-click or OpenRouter/Groq/Gemini), interests,
+  3 examples; no dead ends; replaces the auto setup sheet for new people only. engine/usability_api.py (/onboarding,
+  /prefs/language, /help).
+- "What can LOKI do?" (32 one-click examples, 8 categories, health safety notes) + help center (docs/help/, "?", F1).
+- Accessibility (app/ui/a11y.js): text size, high contrast, reduced motion, colour-blind-safe colours, skip link,
+  arrow keys, focus kept in dialogs. i18n (app/ui/i18n.js + 8 tables incl. Arabic RTL, opt-in data-i18n); LOKI
+  answers in the user's language (LOKI_REPLY_LANGUAGE).
+- Installers: tools/make_release.py, packaging/windows/loki.iss, tools/macos/make_dmg.sh, packaging/installer/
+  (bootstrap + launcher), .github/workflows/installers.yml (manual); engine/release_update.py = signed release-zip
+  updates with the same pre-flight/trial/rollback. docs/INSTALL.md.
+- tests/test_usability.py (137 quick, 166 with LOKI_SUITE_SLOW=1) in SUITES. Real machines: ZIVA W35 (PC), M26 (Mac). Needs Mohamed: licence, feed, key.
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 
 - E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before

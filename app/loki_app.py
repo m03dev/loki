@@ -262,6 +262,10 @@ def stop_engine(process: subprocess.Popen | None) -> None:
 
 # --------------------------------------------------------------------- restarts
 RESTART_EXIT_CODE = 75          # engine/updater.py: "restart me on the new code"
+# An installed LOKI (session 29): packaging/installer/loki_launch.py sets LOKI_RELEASE_ROOT and starts
+# <root>/<current>/app/loki_app.py; this exit code asks it to start the (new) current version.
+RELEASE_MODE = bool(os.environ.get("LOKI_RELEASE_ROOT", "").strip())
+RELAUNCH_EXIT_CODE = 76         # engine/release_update.py
 WINDOW: dict = {"window": None, "browser": False}
 
 
@@ -317,7 +321,11 @@ def start_and_wait(python: Path, workspace: Path, godot: str) -> tuple:
     if token:
         return process, token
     stop_engine(process)
-    if rollback_update().get("ok"):
+    back = rollback_update()
+    if back.get("ok") and RELEASE_MODE:
+        log("went back to %s; the launcher starts it" % back.get("to"))
+        os._exit(RELAUNCH_EXIT_CODE)   # the previous version is another folder: the launcher starts it
+    if back.get("ok"):
         log("starting the previous version again")
         process = start_engine(python, workspace, godot)
         token = wait_for_engine(process)
@@ -362,6 +370,14 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             show_url(f"{BASE}/#token={token}")
             continue
         log("the engine is restarting on the updated code")
+        if RELEASE_MODE:
+            # an installed LOKI: the launcher (packaging/installer/loki_launch.py) starts the version
+            # that is current now - the new one, or the last good one after a rollback
+            stop.set()
+            close_window()
+            if os.environ.get("LOKI_APP_TEST", "") != "1":
+                threading.Timer(2.0, os._exit, [RELAUNCH_EXIT_CODE]).start()
+            return
         if relaunch_app():
             # Update everything restarts the WHOLE client, not only the engine: the window and
             # this app process run the new code too. The new app waits for this one to exit.
@@ -584,7 +600,9 @@ def main(argv: list[str] | None = None) -> int:
     workspace = choose_workspace(args.workspace, settings)
     if adopt_old_chats(workspace):
         log("brought your chats over from ~/Loki")
-    auto_update()
+    if auto_update().get("relaunch"):
+        log("a new release was checked and installed; the launcher starts it")
+        return RELAUNCH_EXIT_CODE
     if args.workspace:
         settings["workspace"] = str(workspace)
         save_settings(settings)
@@ -606,6 +624,9 @@ def main(argv: list[str] | None = None) -> int:
         if python is None:
             fix = (f"cd /d {REPO} && setup.bat" if sys.platform == "win32"
                    else f"cd {REPO} && bash setup.sh")
+            if RELEASE_MODE:   # installed with the installer: its launcher makes the environment
+                fix = ("Quit LOKI and open it again from the Start menu or Applications: it finishes setting "
+                       "itself up (it needs the internet once). If it keeps failing, see docs/INSTALL.md.")
             return tell("Loki is not set up yet",
                         f"Run this once in a terminal, then open Loki again:\n\n{fix}")
         godot = find_godot()

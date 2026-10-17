@@ -24,7 +24,7 @@ for package in ("mcp", "openai", "pydantic", "pydantic_core", "httpx", "anyio", 
         pass
 
 # Loki's own tree, as files on disk (the engine imports the harness from source).
-for folder in ("engine", "app/ui", "capabilities", "skills"):
+for folder in ("engine", "app/ui", "capabilities", "skills", "docs/help"):
     datas.append((str(ROOT / folder), folder))
 datas.append((str(ROOT / "LICENSE"), "."))
 

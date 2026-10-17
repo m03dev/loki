@@ -383,5 +383,9 @@ function afterStart() {
     try { localStorage.setItem("loki-setup-later", String(Date.now())); } catch (_) { /* no storage */ }
   });
   refreshUsagePill();
-  openSetup(false);
+  // New people get the welcome tour (onboarding.js) instead of this sheet; the sheet stays for
+  // "More choices" and Settings > Local models. Either way the better-model banner still shows.
+  if (window.LokiI18n) LokiI18n.syncWithEngine();
+  if (window.Onboarding) Onboarding.start().then((shown) => { if (!shown) openSetup(false); }).catch(() => openSetup(false));
+  else openSetup(false);
 }

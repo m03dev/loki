@@ -165,6 +165,87 @@ pushed. **tests/test_research3.py (154 offline checks, in SUITES)**; screens `do
   sandboxed iframes, the Import file picker, confirm()/prompt() dialogs, clipboard.
 - **Next (from the table):** a global quick-launch hotkey ("Spotlight for LOKI", Khoj Mini), clipboard history
   (opt-in), job-finished notifications, a hands-free voice mode with Pipecat's Smart Turn, a screenshot button.
+Last updated: 2026-10-17 (session 29, Claude in the cloud; usable-by-anyone worktree).
+
+## Session 29 usable by anyone (worktree)
+
+The owner wants "a useful app that can help people" - other people, not only him. LOKI was a power-user tool
+with an English-only window, a model-setup sheet as the first thing anyone saw, and installs that needed git.
+
+**1. A first run for anyone** (`app/ui/onboarding.js`, engine `engine/usability_api.py`): a 4-step welcome tour -
+what LOKI is + pick one of 8 languages (with Bigger text / High contrast right there), connect a FREE model (on this
+computer: the detected Ollama/MLX state + the existing one-click `/setup/auto` with its size, "install Ollama by hand"
+and "More choices" = the old setup sheet; or online: OpenRouter one-click sign-in via the existing `/signin/openrouter`,
+Groq/Gemini sign-up link + paste key via `/providers/connect`), choose what to help with (8 interests, saved as
+`LOKI_INTERESTS`), and try 3 matching examples. Every error says what to do (wrong key -> the prefix it should
+have; setup failed -> retry / install by hand / go online), every step can be skipped, "Next" without a model
+warns once then goes on. It REPLACES the old auto-opening setup sheet for new people only (setup.js `afterStart`):
+the tour shows only when the engine says `done:false`, and marks itself done for anyone who already has a working
+model and real chats (the owner never sees it). Esc = "ask again in 3 days"; Settings > General re-opens it.
+
+**2. "What can LOKI do?" + help** (`app/ui/gallery.js`): 32 examples in 8 categories (everyday, work, study,
+creative, home, money, health info, small business); one click runs it in a new chat in Ask mode (nothing on the
+computer changes) and the answer shows in the chat. The 4 health examples show a safety note on the card and add
+"general information, not a diagnosis, say when to see a doctor" to the prompt. Opened from a grid icon in the
+sidebar and "More ideas..." on the home screen. Help center: the "?" icon in the top bar (tooltip like every icon)
+or F1, searchable articles from `docs/help/*.md` (10 articles: getting started, connect a model, examples,
+privacy, health safety, languages, accessibility, keyboard, updates, troubleshooting; `docs/help/index.json` orders
+them; `docs/help/<lang>/<slug>.md` overrides per language) via `GET /help`, `GET /help/<slug>`, rendered with
+app.js's escaping Markdown renderer.
+
+**3. Accessibility** (`app/ui/a11y.js`, `app/ui/usability.css`): Settings > General > "Language and accessibility"
+(text size 100/115/130/150% via zoom, high contrast (black/white/yellow focus), motion (follow the system / reduce /
+full - reduce hides the 3D world), colour-blind-safe status colours (Okabe-Ito + a symbol)), saved per computer
+in localStorage. Keyboard: a skip link, arrow keys + roving tabindex in tab lists and radio groups (Settings
+sections), focus kept inside open dialogs and returned to the opener, Esc closes; Space on a focused button no
+longer opens the chat box on the home screen (app.js `keyForControl`), Babylon's `tabindex=1` on the decorative
+world canvas is neutralised. `LokiDialog` is the accessible dialog all new UI uses.
+
+**4. Languages** (`app/ui/i18n.js`, `app/ui/i18n/<lang>.json`): en, es, fr, de, ar (RTL), hi, zh, ja - 217 keys +
+63 icon phrases each, all machine-drafted by Claude and marked `_meta.review: true`. OPT-IN per element so other
+agents' new UI keeps working in English: `data-i18n="key"`, `data-i18n-attr="placeholder:key"`, `data-i18n-src`
+(by English text); icons.js keeps the English name in `data-tip-src` and translates tooltips/aria-labels from
+"phrases"; index.html's static words are annotated from i18n.js (STATIC) - index.html itself only got 6 new lines.
+`tools/i18n_tables.py --write-en` regenerates en.json from the code (tr("key","English") etc.), `--check` finds
+missing keys/placeholders, `--missing es` lists what a table lacks. Arabic sets `dir=rtl` and usability.css flips
+the sidebar, menus and text alignment. **LOKI answers in the user's language**: `LOKI_REPLY_LANGUAGE` match
+(default: the language the user writes in, the window's language as the fallback, never drifting) / ui / en (the
+old `_ENGLISH_RULE`, unchanged); `engine/loki.py _language_rule()`. Not translated yet: app.js's dynamic strings
+(status line, "New chat", notices), the Settings panels' own contents, and LOKI's replies to errors.
+
+**5. Installers for other people** (docs/INSTALL.md): `tools/make_release.py` (seed tree of git-tracked files minus
+tests/mobile/cloud/CI/big docs + RELEASE.json, zip, manifest with sha256, signed with tools/loki_sign.py when
+LOKI_SIGNING_KEY is set), `packaging/windows/loki.iss` (Inno Setup, per-user, no admin), `tools/macos/make_dmg.sh`
+(self-contained Loki.app + .dmg; optional Developer ID signing + notarization), `packaging/installer/bootstrap.ps1
+/.sh` (first run: pinned uv + checksum -> standalone Python 3.12 -> `<data>/.venv`), `packaging/installer/
+loki_launch.py` (stdlib: installs the seed into `<data>/versions/<v>`, pip installs changed requirements, runs the
+current version with `LOKI_RELEASE_ROOT`, starts again on exit 76), `.github/workflows/installers.yml` (manual or
+v* tag only; builds release + Windows setup + dmg + bootstrap smoke tests; NOT run here). **Packaged updates are
+safe**: `engine/release_update.py` - signed feed (pure-Python RSA verify against keys/loki_public.pem; unsigned is
+refused by default; https only), sha256, safe unzip, pre-flight (the new tree's own `--self-test` + `ui_missing`),
+switch with trial (`pending` until /ui/ready), rollback to last_good + skip with reason, history, keep 3 versions.
+`engine/updater.py` dispatches to it when `LOKI_RELEASE_ROOT` is set (update/check/status/health/mark_good/
+on_trial/rollback/check_now/run_forever) so Update everything, the banner and Settings > Machines work unchanged;
+`app/loki_app.py` exits 76 to the launcher after a release switch or rollback (`RELEASE_MODE`). The git path and
+FROZEN (PyInstaller, which still does not self-update - documented) are untouched.
+
+**Tests**: tests/test_usability.py (in SUITES; 137 checks in ~30 s by default - the owner's one-minute rule - with a quick pre-flight stand-in and one headless page after the tour; `LOKI_SUITE_SLOW=1` runs all 166 incl. the real pre-flights, ~3 min): tables complete, gallery/help content, the
+engine routes, the language rule, the release updater end to end with this repo as the release (good update ->
+trial -> good; broken engine -> refused + skipped; missing window file; bad checksum; `../` zip; rollback; openssl
+signature verified in pure Python; unsigned refused), the launcher's relaunch loop, the installer files; headless
+Chromium: the whole tour by keyboard (wrong + good key), the tour hidden for existing users, skip link, gallery,
+help, Settings arrows, 130% zoom without sideways scroll, Arabic RTL, high contrast + colour-blind + reduced motion,
+and LOKI's own accessibility rules (`tests/a11y_rules.js`: names, alt, ids, tabindex, lang/dir, dialogs, roles,
+aria refs, 4.5:1 / 7:1 contrast - axe-core could not be vendored: no npm registry from the sandbox). Screenshots:
+docs/operations/screens/usability_*.png (onboarding 1-4, gallery, settings, Arabic home/gallery/onboarding, high
+contrast). tests/test_ui_smoke.py stays green (the tour shows only for an engine that says `done:false`).
+
+**Not verified here (needs a real machine):** the real pywebview window (WebView2 / WKWebView) with any of this;
+iscc on the .iss (written without Inno Setup); make_dmg.sh / hdiutil / codesign (Linux sandbox); the bootstrap's
+real downloads (uv 0.8.0's URL and Python via uv - no GitHub release downloads from the sandbox); a real install on
+a clean account; VoiceOver/NVDA; the translations' quality (machine-drafted). ZIVA W35 (PC) and M26 (Mac). **Needs
+Mohamed**: the GPL/AGPL ports must go before anyone else gets an installer; a public release feed; who holds the
+release signing key.
 
 ## Session 28 task success (worktree)
 

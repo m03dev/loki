@@ -7,6 +7,9 @@ verifies the result, and learns from every verified success.
 It is a standalone desktop app for macOS and Windows. It is **not** a Godot project; game
 work is one optional capability among many.
 
+Just want to **use** LOKI (no git, no Python)? See [docs/INSTALL.md](docs/INSTALL.md) - the Windows
+installer and the macOS .dmg, and how they build and update. The rest of this page is for working on LOKI.
+
 ## Requirements
 
 - Python **3.11+** (3.13 recommended) and git

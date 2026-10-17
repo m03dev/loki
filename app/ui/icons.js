@@ -87,6 +87,8 @@ const TAB_ICONS = {
 };
 
 let tipBox = null, tipTimer = 0;
+// i18n.js (session 29): the English name stays in data-tip-src, the shown one is translated
+const trTip = (s) => (window.LokiI18n && s ? window.LokiI18n.phrase(s) : s);
 
 function showTip(target) {
   const name = target.dataset.tipName, what = target.dataset.tipWhat;
@@ -105,7 +107,8 @@ function showTip(target) {
   const r = target.getBoundingClientRect(), tw = tipBox.offsetWidth, th = tipBox.offsetHeight;
   const side = target.closest(".settings-nav, .sidebar");   // rails: the tip goes to the right
   let x, y;
-  if (side) { x = r.right + 10; y = r.top + r.height / 2 - th / 2; }
+  if (side && document.documentElement.dir === "rtl") { x = r.left - tw - 10; y = r.top + r.height / 2 - th / 2; }
+  else if (side) { x = r.right + 10; y = r.top + r.height / 2 - th / 2; }
   else { x = r.left + r.width / 2 - tw / 2; y = r.top - th - 8; if (y < 6) y = r.bottom + 8; }
   x = Math.max(6, Math.min(window.innerWidth - tw - 6, x));
   y = Math.max(6, Math.min(window.innerHeight - th - 6, y));
@@ -119,8 +122,11 @@ function tipTarget(e) { return e.target && e.target.closest ? e.target.closest("
 function makeIcon(node, icon, name, what) {
   if (!node || node.dataset.iconDone) return;
   node.dataset.iconDone = "1";
+  node.dataset.tipSrc = name;
+  node.dataset.tipWhatSrc = what || "";
+  name = trTip(name);
   node.dataset.tipName = name;
-  node.dataset.tipWhat = what || "";
+  node.dataset.tipWhat = trTip(what || "");
   node.setAttribute("aria-label", name);
   node.removeAttribute("title");   // the tooltip replaces the slow native one
   node.classList.add("icon-btn");
@@ -145,12 +151,14 @@ function iconizeTabs() {
     ico.className = "ico"; ico.innerHTML = iconSvg(spec[0]);
     if (!ico.parentNode) tab.prepend(ico);
     const words = document.createElement("span");
-    words.className = "tab-label"; words.textContent = label;   // kept for search and screen readers
+    words.className = "tab-label"; words.textContent = trTip(label);   // kept for search and screen readers
     ico.after(words);
     tab.dataset.iconDone = "1";
-    tab.dataset.tipName = label;
-    tab.dataset.tipWhat = spec[1];
-    tab.setAttribute("aria-label", label);
+    tab.dataset.tipSrc = label;
+    tab.dataset.tipWhatSrc = spec[1];
+    tab.dataset.tipName = trTip(label);
+    tab.dataset.tipWhat = trTip(spec[1]);
+    tab.setAttribute("aria-label", trTip(label));
   }
 }
 

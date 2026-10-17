@@ -106,6 +106,7 @@ async function loadGeneral() {
     box.append(card);
   }
   if (window.Channels) Channels.render(box);   // Telegram pairing under its token (channels.js)
+  if (window.LokiA11y) LokiA11y.render(box);   // language + accessibility, at the top (a11y.js)
 }
 
 // ---------------------------------------------------------------- Connections portal

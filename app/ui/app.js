@@ -51,6 +51,9 @@ function el(tag, cls, text) {
   return node;
 }
 
+// A UI string in the user's language (i18n.js); the English text when there is no table.
+function uiText(key, english, vars) { return window.LokiI18n ? window.LokiI18n.t(key, english, vars) : english; }
+
 function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -141,9 +144,9 @@ function setView(view) {
   if (welcome) welcome.hidden = !home;
   if (home) {
     $("#chat-title").textContent = "Loki";
-    $("#prompt").placeholder = "Ask Loki anything, or describe what to build";
+    $("#prompt").placeholder = uiText("composer.placeholder_home", "Ask Loki anything, or describe what to build");
   } else {
-    $("#prompt").placeholder = "Message Loki";
+    $("#prompt").placeholder = uiText("composer.placeholder", "Message Loki");
   }
 }
 
@@ -857,6 +860,15 @@ function autosize() {
   t.style.height = Math.min(t.scrollHeight, 220) + "px";
 }
 
+// Keyboard users (session 29): Space on a focused button presses it, and typing inside an open
+// dialog stays in the dialog - neither opens the chat box from the home screen.
+function keyForControl(ev) {
+  const t = ev.target && ev.target.closest ? ev.target : null;
+  if (!t) return false;
+  if (t.closest('[role="dialog"]')) return true;
+  return ev.key === " " && !!t.closest('button, a[href], summary, [role="button"], [role="tab"], [role="radio"], [tabindex]');
+}
+
 function wire() {
   $("#composer").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -897,7 +909,7 @@ function wire() {
     const main = $("#main");
     if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey && main.classList.contains("home")
         && !main.classList.contains("summoned") && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target || {}).tagName || "")
-        && $("#settings").hidden) {
+        && $("#settings").hidden && !keyForControl(ev)) {
       ev.preventDefault();
       summon(true);
       const prompt = $("#prompt");

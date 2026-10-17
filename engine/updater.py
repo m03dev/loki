@@ -49,6 +49,30 @@ RUNNING_COMMIT = ""
 RESTART_EXIT_CODE = 75      # "restart me": app/loki_app.py starts the engine again
 
 
+def _release_mod():
+    import release_update  # pylint: disable=import-outside-toplevel
+    return release_update
+
+
+def _release(repo: Path | None = None) -> bool:
+    """True in an installed LOKI (LOKI_RELEASE_ROOT, set by packaging/installer/loki_launch.py) for this
+    machine's own tree; a git checkout and the suites' throwaway repos keep the git path."""
+    if not os.environ.get("LOKI_RELEASE_ROOT", "").strip():
+        return False
+    return repo is None or Path(repo).resolve() == REPO.resolve()
+
+
+def _release_check_now() -> dict:
+    info = _release_mod().check()
+    STATE.update({"checked": time.time(), "update_available": bool(info.get("update_available")),
+                  "latest": info.get("latest", ""), "current": info.get("current", ""),
+                  "error": "" if info.get("ok") else info.get("error", ""),
+                  "problem": "" if info.get("ok") else info.get("problem", ""),
+                  "note": ("update %s -> %s waiting" % (info.get("current"), info.get("latest")))
+                  if info.get("update_available") else ("up to date" if info.get("ok") else "")})
+    return {**_release_mod().status(), **STATE}
+
+
 def _data_dir() -> Path:
     return Path(os.getenv("LOKI_DATA") or (REPO / "harness_data"))
 
@@ -68,6 +92,8 @@ def _legacy_health_file() -> Path:
 
 def health(repo: Path | None = None) -> dict:
     """{last_good, pending, skip:[...]} - what started fine here, what is on trial, what failed."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().state()
     try:
         import json  # pylint: disable=import-outside-toplevel
         data = json.loads(_health_file(repo).read_text(encoding="utf-8"))
@@ -88,6 +114,8 @@ def _save_health(data: dict, repo: Path | None = None) -> None:
 
 def mark_good(repo: Path | None = None) -> dict:
     """The engine started and answered: this commit is good on this machine."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().mark_good()
     commit = version(repo or REPO).get("commit", "")
     data = health(repo)
     if commit:
@@ -101,6 +129,8 @@ def mark_good(repo: Path | None = None) -> dict:
 
 def on_trial(repo: Path | None = None) -> bool:
     """This machine runs a fresh update that has not proved itself yet (engine AND window)."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().on_trial()
     data = health(repo)
     current = version(repo or REPO).get("commit", "")
     return bool(data.get("pending") and current and data["pending"].startswith(current[:12]))
@@ -112,6 +142,8 @@ def rollback(repo: Path | None = None, why: str = "it did not start") -> dict:
     Only this checkout moves (`git reset --keep`, which refuses to touch local edits);
     nothing is pushed. The bad commit is remembered so the next start does not apply it
     again; any NEWER commit on GitHub (the fix) is applied normally."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().rollback(why)
     repo = repo or REPO
     data = health(repo)
     current = version(repo).get("commit", "")
@@ -485,6 +517,8 @@ def explain_git_error(out: str, platform: str | None = None) -> tuple:
 
 def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) -> dict:
     """How this checkout compares with GitHub. Fetches unless fetch=False."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().check(timeout=min(timeout, 30.0))
     repo = repo or REPO
     gone = unreachable(repo)
     if gone:
@@ -769,6 +803,8 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
     - other local commits are replayed on top of GitHub's version (rebase; backup ref kept)
       and stay unpushed; a conflict undoes the rebase and is reported;
     - otherwise it is a fast-forward."""
+    if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().update(timeout)
     repo = repo or REPO
     with _lock:
         notes = []
@@ -957,6 +993,8 @@ def _done(updated: bool, note: str, error: str = "", problem: str = "", repo: Pa
 def status() -> dict:
     """Version + update state for /health. `error`/`problem` say why the last update attempt
     (at start, in the app's process, or a later check) did not work; both are "" when fine."""
+    if _release():   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_mod().status()
     state = {k: v for k, v in STATE.items()}
     last = last_result(REPO)
     if last and float(last.get("at") or 0) > float(state.get("checked") or 0):
@@ -974,6 +1012,8 @@ def check_now() -> dict:
 
     A running engine never swaps its own code (half-old, half-new modules would be worse
     than either); the update is applied the next time LOKI starts (app/loki_app.py)."""
+    if _release():   # an installed LOKI (no git): release zips, engine/release_update.py
+        return _release_check_now()
     with _lock:
         state = check(REPO)
     if state.get("ok"):
@@ -1016,7 +1056,7 @@ def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
     every = every_s if every_s is not None else float(os.getenv("LOKI_UPDATE_EVERY_S", "600") or 600)
     time.sleep(30)
     while True:
-        if enabled() and is_checkout(REPO):
+        if enabled() and (is_checkout(REPO) or _release()):
             try:
                 check_now()
                 if STATE.get("update_available") and force_enabled() and idle and apply and idle():

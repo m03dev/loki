@@ -35,7 +35,7 @@ FULL = [False]   # --full: every suite, no time budget (slow; the PC's nightly r
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
-          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_mmo_systems", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3"]
+          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_mmo_systems", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability"]
 
 
 def _suite_env() -> dict:
@@ -127,8 +127,11 @@ def run_fast(repo: Path, say=print, budget: float | None = None) -> bool:
     from concurrent.futures import ThreadPoolExecutor  # pylint: disable=import-outside-toplevel
     budget = TEST_BUDGET_S if budget is None else budget
     start = time.monotonic()
-    code, out = run(repo, sys.executable, str(repo / "app" / "loki_app.py"), "--self-test", timeout=min(30, budget))
-    say("  %-20s %s (%.0fs)" % ("self-test", (out.splitlines() or ["?"])[-1][:60], time.monotonic() - start))
+    if (repo / "app" / "loki_app.py").is_file():
+        code, out = run(repo, sys.executable, str(repo / "app" / "loki_app.py"), "--self-test", timeout=min(30, budget))
+        say("  %-20s %s (%.0fs)" % ("self-test", (out.splitlines() or ["?"])[-1][:60], time.monotonic() - start))
+    else:
+        code, out = 0, ""   # not a LOKI app checkout (a test's throwaway repo)
     if code != 0:
         say("      " + out[-400:])
         return False
@@ -253,9 +256,10 @@ def ship(repo: Path, message: str, tests: bool = True, say=print) -> int:
     if ahead.strip() == "0":
         say("Nothing to push: GitHub already has all of this.")
         return 0
-    if tests and before.strip() != after.strip() and FULL[0]:
+    if tests and before.strip() != after.strip():
         say("4. GitHub had new commits - testing the combined result")
-        if not run_tests(repo, say):
+        # within the 1-minute rule: the combined code must still start (self-test); --full re-runs every suite
+        if not (run_tests(repo, say) if FULL[0] else run_fast(repo, say, budget=20)):
             say("Tests fail after combining with GitHub's changes - nothing was pushed.")
             return 1
     say("5. push")

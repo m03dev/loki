@@ -4446,6 +4446,35 @@ _ENGLISH_RULE = (
     + " to edit alone, but keep all of your own writing in English."
 )
 
+# Session 29 (LOKI for anyone): LOKI answers in the user's language by default.
+# LOKI_REPLY_LANGUAGE: match (default) = the language the user writes in, ui = always the window's
+# language (LOKI_LANGUAGE), en = English only (_ENGLISH_RULE, the old behaviour).
+_LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "fr": "French", "de": "German", "ar": "Arabic",
+                   "hi": "Hindi", "zh": "Chinese (Simplified)", "ja": "Japanese"}
+
+
+def _ui_language() -> str:
+    code = (os.environ.get("LOKI_LANGUAGE", "auto") or "auto").strip().lower()
+    if code == "auto":
+        code = (os.environ.get("LOKI_BROWSER_LANGUAGE", "") or "en").strip().lower()
+    return code if code in _LANGUAGE_NAMES else "en"
+
+
+def _language_rule() -> str:
+    reply = (os.environ.get("LOKI_REPLY_LANGUAGE", "match") or "match").strip().lower()
+    if reply == "en":
+        return _ENGLISH_RULE
+    name = _LANGUAGE_NAMES[_ui_language()]
+    keep = (" Code, code comments, commit messages, file names and tool arguments stay in English"
+            " unless the user asks otherwise; leave the data of files you edit in their own language.")
+    if reply == "ui":
+        return ("# Language - always " + name + chr(10) + "Write every reply, question and plan in " + name
+                + ", whatever language the user or the project uses." + keep)
+    return ("# Language - answer in the user's language" + chr(10)
+            + "Reply in the language the user's latest message is written in. When it gives no clear"
+            + " language (a command, a link, a file name), use " + name + ". Never switch to a language"
+            + " the user did not use - not even one sentence." + keep)
+
 
 SYSTEM_PROMPT = '''You are LOKI. You are a SENIOR GAME DEVELOPER working autonomously in a Godot 4 project. You are practical, rigorous and concise.
 
@@ -4829,7 +4858,7 @@ def _end_triage() -> None:
 
 
 def _base_system_prompt() -> str:
-    english = _ENGLISH_RULE + chr(10) * 2
+    english = _language_rule() + chr(10) * 2   # the user's language (session 29); _ENGLISH_RULE when en
     if AGENT_MODE in MODE_PROMPTS:
         return english + MODE_PROMPTS[AGENT_MODE] + chr(10) * 2 + "# Project context" + chr(10) + composed_memory()
     if not is_godot_workspace():
