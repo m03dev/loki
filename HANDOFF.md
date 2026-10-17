@@ -6,6 +6,17 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 27 research ports, Claude worktree).
 
+## Session 27 (cont.): the Mac's white window
+
+The owner reported the Mac shows only a white window (Ziva Mac was looking into it; this session has no access to
+the Mac). Whatever the cause, a blank window is now impossible to miss and easy to diagnose: `app/ui/boot.js`
+loads first and catches script/load errors, sends them to the engine (`POST /ui/error` -> engine.out "window
+error" lines, `/health` `ui_errors`), and shows a rescue screen with the errors, Reload, and "Reload without the
+3D world" (localStorage loki.safeMode; cleared when Settings > LOKI World is opened). loki_app.py never shows
+about:blank any more when the engine fails - it shows the log tail. An update relaunch now hard-exits the old copy
+after 2 s (closing a window off the main thread can hang on macOS, leaving a blank old window). Bonsai 2 gets
+/no_think like qwen3. ZIVA M18.
+
 ## Ziva (Windows), 2026-10-17: the PC session-26/27 checks, and a duplicate fix dropped
 
 Ran the [windows] inbox item and W21/W20/W19/W18/W10/W23 on the real PC. All 28 suites green. Highlights:

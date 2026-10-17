@@ -60,6 +60,8 @@ sent = loki._small_model_kwargs(kw, local)
 check("the /no_think switch is added to the system message", sent["messages"][0]["content"].endswith("/no_think"))
 check("the conversation itself is not changed", kw["messages"][0]["content"] == "You are LOKI.")
 check("not for cloud models", loki._small_model_kwargs(kw, cloud) is kw)
+bonsai = types.SimpleNamespace(base_url=local.base_url, model="hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0")
+check("Bonsai 2 (a Qwen3.5) gets /no_think too", loki._small_model_kwargs(kw, bonsai)["messages"][0]["content"].endswith("/no_think"))
 check("not for other local models", loki._small_model_kwargs(kw, types.SimpleNamespace(base_url=local.base_url,
                                                                                        model="llama3.1:8b")) is kw)
 
@@ -178,6 +180,21 @@ check("it starts at once and finishes with the specialist's answer", res["ok"] a
 bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
 cjs = (REPO / "app" / "ui" / "creations.js").read_text(encoding="utf-8")
 check("the bridge and the wall use it", 'route == "/creations/make"' in bridge and 'api("/creations/make"' in cjs)
+
+section("a blank window is never blank: boot.js rescue + errors in engine.out")
+boot = (REPO / "app" / "ui" / "boot.js").read_text(encoding="utf-8")
+idx = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
+app_py = (REPO / "app" / "loki_app.py").read_text(encoding="utf-8")
+check("boot.js loads first, not deferred, before the stylesheets", '<script src="/ui/boot.js"></script>' in idx
+      and idx.index("/ui/boot.js") < idx.index("/ui/app.css"))
+check("it reports script errors to the engine and shows a rescue screen with them", "/ui/error" in boot and "rescue(" in boot
+      and "Reload without the 3D world" in boot and 'route == "/ui/error"' in bridge and '"ui_errors"' in bridge)
+check("app.js marks the window ready", "window.LOKI_READY = true" in (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8"))
+check("the app never shows about:blank (white) when the engine fails; it shows the log", 'show_url("about:blank")' not in app_py
+      and "show_problem(" in app_py and "log_tail(" in app_py)
+import loki_bridge  # noqa: E402
+check("tokens in a window error line are redacted", "[redacted]" in loki_bridge.redact_line("GET /#token=abcdef123 Bearer xyz.987")
+      and "abcdef123" not in loki_bridge.redact_line("#token=abcdef123"))
 
 section("TimesFM-3: the owner said yes")
 import forecast  # noqa: E402

@@ -1,0 +1,55 @@
+// Loaded first (not deferred): if LOKI's window fails to start - a script error, a stylesheet
+// that did not load, an engine that never answers - show what went wrong instead of a blank
+// white window, and send the errors to the engine's log (engine.out) so they can be read later.
+"use strict";
+(function () {
+  const errors = [];
+  const token = (/(?:^|[#&])token=([^&]+)/.exec(location.hash) || [])[1] || "";
+  function report(text) {
+    errors.push(String(text).slice(0, 600));
+    if (errors.length > 20) errors.shift();
+    if (!token) return;
+    try {
+      fetch("/ui/error", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ error: String(text).slice(0, 2000), ua: navigator.userAgent.slice(0, 200), url: location.pathname }) })
+        .catch(() => {});
+    } catch (_) { /* nothing else to do */ }
+  }
+  window.addEventListener("error", (e) => {
+    if (e.target && e.target !== window && (e.target.src || e.target.href)) report("could not load " + (e.target.src || e.target.href));
+    else report((e.message || "error") + " at " + (e.filename || "?").replace(location.origin, "") + ":" + (e.lineno || 0) + ":" + (e.colno || 0));
+  }, true);
+  window.addEventListener("unhandledrejection", (e) => report("unhandled: " + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason)));
+  window.LOKI_BOOT = { errors, report };
+
+  function rescue(reason) {
+    if (window.LOKI_READY || document.getElementById("boot-rescue")) return;
+    const box = document.createElement("div");
+    box.id = "boot-rescue";
+    const s = box.style;   // CSSOM styles: allowed by the CSP, and work even when app.css did not load
+    s.position = "fixed"; s.inset = "0"; s.zIndex = "99999"; s.background = "#1f1f24"; s.color = "#e6e9ee";
+    s.font = "14px -apple-system, system-ui, sans-serif"; s.padding = "40px"; s.overflow = "auto";
+    const h = document.createElement("h2"); h.textContent = "LOKI's window did not start properly"; h.style.fontWeight = "600";
+    const p = document.createElement("p"); p.textContent = reason; p.style.color = "#9aa0aa";
+    const pre = document.createElement("pre"); pre.style.whiteSpace = "pre-wrap"; pre.style.color = "#ffb4a8";
+    pre.textContent = errors.length ? errors.join("\n") : "(no script errors were reported)";
+    const again = document.createElement("button"); again.textContent = "Reload"; again.type = "button";
+    again.style.padding = "8px 16px"; again.style.marginRight = "8px";
+    again.addEventListener("click", () => location.reload());
+    const safe = document.createElement("button"); safe.textContent = "Reload without the 3D world"; safe.type = "button";
+    safe.style.padding = "8px 16px";
+    safe.addEventListener("click", () => { try { localStorage.setItem("loki.safeMode", "1"); } catch (_) { /* ignore */ } location.reload(); });
+    box.append(h, p, pre, again, safe);
+    (document.body || document.documentElement).append(box);
+    report("rescue screen shown: " + reason + " | " + errors.slice(-5).join(" | "));
+  }
+  // The page is ready when app.js says so (state.connected). If not in 25 s, or if app.js never
+  // ran at all, show the rescue screen.
+  setTimeout(() => {
+    if (window.LOKI_READY) return;
+    const css = document.styleSheets && document.styleSheets.length;
+    if (typeof window.start !== "function") rescue("app.js did not run (a script error or a blocked file).");
+    else if (!css) rescue("The stylesheets did not load.");
+  }, 20000);
+  setTimeout(() => rescue("The window never connected to the LOKI engine (it waited 2.5 minutes)."), 150000);
+})();

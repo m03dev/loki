@@ -2112,6 +2112,7 @@ function refreshBackground() {
 }
 
 function showWorldPanel() {
+  try { if (localStorage.getItem("loki.safeMode") === "1") localStorage.removeItem("loki.safeMode"); } catch (_) { /* ignore */ }
   if (World.engine === "godot" && window.WorldGodot) { fetchWorld(); window.WorldGodot.panel(true); return; }
   if (!World.views.panel) {
     const canvas = document.getElementById("world-panel-canvas");
@@ -2171,6 +2172,11 @@ async function loadGodotWorld() {
 }
 
 async function startWorld() {
+  // "Reload without the 3D world" (boot.js rescue screen): skip the world until it is opened again in
+  // Settings > LOKI World, so a renderer that breaks this machine's window cannot keep it blank.
+  let safe = false;
+  try { safe = localStorage.getItem("loki.safeMode") === "1"; } catch (_) { /* no storage */ }
+  if (safe) return;
   try {
     const data = await api("/settings/general");
     if (data && data.ok) {

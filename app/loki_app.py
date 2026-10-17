@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import signal
+import threading
 import subprocess
 import sys
 import time
@@ -287,6 +288,25 @@ def show_url(url: str) -> None:
         webbrowser.open(url)
 
 
+def log_tail(path: Path, lines: int = 40) -> str:
+    try:
+        return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
+    except OSError:
+        return "(no log)"
+
+
+def show_problem(title: str, detail: str) -> None:
+    """Never leave the window blank (white): say what happened, with the log, in the window."""
+    window = WINDOW.get("window")
+    if window is not None:
+        try:
+            window.load_html(problem_page(title, detail))
+            return
+        except Exception:  # noqa: BLE001
+            log("could not show the problem page:\n" + traceback.format_exc())
+    log("%s: %s" % (title, detail[:400]))
+
+
 def start_and_wait(python: Path, workspace: Path, godot: str) -> tuple:
     """Start the engine; if a fresh update keeps it from starting, roll back once and retry."""
     process = start_engine(python, workspace, godot)
@@ -332,6 +352,9 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             holder["process"] = new_process
             if not token:
                 log("the engine did not come back")
+                show_problem("LOKI's engine stopped and did not start again",
+                             "Quit LOKI and open it again. The last lines of its log (%s):\n\n%s"
+                             % (STATE / "engine.out", log_tail(STATE / "engine.out")))
                 return
             show_url(f"{BASE}/#token={token}")
             continue
@@ -341,12 +364,18 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             # this app process run the new code too. The new app waits for this one to exit.
             stop.set()
             close_window()
+            # Closing a window from this thread can hang on macOS (Cocoa wants the main thread),
+            # which would leave this old copy as a blank window next to the new one: leave for sure.
+            if os.environ.get("LOKI_APP_TEST", "") != "1":
+                threading.Timer(2.0, os._exit, [0]).start()
             return
         new_process, token = start_and_wait(python, workspace, godot)
         holder["process"] = new_process
         if not token:
             log("the engine did not come back after the update")
-            show_url("about:blank")
+            show_problem("LOKI's engine did not come back after the update",
+                         "It was rolled back if it could be. Quit LOKI and open it again. The last lines of "
+                         "its log (%s):\n\n%s" % (STATE / "engine.out", log_tail(STATE / "engine.out")))
             return
         show_url(f"{BASE}/#token={token}")
 

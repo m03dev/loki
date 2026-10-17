@@ -151,6 +151,7 @@ loki_app.supervise(holder2, Path("py"), Path("ws"), "", stop2)
 check("but not forever: 5 crashes in 10 minutes and it stops trying", starts == [])
 
 # Update everything restarts the whole client on every machine, not only the engine
+os.environ["LOKI_APP_TEST"] = "1"   # no hard exit of the test process after a relaunch
 launched, closed = [], []
 loki_app.subprocess.Popen = lambda cmd, **kw: launched.append((cmd, kw.get("env", {}).get("LOKI_APP_WAIT_PID")))
 loki_app.close_window = lambda: closed.append(1)

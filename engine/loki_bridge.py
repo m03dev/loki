@@ -232,6 +232,13 @@ def forecast_report(agent: Any) -> dict:
 
 
 _USAGE_CACHE: dict = {"t": 0.0, "today": {}}
+UI_ERRORS: list = []   # the window's script errors (boot.js), newest last; also in /health
+
+
+def redact_line(text: str) -> str:
+    """No tokens or keys from a client error line go into the log."""
+    import re as _re  # pylint: disable=import-outside-toplevel
+    return _re.sub(r"(token=|Bearer\s+|sk-[A-Za-z0-9_-]{4})[A-Za-z0-9._~+/=-]+", r"\1[redacted]", text)
 
 
 def world_extras(agent: Any) -> dict:
@@ -890,7 +897,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                   "providers": report, "route": route_trace,
                                   "usage": dict(getattr(agent, "REQUEST_USAGE", {})),
                                   "first_layer": first_layer_status(agent),
-                                  "update": update_status()})
+                                  "update": update_status(), "ui_errors": UI_ERRORS[-10:]})
             return
         if route == "/progress":
             try:
@@ -1247,6 +1254,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
+            return
+        if route == "/ui/error":
+            # boot.js: a script error or the rescue screen in the window - kept in engine.out, where a
+            # blank or broken window on a machine nobody is watching can be diagnosed later.
+            text = redact_line(str(data.get("error", "")))[:2000]
+            ua = str(data.get("ua", ""))[:200]
+            UI_ERRORS.append({"t": time.time(), "error": text, "ua": ua})
+            del UI_ERRORS[:-30]
+            print("[loki-bridge] window error: %s  (%s)" % (text, ua), flush=True)
+            self._send_json(200, {"ok": True})
             return
         if route == "/creations/make":
             # A picture is made straight by the image specialist - no chat model in between to

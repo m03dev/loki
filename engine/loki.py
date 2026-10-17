@@ -5573,7 +5573,9 @@ def _small_model_kwargs(kwargs: dict, cfg) -> dict:
     `think: false` body field is not honoured by every OpenAI-compatible endpoint). Without it
     qwen3:8b often spends the whole reply thinking and returns an empty answer - the
     "model returned an empty reply" failures. A copy; the conversation is not changed."""
-    if not _cfg_is_local(cfg) or "qwen3" not in str(getattr(cfg, "model", "")).lower():
+    name = str(getattr(cfg, "model", "")).lower()
+    # Qwen3 / Qwen3.5 family, and Bonsai 2 (PrismML's ternary Qwen3.5) which thinks the same way
+    if not _cfg_is_local(cfg) or not any(k in name for k in ("qwen3", "bonsai")):
         return kwargs
     msgs = list(kwargs.get("messages") or [])
     if msgs and msgs[0].get("role") == "system" and isinstance(msgs[0].get("content"), str):

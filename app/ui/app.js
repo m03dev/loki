@@ -932,6 +932,7 @@ async function start() {
     await new Promise((r) => setTimeout(r, 1000));
   }
   state.connected = true;
+  window.LOKI_READY = true;   // boot.js: the window started; no rescue screen
   setStatus("Ready", true);
   await Promise.all([loadModels(), loadMode(), loadConversations()]);
   setInterval(pollApproval, 1500);

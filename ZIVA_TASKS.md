@@ -1074,6 +1074,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       wasm under CSP 'wasm-unsafe-eval')? Paste Web Inspector console errors. (5) Together with W26: you see the
       PC's player and its chat. Report under Reports.
 
+- [ ] **M18 The white window on the Mac (2026-10-17) - URGENT, before anything else.** Pull, then quit LOKI
+      completely and open it again. The window can no longer stay blank: if it fails to start you now see
+      "LOKI's window did not start properly" with the script errors (boot.js), and the engine log keeps them
+      as "[loki-bridge] window error: ..." (also `GET /health` -> `ui_errors`). If the ENGINE fails, the
+      window shows its log instead of a white page. Report: what the window shows, the "window error"
+      lines and the last 40 lines of harness_data/app/engine.out. If the world is the cause, "Reload without
+      the 3D world" gets LOKI back; then switch Settings > General > LOKI World look to "classic" and report.
+      Also note: Update everything now restarts the WHOLE app; if two LOKI windows or a stuck old one
+      appear after an update, say so. Then run `harness_data/.venv/bin/python tools/ship.py --check` and
+      report each suite line. Bonsai 2: chats on it now get Qwen's /no_think (empty replies were its
+      thinking) - report a 3-message chat and one background job on Bonsai.
+
 ## Needs Mohamed
 
 - [ ] **Framepipe repo name (2026-10-16).** Claude could not find a "framepipe" repository among
