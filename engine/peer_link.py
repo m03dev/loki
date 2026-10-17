@@ -295,6 +295,8 @@ def callbacks(state: Any, agent: Any) -> dict:
             "restart": lambda: _restart_soon(state),
             "presence": _presence_receive,
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
+
+            "files": _files_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 
 
@@ -309,6 +311,11 @@ def _memory_receive(agent: Any, origin: str, data: dict) -> dict:
     import memory_sync  # pylint: disable=import-outside-toplevel
     return memory_sync.receive(origin, data, root=Path(getattr(agent, "DATA_DIR", "") or experience._data_dir()),
                                notes_file=getattr(agent, "MEMORY_FILE", None))
+
+def _files_receive(origin: str, data: dict) -> tuple:
+    """POST /peer/files: another machine lists/reads (or, when allowed here, writes) the shared folder."""
+    import conn_peer_files  # pylint: disable=import-outside-toplevel
+    return conn_peer_files.serve(origin, data)
 
 
 def _restart_soon(state: Any) -> dict:

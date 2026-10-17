@@ -1,0 +1,22 @@
+{
+  "name": "computer-use",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "LOKI drives this computer's desktop (screenshots, mouse, keyboard) for apps without an API: the accessibility tree first (Windows UI Automation, macOS Accessibility), vision only when that fails. You approve each app once; Ctrl+Alt+Esc or the mouse in the top-left corner stops it at once; never in background jobs unless you allow it; every action is logged.",
+  "license": "LOKI's own code (control-type list from Windows-MCP, MIT)",
+  "homepage": "https://github.com/CursorTouch/Windows-MCP",
+  "permissions": [
+    "computer:host"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "platforms": [
+    "win32",
+    "darwin"
+  ],
+  "setup_extras": "",
+  "install": "Windows: Install (pip comtypes) for the accessibility tree. macOS: System Settings > Privacy & Security > Accessibility and Screen Recording: allow the app that runs LOKI.",
+  "notice": "This lets LOKI click and type on your real desktop. It asks before it touches each app; the kill switch is Ctrl+Alt+Esc.",
+  "health_endpoint": "",
+  "entrypoint": "computer_use.Computer"
+}

@@ -19,6 +19,7 @@
 <script src="/ui/lab.js" defer></script>
 <script src="/ui/bench.js" defer></script>
 <script src="/ui/memory_panel.js" defer></script>
+<script src="/ui/tools_panel.js" defer></script>
 <script src="/ui/play_panel.js" defer></script>
 <script src="/ui/creations.js" defer></script>
 <script src="/ui/icons.js" defer></script>
@@ -178,7 +179,11 @@
         <div id="world-legend" class="world-legend"></div>
       </section>
       <section data-panel="tools" hidden>
-        <header class="panel-head"><h3>Tools</h3><p class="note">Tool groups Loki may use. Risky tools still ask before they run.</p></header>
+        <header class="panel-head"><h3>Tools</h3><p class="note">Everything LOKI's agents can touch: does it work, what is missing, and the fix. Tools that cannot work right now are hidden from the model. Risky actions still ask before they run.</p></header>
+        <div id="tools-health" class="tools-health"></div>
+        <h4 class="th-sub">Connect your apps</h4>
+        <div id="connector-cards" class="conn-cards"></div>
+        <h4 class="th-sub">Tool groups</h4>
         <div id="categories" class="rows"></div>
         <div id="user-tools" class="lab"></div>
       </section>

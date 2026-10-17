@@ -877,6 +877,34 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       "Update history on this computer" with this update marked "works here (engine + window)". Report the
       lines. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (two new suites:
       test_update_overhaul, test_ui_smoke - the smoke test skips without Playwright; say if it skipped).
+- [ ] **W34 Tools, connectors, computer use on the PC (session 28, 2026-10-17).** HANDOFF "Session 28 tools,
+      connectors, computer use (worktree)". After LOKI updates:
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - new suite test_tools_core (its REAL
+      Chromium checks run only where Playwright + Chromium are installed; say if they ran).
+      (2) Settings > Tools: the health map loads ("N work · M need setup ..."). Screenshot it. List every row
+      that says Broken or Failing and its last error.
+      (3) **GitHub:** `gh auth status` in a terminal (run `gh auth login` if needed). Settings > Tools > GitHub:
+      default repository `m03dev/loki`, Save, Test -> "signed in as ...". Chat: "list the open issues in
+      m03dev/loki" -> a github(action=issues) call with real issues. Then "open an issue titled 'LOKI test -
+      delete me'": the approval prompt MUST appear; say No; confirm nothing was created.
+      (4) **Email (only after Mohamed picked the account - Needs Mohamed):** Settings > Tools > Email: address
+      + app password, Save, Test. Chat: "what are my 5 newest emails?" then "draft a reply to the newest saying
+      thanks" -> a .eml in drafts/, nothing sent. Then "send it": the approval prompt MUST appear with the
+      recipient and subject; say No. Do not send anything.
+      (5) **Calendar:** whichever Mohamed set up (Google sign-in, or the iCal link): "what is on my calendar this
+      week?" Then "add 'LOKI test' tomorrow 3pm for 15 minutes" -> approval prompt; say No.
+      (6) **Computer use (the main one):** Settings > Add-ons > computer-use: Install (pip comtypes), turn it on
+      (confirm the warning). Chat: "open Notepad and type hello". Expect: an approval prompt "LOKI wants to
+      control notepad" -> Yes; Notepad opens; `computer(action=elements)` lists numbered controls (the edit
+      field must be there - that proves UI Automation works); "hello" appears in Notepad. Screenshot. Then press
+      **Ctrl+Alt+Esc** and ask it to type more: it must refuse ("kill switch"); Settings > Tools > Computer use
+      shows STOPPED and the recent-actions log; Re-arm there. Close Notepad without saving.
+      (7) A display-scaling check: if Windows display scale is not 100%, say whether the clicks landed where
+      the elements are (they should: the engine is per-monitor DPI aware).
+      (8) Settings > Add-ons > chromium: Install, turn on. Chat: "open https://news.ycombinator.com with
+      browse_page" (works in the text browser) and a JavaScript-only page of your choice (it should say it
+      switched to Chromium and show numbered elements). Report both.
+      (9) Files on my machines (needs the Mac linked): "list the files in Home on the Mac" -> peer_files. Report.
 
 - [ ] **W29 Talk to LOKI from Telegram + the mic button, on the PC (2026-10-17, session 28).** The PC is the
       machine that answers Telegram (LOKI_TELEGRAM_POLL=auto -> the Windows PC). Tested in the cloud only against
@@ -1384,6 +1412,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M19 Updates are health-gated (2026-10-17).** Same as W27 on the Mac. Also: if the white window comes back
       at all, LOKI should now go back to the previous version by itself within 5 minutes and say why in that
       history - report exactly what happened.
+- [ ] **M25 Tools, connectors, computer use on the Mac (session 28, 2026-10-17).** Same as W28 (1)-(5), (8),
+      (9) on the Mac, plus computer use in macOS:
+      (a) Settings > Add-ons > computer-use: turn it on (nothing to install on macOS).
+      (b) System Settings > Privacy & Security > **Accessibility** and **Screen Recording**: allow the app that
+      runs LOKI (Loki.app, or the Python in harness_data/.venv if Loki.app launches it - add both if unsure).
+      Restart LOKI after granting.
+      (c) Chat: "open TextEdit and type hello" -> approval "LOKI wants to control textedit" -> Yes; TextEdit
+      opens (make a new document if it shows the file picker: ask LOKI to press cmd+n); `computer(action=elements)`
+      must list numbered controls (proves AXUIElement works; if it says "no accessibility tree", the
+      Accessibility permission is missing - say so); "hello" appears. Screenshot.
+      (d) `computer(action=screenshot)` -> a PNG in screens/ (if it fails, Screen Recording is missing).
+      (e) Press **Ctrl+Option+Esc**, then ask for more typing: it must refuse; re-arm in Settings > Tools.
+      (f) Retina: say whether clicks found by `click text=...` landed on the right element.
 
   -> Ziva (Mac), 2026-10-17 (patch 219): PARTLY DONE - the blank-window guard works, and it caught a REAL
      bug, which I fixed and shipped.
@@ -1484,6 +1525,29 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       shown again - do not paste it anywhere else, not here). Then press "Pair my phone" in the card under it
       and open the t.me link on your phone (or send the bot `/start <code>`). Only your chat is answered.
       Then Ziva runs W27.
+- [ ] **Which accounts should LOKI connect? (session 28, 2026-10-17)** Settings > Tools has cards for Email,
+      Google (Gmail + Calendar), Calendar, GitHub, Notes and Files on my machines - all read-only until you
+      approve each write. Tell Ziva which: (a) which email address (Gmail? iCloud?), (b) which calendar (Google,
+      iCloud, or a read-only iCal link), (c) GitHub is ready via `gh auth login` on each machine, (d) notes:
+      the Obsidian vault folder on the Mac/PC, or Notion.
+- [ ] **Gmail / Google Calendar need your own Google OAuth client (one time, ~5 minutes).** Google does not
+      allow the Gmail or Calendar scopes in the device-code flow, so LOKI uses the desktop "loopback" sign-in:
+      console.cloud.google.com > create a project "LOKI" > APIs & Services > Library: enable **Gmail API** and
+      **Google Calendar API** > OAuth consent screen: External, app name LOKI, add yourself as a **test user** >
+      Credentials > Create credentials > OAuth client ID > **Desktop app** > copy the client id and secret into
+      Settings > Tools > Google account, Save, **Sign in with Google**. (In "Testing" mode Google's refresh tokens
+      expire after 7 days; set the consent screen to "In production" to keep the sign-in - Google then shows an
+      "unverified app" warning for your own app, which you can continue past.)
+      Simpler alternatives that need no Google Cloud: Gmail with an **app password** (Google account > Security >
+      2-Step Verification > App passwords) on the Email card, and the calendar's **Secret address in iCal
+      format** on the Calendar card (read-only).
+- [ ] **iCloud mail / calendar:** an app-specific password from appleid.apple.com > Sign-In and Security.
+- [ ] **Notion:** notion.so/profile/integrations > New integration (internal) > copy the secret; on each page LOKI
+      may use: ... > Connections > add the integration.
+- [ ] **Computer use on your real desktops (decision):** BUILD_BRIEF section 7 says "computer-use only inside
+      VMs"; you asked for it on the PC and the Mac. It is built opt-in (the computer-use add-on), asks per app,
+      has a kill switch (Ctrl+Alt+Esc / mouse in the top-left corner) and never runs in background jobs unless
+      you allow it. Say if you want BUILD_BRIEF section 7 updated, or keep unattended work in cua VMs only.
 
 - [ ] **Framepipe repo name (2026-10-16).** Claude could not find a "framepipe" repository among
       the ones this account can reach. What is its exact GitHub name (owner/repo)?

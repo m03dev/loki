@@ -655,3 +655,25 @@ button.danger:hover { color: var(--err); }
 .pair-code span { font-size: 12.5px; color: var(--muted); }
 .pair-code .link { align-self: flex-start; padding-left: 0; }
 .pair-code .qr-holder svg { width: 148px; height: 148px; background: #fff; border-radius: 8px; padding: 6px; }
+
+/* Settings > Tools: health map + connector cards (tools_panel.js, session 28) */
+.th-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.th-head .chip.on { border-color: var(--accent); }
+.th-row { align-items: flex-start; }
+.th-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.th-text b { display: inline; margin-right: 6px; }
+.th-text .badge { align-self: flex-start; }
+.th-text small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.th-err { color: var(--err); }
+.th-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.th-sub { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.conn-cards { display: flex; flex-direction: column; gap: 8px; }
+.conn-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--surface); }
+.conn-card summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.conn-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.conn-field { display: grid; grid-template-columns: minmax(140px, 40%) 1fr; align-items: center; gap: 10px; font-size: 13px; }
+.conn-field input[type="checkbox"] { justify-self: start; }
+.conn-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.conn-help, .conn-detail { font-size: 12px; }
+.conn-log { font: 11.5px var(--mono); color: var(--muted); display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 220px; overflow: auto; }
+@media (max-width: 760px) { .conn-field { grid-template-columns: 1fr; } }

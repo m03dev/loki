@@ -921,6 +921,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import self_api  # pylint: disable=import-outside-toplevel
             self._send_json(*self_api.route(self.server.state, "GET", self.path, {}))
             return
+        if route.startswith(("/tools/health", "/connectors", "/computer")):   # Settings > Tools (engine/tools_api.py)
+            import tools_api  # pylint: disable=import-outside-toplevel
+            try:
+                self._send_json(*tools_api.handle(self.server.state, "GET", self.path, {}))
+            except Exception as exc:  # noqa: BLE001 - one broken card must not break Settings
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
             return
@@ -1215,6 +1222,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         import self_api  # pylint: disable=import-outside-toplevel - session 28: LOKI improving itself
         if self_api.handles("POST", route):
             self._send_json(*self_api.route(state, "POST", route, data, job_action))
+            return
+        if route.startswith(("/tools/health", "/connectors", "/computer")):   # Settings > Tools (engine/tools_api.py)
+            import tools_api  # pylint: disable=import-outside-toplevel
+            try:
+                self._send_json(*tools_api.handle(state, "POST", self.path, data))
+            except Exception as exc:  # noqa: BLE001 - one broken card must not break Settings
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
         if route in ("/world/presence", "/world/retry"):
             self._send_json(*world_action(state, route, data))

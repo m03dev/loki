@@ -17,7 +17,8 @@ Rules (in order):
      at enable time, and its required env/commands present.
   4. Network: loopback is always fine; other hosts need a granted network permission,
      or LOKI_NET_ALLOW (comma-separated hosts) set by the user.
-  5. Dangerous tools ASK (decidable); everything else is ALLOWED.
+  5. Connector writes (ACTION_ALWAYS_ASK: send an email, create an event, open an issue...) ASK, never
+     decidable; dangerous tools ASK (decidable); everything else is ALLOWED.
 """
 from __future__ import annotations
 
@@ -41,7 +42,20 @@ DECIDABLE = {"run_command", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
 ALWAYS_ASK = {"delete_file", "delegate"}
 # Tools that need an enabled capability (tool -> capability name).
-CAPABILITY_TOOLS: dict[str, str] = {"render_video": "remotion", "video_project": "remotion"}
+CAPABILITY_TOOLS: dict[str, str] = {"render_video": "remotion", "video_project": "remotion",
+                                    # session 28: driving this computer's desktop needs the computer-use add-on
+                                    # (permission computer:host, confirmed by the owner when turned on)
+                                    "computer": "computer-use"}
+# Connector tools whose `action` decides (session 28, engine/conn_*.py): these actions WRITE to the owner's
+# accounts or machines and always ask the owner - no decision provider may skip it, and in a background job
+# (nobody to ask) they are refused. Read actions of the same tools are allowed.
+ACTION_ALWAYS_ASK: dict[str, set] = {
+    "email": {"send"},
+    "calendar": {"create"},
+    "github": {"create_issue", "comment", "close_issue", "create_pr"},
+    "notes": {"write", "append"},
+    "peer_files": {"write"},
+}
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
 # conductor roles whose url= is a workspace path, not a web address.
 CONDUCTOR_PATH_ROLES = {"track"}
@@ -119,6 +133,11 @@ class PolicyEngine:
         if name == "conductor" and str(args.get("role", "")).strip().lower() == "browse":
             # A browser acting on live websites always asks; no recommendation skips it.
             return Verdict(ASK, "a browser will act on websites", decidable=False)
+        writes = ACTION_ALWAYS_ASK.get(name)
+        if writes:
+            action = str(args.get("action", "") or "").strip().lower()
+            if action in writes:
+                return Verdict(ASK, "%s %s writes to your account - always asks" % (name, action), decidable=False)
         if name in ALWAYS_ASK:
             return Verdict(ASK, "%s always asks" % name, decidable=False)
         if name in self.dangerous:

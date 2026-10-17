@@ -5453,6 +5453,201 @@ async def call_tool(name: str, args: dict) -> str:
     return f"error: unknown tool {name}"
 
 
+# --- Session 28: tools, connectors, computer use (worktree) -----------------------------------------
+# The tool health map (tool_health.py), connectors to the owner's apps (connectors.py + conn_*.py), the
+# `computer` tool (computer_use.py + computer_backends.py), a real Chromium behind browse_page
+# (browser_real.py) and tool errors that teach small models (tool_teach.py). Registration only: the three
+# wrappers at the end sit AROUND _tool_enabled, _guard_call and call_tool; none of them is changed.
+# Writes ask the owner through engine/policy.py (ACTION_ALWAYS_ASK, CAPABILITY_TOOLS["computer"]).
+import browser_real  # noqa: E402
+import computer_use  # noqa: E402
+import connectors as _connectors  # noqa: E402
+import tool_health  # noqa: E402
+import tool_teach  # noqa: E402
+
+_connectors._load_all()   # noqa: SLF001 - registers conn_google/email/calendar/github/notes/peer_files
+import conn_calendar  # noqa: E402
+import conn_email  # noqa: E402
+import conn_github  # noqa: E402
+import conn_notes  # noqa: E402
+import conn_peer_files  # noqa: E402
+
+TOOL_HEALTH = tool_health.default(DATA_DIR, redact=lambda s: _connectors.redact(redact_secrets(str(s))))
+
+
+async def _vision_ask(png: bytes, prompt: str) -> str:
+    """One image question for the computer tool: LOKI_VISION_MODEL (a provider name, or an Ollama tag like
+    qwen2.5vl:7b), else the active model."""
+    import base64  # pylint: disable=import-outside-toplevel
+    want = str(os.getenv("LOKI_VISION_MODEL", "") or "").strip()
+    if want and want in MODELS:
+        cfg = MODELS[want]
+        base, key, model = cfg.base_url, cfg.api_key, cfg.model
+    elif want:
+        base, key, model = "http://localhost:11434/v1", "ollama", want
+    else:
+        cfg = MODELS[active_model_name()]
+        base, key, model = cfg.base_url, cfg.api_key, cfg.model
+    if str(base).startswith(CLI_AGENT_PREFIX):
+        raise RuntimeError("the active model is a CLI agent; set LOKI_VISION_MODEL to a vision model")
+    client = AsyncOpenAI(base_url=base, api_key=key or "none", timeout=MODEL_TIMEOUT_S)
+    response = await client.chat.completions.create(model=model, max_tokens=900, messages=[{"role": "user", "content": [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(png).decode()}}]}])
+    return str(response.choices[0].message.content or "")
+
+
+COMPUTER = computer_use.default(DATA_DIR, approve=lambda kind, detail, decidable=True: approve(kind, detail, decidable),
+                                vision=_vision_ask, workspace=WORKSPACE)
+CHROMIUM = browser_real.default(allow=_public_ok, workspace=WORKSPACE)
+
+
+def _threaded(fn):
+    async def run(**kwargs):
+        return _connectors.redact(await asyncio.to_thread(fn, **kwargs))
+    return run
+
+
+async def computer_tool(**kwargs) -> str:
+    return await COMPUTER.act(**kwargs)
+
+
+_browse_text = LOCAL_TOOLS["browse_page"]
+
+
+async def browse_page_any(action: str = "view", url: str = "", index: int = 0, text: str = "", direction: str = "down",
+                          engine: str = "") -> str:
+    """browse_page: the text browser, or Chromium (the `chromium` add-on) when a page needs JavaScript or
+    engine='chromium'. Steps that would send something ask the owner (browser_real.risky)."""
+    name = os.getenv("LOKI_JOB_ID", "") or "chat"
+    use = browser_real.choose(name, str(action or "view").strip().lower(), engine)
+    chromium_on = CAPABILITIES.is_enabled("chromium")
+    if use == "chromium" and not chromium_on:
+        if str(engine or "").lower() == "chromium":
+            return "error: the Chromium browser is off - the owner turns it on in Settings > Add-ons (chromium)"
+        use = "text"
+    if use == "text":
+        result = await asyncio.to_thread(_browse_text, action, url, index, text, direction)
+        if str(action).lower() in ("open", "goto", "navigate", "visit") and browser_real.needs_js(result) and chromium_on \
+                and (await asyncio.to_thread(CHROMIUM.available))[0]:
+            browser_real.switch(name, "chromium")
+            more = await asyncio.to_thread(CHROMIUM.act, "open", url, None, "", "down", name)
+            return "(This page needs JavaScript - switched to the Chromium browser.)\n" + more
+        return result
+    risk = CHROMIUM.risky(name, str(action or "").lower(), index)
+    if risk:
+        if os.getenv("LOKI_JOB_ID"):
+            return "DENIED: the browser would %s - a background job may not. Ask the owner, or reply 'BLOCKED: <reason>'." % risk
+        if not await approve("browse_page", "The browser wants to " + risk, False):
+            return "DENIED: the owner did not approve that. Do NOT retry it; reply 'BLOCKED: <reason>' or do it another way."
+    return await asyncio.to_thread(CHROMIUM.act, action, url, index, text, direction, name)
+
+
+LOCAL_TOOLS.update({"email": _threaded(conn_email.tool), "calendar": _threaded(conn_calendar.tool),
+                    "github": _threaded(conn_github.tool), "notes": _threaded(conn_notes.tool),
+                    "peer_files": _threaded(conn_peer_files.tool), "computer": computer_tool,
+                    "browse_page": browse_page_any})
+_S28_SCHEMAS = [
+    schema("email", tool_teach.DESCRIPTIONS["email"],
+           {"action": {"type": "string", "enum": list(conn_email.ACTIONS)}, "query": {"type": "string"},
+            "id": {"type": "string"}, "folder": {"type": "string"}, "to": {"type": "string"},
+            "subject": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "string"},
+            "limit": {"type": "integer"}}, ["action"]),
+    schema("calendar", tool_teach.DESCRIPTIONS["calendar"],
+           {"action": {"type": "string", "enum": list(conn_calendar.ACTIONS)}, "days": {"type": "integer"},
+            "start": {"type": "string"}, "end": {"type": "string"}, "title": {"type": "string"},
+            "duration_min": {"type": "integer"}, "location": {"type": "string"}, "notes": {"type": "string"}}, ["action"]),
+    schema("github", tool_teach.DESCRIPTIONS["github"],
+           {"action": {"type": "string", "enum": list(conn_github.ACTIONS)}, "repo": {"type": "string"},
+            "number": {"type": "integer"}, "query": {"type": "string"}, "title": {"type": "string"},
+            "body": {"type": "string"}, "head": {"type": "string"}, "base": {"type": "string"},
+            "state": {"type": "string", "enum": ["open", "closed", "all"]}, "limit": {"type": "integer"}}, ["action"]),
+    schema("notes", tool_teach.DESCRIPTIONS["notes"],
+           {"action": {"type": "string", "enum": list(conn_notes.ACTIONS)}, "query": {"type": "string"},
+            "path": {"type": "string"}, "title": {"type": "string"}, "text": {"type": "string"},
+            "page": {"type": "string"}}, ["action"]),
+    schema("peer_files", tool_teach.DESCRIPTIONS["peer_files"],
+           {"action": {"type": "string", "enum": ["machines", "list", "read", "write"]}, "machine": {"type": "string"},
+            "path": {"type": "string"}, "text": {"type": "string"}}, ["action"]),
+    schema("computer", tool_teach.DESCRIPTIONS["computer"],
+           {"action": {"type": "string", "enum": ["elements", "find", "click", "double_click", "right_click", "type", "key",
+                                                  "scroll", "open_app", "apps", "screenshot", "look", "wait"]},
+            "index": {"type": "integer"}, "text": {"type": "string"}, "role": {"type": "string"},
+            "x": {"type": "integer"}, "y": {"type": "integer"}, "keys": {"type": "string"},
+            "direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer"},
+            "app": {"type": "string"}, "seconds": {"type": "number"}, "question": {"type": "string"}}, ["action"]),
+]
+TOOL_SCHEMAS.extend(_S28_SCHEMAS)
+MODEL_TOOL_SCHEMAS.extend(_S28_SCHEMAS)
+MODEL_TOOL_NAMES.update(s["function"]["name"] for s in _S28_SCHEMAS)
+for _entry in TOOL_SCHEMAS:     # browse_page gains engine= (auto | text | chromium), key and screenshot
+    if _entry["function"]["name"] == "browse_page":
+        _entry["function"]["description"] += (" With the chromium add-on on, a page that needs JavaScript opens in a real "
+                                              "Chromium automatically (engine='chromium' forces it; there also 'key' "
+                                              "text='Escape' and 'screenshot'); sending a form or a password asks the owner.")
+        _entry["function"]["parameters"]["properties"]["engine"] = {"type": "string", "enum": ["auto", "text", "chromium"]}
+TOOL_CATEGORIES["connectors"] = ["email", "calendar", "github", "notes", "peer_files"]
+TOOL_CATEGORIES["computer"] = ["computer"]
+CATEGORY_LABELS["connectors"] = "Connectors (your email, calendar, GitHub, notes, files on your other machine - writes ask)"
+CATEGORY_LABELS["computer"] = "Computer use (drive this desktop; needs the computer-use add-on; asks per app)"
+CATEGORIES.setdefault("connectors", True)
+CATEGORIES.setdefault("computer", True)
+NETWORK_WRITES |= {"computer"}            # never in Plan mode (it clicks and types)
+LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("code_map") + 1:LOCAL_TOOL_PRIORITY.index("code_map") + 1] = [
+    "email", "calendar", "github", "notes", "computer", "peer_files"]   # hidden until set up, so no slot is wasted
+
+for _cid, _spec in _connectors.SPECS.items():   # an unset connector is not offered to the model
+    if _spec.get("tool"):
+        tool_health.require(_spec["tool"], (lambda c: lambda: "" if _connectors.configured(c)
+                                            else "not set up: " + _connectors.modules()[c].status().get("detail", ""))(_cid))
+tool_health.require("computer", lambda: "" if COMPUTER.backend.available()[0] and COMPUTER.armed
+                    else ("kill switch on" if not COMPUTER.armed else COMPUTER.backend.available()[1]))
+tool_health.require("generate_media", lambda: "" if __import__("higgsfield").configured() else
+                    "needs a Higgsfield key (Settings > General)")
+# make_music is not pre-checked: its own error says how to start ACE-Step, and after 3 such failures
+# ("is not running") the health map hides it for the cool-down anyway.
+
+_tool_enabled_by_category = _tool_enabled
+
+
+def _tool_enabled(tool_name: str) -> bool:   # noqa: F811 - wraps the category switch with the health map
+    return _tool_enabled_by_category(tool_name) and tool_health.offerable(tool_name)
+
+
+_guard_call_plain = _guard_call
+
+
+def _guard_call(name: str, raw_args):   # noqa: F811 - teaching errors around the tool guard
+    params = _tool_params()
+    real = tool_guard.resolve_name(name, params.keys()) or name
+    raw_args = tool_teach.repair(real, raw_args)
+    fix = _guard_call_plain(name, raw_args)
+    if not fix.ok:
+        fix.error = tool_teach.teach(fix.name or real, fix.error, params.get(fix.name or real), raw_args)
+    return fix
+
+
+_call_tool_unrecorded = call_tool
+
+
+async def call_tool(name: str, args: dict) -> str:   # noqa: F811 - records every result in the health map
+    args = args if isinstance(args, dict) else {}
+    if name == "email" and str(args.get("action", "")).lower() == "send" and args.get("draft") and not args.get("to"):
+        try:   # the owner's approval prompt shows what a draft would send
+            draft_msg = conn_email.load_draft(args["draft"])
+            args = {**args, "to": draft_msg["To"], "subject": draft_msg["Subject"],
+                    "body": str(draft_msg.get_body(("plain",)).get_content())[:2000]}
+        except Exception:  # noqa: BLE001 - send reports the bad draft itself
+            pass
+    result = await _call_tool_unrecorded(name, args)
+    if name in LOCAL_TOOLS or name in mcp_sessions:
+        try:
+            TOOL_HEALTH.record(name, result)
+        except Exception:  # noqa: BLE001 - bookkeeping never breaks a tool call
+            pass
+    return result
+
+
 # ---------------------------------------------------------------------------
 # The agent loop: one turn = keep calling tools until the model stops asking.
 # ---------------------------------------------------------------------------

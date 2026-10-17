@@ -65,6 +65,16 @@ Concise dated records of meaningful work. Newest at the top.
   calls it once; memory_extract learns what the owner says (review in Settings > Memory: keep/undo).
 - memory_sync over the signed peer link (POST /peer/memory), notes file synced; knowledge.ProjectIndex (incremental,
   path:line). Settings > Memory rebuilt. tests/test_memory_core2.py (112, eval 30/30) in SUITES. ZIVA W28 / M20.
+## 2026-10-17 - Session 28 (Claude, worktree): tools, connectors, computer use
+
+- Tool health map (tool_health.py, GET /tools/health, Settings > Tools): status + last success/error + one-click
+  fix for every tool, MCP server, add-on, connector; dead tools hidden from the model.
+- Connectors, read-only by default, writes always ask (policy.ACTION_ALWAYS_ASK): email (IMAP/SMTP, Google
+  XOAUTH2), Google loopback sign-in, calendar (Google/CalDAV/iCal), GitHub (gh or token), notes (Obsidian/Notion),
+  files on the other machine (POST /peer/files).
+- `computer` tool: accessibility tree first (UIA / AXUIElement, ctypes), vision fallback, per-app approval,
+  kill switch, log; the computer-use add-on. Chromium (Playwright) behind browse_page with numbered elements.
+- tool_teach.py: examples, action synonyms, teaching errors. tests/test_tools_core.py. Real machines: ZIVA W28, M20.
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 

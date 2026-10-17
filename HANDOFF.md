@@ -314,6 +314,74 @@ Still open: the model-based extractor is not wired to a model; reasoning_bank/ex
 own files (they are candidates of the one retrieval, not migrated); knowledge index is per machine (not synced, by
 design - each machine indexes its own checkout).
 
+## Session 28 tools, connectors, computer use (worktree)
+
+The owner: "the core systems aren't fleshed out yet" - TOOLS, CONNECTORS, COMPUTER USE. Everything LOKI's agents
+can touch must work, be discoverable and be safe. Built in a Claude worktree, committed there, not pushed; the
+parent session merges and ships. **tests/test_tools_core.py (200+ offline checks, fakes; plus REAL headless
+Chromium checks where Playwright is installed) is in SUITES.** Research and usage: docs/integrations/COMPUTER_USE.md.
+
+- **Tool health map** (`engine/tool_health.py`, `engine/tools_api.py`, `GET /tools/health`, Settings > Tools):
+  every built-in tool, MCP server (from mcp_servers.json: connected / off / needs a command or key), add-on,
+  connector, computer use and the browser - installed? configured? status, last success, last error (secrets
+  scrubbed), calls/failures - and a one-click fix (`POST /tools/health/fix`: reset, enable_category,
+  enable_addon (high-risk ones need the owner's confirm), install (pip + post steps, in a thread), enable_mcp
+  (LOKI_MCP_ENABLE, next start), arm_computer). **Dead tools are hidden from the model:** a tool whose
+  requirement is missing (unset connector, no Higgsfield key, ACE-Step not running, computer use unavailable or
+  stopped) or whose last 3 calls failed for an ENVIRONMENT reason (cannot reach, not installed, 401/403...) is
+  not offered (30 min cool-down, then offered again). A model-fault error never hides a tool; DENIED is not a
+  failure. Store: harness_data/tool_health.json.
+- **Connectors** (`engine/connectors.py` + one module each, standard library only, read-only by default, every
+  write in `policy.ACTION_ALWAYS_ASK` = always asks, never decidable, refused in background jobs; secrets are
+  SECRET settings in harness_data/.env, shown only as saved/not saved, scrubbed from every result and error):
+  - `email` (conn_email.py): IMAP list/search (Gmail X-GM-RAW)/read (EXAMINE + BODY.PEEK: never marks read),
+    draft = a local .eml in workspace drafts/ (nothing leaves), send over SMTP = **always asks**, the approval
+    shows recipient + subject + body (a draft is expanded before the prompt). App password, or EMAIL_AUTH=google.
+  - Google sign-in (conn_google.py): OAuth loopback + PKCE (Google forbids Gmail/Calendar scopes in the device
+    flow), refresh token as GOOGLE_REFRESH_TOKEN, XOAUTH2 for IMAP/SMTP. Needs the owner's own OAuth client.
+  - `calendar` (conn_calendar.py): Google Calendar API, CalDAV (iCloud/Fastmail/Nextcloud; REPORT + PUT) or a
+    read-only iCal link; an iCalendar reader with RRULE/EXDATE; `create` asks.
+  - `github` (conn_github.py): the gh CLI when signed in (argument lists, body on stdin), else a token; repos,
+    issues, issue, prs, pr, search; create_issue/comment/close_issue/create_pr ask.
+  - `notes` (conn_notes.py): an Obsidian vault (never hidden folders, write never overwrites) or Notion.
+  - `peer_files` (conn_peer_files.py): files on the other machine over the signed peer link - new peer route
+    `POST /peer/files` (peers.py + peer_link.py callbacks) serves only that machine's shared folder
+    (LOKI_PEER_FILES_ROOT, default ~/LOKI Projects), never hidden files or harness_data, text only, writes only
+    when THAT machine allows them (LOKI_PEER_FILES_WRITE=1; a .bak is kept); the asking side's write asks.
+- **Computer use** (`engine/computer_use.py` over `engine/computer_backends.py`, ctypes only): the `computer`
+  tool - elements (the focused window's accessibility tree, numbered: Windows UI Automation via comtypes,
+  macOS AXUIElement), find (fuzzy, by role), click/double/right (index, text, or x/y), type, key, scroll,
+  open_app, apps, screenshot, look, wait; vision fallback (LOKI_VISION_MODEL or the active model) when the
+  tree is empty, scaled pixels->points (Retina). Safety: the `computer-use` add-on (computer:host) must be on
+  (policy.CAPABILITY_TOOLS); never in background jobs unless LOKI_COMPUTER_IN_JOBS=1; kill switch
+  Ctrl+Alt+Esc / mouse in the top-left corner / Stop in Settings (stays stopped until re-armed); never-list
+  (password managers); approval PER APP (once, until restart; LOKI_COMPUTER_APPS pre-approves); every action in
+  harness_data/computer_log.jsonl. Not offered in Plan mode.
+- **Browser** (`engine/browser_real.py`): with the `chromium` add-on (Install = pip playwright + playwright
+  install chromium) `browse_page` opens pages that need JavaScript in a headless Chromium with the SAME
+  numbered elements (data-loki-idx in the live page); private profile per session, downloads off, local
+  network blocked in the browser, typing a password / submitting a POST form asks (refused in jobs).
+  `engine=auto|text|chromium`, LOKI_BROWSER, LOKI_BROWSER_HEADED.
+- **Tool use for small models** (`engine/tool_teach.py`): short descriptions with one worked example each,
+  action synonyms repaired before validation (send_email -> send, open_application -> open_app ...), and every
+  guard error gets the valid actions + "did you mean" + an example call.
+- **Where it is wired:** loki.py ONE registration block after call_tool (tools, schemas, categories
+  `connectors` + `computer`, LOCAL_TOOL_PRIORITY after code_map, browse_page gains engine=, requirement
+  checks) whose three wrappers sit around `_tool_enabled` (health), `_guard_call` (teaching) and `call_tool`
+  (recording + draft preview) - agent_turn/_pursue_goal/run_job/tool_harness/tool_guard untouched.
+  policy.py: ACTION_ALWAYS_ASK + CAPABILITY_TOOLS["computer"]. loki_bridge.py: two route blocks to tools_api.
+  addons_install.py: chromium, computer-use (comtypes on Windows), POST_INSTALL. app/ui/tools_panel.js +
+  index.html (Tools panel) + one line in app.js + CSS. New manifests capabilities/computer-use, chromium.
+- **Verified here (Linux cloud box):** all suites via `tools/ship.py --check`; the REAL headless Chromium path
+  against a local page (a JavaScript-made button numbered and clicked, a GET form typed + submitted, the
+  password field and POST button flagged risky, the local network refused); the Google loopback sign-in
+  against a real loopback HTTP server with a fake token endpoint.
+- **NOT verified (needs the real machines - ZIVA W28 PC, M20 Mac):** the Windows UI Automation and macOS
+  AXUIElement backends have never run (no Windows/macOS here; the ctypes signatures follow the docs), the
+  kill hotkey, DPI/Retina scaling, real IMAP/SMTP/CalDAV/Google/GitHub/Notion servers (all fakes; gh was
+  faked too), the peer file route between the real Mac and PC, the Settings > Tools panel in WebView2/WKWebView
+  (ui smoke test only checks it loads). Accounts to connect + the Google OAuth client: Needs Mohamed.
+
 ## Session 28: patching and updating clients, overhauled (after the Mac's white window)
 
 The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now

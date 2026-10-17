@@ -13,6 +13,7 @@ same secret can then:
     POST /peer/experience         hand over verified work, so this machine can train on it
     GET  /peer/diagnose           why this machine might not respond (read-only, redacted)
     POST /peer/restart            restart this machine's engine (the app reloads its window)
+    POST /peer/files              list/read (and, when allowed here, write) this machine's shared folder
 
 Security, because this listens on the network:
   * OFF unless LOKI_PEER_LISTEN=1 and a LOKI_PEER_SECRET of at least 32 characters is set.
@@ -485,6 +486,12 @@ class PeerServer:
             if "restart" not in cb:
                 return 404, {"ok": False, "error": "restart is not available here"}
             return 200, {"ok": True, **cb["restart"]()}
+        if method == "POST" and path == "/peer/files":
+            # Files on my machines (engine/conn_peer_files.py): only this machine's shared folder, never
+            # hidden files; writes only when this machine's owner allowed them.
+            if "files" not in cb:
+                return 404, {"ok": False, "error": "file sharing is not available here"}
+            return cb["files"](origin, data)
         if method == "POST" and path == "/peer/experience":
             items = data.get("trajectories")
             if not isinstance(items, list):

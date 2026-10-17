@@ -523,7 +523,7 @@ function showTab(name) {
   if (name === "world" && typeof showWorldPanel === "function") showWorldPanel();
   if (name !== "world" && typeof hideWorldPanel === "function") hideWorldPanel();
   if (name === "machines" && typeof loadUpdatePanel === "function") loadUpdatePanel();
-  if (name === "tools") { loadCategories(); if (typeof loadUserTools === "function") loadUserTools(); }
+  if (name === "tools") { loadCategories(); if (typeof loadUserTools === "function") loadUserTools(); if (typeof loadToolsPanel === "function") loadToolsPanel(); }
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
   if (name === "crm" && typeof loadCrm === "function") loadCrm();

@@ -22,6 +22,16 @@ PIP: dict = {
     "media": ["yt-dlp[default]"],
     "mlx": ["mlx-lm"],
     "whisper": ["faster-whisper"],
+    # session 28: a real Chromium for browse_page (Playwright; the browser itself comes from POST_INSTALL)
+    "chromium": ["playwright"],
+}
+# add-on name -> {sys.platform: [pip requirements]} where only some machines need a package
+PIP_PLATFORM: dict = {
+    "computer-use": {"win32": ["comtypes"]},     # Windows UI Automation; macOS needs nothing (ctypes)
+}
+# add-on name -> extra steps after pip, each an argument list run with LOKI's Python (no shell)
+POST_INSTALL: dict = {
+    "chromium": [["-m", "playwright", "install", "chromium"]],
 }
 
 # add-on name -> how to install what pip cannot (shown to the owner, not run)
@@ -35,9 +45,10 @@ MANUAL: dict = {
 }
 
 
-def pip_specs(name: str) -> list:
-    """The pip requirements for `name`, or [] when pip is not the way to install it."""
-    return list(PIP.get(str(name or "").strip(), []))
+def pip_specs(name: str, platform: str = "") -> list:
+    """The pip requirements for `name` on this machine, or [] when pip is not the way to install it."""
+    name = str(name or "").strip()
+    return list(PIP.get(name, [])) + list(PIP_PLATFORM.get(name, {}).get(platform or sys.platform, []))
 
 
 def manual_hint(name: str) -> str:
@@ -92,5 +103,13 @@ def install(name: str, python: str = "", run: Callable | None = None, timeout: f
         return {"ok": False, "specs": specs, "log": [], "error": str(exc)[:200]}
     ok = getattr(proc, "returncode", 1) == 0
     tail = ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()[-4:]
+    for step in (POST_INSTALL.get(name, []) if ok else []):
+        try:
+            more = run([python, *step], capture_output=True, text=True, timeout=timeout)   # no shell
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "specs": specs, "log": tail, "error": "%s failed: %s" % (" ".join(step), str(exc)[:160])}
+        tail += ((more.stdout or "") + (more.stderr or "")).strip().splitlines()[-2:]
+        if getattr(more, "returncode", 1) != 0:
+            return {"ok": False, "specs": specs, "log": tail, "error": "%s failed" % " ".join(step)}
     return {"ok": ok, "specs": specs, "log": tail,
             "error": "" if ok else "pip failed: " + (tail[-1] if tail else "no output")}
