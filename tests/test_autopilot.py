@@ -9,6 +9,7 @@ network: a fake clock, a fake system check, a fake team starter, a fake state.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import types
@@ -18,7 +19,6 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(REPO / "engine")]
 
 import autopilot  # noqa: E402
-import selftest  # noqa: E402
 
 PASS: list = []
 FAIL: list = []
@@ -157,6 +157,11 @@ check("once the team finishes, the next request starts", len(started) == 2 and "
 
 # ---------------------------------------------------------------------------- one duty per pass
 section("one duty per pass, each on its own schedule")
+# The PC-only duties (selftest, task_bench; auto = on for the PC) would run here and, once
+# the bench starts, make the autopilot busy - this test is about the base duty rotation,
+# so turn them off for it (they have their own suites).
+_saved_env = {k: os.environ.get(k) for k in ("LOKI_SELFTEST", "LOKI_TASK_BENCH")}
+os.environ["LOKI_SELFTEST"] = os.environ["LOKI_TASK_BENCH"] = "0"
 clock = Clock()
 calls: list = []
 auto = autopilot.Autopilot(data_dir=TMP / "t", repo=TASKS, clock=clock, state=FakeState(),
@@ -168,10 +173,11 @@ ran = auto.tick()
 check("the first pass runs exactly one duty", len(ran) == 1, ran)
 drained = [auto.tick() for _ in range(5)]
 done_duties = [r[0][0] for r in [ran] + drained if r]
-# selftest is a duty only where it is enabled (auto = on for the PC), so the expected set moves
-_expected = ["health", "inbox", "report"] + (["selftest"] if selftest.enabled() else [])
-check("across passes each duty runs once, then nothing", sorted(done_duties) == sorted(_expected)
+check("across passes each duty runs once, then nothing", sorted(done_duties) == ["health", "inbox", "report"]
       and drained[-1] == [], (done_duties, drained[-1]))
+for _k, _v in _saved_env.items():
+    os.environ[_k] = _v if _v is not None else ""
+    os.environ.pop(_k, None) if _v is None else None
 
 # ---------------------------------------------------------------------------- report
 section("weekly report: only measured facts")

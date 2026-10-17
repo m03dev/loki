@@ -564,14 +564,16 @@ orig_make = creations.make_image
 creations.make_image = lambda ag, prompt, **kw: made_by_autopilot.append((prompt, kw)) or {"ok": True, "id": "a"}
 pilot = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORKSPACE=WS, DATA_DIR=str(TMP / "auto")),
                             data_dir=TMP / "auto", clock=lambda: 1792224000.0)
-pilot.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0})
+pilot.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0,
+                            "selftest": 1792224000.0, "task_bench": 1792224000.0})
 ran = pilot.tick()
 check("an idle pass makes today's picture", ran and ran[0][0] == "creation" and made_by_autopilot
       and made_by_autopilot[0][1]["daily"], (ran, made_by_autopilot))
 os.environ["LOKI_DAILY_CREATION"] = "off"
 pilot2 = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORKSPACE=WS), data_dir=TMP / "auto2",
                              clock=lambda: 1792224000.0)
-pilot2.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0})
+pilot2.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0,
+                             "selftest": 1792224000.0, "task_bench": 1792224000.0})
 check("switched off: no creation duty at all", pilot2.tick() == [])
 creations.make_image = orig_make
 os.environ.pop("LOKI_DAILY_CREATION", None)

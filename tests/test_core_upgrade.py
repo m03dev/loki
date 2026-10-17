@@ -746,7 +746,8 @@ ap = autopilot.Autopilot(state=state, agent=agent, data_dir=EVDATA, repo=FAKE_RE
 
 def evolve_tick():
     """One autopilot pass where only the evolve duty is due (the others ran a moment ago)."""
-    ap.data["last"].update({"health": clock[0], "inbox": clock[0], "report": clock[0], "evolve": 0})
+    ap.data["last"].update({"health": clock[0], "inbox": clock[0], "report": clock[0], "evolve": 0,
+                            "selftest": clock[0], "task_bench": clock[0]})
     return ap.tick()
 
 

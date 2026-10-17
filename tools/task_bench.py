@@ -55,7 +55,10 @@ BONSAI_TAG = "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0"
 SCRIPTED_LOCAL = "qwen3:8b"          # what the scripted fake pretends to be (a local qwen3)
 STRONG = "groq"                       # the provider a scripted job escalates to
 REAL_TIMEOUT_S = float(os.getenv("LOKI_BENCH_TIMEOUT", "900"))
-SCRIPTED_TIMEOUT_S = 60.0
+# A scripted team task can need well over a minute on Windows (team-primes measured 83.5 s on
+# the PC); 60 cut it off and made the suite machine-speed-sensitive. Tasks with their own
+# deadline_s are unaffected (they use deadline + 15).
+SCRIPTED_TIMEOUT_S = 120.0
 
 
 def _tasks_module():

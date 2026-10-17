@@ -619,7 +619,7 @@ eap = autopilot.Autopilot(state=estate, agent=loki, data_dir=DATA, repo=E2E_REPO
 
 def evolve_tick():
     eap.data["last"].update({"health": eclock[0], "inbox": eclock[0], "report": eclock[0], "review": eclock[0],
-                             "speed": eclock[0], "selftest": eclock[0], "evolve": 0})
+                             "speed": eclock[0], "selftest": eclock[0], "task_bench": eclock[0], "evolve": 0})
     return eap.tick()
 runs = []
 shipped_with_tick = []

@@ -223,6 +223,7 @@ clock = {"t": night}
 for name in ("LOKI_AUTOPILOT_HEALTH_S", "LOKI_AUTOPILOT_REPORT_S"):
     os.environ[name] = "999999999"
 os.environ["LOKI_AUTOPILOT_INBOX"] = "off"
+os.environ["LOKI_SELFTEST"] = "0"   # the PC self-test duty would fire on this fake clock
 ap = autopilot.Autopilot(state=None, agent=None, data_dir=TMP / "ap", clock=lambda: clock["t"], bench_start=fake_start)
 ap.data["last"].update({"health": night, "report": night})
 out = ap.tick()
