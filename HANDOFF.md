@@ -800,6 +800,16 @@ Chromium checks where Playwright is installed) is in SUITES.** Research and usag
   faked too), the peer file route between the real Mac and PC, the Settings > Tools panel in WebView2/WKWebView
   (ui smoke test only checks it loads). Accounts to connect + the Google OAuth client: Needs Mohamed.
 
+## 2026-10-17 evening: LOKI gets its own tasks (owner: "give loki tasks to do and fix ... and keep track")
+
+Instead of Claude fixing them, the owner's four new issues are LOKI's own evolve steps at the top of
+docs/EVOLVE.md, in this order: E13 no stray "L" in the window, E15 ground texture clipping/shimmer, E14 every
+machine's island unique (seeded per machine), E12 a Maya-like loading/splash window (no terminal) for start-up
+and updates. The PC's autopilot builds them when idle (improve_loki in a worktree, ship_loki, health-gated
+updates); progress is tracked in Settings > Lab, in the ticks in docs/EVOLVE.md and in ZIVA W41 reports. The
+roadmap was cleaned: stale open duplicates of finished steps removed; E11 (game engine) parked by the owner.
+Claude's role now: watch, unblock, report - not write these fixes.
+
 ## Session 28: patching and updating clients, overhauled (after the Mac's white window)
 
 The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now

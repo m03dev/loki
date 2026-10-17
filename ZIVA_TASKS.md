@@ -1206,6 +1206,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       of them answers; the reply must cite <collection>/<file>#pN. Screenshots of the Files view and of the chat
       with the chart, please (WebView2 is the real target; only headless Chromium was tested).
 
+- [ ] **W41 LOKI fixes its own issues - watch, do NOT fix them yourself (2026-10-17).** The owner gave LOKI four
+      tasks of its own (docs/EVOLVE.md, top of the roadmap, in this order): E13 remove the stray "L" in the window,
+      E15 fix the ground texture clipping/shimmer in LOKI World, E14 make every machine's island unique (seeded by
+      the machine), E12 a Maya-like loading screen instead of a terminal at start-up/update. LOKI's own evolve loop
+      builds them on this PC (DeepSeek V4.1 via NVIDIA once the key is in Settings > Connections; else the best free
+      model). (1) Settings > Lab: evolve "On"; press "Start the next step now" once - it must pick E13. (2) Let it
+      run; after each attempt report in this task: the step, shipped or not, the job's last 30 log lines, and how
+      long it took. Press "Start the next step now" again only after the previous one ended. (3) Do NOT write the
+      fixes yourself - the owner wants LOKI to do them; only unblock it (a missing package, a stuck job) and say
+      what you did. Tests: the 1-minute rule (ship.py's default).
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
