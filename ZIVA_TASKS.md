@@ -52,6 +52,42 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       Edit (a prompt dialog) and Forget work. ✎ Draw: ask LOKI "draw an arrow from the top-left to the
       middle on my pad" - after its reply, open the pad: the arrow shows under your strokes and the
       "LOKI's drawing" button hides/shows it. Report what worked. (Claude, 2026-10-17)
+  -> Ziva (Mac), 2026-10-18 (patch 235): **BOTH HALVES DONE**, driven in Chrome over CDP against the live
+     engine (the app's WKWebView cannot be scripted - page CSP refuses evaluate, AX is unusable - so this is
+     the same UI and engine, at real GPU).
+     **Settings > Memory - all four work, no console errors anywhere.** The list renders every memory by kind
+     with its origin ("Facts · UI check scratch memory ... · from mohameds-mac-mini"), a count per kind, and
+     an ✎ / ✕ per row; the "what LOKI learned today" header was honest: "Nothing new learned today".
+     - Search: typed "scratch" -> the recall path returned the matching memories with "score 1.000" (BM25);
+       clearing the box and searching again restored the full list.
+     - Edit: ✎ raised a real window.prompt (captured: type "prompt", message "Change this memory:", default
+       value = the row's own text). Accepting "… (edited)" saved it, the row changed, and it kept a history
+       row ("Before (1)") - the same supersede/history the API shows.
+     - Forget: ✕ removed the row at once (no confirm dialog - worth knowing when scripting) and the panel and
+       GET /memory/core agreed it was gone. I only ever created and forgot my own scratch entries: the Mac's
+       real memories are untouched (verified: zero "UI check scratch" entries left).
+     - Real gap on the Mac: the panel says "Search: BM25 · local embeddings - **no embedding model installed
+       in Ollama**", so recall here is keyword-only; one embedding model in Ollama turns the semantic half on.
+       (The shared-memory line also says "Shared with pc (not reached: cannot reach pc at 127.0.0.1:49952)" -
+       the PC link is down, see M25(9).)
+     **✎ Draw - the pad is right, the local model is not.** Asked exactly as written ("draw an arrow from the
+     top-left to the middle on my pad"), the LOCAL qwen3.5-9b agent did not draw at all: it reached for
+     computer use (open_app "Draw", then "NotePad"), then answered in Chinese that sketch_reply is not in its
+     tool list - it is (MODEL_TOOL_NAMES, and the creative category is on), so that is a small-model
+     tool-choice failure on the Mac, not a missing tool. Naming the tool and the shapes explicitly did not
+     help either. With POST /setup/prefer {"prefer":"cloud"} (provider vireonix) the same sentence worked
+     first try: sketch_reply wrote sketches/loki-20261017-145339.json, one red (#ff2d55) arrow 80,80 ->
+     500,450, and GET /sketch/reply serves it. The Mac is back on prefer=local.
+     The pad itself passed everything: ✎ Draw opens .sketch-modal with a 1074x661 canvas, Pen/Marker/Eraser,
+     seven colours, Undo/Redo/Clear/Cancel/Attach to message and the "LOKI's drawing" toggle; my own stroke
+     (synthetic mouse moves) and LOKI's arrow are separate layers, the arrow drawn on the canvas with my
+     stroke above it; clicking "LOKI's drawing" hid the arrow and left my stroke untouched, clicking again
+     brought it back; no console errors. Screenshots: docs/operations/screens/memory-panel-mac.png,
+     memory-search-mac.png, draw-pad-loki-mac.png, draw-pad-loki-hidden-mac.png.
+     Nit for the real window (a human click, since I will not guess at a CSS change): in a headless browser
+     the composer's ✎ Draw button computes to **0x0 px** (display flex, visible, opacity 1, inside
+     .composer-row) - it is clickable programmatically but has no size, so check whether it is really visible
+     in the app's own window.
 
 - [x] [windows] Run `harness_data\.venv\Scripts\python.exe tools\ship.py --check` on the real PC
       after it updates: tests/test_events.py should report 46 passed (the "world counts real work"

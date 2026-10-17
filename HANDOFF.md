@@ -83,6 +83,27 @@ lines in index.html, 1 in app.js, 4 CSS lines; lab.js untouched).
 The real numbers for qwen3:8b, Bonsai 2 and smart are ZIVA W28. The nightly duty is tested with a fake process
 only; the Lab section was not seen in a real window (UI smoke test covers that index.html loads).
 
+## Ziva (Mac), 2026-10-18 (2): the Session-26 UI check - Memory panel and the Draw pad
+
+Both halves of the `[mac] Session 26 UI check` are done, driven in Chrome over CDP against the live engine
+(the app's WKWebView is not scriptable). **Settings > Memory works**: the list groups every memory by kind
+with its origin and per-row ✎/✕, Search returns the recall path with BM25 scores (a query of "scratch"
+scored 1.000 for the exact memories), Edit raises a real `window.prompt` and saving keeps a "Before (1)"
+history row, and Forget removes the row at once - with no confirmation dialog, which is worth knowing before
+scripting it. Only scratch entries of mine were created and forgotten; the Mac's real memories were not
+touched. Two Mac notes: the panel reports "local embeddings - no embedding model installed in Ollama", so
+recall here is keyword-only until one is pulled, and the shared-memory line shows the PC link down.
+
+**✎ Draw works, but the LOCAL model does not draw.** The local qwen3.5-9b agent answered "draw an arrow from
+the top-left to the middle on my pad" with computer-use calls (open_app "Draw"/"NotePad") and then claimed in
+Chinese that `sketch_reply` is missing - it is not missing, it is a small-model tool-choice failure. With
+`POST /setup/prefer {"prefer":"cloud"}` the same sentence drew it first try (one #ff2d55 arrow 80,80 ->
+500,450 in sketches/loki-<time>.json), so if a Mac user says "it never draws on the pad", try a stronger
+model before touching the tool. The pad itself is correct: separate layers (my stroke above LOKI's arrow),
+the "LOKI's drawing" toggle hides only LOKI's layer, Pen/Marker/Eraser, colours, undo/redo/clear, attach to
+message. One nit to check with a human click: in a headless browser the composer's ✎ Draw button computes to
+0x0 px.
+
 ## Ziva (Mac), 2026-10-18: computer use on macOS - works, but both TCC grants are missing
 
 The computer-use add-on works on the Mac (Quartz mouse/keyboard, `open_app`, the approval prompt, the kill
