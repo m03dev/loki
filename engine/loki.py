@@ -1477,9 +1477,13 @@ def failover_target(spent: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 def load_memory() -> str:
-    if MEMORY_FILE.is_file():
-        return MEMORY_FILE.read_text(encoding="utf-8")
-    return "(nothing saved yet)"
+    """Who the owner is, for every prompt - bounded (memory.profile_block); the rest of memory
+    comes per request through memory.pack."""
+    try:
+        text = memory.profile_block(DATA_DIR, MEMORY_FILE)["text"]
+    except Exception:  # noqa: BLE001
+        text = MEMORY_FILE.read_text(encoding="utf-8") if MEMORY_FILE.is_file() else ""
+    return text or "(nothing saved yet)"
 
 
 def save_memory(fact: str) -> str:
@@ -3290,6 +3294,7 @@ MEMORY_BUDGET = memory_core.Budget()
 LAST_RECALL: list = []      # memories this request used: the pack's citations + the memory tool's recalls
 LAST_SKILLS: list = []      # learned skills offered to this request
 LAST_LEARNED: dict = {}     # the skill learned from the last request, if any
+LAST_NOTED: list = []       # what the last request taught LOKI about the owner (memory.after_request)
 
 
 def _cite(citations: list) -> None:
@@ -4708,17 +4713,13 @@ def _triage(text: str) -> dict:
         verdict = dict(first_layer.rules(text), source="rules", note="triage failed: %s" % exc)
     LAST_TRIAGE = verdict
     TRIAGE_NOTE = first_layer.guidance(verdict)
-    try:   # what worked / failed on similar past tasks (reasoning_bank.py); advice only
-        lessons = reasoning_bank.prompt_for(text) if EXPERIENCE_ENABLED else ""
-    except Exception:  # noqa: BLE001
-        lessons = ""
-    if lessons:
-        TRIAGE_NOTE = (TRIAGE_NOTE + chr(10) * 2 + lessons).strip()
-        _progress("thinking", "Recalled %d lesson(s) from similar past tasks." % (lessons.count(chr(10) + "- ")))
-    try:   # OpenHuman's memory pack: the few memories that matter for this request (memory_core.py)
-        mem = memory_core.pack(text, root=DATA_DIR, repo=REPO_ROOT)
+    try:   # the ONE memory path (memory.pack): lessons + memories + project passages, token-budgeted
+        mem = memory.pack(text, root=DATA_DIR, repo=REPO_ROOT, workspace=WORKSPACE,
+                          lessons=EXPERIENCE_ENABLED, notes_file=MEMORY_FILE)
     except Exception:  # noqa: BLE001
         mem = {"text": "", "used": [], "skills": []}
+    if mem.get("lessons"):
+        _progress("thinking", "Recalled %d lesson(s) from similar past tasks." % mem["lessons"])
     if mem.get("text"):
         TRIAGE_NOTE = (TRIAGE_NOTE + chr(10) * 2 + mem["text"]).strip()
         _cite(mem.get("used"))
@@ -7030,6 +7031,7 @@ def _start_request() -> tuple:
     LAST_RECALL.clear()
     LAST_SKILLS.clear()
     LAST_LEARNED.clear()
+    LAST_NOTED.clear()
     _GUARD_AT_START["repaired"] = GUARD_STATS["repaired"]
     _GUARD_AT_START["rejected"] = GUARD_STATS["rejected"]
     _LAST_VERIFY.clear()
@@ -7045,6 +7047,11 @@ def _start_request() -> tuple:
 def _record_experience(kind: str, goal: str, status: str, started: float, start_index: int) -> None:
     """Log the request; keep its trajectory when it is a verified success. Never raises."""
     speed_watch.record("request", (time.time() - started) * 1000, note=kind)   # speed watch (E6)
+    # Session 28: the durable things the owner said, remembered (reviewable in Settings > Memory)
+    noted = memory.after_request([m for m in messages[start_index:] if isinstance(m, dict)], status, root=DATA_DIR)
+    LAST_NOTED[:] = noted
+    if noted:
+        _progress("thinking", "Remembered: " + "; ".join(n["text"] for n in noted)[:300])
     if not EXPERIENCE_ENABLED:
         return
     try:

@@ -178,6 +178,88 @@ documented shapes, real `/models` metadata, a real Ollama's `/api/create num_ctx
 MLX - ZIVA W28 (PC) and M20 (Mac). Needs Mohamed: new mistral/together/cerebras keys, deepseek credit, the
 PC's Ollama update.
 
+## Session 28 memory & knowledge (worktree)
+
+The owner: "the core systems aren't fleshed out yet" - this one is MEMORY & KNOWLEDGE. LOKI now has ONE memory
+model, ONE retrieval path, careful automatic learning, the same memory on every linked machine, an index of the
+project's own docs/code, and an eval. Built in a Claude worktree; `tests/test_memory_core2.py` (112 checks) is in
+SUITES.
+
+**The model** (`engine/memory_core.py`, API kept): every memory has a KIND - profile, preference, person, project,
+decision, fact (semantic), episode, lesson (episodic), skill (procedural = the learned SKILL.md files) - plus an
+importance, a status (active / superseded, with `history`) and `review` ("new" when LOKI learned it by itself).
+`engine/memory_kinds.py` names the kind and detects contradictions by rules: "the owner's editor is VS Code" then
+"... is Zed" -> the newer SUPERSEDES the older (kept, restorable); "prefers dark mode" vs "prefers light mode" too;
+"is working on X" vs "uses X" do not. Same text = refresh, near-duplicate = merge, secrets scrubbed (explicit
+learn) or the whole sentence dropped (automatic learning).
+
+**Storage** (`engine/memory_store.py`): `harness_data/memory_log.jsonl`, an append-only log of put/del operations
+named (host, n) with a hybrid logical clock; the winner per item id is the largest (v, host, n) - last writer wins,
+tombstones for forget, merge is idempotent and order-independent. Forget also REDACTS the item's text from older
+operations. Compaction keeps a per-host floor so vectors never go backwards. A cross-process file lock (fcntl /
+msvcrt) because the engine and job processes both write. Session 26's `memory_core.jsonl` is migrated on first
+use (renamed `.migrated`). Local only: `memory_uses.json` (use counts), `memory_vectors.json` (embedding cache),
+`memory_sync.json` (per-peer vectors, last sync).
+
+**Retrieval - the one path** (`memory.py` -> `memory_core.retrieve` -> `memory_search.py`): BM25 (k1 1.2, b .75)
+with a light stemmer and a small synonym table (pc~windows, gpu~rtx, boss~manager, publish~ship...), plus
+embeddings from a LOCAL Ollama embedding model when one is installed (`LOKI_EMBED=auto|off|<model>`; never pulls
+anything; vectors cached by text hash; at most 64 new embeddings per search; any failure -> BM25). A candidate
+needs real evidence (enough of the query's rare words, or cosine >= .6). Score = relevance x recency by kind
+(profile/preference/person/project/decision never fade; facts 180 d; episodes 30 d) x importance x usefulness;
+near-identical results collapse; cut to a TOKEN budget. Prompt layout:
+- always on: `memory.profile_block()` - the owner's notes (memory.md) + the most important profile/preference
+  memories, capped at 350 tokens (`LOKI_MEMORY_PROFILE_TOKENS`); `loki.load_memory()` uses it (memory.md used
+  to be pasted whole);
+- per request: `memory.pack()` - reasoning_bank lessons (<= 300 tokens) + matching memories (pack budget,
+  `LOKI_MEMORY_PACK_CHARS`) + project passages with `path:line` (<= 250 tokens), total <= 1000
+  (`LOKI_MEMORY_PACK_TOKENS`); the owner's note lines are not repeated, relevant profile memories are (so they
+  are cited in `memories_used`). `loki._triage` now makes ONE call to
+  `memory.pack` (it used to call reasoning_bank.prompt_for and memory_core.pack separately). Chat, background jobs
+  (run_job -> pursue_goal -> _triage) and team roles (jobs) all go through it.
+
+**Automatic writing** (`engine/memory_extract.py`, called from `loki._record_experience` via
+`memory.after_request`): rules over the OWNER's own messages only (never the model's replies or tool output):
+"my name is", "call me", "I prefer/like/hate", "always/never ...", "from now on", "Mia is my sister", "my boss is",
+"I'm working on", "we decided", "my X is Y", "remember that ...". Third person, no questions/small talk/"right
+now" things, no secrets, max 3 per request, marked review="new"; never from a background job's prompt
+(written by LOKI or a schedule; `LOKI_MEMORY_EXTRACT_JOBS=1` to allow). `LOKI_MEMORY_EXTRACT=model` + an `ask`
+function lets a model do it through the same filters (NOT wired to a model in loki.py yet - rules are the
+default). The reply metadata carries `memories_learned`.
+
+**Sync** (`engine/memory_sync.py`, `POST /peer/memory` in peers.py, callback in peer_link.py): vector exchange
+over the signed link (`{have, ops}` -> merge -> answer with the ops the caller lacks), batches of 1000, works
+transitively through a third machine, received items scrubbed again. memory.md rides along as one document item
+(first sync of two notes files = union of lines; afterwards the newer edit wins, older text in history).
+`memory_sync.run_forever` (started by `peer_link.sync_forever`) syncs ~5 s after any learn/forget and every
+`LOKI_MEMORY_SYNC_S` (300 s).
+
+**Project knowledge** (`knowledge.ProjectIndex`): `harness_data/knowledge/<workspace-hash>.json`, incremental (only
+files whose size/mtime changed are re-read, deleted files dropped, a time budget per refresh), Markdown chunked at
+headings, code in ~900-char windows, `.env`/key/secret files and build/vendor folders skipped, chunks scrubbed.
+Refreshed in a background thread when older than 2 min (`LOKI_PROJECT_INDEX=off` to disable); Settings >
+Memory has Reindex. The Obsidian vault stays separate and read-only (brain.py).
+
+**Settings > Memory** (`app/ui/memory_panel.js`, `GET/POST /memory/core` extended): "LOKI learned N things today"
+with ✓ keep / ↶ undo (icons with tooltips), the machines it is shared with + sync now, search mode, project index +
+reindex, a search box that shows exactly what a request would recall (scores + project passages), kind chips,
+edit/forget, "Replaced by newer memories" with restore, learned skills; the memory.md box moved into "Your notes
+for LOKI (always included)". The Brain map shows memories by kind and edits/forgets them by id.
+
+**Measured** (offline, `tests/test_memory_core2.py`): 30 questions over 29 seeded memories + 2 episodes + 12
+distractors + a superseded fact: 30/30 recalled into the request's pack, search alone 30/30 in its top 5, largest memory
+context 382 tokens (profile + pack; budget 1350), 3 unrelated questions recall nothing; a toy local embedder finds a paraphrase BM25 misses and
+keeps 29/30. Store/merge/tombstone/redaction/compaction/migration, sync Mac<->PC<->third machine incl. over the real
+HMAC PeerServer, notes sync, project index, the bridge API, the loki hooks, and the Memory tab in headless Chromium
+(render, undo, search) are all checked.
+
+**Not verified here (needs the real machines - ZIVA W28 PC, M20 Mac):** two real machines syncing over LAN/relay; a
+real Ollama embedding model (nomic-embed-text) - the hybrid path is tested only with a fake embedder; the Memory tab
+in WKWebView; a live model actually USING the recalled memories / citing path:line; index speed on a large project.
+Still open: the model-based extractor is not wired to a model; reasoning_bank/experience/skill_learning keep their
+own files (they are candidates of the one retrieval, not migrated); knowledge index is per machine (not synced, by
+design - each machine indexes its own checkout).
+
 ## Session 28: patching and updating clients, overhauled (after the Mac's white window)
 
 The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now

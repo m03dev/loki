@@ -294,6 +294,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
             "restart": lambda: _restart_soon(state),
             "presence": _presence_receive,
+            "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 
 
@@ -301,6 +302,13 @@ def _presence_receive(origin: str, data: dict) -> dict:
     """POST /peer/presence: another machine's avatar for LOKI World (presence.py)."""
     import presence  # pylint: disable=import-outside-toplevel
     return presence.HUB.receive(origin, data)
+
+
+def _memory_receive(agent: Any, origin: str, data: dict) -> dict:
+    """POST /peer/memory: another machine's memory operations; answered with ours (memory_sync.py)."""
+    import memory_sync  # pylint: disable=import-outside-toplevel
+    return memory_sync.receive(origin, data, root=Path(getattr(agent, "DATA_DIR", "") or experience._data_dir()),
+                               notes_file=getattr(agent, "MEMORY_FILE", None))
 
 
 def _restart_soon(state: Any) -> dict:
@@ -465,6 +473,11 @@ def sync_once(agent: Any) -> dict:
 
 
 def sync_forever(state: Any, agent: Any) -> None:
+    try:   # one memory on every machine: its own loop, so a learned fact travels in seconds
+        import memory_sync  # pylint: disable=import-outside-toplevel
+        threading.Thread(target=memory_sync.run_forever, args=(agent,), daemon=True, name="loki-memory-sync").start()
+    except Exception:  # noqa: BLE001
+        pass
     time.sleep(20)   # let the engine finish starting
     while True:
         if peers.peers():

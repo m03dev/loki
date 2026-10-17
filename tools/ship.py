@@ -34,7 +34,7 @@ MIRRORS = [b for b in os.getenv("LOKI_MIRROR_BRANCHES", "macos-app").split(",") 
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
-          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_mmo_systems", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core"]
+          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_mmo_systems", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2"]
 
 
 def _suite_env() -> dict:
@@ -53,6 +53,7 @@ def _suite_env() -> dict:
             env.pop(name, None)
     env["LOKI_TIMESFM_APPROVED"] = "0"   # a suite never starts the real TimesFM pip install
     env["LOKI_UPDATE_PREFLIGHT"] = "0"   # suites' throwaway repos; tests/test_update_overhaul.py turns it on
+    env["LOKI_EMBED"] = "off"            # memory search is plain BM25 in suites, the same with or without Ollama
     # Each suite gets its own provider-health file (engine/provider_health.py), so one suite's
     # "gemini quota spent" never steers another's routing; and no background probes.
     env["LOKI_HEALTH_FILE"] = os.path.join(tempfile.mkdtemp(prefix="loki-health-"), "provider_health.json")

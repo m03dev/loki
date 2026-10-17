@@ -453,6 +453,13 @@ class PeerServer:
             if "presence" not in cb:
                 return 404, {"ok": False, "error": "presence is not available here"}
             return 200, {"ok": True, **cb["presence"](origin, data)}
+        if method == "POST" and path == "/peer/memory":
+            # One memory on every machine (memory_sync.py): the caller's memory operations in,
+            # ours that it lacks out. Merging is last-writer-wins per item with tombstones, and
+            # every received item is scrubbed of secrets again before it is stored.
+            if "memory_sync" not in cb:
+                return 404, {"ok": False, "error": "memory sync is not available here"}
+            return 200, {"ok": True, **cb["memory_sync"](origin, data)}
         if method == "GET" and path == "/peer/diagnose":
             # "LOKI on the Mac is not responding": the other machine can see why (read-only,
             # redacted) - a stuck request, the System check, models, memory, the last log lines.

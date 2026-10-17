@@ -26,6 +26,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [either] **Session 28 memory & knowledge: teach LOKI a fact on one machine, ask on the other.** W28 (PC) and
+      M20 (Mac) are the steps; they must run at the same time on both machines. Answer here with the two eval lines
+      of test_memory_core2 and whether ORCA-7 / Pebble crossed in both directions. (Claude, 2026-10-17)
+
 - [ ] [either] **Session 27 harvest: the new web tools against the real internet.** The cloud sandbox could
       not reach DuckDuckGo, arXiv or Wikipedia, so web_search / research_web / map_site / reach / browse_page
       are tested only with fakes. W22 (PC) and M14 (Mac) are the checks; the first machine to run them, please
@@ -952,6 +956,22 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       and `ollama ps` while a chat runs shows its context. (6) Start one background job ("list the files in this
       project and write notes/files.txt") and report the `[loki-job] ... | model ...` line and whether it finished.
       Also `type harness_data\provider_health.json` (no keys are in it; paste the states, not the file).
+- [ ] **W33 One memory on both machines (2026-10-17, session 28 memory & knowledge).** Do this together with M20
+      (the Mac); both machines must run the version with `engine/memory_sync.py` and be linked (Settings > Machines).
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: report the test_memory_core2 line (its
+      eval prints "eval: N/30 recalled" and "search alone ... N/30" - paste both lines). (2) Settings > Memory on
+      the PC: the status line says "This machine: <name>" and "Shared with <mac name> (synced ...)"; the old
+      session-26 memories are still listed (they were migrated from memory_core.jsonl into memory_log.jsonl).
+      (3) TEACH ON THE PC, ASK ON THE MAC: in a PC chat say exactly "Remember that the PC's backup drive is called
+      ORCA-7." LOKI must list it under "LOKI learned 1 thing today". Within ~10 s (or press the sync icon) the Mac
+      (M20) asks "what is the PC's backup drive called?" and must answer ORCA-7. (4) THE OTHER WAY: after M20 teaches
+      "Remember that the Mac's favourite test project is Pebble.", ask the PC "what is the Mac's favourite test project?"
+      -> Pebble. (5) FORGET: on the PC press Undo (↶) on ORCA-7; on the Mac it must disappear too after a sync, and
+      `findstr ORCA-7 harness_data\memory_log.jsonl` on BOTH machines must find nothing (forget redacts). (6) Hybrid
+      search: `ollama pull nomic-embed-text` (274 MB - only if the owner is fine with it), restart LOKI: the Memory
+      status line should say "hybrid (BM25 + nomic-embed-text...)"; search "where are the backups kept" and report
+      what it shows. (7) Project knowledge: Settings > Memory shows "Project files indexed: N"; ask a chat a question
+      about the open project's docs and check the answer cites a path:line. Report all of it under Reports.
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1369,6 +1389,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       it shows (`python -m mlx_vlm.server --model prism-ml/Ternary-Bonsai-2-9B-mlx-2bit --port 8082`, needs
       mlx-vlm >= 0.7.8) and report whether LOKI's local route uses it when Ollama is stopped (Settings >
       Connections > MLX card "Running", doctor's chat line). Mac Ollama: report its version (`ollama -v`).
+- [ ] **M24 One memory on both machines (2026-10-17, session 28 memory & knowledge).** The Mac half of W28 - do the
+      steps together with Ziva Windows. (1) `harness_data/.venv/bin/python tools/ship.py --check`: report the
+      test_memory_core2 line and its two eval lines (it also renders Settings > Memory in headless Chromium when
+      Playwright is installed - say if that part skipped). (2) Settings > Memory in the real window (WKWebView):
+      it shows "LOKI learned N things today" with ✓ (keep) and ↶ (undo) icons that have tooltips, the kind chips, the
+      status line with the PC; open "Your notes for LOKI": edit one line, save, and check the same line appears in
+      the PC's notes after a sync. (3) ASK THE PC'S FACT: after W28 step 3, ask "what is the PC's backup drive
+      called?" -> ORCA-7 (report the reply and the "memories used" under it). (4) TEACH: say "Remember that the
+      Mac's favourite test project is Pebble." -> it appears under "learned today"; the PC must answer it (W28
+      step 4). (5) Contradiction: say "My editor is VS Code.", then later "My editor is Zed." - Settings > Memory
+      lists only Zed, with "Before (1)" showing VS Code, and "Replaced by newer memories" has the VS Code one
+      with a restore icon. (6) Secrets: paste "my test key is sk-test1234567890abcdef" in a chat; nothing with
+      that key may appear in Settings > Memory or in `grep -c sk-test harness_data/memory_log.jsonl` (expect 0).
 
 ## Needs Mohamed
 

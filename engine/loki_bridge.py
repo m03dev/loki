@@ -1778,29 +1778,73 @@ def sketch_reply_latest(state: Any) -> dict[str, Any]:
 def memory_core_api(state: Any, method: str, data: Any) -> tuple[int, dict[str, Any]]:
     """GET /memory/core[?q=] lists (or recalls) LOKI's learned memories and skills; POST
     {action: learn|edit|forget, text, id, tier} changes them (engine/memory_core.py)."""
+    import memory as memory_mod  # pylint: disable=import-outside-toplevel
     import memory_core  # pylint: disable=import-outside-toplevel
+    import memory_store  # pylint: disable=import-outside-toplevel
+    import memory_sync  # pylint: disable=import-outside-toplevel
     import skill_learning  # pylint: disable=import-outside-toplevel
-    root = Path(getattr(state.agent, "DATA_DIR", "") or memory_core.data_dir())
+    agent = state.agent
+    root = Path(getattr(agent, "DATA_DIR", "") or memory_core.data_dir())
+    workspace = getattr(agent, "WORKSPACE", None)
+    notes = getattr(agent, "MEMORY_FILE", None)
     if method == "GET":
         query = ((data or {}).get("q") or [""])[0] if isinstance(data, dict) else ""
+        kind = ((data or {}).get("kind") or [""])[0] if isinstance(data, dict) else ""
+
+        def clean(i: dict) -> dict:
+            return {k: v for k, v in i.items() if not k.startswith("_")}
         if query:
-            found = memory_core.fetch(query, root=root)
-            items = found["items"]
+            # what LOKI would recall for this (the same retrieval a request uses), with its scores
+            found = memory_mod.retrieve(query, root=root, workspace=workspace, notes_file=notes, budget_tokens=2000,
+                                        kinds=[kind] if kind else None, mark_used=False)
+            items = [{"id": i["id"], "kind": i["kind"], "tier": i["tier"], "text": i["text"], "score": i["score"],
+                      "why": i.get("why", {})} for i in found["items"]]
+            extra = {"knowledge": found.get("knowledge", []), "mode": found.get("mode")}
         else:
-            items = list(reversed(memory_core.items(root)))[:200]
+            items = [clean(i) for i in reversed(memory_core.items(root, kind=kind))][:300]
+            extra = {}
+        midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+        superseded = [clean(i) for i in reversed(memory_core.all_items(root)) if i.get("status") == "superseded"][:40]
+        index = {}
+        try:
+            import knowledge  # pylint: disable=import-outside-toplevel
+            if workspace:
+                index = knowledge.project_index(Path(workspace), root).status()
+        except Exception:  # noqa: BLE001
+            pass
         return 200, {"ok": True, "items": items, "skills": skill_learning.learned(root),
-                     "stats": memory_core.stats(root)}
+                     "stats": memory_core.stats(root), "today": [clean(i) for i in memory_core.learned_since(midnight, root)],
+                     "superseded": superseded, "kinds": [{"kind": k, "label": memory_store.KIND_LABEL[k]}
+                                                         for k in memory_store.KINDS],
+                     "sync": memory_sync.status(root), "index": index,
+                     "profile": memory_mod.profile_block(root, notes), **extra}
     data = data if isinstance(data, dict) else {}
     action = str(data.get("action", "")).lower()
+    item_id = str(data.get("id", ""))
     if action == "learn":
         out = memory_core.learn(str(data.get("text", "")), tier=str(data.get("tier", "semantic")), root=root,
-                                source="owner")
+                                source="owner", kind=str(data.get("kind", "") or ""))
     elif action == "edit":
-        out = memory_core.edit(str(data.get("id", "")), str(data.get("text", "")), root=root)
-    elif action == "forget":
-        out = memory_core.forget(str(data.get("id", "")), root=root)
+        out = memory_core.edit(item_id, str(data.get("text", "")), root=root, kind=str(data.get("kind", "") or ""))
+    elif action in ("forget", "undo"):
+        out = memory_core.forget(item_id, root=root)
+    elif action == "keep":
+        out = memory_core.keep(item_id, root=root)
+    elif action == "keep_all":
+        midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+        kept = [memory_core.keep(i["id"], root=root) for i in memory_core.learned_since(midnight, root)]
+        out = {"ok": True, "kept": len(kept)}
+    elif action == "restore":
+        out = memory_core.restore(item_id, root=root)
+    elif action == "sync":
+        out = {"ok": True, "results": memory_sync.sync_all(root, notes)}
+    elif action == "reindex":
+        import knowledge  # pylint: disable=import-outside-toplevel
+        if not workspace:
+            return 400, {"ok": False, "error": "no workspace project is open"}
+        out = knowledge.project_index(Path(workspace), root).refresh(budget_s=20.0)
     else:
-        return 400, {"ok": False, "error": "action is learn, edit or forget"}
+        return 400, {"ok": False, "error": "action is learn, edit, forget, undo, keep, keep_all, restore, sync or reindex"}
     return (200 if out.get("ok") else 400), out
 
 
@@ -1812,8 +1856,11 @@ def memory_metadata(agent: Any) -> dict[str, Any]:
         used = [dict(m) for m in (getattr(agent, "LAST_RECALL", None) or [])][:12]
         skills = list(getattr(agent, "LAST_SKILLS", None) or [])
         learned = dict(getattr(agent, "LAST_LEARNED", None) or {})
+        noted = [dict(n) for n in (getattr(agent, "LAST_NOTED", None) or [])][:5]
     except Exception:  # noqa: BLE001
         return out
+    if noted:
+        out["memories_learned"] = noted
     if used:
         out["memories_used"] = used
     if skills:

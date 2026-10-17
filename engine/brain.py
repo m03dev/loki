@@ -154,6 +154,25 @@ def build(data_dir: Path, workspace: Path, registry: Any = None, roster: list[di
     facts = [l.strip("-* \t") for l in _read(Path(data_dir) / "memory.md").splitlines() if l.strip("-* \t#")]
     for fact in facts[:MAX_MEMORY_FACTS]:
         g.edge(memory_hub, g.node(_id("memory", fact), fact[:48], "memory", fact))
+    # the one memory model (memory_core / memory_store): one hub per kind, each memory a node the
+    # Brain tab can correct or forget (POST /memory/core)
+    try:
+        import memory_store  # pylint: disable=import-outside-toplevel
+        by_kind: dict[str, int] = {}
+        noted = {" ".join(f.lower().split()) for f in facts}
+        for item in reversed(memory_store.items(Path(data_dir))):
+            kind = item.get("kind") or "fact"
+            if by_kind.get(kind, 0) >= MAX_MEMORY_FACTS or " ".join(str(item.get("text", "")).lower().split()) in noted:
+                continue
+            by_kind[kind] = by_kind.get(kind, 0) + 1
+            hub = g.node("kind:" + kind, memory_store.KIND_LABEL.get(kind, kind), "memory",
+                         "Memories of this kind (Settings > Memory lists them all).")
+            g.edge(memory_hub, hub)
+            nid = g.node("core:" + item["id"], str(item.get("text", ""))[:48], "memory", str(item.get("text", "")))
+            g.nodes[nid]["mem"] = item["id"]
+            g.edge(hub, nid)
+    except Exception:  # noqa: BLE001 - the map is a view; a broken store must not break it
+        pass
     memory_dir = Path(data_dir) / "memory"
     if memory_dir.is_dir():
         _markdown_folder(g, memory_dir, "memory", memory_hub, 300, tags=True)

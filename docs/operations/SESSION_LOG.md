@@ -55,6 +55,16 @@ Concise dated records of meaningful work. Newest at the top.
   the real window, MLX fallback. Failover: empty choices, timeouts, 429s without long back-off, SDK retries off.
 - Settings > Connections: health + fix per card, Explain routing, Re-check; General > Private (local only).
 - tests/test_routing_core.py (142) in SUITES. Real machines: ZIVA W28 / M20.
+## 2026-10-17 - Session 28 (Claude, worktree): memory & knowledge as one system
+
+- One model (memory_core + memory_kinds): kinds profile/preference/person/project/decision/fact/episode/lesson/skill,
+  importance, supersede-with-history on contradiction, dedupe/merge, secrets never stored.
+- memory_store: append-only op log, last-writer-wins per id, tombstones + redaction, vectors, compaction, migration.
+- memory_search: BM25 + synonyms + optional local Ollama embeddings (hybrid), recency by kind, token budget.
+- memory.pack = the ONE path (profile always on, lessons + memories + project passages per request); loki._triage
+  calls it once; memory_extract learns what the owner says (review in Settings > Memory: keep/undo).
+- memory_sync over the signed peer link (POST /peer/memory), notes file synced; knowledge.ProjectIndex (incremental,
+  path:line). Settings > Memory rebuilt. tests/test_memory_core2.py (112, eval 30/30) in SUITES. ZIVA W28 / M20.
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 

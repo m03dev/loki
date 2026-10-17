@@ -120,7 +120,7 @@ const Brain = (function () {
     selected = n; redraw();
     pane.replaceChildren(el("h4", "", n.label), el("span", "brain-group", (graph.groups || {})[n.group] || n.group));
     if (n.detail) pane.append(el("p", "note", n.detail));
-    if (n.group === "memory" && !n.note && n.id !== "hub:memory") pane.append(factTools(n, pane));
+    if (n.group === "memory" && !n.note && n.id !== "hub:memory" && !String(n.id).startsWith("kind:")) pane.append(factTools(n, pane));
     const links = edges.filter(([a, b]) => a === n || b === n).map(([a, b]) => (a === n ? b : a));
     if (n.note) {
       const data = await api("/brain/note?id=" + encodeURIComponent(n.id)).catch(() => null);
@@ -149,6 +149,14 @@ const Brain = (function () {
     const save = el("button", "", "Save change"), forget = el("button", "quiet", "Forget it");
     save.type = forget.type = "button";
     const apply = async (replacement) => {
+      if (n.mem) {   // a memory of the one memory model (engine/memory_core.py)
+        const body = replacement === null ? { action: "forget", id: n.mem } : { action: "edit", id: n.mem, text: replacement.trim() };
+        const r = await api("/memory/core", body).catch(() => null);
+        if (!r || !r.ok) { addNotice((r && r.error) || "Could not change LOKI's memory.", true); return; }
+        addNotice(replacement === null ? "Forgotten (on every linked machine)." : "Memory updated.");
+        load();
+        return;
+      }
       const cur = await api("/memory").catch(() => null);
       const lines = String((cur && cur.memory) || "").split("\n");
       const i = lines.findIndex((l) => l.replace(/^[-*\s]+/, "").trim() === n.detail.trim());

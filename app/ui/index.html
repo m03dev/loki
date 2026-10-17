@@ -183,10 +183,13 @@
         <div id="user-tools" class="lab"></div>
       </section>
       <section data-panel="memory" hidden>
-        <header class="panel-head"><h3>Memory</h3><p class="note">Lasting facts Loki keeps about you and your work.</p></header>
-        <textarea id="memory-text" class="memory" rows="12" aria-label="Memory"></textarea>
-        <div class="right"><button type="button" id="save-memory">Save memory</button></div>
+        <header class="panel-head"><h3>Memory</h3><p class="note">What LOKI remembers about you, your projects, people, preferences, decisions and past work - the same on every linked machine. Check what it learned, undo what it got wrong.</p></header>
         <div id="memory-core" class="lab"></div>
+        <details class="mem-notes">
+          <summary title="Your own notes, always included in every request (and synced to your other machines)">Your notes for LOKI (always included)</summary>
+          <textarea id="memory-text" class="memory" rows="8" aria-label="Your notes for LOKI"></textarea>
+          <div class="right"><button type="button" id="save-memory">Save memory</button></div>
+        </details>
       </section>
       <section data-panel="models" hidden>
         <header class="panel-head"><h3>Local models</h3><p class="note">Models that run on this computer, with no internet.</p></header>

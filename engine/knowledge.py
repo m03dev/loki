@@ -18,7 +18,12 @@ protocol only when Loki needs "what was true before decision X" questions.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import re
+import threading
+import time
 from pathlib import Path
 
 SCHEME = "viking://"
@@ -108,3 +113,224 @@ def default_store(repo: Path, data_dir: Path, workspace: Path) -> LocalViking:
         "skills": [Path(repo) / "skills", data_dir / "vendor"],
         "project": [Path(workspace) / "docs"],
     })
+
+
+# --------------------------------------------------------------------------- project knowledge
+# Session 28: the workspace project's docs and code, indexed INCREMENTALLY so LOKI can answer
+# from them and cite where it read it (path:line). The index lives in
+# harness_data/knowledge/<workspace-hash>.json (local to this machine: each machine indexes its own
+# checkout). refresh() only re-reads files whose size or modification time changed, drops files
+# that are gone, and stops after a time budget (it continues next time), so it can run before
+# requests in the background. The Obsidian vault stays separate (brain.py, read-only).
+
+INDEX_SUFFIXES = {".md", ".txt", ".rst", ".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".yaml", ".yml",
+                  ".toml", ".ini", ".cfg", ".gd", ".go", ".rs", ".java", ".cs", ".c", ".h", ".cpp", ".hpp",
+                  ".sh", ".bat", ".ps1", ".sql", ".tex", ".org", ".json", ".swift", ".kt", ".rb", ".php", ".lua"}
+INDEX_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "env", "dist", "build", ".godot",
+                   "harness_data", ".claude", ".idea", ".vscode", ".next", "target", "vendor", "Library",
+                   ".import", "exports", "export", "out", "coverage", ".pytest_cache", ".mypy_cache"}
+SECRET_FILES = re.compile(r"(^\.env|secret|credential|password|\.pem$|\.key$|id_rsa|id_ed25519|token)", re.I)
+MAX_INDEX_FILES = 3000
+MAX_INDEX_BYTES = 400_000
+MAX_INDEX_CHUNKS = 20_000
+CHUNK_CHARS = 900
+_INDEX_CACHE: dict = {}
+_INDEX_LOCK = threading.Lock()
+
+
+def _chunks(path: Path) -> list:
+    """[(start_line, text)] - Markdown split at headings, code and text in ~900-char windows."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix.lower() == ".html":
+        text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", text, flags=re.S | re.I)
+        text = re.sub(r"<[^>]+>", " ", text)
+    out, buf, start, used = [], [], 1, 0
+    heading = path.suffix.lower() == ".md"
+    for n, line in enumerate(text.split("\n"), 1):
+        if heading and line.startswith("#") and buf and used > 20:
+            out.append((start, "\n".join(buf).strip()))
+            buf, used = [], 0
+        if not buf:
+            start = n
+        buf.append(line)
+        used += len(line) + 1
+        if used >= CHUNK_CHARS and (not line.strip() or used >= CHUNK_CHARS * 2):
+            out.append((start, "\n".join(buf).strip()))
+            buf, used = [], 0
+    if buf and "\n".join(buf).strip():
+        out.append((start, "\n".join(buf).strip()))
+    return [(s, t[:CHUNK_CHARS * 2]) for s, t in out if t.strip()]
+
+
+class ProjectIndex:
+    """An incremental BM25 index of one workspace's docs and code."""
+
+    def __init__(self, workspace: Path, data_dir: Path) -> None:
+        self.root = Path(workspace).expanduser().resolve()
+        key = hashlib.sha1(str(self.root).encode("utf-8", "replace")).hexdigest()[:12]
+        self.path = Path(data_dir) / "knowledge" / ("%s.json" % key)
+        self.busy = False
+
+    def load(self) -> dict:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("workspace") == str(self.root):
+                return data
+        except (OSError, ValueError):
+            pass
+        return {"workspace": str(self.root), "files": {}, "t": 0, "complete": False}
+
+    def _save(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, self.path)
+        _INDEX_CACHE.pop(str(self.path), None)
+
+    def _walk(self):
+        count = 0
+        for dirpath, dirnames, filenames in os.walk(self.root):
+            dirnames[:] = sorted(d for d in dirnames if d not in INDEX_SKIP_DIRS and not d.startswith("."))
+            for name in sorted(filenames):
+                p = Path(dirpath) / name
+                if p.suffix.lower() not in INDEX_SUFFIXES or SECRET_FILES.search(name):
+                    continue
+                yield p
+                count += 1
+                if count >= MAX_INDEX_FILES:
+                    return
+
+    def refresh(self, budget_s: float = 3.0, clock=time.monotonic) -> dict:
+        """Re-read what changed since last time. Returns counts; `complete` False = budget ran out
+        (the next refresh continues where this one stopped)."""
+        if not self.root.is_dir():
+            return {"ok": False, "error": "no such folder: %s" % self.root}
+        try:
+            import memory_core  # pylint: disable=import-outside-toplevel
+            scrub = memory_core.scrub
+        except Exception:  # noqa: BLE001
+            def scrub(text):
+                return text
+        started = clock()
+        data = self.load()
+        files = data.get("files") or {}
+        was_complete = bool(data.get("complete"))
+        seen, added, changed, complete = set(), 0, 0, True
+        total_chunks = sum(len(f.get("chunks") or []) for f in files.values())
+        for p in self._walk():
+            rel = p.relative_to(self.root).as_posix()
+            seen.add(rel)
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            if st.st_size > MAX_INDEX_BYTES:
+                continue
+            old = files.get(rel)
+            if old and old.get("mtime") == st.st_mtime_ns and old.get("size") == st.st_size:
+                continue
+            if clock() - started > budget_s or total_chunks >= MAX_INDEX_CHUNKS:
+                complete = False
+                continue
+            try:
+                pieces = [[s, scrub(t)] for s, t in _chunks(p)]
+            except OSError:
+                continue
+            total_chunks += len(pieces) - len((old or {}).get("chunks") or [])
+            files[rel] = {"mtime": st.st_mtime_ns, "size": st.st_size, "chunks": pieces}
+            if old:
+                changed += 1
+            else:
+                added += 1
+        removed = 0
+        for rel in list(files):
+            if rel not in seen:
+                files.pop(rel)
+                removed += 1
+        data.update(files=files, t=time.time(), complete=complete)
+        if added or changed or removed or not self.path.is_file() or complete != was_complete:
+            self._save(data)
+        return {"ok": True, "added": added, "changed": changed, "removed": removed, "files": len(files),
+                "chunks": sum(len(f.get("chunks") or []) for f in files.values()), "complete": complete}
+
+    def ensure_fresh(self, max_age_s: float = 120.0, background: bool = True) -> None:
+        """Refresh when the index is older than max_age_s - in a background thread by default, so a
+        request never waits on a walk of a big project."""
+        try:
+            age = time.time() - self.path.stat().st_mtime
+        except OSError:
+            age = float("inf")
+        if self.busy or age < max_age_s:
+            return
+
+        def run() -> None:
+            with _INDEX_LOCK:
+                self.busy = True
+                try:
+                    self.refresh()
+                    os.utime(self.path) if self.path.is_file() else None
+                except Exception:  # noqa: BLE001 - the index is a bonus; it must never break a request
+                    pass
+                finally:
+                    self.busy = False
+        if background:
+            threading.Thread(target=run, daemon=True, name="loki-knowledge-index").start()
+        else:
+            run()
+
+    def _bm25(self):
+        import memory_search  # pylint: disable=import-outside-toplevel
+        data = self.load()
+        stamp = (data.get("t"), len(data.get("files") or {}))
+        cached = _INDEX_CACHE.get(str(self.path))
+        if cached and cached[0] == stamp:
+            return cached[1], cached[2]
+        where, docs = [], []
+        for rel, info in sorted((data.get("files") or {}).items()):
+            for line, text in info.get("chunks") or []:
+                where.append((rel, int(line), text))
+                docs.append(memory_search.words(rel.replace("/", " ").replace("_", " ") + " " + text))
+        bm = memory_search.BM25(docs) if docs else None
+        _INDEX_CACHE[str(self.path)] = (stamp, bm, where)
+        return bm, where
+
+    def search(self, query: str, top: int = 4) -> list:
+        """[{path, line, text, score, cite}] best first (BM25), only passages with real evidence."""
+        import memory_search  # pylint: disable=import-outside-toplevel
+        bm, where = self._bm25()
+        q = memory_search.expand(query)
+        if not bm or not where or not q:
+            return []
+        own = len([w for w, wt in q.items() if wt >= 1.0])
+        scored = []
+        for i in range(len(where)):
+            s = bm.score(i, q)
+            if s <= 0:
+                continue
+            cov, hits = memory_search.coverage(bm, i, q)
+            if cov >= 0.4 or hits >= 3 or (own <= 2 and cov >= 0.3):
+                scored.append((s * (0.6 + 0.4 * cov), i))
+        scored.sort(reverse=True)
+        out = []
+        for s, i in scored[:max(1, int(top))]:
+            rel, line, text = where[i]
+            out.append({"path": rel, "line": line, "text": text, "score": round(s, 3), "cite": "%s:%d" % (rel, line)})
+        return out
+
+    def status(self) -> dict:
+        data = self.load()
+        files = data.get("files") or {}
+        return {"workspace": str(self.root), "files": len(files),
+                "chunks": sum(len(f.get("chunks") or []) for f in files.values()),
+                "t": data.get("t", 0), "complete": bool(data.get("complete")), "indexing": self.busy}
+
+
+_INDEXES: dict = {}
+
+
+def project_index(workspace: Path, data_dir: Path) -> ProjectIndex:
+    """One ProjectIndex per (workspace, data folder) per process."""
+    key = (str(Path(workspace).expanduser().resolve()), str(data_dir))
+    if key not in _INDEXES:
+        _INDEXES[key] = ProjectIndex(Path(workspace), Path(data_dir))
+    return _INDEXES[key]

@@ -287,6 +287,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(14
 .spark .spark-empty { stroke: rgba(255,255,255,.15); stroke-dasharray: 3 3; }
 .job-meta.forecast { color: #a9c7e8; }
 
+/* Settings > Memory (memory_panel.js) */
+.mem-today { border: 1px solid rgba(140, 207, 196, .28); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+  background: var(--grad-soft); }
+.mem-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
+.mem-status .note { margin: 0; }
+.mem-kinds { margin-bottom: 12px; }
+.mem-kinds .chip.on { border-color: var(--accent); background: var(--bubble); }
+.mem-icon { min-width: 30px; font-size: 13px; line-height: 1; }
+.mem-kind { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--muted); }
+.mem-kind-preference { color: #f2b880; } .mem-kind-person { color: #c4b5e8; } .mem-kind-project { color: #7fb2e6; }
+.mem-kind-decision { color: #9fd59a; } .mem-kind-profile { color: #8ccfc4; } .mem-kind-lesson { color: #e88a8a; }
+.mem-meta { font-size: 11px; margin: 2px 0 0; }
+.mem-history summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+.mem-knowledge { margin-top: 10px; }
+.mem-notes { margin-top: 14px; }
+.mem-notes summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+
 /* Settings > Play (play_panel.js) */
 .play { display: grid; grid-template-columns: 200px 1fr; gap: 12px; min-height: 420px; }
 .play-list { display: flex; flex-direction: column; gap: 6px; }
