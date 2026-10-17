@@ -11,6 +11,15 @@ Concise dated records of meaningful work. Newest at the top.
 - cli_agents.py: no NUL bytes, long prompts on stdin. creations: /creations/make (image maker direct).
 - forecast.py: TimesFM approved by the owner, installed at start-up. tests/test_job_fixes.py.
 
+## 2026-10-17 - Session 27 (Claude, worktree): LOKI World MMO - engine API, presence, in-app stage 1
+
+- docs/MMO_API.md: the contract for clients (the Godot 4 client the owner chose; the in-app fallback).
+- engine/mmo_state.py + /mmo/* routes: quests = jobs, monsters = failed jobs, loot = creations, NPC
+  classes/levels, hotbar LOKI actions -> real jobs, retry on a stronger model.
+- engine/presence.py + /world/presence, /peer/presence: the owner's avatars and chat between machines.
+- app/ui/mmo/mmo_core.js: Play in Settings > LOKI World (WASD, camera, jump, zones over the bridges).
+- tests/test_mmo.py (77) in SUITES; tests/mmo_preview/ screenshot harness.
+
 ---
 
 ## 2026-10-17 - Session 26 (Claude): Babylon.js world, an island per device, Creations

@@ -102,6 +102,41 @@ watcher makes world pixels one size coarser when frames keep running late and ke
 if it really helped (`World.adaptive = false` pins it). A lost WebGL context (sleep, GPU
 switch) is rebuilt. Lights are ranked so a blocked agent's red light is never the one dropped.
 
+## LOKI World as an MMO (session 27)
+
+The owner wants LOKI World to play like hordes.io. The **game state lives in the engine** and any
+client uses it - the contract is **docs/MMO_API.md**:
+
+- `GET /mmo/state`: your profile (name, class, level, XP, stats), quests = jobs, monsters =
+  failed jobs, loot = creations, NPCs = agents with classes and levels, the 9-slot hotbar.
+- `POST /mmo/skill` (a LOKI action from the hotbar starts a real job), `/mmo/quest/turnin`,
+  `/mmo/monster/defeat`, `/mmo/monster/retry` (the failed job again on a stronger model),
+  `/mmo/profile`, `/mmo/note` - engine/mmo_state.py, progress in `harness_data/.../mmo/profile.json`.
+- `POST /world/presence`: your avatar out, the **other machines' avatars and chat** back. The
+  engines exchange them over the signed peer link (`/peer/presence`, engine/presence.py), so the
+  owner on the Mac and on the PC see each other.
+
+**Clients.** The owner chose a **Godot 4 client** (its own project, never in this repo: a desktop
+app for Steam and a web build inside LOKI's window). Until it lands, the in-app world has the
+first stage as a fallback (`app/ui/mmo/mmo_core.js`): in Settings > LOKI World press **Play**:
+
+| Key | Does |
+| --- | --- |
+| W A S D / arrow up, down | walk (relative to the camera) |
+| drag the mouse, Q / E, arrow left / right | turn the camera |
+| wheel / pinch | zoom (down to 3 in Play) |
+| Space | jump |
+| walk onto a bridge of light at the island's edge | travel to that machine's island (its zone); S turns back |
+| click a machine's name | travel there |
+| Spectate | the old orbiting view, everything as before |
+
+Your character is drawn in the island's style (the agents' body and visor) with a class hat,
+cape and weapon (Warrior helm and sword, Mage hat and staff, Archer hood and bow, Shaman feathers
+and totem); the Mac starts as a Mage, the PC as a Warrior. It walks round the pool, buildings,
+desks, trees, benches and the gallery, never off the island. What it draws comes from pools made
+once (no allocation per frame); `tests/test_mmo.py` guards that. Screenshots:
+`python tests/mmo_preview/shot.py <dir>` (headless Chromium, fake /world data).
+
 ## Godot brief - cancelled
 
 An earlier brief asked Ziva to build this world as a **Godot** client in its own Godot

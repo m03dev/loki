@@ -1,0 +1,8 @@
+/* LOKI World MMO (app/ui/mmo/): the Play / Spectate switch on the world view.
+   The full MMO screen moves to the Godot client (docs/MMO_API.md); this is the in-app fallback. */
+.mmo-toggle { position: absolute; right: 12px; bottom: 12px; z-index: 3; pointer-events: auto; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .14); border-radius: 999px; padding: 5px 12px; font-size: 12px;
+  background: rgba(20, 22, 30, .85); color: #e6ecf5; }
+.mmo-toggle:hover { border-color: #2ee6d6; }
+.world-frame.mmo-on canvas { cursor: crosshair; }
+.world-frame.mmo-on .world-home { display: none; }

@@ -1,0 +1,4 @@
+body { margin: 0; }
+#main { display: none; }
+.world-frame { height: 100vh; border-radius: 0; }
+.world-legend { display: none; }

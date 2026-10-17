@@ -447,6 +447,12 @@ class PeerServer:
             if "apply_update" not in cb:
                 return 404, {"ok": False, "error": "updates are not handled here"}
             return 200, {"ok": True, **cb["apply_update"]()}
+        if method == "POST" and path == "/peer/presence":
+            # LOKI World: the owner's avatar on that machine (position, name, level, chat lines),
+            # answered with this machine's own - display-only, sanitised in presence.py.
+            if "presence" not in cb:
+                return 404, {"ok": False, "error": "presence is not available here"}
+            return 200, {"ok": True, **cb["presence"](origin, data)}
         if method == "GET" and path == "/peer/diagnose":
             # "LOKI on the Mac is not responding": the other machine can see why (read-only,
             # redacted) - a stuck request, the System check, models, memory, the last log lines.

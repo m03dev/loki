@@ -293,7 +293,14 @@ def callbacks(state: Any, agent: Any) -> dict:
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
             "restart": lambda: _restart_soon(state),
+            "presence": _presence_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
+
+
+def _presence_receive(origin: str, data: dict) -> dict:
+    """POST /peer/presence: another machine's avatar for LOKI World (presence.py)."""
+    import presence  # pylint: disable=import-outside-toplevel
+    return presence.HUB.receive(origin, data)
 
 
 def _restart_soon(state: Any) -> dict:

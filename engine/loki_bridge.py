@@ -243,6 +243,11 @@ def world_extras(agent: Any) -> dict:
                                                            for c in made[:5]]}
     except Exception:  # noqa: BLE001
         out["creations"] = {"count": 0, "latest": []}
+    try:   # the MMO: the owner's avatars on the other machines, and the world chat
+        import presence  # pylint: disable=import-outside-toplevel
+        out["presence"] = presence.world_part()
+    except Exception:  # noqa: BLE001
+        out["presence"] = {"players": [], "chat": [], "cursor": 0}
     try:   # the island you stand on is this machine: its name and OS
         import platform  # pylint: disable=import-outside-toplevel
         import peers  # pylint: disable=import-outside-toplevel
@@ -1014,6 +1019,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/update":
             self._send_json(200, {"ok": True, **update_status()})
             return
+        if route.startswith("/mmo/"):   # LOKI World MMO game state (docs/MMO_API.md, engine/mmo_state.py)
+            import mmo_state  # pylint: disable=import-outside-toplevel
+            self._send_json(*mmo_state.route(self.server.state, "GET", route, {}, job_action))
+            return
+        if route == "/world/presence":   # LOKI World MMO: the other machines' avatars + chat
+            import presence  # pylint: disable=import-outside-toplevel
+            try:
+                after = int((parse_qs(urlparse(self.path).query).get("after") or ["0"])[0])
+            except ValueError:
+                after = 0
+            self._send_json(200, presence.HUB.snapshot(after))
+            return
         if route in ("/events", "/world"):
             import events  # pylint: disable=import-outside-toplevel
             state = self.server.state
@@ -1117,6 +1134,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
         if handled is not None:
             self._send_json(*handled)
+            return
+        if route in ("/world/presence", "/world/retry"):
+            self._send_json(*world_action(state, route, data))
+            return
+        if route.startswith("/mmo/"):   # LOKI World MMO game actions (docs/MMO_API.md)
+            import mmo_state  # pylint: disable=import-outside-toplevel
+            self._send_json(*mmo_state.route(state, "POST", route, data, job_action))
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
@@ -1556,6 +1580,25 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def world_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """LOKI World MMO (app/ui/mmo/): POST /world/presence {player, chat?, after} - this machine's
+    avatar, shared with the linked machines (presence.py); POST /world/retry {id, model?} - start
+    a failed job again on a stronger model (the loot of a defeated failure monster). The retry
+    goes through job_action, so the policy decides exactly as for any new job."""
+    import presence  # pylint: disable=import-outside-toplevel
+    if route == "/world/presence":
+        return 200, presence.app_post(data)
+    jobs = state.jobs
+    if jobs is None:
+        return 503, {"ok": False, "error": "Background jobs are not running."}
+    job_id = "".join(ch for ch in str(data.get("id") or "") if ch.isalnum())[:16]
+    try:
+        spec = presence.retry_spec(jobs.store.get(job_id), str(data.get("model") or ""))
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    return job_action(state, "/jobs", spec)
 
 
 def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:

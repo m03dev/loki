@@ -675,8 +675,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (4) Settings > Creations: the red fox from W13 is at the front. Type "a fox asleep in the snow" and press
       Make it; it appears within a few minutes. Click it, then "Make more like this". Screenshots.
       (5) Walk to the creations hall on the island (pink roof): the newest pieces hang there.
+- [ ] **W22 Session 27 on the PC (2026-10-17) - LOKI World MMO: Play, and the Mac seeing the PC.** Restart
+      LOKI (it updates). (1) `ship.py --check`: test_mmo must say 77 passed. (2) Settings > LOKI World >
+      **Play**: you are a Warrior (helm, sword, cape). Walk with WASD, turn with the mouse drag and Q/E, jump
+      with Space, zoom with the wheel. Report fps (the HUD line), whether keys ever get "stuck" or reach the
+      chat box, and if you can walk through anything (pool, houses, trees). Walk onto the bridge of light
+      toward the Mac's island: you should cross to it and back (S turns you round). Screenshot.
+      (3) **Presence with the Mac** (do it together with M14, both in Play at the same time):
+      `curl -H "Authorization: Bearer <harness_data/app/engine.token>" http://127.0.0.1:8767/world/presence`
+      must list a player with `"machine"` = the Mac's name within a few seconds, with `u`/`v` changing as
+      the Mac walks, and `age` under 1 s while it moves. Report the ages you see (relay latency).
+      (4) `GET /mmo/state` (same header): report `welcome` (first time only), `profile.level`, how many
+      `quests` and `monsters`. Do NOT press skill actions unless you mean it - they start real jobs.
 
-- [ ] **W22 Jobs that succeed (2026-10-17).** Every background job had failed (see HANDOFF session 27). After
+- [ ] **W23 Jobs that succeed (2026-10-17).** Every background job had failed (see HANDOFF session 27). After
       LOKI updates: (1) Settings > Creations: Make it "a fox asleep in the snow" (picture) - it must appear as a
       REAL picture within a few minutes; report the time. (2) Start 3 background jobs from the chat ("in the
       background: write a 5-line poem to poem.md", "...research the best free image models and write
@@ -867,6 +879,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       vs WebGL1 - Babylon falls back by itself)? Screenshot. (3) You stand on the Mac's island; the PC is its
       own island out there; click its name to fly there and back. (4) Settings > Creations shows the Mac's
       own creations; make one picture. Report all of it under Reports.
+- [ ] **M14 Session 27 on the Mac (2026-10-17) - LOKI World MMO in WKWebView.** Quit and reopen LOKI.
+      (1) `ship.py --check` (test_mmo 77 passed). (2) Settings > LOKI World > **Play**: you are a Mage
+      (wizard hat, staff). WASD / mouse drag / Q,E / Space / wheel in WKWebView: do all keys work, does any
+      key also type into LOKI's prompt or close Settings? fps (HUD line) and Activity Monitor CPU % while
+      walking. Spectate brings the old view back. Screenshot. (3) Together with W22 (the PC in Play at the
+      same time): `GET /world/presence` on the Mac lists the PC's player (`machine` = the PC's name) with
+      `age` under ~1 s while the PC walks; report the ages. If it stays empty: is the link up (Settings >
+      Machines) and does the PC's LOKI have session 27 (an older one answers /peer/presence with 404)?
 
 ## Needs Mohamed
 

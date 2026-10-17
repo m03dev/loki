@@ -963,7 +963,10 @@ async function fetchWorld() {
   World.fetching = true;
   try {
     const data = await api("/world");
-    if (data && data.ok) { World.data = data; syncAgents(data.agents); renderLegend(); }
+    if (data && data.ok) {
+      World.data = data; syncAgents(data.agents); renderLegend();
+      if (window.MMO) window.MMO.onWorld(data);
+    }
   } catch (_) { /* engine restarting */ }
   World.fetching = false;
   World.lastFetch = performance.now();
@@ -1466,6 +1469,9 @@ function sceneList(view, t, dt, P) {
     if (fl && Math.random() < dt * 5) emit("mist", [Math.cos(fl.a) * (ISLAND + 0.1), -5.4, Math.sin(fl.a) * (ISLAND + 0.1)]);
   }
 
+  // the MMO: you, the other machines' avatars, failure monsters, spell effects (pooled, no garbage)
+  if (view.mmo && view.mmo.active) view.mmo.scene(L, t, dt, P, now);
+
   // particles
   for (const p of World.particles) {
     const k = 1 - p.age / p.life;
@@ -1503,9 +1509,12 @@ function frame(view, now) {
 
   const dt = Math.min(0.1, (now - (view.last || now)) / 1000);
   view.last = now;
-  if (!view.drag && !World.reduced && !view.follow) view.yaw += dt * (view.opts.spin || 0.05);
+  // the MMO (app/ui/mmo/): you walk your own character; the camera follows you, not the orbit
+  const mmo = view.mmo && view.mmo.active ? view.mmo : null;
+  if (!view.drag && !World.reduced && !view.follow && !mmo) view.yaw += dt * (view.opts.spin || 0.05);
   const t = now / 1000;
   stepParticles(dt);
+  if (mmo) mmo.tick(view, dt, now);
 
   // time of day -> palette (subtle; reduced motion keeps it but it only moves with the clock)
   const d = new Date(), hour = World.hour != null ? World.hour : d.getHours() + d.getMinutes() / 60;
@@ -1518,10 +1527,10 @@ function frame(view, now) {
   // camera: orbit round a target that eases onto a followed agent
   const fol = view.follow && World.agents[view.follow];
   if (view.follow && !fol) view.follow = "";
-  const want = fol ? [fol.x, 0.9, fol.z] : view.focus || [0, 0.7, 0];   // view.focus: look at a place
-  const ease = Math.min(1, dt * 3);
+  const want = mmo ? mmo.camTarget : fol ? [fol.x, 0.9, fol.z] : view.focus || [0, 0.7, 0];   // view.focus: look at a place
+  const ease = mmo ? 1 : Math.min(1, dt * 3);   // the MMO smooths its own camera
   view.target = [lerp(view.target[0], want[0], ease), lerp(view.target[1], want[1], ease), lerp(view.target[2], want[2], ease)];
-  if (fol && !view.drag) view.dist = lerp(view.dist, Math.min(view.dist, 9.5), ease * 0.5);
+  if (fol && !view.drag && !mmo) view.dist = lerp(view.dist, Math.min(view.dist, 9.5), ease * 0.5);
   const fov = view.opts.fov || 0.8, target = view.target;
   const eye = [target[0] + Math.cos(view.yaw) * Math.cos(view.pitch) * view.dist, Math.sin(view.pitch) * view.dist + target[1],
     target[2] + Math.sin(view.yaw) * Math.cos(view.pitch) * view.dist];
@@ -1780,6 +1789,7 @@ function drawLabels(view, vp, now) {
     return node;
   };
   const setText = (node, k, text) => { if (node.children[k].textContent !== text) { node.children[k].textContent = text; node.dirty = true; } };
+  const mmo = view.mmo && view.mmo.active ? view.mmo : null;
   for (const [id, a] of Object.entries(World.agents)) {
     const d2 = a.data || {};
     seen.add(id);
@@ -1794,8 +1804,10 @@ function drawLabels(view, vp, now) {
     setText(node, 3, !fresh && a.chatting && Math.floor(now / 900 + a.phase) % 3 !== 0 ? "···" : "");
     node.classList.toggle("speaking", !!fresh);
     node.classList.toggle("selected", id === World.selected);
+    if (mmo) mmo.decorate(node, id, a, now);   // nameplate: level, class, bars
     items.push({ node, x: at[0], y: at[1], depth: at[2] });
   }
+  if (mmo) mmo.labels(view, now, nodeFor, setText, items, seen);   // you, other players, monsters
   if (view.opts.detail) for (const tm of view.teamSpots || []) {
     const key = "team:" + tm.id;
     seen.add(key);
@@ -2025,6 +2037,9 @@ function attachControls(view) {
     delete view.pointers[e.pointerId];
     if (p && !p.moved && e.type === "pointerup" && Object.keys(view.pointers).length === 0) {   // a click: inspect
       const r = c.getBoundingClientRect();
+      if (view.mmo && view.mmo.active && view.mmo.click(view, e.clientX - r.left, e.clientY - r.top)) {
+        view.drag = null; view.pinch = null; return;   // the MMO took it: a target, a monster, another player
+      }
       const id = pickAgent(view, e.clientX - r.left, e.clientY - r.top);
       World.selected = id;
       if (!id) view.follow = "";
@@ -2062,6 +2077,7 @@ function attachControls(view) {
   c.addEventListener("lostpointercapture", (e) => { if (view.pointers[e.pointerId]) end(e); });
   c.addEventListener("dblclick", (e) => {
     const r = c.getBoundingClientRect();
+    if (view.mmo && view.mmo.active) { view.mmo.interact(); return; }   // talk to / attack what you clicked
     const id = pickAgent(view, e.clientX - r.left, e.clientY - r.top);
     World.selected = id; view.follow = id;
     renderLegend(); updateCard(view, true);
@@ -2073,7 +2089,11 @@ function attachControls(view) {
     if (e.key === "+" || e.key === "=") view.dist = Math.max(6, view.dist - 1);
     if (e.key === "-") view.dist = Math.min(28, view.dist + 1);
   });
-  c.addEventListener("wheel", (e) => { e.preventDefault(); view.dist = Math.max(6, Math.min(28, view.dist + e.deltaY * 0.01)); }, { passive: false });
+  c.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const close = view.mmo && view.mmo.active ? 3 : 6;   // third person: you can zoom in close
+    view.dist = Math.max(close, Math.min(28, view.dist + e.deltaY * 0.01));
+  }, { passive: false });
 }
 
 // ---------------------------------------------------------------- the two views
@@ -2096,8 +2116,10 @@ function showWorldPanel() {
     const canvas = document.getElementById("world-panel-canvas");
     World.views.panel = canvas && makeView(canvas, document.getElementById("world-panel-labels"),
       { dist: 17, pitch: 0.5, spin: 0.03, detail: true, pixel: 2, fps: 0 });
-    if (World.views.panel) attachControls(World.views.panel);
-    else if (canvas) canvas.replaceWith(el("p", "note", "This window cannot draw 3D (no WebGL). The list below shows the same agents."));
+    if (World.views.panel) {
+      attachControls(World.views.panel);
+      if (window.MMO) window.MMO.attach(World.views.panel);   // LOKI World as an MMO (app/ui/mmo/)
+    } else if (canvas) canvas.replaceWith(el("p", "note", "This window cannot draw 3D (no WebGL). The list below shows the same agents."));
   }
   fetchWorld();
   setVisible(World.views.panel, true);

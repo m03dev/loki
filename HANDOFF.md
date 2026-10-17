@@ -41,6 +41,38 @@ where missing (LOKI_TIMESFM_APPROVED=0 says no; suites never install). It foreca
 trends) for the forecast_series tool - it does not make jobs succeed; the fixes above do.
 tests/test_job_fixes.py (33).
 
+## Session 27 MMO world (worktree)
+
+The owner: make LOKI World "more like hordes.io ... an actual mmo" (own character, MMO HUD, agents as
+NPCs with levels/classes, jobs as quests, failures as monsters, loot = creations, combat, and the Mac and
+PC seeing each other). Mid-session the owner changed plan: **the MMO client will be a Godot 4 game**
+(own repo; Steam desktop build + a web build inside LOKI's window replacing the Babylon world there).
+So this worktree built the **engine side every client uses** plus the first in-app stage as a fallback.
+
+- **Contract: docs/MMO_API.md** (auth = the bridge's bearer token, loopback Host/Origin rules, polling
+  rates, payloads, coordinates/zones, combat numbers, presence interpolation).
+- **engine/mmo_state.py** + bridge routes `GET /mmo/state`, `POST /mmo/profile|skill|quest/accept|
+  quest/turnin|monster/defeat|monster/retry|note`: quests = jobs, monsters = failed jobs (named from the
+  error, stable spawn), loot = creations (+ lesson scrolls), NPC classes/levels from roles and finished
+  jobs, a 9-slot hotbar whose LOKI actions start real jobs through the bridge's own `job_action` (policy
+  included; same prompts as Settings > Creations). First run turns the owner's past work into XP.
+  Progress: `<DATA_DIR>/mmo/profile.json`.
+- **engine/presence.py** + `POST/GET /world/presence`, `presence` in GET /world, signed
+  `POST /peer/presence` (peers.py route, peer_link callback): one exchange carries both machines'
+  avatars and chat (works over a one-way relay link), pushes only while a world is open (~350 ms moving,
+  2 s idle), back-off for a dead peer, everything sanitised. `/world/retry` = retry without the game.
+- **In-app stage 1** (`app/ui/mmo/mmo_core.js`, `mmo.css`, small guarded hooks in world.js): Settings >
+  LOKI World > Play: WASD/mouse/QE camera, jump, collisions, island edges, bridges of light to the other
+  machines' islands (zones), class avatars, WebAudio beeps; Spectate = the old view. No HUD/combat/
+  presence client in the browser (stopped per the new plan). Pooled drawing, no per-frame allocation.
+- Tests: `tests/test_mmo.py` (77, in SUITES): files/hooks/no-CDN/perf guards, presence over a real
+  signed peer link on loopback (both directions in one call, dedupe, expiry, back-off, wrong secret,
+  old peer 404), game rules, routes with a fake engine and over the real BridgeHTTPServer.
+  Screenshots: `tests/mmo_preview/shot.py` (headless Chromium + SwiftShader; checked babylon + classic).
+- **Not done / needs a machine**: fps of Play on the real Mac/PC; presence between the real Mac and PC
+  has only run on loopback (ZIVA W22/M14 ask for a two-machine `/world/presence` check); the Godot web
+  build needs `.wasm`/`.pck` in UI_TYPES and `'wasm-unsafe-eval'` for its page (see MMO_API.md section 1).
+
 ## Session 26 (2026-10-17, Claude in the cloud): Babylon.js world, one island per device, Creations
 
 - **Babylon.js is LOKI World's engine** (owner's choice, over Godot/Panda3D: it runs inside the app's
