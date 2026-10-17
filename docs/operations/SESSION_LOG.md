@@ -28,6 +28,14 @@ Concise dated records of meaningful work. Newest at the top.
   owner-only Ship it. LOKI keeps an icon that opens it. docs/STUDIO.md.
 - tests/test_studio.py (182) in SUITES. Real machines: ZIVA W35 (PC), M26 (Mac); Needs Mohamed: the NVIDIA key.
 
+## 2026-10-17 - Session 29 (Claude, worktree): research round 3 - what the best personal-AI apps have
+
+- Research: docs/integrations/research-2026-10-17b.md (35 projects/features ranked, sources).
+- Built: message actions (copy/edit/regenerate/branch), rich replies + sandboxed artifacts canvas (HTML/SVG
+  preview, Mermaid vendored, charts, cards, citations), chat export/import (ChatGPT, Claude, Open WebUI,
+  LibreChat, Markdown), prompt library, compare models + Elo, Home Assistant connector (writes ask), weather/
+  news/clock/translate with no key, picture edits (Pillow, rembg add-on, Real-ESRGAN), Settings > Your data
+  (inventory, backup/restore, clear). tests/test_research3.py (154) in SUITES. Real machines: ZIVA W35, M26.
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 
 - E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before

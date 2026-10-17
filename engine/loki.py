@@ -5732,6 +5732,114 @@ async def call_tool(name: str, args: dict) -> str:   # noqa: F811 - records ever
     return result
 
 
+# --- Research round 3 (docs/integrations/research-2026-10-17b.md): what the best personal-AI apps have ------
+# Home Assistant (conn_home.py, writes always ask via policy.ACTION_ALWAYS_ASK["home"]), everyday answers
+# with no key (everyday.py: Open-Meteo weather, RSS news, world clock, translate), picture edits on this
+# computer (image_tools.py: Pillow + the rembg add-on + Real-ESRGAN when installed), and one plain model call
+# per provider for "compare models" (compare.py, routes in assist_api.py). Registration only.
+import conn_home  # noqa: E402
+import everyday  # noqa: E402
+import image_tools  # noqa: E402
+
+
+async def _r3_model_ask(name: str, prompt: str) -> str:
+    """One answer from the provider `name` (no tools, no history) - for side-by-side comparisons."""
+    cfg = MODELS[name]
+    if cfg.base_url.startswith(CLI_AGENT_PREFIX):
+        client = cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
+    else:
+        if not str(cfg.api_key or "").strip() and "11434" not in cfg.base_url:
+            raise ModelUnavailable("%s needs an API key (Settings > Connections)" % name)
+        client = AsyncOpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "none", timeout=MODEL_TIMEOUT_S, max_retries=0)
+    kwargs = {"model": cfg.model, "messages": [{"role": "user", "content": str(prompt)}],
+              "max_tokens": int(os.getenv("LOKI_COMPARE_TOKENS", "1500"))}
+    if "11434" in cfg.base_url:
+        kwargs["extra_body"] = {"think": False}
+    started = time.monotonic()
+    response = await _model_request(client, kwargs, cfg, name)
+    _record_usage(response, kwargs, cfg, started)
+    return structured.strip_thinking(response.choices[0].message.content or "")
+
+
+async def weather_tool(place: str = "", days: int = 3, units: str = "") -> str:
+    return await asyncio.to_thread(everyday.weather, place, days, units)
+
+
+async def news_tool(topic: str = "", limit: int = 8) -> str:
+    return await asyncio.to_thread(everyday.news, topic, limit)
+
+
+async def world_clock_tool(place: str = "") -> str:
+    return await asyncio.to_thread(everyday.clock, place)
+
+
+async def translate_tool(text: str, to: str, source_lang: str = "") -> str:
+    return await everyday.translate(text, to, _port_ask, source_lang)
+
+
+async def edit_image_tool(path: str, action: str = "info", width: int = 0, height: int = 0, box: str = "",
+                          degrees: float = 90, direction: str = "horizontal", to: str = "", quality: int = 82,
+                          scale: int = 2) -> str:
+    """Edit a picture in the workspace; the result is a new file next to it."""
+    try:
+        src = resolve_in_workspace(path)
+        out = await asyncio.to_thread(image_tools.edit, src, action, width, height, box, degrees, direction, to,
+                                      quality, scale)
+    except image_tools.ImageError as exc:
+        return "error: %s" % exc
+    except ValueError as exc:
+        return "error: %s" % exc
+    rel = Path(out["path"]).resolve().relative_to(WORKSPACE.resolve()).as_posix() if out.get("path") else ""
+    return "%s%s" % (out["detail"], (" -> %s" % rel) if rel and action != "info" else "")
+
+
+LOCAL_TOOLS.update({"home": _threaded(conn_home.tool), "weather": weather_tool, "news": news_tool,
+                    "world_clock": world_clock_tool, "translate": translate_tool, "edit_image": edit_image_tool})
+_R3_SCHEMAS = [
+    schema("home", "Your smart home through Home Assistant. Read: action='status' (what is on, unlocked), 'list' "
+           "(domain='light' or a word), 'find' (entity='kitchen'), 'state' (entity='thermostat'), 'history' (entity=, "
+           "hours=). Change (asks the owner first): 'turn_on' / 'turn_off' / 'toggle' with entity= a name or id, and "
+           "optional brightness=0-100, color='warm white', temperature=21; 'call' domain= service= data='{...}' for any "
+           "other service; 'assist' text='...' hands a sentence to Home Assistant's Assist. Example: "
+           "home(action='turn_off', entity='living room lights').",
+           {"action": {"type": "string", "enum": list(conn_home.ACTIONS)}, "entity": {"type": "string"},
+            "domain": {"type": "string"}, "service": {"type": "string"}, "text": {"type": "string"},
+            "brightness": {"type": "integer"}, "color": {"type": "string"}, "temperature": {"type": "number"},
+            "data": {"type": "string"}, "hours": {"type": "integer"}, "limit": {"type": "integer"}}, ["action"]),
+    schema("weather", "The weather now and the next days for a place (free, no key; Open-Meteo). place='Paris' or "
+           "'Springfield, Illinois'; blank = LOKI_HOME_CITY. Copy the ```loki-card block it returns into your reply "
+           "unchanged so the window draws the forecast card.",
+           {"place": {"type": "string"}, "days": {"type": "integer"}, "units": {"type": "string", "enum": ["", "c", "f"]}}),
+    schema("news", "Current headlines with links: topic='electric cars' searches the news; blank = top world stories. "
+           "Cite the links you use.", {"topic": {"type": "string"}, "limit": {"type": "integer"}}),
+    schema("world_clock", "The time and date now in a city (its time zone).", {"place": {"type": "string"}}, ["place"]),
+    schema("translate", "Translate text into a language (to='Spanish', 'Japanese', 'de'...); keeps tone and formatting.",
+           {"text": {"type": "string"}, "to": {"type": "string"}, "source_lang": {"type": "string"}}, ["text", "to"]),
+    schema("edit_image", "Edit a picture in the workspace on this computer; the result is a NEW file next to it. "
+           "action: info | resize (width/height) | crop (box='left,top,right,bottom') | rotate (degrees) | flip "
+           "(direction) | convert (to=png|jpg|webp) | compress (quality, width) | grayscale | thumbnail (width) | "
+           "upscale (scale=2-4) | remove_background (transparent PNG; needs the rembg add-on).",
+           {"path": {"type": "string"}, "action": {"type": "string", "enum": list(image_tools.ACTIONS)},
+            "width": {"type": "integer"}, "height": {"type": "integer"}, "box": {"type": "string"},
+            "degrees": {"type": "number"}, "direction": {"type": "string", "enum": ["horizontal", "vertical"]},
+            "to": {"type": "string"}, "quality": {"type": "integer"}, "scale": {"type": "integer"}}, ["path", "action"]),
+]
+TOOL_SCHEMAS.extend(_R3_SCHEMAS)
+MODEL_TOOL_SCHEMAS.extend(_R3_SCHEMAS)
+MODEL_TOOL_NAMES.update(s["function"]["name"] for s in _R3_SCHEMAS)
+TOOL_CATEGORIES["home"] = ["home"]
+CATEGORY_LABELS["home"] = "Smart home (Home Assistant - reading is free, every change asks)"
+CATEGORIES.setdefault("home", True)
+TOOL_CATEGORIES["everyday"] = ["weather", "news", "world_clock", "translate"]
+TOOL_CATEGORIES["creative"] += ["edit_image"]
+CATEGORY_LABELS["everyday"] = "Everyday (weather, news, time around the world, translation - free, no key)"
+CATEGORIES.setdefault("everyday", True)
+MODIFYING |= {"edit_image"}
+LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("peer_files") + 1:LOCAL_TOOL_PRIORITY.index("peer_files") + 1] = [
+    "home", "weather", "news"]
+# (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)
+
+
 # ---------------------------------------------------------------------------
 # The agent loop: one turn = keep calling tools until the model stops asking.
 # ---------------------------------------------------------------------------

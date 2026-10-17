@@ -999,6 +999,29 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       switched to Chromium and show numbered elements). Report both.
       (9) Files on my machines (needs the Mac linked): "list the files in Home on the Mac" -> peer_files. Report.
 
+- [ ] **W37 Research round 3 on the PC (2026-10-17, session 29).** HANDOFF "Session 29 research round 3
+      (worktree)", docs/integrations/research-2026-10-17b.md. After LOKI updates (Pillow installs from requirements):
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - new suite test_research3 (say whether its
+      headless-Chromium window checks ran).
+      (2) In WebView2: ask "draw a flowchart of making tea as a mermaid diagram" -> the diagram is DRAWN in the
+      reply (white box); ask "make a small HTML page with a button that counts clicks" -> Preview opens the
+      canvas on the right and the button counts. Screenshot both. Hover a message: Copy / Edit / Regenerate /
+      Branch with tooltips; try Edit and Branch once and say what happened.
+      (3) Chat menu (... top right) > Import chats: pick a ChatGPT export's conversations.json if Mohamed has one
+      (else export this chat as JSON and import that) - the file picker must open in WebView2. Export as a web page:
+      exports/<name>.html opens in a browser.
+      (4) /weather (set LOKI_HOME_CITY or say a city), /news, /time Tokyo, /translate Spanish: good morning -
+      real Open-Meteo / Google News / model answers; screenshot the weather card.
+      (5) Chat menu > Compare models: local + one free cloud model, "explain DNS in two sentences", vote once,
+      then Leaderboard.
+      (6) Settings > Add-ons > rembg > Install; then "remove the background of <a photo in the workspace>" ->
+      <name>-nobg.png is transparent; time the first run (model download ~170 MB). Optional: put
+      realesrgan-ncnn-vulkan on PATH and "upscale photo.png 4x" - say which path ran (Real-ESRGAN or Lanczos).
+      (7) Settings > Your data: Back up now (without keys) -> a zip in C:\Users\macul\LOKI Backups; check it holds
+      no .env; Restore it (restart after) and confirm chats are still there.
+      (8) Home Assistant only if Mohamed has one (Needs Mohamed): Settings > Tools > Home, address + token, Test;
+      "which lights are on?" then "turn off <a light>" -> the approval prompt MUST appear.
+
 - [ ] **W29 Talk to LOKI from Telegram + the mic button, on the PC (2026-10-17, session 28).** The PC is the
       machine that answers Telegram (LOKI_TELEGRAM_POLL=auto -> the Windows PC). Tested in the cloud only against
       a fake Telegram server. Needs Mohamed's bot token first (Needs Mohamed: "Telegram bot").
@@ -1662,6 +1685,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      pc ok false, "cannot reach pc at http://127.0.0.1:49952 ([Errno 54] Connection reset by peer)" while
      relay is true, and the island shows "pc offline". Needs the PC to start/update LOKI (then this is the
      first thing to re-run).
+- [ ] **M28 Research round 3 on the Mac (2026-10-17, session 29).** Same as W35 (1)-(7) in WKWebView. Watch
+      especially: the sandboxed iframes (diagram + preview) render in WKWebView; the Import file picker opens;
+      `confirm()` / `prompt()` dialogs appear (prompt library blanks, Save preview, Restore); clipboard Copy works;
+      links in replies open in Safari, not inside LOKI's window. rembg on Apple Silicon (onnxruntime CPU) - time it.
+
 - [ ] **M21 The mic button and spoken replies in WKWebView; Telegram stays quiet on the Mac (2026-10-17,
       session 28).** (1) Rebuild Loki.app (`tools/macos/make_loki_app.sh`) - its Info.plist now has
       NSMicrophoneUsageDescription; without it macOS refuses (or kills) microphone access. Open LOKI from Loki.app.
@@ -1727,6 +1755,9 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       NVIDIA NIM**. Do it on both the PC and the Mac. Nothing else: LOKI
       then routes chat, jobs, teams and its own improvements to it, about 40 requests a minute, with every other
       provider as the fallback; LOKI Studio uses it too. Then Ziva runs W35 / M26.
+- [ ] **Home Assistant (2026-10-17, research round 3) - optional.** If you use Home Assistant: its address
+      (e.g. http://homeassistant.local:8123) and a long-lived token (HA profile > Security > Long-lived access
+      tokens) go in Settings > Tools > Home on the PC. Then LOKI can see and switch your devices (every change asks).
 
 - [ ] **Telegram bot (2026-10-17) - talk to LOKI from your phone.** In Telegram, open **@BotFather**, send
       `/newbot`, pick a name and a username ending in "bot". It gives you a token (digits:letters). Paste it in

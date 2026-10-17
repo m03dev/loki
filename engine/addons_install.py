@@ -24,6 +24,8 @@ PIP: dict = {
     "whisper": ["faster-whisper"],
     # session 28: a real Chromium for browse_page (Playwright; the browser itself comes from POST_INSTALL)
     "chromium": ["playwright"],
+    # research round 3: remove a picture's background on this computer (engine/image_tools.py)
+    "rembg": ["rembg[cpu]"],
 }
 # add-on name -> {sys.platform: [pip requirements]} where only some machines need a package
 PIP_PLATFORM: dict = {

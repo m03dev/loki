@@ -112,6 +112,59 @@ exact reasoning field and 429 body/headers are from build.nvidia.com's docs and 
 40/min figure per account; pywebview windows on Windows/macOS (Studio's window only ran in headless Chromium); the
 Studio icon in LOKI's real window; Loki Studio.cmd / LOKI Studio.app; a pin refresh with the real test_studio in a
 real checkout; the stdio MCP server inside Claude Code/Codex. -> ZIVA W35 (PC), M26 (Mac). Needs Mohamed: the NVIDIA key.
+Last updated: 2026-10-17 (session 29, Claude in the cloud; research round 3 worktree).
+
+## Session 29 research round 3 (worktree)
+
+The owner: "keep researching, downloading and installing new features ... a useful app that can help people and can
+turn into anything". Research: what the best personal-AI apps of October 2026 (Open WebUI, LibreChat, Msty, Cherry
+Studio, Lobe Chat, Khoj, Jan, OpenClaw, Leon, Goose ...) give ordinary people that LOKI lacked - ranked table of 35
+with sources in **docs/integrations/research-2026-10-17b.md**. Built in a Claude worktree, committed there, not
+pushed. **tests/test_research3.py (154 offline checks, in SUITES)**; screens `docs/operations/screens/research3-*.png`.
+
+- **Message actions** (`engine/chat_plus.py`, `app/ui/chat_plus.js`): Copy on every message; Edit & send again
+  (yours); Regenerate and Branch from here (LOKI's). Edit/regenerate cut the stored chat before that message and
+  resend through /chat; branch = a new chat up to there (original kept). Found by text + occurrence; 409 while busy.
+- **Rich replies + artifacts** (`app/ui/artifacts.js` replaces app.js's global `renderMarkdown`, same escaping
+  contract; `engine/artifacts.py`): tables, task lists, quotes, links (open in the browser via /open), [n]
+  citations that jump to the reply's n-th link, code blocks with language + Copy; ```html/```svg get **Preview**
+  in a canvas beside the chat (Save -> workspace artifacts/<name>.html, later versions .v2 ...); ```mermaid is
+  drawn in place; ```chart (JSON: type bar|line|pie|donut, labels, data/series) drawn as SVG; ```loki-card
+  (weather/news/clock) drawn as cards. Pages run at `GET /artifact/<id>` (no token; host-checked) in
+  `sandbox="allow-scripts"` frames with their own CSP (`sandbox allow-scripts`, `connect-src 'none'`); the window's
+  UI_CSP is unchanged. Mermaid 11.16.1 vendored in `app/ui/vendor/mermaid/` (MIT, loaded only inside the frame).
+- **Export / import chats** (`engine/chat_io.py`): Markdown, standalone page, JSON (exports/ in the workspace);
+  import ChatGPT (mapping graph, current_node branch), Claude, Open WebUI, LibreChat, LOKI, Markdown/`User:`.
+  `/convo/import` and `/artifact` read bodies up to 150 MB / 4 MB (the bridge's 32 KB limit stays for the rest).
+- **Prompt library** (`engine/prompt_library.py`; book button in the message box; `/p name`, `/prompts`): 12
+  starters, `{{blank|default}}`, `{{date}} {{time}} {{weekday}} {{clipboard}}`; own prompts in DATA_DIR/prompts.json.
+- **Compare models** (`engine/compare.py`; chat menu or `/compare`): 2-4 ready models answer the same message side
+  by side (no tools, `loki._r3_model_ask`), vote -> Elo leaderboard in DATA_DIR/arena.json.
+- **Home Assistant** (`engine/conn_home.py`, connector `home`, registered in connectors.py, tool category `home`): status/list/find/state/
+  history; turn_on/off/toggle (brightness, colour, temperature), call, assist - by friendly name. Writes are in
+  `policy.ACTION_ALWAYS_ASK["home"]` (always ask, never in jobs); hidden from the model until HA_URL + HA_TOKEN.
+- **Everyday** (`engine/everyday.py`, category `everyday`): `weather` (Open-Meteo, no key, °F in the US),
+  `news` (Google News RSS / BBC), `world_clock`, `translate` (model or LOKI_LIBRETRANSLATE_URL); `/weather`,
+  `/news`, `/time`, `/translate Spanish: text` render cards without a model.
+- **Picture edits** (`engine/image_tools.py`, tool `edit_image`): info, resize, crop, rotate, flip, convert,
+  compress, grayscale, thumbnail, upscale (Real-ESRGAN ncnn if on PATH / LOKI_REALESRGAN, else Lanczos),
+  remove_background (new add-on `rembg`, pip `rembg[cpu]`). Always a NEW file. **Pillow added to requirements.txt.**
+- **Settings > Your data** (`engine/your_data.py`, `app/ui/data_panel.js`): sizes of everything LOKI keeps,
+  which providers got messages in 30 days (from usage.jsonl), backup zip (no .env unless ticked; no venv/models/
+  installed programs; LOKI's own tools kept) to ~/LOKI Backups (LOKI_BACKUP_DIR), restore (manifest, no escaping
+  paths/links, safety backup first), clear logs/previews/computer log/usage/chats.
+- **Where it is wired:** loki.py one registration block before the agent loop; loki_bridge.py three route blocks
+  (`/artifact/<id>` page, big-body POSTs, GET/POST to `engine/assist_api.py`); policy.py one dict entry;
+  connectors.py one import; addons_install.py one PIP entry; index.html 1 stylesheet + 3 scripts + the Your data
+  tab; app.js untouched (chat_plus.js wraps the global addUser/addLoki; data_panel.js adds icons to ICON_PATHS).
+- **Verified here (Linux cloud box):** every engine module with fakes; real Pillow; every route on the real
+  BridgeHTTPServer; the window in headless Chromium against the real bridge - Mermaid really draws in its frame,
+  the preview's own script runs, the frames cannot read the window, prompt blanks fill, compare + vote, Your data.
+- **NOT verified (ZIVA W35 PC, M26 Mac; Needs Mohamed for HA):** real Open-Meteo / Google News / LibreTranslate /
+  Home Assistant / models (the sandbox cannot reach them), rembg and Real-ESRGAN for real, WebView2/WKWebView:
+  sandboxed iframes, the Import file picker, confirm()/prompt() dialogs, clipboard.
+- **Next (from the table):** a global quick-launch hotkey ("Spotlight for LOKI", Khoj Mini), clipboard history
+  (opt-in), job-finished notifications, a hands-free voice mode with Pipecat's Smart Turn, a screenshot button.
 
 ## Session 28 task success (worktree)
 

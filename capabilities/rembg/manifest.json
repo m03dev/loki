@@ -1,0 +1,19 @@
+{
+  "name": "rembg",
+  "version": "0.1.0",
+  "kind": "model",
+  "description": "Remove the background from a picture on this computer: ask LOKI \"remove the background of photo.jpg\" (the edit_image tool) and you get a transparent PNG next to it. rembg with its u2net/isnet/birefnet ONNX models; the model downloads once (~170 MB, to ~/.u2net). Nothing is uploaded.",
+  "license": "MIT",
+  "homepage": "https://github.com/danielgatis/rembg",
+  "permissions": [
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [
+    "rembg"
+  ],
+  "health_endpoint": "",
+  "entrypoint": "image_tools.edit"
+}

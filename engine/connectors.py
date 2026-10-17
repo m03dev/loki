@@ -53,7 +53,8 @@ def _load_all() -> None:
     import conn_google  # noqa: F401  pylint: disable=import-outside-toplevel
     import conn_notes  # noqa: F401  pylint: disable=import-outside-toplevel
     import conn_peer_files  # noqa: F401  pylint: disable=import-outside-toplevel
-    for mod in (conn_google, conn_email, conn_calendar, conn_github, conn_notes, conn_peer_files):
+    import conn_home  # noqa: F401  pylint: disable=import-outside-toplevel - research round 3: Home Assistant
+    for mod in (conn_google, conn_email, conn_calendar, conn_github, conn_notes, conn_peer_files, conn_home):
         if mod.SPEC["id"] not in _MODULES:
             register(mod)
     for mod in _settings_cards():

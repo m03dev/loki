@@ -899,6 +899,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         route = urlparse(self.path).path
+        if route.startswith("/artifact/"):   # research round 3: a chat preview page, sandboxed (engine/assist_api.py)
+            import assist_api  # pylint: disable=import-outside-toplevel
+            assist_api.serve_artifact(self, route, ALLOWED_HOSTS)
+            return
         if self._serve_ui(route):
             return
         if self._serve_game(route):
@@ -931,6 +935,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(*tools_api.handle(self.server.state, "GET", self.path, {}))
             except Exception as exc:  # noqa: BLE001 - one broken card must not break Settings
                 self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
+        import assist_api  # pylint: disable=import-outside-toplevel - research round 3 (chats, prompts, compare, data)
+        if assist_api.handles(route):
+            self._send_json(*assist_api.route(self.server.state, "GET", self.path, {}))
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
@@ -1219,6 +1227,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         route = urlparse(self.path).path
+        if route in ("/convo/import", "/artifact"):   # research round 3: chat exports / previews are big bodies
+            import assist_api  # pylint: disable=import-outside-toplevel
+            body = assist_api.read_json(self)
+            if body is not None:
+                self._send_json(*assist_api.route(self.server.state, "POST", self.path, body))
+            return
         data = self._read_json()
         if data is None:
             return
@@ -1245,6 +1259,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(*tools_api.handle(state, "POST", self.path, data))
             except Exception as exc:  # noqa: BLE001 - one broken card must not break Settings
                 self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
+        import assist_api  # pylint: disable=import-outside-toplevel - research round 3 (chats, prompts, compare, data)
+        if assist_api.handles(route):
+            self._send_json(*assist_api.route(state, "POST", self.path, data))
             return
         if route in ("/world/presence", "/world/retry"):
             self._send_json(*world_action(state, route, data))

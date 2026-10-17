@@ -55,6 +55,7 @@ ACTION_ALWAYS_ASK: dict[str, set] = {
     "github": {"create_issue", "comment", "close_issue", "create_pr"},
     "notes": {"write", "append"},
     "peer_files": {"write"},
+    "home": {"turn_on", "turn_off", "toggle", "call", "assist"},   # Home Assistant (conn_home.py, research round 3)
 }
 # conductor(role=...) - checked per role by conductor.Conductor.pick, which asks capability()
 # conductor roles whose url= is a workspace path, not a web address.

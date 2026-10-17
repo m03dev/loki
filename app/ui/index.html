@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/ui/glass.css">
 <link rel="stylesheet" href="/ui/mmo/mmo.css">
 <link rel="stylesheet" href="/ui/automations.css">
+<link rel="stylesheet" href="/ui/research3.css">
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
@@ -31,6 +32,9 @@
 <script src="/ui/channels.js" defer></script>
 <script src="/ui/automations.js" defer></script>
 <script src="/ui/studio_link.js" defer></script>
+<script src="/ui/artifacts.js" defer></script>
+<script src="/ui/chat_plus.js" defer></script>
+<script src="/ui/data_panel.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -145,6 +149,7 @@
         <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
         <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
         <button type="button" role="tab" data-tab="usage" aria-selected="false"><span class="ico" aria-hidden="true">$</span>Usage</button>
+        <button type="button" role="tab" data-tab="data" aria-selected="false"><span class="ico" aria-hidden="true">▤</span>Your data</button>
       </div>
       <button type="button" id="close-settings" class="quiet close-settings" aria-label="Close settings">Close</button>
     </nav>
@@ -212,6 +217,10 @@
         <header class="panel-head"><h3>Usage</h3><p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p></header>
         <div id="usage-panel"></div>
         <div class="right"><button type="button" id="usage-reset" class="quiet">Reset usage</button></div>
+      </section>
+      <section data-panel="data" hidden>
+        <header class="panel-head"><h3>Your data</h3><p class="note">What LOKI keeps on this computer and where, which model providers got your messages, backups you can restore, and clearing what you do not want kept.</p></header>
+        <div id="data-panel" class="data-panel"></div>
       </section>
       <section data-panel="machines" hidden>
         <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
