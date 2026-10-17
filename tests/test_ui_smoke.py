@@ -65,7 +65,7 @@ async def main() -> None:
                 f = UI / path[4:]
                 if f.is_file():
                     return await r.fulfill(path=str(f))
-                if path in ("/ui/error", "/ui/ready"):
+                if r.request.method != "GET" or path in ("/ui/error", "/ui/ready", "/ui/timing"):   # engine endpoints
                     ui_posts.append((path, r.request.post_data))
                     return await r.fulfill(json={"ok": True})
                 missing.append(path)

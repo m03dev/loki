@@ -1,5 +1,23 @@
 # LOKI on the phone
 
+> **Today, talk to LOKI from your phone with Telegram** (session 28, EVOLVE E10). The phone
+> app below (`mobile/`, branch `claude/phone`) has never been built or run on a phone and is
+> parked; Telegram covers "talk to LOKI from my phone" now, from anywhere (not only your Wi-Fi):
+>
+> 1. In Telegram, open **@BotFather**, send `/newbot`, pick a name; it gives you a token.
+> 2. LOKI > Settings > General > **Telegram bot token**: paste it (a secret setting - saved in
+>    `harness_data/.env`, never shown again).
+> 3. Press **Pair my phone** in the card under it, then open the t.me link (or scan its QR, or
+>    send `/start <code>` to your bot). From then on only that chat is answered.
+>
+> Messages become LOKI chats (Ask mode; `LOKI_CHANNEL_MODE=plan` lets it read and look things
+> up - never Build, and a Telegram message can never approve anything). Long answers are
+> split; pictures LOKI makes come back as photos. Commands: `/make <what>` (a picture),
+> `/jobs`, `/stop`, `/help`. Voice notes work when Whisper is installed (Settings > Add-ons >
+> whisper). Only the Windows PC answers by default (`LOKI_TELEGRAM_POLL=auto`), so the Mac and
+> the PC never both reply; set it `on` on the Mac and `off` on the PC to answer from the Mac.
+> Code: `engine/channels.py`, `engine/channel_telegram.py`; tests: `tests/test_channels.py`.
+
 The owner asked for "an iOS and Android version, and a phone-local model - these super small
 ones". What is built: **one app for iPhone and Android** (`mobile/`, Expo / React Native)
 that chats with **LOKI on your Mac or PC when it can reach it**, and with **a small model on

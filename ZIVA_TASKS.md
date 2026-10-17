@@ -874,6 +874,27 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       lines. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (two new suites:
       test_update_overhaul, test_ui_smoke - the smoke test skips without Playwright; say if it skipped).
 
+- [ ] **W29 Talk to LOKI from Telegram + the mic button, on the PC (2026-10-17, session 28).** The PC is the
+      machine that answers Telegram (LOKI_TELEGRAM_POLL=auto -> the Windows PC). Tested in the cloud only against
+      a fake Telegram server. Needs Mohamed's bot token first (Needs Mohamed: "Telegram bot").
+      (1) `ship.py --check`: report the test_channels line. (2) Settings > General: the "Telegram bot token" field
+      says "saved"; the card under it says "Bot: @<name>", "This machine answers: yes", "Listening for
+      messages". Press "Check the bot". (3) Mohamed presses "Pair my phone" and opens the t.me link on his phone
+      (or sends `/start <code>`): the card must turn to "Paired with ...". From another Telegram account (if
+      handy), the bot must say only "This is a private LOKI bot." once. (4) From the phone: a question (answer
+      comes back; a long one in several messages), `/jobs`, `/make a red fox asleep in the snow` (the photo
+      arrives when zimage is done - report the minutes), `/stop` during a long answer. (5) Settings > Add-ons >
+      whisper > Install (faster-whisper), restart LOKI, send a Telegram voice note: "Heard: ..." then the answer.
+      (6) `findstr /C:"<the digits before the colon of the token>" harness_data\app\engine.out` must find
+      NOTHING (the token is never logged). (7) The mic in the message box (WebView2): hover shows the "Talk"
+      tooltip; hold it, say a sentence, let go: the words appear in the box (Whisper). WebView2 must ask once
+      for the microphone (say Allow); if it never asks and fails, report the exact notice - and check Windows
+      Settings > Privacy & security > Microphone > "Let desktop apps access your microphone". Before Whisper is
+      installed, press the mic once and report what happens (WebView2's own speech recognition usually has no
+      speech service: the notice must point to Add-ons > whisper). (8) The speaker button next to the mic: on,
+      ask something - the reply is read aloud (the window's voice; Kokoro when `pip install kokoro soundfile`
+      is in the venv). Screenshot docs/operations/screens/voice-windows.png. Report under Reports.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -1258,7 +1279,28 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      - Bonsai 2 with /no_think (a 3-message chat + a background job): NOT DONE - Ollama was not running on this
      Mac this session (and Bonsai 2 is the PC's model; the Mac's local model is the Ollama qwen3:8b, which
      answered a chat in ~30 s at 1.4 tok/s).
+- [ ] **M21 The mic button and spoken replies in WKWebView; Telegram stays quiet on the Mac (2026-10-17,
+      session 28).** (1) Rebuild Loki.app (`tools/macos/make_loki_app.sh`) - its Info.plist now has
+      NSMicrophoneUsageDescription; without it macOS refuses (or kills) microphone access. Open LOKI from Loki.app.
+      (2) Message box: hover the mic (tooltip "Talk"), hold it and talk. macOS should ask once for Loki's
+      microphone, and WKWebView may ask "allow 127.0.0.1 to use your microphone" (each launch, unless pywebview
+      answers it - report which prompts you saw and whether a second press asks again). Without Whisper: Web
+      Inspector console `typeof webkitSpeechRecognition` - report it; the mic must either use it or say how to
+      install Whisper (never a silent failure). (3) Settings > Add-ons > whisper > Install, restart, hold the mic:
+      the words appear in the box; report how long a 5-second sentence takes on the M-series CPU. (4) The speaker
+      button: replies are read aloud (speechSynthesis; Kokoro if installed). (5) Telegram (after the PC is paired,
+      W27): Settings > General card on the Mac says "This machine answers: no - auto: only the Windows PC
+      answers", and a Telegram message is answered exactly once (by the PC). Screenshot
+      docs/operations/screens/voice-mac.png. Report under Reports.
+
 ## Needs Mohamed
+
+- [ ] **Telegram bot (2026-10-17) - talk to LOKI from your phone.** In Telegram, open **@BotFather**, send
+      `/newbot`, pick a name and a username ending in "bot". It gives you a token (digits:letters). Paste it in
+      LOKI on the **PC**: Settings > General > "Telegram bot token" (it is saved in harness_data/.env, never
+      shown again - do not paste it anywhere else, not here). Then press "Pair my phone" in the card under it
+      and open the t.me link on your phone (or send the bot `/start <code>`). Only your chat is answered.
+      Then Ziva runs W27.
 
 - [ ] **Framepipe repo name (2026-10-16).** Claude could not find a "framepipe" repository among
       the ones this account can reach. What is its exact GitHub name (owner/repo)?

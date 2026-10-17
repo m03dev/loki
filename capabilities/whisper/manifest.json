@@ -1,0 +1,19 @@
+{
+  "name": "whisper",
+  "version": "0.1.0",
+  "kind": "model",
+  "description": "Whisper speech to text on this computer: talk to LOKI with the mic button in the message box, and send Telegram voice notes. faster-whisper (installed here; the model downloads once, ~145 MB for base) or whisper.cpp (set LOKI_WHISPER_CPP to whisper-cli and put a ggml model in harness_data/models/whisper/). Nothing you say leaves the computer.",
+  "license": "MIT",
+  "homepage": "https://github.com/SYSTRAN/faster-whisper",
+  "permissions": [
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [
+    "faster_whisper"
+  ],
+  "health_endpoint": "",
+  "entrypoint": "voice_input.transcribe"
+}

@@ -70,6 +70,12 @@ GENERAL = {
                      "label": "Offer 3-4 readings of an open request before starting (auto: only when it looks open)"},
     "HIGGSFIELD_KEY": {"kind": "secret", "default": "",
                "label": "Higgsfield key for images and video (KEY:SECRET from cloud.higgsfield.ai)"},
+    "LOKI_TELEGRAM_TOKEN": {"kind": "secret", "default": "",
+                            "label": "Telegram bot token: talk to LOKI from your phone (make a bot with @BotFather, paste its token, then pair below)"},
+    "LOKI_TELEGRAM_POLL": {"kind": "choice", "default": "auto", "choices": ["auto", "on", "off"],
+                           "label": "This machine answers Telegram (auto: only the Windows PC, so your two machines never both reply)"},
+    "LOKI_CHANNEL_MODE": {"kind": "choice", "default": "ask", "choices": ["ask", "plan"],
+                          "label": "Messages from Telegram run in: ask = answer only; plan = may read and look things up (never changes anything)"},
 }
 
 
@@ -281,6 +287,9 @@ def _apply_live(agent: Any, updates: dict) -> None:
         agent.SELF_SHIP = updates["LOKI_SELF_SHIP"]
     if "LOKI_PREFER" in updates and hasattr(agent, "PREFER"):
         agent.PREFER = updates["LOKI_PREFER"]
+    for key in ("LOKI_TELEGRAM_POLL", "LOKI_CHANNEL_MODE"):   # engine/channels.py reads these live
+        if key in updates:
+            os.environ[key] = updates[key]
 
 
 def launch_agent(state: Any, data: dict, job_action) -> tuple:

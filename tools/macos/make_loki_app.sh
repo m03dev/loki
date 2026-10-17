@@ -57,6 +57,8 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>NSMicrophoneUsageDescription</key><string>Loki listens while you hold the mic button, to turn your speech into a message.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Loki turns your speech into a message when local Whisper is not installed.</string>
 </dict>
 </plist>
 PLIST

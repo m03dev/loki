@@ -21,6 +21,7 @@ PIP: dict = {
     "vision-track": ["trackers", "supervision", "rfdetr"],
     "media": ["yt-dlp[default]"],
     "mlx": ["mlx-lm"],
+    "whisper": ["faster-whisper"],
 }
 
 # add-on name -> how to install what pip cannot (shown to the owner, not run)

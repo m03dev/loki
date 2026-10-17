@@ -15,6 +15,17 @@ Concise dated records of meaningful work. Newest at the top.
   3-job self-test on the PC (engine/selftest.py), checked from files, regressions flagged.
 - tests/test_self_systems.py (120) incl. autopilot -> evolve -> improve_loki -> run_job -> check_loki -> ship proof.
   Screenshots via tests/lab_preview/shot.py. Real machines: ZIVA W27 (PC), M19 (Mac).
+## 2026-10-17 - Session 28 (Claude, worktree): talk to LOKI from anywhere - Telegram + voice
+
+- EVOLVE E10: engine/channels.py (pairing with a one-time code, owner-only private chat, Ask/Plan via
+  phone_link.chat_once with approvals denied, /jobs /make /stop /help, splitting, photos, rate limits, token
+  redaction, one machine polls: LOKI_TELEGRAM_POLL auto = the PC) + engine/channel_telegram.py (stdlib Bot API,
+  long poll, multipart photos, voice notes). Settings > General: token (secret), poll, mode + pairing card.
+- EVOLVE E7: engine/voice_input.py (faster-whisper / whisper.cpp, WAV upload, spoken replies via voice.speak),
+  app/ui/voice.js (mic push-to-talk + speaker toggle, data-icon tooltips; webview speech recognition fallback),
+  whisper add-on, CSP media-src, Loki.app NSMicrophoneUsageDescription. Discord not built (needs a gateway).
+- tests/test_channels.py (fake Telegram on loopback) in SUITES; tests/voice_preview/shot.py (headless Chromium,
+  fake mic -> WAV -> text). Real machines: ZIVA W27 (PC), M19 (Mac); Needs Mohamed: a bot from @BotFather.
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 

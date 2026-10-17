@@ -105,6 +105,7 @@ async function loadGeneral() {
     card.append(text, control);
     box.append(card);
   }
+  if (window.Channels) Channels.render(box);   // Telegram pairing under its token (channels.js)
 }
 
 // ---------------------------------------------------------------- Connections portal

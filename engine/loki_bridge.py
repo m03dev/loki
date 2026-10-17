@@ -196,7 +196,7 @@ UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
             ".json": "application/json; charset=utf-8",
             # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
             ".wasm": "application/wasm", ".pck": "application/octet-stream"}
-UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data: blob:; "
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # The Godot world page only: WebAssembly needs 'wasm-unsafe-eval' (not 'unsafe-eval' - no JS eval),
 # and LOKI's own window frames it (same origin). Every other UI page keeps UI_CSP.
@@ -468,6 +468,7 @@ class BridgeState:
         self.brain: dict[str, Any] = {}  # last brain-map graph (its note ids are the only readable files)
         self.peer_server: Any = None  # peers.PeerServer when this machine listens for your other machines
         self.phone_server: Any = None  # phone_link.PhoneServer when the phone app may talk to this machine
+        self.channels: dict[str, Any] = {}  # channels.Channel per chat app (Telegram), started at boot
 
     def try_busy(self) -> list | None:
         # acquire both request locks, or None when a request is in flight
@@ -672,6 +673,17 @@ def phone_ui(state: "BridgeState", method: str, route: str, data: dict[str, Any]
     except Exception as exc:  # noqa: BLE001
         return 500, {"ok": False, "error": f"phone link failed: {type(exc).__name__}: {exc}"}
     return result if result is not None else (404, {"ok": False, "error": "Unknown endpoint."})
+
+
+def talk_ui(state: "BridgeState", method: str, route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Talking to LOKI: the Telegram channel (engine/channels.py) and voice (engine/voice_input.py)."""
+    try:
+        import channels  # pylint: disable=import-outside-toplevel
+        import voice_input  # pylint: disable=import-outside-toplevel
+        result = channels.ui_route(state, method, route, data) or voice_input.ui_route(state, method, route, data)
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    return result or (404, {"ok": False, "error": "Unknown endpoint."})
 
 
 def initial_ecc_sync(agent) -> None:
@@ -914,6 +926,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/phones"):
             self._send_json(*phone_ui(self.server.state, "GET", route, {}))
+            return
+        if route.startswith("/channels") or route == "/voice":
+            self._send_json(*talk_ui(self.server.state, "GET", route, {}))
             return
         if route == "/connections":
             self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
@@ -1208,6 +1223,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/phones"):
             self._send_json(*phone_ui(state, "POST", route, data))
+            return
+        if route.startswith("/channels") or route.startswith("/voice/"):
+            self._send_json(*talk_ui(state, "POST", route, data))
             return
         if route in ("/teams", "/teams/cancel"):
             runner = getattr(state.agent, "TEAMS", None)
@@ -2352,6 +2370,11 @@ async def serve() -> None:
         state.phone_server = phone_link.start(state, loki)
     except Exception as exc:  # noqa: BLE001 - the phone link is optional; chat must still start
         print(f"[loki-bridge] phone link unavailable: {exc}", flush=True)
+    try:
+        import channels  # pylint: disable=import-outside-toplevel
+        channels.start(state, loki)   # Telegram: idle until a bot token is saved and this machine polls
+    except Exception as exc:  # noqa: BLE001 - channels are optional; chat must still start
+        print(f"[loki-bridge] channels unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
@@ -2393,6 +2416,8 @@ async def serve() -> None:
             state.peer_server.stop()
         if state.phone_server is not None:
             state.phone_server.stop()
+        for channel in (getattr(state, "channels", None) or {}).values():
+            channel.stop()
         server.shutdown()
         server.server_close()
         await stack.aclose()

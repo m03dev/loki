@@ -160,6 +160,63 @@ SUCCEED. Built in a Claude worktree, committed there (not pushed). EVOLVE E6, E8
   qwen3:8b on the PC; the weekly review's model call; first-paint timing in WebView2/WKWebView; TimesFM
   forecasts (only the statistical path ran). The sandbox is a separate process with a static scan, not an OS
   jail - the approval before each call is the real gate.
+Last updated: 2026-10-17 (session 28 channels + voice, Claude worktree).
+
+## Session 28 channels + voice (worktree)
+
+The owner: "keep working and implementing systems" - this one is TALKING TO LOKI from anywhere.
+
+- **Telegram (EVOLVE E10, ticked).** `engine/channels.py` (the channel core) + `engine/channel_telegram.py`
+  (Bot API over stdlib urllib: getMe, long-poll getUpdates with the offset in harness_data/channels/telegram.json,
+  sendMessage, sendPhoto/sendDocument multipart, sendChatAction, setMyCommands, getFile for voice notes).
+  Settings > General: `LOKI_TELEGRAM_TOKEN` (secret kind, like HIGGSFIELD_KEY), `LOKI_TELEGRAM_POLL`
+  (auto|on|off; auto = only the Windows PC polls, so the two machines never both answer; Telegram's 409 for a
+  second poller is reported "set LOKI_TELEGRAM_POLL=off on the other machine"), `LOKI_CHANNEL_MODE` (ask|plan).
+  A card under the token (app/ui/channels.js) shows the bot, who answers, and **Pair my phone**: a one-time
+  8-letter code (15 min, single use) with a t.me deep link + QR; `/start <code>` from a PRIVATE chat pairs
+  that user + chat; wrong codes are limited per chat (5) and in total (20, then the code is burned).
+  Everybody else gets one "This is a private LOKI bot." an hour; groups and bots are ignored.
+  The owner's messages go through `phone_link.chat_once` (the window's agent path, `request_chat`) in
+  Ask/Plan only, every approval denied, one at a time ("still on your last message. /stop stops it").
+  Replies split at 4000 chars (paragraph > line > space; at most 8 pieces), sends spaced ~1 s per chat, 429
+  retry_after honoured; images LOKI made during the answer go back as photos. `/make <prompt>` ->
+  creations.make_image (the image specialist directly) and the photo when it is done; `/jobs`; `/stop`
+  (agent.request_cancel); `/help`. Voice notes are transcribed when Whisper is installed. Limits: 6
+  messages/min, 20 commands/min. The token never reaches a log, the store, /channels or /settings/general
+  (redact() on every error; URLs are never printed). Bridge: `/channels`, `/channels/pair|unpair|test`
+  routes and one startup hook (`channels.start`), stopped on exit.
+- **Voice (EVOLVE E7, ticked).** `engine/voice_input.py`: faster-whisper (Settings > Add-ons > **whisper**,
+  new manifest + `addons_install.PIP["whisper"]`; model `LOKI_WHISPER_MODEL`, default base, int8) or whisper.cpp
+  (`LOKI_WHISPER_CPP` / whisper-cli on PATH + a ggml model in harness_data/models/whisper/; ffmpeg converts
+  non-WAV). `/voice` (status), `/voice/transcribe` (a 16 kHz WAV data URL, <= ~6 min, nothing kept),
+  `/voice/speak` (voice.speak -> a data URL; Markdown/code stripped, <= 1500 chars). `app/ui/voice.js`: a
+  **mic** button (data-icon + tooltip; hold to talk / click to toggle / Esc cancels) that records WAV itself
+  with WebAudio (same bytes from WebView2 and WKWebView) for Whisper, else uses webkitSpeechRecognition when
+  the webview has one, else says how to install Whisper; a **speaker** toggle for spoken replies (Kokoro via
+  the engine when installed, else the window's speechSynthesis, else the OS voice). Permission errors name the
+  exact macOS / Windows privacy setting. UI_CSP gains `media-src 'self' data: blob:` (audio playback);
+  Loki.app's Info.plist gains NSMicrophoneUsageDescription + NSSpeechRecognitionUsageDescription (rebuild with
+  tools/macos/make_loki_app.sh). app.js: one hook (`Voice.afterReply`); settings.js: one (`Channels.render`).
+- **The phone app** (docs/PHONE.md, branch claude/phone) is still not built; PHONE.md now opens with the
+  Telegram way, which covers "talk to LOKI from my phone" from anywhere.
+- **Discord: not built.** A DM-only bot without the Discord gateway cannot see new DMs, Discord wants a bot to
+  identify on the gateway (a websocket) once before it may send, and a bot can only DM users it shares a
+  server with. That needs a websocket client (no stdlib one) - not "clean". The channel core is
+  transport-agnostic (a transport only implements token/fetch/send_text/send_photo/me), so a
+  `channel_discord.py` is one file once a small websocket dependency is acceptable.
+- **Verified here:** tests/test_channels.py (in SUITES) against a fake Telegram Bot API on loopback - pairing,
+  owner-only, strangers/groups/bots, wrong/burned/expired codes, splitting, photos, /jobs /make /stop /help,
+  busy/409/errors, rate limits, 429 retry, 401/409/unreachable, the poll offset, the live poll switch, voice
+  notes, the token absent from logs/status/store/every bridge HTTP answer; voice detection, WAV checks,
+  faster-whisper + whisper.cpp (+ffmpeg) via fakes, spoken replies, the bridge routes over the real
+  BridgeHTTPServer, and the UI hooks. tests/voice_preview/shot.py: headless Chromium with a FAKE microphone -
+  hold the mic 1.6 s -> a 16 kHz WAV (50 KB) -> /voice/transcribe -> the words in the box; the speaker toggle;
+  the "no Whisper, no recognition" notice; screenshots docs/operations/screens/voice-mic-tooltip.png,
+  voice-mic-recording.png, telegram-card.png.
+- **Not verified (needs a real machine/account):** the real Telegram API (no bot token here; ZIVA W27 after
+  Mohamed's @BotFather bot - Needs Mohamed), real faster-whisper/whisper.cpp transcription speed, WebView2's
+  and WKWebView's real microphone prompts, whether WKWebView in pywebview exposes webkitSpeechRecognition and
+  grants getUserMedia (M19), Kokoro spoken replies.
 
 ## Session 27 (cont.): the Mac's white window
 

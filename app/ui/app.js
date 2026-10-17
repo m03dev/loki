@@ -283,7 +283,7 @@ async function send(text, opts) {
     await pollProgress();
     if (data.ok) {
       const reply = String(data.response || "").trim();
-      if (reply) addLoki(reply);
+      if (reply) { addLoki(reply); if (window.Voice) Voice.afterReply(reply); }   // spoken replies (voice.js)
       if (window.Workbench) Workbench.afterReply(data);   // files changed: Review / Rewind
       if (data.usage && typeof showMeter === "function") showMeter(data.usage);
       setStatus("Ready", true);
