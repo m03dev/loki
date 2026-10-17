@@ -4,6 +4,16 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
+
+- game/loki-world: you, islands per device, bridges, flying; cel/ink/pixel look; full MMO HUD; agents as NPCs,
+  jobs as quests, failures as monsters (retry on a stronger model), creations as loot; presence multiplayer;
+  LokiApi net layer on docs/MMO_API.md with derived and offline fallbacks; export presets (single-threaded Web,
+  Windows, macOS, Linux). Godot 4.7.2 built from source here: imports, 107 Godot tests, headless E2E vs the bridge.
+- LOKI hooks: world.js "godot" look (falls back to Babylon), app/ui/world_godot/ (no inline script), bridge
+  .wasm/.pck + 'wasm-unsafe-eval' for that page only, portal choice. tests/test_godot_world.py (84) in SUITES.
+- Real machines: ZIVA W26 (PC: Web + Windows export) and M17 (Mac).
+
 ## 2026-10-17 - Session 27 (Claude): every job failed - fixed
 
 - loki.py: qwen3 /no_think, text tool calls salvaged, role-name tools -> conductor, write_file refuses media,

@@ -23,6 +23,39 @@ keeps text tool calls, `_specialist_made` counts a specialist-written file, and 
 DIRECTLY (POST /creations/make, no model). So I dropped my duplicate patch (no code shipped from this
 session) and VERIFIED the upstream fix on the PC instead: /creations/make made a real 1,056,903-byte PNG
 via zimage. Details, fps and screenshots are in ZIVA_TASKS.md (W21/W23).
+## Session 27 Godot MMO (worktree)
+
+The owner: LOKI World becomes a real MMO "like hordes.io ... mmo everything we can", in **Godot 4**. Built in a
+Claude worktree as **`game/loki-world/`** (AGENTS.md: the one Godot project), GL Compatibility so the desktop and
+web builds look the same. docs/WORLD.md "LOKI World in Godot 4" has the controls, options and export steps.
+
+- **Play:** your own character (class hat + weapon), WASD + mouse orbit camera, jump, click/Tab to target,
+  hotbar 1-9 (Strike, Bolt, Mend, then LOKI actions that start REAL jobs: picture, research, build, video, game,
+  then Hearth), cast bars, cooldowns, damage numbers, XP and level-ups, emotes, day/night from the clock.
+- **World:** this machine's island at home, every linked machine its own island out in the sky, walkable bridges
+  of light, fly via the map (M). LOKI's agents are NPCs at their stations (classes, levels from finished jobs);
+  quests = jobs (turn in at LOKI); failed jobs = monsters (beat one: XP + lesson scroll + "retry on a stronger
+  model"); loot = creations (hung in the creations hall, in the bags); the fox and two rabbits.
+- **HUD:** nameplates with bars, player/target/party frames, minimap + big map, chat (Say via presence, `/l` to
+  LOKI via POST /chat), quest tracker + log, bags, character sheet (name/class), loot window, help, pair window.
+- **Look:** 4-band cel shading with faceted normals, ink outlines (inverted hull; islands bake theirs - 2 draws
+  per island), 1/3 resolution upscaled nearest + posterize/Bayer dither, banded sky, crystals, waterfall.
+- **Net:** `autoload/loki_api.gd` follows docs/MMO_API.md (GET /mmo/state 3 s, /mmo/* actions, /world/presence
+  150 ms/1 s); falls back to deriving the game from /world+/jobs+/creations on an older engine; offline demo
+  world without LOKI. Token: page fragment (web) or LOKI's state folder / --token / Pair (desktop).
+- **Web hook:** Settings > General > LOKI World look = **godot** loads `/ui/world_godot/` in one frame laid over
+  the home background or the LOKI World panel (app/ui/world_godot/host.js; world.js: 4 small hooks); falls back
+  to Babylon when the export is missing. engine/loki_bridge.py serves `.wasm`/`.pck` and gives
+  `'wasm-unsafe-eval'` + same-origin framing ONLY to /ui/world_godot/index.html; portal_api lists "godot".
+- **Verified here:** Godot 4.7.2 built from source (release downloads are blocked here) - the project imports, its
+  own headless tests pass (107), and it plays headless against the REAL bridge (source=engine, quests/monster/loot
+  from fake jobs, presence and chat both ways); screenshots rendered with Mesa llvmpipe under Xvfb (software, ~13
+  fps - not a GPU number). A Linux release export (template built from source too) starts and runs the game.
+  tests/test_godot_world.py (84) is in SUITES; it runs Godot only when one is on PATH
+  (`LOKI_SUITE_GODOT`). tests/test_loki.py's "no Godot files" check now exempts game/loki-world/ only.
+- **Not done here:** the Web export (needs Emscripten-built templates; their download host is blocked) and the
+  Windows/macOS exports - ZIVA W26 (PC, Godot 4.8) and M17 (Mac). No real GPU, WebView2 or WKWebView run yet;
+  sound; Steam (notes in WORLD.md). The web export, once made, must be committed (index.js/.wasm/.pck).
 
 ## Session 27 (2026-10-17, Claude in the cloud): why every LOKI job failed, and the fixes
 

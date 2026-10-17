@@ -1,0 +1,46 @@
+; LOKI World - the MMO of LOKI's real work (docs/WORLD.md, docs/MMO_API.md).
+; One Godot 4 project: exported as its own desktop app (Steam later) and as a web build that
+; LOKI's window shows (app/ui/world_godot/). GL Compatibility everywhere, so the web build and
+; the desktop build look the same.
+
+config_version=5
+
+[application]
+
+config/name="LOKI World"
+config/description="An MMO made of LOKI's real work: your agents, quests from jobs, monsters from failures, loot from creations."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.05, 0.07, 0.12, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+GameState="*res://autoload/game_state.gd"
+LokiApi="*res://autoload/loki_api.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/vsync/vsync_mode=1
+
+[gui]
+
+common/snap_controls_to_pixels=true
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/physics_engine="GodotPhysics3D"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+anti_aliasing/quality/msaa_3d=0
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+environment/defaults/default_clear_color=Color(0.05, 0.07, 0.12, 1)

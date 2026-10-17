@@ -4,7 +4,7 @@ LOKI World is an MMO made of LOKI's real work. The **engine** (this repo) owns t
 a **client** draws it and plays it. Clients:
 
 - the in-app fallback (`app/ui/mmo/`, Babylon/classic renderer): walk your character today;
-- the **Godot 4 client** (its own repo, never in this one - AGENTS.md): exported as a desktop app
+- the **Godot 4 client** (`game/loki-world/`, the one Godot project in this repo - AGENTS.md): exported as a desktop app
   (Steam) and as a web build shown inside LOKI's window.
 
 Everything below is plain HTTP + JSON on the LOKI bridge. Engine code: `engine/mmo_state.py`

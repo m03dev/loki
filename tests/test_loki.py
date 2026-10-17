@@ -164,9 +164,11 @@ check("DATA_DIR is named harness_data", loki.DATA_DIR.name == "harness_data", lo
 check("DATA_DIR is not inside engine/", "engine" not in loki.DATA_DIR.relative_to(REPO).parts if REPO in loki.DATA_DIR.parents else True, loki.DATA_DIR)
 for _godot_leftover in ("project.godot", "addons"):
     check("no %s in the checkout" % _godot_leftover, not (REPO / _godot_leftover).exists())
+# AGENTS.md: the one Godot project is LOKI World, the MMO, in game/loki-world/ - nowhere else.
 _tracked_godot = [f for f in subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True).stdout.split()
-                  if f.endswith((".gd", ".uid", ".tscn", ".tres", ".godot", ".import")) or f.startswith("addons/")]
-check("no Godot files are tracked in the repo", not _tracked_godot, _tracked_godot[:5])
+                  if (f.endswith((".gd", ".uid", ".tscn", ".tres", ".godot", ".import")) or f.startswith("addons/"))
+                  and not f.startswith("game/loki-world/")]
+check("no Godot files are tracked outside game/loki-world/", not _tracked_godot, _tracked_godot[:5])
 
 
 check("MCP_CONFIG ships with the code", loki.MCP_CONFIG.parent == loki.ROOT, loki.MCP_CONFIG)

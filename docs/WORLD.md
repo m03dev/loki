@@ -4,7 +4,7 @@ The LOKI World shows LOKI's real agents as characters in a small **3D scene insi
 app** (plain WebGL, `app/ui/world.js`): faintly behind the home screen, and full size in
 Settings > LOKI World (`LOKI_WORLD=background|panel|off`). It is a **viewer, not the brain**:
 LOKI's engine runs the agents, decisions, permissions and routing; the world draws what the
-engine reports. There is no Godot project; the world lives in the app.
+engine reports. The in-app world lives in the app; the MMO is a Godot 4 project in `game/loki-world/` (below).
 (docs/VISION.md section 3.)
 
 ## Connecting
@@ -116,8 +116,9 @@ client uses it - the contract is **docs/MMO_API.md**:
   engines exchange them over the signed peer link (`/peer/presence`, engine/presence.py), so the
   owner on the Mac and on the PC see each other.
 
-**Clients.** The owner chose a **Godot 4 client** (its own project, never in this repo: a desktop
-app for Steam and a web build inside LOKI's window). Until it lands, the in-app world has the
+**Clients.** The owner chose a **Godot 4 client**: `game/loki-world/` in this repo (AGENTS.md - the
+only place for Godot files), a desktop app for Steam and a web build inside LOKI's window; see
+"LOKI World in Godot 4" below. Until its web build is exported, the in-app world has the
 first stage as a fallback (`app/ui/mmo/mmo_core.js`): in Settings > LOKI World press **Play**:
 
 | Key | Does |
@@ -137,8 +138,81 @@ desks, trees, benches and the gallery, never off the island. What it draws comes
 once (no allocation per frame); `tests/test_mmo.py` guards that. Screenshots:
 `python tests/mmo_preview/shot.py <dir>` (headless Chromium, fake /world data).
 
-## Godot brief - cancelled
+## LOKI World in Godot 4 - the MMO (`game/loki-world/`)
 
-An earlier brief asked Ziva to build this world as a **Godot** client in its own Godot
-project. That is cancelled: the world lives **in the app** (plain WebGL, `app/ui/world.js`),
-never Godot. The current checks are in ZIVA_TASKS.md (W6 on Windows, M6 on the Mac).
+One Godot 4 project (GL Compatibility renderer everywhere), exported **(a)** as its own desktop app
+(Windows / macOS / Linux; Steam later) and **(b)** as a single-threaded web build into
+`app/ui/world_godot/` that LOKI's window shows instead of the Babylon world
+(Settings > General > LOKI World look = **godot**; until the export is there, or if the window
+cannot run it, LOKI falls back to Babylon by itself). It plays the engine's game (docs/MMO_API.md).
+
+**What it is.** You walk as yourself on the island of the machine you are on; every other machine
+running LOKI is its own island out in the shared sky, joined by walkable bridges of light (or open
+the map with M and click an island to fly there). LOKI's agents are NPCs at their stations with a
+class from their role and a level from finished jobs; LOKI (horns, in the hall) gives and takes
+quests. Your quests are LOKI's jobs - the hotbar's LOKI actions (4-8) start real jobs; finished
+ones are turned in at LOKI for XP. A failed job is a monster out on the island (Timeout Wraith,
+Syntax Golem...): beat it for XP and a lesson scroll (the real error), then **retry it on a
+stronger model** from the loot window. Loot is what LOKI made: pictures hang in the creations hall
+(pink roof) and fill your bags. The owner on his other machine walks around live (presence), and
+the chat reaches him (Say) or LOKI (`/l ...`). Day and night follow the local clock. The fox and the
+rabbits live on the home island (the fox sleeps at night).
+
+**The look.** Cel-shaded toon light (4 hard bands, faceted low-poly faces), black ink outlines
+(inverted hull; each island bakes its own hull so a whole island is 2 draw calls), the 3D view
+rendered small and shown with nearest filtering (pixels; `--pixel=N`, default 3), posterize with a
+4x4 Bayer dither, a banded sky with a pixel sun and stars, floating islands with teal crystals
+under them, a waterfall off the home island. Everything is built from Godot primitives at run
+time - no assets (game/loki-world/LICENSES.md).
+
+| Key | Does |
+| --- | --- |
+| W A S D | walk (relative to the camera); R autorun |
+| mouse drag / right drag | orbit the camera / orbit and turn you; wheel zoom; Q / E turn |
+| Space | jump |
+| click / Tab | target / nearest enemy; double or right click or F: talk / attack (auto attack) |
+| 1-9 | Strike, Bolt, Mend, Make a picture, Research, Build, Make a video, Make a game, Hearth |
+| Enter | chat (Say); `/l text` talks to LOKI; `/wave /dance /sit /cheer /bow` |
+| L B C M H Esc | quest log, bags, character (name + class), map, help, close / clear target |
+
+HUD: nameplates with level and health/energy bars, your frame and the target frame, party frames
+(the agents working right now), minimap (turns with the camera) with zone and clock, quest
+tracker, hotbar with cooldown sweeps and tooltips, cast bar, XP bar, floating damage numbers,
+zone and level-up banners.
+
+**Talking to LOKI** (`autoload/loki_api.gd`, the only net code): the web build is same-origin and
+takes the token from the page fragment (`#token=`, as app/ui does); the desktop build tries
+`http://127.0.0.1:8767` then `:8766` and reads the token from LOKI's state folder
+(`<LOKI_DATA or checkout>/harness_data/app/engine.token`, the per-user folder of a packaged LOKI,
+`~/Documents/loki/...`), or `--token=` / `--token-file=` / `LOKI_TOKEN`, or the Pair window. It
+uses `GET /mmo/state` every 3 s and the `/mmo/*` actions; `POST /world/presence` every 150 ms while
+you move (1 s standing). An engine without the MMO API: the same game is derived from `/world`,
+`/jobs` and `/creations` (`scripts/net/derive.gd`). No LOKI at all: an **offline demo world**
+(clearly marked) so the game always runs, and it keeps looking for LOKI every 10 s.
+
+**Open, run, export.** Open `game/loki-world/project.godot` in Godot 4.4+ (the PC has 4.8) and
+press Play (F5); with LOKI running on the same machine it joins by itself. Command-line options
+after `--`: `--mode=background`, `--pixel=3`, `--hour=21`, `--screenshot=shot.png --frames=150`,
+`--cam=yaw,pitch,dist`, `--at=x,z`, `--open=bags|quests|character|help|map`, `--fight=1`,
+`--loki-url=`, `--token=`, `--no-save`. Export (Project > Export, presets in
+`export_presets.cfg`; install the export templates of your Godot version first):
+- **Web** -> `app/ui/world_godot/index.html` (+ index.js, .wasm, .pck): single-threaded (no
+  COOP/COEP needed, runs in WKWebView and WebView2), shell `web/shell.html` has no inline script
+  (LOKI's CSP); the bridge serves `.wasm`/`.pck` and gives `'wasm-unsafe-eval'` to that page only.
+- **Windows Desktop** / **macOS** / **Linux** -> `game/loki-world/build/` (not committed).
+- **Steam (later):** a Steamworks app id, the GodotSteam GDExtension (MIT) for the overlay /
+  achievements / friends, Steam builds via SteamPipe from the desktop exports; nothing in the game
+  needs Steam to run. Ship Godot's licence notices with any build.
+
+**Tests.** `godot --headless --path game/loki-world res://tests/run_tests.tscn -- --no-save`
+(107: scripts compile, levels/classes/monsters like the engine, derive, offline world, net layer,
+the world builds, combat to a kill with XP and loot, Mend and cooldowns). `tests/test_godot_world.py`
+(in ship.py) checks the files, the systems, that the net layer only uses real bridge routes and
+the engine's words and tables, no CDN, licence notes, the export presets and the hooks; when a
+Godot 4 binary is on PATH (or `LOKI_SUITE_GODOT`) it also imports the project, runs those tests
+and plays the game headless against the real bridge (source=engine, presence and chat both ways).
+
+## Godot brief (2026-10-14) - superseded
+
+The first Godot brief (a separate Godot client) was cancelled on 2026-10-14; on 2026-10-17 the owner
+chose Godot for the MMO after all, inside this repo in `game/loki-world/` (above).

@@ -30,6 +30,8 @@ engine/package-lock.json
 /scripts/
 /plugins/
 project.godot
+# ...except LOKI World, the MMO (AGENTS.md: the one Godot project, game/loki-world/)
+!game/loki-world/project.godot
 .git-rewrite/
 
 # Packaged builds and models

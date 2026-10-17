@@ -1,0 +1,5 @@
+/* LOKI World (Godot web build) page: the canvas fills the frame; pixels stay sharp. */
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0d1220; }
+#canvas { display: block; width: 100%; height: 100%; outline: none; image-rendering: pixelated; }
+#status { position: absolute; left: 0; right: 0; top: 45%; text-align: center; color: #9fe8de;
+  font: 14px system-ui, sans-serif; }

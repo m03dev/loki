@@ -832,6 +832,28 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       a job "Scheduled: ..." ran (Jobs list) and today.txt exists; then remove the schedule.
       (8) code_map on a real project folder: is the map useful? Too long?
 
+- [ ] **W26 LOKI World in Godot 4 on the PC (2026-10-17) - open it, play it, export Web + Windows.** The MMO is
+      now `game/loki-world/` (Godot 4, GL Compatibility). Built and tested headless in the cloud with Godot 4.7.2
+      (screenshots there were software-rendered, so fps and the real GPU look are yours to report).
+      (1) `ship.py --check`; test_godot_world runs Godot itself only if `godot` is on PATH (or set
+      LOKI_SUITE_GODOT=<path to Godot 4.8>) - report its line either way.
+      (2) Open `game/loki-world/project.godot` in Godot 4.8 (it may ask to upgrade the project from 4.7: yes),
+      wait for the import, press Play (F5) with LOKI running: the bottom-right line must say "LOKI (MMO API)" (not
+      "offline demo"). Walk (WASD, mouse drag, wheel, Space), click a monster or press Tab then 1/2 to fight,
+      press 4 and type "a fox in the snow" - it must start a REAL job (Jobs list); L/B/C/M/H windows; Enter to chat,
+      `/l hello` must get LOKI's answer in the chat. Report fps (bottom right), the Output panel's errors, and
+      take screenshots into docs/operations/screens/godot-world-windows-*.png (day, night with `--hour=22`, a fight).
+      (3) Editor > Manage Export Templates > Download for 4.8. Project > Export > **Web** -> Export Project
+      (path is preset: app/ui/world_godot/index.html; keep "Thread Support" OFF). Then in LOKI: Settings > General
+      > LOKI World look = **godot**, restart LOKI: the home screen and Settings > LOKI World must show the Godot
+      world (Play in the panel, a quiet orbit behind the home screen). WebView2 dev tools (F12 if enabled): paste
+      any console error, especially a CSP one ("wasm-unsafe-eval", "eval"). If it works, ship the export with
+      ship.py (index.js, index.wasm, index.pck, *.worklet.js; NOT the build/ folder) and say how big the .wasm is.
+      (4) Export **Windows Desktop** to game/loki-world/build/windows/ (not committed): run "LOKI World.exe" with
+      LOKI running - it must find the token by itself (harness_data\app\engine.token) and say "LOKI (MMO API)".
+      (5) With the Mac (M17) in the game at the same time: you see the Mac's player walk on its island; chat
+      lines reach each other. Report what you saw under Reports.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -1040,6 +1062,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       needed). (3) browse_page on https://www.wikipedia.org: type a word into the search field, submit, report
       the result page. (4) Settings > Add-ons / skills catalog: the six "anthropic" skills are listed. Report all
       of it under Reports.
+
+- [ ] **M17 LOKI World in Godot 4 on the Mac (2026-10-17) - run it, macOS export, the web build in WKWebView.**
+      (1) `ship.py --check` (test_godot_world: report the line). (2) Install Godot 4 (godotengine.org, 4.4 or
+      newer; same version as the PC if you can), open `game/loki-world/project.godot`, Play with LOKI running:
+      bottom right must say "LOKI (MMO API)"; walk, fight, press 4 for a real picture job, chat `/l hello`. Report
+      fps, Output errors, screenshots docs/operations/screens/godot-world-mac-*.png. (3) Export **macOS** (templates
+      first) to game/loki-world/build/macos/ and run the app with LOKI running (it reads the token from
+      ~/Documents/loki/harness_data/app/engine.token by itself; if not, the Pair window takes it). (4) After the
+      PC shipped the Web export (W26): LOKI World look = godot, restart LOKI: does WKWebView run it (WebGL2,
+      wasm under CSP 'wasm-unsafe-eval')? Paste Web Inspector console errors. (5) Together with W26: you see the
+      PC's player and its chat. Report under Reports.
 
 ## Needs Mohamed
 

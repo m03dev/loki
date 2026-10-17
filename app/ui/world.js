@@ -2112,6 +2112,7 @@ function refreshBackground() {
 }
 
 function showWorldPanel() {
+  if (World.engine === "godot" && window.WorldGodot) { fetchWorld(); window.WorldGodot.panel(true); return; }
   if (!World.views.panel) {
     const canvas = document.getElementById("world-panel-canvas");
     World.views.panel = canvas && makeView(canvas, document.getElementById("world-panel-labels"),
@@ -2127,6 +2128,7 @@ function showWorldPanel() {
 }
 
 function hideWorldPanel() {
+  if (World.engine === "godot" && window.WorldGodot) { window.WorldGodot.panel(false); return; }
   setVisible(World.views.panel, false);
   setTimeout(refreshBackground, 0);
 }
@@ -2162,15 +2164,27 @@ async function loadBabylon() {
   return (await loadScript("/ui/vendor/babylon/babylon.loki.js")) && (await loadScript("/ui/world_babylon.js")) && !!window.WorldBabylon;
 }
 
+// The Godot MMO's host (app/ui/world_godot/host.js): resolves true once the web build is starting.
+async function loadGodotWorld() {
+  if (!window.WorldGodot && !(await loadScript("/ui/world_godot/host.js"))) return false;
+  return !!window.WorldGodot && (await window.WorldGodot.start(state.token, backgroundWanted));
+}
+
 async function startWorld() {
   try {
     const data = await api("/settings/general");
     if (data && data.ok) {
       World.mode = data.values.LOKI_WORLD || "background";
       const want = (data.values.LOKI_WORLD_ENGINE || "babylon").toLowerCase();
-      World.engine = ["babylon", "three", "classic"].includes(want) ? want : "babylon";
+      World.engine = ["babylon", "godot", "three", "classic"].includes(want) ? want : "babylon";
     }
   } catch (_) { /* default */ }
+  // LOKI World as the Godot MMO (game/loki-world, web build in /ui/world_godot/): its own page in a
+  // frame, which needs no view here. Not exported yet / cannot run -> Babylon as before.
+  if (World.engine === "godot") {
+    if (await loadGodotWorld()) return;
+    World.engine = "babylon";
+  }
   if (World.engine === "three") await loadThree();   // only then is the 2 MB three.js parsed at all
   if (World.engine === "babylon" && !(await loadBabylon())) World.engine = "classic";
   const canvas = document.getElementById("world-bg-canvas");

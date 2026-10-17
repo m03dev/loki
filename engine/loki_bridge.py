@@ -191,9 +191,16 @@ ALLOWED_HOSTS = (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
 UI_DIR: Path | None = None
 UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
-            ".json": "application/json; charset=utf-8"}
+            ".json": "application/json; charset=utf-8",
+            # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
+            ".wasm": "application/wasm", ".pck": "application/octet-stream"}
 UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+# The Godot world page only: WebAssembly needs 'wasm-unsafe-eval' (not 'unsafe-eval' - no JS eval),
+# and LOKI's own window frames it (same origin). Every other UI page keeps UI_CSP.
+GODOT_WORLD_PAGE = "/ui/world_godot/index.html"
+GODOT_WORLD_CSP = (UI_CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'")
+                   .replace("frame-ancestors 'none'", "frame-ancestors 'self'"))
 
 
 def memory_guard(state: Any, every_s: float = 60.0) -> None:
@@ -746,12 +753,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
             return True
+        if route == GODOT_WORLD_PAGE:
+            self._send_static(found, framed=True, csp=GODOT_WORLD_CSP)
+            return True
         self._send_static(found, framed=(route == "/ui/play.html"))
         return True
 
-    def _send_static(self, found: Path, framed: bool = False) -> None:
+    def _send_static(self, found: Path, framed: bool = False, csp: str = "") -> None:
         """One static file. `framed`: the Play page, which LOKI's own window shows in a sandboxed
-        frame - it may be framed by LOKI itself (same origin) and nothing else."""
+        frame - it may be framed by LOKI itself (same origin) and nothing else. `csp`: a page's
+        own policy (the Godot world page: GODOT_WORLD_CSP)."""
         body = found.read_bytes()
         try:
             self.send_response(200)
@@ -760,8 +771,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
-            self.send_header("Content-Security-Policy",
-                             UI_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") if framed else UI_CSP)
+            self.send_header("Content-Security-Policy", csp or (
+                UI_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") if framed else UI_CSP))
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionError, OSError):
