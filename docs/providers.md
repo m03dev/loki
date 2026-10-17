@@ -3,6 +3,39 @@
 Loki talks to any **OpenAI-compatible** endpoint. Put keys in `harness_data/.env`
 (copy from `engine/.env.example`) and choose one with `LOKI_MODEL`.
 
+## The main driver: DeepSeek V4.1 Flash on NVIDIA NIM (session 29)
+
+The owner: "i want it as the main driver". NVIDIA serves DeepSeek V4.1 Flash for free on
+NIM: `https://integrate.api.nvidia.com/v1` (OpenAI-compatible), model
+`deepseek-ai/deepseek-v4.1-flash`, 1M context, native tool calling, about **40 requests a
+minute** per account (checked 2026-10-17; the limit can change per account).
+
+**Setup (one line):** get a free key at <https://build.nvidia.com/settings/api-keys>
+(sign in, Generate API Key, it starts with `nvapi-`) and paste it in Settings > Connections >
+NVIDIA NIM. That is all.
+
+- **Routing.** `nvidia` leads `SMART_ORDER` and `ONLINE_ORDER`, and whenever its key is set
+  and it is healthy `loki.main_driver_ready()` puts it first for everything it can do - chat
+  (ahead of local-first), code, background jobs, teams (`start_team` -> smart), LOKI improving
+  itself (`improve_loki` / evolve jobs run "online") - ahead of the learned order. It steps
+  aside, and the usual order takes over, for pictures (DeepSeek cannot see them), Local only,
+  a rejected key, a rate limit or quota that provider_health remembers, or when it failed in
+  this session. `LOKI_MAIN_DRIVER=off` (Settings > General) goes back to the plain smart order.
+  `/models doctor` starts with a "Main driver: ..." line (driving, or why not + the fix).
+- **Pacing** (`engine/ratelimit.py`). LOKI spaces its own requests under the cap
+  (`LOKI_NVIDIA_RPM`, default 36 = 40 minus headroom) instead of collecting 429s: a request
+  that would go over waits for a slot (up to `LOKI_RATE_PACE_MAX_S`, 75 s) and says so. The
+  window is shared by the engine, every background job and LOKI Studio through
+  `harness_data/ratelimit/nvidia.json`. A 429 anyway (the key is busy elsewhere) penalises the
+  window and - with another provider ready - fails over at once (provider_health marks it
+  `rate_limited` for as long as it said).
+- **Reasoning.** Thinking is OFF for agent work (`chat_template_kwargs: {"thinking": false}`,
+  NIM's own switch); `LOKI_NVIDIA_THINKING=high|max` turns it on. Whatever reasoning comes
+  back (`reasoning_content`, `reasoning`, `<think>...</think>`) is shown as a "thinking" line
+  and taken out of the message: it never lands in the history and is never re-sent.
+- **Fallbacks.** Every other provider stays behind it: OpenRouter's DeepSeek V4.1 Flash
+  (`deepseek-4.1`), Gemini, Groq, ... and the local model.
+
 | `LOKI_MODEL` | Provider | Free tier |
 |---|---|---|
 | `local` / `local-reasoning` | Ollama (local) | yes, local |
@@ -200,7 +233,7 @@ Each is an OpenAI-compatible endpoint, and each is overridable with `<PROVIDER>_
 | `kilocode` | `https://api.kilo.ai/api/gateway` | https://app.kilo.ai/profile |
 | `llm7` | `https://api.llm7.io/v1` | https://token.llm7.io (optional - anonymous use works) |
 | `modelscope` | `https://api-inference.modelscope.cn/v1` | https://modelscope.cn/my/myaccesstoken |
-| `nvidia` | `https://integrate.api.nvidia.com/v1` | https://build.nvidia.com/explore/discover |
+| `nvidia` | `https://integrate.api.nvidia.com/v1` (default model `deepseek-ai/deepseek-v4.1-flash`, the main driver) | https://build.nvidia.com/settings/api-keys |
 | `ollama-cloud` | `https://ollama.com/api` | https://ollama.com/settings/keys |
 | `ovh` | `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1` | https://www.ovhcloud.com/en/public-cloud/ai-endpoints/ |
 | `siliconflow` | `https://api.siliconflow.cn/v1` | https://cloud.siliconflow.cn/account/ak |

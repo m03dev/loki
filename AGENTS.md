@@ -66,6 +66,7 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
 | --- | --- |
 | `engine/` | the Python core (agent loop `loki.py`, API `loki_bridge.py`, first layer, workers, peers, updater) |
 | `app/` | the desktop window and its UI |
+| `studio/` | LOKI Studio, the separate app LOKI is developed with (docs/STUDIO.md; the LOKI MCP API is docs/LOKI_MCP.md) |
 | `tools/` | `ship.py`, `peer_link.py`, `setup_laya.py`, `self_improve.py`, training, packaging |
 | `tests/` | offline suites; `tools/ship.py --check` runs all of them |
 | `docs/` | architecture, operations, decisions, security, session log, `BUILD_BRIEF.md` (the owner's direction) |

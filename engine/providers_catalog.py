@@ -71,7 +71,10 @@ CATALOG: list[dict] = [
      "env": "CODESTRAL_API_KEY", "blurb": "Mistral's coding model, free: 30 requests/min, 2,000/day.",
      "signup": "https://console.mistral.ai/codestral", "keys": "https://console.mistral.ai/codestral", "docs": "https://docs.mistral.ai/capabilities/code_generation/"},
     {"id": "nvidia", "name": "NVIDIA NIM", "group": "free", "auth": ["key"], "tools": True,
-     "env": "NVIDIA_API_KEY", "blurb": "Free hosted Nemotron and other open models, 40 requests/min (phone verification).",
+     "env": "NVIDIA_API_KEY", "main_driver": True,
+     "setup": "Get a free key at build.nvidia.com (Settings > API Keys) and paste it here - that is all.",
+     "blurb": "LOKI's main driver: DeepSeek V4.1 Flash, free (about 40 requests/min, LOKI paces itself), "
+              "1M context, calls tools. Get a free key at build.nvidia.com and paste it here.",
      "signup": "https://build.nvidia.com", "keys": "https://build.nvidia.com/settings/api-keys", "docs": "https://docs.api.nvidia.com"},
     {"id": "cloudflare", "name": "Cloudflare Workers AI", "group": "free", "auth": ["key"], "tools": True,
      "env": "CLOUDFLARE_API_TOKEN", "extra_env": ["CLOUDFLARE_ACCOUNT_ID"],

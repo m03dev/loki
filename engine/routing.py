@@ -417,6 +417,11 @@ def doctor(agent: Any) -> dict:
         mode, "" if mode in ("smart", "online") else " (pinned - routing only steps in when it fails)",
         "allowed" if getattr(agent, "ALLOW_PAID", False) else "never picked automatically",
         "on" if local_only_setting() else "off"))
+    driver = main_driver(agent)
+    if driver.get("provider"):
+        head += "\n" + driver["text"]
+        if not driver["ready"] and driver.get("fix"):
+            needs_you.insert(0, driver["fix"])
     lines = [head, ""] + ["- " + r["text"] for r in routes]
     if dead:
         lines += ["", "Skipped right now:"] + ["- %s: %s.%s" % (d["provider"], d["line"], (" Fix: " + d["fix"]) if d["fix"] else "")
@@ -426,4 +431,36 @@ def doctor(agent: Any) -> dict:
     if needs_you:
         lines += ["", "Needs you:"] + ["- " + x for x in needs_you]
     return {"ok": True, "mode": mode, "routes": routes, "dead": dead, "local": local, "needs_you": needs_you,
-            "text": "\n".join(lines)}
+            "main_driver": driver, "text": "\n".join(lines)}
+
+
+def main_driver(agent: Any) -> dict:
+    """LOKI's main driver (session 29: DeepSeek V4.1 Flash on NVIDIA NIM), whether it is driving
+    now, and the one-line fix when it is not."""
+    pid = str(getattr(agent, "MAIN_DRIVER", "") or "")
+    if not pid or pid not in getattr(agent, "MODELS", {}):
+        return {"provider": "", "ready": False, "text": "Main driver: off (LOKI_MAIN_DRIVER=off).", "fix": ""}
+    model = str(getattr(agent.MODELS.get(pid), "model", "") or "")
+    try:
+        ready, why = agent.main_driver_ready({})
+    except Exception as exc:  # noqa: BLE001
+        ready, why = False, str(exc)
+    mode = getattr(agent, "model_name", "smart")
+    pinned = mode not in ("smart", "online") and mode != pid
+    fix = ""
+    if not ready and "key" in why:
+        fix = ("Main driver %s needs its free key: get one at %s and paste it in Settings > Connections > "
+               "NVIDIA NIM." % (model, getattr(agent, "MAIN_DRIVER_KEY_URL", "https://build.nvidia.com/settings/api-keys")))
+    try:
+        import ratelimit  # pylint: disable=import-outside-toplevel
+        cap = ratelimit.rpm(pid)
+    except Exception:  # noqa: BLE001
+        cap = 0
+    if ready:
+        text = "Main driver: %s on %s - drives chat, background jobs, teams and self-improvement%s%s." % (
+            model, pid, (" (paced at %d requests/min)" % cap) if cap else "",
+            "; but you pinned %s, so it only steps in when that fails" % mode if pinned else "")
+    else:
+        text = "Main driver: %s on %s - not driving: %s. Every other provider is the fallback meanwhile." % (model, pid, why)
+    return {"provider": pid, "model": model, "ready": bool(ready), "why": why, "pinned": pinned, "rpm": cap,
+            "text": text, "fix": fix}

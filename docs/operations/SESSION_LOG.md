@@ -16,6 +16,18 @@ Concise dated records of meaningful work. Newest at the top.
   approvals, step editor, templates. docs/AUTOMATIONS.md.
 - tests/test_automations.py (190, in SUITES) incl. the real bridge + webhook and the view in headless Chromium.
   Real machines: ZIVA W35 (PC: morning briefing to Telegram + folder watcher), M26 (Mac).
+## 2026-10-17 - Session 29 (Claude, worktree): DeepSeek V4.1 Flash as the main driver, the LOKI MCP API, LOKI Studio
+
+- NVIDIA NIM's free DeepSeek V4.1 Flash leads smart/online routing whenever its key is set (chat, jobs, teams,
+  self-improvement), paced under ~40/min (engine/ratelimit.py, shared across processes), 429 -> failover, reasoning shown
+  as thinking and never re-sent; /models doctor + the Connections card say so.
+- engine/loki_mcp.py: an MCP server over LOKI (status, doctor, settings, jobs, logs, memory, tools, creations, restart)
+  and its code (jailed to a dev worktree; tests; ship), risky tools need the owner's approval code. docs/LOKI_MCP.md.
+- studio/: LOKI Studio, a separate app (the owner: "like a game engine") that runs from a pinned known-good copy, works
+  when LOKI is down (logs, start, rollback), develops LOKI in per-session worktrees on DeepSeek with the MCP API,
+  owner-only Ship it. LOKI keeps an icon that opens it. docs/STUDIO.md.
+- tests/test_studio.py (182) in SUITES. Real machines: ZIVA W35 (PC), M26 (Mac); Needs Mohamed: the NVIDIA key.
+
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 
 - E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before

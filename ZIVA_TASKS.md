@@ -1093,6 +1093,30 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       status line should say "hybrid (BM25 + nomic-embed-text...)"; search "where are the backups kept" and report
       what it shows. (7) Project knowledge: Settings > Memory shows "Project files indexed: N"; ask a chat a question
       about the open project's docs and check the answer cites a path:line. Report all of it under Reports.
+- [ ] **W36 DeepSeek V4.1 Flash as the main driver + LOKI Studio on the PC (2026-10-17, session 29).** Needs the
+      NVIDIA key first (Needs Mohamed: "NVIDIA key"); if it is not there yet, do (1), (5) and (6) and leave the rest.
+      (1) After LOKI updates (tests take at most 1 minute - the owner's rule): `harness_data\.venv\Scripts\python.exe
+      app\loki_app.py --self-test` and `harness_data\.venv\Scripts\python.exe tests\test_studio.py` (~35 s here;
+      stop it at 60 s) - report the last line (182 checks; its window check needs Playwright).
+      (2) With the key pasted in Settings > Connections > NVIDIA NIM: type `/models doctor` (or Explain routing)
+      and paste the whole text under Reports. Expected: a "Main driver: deepseek-ai/deepseek-v4.1-flash on nvidia -
+      drives chat, background jobs, teams and self-improvement (paced at 36 requests/min)" line, and chat, code,
+      background jobs and hard tasks -> nvidia. Pictures must NOT go to nvidia. (3) One chat ("what files are in this
+      project?") and one background job ("write notes/hello.txt with one line"): report the `[loki-job] ... | model
+      ...` line, whether it finished, and the time. A "... thought: ..." progress line may appear; the reply must
+      not contain <think> text. (4) Pacing: start three background jobs at once (any small tasks) and report
+      whether any "nvidia allows about 36 requests a minute; waiting Ns" line appears and whether ANY job failed
+      with a 429 (`findstr /c:"429" harness_data\jobs\*.log`). (5) LOKI Studio: double-click `Loki Studio.cmd` in
+      the LOKI folder. Its own window must open (title LOKI Studio) - with LOKI closed too. Then open LOKI and press
+      the new Studio icon at the bottom of the sidebar (hover: "LOKI Studio - work on LOKI itself with DeepSeek
+      V4.1"): it must bring the same Studio window forward, not open a second one. (6) In Studio: the LOKI card
+      says running/not running correctly; Logs shows the engine log; with LOKI CLOSED press Start - LOKI opens.
+      Report `dir harness_data\studio` (pinned, sessions, worktrees, pin.json) and the pin line at the bottom of the
+      rail. (7) A small real task in Studio: "Add a hover tooltip to the Clear finished button in the jobs list that
+      says it removes finished jobs from the list". Watch it: thinking lines, tool calls, the diff, run_tests. If it
+      asks to restart the engine, Approve once. Report: how many steps, minutes, whether the diff is right, and the
+      test result. Do NOT press Ship it - paste the diff under Reports; Mohamed or the Mac decides. Then press
+      Discard. (8) Continue with the highest open W tasks.
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1683,8 +1707,26 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       lists only Zed, with "Before (1)" showing VS Code, and "Replaced by newer memories" has the VS Code one
       with a restore icon. (6) Secrets: paste "my test key is sk-test1234567890abcdef" in a chat; nothing with
       that key may appear in Settings > Memory or in `grep -c sk-test harness_data/memory_log.jsonl` (expect 0).
+- [ ] **M27 DeepSeek V4.1 Flash + LOKI Studio on the Mac (2026-10-17, session 29).** Same as W35 (1)-(4) on the Mac
+      (`harness_data/.venv/bin/python app/loki_app.py --self-test` + `timeout 60 harness_data/.venv/bin/python
+      tests/test_studio.py`; `grep -l 429 harness_data/jobs/*.log`). Then Studio on
+      the Mac: `bash studio/make_studio_app.sh` -> open ~/Applications/LOKI Studio.app (the menu bar must say LOKI
+      Studio, the window must not be white - it is WKWebView too). With LOKI quit: Logs, Start. In LOKI: the Studio
+      icon brings Studio forward. Give Studio the task "Add a tooltip to the Clear finished button in the jobs list
+      that says it removes finished jobs from the list" (or the same task W35 did, to compare the two machines);
+      report steps, minutes, the diff and the test result; then, if the diff and tests are right AND Mohamed agreed
+      under Reports, press Ship it and report the ship output (every suite must pass; the PC then takes it through
+      the health-gated updater - say whether it did). Otherwise Discard. Also try Roll back only if a version is on
+      trial; never on a healthy LOKI. Continue with the highest open M tasks.
 
 ## Needs Mohamed
+
+- [ ] **NVIDIA key (2026-10-17, session 29) - makes DeepSeek V4.1 Flash LOKI's main driver, free.** Open
+      https://build.nvidia.com/settings/api-keys, sign in (a free NVIDIA account; it may ask to verify a phone),
+      press **Generate API Key**, copy it (it starts with `nvapi-`) and paste it in LOKI: **Settings > Connections >
+      NVIDIA NIM**. Do it on both the PC and the Mac. Nothing else: LOKI
+      then routes chat, jobs, teams and its own improvements to it, about 40 requests a minute, with every other
+      provider as the fallback; LOKI Studio uses it too. Then Ziva runs W35 / M26.
 
 - [ ] **Telegram bot (2026-10-17) - talk to LOKI from your phone.** In Telegram, open **@BotFather**, send
       `/newbot`, pick a name and a username ending in "bot". It gives you a token (digits:letters). Paste it in

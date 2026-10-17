@@ -1140,7 +1140,9 @@ section("go-to model: DeepSeek 4.1 via OpenRouter")
 check("the deepseek-4.1 alias exists", "deepseek-4.1" in loki.MODELS)
 check("it points at deepseek v4.1 flash",
       "v4.1" in loki.MODELS["deepseek-4.1"].model, loki.MODELS["deepseek-4.1"].model)
-check("OpenRouter leads smart mode", loki.SMART_ORDER[0] == "openrouter", loki.SMART_ORDER[0])
+# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; OpenRouter is the first fallback
+check("the main driver leads smart mode, OpenRouter right after",
+      loki.SMART_ORDER[:2] == ("nvidia", "openrouter"), loki.SMART_ORDER[:3])
 
 
 
@@ -1737,10 +1739,11 @@ for _name in _free_apis:
           bool(loki.MODELS[_name].base_url) and bool(loki.MODELS[_name].model))
 
 
-check("the new providers are NOT in the smart failover order",
+# session 29: nvidia (DeepSeek V4.1 Flash) is the main driver, so it - and only it - leads the order now
+check("the new providers are NOT in the smart failover order (except nvidia, the main driver)",
 
 
-      not (set(_free_apis) & set(loki.SMART_ORDER)))
+      (set(_free_apis) & set(loki.SMART_ORDER)) == {"nvidia"} and loki.SMART_ORDER[0] == "nvidia")
 
 
 

@@ -549,7 +549,8 @@ def self_test() -> int:
     for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
                  "model_setup", "usage", "agents",
                  "knowledge", "federation", "skill_scan", "loki", "providers_catalog", "portal_api",
-                 "signin", "qr", "tool_harness", "update_all", "system_check"):
+                 "signin", "qr", "tool_harness", "update_all", "system_check",
+                 "ratelimit", "loki_mcp", "studio_api"):   # session 29: the main driver's pacing, the MCP API, Studio's door
         try:
             __import__(name)
         except Exception as exc:  # noqa: BLE001

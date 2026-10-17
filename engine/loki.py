@@ -328,6 +328,7 @@ import web_reader  # noqa: E402  (read a web page natively, no add-on)
 import command_risk  # noqa: E402  (LOW / MEDIUM / HIGH for shell commands)
 import task_tracker  # noqa: E402  (a plan with statuses that survives condensing)
 import provider_health  # noqa: E402  (each provider's live state, remembered across processes)
+import ratelimit  # noqa: E402  (pacing for per-minute caps: NVIDIA NIM's ~40 requests/min)
 import routing  # noqa: E402  (task-aware model choice, learned per task kind, /models doctor)
 
 godot_tools.ROOT = ROOT
@@ -470,9 +471,13 @@ MODELS = {
     "modelscope": ModelConfig(base_url=os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1"),
                               api_key=os.getenv("MODELSCOPE_API_KEY", ""),
                               model=os.getenv("MODELSCOPE_MODEL", "Qwen/Qwen3.5-35B-A3B")),
+    # NVIDIA NIM, free with an account key (nvapi-..., build.nvidia.com/settings/api-keys), about
+    # 40 requests/min. Since session 29 it serves LOKI's MAIN DRIVER: DeepSeek V4.1 Flash (1M
+    # context, native tool calling). Paced client-side (engine/ratelimit.py, LOKI_NVIDIA_RPM);
+    # its thinking mode is off for agent work (LOKI_NVIDIA_THINKING=off|high|max).
     "nvidia": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                           api_key=os.getenv("NVIDIA_API_KEY", ""),
-                          model=os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")),
+                          model=os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4.1-flash")),
     "ollama-cloud": ModelConfig(base_url=os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/api"),
                                 api_key=os.getenv("OLLAMA_API_KEY", ""),
                                 model=os.getenv("OLLAMA_CLOUD_MODEL", "deepseek-v4-pro")),
@@ -621,6 +626,18 @@ LOCAL_PROVIDERS = LOCAL_PROVIDERS + ("loki-tuned",)
 if TUNED_PROMOTED and "local" in SMART_ORDER:
     _at = SMART_ORDER.index("local")
     SMART_ORDER = SMART_ORDER[:_at] + ("loki-tuned",) + SMART_ORDER[_at:]
+
+# THE MAIN DRIVER (session 29, the owner: "i want it as the main driver"): DeepSeek V4.1 Flash on
+# NVIDIA NIM. Whenever its key is set and it is healthy it comes first in smart and online routing -
+# chat, background jobs, teams and LOKI improving itself - ahead of local-first and the learned
+# order; every other provider stays behind it as the fallback. LOKI_MAIN_DRIVER=off (Settings >
+# General) goes back to the plain smart order; another provider name makes that one the driver.
+MAIN_DRIVER = str(os.getenv("LOKI_MAIN_DRIVER", "nvidia")).strip().lower()
+if MAIN_DRIVER in ("off", "none", "0", "false", "no"):
+    MAIN_DRIVER = ""
+MAIN_DRIVER_KEY_URL = "https://build.nvidia.com/settings/api-keys"
+if MAIN_DRIVER and MAIN_DRIVER in MODELS:
+    SMART_ORDER = (MAIN_DRIVER,) + tuple(p for p in SMART_ORDER if p != MAIN_DRIVER)
 
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 
@@ -1115,10 +1132,46 @@ def current_needs() -> dict:
 ROUTE_NOTES: dict = {}   # provider -> why routing skipped it for the last pick (for /models doctor)
 
 
+def main_driver_ready(needs: dict | None = None) -> tuple:
+    """(True, "") when the main driver (MAIN_DRIVER, DeepSeek V4.1 Flash on NVIDIA) should take
+    this task: set up, not switched off or used up, healthy, not local-only, and able to do it
+    (it cannot see pictures). Else (False, why) - routing then goes on as before."""
+    needs = dict(needs or {})
+    if not MAIN_DRIVER or MAIN_DRIVER not in MODELS:
+        return False, "no main driver (LOKI_MAIN_DRIVER=off)"
+    if needs.get("local_only"):
+        return False, "local only is on"
+    if not provider_configured(MAIN_DRIVER):
+        return False, "no key yet - get a free one at " + MAIN_DRIVER_KEY_URL
+    if MAIN_DRIVER in _SMART_FAILED:
+        return False, "used up or failing in this session (falls back until it recovers)"
+    if provider_tier(MAIN_DRIVER) == "paid" and not paid_allowed_automatically():
+        return False, "paid and paid providers are not allowed automatically"
+    try:
+        ok, why = provider_health.registry().usable(MAIN_DRIVER, str(MODELS[MAIN_DRIVER].api_key or ""),
+                                                    int(needs.get("est_tokens") or 0))
+        if not ok:
+            return False, why
+        fit, short = routing.fits(routing.abilities(sys.modules[__name__], MAIN_DRIVER), needs)
+        if not fit:
+            return False, short
+    except Exception:  # noqa: BLE001 - health must never break routing
+        pass
+    return True, ""
+
+
+def _main_first(ordered: list, needs: dict) -> list:
+    """`ordered` with the main driver moved to the front when it is ready for this task."""
+    if MAIN_DRIVER in ordered and main_driver_ready(needs)[0]:
+        return [MAIN_DRIVER] + [p for p in ordered if p != MAIN_DRIVER]
+    return ordered
+
+
 def _route_pick(order, needs: dict, allow_local: bool = True) -> str:
     """The first provider in `order` that is configured, not used up, healthy, affordable and
     (when any is) able to do this task. "" when none is."""
     ordered, notes = routing.order_for(sys.modules[__name__], routing_order(order), needs)
+    ordered = _main_first(list(ordered), needs)
     ROUTE_NOTES.clear()
     ROUTE_NOTES.update(notes)
     for candidate in ordered:
@@ -1178,6 +1231,11 @@ def _smart_pick(needs: dict) -> tuple:
             if name not in _SMART_FAILED and provider_configured(name):
                 return name, "local only is on: the local server that is running"
         return "local", "local only is on, but no local model is running"
+    driver_ok, _driver_why = main_driver_ready(needs)
+    if driver_ok and online():
+        # The main driver takes everything it can do - ahead of local-first (session 29).
+        return MAIN_DRIVER, "main driver: %s on %s (%s)" % (
+            MODELS[MAIN_DRIVER].model, MAIN_DRIVER, routing.why_line(sys.modules[__name__], MAIN_DRIVER, needs))
     local_first = PREFER == "local" and "local" not in _SMART_FAILED and local_ready()
     why_not_local = ""
     job_pick = ""
@@ -6149,6 +6207,11 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
     retries = min(MODEL_RETRIES, AUTO_RETRIES) if auto else MODEL_RETRIES   # used when another provider is ready
     while True:
         constrained = False
+        if provider and ratelimit.rpm(provider):
+            # NVIDIA NIM's free tier is ~40 requests/min per account: space the requests (shared
+            # with jobs and LOKI Studio through the data folder) instead of collecting 429s.
+            await ratelimit.acquire_async(provider, max_wait_s=RATE_PACE_MAX_S,
+                                          say=lambda m: _progress("thinking", m))
         started = time.monotonic()
         try:
             if kwargs.get("tools") and _use_constrained(provider, cfg):
@@ -6159,13 +6222,13 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
             elif kwargs.get("tools") and tool_harness.configured(provider):
                 # This provider cannot take a native tools list: send the tools as text
                 # and turn the <tool_call> blocks in its answer back into tool_calls.
-                prompted = tool_harness.prepare(kwargs)
+                prompted = _provider_kwargs(provider, cfg, tool_harness.prepare(kwargs))
                 known = prompted.pop("_prompted_tools", [])
                 response = await client.chat.completions.create(**prompted)
                 if not _no_choices(response):
                     response = tool_harness.attach(response, known)
             else:
-                sent = _small_model_kwargs(kwargs, cfg)
+                sent = _provider_kwargs(provider, cfg, _small_model_kwargs(kwargs, cfg))
                 response = await client.chat.completions.create(**sent)
                 if not _no_choices(response):
                     response = _salvage_reply(response, kwargs)
@@ -6182,9 +6245,12 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 raise ModelUnavailable(text)
             if provider:
                 _health_success(provider, cfg, started, kwargs)
-            return response
+            return _take_reasoning(response, provider, cfg)
         except openai.APIStatusError as exc:
             status = _status_of(exc)
+            if status == 429 and provider and ratelimit.rpm(provider):
+                # Over the cap anyway (another program on the same key): the next requests wait.
+                ratelimit.penalize(provider, provider_health.retry_after(str(exc.message), _retry_header(exc)) or 20)
             if constrained and 400 <= status < 500:
                 # This server does not take response_format/json_schema: plain prompted
                 # (or native) tools from now on, and retry this same request.
@@ -6215,8 +6281,10 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                           % (status, len(kwargs["tools"])))
                 continue
             wait_hint = provider_health.retry_after(str(exc.message), _retry_header(exc))
+            paced_429 = status == 429 and bool(provider) and ratelimit.rpm(provider) > 0 and _has_alternative(provider)
             if (status in _TRANSIENT_STATUS and attempt < (retries if _has_alternative(provider) else MODEL_RETRIES)
-                    and not _is_quota_error(exc) and not (auto and wait_hint > RETRY_MAX_S and _has_alternative(provider))):
+                    and not _is_quota_error(exc) and not (auto and wait_hint > RETRY_MAX_S and _has_alternative(provider))
+                    and not paced_429):   # a paced provider that still says 429 is saturated: fail over now
                 attempt += 1
                 delay = _retry_delay(attempt)
                 _progress("thinking", "Model returned HTTP %s; retrying in %.1fs (attempt %d of %d)..." % (status, delay, attempt, retries))
@@ -6261,6 +6329,91 @@ CONSTRAINED_REFUSED: set = set()
 
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+# Pacing: how long one request may wait for a free slot under a provider's per-minute cap.
+RATE_PACE_MAX_S = float(os.getenv("LOKI_RATE_PACE_MAX_S", "75") or 75)
+# DeepSeek on NVIDIA NIM: thinking off for agent work (fast, light on the per-minute cap, and the
+# tool loop never has to carry reasoning back); "high"/"max" turns it on for hard tasks.
+NVIDIA_THINKING = str(os.getenv("LOKI_NVIDIA_THINKING", "off")).strip().lower()
+LAST_REASONING: list = []   # the last few hidden-reasoning texts (shown as "thinking", never in history)
+
+
+def _is_deepseek_nim(provider: str, cfg) -> bool:
+    model = str(getattr(cfg, "model", "") or "").lower()
+    url = str(getattr(cfg, "base_url", "") or "")
+    return "deepseek" in model and (provider == "nvidia" or "integrate.api.nvidia.com" in url)
+
+
+def _provider_kwargs(provider: str, cfg, kwargs: dict) -> dict:
+    """Per-provider request fields (a copy): DeepSeek on NIM takes its thinking switch in
+    chat_template_kwargs (build.nvidia.com's own example)."""
+    if not _is_deepseek_nim(provider, cfg):
+        return kwargs
+    extra = dict(kwargs.get("extra_body") or {})
+    extra.pop("think", None)
+    thinking = NVIDIA_THINKING not in ("off", "0", "false", "no", "")
+    tmpl: dict = {"thinking": thinking}
+    if thinking:
+        tmpl["reasoning_effort"] = "max" if NVIDIA_THINKING == "max" else "high"
+    extra["chat_template_kwargs"] = tmpl
+    return dict(kwargs, extra_body=extra)
+
+
+def split_reasoning(content, reasoning=None) -> tuple:
+    """(answer, reasoning): the reasoning a model returned in reasoning_content / reasoning, or
+    as <think>...</think> inside the answer, taken out of the answer."""
+    text = content if isinstance(content, str) else ("" if content is None else str(content))
+    found = [str(reasoning)] if reasoning else []
+    if "think>" in text.lower():
+        found += [m.group(0)[7:-8].strip() for m in _THINK_RE.finditer(text)]
+        text = _THINK_RE.sub("", text)
+        low = text.lower()
+        if "</think>" in low:   # the opening tag was in the template: everything before it is reasoning
+            at = low.rindex("</think>")
+            found.append(text[:at].replace("<think>", "").strip())
+            text = text[at + len("</think>"):]
+        text = text.replace("<think>", "").replace("</think>", "").strip()
+    return text, "\n".join(f for f in found if f).strip()
+
+
+def _take_reasoning(response, provider: str, cfg):
+    """A remote model's hidden reasoning (DeepSeek's reasoning_content, <think> blocks) is shown as
+    progress and dropped from the message: it never lands in the history (it would be re-sent every
+    turn, and DeepSeek refuses some requests that carry it back). Local models keep the old
+    behaviour (an empty answer is recovered from their reasoning)."""
+    if provider in LOCAL_PROVIDERS or provider in LOCAL_SERVERS or (not provider and _cfg_is_local(cfg)):
+        return response
+    try:
+        message = response.choices[0].message
+    except (AttributeError, IndexError, TypeError):
+        return response
+    extra = getattr(message, "model_extra", None)
+    raw = None
+    for field in ("reasoning_content", "reasoning"):
+        value = extra.get(field) if isinstance(extra, dict) else None
+        if value is None:
+            value = getattr(message, field, None)
+        if value and raw is None:
+            raw = value
+        if isinstance(extra, dict):
+            extra.pop(field, None)
+        try:
+            if getattr(message, field, None) is not None:
+                setattr(message, field, None)
+        except Exception:  # noqa: BLE001
+            pass
+    original = getattr(message, "content", None)
+    content, reasoning = split_reasoning(original, raw)
+    if reasoning or (isinstance(original, str) and content != original):
+        try:
+            message.content = content
+        except Exception:  # noqa: BLE001
+            pass
+    if reasoning:
+        LAST_REASONING.append(reasoning[:4000])
+        del LAST_REASONING[:-5]
+        _progress("thinking", "%s thought: %s" % (provider or "the model", " ".join(reasoning.split())[:240]))
+    return response
 
 
 def _small_model_kwargs(kwargs: dict, cfg) -> dict:

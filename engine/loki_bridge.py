@@ -917,6 +917,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
+        if route == "/studio":   # session 29: LOKI Studio (engine/studio_api.py)
+            import studio_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*studio_api.route(self.server.state, "GET", route))
+            return
         if route in ("/speed", "/jobs/stats", "/user_tools"):   # session 28: LOKI improving itself
             import self_api  # pylint: disable=import-outside-toplevel
             self._send_json(*self_api.route(self.server.state, "GET", self.path, {}))
@@ -1226,6 +1230,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
         if handled is not None:
             self._send_json(*handled)
+            return
+        import studio_api  # pylint: disable=import-outside-toplevel - session 29: LOKI Studio + engine restart
+        if studio_api.handles("POST", route):
+            self._send_json(*studio_api.route(state, "POST", route, data))
             return
         import self_api  # pylint: disable=import-outside-toplevel - session 28: LOKI improving itself
         if self_api.handles("POST", route):

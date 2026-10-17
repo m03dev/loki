@@ -55,6 +55,64 @@ things without being asked each time. Built in a Claude worktree, committed ther
   folder watcher with a real browser download, peer sync between the real Mac and PC, the view in WebView2/WKWebView.
   Not built: an OS-wide hotkey (Run with text reads the clipboard instead), failover to the other machine.
 
+## Session 29 DeepSeek V4.1 + LOKI Studio (worktree)
+
+The owner: "i heard deepseek4.1 flash is free now through nvida ... i want it as the main driver ... i want a tab in
+loki for loki development that runs on deepseek4.1 and has the loki mcp api and controls it", then: "this mode might
+need to exist outside of loki like a game engine". So: DeepSeek is the main driver, LOKI has an MCP API, and the
+development environment is its OWN app, **LOKI Studio** (docs/STUDIO.md); inside LOKI there is only an icon that opens it.
+
+1. **Main driver** (engine/loki.py provider block + routing helpers, engine/routing.py, docs/providers.md): `nvidia`
+   defaults to `deepseek-ai/deepseek-v4.1-flash` (NIM, free, ~40 req/min, 1M context, tools) and leads SMART_ORDER and
+   ONLINE_ORDER. `main_driver_ready(needs)` puts it first - ahead of local-first and the learned order - for chat,
+   code, background jobs, teams and self-improvement (improve_loki/evolve run "online") whenever its key is set and it
+   is healthy; pictures, Local only, a rejected key, a remembered rate limit/quota or a failure this session fall back
+   to the usual order. `LOKI_MAIN_DRIVER=off` / `LOKI_NVIDIA_THINKING=off|high|max` in Settings > General. `/models
+   doctor` opens with a "Main driver: ..." line (+ a Needs-you line with the key URL when missing). The Connections
+   card says "LOKI's main driver ... Get a free key at build.nvidia.com".
+2. **Pacing** (engine/ratelimit.py, stdlib): a per-provider sliding minute (LOKI_NVIDIA_RPM, default 36) shared by the
+   engine, every job and Studio via harness_data/ratelimit/nvidia.json; `_model_request` waits for a slot (up to 75 s,
+   says so). A 429 anyway penalises the window and, with another provider ready, fails over at once (provider_health
+   marks rate_limited); with none ready the retry waits in the pacer.
+3. **Reasoning**: NIM's `chat_template_kwargs: {"thinking": false}` for agent work; `reasoning_content` / `reasoning` /
+   `<think>` are shown as a "<provider> thought: ..." progress line and removed from the message (`_take_reasoning`,
+   `split_reasoning`) - never in the history, never re-sent. Local models keep the old empty-answer recovery.
+4. **The LOKI MCP API** (engine/loki_mcp.py, docs/LOKI_MCP.md): an `mcp` 2.x MCPServer (stdio; `--http` = streamable
+   HTTP on 127.0.0.1 behind the bridge token). 25 tools: loki_status, models_doctor, settings_get/set (no secrets),
+   jobs_list/job_start/job_stop/job_logs, engine_logs (disk: works when LOKI is down), world_summary, memory_search,
+   tools_health, creations_list, restart_engine, read/list/search/edit/write files, git_status/diff/log, read_doc
+   (HANDOFF/ZIVA_TASKS/AGENTS/BUILD_BRIEF), run_tests (ship.py --check, hermetic), ship (ship.py). Code tools are jailed
+   to the dev worktree (never the checkout, harness_data, .env, tokens, keys, .git). Risky tools go through policy.py
+   and need an HMAC approval code that only the asking program (Studio, after the owner's Approve) can make, or
+   `--allow-risky` (the client's own prompt is the gate). Engine side: engine/studio_api.py (`POST /engine/restart`,
+   `GET /studio`, `POST /studio/open`; 2 small hooks in loki_bridge.py).
+5. **LOKI Studio** (studio/): its own process, window (pywebview, else the browser) and launchers (`Loki Studio.cmd`;
+   `studio/loki_studio.sh` + `studio/make_studio_app.sh` -> LOKI Studio.app). Runs from a **pinned known-good copy**
+   (harness_data/studio/pinned, a detached worktree at the updater's last_good; moved only after the candidate passes
+   `studio_app.py --self-test` + test_studio in a throwaway worktree, and only at the next start; falls back to the
+   checkout if the pin will not start). Its agent loop is its own (studio_core + studio_models, no loki.py): DeepSeek on
+   NVIDIA first, then OpenRouter's DeepSeek V4.1, OpenCode Zen, Gemini, Groq, local; paced; no key -> it says exactly
+   how to get one and uses the next best free model. A session = a worktree on `studio/<id>`; the agent's only hands are
+   the MCP API (stdio, bound to that worktree); everything streams (thinking, tool calls, results, diffs); risky calls
+   wait for Approve; follow-ups continue the same session; Diff, Tests, **Ship it** (owner only: ship.py), Discard;
+   history in harness_data/studio/sessions/. The LOKI card: status, logs from disk, Start/Restart, **Roll back** (the
+   updater's rollback, or by hand `git reset --keep <last_good>` + skip list). LOKI's sidebar has only the Studio icon
+   (app/ui/studio_link.js, 1 line in index.html, 1 icon in icons.js).
+6. Tests: **tests/test_studio.py** (182 checks, in SUITES): ratelimit, main-driver routing, the real agent loop vs a
+   fake NVIDIA (tool calls + reasoning_content + <think> + 429s + pacing against a server-side cap), every MCP tool via
+   the mcp client in-process + the stdio process + the HTTP token check, a fake running engine, a full Studio session
+   with the engine stopped (scripted model edits a temp worktree, fake check, approval, cannot ship, follow-up, ship
+   with approval, failing tests not shipped, stop, discard, history), start/restart/rollback (both kinds), the pin,
+   Studio's server (token, Host, CSP), its window and LOKI's Studio icon in headless Chromium
+   (docs/operations/screens/studio.png, studio-button.png).
+   test_loki: 2 checks updated for the new order. app self-test imports ratelimit, loki_mcp, studio_api.
+
+**Not verified here (no key, no network, no real window):** a real NIM request (model id, `chat_template_kwargs`, the
+exact reasoning field and 429 body/headers are from build.nvidia.com's docs and catalog pages, not a live call); the
+40/min figure per account; pywebview windows on Windows/macOS (Studio's window only ran in headless Chromium); the
+Studio icon in LOKI's real window; Loki Studio.cmd / LOKI Studio.app; a pin refresh with the real test_studio in a
+real checkout; the stdio MCP server inside Claude Code/Codex. -> ZIVA W35 (PC), M26 (Mac). Needs Mohamed: the NVIDIA key.
+
 ## Session 28 task success (worktree)
 
 The owner: "do not focus on the game, the core systems aren't fleshed out yet" - #1: **agents finish real

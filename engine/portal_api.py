@@ -59,6 +59,10 @@ GENERAL = {
                              "label": "Daily limit for paid use (USD)"},
     "LOKI_SELF_SHIP": {"kind": "choice", "default": "auto", "choices": ["auto", "ask", "off"],
                        "label": "LOKI may ship changes to its own code"},
+    "LOKI_MAIN_DRIVER": {"kind": "choice", "default": "nvidia", "choices": ["nvidia", "off"],
+                         "label": "Main driver: DeepSeek V4.1 Flash on NVIDIA first for everything (when its key is set)"},
+    "LOKI_NVIDIA_THINKING": {"kind": "choice", "default": "off", "choices": ["off", "high", "max"],
+                             "label": "DeepSeek on NVIDIA thinks before answering (slower, uses more of the 40/min)"},
     "LOKI_PREFER": {"kind": "choice", "default": "local", "choices": ["local", "cloud"],
                     "label": "Prefer local models or the cloud"},
     "LOKI_LOCAL_ONLY": {"kind": "bool", "default": "0",
@@ -309,6 +313,10 @@ def _apply_live(agent: Any, updates: dict) -> None:
         agent.SELF_SHIP = updates["LOKI_SELF_SHIP"]
     if "LOKI_PREFER" in updates and hasattr(agent, "PREFER"):
         agent.PREFER = updates["LOKI_PREFER"]
+    if "LOKI_MAIN_DRIVER" in updates and hasattr(agent, "MAIN_DRIVER"):
+        agent.MAIN_DRIVER = "" if updates["LOKI_MAIN_DRIVER"] == "off" else updates["LOKI_MAIN_DRIVER"]
+    if "LOKI_NVIDIA_THINKING" in updates and hasattr(agent, "NVIDIA_THINKING"):
+        agent.NVIDIA_THINKING = updates["LOKI_NVIDIA_THINKING"]
     for key in ("LOKI_TELEGRAM_POLL", "LOKI_CHANNEL_MODE"):   # engine/channels.py reads these live
         if key in updates:
             os.environ[key] = updates[key]
