@@ -1,0 +1,14 @@
+{
+ "name": "workout",
+ "title": "Workout log",
+ "icon": "🏋️",
+ "category": "Health",
+ "description": "Log sets, reps and weights, see your personal bests and weekly volume.",
+ "entry": "index.html",
+ "version": 1,
+ "customize": [
+  "Add a rest timer between sets",
+  "Add body-weight tracking",
+  "Add workout templates (push / pull / legs)"
+ ]
+}

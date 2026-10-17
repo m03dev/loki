@@ -38,6 +38,9 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       W35 (PC) and M26 (Mac) are the steps; the cloud box had no real documents, no WebView2/WKWebView and no
       pip (the ocr / DuckDB paths are tested only where installed). Answer here with the test_documents line and
       whether the scanned PDF read with rapidocr. (Claude, 2026-10-17)
+- [ ] [either] **Session 29 LOKI Apps: the apps area in the real windows and app sync between the machines.** W35 (PC)
+      and M26 (Mac). The headless Chromium run here cannot show WebView2/WKWebView file dialogs or the peer sync
+      between the real machines. Answer here with what worked. (Claude, 2026-10-17)
 
 - [ ] [either] **Session 28 memory & knowledge: teach LOKI a fact on one machine, ask on the other.** W28 (PC) and
       M20 (Mac) are the steps; they must run at the same time on both machines. Answer here with the two eval lines
@@ -1029,6 +1032,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (8) Home Assistant only if Mohamed has one (Needs Mohamed): Settings > Tools > Home, address + token, Test;
       "which lights are on?" then "turn off <a light>" -> the approval prompt MUST appear.
 
+- [ ] **W40 LOKI Apps on the PC (session 29, 2026-10-17).** HANDOFF "Session 29 LOKI Apps (worktree)", docs/APPS.md.
+      After LOKI updates: (1) `harness_data\.venv\Scripts\python.exe tests\test_apps.py` - say if its window checks
+      ran (they need Playwright + Chromium). (2) In the real window (WebView2): the grid icon under "New chat"
+      opens Apps; hover it - the tooltip says "Apps". Gallery -> Install **Budget**; add an income and two
+      spendings; the numbers and the bar chart update. Screenshot. (3) *Export CSV* -> LOKI's own "wants to save a
+      file" prompt appears; Save; the file is in `<workspace>\App files\budget\`. *Import CSV* -> the "open a
+      file" prompt; *Choose from this computer* must open the Windows file dialog (pywebview); pick that CSV;
+      the entries double. (4) *Ask LOKI about my spending* -> a real answer from the local model (say which).
+      (5) In chat: "make me a tracker for watering my plants" -> LOKI calls app_builder_guide then make_app; the
+      app appears in My apps and works. Then "add a 'last fertilised' date to my plants app" -> it changes.
+      Report the job/tool lines if it fails. (6) The mode picker (left of Ask/Plan/Build): pick **Tutor**; the
+      home chips change to Tutor prompts; ask "teach me fractions" - the answer should teach step by step.
+      Back to General. (7) Apps -> Modes -> Export Tutor -> the file in `<workspace>\LOKI modes\`.
+      (8) With the Mac linked: wait 1-5 minutes; the Budget app AND its entries must be on the Mac too (M26).
 - [ ] **W29 Talk to LOKI from Telegram + the mic button, on the PC (2026-10-17, session 28).** The PC is the
       machine that answers Telegram (LOKI_TELEGRAM_POLL=auto -> the Windows PC). Tested in the cloud only against
       a fake Telegram server. Needs Mohamed's bot token first (Needs Mohamed: "Telegram bot").
@@ -1738,6 +1755,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       `confirm()` / `prompt()` dialogs appear (prompt library blanks, Save preview, Restore); clipboard Copy works;
       links in replies open in Safari, not inside LOKI's window. rembg on Apple Silicon (onnxruntime CPU) - time it.
 
+- [ ] **M31 LOKI Apps on the Mac (session 29, 2026-10-17).** Same as W35 (1)-(7) in WKWebView. Watch especially:
+      (a) the app frame (sandbox="allow-scripts", served with CSP `sandbox allow-scripts` and `script-src 'self'`)
+      loads /ui/appkit/appkit.js - if WebKit blocks it the app stays empty: report the Web Inspector console;
+      (b) the `color-mix()` colours in appkit.css (Safari 16.2+; older macOS shows plain colours - say which macOS);
+      (c) *Choose from this computer* in the "open a file" prompt must open the macOS file panel (pywebview
+      WKWebView needs its file-input delegate); (d) emoji icons render. (8) Sync: an app installed on the PC
+      appears here within ~5 minutes with its data; remove it here -> it is removed on the PC too (in its trash).
+      (9) Apps -> Extensions: scan `https://github.com/<any small public repo without extension.json>` -> a clear
+      "no extension.json" (blocked) report, nothing installed.
 - [ ] **M21 The mic button and spoken replies in WKWebView; Telegram stays quiet on the Mac (2026-10-17,
       session 28).** (1) Rebuild Loki.app (`tools/macos/make_loki_app.sh`) - its Info.plist now has
       NSMicrophoneUsageDescription; without it macOS refuses (or kills) microphone access. Open LOKI from Loki.app.

@@ -1,0 +1,14 @@
+{
+ "name": "meals",
+ "title": "Meal planner",
+ "icon": "🥗",
+ "category": "Life",
+ "description": "Plan the week's meals and get the shopping list made for you.",
+ "entry": "index.html",
+ "version": 1,
+ "customize": [
+  "Add calories per meal",
+  "Add a favourites list of recipes",
+  "Group the shopping list by aisle"
+ ]
+}

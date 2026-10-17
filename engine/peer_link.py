@@ -295,6 +295,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "restart": lambda: _restart_soon(state),
             "presence": _presence_receive,
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
+            "apps_sync": lambda origin, data: _apps_receive(agent, origin, data),
 
             "files": _files_receive,
             "automations": _automations_receive,
@@ -312,6 +313,13 @@ def _memory_receive(agent: Any, origin: str, data: dict) -> dict:
     import memory_sync  # pylint: disable=import-outside-toplevel
     return memory_sync.receive(origin, data, root=Path(getattr(agent, "DATA_DIR", "") or experience._data_dir()),
                                notes_file=getattr(agent, "MEMORY_FILE", None))
+
+def _apps_receive(agent: Any, origin: str, data: dict) -> dict:
+    """POST /peer/apps: another machine's LOKI Apps summary or push (apps.py)."""
+    import apps  # pylint: disable=import-outside-toplevel
+    root = getattr(agent, "DATA_DIR", "")
+    return apps.sync_receive(Path(getattr(agent, "WORKSPACE", ".")), origin, data, Path(root) if root else None)
+
 
 def _files_receive(origin: str, data: dict) -> tuple:
     """POST /peer/files: another machine lists/reads (or, when allowed here, writes) the shared folder."""

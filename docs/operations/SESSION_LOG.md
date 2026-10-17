@@ -63,6 +63,22 @@ Concise dated records of meaningful work. Newest at the top.
   chat. Document collections are a source of the one knowledge index; memory.pack cites file#page.
 - Add-ons documents, ocr, data-analysis, docling. tests/test_documents.py + tests/test_files_ui.py (Files view screenshot) in SUITES.
   Real machines: ZIVA W35 (PC), M26 (Mac).
+## 2026-10-17 - Session 29 (Claude, worktree): LOKI Apps - LOKI turns into whatever you need
+
+- Mini-apps (engine/apps.py): <workspace>/apps/<name>/ (manifest + index.html + app.js), served at /apps/w|t|x|p/...
+  without the token under APP_CSP (connect-src 'none', script-src 'self', sandbox allow-scripts), run in
+  sandbox="allow-scripts" frames; a postMessage bridge in app/ui/apps.js gives each app its own engine-side store
+  (last writer wins per key, tombstones), "ask LOKI" (loki.app_ask -> _port_ask with the app's data) and file
+  save/open behind LOKI's own approval dialogs. Apps + data sync between machines over POST /peer/apps.
+- Design kit app/ui/appkit/ (appkit.css + appkit.js: bridge + components) and 12 gallery templates (budget, habits,
+  journal, flashcards, meals, workout, reading, contacts, invoice, kanban, pomodoro, notes).
+- Agent tools app_builder_guide + make_app (create/update/install/read/list/data; refuses sandbox-breaking code).
+- Modes (engine/personas.py): 8 built-ins + own, export/import .lokimode (scanned like skills), picker in the
+  message box (app/ui/modes.js), applied by wrappers around system_prompt/_tool_enabled.
+- Extensions (engine/extensions.py): extension.json format (python tools in the user_tools sandbox, app, panel,
+  mode), stage from a folder or https git URL -> scan report -> install on approval; tools ask unless trusted.
+- tests/test_apps.py (131 checks, ~35 s, headless Chromium incl. the sandbox and the approval dialog) in SUITES.
+  docs/APPS.md. Real machines: ZIVA W35 (PC), M26 (Mac).
 
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 

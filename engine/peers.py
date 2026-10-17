@@ -476,6 +476,12 @@ class PeerServer:
             if "memory_sync" not in cb:
                 return 404, {"ok": False, "error": "memory sync is not available here"}
             return 200, {"ok": True, **cb["memory_sync"](origin, data)}
+        if method == "POST" and path == "/peer/apps":
+            # LOKI Apps (apps.py): the owner's mini-apps and their data on every machine - summaries
+            # first, then only what the other side lacks; data merged key by key, last writer wins.
+            if "apps_sync" not in cb:
+                return 404, {"ok": False, "error": "app sync is not available here"}
+            return 200, {"ok": True, **cb["apps_sync"](origin, data)}
         if method == "GET" and path == "/peer/diagnose":
             # "LOKI on the Mac is not responding": the other machine can see why (read-only,
             # redacted) - a stuck request, the System check, models, memory, the last log lines.

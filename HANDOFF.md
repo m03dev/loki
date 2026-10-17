@@ -318,6 +318,60 @@ Chromium against the real files_api, with a screenshot) are in SUITES.**
   docs); WebView2/WKWebView drag & drop (pywebview may swallow file drops on macOS - the Add files picker is the
   fallback); the Windows memory watchdog and `os.startfile`; Docling; LibreOffice conversion of .doc/.xls; real
   user PDFs/spreadsheets; a live model using the tools and citing pages.
+Last updated: 2026-10-17 (session 29, Claude in the cloud; LOKI Apps worktree).
+
+## Session 29 LOKI Apps (worktree)
+
+The owner: "i want a useful app that can help people and can turn into anything" - not the game. LOKI now builds
+small apps for people, changes into the helper they need, and can be extended by anyone. Users and authors:
+**docs/APPS.md**. Built in a Claude worktree, committed there, not pushed; the parent session merges and ships.
+
+- **Mini-apps** (`engine/apps.py`, `engine/apps_api.py`, `app/ui/apps.js` + `apps.css`): an Apps area (grid icon
+  under New chat, data-icon tooltip) with My apps / Gallery / Modes / Extensions. Each app runs in an iframe
+  `sandbox="allow-scripts"`; its files come from `GET /apps/<w|t|x|p>/<name>/<file>` (no token - a sandboxed frame
+  has none - Host-checked, app folder only, safe types) with `apps.APP_CSP` (no network, scripts from files only,
+  CSP `sandbox allow-scripts` even when opened directly). The window side of the bridge identifies the app by
+  the frame a message comes out of (never by the message) and calls `/apps/storage`, `/apps/ask`, `/apps/files/*`
+  with the token. File saves and opens go through LOKI's own dialogs in the main window.
+  Store: `harness_data/app_data/<app>.json`, per key `{v, t, h, d}` (last writer wins, ties by machine name,
+  tombstones). Saved files: `<workspace>/App files/<app>/`, never overwritten.
+- **Sync**: `POST /peer/apps` (peers.py block + peer_link callback): summaries first, then only the apps/data the
+  other side lacks; removals are tombstones (`_removed.json`), removed apps go to `app_data/.removed/`. Loop:
+  started lazily by the first /apps or /personas call (`apps.ensure_sync_thread`), 5 s after a change and every
+  `LOKI_APPS_SYNC_S` (300); `LOKI_APPS_SYNC=0` turns it off.
+- **Kit + gallery** (`app/ui/appkit/`): appkit.css (midnight navy, cyan->emerald, light mode), appkit.js (`loki.*`
+  bridge, `kit.*` components - its header comment is the reference the guide shows the model) and 12 templates.
+- **Agent tools** (loki.py session-29 block, registration only): `app_builder_guide`, `make_app`
+  (create/update/install/read/list/data; refuses inline scripts, onclick=, CDN, fetch, localStorage, alert, eval,
+  JS syntax errors via node --check), `app_ask` for the bridge (one `_port_ask` with the app's data). make_app is in
+  MODIFYING (never in Plan mode).
+- **Modes** (`engine/personas.py`, `app/ui/modes.js`): Tutor, Writer, Coder, Researcher, Life admin, Small
+  business, Student, Creator + own (`harness_data/modes/`), export `<workspace>/LOKI modes/<id>.lokimode`, import
+  scanned with skill_scan.BLOCK_PATTERNS. Applied by wrappers AROUND `system_prompt` (adds "# Mode: ...") and
+  `_tool_enabled` (only when a mode sets only_tools); `apply_persona()` puts the mode's tools first for small
+  models. The picker sits left of Ask/Plan/Build; starter prompts replace the welcome chips.
+- **Extensions** (`engine/extensions.py`): `extension.json` (`loki-extension/1`: python tools, app, panel, mode).
+  `POST /extensions/scan` stages (folder copy, or `git clone --depth 1` https only, no prompts, `.git` removed) and
+  scans (user_tools.scan per tool, skill_scan patterns on every text file, skill_rules, undeclared programs noted,
+  name clashes with LOKI's tools blocked); `POST /extensions/install` after the owner's click (re-scanned, tool
+  tests run). Tools run via `extensions.execute` (the user_tools sandbox) and ask every call
+  (`approve("extension_tool", ..., decidable=False)`) unless trusted.
+- **Bridge**: one file-serving method `_serve_app` + one GET block + one POST block (read before `_read_json`,
+  6 MB bodies for app data). index.html: 1 stylesheet, 2 scripts, 1 button; icons.js: the `grid` icon; app.js
+  untouched.
+- **Tests**: tests/test_apps.py (131 checks, ~35 s) in SUITES - templates, make_app rules, storage merge, files,
+  personas, extensions (stage/scan/block/install/git clone/sandboxed run), two-machine sync with a fake peer, the
+  loki.py tools + wrappers + approval, the real bridge over HTTP, and headless Chromium: the window starts, every
+  template runs under the real CSP, Budget in its sandboxed frame stores through the bridge, cannot reach the
+  parent/storage/network, gets an "ask LOKI" answer, a file save asks in LOKI's window (approve + decline), the mode
+  picker sets Tutor. `LOKI_SUITE_SHOTS=<dir>` keeps screenshots (looked at: gallery, Budget + ask, save approval,
+  mode picker). Also green here: --self-test, test_ui_smoke, test_loki, test_peers, test_play.
+- **Not verified here**: WebView2/WKWebView (file dialogs from `<input type=file>`, WebKit and the sandboxed frame's
+  `'self'` scripts, color-mix), a real model answering "ask LOKI" or building an app with make_app, real sync
+  between the Mac and the PC, a real git extension from GitHub (the clone path was tested with a local repo).
+  ZIVA W35 (PC), M26 (Mac). In headless Chromium a synthetic click right after an app's first render sometimes
+  did not reach the frame; the suite drives the bridge with calls instead - watch for "first click ignored" on
+  the real machines.
 
 ## Session 28 task success (worktree)
 

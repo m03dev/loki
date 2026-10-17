@@ -841,6 +841,40 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._send_static(found)
         return True
 
+    def _serve_app(self, route: str) -> bool:
+        """GET /apps/<w|t|x|p>/<name>/<file>: a LOKI mini-app's files for its sandboxed frame in the Apps area
+        (engine/apps.py). Only that app's folder and safe file types, only this machine's host name; pages
+        get apps.APP_CSP (no network, scripts from files only, sandboxed even when opened on their own)."""
+        import apps_api  # pylint: disable=import-outside-toplevel
+        if not apps_api.is_file_route(route):
+            return False
+        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+            self._send_json(403, {"ok": False, "error": "Host not allowed."})
+            return True
+        import apps  # pylint: disable=import-outside-toplevel
+        agent = self.server.state.agent
+        root = getattr(agent, "DATA_DIR", None)
+        found = apps.app_file(route, Path(getattr(agent, "WORKSPACE", ".")), Path(root) if root else None)
+        if found is None:
+            self._send_json(404, {"ok": False, "error": "Not found."})
+            return True
+        body = found.read_bytes()
+        page = found.suffix.lower() == ".html"
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", apps.APP_TYPES.get(found.suffix.lower(), "application/octet-stream"))
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "SAMEORIGIN" if page else "DENY")
+            self.send_header("Content-Security-Policy", apps.APP_CSP if page else "default-src 'none'; sandbox")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionError, OSError):
+            pass
+        return True
+
     def _serve_creation(self, route: str) -> bool:
         """GET /creations/<kind>/<file>: a picture, video, sketch or sound LOKI made in the
         workspace, for Settings > Creations (an <img>/<video> cannot send the bearer token).
@@ -909,6 +943,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if self._serve_creation(route):
             return
+        if self._serve_app(route):   # LOKI Apps: a mini-app's files for its sandboxed frame
+            return
         if self._oauth_callback(route):
             return
         if not self._authorized():
@@ -938,6 +974,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             try:
                 self._send_json(*files_api.handle(self.server.state, "GET", self.path, {}))
             except Exception as exc:  # noqa: BLE001 - a broken preview must not break the window
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
+        import apps_api  # pylint: disable=import-outside-toplevel - LOKI Apps, modes, extensions
+        if apps_api.owns(route) or route == "/extensions":
+            try:
+                self._send_json(*apps_api.handle_get(self.server.state, self.path))
+            except Exception as exc:  # noqa: BLE001
                 self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
         if route.startswith(("/tools/health", "/connectors", "/computer")):   # Settings > Tools (engine/tools_api.py)
@@ -1251,6 +1294,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except ValueError:
                 length = -1
             self._send_json(*files_api.save_upload(self.server.state, urlparse(self.path).query, self.rfile, length))
+            return
+        import apps_api  # pylint: disable=import-outside-toplevel - LOKI Apps, modes, extensions (bigger bodies)
+        if apps_api.owns(route):
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = -1
+            if length <= 0 or length > apps_api.MAX_BODY:
+                self._send_json(413, {"ok": False, "error": "Request body is empty or too large."})
+                return
+            try:
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._send_json(400, {"ok": False, "error": "Invalid JSON body."})
+                return
+            try:
+                self._send_json(*apps_api.handle(self.server.state, "POST", self.path, body))
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
         data = self._read_json()
         if data is None:

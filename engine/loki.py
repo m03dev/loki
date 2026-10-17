@@ -6286,6 +6286,176 @@ if "read_web" in LOCAL_TOOL_PRIORITY:   # after the web tools, which stay in the
     LOCAL_TOOL_PRIORITY[_at:_at] = ["read_document", "write_document", "analyze_data"]
 
 
+# --- Session 29: LOKI Apps - mini-apps, modes (personas) and extensions (docs/APPS.md) -------------------
+# engine/apps.py (mini-apps LOKI builds and runs in a sandboxed frame), engine/personas.py (Tutor, Writer,
+# Coder... packs), engine/extensions.py (plugins anyone can write). Registration only: two tools, the
+# extensions' tools (each call asks unless the owner trusted that extension), and two wrappers AROUND
+# system_prompt (the active mode's instructions) and _tool_enabled (a mode with only_tools) - neither changed.
+import apps as _apps  # noqa: E402
+import extensions as _extensions  # noqa: E402
+import personas as _personas  # noqa: E402
+
+
+def app_builder_guide() -> str:
+    """How to build a LOKI mini-app: the bridge (loki.store / ask / files), the kit, the rules, a full example."""
+    return _apps.guide()
+
+
+def make_app(action: str = "create", name: str = "", title: str = "", description: str = "", icon: str = "",
+             html: str = "", js: str = "", css: str = "", template: str = "") -> str:
+    """Create / update / install / read / list LOKI mini-apps in <workspace>/apps/, or read an app's saved data."""
+    action = str(action or "create").strip().lower()
+    if action in ("create", "update", "write", "edit", "save"):
+        if not name:
+            return "error: make_app needs a name (lowercase, e.g. budget)"
+        out = _apps.make_app(WORKSPACE, name, title=title, description=description, icon=icon, html=html, js=js, css=css)
+        if not out.get("ok"):
+            return "error: %s" % out.get("error")
+        _progress("tool", "App %s %s - open it in Apps." % (out["name"], "updated" if out["updated"] else "made"))
+        return ("%s app %s (%s). It is in the Apps area now (the grid icon in the sidebar); tell the user to open it."
+                "%s" % ("updated" if out["updated"] else "made", out["name"], out["path"],
+                        (" Warnings: " + "; ".join(out["warnings"])) if out.get("warnings") else ""))
+    if action == "install":
+        out = _apps.install_template(WORKSPACE, template or name, name if template else "")
+        return ("installed the %s template as app %s; read it with make_app(action='read', name='%s') to change it"
+                % (template or name, out["name"], out["name"])) if out.get("ok") else "error: %s" % out.get("error")
+    if action == "read":
+        out = _apps.read_app(WORKSPACE, _apps.clean_name(name))
+        if not out.get("ok"):
+            return "error: %s" % out.get("error")
+        parts = ["APP %s - %s" % (out["name"], json.dumps(out["manifest"], ensure_ascii=False)[:600])]
+        for rel, text in out["files"].items():
+            if rel != "manifest.json":
+                parts.append("---- %s ----\n%s" % (rel, text))
+        return "\n".join(parts)
+    if action == "list":
+        mine = _apps.list_apps(WORKSPACE)
+        return ("installed apps: " + (", ".join("%s (%s)" % (a["name"], a["title"]) for a in mine) or "none")
+                + "\ntemplates: " + ", ".join(t["name"] for t in _apps.list_templates()))
+    if action == "data":
+        try:
+            return "data saved by app %s:\n%s" % (name, _apps.data_summary(_apps.clean_name(name), DATA_DIR))
+        except ValueError as exc:
+            return "error: %s" % exc
+    return "error: unknown action %r (create, update, install, read, list, data)" % action
+
+
+async def app_ask(app_key: str, prompt: str, data=None) -> str:
+    """'Ask LOKI' from inside a mini-app: one model call with the app's own data as context."""
+    try:
+        stored = _apps.data_summary(app_key, DATA_DIR, limit=8000)
+    except ValueError:
+        stored = "{}"
+    extra = json.dumps(data, ensure_ascii=False, default=str)[:8000] if data is not None else ""
+    title = app_key.split(":")[-1]
+    system = ("You are LOKI, answering a question asked from inside the owner's mini-app '%s'. Answer in plain, "
+              "short text (no Markdown tables unless asked), using the app's data below. If the data does not say, "
+              "say so.\n\nThe app's saved data (JSON):\n%s%s"
+              % (title, stored, ("\n\nWhat the app sent with the question:\n" + extra) if extra else ""))
+    mode = _personas.active(DATA_DIR)
+    if mode and mode.get("instructions"):
+        system += "\n\n" + _personas.prompt_section(mode)
+    return (await _port_ask(prompt, system=system, max_tokens=1200)).strip()
+
+
+def _extension_runner(item: dict):
+    async def run(**args) -> str:
+        detail = "%s from extension %s(%s)" % (item["name"], item["ext_name"],
+                                               json.dumps(args, ensure_ascii=False, default=str)[:300])
+        if not item.get("trusted") and not await approve("extension_tool", detail, decidable=False):
+            return ("DENIED: running %s (extension %s) was not approved. Do it with other tools, or reply "
+                    "'BLOCKED: <reason>'." % (item["name"], item["ext_name"]))
+        _ok, out = await asyncio.to_thread(_extensions.execute, item["path"], args, WORKSPACE, item["timeout"])
+        return out
+    return run
+
+
+EXTENSIONS = _extensions.Registry(sys.modules[__name__], lambda: DATA_DIR, _extension_runner)
+LOCAL_TOOLS.update({"app_builder_guide": app_builder_guide, "make_app": make_app})
+_S29_SCHEMAS = [
+    schema("app_builder_guide", "Before making or changing a LOKI app (a small tool the user keeps: budget, habit "
+           "tracker, planner, flashcards, invoice...): how apps work inside LOKI - the loki.store/ask/files bridge, "
+           "the design kit, the sandbox rules and a full example.", {}, []),
+    schema("make_app", "Build a small app that runs inside LOKI's Apps area (read app_builder_guide first). "
+           "action=create (name, title, icon emoji, description, html = BODY markup, js = app.js, css optional) - "
+           "also updates an existing app (only the parts given are replaced); action=install template=<budget|habits|"
+           "journal|flashcards|meals|workout|reading|contacts|invoice|kanban|pomodoro|notes>; action=read name (its "
+           "files, before changing it); action=list; action=data name (what the app saved).",
+           {"action": {"type": "string", "enum": ["create", "update", "install", "read", "list", "data"]},
+            "name": {"type": "string"}, "title": {"type": "string"}, "description": {"type": "string"},
+            "icon": {"type": "string"}, "html": {"type": "string"}, "js": {"type": "string"},
+            "css": {"type": "string"}, "template": {"type": "string"}}, ["action"]),
+]
+TOOL_SCHEMAS.extend(_S29_SCHEMAS)
+MODEL_TOOL_SCHEMAS.extend(_S29_SCHEMAS)
+MODEL_TOOL_NAMES.update(("app_builder_guide", "make_app"))
+TOOL_CATEGORIES["creative"] += ["app_builder_guide", "make_app"]
+TOOL_CATEGORIES["extensions"] = []
+CATEGORY_LABELS["extensions"] = "Extensions you installed (each call asks first unless you trusted it)"
+CATEGORIES.setdefault("extensions", True)
+MODIFYING.add("make_app")       # it writes files: never in Plan mode, and counts as real work
+try:
+    EXTENSIONS.sync()
+except Exception as _exc:  # noqa: BLE001 - a broken extension must never stop LOKI starting
+    print("[loki] extensions could not be loaded: %s" % _exc)
+
+_PERSONA_PROMOTED: list = []
+
+
+def apply_persona() -> dict | None:
+    """Put the active mode's tools first for small models (and take the last mode's back out)."""
+    mode = _personas.active(DATA_DIR)
+    for name in _PERSONA_PROMOTED:
+        if name in LOCAL_TOOL_PRIORITY:
+            LOCAL_TOOL_PRIORITY.remove(name)
+    _PERSONA_PROMOTED.clear()
+    wanted = [t for t in (mode or {}).get("tools") or [] if t in LOCAL_TOOLS and t not in LOCAL_TOOL_PRIORITY]
+    at = LOCAL_TOOL_PRIORITY.index("find_tools") + 1 if "find_tools" in LOCAL_TOOL_PRIORITY else 0
+    LOCAL_TOOL_PRIORITY[at:at] = wanted
+    _PERSONA_PROMOTED.extend(wanted)
+    try:
+        refresh_system_prompt()
+    except Exception:  # noqa: BLE001
+        pass
+    return mode
+
+
+_system_prompt_plain = system_prompt
+
+
+def system_prompt() -> str:   # noqa: F811 - the active mode's instructions on top of LOKI's own
+    text = _system_prompt_plain()
+    try:
+        mode = _personas.active(DATA_DIR)
+    except Exception:  # noqa: BLE001 - a broken mode file never breaks a request
+        mode = None
+    return text + (chr(10) * 2 + _personas.prompt_section(mode) if mode else "")
+
+
+_tool_enabled_before_modes = _tool_enabled
+# Always offered, even in a mode with only_tools: answering, planning and finding more tools.
+_MODE_ALWAYS = {"find_tools", "todo_add", "todo_list", "todo_done", "save_memory", "read_file", "list_files",
+                "app_builder_guide", "make_app", "load_ecc_skill", "list_ecc_skills"}
+
+
+def _tool_enabled(tool_name: str) -> bool:   # noqa: F811 - a mode with only_tools narrows the offer
+    if not _tool_enabled_before_modes(tool_name):
+        return False
+    try:
+        mode = _personas.active(DATA_DIR)
+    except Exception:  # noqa: BLE001
+        return True
+    if mode and mode.get("only_tools") and mode.get("tools"):
+        return tool_name in mode["tools"] or tool_name in _MODE_ALWAYS
+    return True
+
+
+try:
+    apply_persona()
+except Exception as _exc:  # noqa: BLE001
+    print("[loki] the chosen mode could not be applied: %s" % _exc)
+
+
 # ---------------------------------------------------------------------------
 # The agent loop: one turn = keep calling tools until the model stops asking.
 # ---------------------------------------------------------------------------

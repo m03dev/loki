@@ -1,0 +1,14 @@
+{
+ "name": "flashcards",
+ "title": "Study cards",
+ "icon": "🧠",
+ "category": "Learning",
+ "description": "Flashcard decks with spaced repetition - LOKI can write the cards for you.",
+ "entry": "index.html",
+ "version": 1,
+ "customize": [
+  "Add a typing quiz mode",
+  "Add images as text descriptions on cards",
+  "Show how many cards are due each day"
+ ]
+}
