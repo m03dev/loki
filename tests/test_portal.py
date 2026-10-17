@@ -748,17 +748,22 @@ three_js = (ui / "world_three.js").read_text(encoding="utf-8")
 check("the world has a three.js renderer (vendored, local, MIT) with PBR, shadows, bloom and tone mapping",
       (ui / "vendor" / "three" / "three.module.js").is_file() and (ui / "vendor" / "three" / "LICENSE").is_file()
       and all(x in three_js for x in ("MeshStandardMaterial", "castShadow", "UnrealBloomPass", "ACESFilmicToneMapping", "InstancedMesh")))
-check("three.js loads only from LOKI itself (no CDN), as a module before world.js",
-      "https://" not in three_js and html.index('type="module" src="/ui/world_three.js"') < html.index('/ui/world.js"'))
+check("three.js loads only from LOKI itself (no CDN), and only on demand (LOKI_WORLD_ENGINE=three)",
+      "https://" not in three_js and 'src="/ui/world_three.js"' not in html and 's.src = "/ui/world_three.js"' in world_js)
 vendored = [p for p in (ui / "vendor" / "three").rglob("*.js")]
 check("vendored add-ons import three by a local path, never the bare 'three' specifier",
       not any(("from 'three'" in p.read_text(encoding="utf-8") or 'from "three"' in p.read_text(encoding="utf-8")) for p in vendored))
-check("the classic renderer stays as the fallback", 'World.engine !== "classic"' in world_js and "function initGL(" in world_js)
+check("LOKI's own pixel cel-shaded renderer is the default look; three.js only when asked",
+      'engine: "classic"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js)
+check("denser pixels and more colour bits than the first pixel look",
+      '"const float BANDS = 4.0;"' in world_js and "view.opts.levels || 32" in world_js and "pixel: 2, fps: 0" in world_js)
+check("island life: the fox and the rabbits", "function critters(" in world_js and 'kind: "fox"' in world_js)
 check("the world shows your other machines, the model and today's usage",
       all(x in world_js for x in ("World.data.machines", "machineSpots", "model.local", "usage.calls")))
 glass = (ui / "glass.css").read_text(encoding="utf-8")
-check("the glass look: blur, translucency, gradients, and a reduced-transparency fallback",
-      "backdrop-filter" in glass and "--grad:" in glass and "prefers-reduced-transparency" in glass)
+check("the glass look without live blur over the moving world (the lag): tinted panels, gradients",
+      "--blur: none;" in glass and "--grad:" in glass and "prefers-reduced-transparency" in glass
+      and "backdrop-filter: blur(8px)" not in glass)
 check("the world fills the window behind the glass", ".world-bg { position: fixed; inset: 0; }" in glass)
 setup_js = (ui / "setup.js").read_text(encoding="utf-8")
 check("setup.js no longer shares a global button() with settings.js (labels were swapped)",
@@ -766,7 +771,7 @@ check("setup.js no longer shares a global button() with settings.js (labels were
 check("the world keeps the functions app.js and settings.js call", all(
     ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")) and "window.afterStart" in world_js)
 if shutil.which("node"):
-    for name in ("app.js", "settings.js", "world.js", "world_noise.js", "setup.js", "machines.js", "workbench.js"):
+    for name in ("app.js", "settings.js", "world.js", "world_noise.js", "setup.js", "machines.js", "workbench.js", "lab.js", "sketch.js"):
         proc = subprocess.run(["node", "--check", str(ui / name)], capture_output=True, text=True)
         check("%s parses" % name, proc.returncode == 0, proc.stderr)
 

@@ -16,6 +16,10 @@ Duties, each on its own interval:
            "a job for LOKI's own agents") and start it as a team. One at a time; each
            request is started once. The repo file is never edited (that would block the
            updater); what was started is recorded in autopilot.json and as an event.
+  evolve   (LOKI_EVOLVE, engine/evolve.py) take the next step of LOKI growing its own
+           personal-agent core - docs/EVOLVE.md and the owner's ideas from Settings > Lab - and
+           hand it to improve_loki (own worktree, all tests, ship). One at a time; outcomes are
+           kept and fed to the next attempt, so it learns what works.
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -91,7 +95,8 @@ class Autopilot:
                  repo: Path | None = None, clock: Callable[[], float] = time.time,
                  run_check: Callable[[], dict] | None = None,
                  apply_fix: Callable[[str, dict], dict] | None = None,
-                 start_team: Callable[[str], str] | None = None) -> None:
+                 start_team: Callable[[str], str] | None = None,
+                 evolve: Any = None, improve: Callable[[str], str] | None = None) -> None:
         self.state = state
         self.agent = agent
         self.clock = clock
@@ -102,6 +107,8 @@ class Autopilot:
         self.run_check = run_check
         self.apply_fix = apply_fix
         self.start_team = start_team or (getattr(agent, "start_team", None) if agent is not None else None)
+        self.evolve = evolve
+        self.improve = improve or (getattr(agent, "improve_loki", None) if agent is not None else None)
         self.lock = threading.Lock()
         self.data = self._load()
 
@@ -203,6 +210,24 @@ class Autopilot:
             return reply
         return ""
 
+    def duty_evolve(self) -> str:
+        if self.evolve is None or self.improve is None:
+            return ""
+        jobs = getattr(self.state, "jobs", None)
+
+        def job_status(job_id: str):
+            try:
+                job = jobs.store.get(job_id) if jobs is not None else None
+            except Exception:  # noqa: BLE001
+                job = None
+            return job.get("status") if job else None
+        for item_id, outcome in self.evolve.settle(job_status):
+            self._log("evolve", "%s %s" % (item_id, "shipped" if outcome == "shipped" else "did not ship; it will be tried again"))
+        line = self.evolve.step(self.improve)
+        if line:
+            self._log("evolve", line)
+        return line
+
     def _team_running(self, team_id: str) -> bool:
         runner = getattr(self.agent, "TEAMS", None)
         try:
@@ -247,6 +272,10 @@ class Autopilot:
         duties = [("health", _env_s("LOKI_AUTOPILOT_HEALTH_S", 21600), self.duty_health)]
         if _env_on("LOKI_AUTOPILOT_INBOX"):
             duties.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 900), self.duty_inbox))
+        if self.evolve is not None:
+            import evolve as _evolve  # pylint: disable=import-outside-toplevel
+            if _evolve.enabled():
+                duties.append(("evolve", _env_s("LOKI_EVOLVE_S", 14400), self.duty_evolve))
         duties.append(("report", _env_s("LOKI_AUTOPILOT_REPORT_S", 604800), self.duty_report))
         with self.lock:
             for name, every, fn in duties:

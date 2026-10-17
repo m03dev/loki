@@ -314,9 +314,27 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
         if code is None:
             stop.wait(1.0)
             continue
-        if code != RESTART_EXIT_CODE or stop.is_set():
-            log("the engine stopped (exit %s)" % code)
+        if stop.is_set():
             return
+        if code != RESTART_EXIT_CODE:
+            # The engine died on its own (a crash, or killed for memory). Before, the window then
+            # sat there dead until LOKI was quit - all night once. Start it again, a few times,
+            # with a growing pause, and reload the window; give up only if it keeps dying.
+            now = time.time()
+            crashes = [c for c in holder.get("crashes", []) if now - c < 600] + [now]
+            holder["crashes"] = crashes
+            log("the engine stopped (exit %s)%s" % (code, "; starting it again" if len(crashes) <= 5 else ""))
+            if len(crashes) > 5:
+                log("the engine crashed 5 times in 10 minutes; not restarting it again")
+                return
+            stop.wait(min(30.0, 2.0 * len(crashes)))
+            new_process, token = start_and_wait(python, workspace, godot)
+            holder["process"] = new_process
+            if not token:
+                log("the engine did not come back")
+                return
+            show_url(f"{BASE}/#token={token}")
+            continue
         log("the engine is restarting on the updated code")
         new_process, token = start_and_wait(python, workspace, godot)
         holder["process"] = new_process

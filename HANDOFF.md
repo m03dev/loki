@@ -4,7 +4,40 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-16 (session 23, Claude in the cloud).
+Last updated: 2026-10-17 (session 24, Claude in the cloud).
+
+## Session 24 (2026-10-17, Claude in the cloud): the pixel look is back, the lag is gone, LOKI grows itself
+
+The owner was right: session 22 made three.js (PBR, bloom) the default world and put the world
+full-window behind live-blurred glass. That replaced the pixel cel-shaded look they liked and
+made the window lag. Nothing was taken off; it was put back and the cost removed:
+
+- **World: LOKI's own pixel cel-shaded engine is the default again** (`World.engine = "classic"`,
+  `LOKI_WORLD_ENGINE` classic|three, default classic). Improved, not replaced: denser pixels (panel
+  2 px, background 3 px - was 3 / 4), more colour bits (32 levels, was 20) and 4 cel bands (was 3).
+  three.js stays as an option and is now loaded ONLY when chosen (no 2 MB module parsed at start).
+  The session-23 asset fixes (benches, flags, books, seated people-sized agents) apply to both.
+- **The lag**: every glass panel had `backdrop-filter: blur(22px)` over a 3D canvas that redraws
+  30-60 times a second, and each world label had its own blur - the browser re-blurred all of it
+  every frame. `--blur: none`; panels are tinted (more opaque) glass; the transcript's scroll mask
+  is gone too.
+- **The fox** (the owner loves the fox an agent made): a fox now lives on the island - trots between
+  the flower patches, sits and looks around, goes to see LOKI now and then, and curls up asleep at
+  night (little z's) - plus two rabbits. Same boxes, cel shading and ink lines as everything else.
+- **A crashed engine is restarted** (`app/loki_app.py supervise`): on the PC the engine exited 1 at
+  22:53 and the window sat dead until morning. Now it restarts with a growing pause and reloads the
+  window; after 5 crashes in 10 minutes it stops trying. (Cause of that exit: not in the logs.)
+- **LOKI grows its own "OpenHuman", by itself** (`engine/evolve.py`, `docs/EVOLVE.md`, Settings >
+  Lab): a roadmap of steps (memory you can see, its own game engine with a Play panel, learning
+  skills from its own work, subagents, more island life, a creations hall, speed watch, voice,
+  self-review, tools it writes itself, a phone channel). When idle, the autopilot's `evolve` duty
+  hands the next step to `improve_loki` (own worktree, all suites, ship), one at a time; outcomes are
+  kept and fed into the next attempt; failures retry after 3 days. The owner's ideas (Lab > Add
+  idea) go first; LOKI's own ideas wait for the owner's OK. `LOKI_EVOLVE` auto = on only on the
+  Windows PC (on 24/7). Tests: tests/test_evolve.py (29).
+- **"Moved to the web"**: nothing moved - LOKI is still the same desktop window (pywebview; the PC's
+  log says "opening the Loki window" every start) talking to its own engine on this computer. Only
+  the Mac-PC link goes over the internet (the bore.pub relay), and that is signed.
 
 ## Session 23 (2026-10-16, Claude in the cloud): options, drawing pad, world fixes, softer GUI, add-ons
 

@@ -527,6 +527,7 @@ function showTab(name) {
   if (name === "memory") loadMemory();
   if (name === "capabilities") loadCapabilities();
   if (name === "crm" && typeof loadCrm === "function") loadCrm();
+  if (name === "lab" && typeof loadLab === "function") loadLab();
   if (name === "models" && typeof loadModelsTab === "function") loadModelsTab();
   if (name === "usage" && typeof loadUsageTab === "function") loadUsageTab();
   if (name === "machines" && typeof loadMachines === "function") loadMachines();

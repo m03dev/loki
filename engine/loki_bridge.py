@@ -821,6 +821,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             text = agent.project_state_text() if hasattr(agent, "project_state_text") else ""
             self._send_json(200, {"ok": True, "state": text})
             return
+        if route == "/evolve":
+            ev = getattr(self.server.state, "evolve", None)
+            auto = getattr(self.server.state, "autopilot", None)
+            log = [e for e in (auto.data["log"] if auto is not None else []) if e.get("duty") == "evolve"][-20:]
+            self._send_json(200, ev.status() | {"log": log} if ev is not None else {"ok": False, "error": "evolve is not running"})
+            return
         if route == "/autopilot":
             auto = getattr(self.server.state, "autopilot", None)
             self._send_json(200, {"ok": True, **(auto.status() if auto is not None else {"enabled": False})})
@@ -1103,6 +1109,24 @@ class BridgeHandler(BaseHTTPRequestHandler):
             name = "sketch-%s.png" % time.strftime("%Y%m%d-%H%M%S")
             (folder / name).write_bytes(blob)
             self._send_json(200, {"ok": True, "path": "sketches/" + name})
+            return
+        if route in ("/evolve/idea", "/evolve/start", "/evolve/approve"):
+            ev = getattr(state, "evolve", None)
+            if ev is None:
+                self._send_json(503, {"ok": False, "error": "evolve is not running"})
+                return
+            if route == "/evolve/idea":
+                self._send_json(200, ev.add_idea(str(data.get("text", ""))))
+                return
+            if route == "/evolve/approve":
+                self._send_json(200, ev.approve(str(data.get("id", "")), bool(data.get("yes", True))))
+                return
+            if ev.busy():
+                self._send_json(409, {"ok": False, "error": "LOKI is already changing itself; one change at a time"})
+                return
+            line = ev.step(state.agent.improve_loki)
+            self._send_json(200 if line and not line.startswith("Could not") else 400,
+                            {"ok": bool(line) and not line.startswith("Could not"), "line": line or "nothing left to do"})
             return
         if route == "/options":
             # "Which do you mean?": 3-4 readings of an open request (engine/options.py). Quick
@@ -1923,9 +1947,12 @@ async def serve() -> None:
             def _apply(action: str, args: dict) -> dict:
                 return _sc.apply_fix(state, action, args)
 
+            import evolve as _evolve  # pylint: disable=import-outside-toplevel
+            state.evolve = _evolve.Evolve(Path(__file__).resolve().parent.parent, Path(loki.DATA_DIR))
             state.autopilot = _autopilot.Autopilot(
                 state=state, agent=loki, data_dir=Path(loki.DATA_DIR),
-                run_check=_run_check, apply_fix=_apply, start_team=loki.start_team)
+                run_check=_run_check, apply_fix=_apply, start_team=loki.start_team,
+                evolve=state.evolve, improve=loki.improve_loki)
             if _autopilot.Autopilot.enabled():
                 threading.Thread(target=state.autopilot.run_forever, daemon=True, name="loki-autopilot").start()
                 print("[loki-bridge] autopilot on: LOKI works when idle (health, inbox, weekly report)", flush=True)

@@ -632,6 +632,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       turn Scrapling on, ask "scrape https://example.com". Report.
       (8) Optional, only with Mohamed's OK: `npm i -g penecho`, turn PenEcho on, "Open drawing canvas".
 
+- [ ] **W19 Session 24 on the PC (2026-10-17) - the look and the speed.** Restart LOKI (it updates).
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: 23 suites, report the lines.
+      (2) Home screen with the world behind: it is the PIXEL cel-shaded world again (chunky pixels,
+      ink outlines, flat cel bands), sharper than before. Screenshot it. Then use the window for
+      2 minutes (scroll a long chat, type, open Settings): does anything lag? Report the HUD fps.
+      (3) Find the fox (it walks between flower patches; at night it sleeps). Screenshot it.
+      (4) Settings > Lab: the roadmap is listed, "On" (this is the PC). Press "Start the next step
+      now" ONCE and watch the job in the work strip until it ends. Report: shipped or not, the
+      commit if any, and the last 30 lines of its log. Do not start a second one.
+      (5) Settings > General > LOKI World look: switch to "three" and back to "classic"; both work.
+      (6) Update Ollama to 0.40.6+ (`winget upgrade Ollama.Ollama` or the installer from ollama.com)
+      so Bonsai 2 loads; re-pull it from Settings > Local models; report the smoke test.
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -794,6 +807,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M10 Session 23 on the Mac (2026-10-16).** After M8: the same checks as W18 (2)-(6) on the
       Mac. For (5) use the trackpad, and an Apple Pencil via Sidecar if one is around. Watch memory
       pressure while the world runs and while option cards are made (local model) - report both.
+
+- [ ] **M11 Session 24 on the Mac (2026-10-17) - the look and the speed.** Quit and reopen LOKI.
+      (1) `harness_data/.venv/bin/python tools/ship.py --check`: report the lines.
+      (2) Home screen: the pixel cel-shaded world is back; use the window 2 minutes - any lag?
+      Activity Monitor: LOKI's WebKit process CPU % with the world on (before this change it
+      re-blurred every panel each frame). Report fps and CPU.
+      (3) Screenshot the fox. (4) Settings > Lab shows "Off on this machine" (auto = PC only) -
+      leave it off; the Mac has 16 GB.
 
 ## Needs Mohamed
 

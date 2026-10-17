@@ -17,7 +17,8 @@
 // General) picks background | panel | off.
 //
 // The look: a 3D pixel-art, cel-shaded floating island. The scene is drawn into a small
-// low-resolution framebuffer (1/3 - 1/4 of the canvas, an integer scale) and blown up with
+// low-resolution framebuffer (1/2 - 1/3 of the canvas, an integer scale; denser than the first
+// 1/3 - 1/4, with 32 colour levels and 4 cel bands) and blown up with
 // NEAREST filtering plus a light ordered dither, so it reads as chunky pixels. Lighting is
 // quantized into bands (a sun or moon, a sky/ground hemisphere fill, a rim light and the
 // station lamps as small point lights), and every solid gets a dark ink outline from an
@@ -37,7 +38,7 @@ const World = {
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
   adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
-  engine: "",       // "classic" forces the hand-written WebGL 1 renderer; otherwise three.js when possible
+  engine: "classic",   // LOKI's own pixel cel-shaded engine (the look); "three" = the optional three.js renderer
   selected: "", particles: [], seats: {}, ripples: [], fish: null, fishAt: 0,
 };
 
@@ -211,7 +212,7 @@ function fragmentShader(baked) {
   "uniform vec3 eye; uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyAmb; uniform vec3 gndAmb; uniform float T;" +
   "uniform vec3 shadeTint; uniform vec3 rimCol; uniform vec3 fogc; uniform vec2 fogr;" +
   "uniform vec3 LP[10]; uniform vec4 LC[10];" +
-  "const float BANDS = 3.0;" +
+  "const float BANDS = 4.0;" +
   "float cel(float x){ return min(floor(clamp(x,0.0,1.0) * BANDS) / (BANDS - 1.0), 1.0); }" +
   "void main(){ vec3 N = normalize(vn); vec3 V = normalize(eye - wp);" +
   " vec3 base = C;" +
@@ -427,9 +428,9 @@ function initGL(view) {
 }
 
 function makeView(canvas, labels, opts) {
-  // The three.js renderer (world_three.js) when this machine has WebGL 2 and nobody asked
-  // for the classic one (World.engine = "classic" or LOKI_WORLD_ENGINE=classic).
-  if (window.WorldThree && World.engine !== "classic") {
+  // LOKI's own pixel cel-shaded renderer is the world's look. The three.js renderer
+  // (world_three.js) is only used when asked for: LOKI_WORLD_ENGINE=three (Settings > General).
+  if (window.WorldThree && World.engine === "three") {
     let three = null;
     try {
       three = window.WorldThree.create(canvas, { staticScene, meshes: MESH_SRC, water: WATER,
@@ -1001,6 +1002,87 @@ function stepParticles(dt) {
   }
 }
 
+// ---------------------------------------------------------------- critters
+// Island life the owner asked for more of: a fox (LOKI's favourite) trots between the flower
+// patches, sits to watch the agents, follows LOKI now and then and curls up asleep at night;
+// two rabbits hop about. Pure ambience - built from the same boxes, cel shading and ink lines.
+function critterSpots() {
+  if (World.spots) return World.spots;
+  World.spots = SCENERY.flowers.map((f) => [f.x, f.z]).concat(SCENERY.tufts.filter((_, i) => i % 3 === 0).map((f) => [f.x, f.z]));
+  return World.spots;
+}
+function critters(solid, shadow, t, dt, night) {
+  const spots = critterSpots();
+  if (!spots.length) return;
+  if (!World.critters) {
+    World.critters = [
+      { kind: "fox", x: spots[0][0], z: spots[0][1], ry: 0, speed: 0.75, phase: 0, mode: "rest", until: 0, tx: 0, tz: 0 },
+      { kind: "rabbit", x: spots[3 % spots.length][0], z: spots[3 % spots.length][1], ry: 1, speed: 0.6, phase: 0, mode: "rest", until: 0, tx: 0, tz: 0 },
+      { kind: "rabbit", x: spots[9 % spots.length][0], z: spots[9 % spots.length][1], ry: 2, speed: 0.6, phase: 1, mode: "rest", until: 0, tx: 0, tz: 0 },
+    ];
+  }
+  const loki = World.agents.loki;
+  for (const c of World.critters) {
+    const asleep = c.kind === "fox" && night > 0.75;
+    if (c.mode === "rest" && t > c.until && !asleep) {
+      // pick somewhere near (no long trips across the plaza); the fox sometimes goes to see LOKI
+      let tx, tz;
+      if (c.kind === "fox" && loki && Math.random() < 0.25 && Math.hypot(loki.x, loki.z) > 3.6) {
+        tx = loki.x + 0.9; tz = loki.z + 0.9;
+      } else {
+        const near = spots.filter((p) => { const d = Math.hypot(p[0] - c.x, p[1] - c.z); return d > 0.8 && d < 4.5; });
+        const p = (near.length ? near : spots)[Math.floor(Math.random() * (near.length || spots.length))];
+        tx = p[0]; tz = p[1];
+      }
+      if (Math.hypot(tx, tz) < 3.9) { const k = 3.9 / (Math.hypot(tx, tz) || 1); tx *= k; tz *= k; }   // never into the plaza/pool
+      c.tx = tx; c.tz = tz; c.mode = "walk";
+    }
+    if (c.mode === "walk") {
+      const dx = c.tx - c.x, dz = c.tz - c.z, d = Math.hypot(dx, dz);
+      if (d < 0.08) { c.mode = "rest"; c.until = t + (c.kind === "fox" ? 3 + Math.random() * 7 : 1 + Math.random() * 4); }
+      else {
+        const step = Math.min(d, dt * c.speed * (c.kind === "rabbit" ? (Math.sin(c.phase) > 0 ? 1.6 : 0.2) : 1));
+        c.x += dx / d * step; c.z += dz / d * step;
+        c.ry = angLerp(c.ry, Math.atan2(dx, dz), Math.min(1, dt * 8));
+        c.phase += dt * (c.kind === "rabbit" ? 9 : 11);
+      }
+    }
+    const f = [Math.sin(c.ry), Math.cos(c.ry)], sd = [Math.cos(c.ry), -Math.sin(c.ry)], walking = c.mode === "walk";
+    const at = (fw, sw, y) => [c.x + f[0] * fw + sd[0] * sw, y, c.z + f[1] * fw + sd[1] * sw];
+    if (c.kind === "fox") {
+      const orange = [0.93, 0.47, 0.17], cream = [0.98, 0.93, 0.84], dark = [0.22, 0.14, 0.12];
+      const lift = asleep ? -0.1 : 0, bob = walking ? Math.abs(Math.sin(c.phase)) * 0.025 : 0;
+      solid("box", at(0, 0, 0.27 + lift + bob), c.ry, [0.22, 0.19, 0.46], orange);                          // body
+      solid("box", at(0.17, 0, 0.23 + lift + bob), c.ry, [0.17, 0.12, 0.13], cream, { line: false });       // chest
+      const hy = asleep ? 0.2 : 0.42 + bob, hf = asleep ? 0.2 : 0.3, look = asleep ? 0 : Math.sin(t * 0.7 + c.x) * 0.35 * (walking ? 0.2 : 1);
+      solid("box", at(hf, 0, hy), c.ry + look, [0.2, 0.18, 0.19], orange);                                  // head
+      solid("box", at(hf + 0.14, 0, hy - 0.04), c.ry + look, [0.09, 0.08, 0.12], cream);                    // snout
+      solid("box", at(hf + 0.21, 0, hy - 0.02), c.ry + look, [0.04, 0.04, 0.03], dark, { line: false });    // nose
+      for (const s2 of [-1, 1]) {
+        solid("pyr", at(hf - 0.01, s2 * 0.065, hy + 0.15), c.ry + look, [0.08, 0.13, 0.05], orange);       // ears
+        if (!asleep) solid("box", at(hf + 0.09, s2 * 0.05, hy + 0.03), c.ry + look, [0.03, 0.03, 0.02], dark, { line: false });   // eyes
+      }
+      const wag = walking ? Math.sin(c.phase * 0.5) * 0.25 : Math.sin(t * 1.5) * 0.12;
+      const tailSide = asleep ? 0.2 : 0;
+      solid("box", at(-0.34, tailSide + wag * 0.3, 0.3 + lift), c.ry + wag + (asleep ? 1.2 : 0), [0.12, 0.12, 0.3], orange);   // tail
+      solid("box", at(-0.52, tailSide + wag * 0.5, 0.3 + lift), c.ry + wag + (asleep ? 1.2 : 0), [0.11, 0.11, 0.1], cream);    // white tip
+      if (!asleep) for (const [fw, s2] of [[0.15, 1], [0.15, -1], [-0.15, 1], [-0.15, -1]]) {
+        const swing = walking ? Math.sin(c.phase + (fw > 0 ? 0 : Math.PI) + (s2 > 0 ? 0 : Math.PI)) * 0.06 : 0;
+        solid("box", at(fw + swing, s2 * 0.07, 0.09), c.ry, [0.05, 0.18, 0.05], dark, { line: false });   // legs
+      }
+      shadow(c.x, c.z, 0.38, 0.45);
+      if (asleep && Math.random() < dt * 0.6) emit("bubble", [c.x, 0.5, c.z]);   // little z's
+    } else {
+      const fur = [0.62, 0.55, 0.50], hop = walking ? Math.max(0, Math.sin(c.phase)) * 0.12 : 0;
+      solid("box", at(0, 0, 0.1 + hop), c.ry, [0.15, 0.14, 0.21], fur);
+      solid("box", at(0.12, 0, 0.19 + hop), c.ry, [0.12, 0.12, 0.12], fur);
+      for (const s2 of [-1, 1]) solid("box", at(0.1, s2 * 0.035, 0.31 + hop), c.ry, [0.03, 0.14, 0.04], mix3(fur, [1, 0.8, 0.8], 0.25));
+      solid("sph4", at(-0.12, 0, 0.13 + hop), 0, [0.07, 0.07, 0.07], [0.97, 0.96, 0.94], { line: false });
+      shadow(c.x, c.z, 0.22, 0.4);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- building the dynamic scene
 // Each frame collects what moves (agents, lamp orbs, banners, particles, lights) and then
 // draws it in passes: sky, ink outlines, cel-shaded solids, shadows, glows.
@@ -1189,7 +1271,7 @@ function sceneList(view, t, dt, P) {
     const slump = d.state === "failed" ? 0.85 : 1;
     const col = d.state === "failed" ? [0.75, 0.38, 0.42] : a.color;
     // People-sized next to the benches, desks and doors (about 1 unit tall; LOKI a head taller).
-    const big = (id === "loki" ? 1.0 : 0.82);
+    const big = (id === "loki" ? 1.15 : 0.95);
     a.big = big;
     const sit = seated ? 0.345 - 0.11 * big : 0;    // the body's base rests on the bench seat (0.345)
     const y0 = bob + sit;
@@ -1283,6 +1365,7 @@ function sceneList(view, t, dt, P) {
       solid("box", [bx, byy, bz], ry, [0.08, 0.07, 0.22], [0.15, 0.17, 0.25], { line: false });
       for (const s of [-1, 1]) solid("box", [bx + sd[0] * s * 0.17, byy + flap, bz + sd[1] * s * 0.17], ry, [0.26, 0.03, 0.12], [0.2, 0.22, 0.3], { line: false });
     }
+    critters(solid, shadow, t, dt, night);
     const fl = SCENERY.fall;
     if (fl && Math.random() < dt * 5) emit("mist", [Math.cos(fl.a) * (ISLAND + 0.1), -5.4, Math.sin(fl.a) * (ISLAND + 0.1)]);
   }
@@ -1528,7 +1611,7 @@ function frame(view, now) {
     gl.bindTexture(gl.TEXTURE_2D, fb.tex);
     gl.uniform1i(bl.T, 0);
     gl.uniform2f(bl.R, lw, lh); gl.uniform2f(bl.VPX, lw * scale, lh * scale);
-    gl.uniform1f(bl.Q, view.opts.levels || 20);
+    gl.uniform1f(bl.Q, view.opts.levels || 32);   // colour levels per channel: more bits than the first 20
     bindMesh(gl, bl, quad);
     gl.drawArrays(gl.TRIANGLES, 0, quad.count); draws++;
   }
@@ -1886,7 +1969,7 @@ function showWorldPanel() {
   if (!World.views.panel) {
     const canvas = document.getElementById("world-panel-canvas");
     World.views.panel = canvas && makeView(canvas, document.getElementById("world-panel-labels"),
-      { dist: 17, pitch: 0.5, spin: 0.03, detail: true, pixel: 3, fps: 0 });
+      { dist: 17, pitch: 0.5, spin: 0.03, detail: true, pixel: 2, fps: 0 });
     if (World.views.panel) attachControls(World.views.panel);
     else if (canvas) canvas.replaceWith(el("p", "note", "This window cannot draw 3D (no WebGL). The list below shows the same agents."));
   }
@@ -1905,17 +1988,31 @@ function setWorldMode(mode) {
   refreshBackground();
 }
 
+// The optional three.js renderer is a module loaded on demand (LOKI_WORLD_ENGINE=three), so the
+// default pixel engine never pays for parsing it. Resolves either way; makeView falls back.
+function loadThree() {
+  if (window.WorldThree) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.type = "module"; s.src = "/ui/world_three.js";
+    s.onload = () => setTimeout(() => resolve(!!window.WorldThree), 0);
+    s.onerror = () => resolve(false);
+    document.head.append(s);
+  });
+}
+
 async function startWorld() {
   try {
     const data = await api("/settings/general");
     if (data && data.ok) {
       World.mode = data.values.LOKI_WORLD || "background";
-      World.engine = (data.values.LOKI_WORLD_ENGINE || "").toLowerCase() === "classic" ? "classic" : World.engine;
+      World.engine = (data.values.LOKI_WORLD_ENGINE || "").toLowerCase() === "three" ? "three" : "classic";
     }
   } catch (_) { /* default */ }
+  if (World.engine === "three") await loadThree();   // only then is the 2 MB three.js parsed at all
   const canvas = document.getElementById("world-bg-canvas");
   if (canvas) World.views.bg = makeView(canvas, document.getElementById("world-bg-labels"),
-    { dist: 19, pitch: 0.46, spin: 0.045, detail: false, pixel: 4, fps: 30, quality: "medium" });
+    { dist: 19, pitch: 0.46, spin: 0.045, detail: false, pixel: 3, fps: 30, quality: "medium" });
   const main = document.getElementById("main");
   if (main) new MutationObserver(refreshBackground).observe(main, { attributes: true, attributeFilter: ["class"] });
   const settings = document.getElementById("settings");

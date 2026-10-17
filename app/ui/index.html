@@ -10,10 +10,10 @@
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
 <script src="/ui/world_noise.js" defer></script>
-<script type="module" src="/ui/world_three.js"></script>
 <script src="/ui/world.js" defer></script>
 <script src="/ui/settings.js" defer></script>
 <script src="/ui/crm.js" defer></script>
+<script src="/ui/lab.js" defer></script>
 <script src="/ui/workbench.js" defer></script>
 <script src="/ui/sketch.js" defer></script>
 </head>
@@ -122,6 +122,7 @@
         <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
         <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
+        <button type="button" role="tab" data-tab="lab" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Lab</button>
         <button type="button" role="tab" data-tab="crm" aria-selected="false"><span class="ico" aria-hidden="true">☷</span>CRM</button>
         <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
         <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
@@ -182,6 +183,10 @@
         <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
         <div id="update-panel" class="update-panel"></div>
         <div id="machines-panel"></div>
+      </section>
+      <section data-panel="lab" hidden>
+        <header class="panel-head"><h3>Lab - LOKI grows itself</h3><p class="note">LOKI builds its own personal-agent core here, one change at a time, when it is idle: your ideas first, then the roadmap in docs/EVOLVE.md. Each change is made in its own copy of the code, tested on every suite and shipped only if all pass; what worked and what did not is kept and used for the next try.</p></header>
+        <div id="lab-panel" class="lab"></div>
       </section>
       <section data-panel="crm" hidden>
         <header class="panel-head"><h3>CRM</h3><p class="note">Your contacts, companies, deals and tasks, kept on this computer (harness_data/crm.sqlite3). LOKI can read and update them too: ask it to log a call, move a deal or show the pipeline.</p></header>

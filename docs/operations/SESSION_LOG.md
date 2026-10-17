@@ -4,6 +4,16 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 24 (Claude): pixel look back, lag removed, fox, crash restart, LOKI grows itself
+
+- world.js: classic pixel cel-shaded renderer is the default again, denser (2/3 px) with 32 colour
+  levels and 4 cel bands; three.js optional and lazy-loaded. Fox + rabbits.
+- glass.css: no live backdrop blur over the moving world (the lag); no per-label blur.
+- loki_app.py: a crashed engine restarts (5 per 10 min max).
+- engine/evolve.py + docs/EVOLVE.md + Settings > Lab + autopilot evolve duty. tests/test_evolve.py.
+
+---
+
 ## 2026-10-16 - Session 23 (Claude): options, drawing pad, world fixes, softer GUI, add-ons
 
 - engine/options.py + /options + offerOptions: 3-4 readings of an open request, pick one.
