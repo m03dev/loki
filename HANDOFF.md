@@ -4,7 +4,56 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 28, Claude in the cloud; task-success worktree).
+Last updated: 2026-10-17 (session 29 automations, Claude worktree).
+
+## Session 29 automations (worktree)
+
+The owner: "a useful app that can help people and can turn into anything" - this one is AUTOMATIONS: LOKI does
+things without being asked each time. Built in a Claude worktree, committed there, not pushed. Full guide:
+**docs/AUTOMATIONS.md**.
+
+- **Model** (`engine/automations.py`): triggers -> conditions -> steps. Triggers: schedule (engine/schedules.py +
+  a phrase normalizer: "every morning at 8", "every weekday morning", "daily at 7", cron, "in 30m" pinned to a
+  time), folder (settle check, partial downloads ignored, a copy into `<workspace>/automations/inbox/<id>/`),
+  email (connector, last-UID dedupe), calendar (N min before, once per event), webhook (`POST /hook/<id>?key=`,
+  no bridge token, 30/min, 64 KB), Telegram keyword (owner only; wraps the channel's handle at start-up, no edit to
+  channels.py), job done/failed (ignores automations' own jobs), machine online, manual / Run with text.
+  Conditions: trigger fields (contains ... regex, gt/lt, exists), time window, weekdays. Steps: task (a
+  background job, waits, `{{last}}` = its answer), tool, image, telegram (paired owner chat only), file (workspace
+  only), notify (osascript / PowerShell toast / notify-send + in-app notice), http (always asks), if (LLM YES/NO,
+  data framed as data), wait, sort_file (asks). Templates `{{trigger.x}}`, `{{last}}`, `{{steps.N}}`, `{{date}}`.
+- **Safety**: account-touching steps (http, sort_file, any tool the policy engine ASKs about - email send,
+  calendar create, GitHub/notes/peer-file writes) wait for the owner's OK in the view unless THAT EXACT automation
+  is pre-approved (sha256 fingerprint of triggers + conditions + steps + machine; any edit removes it, a rename
+  does not). Forbidden tools: run_command, computer, make_tool, schedule_task, automation, improve/ship. Cloud
+  metadata addresses refused. Drafts (from the view, the chat tool or the model) are always saved OFF.
+- **Natural language**: rules first (offline; the two owner examples and email/calendar/job/machine/Telegram/
+  webhook shapes), the model only for what the rules do not understand, its JSON checked like any automation.
+  8 templates: daily briefing, inbox triage, folder auto-organizer, meeting prep, weekly report, backup reminder,
+  price watch, GitHub issue digest.
+- **Runtime**: one thread (`automations.start` - ONE start-up hook in loki_bridge.serve), tick 5 s; JSON store in
+  `harness_data/automations/`; a run = a compiled program + pc saved after every step, resumed after a restart
+  (a waited-on job keeps its id); missed schedules: catch_up once (default) / skip / all (<= 5); retries with
+  backoff 30 s x2^n (<= 30 min); modes single/queued/parallel; per-automation and overall runs/hour; at most 3
+  runs start at once; kill switch (Stop all cancels runs and their jobs); `LOKI_AUTOMATIONS=off`.
+- **Two machines**: each automation has `machine` (default `pc`; on a lone Mac, the Mac). Only that machine
+  fires it. Shared over the signed peer link: new route `POST /peer/automations` (peers.py one block,
+  peer_link.py one callback), every 2 min + after a change, last writer wins, tombstones, run stats travel back.
+  No failover by design (a double briefing is worse than a late one).
+- **Where it is wired**: loki.py one tool block (`automation`: list/draft/show/run; planning category; not in Plan
+  mode; refused in background jobs). loki_bridge.py: GET/POST `/automations*` route blocks, the `/hook/` block
+  before the token check, one start-up hook. app/ui: `automations.js` + `automations.css` (new), index.html (tab,
+  panel, script, stylesheet), app.js one line in showTab. The rail icon + tooltip are added from automations.js to
+  icons.js' ICON_PATHS/TAB_ICONS (icons.js untouched).
+- **Verified here (Linux cloud box)**: `tests/test_automations.py` (190 checks, in SUITES; fake clock, fake
+  connectors, fake Telegram, fake jobs/peers/model; the real BridgeHTTPServer for the routes and the webhook; the
+  view in headless Chromium: list, rail tooltip, draft card, history log, editor). Screens:
+  `docs/operations/screens/automations-{list,draft,history,editor}.png` (`python tests/automations_preview/shot.py`).
+  `python tools/ship.py --check` green with the new suite.
+- **Not verified (needs the real machines - ZIVA W35 PC, M26 Mac)**: real Telegram delivery of the morning
+  briefing, real IMAP/calendar triggers, a real model's YES/NO, the Windows toast and macOS notification, the
+  folder watcher with a real browser download, peer sync between the real Mac and PC, the view in WebView2/WKWebView.
+  Not built: an OS-wide hotkey (Run with text reads the clipboard instead), failover to the other machine.
 
 ## Session 28 task success (worktree)
 

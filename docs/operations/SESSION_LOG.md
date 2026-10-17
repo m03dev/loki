@@ -4,6 +4,18 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 29 (Claude, worktree): automations - LOKI does things by itself
+
+- engine/automations.py: triggers (schedule, folder, email, calendar, webhook, Telegram keyword, job ended, machine
+  online, manual) -> conditions -> steps (task job, tool, image, Telegram, file, notify, http, if = LLM yes/no,
+  wait, sort_file); one runner thread, JSON store, resumable runs, catch-up, retries with backoff, modes, rate
+  limits, kill switch, one owning machine + sync over `POST /peer/automations`; account-touching steps ask unless
+  that exact automation is pre-approved (fingerprint).
+- Drafting from a sentence (rules offline, model fallback), 8 templates, the agent's `automation` tool (drafts OFF).
+- Settings > Automations (app/ui/automations.js/.css): list + switches, Run now / with text, history with logs,
+  approvals, step editor, templates. docs/AUTOMATIONS.md.
+- tests/test_automations.py (190, in SUITES) incl. the real bridge + webhook and the view in headless Chromium.
+  Real machines: ZIVA W35 (PC: morning briefing to Telegram + folder watcher), M26 (Mac).
 ## 2026-10-17 - Session 28 (Claude, worktree): LOKI improving itself - own tools, speed watch, self-review, jobs view
 
 - E9 engine/user_tools.py + make_tool: tool.json + tool.py in harness_data/tools, checked (scan + own tests) before

@@ -946,6 +946,30 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       "Update history on this computer" with this update marked "works here (engine + window)". Report the
       lines. Then `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (two new suites:
       test_update_overhaul, test_ui_smoke - the smoke test skips without Playwright; say if it skipped).
+- [ ] **W35 Automations on the PC (session 29, 2026-10-17).** HANDOFF "Session 29 automations (worktree)",
+      docs/AUTOMATIONS.md. The PC owns automations by default (it is on 24/7). After LOKI updates:
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - report test_automations' line.
+      (2) The engine log says `automations on: N (this machine is the PC)`; Settings > Automations opens (the
+      lightning icon in the rail; hover shows its tooltip) with no console error. Screenshot it.
+      (3) **Morning briefing to Telegram** (needs the Telegram bot paired - "Needs Mohamed"): in the Automations
+      box type `every morning at 8 send me the weather and my calendar on Telegram`, press Draft it, check the card
+      (When: every morning at 8; Then: LOKI does ... ; Send you a Telegram message), press Turn it on. Press Run now
+      once: a background job starts ("Automation: ..."), and when it ends Mohamed's phone gets the message. Report
+      the job's time, the model it ran on and the message text (or the run's log from History if it failed).
+      Leave it ON so it fires at 08:00 the next morning; report the next day that it came by itself and that the
+      Mac did NOT send a second one.
+      (4) **Folder watcher**: Templates or the box: `when a PDF lands in Downloads, summarize it into notes`, turn it
+      on, then copy any PDF into `C:\Users\macul\Downloads`. Within ~20 s a run starts; the PDF is copied to
+      `<workspace>\automations\inbox\<id>\` and the job writes `notes\<name>.md`. Report the note's first lines.
+      Then download a big PDF in a browser: no run may start on the half-downloaded `.crdownload` file.
+      (5) Desktop notification: `when a job fails notify me` - turn it on, start a job that fails (e.g. a background
+      job "read the file does-not-exist.txt and summarize it"); a Windows toast must appear (PowerShell
+      ToastNotification - never verified on a real Windows). If no toast shows, say so; the in-app notice still counts.
+      (6) Webhook: Templates is not needed - `when a webhook is called notify me`, turn it on, copy its URL from the
+      list and run `curl -X POST "<url>" -H "Content-Type: application/json" -d "{\"door\":\"open\"}"` in a terminal
+      on the PC: a notification; with a wrong key: 404.
+      (7) Kill switch: press the stop icon (Stop all) - nothing fires (Run now refuses), turn back on.
+      Restart LOKI while a run waits for its job: after the restart the run carries on with the SAME job.
 - [ ] **W34 Tools, connectors, computer use on the PC (session 28, 2026-10-17).** HANDOFF "Session 28 tools,
       connectors, computer use (worktree)". After LOKI updates:
       (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` - new suite test_tools_core (its REAL
@@ -1481,6 +1505,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] **M19 Updates are health-gated (2026-10-17).** Same as W27 on the Mac. Also: if the white window comes back
       at all, LOKI should now go back to the previous version by itself within 5 minutes and say why in that
       history - report exactly what happened.
+- [ ] **M26 Automations on the Mac (session 29, 2026-10-17).** Do it after W35 (3). `ship.py --check` (report
+      test_automations). Settings > Automations on the Mac lists the PC's morning briefing within ~2 min (shared over
+      the peer link, "on the PC", "not this computer"); its Run now is refused here ("runs on the PC"), and at 08:00
+      the Mac sends nothing. Turn it off on the Mac -> after ~2 min it is off on the PC too (Ziva Windows checks). Make
+      one Mac-only automation (Edit -> Runs on the Mac): `every day at 6pm notify me` with a notification - check a
+      macOS notification appears (osascript `display notification`; never verified on a real Mac). Screenshot the
+      view in the real WKWebView window.
 - [ ] **M25 Tools, connectors, computer use on the Mac (session 28, 2026-10-17).** Same as W28 (1)-(5), (8),
       (9) on the Mac, plus computer use in macOS:
       (a) Settings > Add-ons > computer-use: turn it on (nothing to install on macOS).

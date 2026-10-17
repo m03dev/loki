@@ -14,6 +14,7 @@ same secret can then:
     GET  /peer/diagnose           why this machine might not respond (read-only, redacted)
     POST /peer/restart            restart this machine's engine (the app reloads its window)
     POST /peer/files              list/read (and, when allowed here, write) this machine's shared folder
+    POST /peer/automations        the caller's automations in, ours out (engine/automations.py)
 
 Security, because this listens on the network:
   * OFF unless LOKI_PEER_LISTEN=1 and a LOKI_PEER_SECRET of at least 32 characters is set.
@@ -492,6 +493,12 @@ class PeerServer:
             if "files" not in cb:
                 return 404, {"ok": False, "error": "file sharing is not available here"}
             return cb["files"](origin, data)
+        if method == "POST" and path == "/peer/automations":
+            # Automations listed on every machine (engine/automations.py): the caller's in, ours out,
+            # last writer wins per automation. Only the machine that owns one ever fires it.
+            if "automations" not in cb:
+                return 404, {"ok": False, "error": "automations are not available here"}
+            return 200, {"ok": True, **cb["automations"](origin, data)}
         if method == "POST" and path == "/peer/experience":
             items = data.get("trajectories")
             if not isinstance(items, list):

@@ -4282,6 +4282,32 @@ TOOL_CATEGORIES["creative"] += ["make_local_video"]
 MODIFYING |= {"make_local_video"}
 
 
+# ---------------------------------------------------------------------------
+# Session 29 automations (engine/automations.py): the owner says "every morning at 8 send me ..."
+# and LOKI drafts it - switched OFF until the owner reads the card and turns it on.
+# ---------------------------------------------------------------------------
+def automation(action: str = "list", text: str = "", id: str = "") -> str:  # noqa: A002
+    """list | draft (from the owner's sentence; saved OFF) | show | run (an existing one)."""
+    import automations as _automations  # pylint: disable=import-outside-toplevel
+    return _automations.tool(action, text, id)
+
+
+LOCAL_TOOLS["automation"] = automation
+_AUTOMATION_SCHEMA = schema(
+    "automation", "The owner's automations - things LOKI does by itself on a trigger (a schedule, a file in a folder, "
+    "a new email, a calendar event, a webhook, a Telegram keyword, a job finishing, a machine coming online). "
+    "action='draft' with text = the owner's own sentence (e.g. 'every morning at 8 send me the weather and my calendar "
+    "on Telegram') drafts one, switched OFF: show the owner the card and tell them to turn it on in Settings > "
+    "Automations. 'list' shows them, 'show' one (id), 'run' starts one now (id).",
+    {"action": {"type": "string", "enum": ["list", "draft", "show", "run"]}, "text": {"type": "string"},
+     "id": {"type": "string"}}, ["action"])
+TOOL_SCHEMAS.append(_AUTOMATION_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_AUTOMATION_SCHEMA)
+MODEL_TOOL_NAMES.add("automation")
+TOOL_CATEGORIES["planning"] += ["automation"]
+NETWORK_WRITES |= {"automation"}          # not in Plan mode (a draft is saved)
+
+
 def _local_rank(name: str) -> int:
     if name in ("team_read", "team_post") and os.getenv("LOKI_TEAM_ID"):
         return -100   # an agent on a team must reach its board (they fell off the local model's short list)

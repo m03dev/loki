@@ -297,6 +297,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
 
             "files": _files_receive,
+            "automations": _automations_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 
 
@@ -316,6 +317,12 @@ def _files_receive(origin: str, data: dict) -> tuple:
     """POST /peer/files: another machine lists/reads (or, when allowed here, writes) the shared folder."""
     import conn_peer_files  # pylint: disable=import-outside-toplevel
     return conn_peer_files.serve(origin, data)
+
+
+def _automations_receive(origin: str, data: dict) -> dict:
+    """POST /peer/automations: another machine's automations in, ours out (engine/automations.py)."""
+    import automations  # pylint: disable=import-outside-toplevel
+    return automations.peer_receive(origin, data)
 
 
 def _restart_soon(state: Any) -> dict:

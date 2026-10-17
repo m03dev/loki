@@ -525,6 +525,7 @@ function showTab(name) {
   if (name === "machines" && typeof loadUpdatePanel === "function") loadUpdatePanel();
   if (name === "tools") { loadCategories(); if (typeof loadUserTools === "function") loadUserTools(); if (typeof loadToolsPanel === "function") loadToolsPanel(); }
   if (name === "memory") loadMemory();
+  if (name === "automations" && window.Automations) Automations.load();   // session 29 (automations.js)
   if (name === "capabilities") loadCapabilities();
   if (name === "crm" && typeof loadCrm === "function") loadCrm();
   if (name === "lab" && typeof loadLab === "function") loadLab();

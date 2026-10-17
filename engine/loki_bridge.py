@@ -937,6 +937,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/channels") or route == "/voice":
             self._send_json(*talk_ui(self.server.state, "GET", route, {}))
             return
+        if route.startswith("/automations"):   # session 29: Settings > Automations (engine/automations.py)
+            import automations  # pylint: disable=import-outside-toplevel
+            self._send_json(*automations.ui_route(self.server.state, "GET", self.path, {}, PORT))
+            return
         if route == "/connections":
             self._send_json(200, {"ok": True, **connection_inventory(self.server.state.agent)})
             return
@@ -1204,6 +1208,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"ok": False, "error": "Unknown endpoint."})
 
     def do_POST(self) -> None:
+        if urlparse(self.path).path.startswith("/hook/"):   # session 29: an automation's webhook - its own secret key
+            import automations  # pylint: disable=import-outside-toplevel
+            self._send_json(*automations.hook_request(self.server.state, self.path, self.headers, self.rfile))
+            return
         if not self._authorized():
             return
         route = urlparse(self.path).path
@@ -1245,6 +1253,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route.startswith("/channels") or route.startswith("/voice/"):
             self._send_json(*talk_ui(state, "POST", route, data))
+            return
+        if route.startswith("/automations"):   # session 29: Settings > Automations (engine/automations.py)
+            import automations  # pylint: disable=import-outside-toplevel
+            self._send_json(*automations.ui_route(state, "POST", route, data, PORT))
             return
         if route in ("/teams", "/teams/cancel"):
             runner = getattr(state.agent, "TEAMS", None)
@@ -2497,6 +2509,11 @@ async def serve() -> None:
         channels.start(state, loki)   # Telegram: idle until a bot token is saved and this machine polls
     except Exception as exc:  # noqa: BLE001 - channels are optional; chat must still start
         print(f"[loki-bridge] channels unavailable: {exc}", flush=True)
+    try:   # session 29: automations - triggers -> conditions -> steps, one runner (engine/automations.py)
+        import automations  # pylint: disable=import-outside-toplevel
+        automations.start(state, loki)
+    except Exception as exc:  # noqa: BLE001 - automations are optional; chat must still start
+        print(f"[loki-bridge] automations unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     try:   # each provider's live state for routing and Settings > Connections (free /models probes only)

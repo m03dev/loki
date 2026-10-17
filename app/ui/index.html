@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/ui/app.css">
 <link rel="stylesheet" href="/ui/glass.css">
 <link rel="stylesheet" href="/ui/mmo/mmo.css">
+<link rel="stylesheet" href="/ui/automations.css">
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
@@ -28,6 +29,7 @@
 <script src="/ui/sketch.js" defer></script>
 <script src="/ui/voice.js" defer></script>
 <script src="/ui/channels.js" defer></script>
+<script src="/ui/automations.js" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -138,6 +140,7 @@
         <button type="button" role="tab" data-tab="play" aria-selected="false"><span class="ico" aria-hidden="true">▶</span>Play</button>
         <button type="button" role="tab" data-tab="lab" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Lab</button>
         <button type="button" role="tab" data-tab="crm" aria-selected="false"><span class="ico" aria-hidden="true">☷</span>CRM</button>
+        <button type="button" role="tab" data-tab="automations" aria-selected="false"><span class="ico" aria-hidden="true">⚡</span>Automations</button>
         <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
         <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
         <button type="button" role="tab" data-tab="usage" aria-selected="false"><span class="ico" aria-hidden="true">$</span>Usage</button>
@@ -177,6 +180,10 @@
         <header class="panel-head"><h3>LOKI World</h3><p class="note">Your agents as characters in a small 3D world, moving to their stations as real work happens. It runs behind the home screen, or here.</p></header>
         <div class="world-frame"><canvas id="world-panel-canvas" aria-label="LOKI World, 3D view of your agents"></canvas><div id="world-panel-labels" class="world-labels"></div></div>
         <div id="world-legend" class="world-legend"></div>
+      </section>
+      <section data-panel="automations" hidden>
+        <header class="panel-head"><h3>Automations</h3><p class="note">LOKI does things by itself: on a schedule, when a file lands in a folder, a new email, before a meeting, a webhook, a word on Telegram, a job ending or a machine coming online. Say it in one sentence; you see the card and turn it on. Anything that touches your accounts asks first unless you pre-approve that exact automation.</p></header>
+        <div id="automations-panel" class="automations"></div>
       </section>
       <section data-panel="tools" hidden>
         <header class="panel-head"><h3>Tools</h3><p class="note">Everything LOKI's agents can touch: does it work, what is missing, and the fix. Tools that cannot work right now are hidden from the model. Risky actions still ask before they run.</p></header>
