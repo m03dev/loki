@@ -2171,7 +2171,22 @@ async def serve() -> None:
     try:
         import updater  # pylint: disable=import-outside-toplevel
         updater.RUNNING_COMMIT = updater.version().get("commit", "")
-        threading.Thread(target=updater.run_forever, daemon=True, name="loki-update").start()
+        def _idle() -> bool:   # nobody is talking to LOKI and no background job is running
+            if (state.chat_lock is not None and state.chat_lock.locked()) or state.chat_request_lock.locked() \
+                    or state.task_request_lock.locked() or time.time() - state.last_request_at < 120:
+                return False
+            try:
+                jobs = state.jobs.store.all() if state.jobs is not None else []
+                return not any(j.get("status") in ("queued", "starting", "working", "blocked") for j in jobs)
+            except Exception:  # noqa: BLE001
+                return False
+
+        def _apply() -> None:
+            import update_all  # pylint: disable=import-outside-toplevel
+            update_all.apply_here(updater, restart_engine)
+
+        threading.Thread(target=updater.run_forever, kwargs={"idle": _idle, "apply": _apply},
+                         daemon=True, name="loki-update").start()
         print("[loki-bridge] version " + (updater.version().get("commit") or "(not a git checkout)"), flush=True)
     except Exception as exc:  # noqa: BLE001
         print(f"[loki-bridge] update checks unavailable: {exc}", flush=True)

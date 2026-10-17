@@ -26,6 +26,16 @@ From the PC's job logs (harness_data/jobs): background jobs run on qwen3:8b (PRE
    prompts on stdin; a ValueError is a CliAgentError, not a traceback.
 Creations' "Make it" for a picture now calls the image specialist directly (POST /creations/make, a
 thread; the wall shows "Making..." and failures) - no chat model in between.
+- **Update everything** now restarts the WHOLE app on every machine (app/loki_app.py relaunches itself and
+  the new copy waits for the old one), and a waiting update is applied by itself when LOKI is idle (no chat,
+  no running job) - checked every 10 min (LOKI_FORCE_UPDATE=0 / LOKI_UPDATE_EVERY_S to change).
+- **Icons in favour of words** (`app/ui/icons.js`): the main buttons and Settings sections are icons; hover
+  or focus one for its name and what it does. Settings is an icon rail (search is an icon that opens the
+  field). Words stay in aria-labels and for the search.
+- **Owner decision: the MMO is Godot.** LOKI World becomes an MMO built in Godot 4 (`game/loki-world/`),
+  exported as its own app for Steam AND as a web build inside LOKI's window (replacing the Babylon world
+  there when it lands). The Godot tools in LOKI stay. AGENTS.md updated.
+
 TimesFM-3: the owner said yes (engine/data/owner_approvals.json); each engine installs it once at start-up
 where missing (LOKI_TIMESFM_APPROVED=0 says no; suites never install). It forecasts numbers (usage, cost,
 trends) for the forecast_series tool - it does not make jobs succeed; the fixes above do.

@@ -453,7 +453,11 @@ async function loadUpdatePanel() {
                                              : (data.in_step ? "Every machine runs the same LOKI" : "Versions differ")),
                  el("small", "", "Newest on GitHub: " + ((data.latest || "").slice(0, 7) || "not checked yet")));
   const go = button("Update everything", "primary", startUpdateEverywhere);
+  go.dataset.icon = "update";
+  go.dataset.tipWhat = "Update LOKI on every linked machine; each one restarts the whole app on the new version.";
   const check = button("Check now", "small quiet", async () => { await api("/update/check", {}); loadUpdatePanel(); });
+  check.dataset.icon = "search";
+  check.dataset.tipWhat = "Look on GitHub for a newer LOKI now.";
   head.append(summary, check, go);
   box.append(head);
   const list = el("div", "update-list");

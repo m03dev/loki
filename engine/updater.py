@@ -3,9 +3,10 @@
 The Mac and the PC must never drift apart. Each LOKI updates itself from GitHub:
 
   - when the app starts (before the engine starts, so the new code runs at once);
-  - while it runs, it checks every LOKI_UPDATE_EVERY_S seconds (default 30 min) and when a
-    linked machine reports a different version, and tells you an update is waiting (a
-    running engine never swaps its own code; the next start applies it).
+  - while it runs, it checks every LOKI_UPDATE_EVERY_S seconds (default 10 min) and when a
+    linked machine reports a different version; a waiting update is applied as soon as LOKI
+    is idle and the WHOLE app restarts on it (LOKI_FORCE_UPDATE=0: only tell you, apply at
+    the next start).
 
 An update never overwrites your work. Genuinely edited tracked files stop it (named in the
 reason; commit and push them with tools/ship.py first); files that only hold another LOKI
@@ -891,14 +892,24 @@ def check_now() -> dict:
     return status()
 
 
-def run_forever(every_s: float | None = None) -> None:
-    """Background loop for the engine: check GitHub now and then (never applies)."""
-    every = every_s if every_s is not None else float(os.getenv("LOKI_UPDATE_EVERY_S", "1800") or 1800)
+def force_enabled() -> bool:
+    """LOKI_FORCE_UPDATE (default on): a waiting update is applied as soon as LOKI is idle and the
+    whole app restarts on it - every machine stays on the newest LOKI without anyone clicking."""
+    return str(os.getenv("LOKI_FORCE_UPDATE", "1")).strip().lower() not in ("0", "false", "off", "no")
+
+
+def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
+    """Background loop for the engine: check GitHub now and then. When an update is waiting,
+    `idle()` says LOKI is not busy and force updates are on, `apply()` updates and restarts."""
+    every = every_s if every_s is not None else float(os.getenv("LOKI_UPDATE_EVERY_S", "600") or 600)
     time.sleep(30)
     while True:
         if enabled() and is_checkout(REPO):
             try:
                 check_now()
+                if STATE.get("update_available") and force_enabled() and idle and apply and idle():
+                    STATE["note"] = "applying the update and restarting LOKI"
+                    apply()
             except Exception as exc:  # noqa: BLE001 - updates must never take the engine down
                 STATE.update({"error": "%s: %s" % (type(exc).__name__, exc)})
         time.sleep(max(60.0, every))

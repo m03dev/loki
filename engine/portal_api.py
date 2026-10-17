@@ -47,8 +47,10 @@ import signin
 # Settings > General: what may be changed from the window, with its kind and choices.
 GENERAL = {
     "LOKI_AUTO_UPDATE": {"kind": "bool", "default": "1", "label": "Update automatically from GitHub when LOKI starts"},
-    "LOKI_UPDATE_EVERY_S": {"kind": "int", "default": "1800", "min": 300, "max": 86400,
+    "LOKI_UPDATE_EVERY_S": {"kind": "int", "default": "600", "min": 300, "max": 86400,
                             "label": "Check for updates every (seconds)"},
+    "LOKI_FORCE_UPDATE": {"kind": "bool", "default": "1",
+                          "label": "Apply updates by itself when idle and restart the whole app"},
     "LOKI_ALLOW_PAID": {"kind": "bool", "default": "0", "label": "Allow paid providers in automatic routing"},
     "LOKI_DAILY_USD_LIMIT": {"kind": "float", "default": "1.0", "min": 0, "max": 100,
                              "label": "Daily limit for paid use (USD)"},

@@ -336,6 +336,12 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             show_url(f"{BASE}/#token={token}")
             continue
         log("the engine is restarting on the updated code")
+        if relaunch_app():
+            # Update everything restarts the WHOLE client, not only the engine: the window and
+            # this app process run the new code too. The new app waits for this one to exit.
+            stop.set()
+            close_window()
+            return
         new_process, token = start_and_wait(python, workspace, godot)
         holder["process"] = new_process
         if not token:
@@ -343,6 +349,72 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             show_url("about:blank")
             return
         show_url(f"{BASE}/#token={token}")
+
+
+# --------------------------------------------------------------------- full restart
+def relaunch_command() -> list:
+    """How this app was started, to start it again (a packaged build is its own executable)."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *sys.argv[1:]]
+    return [sys.executable, *sys.argv]
+
+
+def relaunch_app() -> bool:
+    """Start a fresh copy of the app (it waits until this one has exited). LOKI_APP_NO_RELAUNCH=1
+    keeps the old engine-only restart."""
+    if os.environ.get("LOKI_APP_NO_RELAUNCH", "") == "1":
+        return False
+    env = dict(os.environ, LOKI_APP_WAIT_PID=str(os.getpid()))
+    kwargs: dict = {"env": env, "cwd": str(REPO), "stdin": subprocess.DEVNULL,
+                    "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
+                                   | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        subprocess.Popen(relaunch_command(), **kwargs)  # noqa: S603 - our own command line
+    except Exception:  # noqa: BLE001
+        log("could not start a fresh copy of the app:\n" + traceback.format_exc())
+        return False
+    log("restarting the whole app on the updated code")
+    return True
+
+
+def wait_for_old_app(timeout: float = 30.0) -> None:
+    """A relaunched app: wait for the copy that started it to be gone (it frees the port)."""
+    pid = os.environ.pop("LOKI_APP_WAIT_PID", "")
+    if not pid.isdigit():
+        return
+    end = time.time() + timeout
+    while time.time() < end and pid_alive(int(pid)):
+        time.sleep(0.25)
+
+
+def pid_alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        import ctypes  # pylint: disable=import-outside-toplevel
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return code.value == 259   # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def close_window() -> None:
+    window = WINDOW.get("window")
+    if window is not None:
+        try:
+            window.destroy()
+        except Exception:  # noqa: BLE001
+            log("could not close the window:\n" + traceback.format_exc())
 
 
 # --------------------------------------------------------------------- window
@@ -471,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workspace", default="", help="folder Loki works in (remembered)")
     parser.add_argument("--print-url", action="store_true", help="start the engine, print the URL, keep running")
     args = parser.parse_args(argv)
+    wait_for_old_app()
     # Quitting (Cmd+Q, logout, kill) must take the engine down with the app.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
@@ -515,6 +588,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         def alive() -> bool:
             current = holder.get("process")
+            if stopping.is_set():
+                return False   # relaunched: a fresh copy of the app has taken over
             return current is not None and (current.poll() is None or current.poll() == RESTART_EXIT_CODE)
 
         if args.print_url:

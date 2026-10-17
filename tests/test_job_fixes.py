@@ -188,6 +188,41 @@ check("a machine (and every test suite) can still say no", not forecast.approved
       and forecast.install_if_approved().get("skipped"))
 check("the engine installs it once at start-up where it is missing", "forecast.install_if_approved()" in bridge)
 
+section("Update everything restarts every machine; icons in favour of words")
+import updater  # noqa: E402
+calls = []
+orig = (updater.time.sleep, updater.enabled, updater.is_checkout, updater.check_now)
+
+
+class _Stop(Exception):
+    pass
+
+
+def _sleep(s):
+    if calls and calls[-1] == "applied":
+        raise _Stop()
+
+
+updater.time.sleep = _sleep
+updater.enabled = lambda: True
+updater.is_checkout = lambda repo: True
+updater.check_now = lambda: updater.STATE.update(update_available=True)
+os.environ.pop("LOKI_FORCE_UPDATE", None)
+try:
+    updater.run_forever(every_s=60, idle=lambda: calls.append("idle") or True, apply=lambda: calls.append("applied"))
+except _Stop:
+    pass
+updater.time.sleep, updater.enabled, updater.is_checkout, updater.check_now = orig
+check("a waiting update is applied by itself when LOKI is idle", calls == ["idle", "applied"], calls)
+check("the bridge applies it with a full restart and only when idle (no chat, no running job)",
+      'kwargs={"idle": _idle, "apply": _apply}' in bridge and "update_all.apply_here(updater, restart_engine)" in bridge)
+html = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
+icons = (REPO / "app" / "ui" / "icons.js").read_text(encoding="utf-8")
+check("icons.js is loaded and gives every main button and Settings section an icon with a name and what it does",
+      "/ui/icons.js" in html and all(t in icons for t in ('"#new-chat"', '"#open-settings"', '"#send"', '"#update-banner-go"',
+                                                          "creations:", "brain:", "showTip(", "data-tip-name")))
+check("the words stay for screen readers and the Settings search", "aria-label" in icons and "tab-label" in icons)
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

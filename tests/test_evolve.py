@@ -150,6 +150,18 @@ holder2["crashes"] = [_t.time()] * 5
 loki_app.supervise(holder2, Path("py"), Path("ws"), "", stop2)
 check("but not forever: 5 crashes in 10 minutes and it stops trying", starts == [])
 
+# Update everything restarts the whole client on every machine, not only the engine
+launched, closed = [], []
+loki_app.subprocess.Popen = lambda cmd, **kw: launched.append((cmd, kw.get("env", {}).get("LOKI_APP_WAIT_PID")))
+loki_app.close_window = lambda: closed.append(1)
+starts.clear()
+stop3 = threading.Event()
+loki_app.supervise({"process": Proc(loki_app.RESTART_EXIT_CODE)}, Path("py"), Path("ws"), "", stop3)
+check("an update restart relaunches the whole app (it waits for this one) and closes this window",
+      launched and launched[0][1] == str(os.getpid()) and closed == [1] and stop3.is_set() and starts == [],
+      (launched, closed, starts))
+check("a relaunched app waits for the old one to exit", "wait_for_old_app()" in (REPO / "app" / "loki_app.py").read_text(encoding="utf-8"))
+
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
