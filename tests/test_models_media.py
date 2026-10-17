@@ -95,6 +95,8 @@ tags = [m["tag"] if isinstance(m, dict) and "tag" in m else (m.get("name") if is
 bonsai = [t for t in tags if t and "Ternary-Bonsai-2" in str(t)]
 check("the 9B, 4B and 2B GGUF builds are listed", len(bonsai) == 3, bonsai)
 check("a known quality score for Bonsai 2", any(k.startswith("bonsai-2") for k, _ in model_setup.KNOWN_SCORES))
+check("every Bonsai tag names the Q2_0 FILE (the short :Q2_0 tag also matches the unloadable PQ2_0 pack)",
+      all(":Ternary-Bonsai-2-" in str(t) and str(t).endswith("-Q2_0") for t in bonsai), bonsai)
 
 
 class Reply(io.BytesIO):

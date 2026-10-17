@@ -71,13 +71,15 @@ CATALOG = [
     {"tag": "gemma4:12b", "size": 8.0, "need": 10, "score": 83, "roles": ["agent"],
      "why": "Gemma 4 mid-size: good tool use, sees images"},
     # Bonsai 2 (PrismML, Apache-2.0): Qwen3.5 with ternary weights - near the original's quality at a
-    # fraction of the size, with tool calling. Pulled straight from Hugging Face by Ollama; the Q2_0
-    # files run on upstream llama.cpp b11555+ (verify_runs checks the installed Ollama really can).
-    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0", "size": 2.6, "need": 4.5, "score": 83, "roles": ["agent", "fast"],
+    # fraction of the size, with tool calling. Pulled straight from Hugging Face by Ollama. Name the
+    # Q2_0 FILE in the tag (":Ternary-Bonsai-2-9B-Q2_0"): the short ":Q2_0" tag also matches the
+    # "-PQ2_0" pack, whose Prism ternary type (ggml 142) Ollama cannot load at all. The Q2_0 files
+    # (ggml type 42) run on Ollama 0.40.6+ / llama.cpp b11669+; verify_runs checks it really runs.
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0", "size": 2.6, "need": 4.5, "score": 83, "roles": ["agent", "fast"],
      "family": "bonsai", "why": "Bonsai 2 9B: Qwen3.5-9B quality in 2.6 GB (ternary weights), calls tools - the most model per GB"},
-    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-4B-gguf:Q2_0", "size": 1.2, "need": 2.5, "score": 71, "roles": ["fast", "agent"],
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-4B-gguf:Ternary-Bonsai-2-4B-Q2_0", "size": 1.2, "need": 2.5, "score": 71, "roles": ["fast", "agent"],
      "family": "bonsai", "why": "Bonsai 2 4B: a capable agent model in 1.2 GB"},
-    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-2B-gguf:Q2_0", "size": 0.6, "need": 1.5, "score": 57, "roles": ["fast"],
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-2B-gguf:Ternary-Bonsai-2-2B-Q2_0", "size": 0.6, "need": 1.5, "score": 57, "roles": ["fast"],
      "family": "bonsai", "why": "Bonsai 2 2B: 0.6 GB, for the smallest machines and quick replies"},
     {"tag": "qwen3:8b", "size": 5.2, "need": 7, "score": 78, "roles": ["agent", "code"],
      "why": "the proven 8 GB agent model"},
@@ -754,8 +756,8 @@ def run_auto(tags: list[str], machine: dict, use, progress: Progress = PROGRESS,
             progress.update(status="checking", message="Checking this computer's Ollama can run %s" % tag)
             ok, why = verify_runs(base, opener=opener)
             if not ok:
-                return fail("Downloaded %s, but this Ollama cannot run it yet: %s Update Ollama (it needs llama.cpp "
-                            "b11555 or newer for Bonsai 2's Q2_0 weights), then click again." % (tag, why), why)
+                return fail("Downloaded %s, but this Ollama cannot run it yet: %s Update Ollama (it needs "
+                            "0.40.6 or newer for Bonsai 2's Q2_0 weights), then click again." % (tag, why), why)
         progress.update(op="auto", target=tag, status="preparing",
                         message="Giving %s a long memory for big tasks" % tag)
         name = ensure_context(base, context_for(machine), models, opener=opener)

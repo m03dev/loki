@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import errno
 import json
+import addons_install
 import os
 import secrets
 import shutil
@@ -1296,6 +1297,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/capabilities/enable":
             self._send_json(*capability_toggle(state, data))
             return
+        if route == "/capabilities/install":
+            self._send_json(*capability_install(state, data))
+            return
         if route == "/ecc/sync":
             try:
                 message: str = state.agent.sync_ecc(bool(data.get("force", False)))
@@ -1567,6 +1571,22 @@ def capability_toggle(state: "BridgeState", data: dict[str, Any]) -> tuple[int, 
     if state.jobs is not None:
         state.jobs._avail.clear()  # pylint: disable=protected-access
     return 200, {"ok": True, "capabilities": registry.present()}
+
+
+def capability_install(state: "BridgeState", data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """POST /capabilities/install {name}. pip-install one add-on's requirements into LOKI's venv.
+    The owner asks for one add-on by name from Settings > Add-ons; nothing installs on its own."""
+    registry = getattr(state.agent, "CAPABILITIES", None)
+    if registry is None:
+        return 503, {"ok": False, "error": "No capability registry."}
+    name = str(data.get("name", "")).strip()
+    if name not in {entry["name"] for entry in registry.present()}:
+        return 400, {"ok": False, "error": "Unknown add-on: %s" % (name or "(none)")}
+    result = addons_install.install(name)
+    result["capabilities"] = registry.present()
+    if state.jobs is not None:
+        state.jobs._avail.clear()  # pylint: disable=protected-access
+    return (200 if result.get("ok") else 400), result
 
 
 def brain_graph(state: "BridgeState") -> tuple[int, dict[str, Any]]:

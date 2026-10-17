@@ -670,7 +670,7 @@ def check_capabilities(ctx: Context) -> dict:
     if missing:
         return result("capabilities", title, WARN, "%s %s turned on but missing something it needs.%s" % (
             ", ".join(r["name"] for r in missing), "is" if len(missing) == 1 else "are", tail),
-            fix("Install the extras: tools/setup_extras.py (or turn them off in Add-ons)", "settings:capabilities"),
+            fix("Open Add-ons and press Install on each one (or run tools/setup_extras.py)", "settings:capabilities"),
             items=items)
     return result("capabilities", title, OK, "No add-on is changed or broken.%s" % tail)
 

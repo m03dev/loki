@@ -6,6 +6,22 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-16 (session 22, the PC + the Mac + Claude).
 
+## Ziva (Mac), 2026-10-16: Bonsai 2 fixed, add-on packages installed, one-click add-on install
+
+- **Bonsai 2 was broken by the tag.** `hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0` also matches the
+  repo's `-PQ2_0.gguf` (Prism ternary, ggml type 142), which no Ollama can load ("unsupported tensor
+  output.weight size overflows"); the runnable file is `-Q2_0.gguf` (ggml type 42), and Ollama only
+  gained type 42 in **0.40.6** (PR #18967). model_setup now names the file in the tag
+  (`:Ternary-Bonsai-2-9B-Q2_0`), the failure message says 0.40.6+, and test_models_media guards it.
+  Verified on the Mac: Ollama 0.40.6, smoke test answers "Blue".
+- **Add-on packages installed on the Mac**: browser-use, crawl4ai, headroom-ai, scrapling,
+  hindsight-client, vision (trackers/supervision/rfdetr), agent-reach, ffmpeg.
+- **New: install an add-on from the app.** `engine/addons_install.py` holds the pip plan per add-on;
+  `POST /capabilities/install {name}` runs pip in LOKI's venv (no shell string); Settings > Add-ons
+  shows **Install** on any add-on that is on but missing its packages, and a manual hint for the few
+  pip cannot install (herdr, hermes, SkillSpector). test_integrations' "missing library" checks are
+  now hermetic (skipped when the library is present).
+
 ## Ziva (Mac), 2026-10-16: the three.js world was dead in every checkout - fixed
 
 - `.gitignore`'s unanchored `addons/` rule (a leftover from the Godot era) git-ignored

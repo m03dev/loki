@@ -889,6 +889,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   "logs": {}
 }
 ```
+- 2026-10-16 mac (Ziva) dependencies + Bonsai 2: (1) installed the missing add-on packages on
+  the Mac - browser-use 0.13.11, crawl4ai 0.9.5, headroom-ai 0.41, scrapling 0.4.15,
+  hindsight-client 1.0, vision (trackers 2.6.1 + supervision 0.31 + rfdetr 1.11.2),
+  agent-reach 1.5.0, and ffmpeg 9.0.2 (brew). (2) FIXED Bonsai 2 - LOKI's tag pulled the
+  UNLOADABLE file: hf.co/prism-ml/...-gguf:Q2_0 also matches "-PQ2_0" (Prism ternary, ggml
+  type 142) which no Ollama can read; the real "-Q2_0.gguf" (type 42) needs Ollama 0.40.6+
+  (its gguf reader gained Q2_0 in 0.40.6, PR #18967). Updated the Mac to 0.40.6, re-pulled
+  with the explicit file tag, smoke test answers "Blue". LOKI's three Bonsai tags now name
+  the file + a regression check. (3) NEW, makes installs easy: Settings > Add-ons shows an
+  Install button on any add-on that is on but missing its packages; POST /capabilities/install
+  runs pip in LOKI's own venv (no shell). (4) test_integrations made hermetic - its "missing
+  library" checks only run when the library is absent.
 - 2026-10-16 mac (Ziva) M8+M9: memory pressure WARN (level 2, 20% free), swap 2693/4096 MB, top
   RSS llama-server 6.8 GB (Ollama) > node 509 MB > WebKit 221 MB - LOKI itself is ~50 MB. The bare
   /health curl needs the bearer token (ok true with it). Quit+reopen came back in ~10 s, no

@@ -646,6 +646,34 @@ for name in ("opencode", "agent-reach", "media", "image-gen", "mlx", "kyojin", "
     data = json.loads((REPO / "capabilities" / name / "manifest.json").read_text(encoding="utf-8"))
     check("manifest %s is valid" % name, manifests.validate(data) == [], manifests.validate(data))
 check("OpenCode jobs need the opencode capability", policy_mod.AGENT_CAPABILITY.get("opencode") == "opencode")
+
+import addons_install  # noqa: E402
+
+
+class _Done:
+    returncode = 0
+    stdout = "Successfully installed scrapling"
+    stderr = ""
+
+
+_pip_calls = []
+
+
+def _fake_pip(argv, **kw):
+    _pip_calls.append((argv, kw))
+    return _Done()
+
+
+_res = addons_install.install("scrapling", python="/py", run=_fake_pip)
+check("installing an add-on runs pip in LOKI's own venv and never a shell string",
+      _res["ok"] and _pip_calls and _pip_calls[0][0][:3] == ["/py", "-m", "pip"]
+      and "scrapling" in _pip_calls[0][0] and "shell" not in _pip_calls[0][1])
+check("an add-on pip cannot install says so instead of running anything",
+      addons_install.install("herdr")["ok"] is False and "herdr.dev" in addons_install.install("herdr")["error"])
+check("the app offers Install for pip add-ons (plan + endpoint + UI wiring)",
+      addons_install.pip_specs("browser-use") == ["browser-use"] and bool(addons_install.pip_specs("vision-track"))
+      and "/capabilities/install" in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+      and "capabilities/install" in (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8"))
 check("OBLITERATUS is not integrated", not (REPO / "capabilities" / "obliteratus").exists())
 
 # --------------------------------------------------------------------------- UI

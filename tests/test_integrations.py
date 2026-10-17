@@ -176,7 +176,14 @@ check("a runner that hangs times out cleanly", "timed out" in c.run("browse", "x
 c = make({"hindsight": ["network:loopback"]}, runner=lambda *a, **k: types.SimpleNamespace(returncode=1, stdout="", stderr="boom"))
 check("a runner with no result reports its stderr", "boom" in c.run("recall", "x"))
 
+# The "library is missing" path can only be exercised on a machine that does NOT have the
+# add-on installed. Skip it where it is installed (as the vision-track check below does), so
+# the suite passes on a real machine with the extras - and stays offline.
+_RUNNER_LIB = {"web_read": "crawl4ai", "browse": "browser_use", "hindsight": "hindsight_client"}
+import importlib.util as _ilu  # noqa: E402
 for script in ("web_read", "browse", "hindsight"):
+    if _ilu.find_spec(_RUNNER_LIB[script]) is not None:
+        continue
     import subprocess as sp
     proc = sp.run([sys.executable, "-I", str(conductor.RUNNERS / (script + ".py"))],
                   input=json.dumps({"backend": "crawl4ai", "url": "https://e.com", "op": "recall", "task": "x"}),

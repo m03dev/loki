@@ -585,7 +585,27 @@ async function loadManifests() {
     top.append(label, el("span", "state" + (cap.status === "enabled" ? " ready" : ""), cap.status));
     r.append(top, el("div", "desc", cap.description));
     for (const p of cap.permissions) r.append(el("div", "perm" + (p.high_risk ? " high" : ""), "• " + p.text));
-    if (cap.missing && cap.missing.length) r.append(el("div", "why", "Needs " + cap.missing.join(", ")));
+    if (cap.missing && cap.missing.length) {
+      r.append(el("div", "why", "Needs " + cap.missing.join(", ")));
+      const plan = cap.install || {};
+      if (plan.pip && plan.pip.length) {
+        const install = el("button", "mini", "Install");
+        install.title = "pip install " + plan.pip.join(" ");
+        install.addEventListener("click", async () => {
+          install.disabled = true;
+          const was = install.textContent;
+          install.textContent = "Installing\u2026";
+          const result = await api("/capabilities/install", { name: cap.name }).catch(() => null);
+          if (!result || !result.ok) addNotice((result && result.error) || ("Could not install " + cap.name + "."), true);
+          else addNotice("Installed " + cap.name + (result.specs && result.specs.length ? " (" + result.specs.join(", ") + ")" : "") + ".");
+          install.textContent = was;
+          loadManifests();
+        });
+        r.append(install);
+      } else if (plan.manual) {
+        r.append(el("div", "why", plan.manual));
+      }
+    }
     if (cap.status === "changed") r.append(el("div", "why", "Changed since you turned it on - toggle to re-approve."));
     if (cap.errors && cap.errors.length) r.append(el("div", "why", cap.errors.join("; ")));
     box.append(r);

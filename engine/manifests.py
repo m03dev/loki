@@ -25,6 +25,8 @@ Standard library only; pure functions plus one small JSON enablement store.
 """
 from __future__ import annotations
 
+import addons_install
+
 import hashlib
 import json
 import os
@@ -296,6 +298,7 @@ class Registry:
                 "permissions": [{"id": p, "text": describe_permission(p), "high_risk": p in HIGH_RISK}
                                 for p in m.get("permissions", []) if isinstance(p, str)],
                 "missing": entry.get("missing", []), "errors": entry.get("errors", []),
+                "install": addons_install.plan(entry["name"]),
             })
         return rows
 
