@@ -31,6 +31,7 @@ DEFAULT_REPO = HERE.parent
 REPO_DEFAULT = DEFAULT_REPO  # alias used by _suite_env()
 BRANCH = os.getenv("LOKI_BRANCH", "master")
 MIRRORS = [b for b in os.getenv("LOKI_MIRROR_BRANCHES", "macos-app").split(",") if b.strip()]
+FULL = [False]   # --full: every suite, no time budget (slow; the PC's nightly run)
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
@@ -82,7 +83,87 @@ def git(repo: Path, *args: str, timeout: float = 120.0) -> tuple:
     return run(repo, "git", *args, timeout=timeout)
 
 
+TEST_BUDGET_S = float(os.getenv("LOKI_TEST_BUDGET_S", "60") or 60)   # the owner's rule: a test run takes at most 1 minute
+
+
+def changed_files(repo: Path) -> list:
+    """Files this ship changes: committed-but-unpushed, staged, unstaged and new."""
+    out = set()
+    for args in (("diff", "--name-only", "origin/%s...HEAD" % BRANCH), ("diff", "--name-only", "HEAD"),
+                 ("ls-files", "--others", "--exclude-standard")):
+        code, text = git(repo, *args)
+        if code == 0:
+            out.update(line.strip() for line in text.splitlines() if line.strip())
+    return sorted(out)
+
+
+def pick_suites(repo: Path, files: list) -> list:
+    """The suites that exercise the changed files: a changed test runs itself; a changed module
+    runs every suite that names it. Always the window smoke test when the UI changed."""
+    picked = []
+    stems = {Path(f).stem for f in files if f.endswith((".py", ".js", ".css", ".html"))} - {"ship", "index", "app"}
+    for suite in SUITES:
+        path = repo / "tests" / (suite + ".py")
+        if not path.is_file():
+            continue
+        if any(Path(f).stem == suite for f in files):
+            picked.append(suite)
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(len(st) > 3 and (("import " + st) in text or (st + ".") in text or ('"' + st) in text) for st in stems):
+            picked.append(suite)
+    if any(f.startswith("app/ui/") for f in files) and "test_ui_smoke" not in picked:
+        picked.append("test_ui_smoke")
+    return picked
+
+
+def run_fast(repo: Path, say=print, budget: float | None = None) -> bool:
+    """The default test run (the owner's 1-minute rule): LOKI's self-test, then the suites that
+    exercise the changed files, side by side, within `budget` seconds. A suite that does not finish
+    in time is reported, not waited for; `--full` runs everything (the PC's nightly job does)."""
+    from concurrent.futures import ThreadPoolExecutor  # pylint: disable=import-outside-toplevel
+    budget = TEST_BUDGET_S if budget is None else budget
+    start = time.monotonic()
+    code, out = run(repo, sys.executable, str(repo / "app" / "loki_app.py"), "--self-test", timeout=min(30, budget))
+    say("  %-20s %s (%.0fs)" % ("self-test", (out.splitlines() or ["?"])[-1][:60], time.monotonic() - start))
+    if code != 0:
+        say("      " + out[-400:])
+        return False
+    suites = pick_suites(repo, changed_files(repo))
+    if not suites:
+        say("  no suite covers these files; the self-test passed")
+        return True
+    say("  suites for this change: " + ", ".join(suites))
+    deadline = start + budget
+
+    def one(suite):
+        t0 = time.monotonic()
+        if deadline - t0 < 3:
+            return suite, 124, "", 0.0
+        c, o = run(repo, sys.executable, str(repo / "tests" / (suite + ".py")), timeout=deadline - t0)
+        return suite, c, o, time.monotonic() - t0
+
+    ok = True
+    with ThreadPoolExecutor(max_workers=min(8, len(suites))) as pool:
+        for suite, c, o, took in pool.map(one, suites):
+            tail = [line for line in o.splitlines() if "passed," in line]
+            if c == 124:
+                say("  %-20s over the %.0fs budget - not waited for (run --full on the PC)" % (suite, budget))
+                continue
+            say("  %-20s %s (%.0fs)" % (suite, tail[-1].strip() if tail else ("exit %d" % c), took))
+            if c != 0:
+                ok = False
+                for line in [ln for ln in o.splitlines() if ln.strip().startswith("FAIL") or "Error" in ln][:8]:
+                    say("      " + line.strip())
+    return ok
+
+
 def run_tests(repo: Path, say=print) -> bool:
+    if not FULL[0]:
+        return run_fast(repo, say)
     ok = True
     for suite in SUITES:
         path = repo / "tests" / (suite + ".py")
@@ -172,7 +253,7 @@ def ship(repo: Path, message: str, tests: bool = True, say=print) -> int:
     if ahead.strip() == "0":
         say("Nothing to push: GitHub already has all of this.")
         return 0
-    if tests and before.strip() != after.strip():
+    if tests and before.strip() != after.strip() and FULL[0]:
         say("4. GitHub had new commits - testing the combined result")
         if not run_tests(repo, say):
             say("Tests fail after combining with GitHub's changes - nothing was pushed.")
@@ -201,10 +282,13 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true", help="only run the tests")
     ap.add_argument("--only", default="", help="with --check: just these suites (comma list, e.g. test_portal)")
     ap.add_argument("--no-tests", action="store_true", help="skip the tests (not for agents)")
+    ap.add_argument("--full", action="store_true", help="every suite, no 1-minute budget (slow)")
     args = ap.parse_args(argv)
     repo = Path(args.repo).resolve()
+    FULL[0] = bool(args.full or os.getenv("LOKI_TEST_FULL") == "1")
     if args.check:
         if args.only.strip():
+            FULL[0] = True   # named suites run in full
             wanted = [s.strip() for s in args.only.split(",") if s.strip()]
             unknown = [s for s in wanted if s not in SUITES]
             if unknown:
