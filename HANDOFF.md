@@ -72,6 +72,7 @@ So this worktree built the **engine side every client uses** plus the first in-a
 - **Not done / needs a machine**: fps of Play on the real Mac/PC; presence between the real Mac and PC
   has only run on loopback (ZIVA W22/M14 ask for a two-machine `/world/presence` check); the Godot web
   build needs `.wasm`/`.pck` in UI_TYPES and `'wasm-unsafe-eval'` for its page (see MMO_API.md section 1).
+Last updated: 2026-10-17 (session 27 harvest, Claude worktree; session 26 before it).
 
 ## Session 26 (2026-10-17, Claude in the cloud): Babylon.js world, one island per device, Creations
 
@@ -152,6 +153,75 @@ check) and Reflexion's `trial_loop` around it; stable-diffusion.cpp (PC) / mflux
 by enhance_image_prompt; Wan2GP as the PC's video add-on; Playwright MCP (accessibility snapshot) for text-only
 browser control; arXiv/Wikipedia/GitHub sources in deep_research; MMO notes for the world agent are in the
 research doc (Colyseus + snapshot interpolation + bitECS/miniplex).
+## Session 27 harvest (worktree)
+
+The owner: "go through all the connectors and add-ons we talked about, every single repo we have
+documented - take the code and improve LOKI, not the ones we have." Licence: "LOKI stays private,
+copy anything". Built in a Claude worktree, committed there; the parent session merges and ships.
+**26 suites pass** (`tests/test_harvest.py` is new: offline, fake openers, 149 checks).
+
+**docs/integrations/HARVEST.md** is the inventory: every `github.com/...` in docs/, engine/,
+contrib/, capabilities/, tools/, app/ui, HANDOFF and ZIVA_TASKS (91 rows; 12 placeholder links left out),
+each with licence, what LOKI already had, what was worth taking, and the decision. Session 26's
+ports (OpenHuman, OpenHands, Scrapling, MuMuAINovel, PenEcho) were not redone.
+
+**Ported into LOKI's own code (13) - priority: agents that succeed on qwen3:8b and free models:**
+- **Edits that land** (Hermes Agent `fuzzy_match.py` + `escape_drift_autocorrect.py`, copied; the
+  opencode/cline replacer chain): `edit_file` falls back to line-trimmed, whitespace/indent-flexible,
+  escape-, unicode- (smart quotes/dashes), boundary-, block-anchor and context-aware matching, says which
+  one matched, and a miss shows the closest lines. A one-line "similar" match is NOT accepted (a guess).
+- **Edits that cannot break a file** (SWE-agent lint-on-edit, `engine/lint_guard.py`): an `edit_file` /
+  `insert_lines` that introduces a syntax error (Python, JSON, TOML, XML, brace balance for JS/TS/CSS/
+  Go/Rust/Java/C...) is not written; the model gets SWE-agent's "your edit would have looked like / the
+  original" report. Errors already in the file are not blamed. LOKI_EDIT_LINT=0 turns it off.
+- **Web search with no add-on** (Vane, `engine/web_search.py`): tools `web_search` (modes web, academic
+  = arXiv, discussion = Reddit, news) and `research_web` (search -> read the best pages -> crawl4ai BM25
+  keeps the relevant parts -> numbered sources + Vane's citation rules, one call). SearxNG when
+  `LOKI_SEARXNG_URL` is set, else DuckDuckGo HTML, arXiv Atom, Wikipedia API.
+- **Focused reading + local RAG** (crawl4ai, `engine/content_filter.py`): `read_web(url, query=...)`
+  returns only the parts about the query; `search_docs(query)` = BM25 over workspace files (pdf with pypdf).
+- **Text browser** (browser-use + page-agent, `engine/text_browser.py`): `browse_page` open/click/type/
+  select/submit/scroll/back/find with numbered `[i]<tag ...>` elements; GET forms only unless
+  LOKI_BROWSE_POST=1 (a POST changes something on a site - Browser Use add-on asks first).
+- **Site maps** (Firecrawl map, `engine/site_map.py` - AGPL port): `map_site(url, search)`.
+- **Reach** (Agent Reach, `engine/reach_native.py`): `reach(url)` - GitHub API (repo + README, issue + comments,
+  file), RSS/Atom, YouTube oEmbed, Reddit/JS pages through Jina Reader (LOKI_JINA=0 = never). Its URL
+  rules now also guard `loki._private_host`: `127.1`, `2130706433`, `0x7f000001`, `*.internal`,
+  `metadata.google.internal` are refused everywhere LOKI fetches.
+- **Code maps** (SWE-agent filemap/search_dir, `engine/code_map.py`): `code_map(path)` - a file's outline
+  (Python bodies elided) or a folder's map of symbols with line numbers.
+- **Compression** (Headroom SmartCrusher + LogCompressor, `engine/compress.py`): `_elide` (the one tool-result
+  choke point) now keeps a big JSON array's first/last/error rows and a long log's errors, traces and
+  summary before falling back to head + tail.
+- **Skill abuse rules** (SkillSpector `agent_skills.yar`, `engine/skill_rules.py`): always-on
+  `skill_scan.NATIVE_SCANNERS` (the add-on's EXTERNAL_SCANNERS stay separate). 0 of LOKI's 260 skills trip it.
+- **Scheduled tasks** (Hermes cron, `engine/schedules.py`): `schedule_task add|list|remove|pause|resume`
+  ("every weekday at 9am", "in 30m", "every 2h", cron lines, ISO times; cron matcher built in). The
+  autopilot's new `schedules` duty starts a due one as a background LOKI job at its time (idle or not;
+  never two runs of one schedule at once). A background job cannot schedule jobs. Store: harness_data/schedules.json.
+- **Tool-argument coercion** (Hermes arg_coercion) in `tool_guard`: JSON-string objects, JSON-string
+  array items, "null".
+- **Skills**: six Apache-2.0 skills from anthropics/skills in `skills/anthropic/` (catalog source
+  "anthropic"); the proprietary docx/pdf/pptx/xlsx skills were not copied.
+
+Where it is wired (small blocks only): `engine/loki.py` tool block after the session-26 tools,
+schemas after `read_web`, MODEL_TOOL_NAMES, TOOL_CATEGORIES (files: code_map/search_docs; web: the
+web tools; planning: schedule_task), LOCAL_TOOL_PRIORITY (research_web, web_search, read_web, code_map
+right after the file tools), `NETWORK_WRITES` += schedule_task (Plan mode), `_elide`, `_private_host`,
+`read_web(query=)`. Not touched: agent_turn, _pursue_goal, _model_request, the prompted-tools parser,
+DONE verification, cli_agents.py, creations.py, conductor.py, app/ui.
+
+**Licence:** ports keep their upstream licence in `engine/licenses/` (Hermes, SWE-agent, crawl4ai, Vane,
+Firecrawl AGPL, browser-use, page-agent, Agent Reach, Headroom + NOTICE, SkillSpector); docs/THIRD_PARTY.md
+has a row each. `engine/site_map.py` is an AGPL-3.0 port - one more file to remove if LOKI is ever published.
+
+**Not done / check on a machine (ZIVA W22 PC, M14 Mac):** none of the web tools has met the real internet
+(the cloud sandbox blocks DuckDuckGo/arXiv/Wikipedia) - whether DuckDuckGo's HTML page answers LOKI's
+requests from the owner's IPs is the open question; a SearxNG (LOKI_SEARXNG_URL) is the robust fix if not.
+No live model has used the new tools yet; scheduled jobs have not fired on a real engine. Skipped with
+reasons in HARVEST.md: memory/graph servers (Hindsight, OpenViking, Graphiti), runtimes (ruflo family,
+Paperclip, cua, herdr), phone/hardware projects, API-catalog entries, deepseek-harness (TS preview),
+artemis (no longer public). aider is not documented in the project, so it was left to the new-repo research.
 
 ## Session 26 core upgrade (worktree)
 

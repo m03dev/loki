@@ -46,6 +46,18 @@ MAX_FILES = 400
 # Extra scanners (e.g. NVIDIA SkillSpector) registered by Loki when enabled:
 # callable(folder) -> [(severity, message)]. high/critical findings block the skill.
 EXTERNAL_SCANNERS: list = []
+# Built-in scanners that always run (session 27: NVIDIA SkillSpector's agent-skill rules,
+# engine/skill_rules.py). Same contract as EXTERNAL_SCANNERS; LOKI never replaces this list.
+NATIVE_SCANNERS: list = []
+try:
+    import skill_rules as _skill_rules
+    NATIVE_SCANNERS.append(_skill_rules.scan_folder)
+except ImportError:  # pragma: no cover - imported as engine.skill_scan
+    try:
+        from engine import skill_rules as _skill_rules  # type: ignore
+        NATIVE_SCANNERS.append(_skill_rules.scan_folder)
+    except ImportError:
+        pass
 BLOCKING_SEVERITIES = {"critical", "high", "error"}
 
 
@@ -114,7 +126,7 @@ def scan(skill_md: Path) -> dict:
                 pass
         if is_exec:
             executables.append(rel)
-    for scanner in list(EXTERNAL_SCANNERS):
+    for scanner in list(NATIVE_SCANNERS) + list(EXTERNAL_SCANNERS):
         try:
             findings = scanner(root) or []
         except Exception:  # noqa: BLE001 - an external scanner failing never blocks on its own

@@ -257,7 +257,25 @@ def _coerce(value: Any, kind: str) -> Any:
         if parsed and isinstance(parsed.get("v"), list):
             return parsed["v"]
         return [value]
+    # Session 27 (Hermes Agent tools/arg_coercion.py, MIT - engine/licenses/HermesAgent-MIT.txt):
+    # an object sent as a JSON string, and "null" for a value the model meant to leave out.
+    if kind == "object" and isinstance(value, str) and value.strip().startswith("{"):
+        parsed = repair_json(value)
+        return parsed if isinstance(parsed, dict) else value
+    if kind in ("integer", "number", "boolean", "object", "array") and isinstance(value, str) \
+            and value.strip().lower() in ("null", "none"):
+        return None
     return value
+
+
+def _coerce_items(value: Any, spec: dict) -> Any:
+    """Hermes arg_coercion: array items given as JSON strings where the schema wants objects,
+    or numbers/booleans as strings, are converted one by one."""
+    items = (spec or {}).get("items") if isinstance(spec, dict) else None
+    kind = items.get("type") if isinstance(items, dict) else None
+    if not isinstance(value, list) or kind not in ("object", "integer", "number", "boolean"):
+        return value
+    return [_coerce(v, kind) if isinstance(v, str) else v for v in value]
 
 
 def _kind_ok(value: Any, kind: str) -> bool:
@@ -302,6 +320,8 @@ def validate(name: str, args: dict, params: dict | None) -> tuple:
             continue
         kind = (props[key] or {}).get("type") if isinstance(props[key], dict) else None
         out[key] = _coerce(value, kind) if kind else value
+        if kind == "array":
+            out[key] = _coerce_items(out[key], props[key])
     missing = [k for k in params.get("required") or [] if k not in out or out[k] is None]
     if missing:
         hint = " (you sent: %s)" % ", ".join(sorted(args)) if args else ""

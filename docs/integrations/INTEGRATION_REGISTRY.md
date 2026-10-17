@@ -17,7 +17,7 @@ something; **Rejected**: deliberately not adopted.
 | **public-apis** | github.com/public-apis/public-apis | API catalog | public repo | check | the vault already carries apis.guru's 2,059 entries | not separately imported - apis.guru is the larger, machine-readable superset | Superseded | none |
 | **public-api-lists** | github.com/public-api-lists/public-api-lists | API catalog | public repo | check | as above | as above | Superseded | none |
 | **davemachado/public-api** | github.com/davemachado/public-api | API catalog | public repo (may be archived) | check | as above | as above | Superseded | none |
-| **anthropics/skills** | github.com/anthropics/skills | agent skills | public repo | check | 519 vendored skills already | review and import relevant skills | Planned | none |
+| **anthropics/skills** | github.com/anthropics/skills | agent skills | public repo | Apache-2.0 (docx/pdf/pptx/xlsx proprietary) | 519 vendored skills already | six open-source skills vendored in skills/anthropic (session 27, docs/integrations/HARVEST.md) | Partial | none |
 | **deepseek-harness** | github.com/deepseek-ai/deepseek-harness | harness patterns | verify existence | check | Loki has its own loop | extract patterns; write a comparison first | Planned | none |
 | **awesome-harness-engineering** (walkinglabs / yenanjing) | github.com/walkinglabs/... , github.com/yenanjing/... | harness references | verify existence | check | — | reference only | Planned | none |
 | **Godot MCP** | "Godot Editor MCP" addon by hybridindie (was vendored; see git history) | live editor bridge for a game project | MIT | MIT (c) 2026 Johnny D | optional game capability | no longer vendored in Loki (2026-10-13); a game project adds it itself if it wants it | Removed from Loki | none |

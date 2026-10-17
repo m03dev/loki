@@ -2076,6 +2076,13 @@ def _elide(text: str, limit: int = MAX_OUTPUT) -> str:
     body = str(text)
     if len(body) <= limit:
         return body
+    try:   # session 27: Headroom's crushers keep errors/summaries/telling rows (engine/compress.py)
+        import compress as _compress  # pylint: disable=import-outside-toplevel
+        crushed = _compress.compress(body, limit)
+        if crushed:
+            return crushed
+    except Exception:  # noqa: BLE001 - never let compression break a tool result
+        pass
     half = max(1, limit // 2)
     head, tail = body[:half], body[-half:]
     dropped = body[len(head):len(body) - len(tail)]
@@ -3066,6 +3073,15 @@ def _private_host(url: str) -> bool:
         return False
     if host in ("localhost", "") or host.endswith(".local") or host.endswith(".localhost"):
         return True
+    try:   # session 27 (Agent Reach url.py): internal names, and IPv4 in legacy spellings (127.1, 2130706433)
+        import reach_native as _rn  # pylint: disable=import-outside-toplevel
+        if host.rstrip(".") in _rn.BLOCKED_HOSTS or host.rstrip(".").endswith(_rn.BLOCKED_SUFFIXES):
+            return True
+        legacy = _rn.literal_ip(host)
+        if legacy is not None and not legacy.is_global:
+            return True
+    except Exception:  # noqa: BLE001
+        pass
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
@@ -3073,9 +3089,19 @@ def _private_host(url: str) -> bool:
     return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
 
 
-def read_web(url: str, max_chars: int = 20000) -> str:
+def read_web(url: str, max_chars: int = 20000, query: str = "") -> str:
     """One web page as markdown. An installed reader add-on (crawl4ai, Scrapling, Firecrawl) is used
-    when it is on; otherwise LOKI reads it natively (web_reader.py, ported from Scrapling's core)."""
+    when it is on; otherwise LOKI reads it natively (web_reader.py, ported from Scrapling's core).
+    With `query`, only the parts of the page about it are returned (crawl4ai's BM25 filter)."""
+    if str(query or "").strip():
+        whole = read_web(url, 60000)
+        if whole.startswith("error"):
+            return whole
+        import content_filter as _cf  # pylint: disable=import-outside-toplevel
+        part = _cf.focus(whole, query, max_chars=max(1000, min(int(max_chars or 6000), 20000)))
+        if part:
+            return "[the parts of %s about %r - read_web without query for the whole page]\n\n%s" % (url, query, part)
+        return whole[:max(1000, min(int(max_chars or 20000), 60000))]
     url = str(url or "").strip()
     if _private_host(url):
         return ("error: %s is on this computer or the local network; read_web only reads public pages "
@@ -3220,6 +3246,101 @@ LOCAL_TOOLS.update({"memory": memory_tool, "read_web": read_web, "run_subagent":
                     "task_tracker": task_tracker_tool, "sketch_reply": sketch_reply})
 
 
+# --- session 27 harvest: code from the documented repos, built in (docs/integrations/HARVEST.md) ----
+import web_search as _web_search  # noqa: E402  (Vane: search + cited research; DuckDuckGo/arXiv/Wikipedia/SearxNG)
+import site_map as _site_map  # noqa: E402  (Firecrawl map)
+import text_browser as _text_browser  # noqa: E402  (browser-use + page-agent: numbered elements)
+import reach_native as _reach_native  # noqa: E402  (Agent Reach: GitHub, feeds, YouTube, Jina)
+import code_map as _code_map  # noqa: E402  (SWE-agent filemap / search_dir)
+import content_filter as _content_filter  # noqa: E402  (crawl4ai BM25 + citations)
+import schedules as _schedules  # noqa: E402  (Hermes Agent cron)
+
+
+def _public_ok(url: str) -> bool:
+    return not _private_host(url)
+
+
+def web_search(query: str, mode: str = "web", max_results: int = 8) -> str:
+    """Search the web with no add-on and no key (Vane's SearxNG client when LOKI_SEARXNG_URL is set,
+    else DuckDuckGo, arXiv for mode=academic, Wikipedia as the last fallback)."""
+    found = _web_search.search(query, mode=str(mode or "web"), max_results=max(1, min(int(max_results or 8), 15)))
+    return _web_search.format_results(query, found)
+
+
+def research_web(question: str, mode: str = "web", pages: int = 3, queries=None) -> str:
+    """Vane's pipeline in one call: search, read the best pages natively, keep the relevant parts,
+    return numbered sources and the citation rules to answer from."""
+    if isinstance(queries, str):
+        queries = [q.strip() for q in queries.split("\n") if q.strip()]
+    return _web_search.research(question, mode=str(mode or "web"), pages=int(pages or 3), queries=queries,
+                                read=lambda url: read_web(url, 40000))
+
+
+def browse_page(action: str = "view", url: str = "", index: int = 0, text: str = "", direction: str = "down") -> str:
+    """A text browser: open a page and see its links and form fields numbered; click, type, select,
+    submit (search-style forms), scroll, back, find. No JavaScript (the Browser Use add-on does that)."""
+    return _text_browser.act(action, url=url, index=index, text=text, direction=direction,
+                             name=os.getenv("LOKI_JOB_ID", "") or "chat", allow=_public_ok)
+
+
+def map_site(url: str, search: str = "", limit: int = 200) -> str:
+    """Every page URL a website has (sitemaps + links), optionally ranked for `search`."""
+    if _private_host(url if "://" in str(url) else "https://" + str(url)):
+        return "error: %s is on this computer or the local network; map_site maps public sites" % url
+    result = _site_map.map_site(url, search=search, limit=int(limit or 200))
+    return _site_map.format_map(url, result, search)
+
+
+def reach(url: str) -> str:
+    """Read a URL with the channel that suits it: GitHub API (repo + README, issue, file), RSS/Atom feed,
+    YouTube details, Reddit/JavaScript pages through Jina Reader; LOKI's own reader for the rest."""
+    if _private_host(url if "://" in str(url) else "https://" + str(url)):
+        return "error: %s is on this computer or the local network" % url
+    return _reach_native.reach(url, native_read=lambda u: read_web(u, 40000))
+
+
+def code_map(path: str = ".", depth_files: int = 60) -> str:
+    """A file's outline (Python function bodies elided, other languages' declarations) or a folder's
+    map (every source file with its top-level symbols and line numbers)."""
+    target = resolve_in_workspace(path or ".")
+    if target.is_dir():
+        return _code_map.repo_map(target, max_files=max(5, min(int(depth_files or 60), 200)))
+    return _code_map.outline(target, label=str(path))
+
+
+def search_docs(query: str, subdir: str = ".", top: int = 6) -> str:
+    """The passages in the workspace's documents and code that best answer `query` (BM25)."""
+    return _content_filter.search_files_bm25(resolve_in_workspace(subdir or "."), query, top=int(top or 6))
+
+
+SCHEDULES = _schedules.Schedules(DATA_DIR / "schedules.json")
+
+
+def schedule_task(action: str = "list", prompt: str = "", schedule: str = "", id: str = "", repeat: str = "") -> str:  # noqa: A002
+    """Scheduled tasks LOKI does by itself as background jobs: add | list | remove | pause | resume."""
+    action = str(action or "list").strip().lower()
+    try:
+        if action == "add":
+            if os.getenv("LOKI_JOB_ID"):
+                return "error: a background job cannot schedule more jobs - ask the user to schedule it"
+            item = SCHEDULES.add(prompt, schedule, repeat=repeat or None)
+            return "scheduled: " + _schedules.describe(item) + "\n(it runs as a background job; see the job list)"
+        if action == "remove":
+            return ("removed %s" % id) if SCHEDULES.remove(id) else "error: no scheduled task %s" % id
+        if action in ("pause", "resume"):
+            return ("%sd %s" % (action, id)) if SCHEDULES.pause(id, action == "pause") else "error: no scheduled task %s" % id
+        items = SCHEDULES.list()
+        return ("\n".join(_schedules.describe(i) for i in items)) if items else "no scheduled tasks"
+    except ValueError as exc:
+        return "error: %s" % exc
+
+
+LOCAL_TOOLS.update({"web_search": web_search, "research_web": research_web, "browse_page": browse_page,
+                    "map_site": map_site, "reach": reach, "code_map": code_map, "search_docs": search_docs,
+                    "schedule_task": schedule_task})
+NETWORK_WRITES |= {"schedule_task"}
+
+
 def schema(name, description, properties=None, required=None) -> dict:
     return {
         "type": "function",
@@ -3257,8 +3378,28 @@ TOOL_SCHEMAS = [
     schema("memory", "LOKI's long-term memory. action='recall' (query: what you need to know - returns the most relevant memories), 'learn' (text: one short lasting learning worth keeping, e.g. a fix that worked or a fact about this machine; tier 'semantic' for facts, 'episodic' for what happened), 'fetch' (query + cursor: page through all matches), 'forget' (id, or query with all=true). Relevant memories are already recalled into your instructions at the start of each request.",
            {"action": {"type": "string"}, "query": {"type": "string"}, "text": {"type": "string"}, "id": {"type": "string"},
             "tier": {"type": "string"}, "tags": {"type": "string"}, "cursor": {"type": "integer"}, "all": {"type": "boolean"}}, ["action"]),
-    schema("read_web", "Read one public web page as markdown (main content only; hidden text removed). Works without any add-on.",
-           {"url": {"type": "string"}, "max_chars": {"type": "integer"}}, ["url"]),
+    schema("read_web", "Read one public web page as markdown (main content only; hidden text removed). Works without any add-on. Pass query='what you need' to get only the parts of the page about it (much shorter).",
+           {"url": {"type": "string"}, "max_chars": {"type": "integer"}, "query": {"type": "string"}}, ["url"]),
+    # session 27 harvest (docs/integrations/HARVEST.md)
+    schema("web_search", "Search the web (no add-on, no key). mode='web' (default), 'academic' (papers: arXiv), 'discussion' (Reddit threads), 'news'. Returns numbered results with url and snippet; then read_web(url, query=...) the useful ones. Targeted queries; do not search just to check something exists.",
+           {"query": {"type": "string"}, "mode": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"]),
+    schema("research_web", "Answer a question from the live web in ONE call: searches, reads the best pages, keeps only the relevant parts and returns numbered sources [1], [2]... with the rules for a cited answer. Use for any question about current facts, products, people, news or docs. queries = up to 2 extra search phrasings.",
+           {"question": {"type": "string"}, "mode": {"type": "string"}, "pages": {"type": "integer"},
+            "queries": {"type": "array", "items": {"type": "string"}}}, ["question"]),
+    schema("browse_page", "A text web browser. action='open' url=...; the page shows its links and form fields numbered like [3]<input name=q />. Then action='click' index=N (follow a link / press a button), 'type' index=N text=..., 'select' index=N text=option, 'submit' index=N (search-style forms), 'scroll' (direction up/down), 'back', 'find' text=..., 'view'. No JavaScript.",
+           {"action": {"type": "string"}, "url": {"type": "string"}, "index": {"type": "integer"},
+            "text": {"type": "string"}, "direction": {"type": "string"}}, ["action"]),
+    schema("map_site", "List the pages of a website (from its sitemaps and links) without crawling it. search='words' ranks the URLs for those words - use it to find the right page on a big site, then read_web it.",
+           {"url": {"type": "string"}, "search": {"type": "string"}, "limit": {"type": "integer"}}, ["url"]),
+    schema("reach", "Read a URL the best way for its site: a GitHub repo (facts + README), issue/PR or file; an RSS/Atom feed (newest items); a YouTube video's details; Reddit or JavaScript-heavy pages (through Jina Reader). Other pages: LOKI's own reader.",
+           {"url": {"type": "string"}}, ["url"]),
+    schema("code_map", "See code structure without reading every line. path=a file: its outline with line numbers (Python function bodies elided). path=a folder (default '.'): every source file with its classes/functions and line numbers. Then read_file with start_line/end_line for the part you need.",
+           {"path": {"type": "string"}, "depth_files": {"type": "integer"}}, []),
+    schema("search_docs", "Find the passages in the workspace's documents and code (md, txt, html, code, json, csv; pdf if pypdf is installed) that best answer a question - ranked by relevance (BM25), with file and line.",
+           {"query": {"type": "string"}, "subdir": {"type": "string"}, "top": {"type": "integer"}}, ["query"]),
+    schema("schedule_task", "Tasks LOKI does by itself later, as background jobs. action='add' with prompt=what to do and schedule='every weekday at 9am' | 'in 30m' (once) | 'every 2h' | 'every monday 18:00' | a cron line '0 9 * * 1-5' | '2026-11-03T14:00'; 'list'; 'remove'/'pause'/'resume' with id.",
+           {"action": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string"},
+            "id": {"type": "string"}, "repeat": {"type": "string"}}, ["action"]),
     schema("run_subagent", "Hand ONE focused sub-task to a short-lived helper agent with its own small context and a narrow tool set; it returns one result, so your own context stays small. Good for: searching the code for something, reading a few files and summarizing them, reading web pages. tools = comma list (default read_file, search_files, list_tree, list_files, read_web, memory). tasks = a list of several tasks to run side by side (at most 4).",
            {"task": {"type": "string"}, "tools": {"type": "string"}, "tasks": {"type": "array", "items": {"type": "string"}},
             "max_turns": {"type": "integer"}}, []),
@@ -3402,6 +3543,8 @@ MODEL_TOOL_NAMES = {
     "forecast_series", "generate_media", "game_engine_guide",
     "crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline", "scrape", "video_project", "render_video",
     "insert_lines", "undo_edit", "memory", "read_web", "run_subagent", "task_tracker", "sketch_reply",
+    # session 27 harvest
+    "web_search", "research_web", "browse_page", "map_site", "reach", "code_map", "search_docs", "schedule_task",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -3410,20 +3553,21 @@ MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_
 # --- tool categories (toggleable from the editor Settings dialog) ------------
 TOOL_CATEGORIES = {
     "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
-              "edit_file", "insert_lines", "undo_edit", "search_files", "make_dir", "move_file", "delete_file"],
+              "edit_file", "insert_lines", "undo_edit", "search_files", "make_dir", "move_file", "delete_file",
+              "code_map", "search_docs"],
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
     "planning": ["todo_add", "todo_list", "todo_done", "forecast_series", "project_state", "list_capabilities",
-                 "agent_sessions", "api_vault", "task_tracker"],
+                 "agent_sessions", "api_vault", "task_tracker", "schedule_task"],
     "memory": ["save_memory", "knowledge", "memory"],
     "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
                     "check_loki", "run_subagent"],
     "capabilities": ["list_capabilities"],
     "creative": ["generate_media", "video_project", "render_video", "game_engine_guide", "sketch_reply"],
     "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
-    "web": ["scrape", "read_web"],
+    "web": ["scrape", "read_web", "web_search", "research_web", "browse_page", "map_site", "reach"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
@@ -3441,7 +3585,7 @@ CATEGORY_LABELS = {
     "capabilities": "Capabilities (what Loki can use right now)",
     "creative": "Creative (Higgsfield images and video - uses your credits; Remotion videos)",
     "business": "Business (LOKI's CRM: contacts, companies, deals, tasks)",
-    "web": "Web (scrape pages and crawl sites into the workspace)",
+    "web": "Web (search, research with sources, read and browse pages, map sites, scrape and crawl)",
     "skills": "Skills (ECC agents and skills)",
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",
@@ -3498,6 +3642,7 @@ TRIMMED_TOOLS_NOTE = ""
 
 LOCAL_MAX_TOOLS = int(os.getenv("LOKI_LOCAL_MAX_TOOLS", "22"))
 LOCAL_TOOL_PRIORITY = ["list_tree", "read_file", "edit_file", "write_file", "search_files",
+                       "research_web", "web_search", "read_web", "code_map",   # session 27 harvest
                        "run_command", "make_dir", "move_file", "delete_file", "conductor", "delegate",
                        "knowledge", "save_memory", "todo_add", "todo_list", "todo_done",
                        "project_state", "append_file", "validate_scene", "play_scene",
@@ -3666,15 +3811,6 @@ async def extract_structured(text: str = "", schema=None, instruction: str = "")
     return "error: no valid JSON after %d tries: %s" % (out["attempts"], "; ".join(out["errors"][:5]))
 
 
-async def web_search(query: str, max_results: int = 8) -> str:
-    """Search the web without a key (DuckDuckGo, or SearXNG at LOKI_SEARXNG_URL): titles, links, snippets."""
-    try:
-        results = await asyncio.to_thread(deep_research.search, query, max(1, min(int(max_results or 8), 15)))
-    except Exception as exc:  # noqa: BLE001
-        return "error: web search failed: %s" % exc
-    return deep_research.format_results(results)
-
-
 async def deep_research_tool(question: str, depth: int = 1) -> str:
     """STORM: perspectives -> questions -> searches -> read pages -> cited report in research/."""
     if not str(question or "").strip():
@@ -3729,7 +3865,7 @@ async def speak(text: str, voice_name: str = "") -> str:
 
 LOCAL_TOOLS.update({"repo_map": repo_map_tool, "apply_edits": apply_edits, "find_tools": find_tools,
                     "plan_and_solve": plan_and_solve, "reflect": reflect_tool,
-                    "extract_structured": extract_structured, "web_search": web_search,
+                    "extract_structured": extract_structured,   # web_search: the harvest's (SearxNG/DDG/arXiv)
                     "deep_research": deep_research_tool, "enhance_image_prompt": enhance_image_prompt,
                     "make_music": make_music, "speak": speak})
 _PORT_SCHEMAS = [
@@ -3757,8 +3893,6 @@ _PORT_SCHEMAS = [
     schema("extract_structured", "Get data out of text as JSON that matches a JSON Schema - validated, and fixed "
            "automatically when it does not match.",
            {"text": {"type": "string"}, "schema": {"type": "object"}, "instruction": {"type": "string"}}, ["schema"]),
-    schema("web_search", "Search the web (no key needed): titles, links and snippets. Read a result with read_web.",
-           {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"]),
     schema("deep_research", "Research a topic on the web and write a report with numbered citations and a "
            "reference list (saved in research/). depth 1 (quick) to 3 (thorough). Takes a few minutes.",
            {"question": {"type": "string"}, "depth": {"type": "integer"}}, ["question"]),

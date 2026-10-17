@@ -26,6 +26,11 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [either] **Session 27 harvest: the new web tools against the real internet.** The cloud sandbox could
+      not reach DuckDuckGo, arXiv or Wikipedia, so web_search / research_web / map_site / reach / browse_page
+      are tested only with fakes. W22 (PC) and M14 (Mac) are the checks; the first machine to run them, please
+      answer here with the engine that worked. (Claude, 2026-10-17)
+
 - [ ] [windows] **Session 26: watch LOKI improve itself for real.** After the PC updates past the
       session-26 core upgrade, restart LOKI and leave it idle. In Settings > Lab: the next step
       (E4 or an owner idea) should start, its job should end, and the row should say shipped - or
@@ -714,6 +719,25 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       does voice/<file>.wav play? Without Kokoro the Windows SAPI voice must still work.
       (6) "make a pixel art picture of a fox" - does LOKI call enhance_image_prompt before the image? Screenshot.
 
+- [ ] **W25 Session 27 harvest on the PC (2026-10-17) - native search, browsing, edits, schedules.** Restart
+      LOKI (it updates). Model: the PC's local qwen3:8b first, then a free online one. (1)
+      `harness_data\.venv\Scripts\python.exe tools\ship.py --check`: test_harvest must pass; report the lines.
+      (2) In chat: "what sizes does qwen3 come in? cite your sources" - LOKI should call research_web (or
+      web_search then read_web with a query) and answer with [1], [2] and a Sources list. Report which engine
+      answered (the result says duckduckgo / wikipedia / searxng) and paste any "error:" line - DuckDuckGo may
+      block; that is the main thing to learn here.
+      (3) "open https://news.ycombinator.com with browse_page and click the top story" - report whether the
+      numbered elements made sense and the click worked.
+      (4) "map the site docs.python.org and find the page about asyncio" (map_site with search).
+      (5) "reach https://github.com/NousResearch/hermes-agent" (repo facts + README) and an RSS feed, e.g.
+      https://hnrss.org/frontpage.
+      (6) Editing on the local model: ask LOKI to change an indented line in a .py file in a test folder with a
+      deliberately sloppy instruction; the edit should land ("matched it line trimmed") and a broken edit should
+      be refused with "introduced new syntax error(s)". Report how many tries it took.
+      (7) "every day at 7:55 write the date into today.txt" (schedule_task), then check the next morning that
+      a job "Scheduled: ..." ran (Jobs list) and today.txt exists; then remove the schedule.
+      (8) code_map on a real project folder: is the map useful? Too long?
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -914,6 +938,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       https://github.com/ace-step/ACE-Step-1.5 && cd ACE-Step-1.5 && uv sync && uv run acestep-api`; then "make
       a 30 second lo-fi song" (make_music). Report time, memory pressure, and whether the mp3 plays. If it
       is too heavy, say so and point LOKI_ACESTEP_URL at the PC instead (http://<pc>:8001 on the LAN).
+
+- [ ] **M16 Session 27 harvest on the Mac (2026-10-17).** Quit and reopen LOKI. (1)
+      `harness_data/.venv/bin/python tools/ship.py --check` (test_harvest must pass). (2) Ask "what changed in
+      Python 3.14? cite sources" - research_web should answer with numbered sources; report the engine line and
+      any error (macOS Python's certificate store: an SSL error here means `Install Certificates.command` is
+      needed). (3) browse_page on https://www.wikipedia.org: type a word into the search field, submit, report
+      the result page. (4) Settings > Add-ons / skills catalog: the six "anthropic" skills are listed. Report all
+      of it under Reports.
 
 ## Needs Mohamed
 

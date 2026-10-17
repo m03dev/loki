@@ -20,6 +20,9 @@ Duties, each on its own interval:
            personal-agent core - docs/EVOLVE.md and the owner's ideas from Settings > Lab - and
            hand it to improve_loki (own worktree, all tests, ship). One at a time; outcomes are
            kept and fed to the next attempt, so it learns what works.
+  schedules  (session 27, engine/schedules.py - Hermes Agent's cron) the owner's scheduled tasks
+           ("every weekday at 9am ...", tool `schedule_task`): a due one becomes a background job
+           at its time, idle or not (one per pass; a schedule never runs twice at once).
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -111,6 +114,12 @@ class Autopilot:
         self.improve = improve or (getattr(agent, "improve_loki", None) if agent is not None else None)
         self.lock = threading.Lock()
         self.data = self._load()
+        self.schedules = None
+        try:   # scheduled tasks (engine/schedules.py); optional
+            import schedules as _schedules  # pylint: disable=import-outside-toplevel
+            self.schedules = _schedules.Schedules(Path(base) / "schedules.json", clock=self.clock)
+        except Exception:  # noqa: BLE001
+            self.schedules = None
 
     # ------------------------------------------------------------ persistence
     def _load(self) -> dict:
@@ -210,6 +219,39 @@ class Autopilot:
             return reply
         return ""
 
+    def duty_schedules(self) -> str:
+        """Start the first due scheduled task as a background job (one per pass)."""
+        jobs = getattr(self.state, "jobs", None)
+        if self.schedules is None or jobs is None or not hasattr(jobs, "create"):
+            return ""
+        due = self.schedules.due()
+        if not due:
+            return ""
+        item = due[0]
+        last = str(item.get("last_job") or "")
+        if last:
+            try:
+                running = (jobs.store.get(last) or {}).get("status") in ACTIVE_JOB
+            except Exception:  # noqa: BLE001
+                running = False
+            if running:       # still busy with the last run: skip this one, never pile up
+                self.schedules.mark_run(item["id"], last)
+                self._log("schedules", "Skipped '%s': its last run is still going" % item["title"][:80])
+                return ""
+        workspace = str(getattr(self.agent, "WORKSPACE", "") or "")
+        try:
+            job = jobs.create({"backend": "local", "agent": "loki", "prompt": item["prompt"],
+                               "title": "Scheduled: " + item["title"], "workspace": workspace})
+            job_id = str(job.get("id", ""))
+        except Exception as exc:  # noqa: BLE001
+            self.schedules.mark_run(item["id"], "")
+            self._log("schedules", "Could not start '%s': %s" % (item["title"][:80], exc))
+            return ""
+        self.schedules.mark_run(item["id"], job_id)
+        self._log("schedules", "Started scheduled task '%s' as job %s" % (item["title"][:80], job_id),
+                  schedule=item["id"], job=job_id)
+        return "started job %s for scheduled task %s" % (job_id, item["id"])
+
     def duty_evolve(self) -> str:
         if self.evolve is None or self.improve is None:
             return ""
@@ -293,6 +335,15 @@ class Autopilot:
         """One pass: at most one duty. Returns [(duty, result)] for what ran."""
         if not self.enabled():
             return []
+        try:   # scheduled tasks run at their time, idle or not
+            with self.lock:
+                fired = self.duty_schedules()
+                if fired:
+                    self._save()
+            if fired:
+                return [("schedules", fired)]
+        except Exception as exc:  # noqa: BLE001
+            self._log("schedules", "failed: %s: %s" % (type(exc).__name__, exc))
         ok, _why = self.idle()
         if not ok:
             return []

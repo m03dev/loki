@@ -16,12 +16,31 @@ these semantics, plus insert_lines and undo_edit.
   undo       the file as it was before the last edit made here (5 kept per file).
 
 Line endings are kept: a CRLF file (Windows) stays CRLF; matching works on LF either way.
+
+Session 27 harvest:
+  fuzzy      when the old text is not found exactly, Hermes Agent's strategy chain (itself after
+             opencode / cline: line-trimmed, whitespace-normalized, indentation-flexible,
+             escape-normalized, trimmed-boundary, unicode quotes/dashes, block-anchor,
+             context-aware) finds the region the model meant - engine/fuzzy_match.py. A miss
+             shows the closest lines in the file, so the model can copy them.
+  lint       SWE-agent's lint-on-edit (engine/lint_guard.py): an edit or insert that introduces
+             a syntax error is NOT written; the model sees the errors, its edit applied and the
+             original side by side.
 """
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
+
+try:
+    import fuzzy_match  # Hermes Agent / opencode replacer chain
+except ImportError:  # pragma: no cover - imported as engine.file_editor
+    from engine import fuzzy_match  # type: ignore
+try:
+    import lint_guard  # SWE-agent lint-on-edit
+except ImportError:  # pragma: no cover
+    from engine import lint_guard  # type: ignore
 
 SNIPPET_CONTEXT_WINDOW = 4
 MAX_RESPONSE_LEN = 16000
@@ -131,22 +150,63 @@ def str_replace(path: Path, old: str, new: str, replace_all: bool = False, label
             hits = [m.start() for m in re.finditer(re.escape(stripped), text)]
             if hits:
                 old_n = stripped
+    strategy = "exact"
     if not hits:
-        raise EditError("no replacement was made: that exact text does not appear in %s. Read the lines "
-                        "again (read_file with start_line/end_line) and copy them exactly." % label)
+        # Not there exactly: the fuzzy chain (whitespace, indentation, escapes, smart quotes,
+        # anchors) finds what the model meant, or explains precisely why not.
+        updated, count, strategy, error = fuzzy_match.fuzzy_find_and_replace(
+            text, old_n, new_n, replace_all=bool(replace_all))
+        if not error and strategy in fuzzy_match.SIMILARITY_STRATEGIES \
+                and len([ln for ln in old_n.split("\n") if ln.strip()]) < 2:
+            # one line that is only ~80% similar is a guess, not a match: show the closest lines instead
+            error, count = "only a similar line was found", 0
+        if error or not count:
+            hint = ""
+            try:
+                hint = fuzzy_match.find_closest_lines(old_n, text)
+            except Exception:  # noqa: BLE001
+                hint = ""
+            if "match" in str(error or "") and "Found" in str(error or ""):
+                raise EditError("no replacement was made in %s: %s" % (label, error))
+            raise EditError("no replacement was made: that exact text does not appear in %s. Read the lines "
+                            "again (read_file with start_line/end_line) and copy them exactly.%s"
+                            % (label, ("\nThe closest lines in the file:\n" + hint) if hint else ""))
+        first_line = _first_changed_line(text, updated)
+        _guard(label, text, updated, first_line, new_n.count("\n"), old_n.count("\n"))
+        _remember(path, text, newline)
+        _write(path, updated, newline)
+        snippet = _snippet(updated, first_line, new_n.count("\n"), label)
+        return ("(the old text did not match exactly; matched it %s - check the result)\n%s"
+                % (strategy.replace("_", " "), snippet)), count
     if len(hits) > 1 and not replace_all:
         lines = sorted({text.count("\n", 0, h) + 1 for h in hits})
         raise EditError("no replacement was made: the text appears %d times in %s (lines %s). Include more "
                         "surrounding lines so it is unique, or pass replace_all=true to change every one."
                         % (len(hits), label, lines[:20]))
-    _remember(path, text, newline)
     first_line = text.count("\n", 0, hits[0]) + 1
     if replace_all:
         updated = text.replace(old_n, new_n)
     else:
         updated = text[:hits[0]] + new_n + text[hits[0] + len(old_n):]
+    _guard(label, text, updated, first_line, new_n.count("\n"), old_n.count("\n"))
+    _remember(path, text, newline)
     _write(path, updated, newline)
     return _snippet(updated, first_line, new_n.count("\n"), label), len(hits) if replace_all else 1
+
+
+def _first_changed_line(before: str, after: str) -> int:
+    limit = min(len(before), len(after))
+    i = 0
+    while i < limit and before[i] == after[i]:
+        i += 1
+    return before.count("\n", 0, i) + 1
+
+
+def _guard(label: str, before: str, after: str, line: int, new_lines: int, old_lines: int) -> None:
+    """SWE-agent: refuse an edit that introduces a syntax error the file did not have."""
+    errors = lint_guard.introduced(label, before, after)
+    if errors:
+        raise EditError(lint_guard.report(errors, before, after, line, new_lines, old_lines))
 
 
 def insert(path: Path, insert_line: int, new_text: str, label: str = "") -> str:
@@ -162,13 +222,14 @@ def insert(path: Path, insert_line: int, new_text: str, label: str = "") -> str:
     n = int(insert_line)
     if n < 0 or n > len(lines):
         raise EditError("insert_line %d should be within [0, %d] (0 = before the first line)" % (n, len(lines)))
-    _remember(path, text, newline)
     piece = str(new_text or "").replace("\r\n", "\n")
     if piece.endswith("\n"):
         piece = piece[:-1]
     new_lines = piece.split("\n")
     lines[n:n] = new_lines
     updated = "\n".join(lines) + ("\n" if trailing or not lines else "")
+    _guard(label, text, updated, n + 1, len(new_lines), 0)
+    _remember(path, text, newline)
     _write(path, updated, newline)
     return _snippet(updated, n + 1, len(new_lines), label)
 

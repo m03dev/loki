@@ -689,8 +689,8 @@ saved = list((WS / "research").glob("*.md"))
 check("deep_research writes research/<date>-<slug>.md with references", saved and "## References" in
       saved[0].read_text() and out.startswith("wrote research/"), out[:300])
 loki._port_ask = _orig_port
-out = run(loki.call_tool("web_search", {"query": "fox"}))
-check("web_search formats results", "Fox page" in out and "https://foxes.example/fox" in out, out)
+check("one web_search tool (the harvest's: SearxNG/DuckDuckGo/arXiv), not two", list(loki.LOCAL_TOOLS).count("web_search") == 1
+      and "def _port_web_search" not in (REPO / "engine" / "loki.py").read_text(encoding="utf-8"))
 music.make = lambda prompt, out_dir, *a, **k: {"ok": True, "files": [Path(out_dir) / "x.mp3"]}
 check("make_music reports the workspace path", run(loki.call_tool("make_music", {"prompt": "jazz"}))
       == "made music/x.mp3")

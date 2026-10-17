@@ -30,6 +30,18 @@ Concise dated records of meaningful work. Newest at the top.
 - tests/test_research_ports.py (141, offline); all 26 suites pass. Live checks: ZIVA W22 / M14.
 
 ---
+## 2026-10-17 - Session 27 (Claude, worktree): the harvest - code from every documented repo built into LOKI
+
+- docs/integrations/HARVEST.md: one row per documented repo (91 rows; 12 placeholder links left out) with
+  licence, what LOKI already had, what was worth taking, and the decision.
+- Ported (13): Hermes Agent fuzzy edits + escape drift + arg coercion + cron parser; SWE-agent
+  lint-on-edit revert + filemap/search_dir; crawl4ai BM25 focus/citations; Vane search + cited
+  research; Firecrawl map; browser-use + page-agent text browser; Agent Reach channels + strict
+  public-URL check; Headroom JSON/log compression; SkillSpector agent-skill rules; six
+  Apache-2.0 Anthropic skills. New tools: web_search, research_web, browse_page, map_site, reach,
+  code_map, search_docs, schedule_task; read_web(query=); autopilot duty `schedules`.
+- Licences in engine/licenses/ (one AGPL-3.0 port: engine/site_map.py); THIRD_PARTY.md rows.
+- tests/test_harvest.py (offline fakes) in SUITES; all 26 suites pass. Real-internet checks: W22, M14.
 
 ## 2026-10-17 - Session 26 (Claude): Babylon.js world, an island per device, Creations
 

@@ -291,7 +291,9 @@ def skill_roots(repo: Path, data_dir: Path) -> list:
              ("learned", Path(data_dir) / "skills" / "learned"),   # skill_learning.py (roadmap E2)
              # the novel pipeline's stage prompts (MuMuAINovel, GPL-3.0 - LICENSE in skills/novel-writer)
              ("novel", Path(repo) / "skills" / "novel-writer" / "stages"),
-             ("marketing", Path(repo) / "skills" / "marketing")]
+             ("marketing", Path(repo) / "skills" / "marketing"),
+             # session 27: open-source skills from anthropics/skills (Apache-2.0, LICENSE beside them)
+             ("anthropic", Path(repo) / "skills" / "anthropic")]
     try:   # Ruflo's core skills and every plugin's (contrib/ruflo)
         import ruflo_library  # pylint: disable=import-outside-toplevel
         return roots + ruflo_library.skill_roots(Path(repo) / "contrib" / "ruflo")
