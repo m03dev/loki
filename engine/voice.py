@@ -16,6 +16,7 @@ The runner and the Kokoro loader are injected; tests use fakes.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -55,9 +56,32 @@ def load_kokoro():
     return KPipeline, soundfile
 
 
-def speak_kokoro(text: str, out: Path, voice: str, kokoro) -> Path:
+def _ascii_config_copy(src) -> Path:
+    """A copy of a JSON config with every non-ASCII character escaped (so the file is pure ASCII),
+    keeping the same data. Kokoro opens its config.json without encoding=, which is UTF-8, so on
+    Windows (cp1252) json.load raises UnicodeDecodeError and EVERY Kokoro call silently fell back to
+    the OS voice. Handing it an ASCII-only copy works on every platform."""
+    data = json.loads(Path(src).read_text(encoding="utf-8"))
+    out = Path(tempfile.gettempdir()) / "loki-kokoro-config.json"
+    out.write_text(json.dumps(data, ensure_ascii=True), encoding="ascii")
+    return out
+
+
+def kokoro_config_path(fetch=None) -> str:
+    """The path to give KPipeline(config_path=...), or "" to use its (locale-broken) default."""
+    try:
+        if fetch is None:
+            from huggingface_hub import hf_hub_download  # type: ignore  # noqa: PLC0415
+            fetch = lambda: hf_hub_download(repo_id="hexgrad/Kokoro-82M", filename="config.json")  # noqa: E731
+        return str(_ascii_config_copy(fetch()))
+    except Exception:  # noqa: BLE001 - no hub / no config: let KPipeline try its own default
+        return ""
+
+
+def speak_kokoro(text: str, out: Path, voice: str, kokoro, config=None) -> Path:
     KPipeline, soundfile = kokoro
-    pipeline = KPipeline(lang_code=_kokoro_lang(voice))
+    cfg = (config() if callable(config) else config) or ""
+    pipeline = KPipeline(lang_code=_kokoro_lang(voice), config_path=(cfg or None))
     chunks = []
     for _gs, _ps, audio in pipeline(text, voice=voice or DEFAULT_VOICE):
         if audio is not None:
@@ -97,7 +121,7 @@ def os_command(text_file: Path, out: Path, voice: str = "", platform: str = sys.
 
 
 def speak(text: str, out_dir: Path, voice: str = "", kokoro_loader=load_kokoro, runner=subprocess.run,
-          platform: str = sys.platform, which=shutil.which) -> dict:
+          platform: str = sys.platform, which=shutil.which, kokoro_config=kokoro_config_path) -> dict:
     """Write `text` as speech into out_dir. Returns {"ok", "file", "engine"} or {"ok": False, "error"}."""
     text = " ".join(str(text or "").split())[:MAX_CHARS]
     if not text:
@@ -109,7 +133,7 @@ def speak(text: str, out_dir: Path, voice: str = "", kokoro_loader=load_kokoro, 
     kokoro = kokoro_loader() if use_kokoro else None
     if kokoro:
         try:
-            path = speak_kokoro(text, out, voice or DEFAULT_VOICE, kokoro)
+            path = speak_kokoro(text, out, voice or DEFAULT_VOICE, kokoro, kokoro_config)
             return {"ok": True, "file": path, "engine": "kokoro"}
         except Exception as exc:  # noqa: BLE001 - fall through to the OS voice
             kokoro_error = str(exc)

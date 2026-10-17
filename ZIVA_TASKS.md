@@ -725,6 +725,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (5) Settings > General > LOKI World look: switch to "three" and back to "classic"; both work.
       (6) Update Ollama to 0.40.6+ (`winget upgrade Ollama.Ollama` or the installer from ollama.com)
       so Bonsai 2 loads; re-pull it from Settings > Local models; report the smoke test.
+     UPDATE 2026-10-17 (Mohamed: install everything): Ollama upgraded to 0.40.6 (winget had no newer
+     manifest, so the installer from ollama.com was used) and Bonsai 2 re-pulled with the correct tag
+     hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0 - it LOADS and answers now
+     ("hi there friend"). The smoke test passes. (1) 32 suites green.
   -> Ziva (Windows), 2026-10-17 (master 178c3e5): PARTLY DONE.
      (1) 28 suites green (see W21 (1)).
      (2) Home + LOKI World: the pixel cel-shaded world is back (Babylon.js), sharper - chunky pixels, flat
@@ -832,6 +836,10 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the log shows "switching this task to <model>". (3) Settings > Lab: start the next step once; report
       whether it shipped. (4) Settings > General: TimesFM installs by itself (watch /forecast status; it is a
       big pip install); report when done. Paste the last 30 lines of any failed job's log.
+     UPDATE 2026-10-17 (Mohamed: install everything): (1) DONE - POST /creations/make made a real
+     1,056,903-byte PNG via zimage in ~7 min. (4) DONE - TimesFM 3.0.2 is installed (pip);
+     /forecast reports timesfm_installed true (backend "timesfm-3" once the model loads). (3) still
+     not pressed (see W19 (4)). (2) not run.
   -> Ziva (Windows), 2026-10-17: PARTLY DONE.
      (1) DONE. Settings-equivalent: POST /creations/make {kind:"image", prompt:"a fox asleep in the snow"}
      -> {"ok": true}; a REAL 1,056,903-byte PNG (20261017-110025-a-fox-asleep-in-the-snow.png, "made with
@@ -858,6 +866,25 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       kokoro soundfile` then "read this aloud: hello from LOKI" (speak): which engine (kokoro or powershell),
       does voice/<file>.wav play? Without Kokoro the Windows SAPI voice must still work.
       (6) "make a pixel art picture of a fox" - does LOKI call enhance_image_prompt before the image? Screenshot.
+  -> Ziva (Windows), 2026-10-17 (installs Mohamed asked for: "install everything"): PARTLY DONE + 2 bugs fixed.
+     (1) tools/ship.py --check: all 32 suites green (list in W21 (1); test_research_ports 146).
+     (2) NOT run this session (the local-model tool calls).
+     (3) NOT run this session (apply_edits).
+     (4) ACE-Step 1.5 INSTALLED AND WORKING on the PC: git clone to C:/Users/macul/ACE-Step-1.5, uv sync
+     (torch cu128), started "uv run acestep-api" on http://127.0.0.1:8001 with ACESTEP_OFFLOAD_TO_CPU=true
+     - WITHOUT it the 8 GB card had 0.01 GB free and the CPU VAE decode HUNG for 10+ min; with it the whole
+     song takes ~20 s. "an upbeat indie-folk song about a fox running in the snow", duration 30 -> a real
+     30.0 s / 480,812-byte mp3 (128 kbps, ffprobe-verified). BUG FIXED in engine/music.py: ACE-Step returns
+     the finished file as a ready server path "/v1/audio?path=..." and the client wrapped it AGAIN, so the
+     server answered HTTP 403; audio_url() now uses a ready path as-is (a filesystem path is still wrapped).
+     (5) SPEAK WORKS with Kokoro: pip install kokoro soundfile (needed --only-binary=:all: - plain pip tried
+     to build spacy->thinc->blis from source and failed), Kokoro-82M weights downloaded. BUG FIXED in
+     engine/voice.py: Kokoro opens its config.json with the OS default encoding (cp1252 on Windows) though
+     the file is UTF-8, so every call raised UnicodeDecodeError and silently fell back to the SAPI voice; the
+     pipeline now gets an ASCII-safe copy. voice.speak("hello from LOKI") -> engine "kokoro", a real 24 kHz
+     wav. espeak-ng (Kokoro's out-of-dictionary fallback) did NOT install - its MSI fails here (needs
+     admin/VCRedist); Kokoro works without it (unknown words are skipped).
+     (6) NOT run this session (enhance_image_prompt).
 
 - [ ] **W25 Session 27 harvest on the PC (2026-10-17) - native search, browsing, edits, schedules.** Restart
       LOKI (it updates). Model: the PC's local qwen3:8b first, then a free online one. (1)

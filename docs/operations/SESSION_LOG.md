@@ -762,3 +762,11 @@ Ran the [windows] inbox item and W21/W20/W19/W18/W10/W23 on the PC (28 suites gr
 Session 27's job fix on the PC: POST /creations/make made a real ~1 MB picture with zimage in
 ~7 min; /peers/diagnose works over the relay and is redacted. Dropped a duplicate weak-model
 "Make it" fix after finding a5deaad already fixed it better; no code shipped. See ZIVA_TASKS.md.
+
+## 2026-10-17 (later) - Ziva (Windows): everything installed, two bugs fixed
+
+Ollama 0.40.5->0.40.6 + Bonsai 2 (correct -Q2_0 tag) loads; kokoro 0.2.2 + soundfile installed and
+fixed (ASCII-safe config - Kokoro opened its UTF-8 config with the Windows cp1252 locale and fell
+back); TimesFM 3.0.2 installed; ACE-Step 1.5 cloned, uv synced and running with
+ACESTEP_OFFLOAD_TO_CPU=true, a fox song made a real 30 s mp3, and engine/music.py fixed (a ready
+/v1/audio?path= file was wrapped again -> 403). 32 suites green; tests/test_research_ports 146.

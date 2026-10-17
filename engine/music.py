@@ -81,6 +81,25 @@ def parse_result(entry: dict) -> list:
     return [str(i.get("file")) for i in items if isinstance(i, dict) and i.get("file")]
 
 
+def audio_url(base: str, remote: str) -> str:
+    """The URL to fetch a finished song. ACE-Step 1.5 returns `file` as a ready server path
+    ("/v1/audio?path=..."); an older build returned an absolute filesystem path. Accept both:
+    wrapping a ready path again (the old bug) made the server answer 403 Forbidden."""
+    remote = str(remote or "").strip()
+    if remote.startswith(("http://", "https://")):
+        return remote
+    if remote.startswith("/v1/"):   # a ready server path from ACE-Step 1.5
+        return base + remote
+    return base + "/v1/audio?" + urllib.parse.urlencode({"path": remote})
+
+
+def audio_ext(remote: str) -> str:
+    """'.mp3'/'.wav' for a finished song, read from the URL or its ?path=."""
+    parsed = urllib.parse.urlparse(str(remote or ""))
+    inner = urllib.parse.parse_qs(parsed.query).get("path", [""])[0]
+    return Path(inner or parsed.path).suffix or ".mp3"
+
+
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")[:48] or "song"
 
@@ -129,9 +148,9 @@ def make(prompt: str, out_dir: Path, lyrics: str = "", duration: float = 0, bpm:
     saved = []
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for i, remote in enumerate(files, 1):
-        ext = Path(urllib.parse.urlparse(remote).path).suffix or ".mp3"
+        ext = audio_ext(remote)
         target = out_dir / ("%s-%s%s%s" % (stamp, slug(prompt or lyrics), "" if i == 1 else "-%d" % i, ext))
-        src = remote if remote.startswith("http") else url + "/v1/audio?" + urllib.parse.urlencode({"path": remote})
+        src = audio_url(url, remote)
         req = urllib.request.Request(src, headers={k: v for k, v in _headers(env).items() if k == "Authorization"})
         try:
             with opener(req, timeout=120) as resp:

@@ -534,6 +534,12 @@ body = json.loads(ace.reqs[0].data)
 check("task body: prompt, text2music, duration", body["prompt"] == "lofi hip hop, rain, piano"
       and body["task_type"] == "text2music" and body["audio_duration"] == 30.0)
 check("download uses /v1/audio?path=", "path=%2Foutputs%2Ft1_0.mp3" in ace.reqs[-1].full_url, ace.reqs[-1].full_url)
+check("a ready server path (/v1/audio?...) is used as-is, not wrapped again (403 bug)",
+      music.audio_url("http://x:8001", "/v1/audio?path=C%3A%5Ca.mp3") == "http://x:8001/v1/audio?path=C%3A%5Ca.mp3")
+check("a filesystem path is wrapped with ?path=",
+      "/v1/audio?path=" in music.audio_url("http://x:8001", "C:" + chr(92) + "out" + chr(92) + "a.mp3"))
+check("audio_ext reads the extension from the ?path= or the url",
+      music.audio_ext("/v1/audio?path=C%3A%5Ca.mp3") == ".mp3" and music.audio_ext("/outputs/t1_0.wav") == ".wav")
 check("Bearer key sent when set", ace.reqs[0].get_header("Authorization") == "Bearer k")
 check("duration clamped, seed fixed", music.task_body("x", duration=999, seed=5)["audio_duration"] == 240.0
       and music.task_body("x", seed=5)["use_random_seed"] is False)
@@ -561,8 +567,9 @@ written: dict = {}
 
 
 class FakePipeline:
-    def __init__(self, lang_code="a"):
+    def __init__(self, lang_code="a", config_path=None):
         written["lang"] = lang_code
+        written["config_path"] = config_path
 
     def __call__(self, text, voice=""):
         written["voice"] = voice
@@ -572,10 +579,18 @@ class FakePipeline:
 
 fake_sf = types.SimpleNamespace(write=lambda path, data, rate: (written.update(path=path, n=len(data), rate=rate),
                                                                  Path(path).write_bytes(b"RIFF")))
-out = voice.speak("Hello there", TMP / "voice", "bf_emma", kokoro_loader=lambda: (FakePipeline, fake_sf))
+out = voice.speak("Hello there", TMP / "voice", "bf_emma", kokoro_loader=lambda: (FakePipeline, fake_sf), kokoro_config=lambda: "")
 check("Kokoro: chunks joined, 24 kHz wav, British voice -> lang b", out["ok"] and out["engine"] == "kokoro"
       and written["rate"] == 24000 and written["n"] == 3 and written["lang"] == "b"
       and str(out["file"]).endswith(".wav"), (out, written))
+import json as _json  # noqa: E402
+_src = TMP / "kokoro-config-src.json"
+_src.write_text(_json.dumps({"name": "caf" + chr(0xE9) + " 82M", "vocab": {"a": 1}}), encoding="utf-8")
+_copy = voice._ascii_config_copy(_src)
+check("Kokoro config copy is pure ASCII and keeps the data (Windows cp1252 open)",
+      all(b < 128 for b in _copy.read_bytes())
+      and _json.loads(_copy.read_text(encoding="ascii"))["name"] == "caf" + chr(0xE9) + " 82M", _copy.read_bytes()[:40])
+check("kokoro_config_path uses the fetch it is given", str(voice.kokoro_config_path(fetch=lambda: str(_src))) == str(_copy))
 ran: list = []
 
 

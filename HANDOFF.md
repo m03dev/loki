@@ -1576,3 +1576,23 @@ conversation (5.7); Laya as the first layer, warm and measured (5.2); docs clean
   deliberately replaced by the top-level `engine/` + `engine/workers.py`; jobs.py and worker.py do not
   exist on master. Nothing master lacks, safe to delete (kept as a backup branch on purpose).
 - A running engine does not restart itself after an update; the next start applies it.
+
+
+## Ziva (Windows), 2026-10-17 (later): everything installed - Ollama, Bonsai 2, Kokoro, TimesFM, ACE-Step
+
+Mohamed asked to install everything outstanding. Done on the PC, all 32 test suites green:
+- **Ollama 0.40.5 -> 0.40.6** (winget has no newer manifest; used the installer from ollama.com) and Bonsai 2
+  re-pulled as `hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0` - it loads and answers.
+- **kokoro 0.2.2 + soundfile** into the venv (needed `--only-binary=:all:`; plain pip tried to build
+  spacy->thinc->blis from source and failed). Fixed a real bug: `engine/voice.py` now hands Kokoro an
+  ASCII-safe copy of its config, because Kokoro opens config.json with the Windows cp1252 locale though the
+  file is UTF-8, so every call raised UnicodeDecodeError and fell back to the SAPI voice. `speak` now uses
+  Kokoro (a real 24 kHz wav). espeak-ng did not install (its MSI needs admin/VCRedist); it is optional.
+- **TimesFM 3.0.2** installed; /forecast reports timesfm_installed true.
+- **ACE-Step 1.5** installed (C:/Users/macul/ACE-Step-1.5, uv sync) and running on http://127.0.0.1:8001
+  with `ACESTEP_OFFLOAD_TO_CPU=true` (without it the 8 GB card had no free VRAM and the CPU VAE decode hung
+  for 10+ min). A fox song produced a real 30 s / 480 KB mp3. Fixed `engine/music.py`: the server returns
+  `file` as a ready `/v1/audio?path=...` and the client wrapped it AGAIN -> HTTP 403; `audio_url()` now uses
+  a ready path as-is.
+
+Two small code fixes (voice.py, music.py), 3 new checks in tests/test_research_ports.py (now 146).
