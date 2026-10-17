@@ -333,6 +333,8 @@ class LocalBackend(Backend):
                 "id": job["id"], "prompt": job["prompt"], "profile": job.get("profile") or {},
                 "allow_commands": bool(job.get("allow_commands")), "model": job.get("model", ""),
                 "selfcheck": bool(job.get("selfcheck")),
+                # stop a minute before the supervisor's kill, saying BLOCKED and keeping partial work
+                "deadline_s": max(60, int(job.get("timeout_s") or DEFAULT_TIMEOUT_S) - 60),
                 "result_path": str(self.data_dir / "jobs" / (job["id"] + ".result.txt")),
             }), encoding="utf-8")
             argv = loki_job_argv(str(job_file))

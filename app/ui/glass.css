@@ -318,3 +318,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(14
 @media (max-width: 860px) { .brain-wrap { grid-template-columns: 1fr; height: auto; } .brain-canvas { height: 50vh; } }
 .brain-fact { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .brain-fact textarea { width: 100%; box-sizing: border-box; }
+
+/* Settings > Lab: task-success benchmark (bench.js) */
+.bench { margin-top: 18px; }
+.bench-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.bench-head b { font-size: 12px; color: var(--muted); }

@@ -17,6 +17,7 @@
 <script src="/ui/settings.js" defer></script>
 <script src="/ui/crm.js" defer></script>
 <script src="/ui/lab.js" defer></script>
+<script src="/ui/bench.js" defer></script>
 <script src="/ui/memory_panel.js" defer></script>
 <script src="/ui/play_panel.js" defer></script>
 <script src="/ui/creations.js" defer></script>
@@ -213,6 +214,7 @@
       <section data-panel="lab" hidden>
         <header class="panel-head"><h3>Lab - LOKI grows itself</h3><p class="note">LOKI builds its own personal-agent core here, one change at a time, when it is idle: your ideas first, then the roadmap in docs/EVOLVE.md. Each change is made in its own copy of the code, tested on every suite and shipped only if all pass; what worked and what did not is kept and used for the next try.</p></header>
         <div id="lab-panel" class="lab"></div>
+        <div id="bench-panel" class="lab bench"></div>
       </section>
       <section data-panel="crm" hidden>
         <header class="panel-head"><h3>CRM</h3><p class="note">Your contacts, companies, deals and tasks, kept on this computer (harness_data/crm.sqlite3). LOKI can read and update them too: ask it to log a call, move a deal or show the pipeline.</p></header>

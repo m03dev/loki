@@ -4015,6 +4015,8 @@ MODIFYING |= {"make_local_video"}
 
 
 def _local_rank(name: str) -> int:
+    if name in ("team_read", "team_post") and os.getenv("LOKI_TEAM_ID"):
+        return -100   # an agent on a team must reach its board (they fell off the local model's short list)
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
         return SELF_IMPROVE_PRIORITY.index(name) - len(SELF_IMPROVE_PRIORITY) - 1
     try:
@@ -5008,6 +5010,17 @@ def _guard_call(name: str, raw_args):
     """Repair and check one tool call before it runs (see tool_guard.check_call)."""
     params = _tool_params()
     real = tool_guard.resolve_name(name, params.keys()) or name
+    role = MEDIA_TOOL_ALIASES.get(real, real)
+    if real not in params and role in conductor.ROLES and "conductor" in params:
+        # A small model called a specialist by its role name ("image", "generate_image",
+        # "research"): that is conductor(role=...). The guard used to reject it before call_tool
+        # could route it, so the job never made its picture (seen on the PC).
+        given = tool_guard.repair_json(raw_args) or {}
+        task = str(given.get("task") or given.get("prompt") or given.get("query") or given.get("description") or "")
+        name, real = "conductor", "conductor"
+        raw_args = {"role": role, "task": task}
+        if given.get("url"):
+            raw_args["url"] = str(given["url"])
     args = tool_guard.repair_json(raw_args)
     if args is not None:
         # LOKI's own synonyms (filename -> path, text -> content) first, so validation
@@ -5409,6 +5422,9 @@ def _verdict(text: str) -> str:
     return "ok"
 
 
+_SYNTAX_CHECKED = (".py", ".pyw", ".toml", ".xml", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".css")
+
+
 def verify_files(paths) -> dict:
     """Check each path that has a deterministic checker. Pure apart from running Godot.
 
@@ -5442,6 +5458,16 @@ def verify_files(paths) -> dict:
                 text = "json %s: INVALID - %s" % (path, exc)
         elif lower.endswith(tuple(MEDIA_SUFFIXES)):
             text = media_check(path)
+        elif lower.endswith(_SYNTAX_CHECKED):
+            # Python, TOML, XML and the C-like languages (JS, TS, CSS...): a syntax check, so
+            # "DONE" on a script that does not even compile is sent back (it used to pass as
+            # "no automatic check").
+            import lint_guard  # pylint: disable=import-outside-toplevel
+            try:
+                errors = lint_guard.check(path, resolve_in_workspace(path).read_text(encoding="utf-8", errors="replace"))
+            except OSError as exc:
+                errors = ["cannot read it: %s" % exc]
+            text = ("syntax %s: ERRORS\n%s" % (path, "\n".join(errors[:6]))) if errors else "syntax %s: OK" % path
         else:
             report["skipped"].append(path)
             continue
@@ -5923,6 +5949,7 @@ async def agent_turn(force_tool: bool = False) -> str:
     while True:
         if _cancel_event.is_set():
             raise BudgetExhausted("cancelled by the user")
+        _check_job_deadline()
         if REQUEST_DEADLINE_S > 0 and time.monotonic() - started > REQUEST_DEADLINE_S:
             raise BudgetExhausted("hit the %ds time budget" % int(REQUEST_DEADLINE_S))
         if MAX_TURNS_PER_REQUEST > 0 and turns >= MAX_TURNS_PER_REQUEST:
@@ -6048,6 +6075,7 @@ async def agent_turn(force_tool: bool = False) -> str:
                 for tool_name, tool_args in recovered[:4]:
                     print("  [tool:text] %s(%s)" % (tool_name, json.dumps(tool_args)[:200]))
                     tool_result = await call_tool(tool_name, tool_args)
+                    _note_result(tool_result)
                     notes.append("Result of %s(%s):\n%s" % (tool_name, json.dumps(tool_args)[:200], tool_result))
                 messages.append({"role": "user", "content": "\n\n".join(notes)})
                 _last_turn_had_tools = True
@@ -6074,7 +6102,10 @@ async def agent_turn(force_tool: bool = False) -> str:
                     )})
                     continue
                 content = "(the model stopped responding and gave no message; it may have stalled.)"
-            messages.append({"role": "assistant", "content": content})
+            # A huge prose reply (a small model reciting a file or its reasoning) is kept short in the
+            # history, so it cannot fill a small model's context for the rest of the task. The caller
+            # still gets the whole reply (its DONE/BLOCKED line is read from it).
+            messages.append({"role": "assistant", "content": _clip_reply(content)})
             return content
         messages.append(_as_dict(message))
         # Nudges wait until every tool result of this batch is in: a user message between an
@@ -6088,6 +6119,7 @@ async def agent_turn(force_tool: bool = False) -> str:
             if not fix.ok:
                 print("  [tool] %s rejected: %s" % (call.function.name, fix.error[:200]))
                 GUARD_STATS["rejected"] += 1
+                _note_result("error")
                 messages.append({"role": "tool", "tool_call_id": call.id,
                                  "content": "error: %s" % fix.error})
                 continue
@@ -6099,6 +6131,7 @@ async def agent_turn(force_tool: bool = False) -> str:
             global _REQUEST_TOOL_CALLS
             _REQUEST_TOOL_CALLS += 1
             result = await call_tool(fix.name, args)
+            _note_result(result)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             # Break a loop where the model repeats an identical failing call forever.
             global _repeat_sig, _repeat_count
@@ -6208,6 +6241,157 @@ async def _run_agent(user_message: str) -> str:
         raise
 
 
+# ---------------------------------------------------------------------------
+# Session 28: what tools/task_bench.py's scenarios showed the goal loop needed.
+# ---------------------------------------------------------------------------
+_task_ok_calls = 0        # tool calls in this task that did something (not an error or a refusal)
+_task_failed_calls = 0    # tool calls that failed, were refused or rejected
+JOB_DEADLINE_AT = 0.0     # time.monotonic() at which a background job must stop (0 = none)
+MAX_REPLY_CHARS = int(os.getenv("LOKI_MAX_REPLY_CHARS", "24000") or 0)
+_OUTCOME_ANYWHERE = re.compile(r"^\s*[*_`>#\s]*(DONE|BLOCKED)\**\s*[:\-]")
+# A file a goal or a DONE line names: documents, code, data, media - not a domain (danas-bakery.com).
+_FILE_NAME = re.compile(r"(?<![\w@/:.-])((?:[\w-]+[/\\])*[\w-]+\.(?:md|txt|py|json|html?|css|js|ts|tsx|jsx|csv|tsv|"
+                        r"toml|ya?ml|xml|svg|png|jpe?g|gif|webp|mp3|wav|mp4|pdf|docx|xlsx|pptx|sql|sh|bat|ps1|ipynb|"
+                        r"gd|tscn|rs|go|java|c|cpp|h|rb|php|ini|cfg|log))\b", re.I)
+
+
+def reply_outcome(reply: str) -> str:
+    """'done', 'blocked' or '': the reply's DONE/BLOCKED line. The first line as before ("Done:"
+    in any case), or - a small model often explains first - a later line that starts with an
+    upper-case DONE: / BLOCKED: (the last one wins)."""
+    text = str(reply or "").strip()
+    head = text.upper()
+    if head.startswith("DONE"):
+        return "done"
+    if head.startswith("BLOCKED"):
+        return "blocked"
+    for line in reversed(text.splitlines()):
+        m = _OUTCOME_ANYWHERE.match(line)
+        if m:
+            return m.group(1).lower()
+    return ""
+
+
+def _outcome_text(reply: str) -> str:
+    """The DONE/BLOCKED line itself (for the checks below)."""
+    for line in reversed(str(reply or "").strip().splitlines()):
+        if _OUTCOME_ANYWHERE.match(line) or line.strip().upper().startswith(("DONE", "BLOCKED")):
+            return line.strip()
+    return ""
+
+
+def _note_result(result) -> None:
+    """Count one tool result as done-something or failed (a refusal, an error, a rejected call)."""
+    global _task_ok_calls, _task_failed_calls
+    head = str(result or "").lstrip()[:80].lower()
+    if head.startswith(("error", "denied", "refused")) or "denied by loki" in head:
+        _task_failed_calls += 1
+    else:
+        _task_ok_calls += 1
+
+
+def _clip_reply(content: str) -> str:
+    text = str(content or "")
+    if MAX_REPLY_CHARS <= 0 or len(text) <= MAX_REPLY_CHARS:
+        return text
+    head, tail = MAX_REPLY_CHARS * 2 // 3, MAX_REPLY_CHARS // 3
+    return "%s\n\n[... %d characters of this reply left out ...]\n\n%s" % (text[:head], len(text) - head - tail, text[-tail:])
+
+
+def _check_job_deadline() -> None:
+    if JOB_DEADLINE_AT and time.monotonic() > JOB_DEADLINE_AT:
+        raise BudgetExhausted("hit the job's time limit (deadline)")
+
+
+def _role_writes() -> bool:
+    """False for a team agent whose role only reads and reports (tester, reviewer, researcher,
+    browser tester): its DONE is a report, so 'nothing was written' is not premature."""
+    if not JOB_ROLE:
+        return True
+    try:
+        import team as _team  # pylint: disable=import-outside-toplevel
+        spec = _team.ROLES.get(JOB_ROLE)
+    except Exception:  # noqa: BLE001
+        spec = None
+    return True if spec is None else bool(spec.get("writes"))
+
+
+def _file_exists_somewhere(name: str, limit: int = 4000) -> bool:
+    """A file the goal or a DONE line names: at that path, or under that file name anywhere in the
+    workspace (a model may put notes.md in docs/). Bounded walk; never raises."""
+    clean = str(name).strip().strip("'\"`").replace("\\", "/")
+    try:
+        if resolve_in_workspace(clean).exists():
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    base = clean.rsplit("/", 1)[-1].lower()
+    if any(str(p).replace("\\", "/").rsplit("/", 1)[-1].lower() == base for p in _task_files):
+        return True
+    seen = 0
+    try:
+        for root, dirs, files in os.walk(WORKSPACE):
+            dirs[:] = [d for d in dirs if d not in (".git", "node_modules", ".venv", "__pycache__", ".loki")]
+            if any(f.lower() == base for f in files):
+                return True
+            seen += len(files) + 1
+            if seen > limit:
+                return False
+    except OSError:
+        return False
+    return False
+
+
+def _named_files(text: str) -> list:
+    text = re.sub(r"\b\w+://\S+|\bwww\.\S+|\S+@\S+", " ", str(text or ""))
+    out = []
+    for name in _FILE_NAME.findall(text):
+        name = name.strip("./").replace("\\", "/")
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+_OUTPUT_WORDS = {"write", "create", "save", "saved", "into", "as", "to", "named", "called", "produce", "export",
+                 "generate", "draft", "build", "make", "add"}
+
+
+def _goal_outputs(goal: str) -> list:
+    """Files the goal asks to PRODUCE that are not there yet: a name right after write / create /
+    save as / into / to ... ("summarize report.txt into summary.md" -> summary.md). A file the goal
+    only mentions ("read AGENTS.md first") or one that exists already (an input) is not one."""
+    text = re.sub(r"\b\w+://\S+|\bwww\.\S+|\S+@\S+", " ", str(goal or ""))
+    out = []
+    for m in _FILE_NAME.finditer(text):
+        before = re.findall(r"[A-Za-z]+", text[max(0, m.start() - 40):m.start()].lower())[-3:]
+        name = m.group(1).strip("./").replace("\\", "/")
+        if _OUTPUT_WORDS.intersection(before) and name not in out and not _file_exists_somewhere(name):
+            out.append(name)
+    return out[:8]
+
+
+_PICTURE_GOAL = re.compile(r"\b(make|draw|create|generate|paint|design|render)\b[^.?!]{0,60}\b(picture|image|logo|"
+                           r"drawing|illustration|photo|artwork|poster|icon)s?\b", re.I)
+_PICTURE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")
+
+
+def _goal_wants_picture(goal: str) -> bool:
+    """"Make a picture of a fox" - the work is a real picture file, not a text file next to one."""
+    return bool(_PICTURE_GOAL.search(str(goal or ""))) and not re.search(r"\.(py|js|ts|html|css|gd)\b", str(goal))
+
+
+def _made_picture() -> bool:
+    return any(str(p).lower().endswith(_PICTURE_SUFFIXES) for p in _task_files)
+
+
+def _partial_note() -> str:
+    """What a stopped task leaves behind, for its result line."""
+    files = [p for p in _task_files if p]
+    if not files:
+        return "Nothing was saved before it stopped."
+    return "Partial work is kept in the workspace: %s." % ", ".join(files[-8:])
+
+
 _NAMED_FILE = re.compile(r"(?<![\w@])[\w./\\-]*\w\.[A-Za-z][A-Za-z0-9]{0,5}\b")
 
 
@@ -6287,12 +6471,14 @@ def _answer_only(goal: str) -> bool:
 
 async def _pursue_goal(goal: str) -> str:
     global _empty_nudges, _task_modified, _task_wrote_file, _repeat_sig, _repeat_count, _jev_loop_window, _stuck_hits
+    global _task_ok_calls, _task_failed_calls
     _empty_nudges = 0
     _stuck_hits = 0
     _repeat_sig, _repeat_count = "", 0
     _jev_loop_window = []
     _task_modified = False
     _task_wrote_file = False
+    _task_ok_calls = _task_failed_calls = 0
     ROUTE_TRACE.clear()
     REQUEST_USAGE.clear()
     _task_files.clear()
@@ -6328,13 +6514,20 @@ async def _pursue_goal(goal: str) -> str:
     force_next = False
     verify_rejections = 0
     premature_done = 0
+    # Files the goal asks for that are not there yet. Not for a team agent other than the builder:
+    # its prompt quotes the whole team goal ("... as index.html"), which is the builder's to make.
+    outputs = _goal_outputs(goal) if JOB_ROLE in ("", "builder") else []
+    writes = _role_writes()
+    wants_picture = _goal_wants_picture(goal) and JOB_ROLE in ("", "builder")
+    in_job = bool(os.getenv("LOKI_JOB_ID"))
+    pushed = {"no_action": 0, "done_line": 0, "blocked_untried": 0, "question": 0}
     while True:
         step += 1
         if GOAL_STEPS > 0 and step > GOAL_STEPS:
             _progress("done", "Reached the %d-step limit without finishing." % GOAL_STEPS)
             save_history()
             print("  [goal] hit the step limit without finishing")
-            return "Reached the %d-step limit without finishing." % GOAL_STEPS
+            return "BLOCKED: reached the %d-step limit without finishing. %s" % (GOAL_STEPS, _partial_note())
         label = ("Step %d of %d..." % (step, GOAL_STEPS)) if GOAL_STEPS > 0 else ("Step %d..." % step)
         _progress("thinking", label)
         reply = await agent_turn(force_tool=force_next)
@@ -6348,35 +6541,79 @@ async def _pursue_goal(goal: str) -> str:
                 stalls = 0
                 continue
             if stalls >= 2:
-                message = "The model returned empty replies repeatedly; task halted. Try again or use a stronger model."
+                # BLOCKED, not a plain sentence: a job that ends like this failed, and must say so
+                # (it used to exit 0, so the job - and a team counting on it - looked finished).
+                message = ("BLOCKED: the model returned empty replies repeatedly, so the task was halted. "
+                           "It needs a stronger model (or try again). %s" % _partial_note())
                 _progress("done", message)
                 save_history()
                 return message
         else:
             stalls = 0
-        head = reply.strip().upper()
-        if head.startswith("DONE") and _goal_needs_files(goal) and (
-                not _task_modified or (not _task_wrote_file and _goal_names_file(goal))):
+        outcome = reply_outcome(reply)
+        head = outcome.upper()
+        missing_outputs = [n for n in outputs if not _file_exists_somewhere(n)] if outcome == "done" and writes else []
+        if outcome == "done" and writes and wants_picture and not _made_picture():
+            missing_outputs.append("the picture (an image file made with conductor(role='image'))")
+        if head.startswith("DONE") and writes and ((_goal_needs_files(goal) and (
+                not _task_modified or (not _task_wrote_file and _goal_names_file(goal)))) or missing_outputs):
             premature_done += 1
             if premature_done > PREMATURE_DONE_LIMIT and _escalate_model("it kept saying DONE without doing it"):
                 premature_done = 0
                 continue
             if premature_done > PREMATURE_DONE_LIMIT:
-                message = ("BLOCKED: the model kept saying DONE without changing any file (%d times); "
-                           "stopped instead of looping. Try a stronger model." % premature_done)
+                message = ("BLOCKED: the model kept saying DONE without %s (%d times); stopped instead of "
+                           "looping. Try a stronger model." % (
+                               ("making " + ", ".join(missing_outputs)) if missing_outputs else "changing any file",
+                               premature_done))
                 _progress("done", message)
                 save_history()
                 return message
-            _progress("thinking", "Checked: nothing was written yet - not accepting DONE.")
-            messages.append({"role": "user", "content": (
-                "Your 'DONE' is premature: NO file was created or changed during this "
-                "task, so the goal is not actually done. Do it now with a real tool call: "
-                "a picture -> conductor(role='image', task='<what to draw>'); a document or "
-                "code -> write_file / edit_file; research -> conductor(role='research', ...). "
-                "Never write a description into an image file. Check the result, and only "
-                "then reply 'DONE'."
-            )})
+            _progress("thinking", "Checked: %s - not accepting DONE." % (
+                ("%s does not exist yet" % ", ".join(missing_outputs)) if missing_outputs else "nothing was written yet"))
+            if missing_outputs and wants_picture and not _made_picture():
+                what = ("Your 'DONE' is premature: the task asks for a picture and no picture was made. Make it "
+                        "with conductor(role='image', task='<what to draw>') - never write a description into "
+                        "a file. If the image maker is not available, reply 'BLOCKED: <what is needed>'.")
+            elif missing_outputs:
+                what = ("Your 'DONE' is premature: the task asks for %s, which does not exist yet - "
+                        "a summary or a draft in your reply is not the file. Write it with write_file now "
+                        "(or make it with the right tool), check it, and only then reply 'DONE'."
+                        % ", ".join(missing_outputs))
+            else:
+                what = ("Your 'DONE' is premature: NO file was created or changed during this "
+                        "task, so the goal is not actually done. Do it now with a real tool call: "
+                        "a picture -> conductor(role='image', task='<what to draw>'); a document or "
+                        "code -> write_file / edit_file; research -> conductor(role='research', ...). "
+                        "Never write a description into an image file. Check the result, and only "
+                        "then reply 'DONE'.")
+            messages.append({"role": "user", "content": what})
             force_next = True
+            continue
+        if head.startswith("DONE") and not _task_modified and _task_ok_calls == 0 and not pushed["no_action"]:
+            # No action of this task did anything (none was tried, or every one failed or was
+            # refused), and still "DONE": the final self-check says no once (a refused deploy is not
+            # a deploy). A second DONE is accepted - some tasks really need no tool.
+            pushed["no_action"] += 1
+            why = "every tool call failed or was refused" if _task_failed_calls else "no tool was used"
+            _progress("thinking", "Checked: %s - not accepting DONE yet." % why)
+            messages.append({"role": "user", "content": (
+                "Self-check before DONE: nothing was actually done in this task - %s (see above). Do not "
+                "claim it is done. Do it with a tool call that works, or reply 'BLOCKED: <exactly what you "
+                "need from the owner>' (a key, a permission, a file, an approval). If it truly needed no "
+                "action, reply DONE again and say why." % why)})
+            continue
+        named = [n for n in _named_files(_outcome_text(reply)) if not _file_exists_somewhere(n)] \
+            if head.startswith("DONE") else []
+        if named and not pushed["done_line"]:
+            # The DONE line names a file that is not there: the summary would mislead the owner.
+            pushed["done_line"] += 1
+            _progress("thinking", "Checked: the DONE line names %s, which does not exist." % ", ".join(named))
+            made = ", ".join(_task_files[-6:]) or "no files"
+            messages.append({"role": "user", "content": (
+                "Self-check before DONE: your DONE line names %s, which does not exist in the workspace "
+                "(this task changed: %s). Finish that file if it is still missing, or reply DONE again "
+                "naming exactly what you made." % (", ".join(named), made))})
             continue
         if head.startswith("DONE") and VERIFY_ENABLED and _task_files:
             # The model says DONE; check the files it actually wrote before believing it.
@@ -6389,11 +6626,30 @@ async def _pursue_goal(goal: str) -> str:
                 continue
             save_history()
             return reply.strip() + chr(10) * 2 + verification_summary(report)
-        if head.startswith("BLOCKED") and _escalate_model("it gave up: " + reply.strip()[8:90]):
+        if head.startswith("BLOCKED") and _task_ok_calls + _task_failed_calls == 0 and not pushed["blocked_untried"]:
+            # BLOCKED before trying a single tool is a guess ("I can't read PDFs", "the Builder role is
+            # unavailable"). Once: look first, then say BLOCKED with what is really missing.
+            pushed["blocked_untried"] += 1
+            _progress("thinking", "Checked: BLOCKED without trying anything - asking it to try first.")
+            messages.append({"role": "user", "content": (
+                "You have not tried anything yet: no tool was called in this task. Try first - look at the "
+                "workspace (list_tree, read_file) and use your tools. If a real tool result then shows you "
+                "cannot do it, reply 'BLOCKED: <exactly what you need from the owner>'.")})
+            continue
+        if head.startswith("BLOCKED") and _escalate_model("it gave up: " + _outcome_text(reply)[8:90]):
             continue   # a small model's BLOCKED is often a guess ("Builder's role unavailable")
         if head.startswith("DONE") or head.startswith("BLOCKED"):
             save_history()
             return reply.strip()
+        if in_job and not _last_turn_had_tools and reply.strip().endswith("?") and pushed["question"] < 2:
+            # A question in a background job: nobody is there to answer it (a small model asks again
+            # and again). Tell it to choose and say what it chose.
+            pushed["question"] += 1
+            _progress("thinking", "The model asked a question; nobody can answer in a background job.")
+            messages.append({"role": "user", "content": (
+                "Nobody can answer questions during a background job. Make a reasonable assumption, do the "
+                "task with it, and state the assumption in your final 'DONE: ...' line.")})
+            continue
         if _last_turn_had_tools:
             idle = 0
         else:
@@ -6402,7 +6658,8 @@ async def _pursue_goal(goal: str) -> str:
                 idle = 0
                 continue
             if idle >= 12:
-                message = "The model stopped calling tools after several nudges. Say 'continue' to resume."
+                message = ("BLOCKED: the model stopped calling tools after several nudges, so the task is not "
+                           "finished. Say 'continue' to resume, or use a stronger model. %s" % _partial_note())
                 _progress("done", message)
                 save_history()
                 return message
@@ -6501,10 +6758,7 @@ def _skill_note(reply: str) -> str:
 
 
 def _status_of_reply(reply: str) -> str:
-    head = (reply or "").strip().upper()
-    if head.startswith("DONE"):
-        return "done"
-    return "blocked"
+    return "done" if reply_outcome(reply) == "done" else "blocked"
 
 
 def ruflo_command(user_message: str) -> tuple:
@@ -6713,6 +6967,16 @@ async def run_job(job_path: str) -> int:
         return False
 
     approve = job_approve
+    if allow_commands:
+        # The job may run commands (tests, builds), so OFFER run_command: the "system" tool category
+        # is off by default, so a job allowed to run its tests never saw the tool. This process only;
+        # the owner's setting is not saved. The command policy and the risk check still apply.
+        CATEGORIES["system"] = True
+        MODEL_TOOL_NAMES.add("run_command")   # it was never offered to a model at all
+    deadline = float(job.get("deadline_s") or os.getenv("LOKI_JOB_DEADLINE", "0") or 0)
+    if deadline > 0:
+        # Stop in time to say so and keep the partial work, instead of being killed with nothing saved.
+        globals()["JOB_DEADLINE_AT"] = time.monotonic() + deadline
     globals()["JOB_ROLE"] = str((job.get("profile") or {}).get("role") or "")
     globals()["loki_progress_callback"] = lambda event, text: print("  [%s] %s" % (event, text[:300]), flush=True)
     system = system_prompt()
@@ -6730,21 +6994,27 @@ async def run_job(job_path: str) -> int:
         if job.get("mcp"):
             await connect_mcp(stack)
         result = await pursue_goal(str(job.get("prompt", "")))
-    except ModelUnavailable as exc:
-        print("BLOCKED: " + exc.hint, flush=True)
-        return 3
-    except BudgetExhausted as exc:
-        print("BLOCKED: " + str(exc), flush=True)
-        return 4
+    except (ModelUnavailable, BudgetExhausted) as exc:
+        # Stopped from outside the loop (no model, a budget, the job's time limit): say BLOCKED with
+        # the reason AND what was saved, in the result file too (it used to be left empty).
+        why = exc.hint if isinstance(exc, ModelUnavailable) else str(exc)
+        result = "BLOCKED: %s. %s" % (str(why).rstrip(". "), _partial_note())
+        print(result, flush=True)
+        _write_result(job, result)
+        return 3 if isinstance(exc, ModelUnavailable) else 4
     finally:
         await stack.aclose()
     print("\n" + (result or "").strip(), flush=True)
+    _write_result(job, result)
+    return 2 if reply_outcome(result) == "blocked" else 0
+
+
+def _write_result(job: dict, text: str) -> None:
     if job.get("result_path"):
         try:
-            Path(job["result_path"]).write_text(result or "", encoding="utf-8")
+            Path(job["result_path"]).write_text(text or "", encoding="utf-8")
         except OSError:
             pass
-    return 2 if (result or "").strip().upper().startswith("BLOCKED") else 0
 
 
 if __name__ == "__main__":

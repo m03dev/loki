@@ -198,7 +198,8 @@ async def failed_write_turn(*_a, **_k):   # a write that errored changed nothing
 loki.agent_turn = dir_only_turn
 result = asyncio.run(loki.pursue_goal("create notes/hello.txt with hi, then list the folder"))
 check("the main task loop does not accept DONE when only the folder was made for a named file",
-      result.startswith("BLOCKED") and "without changing any file" in result, result)
+      result.startswith("BLOCKED") and ("without changing any file" in result
+                                        or "without making notes/hello.txt" in result), result)
 check("...and the goal parser knows a named file from a folder or a web address",
       loki._goal_names_file("create notes/hello.txt") and not loki._goal_names_file("make a folder called notes")
       and not loki._goal_names_file("open https://example.com/a.html") and not loki._goal_names_file("e.g. make it faster"))

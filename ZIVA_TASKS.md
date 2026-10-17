@@ -923,6 +923,23 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (7) Daily creation: it is ON for the PC by default. Leave LOKI idle; the next day Creations should have one
       new picture marked "daily" (autopilot log line "started today's picture"). Report the template's keys under
       Reports (never commit harness_data); screenshots to docs/operations/screens/creations-pc-*.png.
+- [ ] **W31 Do LOKI's agents finish real tasks? Run the task bench on the PC (2026-10-17).** The owner's #1
+      core system. tools/task_bench.py runs 31 realistic tasks (docs, code + its test, research with sources,
+      pictures, summaries, plans, builds, two team jobs, assumptions, honest BLOCKED) through the REAL job loop,
+      each in a throwaway folder, and checks the files/tests/pictures/sources (HANDOFF "Session 28 task
+      success"). In the cloud it only ran with scripted fake models (31/31). Now the real models, on the PC:
+      (1) `harness_data\.venv\Scripts\python.exe tools\ship.py --check` (new suite test_task_success, ~3 min).
+      (2) `harness_data\.venv\Scripts\python.exe tools\task_bench.py --model local` (qwen3:8b; ~1-3 h, one task
+      at a time; leave the PC alone). (3) the same with `--model bonsai` (Bonsai 2; if the tag is not
+      installed: `ollama pull hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0`, or say it is
+      missing) and (4) `--model smart`. Each run adds to `harness_data\bench\<date>.json` and `<date>.md`.
+      Report under Reports: the summary table from `<date>.md` (passed, rate, steps, tokens, time, escalated,
+      timeouts per model), and for every FAILED task its "why it failed" cell plus the last 30 lines of its log
+      (`harness_data\bench\logs\<date>\<model>\<task>.log`) - those failures are the next fixes. Do not fix
+      them in the same session; say which look like a loop bug and which like the model. (5) Settings > Lab:
+      the new "Task success" table shows the runs (screenshot). (6) The nightly run: LOKI_TASK_BENCH is auto =
+      on on the PC; after one night (01:00-06:59, idle) `harness_data\autopilot.json` has a `task_bench` entry
+      and `harness_data\bench\autopilot.log` the output - report whether it ran.
 
 ## Ziva (Mac) - the Mac mini
 

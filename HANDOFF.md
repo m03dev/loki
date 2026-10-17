@@ -4,7 +4,84 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 28, Claude in the cloud).
+Last updated: 2026-10-17 (session 28, Claude in the cloud; task-success worktree).
+
+## Session 28 task success (worktree)
+
+The owner: "do not focus on the game, the core systems aren't fleshed out yet" - #1: **agents finish real
+tasks.** Session 27 fixed what the PC's job logs showed; nobody had proven the loop works across realistic
+tasks. Now there is a benchmark, and the loop was fixed until it passes.
+
+- **tests/tasks/** (`base.py` checks + scripted-step helpers, `catalog.py`): 31 owner tasks - write a doc
+  (README, meeting notes, changelog, an email), edit code and run its test (fix a bug, add a function, rename
+  across files, JSON config, a CLI script), research with sources (a file with links, a question answered with
+  a link, a comparison table), pictures (incl. "the image maker is not set up" -> must end BLOCKED), summarize
+  a file (report, a 3,000-line log, a CSV total), plan a project, multi-step builds (website, package + tests,
+  todo CLI), two team jobs (one where the tester finds a bug and the fix round fixes it), tasks that need an
+  assumption, and tasks that must end BLOCKED honestly (deploy without credentials, a missing file, a purchase,
+  a job that never ends). Checkers look at the real result: files + content, tests that run, real picture
+  bytes, sources that came from a tool (no invented links), a DONE line that names only files that exist, no
+  fake media, team agents that really finished.
+- **tools/task_bench.py**: runs them through the REAL `loki.run_job` (a child process per job, LOKI_WORKSPACE =
+  a throwaway folder, LOKI_JOB_ID set - exactly like a job from the app), team tasks through `team.TeamRunner`
+  with a synchronous jobs adapter. `--model local|bonsai|smart|groq|openrouter|claude-code|...` (comma list),
+  `--tasks`, `--kind`, `--jobs`, `--timeout`, `--no-escalate`, `--keep`, `--list`. Records success, status,
+  steps (model calls), tool calls, tokens, time, escalation, the longest request, and the failure reason;
+  writes `harness_data/bench/<date>.json` (all models that day), `latest.json`, `<date>.md` (the table) and a log
+  per task in `harness_data/bench/logs/`. Experience logging is off for bench jobs (synthetic tasks must not
+  skew routing). `--scripted` swaps the model for scripted fakes that replay small-model behaviour seen in the
+  PC's logs, and the web/image specialists for fixtures; `--scenario cheat` plays models that never do the work.
+  The scripted model also flags a call to a real tool the loop did not OFFER (that is how the run_command gap
+  below was found).
+- **Scripted, the same catalog: 15/31 on the engine before this session, 31/31 after.** The 4 cheat scenarios
+  fail both times (0/4), but before 3 of them ended "DONE" in the loop (fake email/summary/picture accepted);
+  now those end BLOCKED and only the invented-link one ends DONE (the bench's source check catches it - the
+  loop cannot know a link is made up). tests/test_task_success.py (94 checks, ~3 min, in SUITES).
+
+**What the scenarios exposed, and the fixes (engine/loki.py goal loop unless noted):**
+1. *A team "verified" buggy code.* The tester's `DONE: PASS` was rejected as premature (it writes nothing by
+   design), it stalled, the job ended with a plain "task halted" and exit 0, and team.py counted that as a pass -
+   in team-primes this hid the tester's real FAIL. Read-only team roles (tester, reviewer, researcher, browser)
+   are exempt from "nothing was written"; a halted job now ends **BLOCKED** (exit 2) with its partial work, so a
+   team says "needs you". Same for "stopped calling tools" and the step limit.
+2. *No model could ever run a command.* `run_command` was not in MODEL_TOOL_NAMES and the "system" category is
+   off by default, so a job started with allow_commands (and every team Tester/Builder) could not run a test.
+   run_job now offers it in that process only (policy + risk checks unchanged; the owner's setting not saved).
+3. *Team agents on a local model could not reach their board* (team_post/team_read fell off the 22-tool list):
+   they lead the list when LOKI_TEAM_ID is set.
+4. *DONE in the last line of a prose reply* was not seen (head-only check) and the job looped into "halted":
+   `reply_outcome()` reads a DONE:/BLOCKED: line anywhere (first line as before, else the last upper-case one);
+   run_job's exit code and the request status use it.
+5. *Premature DONE on goals without a "create/write..." word* ("Draft an email ... save it as email_draft.txt",
+   "Summarize report.txt into summary.md" with the summary in the reply): a file the goal asks to PRODUCE
+   (`_goal_outputs`: a name right after write/create/save as/into/to..., not yet there) must exist before DONE.
+   A picture request needs a real picture file (a .txt next to it is not one).
+6. *Final self-checks before DONE*: nothing in the task succeeded (every call refused/failed, or none) -> pushed
+   back once ("deployed to S3" after the deploy was refused now ends BLOCKED: needs credentials + permission);
+   the DONE line names a file that does not exist -> pushed back once.
+7. *BLOCKED guesses*: BLOCKED before trying any tool is pushed back once ("look first"); an honest BLOCKED after
+   that stays BLOCKED (blocked-purchase), then escalation as before.
+8. *Questions nobody can answer*: a question in a background job gets "assume, do it, say the assumption in
+   DONE" (twice at most); it used to loop to "halted".
+9. *Python with a syntax error passed as "no automatic check"*: verification now syntax-checks .py, .toml, .xml
+   and JS/TS/CSS (lint_guard.check); errors go back to the model like a broken JSON.
+10. *A native call to the role name "image"* was rejected by the tool guard before call_tool could route it to
+   the conductor: `_guard_call` now maps role names (image, generate_image, research...) to conductor(role=...).
+11. *A 120,000-character reply filled the context*: prose replies over LOKI_MAX_REPLY_CHARS (24,000) are kept
+   head + tail in the history (the DONE line is read from the full reply).
+12. *Job timeouts*: a job now has a deadline (`deadline_s` in the job file - workers.py passes timeout - 60 s -
+   or LOKI_JOB_DEADLINE); at it the job stops with "BLOCKED: hit the job's time limit. Partial work is kept: ..."
+   and the result file is ALWAYS written (it was empty when a job was stopped by a budget or a missing model).
+
+**Nightly on the PC**: autopilot duty `task_bench` (LOKI_TASK_BENCH auto = on on Windows, off on the Mac; window
+LOKI_TASK_BENCH_HOURS=1-6 local; LOKI_TASK_BENCH_S=72000; models LOKI_TASK_BENCH_MODELS=local,smart) starts
+`tools/task_bench.py` in the background right after the health check, once a night, when idle; while it runs
+nothing else starts. **Settings > Lab** has a separate "Task success" section (app/ui/bench.js, GET /bench, 2
+lines in index.html, 1 in app.js, 4 CSS lines; lab.js untouched).
+
+**Not verified here (no model, no GPU, no network):** no real model has run the bench - only the scripted fakes.
+The real numbers for qwen3:8b, Bonsai 2 and smart are ZIVA W28. The nightly duty is tested with a fake process
+only; the Lab section was not seen in a real window (UI smoke test covers that index.html loads).
 
 ## Ziva (Mac), 2026-10-17 (patch 219): the Babylon world verified in the app's own WebKit - and the connection-drop bug behind broken windows
 

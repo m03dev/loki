@@ -528,6 +528,7 @@ function showTab(name) {
   if (name === "capabilities") loadCapabilities();
   if (name === "crm" && typeof loadCrm === "function") loadCrm();
   if (name === "lab" && typeof loadLab === "function") loadLab();
+  if (name === "lab" && typeof loadBench === "function") loadBench();
   if (name === "play" && typeof loadPlay === "function") loadPlay();
   if (name === "creations" && typeof loadCreations === "function") loadCreations();
   if (name === "brain" && window.Brain) Brain.load();

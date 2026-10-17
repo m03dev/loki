@@ -1011,6 +1011,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             log = [e for e in (auto.data["log"] if auto is not None else []) if e.get("duty") == "evolve"][-20:]
             self._send_json(200, ev.status() | {"log": log} if ev is not None else {"ok": False, "error": "evolve is not running"})
             return
+        if route == "/bench":
+            self._send_json(200, bench_latest(self.server.state))
+            return
         if route == "/autopilot":
             auto = getattr(self.server.state, "autopilot", None)
             self._send_json(200, {"ok": True, **(auto.status() if auto is not None else {"enabled": False})})
@@ -1738,6 +1741,24 @@ def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tup
     args = data.get("args") if isinstance(data.get("args"), dict) else {}
     result = system_check.apply_fix(state, action, args)
     return (200 if result.get("ok") else 400), result
+
+
+def bench_latest(state: Any) -> dict[str, Any]:
+    """GET /bench: the latest task-success benchmark (tools/task_bench.py) for Settings > Lab."""
+    try:
+        tools_dir = str(Path(__file__).resolve().parent.parent / "tools")
+        if tools_dir not in sys.path:
+            sys.path.append(tools_dir)
+        import task_bench  # pylint: disable=import-outside-toplevel
+        import autopilot as _autopilot  # pylint: disable=import-outside-toplevel
+        data_dir = Path(getattr(getattr(state, "agent", None), "DATA_DIR", "") or task_bench.data_dir())
+        out = task_bench.latest(data_dir / "bench")
+        auto = getattr(state, "autopilot", None)
+        out["running"] = bool(auto is not None and auto.bench_running())
+        out["enabled"] = _autopilot.task_bench_enabled()
+        return out
+    except Exception as exc:  # noqa: BLE001 - a missing report must never break the window
+        return {"ok": False, "error": "the task benchmark is not available: %s" % exc}
 
 
 def sketch_reply_latest(state: Any) -> dict[str, Any]:

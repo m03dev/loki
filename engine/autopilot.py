@@ -32,6 +32,10 @@ Duties, each on its own interval:
   creation (session 28, engine/creative.py) one picture a day from the owner's starred styles and
            subjects (a fox by default) - LOKI_DAILY_CREATION on|off|auto (auto: on with an NVIDIA GPU,
            off on the Mac).
+  task_bench (LOKI_TASK_BENCH, session 28) nightly, in LOKI_TASK_BENCH_HOURS (default 1-6, local
+           time), at most every LOKI_TASK_BENCH_S (20h): tools/task_bench.py on the models in
+           LOKI_TASK_BENCH_MODELS (default local,smart) - do LOKI's agents finish real tasks? Scores in
+           Settings > Lab. auto = on on the Windows PC, off on the Mac. Nothing else starts while it runs.
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -81,6 +85,28 @@ def _emit(kind: str, payload: dict) -> None:
         pass
 
 
+def task_bench_enabled() -> bool:
+    """LOKI_TASK_BENCH=auto (default: on on the Windows PC, the worker; off on the Mac) | on | off."""
+    value = str(os.getenv("LOKI_TASK_BENCH", "auto")).strip().lower()
+    if value in ("", "auto"):
+        import sys  # pylint: disable=import-outside-toplevel
+        return sys.platform == "win32"
+    return value not in ("0", "off", "false", "no")
+
+
+def in_hours(window: str, now: float) -> bool:
+    """True when the local hour of `now` is inside "1-6" (wraps past midnight: "22-5"); "" = always."""
+    window = str(window or "").strip()
+    if not window or "-" not in window:
+        return True
+    try:
+        start, end = (int(x) for x in window.split("-", 1))
+    except ValueError:
+        return True
+    hour = time.localtime(now).tm_hour
+    return start <= hour <= end if start <= end else (hour >= start or hour <= end)
+
+
 def inbox_requests(path: Path) -> list:
     """Open `[loki]` requests in ZIVA_TASKS.md, oldest first: [{"id", "text"}]."""
     try:
@@ -108,7 +134,8 @@ class Autopilot:
                  run_check: Callable[[], dict] | None = None,
                  apply_fix: Callable[[str, dict], dict] | None = None,
                  start_team: Callable[[str], str] | None = None,
-                 evolve: Any = None, improve: Callable[[str], str] | None = None) -> None:
+                 evolve: Any = None, improve: Callable[[str], str] | None = None,
+                 bench_start: Callable[[str], Any] | None = None) -> None:
         self.state = state
         self.agent = agent
         self.clock = clock
@@ -121,6 +148,8 @@ class Autopilot:
         self.start_team = start_team or (getattr(agent, "start_team", None) if agent is not None else None)
         self.evolve = evolve
         self.improve = improve or (getattr(agent, "improve_loki", None) if agent is not None else None)
+        self.bench_start = bench_start      # models -> a Popen-like (tests inject one)
+        self.bench_proc = None
         self.lock = threading.Lock()
         self.data = self._load()
         self.schedules = None
@@ -165,6 +194,8 @@ class Autopilot:
     def idle(self) -> tuple:
         """(idle, why not). Quiet means: no request in flight, no job running, no recent ask."""
         state = self.state
+        if self.bench_running():
+            return False, "the task benchmark is running"
         if state is not None and hasattr(state, "try_busy"):
             held = state.try_busy()
             if held is None:
@@ -385,6 +416,36 @@ class Autopilot:
             line = "Speed watch: %s." % out.get("why", "nothing to add")
         self._log("speed", line)
         return line
+    # ------------------------------------------------------------ task bench (session 28)
+    def bench_running(self) -> bool:
+        proc = self.bench_proc
+        return proc is not None and proc.poll() is None
+
+    def _start_bench(self, models: str):
+        """Start tools/task_bench.py in the background (its own process; output to bench/autopilot.log)."""
+        import subprocess  # pylint: disable=import-outside-toplevel
+        import sys  # pylint: disable=import-outside-toplevel
+        out = self.path.parent / "bench"
+        out.mkdir(parents=True, exist_ok=True)
+        log = open(out / "autopilot.log", "ab")  # noqa: SIM115 - handed to the child
+        kwargs: dict = {"cwd": str(self.repo), "stdout": log, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            return subprocess.Popen([sys.executable, str(self.repo / "tools" / "task_bench.py"), "--model", models],
+                                    **kwargs)
+        finally:
+            log.close()
+
+    def duty_task_bench(self) -> str:
+        """Nightly: run the task-success benchmark on the local and the smart model, one run at a time."""
+        if self.bench_running():
+            return ""
+        models = os.getenv("LOKI_TASK_BENCH_MODELS", "local,smart").strip() or "local,smart"
+        self.bench_proc = (self.bench_start or self._start_bench)(models)
+        self._log("task_bench", "Started the task-success benchmark (%s); scores appear in Settings > Lab." % models,
+                  models=models)
+        return "started task bench: %s" % models
 
     def _team_running(self, team_id: str) -> bool:
         runner = getattr(self.agent, "TEAMS", None)
@@ -485,6 +546,9 @@ class Autopilot:
             pass
         if self.agent is not None and hasattr(self.agent, "WORKSPACE") and self._daily_on():
             duties.append(("creation", _env_s("LOKI_DAILY_CREATION_CHECK_S", 3600), self.duty_creation))
+        if task_bench_enabled() and in_hours(os.getenv("LOKI_TASK_BENCH_HOURS", "1-6"), self.clock()):
+            # right after health: the nightly score comes before starting new self-improvement work
+            duties.insert(1, ("task_bench", _env_s("LOKI_TASK_BENCH_S", 72000), self.duty_task_bench))
         with self.lock:
             for name, every, fn in duties:
                 if not self.due(name, every):

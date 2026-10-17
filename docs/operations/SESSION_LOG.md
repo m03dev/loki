@@ -34,6 +34,17 @@ Concise dated records of meaningful work. Newest at the top.
 - Creations: styles, Enhance, aspect, x4, metadata sidecars, prompt on hover, star, filters, make more like this,
   animate this, delete to trash, music/voice tiles. Autopilot duty `creation`; tool make_local_video.
 - tests/test_creative.py (93, fakes) in SUITES; all 31 suites pass. Real machines: ZIVA W27 (PC), M19 (Mac).
+## 2026-10-17 - Session 28 (Claude, worktree): do agents finish real tasks? A benchmark, and the loop fixed
+
+- tests/tasks/ (31 realistic owner tasks with checkers) + tools/task_bench.py (real loki.run_job per task in a
+  throwaway folder, any model, scripted small-model fakes; JSON + markdown table in harness_data/bench/).
+- Scripted, same catalog: 15/31 before -> 31/31 after. Found: a team "verified" buggy code (halted tester =
+  exit 0 = pass), run_command never offered to any model, team board tools missing on local models, DONE in the
+  last line ignored, premature DONE without "create" words, DONE after refused actions, DONE naming missing
+  files, BLOCKED guesses, questions in jobs, .py not syntax-checked, "image" calls rejected by the guard, huge
+  replies filling context, no job deadline / empty result files. All fixed in the goal loop (HANDOFF).
+- Autopilot duty task_bench (nightly, PC on, Mac off), GET /bench, Settings > Lab "Task success" (bench.js).
+- tests/test_task_success.py (94) in SUITES; all 33 suites pass. Real models: ZIVA W28.
 
 ## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
 
