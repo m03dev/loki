@@ -40,6 +40,17 @@ Read with session 27/28 below: this is a *cause* of the same family of complaint
   walks the RESOLVED root while the test compared against the unresolved one - on macOS `/tmp` is
   `/private/tmp`, so `relative_to` raised ValueError. The production path (`build()` resolves its root)
   was fine; the test now resolves too and the function says so in its docstring. 141 passed.
+- **Bonsai 2 now works on the Mac - and pinning a local model no longer breaks its context.** Bonsai 2 9B
+  (Q2_0, 3.2 GB) was already pulled on this Mac; it loads and answers at 6-17 tok/s (vs the local qwen3:8b's
+  1.4). The bug: `POST /setup/use` ("use this model") pinned the RAW tag with no long context, while the
+  one-click setup has always wrapped it as `loki-<model>` with num_ctx. With Ollama's 4096 default the agent
+  prompt (system + 22 tool schemas + history) is already ~4k tokens, so Ollama truncated it, the user's message
+  fell off the front, and Bonsai 2's strict GGUF Jinja template answered HTTP 500 ("No user query found in
+  messages") - LOKI then answered from vireonix "auto" without telling the owner. Fixed:
+  `model_setup.with_long_context` (used by `/setup/use`; 16384 on this 16 GB Mac) + tests in
+  test_models_media; verified live: 0 template errors, all local calls 200, a 3-message chat and a background
+  job that really wrote its file. Still open: the second turn of a chat still reports provider vireonix in the
+  usage line even with prefer=local (an extra cloud call in that turn - unexplained).
 - **The app now restarts itself on an update** ("restarting the whole app on the updated code"): seen twice,
   cleanly, one window each time (patches 211, 218, 219). Memory on the Mac is back to NORMAL (pressure 1, 78%
   free, swap 1517/3072 MB, no llama-server) and `GET /forecast` is on the real TimesFM-3 (mlx) backend, p50

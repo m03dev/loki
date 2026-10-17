@@ -1832,7 +1832,17 @@ def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tupl
             return 409, {"ok": False, "error": "Already busy - wait for it to finish."}
         return 200, {"ok": True, "tags": tags, "progress": ms.PROGRESS.snapshot()}
     if route == "/setup/use":
-        state_now = use(str(data.get("model", "")).strip())
+        # Pinning a model must also give it a long enough context (see ms.with_long_context): with
+        # Ollama's 4096 default the prompt is truncated, the user's message can be dropped, and a
+        # strict template like Bonsai 2's answers HTTP 500 - LOKI then answers from another provider
+        # without saying so. The one-click setup did this; the plain "use this model" did not.
+        picked = str(data.get("model", "")).strip()
+        if picked:
+            try:
+                picked = ms.with_long_context(picked, info=agent.HARDWARE or None)
+            except Exception as exc:  # noqa: BLE001 - never block switching on the context step
+                print("  [setup] could not prepare a long context for %s: %s" % (picked, exc))
+        state_now = use(picked)
         return 200, {"ok": True, "local": state_now.get("name", "")}
     if route == "/setup/prefer":
         prefer = str(data.get("prefer", "local")).strip().lower()

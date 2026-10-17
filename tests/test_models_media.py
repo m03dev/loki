@@ -115,6 +115,57 @@ check("a sane answer passes the smoke test", model_setup.verify_runs("bonsai", o
 bad = model_setup.verify_runs("bonsai", opener=ollama("#$%&@!#$%^&*"))
 check("gibberish (an old runtime) fails it with a reason", not bad[0] and "instead" in bad[1], bad)
 
+section("pinning a local model gives it an agent-sized context window")
+_created: list = []
+
+
+def _tags(models):
+    return lambda req, timeout=0: Reply(json.dumps({"models": [{"name": n} for n in models]}).encode())
+
+
+def _creator(req, timeout=0):
+    _created.append(json.loads(req.data.decode()))
+    return Reply(b"{}")
+
+
+import urllib.request as _urllib  # noqa: E402
+_hw = {"budget_gb": 16.0}
+_listed = _tags(["qwen3.5:9b", "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0"])
+_kept = model_setup.with_long_context("hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0",
+                                      info=_hw, opener=_listed)
+check("a huge HF name becomes a usable loki-<name> variant", _kept.startswith("loki-hf.co-prism-ml")
+      and _kept.endswith("q2_0"), _kept)
+
+
+def _create_flow(model, info, models):
+    """ensure_context's two calls: /api/tags is a plain URL, /api/create a Request."""
+    def opener(req, timeout=0):
+        url = getattr(req, "full_url", req)
+        if "/api/create" in url:
+            _created.append(json.loads(req.data.decode()))
+            return Reply(b"{}")
+        return Reply(json.dumps({"models": [{"name": n} for n in models]}).encode())
+    return opener
+
+
+_created.clear()
+_kept2 = model_setup.with_long_context("qwen3.5:9b", info=_hw,
+                                       opener=_create_flow("qwen3.5:9b", _hw, ["qwen3.5:9b"]))
+check("it is created with num_ctx for this machine's memory", _created
+      and _created[0]["parameters"]["num_ctx"] == model_setup.context_for(_hw), _created)
+check("...and the variant, not the bare model, is what LOKI ends up running",
+      _kept2 == model_setup.derived_name("qwen3.5:9b"), _kept2)
+check("an existing variant is reused, not created again",
+      model_setup.with_long_context(model_setup.derived_name("qwen3.5:9b"), info=_hw,
+                                    opener=_tags([model_setup.derived_name("qwen3.5:9b")]))
+      == model_setup.derived_name("qwen3.5:9b"))
+check("a model Ollama does not serve (an MLX model) is left exactly as it was",
+      model_setup.with_long_context("mlx-community/Qwen3-4B-4bit", info=_hw, opener=_listed)
+      == "mlx-community/Qwen3-4B-4bit")
+check("with Ollama down nothing is changed", model_setup.with_long_context(
+    "qwen3.5:9b", info=_hw, opener=lambda req, timeout=0: (_ for _ in ()).throw(OSError("down")))
+    == "qwen3.5:9b")
+
 section("Higgsfield: the key is the user's, and only from LOKI's own settings")
 check("no key, not configured", not higgsfield.configured({}))
 check("HIGGSFIELD_KEY", higgsfield.credential({"HIGGSFIELD_KEY": "k:s"}) == "k:s")

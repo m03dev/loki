@@ -1211,6 +1211,28 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      once"). Re-measured with the new backlog: 60/60 and 120/120 answered, 0 resets. Shipped with this change.
      - Update everything restarts the whole app: yes, seen twice, cleanly (one window each time, the old one
      exits hard, no stuck duplicate).
+     - Bonsai 2 on the Mac (done later the same session): DONE, with one bug found and fixed.
+       It was already pulled here (hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0, 3.2 GB) and
+       Ollama is 0.40.6, so it loads and answers - but pinning it broke second turns: with Ollama's DEFAULT
+       4096-token window, an agent prompt (system + 22 tool schemas + a little history) is ~4k tokens, so Ollama
+       truncated the prompt, the user's message fell off the front, and Bonsai 2's strict GGUF Jinja template
+       raised "No user query found in messages" (HTTP 500) - LOKI then answered from another provider (vireonix
+       "auto") without saying so. Reproduced directly against Ollama (any request whose messages carry no user
+       role 500s) and in the debug log (runner.num_ctx=4096, "truncating native chat messages", n_tokens 4095).
+       FIXED: model_setup.with_long_context (an Ollama model gets the loki-<model> variant with num_ctx for this
+       machine - 16384 here) and POST /setup/use now runs it, so "use this model" no longer skips the long
+       context the one-click setup always applied; tests in test_models_media.
+       VERIFIED after the fix: the pinned model is loki-hf.co-prism-ml-ternary-bonsai-2-9b-gguf-ternary-bonsai-
+       2-9b-q2_0, 0 template errors (several before), every local call HTTP 200, a 3-message chat answered by
+       Bonsai (6-17 tok/s vs the local qwen3:8b's 1.4), and a background job on the local model that really
+       worked ("Created bonsai_check.txt with line BONSAI-OK", 2 turns). Memory with Bonsai loaded: swap 2353 MB
+       of 3072, pressure still NORMAL (level 1), llama-server 3807 MB.
+       STILL OPEN: on the SECOND turn of a chat LOKI still reports provider vireonix "auto" in the usage line
+       (9.1k in / 2 out) even with prefer=local - an extra free-cloud call in that turn; the reply itself is
+       Bonsai's. Not explained yet. Also: Ollama's OpenAI-compatible endpoint ignores think:false for this model
+       (verified - /v1 returns empty content and puts the answer in `reasoning`; the native /api/chat honours
+       it), which is why some Bonsai replies read like the model's own thinking (the engine recovers the
+       `reasoning` field when content is empty - by design, but it shows the thinking as the answer).
      - Bonsai 2 with /no_think (a 3-message chat + a background job): NOT DONE - Ollama was not running on this
      Mac this session (and Bonsai 2 is the PC's model; the Mac's local model is the Ollama qwen3:8b, which
      answered a chat in ~30 s at 1.4 tok/s).

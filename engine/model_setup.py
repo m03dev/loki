@@ -295,6 +295,28 @@ def derived_name(model: str) -> str:
     return DERIVED_PREFIX + re.sub(r"[^a-z0-9._-]+", "-", model.lower()).strip("-")
 
 
+def with_long_context(model: str, info: dict | None = None, opener=urllib.request.urlopen) -> str:
+    """The name to actually run for `model`: an Ollama model gets the loki-<model> variant with an
+    agent-sized context window, anything else is returned unchanged.
+
+    Why this matters: Ollama's default window is 4096 tokens and an agent prompt (system + the tool
+    schemas + a little history) is already ~4k, so Ollama TRUNCATES the prompt - and the message it
+    drops can be the user's. Models with a strict chat template then fail outright: Bonsai 2's GGUF
+    template raises "No user query found in messages" (HTTP 500), and LOKI quietly answers from
+    another provider instead, so the owner sees a reply from a model they did not pick. The
+    one-click setup has always done this; pinning a model with POST /setup/use did not.
+    """
+    if not model:
+        return model
+    models = ollama_models(opener=opener)
+    if models is None:                     # Ollama is not answering: leave the choice alone
+        return model
+    bases = {m["name"].split(":")[0] for m in models} | {m["name"] for m in models}
+    if model not in bases and derived_name(model) not in bases:
+        return model                       # not an Ollama model (an MLX/other server) - hands off
+    return ensure_context(model, context_for(info or {}), models, opener=opener)
+
+
 def ensure_context(model: str, num_ctx: int, models: list[dict], opener=urllib.request.urlopen) -> str:
     """Return a model name with a context window of at least `num_ctx`: an existing
     loki-<model> variant, or a new one made with /api/create (metadata only - no
