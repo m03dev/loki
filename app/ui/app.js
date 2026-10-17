@@ -935,6 +935,8 @@ function wire() {
     $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
   });
   $("#clear-jobs").addEventListener("click", async () => renderWork(await api("/jobs/clear", {})));
+  // the X in the corner of Settings does what Close does
+  $("#settings-x").addEventListener("click", () => $("#close-settings").click());
   $("#close-settings").addEventListener("click", () => {
     $("#settings").hidden = true;
     if (typeof hideWorldPanel === "function") hideWorldPanel();
