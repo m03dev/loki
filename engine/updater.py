@@ -204,13 +204,38 @@ def git_exe(platform: str | None = None) -> str:
     return ""
 
 
+_GITHUB_OWNER: dict = {}
+
+
+def github_account(repo: Path) -> list:
+    """`-c credential.https://github.com.username=<owner>` for the GitHub account that owns
+    this checkout (from origin's URL, or LOKI_GITHUB_USER). With two GitHub accounts stored,
+    Git Credential Manager otherwise stops to ask "Select an account" - which it may not do
+    here (GCM_INTERACTIVE=never), so the fetch would just fail."""
+    key = str(repo)
+    if key not in _GITHUB_OWNER:
+        owner = (os.environ.get("LOKI_GITHUB_USER") or "").strip()
+        if not owner:
+            try:
+                text = (Path(repo) / ".git" / "config").read_text(encoding="utf-8", errors="replace")
+                import re as _re  # pylint: disable=import-outside-toplevel
+                found = _re.search(r'\[remote "origin"\][^\[]*?url\s*=\s*https://github\.com/([A-Za-z0-9-]+)/', text)
+                owner = found.group(1) if found else ""
+            except OSError:
+                owner = ""
+        _GITHUB_OWNER[key] = owner
+    owner = _GITHUB_OWNER[key]
+    return ["-c", "credential.https://github.com.username=%s" % owner] if owner else []
+
+
 def git(repo: Path, *args: str, timeout: float = 60.0) -> tuple:
     """(returncode, stdout+stderr) of one git command; never raises."""
     exe = git_exe()
     if not exe:
         return 127, "git is not installed"
+    account = github_account(repo) if args and args[0] in ("fetch", "pull", "push", "ls-remote", "clone") else []
     try:
-        proc = subprocess.run([exe, *SAFE_DIRECTORY, "-C", str(repo), *args], capture_output=True,
+        proc = subprocess.run([exe, *SAFE_DIRECTORY, *account, "-C", str(repo), *args], capture_output=True,
                               text=True, encoding="utf-8", errors="replace", timeout=timeout,
                               env=git_env(), stdin=subprocess.DEVNULL)
         return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).rstrip()

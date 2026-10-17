@@ -235,6 +235,12 @@ env = updater.git_env("win32")
 check("Git Credential Manager is told never to prompt", env["GCM_INTERACTIVE"] == "never" and env["GCM_GUI_PROMPT"] == "false")
 check("...nor the terminal, nor ssh", env["GIT_TERMINAL_PROMPT"] == "0" and "BatchMode=yes" in env["GIT_SSH_COMMAND"])
 
+fake = TMP / "acct"
+(fake / ".git").mkdir(parents=True)
+(fake / ".git" / "config").write_text('[remote "origin"]\n\turl = https://github.com/m03dev/loki.git\n', encoding="utf-8")
+check("fetches name the repo owner's GitHub account, so two stored accounts never need a picker",
+      updater.github_account(fake) == ["-c", "credential.https://github.com.username=m03dev"], updater.github_account(fake))
+
 section("why an update failed is clear")
 SIGNS = {
     "fatal: could not read Username for 'https://github.com': terminal prompts disabled": "GitHub sign-in needed",
