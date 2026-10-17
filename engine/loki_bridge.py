@@ -2043,6 +2043,14 @@ class BridgeHTTPServer(ThreadingHTTPServer):
     # port_is_answering() refuses a port that already accepts connections on every platform
     # before we bind (see start_bridge_server).
     allow_reuse_address = sys.platform != "win32"
+    # A page load asks for ~25 files at once (index.html pulls every panel script), and the app's
+    # window opens right when the engine is at its busiest (model warm-up, MCP servers connecting,
+    # an update unpacking). socketserver's default backlog is 5, so the OS refuses the connections
+    # past it and the browser reports ERR_CONNECTION_RESET / ERR_SOCKET_NOT_CONNECTED for some of
+    # them - measured on the Mac: 46 of 60 simultaneous requests reset. The window then comes up
+    # with dead panels (Play, Creations, Brain, the drawing pad) or, if app.js or app.css is one of
+    # the dropped ones, blank. A generous backlog costs nothing; both platforms accept it.
+    request_queue_size = 128
 
     def __init__(self, state: BridgeState) -> None:
         super().__init__((HOST, PORT), BridgeHandler)

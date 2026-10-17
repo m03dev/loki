@@ -102,7 +102,11 @@ check("pagerank: a node nobody links to ranks lowest", min(pr, key=pr.get) == "d
 prp = repo_map.pagerank({("a", "b"): 1.0, ("b", "a"): 1.0, ("c", "a"): 1.0}, {"c": 1.0})
 check("personalization pulls rank toward its node", prp["c"] > repo_map.pagerank(
     {("a", "b"): 1.0, ("b", "a"): 1.0, ("c", "a"): 1.0})["c"], prp)
-files = [p.relative_to(proj).as_posix() for p in repo_map.source_files(proj)]
+# source_files walks the RESOLVED root (so a symlinked temp dir cannot walk in circles), so the
+# caller must resolve its own root too: on macOS /tmp is /private/tmp and the bare path is not a
+# prefix of the paths that come back. build() does exactly this.
+proj_res = proj.resolve()
+files = [p.relative_to(proj_res).as_posix() for p in repo_map.source_files(proj)]
 check("source files skip node_modules", not any("node_modules" in f for f in files) and "pkg/store.py" in files, files)
 m = repo_map.build(proj, focus="", max_chars=2000)
 check("map lists the definitions other files use", "pkg/store.py:" in m and "def load_inventory_file" in m, m)

@@ -6,6 +6,50 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 28, Claude in the cloud).
 
+## Ziva (Mac), 2026-10-17 (patch 219): the Babylon world verified in the app's own WebKit - and the connection-drop bug behind broken windows
+
+Read with session 27/28 below: this is a *cause* of the same family of complaints, found on the Mac.
+
+- **BUG FIXED AND SHIPPED - the engine dropped connections while a page loaded.** `BridgeHTTPServer`
+  (engine/loki_bridge.py) used `socketserver`'s default accept backlog of **5**, while one page load asks for
+  ~25 files at once (index.html pulls every panel script). Measured against the live engine: 60 simultaneous
+  requests -> **46** "Connection reset by peer"; 120 -> 92. A browser shows that as ERR_CONNECTION_RESET /
+  ERR_SOCKET_NOT_CONNECTED, and it happened for real during a Chrome load of the UI: `play_panel.js`,
+  `creations.js`, `icons.js`, `brain.js`, `workbench.js` and `sketch.js` all failed to load - a window with
+  **dead panels** (Play, Creations, Brain, the drawing pad), or **blank** if `app.js`/`app.css` is one of the
+  dropped ones. That matches "the Mac shows a white window" and the PC reports. `request_queue_size = 128` now;
+  re-measured **0 resets** at 60 and 120 concurrent requests, guarded by
+  tests/test_systems.py ("the bridge takes a whole page load at once"). It costs nothing and helps every load.
+- **The blank-window guard works, and it is what caught the above**: boot.js wrote the failed loads to
+  engine.out and `/health` -> `ui_errors`. Its gap: a *script* error is reported as "error at ?:0:0" with no
+  message, file or line (both in the bridge log and in `ui_errors`), which cannot be diagnosed - worth adding
+  `e.error.stack` when the message is empty (not changed here; the cause would have been a guess).
+- **LOKI World is Babylon in the app's WKWebView, in the pixel cel-shaded look.** Verified in the real window
+  (`docs/operations/screens/babylon-world-mac.png`, `babylon-two-islands-mac.png`, `babylon-fox-mac.png`,
+  `babylon-world-panel-mac.png`): WebGL2 (no WebGL1 fallback), quality "high", 33.4-33.6 ms behind the glass =
+  its 30 fps cap with 0 late frames in 500+, 16.7 ms (~60 fps) in the World panel, the 3-px pixel grid and the
+  Bayer posterize confirmed pixel-by-pixel, no console errors (only the pre-existing `/favicon.ico` 401). CPU
+  with the world running (2 min): WebKit.WebContent 11.3% median + WebKit.GPU 8.0% + the app 5.1%.
+  Islands: the Mac's island, the PC's island out in the space around it, click to fly there, "back to <name>".
+  The Mac<->PC relay link came up during the session ("pc via relay - 3277 ms", `GET /peers` ok true, the PC's
+  hello = patch 219) - it works but is not perfectly steady (one "(timed out)" in the world while /peers was ok).
+- **Creations needed image-gen switched on** (it was off on this Mac, and the wall said so clearly); enabled,
+  a fox picture was made here through the free pollinations backend and now heads the wall and the island's
+  creations hall. Say if you want image-gen off again.
+- **test_research_ports failed on macOS only** (so `ship.py` refused to push): `repo_map.source_files`
+  walks the RESOLVED root while the test compared against the unresolved one - on macOS `/tmp` is
+  `/private/tmp`, so `relative_to` raised ValueError. The production path (`build()` resolves its root)
+  was fine; the test now resolves too and the function says so in its docstring. 141 passed.
+- **The app now restarts itself on an update** ("restarting the whole app on the updated code"): seen twice,
+  cleanly, one window each time (patches 211, 218, 219). Memory on the Mac is back to NORMAL (pressure 1, 78%
+  free, swap 1517/3072 MB, no llama-server) and `GET /forecast` is on the real TimesFM-3 (mlx) backend, p50
+  8.1 s / p90 37.4 s per forecast, nothing to unload. The Mac's local model answers at ~1.4 tok/s (~30 s a turn).
+- **Open on the Mac:** clicking panels *inside* the app window cannot be scripted - WKWebView has no usable AX,
+  the page CSP (`script-src 'self'`, no `unsafe-eval`) refuses scripted evaluation, and a real synthetic click
+  cannot hit a world label because the world spins. So Play (Fox & Berries) and the Brain map were verified in
+  Chrome over CDP; **one human click on Settings > Play in the app closes M12/M13's last gap**. M14/M15/M16/M17
+  (session 27) are untouched.
+
 ## Session 28: patching and updating clients, overhauled (after the Mac's white window)
 
 The owner: "overhaul patching and updating clients i dont want that issue to happen again". How an update now

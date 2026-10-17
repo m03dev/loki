@@ -769,6 +769,10 @@ check("the bridge rebinds the same port immediately (SO_REUSEADDR, so a good upd
 loki_bridge.HOST, loki_bridge.PORT = saved_host, saved_port
 check("SO_REUSEADDR only off Windows (there it would let a second bind share a live port)",
       loki_bridge.BridgeHTTPServer.allow_reuse_address == (sys.platform != "win32"))
+check("the bridge takes a whole page load at once (backlog >= 64, not socketserver's 5)",
+      loki_bridge.BridgeHTTPServer.request_queue_size >= 64
+      and loki_bridge.BridgeHTTPServer.daemon_threads is True,
+      str(loki_bridge.BridgeHTTPServer.request_queue_size))
 
 SUP.stop()
 listener.close()

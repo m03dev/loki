@@ -362,6 +362,9 @@ _CACHE: dict = {}
 
 
 def source_files(root: Path, subdir: str = ".") -> list:
+    """Every source file under root/subdir, RESOLVED (a symlinked root - macOS /tmp is
+    /private/tmp - walks the real tree, so callers that compare against the root must resolve
+    theirs too; build() does)."""
     base = (Path(root) / subdir).resolve()
     found = []
     for dirpath, dirnames, filenames in os.walk(base):

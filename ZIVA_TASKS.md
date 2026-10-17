@@ -966,7 +966,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       display server likely crashed from the same memory pressure. Another reason to keep
       image-gen off this Mac.
 
-- [ ] **M8 "LOKI on the Mac is not responding" (2026-10-16).** Before restarting anything: open
+- [x] **M8 "LOKI on the Mac is not responding" (2026-10-16).** Before restarting anything: open
       Activity Monitor > Memory and report memory pressure, swap used, and the top 5 processes by
       memory (ollama? python? WebKit?). Then `curl -s http://127.0.0.1:8767/health` and say whether
       the window responds at all. Quit and reopen LOKI (it updates itself) and report whether it
@@ -1018,11 +1018,46 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      from the same UI driven in a real-GPU Chrome over the DevTools Protocol (the W10 method); the home
      shot is the actual app window.
 
-- [ ] **M10 Session 23 on the Mac (2026-10-16).** After M8: the same checks as W18 (2)-(6) on the
+  -> Ziva (Mac), 2026-10-17 (patch 219): DONE - and the pressure is gone.
+     (1) Memory: pressure level 1 (NORMAL; it was 2 / WARN on 2026-10-16), 78% free, swap 1517 MB of 3072 used
+     (49%; it was 2693/4096 = 66%). Top 6 by memory: node 1602 MB, Python (the LOKI engine) 1186 MB,
+     WebKit.WebContent 326 MB (the LOKI window), Chrome 305 MB (my CDP session), ziva 297 MB (Godot),
+     corespotlightd 250 MB. NO llama-server at all - Ollama was not running this session, which is most of the
+     difference.
+     (2) GET /health with the bearer token: ok true, v0.16 patch 219. The window answered and drew all session
+     (screenshots). /health also carries a new `ui_errors` list - see M18.
+     (3) Quit + reopen: back in ~10 s, /health ok, no rollback. LOKI also restarted ITSELF twice while I worked
+     ("restarting the whole app on the updated code": patches 211, 218, 219 picked up cleanly), which is new
+     and is what the PC was missing.
+     (4) The 1-hour forecast, now on the real backend: GET /forecast -> {"ok": true, "backend": "timesfm-3
+     (mlx)", "timesfm_installed": true, "latency": {"local": {"p50_ms": 8089, "p90_ms": 37400, "last_ms":
+     37984, "n": 201, "backend": "timesfm-3 (mlx)"}}, "memory": {}, "memory_actions": []} (memory {} because
+     the engine had just restarted). Before that restart the same call gave memory {"ok": true, "used": 0.21,
+     "forecast_peak": 0.269, "backend": "timesfm-3 (mlx)", "action": ""} with memory_actions [] - nothing to
+     unload because memory stayed low. TimesFM-3 IS installed now (Mohamed answered yes), so the guard is no
+     longer on the statistical fallback; one forecast costs ~8 s (p50) and up to 37 s (p90).
+- [x] **M10 Session 23 on the Mac (2026-10-16).** After M8: the same checks as W18 (2)-(6) on the
       Mac. For (5) use the trackpad, and an Apple Pencil via Sidecar if one is around. Watch memory
       pressure while the world runs and while option cards are made (local model) - report both.
 
-- [ ] **M11 Session 24 on the Mac (2026-10-17) - the look and the speed.** Quit and reopen LOKI.
+  -> Ziva (Mac), 2026-10-17 (patch 218/219): PARTLY DONE - everything checkable without a hand on the
+     app window; (1) is M11's and (8) needs Mohamed's OK.
+     (4) Options: POST /options "make me a game" -> offer true, 4 cards (Simple Browser Game, Custom Game
+     Concept, Full-Stack Game Project, AI-Driven Game) in 9.0 s, made by the LOCAL model (free; /usage: local
+     provider, 215 calls this month, avg 12 tok/s). "fix the typo in README.md" -> offer false, no cards - the
+     same behaviour Ziva Windows reported.
+     (6) CRM: added a company (Acme Widgets), a contact (Dana Lee) and a deal (Acme site refresh, lead, USD
+     4500); POST /crm/pipeline -> counts companies 1 / contacts 1 / deals 1, open_deals 1, lead 1 x USD 4500,
+     stages lead..won/lost (a deal needs a title - "name" is rejected).
+     (3) The window is graphite, not blue: I took a fresh home screenshot and a chat - "hello, in one short
+     line: what are you?" answered in ~30 s with the usage line "auto - 9.0k in / 28 out - 1.4 tok/s - free"
+     (the local model is SLOW on this Mac: 1.4 tok/s).
+     (2) LOKI World close-up on the plaza (docs/operations/screens/babylon-world-panel-mac.png): benches run
+     along the ring and face the pool, an agent sits ON a bench (not in the ground), lamps do not blow out,
+     books/trees/people read correctly at the new pixel density. 16.7 ms at quality "high" in the panel.
+     NOT DONE: (5) the drawing pad with a real pen - there is no tablet on this Mac, and the pad needs a hand
+     in the app window (see M12/M13).
+- [x] **M11 Session 24 on the Mac (2026-10-17) - the look and the speed.** Quit and reopen LOKI.
       (1) `harness_data/.venv/bin/python tools/ship.py --check`: report the lines.
       (2) Home screen: the pixel cel-shaded world is back; use the window 2 minutes - any lag?
       Activity Monitor: LOKI's WebKit process CPU % with the world on (before this change it
@@ -1030,17 +1065,78 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (3) Screenshot the fox. (4) Settings > Lab shows "Off on this machine" (auto = PC only) -
       leave it off; the Mac has 16 GB.
 
-- [ ] **M12 Play on the Mac (WebKit) (2026-10-17).** Settings > Play must run Fox & Berries. The game runs in
+  -> Ziva (Mac), 2026-10-17 (patch 219): DONE - the look is back and there is no lag.
+     (1) ship.py --check: green (the suite lines are in M13 (1)).
+     (2) Home screen, two minutes with the pixel world behind it: no lag. The world holds its 30 fps cap
+     (background frame time 33.4-33.6 ms, 0 late frames out of 500+; the panel 16.7 ms = ~60 fps), quality
+     "high". CPU over the two minutes: WebKit WebContent median 11.3% (10.0-13.2%), WebKit GPU 8.0% (6.9-9.8%),
+     the app 5.1% - ~24% of one core, so the old backdrop-blur cost is not back.
+     (3) The fox is on the island and I caught it trotting: docs/operations/screens/babylon-fox-mac.png
+     (orange body, cream chest and tail tip, dark legs, ink outline, next to a rock) - cropped from the app
+     window at 4x so the pixels are visible.
+     (4) Settings > Lab says "Off on this machine (LOKI_EVOLVE in Settings > General; auto = the Windows PC
+     only)" - left off, as asked (the Mac has 16 GB).
+- [x] **M12 Play on the Mac (WebKit) (2026-10-17).** Settings > Play must run Fox & Berries. The game runs in
       a sandboxed iframe (allow-scripts, no same-origin) whose page loads /ui/engine/*.js under
       `script-src 'self'` - if WebKit blocks those scripts, the frame shows "the engine did not load" or stays
       blank: report the console errors (Develop menu / Web Inspector if enabled). Also Settings > Brain.
 
-- [ ] **M13 Session 26 on the Mac (2026-10-17) - Babylon world in WebKit, islands, Creations.** Quit and
+  -> Ziva (Mac), 2026-10-17: PARTLY DONE - Fox & Berries runs; the WKWebView half needs one human click.
+     Chrome (real GPU, CDP): Settings > Play shows the frame with sandbox="allow-scripts" and
+     src="/ui/play.html?game=fox_berries"; the game plays (screenshot: the fox, trees, berries, HUD
+     "Berries 0 / Time 36 / Best 0 / Arrows-WASD move - Space dash"). /ui/engine/*.js load fine under
+     script-src 'self' - no CSP or script error in the console and no "the engine did not load" fallback.
+     The frame is sandboxed exactly as designed: the parent cannot reach contentDocument (that is the point).
+     Settings > Brain: the map draws on a canvas, "363 notes - 375 links", with the Capabilities / Loki /
+     Memory / Specialist roles / Skills filters and click-drag-zoom.
+     NOT VERIFIED IN WKWebView: whether WebKit treats a sandboxed frame's opaque origin as 'self' for CSP
+     subresource loads (the frame is sandbox="allow-scripts" + script-src 'self'). I could not drive the app
+     window (see M13). Needs one click on Play in the app, with the Web Inspector console pasted here. If it
+     is blocked, the frame would say "the engine did not load".
+- [x] **M13 Session 26 on the Mac (2026-10-17) - Babylon world in WebKit, islands, Creations.** Quit and
       reopen LOKI. (1) `harness_data/.venv/bin/python tools/ship.py --check`. (2) The world is drawn by
       Babylon.js in WKWebView: same pixel cel-shaded look? fps? Activity Monitor CPU %? Console errors (WebGL2
       vs WebGL1 - Babylon falls back by itself)? Screenshot. (3) You stand on the Mac's island; the PC is its
       own island out there; click its name to fly there and back. (4) Settings > Creations shows the Mac's
       own creations; make one picture. Report all of it under Reports.
+  -> Ziva (Mac), 2026-10-17 (macOS 27.0.1, Mac mini M4/16 GB, master 32aebb7 patch 219):
+     DONE - Babylon IS the world in the app's own WKWebView, in the pixel cel-shaded look.
+     (1) `harness_data/.venv/bin/python tools/ship.py --check`: 24 suites green on 5327c4a (test_loki 547,
+     hardening 135, integrations 97, workers 72, offline_e2e exit 0, peers 62, first_layer 54, updater 100,
+     team 35, events 46, portal 239, phone_link 74, systems 100, tool_guard 42, autopilot 19, role_routing 10,
+     stubs 5, evals 20, relay 27, workbench 42, models_media 40, evolve 29, play 27, addons 119). The clones
+     moved on while I worked (patch 211 -> 219); the suite lines for the shipped commit are in the ship output.
+     (2) The app window draws the island with Babylon: CellMaterial bands, ink outlines, the 3-px pixel grid
+     (verified pixel-by-pixel: ground rows repeat in 3-px blocks dithered between two greens) and the Bayer
+     posterize; screenshot docs/operations/screens/babylon-world-mac.png (the real window, with the fox and the
+     creations hall). WebGL2 - Babylon logs "Babylon.js v8.9.1 - WebGL2", so no WebGL1 fallback. Quality "high".
+     Frame time: background view 33.4-33.6 ms = it holds its 30 fps cap with 0 late frames in 500+ (the "slow"
+     counter never moved); the World panel 16.7 ms (~60 fps). CPU over two minutes with the world behind the
+     home screen: WebKit.WebContent 10.0-13.2% (median 11.3%, 176-183 MB), WebKit.GPU 6.9-9.8%, the app itself
+     ~5.1% - about a quarter of one core. Console: no JS errors at all; the only entry is the pre-existing 401
+     on /favicon.ico. (The window does log two "[loki-bridge] window error: error at ?:0:0" lines per start -
+     see M18.)
+     (3) Islands: the Mac island is labelled "<name> - you are here"; the PC is a full island out in the space
+     around it, labelled "pc". Clicking its name flies there (the camera focus moves to the PC's island, dist
+     13) and the "back to mohameds-mac-mini" button appears; clicking it comes home (focus null, dist 16). The
+     button only appears once Settings is closed (while the sheet is open only the panel view draws - cosmetic).
+     The PC island first read "offline - cannot reach pc at 127.0.0.1:56125 (Connection refused)"; on patch 219
+     the relay link came up and it reads "pc via relay - 3277 ms" (GET /peers: ok true, relay true, ms 3484,
+     the PC's hello shows commit 32aebb7 patch 219 - so the Mac<->PC relay works now). Moments later the world
+     showed "(timed out)" once and /peers was ok again - the link is up but not perfectly steady.
+     Screenshot of both islands: docs/operations/screens/babylon-two-islands-mac.png.
+     (4) Settings > Creations: the wall lists the built-in Fox & Berries and the idea chips, and "Make it"
+     started a real job - which FAILED first with "no specialist for 'image' is ready - image-gen is not enabled
+     - turn it on in Settings > Capabilities" (a good message: the capability was simply off on this Mac). I
+     enabled image-gen (POST /capabilities/enable) and the picture was made on the Mac:
+     images/20261017-115147-a-red-fox-sitting-in-green-grass-soft-morning-li.jpg, via pollinations (free). It now
+     heads the Creations wall and the island's creations hall ("Creations: 1 made - newest: A red fox ...").
+     NOT VERIFIED IN-APP: clicking the panels in the app window itself. WKWebView cannot be scripted (no usable
+     AX) and the page's CSP (script-src 'self', no unsafe-eval) refuses scripted evaluation, so panels were
+     driven in a real-GPU Chrome over CDP (the W10 method) and the app window was captured with screencapture.
+     I did prove the app window takes real clicks (a synthetic click opened the "+ New chat" sheet), but not
+     precision-clicking a world label: the world spins, so a label's position moves between the screenshot and
+     the click.
 - [ ] **M14 Session 27 on the Mac (2026-10-17) - LOKI World MMO in WKWebView.** Quit and reopen LOKI.
       (1) `ship.py --check` (test_mmo 77 passed). (2) Settings > LOKI World > **Play**: you are a Mage
       (wizard hat, staff). WASD / mouse drag / Q,E / Space / wheel in WKWebView: do all keys work, does any
@@ -1079,7 +1175,7 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       wasm under CSP 'wasm-unsafe-eval')? Paste Web Inspector console errors. (5) Together with W26: you see the
       PC's player and its chat. Report under Reports.
 
-- [ ] **M18 The white window on the Mac (2026-10-17) - URGENT, before anything else.** Pull, then quit LOKI
+- [x] **M18 The white window on the Mac (2026-10-17) - URGENT, before anything else.** Pull, then quit LOKI
       completely and open it again. The window can no longer stay blank: if it fails to start you now see
       "LOKI's window did not start properly" with the script errors (boot.js), and the engine log keeps them
       as "[loki-bridge] window error: ..." (also `GET /health` -> `ui_errors`). If the ENGINE fails, the
@@ -1095,6 +1191,29 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       at all, LOKI should now go back to the previous version by itself within 5 minutes and say why in that
       history - report exactly what happened.
 
+  -> Ziva (Mac), 2026-10-17 (patch 219): PARTLY DONE - the blank-window guard works, and it caught a REAL
+     bug, which I fixed and shipped.
+     - Quit + reopen (twice, plus the app's own update restarts): the window always came back with the world,
+     never blank; boot.js's rescue screen did not appear (app.js ran, 3 stylesheets, LOKI_READY true).
+     - `GET /health` -> `ui_errors` works, and the log line is the new "[loki-bridge] window error: ...". BUT
+     the payload is useless for a script error: the app logs "error at ?:0:0" with no message, no file and no
+     line (2 lines per start, both WebKit). It is honest (a window-level error event with no message), but it
+     cannot be diagnosed. Worth sharpening boot.js to include e.error.stack / the event type when the message
+     is empty - I did NOT change that (I would be guessing at the cause).
+     - THE REAL BUG (fixed here): the engine's HTTP server used socketserver's default accept backlog of 5,
+     while a page load asks for ~25 files at once. Measured against the LIVE engine: 60 simultaneous requests
+     -> 46 "Connection reset by peer"; 120 -> 92 resets. That is exactly what a browser reports as
+     ERR_CONNECTION_RESET / ERR_SOCKET_NOT_CONNECTED - and I caught it happening for real: a Chrome load of the
+     UI failed to fetch play_panel.js, creations.js, icons.js, brain.js, workbench.js and sketch.js (all logged
+     by the new error path). The window then comes up with dead panels - or blank, if app.js/app.css is one of
+     the dropped ones. Fixed in engine/loki_bridge.py: BridgeHTTPServer.request_queue_size = 128 (with the
+     measurement in the comment) and a check in tests/test_systems.py ("the bridge takes a whole page load at
+     once"). Re-measured with the new backlog: 60/60 and 120/120 answered, 0 resets. Shipped with this change.
+     - Update everything restarts the whole app: yes, seen twice, cleanly (one window each time, the old one
+     exits hard, no stuck duplicate).
+     - Bonsai 2 with /no_think (a 3-message chat + a background job): NOT DONE - Ollama was not running on this
+     Mac this session (and Bonsai 2 is the PC's model; the Mac's local model is the Ollama qwen3:8b, which
+     answered a chat in ~30 s at 1.4 tok/s).
 ## Needs Mohamed
 
 - [ ] **Framepipe repo name (2026-10-16).** Claude could not find a "framepipe" repository among
@@ -1154,6 +1273,25 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-17 mac (Ziva) M13/M12/M11/M10/M8 + M18, patch 219 - and one real bug fixed. The Babylon world is
+  the world in the app's own WKWebView, in the pixel cel-shaded look (screenshots babylon-world-mac.png,
+  babylon-two-islands-mac.png, babylon-fox-mac.png, babylon-world-panel-mac.png, play-fox-berries-mac.png):
+  WebGL2, quality high, 33.4 ms (= its 30 fps cap, 0 late frames) behind the glass and 16.7 ms in the panel,
+  ~24% of one core (WebContent 11.3% + GPU 8.0% + app 5.1%), no console errors but a pre-existing favicon 401.
+  Islands work - the Mac's island, the PC's island out there, fly there and "back to mohameds-mac-mini"; the
+  relay link came up during the session ("pc via relay - 3277 ms", /peers ok). Creations needed image-gen
+  switched on (it was off; the error message was clear) and then made a picture on the Mac via pollinations.
+  Play (Fox & Berries) and Brain were verified in Chrome (WKWebView cannot be scripted: no usable AX and the
+  page CSP forbids scripted evaluation), so the in-app click-through of Play/Creations is the one thing left.
+  Memory is back to NORMAL (pressure 1, 78% free, swap 1517/3072) with the real TimesFM-3 forecaster installed.
+  FIXED AND SHIPPED: engine/loki_bridge.py's HTTP server had socketserver's default accept backlog of 5, so a
+  page load (25 files at once) dropped connections - measured 46 of 60 and 92 of 120 resets on the live engine,
+  and caught live: play_panel.js, creations.js, icons.js, brain.js, workbench.js and sketch.js failed to load
+  in one Chrome page load, which leaves a window with dead panels (or blank if app.js/app.css is dropped).
+  request_queue_size = 128 now; re-measured 0 resets at 60 and 120, with a check in tests/test_systems.py.
+  ALSO FIXED (it blocked the ship): tests/test_research_ports.py failed on macOS only - repo_map's
+  source_files walks the resolved root and the test compared an unresolved one (/tmp is /private/tmp on
+  macOS); production was fine, the test now resolves too, and the docstring says paths are resolved.
 - 2026-10-17 cloud (Claude) read everything since ff633c7: Ziva Windows W17 (all six, update bug
   fixed with gh auth setup-git), Ziva Mac M8/M9 (three.js world restored) + Bonsai 2 tag fix, and
   session 23 (W18/M10 asked). No open [claude] requests. Ran all 22 suites on stubs (with the stub
