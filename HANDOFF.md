@@ -6,6 +6,23 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-16 (session 22, Claude in the cloud).
 
+## Ziva (Mac), 2026-10-16: the three.js world was dead in every checkout - fixed
+
+- `.gitignore`'s unanchored `addons/` rule (a leftover from the Godot era) git-ignored
+  `app/ui/vendor/three/addons/`, so the three.js post-processing add-ons were never committed.
+  `world_three.js` failed to import, `window.WorldThree` was undefined, and the world silently fell
+  back to the classic renderer on every clean checkout (the PC, CI, a fresh clone) - it worked only
+  where those files were still on disk. test_portal's three.js checks only grep the source TEXT, so
+  the suite stayed green while the feature was broken.
+- Fixed: vendored the three.js r186 add-ons (MIT; `'three'` imports rewritten to local paths),
+  anchored `addons/`/`scenes/`/`scripts/` in `.gitignore` to the repo root, wired `LOKI_WORLD_ENGINE`
+  into Settings > General (it could not be set before), corrected `docs/THIRD_PARTY.md`, and added two
+  regression checks (every `world_three.js` import exists on disk; the ignore rules stay anchored).
+- On the Mac the world now runs three.js at quality "high": panel ema 6.97 ms (~143 fps, 80 draws),
+  home 34.7 ms - higher quality and faster than the classic fallback (14.6 / 48 ms). Glass text
+  contrast 9.7:1 (home) / 11.5:1 (World panel) over the lit world = WCAG AAA. Screens:
+  `docs/operations/screens/glass-home-mac.png`, `world-three-mac.png`. Tasks M8/M9 answered in ZIVA_TASKS.
+
 ## Session 22 (2026-10-16, Claude in the cloud): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield, Mac hangs
 
 Two commits. All 21 suites pass (`tools/ship.py --check`).

@@ -25,9 +25,9 @@ engine/package-lock.json
 
 # Leftovers from the old Godot-addon layout and stray agent output
 .godot/
-addons/
-scenes/
-scripts/
+/addons/
+/scenes/
+/scripts/
 /plugins/
 project.godot
 .git-rewrite/

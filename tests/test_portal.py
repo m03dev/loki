@@ -14,6 +14,7 @@ import asyncio
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -682,6 +683,13 @@ check("the world loads nothing from outside and never evals", all(s not in world
 check("the static scene is baked once into a few buffers (land, sky, shadows)", all(s in world_js for s in (
     "function bake(", "BAKED_VS", "BAKED_OUTLINE_VS", "SHADOW_VS", "view.batches.land", "view.batches.shadows")))
 check("a lost WebGL context is rebuilt, not left black", "webglcontextrestored" in world_js and "initGL(view)" in world_js)
+three_js = (ui / "world_three.js").read_text(encoding="utf-8") if (ui / "world_three.js").exists() else ""
+three_imports = re.findall(r'from\s+"(\./[^"]+)"', three_js)
+three_missing = [m for m in three_imports if not (ui / m.lstrip("./")).exists()]
+check("every import in the three.js renderer is vendored and present (add-ons committed, not git-ignored)",
+      bool(three_imports) and not three_missing, "missing: %s" % three_missing)
+check("the old Godot ignore rules stay anchored to the repo root (they used to swallow the three add-ons)",
+      not any(l.strip() in ("addons/", "scenes/", "scripts/") for l in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()))
 check("the frame-time watcher coarsens pixels only when it helps", "function watchFrames(" in world_js
       and "pf.trial" in world_js and "noGain" in world_js and "World.adaptive" in world_js)
 check("lights are ranked so a blocked agent's red light is never dropped",

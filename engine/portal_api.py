@@ -58,6 +58,8 @@ GENERAL = {
                     "label": "Prefer local models or the cloud"},
     "LOKI_WORLD": {"kind": "choice", "default": "background", "choices": ["background", "panel", "off"],
                    "label": "LOKI World (3D): behind the home screen, only in its panel, or off"},
+    "LOKI_WORLD_ENGINE": {"kind": "choice", "default": "three", "choices": ["three", "classic"],
+                          "label": "LOKI World renderer: three.js (full quality) or classic (lightest)"},
     "LOKI_PROMPTED_TOOLS": {"kind": "text", "default": "", "label": "Providers that get tools as text (comma list)"},
     "LOKI_OPENCODE_MODEL": {"kind": "text", "default": "", "label": "OpenCode model (provider/model)"},
     "HIGGSFIELD_KEY": {"kind": "secret", "default": "",

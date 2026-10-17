@@ -697,10 +697,51 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       the window responds at all. Quit and reopen LOKI (it updates itself) and report whether it
       comes back. On master the memory guard unloads idle Ollama models before the Mac swaps; after
       an hour of use, `GET /forecast` shows `memory` and `memory_actions` - paste them.
-- [ ] **M9 Glass UI and the three.js world on the Mac.** Screenshot the home screen and Settings >
+  -> Ziva (Mac), 2026-10-16: RAN IT, in this order (no restart before the readings).
+     (1) Memory (Activity Monitor > Memory equivalent): pressure WARN - kern.memorystatus_vm_pressure_level
+     2, 20% free. Swap 2693 MB of 4096 used (66%). Top 5 by memory: llama-server (Ollama) 6785 MB >
+     node 509 MB > WebKit.WebContent 221 MB (the LOKI window) > WebKit/zivacode 153 MB > Jump Desktop
+     89 MB. LOKI itself is light: loki_app.py 32 MB + the bridge 17 MB - the swap is Ollama's loaded
+     model, not LOKI.
+     (2) `curl -s http://127.0.0.1:8767/health` -> {"ok": false, "error": "Invalid local bridge token."}
+     - /health wants the bearer token; with it: ok true, v0.16 . patch 199. So the engine answered AND
+     the window responded and rendered (captured it: mean RGB 30/55/66, the lit world behind the glass).
+     (3) Quit + reopen LOKI: it came back in ~10 s (app + engine), /health ok, "up to date
+     (6ae745cbbf20)", no update problem, no rollback (update_health last_good 6ae745cbbf20).
+     (4) goal /forecast right after the restart: memory {"ok": true, "used": 0.37, "forecast_peak":
+     0.37, "backend": "warming-up", "action": ""}, memory_actions []. The guard is enabled (backend
+     statistical; TimesFM not installed - see Needs Mohamed) but the samples were still warming up, so
+     there was nothing to unload yet. A capture is scheduled at the 1-hour mark into /tmp/forecast_1h.log
+     (the engine must stay up); I will paste the settled values there.
+- [x] **M9 Glass UI and the three.js world on the Mac.** Screenshot the home screen and Settings >
       LOKI World. Is the glass readable (text contrast) and smooth? If the world stutters, it drops
       to medium/low by itself - report which level it settled on. If anything is broken, set
       `LOKI_WORLD_ENGINE=classic` and report.
+  -> Ziva (Mac), 2026-10-16: RAN IT - the world was BROKEN in every clean checkout, and is now FIXED.
+     - First capture: window.WorldThree was undefined, so the three.js renderer never loaded and LOKI
+     silently fell back to the classic one (engine "", home ema 48 ms / scale 8, panel ema 14.6 ms /
+     scale 6). The glass UI looked fine either way.
+     - ROOT CAUSE: .gitignore line 28 was an unanchored `addons/` (a leftover Godot rule), which
+     git-ignored app/ui/vendor/three/addons/. So world_three.js's add-on imports (EffectComposer,
+     RenderPass, UnrealBloomPass, OutputPass + their shaders) were NEVER committed: the PC, CI and any
+     fresh clone had a dead three.js world, and it worked only where those files were still on disk.
+     test_portal's three.js checks only grep world_three.js's TEXT, so the suite stayed green while the
+     feature was broken.
+     - FIX (shipped): vendored the r186 add-ons (MIT, `'three'` rewritten to local paths), anchored
+     `addons/`/`scenes/`/`scripts/` in .gitignore to the repo root, wired LOKI_WORLD_ENGINE into
+     Settings > General (it was unsettable - POST /settings/general rejects unknown keys), corrected
+     docs/THIRD_PARTY.md, and added two regression checks (every world_three.js import exists on disk;
+     the ignore rules stay anchored).
+     - AFTER: three.js loads and the world settled on quality "high" (boost 0) - panel ema 6.97 ms
+     (~143 fps, 80 draws), home ema 34.7 ms. Higher quality AND faster than the classic fallback. So
+     LOKI_WORLD_ENGINE=classic was NOT needed; the setting now exists if the owner wants the lighter one.
+     - READABILITY (glass): declared text #EEF2F8 on the glass base #0B0F1A = 17.0:1; measured on the
+     real Mac window over the lit world 9.7:1 (home) and 11.5:1 (World panel) - WCAG AAA either way.
+     - Screenshots: docs/operations/screens/glass-home-mac.png (the real LOKI window, glass home) and
+     docs/operations/screens/world-three-mac.png (Settings > LOKI World, three.js, high).
+     - Method: WKWebView cannot be clicked from a script, so the panel shot + the perf/quality read came
+     from the same UI driven in a real-GPU Chrome over the DevTools Protocol (the W10 method); the home
+     shot is the actual app window.
 
 ## Needs Mohamed
 
@@ -761,6 +802,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-16 mac (Ziva) M8+M9: memory pressure WARN (level 2, 20% free), swap 2693/4096 MB, top
+  RSS llama-server 6.8 GB (Ollama) > node 509 MB > WebKit 221 MB - LOKI itself is ~50 MB. The bare
+  /health curl needs the bearer token (ok true with it). Quit+reopen came back in ~10 s, no
+  rollback. The three.js world was DEAD on every clean checkout (.gitignore's `addons/` swallowed
+  the vendored three add-ons) and is now FIXED: quality high, panel ema 6.97 ms. Glass text
+  9.7-11.5:1 (WCAG AAA). Screens: glass-home-mac.png, world-three-mac.png.
 - 2026-10-17 cloud (Claude) read everything since 1812363: Ziva Windows ticked the --check
   request (19 green, events 46) and R1 (the pair is linked through the relay, 423 ms); a separate
   Claude session added /peer/diagnose + /peer/restart (c231d54) with no live check asked for. No
