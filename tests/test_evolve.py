@@ -38,8 +38,8 @@ FAKE_REPO = TMP / "repo"
 section("the real roadmap")
 real = evolve.roadmap(REPO)
 check("docs/EVOLVE.md has steps LOKI can take", len(real) >= 8 and all(i["id"].startswith("E") for i in real), real[:2])
-check("its own game engine and more island life are on it",
-      any("game engine" in i["title"] for i in real) and any("fox" in i["title"] for i in real))
+check("the owner's own tasks lead it (no L, ground texture, unique islands, loading screen); the game step is parked",
+      [i["id"] for i in real[:4]] == ["E13", "E15", "E14", "E12"] and not any(i["id"] == "E11" for i in real))
 
 section("what next: the owner's ideas first, then the roadmap; done steps skipped")
 clock = [1000.0]
@@ -151,6 +151,13 @@ loki_app.supervise(holder2, Path("py"), Path("ws"), "", stop2)
 check("but not forever: 5 crashes in 10 minutes and it stops trying", starts == [])
 
 # Update everything restarts the whole client on every machine, not only the engine
+# LOKI's own ideas (self-review / speed watch) wait behind the owner's roadmap tasks
+_ev_dir = Path(tempfile.mkdtemp())
+(_ev_dir / "docs").mkdir()
+(_ev_dir / "docs" / "EVOLVE.md").write_text("- [ ] E13 owner's task\n", encoding="utf-8")
+_ev = evolve.Evolve(_ev_dir, _ev_dir / "data")
+_ev._write(_ev.ideas_path, [{"id": "I4", "title": "speed idea", "done": False, "source": "loki", "approved": True}])
+check("the owner's roadmap tasks come before LOKI's own ideas", _ev.next_item()["id"] == "E13", _ev.items())
 os.environ["LOKI_APP_TEST"] = "1"   # no hard exit of the test process after a relaunch
 launched, closed = [], []
 loki_app.subprocess.Popen = lambda cmd, **kw: launched.append((cmd, kw.get("env", {}).get("LOKI_APP_WAIT_PID")))

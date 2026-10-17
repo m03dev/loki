@@ -107,6 +107,7 @@ class Evolve:
             if idea["id"] == item_id:
                 if yes:
                     idea["approved"] = True
+                    idea["owner_ok"] = True   # the owner said "Build it": it goes ahead of the roadmap
                 else:
                     idea["done"] = True
                     idea["declined"] = True
@@ -128,13 +129,18 @@ class Evolve:
 
     # ------------------------------------------------------------ what next
     def items(self) -> list:
-        """Owner ideas first, then the roadmap; each with its last attempt."""
+        """The owner's ideas first, then the roadmap (the owner's ordered tasks), then LOKI's own
+        ideas (self-review, speed watch) - so what the owner asked for is never queued behind
+        LOKI's suggestions. Each with its last attempt."""
         attempts = self.state()["attempts"]
         last = {}
         for a in attempts:
             last[a["id"]] = a
         out = []
-        for item in self.ideas() + roadmap(self.repo):
+        ideas = self.ideas()
+        owner = [i for i in ideas if i.get("source") != "loki" or i.get("owner_ok")]
+        own = [i for i in ideas if i.get("source") == "loki" and not i.get("owner_ok")]
+        for item in owner + roadmap(self.repo) + own:
             row = dict(item)
             row["last"] = last.get(item["id"])
             out.append(row)
