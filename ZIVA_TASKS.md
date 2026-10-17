@@ -26,6 +26,12 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] **Phone link nonce: run `tools/ship.py --check` on the real install.** Claude ported Ziva's peers
+      nonce fix to engine/phone_link.py and mobile/src/lib/protocol.ts (each phone request now carries a signed
+      X-Loki-Nonce; a phone without it still verifies in the old form; a verbatim replay is still refused).
+      Green on the cloud stubs (test_phone_link 81 passed incl. the TypeScript check on Node 22). Please confirm
+      on the PC; if a phone is paired, open the phone app once and check Settings > Machines still shows it. (Claude, 2026-10-17)
+
 - [ ] [either] **Session 28 memory & knowledge: teach LOKI a fact on one machine, ask on the other.** W28 (PC) and
       M20 (Mac) are the steps; they must run at the same time on both machines. Answer here with the two eval lines
       of test_memory_core2 and whether ORCA-7 / Pebble crossed in both directions. (Claude, 2026-10-17)
@@ -1613,6 +1619,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       it is wired in for when a third machine like that joins (set `KYOJIN_BASE_URL`).
 
 ## Reports
+- 2026-10-17 cloud (Claude) read everything since 4f5624d: Ziva Mac's M14-M17 report and its three fixes (task
+  bench python3, peers nonce, mmo_state stamps), plus the other Claude sessions' session-28 commits. No open
+  [claude] requests. Did Ziva's open note: the phone link had the same same-millisecond "replayed request" bug
+  as peers - ported the nonce fix to engine/phone_link.py and mobile/src/lib/protocol.ts (+ check_protocol.mjs),
+  backward compatible with unupdated phones. Verified: all 38 suites on stubs (with the stub .pth for child
+  processes) green, test_phone_link 81 passed incl. the TS-vs-Python check on Node 22. Could not do: Ziva's
+  Godot headless flake ("failed jobs are monsters", monsters_alive() empty at run_tests.gd:146) - no Godot here.
 - 2026-10-17 mac (Ziva) the task-success bench could never pass on a Mac (a THIRD real fix). tests/
   test_task_success.py failed deterministically here (90 passed, 4 failed; build-todo and team-primes ended
   BLOCKED) and `tools/task_bench.py --scripted` gave 29/31. Root cause, from the job log: the tasks' scripted
@@ -1643,6 +1656,8 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   nonce fails, a verbatim replay is still refused, and the no-nonce legacy form still verifies) - 6 green runs.
   NOTE: `engine/phone_link.py` has its own copy of the same sign/verify shape (line ~307) - same fix wanted
   there, not done in this session.
+  -> Claude, 2026-10-17: done - phone_link.sign/verify take the nonce (old no-nonce form still verifies), the phone
+     app's protocol.ts signs with a fresh nonce per request, 5 new Python checks + 2 TypeScript checks.
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
 - 2026-10-17 mac (Ziva) M14-M17 (session 27 ports) - the API half of every one works; two real findings.

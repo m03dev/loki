@@ -118,20 +118,42 @@ export function signingKey(token: string): string {
   return hex(hmacSha256(utf8(token), utf8("loki-phone-v1")));
 }
 
-/** phone_link.sign: HMAC over method, path, timestamp and the body's SHA-256. */
-export function sign(key: string, method: string, path: string, stamp: string, body: string): string {
-  const message = [method.toUpperCase(), path, stamp, hex(sha256(utf8(body)))].join("\n");
-  return hex(hmacSha256(utf8(key), utf8(message)));
+/** phone_link.sign: HMAC over method, path, timestamp, an optional nonce and the body's SHA-256. */
+export function sign(key: string, method: string, path: string, stamp: string, body: string,
+                     nonce: string = ""): string {
+  const parts = [method.toUpperCase(), path, stamp];
+  if (nonce) parts.push(nonce);
+  parts.push(hex(sha256(utf8(body))));
+  return hex(hmacSha256(utf8(key), utf8(parts.join("\n"))));
+}
+
+let nonceCounter = 0;
+
+/** A fresh value per request so two identical requests in one millisecond never share a
+ *  signature (the engine would refuse the second as a replay). It only has to be unique. */
+export function makeNonce(): string {
+  const bytes = new Array<number>(9).fill(0);
+  const c = (globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
+  if (c && typeof c.getRandomValues === "function") {
+    const arr = new Uint8Array(9);
+    c.getRandomValues(arr);
+    for (let i = 0; i < 9; i++) bytes[i] = arr[i];
+  } else {
+    for (let i = 0; i < 9; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  nonceCounter = (nonceCounter + 1) % 65536;
+  return hex(bytes) + nonceCounter.toString(16);
 }
 
 export function signedHeaders(phoneId: string, key: string, method: string, path: string, body: string,
-                              nowMs: number): Record<string, string> {
+                              nowMs: number, nonce: string = makeNonce()): Record<string, string> {
   const stamp = (nowMs / 1000).toFixed(3);
   return {
     "Content-Type": "application/json",
     "X-Loki-Phone": phoneId,
     "X-Loki-Time": stamp,
-    "X-Loki-Sig": sign(key, method, path, stamp, body),
+    "X-Loki-Nonce": nonce,
+    "X-Loki-Sig": sign(key, method, path, stamp, body, nonce),
   };
 }
 

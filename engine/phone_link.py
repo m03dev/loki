@@ -113,9 +113,18 @@ def signing_key(token: str) -> str:
     return hmac.new(token.encode("utf-8"), KEY_LABEL, hashlib.sha256).hexdigest()
 
 
-def sign(key: str, method: str, path: str, stamp: str, body: bytes) -> str:
-    message = "\n".join([method.upper(), path, stamp, hashlib.sha256(body or b"").hexdigest()]).encode()
-    return hmac.new(key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+def sign(key: str, method: str, path: str, stamp: str, body: bytes, nonce: str = "") -> str:
+    """HMAC over method, path, timestamp, an optional per-request nonce and the body's SHA-256.
+
+    Same fix as peers.sign: without a nonce two IDENTICAL requests in the same millisecond (a retry,
+    or two screens polling /phone/status) share a signature and the second is refused as a replay.
+    A request without X-Loki-Nonce is still checked in the old form, so a phone app that has not
+    updated yet keeps working."""
+    parts = [method.upper(), path, stamp]
+    if nonce:
+        parts.append(nonce)
+    parts.append(hashlib.sha256(body or b"").hexdigest())
+    return hmac.new(key.encode("utf-8"), "\n".join(parts).encode(), hashlib.sha256).hexdigest()
 
 
 class Registry:
@@ -290,6 +299,7 @@ def verify(registry: Registry, method: str, path: str, headers: dict, body: byte
     phone_id = str(headers.get("X-Loki-Phone") or "")[:32]
     stamp = str(headers.get("X-Loki-Time") or "")
     given = str(headers.get("X-Loki-Sig") or "")
+    nonce = str(headers.get("X-Loki-Nonce") or "")[:64]
     if not phone_id or not stamp or not given:
         return "", "unsigned request"
     try:
@@ -301,7 +311,7 @@ def verify(registry: Registry, method: str, path: str, headers: dict, body: byte
     key, why = registry.key_for(phone_id)
     if not key:
         return "", why
-    if not hmac.compare_digest(given, sign(key, method, path, stamp, body)):
+    if not hmac.compare_digest(given, sign(key, method, path, stamp, body, nonce)):
         return "", "bad signature"
     if not guard.first_time(phone_id + ":" + given):
         return "", "replayed request"

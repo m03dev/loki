@@ -77,6 +77,25 @@ check("a correctly signed request verifies",
       phone_link.verify(reg, "GET", "/phone/status", h, b"", guard, clock.now) == (pairing["id"], ""))
 check("the same request twice is a replay",
       "replayed" in phone_link.verify(reg, "GET", "/phone/status", h, b"", guard, clock.now)[1])
+# The nonce (same fix as engine/peers.py): two identical requests in one millisecond must both pass.
+def with_nonce(nonce, stamp, method="GET", path="/phone/status", body=b""):
+    return {"X-Loki-Phone": pairing["id"], "X-Loki-Time": stamp, "X-Loki-Nonce": nonce,
+            "X-Loki-Sig": phone_link.sign(key, method, path, stamp, body, nonce)}
+same_ms = "%.3f" % clock.now
+na, nb = with_nonce("n-aaa", same_ms), with_nonce("n-bbb", same_ms)
+check("two identical same-millisecond requests get different signatures", na["X-Loki-Sig"] != nb["X-Loki-Sig"])
+g2 = peers.ReplayGuard()
+check("both identical same-millisecond requests are accepted",
+      phone_link.verify(reg, "GET", "/phone/status", na, b"", g2, clock.now) == (pairing["id"], "") and
+      phone_link.verify(reg, "GET", "/phone/status", nb, b"", g2, clock.now) == (pairing["id"], ""))
+check("a nonce request replayed verbatim is still refused",
+      "replayed" in phone_link.verify(reg, "GET", "/phone/status", na, b"", g2, clock.now)[1])
+swapped = dict(na, **{"X-Loki-Nonce": "n-zzz"})
+check("a swapped nonce breaks the signature",
+      phone_link.verify(reg, "GET", "/phone/status", swapped, b"", peers.ReplayGuard(), clock.now)[1] == "bad signature")
+dropped = {k: v for k, v in na.items() if k != "X-Loki-Nonce"}
+check("dropping the nonce breaks the signature",
+      phone_link.verify(reg, "GET", "/phone/status", dropped, b"", peers.ReplayGuard(), clock.now)[1] == "bad signature")
 wrong = phone_link.signing_key("x" * 43)
 h2 = signed(wrong, pairing["id"], "GET", "/phone/status", stamp="%.3f" % clock.now)
 check("a wrong token is refused", phone_link.verify(reg, "GET", "/phone/status", h2, b"", peers.ReplayGuard(), clock.now)[1] == "bad signature")
@@ -362,6 +381,14 @@ else:
     check("TS reads the pairing code", (ts.get("pairing") or {}).get("machine") == "pc-é" and
           ts["pairing"].get("token") == token and ts["pairing"].get("port") == 8769, ts.get("pairing"))
     check("TS refuses an incomplete code", ts.get("incomplete_refused") is True, ts)
+    check("TS signs with a nonce exactly like Python",
+          ts.get("sig_nonce") == phone_link.sign(key_py, "POST", "/phone/chat", vector["stamp"],
+                                                 vector["body"].encode("utf-8"), "nonce-1"), ts)
+    hd = ts.get("headers") or {}
+    check("TS signedHeaders sends a fresh X-Loki-Nonce inside the signature",
+          hd.get("X-Loki-Nonce") and hd.get("X-Loki-Nonce") != (ts.get("headers2") or {}).get("X-Loki-Nonce") and
+          hd.get("X-Loki-Sig") == phone_link.sign(key_py, "GET", "/phone/status", hd.get("X-Loki-Time", ""), b"",
+                                                  hd.get("X-Loki-Nonce", "")), ts)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 shutil.rmtree(TMP, ignore_errors=True)
