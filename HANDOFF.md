@@ -4,7 +4,50 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-15 (session 21, the PC).
+Last updated: 2026-10-16 (session 22, Claude in the cloud).
+
+## Session 22 (2026-10-16, Claude in the cloud): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield, Mac hangs
+
+Two commits. All 21 suites pass (`tools/ship.py --check`).
+
+- **Mac "not responding".** Its engine still answered over the relay (444 ms, latest version), so the
+  hang is the window or the machine, and the Mac's history points at memory: 16 GB, swap at 96-100%
+  (M7: image-gen crashed WindowServer). Shipped: `GET /peer/diagnose` (busy locks, progress, failing
+  system-check rows, Ollama's loaded models, memory pressure, update status, redacted log tails) and
+  `POST /peer/restart`; from the UI side `POST /peers/diagnose|restart {peer}`. And the cause itself:
+  `forecast.memory_tick` runs every minute in the bridge, forecasts memory 10 minutes ahead and, when
+  LOKI is idle and memory is heading past 92%, unloads idle Ollama models (keep_alive 0) - at most
+  once per 2 minutes. Not yet read on the real Mac: ZIVA_TASKS M8.
+- **PC updates hung on the Git Credential Manager account picker.** `updater.git_env` now makes GCM,
+  ssh and askpass non-interactive and passes `credential.https://github.com.username=<origin owner>`.
+- **LOKI World on three.js** (`app/ui/world_three.js`, vendored r186): PBR, shadows, bloom, ACES, the
+  water shader ported, instanced agents; linked machines are islands with a live light bridge; HUD
+  shows model, today's cost and machines. The classic renderer stays as the fallback
+  (`LOKI_WORLD_ENGINE=classic`). Godot/Panda3D were rejected: no Godot in the repo (AGENTS.md) and
+  Panda3D would be a second window outside the webview; three.js runs inside the existing UI.
+- **Glass GUI** (`app/ui/glass.css`): frosted panels over the full-window world, gradients, rounder;
+  `prefers-reduced-transparency` falls back to solid.
+- **Workbench, the Claude Code/Ziva habits** (`engine/workbench.py`, `app/ui/workbench.js`):
+  checkpoints in a private shadow git store before every Build request, Review (diff), Rewind
+  (undoable), `@file` mentions, an `@` picker and a `/` palette (/plan /build /review /rewind /bg
+  /team /test /commit /model /image ...).
+- **Bonsai 2** (PrismML, Apache-2.0) in `model_setup.CATALOG`: 9B/4B/2B ternary GGUF (Q2_0) pulled
+  by Ollama from Hugging Face, plus the 9B MLX build. Q2_0 needs llama.cpp b11555+, so after a pull
+  `verify_runs` asks one question and reports gibberish as "update Ollama". An installed model
+  within 6 points (`INSTALLED_BONUS`) now beats a download, so nobody is nagged for a small gain.
+- **TimesFM-3 in the core** (`engine/forecast.py`): one forecaster (TimesFM-3 when `timesfm3` is
+  installed - MLX on Apple Silicon, torch elsewhere - Holt's damped trend otherwise) feeds three
+  decisions: routing (`loki.routing_order` moves a provider forecast to be >2.5x slower to the back),
+  the memory guard, and the spend outlook (`GET /forecast`). The agent has `forecast_series`.
+  `POST /forecast/install` pip-installs it. Kill switch `LOKI_FORECAST=off`. NOTE: TimesFM-3's
+  weights are licensed for non-commercial use; LOKI never installs it on its own.
+- **Higgsfield** (`engine/higgsfield.py`): images (and video with an application id) via the
+  official SDK's protocol, stdlib only. The key is pasted by the owner in Settings > General >
+  "Higgsfield key" (KEY:SECRET), stored as `HIGGSFIELD_KEY` in LOKI's .env and never sent back to the
+  window (new `secret` setting kind). Tool `generate_media`, route `POST /media/generate`, command
+  `/image`. Outputs are downloaded into the workspace's images/ or videos/.
+- **Not done:** "framepipe" - no repo by that name is visible to this session; the owner needs to
+  give the exact GitHub name. No API keys were searched for or copied anywhere.
 
 ## Session 21 (2026-10-15, the PC - Ziva Windows): the agent/computer boundary, and one memory
 

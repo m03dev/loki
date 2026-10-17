@@ -572,6 +572,18 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       service). An engine started without the app now restarts itself after **Update everything**
       (it starts a new copy and exits). Confirm that works headless.
 
+- [ ] **W17 Session 22 on the real PC (2026-10-16).** Restart LOKI so it runs master (the new
+      updater no longer opens the GitHub account picker). Then: (1) `tools\ship.py --check`, report
+      the 21 suite lines; (2) LOKI World: Settings > LOKI World - is it the three.js world (soft
+      shadows, bloom, the Mac as an island with a light bridge)? Report the fps in the HUD at high
+      quality on the 3070 Ti, and screenshot it; (3) type `/` in the composer - the palette opens;
+      `/review` after a Build request shows a diff; `/rewind` puts files back; (4) Settings >
+      Local models: pull `hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0` - does the smoke test pass,
+      or does it say to update Ollama? Report `ollama --version`; (5) `GET /forecast` (bearer
+      token): report the backend line. Do NOT install TimesFM unless Mohamed says so (its weights
+      are non-commercial); (6) **read the Mac's diagnosis:** `POST /peers/diagnose
+      {"peer":"mohameds-mac-mini"}` and paste the whole JSON under Reports (it is redacted).
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -679,7 +691,25 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       display server likely crashed from the same memory pressure. Another reason to keep
       image-gen off this Mac.
 
+- [ ] **M8 "LOKI on the Mac is not responding" (2026-10-16).** Before restarting anything: open
+      Activity Monitor > Memory and report memory pressure, swap used, and the top 5 processes by
+      memory (ollama? python? WebKit?). Then `curl -s http://127.0.0.1:8767/health` and say whether
+      the window responds at all. Quit and reopen LOKI (it updates itself) and report whether it
+      comes back. On master the memory guard unloads idle Ollama models before the Mac swaps; after
+      an hour of use, `GET /forecast` shows `memory` and `memory_actions` - paste them.
+- [ ] **M9 Glass UI and the three.js world on the Mac.** Screenshot the home screen and Settings >
+      LOKI World. Is the glass readable (text contrast) and smooth? If the world stutters, it drops
+      to medium/low by itself - report which level it settled on. If anything is broken, set
+      `LOKI_WORLD_ENGINE=classic` and report.
+
 ## Needs Mohamed
+
+- [ ] **Framepipe repo name (2026-10-16).** Claude could not find a "framepipe" repository among
+      the ones this account can reach. What is its exact GitHub name (owner/repo)?
+- [ ] **Higgsfield key (2026-10-16).** Paste KEY:SECRET from cloud.higgsfield.ai into Settings >
+      General > "Higgsfield key" on the PC (and the Mac if wanted). Then `/image a lake at dawn`.
+- [ ] **TimesFM-3 (2026-10-16).** Its weights are licensed for non-commercial use only. Say yes
+      if LOKI may install it (`POST /forecast/install`); until then the statistical forecaster runs.
 
 - [ ] **M3 Tailscale (clean route) needs your admin password + sign-in.** Install the
       Tailscale app on the Mac (it asks for your password - Ziva cannot sudo) and on the PC,

@@ -4,6 +4,18 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-16 - Session 22 (Claude): three.js world, glass GUI, workbench, Bonsai 2, TimesFM-3, Higgsfield
+
+- Mac hangs: /peer/diagnose + /peer/restart; forecast.memory_tick unloads idle Ollama models
+  before the 16 GB Mac swaps. PC updater: GCM non-interactive + credential username.
+- app/ui/world_three.js (three.js r186) with the classic renderer as fallback; glass.css.
+- engine/workbench.py + app/ui/workbench.js: checkpoints, review/rewind, @file, / palette.
+- Bonsai 2 in the model catalog (+ verify_runs); engine/forecast.py (TimesFM-3 or Holt) in
+  routing, memory guard, spend outlook and the forecast_series tool; engine/higgsfield.py.
+- tests: test_workbench (24), test_models_media (39), test_relay/test_portal/test_updater additions.
+
+---
+
 ## 2026-10-15 - LOKI World: a life sim, and cheaper to run
 
 - engine/events.py: /world reads only the new end of the event log (was a full re-parse twice

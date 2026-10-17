@@ -195,6 +195,34 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'sel
           "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 
 
+def memory_guard(state: Any, every_s: float = 60.0) -> None:
+    """Every minute: sample memory, forecast it (forecast.py) and, when this machine is about to
+    run out while LOKI is idle, unload idle local models before it starts swapping."""
+    import forecast  # pylint: disable=import-outside-toplevel
+    time.sleep(30)
+    while True:
+        try:
+            busy = bool((state.chat_lock is not None and state.chat_lock.locked()) or state.chat_request_lock.locked()
+                        or state.task_request_lock.locked() or time.time() - state.last_request_at < 120)
+            result = forecast.memory_tick(busy, forecast.ollama_unload_idle)
+            if result.get("action"):
+                print("[loki-bridge] memory guard: %s" % result["action"], flush=True)
+        except Exception as exc:  # noqa: BLE001 - never take the engine down
+            print("[loki-bridge] memory guard error: %s" % exc, flush=True)
+        time.sleep(every_s)
+
+
+def forecast_report(agent: Any) -> dict:
+    import forecast  # pylint: disable=import-outside-toplevel
+    try:
+        entries = agent.USAGE.entries(time.time() - 3 * 86400)
+    except Exception:  # noqa: BLE001
+        entries = []
+    limit = float(getattr(agent, "DAILY_USD_LIMIT", 0) or 0)
+    return {"ok": True, **forecast.status(), "latency": forecast.provider_outlook(entries),
+            "spend": forecast.spend_outlook(entries, limit)}
+
+
 _USAGE_CACHE: dict = {"t": 0.0, "today": {}}
 
 
@@ -892,6 +920,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             teams_list = [agent.teams.present(t, runner.jobs) for t in runner.all()[:10]] if runner else []
             self._send_json(200, {"ok": True, "teams": teams_list})
             return
+        if route == "/forecast":
+            self._send_json(200, forecast_report(self.server.state.agent))
+            return
+        if route == "/media/status":
+            import higgsfield  # pylint: disable=import-outside-toplevel
+            self._send_json(200, {"ok": True, **higgsfield.status()})
+            return
         if route in ("/checkpoints", "/checkpoints/changes", "/workbench/files"):
             query = dict(part.split("=", 1) for part in urlparse(self.path).query.split("&") if "=" in part)
             from urllib.parse import unquote  # pylint: disable=import-outside-toplevel
@@ -1040,6 +1075,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(500, {"ok": False, "error": f"Bridge request failed: {type(exc).__name__}: {exc}"})
             finally:
                 request_lock.release()
+            return
+        if route == "/media/generate":
+            # Spends the user's Higgsfield credits: only ever from an explicit request.
+            import higgsfield  # pylint: disable=import-outside-toplevel
+            ws = getattr(state.agent, "WORKSPACE", None)
+            result = higgsfield.generate(str(data.get("prompt", "")), kind=str(data.get("kind", "image")),
+                                         application=str(data.get("model", "")), workspace=ws,
+                                         aspect_ratio=str(data.get("aspect_ratio", "16:9")))
+            self._send_json(200 if result.get("ok") else 400, result)
+            return
+        if route == "/forecast/install":
+            import forecast  # pylint: disable=import-outside-toplevel
+            self._send_json(200, forecast.install())
             return
         if route in ("/checkpoints/rewind", "/checkpoints/take"):
             cps = getattr(state, "checkpoints", None)
@@ -1711,6 +1759,7 @@ async def serve() -> None:
     state = BridgeState(loki, secret)
     state.restart_engine = restart_engine
     state.project = project
+    threading.Thread(target=memory_guard, args=(state,), daemon=True, name="loki-memory-guard").start()
     try:
         import workbench  # pylint: disable=import-outside-toplevel
         state.checkpoints = workbench.Checkpoints(project, (STATE_DIR or project / ".loki") / "checkpoints.git")

@@ -89,6 +89,13 @@ async function loadGeneral() {
       });
       range.addEventListener("change", () => save(key, range.value));
       control.append(range, shown);
+    } else if (spec.kind === "secret") {
+      control = el("input", "text-in");
+      control.type = "password";
+      control.autocomplete = "off";
+      control.placeholder = (data.secrets_saved || {})[key] ? "saved - paste a new one to replace" : "paste it here";
+      control.setAttribute("aria-label", spec.label);
+      control.addEventListener("change", async () => { await save(key, control.value); control.value = ""; control.placeholder = "saved - paste a new one to replace"; });
     } else {
       control = el("input", "text-in");
       control.value = value || "";

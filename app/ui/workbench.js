@@ -32,6 +32,7 @@ const Workbench = (function () {
     { name: "check", hint: "prove every part of LOKI works", run: () => settings("system") },
     { name: "usage", hint: "what your requests cost", run: () => settings("usage") },
     { name: "memory", hint: "what LOKI remembers", run: () => settings("memory") },
+    { name: "image", hint: "make an image with Higgsfield (uses your credits)", arg: "prompt", run: (a) => media(a) },
   ];
 
   // ---------------------------------------------------------------- commands
@@ -71,6 +72,14 @@ const Workbench = (function () {
     if (typeof showChat === "function") showChat();
     if (data.ok) addLoki("Started a team on: **" + goal + "**. Watch it in the work strip and in LOKI World.");
     else addNotice(data.error || "Could not start the team.", true);
+  }
+
+  async function media(prompt) {
+    if (typeof showChat === "function") showChat();
+    addNotice("Asking Higgsfield for: " + prompt + " (this can take a minute)");
+    const data = await api("/media/generate", { prompt, kind: "image" }).catch((e) => ({ ok: false, error: String(e) }));
+    if (data.ok) addLoki("Made with Higgsfield: " + ((data.files || []).map((f) => "`" + f + "`").join(", ") || (data.urls || []).join(", ")));
+    else addNotice(data.error || "Higgsfield did not make it.", true);
   }
 
   async function model(name) {

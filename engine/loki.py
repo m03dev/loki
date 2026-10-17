@@ -687,10 +687,36 @@ def _model_of(provider: str) -> str:
     return str(getattr(cfg, "model", "") or "")
 
 
-def routing_order(order) -> list:
-    """`order` as routing should try it: learned within tiers when enabled, else as-is."""
-    if not LEARN_ROUTING:
+_FORECAST_CACHE: dict = {"t": 0.0, "outlook": {}}
+
+
+def latency_outlook() -> dict:
+    """Each provider's forecast latency for the next calls (forecast.py, TimesFM-3 when
+    installed), from the usage ledger; cached for a minute."""
+    now = time.time()
+    if now - _FORECAST_CACHE["t"] > 60:
+        try:
+            import forecast  # pylint: disable=import-outside-toplevel
+            _FORECAST_CACHE["outlook"] = forecast.provider_outlook(USAGE.entries(now - 3 * 86400))
+        except Exception:  # noqa: BLE001
+            _FORECAST_CACHE["outlook"] = {}
+        _FORECAST_CACHE["t"] = now
+    return _FORECAST_CACHE["outlook"]
+
+
+def _forecast_order(order: list) -> list:
+    try:
+        import forecast  # pylint: disable=import-outside-toplevel
+        return forecast.reorder(order, latency_outlook())
+    except Exception:  # noqa: BLE001
         return list(order)
+
+
+def routing_order(order) -> list:
+    """`order` as routing should try it: learned within tiers when enabled, then providers
+    forecast to be getting slow moved back (forecast.py), else as-is."""
+    if not LEARN_ROUTING:
+        return _forecast_order(list(order))
     now = time.time()
     if now - _ROUTING_CACHE["t"] > 60:
         try:
@@ -698,8 +724,8 @@ def routing_order(order) -> list:
         except Exception:
             _ROUTING_CACHE["stats"] = {}
         _ROUTING_CACHE["t"] = now
-    return experience.learned_order(order, provider_tier, _ROUTING_CACHE["stats"],
-                                    LEARN_MIN_SAMPLES)
+    return _forecast_order(experience.learned_order(order, provider_tier, _ROUTING_CACHE["stats"],
+                                                    LEARN_MIN_SAMPLES))
 
 
 def _ollama_reachable() -> bool:
@@ -1332,6 +1358,31 @@ def review_repository(path: str = ".") -> str:
     except ValueError:
         target = Path(path or ".").expanduser()
     return repo_review.render(repo_review.review(target))
+
+
+def forecast_series(values: list, horizon: int = 12) -> str:
+    """Forecast the next values of a numeric series (TimesFM-3 when installed)."""
+    import forecast  # pylint: disable=import-outside-toplevel
+    try:
+        numbers = [float(v) for v in values]
+    except (TypeError, ValueError):
+        return "error: values must be a list of numbers (oldest first)"
+    if len(numbers) < 3:
+        return "error: give at least 3 values"
+    f = forecast.forecast(numbers, int(horizon or 12))
+    fmt = lambda xs: ", ".join("%.4g" % x for x in xs)  # noqa: E731
+    return ("forecast (%s) for the next %d steps:\nmedian: %s\n10%%: %s\n90%%: %s"
+            % (f["backend"], len(f["median"]), fmt(f["median"]), fmt(f["q10"]), fmt(f["q90"])))
+
+
+def generate_media(prompt: str, kind: str = "image", model: str = "", aspect_ratio: str = "16:9") -> str:
+    """Make an image (or a video) with Higgsfield, saved in the workspace. Spends the user's credits."""
+    import higgsfield  # pylint: disable=import-outside-toplevel
+    r = higgsfield.generate(prompt, kind=kind, application=model, workspace=WORKSPACE, aspect_ratio=aspect_ratio)
+    if not r.get("ok"):
+        return "error: " + str(r.get("error"))
+    where = ", ".join(r["files"]) if r["files"] else ", ".join(r["urls"])
+    return "made with Higgsfield (%s): %s" % (r["application"], where or "no files came back")
 
 
 def todo_add(item: str) -> str:
@@ -2402,6 +2453,8 @@ LOCAL_TOOLS = {
     "sync_ecc": sync_ecc,
     "open_in_editor": open_in_editor,
     "todo_add": todo_add,
+    "forecast_series": forecast_series,
+    "generate_media": generate_media,
     "project_state": project_state_update,
     "review_repository": review_repository,
     "agent_sessions": agent_sessions,
@@ -2720,6 +2773,14 @@ TOOL_SCHEMAS = [
     schema("project_state", "Read or update the RESUMABLE PROJECT STATE so the work survives a restart or a different model. action='view' reads it; 'add' appends a value to a field; 'set' replaces one; 'reset' clears it. Fields: objective, phase, completed, files_changed, tests, known_issues, decisions, blockers, next_actions.",
            {"action": {"type": "string"}, "field": {"type": "string"}, "value": {"type": "string"}}),
     schema("todo_add", "Add a step to the persistent plan.", {"item": {"type": "string"}}, ["item"]),
+    schema("forecast_series", "Forecast the next values of a numeric time series (oldest first) with "
+           "TimesFM-3 when installed: returns the median and a 10-90% band.",
+           {"values": {"type": "array", "items": {"type": "number"}}, "horizon": {"type": "integer"}}, ["values"]),
+    schema("generate_media", "Make an image (kind='image') or a video (kind='video', needs model=<Higgsfield "
+           "application id>) with Higgsfield; saved in images/ or videos/. Spends the user's Higgsfield credits - "
+           "only when the user asks for it.",
+           {"prompt": {"type": "string"}, "kind": {"type": "string"}, "model": {"type": "string"},
+            "aspect_ratio": {"type": "string"}}, ["prompt"]),
     schema("todo_list", "Show the persistent plan."),
     schema("todo_done", "Mark plan item N (1-based) as done.", {"index": {"type": "integer"}}, ["index"]),
     schema("save_memory", "Save one short lasting fact about the user.", {"fact": {"type": "string"}}, ["fact"]),
@@ -2756,6 +2817,7 @@ MODEL_TOOL_NAMES = {
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
     "list_capabilities", "agent_sessions", "api_vault", "knowledge", "conductor", "delegate",
     "improve_loki", "ship_loki", "check_loki", "start_team", "team_post", "team_read",
+    "forecast_series", "generate_media",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -2769,12 +2831,13 @@ TOOL_CATEGORIES = {
     "godot": ["godot_api", "godot_search"],
     "project": ["add_input_action", "set_project_setting", "add_autoload", "review_repository"],
     "runtime": ["play_scene", "check_script", "capture_scene", "probe_scene", "view_image"],
-    "planning": ["todo_add", "todo_list", "todo_done", "project_state", "list_capabilities",
+    "planning": ["todo_add", "todo_list", "todo_done", "forecast_series", "project_state", "list_capabilities",
                  "agent_sessions", "api_vault"],
     "memory": ["save_memory", "knowledge"],
     "specialists": ["conductor", "delegate", "start_team", "team_post", "team_read", "improve_loki", "ship_loki",
                     "check_loki"],
     "capabilities": ["list_capabilities"],
+    "creative": ["generate_media"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "run_godot", "open_godot"],
 }
@@ -2790,6 +2853,7 @@ CATEGORY_LABELS = {
     "planning": "Planning (todo list)",
     "memory": "Memory (save facts)",
     "capabilities": "Capabilities (what Loki can use right now)",
+    "creative": "Creative (Higgsfield images and video - uses your credits)",
     "skills": "Skills (ECC agents and skills)",
     "godot": "Godot API reference (look up classes and methods)",
     "project": "Project setup (input actions, settings, autoloads)",

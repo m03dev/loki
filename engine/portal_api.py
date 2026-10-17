@@ -60,6 +60,8 @@ GENERAL = {
                    "label": "LOKI World (3D): behind the home screen, only in its panel, or off"},
     "LOKI_PROMPTED_TOOLS": {"kind": "text", "default": "", "label": "Providers that get tools as text (comma list)"},
     "LOKI_OPENCODE_MODEL": {"kind": "text", "default": "", "label": "OpenCode model (provider/model)"},
+    "HIGGSFIELD_KEY": {"kind": "secret", "default": "",
+               "label": "Higgsfield key for images and video (KEY:SECRET from cloud.higgsfield.ai)"},
 }
 
 
@@ -109,8 +111,10 @@ def handle_get(state: Any, path: str) -> tuple | None:
             return 400, {"ok": False, "error": "give text= (up to 800 characters)"}
         return 200, {"ok": True, "svg": qr.svg(text)}
     if route == "/settings/general":
-        values = {k: os.environ.get(k, spec["default"]) for k, spec in GENERAL.items()}
-        return 200, {"ok": True, "settings": GENERAL, "values": values, "model": agent.model_name,
+        # a secret is never sent back to the window - only whether one is saved
+        values = {k: ("" if spec["kind"] == "secret" else os.environ.get(k, spec["default"])) for k, spec in GENERAL.items()}
+        saved = {k: bool(os.environ.get(k, "").strip()) for k, spec in GENERAL.items() if spec["kind"] == "secret"}
+        return 200, {"ok": True, "settings": GENERAL, "values": values, "secrets_saved": saved, "model": agent.model_name,
                      "platform": sys.platform}
     if route == "/skills":
         return 200, {"ok": True, "skills": [{k: v for k, v in s.items() if k != "path"} for s in _skills(agent)]}
@@ -219,6 +223,8 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
             elif len(value) > 400:
                 return 400, {"ok": False, "error": "too long"}
             updates[key] = value
+            if spec["kind"] == "secret":
+                os.environ[key] = value          # live without a restart
         write_env(updates)
         _apply_live(agent, updates)
         return 200, {"ok": True, "saved": sorted(updates)}

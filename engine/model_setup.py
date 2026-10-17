@@ -70,6 +70,15 @@ CATALOG = [
      "why": "the best small all-rounder: tools, coding, 256K context"},
     {"tag": "gemma4:12b", "size": 8.0, "need": 10, "score": 83, "roles": ["agent"],
      "why": "Gemma 4 mid-size: good tool use, sees images"},
+    # Bonsai 2 (PrismML, Apache-2.0): Qwen3.5 with ternary weights - near the original's quality at a
+    # fraction of the size, with tool calling. Pulled straight from Hugging Face by Ollama; the Q2_0
+    # files run on upstream llama.cpp b11555+ (verify_runs checks the installed Ollama really can).
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Q2_0", "size": 2.6, "need": 4.5, "score": 83, "roles": ["agent", "fast"],
+     "family": "bonsai", "why": "Bonsai 2 9B: Qwen3.5-9B quality in 2.6 GB (ternary weights), calls tools - the most model per GB"},
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-4B-gguf:Q2_0", "size": 1.2, "need": 2.5, "score": 71, "roles": ["fast", "agent"],
+     "family": "bonsai", "why": "Bonsai 2 4B: a capable agent model in 1.2 GB"},
+    {"tag": "hf.co/prism-ml/Ternary-Bonsai-2-2B-gguf:Q2_0", "size": 0.6, "need": 1.5, "score": 57, "roles": ["fast"],
+     "family": "bonsai", "why": "Bonsai 2 2B: 0.6 GB, for the smallest machines and quick replies"},
     {"tag": "qwen3:8b", "size": 5.2, "need": 7, "score": 78, "roles": ["agent", "code"],
      "why": "the proven 8 GB agent model"},
     {"tag": "granite4.1:8b", "size": 5.3, "need": 7, "score": 74, "roles": ["agent", "code"],
@@ -84,7 +93,10 @@ CATALOG = [
      "why": "smallest that still calls tools"},
 ]
 # MLX alternatives on Apple Silicon (served by mlx_lm.server on port 8082, provider "mlx").
+# Bonsai 2's MLX packs need mlx-vlm >= 0.7.8 (mlx-lm 0.32 cannot load them yet).
 MLX_CATALOG = [
+    {"repo": "prism-ml/Ternary-Bonsai-2-9B-mlx-2bit", "size": 3.5, "need": 5.5, "score": 83, "server": "mlx-vlm",
+     "why": "Bonsai 2 9B for Apple Silicon (mlx-vlm >= 0.7.8), sees images too"},
     {"repo": "mlx-community/Qwen3.5-9B-OptiQ-4bit", "size": 6.6, "need": 9, "score": 84,
      "why": "Qwen3.5 9B tuned for Apple Silicon"},
     {"repo": "mlx-community/Qwen3.5-4B-MLX-4bit", "size": 3.0, "need": 4.5, "score": 72,
@@ -93,7 +105,7 @@ MLX_CATALOG = [
      "why": "the small model LOKI's MLX setup started with"},
 ]
 # Quality hints for models already installed (first substring of the tag that matches).
-KNOWN_SCORES = [("qwen3.8", 94), ("qwen3.5:122b", 93), ("qwen3.5:35b", 91), ("qwen3.5:27b", 91),
+KNOWN_SCORES = [("bonsai-2-27b", 90), ("bonsai-2-9b", 83), ("bonsai-2-4b", 71), ("bonsai-2-2b", 57), ("qwen3.8", 94), ("qwen3.5:122b", 93), ("qwen3.5:35b", 91), ("qwen3.5:27b", 91),
                 ("gemma4:31b", 90), ("gemma4:26b", 89), ("qwen3-coder", 88), ("gpt-oss:20b", 88),
                 ("qwen3:30b", 87), ("qwen3:32b", 87), ("qwen3:14b", 85), ("qwen3.5:9b", 84),
                 ("gemma4:12b", 83), ("gemma4", 80), ("qwen3.5:4b", 72), ("qwen3.5:2b", 58),
@@ -537,6 +549,7 @@ def scan(info: dict | None = None, opener=urllib.request.urlopen, servers=_UNSET
 
 # --------------------------------------------------------------------- suggestions
 SPEED_PENALTY = {"fast": 0, "good": 6, "slow": 14}
+INSTALLED_BONUS = 6
 
 
 def _gb(n: float) -> str:
@@ -614,7 +627,8 @@ def plan(machine: dict, installed: list[str] | None = None) -> dict:
                 "tags": [c["tag"] for c in cands[:3]]}
 
     def by_fit(r: dict) -> tuple:
-        return (r["fit"], r["installed"], -r["size"])
+        # an installed model within a few points beats a download: no nagging for a small gain
+        return (r["fit"] + (INSTALLED_BONUS if r["installed"] else 0), r["installed"], -r["size"])
 
     agent = pick("agent", [r for r in ok if "agent" in r["roles"]] or ok, by_fit, "Best overall agent model")
     fast = pick("fast", [r for r in ok if "fast" in r["roles"]] or ok,
@@ -628,7 +642,8 @@ def plan(machine: dict, installed: list[str] | None = None) -> dict:
                 picks["mlx"] = {"role": "mlx", "title": "Apple MLX alternative", "repo": entry["repo"],
                                 "size_gb": entry["size"],
                                 "why": "MLX is installed on this Mac: %s." % entry["why"],
-                                "command": "mlx_lm.server --model %s --port 8082" % entry["repo"]}
+                                "command": ("python -m mlx_vlm.server --model %s --port 8082" if entry.get("server") == "mlx-vlm"
+                                            else "mlx_lm.server --model %s --port 8082") % entry["repo"]}
                 break
     blocked = None
     better = sorted([r for r in rows if not r["fits_disk"] and not r["installed"]
@@ -735,6 +750,12 @@ def run_auto(tags: list[str], machine: dict, use, progress: Progress = PROGRESS,
             models = ollama_models(opener=opener) or models
         names = [m["name"] for m in models]
         base = next((n for n in names if n == tag), next((n for n in names if n.startswith(tag + "-")), tag))
+        if "bonsai" in tag.lower():
+            progress.update(status="checking", message="Checking this computer's Ollama can run %s" % tag)
+            ok, why = verify_runs(base, opener=opener)
+            if not ok:
+                return fail("Downloaded %s, but this Ollama cannot run it yet: %s Update Ollama (it needs llama.cpp "
+                            "b11555 or newer for Bonsai 2's Q2_0 weights), then click again." % (tag, why), why)
         progress.update(op="auto", target=tag, status="preparing",
                         message="Giving %s a long memory for big tasks" % tag)
         name = ensure_context(base, context_for(machine), models, opener=opener)
@@ -747,6 +768,24 @@ def run_auto(tags: list[str], machine: dict, use, progress: Progress = PROGRESS,
         return name
     except Exception as exc:  # noqa: BLE001 - reported to the UI
         return fail("Setup stopped: %s" % str(exc)[:160], str(exc)[:200])
+
+
+def verify_runs(model: str, opener=urllib.request.urlopen) -> tuple:
+    """(True, "") when the model gives a sane short answer. New weight formats (Bonsai 2's
+    ternary Q2_0) load on an older runtime but print gibberish; this catches that."""
+    try:
+        reply = _post_json(OLLAMA + "/api/generate", {"model": model, "stream": False, "think": False,
+                                                       "prompt": "What colour is a clear daytime sky? Answer with one word.",
+                                                       "options": {"num_predict": 12, "temperature": 0}},
+                           timeout=180.0, opener=opener)
+    except Exception as exc:  # noqa: BLE001
+        return False, "it did not answer (%s)." % str(exc)[:120]
+    text = str((reply or {}).get("response", "")).strip().lower()
+    if "blue" in text:
+        return True, ""
+    letters = sum(ch.isalpha() or ch.isspace() for ch in text) / max(1, len(text))
+    return False, ("it answered %r instead of a word." % text[:40]) if text and letters < 0.7 else \
+        ("its answer did not make sense (%r)." % text[:40])
 
 
 # --------------------------------------------------------------------- the whole picture
