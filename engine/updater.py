@@ -176,7 +176,13 @@ def tool_path(base: str | None = None, platform: str | None = None) -> str:
 
 def git_env(platform: str | None = None) -> dict:
     platform = platform or sys.platform
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="", LC_ALL="C")
+    # Never a sign-in window: GIT_TERMINAL_PROMPT only stops the terminal prompt; Git
+    # Credential Manager (Windows, also on macOS) shows its own "Select an account" dialog
+    # unless told not to, and that dialog blocked LOKI from starting (2026-10-16 on the PC).
+    # Without stored credentials the fetch now fails fast and the reason is shown instead.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="", LC_ALL="C",
+               GCM_INTERACTIVE="never", GCM_GUI_PROMPT="false", GIT_CREDENTIAL_MANAGER_INTERACTIVE="never",
+               SSH_ASKPASS="", GIT_SSH_COMMAND=os.environ.get("GIT_SSH_COMMAND") or "ssh -o BatchMode=yes")
     env["PATH"] = tool_path(env.get("PATH", ""), platform)
     if not env.get("HOME") and not platform.startswith("win"):
         env["HOME"] = str(Path.home())   # git and gh read their config from HOME

@@ -230,6 +230,11 @@ check("...the outcome is kept for the engine's /health", updater.last_result(MAC
 sh(MAC, "git", "checkout", "--", "engine/loki.py")
 check("once the edit is gone it updates", updater.update(MAC)["updated"])
 
+section("git can never open a sign-in window (it blocked LOKI from starting)")
+env = updater.git_env("win32")
+check("Git Credential Manager is told never to prompt", env["GCM_INTERACTIVE"] == "never" and env["GCM_GUI_PROMPT"] == "false")
+check("...nor the terminal, nor ssh", env["GIT_TERMINAL_PROMPT"] == "0" and "BatchMode=yes" in env["GIT_SSH_COMMAND"])
+
 section("why an update failed is clear")
 SIGNS = {
     "fatal: could not read Username for 'https://github.com': terminal prompts disabled": "GitHub sign-in needed",
