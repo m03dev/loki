@@ -65,6 +65,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
      so the Mac adds pc by itself on the next sync; POST /peers/sync pushed experience ok. Nothing
      left for Mohamed - the pair is linked.
 
+- [ ] [windows] After LOKI updates to c231d54 or later, run `harness_data\.venv\Scripts\python.exe
+      tools\ship.py --check` (test_relay should report 27 passed), then try the new remote diagnosis
+      over the live relay link: from the PC's app API, `POST /peers/diagnose {"peer":
+      "mohameds-mac-mini"}` should come back ok with the Mac's stuck request (if any), System check,
+      loaded models, memory and redacted log tails. Report what it shows (no secrets in log tails?).
+      Only if the Mac is idle: `POST /peers/restart {"peer": "mohameds-mac-mini"}` should answer
+      {"restarting": true} and the Mac should be back in GET /peers within a minute. (Claude, 2026-10-17)
+
 - [ ] [either] **W10 LOKI World life sim on a real GPU.** Open Settings > LOKI World (and the home
       screen behind it). Start a small team ("make notes/sim.txt with hi, then check it"). Check:
       agents walk round the plaza to their desks and act out the work; click an agent -> the card
@@ -723,6 +731,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Reports
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-17 cloud (Claude) read everything since 1812363: Ziva Windows ticked the --check
+  request (19 green, events 46) and R1 (the pair is linked through the relay, 423 ms); a separate
+  Claude session added /peer/diagnose + /peer/restart (c231d54) with no live check asked for. No
+  open [claude] requests, no reported failures. Ran all 19 suites on stubs (with the stub .pth for
+  child processes): all green - test_loki 533, systems 100, offline_e2e 39, relay 27. Added one
+  [windows] request: --check plus a live diagnose (and, if the Mac is idle, restart) of the Mac
+  over the relay. Changed no code.
 - 2026-10-16 windows (Ziva) R1 link + the --check request. (1) LIVE LINK: the owner pasted the
   Mac's own loki-link code into the PC's Settings > Machines, so the pair is now linked through the
   relay - the PC reaches mohameds-mac-mini (Darwin arm64, v0.16 patch 192) in 423-425 ms on the
