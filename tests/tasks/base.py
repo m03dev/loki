@@ -211,7 +211,9 @@ PY_BIN = shutil.which("python") or sys.executable or "python3"
 
 def pycmd(command: str) -> str:
     """A run_command string with a Python the machine actually has (see PY_BIN)."""
-    return re.sub(r"(?<![\w./-])python(?![\w./-])", PY_BIN, str(command))
+    # a function repl: PY_BIN is a path, and a Windows one (C:\Users\...) has \U, which
+    # re.sub would read as a bad escape in a plain string replacement.
+    return re.sub(r"(?<![\w./-])python(?![\w./-])", lambda _m: PY_BIN, str(command))
 
 
 def runs(argv: list, expect_in: str = "", timeout: float = 60.0) -> Callable:

@@ -770,3 +770,12 @@ fixed (ASCII-safe config - Kokoro opened its UTF-8 config with the Windows cp125
 back); TimesFM 3.0.2 installed; ACE-Step 1.5 cloned, uv synced and running with
 ACESTEP_OFFLOAD_TO_CPU=true, a fox song made a real 30 s mp3, and engine/music.py fixed (a ready
 /v1/audio?path= file was wrapped again -> 403). 32 suites green; tests/test_research_ports 146.
+
+## 2026-10-17 (later) - Ziva (Windows): the new PC-only duties left six suites red on Windows
+
+The new autopilot duties (selftest, task_bench; auto = on for the PC) broke six suites on Windows
+while they stayed green on the Mac: test_autopilot, test_core_upgrade, test_self_systems and
+test_creative (their idle-pass helpers did not mark the PC duties as run, so a PC duty fired first);
+test_task_success (its scripted team task takes about 83 s on this PC, over the 60 s ceiling); and
+tests/tasks/base.py pycmd() passed a Windows path as a regex replacement (a C:/Users path has an
+invalid backslash escape). Fixed all six - Windows can ship again.
