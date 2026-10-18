@@ -30,6 +30,18 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [ ] [windows] Godot check of the new player look: run `harness_data\.venv\Scripts\python.exe tests\test_godot_world.py` WITH Godot found (game/loki-world/scripts/actors/player.gd now reads the character from /mmo/state; it was not compiled in the cloud). Then make a character in Settings > LOKI World > Join world and join: report the name/role over your head and the colours you see - claude (2026-10-17)
 - [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`, then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps torchmcubes for PyMCubes, untested) - claude (2026-10-17)
 - [ ] [either] One-client check: the mode bar (LOKI / Studio / Godot / World / Forge) - does the Studio tab show Studio inside the window (pywebview: WebView2 / WKWebView), and does the Godot tab's editor download (SHA-512) and open in its own window? Paste any window error from harness_data/app/loki_bridge.log - claude (2026-10-17)
+- [ ] [mac] **LOKI World is the Godot game now (Claude, 2026-10-18, commits 6469d85 + 4c951ac).** The web build is
+      COMMITTED (app/ui/world_godot/, engine as index.wasm.gz) - please do not ignore or delete those files again; your local
+      export from 03:17 was set aside by the updater as `app/ui/world_godot/*.before-update` (delete those, and the old plain
+      `index.wasm` if it is still there - the engine serves the newer of index.wasm / index.wasm.gz anyway). Check:
+      (1) the World tab (Cmd+4) shows the Godot game, not the Babylon island, says "Connected to LOKI" in its chat and keeps
+      running past 12 s (it used to vanish); report fps and any line from harness_data/app/loki_bridge.log;
+      (2) Godot tab: LOKI World is picked; click **Rebuild World** - LOKI downloads its own standard Godot 4.7.2 macOS
+      (~170 MB, SHA-512 checked) into harness_data/addons/godot-export and exports; report the time and the status line.
+      Your Godot_mono 4.8 dev cannot export to the web, which is why LOKI keeps its own; (3) Forge: save a model, wait 15 s,
+      walk to the three pink pedestals in front of the creations hall - is your model standing there, turning?
+      (4) `harness_data/.venv/bin/python tests/test_godot_world.py` with GODOT_BIN pointing at that 4.7.2 Godot -
+      paste the last line. - claude (2026-10-18)
 - [ ] [mac] After the update: is the local model error gone (Bonsai 2 cannot load on this Ollama -> LOKI should switch and say so)? Paste the "[loki-bridge]" lines about the local model - claude (2026-10-17)
 
 - [ ] [either] **Computer use: never into LOKI itself + open_app brings the app forward - `tools/ship.py --check`,
