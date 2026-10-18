@@ -51,6 +51,7 @@ import studio_tools
 import studio_commands
 import studio_checkpoints
 import studio_index
+import studio_destination
 import studio_godot
 import godot_docs
 import loki_mcp
@@ -236,7 +237,7 @@ class Session:
         m = self.meta
         out = {k: m.get(k) for k in ("id", "title", "status", "branch", "worktree", "created", "updated", "provider",
                                      "model", "shipped", "last_check", "kind", "root", "project", "mode", "model_pref",
-                                     "approve_edits", "turn", "forked_from")}
+                                     "approve_edits", "turn", "forked_from", "destination")}
         out["kind"] = out["kind"] or "loki"
         out["mode"] = out["mode"] or "default"
         out["todos"] = m.get("todos") or []
@@ -255,7 +256,7 @@ class Studio:
     def __init__(self, repo: Path | None = None, data: Path | None = None, mcp_factory: Callable | None = None,
                  chat: Callable | None = None, python: str = "", ship_runner: Callable | None = None,
                  check_runner: Callable | None = None, hub: studio_godot.GodotHub | None = None,
-                 cli_runner: Callable | None = None):
+                 cli_runner: Callable | None = None, dest_runner: Callable | None = None):
         self.repo = Path(repo or studio_paths.repo()).resolve()
         self.data = Path(data or studio_paths.data()).resolve()
         self.home = self.data / "studio"
@@ -268,6 +269,7 @@ class Studio:
         self.check_runner = check_runner or (lambda tree, suite: loki_mcp.run_check(tree, suite, self.python))
         self.hub = hub or studio_godot.GodotHub(shots=self.home / "shots")
         self.cli_runner = cli_runner
+        self.dest_runner = dest_runner or studio_destination.run   # git/gh for "Where is this going?" (fakes in tests)
         self.tool_extra: dict = {}                   # test hooks for tools (web opener, image maker)
         self.sessions: dict = {}
         self.lock = threading.RLock()
@@ -288,6 +290,19 @@ class Studio:
                                        args=[str(studio_paths.ENGINE / "loki_mcp.py"), "--worktree", session.meta["worktree"],
                                              "--repo", str(self.repo)], env=env)
         return Client(params, read_timeout_seconds=3700)
+
+    # ------------------------------------------------------------- where this is going (studio_destination.py)
+    def destination(self) -> dict:
+        """The stored choice, else the implicit one: the owner (or an unknown gh user) keeps "Improve LOKI itself"."""
+        choice = studio_destination.load(self.home)
+        info = studio_destination.detect(self.repo, self.dest_runner)
+        if not choice and info["can_improve_loki"]:
+            choice = {"kind": "loki", "name": studio_destination.KINDS["loki"][0], "repo": studio_destination.UPSTREAM,
+                      "path": str(self.repo), "implicit": True}
+        return {"choice": choice, **info, "chosen": bool(choice) and not choice.get("implicit")}
+
+    def choose_destination(self, kind: str, name: str = "", visibility: str = "private") -> dict:
+        return studio_destination.choose(self.home, self.repo, kind, name, visibility, runner=self.dest_runner)
 
     # ------------------------------------------------------------- sessions
     def list(self) -> list:
@@ -322,16 +337,22 @@ class Studio:
                     "approve_edits": bool(approve_edits), "turn": 0}
             note = "New session on the Godot project %s (%s). Every turn has a checkpoint." % (meta["project"], root)
         else:
+            dest = self.destination()["choice"]
+            if not dest:
+                raise ValueError("Where is this going? Choose it first in Studio (My own LOKI, A new app from LOKI, "
+                                 "or Just this computer).")
+            base = studio_destination.work_repo(dest, self.repo)
             branch = "studio/" + sid
             tree = self.home / "worktrees" / sid
             tree.parent.mkdir(parents=True, exist_ok=True)
-            code, out = _git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+            code, out = _git(base, "worktree", "add", "-b", branch, str(tree), "HEAD")
             if code != 0:
-                raise RuntimeError("could not make a worktree of %s: %s" % (self.repo, out[-300:]))
+                raise RuntimeError("could not make a worktree of %s: %s" % (base, out[-300:]))
             meta = {"id": sid, "kind": "loki", "title": text.splitlines()[0][:80], "status": "idle", "branch": branch,
                     "worktree": str(tree), "root": str(tree), "created": _now(), "updated": _now(), "messages": [],
-                    "mode": mode, "model_pref": model or "auto", "approve_edits": bool(approve_edits), "turn": 0}
-            note = "New session in its own worktree %s (branch %s)." % (tree, branch)
+                    "mode": mode, "model_pref": model or "auto", "approve_edits": bool(approve_edits), "turn": 0,
+                    "destination": {k: dest.get(k) for k in ("kind", "name", "repo", "path", "project")}, "base_repo": str(base)}
+            note = "New session in its own worktree %s (branch %s) - going to: %s." % (tree, branch, dest.get("name"))
         session = Session(self.home / "sessions" / sid, meta)
         session.save()
         with self.lock:
@@ -589,8 +610,23 @@ class Studio:
         if session.thread is not None and session.thread.is_alive():
             return "NOT shipped: the agent is still working; stop it or wait"
         message = " ".join(str(message or "").split()) or ("LOKI Studio: " + session.meta.get("title", ""))
+        dest = session.meta.get("destination") or {"kind": "loki"}     # sessions from before destinations: LOKI itself
+        kind = dest.get("kind", "loki")
+        base = Path(session.meta.get("base_repo") or self.repo)
+        info = studio_destination.detect(self.repo, self.dest_runner)
+        why = studio_destination.guard(kind, studio_destination.origin(base, self.dest_runner) if kind in ("loki", "fork")
+                                       else "", info.get("gh_user", ""))
+        if why:
+            session.add("error", "Ship refused: " + why)
+            return "NOT shipped: " + why
         session.add("status", "Shipping: every suite runs, then commit, catch up with GitHub, push...", status="shipping")
-        out = self.ship_runner(Path(session.meta["worktree"]), message)
+        if kind in ("app", "local"):
+            check = self.check_runner(Path(session.meta["worktree"]), "")
+            out = ("NOT shipped:\nthe tests failed - nothing was committed\n" + check[-3000:]) if not check.startswith("ALL PASSED") \
+                else studio_destination.publish(kind, Path(session.meta["worktree"]), base, session.meta["branch"], message,
+                                                runner=self.dest_runner)
+        else:
+            out = self.ship_runner(Path(session.meta["worktree"]), message)
         ok = out.startswith("shipped")
         session.add("ship", out, ok=ok)
         if ok:
@@ -610,12 +646,13 @@ class Studio:
             session.set_status("discarded", "Discarded: every change this session made is undone; the history stays here.")
             return
         tree = Path(session.meta["worktree"])
-        _git(self.repo, "worktree", "remove", "--force", str(tree))
+        base = Path(session.meta.get("base_repo") or self.repo)
+        _git(base, "worktree", "remove", "--force", str(tree))
         if tree.exists():
             shutil.rmtree(tree, ignore_errors=True)
-        _git(self.repo, "worktree", "prune")
+        _git(base, "worktree", "prune")
         if not session.meta.get("shipped"):
-            _git(self.repo, "branch", "-D", session.meta["branch"])
+            _git(base, "branch", "-D", session.meta["branch"])
         session.set_status("discarded", "Discarded: the worktree and its branch are gone; the history stays here.")
 
     # ------------------------------------------------------------- checkpoints, undo, fork
@@ -667,7 +704,7 @@ class Studio:
             tree = self.home / "worktrees" / nid
             cp = studio_checkpoints.Checkpoints(self.home / "sessions" / nid / "fork-cp", Path(src.meta["worktree"]), "git", nid)
             commit, err = cp._snapshot_tree()   # the source's files as they are now
-            code, out = _git(self.repo, "worktree", "add", "-b", branch, str(tree), commit or "HEAD")
+            code, out = _git(Path(src.meta.get("base_repo") or self.repo), "worktree", "add", "-b", branch, str(tree), commit or "HEAD")
             if code != 0:
                 raise RuntimeError("could not fork the worktree: %s" % (out or err)[-300:])
             if commit:

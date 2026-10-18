@@ -21,6 +21,7 @@ const ICONS = {
   fork: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M6 7v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7M12 12v5"/>',
   yes: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   no: '<path d="M6 6l12 12M18 6L6 18"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
 };
 
 function svg(name) {
@@ -421,9 +422,107 @@ async function onPromptInput() {
 
 function side(title, node) {
   $("side-title").textContent = title;
-  const body = $("side-body");
+  const body = $("side-body"); body.classList.remove("form");
   body.replaceChildren(node);
   $("side").hidden = false;
+}
+
+// ------------------------------------------------------------------ where is this going? (studio_destination.py)
+async function loadDestination(openIfUnset) {
+  try {
+    const d = await api("/api/destination");
+    S.dest = d;
+    const c = d.choice || {};
+    $("dest-name").textContent = c.name || "not chosen yet";
+    $("dest-repo").textContent = c.repo || c.path || (d.gh_user ? "GitHub: " + d.gh_user : "gh is not signed in");
+    $("dest-card").classList.toggle("unset", !c.kind);
+    if (openIfUnset && !d.chosen && !c.kind) openDestination();
+  } catch (e) { $("dest-name").textContent = "unknown (" + e.message + ")"; }
+}
+
+function openDestination() {
+  const d = S.dest || { kinds: [], default: "fork" };
+  const current = (d.choice && d.choice.kind) || d.default;
+  $("dest-who").textContent = d.gh_user ? "Signed in to GitHub (gh) as " + d.gh_user + (d.is_owner ? " - LOKI's owner." : ". Only " + d.owner + " ships to " + d.upstream + ".")
+    : "gh is not signed in: a fork or a new GitHub repository needs `gh auth login` once (Studio says how).";
+  const box = $("dest-kinds"); box.replaceChildren();
+  for (const k of d.kinds || []) {
+    const lab = el("label"); const r = el("input"); r.type = "radio"; r.name = "dest-kind"; r.value = k.id; r.checked = k.id === current;
+    const off = k.id === "loki" && d.can_improve_loki === false; r.disabled = off; lab.classList.toggle("off", off);
+    const t = el("span"); t.append(el("b", "", k.name), el("small", "", off ? "Only " + d.owner + " can ship to " + d.upstream + "." : k.what));
+    lab.append(r, t); box.append(lab);
+    r.addEventListener("change", destRows);
+  }
+  $("dest-msg").textContent = "";
+  destRows(); $("dest-dialog").showModal();
+}
+
+function destRows() {
+  const k = (document.querySelector('input[name="dest-kind"]:checked') || {}).value;
+  $("dest-name-row").hidden = !(k === "app" || k === "local");
+  $("dest-vis-row").hidden = k !== "app";
+}
+
+// ------------------------------------------------------------------ LOKI's settings from Studio (studio_control.settings_*)
+async function lokiChange(what, args, ask) {
+  if (ask && !confirm(ask)) return false;
+  try {
+    const r = await api("/api/loki/settings", { what, args, confirm: true });
+    if (r.note || r.line) alert(r.note || r.line);
+    return true;
+  } catch (e) { alert(e.message); return false; }
+}
+
+function srow(label, control) { const r = el("div", "srow"); const s = el("span", "", label); s.title = label; r.append(s); if (control) r.append(control); return r; }
+
+async function showLokiSettings() {
+  let d;
+  try { d = await api("/api/loki/settings"); } catch (e) { alert(e.message); return; }
+  const box = el("div");
+  if (!d.running) box.append(el("p", "muted", "LOKI is not running: start it from the LOKI card to change its settings. The evolve roadmap below is read from the file."));
+  const prov = (d.providers && d.providers.providers) || [];
+  if (prov.length) {
+    box.append(el("h4", "", "Models and providers"));
+    for (const p of prov.filter((x) => x.available)) {
+      const tog = el("input"); tog.type = "checkbox"; tog.checked = !!p.enabled; tog.title = "On: LOKI may route to it";
+      tog.addEventListener("change", async () => { if (!(await lokiChange("provider_enable", { id: p.id, on: tog.checked }, (tog.checked ? "Turn on " : "Turn off ") + p.name + "?"))) tog.checked = !tog.checked; });
+      const model = el("input"); model.type = "text"; model.value = p.model || ""; model.title = "Model id (Enter saves)";
+      model.addEventListener("keydown", (k) => { if (k.key === "Enter") lokiChange("provider_model", { id: p.id, model: model.value }, "Use " + model.value + " for " + p.name + "?"); });
+      const row = srow(p.name + (p.default ? " (default)" : "") + (p.configured ? "" : " - not set up"), model); row.append(tog); box.append(row);
+    }
+  }
+  const g = d.general || {};
+  if (g.settings) {
+    box.append(el("h4", "", "General"));
+    for (const [key, spec] of Object.entries(g.settings)) {
+      let c;
+      if (spec.kind === "bool") { c = el("input"); c.type = "checkbox"; c.checked = String(g.values[key]) === "1"; }
+      else if (spec.kind === "choice") { c = el("select"); for (const o of spec.choices) c.append(new Option(o, o)); c.value = g.values[key]; }
+      else { c = el("input"); c.type = "text"; c.value = g.values[key] == null ? "" : g.values[key]; }
+      const save = () => lokiChange("general", { key, value: c.type === "checkbox" ? (c.checked ? "1" : "0") : c.value }, "Set \"" + spec.label + "\" to " + (c.type === "checkbox" ? (c.checked ? "on" : "off") : c.value) + "?");
+      if (c.tagName === "INPUT" && c.type === "text") c.addEventListener("keydown", (k) => { if (k.key === "Enter") save(); }); else c.addEventListener("change", save);
+      box.append(srow(spec.label || key, c));
+    }
+  }
+  const caps = (d.capabilities && d.capabilities.capabilities) || [];
+  if (caps.length) {
+    box.append(el("h4", "", "Capabilities"));
+    for (const cap of caps) {
+      const tog = el("input"); tog.type = "checkbox"; tog.checked = cap.status === "enabled"; tog.disabled = !!cap.card_only;
+      tog.addEventListener("change", async () => { if (!(await lokiChange("capability", { name: cap.name, on: tog.checked }, (tog.checked ? "Turn on " : "Turn off ") + cap.name + "?"))) tog.checked = !tog.checked; });
+      box.append(srow(cap.name + (cap.description ? " - " + cap.description : ""), tog));
+    }
+  }
+  box.append(el("h4", "", "Evolve - what LOKI builds into itself next"));
+  const ev = d.evolve || {};
+  for (const it of (ev.items || []).slice(0, 40)) { const r = srow(it.id + " " + it.title); if (it.done) r.classList.add("done"); box.append(r); }
+  if (ev.error) box.append(el("p", "muted", ev.error));
+  const task = el("input"); task.type = "text"; task.placeholder = "A task for LOKI to do (Enter)"; task.style.maxWidth = "100%"; task.style.flex = "1";
+  const where = el("select"); where.append(new Option("docs/EVOLVE.md (shared roadmap)", "roadmap"), new Option("an idea on this machine", "evolve_idea"));
+  task.addEventListener("keydown", async (k) => { if (k.key === "Enter" && task.value.trim() && await lokiChange(where.value, { text: task.value.trim() }, "Add this task for LOKI?\n\n" + task.value.trim())) { task.value = ""; showLokiSettings(); } });
+  const add = el("div", "srow"); add.append(task, where); box.append(add);
+  side("LOKI's settings", box);
+  $("side-body").classList.add("form");
 }
 
 // ------------------------------------------------------------------ wiring
@@ -500,6 +599,21 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) { alert(e.message); }
   });
   $("side-close").addEventListener("click", () => { $("side").hidden = true; });
+  $("loki-settings").addEventListener("click", showLokiSettings);
+  $("dest-card").addEventListener("click", openDestination);
+  $("dest-cancel").addEventListener("click", () => $("dest-dialog").close());
+  $("dest-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const kind = (document.querySelector('input[name="dest-kind"]:checked') || {}).value;
+    if (!kind) return;
+    $("dest-go").disabled = true; $("dest-msg").textContent = "Setting it up...";
+    try {
+      const r = await api("/api/destination", { kind, name: $("dest-project").value.trim(), visibility: $("dest-public").checked ? "public" : "private", confirm: true });
+      $("dest-dialog").close(); alert(r.note || "Done."); loadDestination(false);
+    } catch (err) { $("dest-msg").textContent = err.message; }
+    $("dest-go").disabled = false;
+  });
+  loadDestination(true);
   document.addEventListener("mouseover", (e) => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) showTip(t); else hideTip(); });
   document.addEventListener("focusin", (e) => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) showTip(t); });
   document.addEventListener("focusout", hideTip);

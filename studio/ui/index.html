@@ -12,6 +12,7 @@
   <aside class="rail" aria-label="Sessions">
     <div class="brand"><span class="mark" aria-hidden="true">L</span><span class="brand-text"><b>LOKI Studio</b><small>build LOKI with LOKI</small></span></div>
     <button type="button" id="new-session" class="primary" data-icon="plus" data-tip="New session|Start fresh: its own git worktree and branch of LOKI.">New session</button>
+    <button type="button" id="dest-card" class="dest-card" data-tip="Where is this going?|Improve LOKI itself, your own LOKI (a fork), a new app from LOKI, or just this computer. Click to change."><small>Where is this going?</small><b id="dest-name">checking...</b><span id="dest-repo" class="muted small"></span></button>
     <nav id="sessions" class="sessions" aria-label="Sessions"></nav>
     <section class="loki-card" aria-label="The LOKI app">
       <div class="loki-head"><span id="loki-dot" class="dot"></span><b>LOKI</b><span id="loki-state" class="muted">checking...</span></div>
@@ -19,6 +20,7 @@
       <div class="loki-actions">
         <button type="button" id="loki-start" class="icon" data-icon="power" data-tip="Start or restart LOKI|Starts the LOKI app, or restarts its engine when it is running.">Start</button>
         <button type="button" id="loki-rollback" class="icon" data-icon="undo" data-tip="Roll back LOKI|Go back to the last version that worked on this computer; the bad one is skipped from now on.">Roll back</button>
+        <button type="button" id="loki-settings" class="icon" data-icon="gear" data-tip="LOKI's settings|Models and providers, General settings, capabilities and the evolve list - change them from here.">Settings</button>
         <button type="button" id="loki-logs" class="icon" data-icon="log" data-tip="LOKI's logs|Read the engine, app and bridge logs from disk - works when LOKI is down.">Logs</button>
       </div>
     </section>
@@ -74,6 +76,18 @@
     <pre id="side-body" class="side-body"></pre>
   </aside>
 </div>
+
+<dialog id="dest-dialog" class="dialog dest">
+  <form method="dialog" id="dest-form">
+    <h3>Where is this going?</h3>
+    <p class="muted" id="dest-who"></p>
+    <div id="dest-kinds" class="dest-kinds" role="radiogroup" aria-label="Destination"></div>
+    <label id="dest-name-row" hidden>Name of the new project (~/LOKI Projects/&lt;name&gt;)<input id="dest-project" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,99}" placeholder="my-agent"></label>
+    <label id="dest-vis-row" class="check" hidden><input type="checkbox" id="dest-public"> Public repository (default private)</label>
+    <p id="dest-msg" class="muted small" role="status"></p>
+    <menu><button value="cancel" type="button" id="dest-cancel">Later</button><button value="ok" class="primary" id="dest-go">Set it up</button></menu>
+  </form>
+</dialog>
 
 <dialog id="ship-dialog" class="dialog">
   <form method="dialog" id="ship-form">

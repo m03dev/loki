@@ -8,6 +8,66 @@ or fix in LOKI; it works on LOKI's code in its own git worktree with DeepSeek V4
 every step and the diff, and ships only when you press **Ship it**. It keeps working when LOKI is
 broken, not running, or in the middle of an update.
 
+## One client: Studio is a tab of LOKI's window (owner, 2026-10-17)
+
+"loki studio should not be another window but the same client, just another tab; utilize the top tab like godot engine
+to switch between modes." LOKI's window has a **mode bar** across the top (`app/ui/modebar.js`, styled like the model
+picker's glass): **LOKI** (chat/home) / **Studio** / **Godot** / **World** / **Forge**, Ctrl+1..5 (Cmd on the Mac).
+Each mode keeps its state when you switch away (panes are built once and only hidden).
+
+- **Studio**: the first time the tab opens, LOKI asks its engine (`POST /studio/embed`, engine/studio_api.py) to start
+  Studio's server in the background (`studio_app.py --headless`, no window; once - a second click while it comes up does
+  not start another) and frames Studio's own loopback page with its token. Studio keeps its own process and server, so it
+  still works when LOKI is broken, and the Godot plugin still links to it. Studio's CSP allows only a loopback page to
+  frame it; LOKI's window allows framing only loopback (`frame-src`). `Loki Studio.cmd` / `loki_studio.sh` still open the
+  standalone window for those who want it. The sidebar's LOKI Studio button now switches to the tab.
+- **Godot** (`engine/godot_web.py`): the official Godot 4 **web editor** (MIT), downloaded on first use from the
+  `4.4.1-stable` release into `<data>/addons/godot-web-editor`, SHA-512 checked against the release's SHA512-SUMS
+  (nothing kept on a mismatch; zip members that are folders, absolute, `..` or odd types are refused), never committed.
+  Served at `/godot-editor/app/` with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
+  require-corp` (SharedArrayBuffer). Projects: `~/LOKI Projects/<name>` and `game/loki-world`. **Which way files flow**
+  (said in the tab): the project folder -> "Project to the web editor" (a zip) -> the editor's Import; back: the editor's
+  Project > Tools > Download Project Source -> "Bring back from Downloads" (writes only inside the project folder).
+  LOKI's own window is not cross-origin isolated, so the tab says so and offers "Web editor in its own window" (the page
+  there IS isolated) and **Open in the Godot app** (the installed editor, `--editor --path`, with the LOKI Studio plugin
+  installed first).
+- **World**: LOKI World's panel (the same one as Settings > LOKI World) shown in the tab. **Forge**: forge.js's sheet.
+
+## Where is this going? (studio/studio_destination.py)
+
+The owner: "when loki is in someone else's hands the studio creates a new repo and a new app starts getting developed ...
+you should have the option to choose where it's going." The card at the top of Studio's rail shows the choice; a click
+changes it. The first time, a non-owner is asked before the first session.
+
+| Choice | What Studio does | Ship it |
+| --- | --- | --- |
+| **Improve LOKI itself** | works on `m03dev/loki` master, as before | `tools/ship.py` |
+| **My own LOKI** | `gh repo fork m03dev/loki`; origin = `<you>/loki`, upstream = `m03dev/loki` (without gh: says how by hand) | `tools/ship.py` (pushes origin = the fork) |
+| **A new app from LOKI** | `~/LOKI Projects/<name>`: a small skeleton (`app/main.py`, `tests/`, `tools/ship.py --check`, README, AGENTS.md, NOTICE.md, LOKI's AGPL LICENSE) + a **copy** of LOKI's `engine/` used as a library from `app/` (a copy, not a package: LOKI's engine is not packaged, and a copy keeps the app working when LOKI changes; NOTICE.md says where it came from); first commit on `main`; `gh repo create <name> --private\|--public --source ... --push` when gh is signed in | the tests (`--check`), commit, merge into the app's main, push its origin |
+| **Just this computer** | `git clone` of LOKI into `~/LOKI Projects/<name>`, origin removed | the tests, commit, merge; nothing leaves the computer |
+
+Who is asking = the account signed in to `gh`. Not `m03dev`: the default is "My own LOKI", "Improve LOKI itself" is
+refused, and `guard()` refuses every Ship it whose target is `m03dev/loki` unless the owner ships LOKI itself. Every
+git/gh call is an argv list through one runner (no shell strings; `gh.exe`/`git.exe` on Windows via `shutil.which`).
+Stored in `harness_data/studio/destination.json`; each session records its own in `session.json` (`destination`,
+`base_repo` - its worktree is made from the app's repo for an app). Sessions from before keep "Improve LOKI itself".
+API: `GET /api/destination`, `POST /api/destination {kind, name?, visibility?, confirm: true}`.
+
+## LOKI's settings, from Studio
+
+The gear on the LOKI card opens **LOKI's settings** in Studio's side panel (`studio_control.settings_overview/change`,
+`GET|POST /api/loki/settings`), through LOKI's own bridge routes - list + toggle + edit, each change after a confirm:
+models/providers (on/off `/providers/enable`, model `/providers/model`), General settings (`/settings/general`; secrets
+and keys are never shown or changed - Settings > Connections does that), capabilities on/off (`/capabilities/enable`),
+and the evolve list: add a task line to `docs/EVOLVE.md`'s Roadmap (`- [ ] E<n> ...`, an uncommitted edit in the LOKI
+folder until the next ship) or an idea on this machine (`/evolve/idea`). When LOKI is down it says so; the roadmap is
+still read from the file.
+
+404 check (2026-10-17): every `/api/...` path in studio.js, the Godot plugin and studio_mcp.py is a route of
+studio_server.py, and every bridge path loki_mcp.py / studio_control.py calls exists in engine/loki_bridge.py or
+portal_api.py (`tests/test_studio_destination.py` checks studio.js's). The owner's "error 404 http not found" came from
+the model call (a wrong NVIDIA model name -> engine/nim_models.py), not from Studio's routes.
+
 ## Start it
 
 | Machine | How |
@@ -183,6 +243,11 @@ worktree - every change is checkpointed instead). Everything below works in both
 to 16 MB (screenshots). The comparison with Ziva, task by task: docs/STUDIO_VS_ZIVA.md.
 
 ## Tests
+
+`tests/test_studio_destination.py` (in SUITES, ~7 s, offline - no `openai` needed): destinations with fake gh/git runners
+(owner vs non-owner defaults, the guard, argv-only command lines, fork/app/local set-up, the stored choice, sessions and
+Ship it), the LOKI settings panel against a fake bridge, studio.js's routes, the Studio tab's single background start, the
+Godot tab (checksum, traversal, COOP/COEP, project zip both ways) and the mode bar in headless Chromium.
 
 `tests/test_studio_godot.py` (in SUITES, ~20 s): the plugin's files and GDScript sanity, the installer (CRLF kept,
 idempotent, remove), the contract (bridge.gd's actions == Studio's; every /api path the dock calls is served), the

@@ -394,3 +394,27 @@ html.u-hc .mpick-pop { background: #000 !important; border-color: #fff !importan
 @media (prefers-reduced-transparency: reduce) {
   .mpick-pop, .model-menu { background: #3a404c; backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
+
+/* The mode bar (app/ui/modebar.js): LOKI / Studio / Godot / World / Forge across the top, like Godot's 2D/3D/Script bar */
+.modebar {
+  position: fixed; top: 7px; left: 50%; transform: translateX(-50%); z-index: 30; display: flex; gap: 2px; padding: 3px;
+  background: rgba(58, 64, 76, .72); border: 1px solid rgba(200, 212, 230, .18); border-radius: 11px;
+  backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2); box-shadow: 0 8px 26px rgba(0, 0, 0, .28);
+}
+.modebar-tab { display: flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--muted); font-size: 12.5px; line-height: 1.2; }
+.modebar-tab svg { width: 15px; height: 15px; flex: none; }
+.modebar-tab:hover { background: rgba(176, 190, 210, .12); color: var(--text); }
+.modebar-tab[aria-selected="true"] { background: rgba(176, 190, 210, .2); border-color: rgba(190, 205, 225, .28); color: var(--text); }
+.mode-pane { position: fixed; inset: 46px 0 0 0; z-index: 9; display: flex; flex-direction: column; background: var(--bg, #15161b); }
+.mode-pane[hidden] { display: none; }
+.mode-frame { flex: 1; width: 100%; border: 0; background: #15161b; }
+.mode-frame[hidden] { display: none; }
+.mode-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.mode-note { margin: 8px 16px; color: var(--muted); }
+.mode-pane [data-panel="world"] { flex: 1; display: flex; flex-direction: column; padding: 8px 16px; min-height: 0; }
+.mode-pane [data-panel="world"] .world-frame { flex: 1; min-height: 0; }
+body.has-modebar .topbar { padding-top: 44px; }
+#forge.in-mode { top: 46px; }
+@media (max-width: 700px) { .modebar-tab span { display: none; } }
+html.u-hc .modebar { background: #000 !important; border-color: #fff !important; backdrop-filter: none; }

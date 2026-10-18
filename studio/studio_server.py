@@ -18,6 +18,10 @@ check against DNS rebinding, and a strict CSP (script-src 'self': no inline scri
   GET  /api/loki/logs?which=&lines=
   POST /api/loki/start | /api/loki/restart | /api/loki/rollback {confirm: true}
   POST /api/raise                         bring the window to the front (LOKI's button)
+  GET  /api/destination                   where this is going: the stored choice, gh's user, the default
+  POST /api/destination {kind, name?, visibility?, confirm: true}   loki | fork | app | local (studio_destination.py)
+  GET  /api/loki/settings                 LOKI's providers, General settings, capabilities, evolve list (via its bridge)
+  POST /api/loki/settings {what, args, confirm: true}  one change (studio_control.settings_change)
 
 The Ziva-parity API (the window AND the Godot plugin's dock use it; docs/STUDIO.md):
   POST /api/session/new  {text, mode?, model?, project? | editor?, approve_edits?}  project = a Godot project
@@ -54,8 +58,10 @@ import studio_commands
 import studio_tools
 import godot_docs
 
+# frame-ancestors: LOKI's own window shows Studio as its Studio tab (app/ui/modebar.js) - a loopback page only; the
+# token still arrives only in the URL fragment, so a page that frames Studio without it can do nothing.
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
-       "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+       "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*; base-uri 'none'; form-action 'none'")
 MAX_BODY = 64_000
 MAX_EDITOR_BODY = 16_000_000          # the editor's results carry screenshots
 EDITOR_TOOLS = {"editor_errors", "screenshot", "playtest_step", "find_lag", "project_index", "project_graph", "godot_docs"}
@@ -166,6 +172,10 @@ class StudioServer:
                          "working": bool(s.thread and s.thread.is_alive())}
         if path == "/api/session/diff":
             return 200, {"ok": True, "diff": self.studio.diff(q.get("id"))[:400_000]}
+        if path == "/api/destination":
+            return 200, {"ok": True, **self.studio.destination()}
+        if path == "/api/loki/settings":
+            return 200, self.control.settings_overview(self.studio.repo, self.studio.data)
         if path == "/api/loki/logs":
             return 200, {"ok": True, "text": self.control.logs(q.get("which") or "engine", int(q.get("lines") or 200),
                                                               self.studio.data)}
@@ -258,6 +268,19 @@ class StudioServer:
                 return 400, {"ok": False, "error": "discarding needs the owner's confirmation"}
             st.discard(data.get("id"))
             return 200, {"ok": True}
+        if path == "/api/destination":
+            if data.get("confirm") is not True:
+                return 400, {"ok": False, "error": "choosing where this goes needs the owner's confirmation"}
+            res = st.choose_destination(str(data.get("kind") or ""), str(data.get("name") or ""),
+                                        "public" if data.get("visibility") == "public" else "private")
+            if not res.get("ok") and res.get("how"):
+                res["error"] = "%s\n\n%s" % (res.get("error", ""), res["how"])
+            return 200, res
+        if path == "/api/loki/settings":
+            if data.get("confirm") is not True:
+                return 400, {"ok": False, "error": "changing LOKI's settings needs the owner's confirmation"}
+            return 200, self.control.settings_change(str(data.get("what") or ""), dict(data.get("args") or {}),
+                                                     st.repo, st.data)
         if path in ("/api/loki/start", "/api/loki/restart", "/api/loki/rollback"):
             if data.get("confirm") is not True:
                 return 400, {"ok": False, "error": "needs the owner's confirmation"}

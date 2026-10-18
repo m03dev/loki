@@ -197,7 +197,8 @@ UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
             # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
             ".wasm": "application/wasm", ".pck": "application/octet-stream"}
 UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data: blob:; "
-          "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+          "connect-src 'self'; frame-src 'self' http://127.0.0.1:* http://localhost:*; "   # the Studio tab: Studio's own loopback server
+          "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # The Godot world page only: WebAssembly needs 'wasm-unsafe-eval' (not 'unsafe-eval' - no JS eval),
 # and LOKI's own window frames it (same origin). Every other UI page keeps UI_CSP.
 GODOT_WORLD_PAGE = "/ui/world_godot/index.html"
@@ -955,6 +956,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import assist_api  # pylint: disable=import-outside-toplevel
             assist_api.serve_artifact(self, route, ALLOWED_HOSTS)
             return
+        if route.startswith("/godot-editor/"):   # the Godot tab: the web editor + projects (engine/godot_web.py)
+            import godot_web  # pylint: disable=import-outside-toplevel
+            godot_web.http(self, "GET", ALLOWED_HOSTS, Path(getattr(self.server.state.agent, "DATA_DIR", "") or godot_web.data_dir()))
+            return
         if self._serve_ui(route):
             return
         if self._serve_game(route):
@@ -1307,6 +1312,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if urlparse(self.path).path.startswith("/hook/"):   # session 29: an automation's webhook - its own secret key
             import automations  # pylint: disable=import-outside-toplevel
             self._send_json(*automations.hook_request(self.server.state, self.path, self.headers, self.rfile))
+            return
+        if urlparse(self.path).path.startswith("/godot-editor/"):   # the Godot tab (engine/godot_web.py)
+            import godot_web  # pylint: disable=import-outside-toplevel
+            godot_web.http(self, "POST", ALLOWED_HOSTS, Path(getattr(self.server.state.agent, "DATA_DIR", "") or godot_web.data_dir()))
             return
         if not self._authorized():
             return

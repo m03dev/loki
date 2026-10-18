@@ -10,6 +10,7 @@ the LOKI MCP API.
 
     python studio/studio_app.py              the Studio window (pywebview), or the browser
     python studio/studio_app.py --print-url  serve and print the URL (no window)
+    python studio/studio_app.py --headless   serve only (LOKI's window shows it as its Studio tab; no window)
     python studio/studio_app.py --self-test  check this copy can run (used before pinning it)
     python studio/studio_app.py --no-pin     run this copy even when a pinned copy exists
 """
@@ -136,6 +137,7 @@ def main(argv: list | None = None) -> int:
         return handed
     ap = argparse.ArgumentParser(description="LOKI Studio")
     ap.add_argument("--print-url", action="store_true", help="serve and print the URL; no window")
+    ap.add_argument("--headless", action="store_true", help="serve only: LOKI's Studio tab shows it (no window)")
     ap.add_argument("--port", type=int, default=int(os.getenv("LOKI_STUDIO_PORT", "8771") or 8771))
     ap.add_argument("--no-pin", action="store_true")
     args = ap.parse_args(argv)
@@ -162,7 +164,7 @@ def main(argv: list | None = None) -> int:
     if os.getenv("LOKI_STUDIO_PIN_REFRESH", "1") != "0":
         threading.Thread(target=refresh_pin, daemon=True, name="studio-pin").start()
     try:
-        if args.print_url:
+        if args.print_url or args.headless:
             print(server.url, flush=True)
             while True:
                 time.sleep(3600)

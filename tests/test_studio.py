@@ -1034,7 +1034,7 @@ if async_playwright is not None and chromium:
         errors, counts, tip, shot, loki_tip, posts = asyncio.run(look())
         check("LOKI's window: the Studio icon's tooltip says 'LOKI Studio - work on LOKI itself with DeepSeek V4.1'",
               "LOKI Studio" in loki_tip and "Work on LOKI itself with DeepSeek V4.1" in loki_tip, loki_tip)
-        check("...and a click asks the engine to open Studio (POST /studio/open)", "/studio/open" in posts, posts)
+        check("...and a click opens the Studio tab, which asks the engine for Studio (POST /studio/embed)", "/studio/embed" in posts, posts)
         check("Studio's window in headless Chromium: no script error", not errors, errors)
         check("...it shows the sessions, thinking, tool calls, the approval and icons",
               counts["sessions"] >= 2 and counts["thinking"] >= 1 and counts["tools"] >= 3 and counts["approvals"] >= 1 and counts["icons"] >= 8, counts)

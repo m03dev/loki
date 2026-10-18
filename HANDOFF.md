@@ -6,6 +6,19 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 night: one client - mode bar, Studio tab, Godot tab; Studio's "Where is this going?" (Claude, cloud)
+
+- LOKI's window: mode bar at the top (`app/ui/modebar.js`): LOKI / Studio / Godot / World / Forge, Ctrl/Cmd+1..5, state
+  kept. Studio tab = Studio's own server started headless once (`POST /studio/embed`, `studio_app.py --headless`) and
+  framed. Godot tab = `engine/godot_web.py` (`/godot-editor/*`): Godot 4.4.1 web editor downloaded + SHA-512 checked,
+  COOP/COEP, project zip in/out, "Open in the Godot app". docs/STUDIO.md has it all.
+- Studio: `studio/studio_destination.py` - Improve LOKI itself / My own LOKI (fork) / A new app from LOKI / Just this
+  computer; non-owners (gh user != m03dev) can never ship to m03dev/loki. LOKI settings panel in Studio (providers,
+  General, capabilities, EVOLVE.md tasks). Suite `tests/test_studio_destination.py` (~7 s).
+- Not verified: real `gh repo fork/create` (gh is not signed in here), the real Godot web editor download and whether it
+  runs in "its own window" in pywebview on the Mac/PC (LOKI's window is not cross-origin isolated, so it is never framed
+  inline), Studio framed inside pywebview (WKWebView/WebView2 loopback iframe), tests/test_studio.py (needs `openai`).
+
 ## 2026-10-17 night: Forge, LOKI's 3D maker (Claude, cloud)
 
 - Sidebar cube -> Forge (`app/ui/forge.js/.css`): Draw / Add an image / Describe it (picture first, redo) ->

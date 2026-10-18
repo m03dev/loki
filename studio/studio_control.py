@@ -14,6 +14,7 @@ the development agent cannot call them except restart_engine, which waits for th
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -132,3 +133,93 @@ def rollback(repo: Path | None = None, why: str = "the owner rolled back from LO
     updater.note_history("rolled back", repo, **{"from": bad, "to": good, "why": why})
     return {"ok": True, "from": bad, "to": good, "note": "went back from %s to %s; %s will not be taken again"
             % (bad[:12], good[:12], bad[:12])}
+
+
+# ------------------------------------------------------------------ LOKI's settings, from Studio (docs/STUDIO.md)
+# Studio's "LOKI settings" panel: list + toggle + edit through LOKI's own bridge routes (the same ones LOKI's
+# Settings use). Every change is the owner's click + confirm in Studio's window; secrets are never read or written.
+SETTINGS_READS = {"providers": "/providers", "general": "/settings/general", "capabilities": "/capabilities/manifests",
+                  "evolve": "/evolve"}
+SETTINGS_WRITES = {"provider_enable": "/providers/enable", "provider_model": "/providers/model",
+                   "provider_default": "/providers/default", "general": "/settings/general",
+                   "capability": "/capabilities/enable", "evolve_idea": "/evolve/idea"}
+
+
+def settings_overview(repo: Path | None = None, data: Path | None = None, a=None) -> dict:
+    a = a or api(repo, data)
+    out: dict = {"ok": True, "running": a.up()}
+    for name, path in SETTINGS_READS.items():
+        code, body = a.bridge("GET", path, timeout=8.0) if out["running"] else (0, {})
+        out[name] = body if code == 200 else {"ok": False, "error": body.get("error") or ("HTTP %s" % code if code else
+                                                                                            "LOKI is not running")}
+    gen = out.get("general") or {}
+    if isinstance(gen.get("settings"), dict):    # never a secret's value, even an empty one
+        gen["settings"] = {k: v for k, v in gen["settings"].items() if v.get("kind") != "secret"}
+        gen["values"] = {k: v for k, v in (gen.get("values") or {}).items() if k in gen["settings"]}
+    if not out["running"]:   # the roadmap is a file: shown even when LOKI is down
+        try:
+            import evolve  # pylint: disable=import-outside-toplevel
+            out["evolve"] = {"ok": True, "items": evolve.roadmap(Path(repo or studio_paths.repo())), "offline": True}
+        except Exception as exc:  # noqa: BLE001
+            out["evolve"] = {"ok": False, "error": str(exc)}
+    return out
+
+
+def settings_change(what: str, args: dict, repo: Path | None = None, data: Path | None = None, a=None) -> dict:
+    """One change: provider on/off / model / default, a General value, a capability on/off, an evolve idea,
+    or a roadmap line in docs/EVOLVE.md. Returns LOKI's answer."""
+    what = str(what or "")
+    args = dict(args or {})
+    if what == "roadmap":
+        return add_roadmap_line(str(args.get("text") or ""), Path(repo or studio_paths.repo()))
+    path = SETTINGS_WRITES.get(what)
+    if path is None:
+        return {"ok": False, "error": "what is one of %s, roadmap" % ", ".join(SETTINGS_WRITES)}
+    if what == "general":
+        key = str(args.get("key") or "")
+        if not key or re.search(r"(KEY|TOKEN|SECRET|PASSWORD)", key.upper()):
+            return {"ok": False, "error": "secrets and keys are changed only in LOKI's Settings > Connections"}
+        body = {"values": {key: str(args.get("value", ""))}}
+    elif what == "capability":
+        body = {"name": str(args.get("name") or ""), "enabled": bool(args.get("on"))}
+    elif what == "evolve_idea":
+        body = {"text": str(args.get("text") or "")}
+    else:
+        body = {"id": str(args.get("id") or ""), "on": bool(args.get("on")), "model": str(args.get("model") or "")}
+    a = a or api(repo, data)
+    if what == "general":   # refuse a secret even if LOKI's list says otherwise
+        code, spec = a.bridge("GET", "/settings/general")
+        if code == 200 and ((spec.get("settings") or {}).get(key) or {}).get("kind") == "secret":
+            return {"ok": False, "error": "secrets are changed only in LOKI's Settings > Connections"}
+    code, out = a.bridge("POST", path, body)
+    if code == 0:
+        return {"ok": False, "error": "LOKI is not running - start it from the LOKI card first"}
+    return out if isinstance(out, dict) else {"ok": code == 200}
+
+
+_ITEM = re.compile(r"^\s*-\s*\[[ xX]\]\s*E(\d+)\b")
+
+
+def add_roadmap_line(text: str, repo: Path) -> dict:
+    """`- [ ] E<n> <text>` at the top of docs/EVOLVE.md's Roadmap in the checkout: LOKI's evolve duty picks it up.
+    It is an uncommitted edit in the LOKI folder until the next Ship it / ship.py from there."""
+    text = " ".join(str(text or "").split())[:600]
+    if len(text) < 8:
+        return {"ok": False, "error": "say a little more about the task"}
+    path = Path(repo) / "docs" / "EVOLVE.md"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return {"ok": False, "error": "no docs/EVOLVE.md: %s" % exc}
+    n = max([int(m.group(1)) for m in (_ITEM.match(l) for l in lines) if m] + [0]) + 1
+    line = "- [ ] E%d %s" % (n, text)
+    at = next((i + 1 for i, l in enumerate(lines) if l.strip() == "## Roadmap"), None)
+    if at is None:
+        lines += ["", "## Roadmap", ""]
+        at = len(lines)
+    while at < len(lines) and not lines[at].strip():
+        at += 1
+    lines.insert(at, line)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"ok": True, "id": "E%d" % n, "line": line,
+            "note": "Added to docs/EVOLVE.md in %s (not shipped yet: it goes out with the next ship from there)." % repo}

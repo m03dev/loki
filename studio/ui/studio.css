@@ -157,3 +157,19 @@ button.primary[data-icon], button.ship[data-icon] { display: inline-flex; align-
 .mermaid svg rect { fill: var(--surface); stroke: var(--accent); }
 .mermaid svg path { stroke: var(--muted); fill: none; }
 .mermaid svg .dash { stroke-dasharray: 4 3; }
+
+/* Where is this going? (studio_destination.py) and LOKI's settings panel */
+.dest-card { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; width: 100%; margin: 8px 0; background: var(--panel); border: 1px solid var(--line); }
+.dest-card small { color: var(--muted); font-size: 11px; }
+.dest-card.unset { border-color: var(--warn); }
+.dest-kinds { display: grid; gap: 8px; margin: 10px 0; }
+.dest-kinds label, .dialog label.check { flex-direction: row; }
+.dest-kinds label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.dest-kinds label.off { opacity: .45; }
+.dest-kinds small { display: block; color: var(--muted); }
+.side-body.form { white-space: normal; font: 13px/1.45 var(--sans); padding: 10px 12px; }
+.side-body.form h4 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.srow { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.srow > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.srow input[type=text], .srow select { max-width: 46%; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.srow.done span { color: var(--muted); text-decoration: line-through; }

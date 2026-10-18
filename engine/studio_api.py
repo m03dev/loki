@@ -2,6 +2,8 @@
 
   GET  /studio            is Studio running here, and how to start it by hand
   POST /studio/open       open LOKI Studio (its own app and window; or bring it to the front)
+  POST /studio/embed      the Studio TAB of LOKI's window: start Studio's server in the background (no window) once,
+                          and give the tab its address with Studio's token (app/ui/modebar.js frames it)
   POST /engine/restart    restart this engine (the LOKI MCP API's restart_engine, after the owner said yes)
 
 LOKI Studio is a separate program on purpose - like a game editor next to the game - so it keeps
@@ -19,7 +21,9 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
-ROUTES = {("GET", "/studio"), ("POST", "/studio/open"), ("POST", "/engine/restart")}
+ROUTES = {("GET", "/studio"), ("POST", "/studio/open"), ("POST", "/studio/embed"), ("POST", "/engine/restart")}
+_EMBED = {"t": 0.0, "lock": threading.Lock()}
+EMBED_GRACE_S = 25.0      # one background start at a time; a second click while it comes up does not start another
 
 
 def handles(method: str, route: str) -> bool:
@@ -55,6 +59,47 @@ def running(data: Path) -> dict:
     except (OSError, ValueError):
         pass
     return {}
+
+
+def _spawn(argv: list, data: Path, popen=None) -> None:
+    env = dict(os.environ, LOKI_DATA=str(data))
+    for name in ("LOKI_SUPERVISED", "LOKI_PORT", "LOKI_JOB_ID"):
+        env.pop(name, None)
+    kwargs: dict = {"cwd": str(REPO), "env": env, "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL, "close_fds": True}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200 | 0x08000000   # DETACHED | NEW_PROCESS_GROUP | NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    python = sys.executable
+    if sys.platform == "win32" and python.lower().endswith("python.exe"):
+        quiet = python[:-10] + "pythonw.exe"
+        python = quiet if Path(quiet).is_file() else python
+    (popen or subprocess.Popen)([python, *argv], **kwargs)  # noqa: S603 - our own program
+
+
+def embed(data: Path, popen=None, clock=None) -> dict:
+    """Studio for the tab: its address + token when it runs; else start its server once in the background."""
+    import time as _time  # pylint: disable=import-outside-toplevel
+    now = (clock or _time.time)()
+    up = running(data)
+    if up:
+        return {"ok": True, "running": True, "url": "http://127.0.0.1:%d/#token=%s" % (int(up["port"]), up["token"])}
+    if getattr(sys, "frozen", False):
+        return {"ok": False, "error": "This packaged LOKI has no Studio inside. " + how_to_start()}
+    script = REPO / "studio" / "studio_app.py"
+    if not script.is_file():
+        return {"ok": False, "error": "studio/studio_app.py is missing in %s" % REPO}
+    with _EMBED["lock"]:
+        if now - _EMBED["t"] < EMBED_GRACE_S:
+            return {"ok": True, "running": False, "starting": True, "note": "LOKI Studio is starting..."}
+        _EMBED["t"] = now
+    try:
+        _spawn([str(script), "--headless"], data, popen)
+    except OSError as exc:
+        _EMBED["t"] = 0.0
+        return {"ok": False, "error": "could not start LOKI Studio (%s). %s" % (exc, how_to_start())}
+    return {"ok": True, "running": False, "starting": True, "started": True, "note": "LOKI Studio is starting..."}
 
 
 def open_studio(data: Path) -> dict:
@@ -97,6 +142,9 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
     if (method, path) == ("GET", "/studio"):
         up = running(data_dir)
         return 200, {"ok": True, "running": bool(up), "port": up.get("port"), "how": how_to_start()}
+    if (method, path) == ("POST", "/studio/embed"):
+        out = embed(data_dir)
+        return (200 if out.get("ok") else 500), out
     if (method, path) == ("POST", "/studio/open"):
         out = open_studio(data_dir)
         return (200 if out.get("ok") else 500), dict(out, how=how_to_start())
