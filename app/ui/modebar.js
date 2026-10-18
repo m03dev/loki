@@ -24,6 +24,23 @@ const LokiModeBar = (() => {
   const svg = (paths) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + "</svg>";
   const call = (path, body) => (typeof api === "function" ? api(path, body) : Promise.reject(new Error("not ready")));
 
+  // The title strip: a 38 px band across the top of the window holding the tabs (owner: "in the window's title bar").
+  // macOS (titlebar-mac): the page is drawn under a transparent title bar, so the strip starts after the traffic
+  // lights. Windows / native: the strip sits flush under the system frame. Empty parts of the strip drag the window
+  // (pywebview's .pywebview-drag-region); the tabs are buttons, never drag regions. Double-click = zoom (js_api).
+  function strip() {
+    const top = mk("header", "titlestrip pywebview-drag-region"); top.id = "titlestrip";
+    const left = mk("div", "titlestrip-side pywebview-drag-region");
+    const right = mk("div", "titlestrip-side pywebview-drag-region");
+    top.append(left, bar(), right);
+    top.addEventListener("dblclick", (e) => {
+      if (e.target.closest("button")) return;
+      const host = window.pywebview && window.pywebview.api;
+      if (host && typeof host.toggle_maximize === "function") host.toggle_maximize();
+    });
+    return top;
+  }
+
   function bar() {
     const nav = mk("nav", "modebar"); nav.id = "modebar"; nav.setAttribute("role", "tablist"); nav.setAttribute("aria-label", "Mode");
     MODES.forEach((m, i) => {
@@ -181,7 +198,7 @@ const LokiModeBar = (() => {
 
   function init() {
     if (document.getElementById("modebar")) return;
-    document.body.prepend(bar());
+    document.body.prepend(strip());
     document.body.dataset.mode = active;
     document.body.classList.add("has-modebar");
     document.addEventListener("keydown", onKey, true);

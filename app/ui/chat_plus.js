@@ -130,10 +130,9 @@ const ChatPlus = (function () {
     item("Import chats (ChatGPT, Claude, Open WebUI, LibreChat, Markdown)...", importChats);
     item("Compare models side by side...", () => comparePanel(""));
     item("Prompt library...", () => promptPicker());
-    const r = anchor.getBoundingClientRect();
-    menu.style.top = Math.round(r.bottom + 6) + "px";
-    menu.style.right = Math.round(window.innerWidth - r.right) + "px";
     document.body.append(menu);
+    if (window.LokiPlace) LokiPlace.place(anchor, menu, { align: "end" });
+    else { const r = anchor.getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 6) + "px"; menu.style.right = Math.round(window.innerWidth - r.right) + "px"; }
     setTimeout(() => document.addEventListener("click", function off(e) { if (menu && !menu.contains(e.target)) { menu.remove(); menu = null; } document.removeEventListener("click", off); }), 0);
   }
 

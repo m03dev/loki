@@ -384,7 +384,7 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
                              "Quit LOKI and open it again. The last lines of its log (%s):\n\n%s"
                              % (STATE / "engine.out", log_tail(STATE / "engine.out")))
                 return
-            show_url(f"{BASE}/#token={token}")
+            show_url(window_url(token))
             continue
         log("the engine is restarting on the updated code")
         if RELEASE_MODE:
@@ -413,7 +413,7 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
                          "It was rolled back if it could be. Quit LOKI and open it again. The last lines of "
                          "its log (%s):\n\n%s" % (STATE / "engine.out", log_tail(STATE / "engine.out")))
             return
-        show_url(f"{BASE}/#token={token}")
+        show_url(window_url(token))
 
 
 # --------------------------------------------------------------------- background + start at login
@@ -596,6 +596,74 @@ def name_the_app() -> None:
         pass
 
 
+# The title bar (owner, 2026-10-17: the mode tabs belong IN the window's title bar, not in a floating pill).
+# macOS: the native traffic lights stay, the page draws under a transparent title bar (full-size content view) and
+#   LOKI's 38 px strip (app/ui/titlebar.js) holds the tabs, starting after the traffic lights; the rest of the strip
+#   drags the window (pywebview's .pywebview-drag-region).
+# Windows: pywebview's frameless WinForms window cannot be resized at its edges (FormBorderStyle None, no hit test),
+#   so the native frame stays and LOKI's strip sits flush directly under it - same tabs, no floating pill.
+# LOKI_TITLEBAR=native (Settings > General) leaves the macOS title bar alone too.
+TITLEBAR = {"mac": False}
+
+
+def titlebar_mode() -> str:
+    return "native" if env_setting("LOKI_TITLEBAR", "custom").lower() == "native" else "custom"
+
+
+def window_url(token: str) -> str:
+    """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar."""
+    return f"{BASE}/#token={token}" + ("&titlebar=mac" if TITLEBAR["mac"] else "")
+
+
+def mac_titlebar(window) -> bool:
+    """Transparent, title-less macOS title bar over a full-size content view. Any failure: the normal title bar."""
+    if sys.platform != "darwin" or titlebar_mode() != "custom":
+        return False
+    try:
+        import AppKit  # type: ignore  # pyobjc, installed with pywebview on macOS
+        from PyObjCTools import AppHelper  # type: ignore
+    except Exception:  # noqa: BLE001
+        return False
+    ns = getattr(window, "native", None)
+    if ns is None:
+        return False
+
+    def apply() -> None:
+        try:
+            mask = getattr(AppKit, "NSWindowStyleMaskFullSizeContentView", 1 << 15)
+            ns.setStyleMask_(ns.styleMask() | mask)
+            ns.setTitlebarAppearsTransparent_(True)
+            ns.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
+            TITLEBAR["mac"] = True
+        except Exception:  # noqa: BLE001
+            TITLEBAR["mac"] = False
+            log("the macOS title bar stays as it is:\n" + traceback.format_exc())
+    try:
+        AppHelper.callAfter(apply)
+        TITLEBAR["mac"] = True   # set at once so the first load_url already asks for the strip
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class WindowApi:
+    """The only Python the page may call (pywebview js_api): double-click on LOKI's title strip = zoom."""
+
+    def __init__(self) -> None:
+        self._max = False
+
+    def toggle_maximize(self) -> bool:
+        window = WINDOW.get("window")
+        if window is None:
+            return False
+        try:
+            (window.restore if self._max else window.maximize)()
+            self._max = not self._max
+        except Exception:  # noqa: BLE001
+            return False
+        return self._max
+
+
 def open_window(url: str = "", html: str = "", main: bool = False, then=None) -> bool:
     """Show Loki in a native window. False when pywebview is not installed.
     main=True with html: LOKI's own window showing `html` first (the start screen); `then` runs in a
@@ -609,10 +677,16 @@ def open_window(url: str = "", html: str = "", main: bool = False, then=None) ->
         webview.create_window("Loki", html=html, width=720, height=360)
     elif html:
         WINDOW["window"] = webview.create_window("Loki", html=html, width=1240, height=820, min_size=(760, 520),
-                                                 background_color="#1f1f24")
+                                                 background_color="#1f1f24", js_api=WindowApi())
     else:
         WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520), text_select=True,
-                                                 background_color="#1f1f24")
+                                                 background_color="#1f1f24", js_api=WindowApi())
+    if WINDOW.get("window") is not None and sys.platform == "darwin":
+        win = WINDOW["window"]
+        try:
+            win.events.before_show += lambda: mac_titlebar(win)
+        except Exception:  # noqa: BLE001 - an older pywebview: the normal title bar
+            pass
     log("opening the Loki window")
     try:
         webview.start(then, debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
@@ -782,7 +856,7 @@ def run_with_splash(workspace: Path, holder: dict, stopping) -> int:
         click = os.environ.get("LOKI_LAUNCH_T0", "")   # set by the native launcher at the double click
         since = (" (%.2fs since the double-click)" % (time.time() - int(click) / 1000.0)) if click.isdigit() and int(click) else ""
         log("engine ready after %.2fs (%.2fs since the app started)%s" % (time.monotonic() - t0, time.monotonic() - T_START, since))
-        show_url(f"{BASE}/#token={token}")
+        show_url(window_url(token))
 
     if not open_window(html=splash_html(), main=True, then=behind_the_window):
         return 1
@@ -839,7 +913,7 @@ def main(argv: list[str] | None = None) -> int:
         return tell(title, detail)
     process = holder.get("process")
 
-    url = f"{BASE}/#token={token}"
+    url = window_url(token)
     try:
         def alive() -> bool:
             current = holder.get("process")

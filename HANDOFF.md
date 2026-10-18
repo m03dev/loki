@@ -6,6 +6,15 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 late: mode tabs in the title bar, menus that stay on screen (Claude, cloud)
+
+- Tabs in a 38 px title strip (`app/ui/modebar.js`). macOS: transparent title bar over full-size content (pyobjc,
+  guarded) and the strip starts after the traffic lights. Windows: the native frame stays (pywebview frameless loses
+  edge resizing) and the strip is flush under it. `LOKI_TITLEBAR=custom|native` in Settings > General.
+- `app/ui/place.js` (LokiPlace) places the chat model menu, the Settings model picker, the chat menu, the mode picker,
+  the / palette and right-click menus; dialogs use vh/clamp() under the strip. Suite `tests/test_ui_fit.py` (~42 s).
+- Not verified: the real Mac title bar (pyobjc in pywebview's window), dragging/double-click in pywebview on either OS.
+
 ## 2026-10-17 night: one client - mode bar, Studio tab, Godot tab; Studio's "Where is this going?" (Claude, cloud)
 
 - LOKI's window: mode bar at the top (`app/ui/modebar.js`): LOKI / Studio / Godot / World / Forge, Ctrl/Cmd+1..5, state

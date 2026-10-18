@@ -398,7 +398,7 @@ async function loadModels() {
   if (!data || !data.ok) return;
   modelMenu.data = data;
   paintModelButton();
-  if (!$("#model-menu").hidden) renderModelMenu();
+  if (!$("#model-menu").hidden) { renderModelMenu(); if (window.LokiPlace) LokiPlace.again(); }
 }
 
 function modelLabel(name) {
@@ -468,7 +468,9 @@ function toggleModelMenu(force) {
   const open = force === undefined ? menu.hidden : force;
   menu.hidden = !open;
   $("#model-button").setAttribute("aria-expanded", String(open));
-  if (open) { renderModelMenu(); loadModels(); const first = menu.querySelector(".model-item.current, .model-item"); if (first) first.focus(); }
+  const fit = () => window.LokiPlace && !menu.hidden && LokiPlace.place($("#model-button"), menu, { align: "end", minWidth: 300 });
+  if (!open && window.LokiPlace) LokiPlace.release(menu);
+  if (open) { renderModelMenu(); fit(); loadModels().then(fit); const first = menu.querySelector(".model-item.current, .model-item"); if (first) first.focus(); }
 }
 function closeModelMenu() { toggleModelMenu(false); }
 

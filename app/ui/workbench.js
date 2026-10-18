@@ -258,9 +258,11 @@ const Workbench = (function () {
       menu.append(row);
     });
     menu.hidden = false;
+    const anchor = document.querySelector(".composer-box");
+    if (window.LokiPlace && anchor) LokiPlace.place(anchor, menu, { prefer: "above", matchWidth: true, maxVh: 0.5, gap: 8 });
   }
 
-  function hide() { if (menu) menu.hidden = true; items = []; kind = ""; }
+  function hide() { if (menu) { menu.hidden = true; if (window.LokiPlace) LokiPlace.release(menu); } items = []; kind = ""; }
 
   function move(d) {
     if (!items.length) return;

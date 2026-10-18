@@ -49,7 +49,7 @@ const LokiModes = (() => {
     if (out && out.ok) { active = out.active || ""; paint(); }
   }
 
-  function closeMenu() { if (menu) { menu.hidden = true; button.setAttribute("aria-expanded", "false"); } }
+  function closeMenu() { if (menu) { menu.hidden = true; button.setAttribute("aria-expanded", "false"); if (window.LokiPlace) LokiPlace.release(menu); } }
 
   function openMenu() {
     if (!menu) {
@@ -76,6 +76,7 @@ const LokiModes = (() => {
     manage.addEventListener("click", () => { closeMenu(); if (window.LokiApps) LokiApps.open("modes"); });
     menu.append(manage);
     menu.hidden = false;
+    if (window.LokiPlace) LokiPlace.place(button, menu, { prefer: "above", minWidth: 280, maxVh: 0.6 });
     button.setAttribute("aria-expanded", "true");
     const first = menu.querySelector(".mode-item.on") || menu.querySelector(".mode-item");
     if (first) first.focus();

@@ -53,6 +53,8 @@ GENERAL = {
     "LOKI_AUTO_UPDATE": {"kind": "bool", "default": "1", "label": "Update automatically from GitHub when LOKI starts"},
     "LOKI_UPDATE_EVERY_S": {"kind": "int", "default": "600", "min": 300, "max": 86400,
                             "label": "Check for updates every (seconds)"},
+    "LOKI_TITLEBAR": {"kind": "choice", "choices": ["custom", "native"], "default": "custom",
+                      "label": "Window title bar: LOKI's mode tabs in it (custom) or the system's own (native) - next start"},
     "LOKI_BACKGROUND": {"kind": "choice", "choices": ["auto", "on", "off"], "default": "auto",
                         "label": "Keep working in the background when the window is closed (auto: on for Windows)"},
     "LOKI_START_AT_LOGIN": {"kind": "choice", "choices": ["auto", "on", "off"], "default": "auto",

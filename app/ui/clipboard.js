@@ -87,9 +87,12 @@
       menu.append(b);
     }
     document.body.append(menu);
-    const w = menu.offsetWidth, h = menu.offsetHeight;
-    menu.style.left = Math.min(e.clientX, window.innerWidth - w - 6) + "px";
-    menu.style.top = Math.min(e.clientY, window.innerHeight - h - 6) + "px";
+    if (window.LokiPlace) LokiPlace.at(e.clientX, e.clientY, menu);
+    else {
+      const w = menu.offsetWidth, h = menu.offsetHeight;
+      menu.style.left = Math.max(6, Math.min(e.clientX, window.innerWidth - w - 6)) + "px";
+      menu.style.top = Math.max(6, Math.min(e.clientY, window.innerHeight - h - 6)) + "px";
+    }
   });
   function insertDelete(field) {
     const s0 = field.selectionStart, e0 = field.selectionEnd;

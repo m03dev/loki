@@ -11,9 +11,20 @@ broken, not running, or in the middle of an update.
 ## One client: Studio is a tab of LOKI's window (owner, 2026-10-17)
 
 "loki studio should not be another window but the same client, just another tab; utilize the top tab like godot engine
-to switch between modes." LOKI's window has a **mode bar** across the top (`app/ui/modebar.js`, styled like the model
-picker's glass): **LOKI** (chat/home) / **Studio** / **Godot** / **World** / **Forge**, Ctrl+1..5 (Cmd on the Mac).
-Each mode keeps its state when you switch away (panes are built once and only hidden).
+to switch between modes." The mode tabs **LOKI** (chat/home) / **Studio** / **Godot** / **World** / **Forge** sit IN the
+window's title bar (`app/ui/modebar.js`, a 38 px title strip), Ctrl+1..5 (Cmd on the Mac). Each mode keeps its state when
+you switch away (panes are built once and only hidden).
+- **macOS**: the native traffic lights stay; `app/loki_app.py` makes the title bar transparent and title-less over a
+  full-size content view (pyobjc, on pywebview's `before_show`; every call guarded - a failure leaves the normal title
+  bar) and tells the page (`#...&titlebar=mac`), so the strip starts after the traffic lights (78 px).
+- **Windows**: pywebview's frameless window (WinForms, `FormBorderStyle None`) cannot be resized at its edges, so the
+  **native frame stays** and LOKI's strip sits flush directly under it - same tabs, no floating pill.
+- Empty parts of the strip drag the window (`.pywebview-drag-region`); the tabs are not drag regions; a double-click on the
+  strip maximises/restores (`WindowApi.toggle_maximize`, the window's only js_api). `LOKI_TITLEBAR=native` (Settings >
+  General) leaves the macOS title bar alone (next start).
+- Every menu/popover is placed by `app/ui/place.js` (`LokiPlace.place/at`): flips above/below to the side with room,
+  stays inside the window, caps its height and scrolls inside; dialogs are sized with vh/% and clamp() under the strip.
+  `tests/test_ui_fit.py` opens them at 900x600, 960x1040 and 1920x1080.
 
 - **Studio**: the first time the tab opens, LOKI asks its engine (`POST /studio/embed`, engine/studio_api.py) to start
   Studio's server in the background (`studio_app.py --headless`, no window; once - a second click while it comes up does

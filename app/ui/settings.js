@@ -343,16 +343,11 @@ function modelPicker(label, current, load, choose) {
   wrap.append(btn);
   let models = null, active = -1, value = current;
 
-  const place = () => {
+  const place = () => {   // place.js: flips above/below, stays inside the window, scrolls inside
+    if (window.LokiPlace) { LokiPlace.place(btn, pop, { matchWidth: true, minWidth: 260, maxVh: 0.6 }); return; }
     const r = btn.getBoundingClientRect();
-    const width = Math.max(r.width, 260);
-    const below = window.innerHeight - r.bottom - 12;
-    const height = Math.min(320, Math.max(160, below > 200 ? below : r.top - 12));
-    pop.style.width = width + "px";
-    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + "px";
-    pop.style.maxHeight = height + "px";
-    if (below > 200 || below > r.top) { pop.style.top = (r.bottom + 6) + "px"; pop.style.bottom = ""; }
-    else { pop.style.bottom = (window.innerHeight - r.top + 6) + "px"; pop.style.top = ""; }
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 268)) + "px";
+    pop.style.top = (r.bottom + 6) + "px";
   };
   const rows = () => [...list.querySelectorAll(".mpick-item")];
   const mark = (i) => {
