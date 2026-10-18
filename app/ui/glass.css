@@ -61,7 +61,7 @@ body {
   background: linear-gradient(180deg, rgba(24, 24, 28, .8), rgba(24, 24, 28, .55));
   border-bottom: 1px solid var(--line);
 }
-.brand-mark { background: var(--grad); color: #061317; box-shadow: 0 4px 16px rgba(110, 196, 182, .35); border-radius: 10px; }
+.brand-mark { background: transparent; box-shadow: none; border-radius: 10px; }
 .brand-name { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
 
 /* controls: soft, translucent, with a gentle lift */
@@ -137,7 +137,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(14
   filter: drop-shadow(0 6px 30px rgba(122, 150, 170, .35));
 }
 .welcome-inner { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 26px; box-shadow: var(--shadow); padding: 28px; }
-.welcome-mark { background: var(--grad); color: #061317; }
+.welcome-mark { background: transparent; }
 .chip { background: rgba(255, 255, 255, .06); border: 1px solid var(--glass-edge); border-radius: 999px; }
 .chip:hover { background: var(--grad-soft); }
 

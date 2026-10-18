@@ -43,10 +43,25 @@ try:
 except ImportError:
     async_playwright = None
 
+def check_no_l_placeholder() -> None:
+    """E13: no element in index.html is just the text 'L' (the old letter placeholders
+    were replaced by LOKI's fox mark). Static check, runs on every machine."""
+    import re
+    html = (UI / "index.html").read_text(encoding="utf-8")
+    bad = re.findall(r">L<", html)
+    check("no element in index.html is just the text 'L'", not bad, bad)
+    check("the fox mark is inline SVG (no external file)",
+          html.count('<span class="brand-mark" aria-hidden="true"><svg') >= 1
+          and html.count('<div class="welcome-mark" aria-hidden="true"><svg') >= 1,
+          "brand-mark / welcome-mark do not carry the inline fox SVG")
+
+
+check_no_l_placeholder()
+
 if async_playwright is None:
     print("SKIP: no Playwright here")
-    print("\n0 passed, 0 failed")
-    sys.exit(0)
+    print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
+    sys.exit(1 if FAIL else 0)
 
 FAKE = {
     "/health": {"ok": True, "service": "loki", "mode": "smart", "provider": "groq", "model": "x", "providers": "", "route": [],
@@ -98,6 +113,9 @@ async def main() -> None:
         check("app.js reaches ready (no white window)", ready, errors[:5])
         check("the window told the engine it is ready (an update on trial is kept)", any(p == "/ui/ready" for p, _ in ui_posts), ui_posts)
         check("no rescue screen", not await page.query_selector("#boot-rescue"))
+        l_only = await page.evaluate(
+            "Array.from(document.querySelectorAll('body *')).filter(e => e.children.length === 0 && e.textContent.trim() === 'L').length")
+        check("no element in the loaded window is just the text 'L'", l_only == 0, l_only)
         await page.click("#open-settings")
         await page.wait_for_timeout(500)
         check("Settings opens", await page.is_visible("#settings"))
