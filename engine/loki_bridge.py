@@ -875,6 +875,24 @@ class BridgeHandler(BaseHTTPRequestHandler):
             pass
         return True
 
+    def _send_forge(self, out: tuple) -> None:
+        """Forge's answer: (status, json) or (status, bytes, content type) for a model file."""
+        if len(out) == 2:
+            self._send_json(*out)
+            return
+        status, body, kind = out
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionError, OSError):
+            pass
+
     def _serve_creation(self, route: str) -> bool:
         """GET /creations/<kind>/<file>: a picture, video, sketch or sound LOKI made in the
         workspace, for Settings > Creations (an <img>/<video> cannot send the bearer token).
@@ -960,6 +978,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/studio":   # session 29: LOKI Studio (engine/studio_api.py)
             import studio_api  # pylint: disable=import-outside-toplevel
             self._send_json(*studio_api.route(self.server.state, "GET", route))
+            return
+        if route.startswith("/forge/"):   # Forge, the 3D panel (engine/forge_api.py)
+            import forge_api  # pylint: disable=import-outside-toplevel
+            self._send_forge(forge_api.handle_get(self.server.state, self.path))
             return
         import usability_api  # pylint: disable=import-outside-toplevel - session 29: help, onboarding, language
         if usability_api.handles("GET", route):
@@ -1294,6 +1316,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             body = assist_api.read_json(self)
             if body is not None:
                 self._send_json(*assist_api.route(self.server.state, "POST", self.path, body))
+            return
+        if route.startswith("/forge/"):   # Forge: drawings and sculpted meshes are big bodies (engine/forge_api.py)
+            import forge_api  # pylint: disable=import-outside-toplevel
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > forge_api.MAX_BODY:
+                self._send_json(413, {"ok": False, "error": "Request body is too large."})
+                return
+            self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
             return
         if route == "/files/upload":   # session 29: a dropped file's raw bytes (not JSON; engine/files_api.py)
             import files_api  # pylint: disable=import-outside-toplevel

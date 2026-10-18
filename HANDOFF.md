@@ -6,6 +6,18 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 night: Forge, LOKI's 3D maker (Claude, cloud)
+
+- Sidebar cube -> Forge (`app/ui/forge.js/.css`): Draw / Add an image / Describe it (picture first, redo) ->
+  Make 3D -> viewer (orbit, zoom, wireframe, clay, lights) + Sculpt (Draw, Inflate, Smooth, Flatten, Grab,
+  Pinch, radius/strength, X symmetry, undo/redo, curved Subdivide) -> Save .glb/.obj into `models/`.
+- Engine `engine/forge3d.py` (`make_3d`): TripoSR (own process, `engine/runners/triposr.py`) -> HF Space
+  TRELLIS via gradio_client -> offline "lift" (always works; closed mesh, vertex colours, own glb writer).
+  API `engine/forge_api.py` (`/forge/*`, token required, file route only models/). Agent tool `make_3d`.
+  Manifest `capabilities/forge-3d`. Suite `tests/test_forge3d.py` (~18 s, includes a headless window check).
+- Not tested here: `python tools/setup_forge3d.py` (torch + TripoSR) on the PC (CUDA) and the Mac (MPS),
+  and the TRELLIS Space (its API names may change). Next: "Send to LOKI World", textured TripoSR output.
+
 ## 2026-10-17 night: LOKI installs what it needs by itself (Claude, cloud)
 
 Owner: "get loki to start downloading and installing packages it needs". `engine/auto_setup.py`: 45 s after the engine

@@ -1,0 +1,20 @@
+{
+  "name": "forge-3d",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Forge: turn a picture, a drawing or a sentence into a 3D model (.glb + .obj in the workspace's models/), then look at it, sculpt it and export it in the Forge panel. Best first: TripoSR on this computer (CUDA ~6 GB on the PC, Apple MPS on the Mac, CPU slowly; set up with tools/setup_forge3d.py), then a free online Hugging Face Space (TRELLIS) when gradio_client is installed - the picture is then sent to that third party (never with LOKI_LOCAL_ONLY=1) - and always an offline 'lift' that inflates the cut-out silhouette into a rounded mesh. LOKI's make_3d tool.",
+  "license": "MIT (TripoSR code and weights; TRELLIS; LOKI's lift is AGPL-3.0)",
+  "homepage": "https://github.com/VAST-AI-Research/TripoSR",
+  "permissions": [
+    "fs:workspace",
+    "network",
+    "process:spawn"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "forge3d.make_3d",
+  "install": "python tools/setup_forge3d.py   (torch + TripoSR, about 3 GB; or `online` for gradio_client only)",
+  "notice": "The online fallback sends your picture to a Hugging Face Space (a third party). The offline lift needs nothing."
+}

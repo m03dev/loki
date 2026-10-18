@@ -5878,6 +5878,50 @@ TOOL_CATEGORIES["creative"] += ["edit_image"]
 CATEGORY_LABELS["everyday"] = "Everyday (weather, news, time around the world, translation - free, no key)"
 CATEGORIES.setdefault("everyday", True)
 MODIFYING |= {"edit_image"}
+
+
+# --- Forge (engine/forge3d.py): a picture, drawing or sentence -> a 3D model in models/ ------------------
+def forge_image_maker(prompt: str) -> str:
+    """Text -> picture through the image specialist (its policy check and backends), for Forge."""
+    import forge3d  # pylint: disable=import-outside-toplevel
+    out = CONDUCTOR.make_image(prompt + ", a single object, centered, plain white background, full view", {})
+    if not out.get("ok"):
+        raise forge3d.ForgeError("could not make the picture: %s" % out.get("error"))
+    return str(out.get("file"))
+
+
+async def make_3d_tool(path: str = "", prompt: str = "", backend: str = "auto") -> str:
+    """Make a 3D model (.glb + .obj in models/) from a workspace picture or a description."""
+    import forge3d  # pylint: disable=import-outside-toplevel
+    try:
+        src = str(resolve_in_workspace(path)) if path else ""
+    except ValueError as exc:
+        return "error: %s" % exc
+    out = await asyncio.to_thread(forge3d.make_3d, src, WORKSPACE / "models", prompt, backend or "auto",
+                                  image_maker=forge_image_maker)
+    if not out.get("ok"):
+        return "error: " + str(out.get("error"))
+    meta = out["meta"]
+    return ("made models/%s with %s (%d vertices, %d triangles)%s%s. Open it in Forge (the cube in the sidebar) "
+            "to look at it, sculpt it and export it." % (out["name"], out["backend"], meta.get("vertices", 0),
+                                                         meta.get("triangles", 0),
+                                                         "; also models/%s" % Path(out["obj"]).name if out["obj"] else "",
+                                                         "; %s" % meta["note"] if meta.get("note") else ""))
+
+
+LOCAL_TOOLS["make_3d"] = make_3d_tool
+_FORGE_SCHEMA = schema(
+    "make_3d", "Make a 3D model (.glb and .obj, saved in models/) from a picture in the workspace (path=) or from "
+    "a description (prompt=; LOKI first draws a picture, then lifts it to 3D). backend: auto (best available: "
+    "TripoSR on this computer, then a free online Space, then an offline inflate that always works) | triposr | "
+    "online | lift. Tell the user it opens in Forge for viewing and sculpting.",
+    {"path": {"type": "string"}, "prompt": {"type": "string"},
+     "backend": {"type": "string", "enum": ["auto", "triposr", "online", "lift"]}})
+TOOL_SCHEMAS.append(_FORGE_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_FORGE_SCHEMA)
+MODEL_TOOL_NAMES.add("make_3d")
+TOOL_CATEGORIES["creative"] += ["make_3d"]
+MODIFYING |= {"make_3d"}
 LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("peer_files") + 1:LOCAL_TOOL_PRIORITY.index("peer_files") + 1] = [
     "home", "weather", "news"]
 # (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)

@@ -1,0 +1,69 @@
+/* Forge (forge.js): make 3D things, view and sculpt them. Dark glass; menus and floating bars in the
+   soft translucent grey-blue of the model picker (glass.css .mpick-pop). The viewer itself is clean. */
+.sheet-panel.forge-panel { width: min(1280px, 100%); height: min(860px, 94vh); max-height: none; overflow: hidden; }
+.forge-panel .sheet-head { gap: 12px; }
+.forge-status { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.forge-status.bad { color: var(--warn, #e9a15b); }
+.forge-body { display: grid; grid-template-columns: 340px 1fr; flex: 1; min-height: 0; border-top: 1px solid var(--line); }
+.forge-side { display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); }
+.forge-ways { display: flex; gap: 6px; }
+.forge-ways .forge-way { flex: 1; height: 38px; border-radius: 10px; }
+.forge-btn.on, .forge-way.on { background: rgba(185, 200, 222, .2); color: var(--text); box-shadow: inset 0 0 0 1px rgba(200, 212, 230, .3); }
+.forge-pane { display: flex; flex-direction: column; gap: 8px; }
+.forge-pane[hidden] { display: none; }
+.forge-canvas { width: 100%; aspect-ratio: 1; border-radius: 12px; background: #fff; touch-action: none; cursor: crosshair;
+  box-shadow: 0 0 0 1px rgba(200, 212, 230, .18); }
+.forge-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.forge-color { width: 34px; height: 30px; padding: 0; border: 1px solid rgba(200, 212, 230, .2); border-radius: 8px; background: transparent; }
+.forge-range { flex: 1; min-width: 70px; accent-color: #9fb6d8; }
+.forge-drop { border: 1.5px dashed rgba(200, 212, 230, .3); border-radius: 12px; padding: 30px 12px; text-align: center;
+  color: var(--muted); font-size: 13px; cursor: pointer; }
+.forge-drop.over, .forge-drop:hover { border-color: rgba(170, 196, 225, .6); background: rgba(185, 200, 222, .06); }
+.forge-preview { width: 100%; max-height: 300px; object-fit: contain; border-radius: 12px; background: rgba(255, 255, 255, .04); }
+.forge-preview[hidden] { display: none; }
+.forge-prompt { width: 100%; resize: vertical; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--text);
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(200, 212, 230, .14); }
+.forge-go { display: flex; gap: 8px; align-items: center; }
+.forge-backend { flex: 1; min-width: 0; padding: 7px 8px; border-radius: 9px; font-size: 12.5px; color: var(--text);
+  background: rgba(58, 64, 76, .72); border: 1px solid rgba(200, 212, 230, .18); }
+.forge-make { padding: 8px 16px; }
+.forge-make:disabled { opacity: .5; cursor: progress; }
+.forge-progress { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.forge-progress[hidden] { display: none; }
+.forge-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.forge-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #9fb6d8, #ed782b); transition: width .4s; }
+.forge-sub { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 4px; }
+.forge-models { display: flex; flex-direction: column; gap: 3px; }
+.forge-model { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 9px; border-radius: 8px; text-align: left;
+  background: transparent; color: #dfe4ec; font-size: 12.5px; }
+.forge-model:hover, .forge-model.on { background: rgba(185, 200, 222, .14); }
+.forge-model-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forge-model-meta { font-size: 11px; color: var(--muted); }
+.forge-stage { position: relative; min-height: 0; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #3a3f4a 0%, #23262d 60%, #1b1d22 100%); }
+.forge-view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.forge-view:active { cursor: grabbing; }
+.forge-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); font-size: 14px;
+  pointer-events: none; padding: 20px; text-align: center; }
+.forge-empty[hidden] { display: none; }
+.forge-float { position: absolute; display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 12px;
+  background: rgba(58, 64, 76, .72); border: 1px solid rgba(200, 212, 230, .18);
+  backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2); box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
+.forge-float[hidden] { display: none; }
+.forge-viewbar { top: 12px; left: 50%; transform: translateX(-50%); }
+.forge-sculptbar { left: 12px; top: 64px; flex-direction: column; align-items: stretch; width: 56px; }
+.forge-brushes { display: flex; flex-direction: column; gap: 3px; padding-bottom: 4px; border-bottom: 1px solid rgba(200, 212, 230, .14); }
+.forge-sculptbar .forge-btn { width: 44px; height: 38px; justify-content: center; }
+.forge-slider { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; }
+.forge-slider-name { font-size: 10.5px; color: var(--muted); }
+.forge-slider input { width: 92px; transform: rotate(-90deg); margin: 40px -22px; accent-color: #9fb6d8; }
+.forge-exportbar { right: 12px; bottom: 12px; }
+.forge-float .forge-btn { background: transparent; color: #dfe4ec; border-radius: 8px; }
+.forge-float .forge-btn:hover { background: rgba(185, 200, 222, .14); }
+.forge-float .forge-btn.on { background: rgba(185, 200, 222, .24); }
+html.u-hc .forge-float { background: #000 !important; border-color: #fff !important; backdrop-filter: none; }
+@media (prefers-reduced-transparency: reduce) { .forge-float { background: #3a404c; backdrop-filter: none; } }
+@media (max-width: 860px) {
+  .forge-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(320px, 1fr); }
+  .forge-side { border-right: 0; border-bottom: 1px solid var(--line); max-height: 46vh; }
+}
