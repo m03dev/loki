@@ -304,7 +304,9 @@
   "What your messages cost, per model and per day.": "你的消息花费，按模型和按天统计。",
   "Work on LOKI itself with DeepSeek V4.1 - opens LOKI Studio, its own app (works even when LOKI is down).": "用 DeepSeek V4.1 开发 LOKI 本身——打开独立应用 LOKI Studio（即使 LOKI 宕机也能用）。",
   "Your computers running LOKI, linked together, and updating them all.": "运行 LOKI 的电脑，彼此相连，并一起更新。",
-  "Your data": "你的数据"
+  "Your data": "你的数据",
+  "Paste": "粘贴",
+  "Paste from the clipboard (works even when Ctrl+V does not).": "从剪贴板粘贴（即使 Ctrl+V 无效也能用）。"
  },
  "fb.email": "写邮件",
  "fb.email_done": "已保存 {file}。邮件草稿已打开——附上文件并发送。",

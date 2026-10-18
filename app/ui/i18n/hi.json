@@ -304,7 +304,9 @@
   "What your messages cost, per model and per day.": "आपके संदेशों की लागत, हर मॉडल और हर दिन के हिसाब से।",
   "Work on LOKI itself with DeepSeek V4.1 - opens LOKI Studio, its own app (works even when LOKI is down).": "DeepSeek V4.1 के साथ खुद LOKI पर काम करें - LOKI Studio खोलता है, उसका अपना ऐप (LOKI बंद होने पर भी चलता है)।",
   "Your computers running LOKI, linked together, and updating them all.": "LOKI चलाने वाले आपके कंप्यूटर, आपस में जुड़े हुए, और सबको अपडेट करना।",
-  "Your data": "आपका डेटा"
+  "Your data": "आपका डेटा",
+  "Paste": "चिपकाएँ",
+  "Paste from the clipboard (works even when Ctrl+V does not).": "क्लिपबोर्ड से चिपकाएँ (Ctrl+V काम न करे तब भी काम करता है)।"
  },
  "fb.email": "ईमेल लिखें",
  "fb.email_done": "{file} सहेजी गई। एक ईमेल ड्राफ़्ट खुला है - फ़ाइल जोड़ें और भेजें।",

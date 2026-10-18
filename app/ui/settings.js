@@ -373,19 +373,41 @@ async function phoneKey(p) {
     qrStatus(r.error || "");
     return;
   }
-  const keyPage = p.keys ? button("Show the key page QR instead", "small", async () => {
-    $("#qr-image").replaceChildren();
+  // The QR holds this computer's address on the home network. The first address is only the
+  // likeliest one (a VPN or a WSL/Hyper-V adapter can win), so the others are one tap away.
+  const urls = (r.urls && r.urls.length) ? r.urls : [r.url];
+  const svgs = (r.svgs && r.svgs.length) ? r.svgs : [r.svg];
+  let shown = 0;
+  const showAddress = (i) => {
+    shown = i;
     const holder = el("div");
-    holder.innerHTML = await qrSvg(p.keys);
-    if (holder.firstElementChild) $("#qr-image").append(holder.firstElementChild);
-    $("#qr-text").textContent = p.keys;
-  }) : null;
-  showQR({ title: "Send a " + p.name + " key from your phone", text: r.url, svg: r.svg,
-           steps: ["Your phone must be on the same Wi-Fi as this computer.",
-                   "Scan the code. A LOKI page opens on the phone.",
-                   "Paste the key (copy it from " + p.name + "'s site on the phone) and tap Send.",
-                   "LOKI checks it and connects " + p.name + ". The page then stops working."],
-           actions: keyPage ? [keyPage] : [] });
+    holder.innerHTML = svgs[i] || "";
+    $("#qr-image").replaceChildren(...(holder.firstElementChild ? [holder.firstElementChild] : []));
+    $("#qr-text").textContent = urls[i];
+  };
+  const actions = [];
+  if (urls.length > 1) {
+    const next = button("Phone can't open it? Try another address", "small", () => {
+      showAddress((shown + 1) % urls.length);
+      next.textContent = "Try another address (" + (shown + 1) + " of " + urls.length + ")";
+    });
+    actions.push(next);
+  }
+  if (p.keys) {
+    actions.push(button("Show " + p.name + "'s key page instead", "small", async () => {
+      const holder = el("div");
+      holder.innerHTML = await qrSvg(p.keys);
+      $("#qr-image").replaceChildren(...(holder.firstElementChild ? [holder.firstElementChild] : []));
+      $("#qr-text").textContent = p.keys;
+    }));
+  }
+  const steps = ["Your phone must be on the same Wi-Fi as this computer (not a guest network).",
+                 "Scan the code. A LOKI page opens on the phone" + (p.keys ? " with a link to " + p.name + "'s key page." : "."),
+                 "Get the key there, paste it into the LOKI page and tap Send.",
+                 "LOKI checks it and connects " + p.name + ". The page then stops working."];
+  if (r.hint) steps.push(r.hint);
+  else steps.push("Key already on this computer? Close this and use Paste next to the key box instead.");
+  showQR({ title: "Send a " + p.name + " key from your phone", text: urls[0], svg: svgs[0], steps, actions });
   qrStatus("Waiting for your phone… (5 minutes)");
   qrView.timer = setInterval(async () => {
     const s = await api("/handoff/status?id=" + encodeURIComponent(r.id)).catch(() => null);

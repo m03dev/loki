@@ -87,23 +87,8 @@ def machine_kind() -> str:
 
 
 def lan_addresses() -> list:
-    """This machine's private addresses a phone could use (LAN first, then VPN/Tailscale)."""
-    found = []
-    candidates = [peers.lan_address()]
-    try:
-        candidates += [info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
-    except OSError:
-        pass
-    for address in candidates:
-        try:
-            ip = ipaddress.ip_address(address)
-        except ValueError:
-            continue
-        if ip.is_loopback or not peers.private_client(address):
-            continue
-        if address not in found:
-            found.append(address)
-    return found[:4] or ["127.0.0.1"]
+    """This machine's private addresses a phone could use (home Wi-Fi first, then VPN/Tailscale)."""
+    return peers.lan_addresses()[:4]
 
 
 # --- keys -------------------------------------------------------------------------

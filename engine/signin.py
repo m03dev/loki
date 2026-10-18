@@ -28,6 +28,7 @@ import base64
 import hashlib
 import html
 import json
+import os
 import secrets
 import threading
 import time
@@ -229,9 +230,11 @@ class PhoneHandoff:
     """A one-time page on the home network that sends one key from a phone to LOKI."""
 
     def __init__(self, provider: str, label: str, connect: Callable[[str, str], dict],
-                 host_ip: str, private_client: Callable[[str], bool], ttl_s: float = HANDOFF_TTL_S,
-                 bind: str = "0.0.0.0") -> None:
+                 host_ip, private_client: Callable[[str], bool], ttl_s: float = HANDOFF_TTL_S,
+                 bind: str = "0.0.0.0", keys_url: str = "", port_number: int = 0) -> None:
         self.provider, self.label, self.connect = provider, label, connect
+        self.keys_url = keys_url if str(keys_url).startswith("https://") else ""
+        hosts = [host_ip] if isinstance(host_ip, str) else [h for h in host_ip if h]
         self.token = _b64url(secrets.token_bytes(24))
         self.created = time.time()
         self.ttl_s = ttl_s
@@ -289,12 +292,26 @@ class PhoneHandoff:
                 if result.get("ok"):
                     threading.Thread(target=handoff.stop, daemon=True).start()
 
-        self.httpd = _QuickServer((bind, 0), Handler)
+        # the same port every time when it is free, so a firewall "Allow" the owner gave once still fits
+        self.httpd = None
+        for candidate in ([port_number, 0] if port_number else [0]):
+            try:
+                self.httpd = _QuickServer((bind, candidate), Handler)
+                break
+            except OSError:
+                continue
+        if self.httpd is None:
+            raise OSError("no free port for the phone page")
         self.created = time.time()          # the five minutes start once the page is up
         self.port = self.httpd.server_address[1]
-        self.url = "http://%s:%d/k/%s" % (host_ip, self.port, self.token)
+        # every address a phone on the same network could use, the likeliest first (the window
+        # offers the next one when the phone cannot open the first)
+        self.urls = ["http://%s:%d/k/%s" % (h, self.port, self.token) for h in (hosts or ["127.0.0.1"])]
+        self.url = self.urls[0]
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="loki-phone-handoff").start()
-        threading.Timer(ttl_s, self.stop).start()
+        timer = threading.Timer(ttl_s, self.stop)
+        timer.daemon = True      # an open page never keeps LOKI (or a test) from exiting
+        timer.start()
 
     def expired(self) -> bool:
         return time.time() - self.created > self.ttl_s or bool(self.result and self.result.get("ok"))
@@ -305,16 +322,19 @@ class PhoneHandoff:
                 "font:17px -apple-system,system-ui,sans-serif;margin:0;padding:28px 18px\">"
                 "<h2 style=\"margin:0 0 6px\">Send a key to LOKI</h2>"
                 "<p style=\"color:#9aa0aa;margin:0 0 18px\">%s - goes straight to your computer, once.</p>%s"
-                "<form method=post><input name=key type=password autocomplete=off autofocus placeholder=\"Paste the API key\" "
+                "%s<form method=post><input name=key type=password autocomplete=off autofocus placeholder=\"Paste the API key\" "
                 "style=\"width:100%%;box-sizing:border-box;font-size:17px;padding:14px;border-radius:12px;border:1px solid #34343c;"
                 "background:#2a2a31;color:#e6e9ee\"><button style=\"margin-top:14px;width:100%%;padding:14px;font-size:17px;"
                 "border:0;border-radius:12px;background:#e6e9ee;color:#1f1f24;font-weight:600\">Send to LOKI</button></form>"
                 "<p style=\"color:#9aa0aa;font-size:13px;margin-top:18px\">Plain HTTP on your home network. "
                 "This page stops working after one key or five minutes.</p></body>"
-                % (html.escape(self.label), ("<p style=\"color:#ff7777\">%s</p>" % html.escape(error)) if error else ""))
+                % (html.escape(self.label), ("<p style=\"color:#ff7777\">%s</p>" % html.escape(error)) if error else "",
+                   ("<p style=\"margin:0 0 16px\"><a href=\"%s\" target=_blank rel=noopener style=\"color:#8ab4ff\">"
+                    "1. Get a key from %s</a> (copy it), then come back here.</p>" % (html.escape(self.keys_url, quote=True), html.escape(self.label)))
+                   if self.keys_url else ""))
 
     def status(self) -> dict:
-        return {"ok": True, "provider": self.provider, "url": self.url, "done": bool(self.result),
+        return {"ok": True, "provider": self.provider, "url": self.url, "urls": self.urls, "done": bool(self.result),
                 "result": self.result, "expires_in": max(0, int(self.ttl_s - (time.time() - self.created)))}
 
     def stop(self) -> None:
@@ -328,10 +348,38 @@ class PhoneHandoff:
 HANDOFFS: dict = {}   # token -> PhoneHandoff
 
 
-def handoff_start(provider: str, label: str, connect, host_ip: str, private_client) -> dict:
+HANDOFF_PORT = 8770
+
+
+def network_hint(run=None) -> str:
+    """Why a phone on the same Wi-Fi may still not open the page, when we can tell.
+
+    On Windows a Wi-Fi marked "Public" blocks every incoming connection (Python's firewall
+    rule is for Private networks only), so the phone just spins. Read-only check."""
+    if os.name != "nt" and run is None:
+        return ""
+    import subprocess  # pylint: disable=import-outside-toplevel
+    run = run or subprocess.run
+    try:
+        out = run(["powershell", "-NoProfile", "-Command", "(Get-NetConnectionProfile).NetworkCategory"],
+                  capture_output=True, text=True, timeout=4, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        categories = (out.stdout or "").split()
+    except Exception:  # noqa: BLE001
+        return ""
+    if "Public" in categories and "Private" not in categories:
+        return ("Windows treats this Wi-Fi as a Public network, which blocks the phone. In Windows Settings > "
+                "Network & internet > Wi-Fi > this network, choose Private - or just copy the key and use Paste here.")
+    return ""
+
+
+def handoff_start(provider: str, label: str, connect, host_ip, private_client, keys_url: str = "") -> dict:
     for token in [t for t, h in HANDOFFS.items() if h.expired()]:
         HANDOFFS.pop(token).stop()
-    handoff = PhoneHandoff(provider, label, connect, host_ip, private_client)
+    try:
+        port_number = int(os.environ.get("LOKI_HANDOFF_PORT", HANDOFF_PORT))
+    except ValueError:
+        port_number = HANDOFF_PORT
+    handoff = PhoneHandoff(provider, label, connect, host_ip, private_client, keys_url=keys_url, port_number=port_number)
     HANDOFFS[handoff.token] = handoff
     return {"id": handoff.token, **handoff.status()}
 

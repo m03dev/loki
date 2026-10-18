@@ -304,7 +304,9 @@
   "What your messages cost, per model and per day.": "メッセージのコスト（モデル別・日別）。",
   "Work on LOKI itself with DeepSeek V4.1 - opens LOKI Studio, its own app (works even when LOKI is down).": "DeepSeek V4.1 で LOKI 自体を開発 - 独立アプリ LOKI Studio を開きます（LOKI が止まっていても動きます）。",
   "Your computers running LOKI, linked together, and updating them all.": "LOKI が動くパソコンをつなげて、まとめて更新します。",
-  "Your data": "あなたのデータ"
+  "Your data": "あなたのデータ",
+  "Paste": "貼り付け",
+  "Paste from the clipboard (works even when Ctrl+V does not).": "クリップボードから貼り付け（Ctrl+V が効かないときも使えます）。"
  },
  "fb.email": "メールを書く",
  "fb.email_done": "{file} を保存しました。メールの下書きが開きました。ファイルを添付して送信してください。",

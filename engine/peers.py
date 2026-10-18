@@ -201,6 +201,46 @@ def lan_address() -> str:
         probe.close()
 
 
+def _address_rank(address: str) -> int:
+    """Home Wi-Fi first: 192.168.x, then 10.x, then 172.16-31 (often Docker, WSL or Hyper-V
+    on Windows), then Tailscale; link-local (169.254) and loopback are useless to a phone."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return 99
+    if ip.is_loopback or ip.is_link_local or ip.version != 4:
+        return 99
+    if ip in ipaddress.ip_network("192.168.0.0/16"):
+        return 0
+    if ip in ipaddress.ip_network("10.0.0.0/8"):
+        return 1
+    if ip in ipaddress.ip_network("172.16.0.0/12"):
+        return 2
+    if ip in ipaddress.ip_network("100.64.0.0/10"):
+        return 3
+    return 98 if ip.is_private else 99
+
+
+def lan_addresses(extra: list | None = None) -> list:
+    """Every address on this machine a phone on the same network could reach, best first.
+
+    The single "default route" address (lan_address) is often wrong for a phone: a VPN, a
+    WSL/Hyper-V/Docker adapter or a second network card wins the route and the QR code then
+    points at an address the phone cannot reach."""
+    candidates = [lan_address()] + list(extra or [])
+    try:
+        candidates += [info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+    except OSError:
+        pass
+    seen, order = set(), []
+    for position, address in enumerate(candidates):
+        if address in seen or _address_rank(address) >= 99:
+            continue
+        seen.add(address)
+        order.append((_address_rank(address), position, address))
+    return [a for _, _, a in sorted(order)] or ["127.0.0.1"]
+
+
 # --- signing ------------------------------------------------------------------------
 
 def _body_hash(body: bytes) -> str:

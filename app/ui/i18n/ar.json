@@ -304,7 +304,9 @@
   "What your messages cost, per model and per day.": "تكلفة رسائلك، لكل نموذج ولكل يوم.",
   "Work on LOKI itself with DeepSeek V4.1 - opens LOKI Studio, its own app (works even when LOKI is down).": "اعمل على LOKI نفسه مع DeepSeek V4.1 - يفتح LOKI Studio، تطبيقه المستقل (يعمل حتى عندما يكون LOKI متوقفًا).",
   "Your computers running LOKI, linked together, and updating them all.": "حواسيبك التي تشغّل LOKI، مرتبطة معًا، وتحديثها كلها.",
-  "Your data": "بياناتك"
+  "Your data": "بياناتك",
+  "Paste": "لصق",
+  "Paste from the clipboard (works even when Ctrl+V does not).": "لصق من الحافظة (يعمل حتى عندما لا يعمل Ctrl+V)."
  },
  "fb.email": "كتابة بريد إلكتروني",
  "fb.email_done": "تم حفظ {file}. فُتحت مسودة بريد إلكتروني - أرفق الملف وأرسله.",

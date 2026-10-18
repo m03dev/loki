@@ -250,10 +250,13 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
             return 400, {"ok": False, "error": "this provider takes no key"}
         try:
             started = signin.handoff_start(pid, entry["name"], lambda p, k: connect(agent, p, k),
-                                           peers.lan_address(), peers.private_client)
+                                           peers.lan_addresses(), peers.private_client, keys_url=entry.get("keys", ""))
         except OSError as exc:
             return 500, {"ok": False, "error": "could not open the phone page: %s" % exc}
         started["svg"] = qr.svg(started["url"])
+        started["svgs"] = [qr.svg(u) for u in started["urls"][:4]]
+        started["keys"] = entry.get("keys", "")
+        started["hint"] = signin.network_hint()
         return 200, started
     if route == "/settings/general":
         updates = {}
