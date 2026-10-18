@@ -522,6 +522,17 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
+- [ ] **W50 Check the frameless Windows title bar and Open in Godot (2026-10-18, 0e2af40).** The owner on the PC:
+      "the tabs are floating here ... opening the godot project takes me to a completely different project". HANDOFF
+      "2026-10-18 19:40". After LOKI restarts on 0e2af40: (1) the window has NO system frame; the tabs sit centred in
+      the top strip; minimise / maximise / close at the top right work; dragging the empty strip moves the window,
+      dragging it to the screen edge snaps; every edge and corner resizes; maximise leaves the taskbar visible;
+      screenshot `w50-titlebar.png` into docs/operations/screens/. (2) engine.out shows "getting LOKI's Godot 4.7.2"
+      then "LOKI's Godot 4.7.2 is ready" (harness_data/addons/godot-export/editor/Godot_v4.7.2-stable_win64.exe).
+      (3) Godot tab > LOKI World > Open in Godot: a Godot 4.7.2 window titled "LOKI World" with the island and the
+      LOKI panel - never ai_testin, never the 4.8 mono editor. Do not open game/loki-world in Godot_v4.8-beta1_mono
+      (it rewrites the project). Report anything off with the first error line.
+
 - [x] **W43 Make the repository public - FIRST, the owner asked (2026-10-17).** The owner said: "make it public ... you
 - [ ] **W45 The one-click Windows installer from GitHub Actions, on a clean account (2026-10-17, session 30).** Needs
       W43 (repo public) first. HANDOFF "Session 30 one-click install", docs/INSTALL.md, docs/TESTERS.md, docs/SPEED.md.
