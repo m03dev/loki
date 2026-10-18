@@ -173,8 +173,10 @@ def _download(url: str, opener=urllib.request.urlopen) -> bytes:
         return resp.read()
 
 
-def install(data: Path | None = None, opener=urllib.request.urlopen, say: Callable[[str], None] = lambda _t: None) -> dict:
-    """Get LOKI's own Godot editor and the web template (once). Nothing is kept when a checksum does not match."""
+def install(data: Path | None = None, opener=urllib.request.urlopen, say: Callable[[str], None] = lambda _t: None,
+            editor_only: bool = False) -> dict:
+    """Get LOKI's own Godot editor and the web template (once). Nothing is kept when a checksum does not match.
+    editor_only: just the editor (Open in Godot needs nothing else)."""
     root = home(data)
     if editor_binary(data) is None:
         name, want = EDITORS[platform_key()]
@@ -196,6 +198,8 @@ def install(data: Path | None = None, opener=urllib.request.urlopen, say: Callab
                     dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         if editor_binary(data) is None:
             return {"ok": False, "error": "the Godot zip had no editor in it"}
+    if editor_only:
+        return {"ok": True}
     tpl = template_target(data) / WEB_TEMPLATE
     if not tpl.is_file():
         say("Taking Godot's web template out of the template pack (about 10 MB of 1.3 GB)...")

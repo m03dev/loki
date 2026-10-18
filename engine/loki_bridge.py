@@ -2827,7 +2827,14 @@ async def serve() -> None:
         import godot_live  # pylint: disable=import-outside-toplevel
         godot_live.write_connect(PORT, secret)
         # LOKI World is ready to open in the real Godot editor: the plugin in it, its Asset Library plugins synced
-        threading.Thread(target=lambda: godot_live.ensure_world(sync=True), daemon=True, name="loki-world-ready").start()
+        def world_ready() -> None:
+            godot_live.ensure_world(sync=True)
+            try:   # LOKI's own Godot 4.7.2, so Open in Godot opens LOKI World at once (engine/godot_web.py)
+                import godot_web  # pylint: disable=import-outside-toplevel
+                godot_web.prefetch(lambda t: print(t, flush=True))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[loki-bridge] LOKI's Godot not fetched: {exc}", flush=True)
+        threading.Thread(target=world_ready, daemon=True, name="loki-world-ready").start()
     except Exception as exc:  # noqa: BLE001 - the editor link is optional
         print(f"[loki-bridge] live Godot link unavailable: {exc}", flush=True)
     try:   # LOKI installs the add-ons it needs by itself, in the background (engine/auto_setup.py)

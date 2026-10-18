@@ -600,10 +600,12 @@ def name_the_app() -> None:
 # macOS: the native traffic lights stay, the page draws under a transparent title bar (full-size content view) and
 #   LOKI's 38 px strip (app/ui/titlebar.js) holds the tabs, starting after the traffic lights; the rest of the strip
 #   drags the window (pywebview's .pywebview-drag-region).
-# Windows: pywebview's frameless WinForms window cannot be resized at its edges (FormBorderStyle None, no hit test),
-#   so the native frame stays and LOKI's strip sits flush directly under it - same tabs, no floating pill.
+# Windows (owner, 2026-10-18: "the tabs are floating here" - the strip sat UNDER the native frame): the window is
+#   frameless too and LOKI's strip IS the title bar - tabs centred, LOKI's own minimise / maximise / close on the
+#   right. A frameless WinForms window has no native edges, so the strip's empty parts and thin edge handles hand the
+#   press to Windows itself (WM_NCLBUTTONDOWN with HTCAPTION / HTLEFT...): real dragging, Aero snap, real resizing.
 # LOKI_TITLEBAR=native (Settings > General) leaves the macOS title bar alone too.
-TITLEBAR = {"mac": False}
+TITLEBAR = {"mac": False, "win": False}
 
 
 def titlebar_mode() -> str:
@@ -612,7 +614,11 @@ def titlebar_mode() -> str:
 
 def window_url(token: str) -> str:
     """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar."""
-    return f"{BASE}/#token={token}" + ("&titlebar=mac" if (TITLEBAR["mac"] or mac_custom_titlebar()) else "")
+    if TITLEBAR["mac"] or mac_custom_titlebar():
+        return f"{BASE}/#token={token}&titlebar=mac"
+    if TITLEBAR["win"] or win_custom_titlebar():
+        return f"{BASE}/#token={token}&titlebar=win"
+    return f"{BASE}/#token={token}"
 
 
 def mac_custom_titlebar() -> bool:
@@ -620,6 +626,56 @@ def mac_custom_titlebar() -> bool:
     size and the title bar transparent at creation - patching a live window afterwards left the old bar on the
     owner's Mac), and mac_buttons() puts the three traffic lights back before it is shown."""
     return sys.platform == "darwin" and titlebar_mode() == "custom"
+
+
+def win_custom_titlebar() -> bool:
+    """Windows with LOKI's own title strip: a frameless window whose strip is the title bar (WindowApi moves,
+    resizes, minimises, maximises and closes it)."""
+    return sys.platform == "win32" and titlebar_mode() == "custom"
+
+
+# Win32 hit-test codes for WM_NCLBUTTONDOWN: the strip / an edge handle hands the press to Windows' own move/size loop
+HIT = {"move": 2, "w": 10, "e": 11, "n": 12, "nw": 13, "ne": 14, "s": 15, "sw": 16, "se": 17}
+
+
+def win_hit(window, edge: str, user32=None) -> bool:
+    """Windows: let Windows move ('move') or resize (n/s/e/w/ne/nw/se/sw) the frameless window, exactly like a
+    native title bar or border - on the window's own UI thread (the mouse capture lives there)."""
+    code = HIT.get(edge)
+    if code is None or window is None:
+        return False
+    form = getattr(window, "native", None)
+    if form is None:
+        return False
+    if user32 is None:
+        import ctypes  # pylint: disable=import-outside-toplevel
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+
+    def go() -> None:
+        hwnd = int(form.Handle.ToInt64()) if hasattr(form.Handle, "ToInt64") else int(form.Handle)
+        user32.ReleaseCapture()
+        user32.SendMessageW(hwnd, 0x00A1, code, 0)   # WM_NCLBUTTONDOWN
+
+    try:
+        if getattr(form, "InvokeRequired", False):
+            from System import Action  # type: ignore  # pythonnet, there with pywebview's WinForms backend
+            form.Invoke(Action(go))
+        else:
+            go()
+        return True
+    except Exception:  # noqa: BLE001
+        log("could not hand the title strip press to Windows:\n" + traceback.format_exc())
+        return False
+
+
+def win_fit_maximized(window) -> None:
+    """A frameless WinForms window maximises over the taskbar unless told the working area first."""
+    try:
+        form = window.native
+        from System.Windows.Forms import Screen  # type: ignore  # pylint: disable=import-outside-toplevel
+        form.MaximizedBounds = Screen.FromHandle(form.Handle).WorkingArea
+    except Exception:  # noqa: BLE001 - not WinForms: nothing to fit
+        pass
 
 
 def mac_buttons(window) -> None:
@@ -637,7 +693,8 @@ def mac_buttons(window) -> None:
 
 
 class WindowApi:
-    """The only Python the page may call (pywebview js_api): double-click on LOKI's title strip = zoom."""
+    """The only Python the page may call (pywebview js_api): the title strip's window controls - double-click =
+    zoom everywhere; on Windows (frameless) also drag, edge resize, minimise and close."""
 
     def __init__(self) -> None:
         self._max = False
@@ -647,11 +704,37 @@ class WindowApi:
         if window is None:
             return False
         try:
+            if not self._max and sys.platform == "win32":
+                win_fit_maximized(window)
             (window.restore if self._max else window.maximize)()
             self._max = not self._max
         except Exception:  # noqa: BLE001
             return False
         return self._max
+
+    def minimize(self) -> bool:
+        window = WINDOW.get("window")
+        try:
+            window.minimize()
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def close(self) -> bool:
+        window = WINDOW.get("window")
+        try:
+            window.destroy()     # same as the frame's X: LOKI keeps working in the background when that is on
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def grab(self, edge: str = "move") -> bool:
+        """Windows: a press on the strip's empty part ('move') or an edge handle - Windows does the rest."""
+        if sys.platform != "win32":
+            return False
+        if edge == "move" and self._max:
+            self._max = False      # dragging a maximised window restores it (Windows does that itself)
+        return win_hit(WINDOW.get("window"), str(edge))
 
 
 def open_window(url: str = "", html: str = "", main: bool = False, then=None) -> bool:
@@ -668,9 +751,11 @@ def open_window(url: str = "", html: str = "", main: bool = False, then=None) ->
     except Exception:  # noqa: BLE001 - an older pywebview
         pass
     mac_strip = bool(main or not html) and mac_custom_titlebar()
-    TITLEBAR["mac"] = mac_strip
-    # frameless on macOS = full-size content + transparent title bar; easy_drag off, or ANY drag moves the window
-    frame = {"frameless": True, "easy_drag": False} if mac_strip else {}
+    win_strip = bool(main or not html) and win_custom_titlebar()
+    TITLEBAR["mac"], TITLEBAR["win"] = mac_strip, win_strip
+    # frameless on macOS = full-size content + transparent title bar; on Windows LOKI's strip is the whole title
+    # bar. easy_drag off, or ANY drag moves the window.
+    frame = {"frameless": True, "easy_drag": False} if (mac_strip or win_strip) else {}
     if html and not main:
         webview.create_window("Loki", html=html, width=720, height=360)
     elif html:

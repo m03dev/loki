@@ -1,7 +1,6 @@
 """LOKI World - your character: the name and look you walk the world with, on this machine.
 
-The window's character creator (app/ui/character.js) shows before you first join LOKI World and
-again from "Edit character". It is kept per machine in <data>/world/character.json (harness_data,
+LOKI World's character (the Godot game's character window; the old JS creator is gone, 2026-10-18). It is kept per machine in <data>/world/character.json (harness_data,
 never committed) and served by the bridge:
 
     GET  /character   {ok, character: {...} | null, options, roles, name_max}

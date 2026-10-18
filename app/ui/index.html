@@ -8,17 +8,13 @@
 <script src="/ui/place.js"></script>
 <link rel="stylesheet" href="/ui/app.css">
 <link rel="stylesheet" href="/ui/glass.css">
-<link rel="stylesheet" href="/ui/mmo/mmo.css">
 <link rel="stylesheet" href="/ui/automations.css">
 <link rel="stylesheet" href="/ui/research3.css">
 <link rel="stylesheet" href="/ui/apps.css">
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
-<script src="/ui/world_noise.js" defer></script>
 <script src="/ui/world.js" defer></script>
-<script src="/ui/mmo/mmo_core.js" defer></script>
-<script src="/ui/character.js" defer></script>
 <script src="/ui/settings.js" defer></script>
 <script src="/ui/crm.js" defer></script>
 <script src="/ui/lab.js" defer></script>
@@ -86,7 +82,6 @@
   </aside>
 
   <main class="main" id="main">
-    <div class="world-bg" aria-hidden="true"><canvas id="world-bg-canvas"></canvas><div id="world-bg-labels" class="world-labels"></div></div>
     <div id="update-banner" class="update-banner" hidden role="status">
       <span id="update-banner-text"></span>
       <button type="button" id="update-banner-go" class="send small">Update everything</button>
@@ -214,8 +209,8 @@
         <div id="agents-panel"></div>
       </section>
       <section data-panel="world" hidden>
-        <header class="panel-head"><h3>LOKI World</h3><p class="note">Your agents as characters in a small 3D world, moving to their stations as real work happens. It runs behind the home screen, or here.</p></header>
-        <div class="world-frame"><canvas id="world-panel-canvas" aria-label="LOKI World, 3D view of your agents"></canvas><div id="world-panel-labels" class="world-labels"></div></div>
+        <header class="panel-head"><h3>LOKI World</h3><p class="note">The Godot game of your agents and their real work. Edit it in the Godot editor (Godot tab &gt; Open in Godot); &quot;Rebuild the World tab&quot; brings your changes here.</p></header>
+        <div class="world-frame" aria-label="LOKI World (Godot)"></div>
         <div id="world-legend" class="world-legend"></div>
       </section>
       <section data-panel="automations" hidden>

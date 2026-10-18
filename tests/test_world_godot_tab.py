@@ -115,12 +115,10 @@ async def main():
         # an AudioWorklet's module is fetched outside Playwright's routing here, so it cannot load in this harness;
         # through the real engine (engine/loki_bridge.py serving app/ui) it loads (checked 2026-10-18)
         errors = [e for e in errors if "worklet" not in e.lower()]
-        await pg.evaluate("window.LokiCharacter.open({ edit: true })")      # Edit character over the World tab
-        await pg.wait_for_timeout(1500)
-        r = await pg.evaluate("""() => { const f = document.querySelector('iframe.world-godot');
-            return { creator: window.LokiCharacter.isOpen(), frameShown: !!f && f.style.display === 'block' }; }""")
-        check("when the character creator is open, the game frame steps aside (it covered the dialog)",
-              r["creator"] and not r["frameShown"], r)
+        r = await pg.evaluate("""() => ({ creator: typeof window.LokiCharacter, mmo: typeof window.MMO,
+            babylon: typeof window.WorldBabylon, bg: !!document.querySelector('.world-bg canvas, #world-panel-canvas') })""")
+        check("only the Godot game is LOKI World: no JS world, JS MMO or JS character creator left in the window",
+              r == {"creator": "undefined", "mmo": "undefined", "babylon": "undefined", "bg": False}, r)
         check("no page errors", not errors, errors[:3])
         await b.close()
 

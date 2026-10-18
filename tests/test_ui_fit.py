@@ -58,6 +58,41 @@ check("macOS: the window is made frameless at creation (full-size content, trans
 check("only the bare strip drags the window (pywebview DRAG_REGION_DIRECT_TARGET_ONLY)",
       'webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True' in app_py)
 check("double-click on the strip maximises/restores through a tiny js_api", "def toggle_maximize" in app_py and "js_api=WindowApi()" in app_py)
+check("Windows: frameless with LOKI's strip as the title bar (LOKI_TITLEBAR=native keeps the system frame)",
+      'sys.platform == "win32" and titlebar_mode() == "custom"' in app_py and "if (mac_strip or win_strip)" in app_py
+      and "&titlebar=win" in app_py)
+sys.path.insert(0, str(REPO / "app"))
+import loki_app  # noqa: E402
+
+
+class _Handle:
+    def ToInt64(self):
+        return 4242
+
+
+class _Form:
+    Handle = _Handle()
+    InvokeRequired = False
+
+
+class _User32:
+    def __init__(self):
+        self.sent = []
+
+    def ReleaseCapture(self):
+        self.sent.append("release")
+
+    def SendMessageW(self, hwnd, msg, wparam, lparam):
+        self.sent.append((hwnd, msg, wparam, lparam))
+
+
+u = _User32()
+ok_move = loki_app.win_hit(type("W", (), {"native": _Form()})(), "move", user32=u)
+ok_se = loki_app.win_hit(type("W", (), {"native": _Form()})(), "se", user32=u)
+check("Windows: the strip hands a press to Windows' own move (HTCAPTION) and resize (HTBOTTOMRIGHT)",
+      ok_move and ok_se and u.sent == ["release", (4242, 0xA1, 2, 0), "release", (4242, 0xA1, 17, 0)], u.sent)
+check("Windows: an unknown edge or no window does nothing", not loki_app.win_hit(None, "move", user32=u)
+      and not loki_app.win_hit(type("W", (), {"native": _Form()})(), "x", user32=u))
 index = (UI / "index.html").read_text(encoding="utf-8")
 check("place.js is loaded before app.js (it reads the titlebar flag first)",
       index.index('src="/ui/place.js"') < index.index('src="/ui/app.js"'))
@@ -119,13 +154,14 @@ def run(pw, size, mac):
         return r.fulfill(json=FAKE.get(p, {"ok": True}))
 
     page.route("http://127.0.0.1:8896/**", route)
-    page.goto("http://127.0.0.1:8896/#token=t" + ("&titlebar=mac" if mac else ""))
+    win = mac == "win"
+    page.goto("http://127.0.0.1:8896/#token=t" + ("&titlebar=win" if win else "&titlebar=mac" if mac else ""))
     page.wait_for_function("window.LOKI_READY === true", timeout=15000)
     page.wait_for_timeout(600)
-    if PYWEBVIEW_DRAG:
+    if PYWEBVIEW_DRAG and not win:
         page.evaluate("() => { window.pywebview = {platform: 'cocoa', _jsApiCallback: () => {}}; }")
         page.add_script_tag(content=PYWEBVIEW_DRAG)
-    tag = "%dx%d%s" % (size[0], size[1], " mac" if mac else "")
+    tag = "%dx%d%s" % (size[0], size[1], " win" if win else " mac" if mac else "")
 
     strip = page.evaluate("""() => { const s = document.getElementById('titlestrip'); if (!s) return null; const r = s.getBoundingClientRect();
         const tabs = [...s.querySelectorAll('.modebar-tab')]; const shell = document.querySelector('.shell').getBoundingClientRect();
@@ -138,10 +174,28 @@ def run(pw, size, mac):
           mac: document.documentElement.classList.contains('titlebar-mac')}; }""")
     check("[%s] the title strip spans the top with the 5 tabs" % tag, strip and strip["top"] == 0 and 30 <= strip["h"] <= 44
           and strip["w"] == size[0] and strip["tabs"] == 5, strip)
-    check("[%s] the strip drags the window, the tabs do not" % tag, strip and strip["drag"] and not strip["tabsDrag"], strip)
+    if not win:
+        check("[%s] the strip drags the window, the tabs do not" % tag, strip and strip["drag"] and not strip["tabsDrag"], strip)
+    else:   # Windows (2026-10-18 "the tabs are floating here"): frameless, the strip IS the title bar
+        w = page.evaluate("""() => { const calls = []; window.pywebview = {_jsApiCallback: (n, a) => calls.push([n, ...a])};
+            const down = (el) => el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, button: 0, detail: 1}));
+            down(document.querySelector('.modebar-tab')); const afterTab = calls.length;
+            down(document.querySelector('.titlestrip-side')); down(document.querySelector('.winedge-se'));
+            const ctl = [...document.querySelectorAll('.titlestrip-side:last-child .winctl')];
+            ctl.forEach((b) => b.click());
+            const close = ctl[2] && ctl[2].getBoundingClientRect();
+            return {afterTab, calls, ctl: ctl.map((b) => b.getAttribute('aria-label')), edges: document.querySelectorAll('.winedge').length,
+              closeRight: close ? Math.round(close.right) : -1, win: document.documentElement.classList.contains('titlebar-win'),
+              pyDrag: !!document.querySelector('.titlestrip .pywebview-drag-region')}; }""")
+        check("[%s] Windows: LOKI's own minimise / maximise / close in the top-right corner" % tag,
+              w["win"] and w["ctl"] == ["Minimise", "Maximise", "Close"] and w["closeRight"] == size[0], w)
+        check("[%s] Windows: a press on a tab moves nothing; the empty strip and the edges go to Windows' own move/resize" % tag,
+              w["afterTab"] == 0 and w["calls"][:2] == [["grab", "move"], ["grab", "se"]] and w["edges"] == 8 and not w["pyDrag"], w)
+        check("[%s] Windows: the buttons minimise, maximise and close the window" % tag,
+              [c[0] for c in w["calls"][2:]] == ["minimize", "toggle_maximize", "close"], w)
     check("[%s] the banner, the sidebar and the page start below the strip" % tag, strip and strip["shellTop"] >= strip["h"] - 0.5
           and strip["bannerTop"] >= strip["h"] - 0.5 and strip["sideTop"] >= strip["h"] - 0.5, strip)
-    if mac:
+    if mac and not win:
         check("[%s] on the Mac the tabs start after the traffic lights" % tag, strip["mac"] and strip["firstTab"] > 78, strip)
     check("[%s] the tabs sit in the centre of the top bar" % tag, strip and abs(strip["center"] - size[0] / 2) <= 4, strip)
 
@@ -154,7 +208,7 @@ def run(pw, size, mac):
             window.dispatchEvent(new MouseEvent('mouseup', o)); };
         const tabMoves = () => { const n = moves.length; fire(document.querySelector('.modebar-tab')); return moves.length - n; };
         const sideMoves = () => { const n = moves.length; fire(document.querySelector('.titlestrip-side:last-child')); return moves.length - n; };
-        return {tab: tabMoves(), side: sideMoves()}; }""") if PYWEBVIEW_DRAG and strip else None
+        return {tab: tabMoves(), side: sideMoves()}; }""") if PYWEBVIEW_DRAG and strip and not win else None
     if moved is not None:
         check("[%s] clicking a tab never moves the window; dragging the empty strip does" % tag,
               moved["tab"] == 0 and moved["side"] > 0, moved)
@@ -226,7 +280,7 @@ if sync_playwright is None:
     print("SKIP the window checks: no Playwright here")
 else:
     with sync_playwright() as pw:
-        for size, mac in (((900, 600), False), ((960, 1040), True), ((1920, 1080), False)):
+        for size, mac in (((900, 600), False), ((960, 1040), True), ((1920, 1080), "win")):
             if time.time() - T0 > 45:
                 print("  SKIP %s: out of time" % (size,))
                 continue

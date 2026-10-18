@@ -408,6 +408,24 @@ html.has-titlestrip { --titlebar-h: 38px; }
 }
 html.titlebar-mac .titlestrip { padding: 0 78px; }   /* room for the traffic lights, same on both sides so the tabs sit in the exact centre */
 .titlestrip-side { height: 100%; min-width: 0; }
+/* Windows (titlebar-win): frameless - the strip is the title bar; LOKI's own window buttons on the right, thin
+   resize handles on the window's edges (modebar.js hands presses on them to Windows) */
+html.titlebar-win .titlestrip { padding: 0; }   /* the window buttons sit in the very corner; the tabs stay centred */
+html.titlebar-win .titlestrip-side:last-child { display: flex; justify-content: flex-end; align-items: stretch; }
+.wincontrols { display: flex; height: 100%; -webkit-app-region: no-drag; }
+.winctl { width: 46px; height: 100%; display: grid; place-items: center; border: 0; border-radius: 0; padding: 0;
+  background: transparent; color: var(--muted, #9aa0aa); cursor: default; }
+.winctl svg { width: 11px; height: 11px; }
+.winctl:hover { background: rgba(176, 190, 210, .14); color: var(--text, #e8ebf0); }
+.winctl.close:hover { background: #c42b1c; color: #fff; }
+.winedge { position: fixed; z-index: 60; }
+.winedge-n, .winedge-s { left: 6px; right: 6px; height: 4px; cursor: ns-resize; }
+.winedge-n { top: 0; } .winedge-s { bottom: 0; }
+.winedge-e, .winedge-w { top: 6px; bottom: 6px; width: 4px; cursor: ew-resize; }
+.winedge-e { right: 0; } .winedge-w { left: 0; }
+.winedge-ne, .winedge-nw, .winedge-se, .winedge-sw { width: 8px; height: 8px; }
+.winedge-ne { top: 0; right: 0; cursor: nesw-resize; } .winedge-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.winedge-nw { top: 0; left: 0; cursor: nwse-resize; } .winedge-se { bottom: 0; right: 0; cursor: nwse-resize; }
 .modebar { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: rgba(58, 64, 76, .55);
   border: 1px solid rgba(200, 212, 230, .14); -webkit-app-region: no-drag; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .modebar-tab { display: flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 7px; border: 1px solid transparent;
@@ -460,3 +478,7 @@ html.u-hc .modebar, html.u-hc .titlestrip { background: #000 !important; border-
 .model-button { max-width: min(260px, 32vw); }
 .portal-tools input[type="search"] { width: clamp(140px, 22vw, 240px); }
 @media (max-width: 1000px) { .sheet-panel.settings-panel { grid-template-columns: clamp(170px, 22vw, 232px) 1fr; } }
+/* LOKI World is the Godot game only (app/ui/world.js): what the World shows before its web build exists */
+.world-missing { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; padding: 24px; }
+.world-missing .note { max-width: 46ch; margin: 0 auto; }
+.world-missing button { justify-self: center; }

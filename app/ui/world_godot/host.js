@@ -4,7 +4,7 @@
 // (mode=play). One frame for both, laid over whichever box is showing - moving an iframe in the
 // DOM would reload the game. The token goes in the frame's URL fragment, as LOKI's own page gets it.
 // Not exported yet, or the browser cannot run it -> start() resolves false and world.js falls
-// back to Babylon.
+// back to a note in the World tab (app/ui/world.js).
 (function () {
   "use strict";
   let frame = null;
@@ -75,7 +75,7 @@
         if (msg.lokiWorldGodot === "ready") mode = "";   // the game listens now: tell it the mode again
         if (msg.lokiWorldGodot === "starting" || msg.lokiWorldGodot === "ready") { done(true); schedule(); }
         else if (msg.lokiWorldGodot === "missing" || msg.lokiWorldGodot === "failed") {
-          console.warn("LOKI World (Godot): " + (msg.detail || msg.lokiWorldGodot) + " - using Babylon");
+          console.warn("LOKI World (Godot): " + (msg.detail || msg.lokiWorldGodot) + " - the World tab shows how to build it");
           done(false, true);
         }
       });

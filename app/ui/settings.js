@@ -64,7 +64,6 @@ async function loadGeneral() {
   const save = async (key, value) => {
     const r = await api("/settings/general", { values: { [key]: value } });
     if (!r.ok) addNotice(r.error || "Not saved.", true);
-    if (key === "LOKI_WORLD" && typeof setWorldMode === "function") setWorldMode(value);
     return r.ok;
   };
   for (const [key, spec] of Object.entries(data.settings)) {

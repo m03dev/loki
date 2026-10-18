@@ -44,42 +44,12 @@ def free_port() -> int:
 
 
 UI = REPO / "app" / "ui"
-core = (UI / "mmo" / "mmo_core.js").read_text(encoding="utf-8")
-world = (UI / "world.js").read_text(encoding="utf-8")
 html = (UI / "index.html").read_text(encoding="utf-8")
 bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
 
 # ------------------------------------------------------------------------------------------
-section("the in-app client (fallback until the Godot client lands)")
-check("files exist", all((UI / "mmo" / f).is_file() for f in ("mmo_core.js", "mmo.css")))
-check("index.html loads the MMO after world.js, and its CSS", html.index("/ui/world.js") < html.index("/ui/mmo/mmo_core.js")
-      and "/ui/mmo/mmo.css" in html)
-mmo_text = "".join(p.read_text(encoding="utf-8") for p in (UI / "mmo").iterdir())
-check("no CDN, no network URLs, no inline handlers", not re.search(r"https?://", mmo_text) and "onclick=" not in mmo_text
-      and "innerHTML" not in mmo_text and "eval(" not in mmo_text)
-check("world.js hooks are guarded (nothing changes in spectate or the home background)",
-      all(x in world for x in ("view.mmo && view.mmo.active", "mmo.tick(view, dt, now)", "view.mmo.scene(L, t, dt, P, now)",
-                               "mmo.decorate(node, id, a, now)", "mmo.labels(view, now, nodeFor, setText, items, seen)",
-                               "window.MMO.attach(World.views.panel)", "window.MMO.onWorld(data)")))
-check("key systems: WASD, mouse/QE camera, jump, collisions, zones + bridges, avatars with classes, sound, presence uv",
-      all(x in core for x in ("arrowup", "q: 1", "jump()", "pushOut", "startTravel", "bridgePoint", "function avatar(",
-                              "AudioContext", "toZoneUV", "fromZoneUV", "Spectate")))
-check("World is reached as a shared top-level const, never window.World (it is not on window)", "window.World" not in core)
-if shutil.which("node"):
-    for f in ("mmo/mmo_core.js", "world.js"):
-        proc = subprocess.run(["node", "--check", str(UI / f)], capture_output=True, text=True)
-        check("%s parses" % f, proc.returncode == 0, proc.stderr)
-
-section("perf guards: nothing allocated per frame in the MMO's draw path")
-hot = core.split("// HOT:BEGIN", 1)[1].split("// HOT:END", 1)[0] if "// HOT:BEGIN" in core else ""
-avatar_src = core.split("function avatar(", 1)[1].split("MMO.avatar = avatar;", 1)[0]
-for name, src in (("scene()", hot), ("avatar()", avatar_src)):
-    bad = [x for x in ("new ", "Object.assign", ".map(", ".filter(", ".concat(", ".slice(", "=> ", "JSON.") if x in src]
-    lits = re.findall(r"(?<![\w\]\)])\[\s*-?[\d.]+\s*,", src)   # array literals like [0.6, 0.6, 0.7]
-    check("%s: no new/assign/map/filter/closures/array literals" % name, bool(src) and not bad and not lits, (bad, lits[:3]))
-check("pooled put()/shadowAt()/glowAt() reuse objects", "SOL[nS]" in core and "SHD[nH]" in core and "GLW[nG]" in core
-      and "resetPools()" in hot)
-check("stats() is cached, not rebuilt each frame", "STATS.xp !== MMO.save.xp" in core)
+section("the in-app JS client is gone: the Godot game is LOKI World (2026-10-18)")
+check("no app/ui/mmo, no mmo_core.js in the window", not (UI / "mmo").exists() and "mmo_core" not in html)
 
 # ------------------------------------------------------------------------------------------
 section("presence: sanitising")

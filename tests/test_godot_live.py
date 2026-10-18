@@ -119,14 +119,33 @@ opened, got = [], []
 _real_bin, _real_install = world_build.editor_binary, world_build.install
 fake_exe = TMP / "Godot"
 world_build.editor_binary = lambda data=None: fake_exe if got else None
-world_build.install = lambda data=None, opener=None, say=None: (got.append(1), {"ok": True})[1]
+world_build.install = lambda data=None, opener=None, say=None, editor_only=False: (got.append(editor_only), {"ok": True})[1]
 godot_live.ensure_world = lambda *a, **k: {"ok": True, "note": "ready"}
 r1 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv), background=False)
-check("the first Open gets LOKI's Godot 4.7.2 (never the window waiting on a download)", r1.get("downloading") and got == [1], r1)
+check("the first Open gets LOKI's Godot 4.7.2 (never the window waiting on a download)", r1.get("downloading") and got == [True], r1)
 check("...then opens LOKI World in it, as an editor", opened and opened[-1][0] == str(fake_exe) and "--editor" in opened[-1]
       and opened[-1][-1].endswith("loki-world"), opened)
 r2 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv))
 check("after that it opens at once with it", r2.get("ok") and not r2.get("downloading") and "4.7.2" in r2["note"], r2)
+# the PC (2026-10-18): no LOKI Godot yet and the download fails -> an error, NEVER the computer's other Godot
+got.clear(); opened.clear(); godot_web._GET_GODOT.update(state="idle", note="", error="")
+world_build.install = lambda data=None, opener=None, say=None, editor_only=False: {"ok": False, "error": "offline"}
+_native = godot_web.native_godot
+godot_web.native_godot = lambda: str(TMP / "Godot_v4.8-beta1_mono_win64.exe")
+r3 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv), background=False)
+r4 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv))
+check("a failed download never opens LOKI World in the computer's other Godot", not opened, opened)
+check("...and Open in Godot says why", r4.get("ok") is False and "offline" in r4.get("error", ""), r4)
+godot_web._GET_GODOT.update(state="idle", note="", error="")
+logged = []
+check("engine start fetches LOKI's Godot in the background (and says so in the log)",
+      godot_web.prefetch(logged.append) == "" and any("4.7.2" in x for x in logged), logged)
+os.environ["LOKI_GODOT_PREFETCH"] = "off"
+logged.clear()
+check("LOKI_GODOT_PREFETCH=off skips it", godot_web.prefetch(logged.append) == "" and not logged, logged)
+os.environ.pop("LOKI_GODOT_PREFETCH")
+godot_web.native_godot = _native
+godot_web._GET_GODOT.update(state="idle", note="", error="")
 os.environ["LOKI_GODOT_EDITOR"] = "system"
 check("LOKI_GODOT_EDITOR=system uses the computer's own Godot", godot_web.loki_godot() == "")
 os.environ.pop("LOKI_GODOT_EDITOR")

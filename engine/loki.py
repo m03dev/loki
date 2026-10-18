@@ -77,6 +77,13 @@ def resolve_godot_exe() -> str:
     for guess in _GODOT_GUESSES:
         if Path(guess).is_file():
             return guess
+    try:   # LOKI's own Godot 4.7.2 (engine/world_build.py) - the one LOKI World opens in
+        import world_build  # pylint: disable=import-outside-toplevel
+        own = world_build.editor_binary()
+        if own:
+            return str(own)
+    except Exception:  # noqa: BLE001
+        pass
     return ""
 
 

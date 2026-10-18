@@ -4,7 +4,29 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
+Last updated: 2026-10-18 19:40 (Windows title bar, LOKI World = Godot only, Claude).
+
+## 2026-10-18 19:40: Windows title bar, Open in Godot on the PC, LOKI World = the Godot game only (Claude, cloud + PC)
+
+Owner (on the PC): "the tabs are floating here ... opening the godot project takes me to a completely different
+project ... where is loki world, i said make it in godot, if it's in code delete it".
+- Windows title bar: the window is frameless (like the Mac) and LOKI's strip IS the title bar - tabs centred, LOKI's
+  own minimise / maximise / close in the corner, thin edge handles. Presses on the empty strip / edges go to Windows'
+  own move/resize (WM_NCLBUTTONDOWN, app/loki_app.py win_hit, on the form's UI thread) - Aero snap works; maximise
+  respects the taskbar. LOKI_TITLEBAR=native keeps the system frame. place.js reads titlebar=win.
+- The PC never had LOKI's Godot 4.7.2 (no harness_data/addons/godot-export), Godot is not on PATH there, and the only
+  Godot on screen was Ziva's Godot_v4.8-beta1_mono on Documents/ai-testin - that was the "different project".
+  Now: the engine fetches LOKI's Godot 4.7.2 (editor only) in the background at start (godot_web.prefetch, logged;
+  LOKI_GODOT_PREFETCH=off), Open in Godot shows the download and opens LOKI World when ready, and LOKI World NEVER
+  opens in another Godot (a failed download is an error, not a fallback). GODOT_EXE defaults to LOKI's Godot.
+  Godot's project list on the PC (AppData/Roaming/Godot/projects.cfg) now lists LOKI World instead of ai-testin.
+- Deleted the code-drawn worlds: world.js's WebGL island, world_babylon.js + vendor/babylon (2.9 MB), world_three.js,
+  world_noise.js, the JS MMO (app/ui/mmo), the JS character creator (character.js), the home-screen background world
+  and the LOKI_WORLD / LOKI_WORLD_ENGINE settings. world.js only hosts the Godot game's web build (World tab, Settings >
+  LOKI World) with the agent list; without a build it points at the Godot tab. vendor/three stays (Forge uses it).
+Checked: test_ui_fit 81 (a Windows strip run), test_godot_live 26, test_world_godot_tab 7, test_portal 203,
+test_godot_world 84, test_character 30, test_mmo 66, test_play 27, test_loki 533, other UI suites, --self-test OK.
+Not checked yet: the frameless window on the real PC (WinForms + WebView2).
 
 ## 2026-10-18 16:30: frames show again in the cross-origin isolated window (Claude, cloud)
 

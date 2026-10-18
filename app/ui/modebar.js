@@ -26,26 +26,58 @@ const LokiModeBar = (() => {
 
   // The title strip: a 38 px band across the top of the window holding the tabs (owner: "in the window's title bar").
   // macOS (titlebar-mac): the page is drawn under a transparent title bar, so the strip starts after the traffic
-  // lights. Windows / native: the strip sits flush under the system frame. Empty parts of the strip drag the window
+  // lights. Windows (titlebar-win): the window is frameless and the strip is its title bar, with LOKI's own
+  // minimise / maximise / close. LOKI_TITLEBAR=native: the strip sits under the system frame. Empty parts of the strip drag the window
   // (pywebview's .pywebview-drag-region); the tabs are buttons, never drag regions. Double-click = zoom (js_api).
+  // pywebview's js_api: LOKI's CSP has no 'unsafe-eval', so pywebview's api.js cannot build pywebview.api.* with
+  // new Function() (engine.out: "EvalError ... script-src 'self'") - call its bridge directly when needed.
+  function host(name, ...args) {
+    const pw = window.pywebview;
+    if (pw && pw.api && typeof pw.api[name] === "function") { try { pw.api[name](...args); } catch (_) { /* no bridge */ } return; }
+    if (pw && typeof pw._jsApiCallback === "function") {
+      try { pw._jsApiCallback(name, args, String(Math.random()).slice(2)); } catch (_) { /* no bridge */ }
+    }
+  }
+  const isWinStrip = () => document.documentElement.classList.contains("titlebar-win");
+
   function strip() {
     // only the two empty sides drag the window; the tabs' bar never does (clicking a tab made the window run away)
+    const win = isWinStrip();
     const top = mk("header", "titlestrip"); top.id = "titlestrip";
-    const left = mk("div", "titlestrip-side pywebview-drag-region");
-    const right = mk("div", "titlestrip-side pywebview-drag-region");
+    // macOS: pywebview's drag regions. Windows (frameless): a press on an empty side is handed to Windows' own
+    // title-bar move (WindowApi.grab) - real dragging and Aero snap.
+    const left = mk("div", "titlestrip-side" + (win ? "" : " pywebview-drag-region"));
+    const right = mk("div", "titlestrip-side" + (win ? "" : " pywebview-drag-region"));
     const tabs = bar();
     tabs.addEventListener("mousedown", (e) => e.stopPropagation());   // a press on a tab is a click, never a drag
+    if (win) {
+      const grab = (e) => { if (e.button === 0 && e.detail < 2 && !e.target.closest("button")) host("grab", "move"); };
+      left.addEventListener("mousedown", grab);
+      right.addEventListener("mousedown", grab);
+      const ctl = mk("div", "wincontrols");
+      const wbtn = (cls, label, paths, fn) => {
+        const b = mk("button", "winctl " + cls); b.type = "button"; b.title = label; b.setAttribute("aria-label", label);
+        b.innerHTML = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" aria-hidden="true">' + paths + "</svg>";
+        b.addEventListener("mousedown", (e) => e.stopPropagation());
+        b.addEventListener("click", fn);
+        return b;
+      };
+      ctl.append(
+        wbtn("min", "Minimise", '<path d="M1.5 6h9"/>', () => host("minimize")),
+        wbtn("max", "Maximise", '<rect x="1.5" y="1.5" width="9" height="9"/>', () => host("toggle_maximize")),
+        wbtn("close", "Close", '<path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/>', () => host("close")));
+      right.append(ctl);
+      // the frameless window's edges: thin handles that hand the press to Windows' own resize
+      for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+        const h = mk("div", "winedge winedge-" + edge);
+        h.addEventListener("mousedown", (e) => { if (e.button === 0) { e.preventDefault(); host("grab", edge); } });
+        document.body.append(h);
+      }
+    }
     top.append(left, tabs, right);
     top.addEventListener("dblclick", (e) => {
       if (e.target.closest("button")) return;
-      const pw = window.pywebview;
-      const host = pw && pw.api;
-      if (host && typeof host.toggle_maximize === "function") { host.toggle_maximize(); return; }
-      // LOKI's CSP has no 'unsafe-eval', so pywebview's api.js cannot build pywebview.api.* with
-      // new Function() (engine.out: "EvalError ... script-src 'self'"). Call its bridge directly.
-      if (pw && typeof pw._jsApiCallback === "function") {
-        try { pw._jsApiCallback("toggle_maximize", [], String(Math.random()).slice(2)); } catch (_) { /* no bridge */ }
-      }
+      host("toggle_maximize");
     });
     return top;
   }
@@ -104,8 +136,18 @@ const LokiModeBar = (() => {
       if (!pick.value) return;
       open.disabled = true;
       const r = await call("/godot-editor/native", { name: pick.value });
-      open.disabled = false;
       status.textContent = r.ok ? r.note : (r.error || "failed");
+      // first time: LOKI's Godot 4.7.2 is downloading - show how it goes until it opens (or says why not)
+      for (let i = 0; r.ok && r.downloading && i < 400; i++) {
+        await new Promise((res) => setTimeout(res, 3000));
+        let s = null;
+        try { s = await call("/godot-editor/status"); } catch (_) { continue; }
+        const g = (s && s.loki_godot) || {};
+        if (g.state === "done") { status.textContent = g.note || "LOKI World is opening in Godot 4.7.2."; break; }
+        if (g.state === "failed") { status.textContent = g.note || "could not get Godot 4.7.2"; break; }
+        status.textContent = "Getting Godot 4.7.2 for LOKI World (one time)... " + Math.round((i + 1) * 3) + " s";
+      }
+      open.disabled = false;
       setTimeout(refresh, 4000);
     }, "send small");
     const rebuild = btn("Rebuild the World tab", "Export LOKI World to the World tab's web copy after you changed it in Godot (LOKI keeps its own Godot 4.7 for this).", async () => {

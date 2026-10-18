@@ -104,9 +104,9 @@ creations_js = (ui / "creations.js").read_text(encoding="utf-8")
 check("Settings > Creations: the wall, a 'make it' box that starts a background job, more like this",
       'data-tab="creations"' in html and "/ui/creations.js" in html and 'api("/jobs"' in creations_js
       and "Make more like this" in creations_js)
-world_src = (ui / "world.js").read_text(encoding="utf-8")
-check("the island has a creations hall that hangs the newest pieces and opens Creations",
-      "SCENERY.gallery" in world_src and 'showTab("creations")' in world_src and "World.data.creations" in world_src)
+island = (REPO / "game" / "loki-world" / "scenes" / "home_island.tscn").read_text(encoding="utf-8")
+check("LOKI World (the Godot game) has a creations hall that hangs the newest pieces",
+      "creations" in island.lower() and "paintings" in (REPO / "game" / "loki-world" / "scripts" / "world" / "world.gd").read_text(encoding="utf-8"))
 shutil.rmtree(TMP2, ignore_errors=True)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

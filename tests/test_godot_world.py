@@ -248,16 +248,13 @@ if shutil.which("node"):
 
 section("the hooks in LOKI (small): world.js engine option, Settings choice, bridge serving")
 wjs = read(UI / "world.js")
-check("world.js: 'godot' (default) plays the Godot game in the World panel, loaded only when it opens; "
-      "the home screen keeps the light Babylon world; no build -> the light world plays",
-      'game: "godot"' in wjs and 'World.game = want === "godot" ? "godot" : "";' in wjs
-      and "loadGodotWorld().then(" in wjs and "WorldGodot.start(state.token, () => false)" in wjs
-      and 'if (!World.godotLive) World.game = "";' in wjs)
+check("world.js: the World panel plays the Godot game, loaded only when it opens; no build -> a note pointing at the Godot tab",
+      'game: "godot"' in wjs and "loadGodotWorld().then(" in wjs and "WorldGodot.start(state.token, () => false)" in wjs
+      and "Rebuild the World tab" in wjs)
 check("world.js: the panel and background go to the Godot frame when it runs", "window.WorldGodot.panel(true)" in wjs
       and "window.WorldGodot.panel(false)" in wjs and 'loadScript("/ui/world_godot/host.js")' in wjs)
 import portal_api  # noqa: E402
-check("Settings > General offers godot", "godot" in portal_api.GENERAL_SETTINGS["LOKI_WORLD_ENGINE"]["choices"]
-      if hasattr(portal_api, "GENERAL_SETTINGS") else '"godot"' in read(REPO / "engine" / "portal_api.py"))
+check("Settings > General has no JS-world engine choice any more", "LOKI_WORLD_ENGINE" not in read(REPO / "engine" / "portal_api.py"))
 import loki_bridge  # noqa: E402
 check("the bridge serves .wasm (application/wasm) and .pck", loki_bridge.UI_TYPES.get(".wasm") == "application/wasm"
       and ".pck" in loki_bridge.UI_TYPES)

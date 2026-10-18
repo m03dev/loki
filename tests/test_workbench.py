@@ -135,10 +135,6 @@ if shutil.which("node"):
     proc = subprocess.run(["node", "--check", str(ui / "sketch.js")], capture_output=True, text=True)
     check("sketch.js parses", proc.returncode == 0, proc.stderr)
 
-section("LOKI World: benches face the pool")
-wj = (ui / "world.js").read_text(encoding="utf-8")
-check("benches are built in their own frame (length along the ring)", "function benchFrame(b)" in wj and "benchFrame(b)" in wj.split("function seatPos")[1][:200])
-
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

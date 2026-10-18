@@ -9,13 +9,16 @@
 // An open popover follows window resizes and scrolling. Plain DOM; CSP script-src 'self'.
 "use strict";
 
-// The title strip (modebar.js): the app says `titlebar=mac` in the URL fragment when the page is drawn under the
+// The title strip (modebar.js): the app says `titlebar=mac` (or `titlebar=win`: frameless, the strip is the title bar) in the URL
+// fragment when the page is drawn under the
 // macOS title bar (app/loki_app.py). Read it here - before app.js clears the fragment - and keep it for reloads.
 (function () {
-  let mac = /(?:^|[#&])titlebar=mac\b/.test(location.hash);
-  try { if (mac) sessionStorage.setItem("loki-titlebar", "mac"); else mac = sessionStorage.getItem("loki-titlebar") === "mac"; } catch (_) { /* no storage */ }
+  const m = /(?:^|[#&])titlebar=(mac|win)\b/.exec(location.hash);
+  let kind = m ? m[1] : "";
+  try { if (kind) sessionStorage.setItem("loki-titlebar", kind); else kind = sessionStorage.getItem("loki-titlebar") || ""; } catch (_) { /* no storage */ }
   document.documentElement.classList.add("has-titlestrip");
-  if (mac) document.documentElement.classList.add("titlebar-mac");
+  if (kind === "mac") document.documentElement.classList.add("titlebar-mac");
+  if (kind === "win") document.documentElement.classList.add("titlebar-win");
 })();
 
 const LokiPlace = (() => {

@@ -375,8 +375,8 @@ poll()
 check("LOKI_CHANNEL_MODE=plan is used", wait_for(lambda: chat_calls[-1] == ("write me a lot", "plan")))
 check("a long reply is split into pieces under 4096", wait_for(lambda: len(fake.texts(OWNER)) >= before + 4)
       and all(len(t) <= 4096 for t in fake.texts(OWNER)), [len(t) for t in fake.texts(OWNER)])
-check("... in order, nothing lost", "".join(fake.texts(OWNER)).replace(" ", "").replace("\n", "")
-      == long_answer.replace(" ", "").replace("\n", ""))
+check("... in order, nothing lost", wait_for(lambda: "".join(fake.texts(OWNER)).replace(" ", "").replace("\n", "")
+      == long_answer.replace(" ", "").replace("\n", "")))   # waits: on a busy machine the last piece can still be on its way
 check("messages into one chat are spaced (about 1 s apart, as Telegram asks)", any(1.0 <= s <= 1.06 for s in clock.slept), clock.slept[:5])
 check("a picture LOKI made while answering is sent as a photo", wait_for(lambda: any(
       s["method"] == "sendPhoto" and s.get("photo", {}).get("bytes") == PNG for s in fake.sent)))

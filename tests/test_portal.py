@@ -683,111 +683,45 @@ check("OBLITERATUS is not integrated", not (REPO / "capabilities" / "obliteratus
 
 # --------------------------------------------------------------------------- UI
 section("the UI")
+
+
+def api_world_ok(js: str) -> bool:
+    return 'api("/world")' in js and "fetch(" not in js
+
+
 ui = REPO / "app" / "ui"
 html = (ui / "index.html").read_text(encoding="utf-8")
 for marker in ('data-tab="general"', 'data-tab="agents"', 'data-tab="world"', 'id="portal"', 'id="qr-modal"',
-               'id="update-banner"', 'id="world-bg-canvas"', "/ui/settings.js", "/ui/world.js"):
+               'id="update-banner"', "/ui/settings.js", "/ui/world.js"):
     check("index.html has %s" % marker, marker in html)
 check("still CSP-clean (no inline script or style)", "<script>" not in html and " style=" not in html and "onclick" not in html)
 settings_js = (ui / "settings.js").read_text(encoding="utf-8")
 world_js = (ui / "world.js").read_text(encoding="utf-8")
 check("the portal tests, signs in, hands off and updates everywhere", all(s in settings_js for s in (
     "/providers/test", "/signin/openrouter", "/handoff", "/update/everywhere", "/agents/draft", "/agents/launch")))
-check("the world draws with WebGL from /world only", "getContext(\"webgl\"" in world_js and 'api("/world")' in world_js
-      and "fetch(" not in world_js)
-check("the world pauses when it cannot be seen", "document.hidden" in world_js and "requestAnimationFrame" in world_js)
-check("the world draws pixelated: a low-res framebuffer blown up with NEAREST",
-      "createFramebuffer" in world_js and "gl.TEXTURE_MAG_FILTER, gl.NEAREST" in world_js
-      and "checkFramebufferStatus" in world_js and "Math.ceil(w / scale)" in world_js)
-check("the pixel upscale uses a whole-number scale and handles devicePixelRatio and resize",
-      "devicePixelRatio" in world_js and "Math.round((World.pixel || view.opts.pixel" in world_js
-      and "canvas.width !== w" in world_js)
-check("without a framebuffer the world still draws (straight to the canvas)", "fbFailed = true" in world_js
-      and "fb ? fb.fbo : null" in world_js)
-check("the world dithers its colours (ordered Bayer dither)", "bayer4(" in world_js)
-check("the world is cel-shaded: lighting quantized into bands", "const float BANDS" in world_js
-      and "floor(clamp(x,0.0,1.0) * BANDS)" in world_js and "sunDir" in world_js and "rimCol" in world_js)
-check("the world has ink outlines (inflated back-face hull)", "OUTLINE_VS" in world_js and "gl.cullFace(gl.FRONT)" in world_js)
-check("the world has a sky, an island, props, shadows and lights", all(s in world_js for s in (
-    "SKY_FS", "ISLAND", "SCENERY.trees", "SCENERY.rocks", "SCENERY.lamps", "L.shadows", "L.glows", "LP[10]")))
-check("the background world is frame-capped", "fps: 30" in world_js and "1000 / fps" in world_js)
+check("LOKI World is only the Godot game (2026-10-18): world.js hosts its web build, the JS worlds are gone",
+      'game: "godot"' in world_js and 'loadScript("/ui/world_godot/host.js")' in world_js and api_world_ok(world_js)
+      and not any((ui / f).exists() for f in ("world_babylon.js", "world_three.js", "world_noise.js", "character.js", "mmo/mmo_core.js"))
+      and not (ui / "vendor" / "babylon").exists() and "world-bg-canvas" not in html and "getContext(" not in world_js)
 check("the world loads nothing from outside and never evals", all(s not in world_js for s in (
     "http://", "https://", "eval(", "new Function", "XMLHttpRequest", "import(")))
-check("the static scene is baked once into a few buffers (land, sky, shadows)", all(s in world_js for s in (
-    "function bake(", "BAKED_VS", "BAKED_OUTLINE_VS", "SHADOW_VS", "view.batches.land", "view.batches.shadows")))
-check("a lost WebGL context is rebuilt, not left black", "webglcontextrestored" in world_js and "initGL(view)" in world_js)
-three_js = (ui / "world_three.js").read_text(encoding="utf-8") if (ui / "world_three.js").exists() else ""
-three_imports = re.findall(r'from\s+"(\./[^"]+)"', three_js)
-three_missing = [m for m in three_imports if not (ui / m.lstrip("./")).exists()]
-check("every import in the three.js renderer is vendored and present (add-ons committed, not git-ignored)",
-      bool(three_imports) and not three_missing, "missing: %s" % three_missing)
 check("the old Godot ignore rules stay anchored to the repo root (they used to swallow the three add-ons)",
       not any(l.strip() in ("addons/", "scenes/", "scripts/") for l in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()))
-check("the frame-time watcher coarsens pixels only when it helps", "function watchFrames(" in world_js
-      and "pf.trial" in world_js and "noGain" in world_js and "World.adaptive" in world_js)
-check("lights are ranked so a blocked agent's red light is never dropped",
-      ".sort((a, b) => (b.pri || 0) - (a.pri || 0)).slice(0, 10)" in world_js)
-check("the world can be inspected: click to pick, a card from /world, follow, Esc, pinch",
-      all(s in world_js for s in ("function pickAgent(", "function updateCard(", "view.follow", '"Escape"', "pointercancel", "view.pinch")))
-check("the life-sim layer: paths round the plaza, benches, chat dots, team banners with real stages, a HUD",
-      all(s in world_js for s in ("function routeTo(", "SCENERY.benches", '"···"', "tm.stages", "function updateHud(")))
-check("labels never pile up (nearest first, lifted, crowded fade)", '"crowded"' in world_js)
-check("ambience stops with reduced motion", world_js.count("World.reduced") >= 10)
-noise_js = (ui / "world_noise.js").read_text(encoding="utf-8")
-check("the water noise is the MIT webgl-noise code, credited, with its licence",
-      "stegu/webgl-noise" in noise_js and "Permission is hereby granted" in noise_js and "float snoise(vec2 v)" in noise_js
-      and "vec2 cellular(vec2 P)" in noise_js and noise_js.count("vec3 permute(vec3 x)") == 1)
-check("index.html loads the noise before the world", html.index("/ui/world_noise.js") < html.index("/ui/world.js"))
-check("water has its own shader: exact shore distance, Beer-Lambert depth, foam, caustics, fresnel, ripples, a falling sheet",
-      all(x in world_js for x in ("WATER_FS", "float shore(vec2 p)", "exp(-max(s, 0.0) * beer)", "cellular(", "pow(1.0 - max(dot(N, V), 0.0), 5.0)",
-                                  "rip[4]", "vec4 sheet()", "function drawWater(")))
-check("without the noise (or a shader that will not compile) the world still draws", "typeof WORLD_NOISE_GLSL" in world_js
-      and "if (view.water)" in world_js)
-check("the water's noise time wraps, so float precision holds in a long session", "t % 600" in world_js)
-three_js = (ui / "world_three.js").read_text(encoding="utf-8")
-check("the world has a three.js renderer (vendored, local, MIT) with PBR, shadows, bloom and tone mapping",
-      (ui / "vendor" / "three" / "three.module.js").is_file() and (ui / "vendor" / "three" / "LICENSE").is_file()
-      and all(x in three_js for x in ("MeshStandardMaterial", "castShadow", "UnrealBloomPass", "ACESFilmicToneMapping", "InstancedMesh")))
-check("three.js loads only from LOKI itself (no CDN), and only on demand (LOKI_WORLD_ENGINE=three)",
-      "https://" not in three_js and 'src="/ui/world_three.js"' not in html and 's.src = "/ui/world_three.js"' in world_js)
-vendored = [p for p in (ui / "vendor" / "three").rglob("*.js")]
-check("vendored add-ons import three by a local path, never the bare 'three' specifier",
-      not any(("from 'three'" in p.read_text(encoding="utf-8") or 'from "three"' in p.read_text(encoding="utf-8")) for p in vendored))
-check("the Godot MMO is LOKI World by default (2026-10-18, the World tab); Babylon.js stays the light home-screen world, "
-      "then LOKI's own renderer", 'game: "godot"' in world_js and 'engine: "babylon"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js
-      and 'World.engine = "classic"' in world_js)
-bjs = ui / "vendor" / "babylon" / "babylon.loki.js"
-babylon_js = (ui / "world_babylon.js").read_text(encoding="utf-8")
-check("Babylon.js is vendored (Apache-2.0, built from source), loads from LOKI itself and only on demand",
-      bjs.is_file() and (ui / "vendor" / "babylon" / "LICENSE").is_file() and "https://" not in babylon_js
-      and 'src="/ui/world_babylon.js"' not in html and '"/ui/vendor/babylon/babylon.loki.js"' in world_js
-      and (REPO / "tools" / "babylon" / "patch_cell.py").is_file())
-check("the Babylon world keeps the look: cel shading, ink outlines, the pixel grid, posterized colour, blob shadows",
-      all(x in babylon_js for x in ("CellMaterial", "INK_VS", "setHardwareScalingLevel", "bayer4", "SHADOW_VS", "thinInstanceSetBuffer")))
-check("every device has its own island: yours is home, each linked machine floats in the space with its own island",
-      all(x in world_js for x in ("World.data.self", "machine:self", "you are here", "function machineIsland(", "machineSlots(",
-                                  "view.homeBtn", "back to ")))
-check("denser pixels and more colour bits than the first pixel look",
-      '"const float BANDS = 4.0;"' in world_js and "view.opts.levels || 32" in world_js and "pixel: 2, fps: 0" in world_js)
-check("island life: the fox and the rabbits", "function critters(" in world_js and 'kind: "fox"' in world_js)
 import loki_bridge as _lb_world  # noqa: E402
 _wx = _lb_world.world_extras(type("A", (), {"active_model_name": lambda self: "m"})())
 check("the world knows which machine it is on (its island is home)",
       isinstance(_wx.get("self"), dict) and bool(_wx["self"].get("name")) and "os" in _wx["self"])
-check("the world shows your other machines, the model and today's usage",
-      all(x in world_js for x in ("World.data.machines", "machineSpots", "model.local", "usage.calls")))
 glass = (ui / "glass.css").read_text(encoding="utf-8")
 check("the glass look without live blur over the moving world (the lag): tinted panels, gradients",
       "--blur: none;" in glass and "--grad:" in glass and "prefers-reduced-transparency" in glass
       and "backdrop-filter: blur(8px)" not in glass)
-check("the world fills the window behind the glass", ".world-bg { position: fixed; inset: 0; }" in glass)
 setup_js = (ui / "setup.js").read_text(encoding="utf-8")
 check("setup.js no longer shares a global button() with settings.js (labels were swapped)",
       "function setupButton(" in setup_js and "function button(" not in setup_js)
 check("the world keeps the functions app.js and settings.js call", all(
-    ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")) and "window.afterStart" in world_js)
+    ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")))
 if shutil.which("node"):
-    for name in ("app.js", "settings.js", "world.js", "world_noise.js", "setup.js", "machines.js", "workbench.js", "lab.js", "sketch.js"):
+    for name in ("app.js", "settings.js", "world.js", "setup.js", "machines.js", "workbench.js", "lab.js", "sketch.js"):
         proc = subprocess.run(["node", "--check", str(ui / name)], capture_output=True, text=True)
         check("%s parses" % name, proc.returncode == 0, proc.stderr)
 
