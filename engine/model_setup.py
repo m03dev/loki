@@ -371,6 +371,59 @@ def score(name: str) -> int:
     return 50
 
 
+# --------------------------------------------------------------------- models this Ollama cannot load
+# A version check is not enough: the owner's Mac (2026-10-17) had an Ollama that passed the Bonsai 2
+# gate and still failed every request with HTTP 500 'read GGUF metadata ... unsupported tensor
+# "output.weight" size overflows'. So a model that Ollama cannot even LOAD is remembered here, per
+# Ollama version, and never picked or suggested again until Ollama changes.
+_LOAD_ERROR = re.compile(r"read gguf metadata|unsupported tensor|unknown model architecture|failed to load model|"
+                         r"unable to load model|error loading model|llama runner process has terminated|"
+                         r"invalid file magic|tensor .* size overflows", re.I)
+
+
+def is_load_error(message: str) -> bool:
+    """Whether an Ollama error means the model file cannot be loaded at all (not a busy/transient one)."""
+    return bool(_LOAD_ERROR.search(str(message or "")))
+
+
+def _broken_file() -> Path:
+    explicit = os.environ.get("LOKI_DATA", "").strip()
+    base = Path(explicit) if explicit else Path(__file__).resolve().parent.parent / "harness_data"
+    return base / "local_broken.json"
+
+
+def _broken_key(name: str) -> str:
+    name = str(name or "")
+    return name.lower() if name.lower().startswith(DERIVED_PREFIX) else derived_name(name)
+
+
+def broken_models() -> dict:
+    try:
+        data = json.loads(_broken_file().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def mark_broken(name: str, error: str, version: str = "") -> None:
+    data = broken_models()
+    data[_broken_key(name)] = {"model": name, "error": str(error)[:300], "ollama": str(version or ""), "t": time.time()}
+    try:
+        _broken_file().parent.mkdir(parents=True, exist_ok=True)
+        _broken_file().write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def is_broken(name: str, version: str = "") -> bool:
+    """Ollama could not load this model (or its loki-* long-context copy) - with THIS Ollama version.
+    After an Ollama update it is tried again."""
+    entry = broken_models().get(_broken_key(name))
+    if not entry:
+        return False
+    return not version or not entry.get("ollama") or entry.get("ollama") == str(version)
+
+
 def best_installed(models: list[dict], budget_gb: float, caps=capabilities, version: str = "") -> dict | None:
     """The best installed Ollama model that calls tools and fits. Derived loki-* variants
     are preferred over their base (same weights, bigger window). With the Ollama `version`
@@ -382,6 +435,8 @@ def best_installed(models: list[dict], budget_gb: float, caps=capabilities, vers
         if "embed" in name.lower():
             continue
         if too_old and is_bonsai(name):
+            continue
+        if is_broken(name, version):
             continue
         tools = "tools" in caps(name)
         fits = not budget_gb or not m.get("size_gb") or m["size_gb"] <= budget_gb * 0.9
@@ -397,8 +452,11 @@ def recommend(info: dict, installed: list[str] | None = None) -> list[dict]:
     """Download candidates that fit this machine, best first."""
     budget = float(info.get("budget_gb") or memory_budget(info))
     installed = installed or []
+    # a family this Ollama could not load (Bonsai 2 on the Mac, 2026-10-17) is not suggested again
+    bad_families = {c.get("family") for c in CATALOG for b in broken_models().values()
+                    if _broken_key(b.get("model", "")) == _broken_key(c["tag"]) and c.get("family")}
     picks = [dict(c, installed=any(n == c["tag"] or n.startswith(c["tag"] + "-") for n in installed))
-             for c in CATALOG if c["need"] <= max(budget * 1.15, 3)]
+             for c in CATALOG if c["need"] <= max(budget * 1.15, 3) and c.get("family") not in bad_families]
     return picks or [dict(CATALOG[-1], installed=False)]
 
 

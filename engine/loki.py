@@ -974,7 +974,10 @@ def _resolve_local() -> dict:
         LOCAL_STATE["version"] = ""
     version = LOCAL_STATE["version"]
     LOCAL_STATE["skipped"] = ""
-    if os.getenv("LOKI_LOCAL_MODEL"):
+    if os.getenv("LOKI_LOCAL_MODEL") and model_setup.is_broken(os.environ["LOKI_LOCAL_MODEL"], version):
+        LOCAL_STATE["skipped"] = ("Ollama %s cannot load the chosen model %s; LOKI uses the best other one"
+                                  % (version or "", os.environ["LOKI_LOCAL_MODEL"]))
+    if os.getenv("LOKI_LOCAL_MODEL") and not model_setup.is_broken(os.environ["LOKI_LOCAL_MODEL"], version):
         # The user pinned a model: use it, with a window big enough for LOKI's prompt.
         pinned = os.environ["LOKI_LOCAL_MODEL"]
         models = model_setup.ollama_models() or []
@@ -7033,6 +7036,21 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                 raise ModelUnavailable(
                     "[model missing] Ollama does not have %s yet. "
                     "Run `ollama pull %s` in Terminal, or pick another model." % (cfg.model, cfg.model)
+                ) from exc
+            if _cfg_is_local(cfg) and "11434" in cfg.base_url and model_setup.is_load_error(str(exc.message)):
+                # Ollama cannot even read this model's file (Bonsai 2's ternary GGUF on the Mac,
+                # 2026-10-17). Remember it for this Ollama version, move to the next local model now,
+                # and let this request fail over instead of failing every request from here on.
+                broken = cfg.model
+                model_setup.mark_broken(broken, str(exc.message), LOCAL_STATE.get("version", ""))
+                try:
+                    now = _resolve_local()
+                    instead = now.get("name") or "a cloud model"
+                except Exception:  # noqa: BLE001
+                    instead = "another model"
+                raise ModelUnavailable(
+                    "[model error] Ollama cannot load %s on this computer (its file format is newer than this "
+                    "Ollama). LOKI switched to %s. Updating Ollama lets LOKI try it again." % (broken, instead)
                 ) from exc
             raise ModelUnavailable(
                 "[model error] %s answered HTTP %s: %s" % (cfg.model, status, short_error(exc.message))
