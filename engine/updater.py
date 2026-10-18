@@ -165,6 +165,18 @@ def rollback(repo: Path | None = None, why: str = "it did not start") -> dict:
     if not good or good == bad:
         return {"ok": False, "error": "no earlier good version is known on this machine"}
     code, out = git(repo, "reset", "--keep", good)
+    kept = ""
+    if code != 0 and ("not uptodate" in out or "local changes" in out.lower()):
+        # Local edits in a file the rollback must change (the PC, 2026-10-17: "Entry
+        # 'tests/test_research_ports.py' not uptodate. Cannot merge.") used to leave the BROKEN
+        # version in place. Set the edits aside in git's stash - kept, never lost - then go back.
+        _backup_edits(repo)
+        scode, sout = git(repo, "stash", "push", "--include-untracked", "-m", "LOKI: edits kept before a rollback")
+        if scode == 0:
+            kept = "your local edits are kept in `git stash` (LOKI: edits kept before a rollback)"
+            code, out = git(repo, "reset", "--keep", good)
+        else:
+            out = out + " | stash failed: " + sout[-120:]
     if code != 0:
         return {"ok": False, "error": "could not go back to %s: %s" % (good, out[-200:])}
     skip = [c for c in data.get("skip", []) if c][-20:]
@@ -176,8 +188,8 @@ def rollback(repo: Path | None = None, why: str = "it did not start") -> dict:
     data["skip_reasons"] = reasons
     _save_health(data, repo)
     note_history("rolled back", repo, **{"from": bad, "to": good, "why": why})
-    STATE.update({"note": "went back to %s: %s %s" % (good, bad, why)})
-    return {"ok": True, "from": bad, "to": good}
+    STATE.update({"note": "went back to %s: %s %s%s" % (good, bad, why, ("; " + kept) if kept else "")})
+    return {"ok": True, "from": bad, "to": good, **({"kept": kept} if kept else {})}
 
 
 def is_behind(commit: str, latest: str, repo: Path | None = None) -> bool:

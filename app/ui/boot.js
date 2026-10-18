@@ -15,9 +15,22 @@
         .catch(() => {});
     } catch (_) { /* nothing else to do */ }
   }
+  // what failed, said plainly: the PC's log kept getting "error at ?:0:0" with nothing to go on
+  function describe(node) {
+    if (!node || !node.tagName) return "";
+    const attr = (n) => { const v = node.getAttribute && node.getAttribute(n); return v ? " " + n + '="' + String(v).slice(0, 160) + '"' : ""; };
+    return "<" + node.tagName.toLowerCase() + attr("id") + attr("class") + attr("src") + attr("href") + attr("data") + ">";
+  }
   window.addEventListener("error", (e) => {
-    if (e.target && e.target !== window && (e.target.src || e.target.href)) report("could not load " + (e.target.src || e.target.href));
-    else report((e.message || "error") + " at " + (e.filename || "?").replace(location.origin, "") + ":" + (e.lineno || 0) + ":" + (e.colno || 0));
+    const t = e.target;
+    if (t && t !== window && t.tagName) {
+      const url = typeof t.src === "string" && t.src ? t.src : (t.href && t.href.baseVal !== undefined ? t.href.baseVal : t.href) || t.currentSrc || "";
+      report("could not load " + (url || "(no address)") + " - " + describe(t));
+      return;
+    }
+    const where = (e.filename || "?").replace(location.origin, "") + ":" + (e.lineno || 0) + ":" + (e.colno || 0);
+    const stack = e.error && e.error.stack ? " | " + String(e.error.stack).split("\n").slice(0, 4).join(" <- ") : "";
+    report((e.message || "error (no message: usually a script from another origin or a media element)") + " at " + where + stack);
   }, true);
   window.addEventListener("unhandledrejection", (e) => report("unhandled: " + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason)));
   window.LOKI_BOOT = { errors, report };

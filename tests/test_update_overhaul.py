@@ -166,8 +166,18 @@ data = updater.health(MACHINE)
 data.update({"last_good": v1, "pending": good})
 updater._save_health(data, MACHINE)
 _cwd = os.getcwd()
+# the PC, 2026-10-17: a local edit in a file the rollback must change blocked it ("not uptodate")
+changed = [f for f in subprocess.run(["git", "-C", str(MACHINE), "diff", "--name-only", v1, good],
+                                     capture_output=True, text=True).stdout.split() if f]
+edited = (MACHINE / changed[0]) if changed else None
+if edited is not None and edited.is_file():
+    edited.write_text(edited.read_text(encoding="utf-8") + "\n# a local edit\n", encoding="utf-8")
 res = updater.rollback(MACHINE, why="its window did not become ready in 300 s")
 check("the checkout goes back to the last good commit", res.get("ok") and head() == v1, res)
+if edited is not None:
+    stash = subprocess.run(["git", "-C", str(MACHINE), "stash", "list"], capture_output=True, text=True).stdout
+    check("a local edit no longer blocks the rollback, and it is kept in the stash",
+          res.get("ok") and "edits kept before a rollback" in stash and "kept" in res, (res, stash))
 h = updater.health(MACHINE)
 check("the bad commit is skipped, with the window's reason", any(good.startswith(c[:12]) for c in h.get("skip", []))
       and "window" in h.get("skip_reasons", {}).get(good[:12], ""), h)
