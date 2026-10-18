@@ -1206,6 +1206,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import mmo_state  # pylint: disable=import-outside-toplevel
             self._send_json(*mmo_state.route(self.server.state, "GET", route, {}, job_action))
             return
+        if route == "/character":   # LOKI World: your character's name and look (engine/character.py)
+            import character  # pylint: disable=import-outside-toplevel
+            self._send_json(*character.route(self.server.state, "GET", route, {}))
+            return
         if route == "/world/presence":   # LOKI World MMO: the other machines' avatars + chat
             import presence  # pylint: disable=import-outside-toplevel
             try:
@@ -1416,6 +1420,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/mmo/"):   # LOKI World MMO game actions (docs/MMO_API.md)
             import mmo_state  # pylint: disable=import-outside-toplevel
             self._send_json(*mmo_state.route(state, "POST", route, data, job_action))
+            return
+        if route == "/character":   # LOKI World: save your character (engine/character.py)
+            import character  # pylint: disable=import-outside-toplevel
+            self._send_json(*character.route(state, "POST", route, data))
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))

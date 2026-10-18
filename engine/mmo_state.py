@@ -1303,7 +1303,15 @@ def route(state: Any, method: str, path: str, data: dict, job_action: Any) -> tu
     try:
         if method == "GET" and path == "/mmo/state":
             import presence  # pylint: disable=import-outside-toplevel
-            return 200, build_state(prof, jobs, made, agents, self_info, machines, presence.world_part(), likes=_likes(state))
+            out = build_state(prof, jobs, made, agents, self_info, machines, presence.world_part(), likes=_likes(state))
+            # this machine's character (engine/character.py, the window's creator): the look to draw
+            # you with and the name over your head; null until one is made (docs/MMO_API.md)
+            import character  # pylint: disable=import-outside-toplevel
+            look = character.load(prof.path.parent.parent)
+            out["profile"]["look"] = look
+            if look:
+                out["profile"]["name"] = look["name"]
+            return 200, out
         if method == "GET" and path == "/mmo/likes":
             return 200, {"ok": True, "likes": _likes(state), "max": 5}
         if method != "POST":

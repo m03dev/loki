@@ -26,6 +26,11 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] Godot check of the new player look: run `harness_data\.venv\Scripts\python.exe tests\test_godot_world.py` WITH Godot found (game/loki-world/scripts/actors/player.gd now reads the character from /mmo/state; it was not compiled in the cloud). Then make a character in Settings > LOKI World > Join world and join: report the name/role over your head and the colours you see - claude (2026-10-17)
+- [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`, then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps torchmcubes for PyMCubes, untested) - claude (2026-10-17)
+- [ ] [either] One-client check: the mode bar (LOKI / Studio / Godot / World / Forge) - does the Studio tab show Studio inside the window (pywebview: WebView2 / WKWebView), and does the Godot tab's editor download (SHA-512) and open in its own window? Paste any window error from harness_data/app/loki_bridge.log - claude (2026-10-17)
+- [ ] [mac] After the update: is the local model error gone (Bonsai 2 cannot load on this Ollama -> LOKI should switch and say so)? Paste the "[loki-bridge]" lines about the local model - claude (2026-10-17)
+
 - [ ] [either] **Computer use: never into LOKI itself + open_app brings the app forward - `tools/ship.py --check`,
       then re-run M25(c) on the Mac / W28 on the PC.** Claude changed engine/computer_use.py,
       engine/computer_backends.py (frontmost() returns the pid; new activate() per OS) and app/loki_app.py

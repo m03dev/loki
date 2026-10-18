@@ -58,12 +58,26 @@ func _ready() -> void:
 	damaged.connect(_on_damaged)
 
 
+var _look_key := ""
+
+
 func rebuild_model() -> void:
 	var p := GameState.profile()
 	cls = str(p.get("cls", "Mage"))
 	var info := GameState.class_info(cls)
 	var color := Color.from_string(str(p.get("color", info["color"])), Color(0.55, 0.48, 1.0))
-	set_model(CharacterModel.person(color, str(info.get("hat", "none")), str(info.get("gear", "none")), 0))
+	var hat := str(info.get("hat", "none"))
+	var skin := 0
+	# the character made in LOKI's window (profile.look, docs/MMO_API.md): its outfit colour,
+	# skin tone and hat; without one, the class look as before
+	var look = p.get("look")
+	_look_key = JSON.stringify(look) if look is Dictionary else ""
+	if look is Dictionary:
+		color = Color.from_string(str(look.get("top_color", "")), color)
+		var skins := ["#f6d7bf", "#e9bf9c", "#d29e76", "#a8754f", "#7d5234", "#55361f"]
+		skin = int(floor(maxf(0, skins.find(str(look.get("skin", "")))) * 4.0 / skins.size()))
+		hat = "cap" if str(look.get("accessory", "")) == "hat" else "none"
+	set_model(CharacterModel.person(color, hat, str(info.get("gear", "none")), skin))
 
 
 func sync_profile() -> void:
@@ -76,7 +90,8 @@ func sync_profile() -> void:
 		hp = clampf(hp + (new_max - hp_max), 1.0, new_max) if alive else hp
 		hp_max = new_max
 	en_max = float(p.get("en_max", 100))
-	if str(p.get("cls", "Mage")) != cls:
+	var look = p.get("look")
+	if str(p.get("cls", "Mage")) != cls or (JSON.stringify(look) if look is Dictionary else "") != _look_key:
 		rebuild_model()
 
 

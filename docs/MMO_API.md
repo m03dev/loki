@@ -61,13 +61,32 @@ walks between islands over the bridges of light.
 
 ## 4. The game: `GET /mmo/state`
 
+### Your character: `profile.look` and `/character`
+
+`profile.look` is the character the player made in LOKI's window (the creator before "Join world",
+and "Edit character" later; app/ui/character.js), or `null` when none was made yet. When it is
+there, `profile.name` is its name. Draw the player with it: `skin`, `top_color` (body/sleeves),
+`bottom_color`, `hair` + `hair_color`, `eyes` + `eye_color`, `body` (slim/regular/broad width),
+`accessory` (none/hat/scarf) + `accessory_color`, and `role` (builder/explorer/artist/scholar;
+the in-app client maps it to the class Warrior/Archer/Shaman/Mage). Every value is one of a fixed
+list, so a client never has to clean it. Kept per machine in `<data>/world/character.json`.
+
+| Call | Body | Answer |
+| --- | --- | --- |
+| `GET /character` | | `{ok, character: {...} or null, options: {field: [allowed values]}, roles: {id: {name, color, about}}, name_max: 24}` |
+| `POST /character` | `{name: 1-24 chars, role, body, skin, hair, hair_color, eyes, eye_color, top, top_color, bottom, bottom_color, accessory, accessory_color}` (missing fields take the defaults) | `{ok, character}`; 400 with the reason for an empty/long name, an unknown field or a value not in `options` |
+
+
 ```json
 {
   "ok": true, "version": 1, "time": 1760700000.0,
   "profile": {"name": "Mohamed", "cls": "Mage", "color": "#8b7bff", "xp": 2410, "level": 7,
               "xp_into": 130, "xp_need": 1610, "hp_max": 156, "en_max": 100, "power": 1.2,
               "stats": {"quests": 31, "kills": 4, "deaths": 1, "casts": 12, "loot": 9, "retries": 1},
-              "machine": "Mac mini"},
+              "machine": "Mac mini",
+              "look": {"name": "Mohamed", "role": "scholar", "body": "regular", "skin": "#d29e76", "hair": "short",
+                       "hair_color": "#1d1a1f", "eyes": "round", "eye_color": "#5a3a22", "top": "jacket", "top_color": "#3b82c4",
+                       "bottom": "trousers", "bottom_color": "#2e3440", "accessory": "scarf", "accessory_color": "#e0a73a"}},
   "classes": {"Warrior": {"color": "#d9604f", "about": "...", "hp": 1.2, "power": 1.0}, "Mage": {...}, "Archer": {...}, "Shaman": {...}},
   "skills": [{"slot": 1, "id": "strike", "name": "Strike", "kind": "combat", "cd_s": 1.1, "energy": 0, "cast_s": 0, "range": 2.2, "dmg": [10, 16]}, "..."],
   "quests": [{"id": "a1b2c3d4", "title": "Make an image of a red fox", "kind": "image", "status": "active",

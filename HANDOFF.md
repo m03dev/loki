@@ -41,6 +41,18 @@ and retried after 6 h, not in a loop. Installing never turns an add-on on (permi
 Add-ons shows progress + "Install what LOKI needs now" / "Everything". Routes: GET /autosetup/status, POST
 /autosetup/start {level}. Tested with fakes (tests/test_auto_setup.py); not run on the real Mac/PC yet.
 
+## 2026-10-17: LOKI World character creator, "Join world" (Claude, cloud)
+
+Owner: "i want a character creation screen and then play button should be join world". Settings > LOKI World's
+"Play" is now **Join world** (icon + tooltip, translated in all 8 tables) next to **Edit character**. With no character
+yet, Join world opens the creator (app/ui/character.js): name, role (Builder/Explorer/Artist/Scholar, one line each),
+body, skin, hair + colour, eyes + colour, top/bottom + colours, hat/scarf/none, Randomize; live preview drawn with
+world.js's own cel shader, ink and pixel blit; keyboard radios. Kept per machine: `GET/POST /character`
+(engine/character.py, <data>/world/character.json, fixed option lists). The avatar wears it (mmo_core.js `person()`,
+pooled; every renderer draws that scene list) with a name/role plate; role -> class. `GET /mmo/state` adds
+`profile.look` (docs/MMO_API.md); Godot player.gd uses its top colour, skin and hat (NOT compiled here - Ziva: run
+test_godot_world with Godot). tests/test_character.py (54, ~20 s, in SUITES). The "Play" games tab is unchanged.
+
 ## 2026-10-17 evening: provider Test, phone QR black page, model picker (Claude, cloud)
 
 Owner: added the NVIDIA key, Test said "could not reach integrate.api.nvidia.com (TimeoutError)"; the phone QR opens

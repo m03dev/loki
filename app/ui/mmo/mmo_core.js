@@ -79,6 +79,7 @@
   }
 
   MMO.myClass = function () {
+    if (!MMO.save.cls && MMO.look && ROLE_CLASS[MMO.look.role]) return ROLE_CLASS[MMO.look.role];
     if (!MMO.save.cls) {   // first time: the Mac is a Mage, the PC a Warrior (change it on the character sheet)
       const self = (hasWorld() && World.data && World.data.self) || {};
       if (!self.name) return "Warrior";   // not known yet: do not save a guess
@@ -270,6 +271,24 @@
   const ORB = [0.75, 0.6, 1], TEAL = [0.25, 0.95, 0.85], LEAF = [0.3, 0.75, 0.35], VISOR = [0.6, 0.98, 1.0];
   const FEATHERS = [[1, 0.5, 0.3], [0.3, 0.9, 1], [1, 0.9, 0.3]];
 
+  // the class weapon in the right hand (avatar() and person() share it)
+  function weapon(L, k, ax, ay, az, fx, fz, ry, big, alpha) {
+    if (k.weapon === "sword") {
+      put(L, "box", ax + fx * 0.05, ay + 0.3 * big, az + fz * 0.05, ry, 0.05 * big, 0.5 * big, 0.09 * big, STEEL, 0.15, true);
+      put(L, "box", ax + fx * 0.05, ay + 0.06 * big, az + fz * 0.05, ry, 0.08 * big, 0.04 * big, 0.22 * big, GOLD, 0.2, false);
+    } else if (k.weapon === "staff") {
+      put(L, "cyl6", ax + fx * 0.04, ay + 0.2 * big, az + fz * 0.04, 0, 0.05 * big, 1.05 * big, 0.05 * big, WOOD, 0, true);
+      put(L, "sph4", ax + fx * 0.04, ay + 0.76 * big, az + fz * 0.04, 0, 0.14 * big, 0.14 * big, 0.14 * big, ORB, 1.0, false);
+      glowAt(L, ax + fx * 0.04, ay + 0.76 * big, az + fz * 0.04, 0.38 * big, ORB, 0.7 * alpha);
+    } else if (k.weapon === "bow") {
+      put(L, "box", ax + fx * 0.08, ay + 0.12 * big, az + fz * 0.08, ry, 0.04 * big, 0.72 * big, 0.06 * big, WOOD, 0, true);
+      put(L, "box", ax + fx * 0.02, ay + 0.12 * big, az + fz * 0.02, ry, 0.01, 0.64 * big, 0.01, STEEL, 0.6, false);
+    } else {
+      put(L, "cyl6", ax + fx * 0.04, ay + 0.12 * big, az + fz * 0.04, 0, 0.08 * big, 0.62 * big, 0.08 * big, WOOD, 0, true);
+      put(L, "box", ax + fx * 0.04, ay + 0.5 * big, az + fz * 0.04, ry, 0.16 * big, 0.14 * big, 0.16 * big, TEAL, 0.6, true);
+    }
+  }
+
   // A character in the island's style (the agents' body, head and visor) with a class hat, a cape
   // and a weapon. Emotes: wave, dance, sit, cheer, bow. Feeds the pools, allocates nothing.
   function avatar(L, x, y, z, ry, col, cls, phase, walking, emote, et, big, alpha, shadowed) {
@@ -305,22 +324,7 @@
       const ay = y0 + 0.55 * big + (s > 0 ? armR : armL) * big, fo = swing + (s > 0 ? fwdArm : fwdArm * 0.5) * big, so = 0.27 * big;
       const ax = x + sx * s * so + fx * fo, az = z + sz * s * so + fz * fo;
       put(L, "box", ax, ay, az, ry, 0.1 * big, 0.3 * big, 0.1 * big, shade(CD, col, 0.85, 0), 0, false);
-      if (s > 0) {   // the weapon
-        if (k.weapon === "sword") {
-          put(L, "box", ax + fx * 0.05, ay + 0.3 * big, az + fz * 0.05, ry, 0.05 * big, 0.5 * big, 0.09 * big, STEEL, 0.15, true);
-          put(L, "box", ax + fx * 0.05, ay + 0.06 * big, az + fz * 0.05, ry, 0.08 * big, 0.04 * big, 0.22 * big, GOLD, 0.2, false);
-        } else if (k.weapon === "staff") {
-          put(L, "cyl6", ax + fx * 0.04, ay + 0.2 * big, az + fz * 0.04, 0, 0.05 * big, 1.05 * big, 0.05 * big, WOOD, 0, true);
-          put(L, "sph4", ax + fx * 0.04, ay + 0.76 * big, az + fz * 0.04, 0, 0.14 * big, 0.14 * big, 0.14 * big, ORB, 1.0, false);
-          glowAt(L, ax + fx * 0.04, ay + 0.76 * big, az + fz * 0.04, 0.38 * big, ORB, 0.7 * alpha);
-        } else if (k.weapon === "bow") {
-          put(L, "box", ax + fx * 0.08, ay + 0.12 * big, az + fz * 0.08, ry, 0.04 * big, 0.72 * big, 0.06 * big, WOOD, 0, true);
-          put(L, "box", ax + fx * 0.02, ay + 0.12 * big, az + fz * 0.02, ry, 0.01, 0.64 * big, 0.01, STEEL, 0.6, false);
-        } else {
-          put(L, "cyl6", ax + fx * 0.04, ay + 0.12 * big, az + fz * 0.04, 0, 0.08 * big, 0.62 * big, 0.08 * big, WOOD, 0, true);
-          put(L, "box", ax + fx * 0.04, ay + 0.5 * big, az + fz * 0.04, ry, 0.16 * big, 0.14 * big, 0.16 * big, TEAL, 0.6, true);
-        }
-      }
+      if (s > 0) weapon(L, k, ax, ay, az, fx, fz, ry, big, alpha);   // the weapon
     }
     // the class hat
     const hat = hy + 0.22 * big;
@@ -344,6 +348,125 @@
   }
   MMO.avatar = avatar;
   MMO.shade = shade;
+
+  // ------------------------------------------------------------------ your character (app/ui/character.js)
+  // The look made in the character creator, kept by the engine (GET /character, engine/character.py).
+  // setLook() turns it into ready colours once, so person() below allocates nothing per frame.
+  const BUILD = { slim: 0.86, regular: 1, broad: 1.16 };
+  const ROLE_CLASS = { builder: "Warrior", explorer: "Archer", artist: "Shaman", scholar: "Mage" };
+  const ROLE_NAME = { builder: "Builder", explorer: "Explorer", artist: "Artist", scholar: "Scholar" };
+  const SHOE = [0.12, 0.11, 0.14], EYE_WHITE = [0.95, 0.95, 0.97];
+  MMO.look = null;
+  MMO.lookOf = function (c) {   // ready colours for person(); null for no character
+    if (!c || typeof c !== "object" || !c.name) return null;
+    const rgb = (h, f) => hexRgb(h, f);
+    return {
+      name: String(c.name).slice(0, 24), role: c.role, roleName: ROLE_NAME[c.role] || "", body: c.body, bw: BUILD[c.body] || 1,
+      hair: c.hair, eyes: c.eyes, top: c.top, bottom: c.bottom, accessory: c.accessory,
+      skin: rgb(c.skin, [0.91, 0.75, 0.61]), hairC: rgb(c.hair_color, [0.29, 0.18, 0.13]), eyeC: rgb(c.eye_color, [0.17, 0.17, 0.2]),
+      topC: rgb(c.top_color, [0.23, 0.51, 0.77]), botC: rgb(c.bottom_color, [0.18, 0.2, 0.25]), accC: rgb(c.accessory_color, [0.85, 0.38, 0.31]),
+      raw: Object.assign({}, c),
+    };
+  };
+  MMO.setLook = function (c) {
+    MMO.look = MMO.lookOf(c);
+    if (!MMO.look) return null;
+    MMO.save.name = MMO.look.name;
+    MMO.persist();
+    return MMO.look;
+  };
+  MMO.roleClass = function (role) { return ROLE_CLASS[role] || ""; };
+
+  // A person in the island's style (the agents' round body and head, ink outlines, cel shading),
+  // dressed as the character creator says: build, skin, hair, eyes, top, bottom, an accessory.
+  // The class weapon stays in the right hand (combat is the same). Feeds the pools, allocates nothing.
+  function person(L, x, y, z, ry, lk, cls, phase, walking, emote, et, big, alpha, shadowed) {
+    const k = CLASSES[cls] || CLASSES.Warrior, bw = lk.bw;
+    let bob = walking ? Math.abs(Math.sin(phase)) * 0.12 : Math.sin(phase) * 0.02;
+    let sit = 0, armL = 0, armR = 0, fwdArm = 0, lean = 0;
+    if (emote === "dance") { bob = Math.abs(Math.sin(et * 7)) * 0.16; ry += Math.sin(et * 3.5) * 1.2; armL = 0.25 + Math.sin(et * 7) * 0.12; armR = 0.25 - Math.sin(et * 7) * 0.12; }
+    else if (emote === "sit") sit = -0.26;
+    else if (emote === "cheer") { bob = Math.abs(Math.sin(et * 9)) * 0.3; armL = armR = 0.34; }
+    else if (emote === "wave") armR = 0.34 + Math.sin(et * 12) * 0.08;
+    else if (emote === "bow") lean = 0.18;
+    else if (emote === "attack") { fwdArm = 0.22 * Math.max(0, 1 - et * 3); armR = 0.12 * Math.max(0, 1 - et * 3); }
+    else if (emote === "cast") { armL = armR = 0.22 + Math.sin(et * 16) * 0.03; fwdArm = 0.1; }
+    const fx = Math.sin(ry), fz = Math.cos(ry), sx = Math.cos(ry), sz = -Math.sin(ry);
+    const y0 = y + bob + sit, hy = y0 + 0.98 * big - lean * 0.5;
+    const hx = x + fx * lean, hz = z + fz * lean;
+    if (shadowed) shadowAt(L, x + 0.06, z - 0.05, 0.42 * big * bw, 0.7 * alpha);
+    // legs and feet (trousers, or bare legs under shorts and a skirt)
+    for (let s = -1; s <= 1; s += 2) {
+      const stride = walking ? Math.sin(phase) * s * 0.11 * big : 0, out = sit ? 0.28 * big : 0;
+      const lx = x + sx * s * 0.1 * big * bw + fx * (stride + out) * 0.5, lz = z + sz * s * 0.1 * big * bw + fz * (stride + out) * 0.5;
+      put(L, "box", lx, y0 + 0.2 * big, lz, ry, 0.12 * big * bw, 0.26 * big, 0.13 * big, lk.bottom === "trousers" ? lk.botC : lk.skin, 0, false);
+      put(L, "box", x + sx * s * 0.1 * big * bw + fx * (stride + out), y + 0.05 + Math.max(0, -stride) * 0.4 + (sit ? 0.02 : 0),
+        z + sz * s * 0.1 * big * bw + fz * (stride + out), ry, 0.12 * big, 0.08 * big, 0.18 * big, SHOE, 0, false);
+    }
+    // the bottom: hips (trousers, shorts) or a flared skirt
+    if (lk.bottom === "skirt") put(L, "cone", x, y0 + 0.36 * big, z, ry, 0.6 * big * bw, 0.5 * big, 0.6 * big * bw, lk.botC, 0, true);
+    else put(L, "cyl", x, y0 + 0.33 * big, z, ry, 0.42 * big * bw, 0.16 * big, 0.4 * big * bw, lk.botC, 0, true);
+    if (lk.bottom === "shorts") for (let s = -1; s <= 1; s += 2) {
+      put(L, "box", x + sx * s * 0.1 * big * bw, y0 + 0.26 * big, z + sz * s * 0.1 * big * bw, ry, 0.14 * big * bw, 0.1 * big, 0.15 * big, lk.botC, 0, false);
+    }
+    // the top
+    put(L, "cyl", x, y0 + 0.56 * big, z, ry, 0.44 * big * bw, 0.4 * big, 0.42 * big * bw, lk.topC, 0, true).s2 = 0.25;
+    if (lk.top === "jacket") {   // open front, a lighter shirt and a collar
+      put(L, "box", x + fx * 0.2 * big * bw, y0 + 0.56 * big, z + fz * 0.2 * big * bw, ry, 0.12 * big, 0.36 * big, 0.04, shade(CA, lk.topC, 0.5, 0.45), 0, false);
+      put(L, "box", x, y0 + 0.75 * big, z, ry, 0.34 * big * bw, 0.06 * big, 0.36 * big * bw, shade(CB, lk.topC, 0.7, 0), 0, false);
+    } else if (lk.top === "hoodie") {   // the hood down at the back, a front pocket
+      put(L, "sph4", x - fx * 0.17 * big, y0 + 0.76 * big, z - fz * 0.17 * big, ry, 0.34 * big * bw, 0.16 * big, 0.2 * big, shade(CA, lk.topC, 0.85, 0), 0, true);
+      put(L, "box", x + fx * 0.2 * big * bw, y0 + 0.46 * big, z + fz * 0.2 * big * bw, ry, 0.24 * big * bw, 0.1 * big, 0.04, shade(CB, lk.topC, 0.8, 0), 0, false);
+    } else {   // tunic: a belt
+      put(L, "cyl", x, y0 + 0.4 * big, z, ry, 0.46 * big * bw, 0.05 * big, 0.44 * big * bw, shade(CA, lk.topC, 0.45, 0.02), 0, false);
+    }
+    // arms: sleeves in the top's colour, hands in skin (+1 is the weapon hand)
+    for (let s = -1; s <= 1; s += 2) {
+      const swing = walking ? -Math.sin(phase) * s * 0.09 * big : 0;
+      const ay = y0 + 0.58 * big + (s > 0 ? armR : armL) * big, fo = swing + (s > 0 ? fwdArm : fwdArm * 0.5) * big, so = (0.25 * bw + 0.03) * big;
+      const ax = x + sx * s * so + fx * fo, az = z + sz * s * so + fz * fo;
+      put(L, "box", ax, ay, az, ry, 0.1 * big, 0.26 * big, 0.1 * big, shade(CD, lk.topC, 0.9, 0), 0, false);
+      put(L, "sph4", ax, ay - 0.15 * big, az, ry, 0.09 * big, 0.09 * big, 0.09 * big, lk.skin, 0, false);
+      if (s > 0) weapon(L, k, ax, ay - 0.04 * big, az, fx, fz, ry, big, alpha);
+    }
+    // the scarf: round the neck, one end hanging in front
+    if (lk.accessory === "scarf") {
+      put(L, "cyl", x, y0 + 0.78 * big, z, ry, 0.38 * big * bw, 0.08 * big, 0.38 * big * bw, lk.accC, 0, true);
+      put(L, "box", x + fx * 0.17 * big + sx * 0.08 * big, y0 + 0.66 * big, z + fz * 0.17 * big + sz * 0.08 * big, ry, 0.08 * big, 0.22 * big, 0.04, lk.accC, 0, false);
+    }
+    // the head and the eyes
+    put(L, "sph", hx, hy, hz, ry, 0.44 * big, 0.44 * big, 0.44 * big, lk.skin, 0, true).s2 = 0.4;
+    const ex = hx + fx * 0.205 * big, ez = hz + fz * 0.205 * big, eyY = hy + 0.03 * big;
+    if (lk.eyes === "visor") put(L, "box", ex, eyY + 0.01 * big, ez, ry, 0.28 * big, 0.09 * big, 0.06, lk.eyeC, 0.5, false);
+    else for (let s = -1; s <= 1; s += 2) {
+      const px = ex + sx * s * 0.08 * big, pz = ez + sz * s * 0.08 * big;
+      if (lk.eyes === "wide") {
+        put(L, "box", px, eyY, pz, ry, 0.08 * big, 0.09 * big, 0.03, EYE_WHITE, 0.1, false);
+        put(L, "box", px + fx * 0.012, eyY - 0.01 * big, pz + fz * 0.012, ry, 0.045 * big, 0.06 * big, 0.03, lk.eyeC, 0, false);
+      } else if (lk.eyes === "sleepy") put(L, "box", px, eyY - 0.01 * big, pz, ry, 0.07 * big, 0.022 * big, 0.03, lk.eyeC, 0, false);
+      else put(L, "box", px, eyY, pz, ry, 0.05 * big, 0.065 * big, 0.03, lk.eyeC, 0, false);
+    }
+    // hair
+    const hb = hx - fx * 0.03 * big, hbz = hz - fz * 0.03 * big;
+    if (lk.hair !== "bald") put(L, "sph4", hb, hy + 0.07 * big, hbz, ry, 0.47 * big, 0.34 * big, 0.47 * big, lk.hairC, 0, true);
+    if (lk.hair === "long") put(L, "box", hx - fx * 0.15 * big, hy - 0.12 * big, hz - fz * 0.15 * big, ry, 0.42 * big, 0.42 * big, 0.14 * big, lk.hairC, 0, true);
+    else if (lk.hair === "spiky") for (let f = -1; f <= 1; f++) {
+      put(L, "cone", hb + sx * f * 0.12 * big, hy + 0.26 * big - (f ? 0.03 : 0), hbz + sz * f * 0.12 * big, ry, 0.12 * big, 0.2 * big, 0.12 * big, lk.hairC, 0, true);
+    } else if (lk.hair === "bun") put(L, "sph4", hx - fx * 0.12 * big, hy + 0.24 * big, hz - fz * 0.12 * big, ry, 0.18 * big, 0.18 * big, 0.18 * big, lk.hairC, 0, true);
+    else if (lk.hair === "curly") for (let f = 0; f < 5; f++) {
+      const an = ry + Math.PI + (f - 2) * 0.62;
+      put(L, "sph4", hx + Math.sin(an) * 0.2 * big, hy + 0.1 * big - Math.abs(f - 2) * 0.05 * big, hz + Math.cos(an) * 0.2 * big, ry, 0.17 * big, 0.17 * big, 0.17 * big, lk.hairC, 0, true);
+    }
+    // the hat: a brim and a crown in its colour
+    if (lk.accessory === "hat") {
+      put(L, "cyl", hb, hy + 0.2 * big, hbz, ry, 0.62 * big, 0.04 * big, 0.62 * big, lk.accC, 0, true);
+      put(L, "cyl", hb, hy + 0.3 * big, hbz, ry, 0.4 * big, 0.18 * big, 0.4 * big, lk.accC, 0, true);
+      put(L, "cyl", hb, hy + 0.24 * big, hbz, ry, 0.41 * big, 0.05 * big, 0.41 * big, shade(CE, lk.accC, 0.45, 0.02), 0, false);
+    }
+    return hy;
+  }
+  MMO.person = person;
+  MMO.resetPools = resetPools;
 
   // ------------------------------------------------------------------ input
   const isTyping = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -485,24 +608,44 @@
     if (MMO.view === view) return;
     MMO.view = view;
     view.mmo = MMO;
-    MMO.active = !MMO.save.settings.spectate;
-    if (MMO.active) MMO.enter(); else MMO.leave();
+    // you walk the world only with a character: none made yet -> the orbiting view until "Join world"
+    MMO.active = !MMO.save.settings.spectate && MMO.hasCharacter();
+    if (MMO.active) MMO.enter(); else MMO.leave(true);
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keyup", onKeyUp, true);
     window.addEventListener("blur", MMO.clearKeys);
     view.canvas.addEventListener("contextmenu", (e) => { if (MMO.active) e.preventDefault(); });
     view.canvas.addEventListener("pointerdown", () => { Sound.init(); if (MMO.active) view.canvas.focus({ preventScroll: true }); });
     for (const s of MMO.systems) if (s.attach) s.attach(view);
-    // Play / Spectate: walk your character, or the old orbiting view (nothing is taken off)
+    // Join world / Spectate: walk your character, or the old orbiting view (nothing is taken off).
+    // Joining with no character yet opens the character creator first (app/ui/character.js).
     const frame = view.canvas.parentElement;
     if (frame && !frame.querySelector(".mmo-toggle")) {
+      const bar = el("div", "mmo-bar");
       const btn = el("button", "mmo-toggle");
       btn.type = "button";
-      const label = () => { btn.textContent = MMO.active ? "◎ Spectate" : "▶ Play"; btn.title = MMO.active
-        ? "Back to the orbiting view" : "Walk your own character: WASD to move, drag to turn the camera, Q/E to turn, Space to jump"; };
-      btn.addEventListener("click", (e) => { e.stopPropagation(); if (MMO.active) MMO.leave(); else MMO.enter(); label(); view.canvas.focus({ preventScroll: true }); });
-      label();
-      frame.append(btn);
+      btn.id = "world-join";
+      const edit = el("button", "mmo-edit");
+      edit.type = "button";
+      edit.id = "world-edit-character";
+      MMO.refreshButtons = function () {
+        const C = window.LokiCharacter;
+        if (C) { C.label(btn, MMO.active ? "spectate" : "join"); C.label(edit, "edit"); }
+        else { btn.textContent = MMO.active ? "\u25CE Spectate" : "\u25B6 Join world"; }
+        edit.hidden = !C;
+      };
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (MMO.active) { MMO.leave(); MMO.refreshButtons(); } else MMO.join();
+      });
+      edit.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (window.LokiCharacter) window.LokiCharacter.open({ edit: true, onJoin: () => MMO.join() });
+      });
+      document.addEventListener("loki:language", MMO.refreshButtons);
+      MMO.refreshButtons();
+      bar.append(edit, btn);
+      frame.append(bar);
     }
     if (hasWorld() && World.data) MMO.onWorld(World.data);
   };
@@ -520,9 +663,24 @@
     if (frame) frame.classList.add("mmo-on");
     for (const s of MMO.systems) if (s.enter) s.enter();
   };
-  MMO.leave = function () {   // spectate: the old orbiting camera, nothing taken off
+  MMO.hasCharacter = function () { return !!MMO.look || !window.LokiCharacter; };
+  // "Join world": with a character, in you go; without one, the creator first (and in after it)
+  MMO.join = function () {
+    const C = window.LokiCharacter;
+    const go = () => {
+      MMO.enter();
+      if (MMO.refreshButtons) MMO.refreshButtons();
+      if (MMO.view) MMO.view.canvas.focus({ preventScroll: true });
+    };
+    if (MMO.hasCharacter()) { go(); return true; }
+    if (!C.loaded) { C.ready.then(() => MMO.join()); return false; }   // still asking the engine
+    C.open({ edit: false, onJoin: go });
+    return false;
+  };
+  MMO.leave = function (quiet) {   // spectate: the old orbiting camera, nothing taken off
     const v = MMO.view;
-    MMO.active = false; MMO.save.settings.spectate = true; MMO.persist();
+    MMO.active = false;
+    if (!quiet) { MMO.save.settings.spectate = true; MMO.persist(); }   // quiet: no character yet, not a choice
     MMO.clearKeys();
     if (v) {
       v.dist = 17; v.pitch = 0.5; v.focus = null;
@@ -570,6 +728,10 @@
     flushSave(now);
   };
 
+  // avatar()'s signature with the look in place of the tunic colour (scene() picks one of the two)
+  function personAt(L, x, y, z, ry, col, cls, phase, walking, emote, et, big, alpha, shadowed) {
+    return person(L, x, y, z, ry, MMO.look, cls, phase, walking, emote, et, big, alpha, shadowed);
+  }
   const RING_SELF = [0.4, 1, 0.55], RING_FOE = [1, 0.3, 0.28], RING_FRIEND = [0.3, 1, 0.9], GHOST = [0.6, 0.6, 0.7];
   const TUNIC = [0, 0, 0];
   // HOT:BEGIN - runs every frame: pooled objects and scratch arrays only
@@ -579,7 +741,7 @@
     const col = k.rgb || (k.rgb = hexRgb(k.color, TEAL));
     const myCol = shade(TUNIC, col, 0.55, 0.32);   // a lighter tunic than the cape
     const emote = p.dead ? "sit" : p.casting ? "cast" : p.emote, et = (now - (p.casting ? p.castAt : p.emoteAt)) / 1000;
-    avatar(L, p.x, p.baseY + p.y, p.z, p.ry, myCol, MMO.myClass(), p.phase, p.walking && !p.travel ? true : !!p.travel,
+    (MMO.look ? personAt : avatar)(L, p.x, p.baseY + p.y, p.z, p.ry, myCol, MMO.myClass(), p.phase, p.walking && !p.travel ? true : !!p.travel,
       p.attackAt && now - p.attackAt < 400 ? "attack" : emote, p.attackAt && now - p.attackAt < 400 ? (now - p.attackAt) / 1000 : et,
       1.0, 1, p.baseY === 0 && !p.travel);
     if (p.dead) glowAt(L, p.x, p.baseY + 1.2, p.z, 1.0, GHOST, 0.5);
@@ -594,7 +756,19 @@
   MMO.decorate = function (node, id, a, now) {
     if (MMO.game) MMO.game.decorateAgent(node, id, a, now);
   };
+  const PLATE = [0, 0, 0];
   MMO.labels = function (view, now, nodeFor, setText, items, seen) {
+    if (MMO.look) {   // you: the name and role from the character creator
+      const p = MMO.player, node = nodeFor("mmo:self", "wlabel mmo-self");
+      seen.add("mmo:self");
+      const at = MMO.projectInto(view, p.x, p.baseY + p.y + 1.75 + (MMO.look.accessory === "hat" ? 0.15 : 0), p.z, PLATE);
+      node.hidden = !at;
+      if (at) {
+        setText(node, 0, MMO.look.name);
+        setText(node, 1, MMO.look.roleName ? "<" + MMO.look.roleName + ">" : "");
+        items.push({ node, x: PLATE[0], y: PLATE[1], depth: PLATE[2] });
+      }
+    }
     for (const s of MMO.systems) if (s.labels) s.labels(view, now, nodeFor, setText, items, seen);
   };
   MMO.click = function (view, x, y) { return MMO.game ? MMO.game.click(view, x, y) : false; };

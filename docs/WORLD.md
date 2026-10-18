@@ -119,7 +119,10 @@ client uses it - the contract is **docs/MMO_API.md**:
 **Clients.** The owner chose a **Godot 4 client**: `game/loki-world/` in this repo (AGENTS.md - the
 only place for Godot files), a desktop app for Steam and a web build inside LOKI's window; see
 "LOKI World in Godot 4" below. Until its web build is exported, the in-app world has the
-first stage as a fallback (`app/ui/mmo/mmo_core.js`): in Settings > LOKI World press **Play**:
+first stage as a fallback (`app/ui/mmo/mmo_core.js`): in Settings > LOKI World press **Join world**. The first time,
+the **character creator** opens (app/ui/character.js): name, role (Builder, Explorer, Artist, Scholar), body, skin, hair,
+eyes, outfit and an accessory, with a live preview in LOKI World's look and a Randomize button; **Edit character** opens it
+again. It is kept per machine by the engine (`GET/POST /character`, engine/character.py) and your avatar wears it:
 
 | Key | Does |
 | --- | --- |
