@@ -224,8 +224,9 @@ def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
     except OSError:
         pass
     # LOKI_SUPERVISED: the engine exits with RESTART_EXIT_CODE to be restarted on new code.
+    # LOKI_APP_PID: this window's process - computer use never clicks or types into it (engine/computer_use.py).
     env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1", LOKI_PORT=str(PORT),
-               LOKI_SUPERVISED="1")
+               LOKI_SUPERVISED="1", LOKI_APP_PID=str(os.getpid()))
     output = open(STATE / "engine.out", "a", encoding="utf-8")
     log(f"starting the engine for {workspace}" + (f" (Godot: {godot})" if godot else " (no Godot)"))
     return subprocess.Popen(engine_command(python, workspace, godot), cwd=str(REPO), env=env,

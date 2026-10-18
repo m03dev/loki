@@ -52,7 +52,12 @@ look (vision describes the screen), wait. When the tree is empty (games, canvas 
 4. A never-list (password managers, keychains; `LOKI_COMPUTER_NEVER`). Ctrl+Alt+Delete is never pressed.
 5. Approval per app: the first action in an app asks the owner (never decidable by Laya); yes holds until
    LOKI restarts. `LOKI_COMPUTER_APPS` = apps the owner pre-approved.
-6. Every action logged to `harness_data/computer_log.jsonl` (typed text only as its length and first characters).
+6. Never into LOKI itself: a click, type, key or scroll while LOKI's own window is in front (the engine's pid,
+   its parent the app window, or `LOKI_APP_PID`) is refused before any approval. `open_app` waits for the app
+   to come to the front; if it does not, it activates it once (macOS: `reopen` + `activate`, which also gives
+   TextEdit/Notes a window; Windows: restore + SetForegroundWindow; Linux: xdotool windowactivate) and, if it
+   is still behind, tells the model it is NOT in front and not to type (Ziva, Mac, 2026-10-18).
+7. Every action logged to `harness_data/computer_log.jsonl` (typed text only as its length and first characters).
 
 BUILD_BRIEF section 7 says "browsers and computer-use only inside VMs". The owner has now asked for computer
 use on the PC and the Mac themselves; the guardrails above keep it opt-in, supervised and stoppable. For

@@ -633,6 +633,38 @@ check("POST /computer/stop stops it", not st["armed"])
 comp.arm()
 check("an unknown action lists the real ones", "elements, find, click" in run(comp.act("dance")))
 
+# Ziva (Mac) 2026-10-18: "open TextEdit and type hello" - TextEdit opened with no window, LOKI's own window stayed
+# in front, and the next action wanted to type into python (LOKI itself).
+computer_use.FRONT_WAIT_S = 0.6
+desk.app, desk.title, desk.pid = "python", "Loki", os.getpid()
+check("LOKI's own window (its pid) is recognised", computer_use.is_self(desk.frontmost()))
+check("...and so is its parent, the app window", computer_use.is_self({"app": "python", "pid": os.getppid()}) or os.getppid() <= 1)
+check("...and LOKI_APP_PID", (os.environ.__setitem__("LOKI_APP_PID", "4194777") or
+      computer_use.is_self({"app": "python", "pid": 4194777})) and not computer_use.is_self({"app": "textedit", "pid": 4194778}))
+os.environ.pop("LOKI_APP_PID")
+before_actions, before_asked = len(desk.actions), len(ASKED)
+for act, kw in (("type", {"text": "hello"}), ("click", {"x": 50, "y": 50}), ("key", {"keys": "enter"}), ("scroll", {})):
+    out = run(comp.act(act, **kw))
+    check("%s into LOKI's own window is refused (no approval asked)" % act, out.startswith("DENIED") and "own window" in out, out)
+check("...and nothing was typed or clicked", len(desk.actions) == before_actions and len(ASKED) == before_asked, desk.actions[before_actions:])
+check("looking at the screen while LOKI is in front is still fine", not run(comp.act("elements")).startswith("DENIED"))
+desk.comes_forward = False
+out = run(comp.act("open_app", app="TextEdit"))
+check("open_app: an app that stays behind is activated once, then reported NOT in front",
+      desk.activated == ["TextEdit"] and "NOT in front" in out and "LOKI's own window" in out and "do not type" in out, out)
+desk.comes_forward = None
+out = run(comp.act("open_app", app="TextEdit"))
+check("open_app: activating brings it forward -> 'it is in front'", "it is in front" in out and desk.app == "textedit", out)
+out = run(comp.act("type", text="hello"))
+check("...and then typing goes to TextEdit", out.startswith("typed 5") and desk.actions[-1] == ("type", "hello"), out)
+desk.comes_forward = True
+desk.activated.clear()
+out = run(comp.act("open_app", app="Notepad"))
+check("open_app: an app that comes forward by itself is not re-activated", "it is in front" in out and not desk.activated, out)
+check("same_app matches names loosely and refuses others", computer_use.same_app("TextEdit", "textedit") and
+      computer_use.same_app("Notepad", "notepad.exe") and computer_use.same_app("calculator", "calc") and
+      not computer_use.same_app("TextEdit", "python") and not computer_use.same_app("", "python"))
+
 # ============================================================================ browser: Chromium path
 print("browser: numbered elements in a real (here: fake) Chromium")
 SNAP = {"title": "Search", "url": "https://example.com/", "lines": [

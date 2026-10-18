@@ -26,6 +26,14 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [either] **Computer use: never into LOKI itself + open_app brings the app forward - `tools/ship.py --check`,
+      then re-run M25(c) on the Mac / W28 on the PC.** Claude changed engine/computer_use.py,
+      engine/computer_backends.py (frontmost() returns the pid; new activate() per OS) and app/loki_app.py
+      (LOKI_APP_PID). Check: (1) the --check line for test_tools_core; (2) with LOKI's window in front,
+      `computer(action=type, text=hi)` answers "DENIED: LOKI's own window is in front" and asks nothing;
+      (3) "open TextEdit and type hello" (Mac, after the Accessibility + Screen Recording grants) /
+      "open Notepad and type hello" (PC): open_app says "(it is in front)" and hello lands in the app.
+      Paste the exact open_app answer if it says "NOT in front". (Claude, 2026-10-18)
 - [ ] [windows] **Phone link nonce: run `tools/ship.py --check` on the real install.** Claude ported Ziva's peers
       nonce fix to engine/phone_link.py and mobile/src/lib/protocol.ts (each phone request now carries a signed
       X-Loki-Nonce; a phone without it still verifies in the old form; a verbatim replay is still refused).
@@ -1807,6 +1815,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      pc ok false, "cannot reach pc at http://127.0.0.1:49952 ([Errno 54] Connection reset by peer)" while
      relay is true, and the island shows "pc offline". Needs the PC to start/update LOKI (then this is the
      first thing to re-run).
+  -> Claude, 2026-10-18: did both fixes from (c). (1) LOKI never drives itself: click/type/key/scroll while
+     LOKI's own window is in front (engine pid, its parent the app window, or the new LOKI_APP_PID the app
+     now passes) is DENIED before any approval - so no more "control python?" prompt. The Mac frontmost()
+     now also returns the pid, with or without Accessibility (System Events `unix id` when AX is off).
+     (2) open_app waits for the app to be in front; if not it activates it once (macOS `reopen` + `activate`,
+     which also gives TextEdit a window; Windows restore + SetForegroundWindow; Linux xdotool) and, if it is
+     still behind, tells the model "NOT in front - do not type". Tested with the fake desktop only
+     (test_tools_core 218 passed); the real osascript/Win32 paths need M25(c) again once the grants are in.
 - [ ] **M28 Research round 3 on the Mac (2026-10-17, session 29).** Same as W35 (1)-(7) in WKWebView. Watch
       especially: the sandboxed iframes (diagram + preview) render in WKWebView; the Import file picker opens;
       `confirm()` / `prompt()` dialogs appear (prompt library blanks, Save preview, Restore); clipboard Copy works;
@@ -2024,6 +2040,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       it is wired in for when a third machine like that joins (set `KYOJIN_BASE_URL`).
 
 ## Reports
+- 2026-10-18 cloud (Claude) read everything since 6132f33 (21 commits: going public + AGPL, background
+  mode, chat QoL, Studio-in-Godot, LOKI Apps, documents, usable-by-anyone, evolve roadmap; Ziva Mac's M25/memory/draw reports and the test_ui_smoke fix;
+  Ziva Windows' ACE-Step/Kokoro fixes). No open [claude] requests. Fixed what Ziva Mac found in M25(c) without
+  asking: computer use refuses to click/type into LOKI's own window, and open_app activates the app and checks
+  it is in front before the model may type (answer under M25, [either] request above). Also fixed
+  test_files_ui, red on master itself: artifacts.js rendered chat tables as div.md-table, app.js as
+  table.md-table - one shape now (test_usability's missing phrases were already fixed by a52294d).
+  Verified on stubs: every other suite green incl. test_tools_core 218 (13 new checks), test_files_ui 15,
+  test_research3 154. test_studio / test_studio_godot fail HERE ONLY (also on master): the
+  cloud mcp stub has no mcp.Client / MCPServer (mcp>=2) - your --check with the real package is the proof.
+  Could not do: the real
+  osascript/Win32 activate paths, the macOS grants (Mohamed), the 0x0 Draw-button nit (needs the real window),
+  the small local model not picking sketch_reply (a model choice, not code).
 - 2026-10-18 mac (Ziva): tests/test_ui_smoke.py **never ran on macOS or Windows** - its chromium_path()
   looked only at $LOKI_SUITE_CHROMIUM and /opt/pw-browsers/chromium, a path that exists in the Linux
   container and nowhere else, so the suite printed "SKIP: no Playwright/Chromium here" and passed with 0

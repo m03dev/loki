@@ -104,6 +104,10 @@ class Backend:
     def open_app(self, name: str) -> str:
         raise RuntimeError("cannot open apps here")
 
+    def activate(self, name: str) -> bool:
+        """Bring an open app to the front (and give it a window if it has none). False if it could not."""
+        return False
+
     def apps(self) -> list:
         return []
 
@@ -292,7 +296,36 @@ class WindowsBackend(Backend):
         hwnd = self.user32.GetForegroundWindow()
         if not hwnd:
             return {"app": "", "title": ""}
-        return {"app": self._proc_name(hwnd), "title": self._title(hwnd)}
+        pid = self.wt.DWORD()
+        self.user32.GetWindowThreadProcessId(hwnd, self.ct.byref(pid))
+        return {"app": self._proc_name(hwnd), "title": self._title(hwnd), "pid": int(pid.value)}
+
+    def activate(self, name: str) -> bool:
+        want = Path(WIN_APPS.get(str(name or "").strip().lower(), str(name or ""))).stem.lower()
+        if not want:
+            return False
+        found: list = []
+        proto = self.ct.WINFUNCTYPE(self.wt.BOOL, self.wt.HWND, self.wt.LPARAM)
+
+        def each(hwnd, _lparam):
+            if self.user32.IsWindowVisible(hwnd) and self.user32.GetWindowTextLengthW(hwnd) > 0:
+                proc = self._proc_name(hwnd)
+                if proc and (proc == want or want in proc or proc in want):
+                    found.append(hwnd)
+                    return False
+            return True
+        self.user32.EnumWindows(proto(each), 0)
+        if not found:
+            return False
+        hwnd = found[0]
+        self.user32.ShowWindow(hwnd, 9)              # SW_RESTORE: un-minimise
+        self.user32.BringWindowToTop(hwnd)
+        if self.user32.SetForegroundWindow(hwnd):
+            return True
+        # Windows only lets the foreground process change the foreground window; a lone Alt tap lifts that lock.
+        self.user32.keybd_event(VK["alt"], 0, 0, 0)
+        self.user32.keybd_event(VK["alt"], 0, 2, 0)
+        return bool(self.user32.SetForegroundWindow(hwnd))
 
     def apps(self) -> list:
         out = []
@@ -522,17 +555,23 @@ class MacBackend(Backend):
     def frontmost(self) -> dict:
         app = self._app()
         if not app:
-            out = subprocess.run(["/usr/bin/osascript", "-e", 'tell application "System Events" to get name of first '
-                                  'application process whose frontmost is true'], capture_output=True, text=True, timeout=5)
-            return {"app": (out.stdout or "").strip().lower(), "title": ""}
+            # No Accessibility permission: System Events still names the front process and its pid.
+            out = subprocess.run(["/usr/bin/osascript", "-e", 'tell application "System Events" to get {name, unix id} '
+                                  'of first application process whose frontmost is true'], capture_output=True, text=True, timeout=5)
+            name, _sep, pid = (out.stdout or "").strip().rpartition(",")
+            if not name:
+                name, pid = pid, ""
+            return {"app": name.strip().lower(), "title": "", "pid": int(pid) if pid.strip().isdigit() else 0}
         try:
             name = self._text_attr(app, "AXTitle")
+            pid = self.ct.c_int(0)
+            self.cg.AXUIElementGetPid(app, self.ct.byref(pid))
             window = self._attr(app, "AXFocusedWindow")
             title = ""
             if window:
                 title = self._text_attr(window, "AXTitle")
                 self.cf.CFRelease(window)
-            return {"app": name.lower(), "title": title}
+            return {"app": name.lower(), "title": title, "pid": int(pid.value)}
         finally:
             self.cf.CFRelease(app)
 
@@ -661,6 +700,16 @@ class MacBackend(Backend):
             raise RuntimeError("cannot open %r (%s)" % (raw, (proc.stderr or "").strip()[:160]))
         return raw
 
+    def activate(self, name: str) -> bool:
+        # `reopen` gives an app with no window its default one (TextEdit, Notes - what clicking the Dock icon
+        # does); `activate` brings it to the front. The name is an AppleScript string literal, escaped.
+        app = str(name or "").strip().replace("\\", "\\\\").replace('"', '\\"')
+        if not app:
+            return False
+        proc = subprocess.run(["/usr/bin/osascript", "-e", 'tell application "%s" to reopen' % app,
+                               "-e", 'tell application "%s" to activate' % app], capture_output=True, text=True, timeout=15)
+        return proc.returncode == 0
+
     def apps(self) -> list:
         proc = subprocess.run(["/usr/bin/osascript", "-e", 'tell application "System Events" to get name of every '
                                'application process whose background only is false'], capture_output=True, text=True, timeout=10)
@@ -701,7 +750,18 @@ class LinuxBackend(Backend):
             title = self._x("getactivewindow", "getwindowname")
         except RuntimeError:
             title = ""
-        return {"app": title.split(" - ")[-1].lower() if title else "", "title": title}
+        try:
+            pid = int(self._x("getactivewindow", "getwindowpid") or 0)
+        except (RuntimeError, ValueError):
+            pid = 0
+        return {"app": title.split(" - ")[-1].lower() if title else "", "title": title, "pid": pid}
+
+    def activate(self, name: str) -> bool:
+        try:
+            self._x("search", "--onlyvisible", "--class", str(name or "").strip(), "windowactivate")
+            return True
+        except RuntimeError:
+            return False
 
     def click(self, x: int, y: int, button: str = "left", count: int = 1) -> None:
         self._x("mousemove", str(int(x)), str(int(y)), "click", "--repeat", str(max(1, int(count))),
@@ -750,6 +810,9 @@ class FakeBackend(Backend):
         self.pos = (400, 300)
         self.kill = False
         self.opened: list = []
+        self.pid = 4_194_401          # above Linux's pid_max: never a real process
+        self.comes_forward = True    # False: an opened app stays behind (like TextEdit with no window)
+        self.activated: list = []
 
     def available(self) -> tuple:
         return True, "fake desktop"
@@ -764,7 +827,7 @@ class FakeBackend(Backend):
         return [dict(e) for e in self.tree[:limit]]
 
     def frontmost(self) -> dict:
-        return {"app": self.app, "title": self.title}
+        return {"app": self.app, "title": self.title, "pid": self.pid}
 
     def click(self, x, y, button="left", count=1):
         self.pos = (x, y)
@@ -789,8 +852,16 @@ class FakeBackend(Backend):
 
     def open_app(self, name):
         self.opened.append(name)
-        self.app, self.title = str(name).lower(), str(name)
+        if self.comes_forward:
+            self.app, self.title, self.pid = str(name).lower(), str(name), 4_195_000 + len(self.opened)
         return name
+
+    def activate(self, name):
+        self.activated.append(name)
+        if self.comes_forward is None:      # None: comes forward only when activated
+            self.app, self.title, self.pid = str(name).lower(), str(name), 4_196_000
+            return True
+        return False
 
     def apps(self):
         return [self.app]

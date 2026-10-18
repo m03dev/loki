@@ -30,7 +30,7 @@ const Artifacts = (function () {
   function table(lines) {
     const cells = (l) => l.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
     const head = cells(lines[0]);
-    let html = '<div class="md-table"><table><thead><tr>' + head.map((c) => "<th>" + inline(c) + "</th>").join("") + "</tr></thead><tbody>";
+    let html = '<div class="md-table-wrap"><table class="md-table"><thead><tr>' + head.map((c) => "<th>" + inline(c) + "</th>").join("") + "</tr></thead><tbody>";
     for (const l of lines.slice(2)) html += "<tr>" + cells(l).map((c) => "<td>" + inline(c) + "</td>").join("") + "</tr>";
     return html + "</tbody></table></div>";
   }

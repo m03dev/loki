@@ -17,7 +17,10 @@ Safety, in this order, for every call:
   5. owner approval PER APP: the first action in an app asks "LOKI wants to control <app>" (the approval
      prompt in the window); a yes holds for that app until LOKI restarts. LOKI_COMPUTER_APPS lists apps
      the owner pre-approved in Settings;
-  6. every action is logged (harness_data/computer_log.jsonl: time, app, action, target; typed text only as
+  6. LOKI never clicks, types, presses keys or scrolls into ITS OWN window (the engine, its parent - the app
+     window - or LOKI_APP_PID): `open_app` brings the app to the front and checks it is there before the
+     model may type, so "open TextEdit and type hello" can never end up typing into LOKI's chat box;
+  7. every action is logged (harness_data/computer_log.jsonl: time, app, action, target; typed text only as
      its length and first characters, never a password field's).
 """
 from __future__ import annotations
@@ -38,6 +41,52 @@ NEVER_DEFAULT = ("1password", "bitwarden", "lastpass", "keepass", "keepassxc", "
                  "keychain", "passwords", "credential manager")
 MAX_LINES = 60
 TYPE_CHUNK = 24
+INPUT_ACTIONS = {"click", "double_click", "right_click", "type", "write", "input", "key", "keys", "press", "hotkey",
+                 "scroll"}
+SELF_NAMES = {"loki", "loki studio"}
+FRONT_WAIT_S = 4.0
+
+
+def own_pids() -> set:
+    """LOKI's own processes: the engine, the app window that started it, and LOKI_APP_PID when set."""
+    pids = {os.getpid()}
+    try:
+        pids.add(os.getppid())
+    except (AttributeError, OSError):
+        pass
+    raw = os.getenv("LOKI_APP_PID", "")
+    if raw.strip().isdigit():
+        pids.add(int(raw))
+    return {p for p in pids if p and p > 1}
+
+
+def is_self(front: dict) -> bool:
+    """True when the front window is LOKI's own (never something to click or type into)."""
+    pid = front.get("pid") or 0
+    if pid and pid in own_pids():
+        return True
+    return str(front.get("app") or "").strip().lower() in SELF_NAMES
+
+
+def _norm_app(name: str) -> str:
+    n = str(name or "").strip().lower()
+    for suffix in (".exe", ".app"):
+        if n.endswith(suffix):
+            n = n[: -len(suffix)]
+    return n.replace(" ", "")
+
+
+def same_app(wanted: str, front_app: str) -> bool:
+    """Loose match of the app the model opened and the one in front ('TextEdit' ~ 'textedit', 'Notepad' ~ 'notepad')."""
+    a, b = _norm_app(wanted), _norm_app(front_app)
+    if not a or not b:
+        return False
+    if a == b or a in b or b in a:
+        return True
+    alias = {"calculator": "calc", "fileexplorer": "explorer", "wordpad": "write"}
+    if alias.get(a) == b or alias.get(b) == a:
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.8
 
 
 def _csv(name: str, default: tuple = ()) -> set:
@@ -183,6 +232,29 @@ class Computer:
         self.approved.add(app)
         self.log("approved", app, action)
         return ""
+
+    async def _bring_forward(self, name: str) -> dict:
+        """After open_app: wait for the app to be in front; if it is not, activate it (and give it a window)."""
+        front: dict = {}
+        activated = False
+        deadline = time.time() + FRONT_WAIT_S
+        while True:
+            await asyncio.sleep(0.5)
+            try:
+                front = self.backend.frontmost() or {}
+            except Exception:  # noqa: BLE001
+                front = {}
+            if same_app(name, front.get("app") or ""):
+                return front
+            if not activated:
+                activated = True
+                try:
+                    self.backend.activate(name)
+                except Exception:  # noqa: BLE001
+                    pass
+                continue
+            if time.time() >= deadline:
+                return front
 
     # ------------------------------------------------------------------ the tree
     def _read_tree(self) -> list:
@@ -340,8 +412,16 @@ class Computer:
                 self.log(action, name.lower(), name, ok=False, note=str(exc))
                 return "error: %s" % exc
             self.log(action, name.lower(), where)
-            await asyncio.sleep(1.5)
-            return "opened %s. Next: action='elements' to see its controls." % name
+            front = await self._bring_forward(name)
+            if not same_app(name, front.get("app") or ""):
+                shown = front.get("app") or "nothing"
+                if is_self(front):
+                    shown = "LOKI's own window"
+                self.log("front", name.lower(), "not in front", ok=False, note=shown)
+                return ("opened %s, but it is NOT in front (in front: %s) - do not type or click yet. Try "
+                        "action='open_app' app='%s' once more, or action='apps' to see its windows; if it stays "
+                        "behind, reply 'BLOCKED: %s did not come to the front'." % (name, shown, name, name))
+            return "opened %s (it is in front). Next: action='elements' to see its controls." % name
         if action == "apps":
             self.log("apps", front.get("app") or "", "list windows")
             try:
@@ -353,6 +433,11 @@ class Computer:
             await asyncio.sleep(secs)
             return "waited %.1f s" % secs
         app_name = front.get("app") or ""
+        if action in INPUT_ACTIONS and is_self(front):
+            self.log(action, app_name or "loki", "refused", ok=False, note="LOKI's own window is in front")
+            return ("DENIED: LOKI's own window is in front - LOKI never clicks, types or presses keys into itself. "
+                    "Bring the target app forward first (action='open_app' app='<the app>'), then check with "
+                    "action='elements'.")
         denied = await self._allow_app(app_name, action, (text or keys or str(index or "") or action)[:80])
         if denied:
             return denied
