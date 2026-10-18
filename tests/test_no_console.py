@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -46,6 +47,27 @@ check("nothing changes on macOS / Linux", no_console.install("darwin") is False)
 for f in ("engine/loki.py", "engine/loki_bridge.py", "studio/studio_server.py", "studio/studio_app.py", "app/loki_app.py"):
     check("%s loads it first" % f, "import no_console" in (REPO / f).read_text(encoding="utf-8")[:4000])
 check("ship.py runs this suite", '"test_no_console"' in (REPO / "tools" / "ship.py").read_text(encoding="utf-8"))
+
+# a console-showing launcher an old setup left in Startup is retired, not just avoided
+sys.path.insert(0, str(REPO / "app"))
+import loki_app  # noqa: E402
+
+startup = Path(tempfile.mkdtemp(prefix="loki-startup-"))
+(startup / "LOKI.vbs").write_text("pythonw loki_app.py --background", encoding="utf-8")   # LOKI's own, hidden
+(startup / "Loki.lnk").write_bytes("C:/Users/x/loki/Loki.cmd".encode("utf-16-le"))
+(startup / "Loki python.lnk").write_bytes("C:/Users/x/loki/.venv/python.exe loki_app.py".encode("utf-16-le"))
+(startup / "Other.lnk").write_bytes("C:/Program Files/Other/other.exe".encode("utf-16-le"))
+(startup / "Ollama.lnk").write_bytes("C:/Users/x/ollama app.exe".encode("utf-16-le"))
+_removed = loki_app.retire_console_launchers(startup)
+check("a Startup shortcut to Loki.cmd (a batch = a black console at every logon) is removed",
+      "Loki.lnk" in _removed, _removed)
+check("LOKI's own hidden login item (LOKI.vbs) is kept", (startup / "LOKI.vbs").is_file())
+check("another program's Startup shortcut is left alone",
+      (startup / "Other.lnk").is_file() and (startup / "Ollama.lnk").is_file())
+check("a shortcut that starts python.exe (a console) for LOKI is removed too",
+      (startup / "Loki python.lnk").exists() is False)
+check("running it again finds nothing", loki_app.retire_console_launchers(startup) == [])
+
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -522,6 +522,42 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
+- [ ] **W51 The terminal windows on the PC (2026-10-18, 9e1f7eb / 2df3eed).** The owner: "Terminal windows still pop up
+      on my screen." 9e1f7eb made CREATE_NO_WINDOW the default for every engine subprocess (engine/no_console.py). Trace
+      every new console process AND every visible console-class window (harness_data/_ziva/console_monitor.ps1,
+      console_windows.ps1) back to a parent while one pops up.
+      -> Ziva (Windows), 2026-10-18: FOUND, and it is NOT a LOKI subprocess - two sources, one mine, one a real leftover:
+      (1) MY OWN test windows. 2df3eed is right: a `cmd /k title ZIVA_TEST3` I opened while tracing sat on the owner's
+      screen as a VISIBLE console (class CASCADIA_HOSTING_WINDOW_CLASS / PseudoConsoleWindow). Closed - 0 ZIVA_TEST cmd
+      left. I now keep every probe window hidden and open none.
+      (2) A REAL leftover LOKI launcher: the Startup entry
+      %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Loki.lnk  (Target=C:\Users\macul\Documents\loki\Loki.cmd,
+      WindowStyle=7). A .cmd/.bat IS a console program, so every logon opened a black cmd window:
+          cmd.exe  "C:\Windows\system32\cmd.exe" /c ""C:\Users\macul\Documents\loki\Loki.cmd" "
+        <- Loki.lnk (parent explorer.exe); Loki.cmd then runs  start "" pythonw.exe app\loki_app.py
+      (pythonw.exe opens no console, which is why the Desktop/Start-menu shortcuts are fine.) The Startup folder also held
+      LOKI.vbs (the app's own hidden login item), so LOKI started twice at logon. The exact command line + parent chain is
+      the two lines above. FIX: app/loki_app.py retire_console_launchers() - sync_login_item() now deletes a Startup
+      .lnk/.cmd/.bat that is plainly LOKI's and would show a console (a shortcut to Loki.cmd, or one that starts
+      python.exe instead of pythonw.exe) and keeps LOKI.vbs and every other program's entry. tests/test_no_console.py 19
+      passed; the stray Loki.lnk is gone from this PC.
+      Everything LOKI itself starts is console-free on 9e1f7eb/fc38b02: the engine (python.exe loki_bridge.py - hidden
+      console), the uvx MCP servers, node (laya), the headless Godot World rebuild, and 8 minutes of idle with a 120 ms
+      visible-window poll caught nothing. No visible console window exists on the screen now.
+      --- LIVE LINK (Godot tab > Open in Godot, LOKI World) ---
+      Open in Godot opened Godot_v4.7.2-stable_win64 on "main.tscn - LOKI World" (never the 4.8 mono editor).
+      %USERPROFILE%\.loki\engine_connect.json: {"url": "http://127.0.0.1:8767", "pid": 31872, "plugin_version": "1.2"}
+      (the token is there but not repeated here).
+      GET /api/godot/editors (there is no /api/godot/status route - it is /editors): ok, one editor - name "LOKI World",
+      godot "4.7.2", plugin "1.2", alive true, errors 0.
+      The Godot tab's Live link box: "Godot 4.7.2 - LOKI World - editing res://scenes/main.tscn" and "Working in the editor
+      now (they stand at the Godot forge in LOKI World): LOKI: output (37 s ago)".
+      Godot Output panel (read through the plugin's output action - it keeps the last lines): "LOKI Studio plugin 1.2 ready
+      (Godot 4.7.2-stable (official))". The dock's own label is "LOKI: linked" when the link is up (addons/loki_studio/
+      dock.gd: "LOKI: linked" if up else "LOKI: not linked"), and the engine reports the editor alive - so the dock says
+      linked. The right dock panel is collapsed in the owner's editor layout, so the label itself was not on screen to
+      photograph. Screenshot: docs/operations/screens/w51-live-link.png (the island, the LOKI World editor in 4.7.2).
+
 - [ ] **W50 Check the frameless Windows title bar and Open in Godot (2026-10-18, 0e2af40).** The owner on the PC:
       "the tabs are floating here ... opening the godot project takes me to a completely different project". HANDOFF
       "2026-10-18 19:40". After LOKI restarts on 0e2af40: (1) the window has NO system frame; the tabs sit centred in

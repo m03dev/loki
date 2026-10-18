@@ -490,24 +490,67 @@ def login_item_text() -> str:
             '  </array>\n  <key>RunAtLoad</key><true/>\n</dict></plist>\n')
 
 
+def retire_console_launchers(folder: Path | None = None) -> list[str]:
+    """Remove LOKI's own console-showing launchers from the Startup folder.
+
+    A batch file (.cmd/.bat) opens a black console window, and so does a shortcut that starts python.exe
+    instead of pythonw.exe: the owner reported "the terminal keeps popping up on my screen". An old setup
+    left Startup/Loki.lnk pointing at the repo's Loki.cmd, so every logon flashed a console before LOKI
+    came up. LOKI's own login item (LOKI.vbs -> pythonw, hidden) is never touched, and neither is any other
+    program's Startup entry. Only plainly-LOKI entries that would show a console are removed."""
+    if folder is None:
+        if sys.platform != "win32":
+            return []
+        folder = login_item_path().parent
+    if not folder.is_dir():
+        return []
+    removed: list[str] = []
+    for entry in sorted(folder.iterdir()):
+        if entry.suffix.lower() not in (".lnk", ".cmd", ".bat") or entry.name.lower() == "loki.vbs":
+            continue
+        try:
+            raw = entry.read_bytes()
+        except OSError:
+            continue
+        # a .lnk keeps its target as a path in the file, sometimes UTF-16; read both ways
+        blob = (raw.decode("utf-16-le", "ignore") + raw.decode("latin-1", "ignore")).lower()
+        console_launcher = ("loki.cmd" in blob or "loki.bat" in blob
+                            or (entry.suffix.lower() in (".cmd", ".bat") and "loki" in entry.name.lower())
+                            or ("python.exe" in blob and "pythonw" not in blob and "loki" in blob))
+        if not console_launcher:
+            continue
+        try:
+            entry.unlink()
+            removed.append(entry.name)
+        except OSError:
+            pass
+    return removed
+
+
 def sync_login_item() -> str:
     """Make the login item match the setting (written or removed; never anything else)."""
     if sys.platform not in ("win32", "darwin"):
         return ""
+    retired = retire_console_launchers()
     path = login_item_path()
+    note = ""
     try:
         if start_at_login_on():
             text = login_item_text()
             if not path.is_file() or path.read_text(encoding="utf-8", errors="replace") != text:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
-                return "LOKI now starts in the background when you log in"
+                note = "LOKI now starts in the background when you log in"
         elif path.is_file():
             path.unlink()
-            return "LOKI no longer starts at login"
+            note = "LOKI no longer starts at login"
     except OSError as exc:
         return "could not update the login item: %s" % exc
-    return ""
+    if retired:
+        log("removed a LOKI login launcher that opened a console window: " + ", ".join(retired))
+        extra = "removed %s (it opened a console window at logon)" % ", ".join(retired)
+        note = (note + " - " + extra) if note else extra
+    return note
 
 
 # --------------------------------------------------------------------- full restart
