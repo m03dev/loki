@@ -1,5 +1,7 @@
 # LOKI phone app (iOS + Android)
 
+**Just want it on your phone? Follow [INSTALL_PHONE.md](INSTALL_PHONE.md).**
+
 One Expo / React Native (TypeScript) app for iPhone and Android. It chats with LOKI on your
 Mac or PC when it can reach it over your network, and with a small model on the phone when
 it cannot. What it is and how it works: [../docs/PHONE.md](../docs/PHONE.md).
