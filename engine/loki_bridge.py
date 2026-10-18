@@ -994,6 +994,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if assist_api.handles(route):
             self._send_json(*assist_api.route(self.server.state, "GET", self.path, {}))
             return
+        if route.startswith("/qol/"):   # session 29: chat quality of life (engine/qol.py, docs/integrations/ZIVA_QOL.md)
+            import qol  # pylint: disable=import-outside-toplevel
+            self._send_json(*qol.route(self.server.state, "GET", self.path))
+            return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(self.server.state, "GET", route, {}))
             return
@@ -1355,6 +1359,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         import assist_api  # pylint: disable=import-outside-toplevel - research round 3 (chats, prompts, compare, data)
         if assist_api.handles(route):
             self._send_json(*assist_api.route(state, "POST", self.path, data))
+            return
+        if route.startswith("/qol/"):   # session 29: chat quality of life (engine/qol.py)
+            import qol  # pylint: disable=import-outside-toplevel
+            self._send_json(*qol.route(state, "POST", self.path, data))
             return
         if route in ("/world/presence", "/world/retry"):
             self._send_json(*world_action(state, route, data))
@@ -2632,6 +2640,11 @@ async def serve() -> None:
         automations.start(state, loki)
     except Exception as exc:  # noqa: BLE001 - automations are optional; chat must still start
         print(f"[loki-bridge] automations unavailable: {exc}", flush=True)
+    try:   # session 29: chat QoL - interrupted turns, steering, allow-for-session (engine/qol.py)
+        import qol  # pylint: disable=import-outside-toplevel
+        qol.install(state, loki)
+    except Exception as exc:  # noqa: BLE001 - comfort features are optional; chat must still start
+        print(f"[loki-bridge] chat QoL unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
     try:   # each provider's live state for routing and Settings > Connections (free /models probes only)

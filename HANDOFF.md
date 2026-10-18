@@ -48,6 +48,53 @@ better-than-Ziva, the 15-task parity benchmark, honest gaps).
   popup, image popup, right-click entries), playtesting a real game window + real screenshots, the Windows/macOS Godot
   builds (connect-file path, USERPROFILE), a real model driving a Godot session, Claude Code / Codex CLIs as drivers
   (only a fake stream here), the git-clone docs path (no network check here), and the 15-task parity benchmark vs Ziva.
+Last updated: 2026-10-17 (session 29 QoL from Ziva's patch notes, Claude worktree).
+
+## Session 29 QoL from Ziva's patch notes (worktree)
+
+The owner: "go through all ziva updates and patchnotes i want those quality of life features like when you disconnect
+it gives you options and stuff". Ziva's public changelog (3.3.0 back to January 2026) and docs (queue-and-steer,
+keyboard-shortcuts, approvals, chat-history, troubleshooting) were read; every chat QoL item, LOKI's status and what
+was built is in **docs/integrations/ZIVA_QOL.md** (with source links). Clean-room: no Ziva code or files. Built in a
+Claude worktree, committed there, not pushed.
+
+- **Disconnect with options** (app/ui/qol.js): engine not answering -> banner, automatic reconnect with a countdown
+  (2-30 s backoff), Reconnect now, Copy my message, What happened?; a cut-off answer gets a card and the text goes
+  back in the box; after reconnecting the window checks whether the engine finished it meanwhile. Offline computer ->
+  "use <local model>".
+- **Recovery cards** (engine/qol.py `classify`/`recovery`): 14 error kinds from LOKI's real error texts -> Try again,
+  Wait then try again (provider's Retry-After counted down; automatic for drops and rate limits, max 5), another
+  ready model, a model on this computer, Let LOKI pick, Summarize and try again, Fix the key, Local models, New chat,
+  What happened? (`GET /qol/diagnose` + Copy this report). Slow answer (90 s no news) -> Keep waiting / Stop and try
+  again / Stop and use another model.
+- **Queue + steer**: typing while LOKI worked used to LOSE the message. Enter now queues (sent when free), Ctrl/Cmd+
+  Enter steers: `POST /qol/steer`; `qol.install` wraps the agent loop's `_trim_context` so the steer joins the
+  conversation at the next step (never between a tool call and its results); the window marks it "Steered"; unread
+  steers come back (`steers_left`). Steer / Send now / Edit / Remove per message; Stop returns them to the box.
+- **Interrupted turns**: `<data>/qol/inflight.json` while a turn runs; the next start offers Send it again / Put it
+  in the box / Dismiss.
+- **Allow for this session** on approval cards: the same exact action (tool + details hash) is not asked again until
+  the engine restarts; refused for policy.ALWAYS_ASK, ACTION_ALWAYS_ASK (connector writes) and extensions; not saved.
+- **Comfort**: drafts kept (reload/crash/update), long pastes (> 8,000 chars) saved to uploads/ and @-attached, Up
+  recalls, context bar + Summarize now (`POST /qol/compact` = the condenser) and `/compact`, desktop notification +
+  optional sound when a long answer finishes or an approval waits (automations.notify_argv), search all chats by
+  name AND message (Ctrl/Cmd+K, icon under New chat), find in chat (Ctrl/Cmd+F), pinned chats (`POST /qol/pin`),
+  rename by double-click/F2, 12 customizable shortcuts (keyboard icon in the top bar / Ctrl/Cmd+/), copy chat as
+  Markdown, thinking on/off, "Switched to X" notes; slash commands /compact /search /find /copy /why /shortcuts /queue.
+- **Studio** (small; another agent owns studio/godot_plugin): failed send keeps the text, draft kept, red status when
+  its server is down.
+- **Wiring**: loki_bridge.py one GET block + one POST block + one `qol.install` start-up line; app/loki_app.py
+  self-test imports qol; index.html 1 stylesheet + 1 script; app.js and loki.py untouched; icons via data-icon with
+  tooltips. i18n: qol strings are English for now; the new tooltip phrases + 3 dialog titles are in all 8 tables,
+  and the phrases chat_plus/data_panel/modes/studio_link had left out of the tables (test_usability was red on them)
+  were added too (machine-drafted, review flag unchanged).
+- **Verified here (Linux)**: tests/test_qol.py 82 checks ~20 s (in SUITES), incl. the real BridgeHTTPServer + the real
+  loki module (a steer sent during a real /chat reaches `loki.messages`) and the window in headless Chromium
+  (screens docs/operations/screens/qol-*.png). Also green: --self-test, test_ui_smoke 7/7, test_research3 154/154,
+  test_usability 137/137, test_studio 182/182. Full `ship.py --check` NOT run (the one-minute rule).
+- **Not verified (real machines: ZIVA W42 PC, M32 Mac)**: WebView2/WKWebView (Ctrl/Cmd shortcuts reaching the page -
+  Cmd+N/Cmd+, may be taken by the app menu on macOS; clipboard; notifications from the engine), a real engine crash /
+  update mid-answer, real provider 429/quota texts, a steer with a real model, the desktop notification and sound.
 
 ## Session 29 automations (worktree)
 

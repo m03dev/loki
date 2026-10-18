@@ -15,6 +15,17 @@ Concise dated records of meaningful work. Newest at the top.
   as an MCP server, Claude Code/Codex/LM Studio drivers. docs/STUDIO.md, docs/STUDIO_VS_ZIVA.md (15-task benchmark).
 - tests/test_studio_godot.py (135, ~20 s, in SUITES) incl. a REAL headless Godot 4.7.2 editor + game. Real machines:
   ZIVA W37 (PC: install, dock, the benchmark vs Ziva), M28 (Mac).
+## 2026-10-17 - Session 29 (Claude, worktree): chat quality of life from Ziva's public patch notes
+
+- Read Ziva's changelog + docs; docs/integrations/ZIVA_QOL.md lists every chat QoL item with its source, LOKI's status
+  and what was built (clean-room; no Ziva code).
+- engine/qol.py + app/ui/qol.js/.css: disconnect banner with auto-reconnect countdown and options, recovery cards for
+  14 error kinds (retry, wait+retry, other/local model, Smart, summarize, fix key, what happened), slow-answer card,
+  queue (Enter) + steer (Ctrl/Cmd+Enter, injected at the agent's next step), interrupted-turn recovery after a
+  restart, allow-for-this-session approvals (never for always-ask/connector writes), drafts, long paste -> file,
+  context bar + /compact, notifications, search all chats, find in chat, pins, rename, 12 customizable shortcuts.
+- Studio: failed send keeps the text, draft kept, server-down status. Bridge: 2 route blocks + 1 start-up line.
+- tests/test_qol.py (82, ~20 s) in SUITES. Real machines: ZIVA W42 (PC), M32 (Mac).
 
 ## 2026-10-17 - Session 29 (Claude, worktree): automations - LOKI does things by itself
 

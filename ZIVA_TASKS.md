@@ -1247,6 +1247,22 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       every place Studio lost as a `[claude]` request. Do NOT ship anything from these sessions; Discard them.
       (8) Remove the plugin from the test copy (`... install_godot_plugin.py "%TEMP%\lw-test" --remove`).
 
+- [ ] **W44 Chat quality of life on the PC (session 29, 2026-10-17; docs/integrations/ZIVA_QOL.md).** In LOKI's
+      real window (WebView2), report each with a screenshot: (1) **Disconnect**: while LOKI answers something long,
+      end the engine (Task Manager: the python running loki_bridge) -> a red banner "LOKI's engine is not answering"
+      with a countdown, Reconnect now, Copy my message, What happened?; the cut-off message is back in the box. Start
+      LOKI again (or let the app restart it) -> "Connected to LOKI's engine again", and on the next start a blue
+      banner "LOKI was closed while it was answering you" -> Send it again works. (2) **Queue + steer**: ask for a
+      long task; while it runs type "also make the title red" + Enter -> a Queued row; type another + Ctrl+Enter ->
+      Steering, then "Steered" in the chat; did LOKI follow it? (3) **Errors**: pick a provider with a wrong key
+      (Settings > Connections, then switch back) -> a card "The key for this model was not accepted" with Fix the key
+      / Use another model; and turn off Wi-Fi with an online model -> card + "This computer is offline" banner with
+      "Use <local model>". (4) **Approvals**: in Build mode ask it to run `python --version` twice -> the second time
+      it must not ask after "Allow for this session". (5) **Shortcuts**: Ctrl+K, Ctrl+F, Ctrl+Shift+M, Ctrl+B, Ctrl+/,
+      Ctrl+N in WebView2 - which ones reach LOKI and which does WebView2 take? Change one in the dialog. (6) Leave a
+      30-second answer running and switch to another app -> a Windows toast "LOKI finished". (7) Paste a 20,000-
+      character text -> "saved as uploads/paste-....txt". Tests: `timeout 60 python tests/test_qol.py` (~20 s).
+
 ## Ziva (Mac) - the Mac mini
 
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
@@ -1805,6 +1821,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       appears here within ~5 minutes with its data; remove it here -> it is removed on the PC too (in its trash).
       (9) Apps -> Extensions: scan `https://github.com/<any small public repo without extension.json>` -> a clear
       "no extension.json" (blocked) report, nothing installed.
+- [ ] **M33 Chat quality of life on the Mac (session 29, 2026-10-17; docs/integrations/ZIVA_QOL.md).** Same as W42
+      (1)-(7) in WKWebView, with Cmd instead of Ctrl. Watch especially: (a) Cmd+N, Cmd+, and Cmd+K - does the Loki.app
+      menu (pywebview) take them before the page? Report which reach LOKI; (b) the "LOKI finished" notification comes
+      from osascript - does macOS show it (Notification Center may need to allow "Script Editor"/osascript)? (c) the
+      sound (Web Audio) plays in WKWebView after a click; (d) Copy chat (Cmd+Shift+C) really puts Markdown on the
+      clipboard. Tests: `timeout 60 python tests/test_qol.py`.
 - [ ] **M21 The mic button and spoken replies in WKWebView; Telegram stays quiet on the Mac (2026-10-17,
       session 28).** (1) Rebuild Loki.app (`tools/macos/make_loki_app.sh`) - its Info.plist now has
       NSMicrophoneUsageDescription; without it macOS refuses (or kills) microphone access. Open LOKI from Loki.app.

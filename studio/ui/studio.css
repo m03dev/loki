@@ -73,6 +73,7 @@ button:disabled { opacity: .4; cursor: default; }
 .driver.good { border-color: #2f4f37; }
 .driver.warn { border-color: #5a4a22; background: #221e14; }
 .driver a { color: var(--accent); }
+body.server-down .driver { border-color: #6a3434; background: #2a1818; color: #ffc9c9; }   /* QoL: Studio's server is not answering */
 .thread { flex: 1; overflow: auto; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .thread > * { flex-shrink: 0; }
 .empty { margin: 8vh auto 0; max-width: 620px; text-align: center; }

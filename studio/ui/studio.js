@@ -214,7 +214,11 @@ async function loadModels() {
 }
 
 async function refreshState() {
-  try { renderState(await api("/api/state")); } catch (e) { $("driver").textContent = "Studio's server: " + e.message; }
+  try { renderState(await api("/api/state")); document.body.classList.remove("server-down"); } catch (e) {
+    // QoL (docs/integrations/ZIVA_QOL.md): say what is wrong and that nothing typed is lost
+    document.body.classList.add("server-down");
+    $("driver").textContent = "Studio's server is not answering (" + e.message + "). Trying again every 4 s - your typed message is kept.";
+  }
 }
 
 // ------------------------------------------------------------------ one session
@@ -362,7 +366,11 @@ async function send(text) {
         approve_edits: $("ask-edits").checked });
       select(r.session.id);
     }
-  } catch (e) { alert(e.message); }
+    try { localStorage.removeItem("studio-draft"); } catch (_) { /* no storage */ }
+  } catch (e) {
+    if (!$("prompt").value.trim()) $("prompt").value = text;   // a failed send never loses what you typed
+    alert(e.message + "\n\nYour message is back in the box.");
+  }
   hideSuggest(); refreshState(); poll();
 }
 
@@ -455,6 +463,8 @@ document.addEventListener("DOMContentLoaded", () => {
     try { const r = await api("/api/session/fork", { id: S.sid }); select(r.session.id); refreshState(); } catch (e) { alert(e.message); }
   });
   loadModels();
+  try { const d = localStorage.getItem("studio-draft"); if (d && !$("prompt").value) $("prompt").value = d; } catch (_) { /* no storage */ }
+  $("prompt").addEventListener("input", () => { try { localStorage.setItem("studio-draft", $("prompt").value); } catch (_) { /* no storage */ } });
   for (const c of document.querySelectorAll(".chip")) c.addEventListener("click", () => { $("prompt").value = c.dataset.prompt; $("prompt").focus(); });
   $("new-session").addEventListener("click", () => { S.sid = ""; S.status = ""; $("thread").replaceChildren(); $("title").textContent = "New session"; $("sub").textContent = "Type what to build or fix. On LOKI's code it gets its own worktree; on a Godot project it works live in the editor."; $("target").disabled = false; showTodos([]); $("prompt").focus(); });
   $("act-stop").addEventListener("click", () => api("/api/session/stop", { id: S.sid }).catch((e) => alert(e.message)));
