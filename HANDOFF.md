@@ -19,6 +19,9 @@ Read from the Mac's harness_data/app/engine.out and jobs.json, not guessed:
 - **Title-strip double-click = zoom** never worked: pywebview's api.js builds `pywebview.api.*` with
   `new Function` (EvalError under the CSP). modebar.js now calls `pywebview._jsApiCallback("toggle_maximize")`.
 - **engine.out noise**: BridgeHTTPServer.handle_error drops BrokenPipe/ConnectionReset tracebacks.
+- **Studio never answered on the Mac**: its "local" driver was hard-wired to `qwen3:8b`, which the Mac never pulled
+  (every turn: "model 'qwen3:8b' not found"). `studio_models.local_model()` now uses the engine's pick
+  (status.json) when Ollama has it, else the first installed model (loki-* first); LOKI_STUDIO_LOCAL_MODEL still pins.
 - Checked in the cloud with an openai stub (no PyPI there); not yet run on the real Mac/PC: the title strip drag +
   double-click, and job 57c9b2ad re-queued.
 

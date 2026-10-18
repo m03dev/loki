@@ -88,7 +88,7 @@ def providers(env: dict | None = None) -> list:
     if allow_paid:
         out.append(Provider("deepseek", "DeepSeek (paid)", e.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
                             e.get("DEEPSEEK_MODEL", "deepseek-flash"), "DEEPSEEK_API_KEY", e.get("DEEPSEEK_API_KEY", ""), free=False))
-    out.append(Provider("local", "The local model (Ollama)", "http://127.0.0.1:11434/v1", e.get("LOKI_STUDIO_LOCAL_MODEL", "qwen3:8b"),
+    out.append(Provider("local", "The local model (Ollama)", "http://127.0.0.1:11434/v1", local_model(e),
                         key="ollama", local=True, extra={"think": False}))
     out.append(Provider("lmstudio", "LM Studio (local)", e.get("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
                         e.get("LMSTUDIO_MODEL", "") or "local-model", key="lm-studio", local=True))
@@ -96,6 +96,48 @@ def providers(env: dict | None = None) -> list:
     if pinned:
         out.sort(key=lambda p: p.id != pinned)
     return out
+
+
+_LOCAL_PICK: dict = {"at": 0.0, "name": ""}
+
+
+def local_model(env: dict | None = None) -> str:
+    """The Ollama model Studio's "local" driver uses: LOKI_STUDIO_LOCAL_MODEL / LOKI_LOCAL_MODEL when
+    pinned, else the one LOKI's engine picked (harness_data/app/status.json) if Ollama has it, else
+    the first installed model (LOKI's own loki-* variants first). Never a model that is not installed:
+    a stock "qwen3:8b" the Mac never pulled made every Studio turn a 404 (2026-10-18)."""
+    e = os.environ if env is None else env
+    pinned = str(e.get("LOKI_STUDIO_LOCAL_MODEL") or e.get("LOKI_LOCAL_MODEL") or "").strip()
+    if pinned:
+        return pinned
+    if _LOCAL_PICK["name"] and time.time() - _LOCAL_PICK["at"] < 60:
+        return _LOCAL_PICK["name"]
+    installed = None
+    try:
+        import model_setup  # pylint: disable=import-outside-toplevel
+        found = model_setup.ollama_models()
+        if found is not None:
+            installed = [m["name"] for m in found if "embed" not in m["name"].lower()]
+    except Exception:  # noqa: BLE001
+        installed = None
+    engine_pick = ""
+    try:
+        status = json.loads((studio_paths.data() / "app" / "status.json").read_text(encoding="utf-8"))
+        engine_pick = str(((status.get("local") or {}).get("name")) or "").strip()
+    except Exception:  # noqa: BLE001
+        engine_pick = ""
+
+    def has(name: str) -> bool:
+        return installed is None or name in installed or name + ":latest" in installed
+
+    if engine_pick and has(engine_pick):
+        name = engine_pick
+    elif installed:
+        name = ([n for n in installed if n.startswith("loki-")] or installed)[0]
+    else:
+        name = engine_pick or "qwen3:8b"
+    _LOCAL_PICK.update(at=time.time(), name=name)
+    return name
 
 
 def chain(env: dict | None = None) -> list:
