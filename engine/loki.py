@@ -129,6 +129,7 @@ PROVIDER_ENV_VARS = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "unorouter": "UNOROUTER_API_KEY",
+    "9router": "NINEROUTER_API_KEY",
     "omniroute": "OMNIROUTE_API_KEY",
     "vireonix": "VIREONIX_API_KEY",
     "typesafe": "TYPESAFE_API_KEY",
@@ -442,6 +443,12 @@ MODELS = {
                            % os.getenv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID")),
         api_key=os.getenv("CLOUDFLARE_API_TOKEN", ""),
         model=os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast")),
+    # 9Router (engine/ninerouter.py, MIT, a separate Node program LOKI starts on 127.0.0.1): your subscriptions, free
+    # tiers and keys behind one OpenAI endpoint with its own fallback chains. Model "loki" = a combo you name so in
+    # its dashboard; without one LOKI takes the first model it lists (provider_health.SWAP_PREFERENCE).
+    "9router": ModelConfig(base_url=os.getenv("NINEROUTER_BASE_URL", "http://127.0.0.1:%s/v1" % (os.getenv("NINEROUTER_PORT") or "20128")),
+                           api_key=os.getenv("NINEROUTER_API_KEY", ""),
+                           model=os.getenv("NINEROUTER_MODEL", "loki")),
     # UnoRouter: a large catalogue of :free routes, no card required.
     "unorouter": ModelConfig(base_url=os.getenv("UNOROUTER_BASE_URL", "https://api.unorouter.com/v1"),
                              api_key=os.getenv("UNOROUTER_API_KEY", ""),
@@ -616,7 +623,7 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # on Loki's ~8k-token request, so it sits lower.
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("openrouter", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
+SMART_ORDER = ("openrouter", "9router", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
                "cloudflare", "together", "nous", "unorouter", "opencode-zen", "codestral",
                "vercel", "deepseek", "cerebras",
                "vireonix", "claude-code", "codex", "local", "local-hermes")

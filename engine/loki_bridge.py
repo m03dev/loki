@@ -2737,6 +2737,11 @@ async def serve() -> None:
         print(f"[loki-bridge] chat QoL unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
+    try:   # 9Router (engine/ninerouter.py): start it on 127.0.0.1 when it is installed and not running
+        import ninerouter  # pylint: disable=import-outside-toplevel
+        ninerouter.start_background()
+    except Exception as exc:  # noqa: BLE001 - an add-on; chat must still start
+        print(f"[loki-bridge] 9router unavailable: {exc}", flush=True)
     try:   # each provider's live state for routing and Settings > Connections (free /models probes only)
         loki.provider_health.start_background(loki)
     except Exception as exc:  # noqa: BLE001 - routing works without it

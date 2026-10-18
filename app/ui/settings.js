@@ -531,6 +531,7 @@ async function phoneKey(p) {
   else steps.push("Key already on this computer? Close this and use Paste next to the key box instead.");
   showQR({ title: "Send a " + p.name + " key from your phone", text: urls[0], svg: svgs[0], steps, actions });
   qrStatus("Waiting for your phone… (5 minutes)");
+  let waited = 0, switched = false;
   qrView.timer = setInterval(async () => {
     const s = await api("/handoff/status?id=" + encodeURIComponent(r.id)).catch(() => null);
     if (!s || !s.ok) { qrStatus("This code expired. Close and try again."); clearInterval(qrView.timer); return; }
@@ -539,6 +540,14 @@ async function phoneKey(p) {
       urls.push(relayUrl);
       internet.hidden = false;
       next.hidden = urls.length < 2;
+    }
+    // the owner (2026-10-18): "links dont go anywhere". When no phone has opened the home link after 25 s, it
+    // almost always cannot (firewall, guest Wi-Fi, mobile data): switch the code to the internet link by itself.
+    waited += 1.5;
+    if (relayUrl && !s.visited && !switched && waited >= 25 && urls[shown] !== relayUrl) {
+      switched = true;
+      await showAddress(urls.indexOf(relayUrl));
+      note.textContent = "No phone reached the home link, so this is the internet link now - scan again. " + note.textContent;
     }
     if (s.result) {
       clearInterval(qrView.timer);

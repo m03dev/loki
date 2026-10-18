@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>LOKI</title>
+<style>
+  :root { --bg: #14161c; --side: #1b1e26; --text: #e8ecf3; --muted: #9aa3b2; --line: #2a2f3a; --you: #2b3445; --accent: #ed782b; --bad: #ff8a8a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+    min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--line); background: var(--side); }
+  header b { font-size: 17px; letter-spacing: .04em; }
+  #who { color: var(--muted); font-size: 13px; flex: 1; }
+  #forget { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 5px 9px; font-size: 13px; }
+  #status { padding: 8px 16px; color: var(--muted); font-size: 13.5px; }
+  #status.bad { color: var(--bad); }
+  #chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #chat[hidden] { display: none; }
+  #log { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.you { align-self: flex-end; background: var(--you); }
+  .msg.loki { align-self: flex-start; background: var(--side); border: 1px solid var(--line); }
+  .msg.bad { color: var(--bad); }
+  form { display: flex; gap: 8px; padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--side); }
+  select, textarea, button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+  select { padding: 0 6px; }
+  textarea { flex: 1; min-width: 0; resize: none; padding: 9px 11px; height: 44px; }
+  #send { background: var(--accent); border: 0; color: #1a1205; font-weight: 600; padding: 0 16px; }
+  #send:disabled { opacity: .5; }
+</style>
+<script src="/web.js" defer></script>
+</head>
+<body>
+<header><b>LOKI</b><span id="who"></span><button type="button" id="forget" title="Unpair this phone">Forget</button></header>
+<div id="status" role="status">Loading…</div>
+<div id="chat" hidden>
+  <div id="log" aria-live="polite"></div>
+  <form id="form">
+    <select id="mode" aria-label="Mode"><option value="ask">Ask</option><option value="plan">Plan</option></select>
+    <textarea id="text" rows="1" placeholder="Message LOKI" aria-label="Message"></textarea>
+    <button type="submit" id="send">Send</button>
+  </form>
+</div>
+</body>
+</html>

@@ -75,8 +75,8 @@ probe.close()
 Out = type("Out", (), {})
 pub, priv = Out(), Out()
 pub.stdout, priv.stdout = "Public\n", "Private\n"
-check("a Public Wi-Fi on Windows gets a plain fix", "Private" in signin.network_hint(run=lambda *a, **k: pub))
-check("a Private Wi-Fi gets no warning", signin.network_hint(run=lambda *a, **k: priv) == "")
+check("a Public Wi-Fi on Windows gets a plain fix", "Private" in signin.network_hint(run=lambda *a, **k: pub, platform="win32"))
+check("a Private Wi-Fi gets no warning", signin.network_hint(run=lambda *a, **k: priv, platform="win32") == "")
 
 calls = []
 Done = type("Done", (), {"returncode": 0})

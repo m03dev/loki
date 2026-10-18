@@ -188,7 +188,10 @@ function privateHost(host: string): boolean {
 
 /** The payload of a "loki-phone:" code (from the QR or pasted), or an Error saying why not. */
 export function parsePairingCode(code: string): Pairing {
-  const text = String(code || "").trim();
+  let text = String(code || "").trim();
+  // the QR is a link now (http://<computer>:<port>/#loki-phone:...) so a phone camera opens LOKI's web page; the
+  // app takes the same code from the #fragment
+  if (!text.startsWith(PAIR_PREFIX) && text.includes("#" + PAIR_PREFIX)) text = decodeURIComponent(text.slice(text.indexOf("#") + 1));
   if (!text.startsWith(PAIR_PREFIX)) throw new Error("That is not a LOKI phone code (it starts with " + PAIR_PREFIX + ").");
   let data: Partial<Pairing>;
   try {

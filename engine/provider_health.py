@@ -568,7 +568,7 @@ def refresh_once(agent: Any, reg: Registry | None = None, opener=urllib.request.
 
 
 # a provider whose own free model list LOKI may pick from when its usual model is gone, best first
-SWAP_PREFERENCE = {"pollinations": ["openai", "openai-fast", "openai-large", "mistral", "deepseek", "qwen-coder"]}
+SWAP_PREFERENCE = {"9router": [], "pollinations": ["openai", "openai-fast", "openai-large", "mistral", "deepseek", "qwen-coder"]}
 
 
 def replacement(pid: str, model: str, served: list) -> str:

@@ -18,6 +18,7 @@ Opt-in add-ons (never part of `all`; each one only when you ask for it by name):
     python tools/setup_extras.py remotion        checks Node/npx for Remotion videos (custom licence)
     python tools/setup_extras.py wechaty         Wechaty + the WeChat puppet (npm, Apache-2.0) into harness_data/addons/wechaty
     python tools/setup_extras.py nanocoder       Nanocoder coding agent CLI (npm, MIT)
+    python tools/setup_extras.py 9router         9Router model router (npm, MIT) into harness_data/addons/9router
     python tools/setup_extras.py local-image     stable-diffusion.cpp + Z-Image Turbo GGUF (PC), mflux (Mac)
     python tools/setup_extras.py local-video     Wan2GP in its own venv (PC with an NVIDIA GPU)
 
@@ -263,6 +264,30 @@ def nanocoder() -> bool:
     return ok
 
 
+def ninerouter_argv(npm: str, prefix: Path) -> list:
+    """npm into LOKI's data folder (never global, never the repo), at LOKI's pinned version (engine/ninerouter.py)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
+    import ninerouter  # pylint: disable=import-outside-toplevel
+    return [npm, "install", "--prefix", str(prefix), "--no-fund", "--no-audit", ninerouter.PACKAGE]
+
+
+def ninerouter_install() -> bool:
+    """9Router (MIT): one local OpenAI endpoint for subscriptions, free tiers and keys. LOKI starts it on 127.0.0.1."""
+    npm = _npm()
+    if not npm:
+        print("  npm is missing: install Node 20+ first (https://nodejs.org)")
+        return False
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
+    import ninerouter  # pylint: disable=import-outside-toplevel
+    ninerouter.prefix().mkdir(parents=True, exist_ok=True)
+    ok = run(ninerouter_argv(npm, ninerouter.prefix()))
+    if ok:
+        print("  done. Restart LOKI (it starts 9Router on 127.0.0.1:%d), open %s, connect your accounts," % (
+            ninerouter.port(), ninerouter.dashboard_url()))
+        print("  make a combo named 'loki', copy the API key and paste it in Settings > Connections > 9Router.")
+    return ok
+
+
 def remotion() -> bool:
     print("  Remotion licence: free for individuals and companies with up to 3 employees;")
     print("  larger companies need a company licence (https://www.remotion.dev/license).")
@@ -317,7 +342,7 @@ STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "ag
 # or big downloads. `all` never includes them.
 OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman, "cadcraft": cadcraft,
           "remotion": remotion, "local-image": local_image, "local-video": local_video,
-          "wechaty": wechaty, "nanocoder": nanocoder}
+          "wechaty": wechaty, "nanocoder": nanocoder, "9router": ninerouter_install}
 
 
 def main(argv: list) -> int:

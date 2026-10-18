@@ -29,6 +29,7 @@ import hashlib
 import html
 import json
 import os
+import sys
 import secrets
 import threading
 import time
@@ -239,6 +240,7 @@ class PhoneHandoff:
         self.created = time.time()
         self.ttl_s = ttl_s
         self.result: dict | None = None
+        self.visited = False
         self.private_client = private_client
         handoff = self
 
@@ -272,6 +274,7 @@ class PhoneHandoff:
 
             def do_GET(self):  # noqa: N802
                 if self._allowed():
+                    handoff.visited = True          # the window stops offering the internet link: the phone got here
                     self._page(200, handoff.form())
 
             def do_POST(self):  # noqa: N802
@@ -353,7 +356,7 @@ class PhoneHandoff:
 
     def status(self) -> dict:
         return {"ok": True, "provider": self.provider, "url": self.url, "urls": self.urls, "relay_url": self.relay_url,
-                "done": bool(self.result),
+                "done": bool(self.result), "visited": self.visited,
                 "result": self.result, "expires_in": max(0, int(self.ttl_s - (time.time() - self.created)))}
 
     def stop(self) -> None:
@@ -373,11 +376,13 @@ HANDOFFS: dict = {}   # token -> PhoneHandoff
 HANDOFF_PORT = 8770
 
 
-def network_hint(run=None) -> str:
+def network_hint(run=None, platform: str = "") -> str:
     """Why a phone on the same Wi-Fi may still not open the page, when we can tell.
 
     On Windows a Wi-Fi marked "Public" blocks every incoming connection (Python's firewall
     rule is for Private networks only), so the phone just spins. Read-only check."""
+    if (platform or sys.platform) == "darwin":
+        return _mac_firewall_hint(run)
     if os.name != "nt" and run is None:
         return ""
     import subprocess  # pylint: disable=import-outside-toplevel
@@ -391,6 +396,33 @@ def network_hint(run=None) -> str:
     if "Public" in categories and "Private" not in categories:
         return ("Windows treats this Wi-Fi as a Public network, which blocks the phone. In Windows Settings > "
                 "Network & internet > Wi-Fi > this network, choose Private - or just copy the key and use Paste here.")
+    return ""
+
+
+def _mac_firewall_hint(run=None) -> str:
+    """macOS: the Application Firewall drops a phone's connection silently when it blocks every incoming connection
+    or LOKI's Python (the owner, 2026-10-18: "links dont go anywhere"). Read-only, no admin needed."""
+    import subprocess  # pylint: disable=import-outside-toplevel
+    run = run or subprocess.run
+    tool = "/usr/libexec/ApplicationFirewall/socketfilterfw"
+
+    def ask(*args) -> str:
+        try:
+            out = run([tool, *args], capture_output=True, text=True, timeout=4)
+            return (out.stdout or "") + (out.stderr or "")
+        except Exception:  # noqa: BLE001
+            return ""
+    state = ask("--getglobalstate")
+    if "enabled" not in state.lower() and "state = 1" not in state.lower() and "state = 2" not in state.lower():
+        return ""
+    if "enabled" in ask("--getblockall").lower():
+        return ("The Mac's firewall blocks ALL incoming connections, so the phone page cannot open. System Settings > "
+                "Network > Firewall > Options: turn off \"Block all incoming connections\" - or use the internet link.")
+    blocked = ask("--getappblocked", os.path.realpath(sys.executable)).lower()
+    if "blocked" in blocked and "permitted" not in blocked and "not blocked" not in blocked:
+        return ("The Mac's firewall blocks LOKI's Python (%s), so the phone page cannot open. System Settings > Network "
+                "> Firewall > Options: set Python to \"Allow incoming connections\" - or use the internet link."
+                % os.path.basename(sys.executable))
     return ""
 
 

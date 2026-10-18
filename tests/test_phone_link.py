@@ -27,6 +27,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 TMP = Path(tempfile.mkdtemp())
 os.environ["LOKI_DATA"] = str(TMP / "data")
+os.environ["LOKI_PHONE_RELAY"] = "off"   # no network in the suite: pairing never reaches for the relay
 for key in ("LOKI_PHONE_LINK", "LOKI_PHONE_PORT", "LOKI_PEER_SECRET", "LOKI_PEER_NAME"):
     os.environ.pop(key, None)
 sys.path.insert(0, str(REPO / "engine"))

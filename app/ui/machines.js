@@ -183,7 +183,7 @@ async function phoneCard() {
   const toggle = el("input");
   toggle.type = "checkbox";
   toggle.checked = Boolean(data.listening);
-  label.append(toggle, document.createTextNode(" Let the LOKI phone app talk to this " + (data.kind || "computer")));
+  label.append(toggle, document.createTextNode(" Let your phone talk to this " + (data.kind || "computer")));
   card.append(label, el("div", "desc", "The phone chats in Ask or Plan mode only and can never approve anything." +
     (data.listening ? " Listening on " + (data.addresses || []).join(", ") + " port " + data.port + "." : "")));
   toggle.addEventListener("change", async () => {
@@ -196,19 +196,54 @@ async function phoneCard() {
     const pair = el("button", "", "Pair a phone");
     pair.type = "button";
     pair.addEventListener("click", async () => {
-      const name = (prompt("Name for this phone:", "My phone") || "").trim();
-      if (!name) return;
-      const r = await api("/phones/pair", { name });
+      // No prompt(): LOKI's Mac window (WKWebView) can swallow it, and then nothing showed at all. The phone is
+      // named after the phones paired so far; rename it by pairing again.
+      const n = (data.phones || []).filter((p) => p.state === "paired" || p.state === "waiting").length;
+      pair.disabled = true;
+      const r = await api("/phones/pair", { name: n ? "Phone " + (n + 1) : "My phone" });
+      pair.disabled = false;
       if (!r.ok) { addNotice(r.error || "Could not pair.", true); return; }
-      const steps = ["Open LOKI on the phone > Connect > Scan.", "Point it at this code (it works for 15 minutes, once per phone).",
-                     "Phone and computer must be on the same network (or Tailscale)."];
+      const urls = (r.urls && r.urls.length ? r.urls : [r.url || r.code]).slice();
+      const svgs = (r.svgs && r.svgs.length ? r.svgs : [r.svg]).slice();
+      let shown = 0;
+      const note = el("p", "note");
+      const show = (i) => {
+        shown = i;
+        const holder = el("div");
+        holder.innerHTML = svgs[i] || "";
+        const q = document.getElementById("qr-image");
+        if (q) q.replaceChildren(...(holder.firstElementChild ? [holder.firstElementChild] : []));
+        const t = document.getElementById("qr-text");
+        if (t) t.textContent = urls[i].split("#")[0];
+        note.textContent = urls[i] === r.relay_url
+          ? "Internet link: works on mobile data or any Wi-Fi. Signed, but not encrypted on the way - prefer the home link."
+          : "Home link: your phone must be on the same Wi-Fi as this computer.";
+      };
+      const actions = [];
+      const other = button("Page won't open? Try the next link", "small", () => {
+        show((shown + 1) % urls.length);
+        other.textContent = "Try the next link (" + (shown + 1) + " of " + urls.length + ")";
+      });
+      other.hidden = urls.length < 2;
+      actions.push(other);
+      if (r.relay_url) actions.push(button("Phone not on this Wi-Fi? Internet link", "small", () => show(urls.indexOf(r.relay_url))));
+      actions.push(button("Copy the link", "small", async () => {
+        try { await navigator.clipboard.writeText(urls[shown]); note.textContent = "Copied - send it to your phone (AirDrop, Messages)."; }
+        catch (_) { note.textContent = urls[shown]; }
+      }));
+      actions.push(note);
+      const steps = ["Open the camera on your phone and point it at this code.",
+                     "Tap the link that appears: LOKI opens in your phone's browser, ready to chat (Ask or Plan).",
+                     "Add it to your Home Screen to keep it. The code works once, for 15 minutes.",
+                     "Nothing opens on the phone? Try the next link - or the internet link if you are not on this Wi-Fi."];
       if (typeof showQR === "function") {
-        showQR({ title: "Pair " + r.name, text: r.code, svg: r.svg, steps });
+        showQR({ title: "Pair " + r.name, text: urls[0].split("#")[0], svg: svgs[0], steps, actions });
+        show(0);
       } else {
         const holder = el("div");
         const doc = new DOMParser().parseFromString(r.svg, "image/svg+xml");
         if (doc.documentElement.tagName.toLowerCase() === "svg") holder.append(document.importNode(doc.documentElement, true));
-        card.append(holder, el("div", "desc", r.code));
+        card.append(holder, el("div", "desc", urls[0].split("#")[0]));
       }
       loadMachines();
     });

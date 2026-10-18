@@ -6,6 +6,28 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
 
+## 2026-10-18 03:10: phone linking that opens on a phone, and 9Router (Claude, cloud + Mac logs)
+
+Owner: "account linking needs rework qr dont show up on my phone and links dont go anywhere ... get 9router repo".
+- **The phone-pairing QR was a bare `loki-phone:` code** that only the (unbuilt) phone app reads - a phone camera shows
+  nothing for it. Now it is a link, http://<computer>:<phone port>/#loki-phone:..., and the phone link serves LOKI's chat
+  page itself (app/ui/phone_web.html + .js, strict CSP, no secret in them; the code stays in the #fragment, which is
+  never sent, and in that browser's storage as the derived signing key). Pure-JS SHA-256/HMAC because phone browsers give
+  no WebCrypto to plain-http home addresses; requests are signed exactly like the app's. Ask/Plan only, as before. The
+  pair response also carries an internet link via LOKI's relay (LOKI_PHONE_RELAY=off turns it off), kept while LOKI
+  runs; "Pair a phone" no longer opens a prompt() and the QR window cycles home/internet links and copies the link.
+- **Key hand-off page ("links don't go anywhere")**: it records a visit; when no phone reached the home link after 25 s
+  and the relay link exists, the window switches the QR to the internet link itself. On a Mac the hint now reads the
+  Application Firewall (socketfilterfw, read-only) and names "block all incoming" or a blocked Python.
+- **9Router** (decolua/9router, MIT, 0.5.104 - past CVE-2026-62328, which hit <= 0.4.41): provider "9router" in
+  MODELS/SMART_ORDER/Connections (key from its dashboard, model "loki" = a combo you name so, else the first it lists);
+  `python tools/setup_extras.py 9router` installs it into harness_data/addons/9router; the engine starts it on 127.0.0.1
+  only (its default is 0.0.0.0), --no-browser --skip-update. LOKI_9ROUTER=auto|on|off. Not run here (npm registry
+  unreachable from the cloud) - first real run is on the Mac.
+- Checked (cloud, stubs): test_phone_web 18/18 (headless Chromium chats through the real PhoneServer), test_ninerouter
+  13/13, test_phone_link 81/81, test_qr_links 23/23, test_portal 239/239, test_routing_core 142/142, test_loki 533/533,
+  --self-test OK. Not verified: a real phone on the owner's Wi-Fi, the relay link from mobile data, 9Router itself.
+
 ## 2026-10-18 02:40: Studio stops killing itself; Forge gets primitives, poly modelling and DynaMesh (Claude, Mac logs + cloud)
 
 Owner: "nvidia key is set now but nothing is working ... the loki studio button is past the border ... i want to create

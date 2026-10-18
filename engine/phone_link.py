@@ -64,6 +64,9 @@ BAD_SIG_WINDOW_S = 300               # ... before the address is refused for the
 CHAT_TIMEOUT_S = 600
 PHONE_MODES = ("ask", "plan")
 KEY_LABEL = b"loki-phone-v1"
+WEB_DIR = Path(__file__).resolve().parent.parent / "app" / "ui"
+WEB_CSP = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; "
+           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
 # --- configuration ------------------------------------------------------------------
@@ -234,6 +237,8 @@ def make_pairing_code(payload: dict) -> str:
 def parse_pairing_code(code: str) -> dict:
     """The payload of a pairing code, or ValueError (the phone app does the same in TS)."""
     code = str(code or "").strip()
+    if not code.startswith(PAIR_PREFIX) and "#" + PAIR_PREFIX in code:   # the QR is a link now: http://host:port/#code
+        code = code.split("#", 1)[1]
     if not code.startswith(PAIR_PREFIX):
         raise ValueError("that is not a LOKI phone code (it starts with %s)" % PAIR_PREFIX)
     body = code[len(PAIR_PREFIX):]
@@ -352,7 +357,40 @@ class PhoneServer:
                     return None
                 return self.rfile.read(length) if length else b""
 
+            def _static(self) -> bool:
+                """The phone's web page (app/ui/phone_web.*): scan the QR and chat in the phone's browser, no app
+                needed. Static files with no secret in them; the code arrives in the URL #fragment, which the
+                browser never sends here. Every API call after it is signed as before."""
+                path = urlparse(self.path).path
+                name = {"/": "phone_web.html", "/index.html": "phone_web.html", "/web.js": "phone_web.js"}.get(path)
+                if name is None:
+                    return False
+                if not peers.private_client(self.client_address[0]):
+                    self._send(403, {"ok": False, "error": "only your own network may talk to LOKI"})
+                    return True
+                try:
+                    raw = (WEB_DIR / name).read_bytes()
+                except OSError:
+                    self._send(404, {"ok": False, "error": "the phone page is missing (app/ui/%s)" % name})
+                    return True
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8" if name.endswith(".html")
+                                     else "text/javascript; charset=utf-8")
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Referrer-Policy", "no-referrer")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.send_header("Content-Security-Policy", WEB_CSP)
+                    self.end_headers()
+                    self.wfile.write(raw)
+                except (BrokenPipeError, ConnectionError, OSError):
+                    pass
+                return True
+
             def do_GET(self):  # noqa: N802
+                if self._static():
+                    return
                 self._handle("GET")
 
             def do_POST(self):  # noqa: N802
@@ -498,6 +536,26 @@ def start(state: Any, agent: Any, registry: Registry | None = None):
     return server
 
 
+def relay_url(state: Any, port_number: int) -> str:
+    """"host:port" of the phone link on LOKI's relay (for a phone on mobile data or another Wi-Fi), started once
+    and kept while LOKI runs; "" when the relay is off (LOKI_PHONE_RELAY=off) or did not answer. Through the relay a
+    request arrives from loopback, so the signature is what keeps it safe - the same as on the home network."""
+    if os.environ.get("LOKI_PHONE_RELAY", "on").strip().lower() in ("off", "0", "false", "no"):
+        return ""
+    have = getattr(state, "phone_relay", None)
+    if have and have[0] == port_number:
+        return have[2]
+    try:
+        import relay_link  # pylint: disable=import-outside-toplevel
+        pub, where = relay_link.publish_page(port_number, wait_s=4.0)
+    except Exception:  # noqa: BLE001 - no relay is not an error: the home link still works
+        return ""
+    if pub is None:
+        return ""
+    state.phone_relay = (port_number, pub, where)
+    return where
+
+
 def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
     """(status, payload) for the app's /phones* loopback routes, or None if not ours."""
     if not route.startswith("/phones"):
@@ -523,6 +581,13 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
         if server is not None:
             server.stop()
             state.phone_server = None
+        relay = getattr(state, "phone_relay", None)
+        if relay:
+            try:
+                relay[1].stop()
+            except Exception:  # noqa: BLE001
+                pass
+            state.phone_relay = None
         return 200, {"ok": True, "listening": False}
     if route == "/phones/pair":
         if server is None:
@@ -531,8 +596,17 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
         code = make_pairing_code(pairing_payload(pairing, lan_addresses(), server.address[1],
                                                  peers.my_name(), machine_kind()))
         import qr  # pylint: disable=import-outside-toplevel
-        return 200, {"ok": True, "id": pairing["id"], "name": pairing["name"], "code": code,
-                     "svg": qr.svg(code), "expires_in": PAIR_TTL_S}
+        # The QR is a LINK (owner 2026-10-18: "qr dont show up on my phone"): a bare "loki-phone:" code means
+        # nothing to a phone camera without the app. The link opens LOKI's chat page in the phone's browser; the
+        # app reads the same code from its #fragment. Home addresses first, then the internet way in.
+        port_number = server.address[1]
+        urls = ["http://%s:%d/#%s" % (h, port_number, code) for h in (lan_addresses() or ["127.0.0.1"])]
+        relay = relay_url(state, port_number)
+        if relay:
+            urls.append("http://%s/#%s" % (relay, code))
+        return 200, {"ok": True, "id": pairing["id"], "name": pairing["name"], "code": code, "url": urls[0],
+                     "urls": urls, "relay_url": urls[-1] if relay else "", "svg": qr.svg(urls[0]),
+                     "svgs": [qr.svg(u) for u in urls[:5]], "expires_in": PAIR_TTL_S}
     if route == "/phones/revoke":
         if not registry.revoke(str(data.get("id") or "")):
             return 404, {"ok": False, "error": "no such phone"}

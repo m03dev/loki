@@ -37,6 +37,11 @@ CATALOG: list[dict] = [
     {"id": "local", "name": "Ollama", "group": "local", "auth": ["none"], "tools": True,
      "blurb": "Local models on this computer. Works offline. LOKI picks the best installed model.",
      "signup": "https://ollama.com/download", "docs": "https://docs.ollama.com"},
+    {"id": "9router", "name": "9Router", "group": "local", "auth": ["key"], "tools": True, "env": "NINEROUTER_API_KEY",
+     "blurb": "One local router for your Claude Code / Codex / Copilot subscriptions, free tiers and keys, with fallback "
+              "chains. Install: python tools/setup_extras.py 9router; LOKI starts it on 127.0.0.1:20128. Paste the key "
+              "from its dashboard (http://127.0.0.1:20128/dashboard); name a combo 'loki' to pick what LOKI uses.",
+     "signup": "https://github.com/decolua/9router", "docs": "https://github.com/decolua/9router#readme"},
     {"id": "lmstudio", "name": "LM Studio", "group": "local", "auth": ["none"], "tools": True,
      "blurb": "Local server from LM Studio (Developer tab > Start server, port 1234).",
      "signup": "https://lmstudio.ai", "docs": "https://lmstudio.ai/docs/app/api"},

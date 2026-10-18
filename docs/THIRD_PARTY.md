@@ -84,6 +84,8 @@ remove or rewrite them as well before LOKI is ever published.
 | `engine/channel_wechaty.py`, `engine/wechaty_sidecar.mjs`, `capabilities/wechaty/` (optional) | [Wechaty](https://github.com/wechaty/wechaty) 1.20.2 and [wechaty-puppet-wechat4u](https://github.com/wechaty/puppet-wechat4u) 1.14.14 (+ file-box), npm packages installed by `tools/setup_extras.py wechaty` into harness_data/addons/wechaty (never the repo) and loaded by LOKI's own sidecar script; no Wechaty code copied | Apache-2.0 (Wechaty, puppet-wechat4u, file-box) |
 | `engine/workers.py` (`nanocoder`), `capabilities/nanocoder/` (optional) | [Nanocoder](https://github.com/Nano-Collective/nanocoder) 1.31.0, a separate program (`npm i -g @nanocollective/nanocoder`) LOKI runs as `nanocoder run` for background jobs; no code copied | MIT |
 | `app/ui/forge_poly.js`, `app/ui/forge_model.js` | [GoBuild](https://github.com/marcel-b-roodt/GoBuild) by Marcel Roodt: the mesh operations (primitives, extrude winding, inset, weld) ported from GDScript to JavaScript; Catmull-Clark and Surface Nets written from the papers | GPL-3.0-or-later (GoBuild) |
+| `engine/ninerouter.py` (optional) | [9Router](https://github.com/decolua/9router) 0.5.104, a separate Node program installed by `tools/setup_extras.py 9router` into harness_data/addons/9router (never the repo) and started on 127.0.0.1; no code copied | MIT |
+| `app/ui/phone_web.js` | SHA-256 / HMAC from LOKI's own mobile/src/lib/protocol.ts (FIPS 180-4, RFC 2104) | AGPL-3.0 (LOKI) |
 | `docs/research/COZY_BLANKET.md` | Notes on Sparseal's CozyBlanket and Uniform from public articles only (commercial, closed source): no code, assets or UI copied | n/a (research notes) |
 
 MIT notice for Godot-3D-Stylized-Water (adapted code in app/ui/world.js):

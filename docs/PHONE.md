@@ -1,5 +1,7 @@
 # LOKI on the phone
 
+**No app needed (2026-10-18):** the pairing QR is a link, `http://<computer>:8769/#loki-phone:...`. A phone camera opens it and LOKI's chat page runs in the phone's browser (app/ui/phone_web.*, served by engine/phone_link.py; the code stays in the #fragment and in that browser, requests are signed exactly like the app's). Add it to the Home Screen to keep it. Off your Wi-Fi, Settings shows an internet link through LOKI's relay. The app reads the same link.
+
 > **Today, talk to LOKI from your phone with Telegram** (session 28, EVOLVE E10). The phone
 > app below (`mobile/`, branch `claude/phone`) has never been built or run on a phone and is
 > parked; Telegram covers "talk to LOKI from my phone" now, from anywhere (not only your Wi-Fi):
