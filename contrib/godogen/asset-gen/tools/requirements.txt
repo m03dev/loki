@@ -1,0 +1,8 @@
+xai-sdk>=1.19
+google-genai>=2.25
+requests
+numpy
+pillow
+rembg
+pymatting
+onnxruntime-gpu[cuda,cudnn]

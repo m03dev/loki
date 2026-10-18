@@ -40,12 +40,14 @@ PATH_ARGS = {
 # Asks the human, but a confident decision provider may skip the prompt.
 DECIDABLE = {"run_command", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
-ALWAYS_ASK = {"delete_file", "delegate"}
+ALWAYS_ASK = {"delete_file", "delegate", "make_godot_game"}   # make_godot_game starts a coding agent
 # Tools that need an enabled capability (tool -> capability name).
 CAPABILITY_TOOLS: dict[str, str] = {"render_video": "remotion", "video_project": "remotion",
                                     # session 28: driving this computer's desktop needs the computer-use add-on
                                     # (permission computer:host, confirmed by the owner when turned on)
-                                    "computer": "computer-use"}
+                                    "computer": "computer-use",
+                                    # godogen (htdt/godogen, MIT): a coding agent builds a whole game as a job
+                                    "make_godot_game": "godogen"}
 # Connector tools whose `action` decides (session 28, engine/conn_*.py): these actions WRITE to the owner's
 # accounts or machines and always ask the owner - no decision provider may skip it, and in a background job
 # (nobody to ask) they are refused. Read actions of the same tools are allowed.
@@ -62,7 +64,8 @@ ACTION_ALWAYS_ASK: dict[str, set] = {
 CONDUCTOR_PATH_ROLES = {"track"}
 # Job backends that need an enabled capability.
 BACKEND_CAPABILITY = {"herdr": "herdr", "cua": "cua"}
-AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode", "openhands": "openhands"}
+AGENT_CAPABILITY = {"hermes": "hermes-agent", "opencode": "opencode", "openhands": "openhands",
+                    "nanocoder": "nanocoder"}
 BACKEND_PERMISSION = {"herdr": "process:agent", "cua": "computer:virtual", "local": "process:agent"}
 
 

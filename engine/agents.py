@@ -33,10 +33,11 @@ import time
 import uuid
 from pathlib import Path
 
-ENGINES = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands")
+ENGINES = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands", "nanocoder")
 ENGINE_LABELS = {"loki": "LOKI (built in, works offline)", "claude-code": "Claude Code (subscription)",
                  "codex": "Codex (subscription)", "hermes": "Hermes Agent", "opencode": "OpenCode",
-                 "openhands": "OpenHands (local Ollama model by default)"}
+                 "openhands": "OpenHands (local Ollama model by default)",
+                 "nanocoder": "Nanocoder (any model: Ollama, OpenRouter, ...)"}
 TOOL_GROUPS = {
     "files": "read and edit files in its workspace",
     "commands": "run commands (tests, builds) in its workspace",

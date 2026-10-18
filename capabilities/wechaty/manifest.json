@@ -1,0 +1,23 @@
+{
+  "name": "wechaty",
+  "version": "0.1.0",
+  "kind": "adapter",
+  "description": "Talk to LOKI on WeChat (and the other networks Wechaty has a puppet for) like the Telegram channel: LOKI runs a small Wechaty helper (Node) while this is on, you log the bot account in with a QR code, pair your own chat with a one-time code, and only that chat is answered (Ask or Plan mode; group chats ignored; nothing else of the account is used).",
+  "license": "Apache-2.0 (Wechaty, a separate npm package; LOKI's sidecar engine/wechaty_sidecar.mjs is LOKI's own)",
+  "homepage": "https://github.com/wechaty/wechaty",
+  "permissions": [
+    "process:spawn",
+    "network",
+    "secret:WECHATY_PUPPET_SERVICE_TOKEN"
+  ],
+  "requires_cmd": [
+    "node"
+  ],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "channel_wechaty.WechatyChannel",
+  "install": "python tools/setup_extras.py wechaty   (npm packages into harness_data/addons/wechaty)",
+  "setup_extras": "wechaty",
+  "notice": "The default WeChat puppet uses the web protocol; WeChat may refuse web logins for some (especially new) accounts, and using a personal account with a bot can break WeChat's terms - use a separate account. WeChat-only for now: other puppets (WhatsApp, puppet-service) are chosen with LOKI_WECHATY_PUPPET and installed by hand."
+}

@@ -22,6 +22,7 @@ const Channels = (() => {
   }
 
   function lines(ch) {
+    if (Array.isArray(ch.lines)) return ch.lines;   // a channel that writes its own (engine/channel_wechaty.py)
     const out = [];
     if (!ch.token_saved) {
       out.push("1. In Telegram, open @BotFather, send /newbot and pick a name.");

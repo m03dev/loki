@@ -222,6 +222,7 @@ class Channel:
     send_gap_s = 1.0               # at most one message a second into one chat
     idle_s = 5.0                   # how often an idle loop looks for a token / LOKI_<NAME>_POLL
     make_poll_s = 2.0              # how often /make looks whether the picture is done
+    setup_hint = "paste the bot token in Settings > General first"
 
     def __init__(self, callbacks: dict, store: Store | None = None, env: dict | None = None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
@@ -250,6 +251,11 @@ class Channel:
     # ------------------------------------------------------------------ transport hooks
     def token(self) -> str:
         return ""
+
+    def configured(self) -> bool:
+        """Ready to run here. A bot-token app (Telegram) is configured once its token is saved; a
+        transport that logs in another way (Wechaty: a QR scan) overrides this."""
+        return bool(self.token())
 
     def fetch(self) -> list:
         raise NotImplementedError
@@ -295,7 +301,7 @@ class Channel:
         here, why = poll_here(self.name, self.env, self.platform)
         owner = self.owner()
         code_live = bool(self._code) and self.clock() < self._code_until
-        return {"name": self.name, "label": self.label, "token_saved": bool(self.token()),
+        return {"name": self.name, "label": self.label, "token_saved": self.configured(),
                 "poll_here": here, "poll_why": why, "polling": self.polling,
                 "bot": {k: v for k, v in self.bot.items() if k in ("username", "first_name", "id")},
                 "paired": bool(owner), "owner": {"name": owner.get("name", ""), "since": owner.get("paired_at")} if owner else {},
@@ -582,7 +588,7 @@ class Channel:
             token = self.token()
             if token != seen_token:            # a new token pasted in Settings: start over
                 self.bot, seen_token, backoff = {}, token, 0.0
-            if not here or not token:
+            if not here or not self.configured():
                 self.polling = False
                 self._stop.wait(self.idle_s)
                 continue
@@ -668,6 +674,13 @@ def start(state: Any, agent: Any) -> dict:
     """Start every channel's loop (each one idles until a token is saved and this machine polls)."""
     import channel_telegram  # pylint: disable=import-outside-toplevel
     started = {"telegram": channel_telegram.TelegramChannel(callbacks(state, agent)).start()}
+    try:   # Wechaty (WeChat and other networks through a Node sidecar): idle until its add-on is on
+        import channel_wechaty  # pylint: disable=import-outside-toplevel
+        registry = getattr(agent, "CAPABILITIES", None)
+        enabled = (lambda: registry.is_enabled("wechaty")) if registry is not None else (lambda: False)
+        started["wechaty"] = channel_wechaty.WechatyChannel(callbacks(state, agent), enabled=enabled).start()
+    except Exception as exc:  # noqa: BLE001 - an optional channel never stops Telegram
+        print("[channels] wechaty not started: %s" % exc, flush=True)
     state.channels = started
     return started
 
@@ -686,15 +699,15 @@ def ui_route(state: Any, method: str, route: str, data: dict):
     if channel is None:
         return 404, {"ok": False, "error": "no such channel (is the engine still starting?)"}
     if route == "/channels/pair":
-        if not channel.token():
-            return 400, {"ok": False, "error": "paste the bot token in Settings > General first"}
+        if not channel.configured():
+            return 400, {"ok": False, "error": channel.setup_hint}
         return 200, {"ok": True, **channel.new_code(), "status": channel.status()}
     if route == "/channels/unpair":
         channel.unpair()
         return 200, {"ok": True, "status": channel.status()}
     if route == "/channels/test":
-        if not channel.token():
-            return 400, {"ok": False, "error": "no bot token saved"}
+        if not channel.configured():
+            return 400, {"ok": False, "error": channel.setup_hint}
         try:
             channel.bot = channel.me() or {}
             return 200, {"ok": True, "status": channel.status()}

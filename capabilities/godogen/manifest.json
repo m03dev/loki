@@ -1,0 +1,18 @@
+{
+  "name": "godogen",
+  "version": "0.1.0",
+  "kind": "tool",
+  "description": "Godogen: describe a game and a coding agent builds it. LOKI writes godogen's game-building instructions (runtime process, a one-page engine guide for Godot GDScript/C#, Bevy, Babylon.js or three.js, and the asset-gen skill) into ~/LOKI Projects/<name>, then Claude Code, Codex, OpenCode, Nanocoder or LOKI's own agent builds, runs and checks the game there as a background job you approve (the make_godot_game tool). Paid asset APIs are only used after you say yes.",
+  "license": "MIT (godogen's text in contrib/godogen, Copyright 2026 Alex Ermolov)",
+  "homepage": "https://github.com/htdt/godogen",
+  "permissions": [
+    "process:agent",
+    "fs:workspace"
+  ],
+  "requires_cmd": [],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "godogen.make_godot_game",
+  "notice": "Godot 4 on PATH (or GODOT_BIN) to run the games; local asset generation needs godogen_assets on an NVIDIA GPU (set LOKI_GODOGEN_ASSETS), otherwise assets come from paid APIs only after you agree."
+}

@@ -5924,6 +5924,49 @@ TOOL_CATEGORIES["creative"] += ["make_3d"]
 MODIFYING |= {"make_3d"}
 LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("peer_files") + 1:LOCAL_TOOL_PRIORITY.index("peer_files") + 1] = [
     "home", "weather", "news"]
+
+
+# --- Godogen (htdt/godogen, MIT; engine/godogen.py, contrib/godogen) ----------------------------------------
+# "Make me a game where ..." -> godogen's instructions are written into ~/LOKI Projects/<name> and a coding
+# agent (Claude Code, Codex, OpenCode, Nanocoder, or LOKI's own) builds the game there as a background job.
+# Needs the godogen add-on (policy.CAPABILITY_TOOLS) and always asks first (policy.ALWAYS_ASK).
+def make_godot_game(description: str, name: str = "", engine: str = "godot-gdscript", agent: str = "auto") -> str:
+    import godogen  # pylint: disable=import-outside-toplevel
+    if JOBS is None:
+        return "error: background jobs are not running in this Loki"
+    try:
+        made = godogen.make_godot_game(description, name, engine or godogen.DEFAULT_ENGINE, agent or "auto")
+    except (godogen.GodogenError, OSError) as exc:
+        return "error: %s" % exc
+    spec = made["job"]
+    verdict = POLICY.job(spec["backend"], spec["agent"])
+    if not verdict.allowed:
+        return "error: the game folder is ready (%s) but the agent cannot start: %s" % (made["workspace"], verdict.reason)
+    try:
+        job = JOBS.create(spec)
+    except ValueError as exc:
+        return "error: %s" % exc
+    threading.Thread(target=JOBS.tick, daemon=True).start()
+    return ("made %s with godogen's %s instructions (%s) and started background job %s: %s is building the game "
+            "there. The user sees it above the message box; open the folder in Godot when it is done."
+            % (made["workspace"], made["engine"], made["manifest"], job["id"], made["agent"]))
+
+
+LOCAL_TOOLS["make_godot_game"] = make_godot_game
+_GODOGEN_SCHEMA = schema(
+    "make_godot_game", "Make a whole game from a description with godogen: a folder ~/LOKI Projects/<name> gets "
+    "godogen's game-building instructions and a coding agent builds, runs and checks the game there as a background "
+    "job (the user approves it first). engine: godot-gdscript (default; any Godot 4) | godot (C#, .NET Godot) | "
+    "bevy | babylon | threejs. agent: auto | claude-code | codex | opencode | nanocoder | loki.",
+    {"description": {"type": "string"}, "name": {"type": "string"},
+     "engine": {"type": "string", "enum": ["godot-gdscript", "godot", "bevy", "babylon", "threejs"]},
+     "agent": {"type": "string", "enum": ["auto", "claude-code", "codex", "opencode", "nanocoder", "loki"]}},
+    ["description"])
+TOOL_SCHEMAS.append(_GODOGEN_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_GODOGEN_SCHEMA)
+MODEL_TOOL_NAMES.add("make_godot_game")
+TOOL_CATEGORIES["godot"] += ["make_godot_game"]
+DELEGATING |= {"make_godot_game"}
 # (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)
 
 

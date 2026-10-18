@@ -194,7 +194,7 @@ STATIONS = {
     "LOKI": "hall", "Researcher": "library", "Architect": "drafting table", "Builder": "workshop",
     "Tester": "test bench", "Reviewer": "review desk", "Browser tester": "terminal",
     "Loki agent": "workshop", "claude-code": "workshop", "codex": "workshop", "hermes": "library",
-    "opencode": "workshop", "openhands": "workshop",
+    "opencode": "workshop", "openhands": "workshop", "nanocoder": "workshop",
 }
 JOB_STATE = {"queued": "waiting", "starting": "working", "working": "working", "blocked": "blocked",
              "done": "done", "failed": "failed", "cancelled": "idle"}

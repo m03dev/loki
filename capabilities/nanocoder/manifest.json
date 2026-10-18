@@ -1,0 +1,20 @@
+{
+  "name": "nanocoder",
+  "version": "0.1.0",
+  "kind": "adapter",
+  "description": "Nanocoder (Nano Collective): an open, local-first coding agent for the terminal that works with any model - Ollama, LM Studio, OpenRouter and other OpenAI-compatible APIs. LOKI runs it for background jobs and saved agents (`nanocoder run`, auto-accept mode: it still stops before shell commands, commits and deletes) and as an agent for make_godot_game. Pick its provider and model with LOKI_NANOCODER_PROVIDER / LOKI_NANOCODER_MODEL (from its agents.config.json).",
+  "license": "MIT",
+  "homepage": "https://github.com/Nano-Collective/nanocoder",
+  "permissions": [
+    "process:agent"
+  ],
+  "requires_cmd": [
+    "nanocoder"
+  ],
+  "requires_env": [],
+  "requires_python": [],
+  "health_endpoint": "",
+  "entrypoint": "workers.LocalBackend",
+  "install": "python tools/setup_extras.py nanocoder   (npm i -g @nanocollective/nanocoder@1.31.0; Node 20+)",
+  "setup_extras": "nanocoder"
+}

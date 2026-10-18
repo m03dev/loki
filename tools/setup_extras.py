@@ -16,6 +16,8 @@ Opt-in add-ons (never part of `all`; each one only when you ask for it by name):
     python tools/setup_extras.py openhuman       how to get OpenHuman (GPL-3.0; no installer here)
     python tools/setup_extras.py cadcraft        CADCraft CAD drafting (MIT/Apache-2.0 release build, checksum-checked)
     python tools/setup_extras.py remotion        checks Node/npx for Remotion videos (custom licence)
+    python tools/setup_extras.py wechaty         Wechaty + the WeChat puppet (npm, Apache-2.0) into harness_data/addons/wechaty
+    python tools/setup_extras.py nanocoder       Nanocoder coding agent CLI (npm, MIT)
     python tools/setup_extras.py local-image     stable-diffusion.cpp + Z-Image Turbo GGUF (PC), mflux (Mac)
     python tools/setup_extras.py local-video     Wan2GP in its own venv (PC with an NVIDIA GPU)
 
@@ -213,6 +215,54 @@ def cadcraft() -> bool:
     return bool(result.get("ok"))
 
 
+# Pinned versions (checked 2026-10-17): wechaty 1.20.2 and its default WeChat puppet.
+WECHATY_PACKAGES = ["wechaty@1.20.2", "wechaty-puppet-wechat4u@1.14.14", "file-box@1.4.15"]
+NANOCODER_PACKAGE = "@nanocollective/nanocoder@1.31.0"
+
+
+def _npm() -> str:
+    return shutil.which("npm") or shutil.which("npm.cmd") or ""
+
+
+def wechaty_argv(npm: str, prefix: Path) -> list:
+    """npm into LOKI's data folder (never global, never the repo); --ignore-scripts: no package's install
+    script runs (wechaty and the wechat4u puppet are plain JavaScript and need none)."""
+    return [npm, "install", "--prefix", str(prefix), "--ignore-scripts", "--no-fund", "--no-audit", *WECHATY_PACKAGES]
+
+
+def wechaty() -> bool:
+    """Wechaty (Apache-2.0), a separate npm package LOKI's sidecar engine/wechaty_sidecar.mjs loads."""
+    npm = _npm()
+    if not npm:
+        print("  npm is missing: install Node 18+ first (https://nodejs.org)")
+        return False
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
+    import channel_wechaty  # pylint: disable=import-outside-toplevel
+    prefix = channel_wechaty.package_dir()
+    prefix.mkdir(parents=True, exist_ok=True)
+    ok = run(wechaty_argv(npm, prefix))
+    if ok:
+        print("  done. Turn on wechaty in Settings > Add-ons, then Settings > General shows the WeChat login.")
+    return ok
+
+
+def nanocoder_argv(npm: str) -> list:
+    return [npm, "i", "-g", NANOCODER_PACKAGE]
+
+
+def nanocoder() -> bool:
+    """Nanocoder (MIT): a coding agent CLI LOKI runs for background jobs (`nanocoder run`)."""
+    npm = _npm()
+    if not npm:
+        print("  npm is missing: install Node 20+ first (https://nodejs.org)")
+        return False
+    ok = run(nanocoder_argv(npm))
+    if ok:
+        print("  done. Run `nanocoder` once to pick a provider (or set LOKI_NANOCODER_PROVIDER / _MODEL),")
+        print("  then turn on nanocoder in Settings > Add-ons.")
+    return ok
+
+
 def remotion() -> bool:
     print("  Remotion licence: free for individuals and companies with up to 3 employees;")
     print("  larger companies need a company licence (https://www.remotion.dev/license).")
@@ -266,7 +316,8 @@ STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "ag
 # Installed only when named: licences that need a decision (AGPL/GPL/custom), separate programs,
 # or big downloads. `all` never includes them.
 OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman, "cadcraft": cadcraft,
-          "remotion": remotion, "local-image": local_image, "local-video": local_video}
+          "remotion": remotion, "local-image": local_image, "local-video": local_video,
+          "wechaty": wechaty, "nanocoder": nanocoder}
 
 
 def main(argv: list) -> int:

@@ -92,6 +92,14 @@ GENERAL = {
                             "label": "Telegram bot token: talk to LOKI from your phone (make a bot with @BotFather, paste its token, then pair below)"},
     "LOKI_TELEGRAM_POLL": {"kind": "choice", "default": "auto", "choices": ["auto", "on", "off"],
                            "label": "This machine answers Telegram (auto: only the Windows PC, so your two machines never both reply)"},
+    "LOKI_WECHATY_POLL": {"kind": "choice", "default": "auto", "choices": ["auto", "on", "off"],
+                          "label": "This machine answers WeChat through the wechaty add-on (auto: only the Windows PC)"},
+    "LOKI_WECHATY_PUPPET": {"kind": "choice", "default": "wechaty-puppet-wechat4u",
+                            "choices": ["wechaty-puppet-wechat4u", "wechaty-puppet-service", "wechaty-puppet-whatsapp",
+                                        "wechaty-puppet-xp"],
+                            "label": "Wechaty network (puppet): wechat4u = WeChat web login by QR (installed by setup_extras); the others you install yourself"},
+    "WECHATY_PUPPET_SERVICE_TOKEN": {"kind": "secret", "default": "",
+                                     "label": "Wechaty puppet-service token (only for wechaty-puppet-service; never needed for the default)"},
     "LOKI_CHANNEL_MODE": {"kind": "choice", "default": "ask", "choices": ["ask", "plan"],
                           "label": "Messages from Telegram run in: ask = answer only; plan = may read and look things up (never changes anything)"},
 }
@@ -332,7 +340,7 @@ def _apply_live(agent: Any, updates: dict) -> None:
         agent.MAIN_DRIVER = "" if updates["LOKI_MAIN_DRIVER"] == "off" else updates["LOKI_MAIN_DRIVER"]
     if "LOKI_NVIDIA_THINKING" in updates and hasattr(agent, "NVIDIA_THINKING"):
         agent.NVIDIA_THINKING = updates["LOKI_NVIDIA_THINKING"]
-    for key in ("LOKI_TELEGRAM_POLL", "LOKI_CHANNEL_MODE"):   # engine/channels.py reads these live
+    for key in ("LOKI_TELEGRAM_POLL", "LOKI_CHANNEL_MODE", "LOKI_WECHATY_POLL", "LOKI_WECHATY_PUPPET"):   # read live
         if key in updates:
             os.environ[key] = updates[key]
 

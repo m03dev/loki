@@ -44,7 +44,7 @@ from typing import Any, Callable
 STATUSES = ("queued", "starting", "working", "blocked", "done", "failed", "cancelled")
 FINAL = frozenset({"done", "failed", "cancelled"})
 ACTIVE = frozenset({"starting", "working", "blocked"})
-AGENTS = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands")
+AGENTS = ("loki", "claude-code", "codex", "hermes", "opencode", "openhands", "nanocoder")
 # The built-in agent: Loki's own loop, headless, on Loki's model (local by default). It
 # needs nothing installed, so background work always has at least one agent.
 BUILTIN_AGENTS = {"loki"}
@@ -118,6 +118,20 @@ def agent_argv(agent: str, prompt: str, interactive: bool = False, env: dict | N
         if interactive:
             return ["openhands", "--override-with-envs"]
         return ["openhands", "--headless", "--json", "--override-with-envs", "-t", prompt]
+    if agent == "nanocoder":
+        # Nanocoder (Nano-Collective/nanocoder, MIT): `nanocoder run` is its one-shot mode. auto-accept
+        # (its default for run) still stops on shell commands, git commits and deletes, so an unattended
+        # job ends with "approval required" instead of doing them. --trust-directory skips its first-run
+        # folder prompt (the job runs in its own worktree); --plain = no full-screen UI in a log file.
+        # Provider/model follow LOKI_NANOCODER_PROVIDER / LOKI_NANOCODER_MODEL (its agents.config.json).
+        argv = ["nanocoder"]
+        if env.get("LOKI_NANOCODER_PROVIDER"):
+            argv += ["--provider", env["LOKI_NANOCODER_PROVIDER"]]
+        if env.get("LOKI_NANOCODER_MODEL"):
+            argv += ["--model", env["LOKI_NANOCODER_MODEL"]]
+        if interactive:
+            return argv
+        return argv + ["--mode", "auto-accept", "--trust-directory", "--plain", "run", prompt]
     if agent == "codex":
         if interactive:
             return ["codex", "--sandbox", "workspace-write"]
