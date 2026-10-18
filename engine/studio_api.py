@@ -100,15 +100,17 @@ def wanted_code(data: Path) -> str:
 
 
 def good_codes(data: Path) -> set:
-    """Every commit a running Studio may be on: the pin, the move it was cleared for, and the checkout itself
-    (studio_app.py runs the checkout when the pinned copy will not start - that Studio is current, not stale)."""
+    """Every commit a running Studio may be on: the pin (the pinned copy always runs exactly the pin - a cleared move
+    becomes the pin when Studio starts) and the checkout's HEAD (studio_app.py runs the checkout when the pinned copy
+    will not start, and LOKI's tab starts it with --no-pin). A Studio on the cleared move but not the pin is a checkout
+    run on old code: stale, so an update reaches it (the Mac, 2026-10-18: Studio stayed on 82c154b after 4c34824)."""
     try:
         rec = json.loads((data / "studio" / "pin.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         rec = {}
     codes = {_git_head(REPO)}
     if isinstance(rec, dict):
-        codes.add(str(rec.get("next") or rec.get("commit") or ""))   # a pin with a cleared move wants the move
+        codes.add(str(rec.get("commit") or ""))
     return {c for c in codes if c}
 
 

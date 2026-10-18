@@ -17,6 +17,8 @@ the whole answer is written, which on the free tier takes longer than the timeou
   times out is not retried on that turn and is asked LAST for 10 min (SLOW_FOR_S). Local servers stay unstreamed.
 - Engine (engine/loki.py `_streamed_request`): DeepSeek on NIM streams (LOKI_STREAM_MODELS=auto|remote|off) and is
   rebuilt into the shape the loop reads (content, tool_calls, reasoning, usage, model_dump).
+- A Studio on the cleared pin move but not the pin is a checkout run on old code, so it counts as stale and an update
+  reaches it (good_codes = the pin + HEAD).
 - Two Studios ran at once (8771 + 64148): a pinned copy LOKI stops on purpose (exit 15) no longer makes its launcher
   start the checkout too.
 - Checked: test_studio_stream 10/10 (incl. a real chunked socket slower than the timeout overall), test_engine_stream

@@ -107,9 +107,11 @@ data = TMP / "data"
 (data / "studio" / "pinned" / "studio" / "studio_app.py").write_text("", encoding="utf-8")
 (data / "studio" / "pin.json").write_text(json.dumps({"commit": "aaa", "next": "bbb"}), encoding="utf-8")
 check("the Studio it should run is the cleared pin move", studio_api.wanted_code(data) == "bbb")
-check("old code is stale", studio_api.stale({"code": "aaa"}, data))
+check("old code is stale", studio_api.stale({"code": "zzz"}, data))
 check("a Studio too old to say is stale", studio_api.stale({}, data))
-check("the right code is not", not studio_api.stale({"code": "bbb"}, data))
+check("the pinned copy at the pin is not", not studio_api.stale({"code": "aaa"}, data))
+check("a checkout run on the cleared move but not HEAD is stale (an update must reach it)",
+      studio_api.stale({"code": "bbb"}, data) or studio_api._git_head(studio_api.REPO) == "bbb")
 sess = data / "studio" / "sessions" / "s1"
 sess.mkdir(parents=True)
 (sess / "session.json").write_text(json.dumps({"status": "working", "updated": time.time()}), encoding="utf-8")
@@ -117,7 +119,7 @@ check("never restarted under a working session", studio_api.busy(data))
 (sess / "session.json").write_text(json.dumps({"status": "idle", "updated": time.time()}), encoding="utf-8")
 check("an idle Studio can be restarted", not studio_api.busy(data))
 calls = []
-studio_api.running = lambda d: ({"port": 1, "pid": 99999999, "token": "t", "code": "aaa"} if not calls else {})
+studio_api.running = lambda d: ({"port": 1, "pid": 99999999, "token": "t", "code": "zzz"} if not calls else {})
 studio_api.stop = lambda info, wait_s=4.0: calls.append(info["pid"])
 studio_api._EMBED["t"] = 0.0
 out = studio_api.embed(data, popen=lambda *a, **k: calls.append("spawn"))
@@ -134,7 +136,7 @@ check("a replaced Studio starts from the checkout, never the old pin", spawned a
 head = studio_api._git_head(studio_api.REPO)
 check("the checkout's own code is not stale (no kill loop)", not head or not studio_api.stale({"code": head}, data))
 calls.clear()
-studio_api.running = lambda d: {"port": 1, "pid": 4242, "token": "t", "code": "aaa"}
+studio_api.running = lambda d: {"port": 1, "pid": 4242, "token": "t", "code": "zzz"}
 studio_api._EMBED["t"] = 0.0
 studio_api.embed(data, popen=lambda *a, **k: None, clock=lambda: 10_030.0)
 check("a second stale Studio within 10 min is left running", 4242 not in calls, calls)
