@@ -103,6 +103,10 @@ URL `http://127.0.0.1:8770/mcp`, header `Authorization: Bearer <the bridge token
 
 `python engine/loki_mcp.py --list` prints the tools.
 
+LOKI Studio is an MCP server too: `studio/studio_mcp.py` gives a client Studio's hands in the live Godot editor
+(through the LOKI Studio plugin), the offline Godot docs, the project index and Studio's sessions - see
+docs/STUDIO.md "Studio as an MCP server".
+
 ## Tests
 
 `tests/test_studio.py` section 4: every tool through the mcp client in-process, the jail, approvals

@@ -195,8 +195,9 @@ if mmo_py:
 section("only here, no CDN, licence notes")
 tracked = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True).stdout.split()
 godot_outside = [f for f in tracked if f.endswith((".gd", ".tscn", ".tres", ".gdshader", ".uid", ".import")) or f.endswith("project.godot")]
-godot_outside = [f for f in godot_outside if not f.startswith("game/loki-world/")]
-check("no Godot project files tracked outside game/loki-world (AGENTS.md)", not godot_outside, godot_outside[:5])
+godot_outside = [f for f in godot_outside if not f.startswith("game/loki-world/")
+                 and not (f.startswith("studio/godot_plugin/addons/loki_studio/") and f.endswith(".gd"))]
+check("no Godot project files tracked outside game/loki-world and the Studio plugin (AGENTS.md)", not godot_outside, godot_outside[:5])
 stray = [str(p.relative_to(REPO)) for p in REPO.rglob("project.godot") if "harness_data" not in p.parts and GAME not in p.parents
          and p.parent != GAME and ".git" not in p.parts and ".claude" not in p.parts]
 check("no other project.godot in the checkout", not stray, stray)

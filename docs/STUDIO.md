@@ -95,7 +95,104 @@ Each asks you to confirm.
 - Keys: Studio reads LOKI's `harness_data/.env` into its own process to call the models; it never
   shows, logs or sends them anywhere else, and the MCP server process gets none of them.
 
+## LOKI Studio inside Godot (the plugin)
+
+The owner: "maybe its better when loki was a godot plugin it was very effective. i want it to work 1:1 OR BETTER
+THEN ZIVA". So Studio has a **second front end that lives in the Godot editor**, like Ziva does - while Studio
+itself stays its own app (it still works when Godot, or LOKI, is closed). The plugin is clean-room: built from
+Ziva's public feature list and Godot's own APIs; no Ziva code or files were copied, decompiled or ported.
+
+### Install it into any Godot 4 project
+
+1. Start LOKI Studio (it writes `~/.loki/studio_connect.json` - its address and a fresh token - on every start).
+2. Put the plugin into the project, either way:
+   - `python studio/install_godot_plugin.py "<path to the project>"` (Windows: `harness_data\.venv\Scripts\python.exe
+     studio\install_godot_plugin.py "C:\Users\...\MyGame"`), or in Studio's chat: the API `POST /api/godot/install`;
+   - or copy `studio/godot_plugin/addons/loki_studio/` to `<project>/addons/loki_studio/` and enable **LOKI Studio**
+     in Project > Project Settings > Plugins.
+   The installer also turns it on in `project.godot` (`[editor_plugins]`) and adds the game autoload
+   `LokiStudioGame`; `--remove` takes all of it out again. Works for LOKI World (`game/loki-world`) and the owner's
+   own games (`~/LOKI Projects/<name>`).
+3. Open the project in Godot (4.4+; 4.5+ for error capture, 4.6+ docks natively). The **LOKI Studio** dock appears
+   on the right and links to Studio by itself (status "linked"). Studio's window shows "1 Godot editor linked" and
+   offers the project as a target ("On: Godot: <name>").
+
+### What is in the plugin
+
+```
+studio/godot_plugin/addons/loki_studio/
+  plugin.cfg, plugin.gd   the EditorPlugin: dock, bridge, debugger plugin, logger, context menus, the game autoload
+  dock.gd                 the chat dock: sessions of this project, New, Fork, Studio; Default/Plan/Ask; model; Ask first;
+                          the thread (answers, thinking, tool calls, results, diffs, checkpoints, screenshots);
+                          Approve/Deny and the agent's questions as buttons; todos; Undo turn, Diff, Stop, queued count;
+                          the input with /command and @mention autocomplete (Enter sends); "+ Selection"
+  bridge.gd               the editor bridge: hello, long-poll /api/godot/poll, answer every studio_godot.ACTIONS action
+                          (scene tree, node properties, selection, open scripts, selected code, set_property, add_node,
+                          remove_node, connect_signal, attach_script, new/open/save scene, open script, select, rescan,
+                          run/stop the game, screenshots of the editor or the game, game input/tree/monitors/values,
+                          undo_turn). Scene changes go through EditorUndoRedoManager: Ctrl+Z works on them, and
+                          Studio's "Undo turn" undoes a whole turn (only while they are still the newest actions)
+  debugger.gd             EditorDebuggerPlugin: the line to the RUNNING game over Godot's own debugger link
+  game_bridge.gd          the autoload in the game: injected input (held >= 2 physics frames), screenshots, the live
+                          tree, values, performance monitors; idle in exported games (no debugger)
+  error_logger.gd         a Logger (Godot 4.5+): editor and game errors/warnings with file, line and backtrace
+  context_menu.gd         right-click "Add to LOKI Studio chat" in the script editor, scene tree and FileSystem (4.4+)
+```
+
+AGENTS.md: this folder is the third allowed place for Godot files (owner decision 2026-10-17); it has no
+`project.godot`. `tests/test_loki.py` and `tests/test_godot_world.py` allow its `.gd` files.
+
+## The Ziva-style workflow (in the window AND the dock)
+
+A session works on **LOKI's code** (a git worktree, as above) or on **a Godot project** (live in its editor; no
+worktree - every change is checkpointed instead). Everything below works in both front ends.
+
+| | How |
+| --- | --- |
+| Project awareness | Godot: `project_index` (project.godot, scenes with nodes/scripts/instances/signal connections, scripts with class_name/extends/signals/exports/funcs/preloads) and `project_graph` (mermaid); the overview is in the system prompt. Code: `repo_map` (per file its classes and functions). `studio/studio_index.py` |
+| Modes | Default / Plan (reads, writes a todo plan, changes nothing) / Ask (read-only answers); `/plan <task>`, `/ask <q>`. Write tools are not even offered in Plan/Ask and are refused if called |
+| Checkpoints + undo | every turn starts with a checkpoint. LOKI code: a git snapshot commit made with a throwaway index (branch, index and working tree untouched; `refs/studio-checkpoints/<session>/<turn>`). Godot: the original bytes of each file before the turn's first write. **Undo turn N** restores the files as they were before N (later turns too), undoes those turns' editor actions and trims the conversation. Discard in a Godot session = undo everything. `studio/studio_checkpoints.py` |
+| Approvals and questions | risky tools wait for Approve (as before) + `pc_worker`; "Ask first" makes every file/scene change wait; `ask_owner(question, options)` shows buttons + a free answer and waits |
+| Todos, queue | `todo_write` - live list in the window and the dock; messages typed while it works are queued and run in order |
+| @-mentions | `@path/file`, `@folder/`, `@res://...` attach content; `@scene`, `@selection` (selected nodes + code), `@errors`, `@todos` attach live editor state. Autocomplete via `/api/mentions` |
+| Slash commands, templates | `/help /plan /ask /default /undo [N] /checkpoints /todos /fork /model <id> /approve edits\|auto /docs /web /remember /memory /skills /index /graph /errors /run /stop /screenshot /lag /playtest /fix /review /test /skill`; templates are `.md` files in `<project>/.loki/prompts/`, `harness_data/studio/prompts/`, `studio/prompts/` (bundled: explain, mechanic, optimize) with `{{args}}`, `{{selection}}`, `{{scene}}` |
+| Project instructions | the project's `AGENTS.md` (or `CLAUDE.md`) goes into the system prompt |
+| Memory, skills | `remember`/`recall` are LOKI's memory (memory_core: the one the Mac and the PC share); `list_skills`/`use_skill` read SKILL.md from the project's `.loki/skills`/`skills`, LOKI's `skills/` and learned ones |
+| Subagents | `subagent(task or tasks[<=3])`: read-only helpers with their own small context, side by side |
+| Docs, web | `godot_docs`: the whole class reference offline (`studio/godot_docs.py build` - from a Godot source checkout, `godot --doctool` of the owner's own Godot, or a sparse git clone), cached in `harness_data/studio/godot_docs/`; `web_search` (engine/web_search.py, no key) |
+| Playtest, lag | `run_game` -> `playtest_step(events)` = input -> wait -> screenshot -> the NEW errors, one turn at a time; `game_get` reads a value; `find_lag` samples fps/frame/physics times/draw calls/nodes/orphans/memory + the busiest scripts and says where to look |
+| Pictures | screenshots (editor 2D/3D/whole, game) saved under `harness_data/studio/shots/` and shown in the thread; `generate_image` (LOKI's local image maker) into the project |
+| Mermaid | the window draws ```mermaid flowcharts itself (no CDN); the dock shows the text and a pointer to the window |
+| Fork | a new session with the same conversation; for LOKI code its own worktree with the same uncommitted changes |
+| Models | `/model` or the picker: auto (DeepSeek V4.1 Flash on NVIDIA first, then the free fallbacks), nvidia, openrouter, opencode-zen, gemini, groq, local (Ollama), lmstudio, **claude-code** and **codex** (the owner's subscriptions: the CLI does the turn with its own tools + Studio's MCP server; `studio/studio_cli.py`) |
+
+### Studio as an MCP server
+
+`studio/studio_mcp.py` gives Claude Code, Codex, Cursor (or Ziva) Studio's Godot hands through the running Studio:
+`godot(action, args)` on the live editor, `godot_errors`, `godot_screenshot`, `godot_playtest_step`, `godot_find_lag`,
+`godot_docs` and `project_index` (these two work without Studio), and Studio's sessions (`studio_sessions`,
+`studio_new_session`, `studio_send`, `studio_events`).
+
+    claude mcp add loki-studio -- python <loki>/studio/studio_mcp.py --project <godot project>
+
+### The API the dock uses (studio_server.py)
+
+`/api/godot/hello|poll|result|event|editors|call|tool|install|docs`, `/api/session/new` (+ `project`, `mode`, `model`,
+`approve_edits`), `/api/session/mode|model|approve_edits|answer|undo|fork|queue/clear|checkpoints`, `/api/commands`,
+`/api/mentions`, `/api/models`, `/api/shot`. Same token, Host check and loopback as the rest; editor results may be up
+to 16 MB (screenshots). The comparison with Ziva, task by task: docs/STUDIO_VS_ZIVA.md.
+
 ## Tests
+
+`tests/test_studio_godot.py` (in SUITES, ~20 s): the plugin's files and GDScript sanity, the installer (CRLF kept,
+idempotent, remove), the contract (bridge.gd's actions == Studio's; every /api path the dock calls is served), the
+editor link with a fake editor over real HTTP, a Godot session on a scripted model (index, docs, edits + checkpoints,
+live editor actions, playtest, lag, todos, questions, subagent, Ask first, Plan mode, queue, undo, discard), a LOKI
+session with git checkpoints + fork through the real LOKI MCP API, mentions/commands/templates/memory/skills, the docs
+cache and the index, Studio as an MCP server, the Claude Code/Codex stream parsing, the window in headless Chromium,
+and - with a Godot binary (GODOT_BIN, `godot` on PATH) - the plugin in a REAL headless Godot editor connected to a real
+Studio server (state, open scene, add/set/connect with UndoRedo, real parse errors captured, undo_turn) and the game
+bridge in a REAL running game (input -> the game's own polling sees it, tree, monitors, errors).
 
 `tests/test_studio.py` (in SUITES): the rate limiter, the main driver, the real agent loop against a
 fake NVIDIA (tool calls, reasoning_content, 429s, pacing), the MCP API, a full Studio session with the

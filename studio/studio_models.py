@@ -86,6 +86,8 @@ def providers(env: dict | None = None) -> list:
                             e.get("DEEPSEEK_MODEL", "deepseek-flash"), "DEEPSEEK_API_KEY", e.get("DEEPSEEK_API_KEY", ""), free=False))
     out.append(Provider("local", "The local model (Ollama)", "http://127.0.0.1:11434/v1", e.get("LOKI_STUDIO_LOCAL_MODEL", "qwen3:8b"),
                         key="ollama", local=True, extra={"think": False}))
+    out.append(Provider("lmstudio", "LM Studio (local)", e.get("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+                        e.get("LMSTUDIO_MODEL", "") or "local-model", key="lm-studio", local=True))
     pinned = str(e.get("LOKI_STUDIO_MODEL", "")).strip().lower()
     if pinned:
         out.sort(key=lambda p: p.id != pinned)
@@ -95,6 +97,21 @@ def providers(env: dict | None = None) -> list:
 def chain(env: dict | None = None) -> list:
     """The providers that are ready right now, in order."""
     return [p for p in providers(env) if p.ready()]
+
+
+CLI_DRIVERS = {"claude-code": ("claude", "Claude Code (your Claude subscription, its own tools + Studio's MCP)"),
+               "codex": ("codex", "Codex CLI (your ChatGPT subscription, its own tools + Studio's MCP)")}
+
+
+def choices(env: dict | None = None) -> list:
+    """Every model a session can be driven by, for the pickers: [{id, name, model, ready}]."""
+    import shutil  # pylint: disable=import-outside-toplevel
+    rows = [{"id": "auto", "name": "Auto (DeepSeek V4.1 Flash on NVIDIA first, then the free fallbacks)", "model": "", "ready": True}]
+    for p in providers(env):
+        rows.append({"id": p.id, "name": p.name, "model": p.model, "ready": p.ready() if not p.local else None})
+    for pid, (binary, name) in CLI_DRIVERS.items():
+        rows.append({"id": pid, "name": name, "model": binary, "ready": bool(shutil.which(binary))})
+    return rows
 
 
 def driver_status(env: dict | None = None) -> dict:

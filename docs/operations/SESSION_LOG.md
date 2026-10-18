@@ -4,6 +4,18 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 29 (Claude, worktree): LOKI Studio inside Godot - Ziva parity and beyond
+
+- studio/godot_plugin/addons/loki_studio/: a Godot editor plugin (dock, editor bridge with UndoRedo, debugger + game
+  autoload for playtests/screenshots/lag, Logger for errors, right-click "Add to chat"); works in any Godot 4 project
+  (studio/install_godot_plugin.py). AGENTS.md: the third allowed Godot place.
+- Studio: Godot sessions (live editor), Default/Plan/Ask, per-turn checkpoints + undo (git snapshots / file snapshots +
+  editor UndoRedo), questions, Ask first, todos, queue, @-mentions, 28 slash commands + .md templates, AGENTS.md,
+  LOKI memory, skills, subagents, offline Godot docs, project index + mermaid, playtest_step, find_lag, fork, Studio
+  as an MCP server, Claude Code/Codex/LM Studio drivers. docs/STUDIO.md, docs/STUDIO_VS_ZIVA.md (15-task benchmark).
+- tests/test_studio_godot.py (135, ~20 s, in SUITES) incl. a REAL headless Godot 4.7.2 editor + game. Real machines:
+  ZIVA W37 (PC: install, dock, the benchmark vs Ziva), M28 (Mac).
+
 ## 2026-10-17 - Session 29 (Claude, worktree): automations - LOKI does things by itself
 
 - engine/automations.py: triggers (schedule, folder, email, calendar, webhook, Telegram keyword, job ended, machine

@@ -1216,6 +1216,26 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       long it took. Press "Start the next step now" again only after the previous one ended. (3) Do NOT write the
       fixes yourself - the owner wants LOKI to do them; only unblock it (a missing package, a stuck job) and say
       what you did. Tests: the 1-minute rule (ship.py's default).
+- [ ] **W42 LOKI Studio inside Godot on the PC + the parity benchmark vs Ziva (2026-10-17, session 29).** HANDOFF
+      "Session 29 Studio in Godot (worktree)", docs/STUDIO.md "LOKI Studio inside Godot", docs/STUDIO_VS_ZIVA.md.
+      Tests take at most 1 minute (the owner's rule). (1) `harness_data\.venv\Scripts\python.exe app\loki_app.py
+      --self-test`, then `set GODOT_BIN=<your Godot 4 editor exe>` and `harness_data\.venv\Scripts\python.exe
+      tests\test_studio_godot.py` (~20 s here; stop it at 60 s) - report the last line and any SKIP/FAIL; with GODOT_BIN
+      set it also loads the plugin in a headless Godot on Windows. (2) Start LOKI Studio (Loki Studio.cmd); check
+      `%USERPROFILE%\.loki\studio_connect.json` exists. Copy `game\loki-world` to `%TEMP%\lw-test` and run
+      `harness_data\.venv\Scripts\python.exe studio\install_godot_plugin.py "%TEMP%\lw-test"`; open it in your Godot.
+      Report: the LOKI Studio dock on the right says "linked"; Studio's window says "1 Godot editor linked"; the Output
+      shows "LOKI Studio plugin 1.0 ready"; any red errors in the Output (paste them). (3) In the dock (Default mode):
+      "Explain how the player moves, with a diagram" -> report the answer, and that the diagram draws in Studio's window
+      (press Studio). (4) "Add a Label named Hello to the main scene that says hi" -> the node appears in the Scene dock;
+      Ctrl+Z removes it; ask again, then press **Undo turn** -> gone again. (5) "/run" then "playtest: walk right 2
+      seconds and jump" -> the game window opens, the agent sends input turn by turn, screenshots show in the thread
+      (click "see the screenshot"). Then "/lag 3" -> paste the verdict. (6) Right-click selected code in the script
+      editor > "Add to LOKI Studio chat"; type "@" and "/" in the dock -> the suggestion popups. (7) THE BENCHMARK:
+      run the 15 tasks of docs/STUDIO_VS_ZIVA.md in Ziva AND in LOKI Studio (fresh copies of the project each time;
+      note the model each used). Fill the table honestly (time, ok, quality 1-5) and paste it under Reports, with
+      every place Studio lost as a `[claude]` request. Do NOT ship anything from these sessions; Discard them.
+      (8) Remove the plugin from the test copy (`... install_godot_plugin.py "%TEMP%\lw-test" --remove`).
 
 ## Ziva (Mac) - the Mac mini
 
@@ -1831,6 +1851,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       under Reports, press Ship it and report the ship output (every suite must pass; the PC then takes it through
       the health-gated updater - say whether it did). Otherwise Discard. Also try Roll back only if a version is on
       trial; never on a healthy LOKI. Continue with the highest open M tasks.
+- [ ] **M32 LOKI Studio inside Godot on the Mac (2026-10-17, session 29).** Same as W37 (1)-(6) and (8) on the Mac
+      (`GODOT_BIN=/Applications/Godot.app/Contents/MacOS/Godot timeout 60 harness_data/.venv/bin/python
+      tests/test_studio_godot.py`; the connect file is `~/.loki/studio_connect.json`; install into a copy of
+      game/loki-world in /tmp). Also: the dock with the Mac's Retina scale (readable? report a screenshot), a
+      screenshot of the 3D viewport (`/screenshot 3d`), and macOS asking for no extra permission. If W37's benchmark
+      is done, run tasks 1, 4, 7, 8 and 13 of docs/STUDIO_VS_ZIVA.md in LOKI Studio on the Mac too, to compare machines.
 
 - [ ] **M29 The macOS .dmg (session 29 "LOKI for anyone", 2026-10-17).** HANDOFF "Session 29 usable by anyone
       (worktree)", docs/INSTALL.md. (1) `harness_data/.venv/bin/python tools/ship.py --check`: report the

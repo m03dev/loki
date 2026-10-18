@@ -40,12 +40,14 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
 ## While you work
 
 - Small steps. Add or update a test in `tests/` for what you change.
-- LOKI is its own app, not a Godot addon. Godot belongs in exactly two places (owner's decision,
-  2026-10-17: "you can use godot we love godot"): the game capability (`engine/godot_tools.py`,
-  `engine/godot_assets.py`, kept) and **LOKI World, the MMO**: one Godot 4 project in
-  `game/loki-world/`, exported as its own app (Steam) and as a web build that LOKI's window shows.
-  Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder anywhere else in the repo.
-  The owner's own game projects live in `~/LOKI Projects/<name>`.
+- LOKI is its own app, not a Godot addon. Godot belongs in exactly three places (owner's decisions,
+  2026-10-17: "you can use godot we love godot", then LOKI Studio inside Godot like Ziva): the game
+  capability (`engine/godot_tools.py`, `engine/godot_assets.py`, kept); **LOKI World, the MMO**: one
+  Godot 4 project in `game/loki-world/`, exported as its own app (Steam) and as a web build that LOKI's
+  window shows; and **the LOKI Studio editor plugin** in `studio/godot_plugin/addons/loki_studio/`
+  (a second front end for Studio that is copied into any Godot project - docs/STUDIO.md; no
+  `project.godot` there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder
+  anywhere else in the repo. The owner's own game projects live in `~/LOKI Projects/<name>`.
 - Never commit anything from `harness_data/` (keys, memory, logs, venvs, models).
 - Updates are health-gated (HANDOFF session 28): a machine only takes a version that passes
   `python app/loki_app.py --self-test` and whose window files all exist, and keeps it only once

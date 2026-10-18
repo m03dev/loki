@@ -128,3 +128,31 @@ button.primary[data-icon], button.ship[data-icon] { display: inline-flex; align-
 .dialog input { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
 .dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 16px 0 0; }
 @media (max-width: 900px) { .studio { grid-template-columns: 210px minmax(0, 1fr); } .side { position: fixed; inset: 0 0 0 auto; width: 92vw; } }
+
+/* the Ziva-parity bar: modes, target, model, ask first; todos; questions; suggestions; diagrams */
+.modebar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 18px 0; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.seg button { background: transparent; padding: 4px 12px; border-radius: 8px; }
+.seg button.on { background: var(--raised); box-shadow: inset 0 -2px 0 var(--accent); }
+.pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.pick select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; max-width: 260px; }
+.pick.check input { accent-color: var(--accent); }
+.todos { margin: 0 18px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.todos li { list-style: none; }
+.todos li.done { color: var(--muted); text-decoration: line-through; }
+.todos li.doing { color: var(--warn); }
+.todos ul { margin: 4px 0 0; padding: 0; }
+.ev.question { background: #182235; border: 1px solid #2e4670; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ev.question .what { flex-basis: 100%; }
+.ev.question input { flex: 1; min-width: 160px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.ev.command { font: 12.5px/1.45 var(--mono); white-space: pre-wrap; background: var(--rail); border: 1px solid var(--line); }
+.ev.checkpoint, .ev.mode, .ev.undo { font-size: 12px; color: var(--ok); padding: 0 12px; }
+.ev img.shot { max-width: 520px; border-radius: 8px; border: 1px solid var(--line); display: block; margin-top: 6px; }
+.suggest { margin: 0 18px; padding: 4px; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; max-height: 220px; overflow: auto; }
+.suggest li { padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.suggest li.on, .suggest li:hover { background: var(--raised); }
+.mermaid { background: var(--rail); border: 1px solid var(--line); border-radius: 10px; padding: 8px; overflow: auto; margin: 6px 0; }
+.mermaid svg text { fill: var(--text); font: 12px var(--sans); }
+.mermaid svg rect { fill: var(--surface); stroke: var(--accent); }
+.mermaid svg path { stroke: var(--muted); fill: none; }
+.mermaid svg .dash { stroke-dasharray: 4 3; }

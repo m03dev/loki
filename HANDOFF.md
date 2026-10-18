@@ -4,7 +4,50 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 29 automations, Claude worktree).
+Last updated: 2026-10-17 (session 29 Studio in Godot, Claude worktree).
+
+## Session 29 Studio in Godot (worktree)
+
+The owner: "maybe its better when loki was a godot plugin it was very effective. i want it to work 1:1 OR BETTER THEN
+ZIVA ... i want my dev tool thats building loki better then ziva smart". Built in a Claude worktree, committed there,
+not pushed. Clean-room from Ziva's public feature list - no Ziva code/files copied or decompiled. Guides:
+**docs/STUDIO.md** ("LOKI Studio inside Godot", "The Ziva-style workflow"), **docs/STUDIO_VS_ZIVA.md** (feature table,
+better-than-Ziva, the 15-task parity benchmark, honest gaps).
+
+- **The Godot plugin** `studio/godot_plugin/addons/loki_studio/` (AGENTS.md: the THIRD allowed Godot place, owner decision
+  2026-10-17; test_loki/test_godot_world allow its .gd files): plugin.gd (dock via EditorDock/add_dock on 4.6+, else
+  add_control_to_dock), dock.gd (chat, sessions of this project, New/Fork/Studio, Default/Plan/Ask, model, Ask first,
+  approvals + questions as buttons, todos, Undo turn/Diff/Stop, queue, /command + @mention autocomplete, + Selection),
+  bridge.gd (hello + long-poll; every studio_godot.ACTIONS action; scene edits via EditorUndoRedoManager, recorded per
+  turn for undo_turn), debugger.gd + game_bridge.gd (autoload LokiStudioGame: input held >= 2 physics frames,
+  screenshots, live tree, values, monitors; only active when run from the editor or --loki-selftest), error_logger.gd
+  (Logger 4.5+: editor + game errors with file/line/backtrace), context_menu.gd (4.4+). Finds Studio through
+  `~/.loki/studio_connect.json` (url + token, 0600, written by Studio at start; LOKI_STUDIO_CONNECT overrides).
+  `studio/install_godot_plugin.py <project> [--remove]` copies it into ANY project and enables it (+ autoload, CRLF kept).
+- **Studio** (studio/): `studio_godot.py` (the editor hub: hello/poll/result/event, call with timeout, screenshots
+  saved to harness_data/studio/shots), `studio_tools.py` (the agent's own tools: Godot project files with checkpoints,
+  project_index/graph, repo_map, godot_docs, every editor action, editor_errors, screenshot, playtest_step, find_lag,
+  game_get, todo_write, remember/recall (memory_core), list/use_skill, web_search, generate_image, pc_worker/pc_job,
+  ask_owner, subagent), `studio_checkpoints.py` (git snapshot commits via a throwaway index for code; file snapshots
+  for Godot), `studio_commands.py` (28 slash commands, .md templates, @-mentions incl. @scene/@selection/@errors/@todos),
+  `studio_index.py`, `godot_docs.py` (offline class reference: source checkout / `godot --doctool` / sparse git clone),
+  `studio_mcp.py` (Studio as an MCP server), `studio_cli.py` (Claude Code / Codex as a session's driver),
+  studio_models.py (+ LM Studio, `choices()`), studio_core.py (sessions of kind loki|godot, modes enforced, per-turn
+  checkpoints + undo + conversation trim, questions, Ask first, subagents, fork, discard = undo all for Godot),
+  studio_server.py (the new /api routes; 16 MB editor bodies), the window (modes bar, target = LOKI code or a linked
+  Godot project, model picker, Ask first, todos, questions, Undo/Fork, screenshots inline, its own mermaid renderer,
+  /@ autocomplete). studio/prompts/: explain, mechanic, optimize.
+- **Verified here (Linux cloud box, Godot 4.7.2 built from source at /usr/local/bin/godot)**: `tests/test_studio_godot.py`
+  (135 checks, ~20 s, in SUITES) incl. the plugin loading in a REAL headless Godot editor, its bridge linking to a real
+  Studio server, real editor actions with UndoRedo, a real parse error captured, undo_turn; the game bridge in a REAL
+  running game (injected input seen by the game's own polling, tree, monitors, errors); the window in headless Chromium
+  (docs/operations/screens/studio-godot.png with LOKI_SUITE_SCREENS). test_studio (182), test_loki (533),
+  test_godot_world (84), `app/loki_app.py --self-test`, `studio_app.py --self-test` green. The Godot docs cache built
+  from the source tree (1071 classes) and from `godot --doctool` (995 classes, 4.7.2-stable).
+- **Not verified (needs a real machine - ZIVA W37 PC, M28 Mac)**: the dock in a WINDOWED editor (layout, autocomplete
+  popup, image popup, right-click entries), playtesting a real game window + real screenshots, the Windows/macOS Godot
+  builds (connect-file path, USERPROFILE), a real model driving a Godot session, Claude Code / Codex CLIs as drivers
+  (only a fake stream here), the git-clone docs path (no network check here), and the 15-task parity benchmark vs Ziva.
 
 ## Session 29 automations (worktree)
 

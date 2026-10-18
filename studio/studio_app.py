@@ -50,7 +50,8 @@ def self_test() -> int:
     os.environ.setdefault("LOKI_DATA", tempfile.mkdtemp(prefix="loki-studio-selftest-"))
     problems = []
     for name in ("studio_models", "studio_core", "studio_control", "studio_pin", "studio_server",
-                 "loki_mcp", "ratelimit", "updater", "policy"):
+                 "studio_godot", "studio_tools", "studio_commands", "studio_checkpoints", "studio_index", "godot_docs",
+                 "studio_cli", "studio_mcp", "install_godot_plugin", "loki_mcp", "ratelimit", "updater", "policy"):
         try:
             __import__(name)
         except Exception as exc:  # noqa: BLE001
@@ -63,6 +64,10 @@ def self_test() -> int:
     for rel in ("index.html", "studio.js", "studio.css"):
         if not (studio_paths.UI / rel).is_file():
             problems.append("missing studio/ui/" + rel)
+    plugin = studio_paths.HERE / "godot_plugin" / "addons" / "loki_studio"
+    for rel in ("plugin.cfg", "plugin.gd", "bridge.gd", "dock.gd", "api.gd", "game_bridge.gd", "debugger.gd"):
+        if not (plugin / rel).is_file():
+            problems.append("missing the Godot plugin's " + rel)
     print("LOKI Studio self-test: " + ("OK" if not problems else "FAILED\n  " + "\n  ".join(problems)), flush=True)
     return 0 if not problems else 1
 
@@ -138,11 +143,13 @@ def main(argv: list | None = None) -> int:
     import studio_core  # pylint: disable=import-outside-toplevel
     import studio_pin  # pylint: disable=import-outside-toplevel
     import studio_server  # pylint: disable=import-outside-toplevel
+    import studio_godot  # pylint: disable=import-outside-toplevel
     studio = studio_core.Studio()
+    connect = studio_godot.connect_path()     # the Godot plugin finds Studio through this file
     try:
-        server = studio_server.StudioServer(studio, port=args.port, on_raise=raise_window)
+        server = studio_server.StudioServer(studio, port=args.port, on_raise=raise_window, connect_file=connect)
     except OSError:
-        server = studio_server.StudioServer(studio, port=0, on_raise=raise_window)   # the port is taken: any free one
+        server = studio_server.StudioServer(studio, port=0, on_raise=raise_window, connect_file=connect)   # the port is taken
     server.start()
     log("LOKI Studio on %s (code from %s, working on %s)" % ("http://127.0.0.1:%d" % server.port, studio_paths.CODE,
                                                               studio.repo))

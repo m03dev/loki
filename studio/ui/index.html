@@ -29,6 +29,8 @@
     <header class="top">
       <div class="titles"><h1 id="title">What should LOKI become next?</h1><div id="sub" class="muted small"></div></div>
       <div class="actions">
+        <button type="button" id="act-undo" class="icon" data-icon="rewind" data-tip="Undo the last turn|Files back as they were before the agent's last turn (and its Godot editor changes undone). /undo N goes back further." disabled>Undo</button>
+        <button type="button" id="act-fork" class="icon" data-icon="fork" data-tip="Fork|Copy this conversation into a new session (its own worktree with the same files) to try another way." disabled>Fork</button>
         <button type="button" id="act-stop" class="icon" data-icon="stop" data-tip="Stop|Stop the agent now. The worktree and the conversation stay." disabled>Stop</button>
         <button type="button" id="act-diff" class="icon" data-icon="diff" data-tip="See the diff|Every change in this session's worktree." disabled>Diff</button>
         <button type="button" id="act-check" class="icon" data-icon="check" data-tip="Run the tests|tools/ship.py --check in this worktree (all suites, like CI)." disabled>Tests</button>
@@ -37,6 +39,17 @@
       </div>
     </header>
     <div id="driver" class="driver" role="status"></div>
+    <div class="modebar" role="toolbar" aria-label="How the agent works">
+      <div class="seg" id="modes" role="radiogroup" aria-label="Mode">
+        <button type="button" data-mode="default" class="on" data-tip="Default|The agent may change things. Every turn has a checkpoint you can undo.">Default</button>
+        <button type="button" data-mode="plan" data-tip="Plan|Reads and plans (a todo list), changes nothing. Switch to Default to do it.">Plan</button>
+        <button type="button" data-mode="ask" data-tip="Ask|Answers questions about the project, read-only.">Ask</button>
+      </div>
+      <label class="pick" data-tip="Works on|LOKI's own code (a new git worktree), or a Godot project open in an editor with the LOKI Studio plugin.">On <select id="target"><option value="">LOKI's code</option></select></label>
+      <label class="pick" data-tip="Model|What drives this session: DeepSeek V4.1 Flash on NVIDIA first; or OpenRouter, Ollama, LM Studio, Claude Code, Codex.">Model <select id="model"><option value="auto">Auto</option></select></label>
+      <label class="pick check" data-tip="Ask first|Ask before every change to files or scenes, not only the risky ones."><input type="checkbox" id="ask-edits"> Ask first</label>
+      <span id="editors" class="muted small"></span>
+    </div>
     <section id="thread" class="thread" aria-live="polite" aria-label="Session">
       <div class="empty" id="empty">
         <h2>Tell Studio what to build or fix in LOKI.</h2>
@@ -48,8 +61,10 @@
         </div>
       </div>
     </section>
+    <section id="todos" class="todos" hidden aria-label="The agent's todo list"></section>
+    <ul id="suggest" class="suggest" hidden role="listbox" aria-label="Suggestions"></ul>
     <form id="composer" class="composer" autocomplete="off">
-      <textarea id="prompt" rows="2" placeholder="Describe a change to LOKI... (Enter sends, Shift+Enter is a new line)" aria-label="Message"></textarea>
+      <textarea id="prompt" rows="2" placeholder="Describe a change... Enter sends, Shift+Enter is a new line. /commands, @files" aria-label="Message"></textarea>
       <button type="submit" id="send" class="primary" data-icon="send" data-tip="Send|Start a session, or continue this one in the same worktree.">Send</button>
     </form>
   </main>
