@@ -470,6 +470,15 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
+- [ ] **W43 Make the repository public - FIRST, the owner asked (2026-10-17).** The owner said: "make it public ... you
+      have permission i want to share it with people". Claude checked the whole git history for secrets (only fake
+      test keys) and switched the licence to AGPL-3.0 (LICENSE, docs/THIRD_PARTY.md, AGENTS.md). Claude's sandbox has no
+      working GitHub admin token, so do it here: (1) `git pull`; (2) run your own quick secret check on the checkout
+      (`git log -p | findstr /R "nvapi- sk-or-v1- gsk_ ghp_ AIza"` - only obvious fakes like sk-abcdef... are OK);
+      (3) `gh repo edit m03dev/loki --visibility public --accept-visibility-change-consequences`; (4) `gh repo view
+      m03dev/loki --json visibility` must say PUBLIC; (5) report here. Keys stay in harness_data/.env (ignored).
+
+
 - [x] **W0 Make the repository private.** DONE 2026-10-14 (Ziva Windows) on the owner's
       direct request: `gh repo edit m03dev/loki --visibility private --accept-visibility-change-consequences`
       (verified: `gh repo view` reports PRIVATE). The Mac still needs `gh auth login` (M2) before

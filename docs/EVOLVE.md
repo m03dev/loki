@@ -15,7 +15,7 @@ pixel cel-shaded look.
 
 Since session 26 LOKI also carries code ported from OpenHuman (memory, sub-agents), OpenHands
 (condenser, stuck detection, file editing, task tracker, command risk) and Scrapling (native web
-reading) - see docs/THIRD_PARTY.md. The owner allows any licence while LOKI stays private.
+reading) - see docs/THIRD_PARTY.md. LOKI is AGPL-3.0 since 2026-10-17 (public repository): take code only under licences compatible with it (MIT, BSD, Apache-2.0, GPL-3.0, AGPL-3.0, ...) - never proprietary or non-commercial code.
 
 ## Roadmap
 

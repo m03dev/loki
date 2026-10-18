@@ -48,6 +48,10 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
   (a second front end for Studio that is copied into any Godot project - docs/STUDIO.md; no
   `project.godot` there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder
   anywhere else in the repo. The owner's own game projects live in `~/LOKI Projects/<name>`.
+- The repository is PUBLIC and LOKI is AGPL-3.0 (owner, 2026-10-17). Never commit a key, token, password,
+  personal file or anything from `harness_data/`. Take code only under licences compatible with AGPL-3.0
+  (MIT, BSD, Apache-2.0, ISC, MPL-2.0, LGPL, GPL-3.0, AGPL-3.0); never proprietary code (e.g. Ziva's) or
+  non-commercial/research-only code. Keep each licence next to the code and a row in docs/THIRD_PARTY.md.
 - Never commit anything from `harness_data/` (keys, memory, logs, venvs, models).
 - Updates are health-gated (HANDOFF session 28): a machine only takes a version that passes
   `python app/loki_app.py --self-test` and whose window files all exist, and keeps it only once

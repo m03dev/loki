@@ -1,16 +1,12 @@
 # Third-party code in LOKI
 
-**LOKI must stay private.** Since session 26 LOKI contains code ported from GPL-3.0 projects
-(OpenHuman, MuMuAINovel). The owner allows copying from any licence because the repository is
-private and LOKI is not distributed. If LOKI is ever published or given to anyone else, the
-GPL-3.0 parts (`engine/memory_core.py`, `engine/subagent.py`, `skills/novel-writer/`) must be
-removed or rewritten first - or all of LOKI released under GPL-3.0. Each project's licence is kept
-next to the code taken from it (`engine/licenses/`, `skills/novel-writer/`).
-
-Session 27 (the harvest, docs/integrations/HARVEST.md) added ports from MIT, Apache-2.0 and one
-AGPL-3.0 project (Firecrawl's `map`, re-written in `engine/site_map.py`): publishing LOKI would
-also need `engine/site_map.py` removed or rewritten, or LOKI released under the AGPL. Apache-2.0
-ports keep the upstream NOTICE where there is one (`engine/licenses/Headroom-NOTICE.txt`).
+**Licence: LOKI is AGPL-3.0** (the owner's decision on 2026-10-17, when the repository went public; see
+LICENSE). That lets LOKI include the GPL-3.0 parts (`engine/memory_core.py`, `engine/subagent.py`,
+`skills/novel-writer/`, `engine/image_prompt.py` + `engine/data/image_styles.json`) and the AGPL-3.0 part
+(`engine/site_map.py`). Everything else below keeps its own (compatible) licence; each project's licence
+text is kept next to the code taken from it (`engine/licenses/`, `skills/novel-writer/`). Model weights
+LOKI downloads on a user's machine (TimesFM-3: non-commercial; local image/video models) are never in
+this repository and keep their own terms. Ziva (ziva.sh) is proprietary: none of its code is in LOKI.
 
 | Where | What | Licence |
 | --- | --- | --- |
@@ -51,7 +47,7 @@ ports keep the upstream NOTICE where there is one (`engine/licenses/Headroom-NOT
 | `engine/voice.py` (optional) | Session 27: [Kokoro](https://github.com/hexgrad/kokoro) used as a library (`KPipeline`, 24 kHz chunks, soundfile) when `pip install kokoro soundfile` was run; no Kokoro code copied. Fallbacks are the OS voices (say / SAPI / espeak-ng) | Apache-2.0 (code and weights) - `engine/licenses/Kokoro-Apache-2.0.txt` |
 | `engine/voice_input.py` (optional) | Session 28: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) used as a library (`WhisperModel(...).transcribe`) when the whisper add-on is installed, or [whisper.cpp](https://github.com/ggml-org/whisper.cpp)'s `whisper-cli` run as a program; no code copied. Whisper model weights download from Hugging Face on first use | MIT (faster-whisper, whisper.cpp, OpenAI Whisper weights) |
 
-Since session 27 `engine/image_prompt.py` and `engine/data/image_styles.json` are GPL-3.0 (Fooocus) too:
+Since session 27 `engine/image_prompt.py` and `engine/data/image_styles.json` are GPL-3.0 (Fooocus) too (fine under LOKI's AGPL-3.0):
 remove or rewrite them as well before LOKI is ever published.
 | `engine/fuzzy_match.py`, `engine/escape_drift_autocorrect.py` (used by `engine/file_editor.py`) | Session 27: [Hermes Agent](https://github.com/NousResearch/hermes-agent) `tools/fuzzy_match.py` and `tools/escape_drift_autocorrect.py` copied with imports made local and the metrics hook removed - the ordered fuzzy find-and-replace chain (exact, line-trimmed, whitespace-normalized, indentation-flexible, escape-normalized, trimmed-boundary, unicode-normalized, block-anchor, context-aware; itself after opencode/cline) | MIT, Copyright (c) 2025 Nous Research - `engine/licenses/HermesAgent-MIT.txt` |
 | `engine/schedules.py`, `engine/tool_guard.py` (`_coerce`, `_coerce_items`) | Session 27: Hermes Agent `cron/jobs.py` (parse_schedule, parse_duration, clock and natural "every monday 9am" parsing, once/interval/cron kinds) re-written with a built-in cron matcher instead of croniter; `tools/arg_coercion.py` (object/array-item JSON strings, null) | MIT, Copyright (c) 2025 Nous Research - `engine/licenses/HermesAgent-MIT.txt` |
