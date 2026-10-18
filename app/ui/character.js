@@ -480,6 +480,7 @@
     texts();
     sync();
     dlg.open();
+    if (window.WorldGodot) window.WorldGodot.panel(true);   // re-place the game frame now: it steps aside (host.js)
     const ok = Preview.start(ui.canvas);
     ui.nope.hidden = ok;
     ui.canvas.hidden = !ok;

@@ -33,30 +33,47 @@ var _say := ""
 var _t := 0.0
 
 
+var _opts := {}
+
+
+func _enter_tree() -> void:
+	# before the World in main.tscn readies itself: the mode decides how the player starts
+	_opts = _options()
+	GameState.set_mode(str(_opts.get("mode", "play")))
+
+
 func _ready() -> void:
-	var opts := _options()
+	var opts := _opts
 	pixel = clampi(int(opts.get("pixel", "3")), 1, 8)
-	GameState.set_mode(str(opts.get("mode", "play")))
-	container = SubViewportContainer.new()
-	container.name = "WorldView"
+	# main.tscn holds WorldView > World3D > World > HomeIsland, so the Godot editor shows LOKI World and you can edit it
+	# (owner 2026-10-18). A scene without them (older copies, tests) still works: they are made here.
+	container = get_node_or_null("WorldView") as SubViewportContainer
+	if container == null:
+		container = SubViewportContainer.new()
+		container.name = "WorldView"
+		add_child(container)
 	container.stretch = true
 	container.stretch_shrink = pixel
 	container.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var mat := ShaderMaterial.new()
-	mat.shader = POST
-	container.material = mat
-	add_child(container)
-	view = SubViewport.new()
-	view.name = "World3D"
+	if not (container.material is ShaderMaterial):
+		var mat := ShaderMaterial.new()
+		mat.shader = POST
+		container.material = mat
+	view = container.get_node_or_null("World3D") as SubViewport
+	if view == null:
+		view = SubViewport.new()
+		view.name = "World3D"
+		container.add_child(view)
 	view.msaa_3d = Viewport.MSAA_DISABLED
 	view.positional_shadow_atlas_size = 0
 	view.handle_input_locally = false
-	container.add_child(view)
-	world = preload("res://scripts/world/world.gd").new()
-	world.name = "World"
-	view.add_child(world)
+	world = view.get_node_or_null("World") as Node3D
+	if world == null:
+		world = preload("res://scripts/world/world.gd").new()
+		world.name = "World"
+		view.add_child(world)
 	if opts.has("hour"):
 		world.hour_override = clampf(float(opts["hour"]), 0.0, 24.0)
 	if opts.has("day-speed"):

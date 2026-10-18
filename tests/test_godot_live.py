@@ -112,6 +112,28 @@ try:
 except ValueError as exc:
     check("a download that does not match the Asset Library's hash is refused", "hash" in str(exc))
 
+# ------------------------------------------------------------------ Open in Godot: LOKI World with LOKI's own Godot 4.7.2
+import godot_web  # noqa: E402
+import world_build  # noqa: E402
+opened, got = [], []
+_real_bin, _real_install = world_build.editor_binary, world_build.install
+fake_exe = TMP / "Godot"
+world_build.editor_binary = lambda data=None: fake_exe if got else None
+world_build.install = lambda data=None, opener=None, say=None: (got.append(1), {"ok": True})[1]
+godot_live.ensure_world = lambda *a, **k: {"ok": True, "note": "ready"}
+r1 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv), background=False)
+check("the first Open gets LOKI's Godot 4.7.2 (never the window waiting on a download)", r1.get("downloading") and got == [1], r1)
+check("...then opens LOKI World in it, as an editor", opened and opened[-1][0] == str(fake_exe) and "--editor" in opened[-1]
+      and opened[-1][-1].endswith("loki-world"), opened)
+r2 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv))
+check("after that it opens at once with it", r2.get("ok") and not r2.get("downloading") and "4.7.2" in r2["note"], r2)
+os.environ["LOKI_GODOT_EDITOR"] = "system"
+check("LOKI_GODOT_EDITOR=system uses the computer's own Godot", godot_web.loki_godot() == "")
+os.environ.pop("LOKI_GODOT_EDITOR")
+world_build.editor_binary, world_build.install = _real_bin, _real_install
+import importlib  # noqa: E402
+godot_live = importlib.reload(godot_live)
+
 # ------------------------------------------------------------------ the engine's hub over HTTP (as loki_bridge serves it)
 TOKEN = "engine-token"
 
@@ -241,6 +263,11 @@ else:
             check("an agent reads the live editor (LOKI World, Godot 4)", st.get("ok") and st["result"]["project_name"] == "LOKI World", st)
             op = godot_live.call("open_scene", {"path": "res://scenes/main.tscn"}, who="job-live")
             check("it opens LOKI World's main scene", op.get("ok"), op)
+            time.sleep(0.5)
+            full = godot_live.call("scene_tree", {"depth": 6}, who="job-live")
+            paths = [n.get("path", "") for n in (full.get("result") or {}).get("nodes", [])]
+            check("the editor shows LOKI World itself: the World and its home island, not an empty scene",
+                  any(p.endswith("World/HomeIsland") for p in paths) and any(p.endswith("World") for p in paths), paths[:15])
             time.sleep(0.5)
             add = godot_live.call("add_node", {"parent": ".", "type": "Node3D", "name": "AgentBeacon",
                                                "properties": {"position": "Vector3(3, 1, -2)"}}, who="job-live")

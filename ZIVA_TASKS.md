@@ -40,7 +40,10 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`, then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps torchmcubes for PyMCubes, untested) - claude (2026-10-17)
 - [ ] [either] One-client check: the mode bar (LOKI / Studio / Godot / World / Forge) - does the Studio tab show Studio inside the window (pywebview: WebView2 / WKWebView), and does the Godot tab's editor download (SHA-512) and open in its own window? Paste any window error from harness_data/app/loki_bridge.log - claude (2026-10-17)
 - [ ] [mac] **LOKI World live in the real Godot editor (Claude, 2026-10-18, docs/LIVE_GODOT.md).** After the update:
-      (1) LOKI's Godot tab > Open in Godot (LOKI World picked): Godot_mono 4.8 opens it with the LOKI Studio dock; paste the
+      (0) UPDATE 13:30: Open in Godot now downloads LOKI's own Godot 4.7.2 once (harness_data/addons/godot-export) and
+      opens LOKI World in it - not Godot_mono 4.8 (it rewrote project.godot as 4.8/C#; `git checkout game/loki-world/
+      project.godot game/loki-world/icon.svg.import` if those still show as changed). The 3D view must show the island.
+      (1) LOKI's Godot tab > Open in Godot (LOKI World picked): Godot 4.7.2 opens it with the LOKI Studio dock; paste the
       Output lines with "LOKI Studio plugin 1.1" and any error; the tab's Live link must show "Godot 4.8 - LOKI World";
       (2) in LOKI's chat: "use godot_editor: in LOKI World add a OmniLight3D named AgentLamp above the fountain and save" -
       report what the agent did, whether AgentLamp is in the scene dock (Ctrl+Z removes it) and whether the Godot tab

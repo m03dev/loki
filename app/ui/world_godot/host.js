@@ -23,7 +23,10 @@
     if (!frame) return;
     const box = target();
     const r = box ? box.getBoundingClientRect() : null;
-    const visible = !!r && r.width > 0 && r.height > 0 && !document.hidden;
+    // the character creator (character.js) opens over the World tab: the game steps aside while it is open, else its
+    // frame (z-index 1000) covered the dialog (seen 2026-10-18)
+    const creator = window.LokiCharacter && typeof window.LokiCharacter.isOpen === "function" && window.LokiCharacter.isOpen();
+    const visible = !!r && r.width > 0 && r.height > 0 && !document.hidden && !creator;
     // styles set from script (allowed under style-src 'self'; no stylesheet edit needed):
     // behind the home screen it is a half-faded backdrop that never takes the mouse
     frame.style.display = visible ? "block" : "none";

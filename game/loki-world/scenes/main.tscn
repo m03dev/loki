@@ -1,6 +1,36 @@
-[gd_scene format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/world/world.gd" id="2_world"]
+[ext_resource type="Shader" path="res://shaders/pixel_post.gdshader" id="3_post"]
+[ext_resource type="PackedScene" path="res://scenes/home_island.tscn" id="4_home"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_post"]
+shader = ExtResource("3_post")
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
+
+[node name="WorldView" type="SubViewportContainer" parent="."]
+texture_filter = 1
+material = SubResource("ShaderMaterial_post")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch = true
+stretch_shrink = 3
+
+[node name="World3D" type="SubViewport" parent="WorldView"]
+handle_input_locally = false
+msaa_3d = 0
+positional_shadow_atlas_size = 0
+size = Vector2i(426, 240)
+render_target_update_mode = 4
+
+[node name="World" type="Node3D" parent="WorldView/World3D"]
+script = ExtResource("2_world")
+
+[node name="HomeIsland" parent="WorldView/World3D/World" instance=ExtResource("4_home")]

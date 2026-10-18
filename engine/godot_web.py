@@ -258,11 +258,52 @@ def import_back(name: str, zip_path: str = "") -> dict:
             "note": "%d files from %s are in %s now%s." % (written, src.name, root, (" (%d skipped)" % skipped) if skipped else "")}
 
 
-def open_native(name: str, popen=subprocess.Popen) -> dict:
-    exe = native_godot()
+def loki_godot(install: bool = False) -> str:
+    """LOKI's own standard Godot 4.7.2 (engine/world_build.py keeps it in <data>/addons/godot-export), installed on
+    first use when `install`. LOKI World opens with it on every machine: the same version as the project, no C#
+    (the Mac's Godot_mono 4.8 dev rewrote LOKI World as a 4.8 C# project - 2026-10-18), the Asset Library included.
+    LOKI_GODOT_EDITOR=system uses the Godot installed on the computer instead."""
+    if os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() == "system":
+        return ""
+    try:
+        import world_build  # pylint: disable=import-outside-toplevel
+        exe = world_build.editor_binary()
+        if exe is None and install:
+            got = world_build.install()
+            exe = world_build.editor_binary() if got.get("ok") else None
+        return str(exe) if exe else ""
+    except Exception:  # noqa: BLE001 - the system Godot is the fallback
+        return ""
+
+
+_GET_GODOT: dict = {"state": "idle", "note": ""}
+
+
+def open_native(name: str, popen=subprocess.Popen, background: bool = True) -> dict:
+    root = project_path(name)
+    world = root.resolve() == (REPO / "game" / "loki-world").resolve()
+    use_loki = world and os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() != "system"
+    if use_loki and not loki_godot():
+        # first time: get LOKI's Godot 4.7.2 (~80-170 MB) in the background, then open - the window never hangs
+        if _GET_GODOT["state"] != "downloading":
+            _GET_GODOT.update(state="downloading", note="")
+
+            def get_then_open() -> None:
+                exe = loki_godot(install=True)
+                if not exe:
+                    _GET_GODOT.update(state="failed", note="could not get Godot 4.7.2 - using the Godot on this computer")
+                res = open_native(name, popen, background=False) if exe or native_godot() else {"ok": False}
+                if exe:
+                    _GET_GODOT.update(state="done", note=res.get("note", ""))
+            if background:
+                threading.Thread(target=get_then_open, daemon=True, name="loki-get-godot").start()
+            else:
+                get_then_open()
+        return {"ok": True, "downloading": True,
+                "note": "Getting Godot 4.7.2 for LOKI World (one time, checked) - it opens by itself when ready."}
+    exe = (loki_godot() if use_loki else "") or native_godot()
     if not exe:
         return {"ok": False, "error": "Godot is not installed here (or set GODOT_BIN). Get Godot 4 from godotengine.org."}
-    root = project_path(name)
     note = ""
     try:
         sys.path.insert(0, str(REPO / "studio"))
@@ -288,7 +329,8 @@ def open_native(name: str, popen=subprocess.Popen) -> dict:
         popen([exe, "--editor", "--path", str(root)], **kwargs)
     except OSError as exc:
         return {"ok": False, "error": "could not start Godot: %s" % exc}
-    return {"ok": True, "note": "Godot is opening %s with the LOKI Studio plugin. %s" % (root.name, note)}
+    which = "LOKI's Godot 4.7.2" if exe == loki_godot() and exe else "Godot (%s)" % Path(exe).name
+    return {"ok": True, "note": "%s is opening %s with the LOKI plugin. %s" % (which, root.name, note), "godot": exe}
 
 
 # ------------------------------------------------------------------ HTTP (loki_bridge hands /godot-editor/* here)

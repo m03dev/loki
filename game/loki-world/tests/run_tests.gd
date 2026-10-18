@@ -131,6 +131,20 @@ func _world() -> void:
 	check("agents are NPCs", w.npcs.has("loki") and w.npcs.size() >= 2)
 	check("failed jobs are monsters", w.monsters_alive().size() >= 1)
 	check("the fox and the rabbits", w.critters.size() == 3 and w.critters[0].kind == "fox")
+	# LOKI World is an editable scene (2026-10-18): main.tscn holds the World and the baked home island
+	var main_text := FileAccess.get_file_as_string("res://scenes/main.tscn")
+	check("main.tscn holds the World and the home island (the editor shows LOKI World)",
+		main_text.find('name="World"') >= 0 and main_text.find("res://scenes/home_island.tscn") >= 0)
+	check("the island in the game is the scene's (named pieces you can edit)", w.home_island != null
+		and w.home_island.get_node_or_null("Hall") != null and w.home_island.get_node_or_null("CreationsHall") != null)
+	check("the creations hall's 5 frames and the shelf's 3 spots come from the scene", w.paintings.size() == 5 and w.shelf_spots.size() == 3,
+		[w.paintings.size(), w.shelf_spots.size()])
+	var lib: Node3D = w.home_island.get_node("Station_library")
+	var before: Vector3 = w.station_point("library")
+	lib.position += Vector3(2, 0, 0)
+	check("move a station in the editor and the agents go to the new place", w.station_point("library").distance_to(before + Vector3(2, 0, 0)) < 0.01,
+		[before, w.station_point("library")])
+	lib.position -= Vector3(2, 0, 0)
 	# Forge -> LOKI World: a .glb (made here with GLTFDocument, as Forge's are) loads at runtime and stands on the shelf
 	check("the Forge shelf has its pedestals", w.shelf_spots.size() == w.SHELF_SIZE)
 	var src := Node3D.new()

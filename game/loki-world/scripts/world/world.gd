@@ -36,6 +36,7 @@ var _shelf_gen := 0
 var _bolts: Array = []
 var _islets: Array = []
 var _beacons: Dictionary = {}
+var home_island: Node3D = null      # the home island's pieces (scenes/home_island.tscn)
 
 
 func _ready() -> void:
@@ -211,132 +212,53 @@ func zone_center(name_: String) -> Vector3:
 
 
 func station_point(station: String) -> Vector3:
-	var s: Array = IslandBuilder.STATIONS.get(station, IslandBuilder.STATIONS["workshop"])
-	var a := deg_to_rad(float(s[0]))
-	var r := float(s[1]) * HOME_RADIUS
-	if station == "hall":
-		return Vector3(0, 0, -HOME_RADIUS * 0.38 + 3.6)
-	return Vector3(cos(a) * r, 0, sin(a) * r)
+	# a station piece you moved in the editor wins (group loki_station on scenes/home_island.tscn)
+	if home_island != null and is_instance_valid(home_island):
+		for n in home_island.get_tree().get_nodes_in_group("loki_station") if home_island.is_inside_tree() else []:
+			if str(n.get_meta("station", "")) == station and home_island.is_ancestor_of(n):
+				var piece := n as Node3D
+				return to_local(piece.global_transform * (piece.get_meta("stand", Vector3.ZERO) as Vector3))
+	return HomeBuilder.station_point(station)
+
+
+## The home island: YOUR scene, scenes/home_island.tscn (edit it in Godot), else built from code (HomeBuilder).
+const HOME_SCENE := "res://scenes/home_island.tscn"
 
 
 func _build_home(node: Node3D) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 1776
-	var body := StaticBody3D.new()
-	body.name = "Ground"
-	node.add_child(body)
-	IslandBuilder.ground_collider(body, HOME_RADIUS)
-	var m := MeshMerger.new()
-	m.add(IslandBuilder.island_mesh(HOME_RADIUS, 77, 26), Transform3D(), Color.WHITE, true, 0.05)
-	# LOKI's hall, north: the big house with horns over the door
-	var hall := Vector3(0, 0, -HOME_RADIUS * 0.38)
-	IslandBuilder.house(m, hall, 0.0, Vector3(6.0, 3.4, 4.6), Color(0.93, 0.88, 0.78), Color(0.15, 0.62, 0.6))
-	m.add(Mats.cyl(0.0, 0.25, 1.0, 5), IslandBuilder.xf(hall + Vector3(-1.1, 6.4, 1.2), 0, Vector3.ONE, 0, 0.6), Color(0.95, 0.9, 0.75))
-	m.add(Mats.cyl(0.0, 0.25, 1.0, 5), IslandBuilder.xf(hall + Vector3(1.1, 6.4, 1.2), 0, Vector3.ONE, 0, -0.6), Color(0.95, 0.9, 0.75))
-	IslandBuilder.box_collider(body, hall + Vector3(0, 1.7, 0), Vector3(6.0, 3.4, 4.6))
-	# the plaza and its paths
-	m.add(Mats.cyl(4.2, 4.4, 0.08, 12), IslandBuilder.xf(Vector3(0, 0.04, 0)), IslandBuilder.PATH, false)
-	m.add(Mats.cyl(0.9, 1.1, 0.5, 8), IslandBuilder.xf(Vector3(0, 0.25, 0)), Color(0.7, 0.68, 0.72))
-	m.add(Mats.cyl(0.18, 0.18, 2.6, 6), IslandBuilder.xf(Vector3(0, 1.5, 0)), Color(0.75, 0.73, 0.8))
-	IslandBuilder.post_collider(body, Vector3.ZERO, 1.0, 0.6)
-	# the stations of LOKI's agents
-	for st in IslandBuilder.STATIONS.keys():
-		if st == "hall":
-			continue
-		var p := station_point(st)
-		var face := atan2(-p.x, -p.z)
-		IslandBuilder.station(m, body, st, p, face)
-	# the creations hall (pink roof): the newest pictures LOKI made hang on its front wall
-	var ch := Vector3(cos(deg_to_rad(125.0)), 0, sin(deg_to_rad(125.0))) * HOME_RADIUS * 0.66
-	var ch_face := atan2(-ch.x, -ch.z)
-	IslandBuilder.house(m, ch, ch_face, Vector3(5.6, 2.8, 2.6), Color(0.96, 0.92, 0.95), Color(0.95, 0.45, 0.65))
-	IslandBuilder.box_collider(body, ch + Vector3(0, 1.4, 0), Vector3(5.6, 2.8, 2.6), ch_face)
-	var basis := Basis.from_euler(Vector3(0, ch_face, 0))
+	var island: Node3D = null
+	var placed := get_node_or_null("HomeIsland") as Node3D     # in the scene itself (main/world.tscn)
+	if placed != null:
+		placed.reparent(node, false)
+		island = placed
+	elif ResourceLoader.exists(HOME_SCENE):
+		island = (load(HOME_SCENE) as PackedScene).instantiate() as Node3D
+		node.add_child(island)
+	else:
+		island = HomeBuilder.build(node)
+	home_island = island
+	var sign := island.get_node_or_null("Sign") as Label3D
+	if sign != null:
+		sign.text = "%s - you are here" % GameState.self_zone
+	# what the game needs from the scene, wherever you moved it in the editor
 	paintings.clear()
-	for k in 5:
-		var local := Vector3(-2.2 + 1.1 * k, 1.75, 1.36)
-		if k == 2:
-			local = Vector3(0, 2.15, 1.36)   # the door is in the middle: hang the newest above it
-		var frame_pos := ch + basis * local
-		m.add(Mats.box(Vector3(0.95, 0.75, 0.06)), Transform3D(basis, frame_pos), Color(0.75, 0.55, 0.25))
-		var pic := MeshInstance3D.new()
-		var quad := QuadMesh.new()
-		quad.size = Vector2(0.8, 0.6)
-		pic.mesh = quad
-		pic.transform = Transform3D(basis, frame_pos + basis * Vector3(0, 0, 0.04))
-		pic.material_override = Mats.picture(GameState.fake_painting(k))
-		pic.visible = false
-		node.add_child(pic)
-		paintings.append(pic)
-	# the Forge shelf: three pedestals in front of the creations hall
+	paintings.resize(5)
+	for pic in island.find_children("*", "MeshInstance3D", true, false):
+		if pic.is_in_group("loki_painting"):
+			var k := int(pic.get_meta("index", 0))
+			if k >= 0 and k < paintings.size():
+				pic.material_override = Mats.picture(GameState.fake_painting(k))
+				paintings[k] = pic
+	paintings = paintings.filter(func(x): return x != null)
 	shelf_spots.clear()
-	for k in SHELF_SIZE:
-		var spot := ch + basis * Vector3(-1.8 + 1.8 * k, 0, 3.0)
-		m.add(Mats.cyl(0.45, 0.55, 0.7, 8), IslandBuilder.xf(spot + Vector3(0, 0.35, 0)), Color(0.82, 0.78, 0.86))
-		m.add(Mats.cyl(0.52, 0.52, 0.08, 8), IslandBuilder.xf(spot + Vector3(0, 0.74, 0)), Color(0.95, 0.45, 0.65))
-		IslandBuilder.box_collider(body, spot + Vector3(0, 0.35, 0), Vector3(0.9, 0.7, 0.9))
-		shelf_spots.append(spot + Vector3(0, 0.78, 0))
-	shelf_models.resize(SHELF_SIZE)
-	# the pond and the waterfall off the east edge
-	var pond_a := deg_to_rad(95.0)
-	var pond := Vector3(cos(pond_a), 0, sin(pond_a)) * HOME_RADIUS * 0.8
-	var water := MeshInstance3D.new()
-	water.mesh = Mats.cyl(2.2, 2.2, 0.05, 10)
-	water.position = pond + Vector3(0, 0.06, 0)
-	water.material_override = Mats.water(false)
-	node.add_child(water)
-	m.add(Mats.cyl(2.5, 2.6, 0.1, 10), IslandBuilder.xf(pond + Vector3(0, 0.02, 0)), Color(0.55, 0.5, 0.48), false)
-	for k in 8:
-		var a := TAU * k / 8.0
-		IslandBuilder.rock(m, pond + Vector3(cos(a) * 2.5, 0, sin(a) * 2.5), 0.7, rng)
-	var fall := MeshInstance3D.new()
-	var fq := QuadMesh.new()
-	fq.size = Vector2(2.0, 30.0)
-	fall.mesh = fq
-	var out_dir := Vector3(cos(pond_a), 0, sin(pond_a))
-	fall.position = out_dir * (HOME_RADIUS * 1.02) + Vector3(0, -15.0, 0)
-	fall.rotation.y = atan2(out_dir.x, out_dir.z)
-	fall.material_override = Mats.water(true)
-	node.add_child(fall)
-	m.add(Mats.box(Vector3(1.4, 0.12, HOME_RADIUS * 0.22)), Transform3D(Basis.from_euler(Vector3(0, atan2(out_dir.x, out_dir.z), 0)), out_dir * HOME_RADIUS * 0.93 + Vector3(0, 0.02, 0)), Color(0.35, 0.65, 0.9), false)
-	# trees, rocks and flowers, kept off the paths and the stations
-	var keep_out: Array = [Vector3.ZERO, hall, ch, pond, SPAWN]
-	for st in IslandBuilder.STATIONS.keys():
-		keep_out.append(station_point(st))
-	var placed := 0
-	var tries := 0
-	while placed < 26 and tries < 400:
-		tries += 1
-		var a := rng.randf() * TAU
-		var r := rng.randf_range(0.25, 0.9) * HOME_RADIUS
-		var p := Vector3(cos(a) * r, 0, sin(a) * r)
-		var ok := true
-		for k in keep_out:
-			if (k as Vector3).distance_to(p) < 3.6:
-				ok = false
-				break
-		if not ok:
-			continue
-		keep_out.append(p)
-		placed += 1
-		if rng.randf() < 0.75:
-			var size := rng.randf_range(0.9, 1.5)
-			IslandBuilder.tree(m, p, size, rng)
-			IslandBuilder.post_collider(body, p, 0.3 * size, 2.0)
-		elif rng.randf() < 0.5:
-			IslandBuilder.rock(m, p, rng.randf_range(0.8, 1.6), rng)
-		else:
-			IslandBuilder.flowers(m, p, rng)
-	for k in 10:
-		var a := rng.randf() * TAU
-		var p := Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.3, 0.9) * HOME_RADIUS
-		IslandBuilder.flowers(m, p, rng)
-	m.commit(node, "HomeIsland")
-	var glow := MeshMerger.new()
-	glow.ink_width = 0.04
-	IslandBuilder.crystals(glow, HOME_RADIUS, rng, 22)
-	glow.commit(node, "Crystals", Mats.toon(Color.WHITE, false, 1, Color(0.06, 0.35, 0.33)))
-	_name_sign(node, Vector3(0, 3.4, 0), "%s - you are here" % GameState.self_zone, Color(0.6, 1.0, 0.9))
+	var spots: Array = []
+	for mk in island.find_children("*", "Marker3D", true, false):
+		if mk.is_in_group("loki_shelf_spot"):
+			spots.append(mk)
+	spots.sort_custom(func(a, b): return int(a.get_meta("index", 0)) < int(b.get_meta("index", 0)))
+	for mk in spots:
+		shelf_spots.append(to_local((mk as Node3D).global_position) if is_inside_tree() else (mk as Node3D).position)
+	shelf_models.resize(shelf_spots.size())
 
 
 func _build_other(node: Node3D, machine: String) -> void:

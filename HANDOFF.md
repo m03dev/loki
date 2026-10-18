@@ -15,6 +15,25 @@ cross-origin to every answer that sets none (COI_HEADERS), UI files send CORP cr
 sends both. The preview pane starts under the title strip (its Close button was covered). Checked: test_research3 154,
 test_apps 131, test_godot_world 83, all other suites on stubs. Not run: WebView2 / WKWebView (ZIVA_TASKS requests).
 
+## 2026-10-18 13:30: LOKI World is a real, editable scene in Godot (Claude, cloud + Mac files)
+
+Owner: "it takes me to a different godot project entirely nothing works". On the Mac, Godot DID open game/loki-world
+(recent files: main.tscn; the plugin set the live-sync flags) - but main.tscn was one empty Node and the island was
+built by code at runtime, so the editor showed nothing. And Godot_mono 4.8 dev rewrote project.godot as 4.8 + [dotnet].
+- scenes/main.tscn now holds WorldView > World3D > World (world.gd) > HomeIsland; scenes/home_island.tscn is the island
+  as named pieces (scripts/world/home_builder.gd, baked by tools/bake_world.gd, 240 nodes, ~930 KB, 5 shared materials).
+  world.gd uses the scene's island (paintings, shelf spots and stations found by group, so moving them in the editor
+  works), building from code only when the scene is missing. main.gd sets the mode in _enter_tree (the World readies
+  first now).
+- Open in Godot uses LOKI's own standard Godot 4.7.2 (world_build's, downloaded in the background on first Open, then
+  opened) - LOKI_GODOT_EDITOR=system for the computer's Godot. The engine logs "Godot x linked: <project>".
+- The character creator no longer opens behind the World tab's game frame.
+- Checked: a REAL Godot 4.7.2 editor in a window (Xvfb) shows the island in its 3D view; game tests 118/118 (scene's
+  island, move a station -> agents follow); test_godot_live 34 (the live editor's tree has World/HomeIsland; first Open
+  downloads then opens), test_godot_world 94, test_world_godot_tab 7, test_godot_tab 9, test_world_build 17,
+  test_ui_smoke, test_character 54, test_mmo 77, test_loki 533, --self-test OK. Not on the Mac yet: the download of
+  the macOS 4.7.2 editor and opening it there.
+
 ## 2026-10-18 12:30: LOKI World live in the real Godot editor - every LOKI agent works in it (Claude, cloud)
 
 Owner: "the loki world [should] be an editable project in godot ... agents ... roam around in a live project state,

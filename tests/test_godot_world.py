@@ -81,7 +81,8 @@ section("scenes, scripts and shaders parse-sane")
 for tscn in sorted(GAME.rglob("*.tscn")):
     text = read(tscn)
     paths = re.findall(r'path="res://([^"]+)"', text)
-    ok = text.startswith("[gd_scene") and "format=3" in text.splitlines()[0] and all((GAME / p).is_file() for p in paths)
+    # format=3, or 4 (Godot 4.6+ writes unique_id; scenes/home_island.tscn is saved by Godot 4.7)
+    ok = text.startswith("[gd_scene") and re.search(r"format=[34]\b", text.splitlines()[0]) and all((GAME / p).is_file() for p in paths)
     ids = re.findall(r'id="([^"]+)"', text)
     refs = re.findall(r'ExtResource\("([^"]+)"\)', text)
     check("%s: header, resources exist, references resolve" % tscn.relative_to(GAME), ok and all(r in ids for r in refs), paths)
@@ -126,7 +127,7 @@ for name, needles in {
                                                                         ("pixel_post.gdshader", "BAYER"), ("main.gd", "stretch_shrink"),
                                                                         ("main.gd", "TEXTURE_FILTER_NEAREST")],
     "fox, rabbits, crystals, waterfall, day/night": [("character_model.gd", "static func fox("), ("character_model.gd", "static func rabbit("),
-                                                     ("island_builder.gd", "static func crystals("), ("world.gd", "water(true)"),
+                                                     ("island_builder.gd", "static func crystals("), ("home_builder.gd", "water(true)"),
                                                      ("world.gd", "func _day_night(")],
     "HUD: nameplates, target/party frames, minimap, chat, hotbar, cast bar, XP, damage numbers": [
         ("overlay.gd", "func _plate("), ("unit_frames.gd", "Party"), ("minimap.gd", "func _draw_big("), ("chat_box.gd", "chat_with_loki"),

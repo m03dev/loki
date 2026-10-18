@@ -369,7 +369,10 @@ def route(method: str, path: str, data: dict, query: dict) -> tuple | None:
             return 200, {"ok": True, "editors": h.connected(), "activity": active(),
                          "actions": sorted(set(studio_godot.ACTIONS) - {"quit"} | set(EXTRA_ACTIONS))}
         if method == "POST" and path == "/api/godot/hello":
-            return 200, {"ok": True, **h.hello(data)}
+            got = h.hello(data)
+            print("[loki-bridge] Godot %s linked: %s (plugin %s)" % (data.get("godot_version", "?"), data.get("project_path", "?"),
+                                                                    data.get("plugin_version", "?")), flush=True)
+            return 200, {"ok": True, **got}
         if method == "POST" and path == "/api/godot/result":
             h.result(data.get("editor"), data)
             return 200, {"ok": True}
