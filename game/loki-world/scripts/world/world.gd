@@ -28,6 +28,11 @@ var day_speed := 0.0                # > 0: hours per second (for screenshots/tes
 var _hour := 12.0
 var _zone_key := ""
 var _painting_key := ""
+## The Forge shelf (beside the creations hall): the newest models made in Forge stand on these pedestals
+const SHELF_SIZE := 3
+var shelf_spots: Array = []        # world positions of the pedestal tops
+var shelf_models: Array = []       # Node3D per spot (the loaded model, or null)
+var _shelf_gen := 0
 var _bolts: Array = []
 var _islets: Array = []
 var _beacons: Dictionary = {}
@@ -50,6 +55,7 @@ func _ready() -> void:
 	GameState.state_changed.connect(_on_state)
 	GameState.presence_changed.connect(_on_presence)
 	GameState.level_up.connect(func(_l): level_up_effect())
+	LokiApi.forge_models_changed.connect(_on_forge_models)
 	_on_state()
 
 
@@ -262,6 +268,15 @@ func _build_home(node: Node3D) -> void:
 		pic.visible = false
 		node.add_child(pic)
 		paintings.append(pic)
+	# the Forge shelf: three pedestals in front of the creations hall
+	shelf_spots.clear()
+	for k in SHELF_SIZE:
+		var spot := ch + basis * Vector3(-1.8 + 1.8 * k, 0, 3.0)
+		m.add(Mats.cyl(0.45, 0.55, 0.7, 8), IslandBuilder.xf(spot + Vector3(0, 0.35, 0)), Color(0.82, 0.78, 0.86))
+		m.add(Mats.cyl(0.52, 0.52, 0.08, 8), IslandBuilder.xf(spot + Vector3(0, 0.74, 0)), Color(0.95, 0.45, 0.65))
+		IslandBuilder.box_collider(body, spot + Vector3(0, 0.35, 0), Vector3(0.9, 0.7, 0.9))
+		shelf_spots.append(spot + Vector3(0, 0.78, 0))
+	shelf_models.resize(SHELF_SIZE)
 	# the pond and the waterfall off the east edge
 	var pond_a := deg_to_rad(95.0)
 	var pond := Vector3(cos(pond_a), 0, sin(pond_a)) * HOME_RADIUS * 0.8
@@ -608,6 +623,52 @@ func _sync_paintings() -> void:
 		_hang(paintings[order[i]], images[i])
 
 
+## Forge -> LOKI World: the newest models from Forge (GET /forge/list), loaded from their .glb at runtime, scaled to
+## about a metre and turning slowly on the shelf's pedestals. A newer model pushes the oldest off the shelf.
+func _on_forge_models(items: Array) -> void:
+	_shelf_gen += 1
+	var gen := _shelf_gen
+	for k in shelf_models.size():
+		if shelf_models[k] is Node3D and is_instance_valid(shelf_models[k]):
+			(shelf_models[k] as Node3D).queue_free()
+		shelf_models[k] = null
+	for k in mini(items.size(), shelf_spots.size()):
+		var it: Dictionary = items[k]
+		var model: Node3D = await LokiApi.forge_model(str(it.get("name", "")))
+		if gen != _shelf_gen or model == null:   # a newer list arrived while this one loaded
+			if model != null:
+				model.queue_free()
+			continue
+		place_on_shelf(model, k, str(it.get("prompt", it.get("name", ""))))
+
+
+func place_on_shelf(model: Node3D, k: int, title: String) -> void:
+	var holder := Node3D.new()
+	holder.name = "ForgeShelf%d" % k
+	add_child(holder)
+	holder.add_child(model)
+	var box := AABB()
+	var first := true
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var b: AABB = (mi as MeshInstance3D).get_aabb()
+		b = (mi as MeshInstance3D).transform * b
+		box = b if first else box.merge(b)
+		first = false
+	var size := maxf(box.size.x, maxf(box.size.y, box.size.z))
+	var fit := 1.1 / size if size > 0.0001 else 1.0
+	model.scale = Vector3.ONE * fit
+	model.position = -Vector3(box.get_center().x, box.position.y, box.get_center().z) * fit
+	holder.position = shelf_spots[k]
+	var label := Label3D.new()
+	label.text = title.substr(0, 40)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 28
+	label.outline_size = 6
+	label.position = Vector3(0, box.size.y * fit + 0.35, 0)
+	holder.add_child(label)
+	shelf_models[k] = holder
+
+
 func _hang(frame: MeshInstance3D, item: Dictionary) -> void:
 	var tex: Texture2D = await LokiApi.creation_texture(item)
 	if is_instance_valid(frame) and tex != null:
@@ -698,6 +759,9 @@ func _burst(at: Vector3, color: Color, amount: int) -> void:
 func _process(delta: float) -> void:
 	_day_night(delta)
 	var t := Time.get_ticks_msec() / 1000.0
+	for h in shelf_models:
+		if h is Node3D and is_instance_valid(h):
+			(h as Node3D).rotation.y += 0.4 * delta
 	for it in _islets:
 		var n: Node3D = it["node"]
 		n.position.y = float(it["base"]) + sin(t * 0.4 + float(it["phase"])) * 0.6

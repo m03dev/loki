@@ -753,8 +753,8 @@ check("three.js loads only from LOKI itself (no CDN), and only on demand (LOKI_W
 vendored = [p for p in (ui / "vendor" / "three").rglob("*.js")]
 check("vendored add-ons import three by a local path, never the bare 'three' specifier",
       not any(("from 'three'" in p.read_text(encoding="utf-8") or 'from "three"' in p.read_text(encoding="utf-8")) for p in vendored))
-check("Babylon.js draws the pixel cel-shaded world by default; LOKI's own renderer stays as the fallback",
-      'engine: "babylon"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js
+check("the Godot MMO is LOKI World by default (2026-10-18, the World tab); Babylon.js stays the light home-screen world, "
+      "then LOKI's own renderer", 'game: "godot"' in world_js and 'engine: "babylon"' in world_js and 'World.engine === "three"' in world_js and "function initGL(" in world_js
       and 'World.engine = "classic"' in world_js)
 bjs = ui / "vendor" / "babylon" / "babylon.loki.js"
 babylon_js = (ui / "world_babylon.js").read_text(encoding="utf-8")

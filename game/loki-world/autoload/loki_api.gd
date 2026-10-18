@@ -19,12 +19,16 @@ extends Node
 
 signal connected(base_url: String, source: String)
 signal went_offline(reason: String)
+## Forge's models changed (GET /forge/list): the world's Forge shelf shows the newest (owner 2026-10-18: everything
+## LOKI makes should show up everywhere - a model made in Forge stands in LOKI World)
+signal forge_models_changed(items: Array)
 
 const PORTS := [8767, 8766]
 const EP := {
 	"health": "/health", "world": "/world", "jobs": "/jobs", "creations": "/creations",
 	"creation_file": "/creations/",   # + <kind>/<file>
 	"make": "/creations/make", "chat": "/chat", "models": "/models",
+	"forge_list": "/forge/list", "forge_file": "/forge/file/",   # + <name>.glb
 	# ---- hooks: the engine's MMO API (docs/MMO_API.md) ----
 	"mmo_state": "/mmo/state", "mmo_skill": "/mmo/skill", "mmo_accept": "/mmo/quest/accept",
 	"mmo_turnin": "/mmo/quest/turnin", "mmo_defeat": "/mmo/monster/defeat", "mmo_retry": "/mmo/monster/retry",
@@ -43,6 +47,7 @@ const ACTION_PROMPTS := {
 const STATE_EVERY := 3.0
 const WORLD_EVERY := 3.0
 const CREATIONS_EVERY := 15.0
+const FORGE_EVERY := 15.0
 const RETRY_EVERY := 10.0
 
 var base_url := ""
@@ -56,7 +61,10 @@ var last_world: Dictionary = {}
 var last_jobs: Array = []
 var last_creations: Array = []
 var fake: FakeWorld = null
-var _timers := {"state": 0.0, "creations": 0.0, "retry": 0.0, "presence": 0.0}
+var _timers := {"state": 0.0, "creations": 0.0, "retry": 0.0, "presence": 0.0, "forge": 0.0}
+var forge_models: Array = []
+var _forge_key := ""
+var _model_cache := {}
 var _busy := {}
 var _texture_cache: Dictionary = {}
 var _presence_pending := ""
@@ -78,13 +86,32 @@ func start() -> void:
 
 # ----------------------------------------------------------------- connecting
 
+var _connecting := false
+
+
 func connect_engine() -> bool:
+	if _connecting:          # the retry timer fired while a slow first check was still waiting: one at a time
+		return not offline
+	_connecting = true
+	var ok := await _connect_engine()
+	_connecting = false
+	return ok
+
+
+func _connect_engine() -> bool:
 	var candidates := _base_candidates()
 	if token == "":
 		token = read_token()
 	var engine_seen := false
+	var page := _js_location("origin") if is_web else ""
 	for base in candidates:
-		var r := await _request("GET", base + EP["health"], null, 3.0)
+		# The page's own LOKI gets 12 s and a second try: right after the 39 MB engine starts, the page is busy and
+		# a 3 s check timed out (HTTPRequest result 13), so the game showed the made-up demo world although LOKI was
+		# right there (found 2026-10-18 with the first real web export).
+		var wait := 12.0 if base == page else 3.0
+		var r := await _request("GET", base + EP["health"], null, wait)
+		if base == page and r["status"] == 0:
+			r = await _request("GET", base + EP["health"], null, wait)
 		# the bridge checks the token before the route: any answer but 401/403 means "you are in"
 		if r["status"] != 0 and r["status"] != 401 and r["status"] != 403:
 			base_url = base
@@ -257,6 +284,57 @@ func _process(delta: float) -> void:
 	if _timers["state"] <= 0.0 and not _busy.get("state", false):
 		_timers["state"] = STATE_EVERY
 		refresh_state()
+	if _timers["forge"] <= 0.0 and not _busy.get("forge", false):
+		_timers["forge"] = FORGE_EVERY
+		refresh_forge()
+
+
+## Forge's models (newest first) -> forge_models_changed when the list is different.
+func refresh_forge() -> void:
+	_busy["forge"] = true
+	var r := await _request("GET", base_url + EP["forge_list"])
+	_busy["forge"] = false
+	if r["status"] != 200 or not (r["data"] is Dictionary):
+		return
+	var items: Array = r["data"].get("items", [])
+	var key := ""
+	for it in items.slice(0, 6):
+		key += "%s@%s;" % [str(it.get("name", "")), str(it.get("t", ""))]
+	if key == _forge_key:
+		return
+	_forge_key = key
+	forge_models = items
+	forge_models_changed.emit(items)
+
+
+## A .glb's bytes -> its scene (GLTFDocument, at runtime), or null.
+static func scene_from_glb(bytes: PackedByteArray) -> Node3D:
+	if bytes.is_empty():
+		return null
+	var doc := GLTFDocument.new()
+	var st := GLTFState.new()
+	if doc.append_from_buffer(bytes, "", st) != OK:
+		return null
+	return doc.generate_scene(st) as Node3D
+
+
+## One Forge model as a scene, loaded at runtime from its .glb (GLTFDocument); null when it cannot be read.
+func forge_model(name: String) -> Node3D:
+	if _model_cache.has(name):
+		var cached = _model_cache[name]
+		return (cached as PackedScene).instantiate() if cached is PackedScene else null
+	var r := await _request("GET", base_url + EP["forge_file"] + name.uri_encode(), null, 30.0, true)
+	var bytes: PackedByteArray = r.get("bytes", PackedByteArray())
+	var scene := scene_from_glb(bytes)
+	if scene == null:
+		_model_cache[name] = null
+		return null
+	var packed := PackedScene.new()
+	for c in scene.find_children("*", "", true, false):
+		c.owner = scene
+	if packed.pack(scene) == OK:
+		_model_cache[name] = packed
+	return scene as Node3D
 
 
 func _retry_connect() -> void:
@@ -590,7 +668,7 @@ func _request(method: String, url: String, body = null, timeout_s: float = 8.0, 
 	var status: int = res[1]
 	if int(res[0]) != HTTPRequest.RESULT_SUCCESS:
 		status = 0
-	var out := {"status": status, "data": {}, "error": ""}
+	var out := {"status": status, "data": {}, "error": "", "result": int(res[0])}
 	var bytes: PackedByteArray = res[3]
 	if raw:
 		out["bytes"] = bytes if status == 200 else PackedByteArray()

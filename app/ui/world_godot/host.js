@@ -50,7 +50,14 @@
     wantBackground = typeof backgroundWanted === "function" ? backgroundWanted : wantBackground;
     return new Promise((resolve) => {
       let settled = false;
-      const done = (ok) => { if (!settled) { settled = true; resolve(ok); } if (!ok) stop(); };
+      // the 12 s "nothing said at all" timer fires after a good start too: once the game said it is starting it
+      // stays; only the game's own "failed"/"missing" removes it later (before 2026-10-18 the timer removed a
+      // running LOKI World 12 s after every start, so the World tab fell back to nothing)
+      let good = false;
+      const done = (ok, fromGame) => {
+        if (!settled) { settled = true; good = !!ok; resolve(!!ok); }
+        if (!ok && (!good || fromGame)) stop();
+      };
       frame = document.createElement("iframe");
       frame.className = "world-godot";
       frame.title = "LOKI World";
@@ -66,7 +73,7 @@
         if (msg.lokiWorldGodot === "starting" || msg.lokiWorldGodot === "ready") { done(true); schedule(); }
         else if (msg.lokiWorldGodot === "missing" || msg.lokiWorldGodot === "failed") {
           console.warn("LOKI World (Godot): " + (msg.detail || msg.lokiWorldGodot) + " - using Babylon");
-          done(false);
+          done(false, true);
         }
       });
       document.body.append(frame);

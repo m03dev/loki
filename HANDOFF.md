@@ -6,6 +6,33 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
 
+## 2026-10-18 04:20: LOKI World IS the Godot game, and one loop from the Godot editor to the World tab (Claude, cloud)
+
+Owner: "loki world wasnt build in godot where is it ... how are we going to incorporate into godot editor ... they feel like
+separate pieces". The Godot MMO (game/loki-world, 26 scripts, 107 tests) existed but was never exported, so the World tab
+silently ran the Babylon.js world (and a second, JavaScript MMO behind its "Join world").
+- **Exported and committed**: app/ui/world_godot/ (Godot 4.7.2 web, no threads; index.wasm kept gzipped - 39 MB -> 10 MB in
+  git - and served with Content-Encoding: gzip by engine/loki_bridge.py). The World tab plays it (World.game="godot",
+  default LOKI_WORLD_ENGINE=godot), loaded only when the tab / Settings > LOKI World opens; behind the home screen the light
+  Babylon island stays (startup unchanged). No build -> the light world plays.
+- **Bugs fixed on the way**: host.js removed the running game 12 s after EVERY start (its "nothing said" timer ignored a good
+  start); LokiApi's 3 s first /health timed out while the 39 MB engine started -> the made-up demo world although LOKI was
+  there (now 12 s + one retry on the page's own origin; one connect at a time); app.js started the World only if models,
+  mode AND chats all loaded (Promise.all -> allSettled); the game's tests read the player's saved profile (now isolated).
+- **Godot editor -> World tab**: engine/world_build.py + GET/POST /world/build + "Rebuild World" in the Godot tab (LOKI World
+  is picked first there). LOKI keeps its own standard Godot 4.7.2 (a C#/mono Godot - the Mac's 4.8 dev mono - cannot export
+  to the web) in <data>/addons/godot-export: the editor SHA-512 checked, only the 10 MB web template range-read out of the
+  1.3 GB template pack (SHA-512 pinned), a private Godot data folder (the owner's is never touched). 15 s from nothing on Linux.
+- The Godot web editor in the Godot tab is now 4.7.2 too (4.4.1 could not open a 4.7 project); installed + checked here.
+- **Forge -> LOKI World**: the Forge shelf - three pedestals in front of the creations hall show the newest Forge models
+  (GET /forge/list, the .glb loaded at runtime with GLTFDocument, ~1 m, turning, named). Character: the creator opens the
+  first time the World tab is clicked and saves to /mmo/profile, which the game uses - one character.
+- Checked: game tests 113/113 (Godot 4.7.2 headless), test_godot_world 86 (incl. the real Godot run), test_world_build 16,
+  test_world_godot_tab 6 (the real build in Chromium in the World tab), test_ui_smoke 10, test_ui_fit 76, test_portal 239,
+  test_forge_ui 20, test_forge_model_ui 13, test_character 54, test_mmo 77, test_mmo_systems 125, test_studio_destination 81,
+  test_files_ui 15, test_loki 533, --self-test OK. In a browser through the real engine: connected, live machine name and
+  profile, /forge/file/<model>.glb fetched. Not run on the Mac: the World tab there, Rebuild World with the macOS editor.
+
 ## 2026-10-18 03:25: NVIDIA answers instead of timing out - streamed replies (Claude, Mac logs + cloud)
 
 After the 02:40 fix Studio DID reach NVIDIA with the owner's key (session 1018-025513: "nvidia did not answer (The read

@@ -446,6 +446,9 @@ else:
             return r.fulfill(path=str(ui / "index.html"))
         if pth.startswith("/ui/") and (ui / pth[4:]).is_file():
             return r.fulfill(path=str(ui / pth[4:]))
+        if pth.endswith(".wasm") and (ui / (pth[4:] + ".gz")).is_file():   # LOKI World's engine (the bridge sends the .gz)
+            import gzip  # pylint: disable=import-outside-toplevel
+            return r.fulfill(body=gzip.decompress((ui / (pth[4:] + ".gz")).read_bytes()), headers={"Content-Type": "application/wasm"})
         if r.request.method == "POST":
             posts.append(pth)
         if pth == "/studio/embed":

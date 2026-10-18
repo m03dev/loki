@@ -35,12 +35,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 REPO = Path(__file__).resolve().parent.parent
-VERSION = "4.4.1-stable"
+# 4.7.2: LOKI World (game/loki-world) is a Godot 4.7 project; a 4.4 editor could not open it (2026-10-18)
+VERSION = "4.7.2-stable"
 ZIP_NAME = "Godot_v%s_web_editor.zip" % VERSION
 URL = "https://github.com/godotengine/godot/releases/download/%s/%s" % (VERSION, ZIP_NAME)
-# from https://github.com/godotengine/godot/releases/download/4.4.1-stable/SHA512-SUMS.txt
-SHA512 = ("dfd01995308dc50a24819607f701b325ec00cce5beaa96202d13e41162cafcf4"
-          "e3e5681fb9f4370407de893c2ba3b1f9c083e11e9aa4b87a3fb0796c9a23503c")
+# from https://github.com/godotengine/godot/releases/download/4.7.2-stable/SHA512-SUMS.txt
+SHA512 = ("03ad6b4b4d96f0f7d85bf4fdcf29535891b79d52ee94a11e96895463a2745347"
+          "b8f601b455e7a58135bf641df43fc25296bc257bbfce593d477dfa64a2272268")
 MAX_ZIP = 200 * 1024 * 1024
 ALLOWED_EXT = {".html", ".js", ".wasm", ".pck", ".png", ".svg", ".ico", ".json", ".webmanifest", ".txt", ".md"}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".wasm": "application/wasm",
@@ -177,7 +178,7 @@ def unpack(blob: bytes, target: Path) -> list:
 def install(data: Path | None = None, opener=urllib.request.urlopen, url: str = URL, sha512: str = SHA512) -> dict:
     """Download, check the SHA-512, unpack. Nothing is kept when the checksum does not match."""
     with _LOCK:
-        _JOB.update(state="downloading", note="Downloading Godot %s's web editor (about 40 MB)..." % VERSION)
+        _JOB.update(state="downloading", note="Downloading Godot %s's web editor (about 55 MB)..." % VERSION)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "LOKI/1"})
         h = hashlib.sha512()

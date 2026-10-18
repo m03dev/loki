@@ -38,7 +38,11 @@ const World = {
   pixel: null,   // set a number (CSS px per world pixel) to override every view's pixel size
   hour: null,    // set 0-24 to pin the time of day (otherwise the local clock tints the sky)
   adaptive: true,   // coarser world pixels when frames run late (World.adaptive = false to pin)
-  engine: "babylon",   // Babylon.js in the pixel cel-shaded look (default); "classic" = the hand-written WebGL one; "three" = three.js
+  // LOKI World is the Godot MMO (game/loki-world) since 2026-10-18 - in the World tab and Settings > LOKI World, loaded
+  // only when one of them opens (a 39 MB engine). Behind the home screen the light Babylon.js island stays, so LOKI
+  // starts as fast as before. engine = the light renderer: "babylon" (default), "classic" (hand-written WebGL), "three".
+  engine: "babylon",
+  game: "godot",       // LOKI_WORLD_ENGINE=godot (default): the World tab plays the Godot game; anything else: the light one
   selected: "", particles: [], seats: {}, ripples: [], fish: null, fishAt: 0,
 };
 
@@ -2113,7 +2117,14 @@ function refreshBackground() {
 
 function showWorldPanel() {
   try { if (localStorage.getItem("loki.safeMode") === "1") localStorage.removeItem("loki.safeMode"); } catch (_) { /* ignore */ }
-  if (World.engine === "godot" && window.WorldGodot) { fetchWorld(); window.WorldGodot.panel(true); return; }
+  if (World.game === "godot") {
+    World.panelOpen = true;
+    loadGodotWorld().then((ok) => {
+      if (ok && World.panelOpen) { fetchWorld(); window.WorldGodot.panel(true); }
+      else if (!ok && World.panelOpen) showWorldPanel();   // fell back: draw the light world in the panel
+    });
+    return;
+  }
   if (!World.views.panel) {
     const canvas = document.getElementById("world-panel-canvas");
     World.views.panel = canvas && makeView(canvas, document.getElementById("world-panel-labels"),
@@ -2129,7 +2140,8 @@ function showWorldPanel() {
 }
 
 function hideWorldPanel() {
-  if (World.engine === "godot" && window.WorldGodot) { window.WorldGodot.panel(false); return; }
+  World.panelOpen = false;
+  if (World.godotLive && window.WorldGodot) { window.WorldGodot.panel(false); return; }
   setVisible(World.views.panel, false);
   setTimeout(refreshBackground, 0);
 }
@@ -2166,9 +2178,19 @@ async function loadBabylon() {
 }
 
 // The Godot MMO's host (app/ui/world_godot/host.js): resolves true once the web build is starting.
+// Only for the World tab / Settings > LOKI World (never behind the home screen): started the first time one opens.
+let godotStarting = null;
 async function loadGodotWorld() {
-  if (!window.WorldGodot && !(await loadScript("/ui/world_godot/host.js"))) return false;
-  return !!window.WorldGodot && (await window.WorldGodot.start(state.token, backgroundWanted));
+  if (World.godotLive) return true;
+  if (!godotStarting) {
+    godotStarting = (async () => {
+      if (!window.WorldGodot && !(await loadScript("/ui/world_godot/host.js"))) return false;
+      return !!window.WorldGodot && (await window.WorldGodot.start(state.token, () => false));
+    })();
+  }
+  World.godotLive = await godotStarting;
+  if (!World.godotLive) World.game = "";   // not exported / cannot run here: the light world plays instead
+  return World.godotLive;
 }
 
 async function startWorld() {
@@ -2181,16 +2203,11 @@ async function startWorld() {
     const data = await api("/settings/general");
     if (data && data.ok) {
       World.mode = data.values.LOKI_WORLD || "background";
-      const want = (data.values.LOKI_WORLD_ENGINE || "babylon").toLowerCase();
-      World.engine = ["babylon", "godot", "three", "classic"].includes(want) ? want : "babylon";
+      const want = (data.values.LOKI_WORLD_ENGINE || "godot").toLowerCase();   // the Godot MMO is LOKI World (2026-10-18)
+      World.game = want === "godot" ? "godot" : "";
+      World.engine = ["babylon", "three", "classic"].includes(want) ? want : "babylon";
     }
   } catch (_) { /* default */ }
-  // LOKI World as the Godot MMO (game/loki-world, web build in /ui/world_godot/): its own page in a
-  // frame, which needs no view here. Not exported yet / cannot run -> Babylon as before.
-  if (World.engine === "godot") {
-    if (await loadGodotWorld()) return;
-    World.engine = "babylon";
-  }
   if (World.engine === "three") await loadThree();   // only then is the 2 MB three.js parsed at all
   if (World.engine === "babylon" && !(await loadBabylon())) World.engine = "classic";
   const canvas = document.getElementById("world-bg-canvas");

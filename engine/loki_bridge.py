@@ -195,7 +195,7 @@ UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
             ".json": "application/json; charset=utf-8",
             # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
-            ".wasm": "application/wasm", ".pck": "application/octet-stream"}
+            ".wasm": "application/wasm", ".pck": "application/octet-stream", ".gz": "application/gzip"}
 # style-src allows inline <style>: pywebview injects one for its drag regions (the Mac title bar)
 # and the bundled Mermaid adds one per diagram; both were blocked ("could not load (no address) -
 # <style>" in engine.out). Scripts stay 'self' only - no inline script, no eval.
@@ -801,8 +801,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(403, {"ok": False, "error": "Host not allowed."})
             return True
         found = ui_file(UI_DIR, route)
+        gz = False
+        if found is None and route.startswith("/ui/world_godot/") and route.endswith(".wasm"):
+            # the Godot engine for LOKI World is committed gzipped (39 MB -> ~9 MB in git); the window
+            # receives it as Content-Encoding: gzip and the browser unpacks it on the way in
+            found = ui_file(UI_DIR, route + ".gz")
+            gz = found is not None
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
+            return True
+        if gz:
+            self._send_static(found, kind=".wasm", encoding="gzip")
             return True
         if route == GODOT_WORLD_PAGE:
             self._send_static(found, framed=True, csp=GODOT_WORLD_CSP)
@@ -810,15 +819,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._send_static(found, framed=(route == "/ui/play.html"))
         return True
 
-    def _send_static(self, found: Path, framed: bool = False, csp: str = "") -> None:
+    def _send_static(self, found: Path, framed: bool = False, csp: str = "", kind: str = "", encoding: str = "") -> None:
         """One static file. `framed`: the Play page, which LOKI's own window shows in a sandboxed
         frame - it may be framed by LOKI itself (same origin) and nothing else. `csp`: a page's
         own policy (the Godot world page: GODOT_WORLD_CSP)."""
         body = found.read_bytes()
         try:
             self.send_response(200)
-            self.send_header("Content-Type", UI_TYPES.get(found.suffix, "application/octet-stream"))
+            self.send_header("Content-Type", UI_TYPES.get(kind or found.suffix, "application/octet-stream"))
             self.send_header("Content-Length", str(len(body)))
+            if encoding:
+                self.send_header("Content-Encoding", encoding)
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
@@ -992,6 +1003,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/studio":   # session 29: LOKI Studio (engine/studio_api.py)
             import studio_api  # pylint: disable=import-outside-toplevel
             self._send_json(*studio_api.route(self.server.state, "GET", route))
+            return
+        if route == "/world/build":   # LOKI World's web build from game/loki-world (engine/world_build.py)
+            import world_build  # pylint: disable=import-outside-toplevel
+            self._send_json(*world_build.route("GET", route, {}))
             return
         if route.startswith("/forge/"):   # Forge, the 3D panel (engine/forge_api.py)
             import forge_api  # pylint: disable=import-outside-toplevel
@@ -1388,6 +1403,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             handled = (500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
         if handled is not None:
             self._send_json(*handled)
+            return
+        if route == "/world/build":   # rebuild LOKI World from game/loki-world (engine/world_build.py)
+            import world_build  # pylint: disable=import-outside-toplevel
+            self._send_json(*world_build.route("POST", route, data))
             return
         import studio_api  # pylint: disable=import-outside-toplevel - session 29: LOKI Studio + engine restart
         if studio_api.handles("POST", route):

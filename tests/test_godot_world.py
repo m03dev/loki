@@ -157,7 +157,8 @@ ep = dict(re.findall(r'"(\w+)": "(/[^"]*)"', api.split("const EP := {", 1)[1].sp
 check("the endpoint table is complete", {"health", "world", "jobs", "creations", "make", "chat", "mmo_state", "mmo_skill",
                                           "mmo_turnin", "mmo_defeat", "mmo_retry", "mmo_note", "mmo_profile", "presence", "retry"} <= set(ep), sorted(ep))
 plain = {k: v for k, v in ep.items() if not k.startswith("mmo_") and k != "creation_file"}
-missing_routes = [v for v in plain.values() if ('"%s"' % v) not in bridge]
+missing_routes = [v for v in plain.values() if ('"%s"' % v) not in bridge
+                  and not (v.startswith("/forge/") and 'route.startswith("/forge/")' in bridge)]   # Forge: one prefix
 check("every plain endpoint is a bridge route", not missing_routes, missing_routes)
 check("/creations/<kind>/<file> is served by the bridge", 'route.startswith("/creations/")' in bridge and ep.get("creation_file") == "/creations/")
 mmo_paths = [v for k, v in ep.items() if k.startswith("mmo_")]
@@ -246,8 +247,11 @@ if shutil.which("node"):
 
 section("the hooks in LOKI (small): world.js engine option, Settings choice, bridge serving")
 wjs = read(UI / "world.js")
-check("world.js: 'godot' is a LOKI World look; it falls back to babylon", '["babylon", "godot", "three", "classic"]' in wjs
-      and "if (await loadGodotWorld()) return;" in wjs and 'World.engine = "babylon";' in wjs)
+check("world.js: 'godot' (default) plays the Godot game in the World panel, loaded only when it opens; "
+      "the home screen keeps the light Babylon world; no build -> the light world plays",
+      'game: "godot"' in wjs and 'World.game = want === "godot" ? "godot" : "";' in wjs
+      and "loadGodotWorld().then(" in wjs and "WorldGodot.start(state.token, () => false)" in wjs
+      and 'if (!World.godotLive) World.game = "";' in wjs)
 check("world.js: the panel and background go to the Godot frame when it runs", "window.WorldGodot.panel(true)" in wjs
       and "window.WorldGodot.panel(false)" in wjs and 'loadScript("/ui/world_godot/host.js")' in wjs)
 import portal_api  # noqa: E402

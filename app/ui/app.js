@@ -1025,7 +1025,11 @@ async function start() {
   // tell the engine: a fresh update is only kept once the window works on it
   api("/ui/ready", { ua: navigator.userAgent.slice(0, 200), version: (window.LOKI_VERSION || "") }).catch(() => {});
   setStatus("Ready", true);
-  await Promise.all([loadModels(), loadMode(), loadConversations()]);
+  // allSettled: one of these failing (a provider list that did not load) must never stop what follows - the
+  // World, the jobs, the home screen (with Promise.all a single failure left LOKI World never started)
+  for (const r of await Promise.allSettled([loadModels(), loadMode(), loadConversations()])) {
+    if (r.status === "rejected") console.warn("LOKI start:", r.reason);
+  }
   setInterval(pollApproval, 1500);
   refreshJobs();
   wireChangedBanner();

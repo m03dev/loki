@@ -33,7 +33,7 @@ you switch away (panes are built once and only hidden).
   frame it; LOKI's window allows framing only loopback (`frame-src`). `Loki Studio.cmd` / `loki_studio.sh` still open the
   standalone window for those who want it. The sidebar's LOKI Studio button now switches to the tab.
 - **Godot** (`engine/godot_web.py`): the official Godot 4 **web editor** (MIT), downloaded on first use from the
-  `4.4.1-stable` release into `<data>/addons/godot-web-editor`, SHA-512 checked against the release's SHA512-SUMS
+  `4.7.2-stable` release (LOKI World is a 4.7 project) into `<data>/addons/godot-web-editor`, SHA-512 checked against the release's SHA512-SUMS
   (nothing kept on a mismatch; zip members that are folders, absolute, `..` or odd types are refused), never committed.
   Served at `/godot-editor/app/` with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
   require-corp` (SharedArrayBuffer). Projects: `~/LOKI Projects/<name>` and `game/loki-world`. **Which way files flow**

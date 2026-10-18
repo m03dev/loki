@@ -490,9 +490,10 @@
   // LOKI World as the Godot client (Settings > General > LOKI World look = godot): it has no
   // in-app Join button, so opening the LOKI World tab with no character opens the creator first
   document.addEventListener("click", (e) => {
-    const tab = e.target && e.target.closest && e.target.closest('button[data-tab="world"]');
+    const tab = e.target && e.target.closest && e.target.closest('button[data-tab="world"], #mode-world');
     if (!tab || C.current || !C.loaded || C.isOpen()) return;
-    if (typeof World !== "undefined" && World.engine === "godot") C.open({ edit: false });
+    // one character for LOKI everywhere: the creator saves it to /mmo/profile, which the Godot game reads
+    if (typeof World !== "undefined" && World.game === "godot") C.open({ edit: false });
   });
 
   // load once the engine answers (app.js calls afterStart; chain onto it, as world.js does)

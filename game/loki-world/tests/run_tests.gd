@@ -18,6 +18,10 @@ func check(name_: String, ok: bool, detail: Variant = "") -> void:
 
 func _ready() -> void:
 	await get_tree().process_frame
+	# never the player's saved profile (beaten monsters, XP), however the suite is started - with or without
+	# --no-save - so a played game can never make a test fail, and the tests never change the player's save
+	GameState.persist = false
+	GameState._load_local()
 	_scripts_compile()
 	_levels()
 	_derive()
@@ -127,6 +131,28 @@ func _world() -> void:
 	check("agents are NPCs", w.npcs.has("loki") and w.npcs.size() >= 2)
 	check("failed jobs are monsters", w.monsters_alive().size() >= 1)
 	check("the fox and the rabbits", w.critters.size() == 3 and w.critters[0].kind == "fox")
+	# Forge -> LOKI World: a .glb (made here with GLTFDocument, as Forge's are) loads at runtime and stands on the shelf
+	check("the Forge shelf has its pedestals", w.shelf_spots.size() == w.SHELF_SIZE)
+	var src := Node3D.new()
+	var mesh := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(4, 2, 1)
+	mesh.mesh = bm
+	src.add_child(mesh)
+	mesh.owner = src
+	var gdoc := GLTFDocument.new()
+	var gst := GLTFState.new()
+	gdoc.append_from_scene(src, gst)
+	var glb: PackedByteArray = gdoc.generate_buffer(gst)
+	src.free()
+	var model: Node3D = LokiApi.scene_from_glb(glb)
+	check("a Forge .glb loads at runtime", model != null and model.find_children("*", "MeshInstance3D", true, false).size() >= 1)
+	check("a broken .glb is refused, not a crash", LokiApi.scene_from_glb(PackedByteArray([1, 2, 3])) == null)
+	w.place_on_shelf(model, 0, "a test box")
+	var holder: Node3D = w.shelf_models[0]
+	check("it stands on the first pedestal", holder != null and holder.position.distance_to(w.shelf_spots[0]) < 0.01)
+	check("scaled to about a metre (4 m box -> 1.1 m)", absf(model.scale.x - 1.1 / 4.0) < 0.01, model.scale)
+	check("with its name over it", holder.find_children("*", "Label3D", true, false).size() == 1)
 	var other := ""
 	for z in w.zones.keys():
 		if not w.zones[z]["home"]:

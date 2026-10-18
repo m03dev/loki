@@ -95,7 +95,7 @@ const LokiModeBar = (() => {
     const pick = mk("select"); pick.setAttribute("aria-label", "Godot project");
     const status = mk("span", "mode-note");
     const btn = (label, tip, fn) => { const b = mk("button", "quiet small", label); b.type = "button"; b.title = tip; b.addEventListener("click", fn); return b; };
-    const install = btn("Install the web editor", "Downloads Godot's official web editor (MIT, about 40 MB) from godotengine.org's GitHub, checks its SHA-512, keeps it in LOKI's data folder.", async () => {
+    const install = btn("Install the web editor", "Downloads Godot's official web editor (MIT, about 55 MB) from godotengine.org's GitHub, checks its SHA-512, keeps it in LOKI's data folder.", async () => {
       install.disabled = true; await call("/godot-editor/install", {}); poll();
     });
     const zip = btn("Project to the web editor", "Downloads the project folder as a zip: import it in the web editor's Project Manager.", async () => {
@@ -118,7 +118,27 @@ const LokiModeBar = (() => {
     const own = btn("Web editor in its own window", "Opens the web editor as its own page (it needs cross-origin isolation, which a framed page here does not get).", () => {
       window.open("/godot-editor/app/godot.editor.html", "_blank", "noopener");
     });
-    head.append(pick, install, zip, back, native, own, status);
+    // LOKI World is a Godot project (game/loki-world): change it here or in the Godot app, then Rebuild World -
+    // LOKI exports it with its own standard Godot (a C#/mono Godot cannot export to the web; engine/world_build.py)
+    const rebuild = btn("Rebuild World", "Export LOKI World (game/loki-world) to the World tab after you changed it in Godot. LOKI downloads its own Godot 4.7 for this once (about 80-170 MB, checked).", async () => {
+      rebuild.disabled = true;
+      const r = await call("/world/build", { confirm: true });
+      status.textContent = r.ok ? "Rebuilding LOKI World..." : (r.error || "failed");
+      watchBuild();
+    });
+    async function watchBuild() {
+      let s;
+      try { s = await call("/world/build"); } catch (_) { rebuild.disabled = false; return; }
+      const job = (s && s.job) || {};
+      if (job.state === "building") { status.textContent = job.note || "Rebuilding LOKI World..."; setTimeout(watchBuild, 1500); return; }
+      rebuild.disabled = false;
+      if (job.state === "done" || job.state === "failed") status.textContent = job.note;
+      else if (s && s.out_of_date) status.textContent = "LOKI World changed since its last build - Rebuild World to see it in the World tab.";
+      rebuild.classList.toggle("attention", !!(s && s.out_of_date));
+    }
+    rebuild.hidden = true;
+    pick.addEventListener("change", () => { rebuild.hidden = pick.value !== "loki-world"; });
+    head.append(pick, install, zip, back, native, own, rebuild, status);
     const flow = mk("p", "mode-note small");
     const frame = mk("iframe", "mode-frame"); frame.title = "Godot web editor"; frame.hidden = true;
     p.append(head, flow, frame);
@@ -131,6 +151,9 @@ const LokiModeBar = (() => {
       for (const pr of s.projects || []) pick.append(new Option(pr.label, pr.name));
       if (!pick.options.length) pick.append(new Option("no Godot project in " + s.projects_dir, ""));
       if ([...pick.options].some((o) => o.value === keep)) pick.value = keep;
+      else if ([...pick.options].some((o) => o.value === "loki-world")) pick.value = "loki-world";   // LOKI World first
+      rebuild.hidden = pick.value !== "loki-world";
+      if (!rebuild.hidden && !rebuild.dataset.checked) { rebuild.dataset.checked = "1"; watchBuild(); }
       flow.textContent = "Files: " + s.flow;
       native.disabled = !s.native; native.title = s.native ? native.title : "Godot is not installed on this computer (or set GODOT_BIN).";
       install.hidden = s.installed; zip.disabled = back.disabled = !s.installed;
