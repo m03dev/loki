@@ -4,7 +4,7 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-18 (later) (W50 verified on the PC, Claude's changes checked, one fix, Ziva).
+Last updated: 2026-10-18 (later) (home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
 
 ## 2026-10-18 20:50: consoles (2), the live link shown in Godot and LOKI (Claude, cloud)
 
@@ -29,6 +29,37 @@ loki_bridge.py), every job, Studio (studio_server/studio_app) and the app (loki_
 tests/test_no_console.py. Also from W50 (Ziva saw godot_editor fall off a local model's 22-tool list and relaxed the
 test): a Godot-tab job (prompt names godot_editor -> LOKI_GODOT_LIVE=1) or a linked editor now ranks godot_editor
 first for local models (loki._local_rank); test_godot_live 27.
+
+## 2026-10-18 (later): the home screen shows the LIVE LOKI World, the repo/PC are clean, and Studio's pin moves again (Ziva, the PC)
+
+Owner: "the bug started when i went into loki studio fix it ... remove everything old and that we dont need anymore ...
+i want the git to be completely clean ... also fix the home loki live link to loki world" ("i want to see it live when
+i home like before, but before was the wrong project").
+
+- **The Studio bug.** Studio runs a PINNED copy and only moves the pin when its own check (ship.py) is green.
+  `harness_data/studio/pin.json` had `"tried": {"9e1f7eb...": "ship.py failed: 1581 ... FAILED: ...because LOKI queued
+  them (it waited, and said so)"}` - so Studio was stuck on 5e00732 because of ONE flaky test. Found the cause by
+  instrumenting the engine: that test shrinks the rate limiter's window to 1.0 s and expects 4 quick requests to
+  overlap; on a loaded PC (ship runs 8 suites at once) a request's own round-trip is longer than 1 s, so the requests
+  never overlapped and the "it waited, and said so" check failed at random (`TEMP pace-enter nvidia 36` -> the default
+  cap, then a real 429). Fixed in tests/test_studio.py (window 3 s). Two Studio servers had also been left running
+  (checkout + pinned): killed, and the stale pinned copy is gone, so Studio runs from the checkout.
+- **Clean.** Removed 8 abandoned loki/job-* branches and their worktrees, the pinned-Studio worktree, merged local
+  branches ziva-verify and backup/pc-merge-c25660f, and the stash - only master and macos-app stay. Deleted the old
+  origin branches (claude/local-tool-guard, safety/pre-hardening, safety/pre-restructure, claude/ruflo,
+  claude/self-improve-fixes, claude/use-loki-fixes). harness_data: the 1.6 GB OllamaSetup.exe, espeak-ng.msi, the
+  pinned Studio copy, old scratch and a stale temp file gone. VRAM 7265 -> 966 MiB (`ollama stop`).
+- **The home live world.** The home screen is "just the world and the word Loki", but 0e2af40 deleted the home
+  background world, so only the word was left ("before was the wrong project" - the hand-drawn JS island). The home now
+  shows the LIVE LOKI World: the real Godot game, the same build and frame as the World tab. `#world-home .world-bg` in
+  index.html, world.js starts it in background mode, app.js's setView toggles the backdrop, and the World tab moves
+  that one frame into its panel and back. Only LOKI's own window starts it (`worldbg=1` in window_url, read by
+  place.js like `titlebar=win`), so the public web build and the test harnesses never boot a Godot game.
+  Verified live in the window (world-home-on, .world-bg.on, agents on the island; 0 exceptions); screenshot
+  docs/operations/screens/w52-home-world.png.
+- Small fixes found while testing: the UI harnesses now serve index.wasm from the committed index.wasm.gz (test_godot_tab,
+  test_qol); engine/qol.py returns the notification env (on Windows the toast text is an env var, not an argv element)
+  so test_qol's check is right; test_usability's fake install makes a real venv on Windows (a copied python.exe cannot run).
 
 ## 2026-10-18 (later): W50 verified on the PC - title bar, Godot download, Open in Godot (Ziva, the PC)
 

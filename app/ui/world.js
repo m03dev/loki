@@ -20,20 +20,54 @@ function loadScript(src) {
   });
 }
 
-// the Godot game's host: resolves true once the web build is starting (the first time the World opens)
+// the Godot game's host: resolves true once the web build is starting (the home screen or the World tab)
 let godotStarting = null;
-async function loadGodotWorld() {
-  if (World.godotLive) return true;
+function loadGodotWorld() {
+  if (World.godotLive) return Promise.resolve(true);
   if (!godotStarting) {
     godotStarting = (async () => {
       if (!window.WorldGodot && !(await loadScript("/ui/world_godot/host.js"))) return false;
-      return !!window.WorldGodot && (await window.WorldGodot.start(state.token, () => false));
+      return !!window.WorldGodot && (await window.WorldGodot.start(state.token, homeWorldWanted));
     })();
   }
-  World.godotLive = await godotStarting;
-  if (!World.godotLive) godotStarting = null;   // try again next time it opens
-  return World.godotLive;
+  return godotStarting.then((ok) => {
+    World.godotLive = ok;
+    if (!ok) godotStarting = null;   // try again next time it opens
+    return ok;
+  });
 }
+
+// The home screen shows the LIVE LOKI World behind the word "Loki" (owner, 2026-10-18: "i want to see it live when i
+// home like before" - before it was the WRONG project, the hand-drawn JS island, deleted). It is the same Godot game
+// and the same frame host.js lays down: here it is the quiet backdrop and never takes the mouse, and opening the
+// World tab just moves that one frame into the panel.
+function homeWorldEnabled() {
+  // LOKI's own window asked for it (place.js reads `worldbg=1`); the web build and the test harnesses did not.
+  return document.documentElement.classList.contains("world-home-on");
+}
+
+function homeWorldWanted() {
+  const main = document.getElementById("main");
+  return !!(homeWorldEnabled() && main && main.classList.contains("home") && !World.reduced);
+}
+
+// Show or hide the home backdrop (the World tab, when open, shows the game in its own box instead - host.js picks).
+function syncHomeWorld() {
+  const box = document.getElementById("world-home");
+  if (box) box.classList.toggle("on", homeWorldWanted());
+}
+
+// Start the world for the home screen. No web build yet -> the home stays plain; the World tab says how to make it.
+function startHomeWorld() {
+  if (!homeWorldEnabled() || typeof state === "undefined" || !state.token) return;
+  loadGodotWorld().then((ok) => {
+    if (!ok) return;
+    if (window.WorldGodot) window.WorldGodot.panel(false);
+    syncHomeWorld();
+  });
+}
+window.startHomeWorld = startHomeWorld;
+window.syncHomeWorld = syncHomeWorld;
 
 function worldNote(text) {
   const box = document.querySelector('[data-panel="world"] .world-frame');

@@ -65,6 +65,11 @@ async def main():
             path = r.request.url.split("8896", 1)[1].split("#")[0].split("?")[0]
             if path == "/":
                 return await r.fulfill(path=str(UI / "index.html"))
+            if path.startswith("/ui/") and path.endswith(".wasm"):
+                gz = UI / (path[4:] + ".gz")   # committed gzipped; the engine sends it with Content-Encoding
+                if gz.is_file():
+                    import gzip
+                    return await r.fulfill(body=gzip.decompress(gz.read_bytes()), headers={"Content-Type": "application/wasm"})
             if path.startswith("/ui/") and (UI / path[4:]).is_file():
                 return await r.fulfill(path=str(UI / path[4:]))
             body = r.request.post_data

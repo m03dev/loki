@@ -248,9 +248,16 @@ if shutil.which("node"):
 
 section("the hooks in LOKI (small): world.js engine option, Settings choice, bridge serving")
 wjs = read(UI / "world.js")
-check("world.js: the World panel plays the Godot game, loaded only when it opens; no build -> a note pointing at the Godot tab",
-      'game: "godot"' in wjs and "loadGodotWorld().then(" in wjs and "WorldGodot.start(state.token, () => false)" in wjs
+check("world.js: the World panel AND the home screen play the Godot game (one frame); no build -> a note pointing at the Godot tab",
+      'game: "godot"' in wjs and "loadGodotWorld().then(" in wjs and "WorldGodot.start(state.token, homeWorldWanted)" in wjs
       and "Rebuild the World tab" in wjs)
+check("the home screen shows the live LOKI World behind the word Loki (owner: 'i want to see it live when i home')",
+      'id="world-home"' in read(UI / "index.html") and 'class="world-bg"' in read(UI / "index.html")
+      and "startHomeWorld" in wjs and "syncHomeWorld" in wjs and "homeWorldEnabled" in wjs
+      and "window.startHomeWorld = startHomeWorld" in wjs and "window.startHomeWorld()" in read(UI / "app.js"))
+check("only LOKI's own window starts the home world (worldbg=1, like titlebar=win): the web build and the test harnesses never boot a Godot game in the background",
+      "worldbg=1" in read(REPO / "app" / "loki_app.py") and "world-home-on" in read(UI / "place.js")
+      and "worldbg=" in read(UI / "place.js"))
 check("world.js: the panel and background go to the Godot frame when it runs", "window.WorldGodot.panel(true)" in wjs
       and "window.WorldGodot.panel(false)" in wjs and 'loadScript("/ui/world_godot/host.js")' in wjs)
 import portal_api  # noqa: E402

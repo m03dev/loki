@@ -262,7 +262,8 @@ check("an empty search finds nothing", qol.search(agent, "  ")["results"] == [])
 check("pin + unpin", qol.set_pin(agent, "b", True)["pins"] == ["b"] and qol.set_pin(agent, "a", True)["pins"] == ["a", "b"]
       and qol.set_pin(agent, "b", False)["pins"] == ["a"])
 n = qol.notify("LOKI finished", "your essay", run=False)
-check("a notification never puts the text inside a script (argv / env only)", n["ok"] and ("argv" not in n or "your essay" in n["argv"]), n)
+check("a notification never puts the text inside a script (its own argv element or an env var)",
+      n["ok"] and ("your essay" in n.get("argv", []) or "your essay" in n.get("env", {}).values()), n)
 fs.progress = [{"event": "tool", "text": "read_file a.txt"}, {"event": "error", "text": CASES[0][0]}]
 d = qol.diagnose(fs)
 check("What happened lists the errors, steps, model and a recovery", d["errors"] and d["recovery"]["kind"] == "rate_limit"
@@ -432,6 +433,11 @@ async def browser_part():
             method = r.request.method
             if path == "/":
                 return await r.fulfill(path=str(UI / "index.html"))
+            if path.startswith("/ui/") and path.endswith(".wasm"):
+                gz = UI / (path[4:] + ".gz")   # committed gzipped; the engine sends it with Content-Encoding
+                if gz.is_file():
+                    import gzip
+                    return await r.fulfill(body=gzip.decompress(gz.read_bytes()), headers={"Content-Type": "application/wasm"})
             if path.startswith("/ui/"):
                 f = UI / path[4:]
                 return await (r.fulfill(path=str(f)) if f.is_file() else r.fulfill(json={"ok": True}))

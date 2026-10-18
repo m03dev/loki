@@ -356,12 +356,18 @@ for v in ("1.0.0", "1.0.1"):
 shutil.copytree(lw / "tree-1.0.0", fake_seed)
 shutil.copytree(lw / "tree-1.0.1", lroot / "1.0.1")
 venv_bin = ldata / ".venv" / ("Scripts" if os.name == "nt" else "bin")
-venv_bin.mkdir(parents=True)
 pyname = "python.exe" if os.name == "nt" else "python3"
-try:
-    os.symlink(sys.executable, venv_bin / pyname)
-except OSError:
-    shutil.copy2(sys.executable, venv_bin / pyname)
+if os.name == "nt":
+    # a lone copy of python.exe cannot run on Windows (no pyvenv.cfg, no DLLs beside it), so the fake install
+    # made a real (pip-less) venv: its python.exe actually starts the fake app.
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(ldata / ".venv")],
+                   capture_output=True, text=True, timeout=180)
+else:
+    venv_bin.mkdir(parents=True)
+    try:
+        os.symlink(sys.executable, venv_bin / pyname)
+    except OSError:
+        shutil.copy2(sys.executable, venv_bin / pyname)
 (ldata / ".venv" / "loki-requirements.sha256").write_text(hashlib.sha256(b"").hexdigest())
 proc = subprocess.run([sys.executable, str(REPO / "packaging" / "installer" / "loki_launch.py"), "--seed", str(fake_seed)],
                       env=dict(os.environ, LOKI_DATA=str(ldata)), capture_output=True, text=True, timeout=60)

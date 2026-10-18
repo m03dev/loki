@@ -915,3 +915,16 @@ are ignored, the real app logs none).
 Third, a Windows-only bug the ship run surfaced: an installed git extension kept its .git because git's object
 files are read-only and rmtree(ignore_errors=True) gave up silently. engine/extensions.py now chmods them writable
 and retries; tests/test_apps.py 114 passed, 0 failed.
+
+## 2026-10-18 (later) - Ziva (Windows): cleaned the repo and PC, fixed Studio's pin, put the live LOKI World back on home
+
+The owner: the bug started in LOKI Studio, clean everything old, make git completely clean, and fix the home live link
+to LOKI World ("i want to see it live when i home like before, but before was the wrong project"). Found the Studio bug:
+Studio runs a pinned copy and only moves the pin when its own check is green, and pin.json showed 9e1f7eb had "failed
+Studio's checks" on the flaky test_studio "it waited, and said so" check. Instrumenting the engine showed the test's 1 s
+rate-limit window is shorter than a request's round-trip on a loaded PC, so the requests never overlapped - fixed with a
+3 s window. Then the cleanup: removed 8 abandoned job branches and their worktrees, the pinned-Studio worktree, merged
+local branches and the stash, deleted the old origin branches, and cleared the OllamaSetup.exe (1.6 GB), the pinned copy
+and old scratch from harness_data; VRAM 7265 -> 966 MiB. Finally the home screen shows the live Godot LOKI World again
+(one frame shared with the World tab, started only by LOKI's own window via worldbg=1), verified live in the window with
+0 exceptions. Suites re-run green (test_studio 177, test_godot_world 87, test_qol 82, test_usability 112, test_godot_tab 9).

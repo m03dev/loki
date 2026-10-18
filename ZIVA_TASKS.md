@@ -522,6 +522,45 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
+- [ ] **W52 Clean the PC and the repo, fix the LOKI Studio bug, and put the LIVE LOKI World back on the home screen
+      (2026-10-18).** The owner: "the bug started when i went into loki studio fix it ... remove everything old and
+      that we dont need anymore ... i want the git to be completely clean ... also fix the home loki live link to
+      loki world" (and, when asked: "i want to see it live when i home like before, but before was the wrong project").
+      -> Ziva (Windows), 2026-10-18: DONE.
+      (1) THE STUDIO BUG. Studio runs a PINNED copy of itself and only moves the pin when its own check (ship.py) is
+      green. harness_data/studio/pin.json showed `"tried": {"9e1f7eb...": "ship.py failed: 1581 ... FAILED: ...because
+      LOKI queued them (it waited, and said so)"}` and studio.log "pin: kept 5e0073268dd3: 9e1f7eb862e4 failed Studio's
+      checks" - so Studio was stuck on an old commit (5e00732) because of ONE flaky test. Root cause found by
+      instrumenting the engine: that test shrinks the rate limiter's window to 1.0 s and expects 4 quick requests to
+      overlap, but when the PC is loaded (ship runs 8 suites at once) a request's own round-trip is longer than 1 s, so
+      the requests never overlapped, no wait was needed, and the "it waited, and said so" check failed at random
+      (engine: "TEMP pace-enter nvidia 36" -> default cap, then a real 429). Fixed in tests/test_studio.py (window 3 s,
+      longer than a loaded round-trip); the engine was only instrumented, then reverted. test_studio 177/0 (ship env).
+      Also: 2 Studio servers were left running (a checkout copy and the pinned copy) - killed; the stale pinned copy is
+      gone (its worktree was removed), so Studio runs from the checkout again.
+      (2) CLEAN. git: 8 abandoned loki/job-* branches + their worktrees (029ce68a, 1fae8485, 26f98267, 28e1b61a,
+      66d5819f, 7aa8dadb, cf7dd344, f1b50c89), the pinned-Studio worktree, merged local branches ziva-verify and
+      backup/pc-merge-c25660f, and the stash - all removed; only master and macos-app stay. Origin: deleted the merged
+      claude/local-tool-guard, safety/pre-hardening, safety/pre-restructure and the old claude/ruflo,
+      claude/self-improve-fixes, claude/use-loki-fixes. Working tree clean. harness_data: removed the 1.6 GB
+      OllamaSetup.exe, espeak-ng.msi, the pinned Studio copy, old scratch (logs, screenshots, chrome-profile, _ziva_test,
+      bench1) and a stale provider_health.tmp file. VRAM: Ollama held 7265/8192 MiB (loki-qwen3.5-9b); `ollama stop` ->
+      966 MiB.
+      (3) THE HOME LIVE LINK. The home screen is "just the world and the word Loki", but 0e2af40 deleted the home
+      background world, so it was showing only the word - and "before was the wrong project" (the hand-drawn JS island).
+      Now the home shows the LIVE LOKI World - the real Godot game, the same build and the same frame as the World tab.
+      New #world-home .world-bg div in index.html (the .world-bg CSS was still there), world.js starts the game in
+      background mode and toggles the backdrop from app.js's setView, and opening the World tab moves that one frame
+      into the panel and back. The public web build and the test harnesses must NOT boot a Godot game, so it runs only
+      when LOKI's own window asks for it: `worldbg=1` in window_url, read by place.js like `titlebar=win`
+      (app/loki_app.py, app/ui/place.js, app/ui/world.js, app/ui/app.js). Verified live in the window: class
+      world-home-on, .world-bg.on, the frame display:block, agents walking on the island; the World tab still shows it
+      and returning home brings the backdrop back; 0 exceptions. Screenshot docs/operations/screens/w52-home-world.png.
+      Also fixed while testing: the home world starts at boot, so the UI harnesses needed index.wasm served from the
+      committed index.wasm.gz (test_godot_tab, test_qol); test_qol's notification check assumed the toast text is an
+      argv element, but on Windows it is passed as an env var (engine/qol.py now returns the env too); and
+      test_usability's fake install copied python.exe, which cannot run on Windows - it makes a real venv now.
+
 - [ ] **W51 The terminal windows on the PC (2026-10-18, 9e1f7eb / 2df3eed).** The owner: "Terminal windows still pop up
       on my screen." 9e1f7eb made CREATE_NO_WINDOW the default for every engine subprocess (engine/no_console.py). Trace
       every new console process AND every visible console-class window (harness_data/_ziva/console_monitor.ps1,

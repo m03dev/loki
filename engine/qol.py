@@ -490,7 +490,7 @@ def notify(title: str, text: str, run: bool = True) -> dict:
     if not shutil.which(argv[0]):
         return {"ok": True, "sent": False, "how": argv[0] + " not found"}
     if not run:
-        return {"ok": True, "sent": False, "how": argv[0], "argv": argv}
+        return {"ok": True, "sent": False, "how": argv[0], "argv": argv, "env": extra}
 
     def go() -> None:
         import subprocess  # pylint: disable=import-outside-toplevel

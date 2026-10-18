@@ -144,6 +144,7 @@ function showEmpty() {
 function setView(view) {
   const home = view === "home";
   $("#main").classList.toggle("home", home);
+  if (typeof window.syncHomeWorld === "function") window.syncHomeWorld();   // the live LOKI World backdrop
   // Home is just the world and the word "Loki"; the chat box appears when it is clicked.
   if (home) $("#main").classList.remove("summoned");
   const welcome = $("#welcome");
@@ -1036,6 +1037,7 @@ async function start() {
   checkChangedCapabilities();
   if (typeof afterStart === "function") afterStart();
   showHome();     // just the world and the word "Loki" until it is clicked
+  if (typeof window.startHomeWorld === "function") window.startHomeWorld();   // the live world behind it
 }
 
 document.addEventListener("DOMContentLoaded", start);

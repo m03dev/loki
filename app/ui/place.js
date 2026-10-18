@@ -21,6 +21,16 @@
   if (kind === "win") document.documentElement.classList.add("titlebar-win");
 })();
 
+// The home screen shows the live LOKI World behind the word "Loki". Only LOKI's own window asks for it
+// (`worldbg=1`, the same way the app says `titlebar=win`): the published web build and the test harnesses never
+// start a whole Godot game in the background. Read it before app.js clears the fragment; keep it for reloads.
+(function () {
+  const m = /(?:^|[#&])worldbg=(1|on|0|off)(?:$|[&#])/.exec(location.hash);
+  let on = m ? m[1] : "";
+  try { if (on) sessionStorage.setItem("loki-worldbg", on); else on = sessionStorage.getItem("loki-worldbg") || ""; } catch (_) { /* no storage */ }
+  if (on === "1" || on === "on") document.documentElement.classList.add("world-home-on");
+})();
+
 const LokiPlace = (() => {
   const MARGIN = 8;
   const open = new Map();   // pop -> () => re-place

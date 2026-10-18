@@ -314,10 +314,13 @@ check("LOKI_NVIDIA_THINKING=high turns thinking on with reasoning_effort",
 loki.NVIDIA_THINKING = "off"
 os.environ.pop("LOKI_NVIDIA_THINKING")
 
-# pacing: the fake NVIDIA answers 429 itself above 3 requests per second; LOKI paces at 2/s (headroom, like
-# 36 of NIM's 40/min) -> 4 quick requests would get a 429 without pacing; with it, none
+# pacing: the fake NVIDIA answers 429 itself above 3 requests per second; LOKI paces at 2 per window (headroom, like
+# 36 of NIM's 40/min) -> 4 quick requests would get a 429 without pacing; with it, none.
+# The window is 3 s, not 1: a 1 s window is shorter than one request's round-trip when the PC is loaded (ship runs
+# suites in parallel), so the requests never overlapped, no wait was needed, and the "it waited" check failed at
+# random - which then blocked LOKI Studio's own pin check (studio.log 14:25: "9e1f7eb failed Studio's checks").
 os.environ["LOKI_NVIDIA_RPM"] = "2"
-ratelimit.WINDOW_S = 1.0
+ratelimit.WINDOW_S = 3.0
 cloud.cap = {"nvidia": 3}
 cloud.window = 1.0
 cloud.times.clear()
@@ -331,7 +334,7 @@ elapsed = time.monotonic() - started
 check("4 requests, a 3-per-second server cap, paced at 2: all answered on NVIDIA, no 429, no failover",
       "three times" in answer and not cloud.bodies("openrouter") and not loki.ROUTE_TRACE, (answer, loki.ROUTE_TRACE))
 check("...because LOKI queued them (it waited, and said so)", elapsed >= 0.8 and any("requests a minute" in t for _e, t in PROGRESS),
-      (elapsed, PROGRESS[-4:]))
+      (elapsed, [t for _e, t in PROGRESS][-6:], dict(loki.ROUTE_TRACE)))
 cloud.cap = {}
 ratelimit.WINDOW_S = 60.0
 os.environ.pop("LOKI_NVIDIA_RPM")
