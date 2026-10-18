@@ -63,6 +63,7 @@ func _enter_tree() -> void:
 	dock = DockScript.new()
 	dock.api = api
 	dock.bridge = bridge
+	dock.engine_bridge = engine_bridge
 	_add_dock()
 	_add_context_menus()
 	if not ProjectSettings.has_setting("autoload/" + GAME_AUTOLOAD):

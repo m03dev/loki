@@ -10,7 +10,7 @@ extends Node
 
 signal hello_done(editor_id: String)
 
-const VERSION := "1.1"
+const VERSION := "1.2"
 const MAX_NODES := 400
 const SHOT_MAX_W := 1280
 

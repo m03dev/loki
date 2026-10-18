@@ -6,6 +6,19 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (W50 verified on the PC, Claude's changes checked, one fix, Ziva).
 
+## 2026-10-18 20:50: consoles (2), the live link shown in Godot and LOKI (Claude, cloud)
+
+Owner: "it's still happening, also LOKI isn't showing the live link - fix it for both Mac and Windows".
+- no_console.flags: DETACHED_PROCESS is swapped for CREATE_NO_WINDOW. A detached process has no console at all, so
+  each console program IT starts (node's git, a CLI's shell, Studio's tools) popped a new visible window; with a
+  hidden console they inherit it. The app process itself (pythonw: the updater's git, --self-test, pip) only gets
+  the guard after a full quit and reopen - closing the window keeps the old process.
+- Live link: checked with a real Godot 4.7.2 editor across an engine restart (fake engine, new token): it re-links
+  by itself. What the owner saw: no editor open after LOKI restarted, and the Godot dock only showed LOKI STUDIO's
+  status ("offline" when Studio is not running). Plugin 1.2: the dock shows "LOKI: linked / not linked" first (the
+  engine link, with the reason in the tooltip), then "Studio: ...". The Godot tab: an empty live link has an "Open
+  LOKI World in Godot" button; Open is never disabled for LOKI World (LOKI gets its own Godot when there is none).
+
 ## 2026-10-18 20:20: no console windows on Windows, godot_editor reaches local models (Claude, cloud)
 
 Owner on the PC: "the terminal keeps popping up on my screen". LOKI runs as pythonw, so every console program it

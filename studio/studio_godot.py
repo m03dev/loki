@@ -27,7 +27,7 @@ import time
 import uuid
 from pathlib import Path
 
-PLUGIN_VERSION = "1.1"
+PLUGIN_VERSION = "1.2"
 POLL_MAX_S = 25.0
 STALE_S = 45.0                    # no poll for this long = the editor is gone
 

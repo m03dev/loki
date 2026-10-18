@@ -20,7 +20,8 @@ def check(name, ok, detail=""):
 
 check("a plain call gets CREATE_NO_WINDOW", no_console.flags(0) == 0x08000000)
 check("a call's own flags are kept, plus no window", no_console.flags(0x00000200) == 0x08000200)
-check("a detached process (the Godot editor) is left as asked", no_console.flags(0x00000008 | 0x00000200) == 0x00000208)
+check("a detached process gets a hidden console instead (its own children then stay hidden too)",
+      no_console.flags(0x00000008 | 0x00000200) == 0x08000200)
 check("an asked-for new console is left as asked", no_console.flags(0x00000010) == 0x00000010)
 
 seen = []
@@ -37,7 +38,7 @@ try:
     check("install() patches Popen on Windows", no_console.install("win32") is True)
     subprocess.Popen(["git", "status"])
     subprocess.Popen(["godot"], creationflags=0x00000008)
-    check("every Popen (run, check_output...) starts without a console", seen == [0x08000000, 0x00000008], seen)
+    check("every Popen (run, check_output...) starts without a console", seen == [0x08000000, 0x08000000], seen)
     check("installing twice is harmless", no_console.install("win32") is True)
 finally:
     subprocess.Popen = real

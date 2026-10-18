@@ -28,6 +28,8 @@ var _suggest_kind := ""
 var _suggest_word := ""
 
 var status_label: Label
+var loki_label: Label
+var engine_bridge: Node          # the link to LOKI's engine (plugin.gd); shown first: that is "the live link"
 var session_pick: OptionButton
 var new_btn: Button
 var fork_btn: Button
@@ -70,6 +72,10 @@ func _button(text: String, tip: String, cb: Callable) -> Button:
 
 func _build() -> void:
 	var top := HBoxContainer.new()
+	loki_label = Label.new()
+	loki_label.text = "LOKI: connecting..."
+	loki_label.tooltip_text = "The live link to LOKI: every LOKI agent sees and changes this editor through it."
+	top.add_child(loki_label)
 	status_label = Label.new()
 	status_label.text = "connecting..."
 	status_label.tooltip_text = "Whether LOKI Studio answers. Start it with Loki Studio.cmd (Windows) or LOKI Studio.app (Mac)."
@@ -209,6 +215,7 @@ func _tick() -> void:
 		return
 	_busy = true
 	_ticks += 1
+	_show_loki_link()
 	if _ticks % 5 == 1:
 		await _refresh_state()
 	if session_id != "":
@@ -216,14 +223,26 @@ func _tick() -> void:
 	_busy = false
 
 
+func _show_loki_link() -> void:
+	if loki_label == null:
+		return
+	var up: bool = engine_bridge != null and str(engine_bridge.editor_id) != ""
+	loki_label.text = "LOKI: linked" if up else "LOKI: not linked"
+	loki_label.modulate = Color(0.55, 0.9, 0.65) if up else Color(1.0, 0.7, 0.45)
+	if not up and engine_bridge != null and engine_bridge.api != null:
+		loki_label.tooltip_text = "Not linked to LOKI yet: %s" % str(engine_bridge.api.last_error if engine_bridge.api.last_error != "" else "start LOKI - this editor links by itself within seconds.")
+	elif up:
+		loki_label.tooltip_text = "Linked to LOKI: every LOKI agent can see and change this editor (Godot tab in LOKI)."
+
+
 func _refresh_state() -> void:
 	var st: Dictionary = await api.get_json("/api/state", 10.0)
 	if not st.get("ok", false):
-		status_label.text = "offline"
+		status_label.text = "Studio: off"
 		status_label.tooltip_text = str(st.get("error", "LOKI Studio is not running"))
 		return
 	var linked: bool = bridge != null and str(bridge.editor_id) != ""
-	status_label.text = "linked" if linked else "online"
+	status_label.text = "Studio: linked" if linked else "Studio: on"
 	status_label.tooltip_text = "LOKI Studio answers; the editor link is %s." % ("up" if linked else "connecting")
 	var mine := project_key(my_project())
 	for e in st.get("editors", []):

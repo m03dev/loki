@@ -98,7 +98,8 @@ func request(method: int, path: String, body: Variant = null, timeout: float = 3
 	if result != HTTPRequest.RESULT_SUCCESS:
 		base_url = ""
 		_set_connected(false)
-		last_error = "LOKI Studio does not answer (start it: Loki Studio.cmd / LOKI Studio.app)"
+		last_error = "LOKI does not answer (start LOKI)" if target == "engine" else \
+			"LOKI Studio does not answer (start it: Loki Studio.cmd / LOKI Studio.app)"
 		return {"ok": false, "error": last_error, "offline": true}
 	var parsed: Variant = JSON.parse_string(raw.get_string_from_utf8())
 	var out: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {"ok": false, "error": "HTTP %d" % code}

@@ -216,7 +216,13 @@ const LokiModeBar = (() => {
       linkBody.replaceChildren();
       const eds = (ed && ed.editors) || [];
       if (!eds.length) {
-        linkBody.append(mk("p", "mode-note", "No Godot editor is linked. Open the project in Godot (above): the LOKI plugin links it to LOKI by itself, and every LOKI agent can then see and change it live."));
+        linkBody.append(mk("p", "mode-note", "No Godot editor is linked right now. Open LOKI World in Godot: the LOKI plugin links it to LOKI by itself within seconds, and every LOKI agent can then see and change it live."));
+        const go = btn("Open LOKI World in Godot", "Opens LOKI's own Godot 4.7.2 on LOKI World, linked live.", () => {
+          if ([...pick.options].some((o) => o.value === "loki-world")) pick.value = "loki-world";
+          open.click();
+        }, "send small");
+        go.disabled = open.disabled;
+        linkBody.append(go);
       }
       for (const e of eds) {   // studio_godot.Editor.summary()
         linkBody.append(mk("p", "godot-editor-row", "Godot " + (e.godot || "") + " - " + (e.name || e.project) +
@@ -250,11 +256,15 @@ const LokiModeBar = (() => {
       if (!pick.options.length) pick.append(new Option("no Godot project in " + s.projects_dir, ""));
       if ([...pick.options].some((o) => o.value === keep)) pick.value = keep;
       else if ([...pick.options].some((o) => o.value === "loki-world")) pick.value = "loki-world";   // LOKI World first
-      open.disabled = !s.native;
-      if (!s.native) status.textContent = "Godot is not installed on this computer: get Godot 4.7 from godotengine.org (or set GODOT_BIN).";
+      // LOKI World always opens: LOKI gets its own Godot 4.7.2 when there is none yet (engine/godot_web.py)
+      const lokiWorld = () => pick.value === "loki-world";
+      open.disabled = !s.native && !lokiWorld();
+      if (!s.native && !lokiWorld()) status.textContent = "Godot is not installed on this computer: get Godot 4.7 from godotengine.org (or set GODOT_BIN).";
+      const g = s.loki_godot || {};
+      if (g.state === "downloading" && !s.native) status.textContent = "Getting LOKI's Godot 4.7.2 (one time)...";
       rebuild.hidden = pick.value !== "loki-world";
     }
-    pick.addEventListener("change", () => { rebuild.hidden = pick.value !== "loki-world"; });
+    pick.addEventListener("change", () => { rebuild.hidden = pick.value !== "loki-world"; projects(); });
     await projects();
     refresh(); refreshPlugins();
     const timer = setInterval(() => { if (!p.hidden && !document.hidden) refresh(); }, 3000);
