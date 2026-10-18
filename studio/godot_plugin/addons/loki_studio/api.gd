@@ -13,6 +13,19 @@ var base_url := ""
 var token := ""
 var connected := false
 var last_error := ""
+## which hub this link talks to: "studio" (LOKI Studio, its own app) or "engine" (LOKI's engine - every LOKI agent,
+## engine/godot_live.py). Both use the same routes; only the connect file differs.
+var target := "studio"
+
+
+func my_connect_file() -> String:
+	if target == "engine":
+		var env := OS.get_environment("LOKI_ENGINE_CONNECT")
+		if env != "":
+			return env
+		var home := OS.get_environment("USERPROFILE") if OS.get_name() == "Windows" else OS.get_environment("HOME")
+		return home.path_join(".loki").path_join("engine_connect.json")
+	return connect_file_path()
 
 
 static func connect_file_path() -> String:
@@ -30,9 +43,10 @@ static func connect_file_path() -> String:
 
 
 func load_connection() -> bool:
-	var path := connect_file_path()
+	var path := my_connect_file()
 	if not FileAccess.file_exists(path):
-		last_error = "LOKI Studio is not running (no %s). Start LOKI Studio (Loki Studio.cmd / LOKI Studio.app)." % path
+		last_error = ("LOKI is not running (no %s). Start LOKI." % path) if target == "engine" else \
+			("LOKI Studio is not running (no %s). Start LOKI Studio (Loki Studio.cmd / LOKI Studio.app)." % path)
 		_set_connected(false)
 		return false
 	var f := FileAccess.open(path, FileAccess.READ)

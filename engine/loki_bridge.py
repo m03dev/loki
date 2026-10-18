@@ -1039,6 +1039,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import world_build  # pylint: disable=import-outside-toplevel
             self._send_json(*world_build.route("GET", route, {}))
             return
+        if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
+            import godot_live  # pylint: disable=import-outside-toplevel
+            q = {k: (v[0] if v else "") for k, v in parse_qs(urlparse(self.path).query).items()}
+            self._send_json(*godot_live.route("GET", route, {}, q))
+            return
         if route.startswith("/forge/"):   # Forge, the 3D panel (engine/forge_api.py)
             import forge_api  # pylint: disable=import-outside-toplevel
             self._send_forge(forge_api.handle_get(self.server.state, self.path))
@@ -1438,6 +1443,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/world/build":   # rebuild LOKI World from game/loki-world (engine/world_build.py)
             import world_build  # pylint: disable=import-outside-toplevel
             self._send_json(*world_build.route("POST", route, data))
+            return
+        if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
+            import godot_live  # pylint: disable=import-outside-toplevel
+            self._send_json(*godot_live.route("POST", route, data, {}))
             return
         import studio_api  # pylint: disable=import-outside-toplevel - session 29: LOKI Studio + engine restart
         if studio_api.handles("POST", route):
@@ -2814,6 +2823,13 @@ async def serve() -> None:
     keeper.start()
     print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    try:   # the live Godot link: a Godot editor with the LOKI Studio plugin finds this engine (engine/godot_live.py)
+        import godot_live  # pylint: disable=import-outside-toplevel
+        godot_live.write_connect(PORT, secret)
+        # LOKI World is ready to open in the real Godot editor: the plugin in it, its Asset Library plugins synced
+        threading.Thread(target=lambda: godot_live.ensure_world(sync=True), daemon=True, name="loki-world-ready").start()
+    except Exception as exc:  # noqa: BLE001 - the editor link is optional
+        print(f"[loki-bridge] live Godot link unavailable: {exc}", flush=True)
     try:   # LOKI installs the add-ons it needs by itself, in the background (engine/auto_setup.py)
         import auto_setup  # pylint: disable=import-outside-toplevel
 

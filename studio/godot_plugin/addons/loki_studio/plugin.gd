@@ -18,6 +18,8 @@ const GAME_SCRIPT := "res://addons/loki_studio/game_bridge.gd"
 
 var api: Node
 var bridge: Node
+var engine_api: Node          # the second link: LOKI's engine (every LOKI agent; engine/godot_live.py)
+var engine_bridge: Node
 var dock: Control
 var dock_holder: Control
 var debugger: EditorDebuggerPlugin
@@ -34,10 +36,21 @@ func _enter_tree() -> void:
 	bridge.plugin = self
 	bridge.api = api
 	add_child(bridge)
+	engine_api = ApiScript.new()
+	engine_api.name = "LokiEngineApi"
+	engine_api.target = "engine"
+	add_child(engine_api)
+	engine_bridge = BridgeScript.new()
+	engine_bridge.name = "LokiEngineBridge"
+	engine_bridge.plugin = self
+	engine_bridge.api = engine_api
+	add_child(engine_bridge)
 	debugger = DebuggerScript.new()
 	debugger.bridge = bridge
+	debugger.bridges = [bridge, engine_bridge]
 	add_debugger_plugin(debugger)
 	bridge.debugger = debugger
+	engine_bridge.debugger = debugger
 	if ClassDB.class_exists("Logger"):
 		var logger_script: Script = load("res://addons/loki_studio/error_logger.gd")
 		if logger_script != null:
@@ -46,6 +59,7 @@ func _enter_tree() -> void:
 			logger.keep_messages = true
 			OS.call("add_logger", logger)
 			bridge.logger = logger
+			engine_bridge.logger = logger
 	dock = DockScript.new()
 	dock.api = api
 	dock.bridge = bridge
@@ -54,13 +68,15 @@ func _enter_tree() -> void:
 	if not ProjectSettings.has_setting("autoload/" + GAME_AUTOLOAD):
 		add_autoload_singleton(GAME_AUTOLOAD, GAME_SCRIPT)
 	bridge.start()
+	engine_bridge.start()
 	dock.start()
 	print("LOKI Studio plugin %s ready (Godot %s)" % [bridge.VERSION, Engine.get_version_info().string])
 
 
 func _exit_tree() -> void:
-	if bridge != null:
-		bridge.stop()
+	for b in [bridge, engine_bridge]:
+		if b != null:
+			b.stop()
 	for item in context_menus:
 		call("remove_context_menu_plugin", item)
 	context_menus.clear()
@@ -74,7 +90,7 @@ func _exit_tree() -> void:
 		remove_debugger_plugin(debugger)
 	if logger != null:
 		OS.call("remove_logger", logger)
-	for n in [bridge, api]:
+	for n in [bridge, api, engine_bridge, engine_api]:
 		if n != null:
 			n.queue_free()
 

@@ -10,7 +10,7 @@ extends Node
 
 signal hello_done(editor_id: String)
 
-const VERSION := "1.0"
+const VERSION := "1.1"
 const MAX_NODES := 400
 const SHOT_MAX_W := 1280
 
@@ -22,7 +22,9 @@ var editor_id := ""
 var running := false
 var turn_actions: Array = []        # [{turn, history, name}] - what Studio did, for undo_turn
 var _game_replies := {}
-var _game_seq := 0
+var _game_seq := 0                 # the engine link counts from 1000000, so two links never share a reply id
+var _game_waiting := {}
+var _err_cursor := 0
 var _game_errors: Array = []
 var _last_flush := 0
 
@@ -31,7 +33,22 @@ func start() -> void:
 	if running:
 		return
 	running = true
+	if api != null and str(api.get("target")) == "engine":
+		_game_seq = 1000000
+	enable_live_sync()
 	_loop()
+
+
+## Edits show in the running game without restarting it: Debug > Synchronize Scene Changes + Synchronize Script Changes
+## (Godot keeps them per project in the editor's project metadata, "debug_options").
+static func enable_live_sync() -> void:
+	if not Engine.is_editor_hint():
+		return
+	var es := EditorInterface.get_editor_settings()
+	if es == null:
+		return
+	es.set_project_metadata("debug_options", "run_live_debug", true)
+	es.set_project_metadata("debug_options", "run_reload_scripts", true)
 
 
 func stop() -> void:
@@ -89,7 +106,10 @@ func _flush() -> void:
 		return
 	var rows: Array = []
 	if logger != null:
-		rows.append_array(logger.take_errors())
+		var fresh: Array = logger.errors_since(_err_cursor)
+		for r in fresh:
+			_err_cursor = maxi(_err_cursor, int(r.get("n", 0)))
+		rows.append_array(fresh)
 	rows.append_array(_game_errors)
 	_game_errors = []
 	if not rows.is_empty():
@@ -641,20 +661,24 @@ func _game(kind: String, args: Dictionary, timeout: float) -> Dictionary:
 		return _err("the game is not running from this editor (run_game first)")
 	_game_seq += 1
 	var id := _game_seq
+	_game_waiting[id] = true
 	debugger.send(kind, [id, args])
 	var end := Time.get_ticks_msec() + int(timeout * 1000)
 	while Time.get_ticks_msec() < end:
 		if _game_replies.has(id):
 			var r: Variant = _game_replies[id]
 			_game_replies.erase(id)
+			_game_waiting.erase(id)
 			return r if typeof(r) == TYPE_DICTIONARY else {"ok": true, "result": r}
 		await _wait(0.05)
+	_game_waiting.erase(id)
 	return _err("the game did not answer %s within %.0f s" % [kind, timeout])
 
 
 func on_game_message(message: String, data: Array) -> void:
 	if message == "reply" and data.size() >= 2:
-		_game_replies[int(data[0])] = data[1]
+		if _game_waiting.has(int(data[0])):          # only the replies to this link's own requests
+			_game_replies[int(data[0])] = data[1]
 	elif message == "errors" and data.size() >= 1 and typeof(data[0]) == TYPE_ARRAY:
 		for row in data[0]:
 			if typeof(row) == TYPE_DICTIONARY:

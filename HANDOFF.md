@@ -15,6 +15,30 @@ cross-origin to every answer that sets none (COI_HEADERS), UI files send CORP cr
 sends both. The preview pane starts under the title strip (its Close button was covered). Checked: test_research3 154,
 test_apps 131, test_godot_world 83, all other suites on stubs. Not run: WebView2 / WKWebView (ZIVA_TASKS requests).
 
+## 2026-10-18 12:30: LOKI World live in the real Godot editor - every LOKI agent works in it (Claude, cloud)
+
+Owner: "the loki world [should] be an editable project in godot ... agents ... roam around in a live project state,
+change everything ... the web godot is of no help to us, we want the godot and the assetstore and all the plugins".
+docs/LIVE_GODOT.md has the design. Done:
+- engine/godot_live.py: LOKI's engine hosts the editor link (Studio's GodotHub, same routes /api/godot/*), writes
+  ~/.loki/engine_connect.json at start; tool **godot_editor** for every agent (chat, jobs over loopback, teams) with all
+  plugin actions + plugins/install_plugin; Plan mode reads only; each action -> ACTIVITY -> /world puts the agent at the
+  new **godot forge** station (LOKI World, 160°) saying what it did.
+- The LOKI Studio plugin (1.1) links to BOTH Studio and the engine (two bridges, one debugger with per-link reply ids,
+  per-link error cursor) and turns on Synchronize Scene/Script Changes so the game run from the editor changes live.
+- LOKI World's project.godot enables the plugin + its game helper (committed); ensure_world copies the plugin in at
+  engine start / open / export (only when it changed); addons/ untracked; Asset Library plugins via install_plugin
+  (pinned commit, only addons/<name>/, hash checked when given) recorded in game/loki-world/plugins.json and synced on
+  every machine.
+- Godot tab rebuilt for the Godot app: LOKI World first, Open in Godot, live link (editor, scene, playing), what each
+  agent does in the editor, "Send to the agents", plugins + Add plugin by Asset Library number. Web editor removed from
+  the tab. The World tab's web copy keeps "Rebuild the World tab" (deterministic gzip now - no 10 MB churn).
+- Checked with the REAL Godot 4.7.2 editor (headless): test_godot_live 29/29 - the editor links to the engine AND to a
+  Studio hub at once; an agent reads it, opens main.tscn, adds a node, sets a property, saves (on disk), stands at the
+  forge; live-sync flags set. test_godot_tab 9/9 (Chromium), test_godot_world 93, test_world_build 17, test_loki 533,
+  test_tools_core 218, test_ui_fit 76, test_systems 101, --self-test OK. Not run on the Mac: the plugin in Godot 4.8 mono
+  with a window, run_game live sync with a real window, an Asset Library install over the network.
+
 ## 2026-10-18 04:20: LOKI World IS the Godot game, and one loop from the Godot editor to the World tab (Claude, cloud)
 
 Owner: "loki world wasnt build in godot where is it ... how are we going to incorporate into godot editor ... they feel like

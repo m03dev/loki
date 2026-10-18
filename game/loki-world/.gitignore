@@ -1,5 +1,6 @@
 .godot/
 /build/
 *.tmp
-# the LOKI Studio plugin LOKI installs when it opens this project in the editor
-addons/loki_studio/
+# every plugin is installed by LOKI on each machine, never committed (AGENTS.md): the LOKI plugin from
+# studio/godot_plugin, the Asset Library ones from plugins.json (engine/godot_live.py sync_plugins)
+addons/

@@ -219,6 +219,11 @@ def export(data: Path | None = None, run=subprocess.run, out: Path = OUT) -> dic
         return {"ok": False, "error": "LOKI's Godot is not installed yet"}
     env = export_env(data)
     log = ""
+    try:   # the plugin's game helper is an autoload of LOKI World: it must be there to export cleanly
+        import godot_live  # pylint: disable=import-outside-toplevel
+        godot_live.ensure_world(GAME)
+    except Exception:  # noqa: BLE001 - the export still works, with a warning from Godot
+        pass
     for args in (["--headless", "--path", str(GAME), "--import"],
                  ["--headless", "--path", str(GAME), "--export-release", "Web"]):
         proc = run([str(godot), *args], capture_output=True, text=True, timeout=900, env=env, cwd=str(GAME))
@@ -231,7 +236,10 @@ def export(data: Path | None = None, run=subprocess.run, out: Path = OUT) -> dic
             continue
         if p.stat().st_size > GZIP_ABOVE:
             gz = p.with_name(p.name + ".gz")
-            with open(p, "rb") as src, gzip.open(gz, "wb", compresslevel=9) as dst:
+            # deterministic (no time, no name in the header): an unchanged engine gives the same bytes, so a rebuild
+            # never adds another 10 MB to git
+            with open(p, "rb") as src, open(gz, "wb") as raw, \
+                    gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=0) as dst:
                 shutil.copyfileobj(src, dst)
             p.unlink()
             files.append(gz.name)

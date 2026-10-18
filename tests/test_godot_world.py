@@ -419,6 +419,11 @@ try:
         print("  Godot", version)
         work = TMP / "loki-world"
         shutil.copytree(GAME, work, ignore=shutil.ignore_patterns(".godot", "build"))
+        sys.path.insert(0, str(REPO / "studio"))
+        import godot_live  # noqa: E402  - LOKI World's plugin, as LOKI puts it in on every machine
+        check("LOKI World gets the LOKI plugin (its project.godot enables it and its game helper)",
+              godot_live.ensure_world(work)["ok"] and (work / "addons" / "loki_studio" / "game_bridge.gd").is_file()
+              and 'res://addons/loki_studio/plugin.cfg' in (work / "project.godot").read_text(encoding="utf-8"))
         env = dict(os.environ, HOME=str(TMP / "home"))
         (TMP / "home").mkdir(exist_ok=True)
 

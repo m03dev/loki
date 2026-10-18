@@ -44,7 +44,10 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
   2026-10-17: "you can use godot we love godot", then LOKI Studio inside Godot like Ziva): the game
   capability (`engine/godot_tools.py`, `engine/godot_assets.py`, kept); **LOKI World, the MMO**: one
   Godot 4 project in `game/loki-world/`, exported as its own app (Steam) and as a web build that LOKI's
-  window shows; and **the LOKI Studio editor plugin** in `studio/godot_plugin/addons/loki_studio/`
+  window shows - and, since 2026-10-18, THE project LOKI's agents work in live inside the owner's real Godot
+  editor (docs/LIVE_GODOT.md: the plugin links the editor to LOKI's engine, every agent has `godot_editor`,
+  Asset Library plugins are recorded in `game/loki-world/plugins.json` and installed by LOKI, `addons/` stays
+  untracked); and **the LOKI Studio editor plugin** in `studio/godot_plugin/addons/loki_studio/`
   (a second front end for Studio that is copied into any Godot project - docs/STUDIO.md; no
   `project.godot` there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder
   anywhere else in the repo. The owner's own game projects live in `~/LOKI Projects/<name>`.

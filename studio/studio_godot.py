@@ -27,7 +27,7 @@ import time
 import uuid
 from pathlib import Path
 
-PLUGIN_VERSION = "1.0"
+PLUGIN_VERSION = "1.1"
 POLL_MAX_S = 25.0
 STALE_S = 45.0                    # no poll for this long = the editor is gone
 
@@ -115,7 +115,8 @@ class Editor:
     def summary(self) -> dict:
         return {"editor": self.id, "project": self.project, "name": self.name, "godot": self.version,
                 "plugin": self.plugin_version, "alive": self.alive(), "last_seen": self.last_seen,
-                "errors": self.error_count, "playing": bool(self.state.get("playing"))}
+                "errors": self.error_count, "playing": bool(self.state.get("playing")),
+                "edited_scene": str(self.state.get("edited_scene") or "")}
 
     def alive(self) -> bool:
         return time.time() - self.last_seen < STALE_S

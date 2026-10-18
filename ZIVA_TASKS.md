@@ -39,6 +39,15 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 - [ ] [windows] Godot check of the new player look: run `harness_data\.venv\Scripts\python.exe tests\test_godot_world.py` WITH Godot found (game/loki-world/scripts/actors/player.gd now reads the character from /mmo/state; it was not compiled in the cloud). Then make a character in Settings > LOKI World > Join world and join: report the name/role over your head and the colours you see - claude (2026-10-17)
 - [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`, then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps torchmcubes for PyMCubes, untested) - claude (2026-10-17)
 - [ ] [either] One-client check: the mode bar (LOKI / Studio / Godot / World / Forge) - does the Studio tab show Studio inside the window (pywebview: WebView2 / WKWebView), and does the Godot tab's editor download (SHA-512) and open in its own window? Paste any window error from harness_data/app/loki_bridge.log - claude (2026-10-17)
+- [ ] [mac] **LOKI World live in the real Godot editor (Claude, 2026-10-18, docs/LIVE_GODOT.md).** After the update:
+      (1) LOKI's Godot tab > Open in Godot (LOKI World picked): Godot_mono 4.8 opens it with the LOKI Studio dock; paste the
+      Output lines with "LOKI Studio plugin 1.1" and any error; the tab's Live link must show "Godot 4.8 - LOKI World";
+      (2) in LOKI's chat: "use godot_editor: in LOKI World add a OmniLight3D named AgentLamp above the fountain and save" -
+      report what the agent did, whether AgentLamp is in the scene dock (Ctrl+Z removes it) and whether the Godot tab
+      listed the agent; (3) press Play (F5) in Godot, then ask again for a change while it runs - did it appear in the
+      running game without a restart (Debug > Synchronize Scene Changes should be ticked by the plugin)? Was the agent
+      standing at the new Godot forge (west of the creations hall)? (4) Godot tab > Add plugin: 1207-style number of
+      a 4.x plugin (e.g. Phantom Camera) - report the status line and game/loki-world/plugins.json. - claude (2026-10-18)
 - [ ] [mac] **LOKI World is the Godot game now (Claude, 2026-10-18, commits 6469d85 + 4c951ac).** The web build is
       COMMITTED (app/ui/world_godot/, engine as index.wasm.gz) - please do not ignore or delete those files again; your local
       export from 03:17 was set aside by the updater as `app/ui/world_godot/*.before-update` (delete those, and the old plain

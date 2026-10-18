@@ -10,7 +10,7 @@ const LokiModeBar = (() => {
   const MODES = [
     { id: "loki", name: "LOKI", tip: "Chat with LOKI - home, conversations, settings.", icon: '<path d="M5 6.5h14v9H9l-4 3.5z"/>' },
     { id: "studio", name: "Studio", tip: "LOKI Studio: build or change LOKI (or your own app) with an agent, review the diff, ship it.", icon: '<path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/>' },
-    { id: "godot", name: "Godot", tip: "The Godot editor: the web editor inside LOKI, or the Godot app with the LOKI Studio plugin.", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
+    { id: "godot", name: "Godot", tip: "Godot: open LOKI World (or any project) in the Godot app; LOKI's agents work in it live, plugins from the Asset Library.", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
     { id: "world", name: "World", tip: "LOKI World: your agents and machines as a living island.", icon: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"/>' },
     { id: "forge", name: "Forge", tip: "Forge: draw, add a picture or describe it - LOKI makes a 3D model you can sculpt and export.", icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>' },
   ];
@@ -89,61 +89,117 @@ const LokiModeBar = (() => {
     built.studio = false;
   }
 
-  // ---------------------------------------------------------------- Godot: the web editor, and the Godot app
+  // ---------------------------------------------------------------- Godot: the REAL Godot editor, live with LOKI's agents
+  // Owner 2026-10-18: "loki world [is] an editable project in godot ... agents roam around in a live project state,
+  // change everything ... the web godot is of no help to us, we want the godot and the assetstore and all the plugins".
+  // So this tab drives the Godot app on this computer: open a project (LOKI World first) with the LOKI plugin, see the
+  // live link (engine/godot_live.py), what each agent is doing in the editor, tell the agents what to change, and add
+  // plugins from the Asset Library (recorded in the project's plugins.json, so every machine gets them).
   async function buildGodot(p) {
     const head = mk("div", "mode-tools");
     const pick = mk("select"); pick.setAttribute("aria-label", "Godot project");
     const status = mk("span", "mode-note");
-    const btn = (label, tip, fn) => { const b = mk("button", "quiet small", label); b.type = "button"; b.title = tip; b.addEventListener("click", fn); return b; };
-    const install = btn("Install the web editor", "Downloads Godot's official web editor (MIT, about 55 MB) from godotengine.org's GitHub, checks its SHA-512, keeps it in LOKI's data folder.", async () => {
-      install.disabled = true; await call("/godot-editor/install", {}); poll();
-    });
-    const zip = btn("Project to the web editor", "Downloads the project folder as a zip: import it in the web editor's Project Manager.", async () => {
+    const btn = (label, tip, fn, cls) => { const b = mk("button", cls || "quiet small", label); b.type = "button"; b.title = tip; b.addEventListener("click", fn); return b; };
+    const open = btn("Open in Godot", "Open the project in the Godot app on this computer, with the LOKI plugin and its Asset Library plugins - your agents work in it live.", async () => {
       if (!pick.value) return;
-      const res = await fetch("/godot-editor/project.zip?name=" + encodeURIComponent(pick.value), { headers: { Authorization: "Bearer " + state.token } });
-      if (!res.ok) { status.textContent = "Could not pack the project (HTTP " + res.status + ")."; return; }
-      const a = mk("a"); a.href = URL.createObjectURL(await res.blob()); a.download = pick.value + ".zip"; document.body.append(a); a.click(); a.remove();
-      status.textContent = "Saved " + pick.value + ".zip - in the editor: Import > pick the zip.";
-    });
-    const back = btn("Bring back from Downloads", "After Project > Tools > Download Project Source in the web editor: copies that zip's files into the project folder.", async () => {
-      if (!pick.value || !confirm("Copy the newest " + pick.value + "*.zip from Downloads into the project folder? Files with the same name are replaced.")) return;
-      const r = await call("/godot-editor/import", { name: pick.value, confirm: true });
-      status.textContent = r.ok ? r.note : (r.error || "failed");
-    });
-    const native = btn("Open in the Godot app", "Opens the project in the Godot editor installed on this computer, with the LOKI Studio plugin - for heavy work.", async () => {
-      if (!pick.value) return;
+      open.disabled = true;
       const r = await call("/godot-editor/native", { name: pick.value });
+      open.disabled = false;
       status.textContent = r.ok ? r.note : (r.error || "failed");
-    });
-    const own = btn("Web editor in its own window", "Opens the web editor as its own page (it needs cross-origin isolation, which a framed page here does not get).", () => {
-      window.open("/godot-editor/app/godot.editor.html", "_blank", "noopener");
-    });
-    // LOKI World is a Godot project (game/loki-world): change it here or in the Godot app, then Rebuild World -
-    // LOKI exports it with its own standard Godot (a C#/mono Godot cannot export to the web; engine/world_build.py)
-    const rebuild = btn("Rebuild World", "Export LOKI World (game/loki-world) to the World tab after you changed it in Godot. LOKI downloads its own Godot 4.7 for this once (about 80-170 MB, checked).", async () => {
+      setTimeout(refresh, 4000);
+    }, "send small");
+    const rebuild = btn("Rebuild the World tab", "Export LOKI World to the World tab's web copy after you changed it in Godot (LOKI keeps its own Godot 4.7 for this).", async () => {
       rebuild.disabled = true;
       const r = await call("/world/build", { confirm: true });
-      status.textContent = r.ok ? "Rebuilding LOKI World..." : (r.error || "failed");
-      watchBuild();
+      status.textContent = r.ok ? "Rebuilding the World tab's copy..." : (r.error || "failed");
+      setTimeout(() => { rebuild.disabled = false; }, 4000);
     });
-    async function watchBuild() {
-      let s;
-      try { s = await call("/world/build"); } catch (_) { rebuild.disabled = false; return; }
-      const job = (s && s.job) || {};
-      if (job.state === "building") { status.textContent = job.note || "Rebuilding LOKI World..."; setTimeout(watchBuild, 1500); return; }
-      rebuild.disabled = false;
-      if (job.state === "done" || job.state === "failed") status.textContent = job.note;
-      else if (s && s.out_of_date) status.textContent = "LOKI World changed since its last build - Rebuild World to see it in the World tab.";
-      rebuild.classList.toggle("attention", !!(s && s.out_of_date));
-    }
-    rebuild.hidden = true;
-    pick.addEventListener("change", () => { rebuild.hidden = pick.value !== "loki-world"; });
-    head.append(pick, install, zip, back, native, own, rebuild, status);
-    const flow = mk("p", "mode-note small");
-    const frame = mk("iframe", "mode-frame"); frame.title = "Godot web editor"; frame.hidden = true;
-    p.append(head, flow, frame);
+    head.append(pick, open, rebuild, status);
 
-    async function poll() {
+    const link = mk("section", "godot-live");
+    const linkHead = mk("h3", "", "Live link");
+    const linkBody = mk("div", "godot-live-body");
+    link.append(linkHead, linkBody);
+
+    const ask = mk("form", "godot-ask");
+    const askText = mk("textarea"); askText.rows = 2;
+    askText.placeholder = "Tell LOKI's agents what to change in the open project - e.g. \"add a lighthouse on the east cliff of LOKI World\"";
+    askText.setAttribute("aria-label", "What should LOKI's agents change in Godot?");
+    const askGo = mk("button", "send small", "Send to the agents"); askGo.type = "submit";
+    ask.append(askText, askGo);
+    ask.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = askText.value.trim();
+      if (!text) return;
+      askGo.disabled = true;
+      const prompt = "Work in the LIVE Godot editor with the godot_editor tool (the owner's real Godot, " +
+        (pick.selectedOptions[0] ? pick.selectedOptions[0].textContent : "the open project") + "). Start with editor_state; " +
+        "change scenes and scripts through godot_editor (undoable), save what you change, then run_game and look " +
+        "(screenshot / game_tree) to check it works. The task: " + text;
+      const r = await call("/jobs", { backend: "local", agent: "loki", prompt, isolate: false, timeout_s: 3600 });
+      askGo.disabled = false;
+      if (r && (r.ok || r.id || (r.job && r.job.id))) { askText.value = ""; status.textContent = "An agent took it - watch it below and at the Godot forge in LOKI World."; }
+      else status.textContent = (r && r.error) || "could not start the agent";
+      refresh();
+    });
+
+    const plug = mk("section", "godot-plugins");
+    const plugHead = mk("h3", "", "Plugins");
+    const plugList = mk("div", "godot-plugin-list");
+    const plugForm = mk("form", "godot-plugin-add");
+    const assetId = mk("input"); assetId.placeholder = "Asset Library number"; assetId.inputMode = "numeric";
+    assetId.setAttribute("aria-label", "Asset Library asset number");
+    const assetGo = mk("button", "quiet small", "Add plugin"); assetGo.type = "submit";
+    const browse = btn("Browse the Asset Library", "godotengine.org/asset-library: the number is in the asset's address (asset/1234). In Godot itself the AssetLib tab works too.", () => {
+      window.open("https://godotengine.org/asset-library/asset?godot_version=4.7", "_blank", "noopener");
+    });
+    plugForm.append(assetId, assetGo, browse);
+    plugForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!assetId.value.trim()) return;
+      assetGo.disabled = true;
+      const r = await call("/api/godot/call", { action: "install_plugin", args: { asset_id: assetId.value.trim() }, timeout: 120 });
+      assetGo.disabled = false;
+      status.textContent = r.ok ? "Installed " + r.installed.name + " " + r.installed.version + " - " + r.next : (r.error || "failed");
+      if (r.ok) assetId.value = "";
+      refreshPlugins();
+    });
+    plug.append(plugHead, plugList, plugForm);
+    p.append(head, link, ask, plug);
+
+    function ago(t) { const s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + " s ago" : Math.round(s / 60) + " min ago"; }
+    async function refresh() {
+      let ed;
+      try { ed = await call("/api/godot/editors"); } catch (_) { ed = null; }
+      linkBody.replaceChildren();
+      const eds = (ed && ed.editors) || [];
+      if (!eds.length) {
+        linkBody.append(mk("p", "mode-note", "No Godot editor is linked. Open the project in Godot (above): the LOKI plugin links it to LOKI by itself, and every LOKI agent can then see and change it live."));
+      }
+      for (const e of eds) {   // studio_godot.Editor.summary()
+        linkBody.append(mk("p", "godot-editor-row", "Godot " + (e.godot || "") + " - " + (e.name || e.project) +
+          (e.edited_scene ? " - editing " + e.edited_scene : "") + (e.playing ? " - the game is running" : "")));
+      }
+      const act = (ed && ed.activity) || {};
+      const rows = Object.entries(act).sort((a, b) => b[1].t - a[1].t);
+      if (rows.length) {
+        const ul = mk("ul", "godot-activity");
+        for (const [who, a] of rows) ul.append(mk("li", "", (who === "loki" ? "LOKI" : "Agent " + who.replace(/^job-/, "")) + ": " + a.detail + " (" + ago(a.t) + ")"));
+        linkBody.append(mk("p", "mode-note small", "Working in the editor now (they stand at the Godot forge in LOKI World):"), ul);
+      }
+    }
+    async function refreshPlugins() {
+      let r;
+      try { r = await call("/api/godot/call", { action: "plugins" }); } catch (_) { r = null; }
+      plugList.replaceChildren();
+      if (!r || !r.ok) { plugList.append(mk("p", "mode-note", (r && r.error) || "")); return; }
+      const man = r.manifest || [];
+      if (!man.length && !(r.installed || []).length) plugList.append(mk("p", "mode-note", "No plugins yet besides LOKI's own."));
+      for (const m of man) plugList.append(mk("p", "godot-plugin", m.name + " " + (m.version || "") + " (" + (m.license || "?") + ") - " + (m.addons || []).join(", ")));
+      const extra = (r.installed || []).filter((n) => n !== "loki_studio" && !man.some((m) => (m.addons || []).includes(n)));
+      if (extra.length) plugList.append(mk("p", "mode-note small", "Also in addons/ (not in plugins.json, so only on this machine): " + extra.join(", ")));
+    }
+    async function projects() {
       let s;
       try { s = await call("/godot-editor/status"); } catch (e) { status.textContent = e.message; return; }
       if (!s || !s.ok) { status.textContent = (s && s.error) || "LOKI's engine does not answer."; return; }
@@ -152,26 +208,15 @@ const LokiModeBar = (() => {
       if (!pick.options.length) pick.append(new Option("no Godot project in " + s.projects_dir, ""));
       if ([...pick.options].some((o) => o.value === keep)) pick.value = keep;
       else if ([...pick.options].some((o) => o.value === "loki-world")) pick.value = "loki-world";   // LOKI World first
+      open.disabled = !s.native;
+      if (!s.native) status.textContent = "Godot is not installed on this computer: get Godot 4.7 from godotengine.org (or set GODOT_BIN).";
       rebuild.hidden = pick.value !== "loki-world";
-      if (!rebuild.hidden && !rebuild.dataset.checked) { rebuild.dataset.checked = "1"; watchBuild(); }
-      flow.textContent = "Files: " + s.flow;
-      native.disabled = !s.native; native.title = s.native ? native.title : "Godot is not installed on this computer (or set GODOT_BIN).";
-      install.hidden = s.installed; zip.disabled = back.disabled = !s.installed;
-      own.hidden = !s.installed;
-      if (s.job && s.job.state === "downloading") { status.textContent = s.job.note; setTimeout(poll, 2000); return; }
-      if (s.job && s.job.state === "failed") status.textContent = "Download failed: " + s.job.note;
-      if (!s.installed) { install.disabled = false; frame.hidden = true; return; }
-      // SharedArrayBuffer: the editor needs a cross-origin-isolated page; a frame is isolated only if LOKI's window is.
-      if (window.crossOriginIsolated) {
-        if (!frame.src) frame.src = s.page;
-        frame.hidden = false;
-        status.textContent = "Godot " + s.version + " web editor.";
-      } else {
-        frame.hidden = true;
-        status.textContent = "This window cannot run the web editor inside it (no SharedArrayBuffer here). Use \"Web editor in its own window\" or \"Open in the Godot app\".";
-      }
     }
-    poll();
+    pick.addEventListener("change", () => { rebuild.hidden = pick.value !== "loki-world"; });
+    await projects();
+    refresh(); refreshPlugins();
+    const timer = setInterval(() => { if (!p.hidden && !document.hidden) refresh(); }, 3000);
+    p.addEventListener("remove", () => clearInterval(timer));
   }
 
   // ---------------------------------------------------------------- World: the same LOKI World panel as Settings > LOKI World

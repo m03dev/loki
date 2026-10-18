@@ -266,8 +266,16 @@ def open_native(name: str, popen=subprocess.Popen) -> dict:
     note = ""
     try:
         sys.path.insert(0, str(REPO / "studio"))
-        import install_godot_plugin  # pylint: disable=import-outside-toplevel
-        note = str(install_godot_plugin.install(root).get("note") or "")
+        if root.resolve() == (REPO / "game" / "loki-world").resolve():
+            import godot_live  # pylint: disable=import-outside-toplevel
+            got = godot_live.ensure_world(root, sync=True)   # the LOKI plugin + plugins.json, project.godot untouched
+            note = got.get("note", "")
+            failed = (got.get("plugins") or {}).get("failed") or []
+            if failed:
+                note += "; plugins not installed: " + "; ".join(failed)
+        else:
+            import install_godot_plugin  # pylint: disable=import-outside-toplevel
+            note = str(install_godot_plugin.install(root).get("note") or "")
     except Exception as exc:  # noqa: BLE001 - the editor still opens without the plugin
         note = "the LOKI Studio plugin could not be added (%s)" % exc
     kwargs: dict = {"cwd": str(root), "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,

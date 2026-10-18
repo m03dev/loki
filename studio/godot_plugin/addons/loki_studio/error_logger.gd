@@ -10,6 +10,7 @@ var source := "editor"
 var keep_messages := false
 var _mutex := Mutex.new()
 var _rows: Array = []
+var _seq := 0                 # rows are numbered so several links (Studio, LOKI's engine) each read every error
 var _lines: Array = []
 
 
@@ -21,8 +22,11 @@ func _log_error(function: String, file: String, line: int, code: String, rationa
 	if not script_backtraces.is_empty():
 		row["backtrace"] = str(script_backtraces[0]).substr(0, 800)
 	_mutex.lock()
-	if _rows.size() < 500:
-		_rows.append(row)
+	_seq += 1
+	row["n"] = _seq
+	_rows.append(row)
+	if _rows.size() > 500:
+		_rows = _rows.slice(_rows.size() - 500)
 	_mutex.unlock()
 
 
@@ -34,6 +38,17 @@ func _log_message(message: String, error: bool) -> void:
 	if _lines.size() > 400:
 		_lines = _lines.slice(_lines.size() - 400)
 	_mutex.unlock()
+
+
+## The errors after `cursor` (a row's "n"); each link keeps its own cursor.
+func errors_since(cursor: int) -> Array:
+	_mutex.lock()
+	var out: Array = []
+	for row in _rows:
+		if int(row.get("n", 0)) > cursor:
+			out.append(row)
+	_mutex.unlock()
+	return out
 
 
 func take_errors() -> Array:

@@ -26,11 +26,14 @@ const STATIONS := {
 	"test bench": [340.0, 0.56],
 	"review desk": [20.0, 0.56],
 	"terminal": [55.0, 0.6],
+	# where an agent stands while it works in the live Godot editor (engine/godot_live.py, 2026-10-18)
+	"godot forge": [160.0, 0.58],
 }
 const STATION_COLORS := {
 	"library": Color(0.25, 0.55, 0.95), "drafting table": Color(0.65, 0.4, 0.95),
 	"workshop": Color(0.25, 0.8, 0.45), "test bench": Color(1.0, 0.75, 0.25),
 	"review desk": Color(1.0, 0.5, 0.3), "terminal": Color(0.3, 0.45, 1.0),
+	"godot forge": Color(0.28, 0.55, 0.75),
 }
 
 
@@ -198,6 +201,14 @@ static func station(m: MeshMerger, body: StaticBody3D, name: String, pos: Vector
 		"review desk":
 			m.add(Mats.box(Vector3(0.6, 0.06, 0.4)), t * Transform3D(Basis(), Vector3(0.2, 0.99, 0)), Color(0.98, 0.96, 0.9))
 			m.add(Mats.cyl(0.08, 0.08, 0.2, 6), t * Transform3D(Basis(), Vector3(-0.45, 1.06, 0)), Color(0.85, 0.2, 0.2))
+		"godot forge":
+			# an anvil and a big screen showing the editor: agents shape LOKI World itself here
+			m.add(Mats.box(Vector3(0.7, 0.3, 0.35)), t * Transform3D(Basis(), Vector3(0.9, 0.55, 0.8)), Color(0.3, 0.32, 0.36))
+			m.add(Mats.box(Vector3(0.3, 0.4, 0.25)), t * Transform3D(Basis(), Vector3(0.9, 0.2, 0.8)), Color(0.25, 0.26, 0.3))
+			m.add(Mats.box(Vector3(1.3, 0.85, 0.08)), t * Transform3D(Basis(), Vector3(0, 1.45, -0.2)), Color(0.14, 0.16, 0.22))
+			m.add(Mats.box(Vector3(1.18, 0.73, 0.02)), t * Transform3D(Basis(), Vector3(0, 1.45, -0.15)), Color(0.28, 0.55, 0.75), false)
+			m.add(Mats.box(Vector3(0.5, 0.05, 0.03)), t * Transform3D(Basis(), Vector3(-0.2, 1.6, -0.13)), Color(0.95, 0.95, 1.0), false)
+			m.add(Mats.box(Vector3(0.7, 0.05, 0.03)), t * Transform3D(Basis(), Vector3(-0.1, 1.45, -0.13)), Color(0.95, 0.8, 0.4), false)
 		"terminal":
 			m.add(Mats.box(Vector3(0.9, 0.6, 0.08)), t * Transform3D(Basis(), Vector3(0, 1.3, -0.2)), Color(0.12, 0.14, 0.2))
 			m.add(Mats.box(Vector3(0.8, 0.5, 0.02)), t * Transform3D(Basis(), Vector3(0, 1.3, -0.15)), Color(0.3, 0.9, 1.0), false)

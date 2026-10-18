@@ -195,6 +195,7 @@ STATIONS = {
     "Tester": "test bench", "Reviewer": "review desk", "Browser tester": "terminal",
     "Loki agent": "workshop", "claude-code": "workshop", "codex": "workshop", "hermes": "library",
     "opencode": "workshop", "openhands": "workshop", "nanocoder": "workshop",
+    "Godot": "godot forge",   # working in the live Godot editor (engine/godot_live.py)
 }
 JOB_STATE = {"queued": "waiting", "starting": "working", "working": "working", "blocked": "blocked",
              "done": "done", "failed": "failed", "cancelled": "idle"}
@@ -243,6 +244,11 @@ def world(jobs: list, teams: list, chat_busy: bool, last_decision: dict | None =
             "stage": team_stage.get(team_id, ""),
             "last_message": said(team_id, role),
         })
+    try:   # an agent working in the live Godot editor stands at the Godot forge (engine/godot_live.py)
+        import godot_live  # pylint: disable=import-outside-toplevel
+        godot_live.apply_to_world(agents, now)
+    except Exception:  # noqa: BLE001 - the world never fails over this
+        pass
     return {"ok": True, "machine": machine_name(), "time": now, "agents": agents, "stats": stats,
             "teams": [{"id": t.get("id"), "goal": t.get("goal"), "status": t.get("status"),
                        "stage": t.get("stage"), "stages": _team_stages(t)} for t in teams[:10]],

@@ -6010,6 +6010,22 @@ TOOL_CATEGORIES["godot"] += ["make_godot_game"]
 DELEGATING |= {"make_godot_game"}
 # (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)
 
+# The live Godot editor (engine/godot_live.py, owner 2026-10-18: "agents ... in a live project state, change everything"):
+# every agent works in the owner's real Godot editor through the LOKI Studio plugin - LOKI World or any open project.
+# Read actions only in Plan mode (the tool enforces it); not hidden outside a Godot workspace (LOKI World is the project).
+import godot_live  # noqa: E402
+LOCAL_TOOLS["godot_editor"] = godot_live.godot_editor
+_GODOT_EDITOR_SCHEMA = schema(
+    "godot_editor", godot_live.tool_doc(),
+    {"action": {"type": "string", "enum": sorted(set(godot_live.studio_godot.ACTIONS) - {"quit"} | set(godot_live.EXTRA_ACTIONS))},
+     "args": {"type": "object", "description": "the action's arguments, e.g. {\"node\": \"Player\", \"property\": \"speed\", \"value\": \"6\"}"},
+     "project": {"type": "string", "description": "the project folder when more than one editor is open (default: the open one)"}},
+    ["action"])
+TOOL_SCHEMAS.append(_GODOT_EDITOR_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_GODOT_EDITOR_SCHEMA)
+MODEL_TOOL_NAMES.add("godot_editor")
+TOOL_CATEGORIES["godot"] += ["godot_editor"]
+
 
 # --- Session 29: documents, files and data (worktree) -----------------------------------------------
 # Read anything (doc_read.py), write Word/Excel/PowerPoint/PDF (doc_write.py), analyze data in a sandbox and

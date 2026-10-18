@@ -5,6 +5,7 @@ extends EditorDebuggerPlugin
 ## network port of our own, and only while the game runs from this editor.
 
 var bridge: Node
+var bridges: Array = []     # every link (Studio, LOKI's engine): each takes the replies to its own requests
 
 
 func _has_capture(prefix: String) -> bool:
@@ -12,8 +13,10 @@ func _has_capture(prefix: String) -> bool:
 
 
 func _capture(message: String, data: Array, session_id: int) -> bool:
-	if bridge != null:
-		bridge.on_game_message(message.trim_prefix("loki:"), data)
+	var all := bridges if not bridges.is_empty() else ([bridge] if bridge != null else [])
+	for b in all:
+		if b != null and is_instance_valid(b):
+			b.on_game_message(message.trim_prefix("loki:"), data)
 	return true
 
 
