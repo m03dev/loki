@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -311,8 +313,42 @@ def list_models(agent: Any, pid: str, timeout: float = 8.0, opener=urllib.reques
     return {"ok": True, "models": ids}
 
 
-def test(agent: Any, pid: str, timeout: float = 20.0, opener=urllib.request.urlopen) -> dict:
-    """One tiny real request (1-token completion) so the card can say "works" honestly."""
+def _test_body(pid: str, cfg) -> dict:
+    """The Test request: what a real chat sends, cut down to one short answer. DeepSeek on NVIDIA
+    NIM gets the same thinking-off switch the agent uses (loki._provider_kwargs) - without it the
+    model reasons first and the free queue made Test time out although the key was fine."""
+    body = {"model": cfg.model, "max_tokens": 8, "messages": [{"role": "user", "content": "Say OK"}]}
+    model, url = str(cfg.model or "").lower(), str(cfg.base_url or "")
+    if "deepseek" in model and (pid == "nvidia" or "integrate.api.nvidia.com" in url):
+        body["chat_template_kwargs"] = {"thinking": False}
+    return body
+
+
+def _diagnose_timeout(pid: str, cfg, opener) -> str:
+    """After a timed-out Test: can we reach the provider at all, and does it offer this model?"""
+    try:
+        _, data = _request(cfg.base_url.rstrip("/") + "/models", str(cfg.api_key or ""), 10.0, opener=opener)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return "the provider is reachable but refused the key (HTTP %d)" % exc.code
+        return "the provider is reachable (HTTP %d on its model list) but did not answer in time" % exc.code
+    except Exception as exc:  # noqa: BLE001
+        host = urllib.parse.urlparse(cfg.base_url).hostname or cfg.base_url
+        return ("this computer cannot reach %s (%s) - check the internet connection, a VPN, or a "
+                "firewall/antivirus blocking LOKI's Python" % (host, type(exc).__name__))
+    items = data.get("data", data.get("models", [])) if isinstance(data, dict) else data
+    ids = [str((i.get("id") or i.get("name")) if isinstance(i, dict) else i) for i in (items or [])]
+    if ids and cfg.model not in ids:
+        family = str(cfg.model).split("/")[-1].split("-")[0].lower()
+        close = [m for m in ids if family and family in m.lower()][:4]
+        return ("%s is not in this provider's model list%s - pick another model in the list next to Test"
+                % (cfg.model, (" (it offers " + ", ".join(close) + ")") if close else ""))
+    return ("the key and the connection work, but %s took too long to answer (the free queue is busy) - "
+            "LOKI keeps it and retries; press Test again in a minute" % cfg.model)
+
+
+def test(agent: Any, pid: str, timeout: float = 45.0, opener=urllib.request.urlopen) -> dict:
+    """One tiny real request (a few-token completion) so the card can say "works" honestly."""
     cfg = agent.MODELS.get(pid)
     if cfg is None:
         return {"ok": False, "error": "unknown provider"}
@@ -323,8 +359,7 @@ def test(agent: Any, pid: str, timeout: float = 20.0, opener=urllib.request.urlo
     else:
         try:
             status, data = _request(cfg.base_url.rstrip("/") + "/chat/completions", str(cfg.api_key or ""), timeout,
-                                    body={"model": cfg.model, "max_tokens": 1,
-                                          "messages": [{"role": "user", "content": "Say OK"}]}, opener=opener)
+                                    body=_test_body(pid, cfg), opener=opener)
             model = data.get("model", cfg.model) if isinstance(data, dict) else cfg.model
             result = {"ok": 200 <= status < 300, "detail": "answered with %s" % model}
             if result["ok"]:
@@ -353,7 +388,11 @@ def test(agent: Any, pid: str, timeout: float = 20.0, opener=urllib.request.urlo
             except Exception:  # noqa: BLE001
                 pass
         except Exception as exc:  # noqa: BLE001
-            result = {"ok": False, "detail": "could not reach %s (%s)" % (cfg.base_url, type(exc).__name__)}
+            reason = getattr(exc, "reason", exc)
+            if isinstance(exc, TimeoutError) or isinstance(reason, (TimeoutError, socket.timeout)):
+                result = {"ok": False, "detail": "no answer in %d s: %s" % (timeout, _diagnose_timeout(pid, cfg, opener))}
+            else:
+                result = {"ok": False, "detail": "could not reach %s (%s)" % (cfg.base_url, type(exc).__name__)}
     result.update({"at": time.time(), "ms": int((time.monotonic() - started) * 1000)})
     _TESTS[pid] = result
     return {"ok": True, "provider": pid, "test": result}

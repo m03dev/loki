@@ -78,6 +78,15 @@ pub.stdout, priv.stdout = "Public\n", "Private\n"
 check("a Public Wi-Fi on Windows gets a plain fix", "Private" in signin.network_hint(run=lambda *a, **k: pub))
 check("a Private Wi-Fi gets no warning", signin.network_hint(run=lambda *a, **k: priv) == "")
 
+calls = []
+Done = type("Done", (), {"returncode": 0})
+fw = signin.allow_phone_port(8770, run=lambda argv, **k: (calls.append(argv), Done())[1])
+check("'Let phones in' asks Windows once for this one port, home networks only",
+      fw["ok"] and "RunAs" in calls[0][-1] and "localport=8770" in calls[0][-1] and "profile=private,domain" in calls[0][-1],
+      (fw, calls))
+Declined = type("Declined", (), {"returncode": 1})
+check("a declined prompt says so", not signin.allow_phone_port(8770, run=lambda *a, **k: Declined())["ok"])
+
 # --- the public QRs go to real https pages
 links = [(e["id"], e.get("keys", "")) for e in providers_catalog.CATALOG if e.get("keys")] \
     if hasattr(providers_catalog, "CATALOG") else []
@@ -90,6 +99,60 @@ check("OpenRouter phone sign-in is OpenRouter's own page with no localhost callb
 js = (REPO / "app" / "ui" / "settings.js").read_text(encoding="utf-8")
 check("the key QR window offers the other addresses and the key page", "Try another address" in js and "key page instead" in js)
 check("the key QR window tells the user Paste works too", "use Paste next to the key box" in js)
+check("the key QR window offers the internet link and the Windows allow", "internet link" in js and "/handoff/firewall" in js)
+
+# --- the provider Test button (owner: "I added the key but I don't think it's working")
+import io  # noqa: E402
+import json  # noqa: E402
+import types  # noqa: E402
+cfg = types.SimpleNamespace(base_url="https://integrate.api.nvidia.com/v1", api_key="nvapi-x",
+                            model="deepseek-ai/deepseek-v4.1-flash")
+agent = types.SimpleNamespace(MODELS={"nvidia": cfg})
+sent = []
+
+
+class _Resp:
+    def __init__(self, data):
+        self.status, self.data = 200, data
+
+    def read(self):
+        return json.dumps(self.data).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def nim(models=None, slow=False, down=False):
+    def opener(req, timeout=0):
+        sent.append((req.full_url, json.loads(req.data.decode()) if req.data else None))
+        if down:
+            raise urllib.error.URLError(TimeoutError("timed out"))
+        if req.full_url.endswith("/models"):
+            return _Resp({"data": [{"id": m} for m in (models or [])]})
+        if slow:
+            raise TimeoutError("timed out")
+        return _Resp({"model": cfg.model})
+    return opener
+
+
+import urllib.error  # noqa: E402
+r = providers_catalog.test(agent, "nvidia", timeout=1, opener=nim())["test"]
+check("Test sends DeepSeek on NVIDIA the thinking-off switch the chat uses",
+      r["ok"] and sent[-1][1].get("chat_template_kwargs") == {"thinking": False}, (r, sent[-1]))
+r = providers_catalog.test(agent, "nvidia", timeout=1, opener=nim(models=[cfg.model], slow=True))["test"]
+check("a slow answer says the key and connection work, not 'could not reach'",
+      not r["ok"] and "key and the connection work" in r["detail"], r)
+r = providers_catalog.test(agent, "nvidia", timeout=1,
+                           opener=nim(models=["deepseek-ai/deepseek-v4-flash", "meta/llama-3.3-70b"], slow=True))["test"]
+check("a model NVIDIA does not offer is named, with the ones it does",
+      "not in this provider's model list" in r["detail"] and "deepseek-ai/deepseek-v4-flash" in r["detail"]
+      and "llama" not in r["detail"], r)
+r = providers_catalog.test(agent, "nvidia", timeout=1, opener=nim(down=True))["test"]
+check("no connection at all says this computer cannot reach NVIDIA",
+      "cannot reach integrate.api.nvidia.com" in r["detail"], r)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

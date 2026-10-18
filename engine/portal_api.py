@@ -6,7 +6,7 @@ only has to route here:
   GET  /models/doctor                     the routing in plain words (routing.doctor)
   GET  /providers/health                  the provider health registry (provider_health)
   POST /providers/probe      {id?}        re-check one/all providers now (free /models calls only)
-  POST /providers/test       {id}         one real 1-token request
+  POST /providers/test       {id}         one real few-token request
   POST /providers/models     {id}         its live model list
   POST /providers/model      {id, model}  use this model for it
   POST /providers/enable     {id, on}     switch it on/off for routing
@@ -18,6 +18,7 @@ only has to route here:
   POST /signin/device        {id}         RFC 8628 sign-in code
   GET  /signin/status?state=              is that sign-in done
   POST /handoff              {id}         one-time "send a key from your phone" page
+  POST /handoff/firewall                  Windows: let phones reach the phone page (one UAC prompt)
   GET  /handoff/status?id=
   GET  /qr?text=                          an SVG QR code
   GET  /settings/general | POST /settings/general {key: value}
@@ -257,7 +258,10 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
         started["svgs"] = [qr.svg(u) for u in started["urls"][:4]]
         started["keys"] = entry.get("keys", "")
         started["hint"] = signin.network_hint()
+        started["windows"] = os.name == "nt"
         return 200, started
+    if route == "/handoff/firewall":
+        return 200, signin.allow_phone_port(int(os.environ.get("LOKI_HANDOFF_PORT") or signin.HANDOFF_PORT))
     if route == "/settings/general":
         updates = {}
         for key, value in (data.get("values") or {}).items():

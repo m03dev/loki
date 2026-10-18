@@ -286,27 +286,17 @@ function providerCard(p) {
     }));
   }
   if (p.available && p.base_url && (p.configured || p.has_key)) {
-    const pick = el("select", "model-pick");
-    pick.setAttribute("aria-label", p.name + " model");
-    const current = el("option", "", p.model || "model");
-    current.value = p.model;
-    pick.append(current);
-    let loaded = false;
-    pick.addEventListener("focus", async () => {
-      if (loaded) return;
-      loaded = true;
+    // LOKI's own list, not a native <select>: on Windows the system popup is white and the
+    // dark theme's option colours made it white-on-white (owner, 2026-10-17: "soft grey").
+    const pick = modelPicker(p.name + " model", p.model || "model", async () => {
       const r = await api("/providers/models", { id: p.id });
-      if (!r.ok) { result.textContent = "✗ models: " + (r.error || ""); return; }
-      for (const m of r.models) {
-        if (m === p.model) continue;
-        const o = el("option", "", m + (/(:|-)free\b/.test(m) ? "  · free" : ""));
-        o.value = m;
-        pick.append(o);
-      }
-    });
-    pick.addEventListener("change", async () => {
-      const r = await api("/providers/model", { id: p.id, model: pick.value });
-      result.textContent = r.ok ? "Uses " + pick.value + " now" : "✗ " + (r.error || "");
+      if (!r.ok) { result.textContent = "✗ models: " + (r.error || ""); return [p.model]; }
+      return [p.model, ...r.models.filter((m) => m !== p.model)];
+    }, async (model) => {
+      const r = await api("/providers/model", { id: p.id, model });
+      result.textContent = r.ok ? "Uses " + model + " now" : "✗ " + (r.error || "");
+      if (r.ok) p.model = model;
+      return r.ok;
     });
     foot.append(pick);
   }
@@ -325,6 +315,120 @@ function providerCard(p) {
   body.append(foot, result);
   card.append(body);
   return card;
+}
+
+// ---------------------------------------------------------------- model picker
+// A soft, translucent grey-blue list with a search box (providers list hundreds of models).
+// The list floats above the sheet (position: fixed) so a card's edges never clip it.
+function modelPicker(label, current, load, choose) {
+  const wrap = el("div", "model-pick mpick");
+  const btn = el("button", "mpick-btn");
+  btn.type = "button";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  btn.setAttribute("aria-label", label);
+  btn.title = label + ": " + current;
+  const name = el("span", "mpick-name", current);
+  btn.append(name, el("span", "mpick-caret", "▾"));
+  const pop = el("div", "mpick-pop");
+  pop.hidden = true;
+  const search = el("input", "mpick-search");
+  search.type = "search";
+  search.placeholder = "Search models";
+  search.setAttribute("aria-label", "Search models");
+  const list = el("div", "mpick-list");
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", label);
+  pop.append(search, list);
+  wrap.append(btn);
+  let models = null, active = -1, value = current;
+
+  const place = () => {
+    const r = btn.getBoundingClientRect();
+    const width = Math.max(r.width, 260);
+    const below = window.innerHeight - r.bottom - 12;
+    const height = Math.min(320, Math.max(160, below > 200 ? below : r.top - 12));
+    pop.style.width = width + "px";
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + "px";
+    pop.style.maxHeight = height + "px";
+    if (below > 200 || below > r.top) { pop.style.top = (r.bottom + 6) + "px"; pop.style.bottom = ""; }
+    else { pop.style.bottom = (window.innerHeight - r.top + 6) + "px"; pop.style.top = ""; }
+  };
+  const rows = () => [...list.querySelectorAll(".mpick-item")];
+  const mark = (i) => {
+    const items = rows();
+    items.forEach((n, k) => n.classList.toggle("active", k === i));
+    active = i;
+    if (items[i]) items[i].scrollIntoView({ block: "nearest" });
+  };
+  const render = () => {
+    const q = search.value.trim().toLowerCase();
+    const shown = (models || [value]).filter((m) => m && (!q || m.toLowerCase().includes(q)));
+    list.replaceChildren(...shown.slice(0, 300).map((m) => {
+      const item = el("div", "mpick-item" + (m === value ? " current" : ""));
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", m === value ? "true" : "false");
+      item.dataset.model = m;
+      item.append(el("span", "mpick-id", m));
+      if (/(:|-)free\b/.test(m)) item.append(el("span", "mpick-tag", "free"));
+      item.addEventListener("mousedown", (event) => { event.preventDefault(); pickIt(m); });
+      return item;
+    }));
+    if (!shown.length) list.append(el("div", "mpick-empty", models ? "No model matches" : "Loading…"));
+    mark(shown.length ? Math.max(0, shown.indexOf(value)) : -1);
+  };
+  const close = () => {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    pop.remove();
+    btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("mousedown", outside, true);
+    window.removeEventListener("resize", close);
+    document.removeEventListener("scroll", onScroll, true);
+  };
+  const outside = (event) => { if (!pop.contains(event.target) && !btn.contains(event.target)) close(); };
+  const onScroll = (event) => { if (!pop.contains(event.target)) close(); };
+  const open = async () => {
+    document.body.append(pop);
+    pop.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    search.value = "";
+    place();
+    render();
+    search.focus();
+    document.addEventListener("mousedown", outside, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", onScroll, true);
+    if (models === null) {
+      models = [];
+      try { models = (await load()) || [value]; } catch (_) { models = [value]; }
+      if (!pop.hidden) render();
+    }
+  };
+  const pickIt = async (m) => {
+    close();
+    btn.focus();
+    if (m === value) return;
+    const before = value;
+    value = m;
+    name.textContent = m;
+    btn.title = label + ": " + m;
+    if (!(await choose(m))) { value = before; name.textContent = before; btn.title = label + ": " + before; }
+  };
+  btn.addEventListener("click", () => (pop.hidden ? open() : close()));
+  btn.addEventListener("keydown", (event) => {
+    if (["ArrowDown", "Enter", " "].includes(event.key) && pop.hidden) { event.preventDefault(); open(); }
+  });
+  search.addEventListener("input", render);
+  search.addEventListener("keydown", (event) => {
+    const items = rows();
+    if (event.key === "ArrowDown") { event.preventDefault(); mark(Math.min(items.length - 1, active + 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); mark(Math.max(0, active - 1)); }
+    else if (event.key === "Enter") { event.preventDefault(); if (items[active]) pickIt(items[active].dataset.model); }
+    else if (event.key === "Escape") { event.preventDefault(); close(); btn.focus(); }
+    else if (event.key === "Tab") close();
+  });
+  return wrap;
 }
 
 // ---------------------------------------------------------------- QR modal
@@ -375,23 +479,44 @@ async function phoneKey(p) {
   }
   // The QR holds this computer's address on the home network. The first address is only the
   // likeliest one (a VPN or a WSL/Hyper-V adapter can win), so the others are one tap away.
-  const urls = (r.urls && r.urls.length) ? r.urls : [r.url];
-  const svgs = (r.svgs && r.svgs.length) ? r.svgs : [r.svg];
+  // A black page on the phone means it never got an answer: the firewall dropped it, or the phone
+  // is on another network. The internet link (LOKI's relay) arrives a moment later for that.
+  const urls = ((r.urls && r.urls.length) ? r.urls : [r.url]).slice();
+  const svgs = ((r.svgs && r.svgs.length) ? r.svgs : [r.svg]).slice();
   let shown = 0;
-  const showAddress = (i) => {
+  const showAddress = async (i) => {
     shown = i;
+    if (!svgs[i]) svgs[i] = await qrSvg(urls[i]);
     const holder = el("div");
     holder.innerHTML = svgs[i] || "";
     $("#qr-image").replaceChildren(...(holder.firstElementChild ? [holder.firstElementChild] : []));
     $("#qr-text").textContent = urls[i];
+    note.textContent = urls[i] === relayUrl
+      ? "Internet link: works on any network and through the firewall. It is not encrypted on the way, so use it only when the home link won't open."
+      : "";
   };
+  const note = el("p", "note");
+  let relayUrl = "";
   const actions = [];
-  if (urls.length > 1) {
-    const next = button("Phone can't open it? Try another address", "small", () => {
-      showAddress((shown + 1) % urls.length);
-      next.textContent = "Try another address (" + (shown + 1) + " of " + urls.length + ")";
+  const next = button("Black page on the phone? Try another address", "small", async () => {
+    await showAddress((shown + 1) % urls.length);
+    next.textContent = "Try another address (" + (shown + 1) + " of " + urls.length + ")";
+  });
+  next.hidden = urls.length < 2;
+  actions.push(next);
+  const internet = button("Use the internet link (any network)", "small", () => showAddress(urls.indexOf(relayUrl)));
+  internet.hidden = true;
+  actions.push(internet);
+  if (r.windows) {
+    const allow = button("Let phones in (Windows asks once)", "small", async () => {
+      allow.disabled = true;
+      qrStatus("Approve the Windows prompt…");
+      const a = await api("/handoff/firewall", {});
+      allow.disabled = false;
+      qrStatus(a.ok ? "✓ " + a.message + ". Scan again." : "✗ " + (a.error || ""));
     });
-    actions.push(next);
+    allow.title = "Adds a Windows Firewall rule for LOKI's phone page (port 8770, home networks only)";
+    actions.push(allow);
   }
   if (p.keys) {
     actions.push(button("Show " + p.name + "'s key page instead", "small", async () => {
@@ -399,9 +524,11 @@ async function phoneKey(p) {
       holder.innerHTML = await qrSvg(p.keys);
       $("#qr-image").replaceChildren(...(holder.firstElementChild ? [holder.firstElementChild] : []));
       $("#qr-text").textContent = p.keys;
+      note.textContent = "";
     }));
   }
-  const steps = ["Your phone must be on the same Wi-Fi as this computer (not a guest network).",
+  actions.push(note);
+  const steps = ["Your phone should be on the same Wi-Fi as this computer (not a guest network).",
                  "Scan the code. A LOKI page opens on the phone" + (p.keys ? " with a link to " + p.name + "'s key page." : "."),
                  "Get the key there, paste it into the LOKI page and tap Send.",
                  "LOKI checks it and connects " + p.name + ". The page then stops working."];
@@ -412,6 +539,12 @@ async function phoneKey(p) {
   qrView.timer = setInterval(async () => {
     const s = await api("/handoff/status?id=" + encodeURIComponent(r.id)).catch(() => null);
     if (!s || !s.ok) { qrStatus("This code expired. Close and try again."); clearInterval(qrView.timer); return; }
+    if (s.relay_url && !relayUrl) {
+      relayUrl = s.relay_url;
+      urls.push(relayUrl);
+      internet.hidden = false;
+      next.hidden = urls.length < 2;
+    }
     if (s.result) {
       clearInterval(qrView.timer);
       qrStatus(s.result.ok ? "✓ " + (s.result.message || "Connected") : "✗ " + (s.result.error || "That key did not work"));

@@ -6,6 +6,25 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 evening: provider Test, phone QR black page, model picker (Claude, cloud)
+
+Owner: added the NVIDIA key, Test said "could not reach integrate.api.nvidia.com (TimeoutError)"; the phone QR opens
+"no link, just a black page"; the model list is far too bright.
+1. **Test** (`providers_catalog.test`): sends DeepSeek on NIM `chat_template_kwargs: {thinking: false}` like the chat does
+   (it was reasoning first and timing out), 8 tokens, 45 s. A timeout is now diagnosed (`_diagnose_timeout`): cannot
+   reach the host at all / key refused / the model id is not in NVIDIA's list (names the ones it offers) / reachable
+   but the free queue was slow. NOT verified against the real NVIDIA API (no access from the cloud box): if it says
+   `deepseek-ai/deepseek-v4.1-flash` is not in the list, the default in `engine/loki.py` must change.
+2. **Black page** = the phone got no answer (QR images decode fine, checked with OpenCV; the page itself renders).
+   The hand-off page is now also published through the relay on a relay-picked port (`relay_link.publish_page`,
+   own status, closed with the page; `LOKI_HANDOFF_RELAY=off` / `LOKI_RELAY=off` turn it off) and offered as "Use the
+   internet link", labelled not encrypted. On Windows "Let phones in" asks once (UAC) for a firewall rule on TCP 8770,
+   private/domain only (`signin.allow_phone_port`, POST /handoff/firewall).
+3. **Model picker**: provider cards use LOKI's own list (`modelPicker` in settings.js: search, keyboard, fixed popover),
+   soft translucent grey-blue glass; the chat's model menu matches; native `<option>`s get a solid grey everywhere.
+Checked here: test_qr_links, test_relay, test_portal, test_ui_smoke, `--self-test` (with an openai stub; PyPI was
+blocked in this sandbox so the openai-dependent suites ran only in CI). Not checked on the real PC/phone.
+
 ## Session 30 one-click install (worktree)
 
 The owner: "it should prompt users after they install the client to download a local model or go online and connect to

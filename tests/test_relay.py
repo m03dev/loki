@@ -92,7 +92,7 @@ class FakeBore:
                 conn.close()
                 return
             pub.listen(16)
-            relay_link._send(conn, {"Hello": want})
+            relay_link._send(conn, {"Hello": pub.getsockname()[1]})   # Hello(0): bore picks the port
             relay_link._send(conn, "Heartbeat")
 
             def watch():   # like bore: when the client's control connection drops, so does its port
@@ -275,6 +275,32 @@ finally:
     stale.close()
 pub.stop()
 pc_server.stop()
+
+section("the phone key page, over the relay when the phone cannot reach this computer")
+sys.path.insert(0, str(REPO / "engine"))
+import signin  # noqa: E402
+import urllib.request  # noqa: E402
+got_keys = []
+page = signin.PhoneHandoff("nvidia", "NVIDIA NIM", lambda p, k: (got_keys.append(k), {"ok": True, "message": "ok"})[1],
+                           ["192.168.1.23"], peers.private_client, ttl_s=30, bind="127.0.0.1", relay=True)
+check("the internet link appears next to the home addresses", wait_for(lambda: bool(page.relay_url)), page.status())
+check("it is the relay's address with the same one-time path",
+      page.relay_url.startswith("http://127.0.0.1:") and page.relay_url.endswith("/k/" + page.token)
+      and page.status()["urls"][-1] == page.relay_url and page.status()["urls"][0].startswith("http://192.168.1.23:"),
+      page.status())
+direct = urllib.request.build_opener(urllib.request.ProxyHandler({})).open
+try:
+    html = direct(page.relay_url, timeout=5).read().decode()
+    check("the phone page opens through the relay (not a black page)", "Send a key to LOKI" in html, html[:200])
+    direct(urllib.request.Request(page.relay_url, data=b"key=nvapi-test-123", method="POST"), timeout=5).read()
+    check("a key sent through the relay reaches LOKI", got_keys == ["nvapi-test-123"], got_keys)
+except OSError as exc:
+    check("the phone page opens through the relay (not a black page)", False, exc)
+page.stop()
+check("closing the page closes its relay tunnel too", page._relay is None)
+os.environ["LOKI_RELAY"] = "off"
+check("LOKI_RELAY=off: no internet link", relay_link.publish_page(1, wait_s=0.2) == (None, ""))
+os.environ.pop("LOKI_RELAY", None)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

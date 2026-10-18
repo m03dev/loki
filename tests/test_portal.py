@@ -194,7 +194,7 @@ def chat_opener(req, timeout):
 
 
 result = pc.test(fake, "groq", opener=chat_opener)["test"]
-check("Test sends one 1-token request with the key", result["ok"] and seen["body"]["max_tokens"] == 1
+check("Test sends one tiny request (a few tokens) with the key", result["ok"] and seen["body"]["max_tokens"] <= 8
       and seen["auth"] == "Bearer k-groq")
 
 

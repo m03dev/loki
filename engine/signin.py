@@ -231,7 +231,7 @@ class PhoneHandoff:
 
     def __init__(self, provider: str, label: str, connect: Callable[[str, str], dict],
                  host_ip, private_client: Callable[[str], bool], ttl_s: float = HANDOFF_TTL_S,
-                 bind: str = "0.0.0.0", keys_url: str = "", port_number: int = 0) -> None:
+                 bind: str = "0.0.0.0", keys_url: str = "", port_number: int = 0, relay: bool = False) -> None:
         self.provider, self.label, self.connect = provider, label, connect
         self.keys_url = keys_url if str(keys_url).startswith("https://") else ""
         hosts = [host_ip] if isinstance(host_ip, str) else [h for h in host_ip if h]
@@ -308,10 +308,28 @@ class PhoneHandoff:
         # offers the next one when the phone cannot open the first)
         self.urls = ["http://%s:%d/k/%s" % (h, self.port, self.token) for h in (hosts or ["127.0.0.1"])]
         self.url = self.urls[0]
+        self.relay_url, self._relay = "", None
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="loki-phone-handoff").start()
+        if relay:   # the internet way in, for when the phone cannot reach this computer directly
+            threading.Thread(target=self._publish_relay, daemon=True, name="loki-phone-relay").start()
         timer = threading.Timer(ttl_s, self.stop)
         timer.daemon = True      # an open page never keeps LOKI (or a test) from exiting
         timer.start()
+
+    def _publish_relay(self) -> None:
+        try:
+            import relay_link  # pylint: disable=import-outside-toplevel
+            pub, where = relay_link.publish_page(self.port)
+        except Exception:  # noqa: BLE001
+            return
+        if pub is None:
+            return
+        if self.expired():
+            pub.stop()
+            return
+        self._relay = pub
+        self.relay_url = "http://%s/k/%s" % (where, self.token)
+        self.urls = self.urls + [self.relay_url]
 
     def expired(self) -> bool:
         return time.time() - self.created > self.ttl_s or bool(self.result and self.result.get("ok"))
@@ -334,10 +352,14 @@ class PhoneHandoff:
                    if self.keys_url else ""))
 
     def status(self) -> dict:
-        return {"ok": True, "provider": self.provider, "url": self.url, "urls": self.urls, "done": bool(self.result),
+        return {"ok": True, "provider": self.provider, "url": self.url, "urls": self.urls, "relay_url": self.relay_url,
+                "done": bool(self.result),
                 "result": self.result, "expires_in": max(0, int(self.ttl_s - (time.time() - self.created)))}
 
     def stop(self) -> None:
+        if self._relay is not None:
+            self._relay.stop()
+            self._relay = None
         try:
             self.httpd.shutdown()
             self.httpd.server_close()
@@ -372,6 +394,27 @@ def network_hint(run=None) -> str:
     return ""
 
 
+def allow_phone_port(port_number: int = HANDOFF_PORT, run=None) -> dict:
+    """Windows only: ask Windows (one UAC prompt the owner answers) to let phones on the home
+    network open LOKI's phone page. Private and domain networks only, this one TCP port."""
+    if os.name != "nt" and run is None:
+        return {"ok": False, "error": "only Windows needs this; on a Mac allow LOKI when macOS asks"}
+    import subprocess  # pylint: disable=import-outside-toplevel
+    run = run or subprocess.run
+    port_number = int(port_number)
+    args = ("advfirewall firewall add rule name=\"LOKI phone page\" dir=in action=allow protocol=TCP "
+            "localport=%d profile=private,domain" % port_number)
+    command = "Start-Process netsh -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '%s'" % args
+    try:
+        out = run(["powershell", "-NoProfile", "-Command", command], capture_output=True, text=True, timeout=120,
+                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": "could not ask Windows (%s)" % type(exc).__name__}
+    if getattr(out, "returncode", 1) != 0:
+        return {"ok": False, "error": "Windows did not allow it (the prompt was declined?)"}
+    return {"ok": True, "message": "Phones on your home Wi-Fi can open LOKI's page now (port %d)" % port_number}
+
+
 def handoff_start(provider: str, label: str, connect, host_ip, private_client, keys_url: str = "") -> dict:
     for token in [t for t, h in HANDOFFS.items() if h.expired()]:
         HANDOFFS.pop(token).stop()
@@ -379,7 +422,9 @@ def handoff_start(provider: str, label: str, connect, host_ip, private_client, k
         port_number = int(os.environ.get("LOKI_HANDOFF_PORT", HANDOFF_PORT))
     except ValueError:
         port_number = HANDOFF_PORT
-    handoff = PhoneHandoff(provider, label, connect, host_ip, private_client, keys_url=keys_url, port_number=port_number)
+    relay = os.environ.get("LOKI_HANDOFF_RELAY", "on").strip().lower() not in ("off", "0", "false", "no")
+    handoff = PhoneHandoff(provider, label, connect, host_ip, private_client, keys_url=keys_url,
+                           port_number=port_number, relay=relay)
     HANDOFFS[handoff.token] = handoff
     return {"id": handoff.token, **handoff.status()}
 

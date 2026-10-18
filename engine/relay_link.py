@@ -144,8 +144,11 @@ class Publisher:
     """Keeps a bore tunnel from <relay>:<derived port> to 127.0.0.1:<local peer port>,
     reconnecting with back-off for as long as the engine runs."""
 
-    def __init__(self, local_port: int, shared: str, name: str) -> None:
-        self.local_port, self.ports, self.stop_flag = local_port, relay_ports(shared, name), threading.Event()
+    def __init__(self, local_port: int, shared: str, name: str, ports: list | None = None,
+                 status: dict | None = None) -> None:
+        self.local_port, self.stop_flag = local_port, threading.Event()
+        self.ports = list(ports) if ports else relay_ports(shared, name)
+        self.status = STATUS if status is None else status   # a page tunnel keeps its own
         self.control: socket.socket | None = None
 
     def start(self) -> "Publisher":
@@ -160,7 +163,7 @@ class Publisher:
                     close()
                 except OSError:
                     pass
-        STATUS.update({"publishing": False})
+        self.status.update({"publishing": False})
 
     def _run(self) -> None:
         wait, k, misses = 2.0, 0, 0
@@ -171,10 +174,10 @@ class Publisher:
             except PortTaken as exc:
                 misses += 1
                 if misses >= 2:                 # our own old tunnel can hold it briefly; then move on
-                    k, misses = (k + 1) % CANDIDATES, 0
-                STATUS.update({"publishing": False, "error": str(exc)})
+                    k, misses = (k + 1) % len(self.ports), 0
+                self.status.update({"publishing": False, "error": str(exc)})
             except (OSError, ValueError) as exc:
-                STATUS.update({"publishing": False, "error": "relay %s unreachable (%s)" % (host(), exc)})
+                self.status.update({"publishing": False, "error": "relay %s unreachable (%s)" % (host(), exc)})
                 wait = min(wait * 2, 60.0)
             if self.stop_flag.wait(wait):
                 break
@@ -193,7 +196,7 @@ class Publisher:
             sock.close()
             raise ValueError("unexpected relay reply %r" % (reply,))
         sock.settimeout(None)
-        STATUS.update({"publishing": True, "host": host(), "port": int(reply["Hello"]), "candidate": k,
+        self.status.update({"publishing": True, "host": host(), "port": int(reply["Hello"]), "candidate": k,
                        "since": time.time(), "error": ""})
         while not self.stop_flag.is_set():
             message = frames.recv()
@@ -202,9 +205,9 @@ class Publisher:
             if isinstance(message, dict) and "Connection" in message:
                 threading.Thread(target=self._accept, args=(str(message["Connection"]),), daemon=True).start()
             elif isinstance(message, dict) and "Error" in message:
-                STATUS["error"] = str(message["Error"])
+                self.status["error"] = str(message["Error"])
             # "Heartbeat": nothing to do
-        STATUS.update({"publishing": False})
+        self.status.update({"publishing": False})
         try:
             sock.close()
         except OSError:
@@ -218,7 +221,7 @@ class Publisher:
             local = _connect("127.0.0.1", self.local_port)
         except (OSError, ValueError):
             return
-        STATUS["connections"] = STATUS.get("connections", 0) + 1
+        self.status["connections"] = self.status.get("connections", 0) + 1
         _pipe(remote, local)
 
 
@@ -235,6 +238,25 @@ def publish(local_port: int, shared: str, name: str) -> Publisher | None:
         if _publisher is None:
             _publisher = Publisher(local_port, shared, name).start()
         return _publisher
+
+
+def publish_page(local_port: int, wait_s: float = 5.0) -> tuple:
+    """Put a one-time local page (the phone key page) on the relay, on a port the relay picks.
+
+    For when the phone cannot reach this computer directly (Windows firewall, guest Wi-Fi, the
+    phone on mobile data). Returns (publisher, "host:port") or (None, "") when the relay is off
+    or did not answer in time. The caller stops the publisher when the page is done."""
+    if mode() == "off":
+        return None, ""
+    status: dict = {"publishing": False, "port": 0, "error": ""}
+    pub = Publisher(local_port, "", "page", ports=[0], status=status).start()
+    end = time.time() + wait_s
+    while time.time() < end:
+        if status.get("publishing") and status.get("port"):
+            return pub, "%s:%d" % (host(), int(status["port"]))
+        time.sleep(0.05)
+    pub.stop()
+    return None, ""
 
 
 def stop() -> None:
