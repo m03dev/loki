@@ -62,3 +62,28 @@ def load_env_file(path: Path | None = None) -> None:
             key = key[7:].strip()
         if key and key not in os.environ:
             os.environ[key] = value.strip().strip('"').strip("'")
+    try:
+        import user_keys  # pylint: disable=import-outside-toplevel  (engine/: keys saved per user account)
+        user_keys.load_into()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def refresh_keys() -> None:
+    """Keys saved since Studio started (LOKI's Settings > Connections): picked up on the next request,
+    not only after a restart. A key that is set already is left alone."""
+    try:
+        import user_keys  # pylint: disable=import-outside-toplevel
+        path = data() / ".env"
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines() if path.is_file() else []
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key, value = key.strip(), value.strip().strip('"').strip("'")
+            if user_keys.is_key(key) and value and not os.environ.get(key, "").strip():
+                os.environ[key] = value
+        user_keys.load_into()
+    except Exception:  # noqa: BLE001
+        pass

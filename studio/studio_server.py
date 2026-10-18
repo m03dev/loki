@@ -39,6 +39,7 @@ The Godot editor link (studio_godot.py; the plugin's bridge.gd):
 from __future__ import annotations
 
 import json
+import subprocess
 import mimetypes
 import os
 import secrets
@@ -67,6 +68,18 @@ MAX_EDITOR_BODY = 16_000_000          # the editor's results carry screenshots
 EDITOR_TOOLS = {"editor_errors", "screenshot", "playtest_step", "find_lag", "project_index", "project_graph", "godot_docs"}
 
 
+
+def _code_commit() -> str:
+    """The commit this Studio's code is (its pinned copy or the checkout): LOKI's window restarts a
+    Studio whose code is older than the one it should run (engine/studio_api.embed)."""
+    try:
+        import studio_paths  # pylint: disable=import-outside-toplevel
+        out = subprocess.run(["git", "-C", str(studio_paths.CODE), "rev-parse", "HEAD"], capture_output=True,
+                             text=True, timeout=5, check=False)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
 class StudioServer:
     def __init__(self, studio, port: int = 0, ui_dir: Path | None = None, control=studio_control,
                  on_raise: Callable | None = None, connect_file: Path | None = None):
@@ -94,8 +107,8 @@ class StudioServer:
             os.chmod(home / "studio.token", 0o600)
         except OSError:
             pass
-        (home / "running.json").write_text(json.dumps({"port": self.port, "pid": os.getpid(), "t": time.time()}),
-                                           encoding="utf-8")
+        (home / "running.json").write_text(json.dumps({"port": self.port, "pid": os.getpid(), "t": time.time(),
+                                                       "code": _code_commit()}), encoding="utf-8")
         if self.connect_file is not None:   # how the Godot plugin (in any project) finds this Studio
             studio_godot.write_connect(self.connect_file, "http://127.0.0.1:%d" % self.port, self.token)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True, name="studio-http")

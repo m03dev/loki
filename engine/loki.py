@@ -200,6 +200,11 @@ def write_provider_key(provider: str, key: str) -> bool:
     except OSError:
         return False
     os.environ[name] = value
+    try:
+        import user_keys  # pylint: disable=import-outside-toplevel
+        user_keys.update({name: value})   # every copy of LOKI on this account has it from now on
+    except Exception:  # noqa: BLE001
+        pass
     cfg = MODELS.get((provider or "").strip().lower())
     if cfg is not None:
         cfg.api_key = value
@@ -241,12 +246,17 @@ def connect_provider(provider: str, key: str) -> dict:
     if name not in PROVIDER_ENV_VARS:
         return {"ok": False, "error": "Unknown provider '%s'." % name}
     reason = verify_provider_key(name, key)
-    if reason:
+    unchecked = reason.startswith("Could not reach")
+    if reason and not unchecked:
         return {"ok": False, "error": reason}
     if not write_provider_key(name, key):
         return {"ok": False, "error": "Could not save the key."}
-    return {"ok": True, "provider": name, "env": PROVIDER_ENV_VARS[name],
-            "message": "%s connected." % name.replace("-", " ").title()}
+    title = name.replace("-", " ").title()
+    # A key LOKI could not check (no internet, the provider slow) is still saved: throwing it away
+    # made it look like keys "don't save" (owner, 2026-10-18). A bad one shows up on its first use.
+    message = ("%s key saved. LOKI could not reach %s to check it just now; it is used from the next request."
+               % (title, title)) if unchecked else "%s connected." % title
+    return {"ok": True, "provider": name, "env": PROVIDER_ENV_VARS[name], "message": message, "checked": not unchecked}
 
 
 def _load_env_file() -> None:
@@ -272,6 +282,12 @@ def _load_env_file() -> None:
 
 
 _load_env_file()
+try:
+    import user_keys as _user_keys  # noqa: E402  (keys saved per user account: ~/.loki/keys.env)
+    _user_keys.adopt(env_file_path() if "env_file_path" in globals() else DATA_DIR / ".env")
+    _user_keys.load_into()
+except Exception:  # noqa: BLE001 - keys are a convenience; never stop the engine over them
+    _user_keys = None
 
 
 class ModelConfig(BaseModel):

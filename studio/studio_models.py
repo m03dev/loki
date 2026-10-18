@@ -68,6 +68,8 @@ def thinking_fields() -> dict:
 
 def providers(env: dict | None = None) -> list:
     """Every provider Studio can drive, best first (the main driver leads)."""
+    if env is None:
+        studio_paths.refresh_keys()   # a key saved in LOKI's Settings since Studio started counts now
     e = os.environ if env is None else env
     allow_paid = str(e.get("LOKI_ALLOW_PAID", "0")).strip() == "1"
     nim_base, nim_key = e.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"), e.get("NVIDIA_API_KEY", "")

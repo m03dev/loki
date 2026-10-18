@@ -53,6 +53,11 @@ def write_env(path: Path, updates: dict) -> None:
             os.environ.pop(key, None)
         else:
             os.environ[key] = str(value)
+    try:
+        import user_keys  # pylint: disable=import-outside-toplevel
+        user_keys.update({k: v for k, v in updates.items() if user_keys.is_key(k)})   # Disconnect forgets it everywhere
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # --- what this machine tells a peer ------------------------------------------------

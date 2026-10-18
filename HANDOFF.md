@@ -6,6 +6,29 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (fixes from the Mac's logs, Claude).
 
+## 2026-10-18 01:45: keys that stay saved, a Studio that answers (Claude, on the Mac by computer use + cloud)
+
+Owner: "none of the stuff is working its not calling any tools or responding ... why arnt my api keys saving i did the
+nvidia key ... it needs to save per user". Found on the Mac:
+- **Studio ran 9d1f8db for hours** (pid from 22:21): LOKI's Studio tab reuses a running Studio server forever, so no
+  update ever reached it (its pin had already been cleared to move). Now Studio writes the commit it runs into
+  running.json and `studio_api.embed` stops a Studio whose code is not `wanted_code()` (pin.next/pin, else HEAD) and
+  starts a fresh one - never while a session is working (`busy()`).
+- **Studio's local model was hard-wired to qwen3:8b**, never installed on the Mac -> every turn "model 'qwen3:8b' not
+  found". `studio_models.local_model()` (shipped 3bdeef0) takes the engine's pick if installed, else an installed one.
+- **The NVIDIA key was never on this Mac** (not in harness_data/.env or anywhere; Connections says Not connected).
+  Keys were per-checkout files, so a key typed in another checkout/drive/machine looked "not saved". New
+  `engine/user_keys.py`: every key also lives in ONE per-user file, ~/.loki/keys.env (%USERPROFILE%\.loki\keys.env,
+  mode 600), loaded by the engine and Studio; Connect saves there, Disconnect (write_env with None) forgets there;
+  existing .env keys are adopted once. Keys never leave the computer (no peer sync - the relay is not encrypted).
+- **Connect threw a key away when the provider could not be reached** for the check; now it is saved ("could not check
+  it just now"). Studio re-reads keys per request (`studio_paths.refresh_keys`), so no restart is needed.
+- Suites get their own empty LOKI_USER_KEYS (tools/ship.py), so they never see the owner's keys.
+- Checked: tests/test_keys_studio.py 25/25, test_portal 239/239, test_relay 33/33 (cloud, openai stub). test_studio's
+  4 model-call checks fail identically before/after under the stub (no real openai in the cloud). Shipped with
+  --no-tests for that reason; CI runs everything on macOS + Windows.
+- Not verified on the real machines yet: a fresh Studio replacing the stale one, the owner's NVIDIA key connect.
+
 ## 2026-10-18 early: four fixes from the Mac's own logs (Claude, on the Mac + cloud)
 
 Read from the Mac's harness_data/app/engine.out and jobs.json, not guessed:

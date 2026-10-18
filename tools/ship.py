@@ -35,7 +35,7 @@ FULL = [False]   # --full: every suite, no time budget (slow; the PC's nightly r
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
-          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_clipboard", "test_qr_links", "test_mmo_systems", "test_character", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability", "test_documents", "test_files_ui", "test_apps", "test_studio_godot", "test_qol", "test_install", "test_cad", "test_studio_destination", "test_ui_fit", "test_auto_setup", "test_local_broken", "test_forge3d", "test_forge_ui", "test_godogen", "test_wechaty"]
+          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_clipboard", "test_qr_links", "test_mmo_systems", "test_character", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability", "test_documents", "test_files_ui", "test_apps", "test_studio_godot", "test_qol", "test_install", "test_cad", "test_studio_destination", "test_ui_fit", "test_auto_setup", "test_local_broken", "test_forge3d", "test_forge_ui", "test_godogen", "test_wechaty", "test_keys_studio"]
 
 
 def _suite_env() -> dict:
@@ -55,6 +55,8 @@ def _suite_env() -> dict:
     env["LOKI_TIMESFM_APPROVED"] = "0"   # a suite never starts the real TimesFM pip install
     env["LOKI_UPDATE_PREFLIGHT"] = "0"   # suites' throwaway repos; tests/test_update_overhaul.py turns it on
     env["LOKI_EMBED"] = "off"            # memory search is plain BM25 in suites, the same with or without Ollama
+    # suites never see the owner's real keys (engine/user_keys.py): an empty per-user key file of their own
+    env["LOKI_USER_KEYS"] = os.path.join(tempfile.mkdtemp(prefix="loki-userkeys-"), "keys.env")
     # Each suite gets its own provider-health file (engine/provider_health.py), so one suite's
     # "gemini quota spent" never steers another's routing; and no background probes.
     env["LOKI_HEALTH_FILE"] = os.path.join(tempfile.mkdtemp(prefix="loki-health-"), "provider_health.json")

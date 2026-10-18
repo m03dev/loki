@@ -78,11 +78,77 @@ def _spawn(argv: list, data: Path, popen=None) -> None:
     (popen or subprocess.Popen)([python, *argv], **kwargs)  # noqa: S603 - our own program
 
 
+def _git_head(tree: Path) -> str:
+    try:
+        out = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             timeout=5, check=False)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def wanted_code(data: Path) -> str:
+    """The commit Studio should run now: its pin (the move it was cleared for, else the pin), else the checkout."""
+    try:
+        rec = json.loads((data / "studio" / "pin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rec = {}
+    if isinstance(rec, dict) and (data / "studio" / "pinned" / "studio" / "studio_app.py").is_file():
+        return str(rec.get("next") or rec.get("commit") or "")
+    return _git_head(REPO)
+
+
+def stale(info: dict, data: Path) -> bool:
+    """True when the running Studio's code is not the code it should run (or it is too old to say)."""
+    have = str(info.get("code") or "")
+    want = wanted_code(data)
+    return not have or bool(want and have != want)
+
+
+def busy(data: Path, now: float | None = None) -> bool:
+    """A Studio session is working right now: never restart under it."""
+    import time as _time  # pylint: disable=import-outside-toplevel
+    now = _time.time() if now is None else now
+    for path in (data / "studio" / "sessions").glob("*/session.json"):
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if str(rec.get("status")) in ("working", "starting") and now - float(rec.get("updated") or 0) < 900:
+            return True
+    return False
+
+
+def stop(info: dict, wait_s: float = 4.0) -> None:
+    """End a running Studio server (its sessions and worktrees stay on disk)."""
+    import signal  # pylint: disable=import-outside-toplevel
+    import time as _time  # pylint: disable=import-outside-toplevel
+    pid = int(info.get("pid") or 0)
+    if pid <= 0 or pid == os.getpid():
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)   # Windows: TerminateProcess
+    except OSError:
+        return
+    end = _time.time() + wait_s
+    while _time.time() < end:
+        try:
+            req = urllib.request.Request("http://127.0.0.1:%d/api/ping" % int(info.get("port") or 0),
+                                         headers={"Authorization": "Bearer " + str(info.get("token") or "")})
+            urllib.request.urlopen(req, timeout=0.5).close()
+        except (OSError, ValueError):
+            return
+        _time.sleep(0.25)
+
+
 def embed(data: Path, popen=None, clock=None) -> dict:
     """Studio for the tab: its address + token when it runs; else start its server once in the background."""
     import time as _time  # pylint: disable=import-outside-toplevel
     now = (clock or _time.time)()
     up = running(data)
+    if up and stale(up, data) and not busy(data):
+        stop(up)        # a Studio still on old code (the Mac ran 9d1f8db for hours, 2026-10-18): start it fresh
+        up = running(data)
     if up:
         return {"ok": True, "running": True, "url": "http://127.0.0.1:%d/#token=%s" % (int(up["port"]), up["token"])}
     if getattr(sys, "frozen", False):
