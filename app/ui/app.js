@@ -591,10 +591,51 @@ async function loadMemory() {
   if (typeof loadMemoryCore === "function") loadMemoryCore();
 }
 
+// LOKI installing its own add-ons in the background (engine/auto_setup.py): what it is doing
+// now, and buttons to start it (or the big ones too) right away.
+const autoSetup = { timer: 0 };
+function autoSetupBox() {
+  const wrap = el("div", "row auto-setup");
+  const line = el("p", "note");
+  const go = el("button", "small", "Install what LOKI needs now");
+  go.type = "button";
+  go.title = "Light add-ons that fit this computer: documents, data, OCR, media, background removal, Chromium, speech, CAD";
+  const all = el("button", "small", "Everything (incl. big model downloads)");
+  all.type = "button";
+  all.title = "Also the local picture maker and, on an NVIDIA PC, the local video maker - several GB";
+  const show = (s) => {
+    if (!s || !s.ok) { line.textContent = ""; return; }
+    const done = (s.done || []).length, failed = Object.keys(s.failed || {}).length;
+    if (s.running) line.textContent = "Installing " + (s.current || "…") + " · " + (s.queue || []).length + " to go" + (done ? " · " + done + " done" : "");
+    else if (s.finished) line.textContent = done || failed ? ("Installed " + done + (failed ? " · " + failed + " failed: " + Object.keys(s.failed).join(", ") : "")) : "Everything LOKI needs is installed.";
+    else line.textContent = s.setting === "off" ? "LOKI does not install add-ons by itself (Settings > General)." : "LOKI checks what it needs shortly after it starts.";
+    clearTimeout(autoSetup.timer);
+    if (s.running) autoSetup.timer = setTimeout(async () => {
+      const next = await api("/autosetup/status").catch(() => null);
+      if (next && next.ok && !next.running) loadManifests();   // the cards show what is installed now
+      else show(next);
+    }, 3000);
+  };
+  const start = async (level) => {
+    go.disabled = all.disabled = true;
+    const r = await api("/autosetup/start", { level }).catch(() => null);
+    go.disabled = all.disabled = false;
+    if (r && !r.ok) line.textContent = "✗ " + (r.error || "");
+    setTimeout(async () => show(await api("/autosetup/status").catch(() => null)), 900);
+  };
+  go.addEventListener("click", () => start("recommended"));
+  all.addEventListener("click", () => start("everything"));
+  const buttons = el("div", "row-actions");
+  buttons.append(go, all);
+  wrap.append(line, buttons);
+  api("/autosetup/status").then(show).catch(() => {});
+  return wrap;
+}
+
 async function loadManifests() {
   const data = await api("/capabilities/manifests").catch(() => null);
   const box = $("#manifests");
-  box.replaceChildren();
+  box.replaceChildren(autoSetupBox());
   if (!data || !data.ok) return;
   for (const cap of data.capabilities || []) {
     const r = el("div", "row manifest");

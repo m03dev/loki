@@ -1268,6 +1268,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                   "tuned_promoted": bool(getattr(agent, "TUNED_PROMOTED", False))})
             return
             return
+        if route == "/autosetup/status":
+            import auto_setup  # pylint: disable=import-outside-toplevel
+            self._send_json(200, {"ok": True, **auto_setup.status()})
+            return
         if route == "/capabilities":
             agent = self.server.state.agent
             if hasattr(agent, "capability_summary"):
@@ -1828,6 +1832,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/capabilities/install":
             self._send_json(*capability_install(state, data))
+            return
+        if route == "/autosetup/start":   # "Install everything this machine needs" (Settings > Add-ons)
+            import auto_setup  # pylint: disable=import-outside-toplevel
+            which = str(data.get("level") or "")
+            if which not in ("", "recommended", "everything"):
+                self._send_json(400, {"ok": False, "error": "level is recommended or everything"})
+                return
+            self._send_json(200, auto_setup.start(Path(getattr(state.agent, "DATA_DIR", ".")), which or "recommended",
+                                                  delay_s=0.5))
             return
         if route == "/ecc/sync":
             try:
@@ -2678,6 +2691,19 @@ async def serve() -> None:
     keeper.start()
     print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    try:   # LOKI installs the add-ons it needs by itself, in the background (engine/auto_setup.py)
+        import auto_setup  # pylint: disable=import-outside-toplevel
+
+        def _busy() -> bool:
+            held = state.try_busy()
+            if held is None:
+                return True
+            for lock in held:
+                lock.release()
+            return False
+        auto_setup.start(Path(getattr(loki, "DATA_DIR", ".")), busy=_busy)
+    except Exception:  # noqa: BLE001
+        pass
     try:   # NVIDIA serves DeepSeek under changing names; a wrong one was HTTP 404 on the Mac
         import nim_models  # pylint: disable=import-outside-toplevel
         if "nvidia" in loki.MODELS:

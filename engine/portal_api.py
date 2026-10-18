@@ -78,6 +78,8 @@ GENERAL = {
                           "label": "LOKI World engine: babylon = Babylon.js in the pixel cel-shaded look (default); godot = the Godot MMO's web build (falls back to babylon until it is exported); classic = the light hand-written one; three = smooth three.js"},
     "LOKI_PROMPTED_TOOLS": {"kind": "text", "default": "", "label": "Providers that get tools as text (comma list)"},
     "LOKI_OPENCODE_MODEL": {"kind": "text", "default": "", "label": "OpenCode model (provider/model)"},
+    "LOKI_AUTO_SETUP": {"kind": "choice", "default": "recommended", "choices": ["recommended", "everything", "off"],
+                        "label": "LOKI installs the add-ons it needs by itself in the background (everything = also the big local picture/video makers)"},
     "LOKI_EVOLVE": {"kind": "choice", "default": "auto", "choices": ["auto", "on", "off"],
                     "label": "LOKI grows its own core by itself when idle (auto: on the Windows PC only)"},
     "LOKI_OPTIONS": {"kind": "choice", "default": "auto", "choices": ["auto", "always", "off"],

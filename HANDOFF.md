@@ -6,6 +6,16 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 night: LOKI installs what it needs by itself (Claude, cloud)
+
+Owner: "get loki to start downloading and installing packages it needs". `engine/auto_setup.py`: 45 s after the engine
+is ready, one add-on at a time, waiting while a request runs (BridgeState.try_busy). LOKI_AUTO_SETUP (Settings >
+General): recommended (default: documents, data-analysis, ocr, media, rembg, chromium, whisper, cadcraft, mlx on Apple
+silicon) | everything (+ local-image, + local-video on NVIDIA) | off. Failures are remembered in <data>/auto_setup.json
+and retried after 6 h, not in a loop. Installing never turns an add-on on (permissions stay the owner's OK). Settings >
+Add-ons shows progress + "Install what LOKI needs now" / "Everything". Routes: GET /autosetup/status, POST
+/autosetup/start {level}. Tested with fakes (tests/test_auto_setup.py); not run on the real Mac/PC yet.
+
 ## 2026-10-17 evening: provider Test, phone QR black page, model picker (Claude, cloud)
 
 Owner: added the NVIDIA key, Test said "could not reach integrate.api.nvidia.com (TimeoutError)"; the phone QR opens
