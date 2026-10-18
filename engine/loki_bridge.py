@@ -1473,6 +1473,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
             return
+        if route in ("/clipboard/paste", "/clipboard/copy"):
+            # the window's own Paste/Copy (engine/clipboard_io.py) - pywebview can block the browser's
+            import clipboard_io  # pylint: disable=import-outside-toplevel
+            if route == "/clipboard/paste":
+                self._send_json(200, {"ok": True, "text": clipboard_io.read()})
+            else:
+                self._send_json(200, {"ok": clipboard_io.write(str(data.get("text", "")))})
+            return
         if route == "/quit":
             # Settings > Quit LOKI: stop for good (the app then exits instead of keeping it in the background)
             self._send_json(200, {"ok": True, "quitting": True})

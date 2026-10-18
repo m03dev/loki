@@ -690,3 +690,13 @@ button.danger:hover { color: var(--err); }
 .settings-panel .tab-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.38); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 .settings-panel .tab-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.55); background-clip: padding-box; }
 .settings-nav .tabs { scrollbar-width: thin; }
+
+/* clipboard.js: a right-click menu for text fields and a Paste button on key fields */
+.clip-menu { position: fixed; z-index: 10000; display: flex; flex-direction: column; min-width: 140px; padding: 4px;
+  background: rgba(20,22,28,.98); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.clip-menu button { text-align: left; background: transparent; border: 0; color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+.clip-menu button:hover:not(:disabled) { background: var(--surface); }
+.clip-menu button:disabled { opacity: .4; }
+.clip-paste.icon-btn { min-width: 32px; min-height: 30px; margin-left: 6px; }
+
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }

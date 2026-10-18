@@ -595,7 +595,7 @@ def open_window(url: str = "", html: str = "") -> bool:
     if html:
         webview.create_window("Loki", html=html, width=720, height=360)
     else:
-        WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520),
+        WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520), text_select=True,
                                                  background_color="#1f1f24")
     log("opening the Loki window")
     try:
