@@ -145,6 +145,9 @@ def requirements_digest(tree: Path) -> str:
     return hashlib.sha256(b"".join(r.read_bytes() for r in reqs if r.is_file())).hexdigest()
 
 
+BASE_MARKER = "loki-base"   # the bundled python the venv was made from (moves = remade)
+
+
 def _venv_home(venv: Path) -> str:
     try:
         for line in (venv / "pyvenv.cfg").read_text(encoding="utf-8").splitlines():
@@ -165,8 +168,18 @@ def ensure_venv(data: Path, base: Path | None) -> Path | None:
     if base is None:
         return current
     want = {base.parent.resolve(), base.resolve().parent}   # a symlinked python reports either
-    if current is not None and _venv_home(venv) and Path(_venv_home(venv)).resolve() in want:
-        return current
+    if current is not None:
+        # The venv is kept only when it was made from THIS bundled runtime, at THIS place. `venv`
+        # records the python it resolved (macOS: the Homebrew/framework path), never the bundled
+        # location, so pyvenv.cfg cannot tell that the app moved - we record the base path ourselves.
+        try:
+            recorded = (venv / BASE_MARKER).read_text(encoding="utf-8").strip()
+        except OSError:
+            recorded = ""
+        if recorded == os.path.abspath(base):
+            return current
+        if not recorded and _venv_home(venv) and Path(_venv_home(venv)).resolve() in want:
+            return current   # made before the marker existed
     log("making LOKI's Python environment from the bundled runtime" + (" (it moved)" if current else ""))
     shutil.rmtree(venv, ignore_errors=True)
     proc = subprocess.run([str(base), "-m", "venv", "--system-site-packages", "--without-pip", str(venv)],
@@ -175,6 +188,10 @@ def ensure_venv(data: Path, base: Path | None) -> Path | None:
     if proc.returncode != 0 or made is None:
         log("could not make the environment: " + (proc.stdout + proc.stderr)[-600:])
         return None
+    try:
+        (venv / BASE_MARKER).write_text(os.path.abspath(base), encoding="utf-8")
+    except OSError:
+        pass
     runtime = base.parent.parent.parent if base.parent.name == "bin" else base.parent.parent   # runtime/python/[bin/]python
     bundled = runtime / "loki-requirements.sha256"
     try:   # the bundle's packages are installed already: say so, so ensure_packages has nothing to do

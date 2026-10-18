@@ -222,6 +222,23 @@ check("conversion cache hit on the second read", not first.get("cached") and sec
 html_out = doc_write.markdown_to_html(MD, "Annual report")
 check("Markdown -> HTML (for the Chromium PDF) has tables and lists", "<table>" in html_out and "<ol>" in html_out and "<blockquote>" in html_out)
 auto = doc_write.markdown_to_pdf(MD, SAMPLES / "auto.pdf", "Annual report", engine="auto")
+def _ocr_font(font_mod, size):
+    """A SCALABLE font for the OCR sample. DejaVu is on Linux/CI; macOS has no DejaVuSans.ttf, and the
+    old fallback - font_mod.load_default() - is a ~10 px bitmap face, so the drawn text was too small
+    for any OCR to read and the check failed with "OCR found no text"."""
+    for name in ("DejaVuSans.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
+                 "/System/Library/Fonts/Helvetica.ttc", "/Library/Fonts/Arial.ttf",
+                 "C:/Windows/Fonts/arial.ttf"):
+        try:
+            return font_mod.truetype(name, size)
+        except OSError:
+            continue
+    try:
+        return font_mod.load_default(size)   # Pillow >= 10.1
+    except TypeError:
+        return font_mod.load_default()
+
+
 check("markdown_to_pdf picks the best engine available (%s)" % auto.get("engine"), auto["ok"] and (SAMPLES / "auto.pdf").read_bytes()[:4] == b"%PDF")
 
 # a scanned PDF: a picture of text, no text layer
@@ -229,10 +246,7 @@ if has("PIL"):
     from PIL import Image, ImageDraw, ImageFont  # noqa: E402
     img = Image.new("RGB", (1300, 420), "white")
     draw = ImageDraw.Draw(img)
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", 64)
-    except OSError:
-        font = ImageFont.load_default()
+    font = _ocr_font(ImageFont, 64)
     draw.text((40, 60), "INVOICE NUMBER 4471", fill="black", font=font)
     draw.text((40, 200), "TOTAL DUE 980 EUR", fill="black", font=font)
     buf = io.BytesIO()

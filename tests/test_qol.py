@@ -420,6 +420,8 @@ async def browser_part():
             print("SKIP the window part: no Chromium (%s)" % str(exc)[:120])
             return
         page = await browser.new_page(viewport={"width": 1240, "height": 860})
+        # a loaded Mac can be slow to settle: 3 s per step was fine on CI and flaky here
+        page.set_default_timeout(15000)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "Failed to load resource" not in m.text else None)
@@ -512,11 +514,19 @@ async def browser_part():
         await page.wait_for_timeout(300)
         await page.fill("#prompt", "second job")
         await page.press("#prompt", "Enter")
-        await page.wait_for_selector("#qol-queue .qol-q.queued", timeout=3000)
+        await page.wait_for_selector("#qol-queue .qol-q.queued", timeout=10000)
         check("Enter while LOKI works queues the message (nothing lost)", "second job" in await page.inner_text("#qol-queue")
               and await page.input_value("#prompt") == "")
-        check("a queued message has Steer / Send now / Edit / Remove icons with tooltips",
-              len(await page.query_selector_all("#qol-queue .qol-q.queued button[data-tip-name] svg")) == 4)
+        # the 4 icon buttons are built a beat after the row itself appears, so wait for the count
+        # rather than counting once (a single count came up short under a loaded test machine)
+        try:
+            await page.wait_for_function(
+                "document.querySelectorAll('#qol-queue .qol-q.queued button[data-tip-name] svg').length === 4",
+                timeout=10000)
+            icons = 4
+        except Exception:  # noqa: BLE001 - report the real count in the check below
+            icons = len(await page.query_selector_all("#qol-queue .qol-q.queued button[data-tip-name] svg"))
+        check("a queued message has Steer / Send now / Edit / Remove icons with tooltips", icons == 4)
         await page.fill("#prompt", "make it blue")
         await page.press("#prompt", "Control+Enter")
         await shot(page, "queue")
@@ -555,7 +565,7 @@ async def browser_part():
         ENG["chat_mode"] = "ok"
         btn = await page.query_selector("#qol-conn button.send:not([hidden])")
         if btn:                                   # LOKI may already have reconnected by itself
-            await btn.click(timeout=3000)
+            await btn.click(timeout=10000)
         await page.wait_for_selector("#qol-conn.good", timeout=5000)
         check("reconnect: the banner says it is back", "again" in await page.inner_text("#qol-conn"))
         await page.wait_for_timeout(400)
@@ -572,17 +582,17 @@ async def browser_part():
         # ---- shortcuts, search, find, prefs
         await page.click("#transcript")
         await page.keyboard.press("Control+K")
-        await page.wait_for_selector("#qol-search:not([hidden])", timeout=3000)
+        await page.wait_for_selector("#qol-search:not([hidden])", timeout=10000)
         await page.fill("#qol-search input", "tides")
-        await page.wait_for_selector("#qol-search .qol-hit-row", timeout=3000)
+        await page.wait_for_selector("#qol-search .qol-hit-row", timeout=10000)
         check("Ctrl/Cmd+K searches every chat's messages", "about tides" in await page.inner_text("#qol-search .qol-results"))
         await page.press("#qol-search input", "Enter")
-        await page.wait_for_selector(".qol-find:not([hidden])", timeout=3000)
+        await page.wait_for_selector(".qol-find:not([hidden])", timeout=10000)
         check("opening a hit finds the words in that chat", await page.query_selector(".turn.qol-hit") is not None
               and "/" in await page.inner_text(".qol-find-count"))
         await page.press(".qol-find input", "Escape")
         await page.keyboard.press("Control+/")
-        await page.wait_for_selector("#qol-prefs:not([hidden])", timeout=3000)
+        await page.wait_for_selector("#qol-prefs:not([hidden])", timeout=10000)
         await shot(page, "shortcuts")
         n_rows = len(await page.query_selector_all("#qol-prefs .qol-key-row"))
         check("Ctrl/Cmd+/ opens Shortcuts and chat comfort (%d shortcuts)" % n_rows, n_rows >= 12)

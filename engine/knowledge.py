@@ -26,6 +26,8 @@ import threading
 import time
 from pathlib import Path
 
+import atomic
+
 SCHEME = "viking://"
 WRITABLE = {"memory", "state"}
 MAX_READ = 200_000
@@ -82,9 +84,7 @@ class LocalViking:
             raise KnowledgeError("a file path is required")
         target = self._resolve(space, path, must_exist=False)
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_text(str(text), encoding="utf-8")
-        os.replace(tmp, target)
+        atomic.write_text(target, str(text))
 
     def list(self, uri: str) -> list[str]:
         space, path = self._parse(uri)
@@ -204,10 +204,7 @@ class ProjectIndex:
         return {"workspace": str(self.root), "files": {}, "t": 0, "complete": False}
 
     def _save(self, data: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.path)
+        atomic.write_json(self.path, data)
         _INDEX_CACHE.pop(str(self.path), None)
 
     def _walk(self):
@@ -397,10 +394,7 @@ def list_collections(data_dir: Path) -> list:
 
 def _save_collections(data_dir: Path, items: list) -> None:
     path = collections_file(data_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(items, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic.write_json(path, items, indent=1)
 
 
 def add_collection(data_dir: Path, folder: Path, name: str = "", ocr: bool = False) -> dict:

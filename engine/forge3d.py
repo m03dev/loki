@@ -190,6 +190,26 @@ def _rembg_cutout(img):
         return None
 
 
+def _plain_background(img, tol: float = 22.0) -> bool:
+    """True when the border of the picture is one flat colour - a drawing, or an image made on the
+    "plain white background" we ask the image makers for. On those the flood-fill cut-out is as good
+    as rembg and ~200x faster, so the lift skips rembg (each call builds an ONNX session: ~11 s)."""
+    w, h = img.size
+    step = max(1, min(w, h) // 48)
+    edge = []
+    for x in range(0, w, step):
+        edge.append(img.getpixel((x, 0)))
+        edge.append(img.getpixel((x, h - 1)))
+    for y in range(0, h, step):
+        edge.append(img.getpixel((0, y)))
+        edge.append(img.getpixel((w - 1, y)))
+    if len(edge) < 4:
+        return False
+    med = tuple(sorted(p[c] for p in edge)[len(edge) // 2] for c in range(3))
+    odd = sum(1 for p in edge if (p[0] - med[0]) ** 2 + (p[1] - med[1]) ** 2 + (p[2] - med[2]) ** 2 > tol * tol)
+    return odd <= max(1, len(edge) // 20)      # at most 5% of the border is off the background
+
+
 def silhouette(img, grid: int = LIFT_GRID, cutout: float = 0.19) -> tuple:
     """(mask, rgb, w, h): the subject on a small grid. mask[y][x] is True on the subject.
     Uses the alpha channel when the picture has a transparent background; else the colour
@@ -620,8 +640,12 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             base = base.with_name("%s-%d" % (base.name, n))
             n += 1
         say("cutting out the subject", 0.3)
-        cut = _rembg_cutout(img)
-        cutter = "rembg" if cut is not None else "border colour"
+        cut = None
+        if _plain_background(img):
+            cutter = "border colour"     # one flat background colour: no need for the model at all
+        else:
+            cut = _rembg_cutout(img)
+            cutter = "rembg" if cut is not None else "border colour"
         if cut is None:
             mask, _, w, h = silhouette(img, grid=256, cutout=(opts or clean_options())["cutout"])
             Image = _pil()
