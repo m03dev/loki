@@ -362,6 +362,22 @@ try:
     check("the .wasm is served as application/wasm", code == 200 and hdr.get("Content-Type") == "application/wasm", hdr)
     code, hdr, body = get("/ui/world_godot/index.pck")
     check("the .pck is served", code == 200 and body == b"GDPC")
+    # the committed engine is index.wasm.gz (2026-10-18): sent gzipped; the newer of .wasm / .wasm.gz wins
+    import gzip as _gz  # noqa: E402
+    import os as _os  # noqa: E402
+    import time as _time  # noqa: E402
+    packed = ui_tmp / "world_godot" / "index.wasm.gz"
+    packed.write_bytes(_gz.compress(b"\0asm\x01\0\0\0NEW"))
+    _os.utime(ui_tmp / "world_godot" / "index.wasm", (_time.time() - 600, _time.time() - 600))
+    code, hdr, body = get("/ui/world_godot/index.wasm")
+    check("a newer index.wasm.gz is sent as Content-Encoding: gzip, application/wasm", code == 200
+          and hdr.get("Content-Encoding") == "gzip" and hdr.get("Content-Type") == "application/wasm"
+          and _gz.decompress(body).endswith(b"NEW"), hdr)
+    _os.utime(packed, (_time.time() - 1200, _time.time() - 1200))
+    code, hdr, body = get("/ui/world_godot/index.wasm")
+    check("a newer plain index.wasm (an export from the Godot app) wins over an older .gz", code == 200
+          and "Content-Encoding" not in hdr and body.startswith(b"\0asm") and not body.endswith(b"NEW"), hdr)
+    packed.unlink()
     code, hdr, body = get("/ui/index.html")
     check("LOKI's own page keeps the strict CSP (no wasm, not frameable)", code == 200
           and "wasm" not in hdr.get("Content-Security-Policy", "") and "frame-ancestors 'none'" in hdr.get("Content-Security-Policy", ""), hdr)

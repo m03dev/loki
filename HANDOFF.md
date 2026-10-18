@@ -31,7 +31,9 @@ silently ran the Babylon.js world (and a second, JavaScript MMO behind its "Join
   test_world_godot_tab 6 (the real build in Chromium in the World tab), test_ui_smoke 10, test_ui_fit 76, test_portal 239,
   test_forge_ui 20, test_forge_model_ui 13, test_character 54, test_mmo 77, test_mmo_systems 125, test_studio_destination 81,
   test_files_ui 15, test_loki 533, --self-test OK. In a browser through the real engine: connected, live machine name and
-  profile, /forge/file/<model>.glb fetched. Not run on the Mac: the World tab there, Rebuild World with the macOS editor.
+  profile, /forge/file/<model>.glb fetched. The engine serves the NEWER of index.wasm / index.wasm.gz (the Mac had
+  an older local export from Ziva; the update sets its clashing files aside as *.before-update). Not run on the Mac: the
+  World tab there, Rebuild World with the macOS editor.
 
 ## 2026-10-18 03:25: NVIDIA answers instead of timing out - streamed replies (Claude, Mac logs + cloud)
 

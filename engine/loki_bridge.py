@@ -802,11 +802,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return True
         found = ui_file(UI_DIR, route)
         gz = False
-        if found is None and route.startswith("/ui/world_godot/") and route.endswith(".wasm"):
-            # the Godot engine for LOKI World is committed gzipped (39 MB -> ~9 MB in git); the window
-            # receives it as Content-Encoding: gzip and the browser unpacks it on the way in
-            found = ui_file(UI_DIR, route + ".gz")
-            gz = found is not None
+        if route.startswith("/ui/world_godot/") and route.endswith(".wasm"):
+            # the Godot engine for LOKI World is committed gzipped (39 MB -> ~10 MB in git); the window receives it
+            # as Content-Encoding: gzip. A plain index.wasm can also be there - an export from the Godot app, or an
+            # older local build (the Mac's, 2026-10-18) - so the NEWER of the two is the one that matches index.js
+            packed = ui_file(UI_DIR, route + ".gz")
+            if packed is not None and (found is None or packed.stat().st_mtime >= found.stat().st_mtime):
+                found, gz = packed, True
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
             return True
