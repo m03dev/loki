@@ -48,6 +48,14 @@ src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
 check("the engine marks it, switches at once and says so",
       "model_setup.mark_broken(" in src and "LOKI switched to" in src and "model_setup.is_broken(os.environ[\"LOKI_LOCAL_MODEL\"]" in src)
 
+# --- a remote provider that dropped its model gets the one it serves now (the PC: pollinations)
+import provider_health as ph  # noqa: E402
+check("Pollinations without 'openai' moves to a model it still serves",
+      ph.replacement("pollinations", "openai", ["mistral", "openai-fast"]) == "openai-fast")
+check("NVIDIA's DeepSeek under its other name", ph.replacement("nvidia", "deepseek-ai/deepseek-v4.1-flash",
+                                                                ["nvidia/deepseek-v4.1-flash"]) == "nvidia/deepseek-v4.1-flash")
+check("a paid provider is never switched to a random model", ph.replacement("openai", "gpt-x", ["gpt-y"]) == "")
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

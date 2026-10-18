@@ -555,9 +555,38 @@ def refresh_once(agent: Any, reg: Registry | None = None, opener=urllib.request.
         if not force and not due(reg, pid):
             continue
         result = probe(pid, base, key, str(getattr(cfg, "model", "") or ""), opener=opener, clock=reg.clock)
+        if result.get("state") == "model_missing":
+            better = replacement(pid, str(getattr(cfg, "model", "") or ""), result.get("models") or [])
+            if better:
+                # the provider renamed or dropped the model (Pollinations "openai", NVIDIA's DeepSeek
+                # names): use what it serves now instead of leaving the provider dead
+                cfg.model = better
+                result = dict(result, state="ok", until=0, reason="", switched_to=better)
         reg.record_probe(pid, result, key=key)
         done.append(pid)
     return done
+
+
+# a provider whose own free model list LOKI may pick from when its usual model is gone, best first
+SWAP_PREFERENCE = {"pollinations": ["openai", "openai-fast", "openai-large", "mistral", "deepseek", "qwen-coder"]}
+
+
+def replacement(pid: str, model: str, served: list) -> str:
+    """The model to use instead of a missing one, or "" (never a random model for a paid provider):
+    the same model under another name (engine/nim_models.py), else the provider's preferred free list."""
+    if not served:
+        return ""
+    try:
+        import nim_models  # pylint: disable=import-outside-toplevel
+        alias = nim_models.resolve(model, served)
+        if alias != model:
+            return alias
+    except Exception:  # noqa: BLE001
+        pass
+    for name in SWAP_PREFERENCE.get(pid, []):
+        if name in served:
+            return name
+    return served[0] if pid in SWAP_PREFERENCE else ""
 
 
 def start_background(agent: Any, every_s: float = 0.0) -> bool:
