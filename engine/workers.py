@@ -359,6 +359,8 @@ class LocalBackend(Backend):
                        LOKI_TEAM_ID=str(job.get("team") or ""),
                        LOKI_TEAM_ROLE=str((job.get("profile") or {}).get("name") or ""))
             env.pop("GAME_PROJECT", None)
+            if "godot_editor" in str(job.get("prompt") or ""):
+                env["LOKI_GODOT_LIVE"] = "1"   # a job for the live Godot editor (the Godot tab): its tool leads the list
             if (Path(job["run_dir"]) / "project.godot").is_file():
                 env["GAME_PROJECT"] = job["run_dir"]
         else:

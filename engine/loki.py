@@ -1,4 +1,8 @@
 import sys
+try:   # no console windows on Windows for anything LOKI starts (engine/no_console.py)
+    import no_console  # noqa: F401
+except Exception:  # noqa: BLE001
+    pass
 
 sys.stdout.reconfigure(encoding="utf-8")  # so emoji don't crash the Windows console
 
@@ -4415,7 +4419,20 @@ TOOL_CATEGORIES["planning"] += ["automation"]
 NETWORK_WRITES |= {"automation"}          # not in Plan mode (a draft is saved)
 
 
+def _godot_live_wanted() -> bool:
+    """A job for the live Godot editor (LOKI_GODOT_LIVE, set by workers for the Godot tab's jobs) or an editor linked
+    to this engine right now: then godot_editor must reach a local model's short list (it fell off it - W50)."""
+    if os.getenv("LOKI_GODOT_LIVE", "") == "1":
+        return True
+    try:
+        return any(e.alive() for e in list(godot_live.hub().editors.values()))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _local_rank(name: str) -> int:
+    if name == "godot_editor" and _godot_live_wanted():
+        return -90
     if name in ("team_read", "team_post") and os.getenv("LOKI_TEAM_ID"):
         return -100   # an agent on a team must reach its board (they fell off the local model's short list)
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():

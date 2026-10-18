@@ -69,6 +69,10 @@ check("every agent has the godot_editor tool", "godot_editor" in loki.LOCAL_TOOL
       and "godot_editor" in loki.MODEL_TOOL_NAMES
       and any(t["function"]["name"] == "godot_editor" for t in loki.TOOL_SCHEMAS),
       "offered now=%s" % any(t["function"]["name"] == "godot_editor" for t in loki.model_tool_schemas()))
+os.environ["LOKI_GODOT_LIVE"] = "1"
+check("a Godot-tab job ranks godot_editor first for a local model (it fell off the 22-tool list)",
+      loki._local_rank("godot_editor") < loki._local_rank("read_file"))
+os.environ.pop("LOKI_GODOT_LIVE")
 check("an unknown action says which exist", "unknown editor action" in godot_live.godot_editor("format_disk"))
 
 # ------------------------------------------------------------------ plugins from the Asset Library

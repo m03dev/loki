@@ -10,6 +10,10 @@ import asyncio
 import errno
 import json
 import addons_install
+try:   # no console windows on Windows (engine/no_console.py)
+    import no_console  # noqa: F401
+except Exception:  # noqa: BLE001
+    pass
 import os
 import secrets
 import shutil

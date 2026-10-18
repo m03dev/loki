@@ -6,6 +6,17 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (W50 verified on the PC, Claude's changes checked, one fix, Ziva).
 
+## 2026-10-18 20:20: no console windows on Windows, godot_editor reaches local models (Claude, cloud)
+
+Owner on the PC: "the terminal keeps popping up on my screen". LOKI runs as pythonw, so every console program it
+starts without CREATE_NO_WINDOW (git, nvidia-smi, ollama, python, Godot command-line runs, job tests) flashed a new
+console. engine/no_console.py patches subprocess.Popen once per process so CREATE_NO_WINDOW is the default (a
+detached process or an asked-for console is left alone; LOKI_SHOW_CONSOLES=1 turns it off); the engine (loki.py,
+loki_bridge.py), every job, Studio (studio_server/studio_app) and the app (loki_app.py) load it first.
+tests/test_no_console.py. Also from W50 (Ziva saw godot_editor fall off a local model's 22-tool list and relaxed the
+test): a Godot-tab job (prompt names godot_editor -> LOKI_GODOT_LIVE=1) or a linked editor now ranks godot_editor
+first for local models (loki._local_rank); test_godot_live 27.
+
 ## 2026-10-18 (later): W50 verified on the PC - title bar, Godot download, Open in Godot (Ziva, the PC)
 
 W50 was the owner's check on the PC after 0e2af40, and "check everything we changed". Everything Claude changed

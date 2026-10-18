@@ -15,6 +15,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+try:   # no console windows on Windows for anything started from here (engine/no_console.py)
+    sys_path_engine = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine")
+    import sys as _sys
+    if sys_path_engine not in _sys.path:
+        _sys.path.append(sys_path_engine)
+    import no_console  # noqa: F401
+except Exception:  # noqa: BLE001
+    pass
 import shutil
 import signal
 import threading
