@@ -1,7 +1,7 @@
 """TripoSR: one cut-out picture -> one textured-by-vertex-colour mesh. stdin/stdout JSON, like every runner.
 
     {"image": "<cut-out RGBA png>", "out": "<path without extension>", "repo": "<TripoSR checkout>",
-     "resolution": 256}
+     "resolution": 256, "foreground_ratio": 0.85, "keep": 100}
     -> {"ok", "glb", "obj", "device"}
 
 TripoSR (github.com/VAST-AI-Research/TripoSR, MIT; weights stabilityai/TripoSR, MIT) is installed by
@@ -32,13 +32,19 @@ def main():
         model = TSR.from_pretrained("stabilityai/TripoSR", config_name="config.yaml", weight_name="model.ckpt")
         model.renderer.set_chunk_size(8192)
         model.to(device)
-        image = resize_foreground(Image.open(job["image"]).convert("RGBA"), 0.85)
+        image = resize_foreground(Image.open(job["image"]).convert("RGBA"), float(job.get("foreground_ratio") or 0.85))
         arr = np.array(image).astype(np.float32) / 255.0
         arr = arr[:, :, :3] * arr[:, :, 3:4] + (1 - arr[:, :, 3:4]) * 0.5     # grey background, as TripoSR expects
         image = Image.fromarray((arr * 255.0).astype(np.uint8))
         with torch.no_grad():
             codes = model([image], device=device)
         mesh = model.extract_mesh(codes, True, resolution=int(job.get("resolution") or 256))[0]
+        keep = float(job.get("keep") or 100) / 100.0
+        if keep < 0.999:   # decimate (trimesh -> fast-simplification / open3d when installed)
+            try:
+                mesh = mesh.simplify_quadric_decimation(face_count=max(500, int(len(mesh.faces) * keep)))
+            except Exception:  # noqa: BLE001 - no simplifier installed: keep the full mesh
+                pass
         out = str(job["out"])
         mesh.export(out + ".glb")
         mesh.export(out + ".obj")

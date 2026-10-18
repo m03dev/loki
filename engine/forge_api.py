@@ -4,11 +4,16 @@ Every route needs the bridge's bearer token (the window fetches models with it, 
   GET  /forge/status?id=          a job: {stage, progress, done, result}; without id: backends + jobs
   GET  /forge/list                the models in <workspace>/models/, newest first (+ sidecar: prompt, backend...)
   GET  /forge/file/<name>         one .glb/.obj from models/ (nothing else, no folders, no '..')
-  POST /forge/image  {prompt}     text -> picture (the image specialist); a job, result {image: "images/x.png"}
-  POST /forge/make   {image | drawing | prompt, backend?}   picture -> 3D; a job, result {name, backend, ...}
+  POST /forge/image  {prompt, options?}  text -> picture (the image specialist); a job, result {image: "images/x.png"}
+  POST /forge/make   {image | drawing | prompt, backend?, options?}   picture -> 3D; a job, result {name, backend, ...}
+                     options = the Output panel's values (forge3d.OPTIONS: resolution, keep, thickness, smooth,
+                     texture_size, image_size, foreground, cutout, symmetry, seed); each backend reads its own
                      image = a workspace path ("images/x.png"), drawing = a data:image URL (canvas or a
                      dropped picture), prompt = describe it (picture first, then 3D)
-  POST /forge/save?name=x.glb     raw body: a sculpted/exported .glb or .obj saved into models/ (never overwrites)
+  POST /forge/save?name=x.glb     raw body: a sculpted/exported .glb/.obj, a material .png or a .ptex project,
+                                  saved into models/ (never overwrites)
+  GET  /forge/mm                  Material Maker on this computer: {installed, path, download}
+  POST /forge/mm/open {name}      open models/<name> (.ptex / .glb / .obj) in Material Maker
 """
 from __future__ import annotations
 
@@ -49,7 +54,7 @@ def _image_maker(state):
     maker = getattr(agent, "forge_image_maker", None)
     if callable(maker):
         return maker
-    return lambda prompt: forge3d.default_image_maker(prompt, workspace(state))
+    return lambda prompt, options=None: forge3d.default_image_maker(prompt, workspace(state), options)
 
 
 def _rel(state, path: str) -> str:
@@ -68,6 +73,9 @@ def handle_get(state, path: str) -> tuple:
             found = forge3d.job(q["id"])
             return (200, {"ok": True, **found}) if found else (404, {"ok": False, "error": "no such job"})
         return 200, {"ok": True, "backends": forge3d.status(), "order": forge3d.plan("auto"), "jobs": forge3d.jobs()}
+    if route == "/forge/mm":
+        import forge_mm  # pylint: disable=import-outside-toplevel
+        return 200, {"ok": True, **forge_mm.status()}
     if route == "/forge/list":
         return 200, {"ok": True, "items": forge3d.list_models(models_dir(state)), "folder": "models"}
     if route.startswith("/forge/file/"):
@@ -75,7 +83,8 @@ def handle_get(state, path: str) -> tuple:
         found = forge3d.model_file(models_dir(state), name)
         if found is None:
             return 404, {"ok": False, "error": "Not found."}
-        kind = "model/gltf-binary" if found.suffix.lower() == ".glb" else "text/plain; charset=utf-8"
+        kind = {".glb": "model/gltf-binary", ".png": "image/png", ".ptex": "application/json"}.get(
+            found.suffix.lower(), "text/plain; charset=utf-8")
         return 200, found.read_bytes(), kind
     return 404, {"ok": False, "error": "Unknown endpoint."}
 
@@ -91,6 +100,13 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
         return 400, {"ok": False, "error": "Invalid JSON body."}
     if not isinstance(data, dict):
         return 400, {"ok": False, "error": "JSON body must be an object."}
+    options = forge3d.clean_options(data.get("options")) if isinstance(data.get("options"), dict) else None
+    if route == "/forge/mm/open":
+        import forge_mm  # pylint: disable=import-outside-toplevel
+        found = forge3d.model_file(models_dir(state), str(data.get("name") or ""))
+        if found is None:
+            return 404, {"ok": False, "error": "no such file in models/"}
+        return 200, forge_mm.open_in_mm(found)
     if route == "/forge/image":
         prompt = str(data.get("prompt") or "").strip()[:800]
         if not prompt:
@@ -100,7 +116,7 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
         def work(progress):
             progress("making the picture", 0.1)
             try:
-                file = maker(prompt)
+                file = forge3d.call_image_maker(maker, prompt, options)
             except forge3d.ForgeError as exc:
                 return {"ok": False, "error": str(exc)}
             rel = _rel(state, file)
@@ -127,7 +143,7 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
         out_dir = models_dir(state)
 
         def work(progress):
-            res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress)
+            res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress, options=options)
             if res.get("ok") and res.get("image"):
                 res["image"] = _rel(state, res["image"])
             return {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
@@ -137,16 +153,23 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
 
 
 def save(state, name: str, body: bytes) -> tuple:
-    """A file the window exported (sculpted) -> models/<name>, never overwriting."""
+    """A file the window exported (sculpted mesh, material map, .ptex) -> models/<name>, never overwriting."""
     name = re.sub(r"[^A-Za-z0-9._ -]+", "-", Path(str(name or "")).name).strip(" .")[:80]
     suffix = Path(name).suffix.lower()
-    if suffix not in forge3d.MODEL_EXTS or not Path(name).stem:
-        return 400, {"ok": False, "error": "only .glb or .obj"}
+    if suffix not in forge3d.SAVE_EXTS or not Path(name).stem:
+        return 400, {"ok": False, "error": "only .glb, .obj, .png or .ptex"}
     if not body:
         return 400, {"ok": False, "error": "empty file"}
-    if suffix == ".glb":
-        if body[:4] != b"glTF":
-            return 400, {"ok": False, "error": "not a .glb"}
+    if suffix == ".glb" and body[:4] != b"glTF":
+        return 400, {"ok": False, "error": "not a .glb"}
+    if suffix == ".png" and body[:8] != b"\x89PNG\r\n\x1a\n":
+        return 400, {"ok": False, "error": "not a .png"}
+    if suffix == ".ptex":
+        try:
+            if not isinstance(json.loads(body.decode("utf-8")), dict):
+                raise ValueError
+        except (UnicodeDecodeError, ValueError):
+            return 400, {"ok": False, "error": "not a .ptex project"}
     folder = models_dir(state)
     folder.mkdir(parents=True, exist_ok=True)
     target, n = folder / name, 2

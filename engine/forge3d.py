@@ -43,7 +43,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNNERS = Path(__file__).resolve().parent / "runners"
 BACKENDS = ("auto", "triposr", "online", "lift")
-MODEL_EXTS = (".glb", ".obj")
+MODEL_EXTS = (".glb", ".obj", ".png", ".ptex")     # what the file route serves from models/
+SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
 DEFAULT_SPACE = "trellis-community/TRELLIS"
 MAX_IMAGE_BYTES = 25_000_000
@@ -52,6 +53,54 @@ LIFT_GRID = 112          # cells along the longer side of the lift's silhouette
 
 class ForgeError(Exception):
     pass
+
+
+# ----------------------------------------------------------------------------- output options (modular)
+# Every knob the window shows in Forge > Output is one entry here; the window builds its sliders from this
+# list (GET /forge/status) and greys out the ones the chosen backend ignores. To add one: add an entry, then
+# read it with opts["<id>"] where the backend uses it. "image" in applies_to = the text -> picture step.
+OPTIONS = [
+    {"id": "resolution", "label": "Mesh resolution", "kind": "range", "min": 64, "max": 512, "step": 32, "default": 256,
+     "applies_to": ["triposr", "lift"], "what": "Marching-cubes resolution (TripoSR) or the lift's grid: more = finer, slower."},
+    {"id": "keep", "label": "Keep triangles %", "kind": "range", "min": 5, "max": 100, "step": 5, "default": 100,
+     "applies_to": ["triposr", "online", "lift"], "what": "Decimate: lower = lighter mesh (games, the web)."},
+    {"id": "thickness", "label": "Thickness", "kind": "range", "min": 0.1, "max": 2.0, "step": 0.05, "default": 0.85,
+     "applies_to": ["lift"], "what": "How far the lift puffs the shape out: low = a coin, high = a ball."},
+    {"id": "smooth", "label": "Smoothing", "kind": "range", "min": 0, "max": 20, "step": 1, "default": 5,
+     "applies_to": ["lift"], "what": "Smoothing passes on the outline (removes the pixel stairs)."},
+    {"id": "texture_size", "label": "Texture size", "kind": "range", "min": 512, "max": 4096, "step": 512, "default": 1024,
+     "applies_to": ["online"], "what": "Size of the baked colour texture."},
+    {"id": "image_size", "label": "Picture size", "kind": "range", "min": 512, "max": 2048, "step": 128, "default": 1024,
+     "applies_to": ["image"], "what": "Resolution of the picture LOKI draws first (Describe it)."},
+    {"id": "foreground", "label": "Subject fill", "kind": "range", "min": 0.5, "max": 1.0, "step": 0.05, "default": 0.85,
+     "applies_to": ["triposr"], "what": "How much of the frame the cut-out subject fills (TripoSR's foreground ratio)."},
+    {"id": "cutout", "label": "Background cut-out", "kind": "range", "min": 0.05, "max": 0.6, "step": 0.01, "default": 0.19,
+     "applies_to": ["triposr", "online", "lift"], "what": "How different from the background a pixel must be to count as the subject."},
+    {"id": "symmetry", "label": "Mirror left/right", "kind": "toggle", "default": False,
+     "applies_to": ["triposr", "online", "lift"], "what": "Make the picture symmetric before shaping it (characters, vases)."},
+    {"id": "seed", "label": "Seed", "kind": "number", "min": 0, "max": 2147483647, "step": 1, "default": 0,
+     "applies_to": ["online", "image"], "what": "0 = random; the same seed makes the same result again."},
+]
+
+
+def clean_options(options=None) -> dict:
+    """Every option with a value inside its range (unknown keys dropped, bad values -> the default)."""
+    given = options if isinstance(options, dict) else {}
+    out = {}
+    for spec in OPTIONS:
+        value = given.get(spec["id"], spec["default"])
+        if spec["kind"] == "toggle":
+            out[spec["id"]] = value in (True, 1, "1", "true", "on")
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = float(spec["default"])
+        if value != value:   # NaN
+            value = float(spec["default"])
+        value = min(float(spec["max"]), max(float(spec["min"]), value))
+        out[spec["id"]] = int(round(value)) if float(spec.get("step", 1)).is_integer() else value
+    return out
 
 
 def data_dir() -> Path:
@@ -75,7 +124,7 @@ def online_ready() -> bool:
 
 
 def status() -> dict:
-    return {"triposr": triposr_ready(), "online": online_ready(), "lift": True,
+    return {"triposr": triposr_ready(), "online": online_ready(), "lift": True, "options": OPTIONS,
             "rembg": importlib.util.find_spec("rembg") is not None,
             "space": os.environ.get("LOKI_FORGE_SPACE", DEFAULT_SPACE),
             "setup": "python tools/setup_forge3d.py"}
@@ -141,7 +190,7 @@ def _rembg_cutout(img):
         return None
 
 
-def silhouette(img, grid: int = LIFT_GRID) -> tuple:
+def silhouette(img, grid: int = LIFT_GRID, cutout: float = 0.19) -> tuple:
     """(mask, rgb, w, h): the subject on a small grid. mask[y][x] is True on the subject.
     Uses the alpha channel when the picture has a transparent background; else the colour
     around the border is the background, flood-filled in from the edge (so a white eye inside
@@ -154,13 +203,13 @@ def silhouette(img, grid: int = LIFT_GRID) -> tuple:
     alpha = [p[3] for p in px]
     border = [i for i in range(w * h) if i % w in (0, w - 1) or i // w in (0, h - 1)]
     if min(alpha[i] for i in border) < 200 and max(alpha) > 127:
-        mask = [a > 127 for a in alpha]
+        mask = [a > max(8, cutout * 255) for a in alpha]
     else:
         def med(c):
             vals = sorted(px[i][c] for i in border)
             return vals[len(vals) // 2]
         bg = (med(0), med(1), med(2))
-        tol = 48 ** 2
+        tol = (max(0.01, cutout) * 255) ** 2
 
         def near(i):
             p = px[i]
@@ -441,19 +490,23 @@ def write_obj(path: Path, mesh: dict) -> Path:
 
 
 # ----------------------------------------------------------------------------- backends
-def run_lift(img, out_base: Path, puff: float = 0.85) -> dict:
-    mask, rgb, w, h = silhouette(img)
-    mesh = lift_mesh(mask, rgb, w, h, puff=puff)
+def run_lift(img, out_base: Path, puff: float = 0.85, opts: dict | None = None) -> dict:
+    o = clean_options(opts)
+    grid = max(24, int(o["resolution"] * 0.45 * math.sqrt(o["keep"] / 100.0)))   # 256 -> 115 cells
+    mask, rgb, w, h = silhouette(img, grid=grid, cutout=o["cutout"])
+    mesh = lift_mesh(mask, rgb, w, h, puff=o["thickness"] if opts else puff, smooth=o["smooth"])
     glb = write_glb(out_base.with_suffix(".glb"), mesh, out_base.stem[:40])
     obj = write_obj(out_base.with_suffix(".obj"), mesh)
     return {"glb": str(glb), "obj": str(obj), "vertices": len(mesh["positions"]),
             "triangles": len(mesh["indices"]) // 3}
 
 
-def run_triposr(cutout_png: Path, out_base: Path, runner=None, timeout: int = 1800) -> dict:
+def run_triposr(cutout_png: Path, out_base: Path, runner=None, timeout: int = 1800, opts: dict | None = None) -> dict:
     """TripoSR in its own process (engine/runners/triposr.py), so torch never loads into the engine."""
+    o = clean_options(opts)
     job = {"image": str(cutout_png), "out": str(out_base), "repo": str(triposr_dir()),
-           "resolution": int(os.environ.get("LOKI_TRIPOSR_RESOLUTION", "256") or 256)}
+           "resolution": int(o["resolution"] if opts else os.environ.get("LOKI_TRIPOSR_RESOLUTION", "256") or 256),
+           "foreground_ratio": o["foreground"], "keep": o["keep"]}
     run = runner or subprocess.run
     try:
         proc = run([sys.executable, str(RUNNERS / "triposr.py")], input=json.dumps(job), capture_output=True,
@@ -469,7 +522,7 @@ def run_triposr(cutout_png: Path, out_base: Path, runner=None, timeout: int = 18
     return out
 
 
-def run_online(cutout_png: Path, out_base: Path, client_factory=None) -> dict:
+def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict | None = None) -> dict:
     """A Hugging Face Space through gradio_client (TRELLIS by default: /image_to_3d, then
     /extract_glb). The picture goes to that Space - a third party."""
     space = os.environ.get("LOKI_FORGE_SPACE", DEFAULT_SPACE)
@@ -481,11 +534,15 @@ def run_online(cutout_png: Path, out_base: Path, client_factory=None) -> dict:
         client = Client(space, hf_token=os.environ.get("HF_TOKEN") or None)
     else:
         client, handle_file = client_factory(space)
+    o = clean_options(opts)
+    # TRELLIS' mesh_simplify is the share of triangles REMOVED (0.9-0.98); "keep %" maps onto it.
+    simplify = round(min(0.98, max(0.9, 0.98 - 0.08 * (o["keep"] - 5) / 95.0)), 3)
     try:
-        client.predict(image=handle_file(str(cutout_png)), multiimages=[], seed=0, ss_guidance_strength=7.5,
+        client.predict(image=handle_file(str(cutout_png)), multiimages=[], seed=int(o["seed"]), ss_guidance_strength=7.5,
                        ss_sampling_steps=12, slat_guidance_strength=3.0, slat_sampling_steps=12,
                        multiimage_algo="stochastic", api_name="/image_to_3d")
-        res = client.predict(mesh_simplify=0.95, texture_size=1024, api_name="/extract_glb")
+        res = client.predict(mesh_simplify=simplify, texture_size=min(2048, int(o["texture_size"])),
+                             api_name="/extract_glb")
     except Exception as exc:  # noqa: BLE001 - Spaces change, sleep, or run out of quota
         raise ForgeError("the online Space %s failed: %s" % (space, str(exc)[:200])) from None
     found = res[1] if isinstance(res, (list, tuple)) and len(res) > 1 else res
@@ -505,11 +562,29 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:40] or "model"
 
 
-def default_image_maker(prompt: str, workspace: Path) -> str:
+def image_job_options(opts: dict | None) -> dict:
+    """The text -> picture step's share of the output options: {width, height, seed}."""
+    o = clean_options(opts)
+    side = int(o["image_size"]) // 16 * 16
+    return {"width": side, "height": side, "seed": int(o["seed"])}
+
+
+def call_image_maker(maker, prompt: str, opts: dict | None):
+    """Image makers take (prompt) or (prompt, options); options are passed when the maker accepts them."""
+    import inspect  # pylint: disable=import-outside-toplevel
+    try:
+        takes = len(inspect.signature(maker).parameters) >= 2
+    except (TypeError, ValueError):
+        takes = False
+    return maker(prompt, image_job_options(opts)) if takes else maker(prompt)
+
+
+def default_image_maker(prompt: str, workspace: Path, options: dict | None = None) -> str:
     """Text -> picture with LOKI's image runner (the same backends as the image specialist)."""
     job = {"prompt": prompt + ", a single object, centered, plain white background, full view, studio light",
            "out_dir": str(Path(workspace) / "images"), "width": 1024, "height": 1024,
            "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
+    job.update({k: v for k, v in (options or {}).items() if k in ("width", "height", "seed") and v})
     proc = subprocess.run([sys.executable, str(RUNNERS / "imagegen.py")], input=json.dumps(job),
                           capture_output=True, text=True, timeout=1800, shell=False)
     lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip().startswith("{")]
@@ -520,8 +595,10 @@ def default_image_maker(prompt: str, workspace: Path) -> str:
 
 
 def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto", *, image_maker=None,
-            progress=None, puff: float = 0.85, triposr_runner=None, online_factory=None) -> dict:
-    """Make a 3D model. See the module docstring. `progress(stage, fraction)` reports each step."""
+            progress=None, puff: float = 0.85, triposr_runner=None, online_factory=None, options=None) -> dict:
+    """Make a 3D model. See the module docstring. `progress(stage, fraction)` reports each step.
+    `options`: the Output panel's values (OPTIONS above); each backend reads the ones it honours."""
+    opts = clean_options(options) if options else None
     say = progress or (lambda stage, frac: None)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -532,8 +609,8 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             if not (prompt or "").strip():
                 raise ForgeError("give a picture, a drawing or a description")
             say("making the picture", 0.05)
-            maker = image_maker or (lambda p: default_image_maker(p, out.parent))
-            source = made_image = maker(prompt.strip())
+            maker = image_maker or (lambda p, o=None: default_image_maker(p, out.parent, o))
+            source = made_image = call_image_maker(maker, prompt.strip(), opts)
         say("reading the picture", 0.2)
         img = load_image(source)
         base = out / ("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), _slug(prompt or (Path(source).stem if isinstance(
@@ -546,7 +623,7 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         cut = _rembg_cutout(img)
         cutter = "rembg" if cut is not None else "border colour"
         if cut is None:
-            mask, _, w, h = silhouette(img, grid=256)
+            mask, _, w, h = silhouette(img, grid=256, cutout=(opts or clean_options())["cutout"])
             Image = _pil()
             m = Image.new("L", (w, h))
             m.putdata([255 if mask[y][x] else 0 for y in range(h) for x in range(w)])
@@ -554,6 +631,10 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             cut.putalpha(m.resize(img.size, Image.BILINEAR))
         cut_dir = out / META_DIR
         cut_dir.mkdir(parents=True, exist_ok=True)
+        if opts and opts["symmetry"]:   # the left half mirrored onto the right
+            Image = _pil()
+            half = cut.crop((0, 0, cut.width // 2, cut.height))
+            cut.paste(half.transpose(Image.FLIP_LEFT_RIGHT), (cut.width - half.width, 0))
         cut_png = cut_dir / (base.name + "-cutout.png")
         cut.save(cut_png)
         errors, result, used = [], None, ""
@@ -561,11 +642,11 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             say("shaping it (%s)" % name, 0.45)
             try:
                 if name == "triposr":
-                    result = run_triposr(cut_png, base, runner=triposr_runner)
+                    result = run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
                 elif name == "online":
-                    result = run_online(cut_png, base, client_factory=online_factory)
+                    result = run_online(cut_png, base, client_factory=online_factory, opts=opts)
                 else:
-                    result = run_lift(cut, base, puff=puff)
+                    result = run_lift(cut, base, puff=puff, opts=opts)
                 used = name
                 break
             except Exception as exc:  # noqa: BLE001 - try the next backend
@@ -577,6 +658,8 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         meta = {"prompt": prompt, "source": "drawing" if isinstance(source, str) and source.startswith("data:")
                 else str(made_image or source), "image": made_image, "backend": used, "cutout": cutter,
                 "t": time.time(), "fallbacks": errors, **glb_counts(glb)}
+        if opts:
+            meta["options"] = opts
         if result.get("note"):
             meta["note"] = result["note"]
         (cut_dir / (glb.name + ".json")).write_text(json.dumps(meta, indent=1), encoding="utf-8")

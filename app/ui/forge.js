@@ -1,14 +1,16 @@
 // Forge: make 3D things. Three ways in - Draw (a canvas), Add an image (drop or pick), Describe it (text ->
 // picture, shown first so it can be redone) - then the engine lifts the picture to a 3D model
 // (engine/forge3d.py: TripoSR on this computer, a free online Space, or the offline lift that always works).
-// The model opens in a viewer (orbit, zoom, wireframe, clay, lighting) with a SCULPT mode in the spirit of
-// Nomad Sculpt / ZBrush: Draw, Inflate, Smooth, Flatten, Grab, Pinch, radius/strength, X symmetry,
-// undo/redo, Subdivide (curved midpoint). Sculpting moves the mesh's own vertices (no voxels).
+// Output: a collapsible panel of modular sliders (forge3d.OPTIONS, served by GET /forge/status) passed to every
+// backend that honours them, remembered in localStorage, greyed out when the chosen backend ignores them.
+// Model: three.js (vendored, MIT) with its own GLTFLoader, GLTFExporter, OBJExporter, OrbitControls and
+// TransformControls (app/ui/vendor/three/addons). Sculpt: the brushes of SculptGL by Stéphane Ginier (MIT,
+// github.com/stephomi/sculptgl - the web sculpting app Nomad Sculpt's author made first), ported below:
+// Brush (clay), Inflate, Smooth (Laplacian), Flatten, Move (grab), Pinch, Crease, with its smooth falloff
+// 3t^4 - 4t^3 + 1, its stroke spacing (0.15 x radius), X symmetry, undo/redo, and Subdivide.
+// Materials: the Material Maker side (forge_materials.js + forge_mm.js), applied to the model live.
 // Save .glb / .obj puts the file in the workspace's models/ (POST /forge/save) - shown in Files.
-//
-// three.js (vendored, MIT) is imported only when Forge opens. The GLB reader/writer and the orbit control
-// are LOKI's own (the three.js add-ons could not be vendored from the build sandbox). Uses api(), el(),
-// state from app.js and the icon pattern of icons.js (data-icon + data-tip-name/-what). Plain DOM, CSP-safe.
+// Uses api(), el(), state from app.js and the icon pattern of icons.js. Plain DOM, CSP-safe.
 "use strict";
 
 Object.assign(ICON_PATHS, {
@@ -29,20 +31,27 @@ Object.assign(ICON_PATHS, {
   flatten: '<path d="M3.5 14.5h17"/><path d="M6 10.5c2-3 4-3 6 0s4 3 6 0"/><path d="M12 17v3.5"/>',
   grab: '<path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10M11 9.5V4a1.5 1.5 0 0 1 3 0v6M14 10V5.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6 7-2.5 0-4-1.5-5.5-4L4 12.5a1.5 1.5 0 0 1 2.5-1.5L8 13"/>',
   pinch: '<path d="M4 6l6 6-6 6M20 6l-6 6 6 6"/>',
+  crease: '<path d="M3.5 8c4 0 6 8 8.5 8s4.5-8 8.5-8"/>',
   mirror: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L4 12l5 5zM15 7l5 5-5 5z"/>',
   subdivide: '<path d="M12 3.5l8.5 15h-17z"/><path d="M7.75 11h8.5M12 18.5l-4.25-7.5M12 18.5l4.25-7.5"/>',
   save: '<path d="M5 3.5h11l3.5 3.5v13.5H5z"/><path d="M8 3.5v5h7v-5M8 20.5v-6h8v6"/>',
+  move: '<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
+  material: '<circle cx="12" cy="12" r="8.5"/><path d="M5 9.5c4 1.5 10 1.5 14 0M4 14c5 2 11 2 16 0"/>',
+  chevron: '<path d="M8 10l4 4 4-4"/>',
 });
 
-const forge = { way: "draw", job: "", jobTimer: 0, three: null, view: null, model: null, imageRel: "", backend: "auto",
-  drawing: { ctx: null, hist: [], tool: "brush", color: "#ed782b", size: 14, down: false, last: null }, picked: "" };
+const forge = { way: "draw", job: "", jobTimer: 0, view: null, model: null, imageRel: "", backend: "auto", side: "make",
+  drawing: { ctx: null, hist: [], tool: "brush", color: "#ed782b", size: 14, down: false, last: null }, picked: "",
+  options: [], values: {} };
+// [id, icon, name, what] - the algorithm of each is SculptGL's (src/editing/tools/<Name>.js), see forgeMakeView
 const FORGE_BRUSHES = [
-  ["draw", "brush", "Draw", "Push the surface out along its normal (hold Alt or Ctrl to dig in)."],
+  ["draw", "brush", "Clay", "SculptGL's Brush (clay): build up along the area's plane (Alt/Ctrl digs in)."],
   ["inflate", "inflate", "Inflate", "Swell the surface, each point along its own normal (Alt/Ctrl deflates)."],
-  ["smooth", "smooth", "Smooth", "Relax bumps toward their neighbours (Shift smooths with any brush)."],
-  ["flatten", "flatten", "Flatten", "Press the surface onto a plane - planes and hard surfaces."],
-  ["grab", "grab", "Grab", "Pull a whole area along with the mouse - big shape changes."],
-  ["pinch", "pinch", "Pinch", "Pull the surface toward the brush centre - sharp creases and edges."],
+  ["smooth", "smooth", "Smooth", "Laplacian smooth toward the neighbours (Shift smooths with any brush)."],
+  ["flatten", "flatten", "Flatten", "Press the surface onto the area's plane - planes and hard surfaces."],
+  ["grab", "grab", "Grab", "SculptGL's Move: pull a whole area along with the mouse."],
+  ["pinch", "pinch", "Pinch", "Pull the surface toward the brush centre - sharpen edges."],
+  ["crease", "crease", "Crease", "Pinch and dig at once - folds, cuts and wrinkles (Alt/Ctrl raises a ridge)."],
 ];
 const FORGE_LIGHTS = [
   ["Studio", 0xdfe6f2, 0x2a2e36, 1.0, 0xffffff, 2.4],
@@ -50,6 +59,7 @@ const FORGE_LIGHTS = [
   ["Cool", 0xcfe0ff, 0x1d2430, 1.1, 0xe4efff, 2.2],
   ["Soft", 0xffffff, 0x60646e, 1.8, 0xffffff, 0.8],
 ];
+const FORGE_STORE = "loki-forge-output";
 
 function forgeBtn(icon, name, what, onClick, cls) {
   const b = el("button", "mini icon-mini forge-btn" + (cls ? " " + cls : ""), name);
@@ -60,7 +70,7 @@ function forgeBtn(icon, name, what, onClick, cls) {
 
 function forgeSay(text, bad) {
   const s = document.getElementById("forge-status");
-  if (s) { s.textContent = text || ""; s.classList.toggle("bad", !!bad); }
+  if (s) { s.textContent = text || ""; s.classList.toggle("bad", !!bad); s.title = text || ""; }
 }
 
 // ------------------------------------------------------------------------------------------ the sheet
@@ -69,20 +79,28 @@ function forgeBuild() {
   const sheet = el("div", "sheet forge-sheet"); sheet.id = "forge"; sheet.hidden = true;
   const panel = el("div", "sheet-panel forge-panel");
   panel.setAttribute("role", "dialog"); panel.setAttribute("aria-modal", "true"); panel.setAttribute("aria-labelledby", "forge-title");
-  const head = el("header", "sheet-head");
+  const head = el("header", "sheet-head forge-head");
   const title = el("h2", "", "Forge"); title.id = "forge-title";
+  const tabs = el("div", "forge-tabs"); tabs.setAttribute("role", "tablist");
+  for (const [id, icon, name, what] of [["make", "cube", "Model", "Make, view and sculpt the 3D model."],
+    ["materials", "material", "Materials", "Procedural materials with Material Maker's nodes - applied to the model live."]]) {
+    const b = forgeBtn(icon, name, what, () => forgeSide(id), "forge-tab"); b.dataset.side = id; b.setAttribute("role", "tab");
+    tabs.append(b);
+  }
   const status = el("span", "forge-status"); status.id = "forge-status"; status.setAttribute("role", "status");
-  head.append(title, status, forgeBtn("close", "Close", "Close Forge (Esc).", forgeClose));
+  head.append(title, tabs, status, forgeBtn("close", "Close", "Close Forge (Esc).", forgeClose));
   const body = el("div", "forge-body");
-  body.append(forgeSide(), forgeStage());
+  body.append(forgeLeft(), forgeStage());
+  const mats = el("section", "forge-materials"); mats.id = "forge-materials"; mats.hidden = true;
+  body.append(mats);
   panel.append(head, body);
   sheet.append(panel);
   document.body.append(sheet);
   sheet.addEventListener("click", (e) => { if (e.target === sheet) forgeClose(); });
 }
 
-function forgeSide() {
-  const side = el("aside", "forge-side");
+function forgeLeft() {
+  const side = el("aside", "forge-side"); side.id = "forge-left";
   const ways = el("div", "forge-ways"); ways.setAttribute("role", "tablist");
   for (const [way, icon, name, what] of [["draw", "pen", "Draw", "Draw it on a canvas, then make it 3D."],
     ["image", "image", "Add an image", "Drop or pick a picture, then make it 3D."],
@@ -98,17 +116,84 @@ function forgeSide() {
   for (const [v, t] of [["auto", "Best available"], ["triposr", "TripoSR (this computer)"], ["online", "Online Space"], ["lift", "Offline lift (instant)"]]) {
     const o = el("option", "", t); o.value = v; pick.append(o);
   }
-  pick.addEventListener("change", () => { forge.backend = pick.value; });
+  pick.addEventListener("change", () => { forge.backend = pick.value; forgeOutputState(); });
   const make = el("button", "send forge-make", "Make 3D"); make.type = "button"; make.id = "forge-make";
   make.addEventListener("click", forgeMake);
   go.append(pick, make);
+  const out = document.createElement("details"); out.className = "forge-output"; out.id = "forge-output";
+  const sum = document.createElement("summary"); sum.textContent = "Output";
+  const outBody = el("div", "forge-output-body"); outBody.id = "forge-output-body";
+  out.append(sum, outBody);
+  try { out.open = localStorage.getItem(FORGE_STORE + "-open") === "1"; } catch (_) { /* private mode */ }
+  out.addEventListener("toggle", () => { try { localStorage.setItem(FORGE_STORE + "-open", out.open ? "1" : "0"); } catch (_) { /* */ } });
   const prog = el("div", "forge-progress"); prog.id = "forge-progress"; prog.hidden = true;
   prog.append(el("span", "forge-stage-text"), el("div", "forge-bar"));
   prog.lastChild.append(el("i"));
   const listHead = el("div", "forge-sub", "Your models");
   const list = el("div", "forge-models"); list.id = "forge-models";
-  side.append(go, prog, listHead, list);
+  side.append(go, out, prog, listHead, list);
   return side;
+}
+
+// ------------------------------------------------------------------------------------------ Output (modular)
+function forgeOutputBackend() {   // which backend the sliders apply to now ("auto" = the first one that is ready)
+  if (forge.backend !== "auto") return forge.backend;
+  return (forge.order && forge.order[0]) || "lift";
+}
+
+function forgeOutputBuild(options) {
+  forge.options = options || [];
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(FORGE_STORE) || "{}") || {}; } catch (_) { saved = {}; }
+  forge.values = {};
+  const body = document.getElementById("forge-output-body");
+  if (!body) return;
+  body.replaceChildren();
+  for (const o of forge.options) {
+    forge.values[o.id] = saved[o.id] !== undefined ? saved[o.id] : o.default;
+    const row = el("label", "forge-opt"); row.dataset.opt = o.id;
+    row.dataset.tipName = o.label; row.dataset.tipWhat = o.what + " (" + o.applies_to.join(", ") + ")";
+    const name = el("span", "forge-opt-name", o.label);
+    let input;
+    const val = el("span", "forge-opt-val");
+    if (o.kind === "toggle") {
+      input = document.createElement("input"); input.type = "checkbox"; input.checked = !!forge.values[o.id];
+      input.addEventListener("change", () => forgeOutputSet(o.id, input.checked));
+    } else if (o.kind === "number") {
+      input = document.createElement("input"); input.type = "number"; input.min = String(o.min); input.max = String(o.max);
+      input.step = String(o.step); input.value = String(forge.values[o.id]);
+      input.addEventListener("change", () => forgeOutputSet(o.id, Number(input.value) || 0));
+    } else {
+      input = document.createElement("input"); input.type = "range"; input.min = String(o.min); input.max = String(o.max);
+      input.step = String(o.step); input.value = String(forge.values[o.id]);
+      val.textContent = String(forge.values[o.id]);
+      input.addEventListener("input", () => { val.textContent = input.value; forgeOutputSet(o.id, Number(input.value)); });
+    }
+    input.setAttribute("aria-label", o.label);
+    input.dataset.opt = o.id;
+    row.append(name, input, val);
+    body.append(row);
+  }
+  const reset = el("button", "quiet small", "Defaults"); reset.type = "button";
+  reset.addEventListener("click", () => { try { localStorage.removeItem(FORGE_STORE); } catch (_) { /* */ } forgeOutputBuild(forge.options); });
+  body.append(reset);
+  forgeOutputState();
+}
+
+function forgeOutputSet(id, value) {
+  forge.values[id] = value;
+  try { localStorage.setItem(FORGE_STORE, JSON.stringify(forge.values)); } catch (_) { /* private mode: not remembered */ }
+}
+
+function forgeOutputState() {   // grey out what the current backend ignores (and the picture step when there is none)
+  const backend = forgeOutputBackend();
+  const usesImage = forge.way === "describe";
+  for (const row of document.querySelectorAll("#forge-output-body .forge-opt")) {
+    const o = forge.options.find((x) => x.id === row.dataset.opt);
+    const on = !!o && (o.applies_to.includes(backend) || (usesImage && o.applies_to.includes("image")));
+    row.classList.toggle("off", !on);
+    row.querySelector("input").disabled = !on;
+  }
 }
 
 function forgeDrawPane() {
@@ -198,17 +283,18 @@ function forgeDescribePane() {
 }
 
 function forgeStage() {
-  const stage = el("section", "forge-stage");
+  const stage = el("section", "forge-stage"); stage.id = "forge-stage";
   const cv = document.createElement("canvas"); cv.id = "forge-view"; cv.className = "forge-view";
-  cv.setAttribute("aria-label", "3D view: drag to turn, wheel to zoom, right-drag or Shift-drag to move");
+  cv.setAttribute("aria-label", "3D view: drag to turn, wheel to zoom, right-drag to move");
   const empty = el("p", "forge-empty", "Draw, add a picture or describe something - the model appears here.");
   empty.id = "forge-empty";
   const viewBar = el("div", "forge-float forge-viewbar");
-  const mode = forgeBtn("sculpt", "Sculpt", "Sculpt mode: shape the model with brushes. Drag on empty space still turns it.", () => forgeMode(), "forge-mode");
+  const mode = forgeBtn("sculpt", "Sculpt", "Sculpt mode: shape the model with brushes. Drag off the model still turns it.", () => forgeMode(), "forge-mode");
   mode.id = "forge-mode";
   viewBar.append(mode,
+    forgeBtn("move", "Move", "Move, turn or scale the whole model with handles (W/E/R).", () => forge.view && forge.view.toggleTransform(), "forge-transform"),
     forgeBtn("wire", "Wireframe", "Show the mesh's triangles.", (e) => forgeToggle("wire", e.currentTarget)),
-    forgeBtn("clay", "Clay", "Plain clay: hide the colours to judge the form.", (e) => forgeToggle("clay", e.currentTarget)),
+    forgeBtn("clay", "Clay", "Plain clay: hide the colours and material to judge the form.", (e) => forgeToggle("clay", e.currentTarget)),
     forgeBtn("sun", "Lighting", "Change the light: studio, warm, cool, soft.", forgeLight),
     forgeBtn("frame", "Frame", "Fit the model in view (F).", () => forge.view && forge.view.frame()));
   const sculpt = el("div", "forge-float forge-sculptbar"); sculpt.id = "forge-sculpt"; sculpt.hidden = true;
@@ -227,7 +313,7 @@ function forgeStage() {
     forgeBtn("redo", "Redo", "Do it again (Ctrl+Shift+Z).", () => forge.view && forge.view.redo()),
     forgeBtn("subdivide", "Subdivide", "Split every triangle in four (curved), for finer detail.", () => forge.view && forge.view.subdivide()));
   const out = el("div", "forge-float forge-exportbar");
-  out.append(forgeBtn("save", "Save .glb", "Save this model (with your sculpting) as .glb in models/ - Blender, Godot, Maya and the web open it.", () => forgeSave("glb")),
+  out.append(forgeBtn("save", "Save .glb", "Save this model (sculpting and material included) as .glb in models/ - Blender, Godot, Maya and the web open it.", () => forgeSave("glb")),
     forgeBtn("file", "Save .obj", "Save it as .obj in models/ (ZBrush, Nomad Sculpt, any 3D app).", () => forgeSave("obj")),
     forgeBtn("folder", "Show in Files", "Open the models folder in Files.", () => {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
@@ -252,6 +338,21 @@ function forgeWay(way) {
     b.classList.toggle("on", b.dataset.way === way); b.setAttribute("aria-selected", String(b.dataset.way === way));
   }
   for (const p of document.querySelectorAll("#forge .forge-pane")) p.hidden = p.dataset.pane !== way;
+  forgeOutputState();
+}
+
+function forgeSide(id) {
+  forge.side = id;
+  for (const b of document.querySelectorAll("#forge .forge-tab")) { b.classList.toggle("on", b.dataset.side === id); b.setAttribute("aria-selected", String(b.dataset.side === id)); }
+  document.getElementById("forge-left").hidden = id !== "make";
+  const mats = document.getElementById("forge-materials");
+  mats.hidden = id !== "materials";
+  document.querySelector("#forge .forge-body").classList.toggle("mats", id === "materials");
+  if (id === "materials" && window.ForgeMaterials && !mats.dataset.ready) {
+    mats.dataset.ready = "1";
+    window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => forgeSay("Materials: " + e.message, true));
+  }
+  if (forge.view) forge.view.resize();
 }
 
 function forgeOpen() {
@@ -259,9 +360,14 @@ function forgeOpen() {
   const sheet = document.getElementById("forge");
   sheet.hidden = false;
   forgeWay(forge.way);
+  forgeSide(forge.side);
   forgeList();
   api("/forge/status").then((r) => {
-    if (r && r.ok && r.order) forgeSay("Ready: " + r.order.join(" → ") + (r.backends && !r.backends.triposr ? " (TripoSR: python tools/setup_forge3d.py)" : ""));
+    if (!r || !r.ok) return;
+    forge.order = r.order || [];
+    if (r.backends && r.backends.options && !forge.options.length) forgeOutputBuild(r.backends.options);
+    forgeOutputState();
+    if (r.order) forgeSay("Ready: " + r.order.join(" → ") + (r.backends && !r.backends.triposr ? " (TripoSR: python tools/setup_forge3d.py)" : ""));
   }).catch(() => {});
   forgeViewer().then((v) => { if (v) v.start(); });
 }
@@ -299,7 +405,7 @@ async function forgePicture() {
   const text = document.getElementById("forge-prompt").value.trim();
   if (!text) { forgeSay("Describe what to make first.", true); return; }
   forgeSay("Drawing the picture…");
-  const r = await api("/forge/image", { prompt: text }).catch(() => null);
+  const r = await api("/forge/image", { prompt: text, options: forge.values }).catch(() => null);
   if (!r || !r.ok) { forgeSay((r && r.error) || "Could not start.", true); return; }
   forgePoll(r.id, (res) => {
     forge.imageRel = res.image;
@@ -312,7 +418,7 @@ async function forgePicture() {
 }
 
 async function forgeMake() {
-  const body = { backend: forge.backend };
+  const body = { backend: forge.backend, options: forge.values };
   if (forge.way === "draw") body.drawing = document.getElementById("forge-canvas").toDataURL("image/png");
   else if (forge.way === "image") {
     if (!forge.picked) { forgeSay("Add a picture first.", true); return; }
@@ -357,7 +463,7 @@ async function forgeLoad(name) {
   const resp = await fetch("/forge/file/" + encodeURIComponent(name), { headers: { Authorization: "Bearer " + state.token } });
   if (!resp.ok) { forgeSay("Could not load " + name, true); return; }
   try {
-    v.setMesh(await forgeParseGlb(await resp.arrayBuffer(), v.THREE));
+    await v.load(await resp.arrayBuffer());
     forge.model = name;
     document.getElementById("forge-empty").hidden = true;
     for (const b of document.querySelectorAll("#forge .forge-model")) b.classList.toggle("on", b.title === name);
@@ -369,7 +475,8 @@ async function forgeLoad(name) {
 async function forgeSave(kind) {
   if (!forge.view || !forge.view.sm) { forgeSay("Nothing to save yet.", true); return; }
   const base = (forge.model || "model.glb").replace(/\.glb$/i, "").replace(/-sculpt(-\d+)?$/, "") + "-sculpt." + kind;
-  const data = kind === "glb" ? forgeWriteGlb(forge.view.sm) : new TextEncoder().encode(forgeWriteObj(forge.view.sm));
+  let data;
+  try { data = await forge.view.exportFile(kind); } catch (exc) { forgeSay("Export failed: " + exc.message, true); return; }
   const resp = await fetch("/forge/save?name=" + encodeURIComponent(base), {
     method: "POST", headers: { Authorization: "Bearer " + state.token, "Content-Type": "application/octet-stream" }, body: data,
   }).catch(() => null);
@@ -380,12 +487,13 @@ async function forgeSave(kind) {
   forgeList();
 }
 
-// ------------------------------------------------------------------------------------------ the mesh
+// ------------------------------------------------------------------------------------------ the sculpt mesh
 // Sculpt mesh (sm): raw vertex arrays as the GPU sees them (pos, nrm, col, uv, idx) plus a "welded" view
-// (wid: raw -> welded id; wpos/wnrm per welded vertex; adjacency), so a UV seam never tears when sculpted.
-function forgeMeshFrom(pos, col, uv, idx, image) {
+// (wid: raw -> welded id; wpos/wnrm per welded vertex; adjacency = SculptGL's vertex ring), so a UV seam never
+// tears when sculpted. Built from a three.js BufferGeometry (GLTFLoader's) and back.
+function forgeMeshFrom(pos, col, uv, idx) {
   const n = pos.length / 3;
-  const sm = { n, pos, nrm: new Float32Array(n * 3), col, uv, idx, image };
+  const sm = { n, pos, nrm: new Float32Array(n * 3), col, uv, idx };
   forgeWeld(sm);
   forgeNormals(sm);
   return sm;
@@ -393,7 +501,7 @@ function forgeMeshFrom(pos, col, uv, idx, image) {
 
 function forgeWeld(sm) {
   const { n, pos } = sm;
-  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], pos[i * 3 + k]); hi[k] = Math.max(hi[k], pos[i * 3 + k]); }
   const q = 1e5 / Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], 1e-9);
   const map = new Map(), wid = new Int32Array(n), first = [];
@@ -406,7 +514,6 @@ function forgeWeld(sm) {
   const wn = first.length, wpos = new Float32Array(wn * 3);
   for (let w = 0; w < wn; w++) for (let k = 0; k < 3; k++) wpos[w * 3 + k] = pos[first[w] * 3 + k];
   sm.wid = wid; sm.wn = wn; sm.wpos = wpos; sm.wnrm = new Float32Array(wn * 3);
-  // adjacency (CSR) over welded vertices
   const sets = Array.from({ length: wn }, () => []);
   const idx = sm.idx;
   for (let t = 0; t < idx.length; t += 3) {
@@ -441,10 +548,11 @@ function forgeNormals(sm) {
   for (let i = 0; i < n; i++) { const w = wid[i] * 3; nrm[i * 3] = wnrm[w]; nrm[i * 3 + 1] = wnrm[w + 1]; nrm[i * 3 + 2] = wnrm[w + 2]; }
 }
 
-// Curved midpoint subdivision: every triangle -> 4. A new edge point is lifted off the straight edge using
-// the two end normals (a cubic Hermite estimate), so a round shape stays round instead of faceting.
+// Subdivide: every triangle -> 4 (SculptGL's halfEdgeSplit midpoints, applied to all edges), then SculptGL's
+// tangential smoothing of the new vertices (Subdivision.js: smo.smoothTangent(newVerts, 1.0)) so the surface
+// gets rounder instead of only denser.
 function forgeSubdivide(sm) {
-  const { n, idx, wid, wpos, wnrm, col, uv } = sm;
+  const { n, idx, col, uv } = sm;
   const raw = new Map(), extra = [];
   const mid = (i, j) => {
     const key = i < j ? i * 4294967296 + j : j * 4294967296 + i;
@@ -463,104 +571,48 @@ function forgeSubdivide(sm) {
   const ncol = col ? new Float32Array(m * 3) : null; if (ncol) ncol.set(col);
   const nuv = uv ? new Float32Array(m * 2) : null; if (nuv) nuv.set(uv);
   for (let e = 0; e < extra.length; e++) {
-    const [i, j] = extra[e], r = n + e, a = wid[i] * 3, b = wid[j] * 3;
-    const dx = wpos[b] - wpos[a], dy = wpos[b + 1] - wpos[a + 1], dz = wpos[b + 2] - wpos[a + 2];
-    const lift = ((dx * wnrm[b] + dy * wnrm[b + 1] + dz * wnrm[b + 2]) - (dx * wnrm[a] + dy * wnrm[a + 1] + dz * wnrm[a + 2])) / 8;
-    let mx = wnrm[a] + wnrm[b], my = wnrm[a + 1] + wnrm[b + 1], mz = wnrm[a + 2] + wnrm[b + 2];
-    const l = Math.hypot(mx, my, mz) || 1; mx /= l; my /= l; mz /= l;
-    pos[r * 3] = (wpos[a] + wpos[b]) / 2 + lift * mx;
-    pos[r * 3 + 1] = (wpos[a + 1] + wpos[b + 1]) / 2 + lift * my;
-    pos[r * 3 + 2] = (wpos[a + 2] + wpos[b + 2]) / 2 + lift * mz;
+    const [i, j] = extra[e], r = n + e;
+    for (let k = 0; k < 3; k++) pos[r * 3 + k] = (sm.pos[i * 3 + k] + sm.pos[j * 3 + k]) / 2;
     if (ncol) for (let k = 0; k < 3; k++) ncol[r * 3 + k] = (col[i * 3 + k] + col[j * 3 + k]) / 2;
     if (nuv) for (let k = 0; k < 2; k++) nuv[r * 2 + k] = (uv[i * 2 + k] + uv[j * 2 + k]) / 2;
   }
-  return forgeMeshFrom(pos, ncol, nuv, out, sm.image);
+  const out2 = forgeMeshFrom(pos, ncol, nuv, out);
+  // SculptGL Smooth.smoothTangent on the new (welded) vertices: Laplacian, minus its normal part
+  const isNew = new Uint8Array(out2.wn);
+  for (let r = n; r < m; r++) isNew[out2.wid[r]] = 1;
+  forgeSmoothTangent(out2, isNew, 1.0);
+  forgeSync(out2); forgeNormals(out2);
+  return out2;
 }
 
-// ------------------------------------------------------------------------------------------ GLB in / out
-function forgeParseGlb(buf, THREE) {
-  const dv = new DataView(buf);
-  if (buf.byteLength < 20 || dv.getUint32(0, true) !== 0x46546C67) throw new Error("not a .glb");
-  let off = 12, g = null, bin = null;
-  while (off + 8 <= buf.byteLength) {
-    const len = dv.getUint32(off, true), type = dv.getUint32(off + 4, true);
-    if (type === 0x4E4F534A) g = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, off + 8, len)));
-    else if (type === 0x004E4942) bin = buf.slice(off + 8, off + 8 + len);
-    off += 8 + len;
+function forgeSmoothTangent(sm, pick, intensity) {
+  const { wpos, wnrm, adjStart, adj, wn } = sm;
+  const next = new Float32Array(wpos);
+  for (let w = 0; w < wn; w++) {
+    if (!pick[w]) continue;
+    const a = adjStart[w], b = adjStart[w + 1];
+    if (b - a < 3) continue;
+    let x = 0, y = 0, z = 0;
+    for (let i = a; i < b; i++) { const v = adj[i] * 3; x += wpos[v]; y += wpos[v + 1]; z += wpos[v + 2]; }
+    const k = 1 / (b - a);
+    let dx = x * k - wpos[w * 3], dy = y * k - wpos[w * 3 + 1], dz = z * k - wpos[w * 3 + 2];
+    const d = dx * wnrm[w * 3] + dy * wnrm[w * 3 + 1] + dz * wnrm[w * 3 + 2];
+    dx -= wnrm[w * 3] * d; dy -= wnrm[w * 3 + 1] * d; dz -= wnrm[w * 3 + 2] * d;
+    next[w * 3] += dx * intensity; next[w * 3 + 1] += dy * intensity; next[w * 3 + 2] += dz * intensity;
   }
-  if (!g) throw new Error("no glTF JSON");
-  if ((g.extensionsRequired || []).length) throw new Error("needs " + g.extensionsRequired.join(", ") + " (not supported)");
-  const SIZE = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
-  const NORM = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 };
-  const COMPS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
-  const read = (i, wantInt) => {
-    const a = g.accessors[i], v = g.bufferViews[a.bufferView], comps = COMPS[a.type] || 1, sz = SIZE[a.componentType];
-    const view = new DataView(bin, (v.byteOffset || 0) + (a.byteOffset || 0));
-    const stride = v.byteStride || comps * sz, out = wantInt ? new Uint32Array(a.count * comps) : new Float32Array(a.count * comps);
-    const get = { 5120: (o) => view.getInt8(o), 5121: (o) => view.getUint8(o), 5122: (o) => view.getInt16(o, true),
-      5123: (o) => view.getUint16(o, true), 5125: (o) => view.getUint32(o, true), 5126: (o) => view.getFloat32(o, true) }[a.componentType];
-    const div = (!wantInt && (a.normalized || a.componentType !== 5126) && NORM[a.componentType]) || 1;
-    for (let e = 0; e < a.count; e++) for (let c = 0; c < comps; c++) out[e * comps + c] = get(e * stride + c * sz) / div;
-    return { data: out, comps };
-  };
-  const P = [], C = [], U = [], I = [];
-  let image = null, count = 0, hasUv = false;
-  const prims = [];
-  const walk = (ni, parent) => {
-    const node = g.nodes[ni], m = new THREE.Matrix4();
-    if (node.matrix) m.fromArray(node.matrix);
-    else m.compose(new THREE.Vector3(...(node.translation || [0, 0, 0])), new THREE.Quaternion(...(node.rotation || [0, 0, 0, 1])),
-      new THREE.Vector3(...(node.scale || [1, 1, 1])));
-    const world = parent.clone().multiply(m);
-    if (node.mesh !== undefined) for (const p of g.meshes[node.mesh].primitives) if (p.mode === undefined || p.mode === 4) prims.push([p, world]);
-    for (const c of node.children || []) walk(c, world);
-  };
-  const scene = g.scenes ? g.scenes[g.scene || 0] : { nodes: g.nodes.map((_, i) => i) };
-  for (const ni of scene.nodes) walk(ni, new THREE.Matrix4());
-  for (const [p] of prims) if (p.attributes.TEXCOORD_0 !== undefined) hasUv = true;
-  for (const [p, world] of prims) {
-    const pos = read(p.attributes.POSITION).data, nv = pos.length / 3;
-    const v = new THREE.Vector3();
-    for (let i = 0; i < nv; i++) { v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).applyMatrix4(world); P.push(v.x, v.y, v.z); }
-    const mat = p.material !== undefined && g.materials ? g.materials[p.material] : {};
-    const pbr = (mat && mat.pbrMetallicRoughness) || {}, factor = pbr.baseColorFactor || [1, 1, 1, 1];
-    if (pbr.baseColorTexture && !image && g.textures) {
-      const src = g.images[g.textures[pbr.baseColorTexture.index].source];
-      if (src && src.bufferView !== undefined) {
-        const bv = g.bufferViews[src.bufferView];
-        image = { bytes: new Uint8Array(bin.slice(bv.byteOffset || 0, (bv.byteOffset || 0) + bv.byteLength)), mime: src.mimeType || "image/png" };
-      }
-    }
-    if (p.attributes.COLOR_0 !== undefined) {
-      const c = read(p.attributes.COLOR_0);
-      for (let i = 0; i < nv; i++) C.push(c.data[i * c.comps] * factor[0], c.data[i * c.comps + 1] * factor[1], c.data[i * c.comps + 2] * factor[2]);
-    } else for (let i = 0; i < nv; i++) C.push(factor[0], factor[1], factor[2]);
-    if (hasUv) {
-      if (p.attributes.TEXCOORD_0 !== undefined) U.push(...read(p.attributes.TEXCOORD_0).data);
-      else for (let i = 0; i < nv; i++) U.push(0, 0);
-    }
-    if (p.indices !== undefined) for (const x of read(p.indices, true).data) I.push(x + count);
-    else for (let i = 0; i < nv; i++) I.push(i + count);
-    count += nv;
-  }
-  if (!count) throw new Error("no triangles in it");
-  // centre on the origin, so X symmetry mirrors across the middle of the model
-  const pos = Float32Array.from(P), box = new THREE.Box3().setFromArray(pos), c = box.getCenter(new THREE.Vector3());
-  for (let i = 0; i < pos.length; i += 3) { pos[i] -= c.x; pos[i + 1] -= c.y; pos[i + 2] -= c.z; }
-  return forgeMeshFrom(pos, Float32Array.from(C), hasUv ? Float32Array.from(U) : null, Uint32Array.from(I), image);
+  wpos.set(next);
 }
 
+// my own small GLB writer: only the fallback when the vendored GLTFExporter cannot load
 function forgeWriteGlb(sm) {
   const parts = [], views = [], accessors = [];
   let off = 0;
   const add = (arr, target, comps, ctype, extra) => {
     const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength), pad = (4 - (bytes.length % 4)) % 4;
     parts.push(bytes, new Uint8Array(pad));
-    const view = { buffer: 0, byteOffset: off, byteLength: bytes.length };
-    if (target) view.target = target;
-    views.push(view);
+    views.push({ buffer: 0, byteOffset: off, byteLength: bytes.length, target });
     off += bytes.length + pad;
-    if (comps) accessors.push(Object.assign({ bufferView: views.length - 1, componentType: ctype, count: arr.length / comps,
+    accessors.push(Object.assign({ bufferView: views.length - 1, componentType: ctype, count: arr.length / comps,
       type: { 1: "SCALAR", 2: "VEC2", 3: "VEC3" }[comps] }, extra || {}));
     return accessors.length - 1;
   };
@@ -570,19 +622,12 @@ function forgeWriteGlb(sm) {
   if (sm.col) attrs.COLOR_0 = add(sm.col, 34962, 3, 5126);
   if (sm.uv) attrs.TEXCOORD_0 = add(sm.uv, 34962, 2, 5126);
   const indices = add(sm.idx, 34963, 1, 5125);
-  const material = { name: "forge", pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.8 } };
-  const doc = { asset: { version: "2.0", generator: "LOKI Forge" }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0, name: "forge" }],
-    meshes: [{ name: "forge", primitives: [{ attributes: attrs, indices, material: 0, mode: 4 }] }], materials: [material] };
-  if (sm.image && sm.uv) {
-    add(sm.image.bytes, 0, 0);
-    doc.images = [{ bufferView: views.length - 1, mimeType: sm.image.mime }];
-    doc.samplers = [{}]; doc.textures = [{ source: 0, sampler: 0 }];
-    material.pbrMetallicRoughness.baseColorTexture = { index: 0 };
-  }
-  Object.assign(doc, { accessors, bufferViews: views, buffers: [{ byteLength: off }] });
-  let js = new TextEncoder().encode(JSON.stringify(doc));
-  const jpad = (4 - (js.length % 4)) % 4;
-  const total = 12 + 8 + js.length + jpad + 8 + off, out = new Uint8Array(total), dv = new DataView(out.buffer);
+  const doc = { asset: { version: "2.0", generator: "LOKI Forge" }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: attrs, indices, material: 0, mode: 4 }] }],
+    materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.8 } }],
+    accessors, bufferViews: views, buffers: [{ byteLength: off }] };
+  const js = new TextEncoder().encode(JSON.stringify(doc)), jpad = (4 - (js.length % 4)) % 4;
+  const total = 28 + js.length + jpad + off, out = new Uint8Array(total), dv = new DataView(out.buffer);
   dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
   dv.setUint32(12, js.length + jpad, true); dv.setUint32(16, 0x4E4F534A, true);
   out.set(js, 20); out.fill(32, 20 + js.length, 20 + js.length + jpad);
@@ -592,88 +637,91 @@ function forgeWriteGlb(sm) {
   return out;
 }
 
-function forgeWriteObj(sm) {
-  const srgb = (c) => { c = Math.min(1, Math.max(0, c)); return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; };
-  const lines = ["# LOKI Forge"];
-  for (let i = 0; i < sm.n; i++) {
-    const p = [sm.pos[i * 3], sm.pos[i * 3 + 1], sm.pos[i * 3 + 2]].map((x) => x.toFixed(5));
-    if (sm.col) p.push(...[0, 1, 2].map((k) => srgb(sm.col[i * 3 + k]).toFixed(4)));
-    lines.push("v " + p.join(" "));
-  }
-  for (let i = 0; i < sm.n; i++) lines.push("vn " + [0, 1, 2].map((k) => sm.nrm[i * 3 + k].toFixed(4)).join(" "));
-  if (sm.uv) for (let i = 0; i < sm.n; i++) lines.push("vt " + sm.uv[i * 2].toFixed(5) + " " + (1 - sm.uv[i * 2 + 1]).toFixed(5));
-  for (let t = 0; t < sm.idx.length; t += 3) {
-    const f = [0, 1, 2].map((k) => { const v = sm.idx[t + k] + 1; return sm.uv ? v + "/" + v + "/" + v : v + "//" + v; });
-    lines.push("f " + f.join(" "));
-  }
-  return lines.join("\n") + "\n";
-}
-
 // ------------------------------------------------------------------------------------------ the viewer
 async function forgeViewer() {
   if (forge.view) return forge.view;
   if (forge.viewLoading) return forge.viewLoading;
   forge.viewLoading = (async () => {
-    let THREE;
-    try { THREE = await import("/ui/vendor/three/three.module.js"); } catch (_) { return null; }
+    let lib;
+    try {
+      const [THREE, gl, ge, oe, oc, tc] = await Promise.all([
+        import("/ui/vendor/three/three.module.js"),
+        import("/ui/vendor/three/addons/loaders/GLTFLoader.js"),
+        import("/ui/vendor/three/addons/exporters/GLTFExporter.js"),
+        import("/ui/vendor/three/addons/exporters/OBJExporter.js"),
+        import("/ui/vendor/three/addons/controls/OrbitControls.js"),
+        import("/ui/vendor/three/addons/controls/TransformControls.js"),
+      ]);
+      lib = { THREE, GLTFLoader: gl.GLTFLoader, GLTFExporter: ge.GLTFExporter, OBJExporter: oe.OBJExporter,
+        OrbitControls: oc.OrbitControls, TransformControls: tc.TransformControls };
+    } catch (exc) { forgeSay("3D view could not load: " + exc.message, true); return null; }
     const canvas = document.getElementById("forge-view");
     let renderer;
-    try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (_) { return null; }
-    forge.view = forgeMakeView(THREE, renderer, canvas);
+    try { renderer = new lib.THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true }); } catch (_) { return null; }
+    forge.view = forgeMakeView(lib, renderer, canvas);
     return forge.view;
   })();
   return forge.viewLoading;
 }
 
-function forgeMakeView(THREE, renderer, canvas) {
+function forgeMakeView(lib, renderer, canvas) {
+  const { THREE } = lib;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
+  camera.position.set(0, 0.4, 2.6);
   scene.add(camera);
   const hemi = new THREE.HemisphereLight(0xdfe6f2, 0x2a2e36, 1.0);
   const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(1.2, 1.6, 2);
   const rim = new THREE.DirectionalLight(0x9fb6d8, 1.2); rim.position.set(-2, 0.5, -2);
   scene.add(hemi); camera.add(key, rim);   // the light turns with the camera: the side you look at is lit
+  const controls = new lib.OrbitControls(camera, canvas);
+  controls.enableDamping = true; controls.dampingFactor = 0.12;
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  const holder = new THREE.Group(); scene.add(holder);
+  const transform = new lib.TransformControls(camera, canvas);
+  transform.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
+  transform.addEventListener("change", () => { view.dirty = true; });
+  const gizmo = transform.getHelper ? transform.getHelper() : transform;
+  scene.add(gizmo);
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0, vertexColors: true });
   const clayColor = new THREE.Color(0xc9b8a8);
-  let mesh = null, texture = null;
+  let mesh = null, baseMap = null, matMaps = null;
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: 0xbfd4ff, transparent: true,
     opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
   ring.renderOrder = 10; ring.visible = false; scene.add(ring);
-  const orbit = { theta: 0.5, phi: 1.2, dist: 2.6, target: new THREE.Vector3() };
   const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true },
-    undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1 };
+    undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1, controls, lib };
   const raycaster = new THREE.Raycaster();
 
-  function place() {
-    const s = Math.sin(orbit.phi);
-    camera.position.set(orbit.target.x + orbit.dist * s * Math.sin(orbit.theta), orbit.target.y + orbit.dist * Math.cos(orbit.phi),
-      orbit.target.z + orbit.dist * s * Math.cos(orbit.theta));
-    camera.lookAt(orbit.target);
-    view.dirty = true;
-  }
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())) {
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); view.dirty = true;
     }
   }
+  controls.addEventListener("change", () => { view.dirty = true; });
   function loop() {
     if (!view.running) return;
     resize();
+    controls.update();
     if (view.dirty) { renderer.render(scene, camera); view.dirty = false; }
     requestAnimationFrame(loop);
   }
-  view.start = () => { if (!view.running) { view.running = true; place(); requestAnimationFrame(loop); } };
+  view.resize = () => { view.dirty = true; };
+  view.start = () => { if (!view.running) { view.running = true; requestAnimationFrame(loop); } };
   view.stop = () => { view.running = false; };
   view.frame = () => {
     if (!mesh) return;
     mesh.geometry.computeBoundingSphere();
     const bs = mesh.geometry.boundingSphere;
-    orbit.target.copy(bs.center); view.size = bs.radius * 2 || 1;
-    orbit.dist = bs.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
-    camera.near = orbit.dist / 100; camera.far = orbit.dist * 100; camera.updateProjectionMatrix();
-    place();
+    view.size = bs.radius * 2 || 1;
+    controls.target.copy(bs.center).applyMatrix4(holder.matrixWorld);
+    const dist = bs.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    camera.position.copy(controls.target).addScaledVector(dir.lengthSq() ? dir : new THREE.Vector3(0, 0.15, 1).normalize(), dist);
+    camera.near = dist / 100; camera.far = dist * 100; camera.updateProjectionMatrix();
+    controls.update(); view.dirty = true;
   };
 
   function geometryOf(sm) {
@@ -681,40 +729,90 @@ function forgeMakeView(THREE, renderer, canvas) {
     geo.setAttribute("position", new THREE.BufferAttribute(sm.pos, 3));
     geo.setAttribute("normal", new THREE.BufferAttribute(sm.nrm, 3));
     if (sm.col) geo.setAttribute("color", new THREE.BufferAttribute(sm.col, 3));
-    if (sm.uv) geo.setAttribute("uv", new THREE.BufferAttribute(sm.uv, 2));
+    geo.setAttribute("uv", new THREE.BufferAttribute(sm.uv || forgeBoxUv(sm), 2));
     geo.setIndex(new THREE.BufferAttribute(sm.idx, 1));
     geo.computeBoundingSphere();
     return geo;
   }
   function useMesh(sm, keepView) {
-    if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+    if (mesh) { holder.remove(mesh); mesh.geometry.dispose(); }
     view.sm = sm;
     mesh = new THREE.Mesh(geometryOf(sm), material);
-    scene.add(mesh);
+    mesh.name = "forge";
+    holder.add(mesh);
     applyLook();
     if (!keepView) view.frame();
     view.dirty = true;
   }
-  view.setMesh = (sm) => {
+  // load a .glb with three.js' own GLTFLoader, then merge every mesh into one sculptable mesh
+  view.load = async (buf) => {
+    const gltf = await new lib.GLTFLoader().parseAsync(buf, "");
+    gltf.scene.updateMatrixWorld(true);
+    const P = [], C = [], U = [], I = [];
+    let count = 0, map = null, hasUv = false;
+    gltf.scene.traverse((o) => { if (o.isMesh && o.geometry.attributes.uv) hasUv = true; });
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const g = o.geometry, p = g.attributes.position, v = new THREE.Vector3();
+      const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (!map && mat && mat.map) map = mat.map;
+      const tint = mat && mat.color ? mat.color : new THREE.Color(1, 1, 1);
+      for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); P.push(v.x, v.y, v.z); }
+      const c = g.attributes.color;
+      for (let i = 0; i < p.count; i++) C.push(c ? c.getX(i) * tint.r : tint.r, c ? c.getY(i) * tint.g : tint.g, c ? c.getZ(i) * tint.b : tint.b);
+      if (hasUv) { const u = g.attributes.uv; for (let i = 0; i < p.count; i++) U.push(u ? u.getX(i) : 0, u ? u.getY(i) : 0); }
+      if (g.index) for (let i = 0; i < g.index.count; i++) I.push(g.index.getX(i) + count);
+      else for (let i = 0; i < p.count; i++) I.push(i + count);
+      count += p.count;
+    });
+    if (!count) throw new Error("no triangles in it");
+    const pos = Float32Array.from(P), box = new THREE.Box3().setFromArray(pos), c = box.getCenter(new THREE.Vector3());
+    for (let i = 0; i < pos.length; i += 3) { pos[i] -= c.x; pos[i + 1] -= c.y; pos[i + 2] -= c.z; }
     view.undoStack = []; view.redoStack = [];
-    if (texture) { texture.dispose(); texture = null; }
-    if (sm.image) {
-      createImageBitmap(new Blob([sm.image.bytes], { type: sm.image.mime })).then((bmp) => {
-        texture = new THREE.Texture(bmp); texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace; texture.needsUpdate = true;
-        applyLook();
-      }).catch(() => {});
-    }
-    useMesh(sm, false);
+    holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1);
+    baseMap = map;
+    useMesh(forgeMeshFrom(pos, Float32Array.from(C), hasUv ? Float32Array.from(U) : null, Uint32Array.from(I)), false);
   };
   function applyLook() {
-    const clay = !!view.clay;
-    material.vertexColors = !clay && !!(view.sm && view.sm.col);
-    material.map = !clay && texture && view.sm && view.sm.uv ? texture : null;
+    const clay = !!view.clay, m = matMaps;
+    material.vertexColors = !clay && !(m && m.albedo) && !!(view.sm && view.sm.col);
+    material.map = clay ? null : (m && m.albedo) || (view.sm && view.sm.uv ? baseMap : null);
+    material.normalMap = !clay && m ? m.normal : null;
+    material.roughnessMap = !clay && m ? m.roughness : null;
+    material.metalnessMap = !clay && m ? m.metallic : null;
+    material.aoMap = !clay && m ? m.ao : null;
+    material.roughness = m ? 1 : 0.62;
+    material.metalness = m ? 1 : 0;
     material.color.copy(clay ? clayColor : new THREE.Color(0xffffff));
     material.wireframe = !!view.wire;
     material.needsUpdate = true;
     view.dirty = true;
   }
+  // Material Maker maps (canvases) -> textures on the model, live
+  view.setMaterial = (maps) => {
+    if (matMaps) for (const t of Object.values(matMaps)) t.dispose();
+    matMaps = null;
+    if (maps) {
+      matMaps = {};
+      for (const [k, cv] of Object.entries(maps)) {
+        const t = new THREE.CanvasTexture(cv);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.flipY = false;
+        if (k === "albedo") t.colorSpace = THREE.SRGBColorSpace;
+        matMaps[k] = t;
+      }
+      // glTF packs roughness in G and metalness in B of one texture: build it so the export is correct
+      const rm = document.createElement("canvas"); rm.width = maps.roughness.width; rm.height = maps.roughness.height;
+      const ctx = rm.getContext("2d"), w = rm.width, h = rm.height;
+      const r = maps.roughness.getContext("2d").getImageData(0, 0, w, h).data, mt = maps.metallic.getContext("2d").getImageData(0, 0, w, h).data;
+      const out = ctx.createImageData(w, h);
+      for (let i = 0; i < out.data.length; i += 4) { out.data[i] = 255; out.data[i + 1] = r[i]; out.data[i + 2] = mt[i]; out.data[i + 3] = 255; }
+      ctx.putImageData(out, 0, 0);
+      matMaps.roughness.dispose(); matMaps.metallic.dispose();
+      matMaps.roughness = matMaps.metallic = new THREE.CanvasTexture(rm);
+      matMaps.roughness.flipY = false; matMaps.roughness.wrapS = matMaps.roughness.wrapT = THREE.RepeatWrapping;
+    }
+    applyLook();
+  };
   view.setLook = (what, on) => { view[what] = on; applyLook(); };
   view.nextLight = () => {
     view.light = (view.light + 1) % FORGE_LIGHTS.length;
@@ -723,9 +821,30 @@ function forgeMakeView(THREE, renderer, canvas) {
     view.dirty = true;
     return name;
   };
-  view.setMode = (m) => { view.mode = m; ring.visible = false; view.dirty = true; };
+  view.setMode = (m) => { view.mode = m; ring.visible = false; controls.enableRotate = true; view.dirty = true; };
+  view.toggleTransform = (mode) => {
+    if (!mesh) return;
+    if (transform.object && !mode) { transform.detach(); }
+    else { transform.attach(holder); transform.setMode(mode || "translate"); }
+    for (const b of document.querySelectorAll("#forge .forge-transform")) b.classList.toggle("on", !!transform.object);
+    view.dirty = true;
+  };
+  // export with three.js' own exporters (GLTFExporter binary / OBJExporter); my writer is only the fallback
+  view.exportFile = async (kind) => {
+    const bake = new THREE.Mesh(mesh.geometry.clone(), material.clone());
+    bake.geometry.applyMatrix4(holder.matrixWorld);
+    bake.name = "forge";
+    if (kind === "obj") return new TextEncoder().encode(new lib.OBJExporter().parse(bake));
+    try {
+      const out = await new lib.GLTFExporter().parseAsync(bake, { binary: true, maxTextureSize: 4096 });
+      return new Uint8Array(out);
+    } catch (exc) {
+      console.warn("GLTFExporter failed, using Forge's writer:", exc);
+      return forgeWriteGlb(view.sm);
+    }
+  };
 
-  // ---- sculpting
+  // ---- sculpting: SculptGL's tools (src/editing/tools/*.js), on the welded vertices
   function snapshot() {
     view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice() });
     if (view.undoStack.length > 40) view.undoStack.shift();
@@ -755,87 +874,124 @@ function forgeMakeView(THREE, renderer, canvas) {
     g.computeBoundingSphere(); g.computeBoundingBox();
     view.dirty = true;
   }
+  const toLocal = (p) => holder.worldToLocal(p.clone());
   function hitAt(e) {
     if (!mesh) return null;
     const r = canvas.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
-    return hit || null;
+    return hit ? { point: toLocal(hit.point) } : null;
   }
-  function areaNormal(sm, c, R) {
-    const { wpos, wnrm, wn } = sm, n = [0, 0, 0], R2 = R * R;
+  // SculptGL picking: the vertices inside the brush sphere
+  function picked(c, R2) {
+    const { wpos, wn } = view.sm, out = [];
     for (let w = 0; w < wn; w++) {
-      const dx = wpos[w * 3] - c.x, dy = wpos[w * 3 + 1] - c.y, dz = wpos[w * 3 + 2] - c.z, d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < R2) { const f = 1 - d2 / R2; n[0] += wnrm[w * 3] * f; n[1] += wnrm[w * 3 + 1] * f; n[2] += wnrm[w * 3 + 2] * f; }
+      const dx = wpos[w * 3] - c.x, dy = wpos[w * 3 + 1] - c.y, dz = wpos[w * 3 + 2] - c.z;
+      if (dx * dx + dy * dy + dz * dz < R2) out.push(w);
     }
-    const l = Math.hypot(n[0], n[1], n[2]) || 1;
-    return new THREE.Vector3(n[0] / l, n[1] / l, n[2] / l);
+    return out;
   }
-  // one dab of the brush at c (world = model space; the mesh has no transform)
-  function dab(tool, c, sign) {
-    const sm = view.sm, { wpos, wnrm, wn, adjStart, adj } = sm;
-    const R = view.brush.radius * view.size, R2 = R * R, s = view.brush.strength;
-    const n = areaNormal(sm, c, R);
-    let plane = 0;
-    if (tool === "flatten") {   // the plane through the weighted middle of the area
-      let sw = 0, px = 0, py = 0, pz = 0;
-      for (let w = 0; w < wn; w++) {
-        const dx = wpos[w * 3] - c.x, dy = wpos[w * 3 + 1] - c.y, dz = wpos[w * 3 + 2] - c.z, d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < R2) { const f = 1 - d2 / R2; sw += f; px += wpos[w * 3] * f; py += wpos[w * 3 + 1] * f; pz += wpos[w * 3 + 2] * f; }
+  // SculptBase.areaNormal / areaCenter (front-facing vertices: SculptBase.getFrontVertices)
+  function areaNormalCenter(iv) {
+    const { wpos, wnrm } = view.sm;
+    const eye = camera.getWorldDirection(new THREE.Vector3()).transformDirection(holder.matrixWorld.clone().invert());
+    let nx = 0, ny = 0, nz = 0, cx = 0, cy = 0, cz = 0, k = 0;
+    for (const w of iv) {
+      if (wnrm[w * 3] * eye.x + wnrm[w * 3 + 1] * eye.y + wnrm[w * 3 + 2] * eye.z > 0) continue;
+      nx += wnrm[w * 3]; ny += wnrm[w * 3 + 1]; nz += wnrm[w * 3 + 2];
+      cx += wpos[w * 3]; cy += wpos[w * 3 + 1]; cz += wpos[w * 3 + 2]; k++;
+    }
+    const l = Math.hypot(nx, ny, nz);
+    if (!l || !k) return null;
+    return { n: [nx / l, ny / l, nz / l], c: [cx / k, cy / k, cz / k] };
+  }
+  // SculptGL's falloff: 3t^4 - 4t^3 + 1 (t = distance / radius)
+  const fall = (d) => { const f = d * d; return 3 * f * f - 4 * f * d + 1; };
+  function dab(tool, c, negative) {
+    const sm = view.sm, v = sm.wpos, nAr = sm.wnrm;
+    const radius = view.brush.radius * view.size, r2 = radius * radius, intensity = view.brush.strength;
+    const iv = picked(c, r2);
+    if (!iv.length) return;
+    if (tool === "draw" || tool === "flatten") {   // Brush.js (clay) and Flatten.js: Flatten.flatten() onto a plane
+      const a = areaNormalCenter(iv);
+      if (!a) return;
+      const [anx, any, anz] = a.n;
+      let [ax, ay, az] = a.c;
+      if (tool === "draw") { const off = radius * 0.1 * (negative ? -1 : 1); ax += anx * off; ay += any * off; az += anz * off; }
+      const comp = negative ? -1 : 1;   // Flatten.flatten: only the side of the plane the brush works on
+      for (const w of iv) {
+        const i = w * 3, vx = v[i], vy = v[i + 1], vz = v[i + 2];
+        const toPlane = (vx - ax) * anx + (vy - ay) * any + (vz - az) * anz;
+        if (tool === "draw" && toPlane * comp > 0) continue;
+        const d = Math.hypot(vx - c.x, vy - c.y, vz - c.z) / radius;
+        if (d >= 1) continue;
+        const f = fall(d) * toPlane * intensity;
+        v[i] -= anx * f; v[i + 1] -= any * f; v[i + 2] -= anz * f;
       }
-      if (sw) plane = (px * n.x + py * n.y + pz * n.z) / sw;
-    }
-    const moves = [];
-    for (let w = 0; w < wn; w++) {
-      const x = wpos[w * 3], y = wpos[w * 3 + 1], z = wpos[w * 3 + 2];
-      const dx = x - c.x, dy = y - c.y, dz = z - c.z, d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= R2) continue;
-      const t = d2 / R2, f = (1 - t) * (1 - t);   // smooth falloff
-      let mx = 0, my = 0, mz = 0;
-      if (tool === "draw") { const k = sign * s * R * 0.06 * f; mx = n.x * k; my = n.y * k; mz = n.z * k; }
-      else if (tool === "inflate") { const k = sign * s * R * 0.06 * f; mx = wnrm[w * 3] * k; my = wnrm[w * 3 + 1] * k; mz = wnrm[w * 3 + 2] * k; }
-      else if (tool === "smooth") {
+    } else if (tool === "inflate") {   // Inflate.js
+      const k = intensity * radius * 0.1 * (negative ? -1 : 1);
+      for (const w of iv) {
+        const i = w * 3, d = Math.hypot(v[i] - c.x, v[i + 1] - c.y, v[i + 2] - c.z) / radius;
+        if (d >= 1) continue;
+        const f = k * fall(d);
+        v[i] += nAr[i] * f; v[i + 1] += nAr[i + 1] * f; v[i + 2] += nAr[i + 2] * f;
+      }
+    } else if (tool === "smooth") {   // Smooth.js + SculptBase.laplacianSmooth
+      const { adjStart, adj } = sm, next = new Float32Array(iv.length * 3);
+      iv.forEach((w, j) => {
         const a = adjStart[w], b = adjStart[w + 1];
-        if (b === a) continue;
-        let ax = 0, ay = 0, az = 0;
-        for (let i = a; i < b; i++) { const v = adj[i] * 3; ax += wpos[v]; ay += wpos[v + 1]; az += wpos[v + 2]; }
-        const k = Math.min(1, s * f * 0.9), cnt = b - a;
-        mx = (ax / cnt - x) * k; my = (ay / cnt - y) * k; mz = (az / cnt - z) * k;
-      } else if (tool === "flatten") {
-        const d = x * n.x + y * n.y + z * n.z - plane, k = -d * Math.min(1, s * f * 0.5);
-        mx = n.x * k; my = n.y * k; mz = n.z * k;
-      } else if (tool === "pinch") {
-        const along = dx * n.x + dy * n.y + dz * n.z, k = -sign * s * f * 0.12;
-        mx = (dx - n.x * along) * k; my = (dy - n.y * along) * k; mz = (dz - n.z * along) * k;
+        if (b - a <= 2) { next[j * 3] = v[w * 3]; next[j * 3 + 1] = v[w * 3 + 1]; next[j * 3 + 2] = v[w * 3 + 2]; return; }
+        let x = 0, y = 0, z = 0;
+        for (let i = a; i < b; i++) { const q = adj[i] * 3; x += v[q]; y += v[q + 1]; z += v[q + 2]; }
+        next[j * 3] = x / (b - a); next[j * 3 + 1] = y / (b - a); next[j * 3 + 2] = z / (b - a);
+      });
+      iv.forEach((w, j) => {
+        const i = w * 3, d = Math.hypot(v[i] - c.x, v[i + 1] - c.y, v[i + 2] - c.z) / radius;
+        const m = Math.min(1, intensity * Math.max(0, fall(Math.min(1, d)))), keep = 1 - m;
+        v[i] = v[i] * keep + next[j * 3] * m; v[i + 1] = v[i + 1] * keep + next[j * 3 + 1] * m; v[i + 2] = v[i + 2] * keep + next[j * 3 + 2] * m;
+      });
+    } else if (tool === "pinch") {   // Pinch.js
+      const k = intensity * 0.05 * (negative ? -1 : 1);
+      for (const w of iv) {
+        const i = w * 3, dx = c.x - v[i], dy = c.y - v[i + 1], dz = c.z - v[i + 2];
+        const f = fall(Math.hypot(dx, dy, dz) / radius) * k;
+        v[i] += dx * f; v[i + 1] += dy * f; v[i + 2] += dz * f;
       }
-      moves.push(w, mx, my, mz);
+    } else if (tool === "crease") {   // Crease.js
+      const a = areaNormalCenter(iv);
+      if (!a) return;
+      const deform = intensity * 0.07, brushFactor = deform * radius * (negative ? 1 : -1);
+      for (const w of iv) {
+        const i = w * 3, dx = c.x - v[i], dy = c.y - v[i + 1], dz = c.z - v[i + 2];
+        const d = Math.hypot(dx, dy, dz) / radius;
+        if (d >= 1) continue;
+        let f = fall(d);
+        const mod = Math.pow(f, 5) * brushFactor;
+        f *= deform;
+        v[i] += dx * f + a.n[0] * mod; v[i + 1] += dy * f + a.n[1] * mod; v[i + 2] += dz * f + a.n[2] * mod;
+      }
     }
-    for (let i = 0; i < moves.length; i += 4) { const w = moves[i] * 3; wpos[w] += moves[i + 1]; wpos[w + 1] += moves[i + 2]; wpos[w + 2] += moves[i + 3]; }
   }
-  function stroke(tool, c, sign) {
-    dab(tool, c, sign);
-    if (view.brush.symmetry && Math.abs(c.x) > view.brush.radius * view.size * 0.05) dab(tool, new THREE.Vector3(-c.x, c.y, c.z), sign);
-    else if (view.brush.symmetry) { /* on the middle line: one dab covers both sides */ }
+  function stroke(tool, c, negative) {
+    dab(tool, c, negative);
+    if (view.brush.symmetry && Math.abs(c.x) > view.brush.radius * view.size * 0.05) dab(tool, new THREE.Vector3(-c.x, c.y, c.z), negative);
     forgeSync(view.sm); forgeNormals(view.sm); refresh();
   }
+  // Move.js: the picked vertices and their proxy positions, moved along the mouse's drag in the view plane
   function grabStart(c) {
-    const sm = view.sm, R = view.brush.radius * view.size, R2 = R * R, sel = [];
-    const pick = (cx, mirror) => {
-      for (let w = 0; w < sm.wn; w++) {
-        const dx = sm.wpos[w * 3] - cx, dy = sm.wpos[w * 3 + 1] - c.y, dz = sm.wpos[w * 3 + 2] - c.z, d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < R2) { const t = d2 / R2; sel.push([w, (1 - t) * (1 - t), mirror]); }
-      }
-    };
+    const sm = view.sm, R = view.brush.radius * view.size, sel = [];
+    const pick = (cx, mirror) => { for (const w of picked(new THREE.Vector3(cx, c.y, c.z), R * R)) sel.push([w, fall(Math.hypot(sm.wpos[w * 3] - cx, sm.wpos[w * 3 + 1] - c.y, sm.wpos[w * 3 + 2] - c.z) / R), mirror]); };
     pick(c.x, false);
     if (view.brush.symmetry && Math.abs(c.x) > R * 0.5) pick(-c.x, true);
-    return { sel, orig: sm.wpos.slice(), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), c), from: c.clone() };
+    const world = holder.localToWorld(c.clone());
+    return { sel, orig: sm.wpos.slice(), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), world), from: c.clone() };
   }
   function grabMove(g, e) {
     const r = canvas.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const p = raycaster.ray.intersectPlane(g.plane, new THREE.Vector3());
     if (!p) return;
-    const d = p.sub(g.from).multiplyScalar(view.brush.strength * 0.6 + 0.4), sm = view.sm;
+    const d = toLocal(p).sub(g.from).multiplyScalar(view.brush.strength * 0.6 + 0.4), sm = view.sm;
     for (const [w, f, mirror] of g.sel) {
       sm.wpos[w * 3] = g.orig[w * 3] + (mirror ? -d.x : d.x) * f;
       sm.wpos[w * 3 + 1] = g.orig[w * 3 + 1] + d.y * f;
@@ -845,62 +1001,69 @@ function forgeMakeView(THREE, renderer, canvas) {
   }
   function showRing(hit) {
     if (!hit || view.mode !== "sculpt") { if (ring.visible) { ring.visible = false; view.dirty = true; } return; }
-    const n = areaNormal(view.sm, hit.point, view.brush.radius * view.size);
-    ring.position.copy(hit.point).addScaledVector(n, view.size * 0.002);
-    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
-    ring.scale.setScalar(view.brush.radius * view.size);
+    const iv = picked(hit.point, (view.brush.radius * view.size) ** 2), a = iv.length ? areaNormalCenter(iv) : null;
+    const n = a ? new THREE.Vector3(...a.n) : new THREE.Vector3(0, 0, 1);
+    ring.position.copy(holder.localToWorld(hit.point.clone().addScaledVector(n, view.size * 0.002)));
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n.transformDirection(holder.matrixWorld));
+    ring.scale.setScalar(view.brush.radius * view.size * holder.scale.x);
     ring.visible = true; view.dirty = true;
   }
 
-  // ---- pointer: left = sculpt (on the model, in Sculpt mode) or turn; right/middle or Shift = move; wheel = zoom
+  // ---- pointer: in Sculpt mode a left-drag on the model sculpts (OrbitControls keeps everything else)
   let drag = null;
-  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
+    if (view.mode !== "sculpt" || e.button !== 0 || transform.dragging) return;
+    const hit = hitAt(e);
+    if (!hit || !view.sm) return;
+    e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting
     canvas.setPointerCapture(e.pointerId);
-    const hit = view.mode === "sculpt" && e.button === 0 && !e.shiftKey ? hitAt(e) : null;
-    if (hit && view.sm) {
-      snapshot();
-      const tool = view.brush.tool;
-      drag = { kind: "sculpt", tool, sign: e.altKey || e.ctrlKey || e.metaKey ? -1 : 1, last: hit.point.clone() };
-      if (tool === "grab") drag.grab = grabStart(hit.point);
-      else stroke(e.shiftKey ? "smooth" : tool, hit.point, drag.sign);
-      return;
-    }
-    drag = { kind: e.button === 0 && !e.shiftKey ? "turn" : "pan", x: e.clientX, y: e.clientY };
-  });
+    snapshot();
+    const tool = e.shiftKey ? "smooth" : view.brush.tool;
+    drag = { tool, negative: e.altKey || e.ctrlKey || e.metaKey, last: hit.point.clone() };
+    if (tool === "grab") drag.grab = grabStart(hit.point);
+    else stroke(tool, hit.point, drag.negative);
+  }, { capture: true });
   canvas.addEventListener("pointermove", (e) => {
     if (!drag) { if (view.mode === "sculpt") showRing(hitAt(e)); return; }
-    if (drag.kind === "sculpt") {
-      if (drag.grab) { grabMove(drag.grab, e); return; }
-      const hit = hitAt(e);
-      showRing(hit);
-      if (!hit) return;
-      if (hit.point.distanceTo(drag.last) < view.brush.radius * view.size * 0.25) return;   // even spacing
-      drag.last.copy(hit.point);
-      stroke(drag.tool, hit.point, drag.sign);
-      return;
+    e.stopImmediatePropagation();
+    if (drag.grab) { grabMove(drag.grab, e); return; }
+    const hit = hitAt(e);
+    showRing(hit);
+    if (!hit) return;
+    // SculptBase.sculptStroke: dabs spaced 0.15 x radius apart along the stroke
+    const step = view.brush.radius * view.size * 0.15, dist = hit.point.distanceTo(drag.last);
+    if (dist < step) return;
+    const n = Math.floor(dist / step);
+    for (let i = 1; i <= n; i++) dab(drag.tool, drag.last.clone().lerp(hit.point, i / n), drag.negative);
+    if (view.brush.symmetry) for (let i = 1; i <= n; i++) {
+      const p = drag.last.clone().lerp(hit.point, i / n);
+      if (Math.abs(p.x) > view.brush.radius * view.size * 0.05) dab(drag.tool, new THREE.Vector3(-p.x, p.y, p.z), drag.negative);
     }
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    drag.x = e.clientX; drag.y = e.clientY;
-    if (drag.kind === "turn") {
-      orbit.theta -= dx * 0.008; orbit.phi = Math.min(Math.PI - 0.05, Math.max(0.05, orbit.phi - dy * 0.008));
-    } else {
-      const k = orbit.dist * 0.0016, right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0),
-        up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
-      orbit.target.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
-    }
-    place();
-  });
+    forgeSync(view.sm); forgeNormals(view.sm); refresh();
+    drag.last.copy(hit.point);
+  }, { capture: true });
   const end = () => { drag = null; };
   canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end);
   canvas.addEventListener("pointerleave", () => { if (!drag) showRing(null); });
-  canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    orbit.dist = Math.max(view.size * 0.05, Math.min(view.size * 30, orbit.dist * Math.exp(e.deltaY * 0.0012)));
-    place();
-  }, { passive: false });
-  view.dab = (tool, x, y, z, sign) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), sign || 1); };   // tests / scripts
+  view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
+  view.transform = transform;
+  view.holder = holder;
   return view;
+}
+
+// box-projected UVs for a mesh without any (so a procedural material can be shown and exported on it)
+function forgeBoxUv(sm) {
+  const uv = new Float32Array(sm.n * 2), p = sm.pos, nr = sm.nrm;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < p.length; i++) { lo = Math.min(lo, p[i]); hi = Math.max(hi, p[i]); }
+  const s = 1 / Math.max(hi - lo, 1e-6);
+  for (let i = 0; i < sm.n; i++) {
+    const ax = Math.abs(nr[i * 3]), ay = Math.abs(nr[i * 3 + 1]), az = Math.abs(nr[i * 3 + 2]);
+    const [u, v] = ax >= ay && ax >= az ? [p[i * 3 + 2], p[i * 3 + 1]] : ay >= az ? [p[i * 3], p[i * 3 + 2]] : [p[i * 3], p[i * 3 + 1]];
+    uv[i * 2] = (u - lo) * s; uv[i * 2 + 1] = (v - lo) * s;
+  }
+  sm.uv = uv;
+  return uv;
 }
 
 function forgeMode() {
@@ -937,6 +1100,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!v) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) v.redo(); else v.undo(); }
     else if (e.key === "f" || e.key === "F") v.frame();
+    else if (e.key === "w" || e.key === "e" || e.key === "r") v.toggleTransform({ w: "translate", e: "rotate", r: "scale" }[e.key]);
     else if (e.key === "[" || e.key === "]") {
       v.brush.radius = Math.min(0.4, Math.max(0.02, v.brush.radius * (e.key === "]" ? 1.15 : 1 / 1.15)));
       const r = document.getElementById("forge-radius"); if (r) r.value = String(v.brush.radius);

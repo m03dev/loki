@@ -333,12 +333,28 @@ def qwen(prompt, width, height, out_dir, seed, sleep=time.sleep, request=None):
     raise RuntimeError("ModelScope took longer than 5 minutes")
 
 
-def pollinations(prompt, width, height, out_dir, seed):
-    params = {"width": width, "height": height, "nologo": "true"}
+POLLINATIONS_IMAGE = "https://image.pollinations.ai/prompt/"
+
+
+def pollinations_request(prompt, width, height, seed, key=None):
+    """The Pollinations request, built in one place so every call asks for no logo.
+    nologo=true removes Pollinations' mark, but their docs say that needs an account: with
+    POLLINATIONS_API_KEY set (a free token from auth.pollinations.ai) it goes as a Bearer token and
+    the picture has no mark; anonymous pictures may still carry it - LOKI never paints over it.
+    private=true keeps the prompt off Pollinations' public feed."""
+    params = {"width": width, "height": height, "nologo": "true", "private": "true", "referrer": "loki"}
     if seed:
         params["seed"] = int(seed)
-    url = "https://image.pollinations.ai/prompt/%s?%s" % (urllib.parse.quote(prompt[:1500]), urllib.parse.urlencode(params))
-    req = urllib.request.Request(url, headers={"User-Agent": "Loki/1.0"})
+    url = POLLINATIONS_IMAGE + "%s?%s" % (urllib.parse.quote(prompt[:1500]), urllib.parse.urlencode(params))
+    key = os.environ.get("POLLINATIONS_API_KEY", "").strip() if key is None else key
+    headers = {"User-Agent": "Loki/1.0"}
+    if key and key != "pollinations":     # "pollinations" is the text endpoint's placeholder, not a token
+        headers["Authorization"] = "Bearer " + key
+    return urllib.request.Request(url, headers=headers), bool(headers.get("Authorization"))
+
+
+def pollinations(prompt, width, height, out_dir, seed):
+    req, signed_in = pollinations_request(prompt, width, height, seed)
     with urllib.request.urlopen(req, timeout=180) as resp:
         data = resp.read()
         kind = resp.headers.get("Content-Type", "image/jpeg")
@@ -346,7 +362,9 @@ def pollinations(prompt, width, height, out_dir, seed):
         raise RuntimeError("Pollinations returned no image")
     path = _out_path(out_dir, prompt, "png" if "png" in kind else "jpg")
     path.write_bytes(data)
-    return {"file": str(path), "backend": "pollinations", "note": "made by a free third-party service"}
+    note = "made by a free third-party service" + ("" if signed_in else
+                                                    "; may carry Pollinations' mark - set POLLINATIONS_API_KEY to remove it")
+    return {"file": str(path), "backend": "pollinations", "note": note, "watermark_free": signed_in}
 
 
 def local(prompt, width, height, out_dir, seed, count=1, negative=""):

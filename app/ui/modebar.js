@@ -29,10 +29,13 @@ const LokiModeBar = (() => {
   // lights. Windows / native: the strip sits flush under the system frame. Empty parts of the strip drag the window
   // (pywebview's .pywebview-drag-region); the tabs are buttons, never drag regions. Double-click = zoom (js_api).
   function strip() {
-    const top = mk("header", "titlestrip pywebview-drag-region"); top.id = "titlestrip";
+    // only the two empty sides drag the window; the tabs' bar never does (clicking a tab made the window run away)
+    const top = mk("header", "titlestrip"); top.id = "titlestrip";
     const left = mk("div", "titlestrip-side pywebview-drag-region");
     const right = mk("div", "titlestrip-side pywebview-drag-region");
-    top.append(left, bar(), right);
+    const tabs = bar();
+    tabs.addEventListener("mousedown", (e) => e.stopPropagation());   // a press on a tab is a click, never a drag
+    top.append(left, tabs, right);
     top.addEventListener("dblclick", (e) => {
       if (e.target.closest("button")) return;
       const host = window.pywebview && window.pywebview.api;

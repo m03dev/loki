@@ -612,38 +612,28 @@ def titlebar_mode() -> str:
 
 def window_url(token: str) -> str:
     """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar."""
-    return f"{BASE}/#token={token}" + ("&titlebar=mac" if TITLEBAR["mac"] else "")
+    return f"{BASE}/#token={token}" + ("&titlebar=mac" if (TITLEBAR["mac"] or mac_custom_titlebar()) else "")
 
 
-def mac_titlebar(window) -> bool:
-    """Transparent, title-less macOS title bar over a full-size content view. Any failure: the normal title bar."""
-    if sys.platform != "darwin" or titlebar_mode() != "custom":
-        return False
+def mac_custom_titlebar() -> bool:
+    """macOS with LOKI's own title strip: the window is created FRAMELESS (pywebview then makes the content full
+    size and the title bar transparent at creation - patching a live window afterwards left the old bar on the
+    owner's Mac), and mac_buttons() puts the three traffic lights back before it is shown."""
+    return sys.platform == "darwin" and titlebar_mode() == "custom"
+
+
+def mac_buttons(window) -> None:
+    """before_show (pywebview runs it on the main thread, before the window appears): the traffic lights back,
+    the title hidden. Any failure: logged, and the window still opens."""
     try:
         import AppKit  # type: ignore  # pyobjc, installed with pywebview on macOS
-        from PyObjCTools import AppHelper  # type: ignore
+        ns = window.native
+        for button in (AppKit.NSWindowCloseButton, AppKit.NSWindowMiniaturizeButton, AppKit.NSWindowZoomButton):
+            ns.standardWindowButton_(button).setHidden_(False)
+        ns.setTitlebarAppearsTransparent_(True)
+        ns.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
     except Exception:  # noqa: BLE001
-        return False
-    ns = getattr(window, "native", None)
-    if ns is None:
-        return False
-
-    def apply() -> None:
-        try:
-            mask = getattr(AppKit, "NSWindowStyleMaskFullSizeContentView", 1 << 15)
-            ns.setStyleMask_(ns.styleMask() | mask)
-            ns.setTitlebarAppearsTransparent_(True)
-            ns.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
-            TITLEBAR["mac"] = True
-        except Exception:  # noqa: BLE001
-            TITLEBAR["mac"] = False
-            log("the macOS title bar stays as it is:\n" + traceback.format_exc())
-    try:
-        AppHelper.callAfter(apply)
-        TITLEBAR["mac"] = True   # set at once so the first load_url already asks for the strip
-        return True
-    except Exception:  # noqa: BLE001
-        return False
+        log("could not show the macOS window buttons:\n" + traceback.format_exc())
 
 
 class WindowApi:
@@ -673,20 +663,28 @@ def open_window(url: str = "", html: str = "", main: bool = False, then=None) ->
     except ImportError:
         return False
     name_the_app()
+    try:   # only the bare strip drags the window - a tab inside it never does (the tabs "ran away" on the Mac)
+        webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+    except Exception:  # noqa: BLE001 - an older pywebview
+        pass
+    mac_strip = bool(main or not html) and mac_custom_titlebar()
+    TITLEBAR["mac"] = mac_strip
+    # frameless on macOS = full-size content + transparent title bar; easy_drag off, or ANY drag moves the window
+    frame = {"frameless": True, "easy_drag": False} if mac_strip else {}
     if html and not main:
         webview.create_window("Loki", html=html, width=720, height=360)
     elif html:
         WINDOW["window"] = webview.create_window("Loki", html=html, width=1240, height=820, min_size=(760, 520),
-                                                 background_color="#1f1f24", js_api=WindowApi())
+                                                 background_color="#1f1f24", js_api=WindowApi(), **frame)
     else:
         WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520), text_select=True,
-                                                 background_color="#1f1f24", js_api=WindowApi())
-    if WINDOW.get("window") is not None and sys.platform == "darwin":
+                                                 background_color="#1f1f24", js_api=WindowApi(), **frame)
+    if WINDOW.get("window") is not None and mac_strip:
         win = WINDOW["window"]
         try:
-            win.events.before_show += lambda: mac_titlebar(win)
-        except Exception:  # noqa: BLE001 - an older pywebview: the normal title bar
-            pass
+            win.events.before_show += lambda: mac_buttons(win)
+        except Exception:  # noqa: BLE001 - an older pywebview: no traffic lights event; still frameless
+            log("this pywebview has no before_show event; the window buttons may be hidden")
     log("opening the Loki window")
     try:
         webview.start(then, debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",

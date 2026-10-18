@@ -1,8 +1,9 @@
 """Forge (engine/forge3d.py, engine/forge_api.py, app/ui/forge.js), offline and under a minute:
 the lift turns a red circle on white into a closed, valid .glb (header, JSON chunk, accessor counts),
 backend selection falls through when TripoSR / gradio_client are missing, the API routes work through
-the real bridge handler (and refuse path traversal), the make_3d tool is registered, and - when
-Playwright + Chromium are here - the window opens Forge, shows the model, sculpts it and saves it.
+the real bridge handler (and refuse path traversal), the make_3d tool is registered, the Output options reach every
+backend (fakes), every Pollinations request asks for no watermark, and Material Maker is found / opened / saved for.
+The window itself (three.js add-ons, sculpting, materials, layout) is tests/test_forge_ui.py.
 
     python tests/test_forge3d.py
 """
@@ -257,8 +258,9 @@ html = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
 js = (REPO / "app" / "ui" / "forge.js").read_text(encoding="utf-8")
 check("index.html loads forge.js and forge.css, with a sidebar icon", '<script src="/ui/forge.js" defer></script>' in html
       and 'href="/ui/forge.css"' in html and 'id="open-forge"' in html and 'data-icon="cube"' in html)
-check("forge.js has the sculpt brushes, symmetry, undo/redo, subdivide",
-      all(('["%s",' % b) in js for b in ("draw", "inflate", "smooth", "flatten", "grab", "pinch"))
+check("forge.js has the sculpt brushes (SculptGL's), symmetry, undo/redo, subdivide",
+      all(('["%s",' % b) in js for b in ("draw", "inflate", "smooth", "flatten", "grab", "pinch", "crease"))
+      and "SculptGL" in js
       and "symmetry" in js and "view.undo" in js and "view.redo" in js and "forgeSubdivide" in js)
 check("forge.js has the three ways in", all(w in js for w in ('"Draw"', '"Add an image"', '"Describe it"')))
 third = (REPO / "docs" / "THIRD_PARTY.md").read_text(encoding="utf-8")
@@ -266,84 +268,134 @@ check("docs/THIRD_PARTY.md has a Forge row", "forge3d" in third and "TripoSR" in
 ship = (REPO / "tools" / "ship.py").read_text(encoding="utf-8")
 check("the suite is in ship.py's SUITES", '"test_forge3d"' in ship)
 
-# ------------------------------------------------------------------ the window, headless (skips without Playwright)
-try:
-    from playwright.async_api import async_playwright
-except ImportError:
-    async_playwright = None
+# ------------------------------------------------------------------ output options reach the backends (fakes)
+opts = forge3d.clean_options({"resolution": 9999, "keep": 50, "thickness": 1.5, "smooth": 0, "image_size": 777, "seed": 42,
+                              "foreground": 0.7, "symmetry": "on", "bogus": 1})
+check("options are clamped to their range, unknown ones dropped", opts["resolution"] == 512 and "bogus" not in opts
+      and opts["symmetry"] is True and opts["thickness"] == 1.5, opts)
+check("every option is one module entry {id, label, min, max, step, default, applies_to}",
+      all({"id", "label", "default", "applies_to", "kind"} <= set(o) for o in forge3d.OPTIONS)
+      and {o["id"] for o in forge3d.OPTIONS} >= {"resolution", "keep", "thickness", "smooth", "texture_size", "image_size",
+                                                   "foreground", "cutout", "symmetry", "seed"})
+seen = {}
 
 
-async def browser_check():
-    UI = REPO / "app" / "ui"
-    async with async_playwright() as p:
-        exe = next((x for x in (os.getenv("LOKI_SUITE_CHROMIUM", ""), "/opt/pw-browsers/chromium") if x and os.path.exists(x)), "")
-        args = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
-        try:
-            browser = await (p.chromium.launch(executable_path=exe, args=args) if exe else p.chromium.launch(args=args))
-        except Exception as exc:  # noqa: BLE001
-            print("SKIP window: no Chromium (%s)" % str(exc)[:120])
-            return
-        page = await browser.new_page(viewport={"width": 1300, "height": 860})
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-
-        async def route(r):
-            path = r.request.url.split("8898", 1)[1].split("#")[0]
-            bare = path.split("?")[0]
-            if bare == "/":
-                return await r.fulfill(path=str(UI / "index.html"))
-            if bare.startswith("/ui/") and (UI / bare[4:]).is_file():
-                return await r.fulfill(path=str(UI / bare[4:]))
-            if bare.startswith("/forge/"):   # straight to the real bridge above
-                st, out, kind = call(path, raw_body=r.request.post_data_buffer) if r.request.method == "POST" else call(path)
-                return await r.fulfill(status=st, body=out, content_type=kind or "application/json")
-            return await r.fulfill(json={"ok": True})
-
-        await page.route("http://127.0.0.1:8898/**", route)
-        await page.goto("http://127.0.0.1:8898/#token=s3cret")
-        await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
-        await page.click("#open-forge")
-        await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
-        check("the sidebar's cube opens Forge", await page.is_visible("#forge-canvas"))
-        box = await page.query_selector("#forge-canvas")
-        bb = await box.bounding_box()
-        await page.mouse.move(bb["x"] + bb["width"] * 0.3, bb["y"] + bb["height"] * 0.5)
-        await page.mouse.down()
-        for i in range(12):
-            await page.mouse.move(bb["x"] + bb["width"] * (0.3 + i * 0.03), bb["y"] + bb["height"] * (0.5 - 0.01 * i))
-        await page.mouse.up()
-        await page.select_option("#forge-backend", "lift")
-        await page.click("#forge-make")
-        await page.wait_for_function("document.getElementById('forge-empty').hidden === true && forge.view && forge.view.sm", timeout=20000)
-        check("a drawing becomes a model in the viewer", True)
-        before = await page.evaluate("forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)")
-        await page.evaluate("forge.view.dab('inflate', 0, 0, 0.1, 1); forge.view.dab('draw', 0.2, 0, 0.1, 1)")
-        after = await page.evaluate("forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)")
-        check("sculpting moves the vertices", abs(after - before) > 1e-4, (before, after))
-        await page.evaluate("forge.view.undo(); forge.view.undo()")
-        undone = await page.evaluate("forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)")
-        check("undo puts them back", abs(undone - before) < 1e-3, (before, undone))
-        tris = await page.evaluate("forge.view.sm.idx.length / 3")
-        await page.evaluate("forge.view.subdivide()")
-        check("subdivide makes four times the triangles", await page.evaluate("forge.view.sm.idx.length / 3") == tris * 4)
-        await page.click("#forge-mode")
-        check("Sculpt mode shows the brushes", await page.is_visible("#forge-sculpt [data-brush='pinch']"))
-        await page.evaluate("forgeSave('glb')")
-        await page.wait_for_function("/Saved models/.test(document.getElementById('forge-status').textContent)", timeout=10000)
-        sculpted = sorted((WS / "models").glob("*-sculpt*.glb"))
-        check("Save .glb writes a valid sculpted model into models/", bool(sculpted)
-              and forge3d.glb_counts(sculpted[-1])["triangles"] == tris * 4)
-        check("no script errors in Forge", not errors, errors[:3])
-        await browser.close()
+def fake_triposr2(argv, input, **kw):  # noqa: A002
+    seen["triposr"] = json.loads(input)
+    return fake_triposr(argv, input, **kw)
 
 
-if async_playwright is None:
-    print("SKIP window: no Playwright")
+forge3d.make_3d(str(circle), WS / "models", backend="triposr", triposr_runner=fake_triposr2, options={"resolution": 384, "foreground": 0.7, "keep": 40})
+check("TripoSR gets mc resolution, foreground ratio and keep %", seen["triposr"]["resolution"] == 384
+      and seen["triposr"]["foreground_ratio"] == 0.7 and seen["triposr"]["keep"] == 40, seen.get("triposr"))
+
+
+class FakeClient:
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, **kw):
+        self.calls.append(kw)
+        if kw.get("api_name") == "/extract_glb":
+            g = TMP / "space.glb"
+            forge3d.write_glb(g, forge3d.lift_mesh([[True]], [[(1, 2, 3)]], 1, 1))
+            return [None, str(g)]
+        return None
+
+
+fc = FakeClient()
+r_on = forge3d.make_3d(str(circle), WS / "models", backend="online", online_factory=lambda space: (fc, lambda f: f),
+                       options={"texture_size": 2048, "keep": 5, "seed": 7})
+check("the online Space gets texture size, simplify and seed", r_on["ok"] and r_on["backend"] == "online"
+      and fc.calls[1]["texture_size"] == 2048 and fc.calls[1]["mesh_simplify"] == 0.98 and fc.calls[0]["seed"] == 7, fc.calls)
+coarse = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"resolution": 64, "smooth": 0})
+fine = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"resolution": 512})
+check("the lift's grid follows Mesh resolution", coarse["meta"]["triangles"] * 8 < fine["meta"]["triangles"],
+      (coarse["meta"]["triangles"], fine["meta"]["triangles"]))
+thin = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"thickness": 0.2})
+fat = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"thickness": 2.0})
+depth = lambda r: (lambda d: d["accessors"][d["meshes"][0]["primitives"][0]["attributes"]["POSITION"]])(forge3d.read_glb(Path(r["glb"]))[0])  # noqa: E731
+check("the lift's thickness follows Thickness", depth(fat)["max"][2] > 4 * depth(thin)["max"][2])
+asked = []
+forge3d.make_3d("", WS / "models", prompt="a vase", backend="lift", options={"image_size": 1536, "seed": 9},
+                image_maker=lambda p, o: (asked.append(o), str(circle))[1])
+check("text -> picture gets the picture size and seed", asked == [{"width": 1536, "height": 1536, "seed": 9}], asked)
+check("an old-style image maker (prompt only) still works", forge3d.make_3d("", WS / "models", prompt="x", backend="lift",
+                                                                              image_maker=lambda p: str(circle))["ok"])
+check("the options are kept in the sidecar", fine["meta"]["options"]["resolution"] == 512)
+st, out, _ = call("/forge/make", {"drawing": url, "backend": "lift", "options": {"resolution": 64, "thickness": 0.3}})
+j = wait(json.loads(out)["id"])
+side2 = json.loads((WS / "models" / ".meta" / (j["result"]["name"] + ".json")).read_text())
+check("POST /forge/make passes the options through the API", side2["options"]["resolution"] == 64 and side2["options"]["thickness"] == 0.3)
+st, out, _ = call("/forge/status")
+check("GET /forge/status serves the option modules for the window", [o["id"] for o in json.loads(out)["backends"]["options"]]
+      == [o["id"] for o in forge3d.OPTIONS])
+
+# ------------------------------------------------------------------ watermark: every Pollinations request asks for none
+sys.path.insert(0, str(REPO / "engine" / "runners"))
+import imagegen  # noqa: E402
+from urllib.parse import parse_qs, urlparse  # noqa: E402
+req, signed = imagegen.pollinations_request("a fox", 1024, 768, 5, key="")
+q = parse_qs(urlparse(req.full_url).query)
+check("Pollinations: nologo=true and private=true on the request", q.get("nologo") == ["true"] and q.get("private") == ["true"]
+      and not signed, req.full_url)
+req2, signed2 = imagegen.pollinations_request("a fox", 1024, 768, 5, key="tok")
+check("Pollinations: with a key it goes as a Bearer token (their docs: nologo needs an account)",
+      signed2 and req2.get_header("Authorization") == "Bearer tok")
+check("Pollinations: the text endpoint's placeholder key is not sent", not imagegen.pollinations_request("x", 512, 512, 0, key="pollinations")[1])
+import re as _re  # noqa: E402
+bad = []
+for f in list((REPO / "engine").rglob("*.py")) + list((REPO / "app" / "ui").glob("*.js")):
+    text = f.read_text(encoding="utf-8", errors="replace")
+    for m in _re.finditer(r"image\.pollinations\.ai", text):
+        line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.end())]
+        if "POLLINATIONS_IMAGE" not in line and "image.pollinations.ai:" not in line and "#" not in line.split("image.pollinations")[0][-3:]:
+            if f.name != "imagegen.py" or "POLLINATIONS_IMAGE =" not in line:
+                bad.append("%s: %s" % (f.name, line.strip()[:100]))
+check("no other code builds a Pollinations image URL by hand", not bad, bad)
+
+# ------------------------------------------------------------------ Material Maker: find it, open files in it, save .ptex/.png
+import forge_mm  # noqa: E402
+os.environ["LOKI_MATERIAL_MAKER"] = ""
+mm_dir = TMP / "data" / "tools" / "material_maker_1_5"
+mm_dir.mkdir(parents=True)
+exe = mm_dir / ("material_maker.exe" if sys.platform == "win32" else "material_maker")
+exe.write_text("")
+exe.chmod(0o755)
+check("Material Maker is found in harness_data/tools", forge_mm.find() == str(exe) or sys.platform == "darwin", forge_mm.find())
+started = []
+forge_mm.RUN = lambda argv, **kw: started.append(argv)
+ptex = json.dumps({"type": "graph", "nodes": [], "connections": []}).encode()
+st, out, _ = call("/forge/save?name=wood.ptex", raw_body=ptex)
+check("a .ptex project saves into models/", st == 200 and json.loads(out)["name"] == "wood.ptex")
+check("a broken .ptex is refused", call("/forge/save?name=x.ptex", raw_body=b"nope")[0] == 400)
+png = io.BytesIO(); Image.new("RGB", (4, 4)).save(png, "PNG")
+check("a material map .png saves; a fake one is refused", call("/forge/save?name=m_albedo.png", raw_body=png.getvalue())[0] == 200
+      and call("/forge/save?name=x.png", raw_body=b"GIF89a")[0] == 400)
+if sys.platform != "darwin":
+    st, out, _ = call("/forge/mm/open", {"name": "wood.ptex"})
+    check("Open in Material Maker starts it with the .ptex", json.loads(out).get("ok") and started and started[-1][-1].endswith("wood.ptex"), (out, started))
+st, out, _ = call("/forge/mm/open", {"name": "../secret.glb"})
+check("Open in Material Maker only opens files from models/", st == 404)
+st, out, _ = call("/forge/mm")
+check("GET /forge/mm reports it with the download link", json.loads(out)["download"].startswith("https://github.com/RodZill4/material-maker"))
+nodes = json.loads((REPO / "app" / "ui" / "vendor" / "material_maker" / "nodes.json").read_text(encoding="utf-8"))
+check("Material Maker's own node files are bundled (noise, voronoi, gradients, shapes, blend, colorize, tiling, transform)",
+      {"perlin", "fbm2", "voronoi", "gradient", "shape", "blend", "colorize", "tile2x2", "transform2"} <= set(nodes["nodes"])
+      and nodes["_meta"]["licence"] == "MIT" and "float rand(vec2" in nodes["_shader_functions"])
+check("their licence is next to them", "Rodolphe Suescun" in (REPO / "app" / "ui" / "vendor" / "material_maker" / "LICENSE").read_text())
+third = (REPO / "docs" / "THIRD_PARTY.md").read_text(encoding="utf-8")
+check("THIRD_PARTY: SculptGL, Material Maker, the three.js add-ons", "SculptGL" in third and "Material Maker" in third
+      and "GLTFLoader" in third and (REPO / "app" / "ui" / "licenses" / "SculptGL-LICENSE.txt").is_file())
+for addon in ("loaders/GLTFLoader.js", "exporters/GLTFExporter.js", "exporters/OBJExporter.js", "controls/OrbitControls.js",
+              "controls/TransformControls.js", "utils/BufferGeometryUtils.js"):
+    text = (REPO / "app" / "ui" / "vendor" / "three" / "addons" / addon).read_text(encoding="utf-8")
+    if "from 'three'" in text:
+        check("vendored add-ons import the local three.js (no import map)", False, addon)
+        break
 else:
-    try:
-        asyncio.run(asyncio.wait_for(browser_check(), 45))
-    except asyncio.TimeoutError:
-        check("the Forge window check finishes in time", False)
+    check("vendored add-ons import the local three.js (no import map)", True)
+check("ship.py runs the Forge window suite too", '"test_forge_ui"' in (REPO / "tools" / "ship.py").read_text(encoding="utf-8"))
 
 srv.shutdown()
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

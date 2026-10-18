@@ -17,6 +17,28 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 UI = REPO / "app" / "ui"
 sys.path.insert(0, str(REPO / "engine"))
+# pywebview's drag script with the values LOKI's window gets (app/loki_app.py sets DRAG_REGION_DIRECT_TARGET_ONLY);
+# from a checkout at ../ext/pywebview or the installed package; skipped when neither is here.
+def _pywebview_drag() -> str:
+    for base in (REPO.parent / "ext" / "pywebview" / "webview", ):
+        f = base / "js" / "customize.js"
+        if f.is_file():
+            break
+    else:
+        try:
+            import webview  # noqa: F401  pylint: disable=import-outside-toplevel
+            f = Path(webview.__file__).parent / "js" / "customize.js"
+        except Exception:  # noqa: BLE001
+            return ""
+    if not f.is_file():
+        return ""
+    return f.read_text(encoding="utf-8") % {"text_select": "True", "drag_selector": ".pywebview-drag-region",
+                                             "drag_region_direct_target_only": "True", "zoomable": "True",
+                                             "draggable": "True", "easy_drag": "False"}
+
+
+PYWEBVIEW_DRAG = _pywebview_drag()
+
 PASS, FAIL = [], []
 T0 = time.time()
 
@@ -29,9 +51,12 @@ def check(name, ok, detail=""):
 src = (REPO / "engine" / "portal_api.py").read_text(encoding="utf-8")
 check("LOKI_TITLEBAR custom|native is in Settings > General", '"LOKI_TITLEBAR": {"kind": "choice", "choices": ["custom", "native"]' in src)
 app_py = (REPO / "app" / "loki_app.py").read_text(encoding="utf-8")
-check("the app styles the macOS title bar through pyobjc, guarded (transparent, hidden title, full-size content)",
-      "setTitlebarAppearsTransparent_(True)" in app_py and "NSWindowStyleMaskFullSizeContentView" in app_py
-      and "setTitleVisibility_" in app_py and 'titlebar_mode() != "custom"' in app_py)
+check("macOS: the window is made frameless at creation (full-size content, transparent bar), easy_drag off, "
+      "the traffic lights shown again before it appears",
+      '{"frameless": True, "easy_drag": False}' in app_py and "standardWindowButton_(button).setHidden_(False)" in app_py
+      and "events.before_show += lambda: mac_buttons(win)" in app_py and 'titlebar_mode() == "custom"' in app_py)
+check("only the bare strip drags the window (pywebview DRAG_REGION_DIRECT_TARGET_ONLY)",
+      'webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True' in app_py)
 check("double-click on the strip maximises/restores through a tiny js_api", "def toggle_maximize" in app_py and "js_api=WindowApi()" in app_py)
 index = (UI / "index.html").read_text(encoding="utf-8")
 check("place.js is loaded before app.js (it reads the titlebar flag first)",
@@ -97,13 +122,17 @@ def run(pw, size, mac):
     page.goto("http://127.0.0.1:8896/#token=t" + ("&titlebar=mac" if mac else ""))
     page.wait_for_function("window.LOKI_READY === true", timeout=15000)
     page.wait_for_timeout(600)
+    if PYWEBVIEW_DRAG:
+        page.evaluate("() => { window.pywebview = {platform: 'cocoa', _jsApiCallback: () => {}}; }")
+        page.add_script_tag(content=PYWEBVIEW_DRAG)
     tag = "%dx%d%s" % (size[0], size[1], " mac" if mac else "")
 
     strip = page.evaluate("""() => { const s = document.getElementById('titlestrip'); if (!s) return null; const r = s.getBoundingClientRect();
         const tabs = [...s.querySelectorAll('.modebar-tab')]; const shell = document.querySelector('.shell').getBoundingClientRect();
         const banner = document.getElementById('update-banner'); banner.hidden = false; const br = banner.getBoundingClientRect(); banner.hidden = true;
         const side = document.querySelector('.sidebar').getBoundingClientRect();
-        return {top: r.top, h: r.height, w: r.width, tabs: tabs.length, drag: s.classList.contains('pywebview-drag-region'),
+        return {top: r.top, h: r.height, w: r.width, tabs: tabs.length, drag: [...s.querySelectorAll('.titlestrip-side')].every(x => x.classList.contains('pywebview-drag-region')),
+          center: tabs.length ? (tabs[0].getBoundingClientRect().left + tabs[tabs.length - 1].getBoundingClientRect().right) / 2 : 0,
           tabsDrag: tabs.some(t => t.classList.contains('pywebview-drag-region') || t.closest('.modebar').classList.contains('pywebview-drag-region')),
           firstTab: tabs[0] ? tabs[0].getBoundingClientRect().left : 0, shellTop: shell.top, bannerTop: br.top, sideTop: side.top,
           mac: document.documentElement.classList.contains('titlebar-mac')}; }""")
@@ -114,6 +143,21 @@ def run(pw, size, mac):
           and strip["bannerTop"] >= strip["h"] - 0.5 and strip["sideTop"] >= strip["h"] - 0.5, strip)
     if mac:
         check("[%s] on the Mac the tabs start after the traffic lights" % tag, strip["mac"] and strip["firstTab"] > 78, strip)
+    check("[%s] the tabs sit in the centre of the top bar" % tag, strip and abs(strip["center"] - size[0] / 2) <= 4, strip)
+
+    # pywebview's own drag script (webview/js/customize.js), as LOKI's window runs it: a press on a tab must never
+    # move the window (the owner, 2026-10-17: "clicking it makes it run away from me"); a press on the empty strip does.
+    moved = page.evaluate("""() => {
+        const moves = []; window.pywebview = {_jsApiCallback: (name) => moves.push(name)};
+        const fire = (el) => { const r = el.getBoundingClientRect(); const o = {bubbles: true, clientX: r.left + 3, clientY: r.top + 3, screenX: 10, screenY: 10};
+            el.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mousemove', {...o, screenX: 60, screenY: 40}));
+            window.dispatchEvent(new MouseEvent('mouseup', o)); };
+        const tabMoves = () => { const n = moves.length; fire(document.querySelector('.modebar-tab')); return moves.length - n; };
+        const sideMoves = () => { const n = moves.length; fire(document.querySelector('.titlestrip-side:last-child')); return moves.length - n; };
+        return {tab: tabMoves(), side: sideMoves()}; }""") if PYWEBVIEW_DRAG and strip else None
+    if moved is not None:
+        check("[%s] clicking a tab never moves the window; dragging the empty strip does" % tag,
+              moved["tab"] == 0 and moved["side"] > 0, moved)
 
     def look(name, sel):
         res = page.evaluate(JS_INSIDE, sel)

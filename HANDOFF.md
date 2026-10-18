@@ -6,6 +6,16 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
 
+## 2026-10-17 midnight: title bar fixed for real (Claude, cloud)
+
+Owner (Mac): the tabs were not in the top bar and clicking them made the window "run away". Causes, from pywebview's
+source (r0x0r/pywebview, customize.js + cocoa.py): (1) any element INSIDE a .pywebview-drag-region dragged the window
+(DRAG_REGION_DIRECT_TARGET_ONLY was False) and the tabs sat inside one; (2) the live-window NSWindow patch did not move
+the content under the bar. Now: macOS window created frameless=True, easy_drag=False (pywebview makes it full-size +
+transparent at creation), traffic lights un-hidden in before_show (main thread); DIRECT_TARGET_ONLY=True; only the two
+empty sides of the strip drag; tabs centred on the whole bar. tests/test_ui_fit.py runs pywebview's real customize.js:
+a press on a tab never moves the window. Not run on the real Mac yet.
+
 ## 2026-10-17 late: mode tabs in the title bar, menus that stay on screen (Claude, cloud)
 
 - Tabs in a 38 px title strip (`app/ui/modebar.js`). macOS: transparent title bar over full-size content (pyobjc,
@@ -37,8 +47,18 @@ Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
   TRELLIS via gradio_client -> offline "lift" (always works; closed mesh, vertex colours, own glb writer).
   API `engine/forge_api.py` (`/forge/*`, token required, file route only models/). Agent tool `make_3d`.
   Manifest `capabilities/forge-3d`. Suite `tests/test_forge3d.py` (~18 s, includes a headless window check).
+- Round 2 (owner feedback): real open source instead of hand-rolled - three.js' own GLTFLoader/GLTFExporter/
+  OBJExporter/OrbitControls/TransformControls vendored (app/ui/vendor/three/addons, from the three.js repo);
+  sculpting ported from SculptGL (MIT; clay, inflate, smooth, flatten, move, pinch, crease); a Materials side
+  that runs Material Maker's own .mmg nodes (27 bundled by tools/import_mm_nodes.py, compiler forge_mm.js =
+  port of gen_shader.gd) -> live PBR maps on the model, PNG/.ptex export, "Open in Material Maker"
+  (engine/forge_mm.py finds the app). Output panel = forge3d.OPTIONS modules (resolution, keep %, thickness,
+  smoothing, texture/picture size, subject fill, cut-out, mirror, seed) passed to every backend, greyed out
+  when ignored. Pollinations: one request builder, nologo+private, Bearer POLLINATIONS_API_KEY (needed for no
+  mark per their docs). Layout fits 900x600. Suites: test_forge3d (~5 s), test_forge_ui (~30 s, Chromium).
 - Not tested here: `python tools/setup_forge3d.py` (torch + TripoSR) on the PC (CUDA) and the Mac (MPS),
-  and the TRELLIS Space (its API names may change). Next: "Send to LOKI World", textured TripoSR output.
+  the TRELLIS Space (its API names may change), TripoSR decimation (needs a trimesh simplifier), and
+  Material Maker on a real machine. Next: "Send to LOKI World", more MM nodes (buffers/function inputs).
 
 ## 2026-10-17 night: LOKI installs what it needs by itself (Claude, cloud)
 
