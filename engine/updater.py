@@ -64,6 +64,16 @@ def _release(repo: Path | None = None) -> bool:
 
 def _release_check_now() -> dict:
     info = _release_mod().check()
+    if info.get("update_available") and str(os.getenv("LOKI_RELEASE_PREPARE", "1")).strip().lower() not in ("0", "off", "no"):
+        # session 30: download + pre-flight now, in this background check, so the next start only
+        # switches (release_update.apply_ready) instead of waiting for the download before the window
+        got = _release_mod().prepare(info=info)
+        if got.get("ready"):
+            STATE.update({"checked": time.time(), "update_available": True, "latest": info.get("latest", ""),
+                          "current": info.get("current", ""), "error": "", "problem": "",
+                          "note": "update %s -> %s is ready; it is used the next time LOKI starts"
+                          % (info.get("current"), got["ready"])})
+            return {**_release_mod().status(), **STATE}
     STATE.update({"checked": time.time(), "update_available": bool(info.get("update_available")),
                   "latest": info.get("latest", ""), "current": info.get("current", ""),
                   "error": "" if info.get("ok") else info.get("error", ""),

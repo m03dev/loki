@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -47,6 +48,10 @@ RELAUNCH_EXIT_CODE = 76          # "start me again from the current version" (th
 KEEP = 3
 REPO = Path(__file__).resolve().parent.parent
 PUBLIC_KEY = REPO / "keys" / "loki_public.pem"
+# The repo is public (2026-10-17): releases are GitHub Releases of m03dev/loki, built and published
+# by .github/workflows/installers.yml on a v* tag. "latest/download/<name>" always serves the newest
+# release's file; the manifest names its zip by an absolute .../releases/download/<tag>/ URL.
+DEFAULT_FEED = "https://github.com/m03dev/loki/releases/latest/download/manifest.json"
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}([.-][A-Za-z0-9]+)?$")
 
 
@@ -109,12 +114,16 @@ def current_tree() -> Path | None:
 
 
 def feed_url() -> str:
-    """LOKI_RELEASE_FEED, else the feed the running release was built with (RELEASE.json)."""
+    """LOKI_RELEASE_FEED, else the feed the running release was built with (RELEASE.json), else
+    LOKI's public GitHub Releases (DEFAULT_FEED). LOKI_RELEASE_FEED=off turns updates off."""
     explicit = os.environ.get("LOKI_RELEASE_FEED", "").strip()
+    if explicit.lower() in ("off", "0", "none", "no"):
+        return ""
     if explicit:
         return explicit
     tree = current_tree()
-    return str(release_info(tree).get("feed", "")) if tree else ""
+    built = str(release_info(tree).get("feed", "")) if tree else ""
+    return built or (DEFAULT_FEED if tree else "")
 
 
 def vkey(version: str) -> tuple:
@@ -182,8 +191,17 @@ def _get(url: str, timeout: float) -> bytes:
     if not url.startswith("https://"):
         raise ValueError("release downloads must use https (got %s)" % url.split("://")[0])
     req = urllib.request.Request(url, headers={"User-Agent": "LOKI-release-updater"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:   # noqa: S310 - https only, checked above
+    # GitHub answers release downloads with a redirect (to its file host): follow https ones only
+    opener = urllib.request.build_opener(_HttpsOnlyRedirects)
+    with opener.open(req, timeout=timeout) as resp:   # noqa: S310 - https only, checked above and on every redirect
         return resp.read()
+
+
+class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401, PLR0913 - urllib's signature
+        if not str(newurl).startswith("https://"):
+            raise urllib.error.URLError("refused a redirect away from https (%s)" % str(newurl).split("://")[0])
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def _join(base: str, rel: str) -> str:
@@ -308,19 +326,27 @@ def skip(version: str, why: str) -> None:
     _save(data)
 
 
-def update(timeout: float = 120.0) -> dict:
-    """Download, check and switch to a newer release. {updated, relaunch, note, error, problem}."""
+def prepare(timeout: float = 120.0, info: dict | None = None) -> dict:
+    """Download, check and pre-flight a newer release WITHOUT switching to it (session 30).
+
+    The engine's background updater calls this while LOKI runs, so the next start only switches
+    (apply_ready: instant, offline) instead of downloading and pre-flighting before the window
+    opens. {updated: False, ready: version | "", note, error, problem}."""
     r = root()
     if r is None:
-        return {"updated": False, "note": "", "error": "not an installed LOKI", "problem": "not installed"}
-    info = check(timeout=min(timeout, 30.0))
+        return {"updated": False, "ready": "", "note": "", "error": "not an installed LOKI", "problem": "not installed"}
+    info = info or check(timeout=min(timeout, 30.0))
     if not info.get("ok"):
-        return {"updated": False, "note": "", "error": info.get("error", ""), "problem": info.get("problem", "update failed")}
+        return {"updated": False, "ready": "", "note": "", "error": info.get("error", ""), "problem": info.get("problem", "update failed")}
     if not info.get("update_available"):
         why = " (%s was skipped: %s)" % (info["latest"], state().get("skip_reasons", {}).get(info["latest"], "")) if info.get("skipped") else ""
-        return {"updated": False, "note": "up to date (%s)%s" % (info["current"], why), "error": "", "problem": ""}
+        return {"updated": False, "ready": "", "note": "up to date (%s)%s" % (info["current"], why), "error": "", "problem": ""}
     man = info["manifest"]
     version = str(man["version"])
+    final = r / version
+    if state().get("ready") == version and (final / "app" / "loki_app.py").is_file():
+        return {"updated": False, "ready": version, "note": "%s is downloaded and checked; LOKI uses it at the next start" % version,
+                "error": "", "problem": ""}
     downloads = r / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
     zpath = downloads / ("Loki-%s.zip" % version)
@@ -335,12 +361,12 @@ def update(timeout: float = 120.0) -> dict:
             zpath.unlink()
         except OSError:
             pass
-        return {"updated": False, "note": "stayed on %s: %s" % (info["current"], why), "error": why, "problem": problem}
+        return {"updated": False, "ready": "", "note": "stayed on %s: %s" % (info["current"], why), "error": why, "problem": problem}
 
     try:
         data = _get(str(man["url"]), timeout)
     except Exception as exc:  # noqa: BLE001 - a network problem is not the version's fault: no skip
-        return {"updated": False, "note": "", "error": "could not download %s: %s" % (version, exc), "problem": "download failed"}
+        return {"updated": False, "ready": "", "note": "", "error": "could not download %s: %s" % (version, exc), "problem": "download failed"}
     if hashlib.sha256(data).hexdigest().lower() != str(man["sha256"]).strip().lower():
         return refuse("the download of %s does not match its checksum" % version, "bad download")
     zpath.write_bytes(data)
@@ -351,7 +377,8 @@ def update(timeout: float = 120.0) -> dict:
     ok, why = preflight(tree)
     if not ok:
         return refuse(why, "new version failed its pre-flight")
-    final = r / version
+    if version in (current(), state().get("last_good", "")):
+        return refuse("refusing to replace the version %s this computer runs" % version)
     shutil.rmtree(final, ignore_errors=True)
     os.replace(tree, final)
     shutil.rmtree(staging, ignore_errors=True)
@@ -360,15 +387,55 @@ def update(timeout: float = 120.0) -> dict:
     except OSError:
         pass
     data_state = state()
+    data_state["ready"] = version
+    _save(data_state)
+    note("ready", version=version)
+    return {"updated": False, "ready": version, "note": "%s is downloaded and checked; LOKI uses it at the next start" % version,
+            "error": "", "problem": ""}
+
+
+def _switch(version: str) -> dict:
+    data_state = state()
     previous = data_state.get("current", "")
     if previous and not data_state.get("pending"):
         data_state["last_good"] = previous
-    data_state.update({"current": version, "pending": version, "updated_at": time.time()})
+    data_state.update({"current": version, "pending": version, "ready": "", "updated_at": time.time()})
     _save(data_state)
     note("updated", **{"from": previous, "to": version})
     prune()
     return {"updated": True, "relaunch": True, "note": "updated %s -> %s (on trial until the window opens)" % (previous or "-", version),
             "error": "", "problem": ""}
+
+
+def apply_ready() -> dict:
+    """At start: switch to a version prepare() already checked - no network, no pre-flight, instant.
+    {updated, relaunch, note, error, problem}; updated is False when nothing is waiting."""
+    r = root()
+    if r is None:
+        return {"updated": False, "note": "", "error": "not an installed LOKI", "problem": "not installed"}
+    data = state()
+    ready = str(data.get("ready") or "")
+    if not ready:
+        return {"updated": False, "note": "no update waiting", "error": "", "problem": ""}
+    cur = str(data.get("current") or "")
+    usable = (ready not in data.get("skip", []) and (r / ready / "app" / "loki_app.py").is_file()
+              and (not cur or vkey(ready) > vkey(cur)))
+    if not usable:
+        data["ready"] = ""
+        _save(data)
+        return {"updated": False, "note": "the waiting update %s is no longer usable" % ready, "error": "", "problem": ""}
+    return _switch(ready)
+
+
+def update(timeout: float = 120.0) -> dict:
+    """Download, check and switch to a newer release now (Update everything).
+    {updated, relaunch, note, error, problem}."""
+    if root() is None:
+        return {"updated": False, "note": "", "error": "not an installed LOKI", "problem": "not installed"}
+    got = prepare(timeout=timeout)
+    if not got.get("ready"):
+        return {"updated": False, "note": got.get("note", ""), "error": got.get("error", ""), "problem": got.get("problem", "")}
+    return _switch(got["ready"])
 
 
 def on_trial() -> bool:
@@ -426,4 +493,4 @@ def status() -> dict:
             "label": "v" + data.get("current", "?"), "current": data.get("current", ""),
             "last_good": data.get("last_good", ""), "pending": data.get("pending", ""),
             "skip": data.get("skip", []), "skip_reasons": data.get("skip_reasons", {}),
-            "history": data.get("history", [])[-30:], "feed": feed_url()}
+            "history": data.get("history", [])[-30:], "feed": feed_url(), "ready": data.get("ready", "")}

@@ -39,6 +39,19 @@ What to do: check the internet connection and open LOKI again. The details are i
 
 python_ok() { [ -x "$VENV/bin/python" ] && "$VENV/bin/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; }
 
+# Session 30: an installer that carries its own Python (runtime/, tools/bundle_runtime.py) needs no
+# download at all - the launcher makes the environment from it, offline.
+BUNDLED="$HERE/runtime/python/bin/python3"
+if [ -x "$BUNDLED" ]; then
+  export LOKI_INSTALL_DIR="$HERE"
+  LAUNCHER="$DATA/launcher/loki_launch.py"
+  [ -f "$LAUNCHER" ] || LAUNCHER="$HERE/loki_launch.py"
+  if [ "${1:-}" = "--setup" ]; then
+    exec "$BUNDLED" "$LAUNCHER" --seed "$HERE/seed" --check
+  fi
+  exec "$BUNDLED" "$LAUNCHER" --seed "$HERE/seed" "$@"
+fi
+
 if ! python_ok; then
   notify "Setting up LOKI for the first time - this takes a few minutes and needs the internet once."
   UV="$RUNTIME/uv"

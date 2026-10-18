@@ -571,10 +571,15 @@ def install_ollama(progress: Progress = PROGRESS, opener=urllib.request.urlopen,
                 runner(["ditto", str(mount / "Ollama.app"), str(dest / "Ollama.app")], check=True, timeout=300)
             finally:
                 runner(["hdiutil", "detach", "-quiet", str(mount)], timeout=60)
-            runner(["open", "-a", str(dest / "Ollama.app")], timeout=30)
+            # headless: the server binary inside the app, in the background - no window, no prompts
+            # (the menu-bar app would greet the user first); the app works the same when opened later
+            if not serve_headless(dest / "Ollama.app"):
+                runner(["open", "-g", "-a", str(dest / "Ollama.app")], timeout=30)
         else:
-            # The official installer shows its own window (and asks Windows for permission).
-            subprocess.Popen([str(target)])
+            # The official installer (Inno Setup), silent and per-user: no window, no admin prompt.
+            # It installs into %LOCALAPPDATA%\Programs\Ollama and starts Ollama in the tray.
+            subprocess.Popen([str(target), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"],
+                             creationflags=0x08000000)
         progress.update(status="starting Ollama", message="Waiting for Ollama to start")
         for _ in range(90):
             if ollama_models(opener=opener) is not None:
@@ -819,7 +824,32 @@ def plan(machine: dict, installed: list[str] | None = None) -> dict:
         else:
             error = "This computer does not have enough memory for a local model. Use a cloud provider instead."
         auto = {"tag": "", "size_gb": 0, "installed": False, "tags": [], "error": error}
-    return {"rows": rows, "picks": picks, "blocked": blocked, "auto": auto}
+    return {"rows": rows, "picks": picks, "blocked": blocked, "auto": auto, "quick": quick_pick(ok, agent)}
+
+
+QUICK_MAX_GB = 7.0   # a first download that takes minutes, not an hour (the owner: "it should be quick")
+
+
+def quick_pick(ok: list, agent: dict | None) -> dict | None:
+    """The first model for a new person (session 30, the welcome tour): small enough to download in a
+    few minutes, good at tools - Bonsai 2 9B, else Bonsai 2 4B, else the best agent model <= 7 GB.
+    Something already downloaded always wins. The tour offers the bigger `auto` pick as an upgrade."""
+    if not ok:
+        return None
+    small = [r for r in ok if r["size"] <= QUICK_MAX_GB and ("agent" in r["roles"] or "fast" in r["roles"])]
+    have = [r for r in ok if r["installed"] and "agent" in r["roles"]]
+    if have:
+        cands = sorted(have, key=lambda r: r["fit"], reverse=True)
+    else:
+        bonsai = sorted([r for r in small if r.get("family") == "bonsai"], key=lambda r: r["score"], reverse=True)
+        rest = sorted([r for r in small if r.get("family") != "bonsai"], key=lambda r: (r["fit"], -r["size"]), reverse=True)
+        cands = bonsai + rest
+    if not cands:
+        return None
+    top = cands[0]
+    return {"tag": top["tag"], "size_gb": top["size"], "installed": top["installed"], "speed": top["speed"],
+            "why": top["why"], "tags": [c["tag"] for c in cands[:3]],
+            "upgrade": agent["tag"] if agent and agent["tag"] != top["tag"] and not top["installed"] else ""}
 
 
 def upgrade_for(best: dict | None, picks: dict) -> dict | None:
@@ -836,11 +866,29 @@ def upgrade_for(best: dict | None, picks: dict) -> dict | None:
 
 
 # --------------------------------------------------------------------- one click
+def serve_headless(app: Path, popen=subprocess.Popen) -> bool:
+    """macOS: run the `ollama serve` binary inside Ollama.app in the background (no window)."""
+    binary = app / "Contents" / "Resources" / "ollama"
+    if not binary.is_file():
+        return False
+    try:
+        popen([str(binary), "serve"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+              start_new_session=True)
+        return True
+    except OSError:
+        return False
+
+
 def start_ollama(runner=subprocess.run) -> None:
-    """Open the installed Ollama app (best effort, both platforms)."""
+    """Start the installed Ollama in the background (best effort, both platforms)."""
     try:
         if sys.platform == "darwin":
-            runner(["open", "-a", "Ollama"], timeout=30)
+            app = next((p for p in (Path("/Applications/Ollama.app"), Path.home() / "Applications" / "Ollama.app") if p.is_dir()), None)
+            if app is not None:   # the app as the user set it up (its settings apply); -g: in the background
+                runner(["open", "-g", "-a", str(app)], timeout=30)
+            elif shutil.which("ollama"):
+                subprocess.Popen([shutil.which("ollama") or "ollama", "serve"], stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         elif sys.platform == "win32":
             app = Path(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama app.exe")
             if app.exists():
@@ -979,6 +1027,7 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
         "picks": advice["picks"],
         "blocked": advice["blocked"],
         "auto": advice["auto"],
+        "quick": advice.get("quick"),
         "upgrade": upgrade_for(best, advice["picks"]) if best and best.get("tools") else None,
         "context": context_for(info),
         "cloud_keys": cloud_keys,

@@ -4,6 +4,21 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-17 - Session 30 (Claude, worktree): one-click install, a first run that never blocks, a faster start
+
+- Installers carry their own Python (tools/bundle_runtime.py: python-build-standalone + every package, pre-compiled);
+  loki_launch.py makes the venv from it offline in 0.3 s; a native Rust launcher (packaging/launcher: Loki.exe / the
+  .app's executable, std only, no console); loki.iss / make_dmg.sh / installers.yml build the Windows installer +
+  portable zip and the macOS dmg + zip, smoke-test the installed copy, and publish a GitHub Release on v* tags; the
+  feed defaults to it. tools/secret_scan.py refuses key-like content in every build; `make_release.py --friends`.
+- The welcome tour: "Run AI on this computer" (quick model, silent Ollama, download in the background with a progress
+  card) / "Connect an account" (OpenRouter, NVIDIA NIM, Groq, Gemini) / "Both".
+- Speed (docs/SPEED.md): lazy MCP import (engine 1.21 -> 0.88 s warm, 3.32 -> 2.38 s cold), the window opens first with
+  a start screen (E12's splash.html hook), installed copies prepare updates in the background. Rust evaluated: only
+  the launcher, for UX.
+- Settings > General > Send feedback (redacted log zip + GitHub issue / email). docs/TESTERS.md, INSTALL.md rewritten.
+- tests/test_install.py (71, ~32 s, in SUITES). Real machines: ZIVA W44 (PC), M33 (Mac).
+
 ## 2026-10-17 - Session 29 (Claude, worktree): LOKI Studio inside Godot - Ziva parity and beyond
 
 - studio/godot_plugin/addons/loki_studio/: a Godot editor plugin (dock, editor bridge with UndoRedo, debugger + game

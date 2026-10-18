@@ -1,14 +1,22 @@
 name: Installers
 
-# Builds the installers for other people: a release (seed + zip + signed manifest), the Windows
-# setup .exe (Inno Setup) and the macOS .dmg. Manual (or a v* tag) only - it never runs on a push,
-# and it publishes nothing: the files are build artifacts. Uploading them to the public release
-# feed is a separate, deliberate step (docs/INSTALL.md "Publishing a release").
+# Builds LOKI for other people (session 30: zero-dependency installs) and, on a v* tag, publishes
+# them as a GitHub Release of this (public) repo:
+#   Loki-Setup-<v>.exe               Windows installer: per-user, no admin, Python inside
+#   Loki-<v>-windows-portable.zip    Windows: unzip, double-click Loki.exe
+#   Loki-<v>.dmg, Loki-<v>-macos.zip macOS (Apple Silicon; Intel when that runner works), Python inside
+#   Loki-<v>.zip + manifest.json(.sig)  the update feed installed copies follow
+#                                        (engine/release_update.DEFAULT_FEED = releases/latest/download/manifest.json)
+# Manual runs (workflow_dispatch) only build artifacts; nothing is published.
+# Secrets (Settings > Secrets and variables > Actions), all optional:
+#   LOKI_SIGNING_KEY_PEM  the release-feed PRIVATE key (PEM). Without it the manifest is unsigned and
+#                         installed copies refuse it (they keep their version) - docs/INSTALL.md "Signing".
+#   LOKI_MAC_SIGN_ID, LOKI_NOTARY_PROFILE   Apple Developer ID signing + notarization (else ad-hoc)
 on:
   workflow_dispatch:
     inputs:
       feed:
-        description: "Release feed URL installed copies check for updates (manifest.json)"
+        description: "Release feed URL (manifest.json); empty = this repo's GitHub Releases"
         required: false
         default: ""
   push:
@@ -16,6 +24,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  UV_VERSION: "0.8.0"   # the same uv the slim bootstrap pins
 
 jobs:
   release:
@@ -29,17 +40,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build the release
+      - name: Build the release (secret-scanned)
         id: build
         env:
           LOKI_RELEASE_FEED: ${{ inputs.feed || vars.LOKI_RELEASE_FEED }}
           SIGNING_KEY: ${{ secrets.LOKI_SIGNING_KEY_PEM }}
         run: |
           if [ -n "$SIGNING_KEY" ]; then
+            umask 077
             printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/loki_signing.pem"
             export LOKI_SIGNING_KEY="$RUNNER_TEMP/loki_signing.pem"
           fi
-          python tools/make_release.py --out dist/release --feed "$LOKI_RELEASE_FEED" | tee release.json
+          ASSET_BASE=""
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            ASSET_BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          fi
+          python tools/make_release.py --out dist/release ${LOKI_RELEASE_FEED:+--feed "$LOKI_RELEASE_FEED"} \
+            ${ASSET_BASE:+--asset-base "$ASSET_BASE"} --notes "LOKI ${GITHUB_REF_NAME}" | tee release.json
           echo "version=$(python -c 'import json;print(json.load(open("dist/release/manifest.json"))["version"])')" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/loki_signing.pem"
       - uses: actions/upload-artifact@v4
@@ -53,10 +70,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           name: loki-release
           path: dist/release
+      - name: Build Loki.exe (the native launcher, packaging/launcher)
+        run: cargo build --release --manifest-path packaging/launcher/Cargo.toml
+      - name: Bundle Python + LOKI's packages (python-build-standalone via uv)
+        run: |
+          python -m pip install "uv==${{ env.UV_VERSION }}"
+          python tools/bundle_runtime.py --seed dist/release/seed --out dist/runtime
       - name: Install Inno Setup if missing
         shell: pwsh
         run: |
@@ -70,46 +96,111 @@ jobs:
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           & $iscc "/DLokiVersion=${{ needs.release.outputs.version }}" packaging\windows\loki.iss
           if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
-      - name: Smoke-test the bootstrap (no window)
+      - name: Build the portable zip
+        run: python tools/make_release.py --from-seed dist/release/seed --runtime dist/runtime --launcher packaging/launcher/target/release/Loki.exe --dist dist
+      - name: Smoke-test - silent install, then the installed launcher sets up offline
         shell: pwsh
         env:
           LOKI_NO_DIALOGS: "1"
           LOKI_DATA: ${{ runner.temp }}\loki-data
         run: |
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\loki-app" | Out-Null
-          Copy-Item packaging\installer\* "$env:RUNNER_TEMP\loki-app\" -Recurse
-          Copy-Item dist\release\seed "$env:RUNNER_TEMP\loki-app\seed" -Recurse
-          powershell -NoProfile -ExecutionPolicy Bypass -File "$env:RUNNER_TEMP\loki-app\bootstrap.ps1" -Setup
-          if ($LASTEXITCODE -ne 0) { Get-Content "$env:LOKI_DATA\app\bootstrap.log"; throw "bootstrap failed" }
-      # Signing (when the secrets exist): signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /f cert.pfx /p ... dist\Loki-Setup-*.exe
+          $setup = Get-ChildItem dist\Loki-Setup-*.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$env:RUNNER_TEMP\setup.log"
+          $app = Join-Path $env:LOCALAPPDATA "Programs\Loki"
+          if (-not (Test-Path "$app\Loki.exe")) { Get-Content "$env:RUNNER_TEMP\setup.log"; throw "Loki.exe was not installed" }
+          & "$app\runtime\python\python.exe" "$app\loki_launch.py" --seed "$app\seed" --check
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:LOKI_DATA\app\launcher.log"; throw "the installed launcher failed" }
+          & "$env:LOKI_DATA\.venv\Scripts\python.exe" "$env:LOKI_DATA\versions\${{ needs.release.outputs.version }}\app\loki_app.py" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "the installed LOKI failed its self-test" }
+      # Code signing (when a certificate exists): signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /f cert.pfx /p ... dist\Loki-Setup-*.exe
       - uses: actions/upload-artifact@v4
         with:
-          name: Loki-Setup-windows
-          path: dist/Loki-Setup-*.exe
+          name: loki-windows
+          path: |
+            dist/Loki-Setup-*.exe
+            dist/Loki-*-windows-portable.zip
           retention-days: 14
 
   macos:
     needs: release
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14        # Apple Silicon
+            arch: arm64
+            optional: false
+          - runner: macos-13        # Intel (GitHub is retiring it; a failure here never blocks a release)
+            arch: x86_64
+            optional: true
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.optional }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           name: loki-release
           path: dist/release
-      - name: Build Loki.dmg
+      - name: Build the native launcher
+        run: cargo build --release --manifest-path packaging/launcher/Cargo.toml
+      - name: Bundle Python + LOKI's packages
+        run: |
+          python -m pip install "uv==${{ env.UV_VERSION }}"
+          python tools/bundle_runtime.py --seed dist/release/seed --out dist/runtime
+      - name: Build Loki.app, the .dmg and the zip (ad-hoc signed unless a Developer ID is set)
         env:
           LOKI_MAC_SIGN_ID: ${{ secrets.LOKI_MAC_SIGN_ID }}
           LOKI_NOTARY_PROFILE: ${{ secrets.LOKI_NOTARY_PROFILE }}
-        run: bash tools/macos/make_dmg.sh
-      - name: Smoke-test the bootstrap (no window)
+        run: |
+          bash tools/macos/make_dmg.sh
+          V="${{ needs.release.outputs.version }}"
+          if [ "${{ matrix.arch }}" != "arm64" ]; then
+            mv "dist/Loki-$V.dmg" "dist/Loki-$V-intel.dmg"; mv "dist/Loki-$V-macos.zip" "dist/Loki-$V-macos-intel.zip"
+          fi
+      - name: Smoke-test - the app's own Python sets up offline and passes the self-test
         env:
           LOKI_NO_DIALOGS: "1"
           LOKI_DATA: ${{ runner.temp }}/loki-data
         run: |
-          bash dist/dmg-stage/Loki.app/Contents/Resources/bootstrap.sh --setup || { cat "$LOKI_DATA/app/bootstrap.log"; exit 1; }
+          RES=dist/dmg-stage/Loki.app/Contents/Resources
+          "$RES/runtime/python/bin/python3" "$RES/loki_launch.py" --seed "$RES/seed" --check || { cat "$LOKI_DATA/app/launcher.log"; exit 1; }
+          "$LOKI_DATA/.venv/bin/python" "$LOKI_DATA/versions/${{ needs.release.outputs.version }}/app/loki_app.py" --self-test
+          codesign --verify --deep --strict dist/dmg-stage/Loki.app && echo "signature ok"
       - uses: actions/upload-artifact@v4
         with:
-          name: Loki-macos-dmg
-          path: dist/Loki-*.dmg
+          name: loki-macos-${{ matrix.arch }}
+          path: |
+            dist/Loki-*.dmg
+            dist/Loki-*-macos*.zip
           retention-days: 14
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [release, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish the GitHub Release (assets first, published last)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          mkdir -p files
+          find out -type f \( -name 'Loki-*' -o -name 'manifest.json' -o -name 'manifest.json.sig' \) -not -path '*/seed/*' -exec cp {} files/ \;
+          ls -la files
+          if [ ! -f files/manifest.json.sig ]; then
+            echo "::warning::manifest.json is unsigned (no LOKI_SIGNING_KEY_PEM secret): installed copies will not update to this release"
+          fi
+          # a draft first: installed copies follow releases/latest, which never points at a half-uploaded release
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "LOKI $TAG" \
+            --notes "Install: docs/TESTERS.md. Windows: Loki-Setup-*.exe (or the portable zip). macOS: Loki-*.dmg (right-click > Open the first time)." \
+            files/*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

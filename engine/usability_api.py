@@ -128,6 +128,8 @@ def save_onboarding(agent: Any, data: dict) -> dict:
         _write_env(agent, {"LOKI_INTERESTS": ",".join(state["interests"])})
     if "model_choice" in data:
         state["model_choice"] = str(data["model_choice"])[:40]
+    if data.get("model_way") in ("local", "cloud", "both"):   # session 30: the tour's three ways
+        state["model_way"] = data["model_way"]
     path = _state_file(agent)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -181,8 +183,8 @@ def save_language(agent: Any, data: dict) -> tuple:
 # ------------------------------------------------------------------ routing
 def handles(method: str, route: str) -> bool:
     if method == "GET":
-        return route == "/help" or route.startswith("/help/") or route in ("/onboarding", "/prefs/language")
-    return route in ("/onboarding", "/prefs/language")
+        return route == "/help" or route.startswith("/help/") or route in ("/onboarding", "/prefs/language", "/feedback")
+    return route in ("/onboarding", "/prefs/language", "/feedback/send")
 
 
 def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple:
@@ -203,6 +205,9 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
             return 200, {"ok": True, **onboarding_state(agent), **language_prefs()}
         if r == "/prefs/language":
             return 200, {"ok": True, **language_prefs()}
+        if r == "/feedback":   # session 30: Settings > General > Send feedback (engine/feedback.py)
+            import feedback  # pylint: disable=import-outside-toplevel
+            return 200, feedback.summary(agent)
     else:
         data = data or {}
         if r == "/onboarding":
@@ -210,4 +215,7 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
             return (200 if result.get("ok") else 500), result
         if r == "/prefs/language":
             return save_language(agent, data)
+        if r == "/feedback/send":
+            import feedback  # pylint: disable=import-outside-toplevel
+            return feedback.send(data, agent)
     return 404, {"ok": False, "error": "not found"}

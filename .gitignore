@@ -53,3 +53,6 @@ dist/
 # test-suite temp dirs (underscore form: loki_eval_* etc.)
 /loki_*/
 .claude/worktrees/
+
+# The Rust launcher (packaging/launcher) builds here
+packaging/launcher/target/

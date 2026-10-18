@@ -1067,8 +1067,12 @@ _specs = json.loads(loki.MCP_CONFIG.read_text(encoding="utf-8"))["mcpServers"]
 _omni = _specs.get("godot_omni", {})
 check("godot_omni connects to the editor over HTTP, not by spawning",
       "url" in _omni and "command" not in _omni, str(_omni.get("url")))
-check("loki imports the HTTP MCP transports",
-      hasattr(loki, "streamable_http_client") and hasattr(loki, "sse_client"))
+import inspect as _inspect  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_cm = _inspect.getsource(loki.connect_mcp)
+check("loki's connect_mcp uses the HTTP MCP transports (imported there: session 30, lazy for a fast start)",
+      "streamable_http_client" in _cm and "sse_client" in _cm and _ilu.find_spec("mcp.client.streamable_http") is not None
+      and _ilu.find_spec("mcp.client.sse") is not None)
 
 
 

@@ -19,10 +19,8 @@ import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamable_http_client, create_mcp_http_client
-from mcp.client.sse import sse_client
+# The MCP client (`mcp`) is imported where it is used (connect_mcp, which runs in the background
+# after the window opens): it is ~0.7 s of the engine's ~1.2 s start (docs/SPEED.md).
 import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -5213,6 +5211,10 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
     Gating matters: a Godot MCP server can expose 150+ tools, and every tool
     schema is paid for on every request - free tiers choke on a few extra k.
     """
+    from mcp import ClientSession, StdioServerParameters  # pylint: disable=import-outside-toplevel
+    from mcp.client.stdio import stdio_client  # pylint: disable=import-outside-toplevel
+    from mcp.client.streamable_http import streamable_http_client, create_mcp_http_client  # pylint: disable=import-outside-toplevel
+    from mcp.client.sse import sse_client  # pylint: disable=import-outside-toplevel
     config = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
     for name, spec in config["mcpServers"].items():
         reason = _server_skip_reason(spec, name)

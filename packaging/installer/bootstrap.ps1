@@ -40,6 +40,26 @@ function PythonOk {
   return ($LASTEXITCODE -eq 0)
 }
 
+# Session 30: an installer that carries its own Python (runtime\, tools/bundle_runtime.py) needs no
+# download at all - the launcher makes the environment from it, offline, with no console window.
+$Bundled = Join-Path $Here "runtime\python\python.exe"
+$BundledW = Join-Path $Here "runtime\python\pythonw.exe"
+if (Test-Path $Bundled) {
+  $env:LOKI_INSTALL_DIR = $Here
+  $Launcher = Join-Path $Data "launcher\loki_launch.py"
+  if (-not (Test-Path $Launcher)) { $Launcher = Join-Path $Here "loki_launch.py" }
+  $Seed = Join-Path $Here "seed"
+  if ($Setup) {
+    & $Bundled $Launcher --seed $Seed --check *>> $Log
+    if ($LASTEXITCODE -ne 0) { Fail "LOKI's bundled Python did not set up (see $Log)" }
+    Say "set up (bundled Python)"
+    exit 0
+  }
+  $runner = if (Test-Path $BundledW) { $BundledW } else { $Bundled }
+  Start-Process -FilePath $runner -ArgumentList @("`"$Launcher`"", "--seed", "`"$Seed`"") -WindowStyle Hidden
+  exit 0
+}
+
 if (-not (PythonOk)) {
   $Uv = Join-Path $Runtime "uv.exe"
   if (-not (Test-Path $Uv)) {

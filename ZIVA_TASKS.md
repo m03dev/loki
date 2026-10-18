@@ -34,6 +34,11 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
       (3) "open TextEdit and type hello" (Mac, after the Accessibility + Screen Recording grants) /
       "open Notepad and type hello" (PC): open_app says "(it is in front)" and hello lands in the app.
       Paste the exact open_app answer if it says "NOT in front". (Claude, 2026-10-18)
+- [ ] [either] **Session 30 one-click install: build the installers in GitHub Actions and install them on a clean
+      account.** W44 (PC: the Windows installer + portable zip) and M33 (Mac: the .dmg). The cloud box could not
+      download python-build-standalone, run iscc/hdiutil or show a real window. Answer here with what installed
+      offline, the timing lines, and anything that showed a console, a Gatekeeper dialog or an Xcode prompt. (Claude, 2026-10-17)
+
 - [ ] [windows] **Phone link nonce: run `tools/ship.py --check` on the real install.** Claude ported Ziva's peers
       nonce fix to engine/phone_link.py and mobile/src/lib/protocol.ts (each phone request now carries a signed
       X-Loki-Nonce; a phone without it still verifies in the old form; a verbatim replay is still refused).
@@ -479,6 +484,23 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 ## Ziva (Windows) - the PC, RTX 3070 Ti, on 24/7
 
 - [x] **W43 Make the repository public - FIRST, the owner asked (2026-10-17).** The owner said: "make it public ... you
+- [ ] **W45 The one-click Windows installer from GitHub Actions, on a clean account (2026-10-17, session 30).** Needs
+      W43 (repo public) first. HANDOFF "Session 30 one-click install", docs/INSTALL.md, docs/TESTERS.md, docs/SPEED.md.
+      (1) `git pull`; on GitHub: **Actions > Installers > Run workflow** (no tag = artifacts only, nothing published);
+      wait for it; report each job's result (paste the first error of a failed step). (2) Download the artifact
+      `loki-windows`; make a NEW local Windows user (Settings > Accounts > Other users; no admin), sign in as it, and
+      install `Loki-Setup-*.exe` with no internet (Wi-Fi off) - the point is that nothing is downloaded. Report: any
+      SmartScreen / installer screens, any console window that flashed, seconds from the installer's Finish to the
+      LOKI window, and the lines `window shown after` / `engine ready after ... since the double-click` from
+      `%LOCALAPPDATA%\Loki\app\loki_app.log`. (3) Wi-Fi on; the tour: pick **Both**; a card at the bottom right must
+      show the download; did Ollama install with NO window? (`%LOCALAPPDATA%\Programs\Ollama`); paste the model it chose
+      and how long it took; connect NVIDIA NIM with the owner's key only if he says so (else Groq free). (4) Settings >
+      General > **Send feedback** > Only save the file: open the zip and check by eye that no key, token or chat is in it.
+      (5) Unzip `Loki-*-windows-portable.zip` and double-click Loki.exe (same user): it must open the same data.
+      (6) Uninstall; `%LOCALAPPDATA%\Loki` must stay. Screenshots of the tour and the card into docs/operations/screens/
+      (`w44-*.png`). Delete the test user afterwards.
+
+- [ ] **W43 Make the repository public - FIRST, the owner asked (2026-10-17).** The owner said: "make it public ... you
       have permission i want to share it with people". Claude checked the whole git history for secrets (only fake
       test keys) and switched the licence to AGPL-3.0 (LICENSE, docs/THIRD_PARTY.md, AGENTS.md). Claude's sandbox has no
       working GitHub admin token, so do it here: (1) `git pull`; (2) run your own quick secret check on the checkout
@@ -1273,6 +1295,20 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 
 ## Ziva (Mac) - the Mac mini
 
+- [ ] **M34 The macOS .dmg from GitHub Actions, as a new user would get it (2026-10-17, session 30).** Same as W44 on
+      the Mac. (1) After W44 (1) ran the Installers workflow, download the artifact `loki-macos-arm64`; report the macOS
+      job's steps (and whether the optional Intel job built). (2) Make a new standard macOS user (System Settings >
+      Users & Groups), sign in, Wi-Fi off; open `Loki-*.dmg`, drag LOKI to Applications, open it: report EXACTLY what
+      Gatekeeper said and what you clicked (right-click > Open? "damaged"? the `xattr` line from docs/TESTERS.md?), the
+      seconds to the window, and the two timing lines from `~/Library/Application Support/Loki/app/loki_app.log`. No
+      dialog may ask to install Xcode command line tools - if one does, that is a bug (paste it). (3) Wi-Fi on: tour >
+      **Run AI on this computer**: did Ollama install with no window (`~/Applications/Ollama.app` or
+      /Applications) and does `curl -s localhost:11434/api/tags` answer? Which model, how long? (4) `codesign -dv
+      /Applications/Loki.app` output; the Dock icon/name (LOKI or Python?). (5) Send feedback > Write an email: the draft
+      opens in Mail? (6) Run `python3 tools/make_release.py --friends --bundle-runtime` in the owner's checkout (needs
+      `pip install uv`): report FRIENDS.txt and the zip size, unzip it on the test user and open LOKI.app.
+      Screenshots `m33-*.png`. Delete the test user afterwards.
+
 - [x] **M1 Checkout.** Mohamed chose `~/Loki` for the Mac checkout; HANDOFF.md still says
       `~/Documents/loki`. Use the one that exists (ask under Needs Mohamed if both or neither),
       then fix HANDOFF.md to match. Run `bash setup.sh` once (this also installs Laya), then
@@ -1927,6 +1963,14 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (e) `.doc`/`.xls` files need LibreOffice (`brew install --cask libreoffice`) - only if the owner wants it.
 
 ## Needs Mohamed
+
+- [ ] **The release signing key + the first release (2026-10-17, session 30).** Installed copies only update to a
+      SIGNED release. Nobody has said they hold the private half of `keys/loki_public.pem`; if you do not, make a new
+      pair on your own computer (4 commands in docs/INSTALL.md "Signing": `openssl genrsa ...`, `openssl rsa -pubout
+      ...`, `python tools/loki_sign.py fingerprint`, `gh secret set LOKI_SIGNING_KEY_PEM ...`), keep the private file
+      offline, and ship only the new `keys/loki_public.pem`. Then, when W44/M33 say the installers work, publish the
+      first release: `git tag v0.17.0 && git push origin v0.17.0` (Actions builds and publishes it; friends download
+      from github.com/m03dev/loki/releases/latest - docs/TESTERS.md is the page to send them).
 
 - [ ] **NVIDIA key (2026-10-17, session 29) - makes DeepSeek V4.1 Flash LOKI's main driver, free.** Open
       https://build.nvidia.com/settings/api-keys, sign in (a free NVIDIA account; it may ask to verify a phone),

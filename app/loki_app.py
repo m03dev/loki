@@ -27,6 +27,8 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+T_START = time.monotonic()   # docs/SPEED.md: "window shown after", "engine ready after" in loki_app.log
+
 # Packaged builds (PyInstaller, see packaging/loki.spec) carry the repo tree inside the
 # bundle and keep user data in a per-user folder, because the install folder may be
 # read-only. FROZEN is True there.
@@ -116,6 +118,15 @@ def auto_update() -> dict:
         import updater  # pylint: disable=import-outside-toplevel
         if not updater.enabled():
             return {}
+        if RELEASE_MODE and os.environ.get("LOKI_UPDATE_AT_START", "") != "1":
+            # An installed LOKI never waits for the network before its window (session 30, docs/SPEED.md):
+            # the engine downloads and pre-flights a new release in the background
+            # (release_update.prepare); here we only switch to one that is already checked.
+            import release_update  # pylint: disable=import-outside-toplevel
+            result = release_update.apply_ready()
+            if result.get("updated"):
+                log("update: " + result.get("note", ""))
+            return result
         python = engine_python()
         if python is not None:   # the update's pre-flight runs the new version with the engine's Python
             os.environ["LOKI_ENGINE_PYTHON"] = str(python)
@@ -585,21 +596,26 @@ def name_the_app() -> None:
         pass
 
 
-def open_window(url: str = "", html: str = "") -> bool:
-    """Show Loki in a native window. False when pywebview is not installed."""
+def open_window(url: str = "", html: str = "", main: bool = False, then=None) -> bool:
+    """Show Loki in a native window. False when pywebview is not installed.
+    main=True with html: LOKI's own window showing `html` first (the start screen); `then` runs in a
+    thread once the window is up (pywebview's start(func)) and later loads LOKI into it (show_url)."""
     try:
         import webview  # type: ignore
     except ImportError:
         return False
     name_the_app()
-    if html:
+    if html and not main:
         webview.create_window("Loki", html=html, width=720, height=360)
+    elif html:
+        WINDOW["window"] = webview.create_window("Loki", html=html, width=1240, height=820, min_size=(760, 520),
+                                                 background_color="#1f1f24")
     else:
         WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520), text_select=True,
                                                  background_color="#1f1f24")
     log("opening the Loki window")
     try:
-        webview.start(debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
+        webview.start(then, debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
                       private_mode=False, storage_path=str(STATE / "webview"))
     except Exception:
         log("the window backend raised:")
@@ -674,6 +690,105 @@ def self_test() -> int:
     return 0 if not problems else 1
 
 
+def bring_up_engine(workspace: Path, holder: dict, stopping) -> tuple:
+    """Attach to a running engine or start one. (token, "", "") or ("", title, what to do)."""
+    token = read_token()
+    status = probe(token) if token else probe("")
+    if token and status == 200:
+        log("attaching to the running engine")
+        return token, "", ""
+    if status != 0:
+        return "", "Port %d is taken" % PORT, (f"Something else answers on {BASE}. Quit it, or start Loki with "
+                                               "LOKI_APP_PORT set to a free port.")
+    python = engine_python()
+    if python is None:
+        fix = (f"cd /d {REPO} && setup.bat" if sys.platform == "win32"
+               else f"cd {REPO} && bash setup.sh")
+        if RELEASE_MODE:   # installed with the installer: its launcher makes the environment
+            fix = ("Quit LOKI and open it again from the Start menu or Applications: it finishes setting "
+                   "itself up. If it keeps failing, see docs/INSTALL.md.")
+        return "", "Loki is not set up yet", f"Run this once in a terminal, then open Loki again:\n\n{fix}"
+    godot = find_godot()
+    process, token = start_and_wait(python, workspace, godot)
+    if not token:
+        return "", "The Loki engine did not start", f"Details are in {STATE / 'engine.out'}"
+    holder["process"] = process
+    threading.Thread(target=supervise, args=(holder, python, workspace, godot, stopping),
+                     daemon=True, name="loki-supervisor").start()
+    return token, "", ""
+
+
+# --------------------------------------------------------------------- the start screen
+# The window opens at once and shows a start screen while the engine starts (session 30). LOKI's own
+# evolve step E12 designs that screen (a Maya-like splash): it only has to add app/ui/splash.html, a
+# SELF-CONTAINED page (inline CSS/JS, images as data: URIs - it is shown before the engine serves
+# anything). It may call window.lokiSplash?.() hooks of its own; the app replaces the page with
+# LOKI's window as soon as the engine answers, and writes progress lines into it via
+# `window.lokiSplashStatus(text)` when the page defines that function. LOKI_SPLASH=off: no start
+# screen (the window opens once the engine answers, as before).
+SPLASH_FILE = UI_DIR / "splash.html"
+
+
+def splash_wanted() -> bool:
+    if os.environ.get("LOKI_SPLASH", "").strip().lower() in ("0", "off", "no", "false"):
+        return False
+    import importlib.util  # pylint: disable=import-outside-toplevel
+    return importlib.util.find_spec("webview") is not None
+
+
+def splash_html() -> str:
+    try:
+        text = SPLASH_FILE.read_text(encoding="utf-8")
+        if text.strip():
+            return text
+    except OSError:
+        pass
+    return ("<!doctype html><meta charset=utf-8><title>LOKI</title>"
+            "<body style=\"margin:0;height:100vh;display:flex;align-items:center;justify-content:center;"
+            "background:#1f1f24;color:#9aa0aa;font:15px -apple-system,system-ui,sans-serif\">"
+            "<p id=s>Starting LOKI…</p><script>window.lokiSplashStatus=function(t){"
+            "document.getElementById('s').textContent=t}</script></body>")
+
+
+def splash_status(text: str) -> None:
+    window = WINDOW.get("window")
+    if window is None:
+        return
+    try:
+        window.evaluate_js("window.lokiSplashStatus && window.lokiSplashStatus(%s)" % json.dumps(text))
+    except Exception:  # noqa: BLE001 - the start screen is decoration; never let it stop the start
+        pass
+
+
+def run_with_splash(workspace: Path, holder: dict, stopping) -> int:
+    t0 = time.monotonic()
+    result = {"code": 0}
+
+    def behind_the_window() -> None:
+        log("window shown after %.2fs" % (time.monotonic() - T_START))
+        if auto_update().get("relaunch"):
+            log("a new release is installed; the launcher starts it")
+            result["code"] = RELAUNCH_EXIT_CODE
+            stopping.set()
+            close_window()
+            if os.environ.get("LOKI_APP_TEST", "") != "1":
+                threading.Timer(2.0, os._exit, [RELAUNCH_EXIT_CODE]).start()
+            return
+        splash_status("Starting LOKI's engine…")
+        token, title, detail = bring_up_engine(workspace, holder, stopping)
+        if not token:
+            show_problem(title, detail)
+            return
+        click = os.environ.get("LOKI_LAUNCH_T0", "")   # set by the native launcher at the double click
+        since = (" (%.2fs since the double-click)" % (time.time() - int(click) / 1000.0)) if click.isdigit() and int(click) else ""
+        log("engine ready after %.2fs (%.2fs since the app started)%s" % (time.monotonic() - t0, time.monotonic() - T_START, since))
+        show_url(f"{BASE}/#token={token}")
+
+    if not open_window(html=splash_html(), main=True, then=behind_the_window):
+        return 1
+    return result["code"]
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["--engine"]:
@@ -697,9 +812,6 @@ def main(argv: list[str] | None = None) -> int:
     workspace = choose_workspace(args.workspace, settings)
     if adopt_old_chats(workspace):
         log("brought your chats over from ~/Loki")
-    if auto_update().get("relaunch"):
-        log("a new release was checked and installed; the launcher starts it")
-        return RELAUNCH_EXIT_CODE
     if args.workspace:
         settings["workspace"] = str(workspace)
         save_settings(settings)
@@ -708,32 +820,24 @@ def main(argv: list[str] | None = None) -> int:
     process: subprocess.Popen | None = None
     holder: dict = {"process": None}
     stopping = threading.Event()
-    token = read_token()
-    status = probe(token) if token else probe("")
-    if token and status == 200:
-        log("attaching to the running engine")
-    elif status != 0:
-        return tell("Port %d is taken" % PORT,
-                    f"Something else answers on {BASE}. Quit it, or start Loki with "
-                    "LOKI_APP_PORT set to a free port.")
-    else:
-        python = engine_python()
-        if python is None:
-            fix = (f"cd /d {REPO} && setup.bat" if sys.platform == "win32"
-                   else f"cd {REPO} && bash setup.sh")
-            if RELEASE_MODE:   # installed with the installer: its launcher makes the environment
-                fix = ("Quit LOKI and open it again from the Start menu or Applications: it finishes setting "
-                       "itself up (it needs the internet once). If it keeps failing, see docs/INSTALL.md.")
-            return tell("Loki is not set up yet",
-                        f"Run this once in a terminal, then open Loki again:\n\n{fix}")
-        godot = find_godot()
-        process, token = start_and_wait(python, workspace, godot)
-        if not token:
-            return tell("The Loki engine did not start",
-                        f"Details are in {STATE / 'engine.out'}")
-        holder["process"] = process
-        threading.Thread(target=supervise, args=(holder, python, workspace, godot, stopping),
-                         daemon=True, name="loki-supervisor").start()
+    if not args.print_url and splash_wanted():
+        # session 30 (docs/SPEED.md): the window opens at once with the start screen; the start-up
+        # update and the engine run behind it, and the window switches to LOKI when the engine answers
+        try:
+            return run_with_splash(workspace, holder, stopping)
+        except KeyboardInterrupt:
+            return 0
+        finally:
+            log("the Loki app is shutting down")
+            stopping.set()
+            stop_engine(holder.get("process"))
+    if auto_update().get("relaunch"):
+        log("a new release was checked and installed; the launcher starts it")
+        return RELAUNCH_EXIT_CODE
+    token, title, detail = bring_up_engine(workspace, holder, stopping)
+    if not token:
+        return tell(title, detail)
+    process = holder.get("process")
 
     url = f"{BASE}/#token={token}"
     try:

@@ -1,0 +1,21 @@
+[package]
+name = "loki-launcher"
+version = "0.2.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "LOKI's double-click launcher: starts the bundled Python with no console window"
+publish = false
+
+# Standard library only: no crates to download, audit or licence.
+[dependencies]
+
+[[bin]]
+name = "Loki"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

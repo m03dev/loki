@@ -4,7 +4,86 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 29 Studio in Godot, Claude worktree).
+Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
+
+## Session 30 one-click install (worktree)
+
+The owner: "it should prompt users after they install the client to download a local model or go online and connect to
+an account ... there shouldn't be any dependencies ... everything should be ready for them a click away ... it should
+be quick ... if we need to move to rust to be fast we do". He shares LOKI with friends now; the repo is public.
+Built in a Claude worktree, committed there, not pushed. Guides: **docs/INSTALL.md** (rewritten), **docs/TESTERS.md**
+(friends: install in 3 steps per OS, what to try, feedback), **docs/SPEED.md** (numbers + the Rust decision).
+
+1. **Zero-dependency installers.** `tools/bundle_runtime.py` makes `dist/runtime/`: python-build-standalone 3.12 (via
+   uv, on the BUILD machine only) with every package of engine/ + app/requirements.txt installed, CPython's tests/IDLE
+   stripped, everything byte-compiled with that Python (unchecked-hash .pyc, the seed too), plus
+   `loki-requirements.sha256`. `packaging/installer/loki_launch.py` (LAUNCHER_VERSION 2) makes `<data>/.venv` from it
+   (`--system-site-packages --without-pip`, offline, 0.3 s incl. the seed copy; remade if the app moved), pip-installs
+   only what an update ADDED, gives every child CREATE_NO_WINDOW, shows a dialog when it fails (no console to read),
+   hands over to a newer launcher a release left in `<data>/launcher` (LOKI_INSTALL_DIR). The slim path (bootstrap
+   downloads uv + Python) stays for builds without a runtime; both bootstraps hand over to a bundled runtime at once.
+   **`packaging/launcher/`**: a 340 KB native `Loki.exe` / `Loki.app/Contents/MacOS/Loki` (Rust, std only, no crates):
+   windows subsystem + CREATE_NO_WINDOW, `exec` on macOS (Dock icon = Loki.app), LOKI_LAUNCH_T0 for timing, falls back
+   to the bootstrap. `loki.iss`: bundled runtime + Loki.exe when built (`#if FileExists`), shortcuts on Loki.exe, no
+   Python step at install time, x64 (ARM64 Windows runs it emulated). `make_dmg.sh`: runtime + launcher in the app,
+   ad-hoc codesign, `Loki-<v>-macos.zip` via ditto, ULFO dmg; the script fallback never calls `python3` (it would ask
+   a clean Mac to install Xcode tools). `make_release.py`: `--asset-base` (absolute GitHub asset URL in the manifest),
+   default feed = GitHub Releases, `--portable` / `--from-seed` (portable zip: LOKI/ with Loki.exe or `Start LOKI.cmd`,
+   runtime, seed, README), **`--friends`** (from `git archive HEAD` = committed tracked files only, scanned,
+   `dist/Loki-<v>-<os>-portable.zip` + FRIENDS.txt; on a Mac it zips a real LOKI.app; `--bundle-runtime`).
+   **`tools/secret_scan.py`** runs on EVERY build: refuses .env, harness_data/, private keys, cert stores, token/chat
+   files and real-looking OpenRouter/OpenAI/Anthropic/Groq/Google/NVIDIA/GitHub/HF/Slack/Telegram/AWS/Stripe keys
+   (placeholders pass; tests/ is never shipped, so its fake keys never are). `.github/workflows/installers.yml`: release
+   (signed when LOKI_SIGNING_KEY_PEM exists) -> windows (cargo, bundle, iscc, portable, SILENT INSTALL + the installed
+   launcher's --check + self-test) -> macos arm64 (+ Intel, optional) (cargo, bundle, dmg+zip, --check + self-test,
+   codesign --verify) -> **publish** on v* tags: draft GitHub Release with every file, then public + latest.
+   `engine/release_update.py`: `DEFAULT_FEED` = `https://github.com/m03dev/loki/releases/latest/download/manifest.json`,
+   `LOKI_RELEASE_FEED=off`, https-only redirects. Key handling (generate, `gh secret set`, rotate): docs/INSTALL.md
+   "Signing".
+2. **First run** (`app/ui/onboarding.js` step 2, `app/ui/firstrun.css`): "How should LOKI think?" - **Run AI on this
+   computer** (shows memory/GPU/disk, the QUICK pick `model_setup.quick_pick`: Bonsai 2 9B, else 4B, else the best
+   agent model <= 7 GB; something downloaded wins; the bigger `auto` pick offered for later), **Connect an account**
+   (OpenRouter one click, **NVIDIA NIM** first among the keys - DeepSeek V4.1 Flash, LOKI's main driver -, Groq,
+   Gemini), **Both**. The choice is the one click: `/setup/auto {quick:true}` starts; **LokiBgSetup** (a card at the
+   bottom right, outlives the tour, resumes after a restart) shows progress; failures offer try again / install Ollama
+   by hand / use an online model. Ollama installs silently: Windows `OllamaSetup.exe /VERYSILENT /SUPPRESSMSGBOXES`
+   (per-user, CREATE_NO_WINDOW), macOS the app copied + its `Contents/Resources/ollama serve` headless
+   (`model_setup.serve_headless`); start_ollama opens the app with `open -g` (background). MLX: shown when installed
+   (picks.mlx); LOKI does not install MLX itself. 47 new strings in all 8 tables (machine-drafted, marked for review);
+   the 11 phrases other sessions had left untranslated are filled too (`i18n_tables.py --check`: 0 problems).
+3. **Speed** (docs/SPEED.md, `tools/measure_start.py`): `import loki` 1.25 s -> 0.59 s (the MCP client is imported in
+   `connect_mcp`, which already ran in the background); engine to /health 1.21 -> 0.88 s warm, 3.32 -> 2.38 s cold, and
+   installed copies get the warm number on their first start (shipped .pyc). **The window opens first** (`app/loki_app.py
+   run_with_splash`): the start screen shows while the start-up update and the engine start behind it; the window
+   loads LOKI when the engine answers. **E12's hook**: LOKI's own `app/ui/splash.html` (self-contained) is shown when it
+   exists, with `window.lokiSplashStatus(text)` progress; else a plain "Starting LOKI…". `LOKI_SPLASH=off` = old order.
+   An installed LOKI no longer downloads/pre-flights before its window: `release_update.prepare()` runs in the engine's
+   background check (`updater._release_check_now`), `apply_ready()` switches at start (no network);
+   `LOKI_UPDATE_AT_START=1` restores the old order. loki_app.log: "window shown after", "engine ready after ... since the
+   double-click". Rust: the launcher is 42 ms of Python - Rust would save ~40 ms; only a native splash before Python
+   could win visible time, and only if the real machines show a slow window (decision in SPEED.md).
+4. **Friends kit**: docs/TESTERS.md; **Settings > General > Send feedback** (`app/ui/feedback.js`, `engine/feedback.py`,
+   routes in usability_api.py): a zip of LOKI's own logs (newest 256 KB each, every line redacted: key patterns, Bearer,
+   #token=, KEY=value, e-mails, the home folder) + system.json, never .env/chats/memory/files, saved to the Desktop and
+   shown; opens a prefilled new GitHub issue (label tester-feedback) or a mailto draft (`LOKI_FEEDBACK_EMAIL`). LOKI
+   uploads nothing.
+5. **Tests**: **tests/test_install.py** (71 checks, ~32 s, in SUITES): the friends build from git archive (no
+   harness_data/.env/tests/tokens/chats, only the public key, feed, sha256), the secret scan (keys made at run time),
+   --asset-base, https-only redirects, prepare/apply_ready, the launcher with a bundled runtime (venv, no pip, kept,
+   remade after a move), the Rust launcher built with cargo (skipped without cargo), iss/dmg/workflow, bundle_runtime's
+   strip + digest, the feedback bundle's redaction + links, lazy mcp, the splash hook, quick_pick, and headless Chromium:
+   the tour's ways (account = no download; local = quick download + progress card that survives closing the tour) +
+   Send feedback. test_usability updated for the 3-way step (139 passed), test_loki's MCP-transport check reads
+   connect_mcp (533 passed); test_updater 102, test_update_overhaul 23, test_ui_smoke 7, `--self-test` OK.
+   Also verified by hand here: a portable Linux zip with the Rust launcher -> `--print-url` started the engine in
+   release mode end to end.
+- **Not verified here (needs the real machines - ZIVA W44 PC, M33 Mac)**: python-build-standalone + the wheels for real
+  (no GitHub release downloads from this sandbox, so `bundle_runtime.py` never ran end to end), iscc, hdiutil/codesign/
+  ditto, the Windows/macOS Rust builds, the silent Ollama installer flags on a real Windows, `ollama serve` from the app
+  bundle, pywebview showing the start screen then LOKI (load_url from the worker thread), WebView2/WKWebView timings,
+  Gatekeeper with an ad-hoc signed app, the GitHub Release publish job (needs a v* tag). **Needs Mohamed**: the release
+  signing key (generate + `gh secret set LOKI_SIGNING_KEY_PEM`, docs/INSTALL.md "Signing") - without it every release
+  is unsigned and installed copies will not update; then push the first v* tag.
 
 ## Session 29 Studio in Godot (worktree)
 

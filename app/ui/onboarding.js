@@ -1,7 +1,9 @@
 // First run for anyone (session 29): a friendly 4-step welcome.
 //   1. What LOKI is + pick a language (and bigger text / high contrast right there)
-//   2. Connect a free model in one click: on this computer (Ollama / MLX, detected, with install
-//      help) or a free online one (OpenRouter sign-in, Groq or Gemini key)
+//   2. How LOKI thinks (session 30): "Run AI on this computer" (hardware detected, a quick model
+//      that fits, Ollama installed silently, downloaded IN THE BACKGROUND with progress that outlives
+//      the tour), "Connect an account" (OpenRouter one click; NVIDIA NIM - DeepSeek V4.1 Flash, LOKI's
+//      main driver -, Groq, Gemini keys) or "Both" (chat online while the local model downloads)
 //   3. What should LOKI help with (saved; the gallery and the examples follow it)
 //   4. Try 3 examples, each one click
 // Every error says what to do next and every step can be skipped: no dead ends.
@@ -18,12 +20,14 @@
     ["home", "Home", "⌂"], ["money", "Money", "¤"], ["health", "Health info", "♥"], ["business", "Small business", "◆"],
   ];
   const CLOUD = [
-    // [id, name, how, sign-up page, key page, key hint]
+    // [id, name, how, sign-up page, key page, key hint, note key, note]
     ["openrouter", "OpenRouter", "oauth", "https://openrouter.ai", "https://openrouter.ai/keys", "sk-or-"],
+    ["nvidia", "NVIDIA NIM", "key", "https://build.nvidia.com", "https://build.nvidia.com/settings/api-keys", "nvapi-",
+      "ob.nvidia_why", "DeepSeek V4.1 Flash, free - LOKI's main driver: fast, smart, calls tools."],
     ["groq", "Groq", "key", "https://console.groq.com", "https://console.groq.com/keys", "gsk_"],
     ["gemini", "Google Gemini", "key", "https://aistudio.google.com", "https://aistudio.google.com/apikey", "AIza"],
   ];
-  const view = { dlg: null, step: 0, data: null, setup: null, interests: [], timer: 0, connected: "" };
+  const view = { dlg: null, step: 0, data: null, setup: null, interests: [], timer: 0, connected: "", way: "" };
 
   const tr = (key, en, vars) => (window.LokiI18n ? window.LokiI18n.t(key, en, vars) : en);
   function node(tag, cls, text) {
@@ -151,7 +155,11 @@
     body.append(easy, nav("ob.start", "Let's start", () => go(1)));
   }
 
-  // ------------------------------------------------------------ 2. a model
+  // ------------------------------------------------------------ 2. a model (session 30: three ways)
+  // "Run AI on this computer" (free, private: a model that fits, Ollama installed silently, the
+  // download in the BACKGROUND - LokiBgSetup below keeps going after the tour closes), "Connect an
+  // account" (OpenRouter one click, NVIDIA NIM / Groq / Gemini keys), or "Both" (chat online at once
+  // while the local model downloads). Nothing blocks; every step can be skipped.
   function working(setup) {
     const act = (setup && setup.active) || {};
     if (act.local) return act.local;
@@ -159,9 +167,30 @@
     return view.connected || "";
   }
 
+  function pickFor(setup) {
+    // the tour's first model is a QUICK one (model_setup.quick_pick: Bonsai 2 9B/4B or a small qwen);
+    // the best-fitting bigger one is offered later as an upgrade
+    const q = (setup && setup.quick) || null;
+    const a = (setup && setup.auto) || {};
+    if (q && q.tag) return { tag: q.tag, size: Number(q.size_gb) || 0, installed: !!q.installed, quick: true, upgrade: q.upgrade || "" };
+    if (a.tag) return { tag: a.tag, size: Number(a.size_gb) || 0, installed: !!a.installed, quick: false, upgrade: "" };
+    return null;
+  }
+
+  function machineLine(setup) {
+    const hw = (setup && setup.hardware) || {};
+    const bits = [];
+    if (hw.ram_gb) bits.push(tr("ob.hw_ram", "{gb} GB memory", { gb: Math.round(hw.ram_gb) }));
+    if (hw.gpu) bits.push(hw.gpu);
+    else if (hw.chip) bits.push(hw.chip);
+    const sc = (setup && setup.scan) || {};
+    if (sc.disk_free_gb !== undefined && sc.disk_free_gb !== null) bits.push(tr("ob.hw_disk", "{gb} GB free disk", { gb: Math.round(sc.disk_free_gb) }));
+    return bits.length ? tr("ob.hw", "This computer: {what}", { what: bits.join(" · ") }) : "";
+  }
+
   async function stepModel(body) {
-    body.append(keyed(node("h3", "u-h"), "ob.model_title", "Connect a free AI model"));
-    body.append(keyed(node("p", "note"), "ob.model_why", "LOKI needs an AI model to think with. Both choices below are free. You can change it any time in Settings."));
+    body.append(keyed(node("h3", "u-h"), "ob.model_title2", "How should LOKI think?"));
+    body.append(keyed(node("p", "note"), "ob.model_why2", "Pick one - or both. Nothing here makes you wait: downloads run in the background and you can change it any time in Settings."));
     const status = node("p", "u-say");
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
@@ -173,14 +202,62 @@
     const now = working(view.setup);
     if (now) say(status, tr("ob.connected", "Connected: LOKI is using {name}. You can go on, or pick another below.", { name: now }), "ok");
     else if (!view.setup) say(status, tr("ob.err_setup", "LOKI could not look at this computer's models (its engine did not answer). You can still connect a free online model below."), "bad");
-    else say(status, tr("ob.none_yet", "No model is connected yet. Pick one:"));
+    else if (window.LokiBgSetup && window.LokiBgSetup.busy()) say(status, tr("ob.bg_running", "A model is downloading in the background - you can go on."));
+    else status.textContent = "";
 
-    const choices = node("div", "u-choices");
-    choices.append(localCard(view.setup, status), cloudCard(status));
-    body.append(choices);
+    const pick = pickFor(view.setup);
+    const ways = node("div", "u-ways");
+    ways.setAttribute("role", "radiogroup");
+    ways.setAttribute("aria-label", tr("ob.model_title2", "How should LOKI think?"));
+    const panels = node("div", "u-choices");
+    const localWhat = !view.setup ? tr("ob.way_local_unknown", "Could not check this computer")
+      : pick ? (pick.installed ? tr("ob.way_local_have", "{model} is already downloaded", { model: pick.tag })
+        : tr("ob.way_local_dl", "{model} · {size} GB download, in the background", { model: shortName(pick.tag), size: pick.size.toFixed(1) }))
+        : tr("ob.way_local_nofit", "No local model fits this computer well");
+    const WAYS = [
+      ["local", "ob.way_local", "Run AI on this computer", "ob.way_local_sub", "Free and private. Works offline once it is downloaded.", localWhat],
+      ["cloud", "ob.way_cloud", "Connect an account", "ob.way_cloud_sub", "Fast on any computer. Free options: OpenRouter, NVIDIA, Groq, Gemini.", ""],
+      ["both", "ob.way_both", "Both", "ob.way_both_sub", "Chat online right away while the local model downloads.", ""],
+    ];
+    const show = (way) => {
+      view.way = way;
+      for (const b of ways.children) {
+        const on = b.dataset.way === way;
+        b.setAttribute("aria-checked", String(on));
+        b.tabIndex = on || (!way && b.dataset.way === "local") ? 0 : -1;
+      }
+      panels.replaceChildren();
+      if (way === "local" || way === "both") panels.append(localCard(view.setup, status, way));
+      if (way === "cloud" || way === "both") panels.append(cloudCard(status));
+      panels.classList.toggle("u-one", way !== "both");
+    };
+    for (const [id, key, en, subKey, subEn, extra] of WAYS) {
+      const b = node("button", "u-way");
+      b.type = "button";
+      b.dataset.way = id;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", "false");
+      b.append(keyed(node("b", "u-way-title"), key, en), keyed(node("span", "u-way-sub"), subKey, subEn));
+      if (extra) b.append(node("span", "u-way-extra", extra));
+      if (id !== "cloud" && view.setup && !pick) b.classList.add("u-way-dim");
+      b.addEventListener("click", () => {
+        show(id);
+        save({ model_way: id });
+        if ((id === "local" || id === "both") && pick && !pick.installed && !(window.LokiBgSetup && window.LokiBgSetup.busy())) {
+          startLocal(status);   // the choice IS the one click: the download starts in the background
+        } else if ((id === "local" || id === "both") && pick && pick.installed && !working(view.setup)) {
+          startLocal(status);   // downloaded already: just switch to it
+        }
+      });
+      ways.append(b);
+    }
+    body.append(ways, panels);
+    if (view.way) show(view.way);
+    else ways.firstChild.tabIndex = 0;
     let warned = false;
     const row = nav("common.next", "Next", () => {
-      if (!working(view.setup) && !warned) {   // say it once, plainly; the next press goes on
+      const pending = window.LokiBgSetup && window.LokiBgSetup.busy();
+      if (!working(view.setup) && !pending && !warned) {   // say it once, plainly; the next press goes on
         warned = true;
         say(status, tr("ob.no_model_warn", "LOKI cannot answer until a model is connected. You can do it later in Settings > Connections, or from the ? help."), "warn");
         keyed(row.querySelector(".u-next"), "ob.next_anyway", "Continue without a model");
@@ -188,66 +265,83 @@
         return;
       }
       go(2);
-    });
+    }, { skip: () => go(2) });
     body.append(row);
   }
 
-  function localCard(setup, status) {
+  function shortName(tag) {
+    const t = String(tag || "");
+    const m = t.match(/Ternary-Bonsai-2-(\d+B)/i);
+    if (m) return "Bonsai 2 " + m[1];
+    return t.replace(/^hf\.co\/[^:]+:/, "");
+  }
+
+  async function startLocal(status, again) {
+    const r = await call("/setup/auto", { quick: true });
+    if (!r || !r.ok) {
+      if (r && /busy|already/i.test(r.error || "") && window.LokiBgSetup) { window.LokiBgSetup.track(); return; }
+      say(status, tr("ob.local_failed", "That did not start: {error}. Try again, install Ollama yourself from ollama.com/download, or use a free online model.", { error: (r && r.error) || "?" }), "bad");
+      return;
+    }
+    save({ model_choice: "local" });
+    if (window.LokiBgSetup) window.LokiBgSetup.track({ onDone: (pr) => {
+      if (pr.status !== "failed") {
+        view.connected = pr.target || "local";
+        if (view.dlg && view.step === 1) say(status, tr("ob.local_done", "Done - LOKI now runs on this computer."), "ok");
+        if (typeof loadModels === "function") loadModels();
+      }
+    } });
+    if (!again && view.dlg && view.step === 1) {
+      say(status, tr("ob.bg_started", "Downloading in the background - you can go on (it keeps going after this tour). Want to chat now? Connect an account too."));
+    }
+  }
+
+  function localCard(setup, status, way) {
     const c = node("section", "u-choice");
     c.setAttribute("aria-labelledby", "u-ob-local");
     const h = keyed(node("h4", "u-sub"), "ob.local_title", "On this computer");
     h.id = "u-ob-local";
-    c.append(h, keyed(node("p", "note"), "ob.local_why", "Private and free, works without internet. Needs a few GB of disk and a one-time download."));
+    c.append(h);
     if (!setup) {
       c.append(keyed(node("p", "u-say bad"), "ob.local_unknown", "Could not check this computer. Try again, or use a free online model."));
       c.append(button("quiet", "common.retry", "Try again", () => go(1)));
       return c;
     }
+    const line = machineLine(setup);
+    if (line) c.append(node("p", "u-found", line));
     const sc = setup.scan || setup.hardware || {};
     const ol = setup.ollama || {};
     const found = [];
     if (ol.running) found.push(tr("ob.found_ollama_on", "Ollama is running"));
     else if (ol.installed || sc.ollama_installed) found.push(tr("ob.found_ollama_off", "Ollama is installed (LOKI will start it)"));
     if (sc.mlx && sc.mlx.installed) found.push(tr("ob.found_mlx", "MLX is installed (Apple Silicon)"));
-    if (sc.llamacpp && sc.llamacpp.installed) found.push("llama.cpp");
-    c.append(node("p", "u-found", found.length ? found.join(" · ") : tr("ob.found_none", "No local model app yet - LOKI installs Ollama for you (free, open source).")));
-    const auto = setup.auto || {};
-    const p = node("p", "u-say");
-    p.setAttribute("aria-live", "polite");
+    c.append(node("p", "note", found.length ? found.join(" · ") : tr("ob.found_none2", "LOKI installs Ollama for you (free, open source) - quietly, no setup windows.")));
     if (setup.active && setup.active.local) {
       c.append(node("p", "u-say ok", tr("ob.local_using", "In use: {name}", { name: setup.active.local })));
       return c;
     }
-    if (!auto.tag) {
+    const pick = pickFor(setup);
+    if (!pick) {
       c.append(node("p", "u-say warn", tr("ob.local_no_fit", "No local model fits this computer well ({why}). A free online model is the better choice here.",
-        { why: auto.error || tr("ob.local_small", "not enough memory or disk") })));
+        { why: (setup.auto && setup.auto.error) || tr("ob.local_small", "not enough memory or disk") })));
       return c;
     }
-    const size = (Number(auto.size_gb) || 0).toFixed(1);
-    const go1 = node("button", "send u-big");
-    go1.type = "button";
-    go1.textContent = auto.installed ? tr("ob.local_use", "Use {model} (already downloaded)", { model: auto.tag })
-      : tr("ob.local_install", "Set it up for me ({model}, {size} GB download)", { model: auto.tag, size });
-    go1.addEventListener("click", async () => {
-      go1.disabled = true;
-      say(p, tr("ob.local_starting", "Starting… you can keep reading; this runs in the background."));
-      const r = await call("/setup/auto", {});
-      if (!r.ok) {
-        go1.disabled = false;
-        say(p, tr("ob.local_failed", "That did not start: {error}. Try again, install Ollama yourself from ollama.com/download, or use a free online model.", { error: r.error || "?" }), "bad");
-        return;
-      }
-      save({ model_choice: "local" });
-      watch(p, go1, status);
-    });
-    const bar = node("div", "bar u-bar");
-    bar.hidden = true;
-    bar.append(node("i"));
-    c.append(go1, bar, p);
-    if (!ol.installed && !ol.running) {
-      const help = button("link u-link", "ob.install_ollama_help", "How to install Ollama by hand", () => openLinkSafe("https://ollama.com/download"));
-      c.append(help);
-    }
+    c.append(node("p", "u-say", pick.installed ? tr("ob.local_ready", "Ready: {model} is on this computer.", { model: shortName(pick.tag) })
+      : tr("ob.local_reco", "Recommended for this computer: {model} ({size} GB). It downloads in the background - you can keep going.",
+        { model: shortName(pick.tag), size: pick.size.toFixed(1) })));
+    if (pick.upgrade) c.append(node("p", "note", tr("ob.local_upgrade", "A bigger, smarter model ({model}) also fits: Settings > Local models, later.", { model: shortName(pick.upgrade) })));
+    const busy = window.LokiBgSetup && window.LokiBgSetup.busy();
+    const b = node("button", "send u-big");
+    b.type = "button";
+    b.textContent = busy ? tr("ob.local_busy", "Downloading… (see the progress at the bottom right)")
+      : pick.installed ? tr("ob.local_use", "Use {model} (already downloaded)", { model: shortName(pick.tag) })
+        : tr("ob.local_install", "Set it up for me ({model}, {size} GB download)", { model: shortName(pick.tag), size: pick.size.toFixed(1) });
+    b.disabled = !!busy;
+    b.addEventListener("click", () => { b.disabled = true; startLocal(status); });
+    c.append(b);
+    if (way === "local") c.append(keyed(node("p", "note"), "ob.local_meanwhile", "Tip: choose Both to chat online while it downloads."));
+    if (!ol.installed && !ol.running) c.append(button("link u-link", "ob.install_ollama_help", "How to install Ollama by hand", () => openLinkSafe("https://ollama.com/download")));
+    if (setup.picks && setup.picks.mlx) c.append(node("p", "note", tr("ob.mlx_note", "MLX is installed: {repo} also runs on this Mac (Settings > Local models).", { repo: setup.picks.mlx.repo })));
     c.append(button("link u-link", "ob.more_choices", "More choices (pick a model yourself)", () => {
       view.dlg.hide("more");
       if (typeof openSetup === "function") openSetup(true);
@@ -255,43 +349,18 @@
     return c;
   }
 
-  function watch(p, btn, status) {
-    const bar = btn.parentNode.querySelector(".u-bar");
-    if (bar) bar.hidden = false;
-    clearInterval(view.timer);
-    view.timer = setInterval(async () => {
-      const r = await call("/setup/progress");
-      if (!r || !r.ok) return;
-      const pr = r.progress || {};
-      if (bar) bar.firstChild.style.width = (pr.done ? 100 : pr.percent || 0) + "%";
-      say(p, (pr.message || pr.status || tr("ob.working", "Working…")) + (pr.total && !pr.done ? " · " + pr.percent + "%" : ""));
-      if (pr.done) {
-        clearInterval(view.timer);
-        if (pr.status === "failed") {
-          btn.disabled = false;
-          say(p, tr("ob.local_failed", "That did not work: {error}. Try again, install Ollama yourself from ollama.com/download, or use a free online model.",
-            { error: pr.message || "?" }), "bad");
-        } else {
-          say(p, tr("ob.local_done", "Done - LOKI now runs on this computer."), "ok");
-          view.connected = pr.target || "local";
-          say(status, tr("ob.connected", "Connected: LOKI is using {name}. You can go on, or pick another below.", { name: view.connected }), "ok");
-          if (typeof loadModels === "function") loadModels();
-        }
-      }
-    }, 1000);
-  }
-
   function cloudCard(status) {
     const c = node("section", "u-choice");
     c.setAttribute("aria-labelledby", "u-ob-cloud");
-    const h = keyed(node("h4", "u-sub"), "ob.cloud_title", "A free online model");
+    const h = keyed(node("h4", "u-sub"), "ob.cloud_title2", "Connect an account");
     h.id = "u-ob-cloud";
     c.append(h, keyed(node("p", "note"), "ob.cloud_why", "Fast on any computer. Needs internet and a free account; what you ask is sent to that service."));
-    for (const [id, name, how, signup, keys, hint] of CLOUD) {
+    for (const [id, name, how, signup, keys, hint, extraKey, extraEn] of CLOUD) {
       const row = node("div", "u-cloud");
       const head = node("div", "u-cloud-head");
       head.append(node("b", "", name), node("span", "u-badge", tr("ob.free", "Free")));
       row.append(head);
+      if (extraKey) row.append(keyed(node("p", "note"), extraKey, extraEn));
       const out = node("p", "u-say");
       out.setAttribute("aria-live", "polite");
       if (how === "oauth") {
@@ -434,6 +503,7 @@
     const st = await call("/onboarding");
     view.data = st && st.ok ? st : {};
     view.interests = (view.data.interests || []).slice();
+    view.way = view.way || view.data.model_way || "";
     view.dlg.open();
     go(force ? 0 : Math.min(view.data.step || 0, STEPS - 1));
     return true;
@@ -441,6 +511,7 @@
 
   // Called once the engine answers (setup.js afterStart). true = the welcome is showing.
   async function start() {
+    bgResume();   // a local model still downloading from before: show its progress again
     const st = await call("/onboarding");
     if (!st || !st.ok || st.done !== false) return false;   // only an engine that knows the tour says done:false
     let later = "";
@@ -453,6 +524,87 @@
     view.setup = setup && setup.ok ? setup : null;
     return open(false);
   }
+
+  // ------------------------------------------------------------ the background download (session 30)
+  // A small progress card at the bottom right while the local model (and Ollama) install: it keeps
+  // going after the tour closes, never blocks the window, and when something fails it offers
+  // choices (try again / install Ollama by hand / use an online model) instead of a dead end.
+  const bg = { el: null, timer: 0, busy: false, hooks: [], hideTimer: 0 };
+
+  function bgEl() {
+    if (bg.el && document.body.contains(bg.el)) return bg.el;
+    const el = node("div", "u-bgsetup");
+    el.id = "u-bgsetup";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.hidden = true;
+    const text = node("p", "u-bg-text");
+    const bar = node("div", "bar u-bar");
+    bar.append(node("i"));
+    const acts = node("div", "u-bg-acts");
+    el.append(text, bar, acts);
+    document.body.append(el);
+    bg.el = el;
+    return el;
+  }
+
+  function bgShow(message, percent, actions, kind) {
+    const el = bgEl();
+    clearTimeout(bg.hideTimer);
+    el.hidden = false;
+    el.className = "u-bgsetup" + (kind ? " " + kind : "");
+    el.querySelector(".u-bg-text").textContent = message;
+    const bar = el.querySelector(".u-bar");
+    bar.hidden = percent === null;
+    if (percent !== null) bar.firstChild.style.width = Math.max(2, Math.min(100, percent)) + "%";
+    const acts = el.querySelector(".u-bg-acts");
+    acts.replaceChildren();
+    for (const [key, en, fn] of actions || []) acts.append(button("quiet u-bg-btn", key, en, fn));
+  }
+
+  function bgTrack(opts) {
+    if (opts && opts.onDone) bg.hooks.push(opts.onDone);
+    bg.busy = true;
+    clearInterval(bg.timer);
+    bgShow(tr("ob.bg_starting", "Setting up the local model…"), 0, [["ob.bg_hide", "Hide", () => { bgEl().hidden = true; }]]);
+    const tick = async () => {
+      const r = await call("/setup/progress");
+      if (!r || !r.ok) return;
+      const pr = r.progress || {};
+      if (!pr.done) {
+        const pct = pr.total ? Number(pr.percent) || 0 : null;
+        bgShow((pr.message || pr.status || tr("ob.working", "Working…")) + (pct !== null ? " · " + Math.round(pct) + "%" : ""),
+          pct === null ? 5 : pct, [["ob.bg_hide", "Hide", () => { bgEl().hidden = true; }]]);
+        return;
+      }
+      clearInterval(bg.timer);
+      bg.busy = false;
+      const hooks = bg.hooks.splice(0);
+      for (const h of hooks) { try { h(pr); } catch (_) { /* a closed tour */ } }
+      if (pr.status === "failed" || pr.status === "manual") {
+        bgShow(tr("ob.bg_failed", "The local model did not install: {error}", { error: pr.message || pr.error || "?" }), null, [
+          ["common.retry", "Try again", async () => { const again = await call("/setup/auto", { quick: true }); if (again && again.ok) bgTrack(); }],
+          ["ob.bg_byhand", "Install Ollama by hand", () => openLinkSafe("https://ollama.com/download")],
+          ["ob.bg_online", "Use an online model", () => { bgEl().hidden = true; view.way = "cloud"; open(false).then(() => go(1)); }],
+          ["ob.bg_close", "Close", () => { bgEl().hidden = true; }],
+        ], "bad");
+      } else {
+        bgShow(tr("ob.bg_done", "LOKI now runs on this computer - private, free, offline."), 100, [["ob.bg_close", "Close", () => { bgEl().hidden = true; }]], "ok");
+        if (typeof loadModels === "function") loadModels();
+        bg.hideTimer = setTimeout(() => { bgEl().hidden = true; }, 12000);
+      }
+    };
+    bg.timer = setInterval(tick, 1500);
+    tick();
+  }
+
+  async function bgResume() {   // the window was reopened while a download runs: show it again
+    const r = await call("/setup/progress");
+    const pr = (r && r.progress) || {};
+    if (r && r.ok && pr.op && !pr.done) bgTrack();
+  }
+
+  window.LokiBgSetup = { track: bgTrack, busy: () => bg.busy, resume: bgResume };
 
   window.Onboarding = { start, open, steps: STEPS, interests: INTERESTS };
 })();

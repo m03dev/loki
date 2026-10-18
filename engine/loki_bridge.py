@@ -2118,6 +2118,8 @@ def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tupl
             tags = [tag]
         else:
             tags = list(snap["auto"].get("tags") or [])
+            if data.get("quick") and (snap.get("quick") or {}).get("tags"):
+                tags = list(snap["quick"]["tags"])   # the welcome tour: a small, quick first model (session 30)
             if not tags:
                 return 409, {"ok": False, "error": snap["auto"].get("error") or "No model fits this computer."}
         if not ms.start_in_background(ms.run_auto, tags, snap["scan"], use):
