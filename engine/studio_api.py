@@ -22,8 +22,9 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 ROUTES = {("GET", "/studio"), ("POST", "/studio/open"), ("POST", "/studio/embed"), ("POST", "/engine/restart")}
-_EMBED = {"t": 0.0, "lock": threading.Lock()}
+_EMBED = {"t": 0.0, "restarted": 0.0, "lock": threading.Lock()}
 EMBED_GRACE_S = 25.0      # one background start at a time; a second click while it comes up does not start another
+RESTART_EVERY_S = 600.0   # replace a stale Studio at most once per 10 min (never a kill loop)
 
 
 def handles(method: str, route: str) -> bool:
@@ -98,11 +99,23 @@ def wanted_code(data: Path) -> str:
     return _git_head(REPO)
 
 
+def good_codes(data: Path) -> set:
+    """Every commit a running Studio may be on: the pin, the move it was cleared for, and the checkout itself
+    (studio_app.py runs the checkout when the pinned copy will not start - that Studio is current, not stale)."""
+    try:
+        rec = json.loads((data / "studio" / "pin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rec = {}
+    codes = {_git_head(REPO)}
+    if isinstance(rec, dict):
+        codes.add(str(rec.get("next") or rec.get("commit") or ""))   # a pin with a cleared move wants the move
+    return {c for c in codes if c}
+
+
 def stale(info: dict, data: Path) -> bool:
-    """True when the running Studio's code is not the code it should run (or it is too old to say)."""
+    """True when the running Studio's code is none of the codes it may run (or it is too old to say)."""
     have = str(info.get("code") or "")
-    want = wanted_code(data)
-    return not have or bool(want and have != want)
+    return not have or have not in good_codes(data)
 
 
 def busy(data: Path, now: float | None = None) -> bool:
@@ -146,9 +159,17 @@ def embed(data: Path, popen=None, clock=None) -> dict:
     import time as _time  # pylint: disable=import-outside-toplevel
     now = (clock or _time.time)()
     up = running(data)
-    if up and stale(up, data) and not busy(data):
-        stop(up)        # a Studio still on old code (the Mac ran 9d1f8db for hours, 2026-10-18): start it fresh
+    fresh = False
+    if up and stale(up, data) and not busy(data) and now - _EMBED.get("restarted", 0.0) > RESTART_EVERY_S:
+        # A Studio still on old code (the Mac ran 9d1f8db for hours, 2026-10-18): start it fresh - from the CHECKOUT
+        # (--no-pin), whose code is current and reports its commit. Restarting into the old pinned copy again was a
+        # loop: that copy predates the "code" note, so it looked stale at once and was killed every ~25 s (the Mac,
+        # 2026-10-18 02:13-02:16), and Studio never lived long enough to move its pin. At most once per
+        # RESTART_EVERY_S, so nothing can ever kill Studio over and over.
+        _EMBED["restarted"] = now
+        stop(up)
         up = running(data)
+        fresh = True
     if up:
         return {"ok": True, "running": True, "url": "http://127.0.0.1:%d/#token=%s" % (int(up["port"]), up["token"])}
     if getattr(sys, "frozen", False):
@@ -157,11 +178,11 @@ def embed(data: Path, popen=None, clock=None) -> dict:
     if not script.is_file():
         return {"ok": False, "error": "studio/studio_app.py is missing in %s" % REPO}
     with _EMBED["lock"]:
-        if now - _EMBED["t"] < EMBED_GRACE_S:
+        if now - _EMBED["t"] < EMBED_GRACE_S and not fresh:
             return {"ok": True, "running": False, "starting": True, "note": "LOKI Studio is starting..."}
         _EMBED["t"] = now
     try:
-        _spawn([str(script), "--headless"], data, popen)
+        _spawn([str(script), "--headless"] + (["--no-pin"] if fresh else []), data, popen)
     except OSError as exc:
         _EMBED["t"] = 0.0
         return {"ok": False, "error": "could not start LOKI Studio (%s). %s" % (exc, how_to_start())}

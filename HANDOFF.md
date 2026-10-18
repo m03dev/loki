@@ -4,7 +4,32 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-18 (fixes from the Mac's logs, Claude).
+Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
+
+## 2026-10-18 02:40: Studio stops killing itself; Forge gets primitives, poly modelling and DynaMesh (Claude, Mac logs + cloud)
+
+Owner: "nvidia key is set now but nothing is working ... the loki studio button is past the border ... i want to create
+primitives dynamesh ... poly modeling, their godot plugin, take it".
+- **Studio kill loop** (Mac studio.log 02:13-02:16: "the pinned copy exited at once (-15)" every ~25 s). The 01:45 fix
+  restarted a stale Studio, but the fresh one came up in the old pinned copy (bb52bd6), which predates the "code" note in
+  running.json -> stale at once -> killed; its fallback ran the checkout (6d68038 != pin) -> stale -> killed. Studio never
+  lived the ~11 s it needs to move its pin, so it stayed on bb52bd6: qwen3:8b hard-wired and keys per checkout - your
+  NVIDIA key (in ~/.loki/keys.env, present) was invisible to it. Now `studio_api.good_codes()` accepts the pin's move (or
+  pin) AND the checkout's HEAD; a replaced Studio starts with `--no-pin` (current code, reports its commit, moves the pin
+  itself); and a stale Studio is replaced at most once per 10 min (RESTART_EVERY_S). tests/test_keys_studio.py 29/29.
+- **Sidebar icon row** fit: 6 icons x 36 px + gaps overflowed the 227 px sidebar; they now shrink (flex 0 1 36px, min 26).
+- **Forge Model bar** (app/ui/forge_model.js, geometry in app/ui/forge_poly.js, pure JS): 7 primitives (cube, plane, UV
+  sphere, quad sphere, cylinder, cone, torus) with live sliders; click picks faces (Shift adds); region Extrude, Inset,
+  Catmull-Clark Smooth, Flip, Delete, all/none; the last Extrude/Inset keeps a live redo slider; DynaMesh (voxel parity on
+  3 axes + Surface Nets -> all quads, closes holes) with Resolution/Relax sliders; undo covers all of it; Sculpt and Model
+  take turns (sculpting drops the poly cage; DynaMesh gives quads back). Ops ported from GoBuild (GPL-3.0, licence at
+  app/ui/forge_poly.GoBuild-LICENSE.txt, row in docs/THIRD_PARTY.md). Gator Model Studio is MIT but has no public source.
+- Queued for LOKI's own self-improvement (docs/EVOLVE.md): E23 the rest of GoBuild (vertex/edge modes, bevel, loop cut,
+  bridge, knife, UVs), E24 Dify (connector + LOKI's own workflow canvas - Dify's extra licence terms rule out copying
+  its code into AGPL LOKI), E25 more of OpenHands (sandboxed runtime, microagents, eval harness).
+- Checked (cloud, stubs): test_forge_poly 16/16, test_forge_model_ui 13/13 (headless Chromium, real click picks a face),
+  test_forge_ui 20/20, test_ui_fit 76/76, test_ui_smoke 10/10, test_studio_destination 81/81, --self-test OK.
+  Not verified on the real Mac: a Studio turn answering on NVIDIA after this lands (should, once the pin moves).
 
 ## 2026-10-18 01:45: keys that stay saved, a Studio that answers (Claude, on the Mac by computer use + cloud)
 

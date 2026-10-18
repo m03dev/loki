@@ -122,6 +122,25 @@ studio_api.stop = lambda info, wait_s=4.0: calls.append(info["pid"])
 studio_api._EMBED["t"] = 0.0
 out = studio_api.embed(data, popen=lambda *a, **k: calls.append("spawn"))
 check("the tab stops the stale Studio and starts a fresh one", calls == [99999999, "spawn"] and out.get("starting"), (calls, out))
+# The Mac, 2026-10-18 02:13-02:16: the fresh Studio came up in the old pinned copy, looked stale again and was
+# killed every ~25 s. Now the fresh one runs the checkout (--no-pin), whose code counts as current, and a stale
+# Studio is replaced at most once per RESTART_EVERY_S.
+spawned = []
+calls.clear()
+studio_api._EMBED["t"] = 0.0
+studio_api._EMBED["restarted"] = 0.0
+studio_api.embed(data, popen=lambda argv, **k: spawned.append(argv), clock=lambda: 10_000.0)
+check("a replaced Studio starts from the checkout, never the old pin", spawned and "--no-pin" in spawned[-1], spawned)
+head = studio_api._git_head(studio_api.REPO)
+check("the checkout's own code is not stale (no kill loop)", not head or not studio_api.stale({"code": head}, data))
+calls.clear()
+studio_api.running = lambda d: {"port": 1, "pid": 4242, "token": "t", "code": "aaa"}
+studio_api._EMBED["t"] = 0.0
+studio_api.embed(data, popen=lambda *a, **k: None, clock=lambda: 10_030.0)
+check("a second stale Studio within 10 min is left running", 4242 not in calls, calls)
+studio_api._EMBED["t"] = 0.0
+studio_api.embed(data, popen=lambda *a, **k: None, clock=lambda: 10_000.0 + studio_api.RESTART_EVERY_S + 1)
+check("...and replaced once the 10 min have passed", 4242 in calls, calls)
 server_src = (REPO / "studio" / "studio_server.py").read_text(encoding="utf-8")
 check("Studio says which code it runs", '"code": _code_commit()' in server_src)
 

@@ -318,7 +318,9 @@ function forgeStage() {
     forgeBtn("folder", "Show in Files", "Open the models folder in Files.", () => {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
     }));
+  const model = typeof forgeModelBar === "function" ? forgeModelBar(viewBar) : null;   // forge_model.js
   stage.append(cv, empty, viewBar, sculpt, out);
+  if (model) stage.append(model);
   return stage;
 }
 
@@ -846,25 +848,29 @@ function forgeMakeView(lib, renderer, canvas) {
 
   // ---- sculpting: SculptGL's tools (src/editing/tools/*.js), on the welded vertices
   function snapshot() {
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice() });
+    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
     if (view.undoStack.length > 40) view.undoStack.shift();
     view.redoStack = [];
   }
   function restore(from, to) {
     const snap = from.pop();
     if (!snap) return;
-    to.push({ sm: view.sm, wpos: view.sm.wpos.slice() });
+    to.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
     const changed = snap.sm !== view.sm;
+    view.poly = snap.poly || null; view.tri2face = snap.tri2face || null;
     snap.sm.wpos.set(snap.wpos);
     forgeSync(snap.sm); forgeNormals(snap.sm);
     if (changed) useMesh(snap.sm, true); else refresh();
+    if (view.poly) flatNormals(); else view.select([]);
+    if (view.onChange) view.onChange();
   }
   view.undo = () => restore(view.undoStack, view.redoStack);
   view.redo = () => restore(view.redoStack, view.undoStack);
   view.subdivide = () => {
     if (!view.sm) return;
     if (view.sm.idx.length / 3 > 150000) { forgeSay("Already very detailed (" + (view.sm.idx.length / 3).toLocaleString() + " triangles).", true); return; }
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice() }); view.redoStack = [];
+    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face }); view.redoStack = [];
+    view.poly = null; view.select([]);
     useMesh(forgeSubdivide(view.sm), true);
     forgeSay((view.sm.idx.length / 3).toLocaleString() + " triangles");
   };
@@ -880,7 +886,7 @@ function forgeMakeView(lib, renderer, canvas) {
     const r = canvas.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
-    return hit ? { point: toLocal(hit.point) } : null;
+    return hit ? { point: toLocal(hit.point), tri: hit.faceIndex } : null;
   }
   // SculptGL picking: the vertices inside the brush sphere
   function picked(c, R2) {
@@ -1018,6 +1024,7 @@ function forgeMakeView(lib, renderer, canvas) {
     e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting
     canvas.setPointerCapture(e.pointerId);
     snapshot();
+    if (view.poly) { view.poly = null; view.tri2face = null; view.select([]); }   // sculpted: the poly cage no longer fits
     const tool = e.shiftKey ? "smooth" : view.brush.tool;
     drag = { tool, negative: e.altKey || e.ctrlKey || e.metaKey, last: hit.point.clone() };
     if (tool === "grab") drag.grab = grabStart(hit.point);
@@ -1045,6 +1052,77 @@ function forgeMakeView(lib, renderer, canvas) {
   const end = () => { drag = null; };
   canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end);
   canvas.addEventListener("pointerleave", () => { if (!drag) showRing(null); });
+  // ---- poly modelling + DynaMesh (app/ui/forge_poly.js, the bar is forge_model.js): a poly mesh shown with hard
+  // edges (every face its own corners, so the sculpt weld still joins them), faces picked by click, selection drawn
+  // over the model, and every change undoable like a stroke.
+  view.poly = null; view.tri2face = null;
+  function flatNormals() {
+    if (!view.poly || !view.sm || !view.polyCorners) return;
+    const nrm = view.sm.nrm;
+    view.poly.f.forEach((f, fi) => {
+      const n = window.ForgePoly.faceNormal(view.poly, f), at = view.polyCorners[fi];
+      for (let k = 0; k < f.length; k++) nrm.set(n, (at + k) * 3);
+    });
+    if (mesh) { mesh.geometry.attributes.normal.needsUpdate = true; view.dirty = true; }
+  }
+  view.showPoly = (poly, keepView, noUndo) => {
+    if (!noUndo && view.sm) snapshot();
+    let corners = 0;
+    for (const f of poly.f) corners += f.length;
+    const pos = new Float32Array(corners * 3), idx = [], tri2face = [], start = [];
+    let c = 0;
+    poly.f.forEach((f, fi) => {
+      start.push(c);
+      for (let k = 0; k < f.length; k++) pos.set(poly.v[f[k]], (c + k) * 3);
+      for (let k = 1; k + 1 < f.length; k++) { idx.push(c, c + k, c + k + 1); tri2face.push(fi); }
+      c += f.length;
+    });
+    if (!keepView) { holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1); }
+    view.poly = poly; view.tri2face = Int32Array.from(tri2face); view.polyCorners = start;
+    const sm = forgeMeshFrom(pos, null, null, Uint32Array.from(idx));
+    view.polyCorners = start;
+    view.sm = sm; flatNormals();
+    useMesh(sm, keepView);
+    view.select([]);
+    if (view.onChange) view.onChange();
+  };
+  // the current model as triangles (welded, sculpted shape) - for DynaMesh and "edit as polygons"
+  view.triangles = () => {
+    if (!view.sm) return null;
+    const sm = view.sm, idx = new Uint32Array(sm.idx.length);
+    for (let i = 0; i < idx.length; i++) idx[i] = sm.wid[sm.idx[i]];
+    return { pos: sm.wpos.slice(), idx };
+  };
+  const selMat = new THREE.MeshBasicMaterial({ color: 0xed782b, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: false });
+  let selMesh = null;
+  view.selected = [];
+  view.select = (faces) => {
+    view.selected = faces.slice();
+    if (selMesh) { holder.remove(selMesh); selMesh.geometry.dispose(); selMesh = null; }
+    if (view.poly && faces.length) {
+      const P = [];
+      for (const fi of faces) {
+        const f = view.poly.f[fi];
+        if (!f) continue;
+        for (let k = 1; k + 1 < f.length; k++) P.push(...view.poly.v[f[0]], ...view.poly.v[f[k]], ...view.poly.v[f[k + 1]]);
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
+      selMesh = new THREE.Mesh(g, selMat); selMesh.renderOrder = 5; holder.add(selMesh);
+    }
+    view.dirty = true;
+  };
+  let tap = null;   // Model mode: a click (not a drag - that still turns the view) picks the face under it
+  canvas.addEventListener("pointerdown", (e) => { tap = view.mode === "poly" && e.button === 0 ? { x: e.clientX, y: e.clientY } : null; });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!tap || view.mode !== "poly") return;
+    const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y);
+    tap = null;
+    if (moved > 5 || !view.tri2face) return;
+    const hit = hitAt(e);
+    const face = hit && hit.tri != null ? view.tri2face[hit.tri] : -1;
+    if (view.onPick) view.onPick(face, e.shiftKey || e.ctrlKey || e.metaKey);
+  });
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;
@@ -1070,6 +1148,9 @@ function forgeMode() {
   const v = forge.view;
   if (!v) return;
   v.setMode(v.mode === "sculpt" ? "view" : "sculpt");
+  const mb = document.getElementById("forge-model"); if (mb) mb.hidden = true;   // Model and Sculpt take turns
+  document.getElementById("forge-model-mode")?.classList.remove("on");
+  if (v.select) v.select([]);
   document.getElementById("forge-sculpt").hidden = v.mode !== "sculpt";
   document.getElementById("forge-mode").classList.toggle("on", v.mode === "sculpt");
   forgeSay(v.mode === "sculpt" ? "Sculpt: drag on the model. Alt/Ctrl inverts, Shift smooths, [ ] radius, drag off the model to turn." : "");

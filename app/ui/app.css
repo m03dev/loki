@@ -606,7 +606,11 @@ button.danger:hover { color: var(--err); }
 .bg-toggle.icon-btn:has(.icon-check:checked) { color: var(--ok); background: var(--surface); box-shadow: inset 0 0 0 1px var(--ok); }
 .bg-toggle.icon-btn:has(.icon-check:focus-visible) { outline: 2px solid var(--ok); }
 .sidebar .new-chat.icon-btn { width: 40px; height: 40px; border-radius: 12px; align-self: flex-start; }
-.sidebar .foot-row .icon-btn { min-width: 36px; }
+/* The foot row always fits inside the sidebar (owner 2026-10-18: the Studio button sat past the border): every icon
+   shares the row and shrinks to 26px before anything can overflow; the row never grows wider than its column. */
+.sidebar-foot { min-width: 0; }
+.sidebar .foot-row { min-width: 0; max-width: 100%; gap: clamp(2px, 1.2%, 6px); }
+.sidebar .foot-row .icon-btn { flex: 0 1 36px; min-width: 26px; padding-left: 0; padding-right: 0; }
 .icon-tip { position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none; max-width: 260px; display: flex; flex-direction: column; gap: 2px;
   background: rgba(16,18,24,.96); color: #e8ecf3; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; padding: 7px 10px;
   box-shadow: 0 6px 22px rgba(0,0,0,.45); font-size: 12px; line-height: 1.35; }
