@@ -141,6 +141,9 @@ check("a second stale Studio within 10 min is left running", 4242 not in calls, 
 studio_api._EMBED["t"] = 0.0
 studio_api.embed(data, popen=lambda *a, **k: None, clock=lambda: 10_000.0 + studio_api.RESTART_EVERY_S + 1)
 check("...and replaced once the 10 min have passed", 4242 in calls, calls)
+app_src = (REPO / "studio" / "studio_app.py").read_text(encoding="utf-8")
+check("a pinned copy LOKI stopped on purpose is not replaced by a second Studio",
+      "abs(code) == 15" in app_src and app_src.index("abs(code) == 15") < app_src.index("running from the checkout instead"))
 server_src = (REPO / "studio" / "studio_server.py").read_text(encoding="utf-8")
 check("Studio says which code it runs", '"code": _code_commit()' in server_src)
 

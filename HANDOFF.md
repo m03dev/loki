@@ -6,6 +6,23 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
 
+## 2026-10-18 03:25: NVIDIA answers instead of timing out - streamed replies (Claude, Mac logs + cloud)
+
+After the 02:40 fix Studio DID reach NVIDIA with the owner's key (session 1018-025513: "nvidia did not answer (The read
+operation timed out)"), but every turn waited 180 s, retried another 180 s, fell back - and the next turn started on
+NVIDIA again. Cause: Studio and the engine asked for up to 8192 tokens UNSTREAMED, so the server sends nothing until
+the whole answer is written, which on the free tier takes longer than the timeout.
+- Studio (studio/studio_models.py): remote providers stream (SSE); the timeout is the first byte (FIRST_BYTE_S 90) then
+  the silence between chunks (STREAM_IDLE_S 75), wall cap 900 s; tool calls are rebuilt from deltas; a provider that
+  times out is not retried on that turn and is asked LAST for 10 min (SLOW_FOR_S). Local servers stay unstreamed.
+- Engine (engine/loki.py `_streamed_request`): DeepSeek on NIM streams (LOKI_STREAM_MODELS=auto|remote|off) and is
+  rebuilt into the shape the loop reads (content, tool_calls, reasoning, usage, model_dump).
+- Two Studios ran at once (8771 + 64148): a pinned copy LOKI stops on purpose (exit 15) no longer makes its launcher
+  start the checkout too.
+- Checked: test_studio_stream 10/10 (incl. a real chunked socket slower than the timeout overall), test_engine_stream
+  12/12, test_loki 533, test_job_fixes 43, test_routing_core 142, test_hardening 135, test_keys_studio 30,
+  test_studio_destination 81, --self-test OK. Not verified: a real NVIDIA turn (the key stays on the Mac).
+
 ## 2026-10-18 03:10: phone linking that opens on a phone, and 9Router (Claude, cloud + Mac logs)
 
 Owner: "account linking needs rework qr dont show up on my phone and links dont go anywhere ... get 9router repo".

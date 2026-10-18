@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import threading
 import time
+import types
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -7095,7 +7096,10 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
                     response = tool_harness.attach(response, known)
             else:
                 sent = _provider_kwargs(provider, cfg, _small_model_kwargs(kwargs, cfg))
-                response = await client.chat.completions.create(**sent)
+                if _stream_for(provider, cfg):
+                    response = await _streamed_request(client, sent)
+                else:
+                    response = await client.chat.completions.create(**sent)
                 if not _no_choices(response):
                     response = _salvage_reply(response, kwargs)
             if _no_choices(response):
@@ -7223,6 +7227,73 @@ def _is_deepseek_nim(provider: str, cfg) -> bool:
     model = str(getattr(cfg, "model", "") or "").lower()
     url = str(getattr(cfg, "base_url", "") or "")
     return "deepseek" in model and (provider == "nvidia" or "integrate.api.nvidia.com" in url)
+
+
+# Streaming (owner's Mac, 2026-10-18: NVIDIA "did not answer (The read operation timed out)" on every long turn).
+# Unstreamed, the server sends nothing until the whole answer is written - a long answer at the free tier's speed is
+# longer than LOKI_MODEL_TIMEOUT, so it timed out and was retried. Streamed, the timeout is the silence between two
+# chunks, so a slow-but-working answer is never cut off. LOKI_STREAM_MODELS: auto (DeepSeek on NVIDIA NIM, where it
+# was seen) | remote (every cloud provider) | off.
+STREAM_MODELS = os.getenv("LOKI_STREAM_MODELS", "auto").strip().lower()
+
+
+def _stream_for(provider: str, cfg) -> bool:
+    if STREAM_MODELS in ("off", "0", "false", "no") or _cfg_is_local(cfg) or str(cfg.base_url).startswith(CLI_AGENT_PREFIX):
+        return False
+    return STREAM_MODELS in ("remote", "on", "all") or _is_deepseek_nim(provider, cfg)
+
+
+class _Obj(types.SimpleNamespace):
+    """A streamed reply in the shape the rest of LOKI reads from openai's objects (attributes + model_dump)."""
+
+    def model_dump(self, **_kw):
+        def plain(v):
+            if isinstance(v, _Obj):
+                return {k: plain(x) for k, x in vars(v).items() if x is not None}
+            if isinstance(v, list):
+                return [plain(x) for x in v]
+            return v
+        return plain(self)
+
+
+async def _streamed_request(client, sent: dict):
+    """client.chat.completions.create(stream=True) put back together as one completion."""
+    stream = await client.chat.completions.create(**dict(sent, stream=True))
+    content, reasoning, calls, usage, finish = [], [], {}, None, None
+    async for chunk in stream:
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+        for choice in getattr(chunk, "choices", None) or []:
+            finish = getattr(choice, "finish_reason", None) or finish
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            if getattr(delta, "content", None):
+                content.append(str(delta.content))
+            extra = getattr(delta, "model_extra", None) or {}
+            for field in ("reasoning_content", "reasoning"):
+                value = getattr(delta, field, None) or (extra.get(field) if isinstance(extra, dict) else None)
+                if value:
+                    reasoning.append(str(value))
+            for tc in getattr(delta, "tool_calls", None) or []:
+                index = getattr(tc, "index", None)
+                slot = calls.setdefault(len(calls) if index is None else int(index),
+                                        {"id": "", "name": "", "arguments": ""})
+                if getattr(tc, "id", None):
+                    slot["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn is not None:
+                    slot["name"] += getattr(fn, "name", None) or ""
+                    slot["arguments"] += getattr(fn, "arguments", None) or ""
+    tool_calls = [_Obj(id=calls[i]["id"] or "call_%d" % i, type="function",
+                       function=_Obj(name=calls[i]["name"], arguments=calls[i]["arguments"] or "{}"))
+                  for i in sorted(calls)] or None
+    message = _Obj(role="assistant", content="".join(content) or None, tool_calls=tool_calls,
+                   reasoning_content="".join(reasoning) or None)
+    if not (content or calls or reasoning):
+        return _Obj(choices=[], usage=usage)
+    return _Obj(choices=[_Obj(index=0, message=message, finish_reason=finish or ("tool_calls" if tool_calls else "stop"))],
+                usage=usage, model=sent.get("model", ""))
 
 
 def _provider_kwargs(provider: str, cfg, kwargs: dict) -> dict:

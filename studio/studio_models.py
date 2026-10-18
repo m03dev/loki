@@ -180,9 +180,10 @@ def driver_status(env: dict | None = None) -> dict:
 
 
 class ModelError(Exception):
-    def __init__(self, text: str, status: int = 0, retry_after: float = 0.0, fail_over: bool = True):
+    def __init__(self, text: str, status: int = 0, retry_after: float = 0.0, fail_over: bool = True,
+                 timed_out: bool = False):
         super().__init__(text)
-        self.status, self.retry_after, self.fail_over = status, retry_after, fail_over
+        self.status, self.retry_after, self.fail_over, self.timed_out = status, retry_after, fail_over, timed_out
 
 
 def split_reasoning(message: dict) -> tuple:
@@ -214,26 +215,98 @@ def _retry_after(headers, body: str) -> float:
     return float(m.group(1)) if m else 0.0
 
 
+# Streaming (owner's Mac, 2026-10-18: "nvidia did not answer (The read operation timed out)" on every turn). Without
+# stream the server says nothing until the WHOLE answer is written: up to 8192 tokens at the free tier's ~20 tok/s is
+# longer than any sane timeout, so every long turn timed out after 180 s, was retried (another 180 s), and the next
+# turn started over. Streamed, tokens arrive as they are made: the timeout is the silence between two chunks
+# (STREAM_IDLE_S), a slow-but-working answer is never cut off, and a provider that never starts fails in
+# FIRST_BYTE_S. Local servers stay unstreamed (Ollama answers fast and its streamed tool calls vary by version).
+STREAM_IDLE_S = float(os.getenv("LOKI_STUDIO_STREAM_IDLE_S", "75") or 75)
+FIRST_BYTE_S = float(os.getenv("LOKI_STUDIO_FIRST_BYTE_S", "90") or 90)
+STREAM_MAX_S = float(os.getenv("LOKI_STUDIO_STREAM_MAX_S", "900") or 900)
+
+
+def _read_stream(resp, provider_id: str, clock=time.monotonic) -> dict:
+    """An OpenAI server-sent-event stream -> one reply message (content, reasoning_content, tool_calls)."""
+    content, reasoning, calls = [], [], {}
+    began = clock()
+    for raw in resp:
+        line = raw.decode("utf-8", errors="replace").strip() if isinstance(raw, bytes) else str(raw).strip()
+        if clock() - began > STREAM_MAX_S:
+            raise ModelError("%s kept writing for more than %d s" % (provider_id, STREAM_MAX_S))
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            continue
+        if chunk.get("error"):
+            err = chunk["error"]
+            raise ModelError("%s: %s" % (provider_id, (err.get("message") if isinstance(err, dict) else err)), status=0)
+        for choice in chunk.get("choices") or []:
+            delta = choice.get("delta") or choice.get("message") or {}
+            if delta.get("content"):
+                content.append(str(delta["content"]))
+            for key in ("reasoning_content", "reasoning"):
+                if delta.get(key):
+                    reasoning.append(str(delta[key]))
+            for tc in delta.get("tool_calls") or []:
+                slot = calls.setdefault(int(tc.get("index", len(calls))), {"id": "", "type": "function",
+                                                                         "function": {"name": "", "arguments": ""}})
+                if tc.get("id"):
+                    slot["id"] = tc["id"]
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    slot["function"]["name"] += fn["name"]
+                if fn.get("arguments"):
+                    slot["function"]["arguments"] += fn["arguments"]
+    message: dict = {"role": "assistant", "content": "".join(content)}
+    if reasoning:
+        message["reasoning_content"] = "".join(reasoning)
+    if calls:
+        message["tool_calls"] = [dict(calls[i], id=calls[i]["id"] or "call_%d" % i) for i in sorted(calls)]
+    if not message["content"] and not calls and not reasoning:
+        raise ModelError("%s returned an empty stream" % provider_id)
+    return message
+
+
 def request(provider: Provider, messages: list, tools: list | None = None, max_tokens: int = 8192,
-            timeout: float = 180.0, opener=urllib.request.urlopen) -> dict:
+            timeout: float = 180.0, opener=urllib.request.urlopen, stream: bool | None = None) -> dict:
     """One chat completion from one provider -> the reply message (dict). Raises ModelError."""
+    stream = (not provider.local) if stream is None else stream
     body: dict = {"model": provider.model, "messages": messages, "max_tokens": max_tokens}
     if tools:
         body["tools"] = tools
     body.update(provider.extra or {})
+    if stream:
+        body["stream"] = True
     req = urllib.request.Request(provider.base_url.rstrip("/") + "/chat/completions", method="POST",
                                  data=json.dumps(body).encode("utf-8"),
                                  headers={"Authorization": "Bearer " + provider.key, "Content-Type": "application/json",
+                                          "Accept": "text/event-stream" if stream else "application/json",
                                           "User-Agent": "LOKI-Studio/1"})
     try:
-        with opener(req, timeout=timeout) as resp:
+        # streamed: the socket timeout is the wait for the first byte, then the silence allowed between chunks
+        with opener(req, timeout=FIRST_BYTE_S if stream else timeout) as resp:
+            kind = str(getattr(resp, "headers", {}).get("Content-Type", "") if getattr(resp, "headers", None) else "")
+            if stream and "event-stream" in kind:
+                try:
+                    resp.fp.raw._sock.settimeout(STREAM_IDLE_S)  # type: ignore[attr-defined]
+                except Exception:  # noqa: BLE001 - not a real socket (tests): keep the first-byte timeout
+                    pass
+                return _read_stream(resp, provider.id)
             data = json.loads(resp.read().decode("utf-8") or "{}")
+    except ModelError:
+        raise
     except urllib.error.HTTPError as exc:
         text = exc.read().decode("utf-8", errors="replace")[:600]
         raise ModelError("%s answered HTTP %s: %s" % (provider.id, exc.code, " ".join(text.split())[:240]),
                          status=exc.code, retry_after=_retry_after(exc.headers, text)) from exc
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise ModelError("%s did not answer (%s)" % (provider.id, getattr(exc, "reason", exc))) from exc
+        raise ModelError("%s did not answer (%s)" % (provider.id, getattr(exc, "reason", exc)), timed_out=True) from exc
     except ValueError as exc:
         raise ModelError("%s sent something that is not JSON" % provider.id) from exc
     choices = data.get("choices") or []
@@ -242,10 +315,20 @@ def request(provider: Provider, messages: list, tools: list | None = None, max_t
     return dict(choices[0].get("message") or {})
 
 
+# A provider that just timed out is asked LAST for a while (it was: first again on every turn, another 6 minutes).
+SLOW_FOR_S = float(os.getenv("LOKI_STUDIO_SLOW_FOR_S", "600") or 600)
+_SLOW: dict = {}   # provider id -> until (time.time())
+
+
+def slow(provider_id: str, now: float | None = None) -> bool:
+    return _SLOW.get(provider_id, 0.0) > (time.time() if now is None else now)
+
+
 def chat(messages: list, tools: list | None = None, chain_list: list | None = None, say=None, sleep=time.sleep,
          opener=urllib.request.urlopen, stop=None, max_short_wait: float = 20.0) -> tuple:
     """(provider, message, reasoning): ask the first ready provider; pace, wait out a short 429, fail over."""
     order = list(chain_list if chain_list is not None else chain())
+    order.sort(key=lambda p: slow(p.id))          # stable: a provider that just timed out goes to the back
     if not order:
         raise ModelError("no model is ready. " + HOW_TO_GET_KEY, fail_over=False)
     say = say or (lambda _t: None)
@@ -274,6 +357,9 @@ def chat(messages: list, tools: list | None = None, chain_list: list | None = No
                         say("%s is busy (429); waiting %.0fs, then asking again." % (provider.id, wait))
                         sleep(wait)
                         continue
+                elif exc.timed_out:
+                    # it went silent: never ask it again on this turn, and ask it last for SLOW_FOR_S
+                    _SLOW[provider.id] = time.time() + SLOW_FOR_S
                 elif exc.status >= 500 or exc.status == 0:
                     if tries <= 1:
                         say("%s failed (%s); asking once more." % (provider.id, str(exc)[:120]))

@@ -91,6 +91,12 @@ def hand_over_to_pin(argv: list) -> int | None:
     log("running the pinned copy %s" % app.parent.parent)
     started = time.monotonic()
     code = subprocess.call([sys.executable, str(app), *argv], env=env)
+    if abs(code) == 15:
+        # stopped on purpose (SIGTERM; Windows TerminateProcess with 15): LOKI's tab replaced this Studio with a
+        # current one (engine/studio_api.embed). Starting the checkout here as well made TWO Studios (the Mac,
+        # 2026-10-18 02:54: ports 8771 and 64148).
+        log("the pinned copy was stopped (%s); not starting another" % code)
+        return code
     if code != 0 and time.monotonic() - started < 20:
         # The pinned copy would not even start: never leave the owner without Studio.
         log("the pinned copy exited at once (%s); running from the checkout instead" % code)
