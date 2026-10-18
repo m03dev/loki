@@ -1413,6 +1413,23 @@ def failover_reason(exc) -> str:
     return "error"
 
 
+# Some providers (NVIDIA NIM's free tier, 2026-10-18) answer an over-long request with a bare
+# "HTTP 400: The request could not be completed" - no word about context. On a big request that
+# is almost always the size, so treat it like a context error: condense, then fail over.
+SIZE_400_TOKENS = int(os.getenv("LOKI_SIZE_400_TOKENS", "24000") or 24000)
+
+
+def _maybe_size_error(exc, messages=None, tools=None) -> bool:
+    text = str(exc)
+    if not re.search(r"HTTP (400|413|422)\b", text):
+        return False
+    try:
+        tokens = routing.estimate_tokens(list(messages or []), len(json.dumps(tools or [])))
+    except Exception:  # noqa: BLE001
+        return False
+    return tokens >= SIZE_400_TOKENS
+
+
 def should_fail_over(exc, auto_routing: bool) -> bool:
     """True when the error means 'try another provider', not 'this is a bug'."""
     if _is_limit_error(exc) or _is_agent_unavailable(exc):
@@ -7025,6 +7042,7 @@ async def _model_request(client, kwargs: dict, cfg, provider: str = ""):
     `provider` is the MODELS key the request goes to; a failure marks THAT provider, and
     provider_health remembers why (for routing, the next job and Settings > Connections).
     """
+    kwargs = dict(kwargs)   # the halved tool list below stays in THIS call; a retry starts full
     attempt = 0
     empty = 0
     full_tools = list(kwargs.get("tools") or [])
@@ -7570,7 +7588,11 @@ async def agent_turn(force_tool: bool = False) -> str:
                 speed_watch.since(_t0, "model_call", provider)   # speed watch (E6)
                 break
             except ModelUnavailable as exc:
-                if condenser.is_context_error(str(exc)) and not condensed_for_error:
+                size_like = condenser.is_context_error(str(exc)) or _maybe_size_error(
+                    exc, kwargs.get("messages"), kwargs.get("tools"))
+                if size_like and not condensed_for_error:
+                    _progress("thinking", "The request was too big for %s; condensing the conversation and "
+                              "trying again..." % (provider or "the model"))
                     # The provider says the conversation is too long for it: condense now (a hard
                     # request, as in OpenHands) and send the same turn again.
                     smaller = await _model_view(requested=True)
@@ -7578,8 +7600,8 @@ async def agent_turn(force_tool: bool = False) -> str:
                         condensed_for_error = True
                         kwargs["messages"] = smaller
                         continue
-                if switches >= len(SMART_ORDER) or not should_fail_over(
-                        exc, model_name in AUTO_ROUTING_MODES):
+                if switches >= len(SMART_ORDER) or not (should_fail_over(
+                        exc, model_name in AUTO_ROUTING_MODES) or (size_like and model_name in AUTO_ROUTING_MODES)):
                     raise
                 reason = failover_reason(exc)
                 if _is_rate_limit(exc):

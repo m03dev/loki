@@ -196,7 +196,10 @@ UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
             ".json": "application/json; charset=utf-8",
             # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
             ".wasm": "application/wasm", ".pck": "application/octet-stream"}
-UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data: blob:; "
+# style-src allows inline <style>: pywebview injects one for its drag regions (the Mac title bar)
+# and the bundled Mermaid adds one per diagram; both were blocked ("could not load (no address) -
+# <style>" in engine.out). Scripts stay 'self' only - no inline script, no eval.
+UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; "
           "connect-src 'self'; frame-src 'self' http://127.0.0.1:* http://localhost:*; "   # the Studio tab: Studio's own loopback server
           "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # The Godot world page only: WebAssembly needs 'wasm-unsafe-eval' (not 'unsafe-eval' - no JS eval),
@@ -2434,6 +2437,15 @@ class BridgeHTTPServer(ThreadingHTTPServer):
     # with dead panels (Play, Creations, Brain, the drawing pad) or, if app.js or app.css is one of
     # the dropped ones, blank. A generous backlog costs nothing; both platforms accept it.
     request_queue_size = 128
+
+    def handle_error(self, request, client_address):  # noqa: D401
+        """A client that hangs up mid-reply (BrokenPipe/ConnectionReset - a probe sending junk, a
+        window closed while loading) is not an engine error: skip the traceback that buried real
+        errors in engine.out. Everything else is logged as before."""
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
 
     def __init__(self, state: BridgeState) -> None:
         super().__init__((HOST, PORT), BridgeHandler)

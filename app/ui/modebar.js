@@ -38,8 +38,14 @@ const LokiModeBar = (() => {
     top.append(left, tabs, right);
     top.addEventListener("dblclick", (e) => {
       if (e.target.closest("button")) return;
-      const host = window.pywebview && window.pywebview.api;
-      if (host && typeof host.toggle_maximize === "function") host.toggle_maximize();
+      const pw = window.pywebview;
+      const host = pw && pw.api;
+      if (host && typeof host.toggle_maximize === "function") { host.toggle_maximize(); return; }
+      // LOKI's CSP has no 'unsafe-eval', so pywebview's api.js cannot build pywebview.api.* with
+      // new Function() (engine.out: "EvalError ... script-src 'self'"). Call its bridge directly.
+      if (pw && typeof pw._jsApiCallback === "function") {
+        try { pw._jsApiCallback("toggle_maximize", [], String(Math.random()).slice(2)); } catch (_) { /* no bridge */ }
+      }
     });
     return top;
   }

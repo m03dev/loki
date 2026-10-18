@@ -4,7 +4,23 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-17 (session 30 one-click install, Claude worktree).
+Last updated: 2026-10-18 (fixes from the Mac's logs, Claude).
+
+## 2026-10-18 early: four fixes from the Mac's own logs (Claude, on the Mac + cloud)
+
+Read from the Mac's harness_data/app/engine.out and jobs.json, not guessed:
+- **Self-improvement job 57c9b2ad died** at ~57k tokens: NVIDIA's free route answered a bare "HTTP 400: The
+  request could not be completed"; LOKI only halved the tool list (42 -> 21 -> 10) and gave up. Now
+  `loki._maybe_size_error`: a 400/413/422 on a request >= 24k tokens (LOKI_SIZE_400_TOKENS) is treated like a
+  context error - condense and resend, then fail over in auto/smart mode. `_model_request` copies kwargs, so a
+  halved tool list no longer sticks to the caller's retry.
+- **Window CSP**: `style-src` now allows inline `<style>` (pywebview's drag-region style for the Mac title bar and
+  Mermaid's diagram styles were blocked: "could not load (no address) - <style>"). Scripts stay 'self', no eval.
+- **Title-strip double-click = zoom** never worked: pywebview's api.js builds `pywebview.api.*` with
+  `new Function` (EvalError under the CSP). modebar.js now calls `pywebview._jsApiCallback("toggle_maximize")`.
+- **engine.out noise**: BridgeHTTPServer.handle_error drops BrokenPipe/ConnectionReset tracebacks.
+- Checked in the cloud with an openai stub (no PyPI there); not yet run on the real Mac/PC: the title strip drag +
+  double-click, and job 57c9b2ad re-queued.
 
 ## 2026-10-17 midnight: title bar fixed for real (Claude, cloud)
 
