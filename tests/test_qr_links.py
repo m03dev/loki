@@ -154,6 +154,19 @@ r = providers_catalog.test(agent, "nvidia", timeout=1, opener=nim(down=True))["t
 check("no connection at all says this computer cannot reach NVIDIA",
       "cannot reach integrate.api.nvidia.com" in r["detail"], r)
 
+# --- NVIDIA serves DeepSeek V4.1 Flash under another name: no 404, LOKI switches (the Mac's "error 404")
+import nim_models  # noqa: E402
+nim_models._cache.clear()
+cfg.model = "deepseek-ai/deepseek-v4.1-flash"
+sent.clear()
+r = providers_catalog.test(agent, "nvidia", timeout=1, opener=nim(models=["nvidia/deepseek-v4.1-flash", "meta/llama-3.3-70b"]))["test"]
+check("Test asks NVIDIA for the name it really serves", r["ok"] and cfg.model == "nvidia/deepseek-v4.1-flash"
+      and sent[-1][1]["model"] == "nvidia/deepseek-v4.1-flash", (r, cfg.model, sent[-1:]))
+check("a model NVIDIA serves is never changed", nim_models.resolve("x/y", ["x/y"]) == "x/y"
+      and nim_models.resolve("meta/llama", ["a"]) == "meta/llama" and nim_models.resolve("deepseek-ai/deepseek-v4.1-flash", []) ==
+      "deepseek-ai/deepseek-v4.1-flash")
+check("no key: nothing is asked of NVIDIA", nim_models.fix(type("C", (), {"base_url": nim_models.NIM_URL, "model": "m", "api_key": ""})()) == "")
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

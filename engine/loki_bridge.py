@@ -2678,6 +2678,12 @@ async def serve() -> None:
     keeper.start()
     print(f"[loki-bridge] workspace {project}; Godot {'at ' + args.godot_exe if args.godot_exe else 'not configured'}", flush=True)
     print(f"[loki-bridge] ready at http://{HOST}:{PORT} (model={loki.MODELS[loki.model_name].model})", flush=True)
+    try:   # NVIDIA serves DeepSeek under changing names; a wrong one was HTTP 404 on the Mac
+        import nim_models  # pylint: disable=import-outside-toplevel
+        if "nvidia" in loki.MODELS:
+            nim_models.fix_later(loki.MODELS["nvidia"], on_change=lambda c: print("[loki-bridge] NVIDIA model " + c, flush=True))
+    except Exception:  # noqa: BLE001
+        pass
     try:   # speed watch (E6): how long the engine took to answer
         import speed_watch  # pylint: disable=import-outside-toplevel
         speed_watch.record("startup", (time.monotonic() - ENGINE_T0) * 1000, root=Path(loki.DATA_DIR))

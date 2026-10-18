@@ -138,6 +138,16 @@
       "enabled": false,
       "capability": "openhuman",
       "note": "OpenHuman (github.com/tinyhumansai/openhuman, GPL-3.0, a separate program): stdio MCP server. Starts when openhuman-core is on PATH and turned on in Settings > Add-ons, or with LOKI_MCP_ENABLE=openhuman."
+    },
+    "cadcraft": {
+      "command": "${LOKI_CADCRAFT_CLI}",
+      "args": [
+        "mcp"
+      ],
+      "requires_env": "LOKI_CADCRAFT_CLI",
+      "enabled": false,
+      "capability": "cadcraft",
+      "note": "CADCraft (github.com/storytold/cadcraft, MIT OR Apache-2.0, a separate program): AutoCAD-style 2D drafting (DXF/DWG, layers, dimensions, hatches, blocks) driven by LOKI's agents over MCP - command_line, execute, inspect_drawing, query_entities, render. Install: python tools/setup_extras.py cadcraft; turn on in Settings > Add-ons, or LOKI_MCP_ENABLE=cadcraft."
     }
   }
 }

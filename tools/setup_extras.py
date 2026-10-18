@@ -14,6 +14,7 @@ Opt-in add-ons (never part of `all`; each one only when you ask for it by name):
     python tools/setup_extras.py openhands       OpenHands CLI (uv tool install, Python 3.12)
     python tools/setup_extras.py penecho         PenEcho drawing canvas (npm; AGPL-3.0, separate program)
     python tools/setup_extras.py openhuman       how to get OpenHuman (GPL-3.0; no installer here)
+    python tools/setup_extras.py cadcraft        CADCraft CAD drafting (MIT/Apache-2.0 release build, checksum-checked)
     python tools/setup_extras.py remotion        checks Node/npx for Remotion videos (custom licence)
     python tools/setup_extras.py local-image     stable-diffusion.cpp + Z-Image Turbo GGUF (PC), mflux (Mac)
     python tools/setup_extras.py local-video     Wan2GP in its own venv (PC with an NVIDIA GPU)
@@ -197,6 +198,21 @@ def openhuman() -> bool:
     return True
 
 
+def cadcraft() -> bool:
+    """CADCraft (MIT OR Apache-2.0): the official build for this machine into <data>/addons/cadcraft."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
+    import cad  # pylint: disable=import-outside-toplevel
+    if cad.cli_path():
+        print("  CADCraft is already here: %s" % cad.cli_path())
+        return True
+    result = cad.install(say=lambda line: print("  " + line))
+    if result.get("ok"):
+        print("  done. Turn on cadcraft in Settings > Add-ons; LOKI's agents can then draw in CAD.")
+    else:
+        print("  " + result.get("error", "failed"))
+    return bool(result.get("ok"))
+
+
 def remotion() -> bool:
     print("  Remotion licence: free for individuals and companies with up to 3 employees;")
     print("  larger companies need a company licence (https://www.remotion.dev/license).")
@@ -249,7 +265,7 @@ def local_video() -> bool:
 STEPS = {"media": media, "imagegen": imagegen, "vision": vision, "mlx": mlx, "agent-reach": agent_reach, "opencode": opencode}
 # Installed only when named: licences that need a decision (AGPL/GPL/custom), separate programs,
 # or big downloads. `all` never includes them.
-OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman,
+OPT_IN = {"scrapling": scrapling, "openhands": openhands, "penecho": penecho, "openhuman": openhuman, "cadcraft": cadcraft,
           "remotion": remotion, "local-image": local_image, "local-video": local_video}
 
 

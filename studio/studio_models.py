@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 import studio_paths  # noqa: F401  (puts engine/ on sys.path)
 import ratelimit
+import nim_models
 
 KEY_URL = "https://build.nvidia.com/settings/api-keys"
 DRIVER = "nvidia"
@@ -69,9 +70,12 @@ def providers(env: dict | None = None) -> list:
     """Every provider Studio can drive, best first (the main driver leads)."""
     e = os.environ if env is None else env
     allow_paid = str(e.get("LOKI_ALLOW_PAID", "0")).strip() == "1"
+    nim_base, nim_key = e.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"), e.get("NVIDIA_API_KEY", "")
+    # the name NVIDIA really serves (a wrong one is HTTP 404 - the owner's Mac, 2026-10-17)
+    nim_model = nim_models.resolve(e.get("NVIDIA_MODEL", DRIVER_MODEL), nim_models.cached(nim_base, nim_key))
     out = [
-        Provider("nvidia", "DeepSeek V4.1 Flash on NVIDIA NIM", e.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
-                 e.get("NVIDIA_MODEL", DRIVER_MODEL), "NVIDIA_API_KEY", e.get("NVIDIA_API_KEY", ""), extra=thinking_fields()),
+        Provider("nvidia", "DeepSeek V4.1 Flash on NVIDIA NIM", nim_base, nim_model, "NVIDIA_API_KEY", nim_key,
+                 extra=thinking_fields()),
         Provider("openrouter", "DeepSeek V4.1 Flash on OpenRouter", e.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
                  e.get("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash"), "OPENROUTER_API_KEY", e.get("OPENROUTER_API_KEY", "")),
         Provider("opencode-zen", "DeepSeek V4 Flash on OpenCode Zen (free)", e.get("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1"),

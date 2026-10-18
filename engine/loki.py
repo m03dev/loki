@@ -5123,6 +5123,15 @@ def _godot_capability_dir() -> str:
 # mcp_servers.json can say ${GODOT_AI_CAPABILITY_DIR}/http-8000.json with no setup.
 os.environ.setdefault("GODOT_AI_CAPABILITY_DIR", _godot_capability_dir())
 
+# CADCraft (capabilities/cadcraft): where its cadcraft-cli is, so mcp_servers.json can run
+# ${LOKI_CADCRAFT_CLI} mcp. Set only when it is installed (the server is skipped otherwise).
+try:
+    import cad as _cad  # pylint: disable=import-outside-toplevel
+    if not os.getenv("LOKI_CADCRAFT_CLI") and _cad.cli_path():
+        os.environ["LOKI_CADCRAFT_CLI"] = _cad.cli_path()
+except Exception:  # noqa: BLE001
+    pass
+
 
 def _json_field(path: str, key: str) -> str:
     """The string field `key` of a JSON file, or "" if it is missing/unreadable."""
@@ -5251,7 +5260,7 @@ async def connect_mcp(stack: AsyncExitStack) -> None:
                         streamable_http_client(url, **kwargs))
                 read, write = entered[0], entered[1]
             else:
-                params = StdioServerParameters(command=spec["command"],
+                params = StdioServerParameters(command=_expand_env(spec["command"]),
                                                args=[_expand_env(a) for a in spec["args"]])
                 if spec.get("cwd"):
                     # Some servers drop files into their working directory. Point

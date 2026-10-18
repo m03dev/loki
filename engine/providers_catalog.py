@@ -357,6 +357,11 @@ def test(agent: Any, pid: str, timeout: float = 45.0, opener=urllib.request.urlo
         ok = bool(agent.provider_configured(pid))
         result = {"ok": ok, "detail": "installed (sign-in is checked on first use)" if ok else "not installed"}
     else:
+        try:   # NVIDIA renames models; use the name it really serves (engine/nim_models.py)
+            import nim_models  # pylint: disable=import-outside-toplevel
+            nim_models.fix(cfg, opener=opener)
+        except Exception:  # noqa: BLE001
+            pass
         try:
             status, data = _request(cfg.base_url.rstrip("/") + "/chat/completions", str(cfg.api_key or ""), timeout,
                                     body=_test_body(pid, cfg), opener=opener)
