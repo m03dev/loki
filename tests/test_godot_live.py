@@ -62,8 +62,13 @@ loki.AGENT_MODE = "plan"
 check("Plan mode cannot change the project", godot_live.godot_editor("add_node", {"type": "Node3D"}).startswith("refused"))
 check("...but can look", not godot_live.godot_editor("scene_tree", {}).startswith("refused"))
 loki.AGENT_MODE = "build"
+# The tool is wired to every agent; model_tool_schemas() can trim it when the ACTIVE model is a local one
+# (LOCAL_MAX_TOOLS, 22), and which model is active depends on the machine - so assert the wiring, and note
+# whether it is offered right now instead of failing on it (a local model is not a missing tool).
 check("every agent has the godot_editor tool", "godot_editor" in loki.LOCAL_TOOLS
-      and any(t["function"]["name"] == "godot_editor" for t in loki.model_tool_schemas()))
+      and "godot_editor" in loki.MODEL_TOOL_NAMES
+      and any(t["function"]["name"] == "godot_editor" for t in loki.TOOL_SCHEMAS),
+      "offered now=%s" % any(t["function"]["name"] == "godot_editor" for t in loki.model_tool_schemas()))
 check("an unknown action says which exist", "unknown editor action" in godot_live.godot_editor("format_disk"))
 
 # ------------------------------------------------------------------ plugins from the Asset Library

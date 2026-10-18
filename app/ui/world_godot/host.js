@@ -69,6 +69,20 @@
       frame.style.border = "0";
       frame.style.display = "none";
       frame.src = "/ui/world_godot/index.html#token=" + encodeURIComponent(token || "") + "&mode=background";
+      // LOKI's mode-bar shortcuts are Ctrl+1..5, but place() focuses the game once the panel opens, and a focused
+      // frame swallows every key: while the game has focus, re-raise a Ctrl+<number> press on LOKI's own document so
+      // the mode bar still switches (regression 2026-10-18: opening the World tab made Ctrl+1..5 do nothing).
+      frame.addEventListener("load", () => {
+        try {
+          frame.contentWindow.addEventListener("keydown", (ev) => {
+            if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+            if (!(/^Digit[1-9]$/.test(ev.code || "") || /^[1-9]$/.test(ev.key || ""))) return;
+            ev.preventDefault();
+            window.parent.document.dispatchEvent(new KeyboardEvent("keydown",
+              { key: ev.key, code: ev.code, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey, bubbles: true, cancelable: true }));
+          }, true);
+        } catch (_) { /* not same-origin: the game keeps its keys */ }
+      });
       window.addEventListener("message", (ev) => {
         if (ev.origin !== location.origin || !frame || ev.source !== frame.contentWindow) return;
         const msg = ev.data || {};

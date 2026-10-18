@@ -129,7 +129,7 @@ def status(data: Path | None = None) -> dict:
     except (OSError, ValueError):
         pass
     return {"ok": True, "installed": (d / "godot.editor.html").is_file(), "version": meta.get("version", ""),
-            "want": VERSION, "job": dict(_JOB), "projects": projects(), "native": native_godot(),
+            "want": VERSION, "job": dict(_JOB), "projects": projects(), "native": native_godot() or loki_godot(),
             "loki_godot": dict(_GET_GODOT, ready=bool(loki_godot())),
             "projects_dir": str(projects_dir()), "page": "/godot-editor/app/godot.editor.html",
             "flow": "LOKI's project folder -> project.zip -> the web editor's Import; back: the editor's Project > Tools > "

@@ -102,7 +102,7 @@ check("guard: a fork to the user's own repo ships", g("fork", "alice/loki", "ali
 check("guard: no choice yet is refused", g("", "alice/loki", "alice") != "")
 argv = D.repo_create_argv("my-agent", "private", Path("/x/my agent"))
 check("gh repo create is an argv list (no shell), private by default, the path one argument",
-      argv[:5] == ["gh", "repo", "create", "my-agent", "--private"] and "/x/my agent" in argv and "--push" in argv, argv)
+      argv[:5] == ["gh", "repo", "create", "my-agent", "--private"] and str(Path("/x/my agent")) in argv and "--push" in argv, argv)
 check("...public when asked", "--public" in D.repo_create_argv("a", "public", Path("p")))
 for bad in ("a;rm -rf /", "../x", "", "-flag", "a b"):
     try:
@@ -463,7 +463,15 @@ else:
             b = pw.chromium.launch(**({"executable_path": chromium} if chromium else {}))
             page = b.new_page(viewport={"width": 1240, "height": 820})
             errs = []
-            page.on("pageerror", lambda e: errs.append(str(e)))
+            def _page_error(e):
+                t = str(e)
+                # the Godot export shell (World tab) tries to load its audio worklets; this suite serves the UI
+                # from disk with a stub route, so that load can fail with a network error - LOKI's own page is fine
+                # (the real app logs no such error). Not a script error to fail on.
+                if "worklet module script" in t:
+                    return
+                errs.append(t)
+            page.on("pageerror", _page_error)
             page.route("http://127.0.0.1:8897/**", route)
             page.goto("http://127.0.0.1:8897/#token=t")
             page.wait_for_selector("#modebar .modebar-tab", timeout=15000)

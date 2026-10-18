@@ -32,6 +32,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -220,6 +221,23 @@ def scan(folder: Path, reserved=()) -> dict:
 GIT_URL = re.compile(r"^https://[A-Za-z0-9.-]+(:\d+)?/[A-Za-z0-9._~/-]+?(\.git)?/?$")
 
 
+def _rmtree(path: Path) -> None:
+    """shutil.rmtree, but a read-only file is made writable and retried first: git writes its object files
+    read-only, and on Windows plain rmtree(ignore_errors=True) leaves .git behind (the clone test caught it)."""
+    def _clear(func, target, _exc):
+        try:
+            os.chmod(target, stat.S_IWRITE)
+            func(target)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_clear)
+    else:   # pragma: no cover - older pythons
+        shutil.rmtree(path, onerror=lambda func, target, exc: _clear(func, target, exc))
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def _clone(url: str, dest: Path, local_ok: bool = False) -> str:
     git = shutil.which("git")
     if not git:
@@ -235,7 +253,7 @@ def _clone(url: str, dest: Path, local_ok: bool = False) -> str:
         return "git clone failed: %s" % exc
     if proc.returncode != 0:
         return "git clone failed: %s" % ((proc.stderr or "").strip().splitlines() or ["exit %d" % proc.returncode])[-1][:300]
-    shutil.rmtree(dest / ".git", ignore_errors=True)   # an installed extension is files, not a repository
+    _rmtree(dest / ".git")   # an installed extension is files, not a repository (read-only git objects need a nudge)
     return ""
 
 

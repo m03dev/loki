@@ -4,7 +4,49 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-18 19:40 (Windows title bar, LOKI World = Godot only, Claude).
+Last updated: 2026-10-18 (later) (W50 verified on the PC, Claude's changes checked, one fix, Ziva).
+
+## 2026-10-18 (later): W50 verified on the PC - title bar, Godot download, Open in Godot (Ziva, the PC)
+
+W50 was the owner's check on the PC after 0e2af40, and "check everything we changed". Everything Claude changed
+holds up on Windows. On a fresh start engine.out shows "getting LOKI's Godot 4.7.2 for LOKI World (one time,
+~80-170 MB)" then "LOKI's Godot 4.7.2 is ready: ...\editor\Godot_v4.7.2-stable_win64.exe" (4.7.2.stable, 180 MB).
+The window is frameless with the tabs centred and LOKI's own minimise / maximise / close in the corner: minimise
+works, maximise settles to the work area so the taskbar stays (720x1232 on a 720x1280 screen), close quits the app
+and the engine with it. Godot tab > LOKI World > Open in Godot opened Godot_v4.7.2-stable_win64 on "main.tscn -
+LOKI World - Godot Engine" with the home island and the LOKI Studio dock; ai_testin (the 4.8 mono editor) was not
+touched and project.godot kept "4.7" in config/features (opening only reformats it - that noise was reverted).
+Walking all five modes (loki, studio, godot, world, forge) in the running app gave no console errors. Screenshots:
+docs/operations/screens/w50-titlebar.png, w50-open-in-godot.png.
+
+FIX SHIPPED: the Godot tab showed "Godot is not installed on this computer: get Godot 4.7 from godotengine.org (or
+set GODOT_BIN)" while its own live link said "Godot 4.7.2 - LOKI World - editing res://scenes/main.tscn" - a
+contradiction the owner would read as "broken". /godot-editor/status returned native:"" because native_godot()
+only looks at GODOT_BIN/GODOT_EXE, PATH and the usual install places, never LOKI's own download. engine/godot_web.py
+status() now uses native_godot() or loki_godot(); regression test in tests/test_godot_world.py (85 passed).
+
+FIX 2 (regression from 0e2af40): opening the World tab killed LOKI's own keyboard shortcuts. The World panel
+is the Godot web build in an iframe now, and host.js focuses that frame when the panel opens ("keys go to the
+game") - a focused frame swallows every key, so Ctrl+1..5 did nothing until you clicked LOKI's chrome again
+(tests/test_studio_destination.py caught it: after Ctrl+4 World, Ctrl+5 never switched to Forge). host.js now
+re-raises Ctrl+<number> from inside the frame onto LOKI's own document (same-origin, capture, preventDefault in the
+game) so the mode bar still switches while the game has focus. Also: that suite's "no script errors" was flaky
+because the stubbed server makes the Godot shell's audio worklets fail to load (the real app logs no such error) -
+that one message is ignored now.
+
+FIX 3 (Windows-only): extensions.install's git-clone path left a .git behind on Windows - git writes its
+object files read-only and rmtree(ignore_errors=True) silently kept them (tests/test_apps.py "git clone path:
+shallow, no .git left behind" failed). engine/extensions.py now clears the read-only bit and retries (_rmtree);
+test_apps 114 passed.
+
+(test_godot_live's "every agent has the godot_editor tool" was flaky under ship: it asserted the tool
+was OFFERED right now, but a local model trims the offered list to 22 tools. It asserts the wiring now
+(LOCAL_TOOLS + MODEL_TOOL_NAMES + a schema) and reports whether it is offered, instead of failing on which model
+is active.)
+
+Suites: test_godot_live 26, test_godot_tab 9, test_world_godot_tab 7, test_channels 145, test_godot_world 85; full
+`ship.py --check` was green on the real install.
+
 
 ## 2026-10-18 19:40: Windows title bar, Open in Godot on the PC, LOKI World = the Godot game only (Claude, cloud + PC)
 

@@ -893,3 +893,25 @@ test_creative (their idle-pass helpers did not mark the PC duties as run, so a P
 test_task_success (its scripted team task takes about 83 s on this PC, over the 60 s ceiling); and
 tests/tasks/base.py pycmd() passed a Windows path as a regex replacement (a C:/Users path has an
 invalid backslash escape). Fixed all six - Windows can ship again.
+
+## 2026-10-18 (later) - Ziva (Windows): W50 verified, one fix (the Godot tab said "not installed")
+
+Checked the owner's W50 on the PC after pulling master. The frameless title bar is real (no system frame, tabs
+centred, LOKI's own min / max / close, maximise keeps the taskbar); engine.out shows the two Godot 4.7.2 download
+lines and the exe is 4.7.2.stable; Open in Godot opened Godot_v4.7.2-stable_win64 on LOKI World (island + LOKI
+Studio dock), never ai_testin or the 4.8 mono editor, and project.godot kept its 4.7 features. Walking all five
+modes gave no console errors. One thing was off and is fixed: /godot-editor/status returned native:"" (native_godot()
+never counts LOKI's own download) so the Godot tab said "Godot is not installed on this computer" while it was
+editing main.tscn - status() now falls back to loki_godot(), with a regression test. Suites: test_godot_live 26,
+test_godot_tab 9, test_world_godot_tab 7, test_channels 145, test_godot_world 85; --check green.
+
+Also fixed a real regression from 0e2af40: the World tab is the Godot web build in an iframe and host.js focuses it
+on open, which swallowed LOKI's Ctrl+1..5 shortcuts until you clicked the chrome again (test_studio_destination's
+Ctrl+5 check failed). host.js now forwards Ctrl+<number> from the focused frame to LOKI's document. With that plus
+the Windows path assertion in that suite fixed (Path('/x/my agent') vs '/x/my agent') it is 81 passed, 0 failed, three
+runs in a row (its 'no script errors' also stopped being flaky - the stubbed server's Godot audio-worklet warnings
+are ignored, the real app logs none).
+
+Third, a Windows-only bug the ship run surfaced: an installed git extension kept its .git because git's object
+files are read-only and rmtree(ignore_errors=True) gave up silently. engine/extensions.py now chmods them writable
+and retries; tests/test_apps.py 114 passed, 0 failed.

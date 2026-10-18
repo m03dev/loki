@@ -267,6 +267,12 @@ if _env is None:
     os.environ.pop("GODOT_EXE", None)
 else:
     os.environ["GODOT_EXE"] = _env
+_nat, _lok = godot_web.native_godot, godot_web.loki_godot
+godot_web.native_godot = lambda: ""
+godot_web.loki_godot = lambda install=False: "/x/Godot_v4.7.2-stable_win64.exe"
+check("Godot tab: /godot-editor/status calls LOKI's own Godot 4.7.2 the native one (the tab said 'Godot is not installed on this computer' while LOKI World was opening in it)",
+      godot_web.status().get("native") == "/x/Godot_v4.7.2-stable_win64.exe")
+godot_web.native_godot, godot_web.loki_godot = _nat, _lok
 check("only the Godot page gets 'wasm-unsafe-eval'; nobody gets 'unsafe-eval'", "'wasm-unsafe-eval'" in loki_bridge.GODOT_WORLD_CSP
       and "wasm-unsafe-eval" not in loki_bridge.UI_CSP and "'unsafe-eval'" not in loki_bridge.GODOT_WORLD_CSP
       and "frame-ancestors 'self'" in loki_bridge.GODOT_WORLD_CSP and "script-src 'self'" in loki_bridge.UI_CSP)

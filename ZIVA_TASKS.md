@@ -532,6 +532,32 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       (3) Godot tab > LOKI World > Open in Godot: a Godot 4.7.2 window titled "LOKI World" with the island and the
       LOKI panel - never ai_testin, never the 4.8 mono editor. Do not open game/loki-world in Godot_v4.8-beta1_mono
       (it rewrites the project). Report anything off with the first error line.
+      -> Ziva (Windows), 2026-10-18: DONE on 0e2af40 (engine.out restarted fresh). (1) Frameless title bar: the
+      window has NO system frame; the tabs sit centred in the 38 px strip and LOKI's own minimise / maximise / close
+      sit at the top right (a 125% DPI screen; verified in the app's own WebView2, three .winctl buttons + eight
+      .winedge handles present). Minimise works; maximise settles to the work area (720x1232 on a 720x1280 screen,
+      so the 48 px taskbar stays visible); close quits the window AND the engine (health then refuses). Screenshot
+      docs/operations/screens/w50-titlebar.png. Dragging the empty strip / an edge hands the press to Windows
+      (WindowApi.grab -> win_hit, WM_NCLBUTTONDOWN) so it is real move / Aero snap / resize - verified in code, not
+      click-simulated. (2) engine.out shows "getting LOKI's Godot 4.7.2 for LOKI World (one time, ~80-170 MB)" then
+      "LOKI's Godot 4.7.2 is ready: ...\editor\Godot_v4.7.2-stable_win64.exe" (180,858,888 bytes, --version
+      4.7.2.stable.official.ed1daf0bf). (3) Godot tab > LOKI World > Open in Godot opened
+      Godot_v4.7.2-stable_win64.exe on "main.tscn - LOKI World - Godot Engine" with the home island and the LOKI
+      Studio dock; ai_testin (the 4.8 mono editor) was NOT touched; project.godot kept config/features
+      ("4.7", "GL Compatibility") - opening only reformats it (boilerplate header, param order), nothing rewritten
+      to 4.8, and that noise was reverted. Screenshot docs/operations/screens/w50-open-in-godot.png.
+      -> OFF, FIXED: the Godot tab's status line read "Godot is not installed on this computer: get Godot 4.7 from
+      godotengine.org (or set GODOT_BIN)" while its own live link said "Godot 4.7.2 - LOKI World - editing
+      res://scenes/main.tscn": /godot-editor/status returned native:"" because native_godot() never counts LOKI's
+      own download. engine/godot_web.py status() now falls back to loki_godot(); regression test added
+      (tests/test_godot_world.py, 85 passed). Walking all five modes in the running app (loki, studio, godot, world,
+      forge) gave no console errors. Suites: test_godot_live 26, test_godot_tab 9, test_world_godot_tab 7,
+      test_channels 145 - all green.
+      -> SECOND FIX (regression from 0e2af40): opening the World tab broke LOKI's own keyboard shortcuts. The World
+      panel is now the Godot web build in an iframe and world_godot/host.js focuses it on open ("keys go to the
+      game"); a focused frame swallows every key, so Ctrl+1..5 did nothing until you clicked LOKI's chrome. host.js
+      now re-raises Ctrl+<number> from inside the frame onto LOKI's document. tests/test_studio_destination.py caught
+      it (after Ctrl+4 World, Ctrl+5 never reached Forge) and now runs 81 passed, 0 failed, three runs in a row.
 
 - [x] **W43 Make the repository public - FIRST, the owner asked (2026-10-17).** The owner said: "make it public ... you
 - [ ] **W45 The one-click Windows installer from GitHub Actions, on a clean account (2026-10-17, session 30).** Needs
