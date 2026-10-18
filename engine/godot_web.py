@@ -92,13 +92,21 @@ def project_path(name: str) -> Path:
 
 
 def native_godot() -> str:
-    """The installed Godot editor: GODOT_BIN, godot/godot4 on PATH, or the usual install places (both OSes)."""
-    for cand in (os.getenv("GODOT_BIN", ""), shutil.which("godot") or "", shutil.which("godot4") or ""):
+    """The installed Godot editor: GODOT_BIN (or GODOT_EXE, what the app passes), godot/godot4 on
+    PATH, or the usual install places (both OSes). On macOS any Godot*.app counts - the mono build
+    is Godot_mono.app and a version-named download is Godot_v4.x-stable.app."""
+    for cand in (os.getenv("GODOT_BIN", ""), os.getenv("GODOT_EXE", ""),
+                 shutil.which("godot") or "", shutil.which("godot4") or ""):
         if cand and Path(cand).is_file():
             return cand
     places = []
     if sys.platform == "darwin":
-        places = [Path("/Applications/Godot.app/Contents/MacOS/Godot"), Path.home() / "Applications/Godot.app/Contents/MacOS/Godot"]
+        places = []
+        for base in (Path("/Applications"), Path.home() / "Applications"):
+            if base.is_dir():
+                places += sorted(base.glob("Godot*.app/Contents/MacOS/Godot"))
+        places += [Path("/Applications/Godot.app/Contents/MacOS/Godot"),
+                   Path.home() / "Applications/Godot.app/Contents/MacOS/Godot"]
     elif sys.platform == "win32":
         for root in (Path(os.getenv("LOCALAPPDATA", "")) / "Programs", Path(os.getenv("ProgramFiles", "C:/Program Files")),
                      Path.home() / "Desktop", Path.home() / "Downloads"):

@@ -1,3 +1,5 @@
 .godot/
 /build/
 *.tmp
+# the LOKI Studio plugin LOKI installs when it opens this project in the editor
+addons/loki_studio/

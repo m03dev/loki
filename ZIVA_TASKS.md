@@ -2154,6 +2154,23 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
      app's protocol.ts signs with a fresh nonce per request, 5 new Python checks + 2 TypeScript checks.
 
 <!-- newest first: YYYY-MM-DD machine task: what happened -->
+- 2026-10-18 mac (Ziva) **the Godot editor now opens INSIDE LOKI's window.** Three fixes: (1) the
+  Godot tab's "Open in the Godot app" was disabled because native_godot() only checked GODOT_BIN,
+  godot/godot4 on PATH and Godot.app - the Mac's is Godot_mono.app, and the app passes its path as
+  GODOT_EXE (ignored). It now reads GODOT_EXE and globs any Godot*.app. (2) LOKI's own page is
+  served cross-origin isolated (COOP same-origin + COEP require-corp on the UI), which is what the
+  embedded editor needs: window.crossOriginIsolated is now true, SharedArrayBuffer exists, and the
+  Godot tab mounts the real editor in-window - verified in Chromium: frame visible at
+  /godot-editor/app/godot.editor.html, title "Godot Engine Web Editor (4.4.1.stable.official)".
+  (3) on macOS the mode-bar shortcut needed Cmd, so Ctrl+3 never opened the Godot tab; Ctrl+N now
+  works on every OS (Cmd too). Also: the installed Studio plugin copy and a Godot web build are
+  gitignored, and the suite skips that plugin copy. Checked: test_studio_destination 81/81 (was
+  76 with 5 mode-bar failures on the Mac), test_godot_world 77/77 (84/84 with real Godot),
+  test_godogen 62/62. Also fixed a stale test that blocked every push: test_systems asserted the
+  provider check's request had max_tokens 1, but providers_catalog sends 8 ("Say OK") - it failed
+  on a clean tree too; the check now matches the engine (101/101).
+  NOTE: the Mac's .NET Godot cannot export Web, so the Godot WORLD web build
+  is a separate step; the world look stays babylon.
 - 2026-10-17 mac (Ziva) M14-M17 (session 27 ports) - the API half of every one works; two real findings.
   M15: `say` wrote voice/*.aiff, then espeak-ng + `pip install --only-binary=:all: kokoro soundfile` gave a
   REAL Kokoro wav (24 kHz mono, 3.15 s) - 60.4 s on the first call (weights + spacy model download), 1.7 s

@@ -195,7 +195,7 @@ const LokiModeBar = (() => {
   }
 
   function onKey(e) {
-    const mod = isMac ? e.metaKey : e.ctrlKey;
+    const mod = e.ctrlKey || e.metaKey;   // Ctrl+N is the shortcut on every OS; Cmd+N works on macOS too
     if (!mod || e.altKey || e.shiftKey) return;
     const n = /^Digit([1-9])$/.exec(e.code || "") || /^([1-9])$/.exec(e.key || "");
     if (!n) return;

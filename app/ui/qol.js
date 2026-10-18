@@ -817,8 +817,8 @@ const LokiQol = (function () {
     let key = e.code && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.code && /^Digit\d$/.test(e.code) ? e.code.slice(5) : KEYS[e.code] || e.key;
     if (!key || ["Control", "Meta", "Shift", "Alt", "OS"].includes(key)) return "";
     if (key.length === 1) key = key.toUpperCase();
-    const mod = isMac ? e.metaKey : e.ctrlKey;
-    return [mod ? "Mod" : "", (isMac && e.ctrlKey) ? "Ctrl" : "", e.altKey ? "Alt" : "", e.shiftKey ? "Shift" : "", key].filter(Boolean).join("+");
+    const mod = e.ctrlKey || e.metaKey;   // Ctrl and Cmd (macOS) are both "Mod": the labels say Ctrl/Cmd
+    return [mod ? "Mod" : "", e.altKey ? "Alt" : "", e.shiftKey ? "Shift" : "", key].filter(Boolean).join("+");
   }
   function comboOfAction(a) { return a.id in prefs.shortcuts ? prefs.shortcuts[a.id] : a.def; }
   function showCombo(c) { return !c ? say("(none)") : c.replace("Mod", isMac ? "⌘" : "Ctrl").replace("Alt", isMac ? "⌥" : "Alt").replace("ArrowUp", "↑").replace("ArrowDown", "↓"); }

@@ -824,6 +824,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.send_header("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
             self.send_header("Content-Security-Policy", csp or (
                 UI_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") if framed else UI_CSP))
+            # Cross-origin isolation: LOKI's window and the pages it frames are all its own origin,
+            # so this costs nothing and it is what lets the Godot web editor run INSIDE the window
+            # (it needs SharedArrayBuffer, which a browser gives only to an isolated page).
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionError, OSError):

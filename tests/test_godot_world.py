@@ -86,7 +86,8 @@ for tscn in sorted(GAME.rglob("*.tscn")):
     refs = re.findall(r'ExtResource\("([^"]+)"\)', text)
     check("%s: header, resources exist, references resolve" % tscn.relative_to(GAME), ok and all(r in ids for r in refs), paths)
 
-gd_files = sorted(p for p in GAME.rglob("*.gd") if ".godot" not in p.parts)
+gd_files = sorted(p for p in GAME.rglob("*.gd") if ".godot" not in p.parts
+                  and "addons/loki_studio" not in p.as_posix())   # LOKI installs this copy; the original is checked in studio/
 bad_indent, bad_head, bad_brackets = [], [], []
 for gd in gd_files:
     text = read(gd)
@@ -205,8 +206,11 @@ game_text = "\n".join(read(p) for p in GAME.rglob("*") if p.is_file() and p.suff
 urls = [u for u in re.findall(r"https?://[^\s\"'<>)]+", game_text) if not re.match(r"https?://(127\.0\.0\.1|localhost)", u)]
 check("no CDN or outside URL in the game (it only talks to LOKI on loopback)", not urls, urls[:5])
 wg = UI / "world_godot"
-web_text = "\n".join(read(p) for p in wg.iterdir() if p.suffix in (".html", ".js", ".css"))
-check("the web page loads nothing from outside", not re.search(r"https?://", web_text))
+# LOKI's own shell only: the generated Godot build (index.js/.wasm/.pck, the worklets) is never
+# scanned - Godot's own index.js carries an MDN link in a comment, and it is not LOKI's page.
+host_shell = [wg / n for n in ("index.html", "boot.js", "host.js", "style.css") if (wg / n).is_file()]
+web_text = "\n".join(read(p) for p in host_shell)
+check("LOKI's own world shell loads nothing from outside (no CDN)", not re.search(r"https?://", web_text))
 lic = read(GAME / "LICENSES.md")
 check("licence notes: no third-party assets, CC0/MIT only, Godot's MIT notice", "Third-party assets: none" in lic
       and "CC0 or MIT" in lic and "MIT" in lic and "Godot" in lic)
@@ -252,6 +256,15 @@ check("Settings > General offers godot", "godot" in portal_api.GENERAL_SETTINGS[
 import loki_bridge  # noqa: E402
 check("the bridge serves .wasm (application/wasm) and .pck", loki_bridge.UI_TYPES.get(".wasm") == "application/wasm"
       and ".pck" in loki_bridge.UI_TYPES)
+import godot_web  # noqa: E402
+_env = os.environ.get("GODOT_EXE")
+os.environ["GODOT_EXE"] = sys.executable       # the app passes --godot-exe -> GODOT_EXE
+check("native Godot is found from GODOT_EXE (the app passes the path this way, not GODOT_BIN)",
+      godot_web.native_godot() == sys.executable)
+if _env is None:
+    os.environ.pop("GODOT_EXE", None)
+else:
+    os.environ["GODOT_EXE"] = _env
 check("only the Godot page gets 'wasm-unsafe-eval'; nobody gets 'unsafe-eval'", "'wasm-unsafe-eval'" in loki_bridge.GODOT_WORLD_CSP
       and "wasm-unsafe-eval" not in loki_bridge.UI_CSP and "'unsafe-eval'" not in loki_bridge.GODOT_WORLD_CSP
       and "frame-ancestors 'self'" in loki_bridge.GODOT_WORLD_CSP and "script-src 'self'" in loki_bridge.UI_CSP)
@@ -348,6 +361,10 @@ try:
     code, hdr, body = get("/ui/index.html")
     check("LOKI's own page keeps the strict CSP (no wasm, not frameable)", code == 200
           and "wasm" not in hdr.get("Content-Security-Policy", "") and "frame-ancestors 'none'" in hdr.get("Content-Security-Policy", ""), hdr)
+    code, hdr, body = get("/")
+    check("LOKI's own page is cross-origin isolated, so the Godot web editor runs INSIDE the window (SharedArrayBuffer)",
+          code == 200 and hdr.get("Cross-Origin-Opener-Policy") == "same-origin"
+          and hdr.get("Cross-Origin-Embedder-Policy") == "require-corp", hdr)
     code, hdr, body = get("/ui/world_godot/index.js")
     check("no export yet -> index.js is a 404, so boot.js says 'missing' and LOKI uses Babylon", code == 404)
 

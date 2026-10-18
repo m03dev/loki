@@ -582,7 +582,8 @@ READY.add("groq")
 row = system_check.check_models(system_check.Context(loki, STATE))      # the real provider test, real sockets
 check("the real provider test reaches an OpenAI-compatible server and reports the latency",
       row["status"] == "ok" and row["data"]["answered"] == "groq" and "ms" in row["detail"]
-      and fake_server.chat_requests()[-1]["max_tokens"] == 1, (row["status"], row["detail"]))
+      # providers_catalog.test sends one tiny request ("Say OK", max_tokens 8) - it was 1 token
+      and any(r.get("max_tokens") == 8 for r in fake_server.chat_requests()), (row["status"], row["detail"]))
 loki.MODELS["groq"].model = "not-pulled:1b"
 row = system_check.check_models(system_check.Context(loki, STATE))
 check("a model the server does not have is named as such, with what to do",
