@@ -347,6 +347,11 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             continue
         if stop.is_set():
             return
+        if code == QUIT_EXIT_CODE:
+            log("LOKI was asked to quit")
+            stop.set()
+            close_window()
+            return
         if code != RESTART_EXIT_CODE:
             # The engine died on its own (a crash, or killed for memory). Before, the window then
             # sat there dead until LOKI was quit - all night once. Start it again, a few times,
@@ -399,12 +404,102 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
         show_url(f"{BASE}/#token={token}")
 
 
+# --------------------------------------------------------------------- background + start at login
+QUIT_EXIT_CODE = 76   # the engine asks the app to quit for good (Settings > Quit LOKI)
+
+
+def env_setting(name: str, default: str = "") -> str:
+    """A setting from the process environment or LOKI's .env (read here, never logged)."""
+    if os.environ.get(name):
+        return os.environ[name].strip()
+    try:
+        for raw in (DATA / ".env").read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if line.startswith(name + "="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return default
+
+
+def background_on() -> bool:
+    """LOKI_BACKGROUND auto|on|off: when the window closes, LOKI keeps working (its jobs, automations,
+    self-improvement) and opening LOKI again brings the window back. auto = on on Windows."""
+    value = env_setting("LOKI_BACKGROUND", "auto").lower()
+    if value in ("1", "on", "true", "yes"):
+        return True
+    if value in ("0", "off", "false", "no"):
+        return False
+    return sys.platform == "win32"
+
+
+def start_at_login_on() -> bool:
+    """LOKI_START_AT_LOGIN auto|on|off. auto = on on Windows (the PC that works for you 24/7)."""
+    value = env_setting("LOKI_START_AT_LOGIN", "auto").lower()
+    if value in ("1", "on", "true", "yes"):
+        return True
+    if value in ("0", "off", "false", "no"):
+        return False
+    return sys.platform == "win32"
+
+
+def login_item_path() -> Path:
+    if sys.platform == "win32":
+        return (Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
+                / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "LOKI.vbs")
+    return Path.home() / "Library" / "LaunchAgents" / "com.m03dev.loki.plist"
+
+
+def login_item_text() -> str:
+    """Starts LOKI in the background at login: no window, no console."""
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--background"]
+    else:
+        python = Path(sys.executable)
+        if sys.platform == "win32" and (python.parent / "pythonw.exe").is_file():
+            python = python.parent / "pythonw.exe"
+        cmd = [str(python), str(Path(__file__).resolve()), "--background"]
+    if sys.platform == "win32":
+        quoted = " ".join('""%s""' % c for c in cmd)
+        return ('\' LOKI: start in the background at login (Settings > General > Start LOKI when I log in)\r\n'
+                'CreateObject("WScript.Shell").Run "%s", 0, False\r\n' % quoted)
+    args = "".join("    <string>%s</string>\n" % c.replace("&", "&amp;").replace("<", "&lt;") for c in cmd)
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'
+            '  <key>Label</key><string>com.m03dev.loki</string>\n  <key>ProgramArguments</key><array>\n' + args +
+            '  </array>\n  <key>RunAtLoad</key><true/>\n</dict></plist>\n')
+
+
+def sync_login_item() -> str:
+    """Make the login item match the setting (written or removed; never anything else)."""
+    if sys.platform not in ("win32", "darwin"):
+        return ""
+    path = login_item_path()
+    try:
+        if start_at_login_on():
+            text = login_item_text()
+            if not path.is_file() or path.read_text(encoding="utf-8", errors="replace") != text:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                return "LOKI now starts in the background when you log in"
+        elif path.is_file():
+            path.unlink()
+            return "LOKI no longer starts at login"
+    except OSError as exc:
+        return "could not update the login item: %s" % exc
+    return ""
+
+
 # --------------------------------------------------------------------- full restart
 def relaunch_command() -> list:
-    """How this app was started, to start it again (a packaged build is its own executable)."""
-    if getattr(sys, "frozen", False):
-        return [sys.executable, *sys.argv[1:]]
-    return [sys.executable, *sys.argv]
+    """How this app was started, to start it again (a packaged build is its own executable). With
+    no window open (LOKI working in the background) the new copy starts in the background too."""
+    cmd = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, *sys.argv]
+    if WINDOW.get("window") is None and "--background" not in cmd:
+        cmd.append("--background")
+    elif WINDOW.get("window") is not None and "--background" in cmd:
+        cmd.remove("--background")
+    return cmd
 
 
 def relaunch_app() -> bool:
@@ -591,6 +686,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Loki desktop app")
     parser.add_argument("--workspace", default="", help="folder Loki works in (remembered)")
     parser.add_argument("--print-url", action="store_true", help="start the engine, print the URL, keep running")
+    parser.add_argument("--background", action="store_true", help="start LOKI with no window (at login)")
     args = parser.parse_args(argv)
     wait_for_old_app()
     # Quitting (Cmd+Q, logout, kill) must take the engine down with the app.
@@ -651,11 +747,26 @@ def main(argv: list[str] | None = None) -> int:
             while process is None or alive():
                 time.sleep(1)
             return 0
+        note = sync_login_item()
+        if note:
+            log(note)
+        if args.background:
+            log("LOKI is working in the background (open LOKI to see it)")
+            while process is not None and alive():
+                time.sleep(1)
+            return 0
         if not open_window(url):
             log("pywebview is not installed; opening Loki in the browser instead")
             WINDOW["browser"] = True
             webbrowser.open(url)
             while process is not None and alive():
+                time.sleep(1)
+        elif process is not None and background_on() and alive() and not stopping.is_set():
+            # The window closed but LOKI keeps working (jobs, automations, self-improvement); opening
+            # LOKI again attaches a new window to this engine. Settings > Quit LOKI stops it for good.
+            WINDOW["window"] = None
+            log("the window closed; LOKI keeps working in the background")
+            while alive():
                 time.sleep(1)
         return 0
     except KeyboardInterrupt:

@@ -935,6 +935,12 @@ function wire() {
     $("#work-toggle").setAttribute("aria-expanded", String(!jobsView.collapsed));
   });
   $("#clear-jobs").addEventListener("click", async () => renderWork(await api("/jobs/clear", {})));
+  // Quit LOKI for good (closing the window only hides it when background mode is on)
+  const quit = $("#quit-loki");
+  if (quit) quit.addEventListener("click", async () => {
+    if (!confirm("Quit LOKI completely? Background jobs, automations and self-improvement stop until you open it again.")) return;
+    await api("/quit", {}).catch(() => null);
+  });
   // the X in the corner of Settings does what Close does
   $("#settings-x").addEventListener("click", () => $("#close-settings").click());
   $("#close-settings").addEventListener("click", () => {

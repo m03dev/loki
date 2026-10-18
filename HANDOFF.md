@@ -890,6 +890,16 @@ Chromium checks where Playwright is installed) is in SUITES.** Research and usag
   faked too), the peer file route between the real Mac and PC, the Settings > Tools panel in WebView2/WKWebView
   (ui smoke test only checks it loads). Accounts to connect + the Google OAuth client: Needs Mohamed.
 
+## 2026-10-17 night: Ziva is out (the owner's monthly limit) - it's the owner, Claude and LOKI now
+
+LOKI does the work through its own evolve loop on the PC (docs/EVOLVE.md: E13, E15, E14, E12 at the top). For
+that LOKI must be RUNNING: closing the window used to stop the engine (it was closed 18:00 and nothing ran).
+Now (app/loki_app.py): LOKI_BACKGROUND (auto = on on Windows) keeps the engine working when the window closes -
+opening LOKI again attaches a new window; LOKI_START_AT_LOGIN (auto = on on Windows) writes a hidden Startup
+item (LOKI.vbs; a LaunchAgent on macOS) that starts it with `--background`; "Quit LOKI" (sidebar, POST /quit,
+exit 76) stops it for good. ZIVA_TASKS.md is now history; open checks there wait for the owner or LOKI.
+The PC still has no NVIDIA key in Settings > Connections, so DeepSeek V4.1 is not driving yet.
+
 ## 2026-10-17 evening: LOKI gets its own tasks (owner: "give loki tasks to do and fix ... and keep track")
 
 Instead of Claude fixing them, the owner's four new issues are LOKI's own evolve steps at the top of

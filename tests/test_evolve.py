@@ -170,6 +170,24 @@ check("an update restart relaunches the whole app (it waits for this one) and cl
       (launched, closed, starts))
 check("a relaunched app waits for the old one to exit", "wait_for_old_app()" in (REPO / "app" / "loki_app.py").read_text(encoding="utf-8"))
 
+# LOKI keeps working when its window is closed, starts at login, and quits only when asked
+starts.clear(); launched.clear(); closed.clear()
+stop4 = threading.Event()
+loki_app.supervise({"process": Proc(loki_app.QUIT_EXIT_CODE)}, Path("py"), Path("ws"), "", stop4)
+check("Quit LOKI: the app stops for good (no restart, no relaunch)", stop4.is_set() and not starts and not launched)
+os.environ["LOKI_BACKGROUND"] = "on"; os.environ["LOKI_START_AT_LOGIN"] = "on"
+check("background mode and start-at-login follow their settings", loki_app.background_on() and loki_app.start_at_login_on())
+loki_app.WINDOW["window"] = None
+check("a relaunch with no window open starts in the background too", "--background" in loki_app.relaunch_command())
+_text = loki_app.login_item_text()
+check("the login item starts LOKI hidden in the background",
+      "--background" in _text and (("WScript.Shell" in _text and ", 0, False" in _text) if sys.platform == "win32"
+                                   else ("RunAtLoad" in _text)))
+for _k in ("LOKI_BACKGROUND", "LOKI_START_AT_LOGIN"):
+    os.environ.pop(_k, None)
+_bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+check("Settings can quit LOKI for good", 'route == "/quit"' in _bridge and "os._exit, [76]" in _bridge)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

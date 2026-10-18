@@ -1473,6 +1473,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/crm/"):
             self._send_json(*crm_route(state, "POST", route, data))
             return
+        if route == "/quit":
+            # Settings > Quit LOKI: stop for good (the app then exits instead of keeping it in the background)
+            self._send_json(200, {"ok": True, "quitting": True})
+            threading.Timer(0.5, os._exit, [76]).start()
+            return
         if route == "/ui/ready":
             # app.js: the window started and connected (an update on trial is now good)
             UI_STATE["ready_info"] = {"t": time.time(), "ua": str(data.get("ua", ""))[:200],
