@@ -358,6 +358,22 @@ try:
     check("GET /ui/world_godot/index.html: 200 with the Godot page CSP, frameable by LOKI only",
           code == 200 and "'wasm-unsafe-eval'" in hdr.get("Content-Security-Policy", "")
           and "frame-ancestors 'self'" in hdr.get("Content-Security-Policy", "") and hdr.get("X-Frame-Options") == "SAMEORIGIN", hdr)
+    # cross-origin isolation (2026-10-18): the window is COEP require-corp, so every bridge answer - framed pages,
+    # /ui files that the sandboxed (opaque-origin) chat diagrams load, even an error - must carry COEP and CORP
+    # cross-origin, or diagrams, previews, Apps and Play go blank
+    check("a UI page is isolated (COOP + COEP) and readable from LOKI's sandboxed frames (CORP cross-origin)",
+          hdr.get("Cross-Origin-Opener-Policy") == "same-origin" and hdr.get("Cross-Origin-Embedder-Policy") == "require-corp"
+          and hdr.get("Cross-Origin-Resource-Policy") == "cross-origin", hdr)
+    code, hdr, body = get("/ui/no-such-file.js")
+    check("every other bridge answer (here a 404) carries COEP require-corp + CORP cross-origin",
+          code == 404 and hdr.get("Cross-Origin-Embedder-Policy") == "require-corp"
+          and hdr.get("Cross-Origin-Resource-Policy") == "cross-origin", hdr)
+    _studio_src = read(REPO / "studio" / "studio_server.py")
+    check("Studio's server sends COEP + CORP cross-origin (it is a cross-origin frame in the isolated window)",
+          '"Cross-Origin-Embedder-Policy", "require-corp"' in _studio_src
+          and '"Cross-Origin-Resource-Policy", "cross-origin"' in _studio_src)
+    check("the chat preview pane starts under the title strip (its Close button was covered)",
+          "html.has-titlestrip .art-canvas { top: var(--titlebar-h); }" in read(REPO / "app" / "ui" / "glass.css"))
     code, hdr, body = get("/ui/world_godot/index.wasm")
     check("the .wasm is served as application/wasm", code == 200 and hdr.get("Content-Type") == "application/wasm", hdr)
     code, hdr, body = get("/ui/world_godot/index.pck")

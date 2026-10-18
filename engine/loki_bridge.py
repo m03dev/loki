@@ -735,11 +735,38 @@ def connection_inventory(agent: Any) -> dict[str, Any]:
             "mcp_servers": agent.mcp_status() if hasattr(agent, "mcp_status") else {}}
 
 
+# Sent on every bridge response that does not set its own (BridgeHandler.end_headers).
+COI_HEADERS = (("Cross-Origin-Embedder-Policy", "require-corp"), ("Cross-Origin-Resource-Policy", "cross-origin"))
+
+
 class BridgeHandler(BaseHTTPRequestHandler):
     server: "BridgeHTTPServer"
 
     def log_message(self, _format: str, *_args: Any) -> None:
         return
+
+    # Cross-origin isolation (the Godot web editor inside LOKI's window needs it, Ziva 04def98) means the window is
+    # COEP require-corp, so EVERY document it frames must send COEP too and every file one of its sandboxed frames
+    # loads (opaque origin: the chat's diagrams load /ui/vendor/mermaid, Apps, Play) must allow a cross-origin read.
+    # Without this the diagrams, previews, Apps and Play went blank. A response that sets its own policy keeps it.
+    def send_response(self, code: int, message: Any = None) -> None:
+        self._coi_sent = set()
+        super().send_response(code, message)
+
+    def send_header(self, keyword: str, value: str) -> None:
+        sent = getattr(self, "_coi_sent", None)
+        if sent is not None:
+            sent.add(keyword.lower())
+        super().send_header(keyword, value)
+
+    def end_headers(self) -> None:
+        sent = getattr(self, "_coi_sent", None)
+        if sent is not None:
+            for name, value in COI_HEADERS:
+                if name.lower() not in sent:
+                    super().send_header(name, value)
+            self._coi_sent = None
+        super().end_headers()
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -840,9 +867,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             # Cross-origin isolation: LOKI's window and the pages it frames are all its own origin,
             # so this costs nothing and it is what lets the Godot web editor run INSIDE the window
             # (it needs SharedArrayBuffer, which a browser gives only to an isolated page).
+            # CORP cross-origin (not same-origin): the window's sandboxed frames have an opaque origin and load
+            # /ui/vendor files (Mermaid); before isolation no file sent CORP at all, so this exposes nothing new
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionError, OSError):

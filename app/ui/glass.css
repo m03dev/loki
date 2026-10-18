@@ -417,6 +417,7 @@ html.titlebar-mac .titlestrip { padding: 0 78px; }   /* room for the traffic lig
 .modebar-tab[aria-selected="true"] { background: rgba(176, 190, 210, .2); border-color: rgba(190, 205, 225, .28); color: var(--text); }
 html.has-titlestrip .shell { height: calc(100vh - var(--titlebar-h)); margin-top: var(--titlebar-h); }
 html.has-titlestrip .sheet { top: var(--titlebar-h); }
+html.has-titlestrip .art-canvas { top: var(--titlebar-h); }   /* the chat preview pane: its Close/Wide bar sat under the title strip and could not be clicked */
 .mode-pane { position: fixed; inset: var(--titlebar-h) 0 0 0; z-index: 9; display: flex; flex-direction: column; background: var(--bg, #15161b); }
 .mode-pane[hidden] { display: none; }
 .mode-frame { flex: 1; width: 100%; border: 0; background: #15161b; }

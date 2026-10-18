@@ -6,6 +6,15 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 02:40 (Studio kill loop, Forge Model bar, Claude).
 
+## 2026-10-18 16:30: frames show again in the cross-origin isolated window (Claude, cloud)
+
+04def98 (Ziva) made the window COEP require-corp so the Godot editor runs in-window; every framed page without COEP
+went blank (chat Mermaid diagrams, Preview, LOKI Apps, Play, the Studio tab) and opaque-origin frames could not load
+/ui/vendor (CORP same-origin). Now engine/loki_bridge.py BridgeHandler.end_headers adds COEP require-corp + CORP
+cross-origin to every answer that sets none (COI_HEADERS), UI files send CORP cross-origin, studio/studio_server.py
+sends both. The preview pane starts under the title strip (its Close button was covered). Checked: test_research3 154,
+test_apps 131, test_godot_world 83, all other suites on stubs. Not run: WebView2 / WKWebView (ZIVA_TASKS requests).
+
 ## 2026-10-18 04:20: LOKI World IS the Godot game, and one loop from the Godot editor to the World tab (Claude, cloud)
 
 Owner: "loki world wasnt build in godot where is it ... how are we going to incorporate into godot editor ... they feel like

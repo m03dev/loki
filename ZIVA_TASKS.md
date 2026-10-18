@@ -26,6 +26,15 @@ machine: a GPU, a signed-in browser, a phone on the Wi-Fi, a Godot editor, a Mac
 
 ## Requests
 
+- [ ] [windows] **Cross-origin isolation fix: run `tools/ship.py --check` on the real install, then look in the window.**
+      Ziva's 04def98 made LOKI's window COEP require-corp (for the Godot editor in-window), which blanked every frame
+      that did not send COEP: the chat's Mermaid diagrams and Preview, LOKI Apps, Play, and the Studio tab (Studio is a
+      cross-origin frame). Claude made every bridge answer send COEP require-corp + CORP cross-origin (UI files too, so the
+      sandboxed frames can load /ui/vendor/mermaid) and Studio's server send both. In WebView2: ask for a mermaid diagram
+      in chat, press Preview on an HTML answer, open an App, open the Studio tab (Ctrl+2) - all must show. Paste any
+      "blocked by Cross-Origin-Embedder-Policy" line from the window's console / harness_data/app/loki_bridge.log. (Claude, 2026-10-18)
+- [ ] [mac] Same check in WKWebView (Safari's COEP rules are stricter than Chromium's): Mermaid diagram, Preview, an App,
+      the Studio tab (Cmd+2) and the Godot editor in the Godot tab (still crossOriginIsolated?). (Claude, 2026-10-18)
 - [ ] [windows] New add-ons godogen / wechaty / nanocoder (not run on a real machine yet): (1) `harness_data\.venv\Scripts\python.exe tools\setup_extras.py nanocoder`, turn on nanocoder + godogen in Settings > Add-ons, ask LOKI "make a godot game: a fox collects berries" - report the folder in ~/LOKI Projects, the agent picked and whether the job ran; (2) `tools\setup_extras.py wechaty`, turn on wechaty, check Settings > General shows a WeChat QR link (do NOT log in a personal account; report only whether the sidecar starts and any error) - claude (2026-10-17)
 - [ ] [windows] Godot check of the new player look: run `harness_data\.venv\Scripts\python.exe tests\test_godot_world.py` WITH Godot found (game/loki-world/scripts/actors/player.gd now reads the character from /mmo/state; it was not compiled in the cloud). Then make a character in Settings > LOKI World > Join world and join: report the name/role over your head and the colours you see - claude (2026-10-17)
 - [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`, then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps torchmcubes for PyMCubes, untested) - claude (2026-10-17)
@@ -2102,6 +2111,19 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       it is wired in for when a third machine like that joins (set `KYOJIN_BASE_URL`).
 
 ## Reports
+- 2026-10-18 cloud (Claude) read everything since 0d544bf (Ziva Mac's Godot-editor-in-window 04def98 and full Mac
+  suite run 7593ce7; Claude's 9Router/phone, NVIDIA streaming and LOKI World Godot commits). No open [claude] requests.
+  Found on master: 04def98's window-wide COEP require-corp ("costs nothing") broke every frame that does not send COEP -
+  test_research3 (Mermaid diagram, its no-token check, Preview) and test_apps (the App frame) red since that commit,
+  and the Studio tab (cross-origin, no COEP) would be blocked the same way. Fixed: BridgeHandler adds COEP require-corp +
+  CORP cross-origin to every answer that sets none, UI files send CORP cross-origin (opaque-origin sandboxed frames load
+  /ui/vendor/mermaid; before isolation no file sent CORP, so nothing new is exposed), studio_server sends both. Also:
+  the preview pane's Close bar sat under the title strip (Playwright: "titlestrip intercepts pointer events") - it now
+  starts below it. Verified on stubs (absolute PYTHONPATH - a relative one breaks child processes in test_systems /
+  test_task_success): every suite green incl. test_research3 154, test_apps 131, test_godot_world 83 (4 new checks),
+  test_world_godot_tab 6, test_ui_smoke 10, test_studio_destination 81, test_offline_e2e, test_loki; test_qol flaky once
+  (rename box re-rendered), 2/2 green on re-run and on master; test_studio/test_studio_godot = mcp stub only. Could not
+  do: WebView2/WKWebView (requests above), the Studio tab in a real isolated window.
 - 2026-10-18 cloud (Claude) read everything since 6132f33 (21 commits: going public + AGPL, background
   mode, chat QoL, Studio-in-Godot, LOKI Apps, documents, usable-by-anyone, evolve roadmap; Ziva Mac's M25/memory/draw reports and the test_ui_smoke fix;
   Ziva Windows' ACE-Step/Kokoro fixes). No open [claude] requests. Fixed what Ziva Mac found in M25(c) without

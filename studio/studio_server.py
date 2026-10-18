@@ -321,6 +321,10 @@ class StudioServer:
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Referrer-Policy", "no-referrer")
+                # LOKI's window is cross-origin isolated (COEP require-corp) and shows Studio as its Studio tab, a
+                # cross-origin frame: without these two headers the browser refuses to show Studio there at all
+                self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+                self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
                 self.end_headers()
                 self.wfile.write(body)
 
