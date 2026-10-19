@@ -18,6 +18,7 @@ var notices: VBoxContainer
 var status_line: Label
 var _banner_t := 0.0
 var auto_chess: Control = null
+var auto_chess_button: Button
 
 
 func setup(world_node: Node, pixel: int) -> void:
@@ -63,11 +64,12 @@ func setup(world_node: Node, pixel: int) -> void:
 	windows = HudWindows.new()
 	windows.hud = self
 	root.add_child(windows)
-	var chess_button := UiKit.button("AUTO CHESS", open_auto_chess)
-	chess_button.position = Vector2(450, 16)
-	chess_button.custom_minimum_size = Vector2(150, 38)
-	chess_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	root.add_child(chess_button)
+	auto_chess_button = UiKit.button("JOIN AUTO CHESS", open_auto_chess)
+	auto_chess_button.position = Vector2(450, 16)
+	auto_chess_button.custom_minimum_size = Vector2(170, 38)
+	auto_chess_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	auto_chess_button.tooltip_text = "Opt into the Auto Chess island mini-game. Your MMO character stays safely in the world."
+	root.add_child(auto_chess_button)
 	var p: Player = world.player
 	p.zone_entered.connect(func(z): show_banner(z + (" - you are here" if z == GameState.self_zone else ""), Color(0.6, 1.0, 0.9)))
 	p.wants_prompt.connect(windows.show_prompt)
@@ -88,11 +90,15 @@ func open_auto_chess() -> void:
 	auto_chess.name = "AutoChessScreen"
 	add_child(auto_chess)
 	root.visible = false
+	if auto_chess_button != null:
+		auto_chess_button.disabled = true
 	if world != null and world.player != null:
 		world.player.input_enabled = false
 	auto_chess.tree_exited.connect(func():
 		auto_chess = null
 		root.visible = GameState.mode == "play"
+		if auto_chess_button != null:
+			auto_chess_button.disabled = false
 		if world != null and world.player != null:
 			world.player.input_enabled = GameState.mode == "play")
 

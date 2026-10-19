@@ -12,7 +12,7 @@ var camera_pivot: Node3D
 var unit_roots: Array[Node3D] = []
 var camera_yaw: float = 0.0
 var camera_pitch: float = -0.28
-var camera_distance: float = 22.0
+var camera_distance: float = 30.0
 
 
 func _ready() -> void:
@@ -106,8 +106,8 @@ func move_avatar(direction: Vector3, delta: float) -> void:
 		return
 	var world_direction: Vector3 = direction.normalized().rotated(Vector3.UP, camera_yaw)
 	avatar.position += world_direction * 5.0 * delta
-	avatar.position.x = clampf(avatar.position.x, -7.0, 7.0)
-	avatar.position.z = clampf(avatar.position.z, -7.0, 7.0)
+	avatar.position.x = clampf(avatar.position.x, -10.0, 10.0)
+	avatar.position.z = clampf(avatar.position.z, -10.0, 10.0)
 	avatar.rotation.y = atan2(world_direction.x, world_direction.z)
 	update_camera()
 

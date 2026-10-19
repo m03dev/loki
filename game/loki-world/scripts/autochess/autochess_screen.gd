@@ -4,6 +4,7 @@ extends Control
 
 const COLS := 8
 const ROWS := 6
+const WORLD_CELL_SIZE := 2.5
 const CELL := Vector2(78.0, 62.0)
 const HEROES := [
 	{"name": "Vanguard", "role": "Guardian", "hp": 130, "atk": 16, "range": 1, "color": Color(0.9, 0.37, 0.27)},
@@ -35,7 +36,7 @@ var _avatar: Node3D
 var _arena: Node3D
 var _camera_yaw: float = 0.0
 var _camera_pitch: float = -0.28
-var _camera_distance: float = 22.0
+var _camera_distance: float = 30.0
 var _dragging_camera: bool = false
 var _last_view_size: Vector2 = Vector2.ZERO
 var _health_refresh_clock: float = 0.0
@@ -141,6 +142,7 @@ func _build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	_start_button = _button("START BATTLE", _start_battle)
+	_start_button.custom_minimum_size = Vector2(164, 40)
 	header.add_child(_start_button)
 	header.add_child(_button("REFRESH  •  2G", _refresh_shop))
 	header.add_child(_button("EXIT  ×", close_screen))
@@ -160,6 +162,7 @@ func _build_ui() -> void:
 	_shop_row = HBoxContainer.new()
 	_shop_row.position = Vector2(32, get_viewport_rect().size.y - 112)
 	_shop_row.size = Vector2(620, 96)
+	_shop_row.mouse_filter = Control.MOUSE_FILTER_STOP
 	_shop_row.add_theme_constant_override("separation", 10)
 	add_child(_shop_row)
 	_refresh_status()
@@ -322,26 +325,6 @@ func _refresh_status() -> void:
 	_status.text = "ROUND %d     %s\nGOLD     %d\nTEAM     %d / 6\n\n%s" % [round_number, phase, gold, team_count, battle_log]
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mouse_button := event as InputEventMouseButton
-		if mouse_button.button_index == MOUSE_BUTTON_RIGHT:
-			_dragging_camera = mouse_button.pressed
-			get_viewport().set_input_as_handled()
-		elif mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_camera_distance = maxf(12.0, _camera_distance - 1.5)
-			_update_camera_transform()
-		elif mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_camera_distance = minf(32.0, _camera_distance + 1.5)
-			_update_camera_transform()
-	elif event is InputEventMouseMotion and _dragging_camera:
-		var motion := event as InputEventMouseMotion
-		_camera_yaw -= motion.relative.x * 0.006
-		_camera_pitch = clampf(_camera_pitch - motion.relative.y * 0.004, -0.75, 0.08)
-		_update_camera_transform()
-		get_viewport().set_input_as_handled()
-
-
 func _update_avatar_movement(delta: float) -> void:
 	if _avatar == null:
 		return
@@ -358,7 +341,7 @@ func _update_avatar_movement(delta: float) -> void:
 		return
 	direction = direction.normalized().rotated(Vector3.UP, _camera_yaw)
 	_avatar.position += direction * 5.0 * delta
-	var center_limit: float = 7.0
+	var center_limit: float = 10.0
 	_avatar.position.x = clampf(_avatar.position.x, -center_limit, center_limit)
 	_avatar.position.z = clampf(_avatar.position.z, -center_limit, center_limit)
 	_avatar.rotation.y = atan2(direction.x, direction.z)
@@ -366,8 +349,25 @@ func _update_avatar_movement(delta: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var click_position: Vector2 = event.position
+	if event is InputEventMouseButton:
+		var button_event := event as InputEventMouseButton
+		if button_event.button_index == MOUSE_BUTTON_RIGHT:
+			_dragging_camera = button_event.pressed
+			accept_event()
+			return
+		if button_event.pressed and button_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_camera_distance = maxf(18.0, _camera_distance - 1.5)
+			_update_camera_transform()
+			accept_event()
+			return
+		if button_event.pressed and button_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_camera_distance = minf(36.0, _camera_distance + 1.5)
+			_update_camera_transform()
+			accept_event()
+			return
+		if button_event.button_index != MOUSE_BUTTON_LEFT or not button_event.pressed:
+			return
+		var click_position: Vector2 = button_event.position
 		if click_position.y >= get_viewport_rect().size.y - 160.0:
 			return
 		if click_position.y < 64.0 or click_position.x < 310.0:
@@ -376,21 +376,26 @@ func _gui_input(event: InputEvent) -> void:
 		if cell.x >= 0:
 			_place_or_remove(cell)
 			accept_event()
+	elif event is InputEventMouseMotion and _dragging_camera:
+		var motion := event as InputEventMouseMotion
+		_camera_yaw -= motion.relative.x * 0.006
+		_camera_pitch = clampf(_camera_pitch - motion.relative.y * 0.004, -0.75, 0.08)
+		_update_camera_transform()
+		accept_event()
 
 
 func _screen_position_to_cell(screen_position: Vector2) -> Vector2i:
 	if _camera == null or _arena_viewport == null:
 		return Vector2i(-1, -1)
-	var viewport_position: Vector2 = screen_position
-	var ray_origin: Vector3 = _camera.project_ray_origin(viewport_position)
-	var ray_direction: Vector3 = _camera.project_ray_normal(viewport_position)
+	var ray_origin: Vector3 = _camera.project_ray_origin(screen_position)
+	var ray_direction: Vector3 = _camera.project_ray_normal(screen_position)
 	var plane := Plane(Vector3.UP, 0.25)
-	var hit_distance: Variant = plane.intersects_ray(ray_origin, ray_direction)
-	if hit_distance == null:
+	var hit_point: Variant = plane.intersects_ray(ray_origin, ray_direction)
+	if hit_point == null:
 		return Vector2i(-1, -1)
-	var hit_point: Vector3 = ray_origin + ray_direction * float(hit_distance)
-	var cell_x: int = floori(hit_point.x / 2.5 + 4.0)
-	var cell_y: int = floori(hit_point.z / 2.5 + 3.0)
+	var board_hit: Vector3 = hit_point
+	var cell_x: int = floori(board_hit.x / WORLD_CELL_SIZE + 4.0)
+	var cell_y: int = floori(board_hit.z / WORLD_CELL_SIZE + 3.0)
 	if cell_x < 0 or cell_y < 0 or cell_x >= COLS or cell_y >= ROWS:
 		return Vector2i(-1, -1)
 	return Vector2i(cell_x, cell_y)
