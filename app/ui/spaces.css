@@ -1,6 +1,7 @@
 /* LOKI Spaces (spaces.js): your own Discord, drawn over the live world on LOKI home and the World tab.
    Glass like the rest of LOKI (glass.css): tinted, no live blur over the 3D canvas. */
-.sp-dock { position: fixed; z-index: 1010; pointer-events: none; }   /* over the World tab's game frame (1000) */
+.sp-dock { position: fixed; z-index: 8; pointer-events: none; }   /* home: over the world, under every sheet (10) and mode pane (9) */
+.sp-dock.in-world { z-index: 1010; }   /* the World tab: over its game frame (1000) */
 .sp-dock[hidden] { display: none; }
 .sp-dock > * { pointer-events: auto; }
 .sp-rail { position: absolute; left: 12px; top: 14px; bottom: 14px; width: 56px; display: flex; flex-direction: column;
