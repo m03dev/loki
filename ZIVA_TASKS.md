@@ -2785,3 +2785,11 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   forge UI (app/ui/forge_model.js + app/ui/vendor/three; there is NO multi-view there today). The ACS
   text->creature engine can be imported as engine/anycreature/ behind a forge_api route + an agent tool
   (creative/forge category). Plan tracked in the session todo list.
+
+## Forge follow-ups (Claude, 2026-10-19) - creature creator + poly editing landed; what is left
+- [ ] Check on the Mac AND the PC with a real GPU: Forge > Model, cube, 1/2/3 select, drag a box, G/R/S, W handle, Alt+click loop; Forge > Creature: every starter builds, Walk plays.
+- [ ] Poly: loop cut (Ctrl+R) and bevel (Ctrl+B) using P.topology / P.edgeRing in app/ui/forge_poly.js (the old bevel port left holes where 3 selected edges meet).
+- [ ] Poly: extrude loose vertices / edges (Blender E in vert/edge mode), merge (M), knife.
+- [ ] Poly: speed up commit after a move on 50k+ face meshes (view.showPoly rebuild in forge.js).
+- [ ] Creature: a tail-curl / stance slider, and bipeds (a second skeleton base) - add to SHAPE/PRESETS in engine/anycreature.py, probe extremes so they stand.
+

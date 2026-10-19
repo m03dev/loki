@@ -6032,18 +6032,29 @@ MODIFYING |= {"make_3d"}
 
 
 # --- anyCreature (contrib/anycreature/, MIT; engine/anycreature.py): an ACS spec -> a creature .glb --------
-async def make_creature_tool(preset: str = "", spec: str = "", size: float = 1.0, smooth: int = 0,
-                             body_color: str = "", accent_color: str = "", name: str = "creature") -> str:
+async def make_creature_tool(preset: str = "", spec: str = "", size: float = 0, smooth: int = 0,
+                             body_color: str = "", accent_color: str = "", name: str = "creature",
+                             shape=None, coat: str = "") -> str:
     """Make a creature (.glb in models/ + its four views) - from a starter + tweaks, or from an ACS spec."""
     import anycreature  # pylint: disable=import-outside-toplevel
     try:
         if spec:
             res = await asyncio.to_thread(anycreature.make, spec, WORKSPACE / "models", name or "creature")
         else:
-            controls = {"preset": preset or "hound", "size": size or 1.0,
-                        "colors": {"body": body_color, "ear": accent_color}}
+            controls = {"preset": preset or "hound", "colors": {"body": body_color, "ear": accent_color}}
+            if size:
+                controls["size"] = size
             if smooth:
                 controls["smooth"] = smooth
+            if coat:
+                controls["coat"] = coat
+            if isinstance(shape, str) and shape.strip():
+                try:
+                    shape = json.loads(shape)
+                except ValueError:
+                    shape = None
+            if isinstance(shape, dict):
+                controls["shape"] = shape
             res = await asyncio.to_thread(anycreature.make_from_controls, controls,
                                           WORKSPACE / "models", name or "creature")
     except anycreature.AnyCreatureError as exc:
@@ -6060,11 +6071,15 @@ async def make_creature_tool(preset: str = "", spec: str = "", size: float = 1.0
 LOCAL_TOOLS["make_creature"] = make_creature_tool
 _CREATURE_SCHEMA = schema(
     "make_creature", "Make a creature (a skinned, animated .glb in models/) plus its front/side/top/hero views. "
-    "The easy way: pick a starter (preset: hound | tall | low), then tweak size, smooth and the colours. The "
-    "engine checks every build and lands on the nearest size that stands. Or pass spec= a whole anyCreature ACS "
+    "The easy way: pick a starter (preset: hound | tall | low | fox | deer | bear), then tweak size, smooth, a coat "
+    "(wolf | fox | arctic | panther | deer | bear | dusk | sand | moss | ember), the colours, and shape= its body plan "
+    "as multipliers around 1.0 (legs, legthick, body, girth, neck, head, snout, ears, tail; e.g. {\"legs\": 1.3}). The "
+    "engine checks every build, applies its own fixes, and lands on the nearest build that stands. Or pass spec= a whole anyCreature ACS "
     "spec (JSON) to author one from scratch (a copied example is BLOCKED and must be made its own). Use this "
     "whenever someone asks for a creature, animal or monster. Tell the user it opens in Forge's four-view panel.",
-    {"preset": {"type": "string", "enum": ["hound", "tall", "low"]}, "spec": {"type": "string"},
+    {"preset": {"type": "string", "enum": ["hound", "tall", "low", "fox", "deer", "bear"]}, "spec": {"type": "string"},
+     "shape": {"type": "object", "description": "body-plan multipliers around 1.0: legs, legthick, body, girth, neck, head, snout, ears, tail"},
+     "coat": {"type": "string"},
      "size": {"type": "number"}, "smooth": {"type": "integer"},
      "body_color": {"type": "string"}, "accent_color": {"type": "string"}, "name": {"type": "string"}})
 TOOL_SCHEMAS.append(_CREATURE_SCHEMA)

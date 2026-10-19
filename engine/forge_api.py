@@ -17,6 +17,8 @@ Every route needs the bridge's bearer token (the window fetches models with it, 
   GET  /forge/creature            the anyCreature engine here: {ok, engine, outline, node}
   GET  /forge/creature/view?name=&view=   one of the four silhouette PNGs (front | side | top | hero)
   POST /forge/creature {spec, name?}  an anyCreature ACS spec -> a creature .glb in models/ (a job),
+       or {preset, size?, smooth?, shape? {legs, body, girth, neck, head, snout, ears, tail, legthick},
+           coat?, colors? {id: #hex}} - the form's controls (engine/anycreature.schema())
                                   result {name, bytes, views: {front, side, top, hero}} (engine/anycreature.py)
 """
 from __future__ import annotations
@@ -169,7 +171,7 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
     if route == "/forge/creature":
         import anycreature  # pylint: disable=import-outside-toplevel
         spec = data.get("spec")
-        controls = {k: data[k] for k in ("size", "smooth", "colors") if k in data}
+        controls = {k: data[k] for k in ("size", "smooth", "colors", "shape", "coat") if k in data}
         if data.get("preset"):
             controls["preset"] = data["preset"]
         if not controls and (not isinstance(spec, (dict, str)) or not spec):
@@ -180,13 +182,14 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
         def work(progress):
             progress("shaping the creature", 0.15)
             try:
-                res = (anycreature.make_from_controls(controls, out_dir, name) if controls
+                res = (anycreature.make_from_controls(controls, out_dir, name, progress) if controls
                        else anycreature.make(spec, out_dir, name))
             except anycreature.AnyCreatureError as exc:
                 return {"ok": False, "error": str(exc)}
-            progress("drawing the front / side / top views", 0.85)
+            progress("drawing the front / side / top views", 0.9)
             return {"ok": True, "name": res["name"], "bytes": res.get("bytes", 0),
                     "size": res.get("size"), "asked_size": res.get("asked_size"), "size_moved": res.get("size_moved", False),
+                    "shape": res.get("shape"), "eased": res.get("eased", False), "ease": res.get("ease", 0),
                     "fixes": res.get("fixes", 0), "views": {v: "creature/view?name=%s&view=%s" % (res["stem"], v)
                                                             for v in res.get("views", {})}}
         return 200, forge3d.start_job(work, kind="creature", label=name, thread=thread)

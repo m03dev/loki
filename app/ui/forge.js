@@ -325,7 +325,8 @@ function forgeStage() {
   const quadLabels = el("div", "forge-quad-labels");
   quadLabels.id = "forge-quad-labels"; quadLabels.hidden = true;
   quadLabels.append(el("span", "", "Front"), el("span", "", "Side"), el("span", "", "Top"), el("span", "", "3/4 view"));
-  stage.append(cv, empty, viewBar, sculpt, out, quadLabels);
+  const animBar = el("div", "forge-float forge-animbar"); animBar.id = "forge-anim"; animBar.hidden = true;
+  stage.append(cv, empty, viewBar, sculpt, out, quadLabels, animBar);
   if (model) stage.append(model);
   return stage;
 }
@@ -342,63 +343,203 @@ function forgeSlider(name, id, min, max, value, onInput) {
 
 function forgeCreaturePane() {
   const pane = el("div", "forge-pane"); pane.dataset.pane = "creature"; pane.hidden = true;
-  pane.append(el("p", "note", "Pick a body plan, then make it yours. Every build is checked for you and "
-    + "lands on the nearest size that stands - no JSON, no guesswork."));
+  pane.append(el("p", "note", "Pick a body plan, shape it with the sliders, give it a coat. Every build is checked "
+    + "for you and lands on the nearest build that stands - then it walks."));
   const presets = el("div", "forge-presets"); presets.id = "forge-creature-presets";
+  const acts = el("div", "forge-cr-acts");
+  acts.append(forgeBtn("sparkle", "Surprise me", "A random body plan and coat (inside the ranges that stand).", () => forgeCreatureRandom()),
+    forgeBtn("undo", "Reset", "Back to the starter's own build and coat.", () => forgeCreatureStart(forge.creature && forge.creature.preset)));
+  const live = el("label", "forge-cr-live");
+  live.dataset.tipName = "Live"; live.dataset.tipWhat = "Rebuild by itself a moment after you stop moving a slider.";
+  const liveBox = document.createElement("input"); liveBox.type = "checkbox"; liveBox.id = "forge-creature-live";
+  try { liveBox.checked = localStorage.getItem(FORGE_STORE + "-crlive") === "1"; } catch (_) { /* private mode */ }
+  liveBox.addEventListener("change", () => { try { localStorage.setItem(FORGE_STORE + "-crlive", liveBox.checked ? "1" : "0"); } catch (_) { /* */ } });
+  live.append(liveBox, el("span", "", "Live"));
+  acts.append(live);
   const sliders = el("div", "forge-creature-sliders"); sliders.id = "forge-creature-sliders";
-  const colors = el("div", "forge-colors"); colors.id = "forge-creature-colors";
-  const row = el("label", "forge-slider");
+  const coats = el("div", "forge-coats"); coats.id = "forge-creature-coats";
+  const colors = el("div", "forge-cr-colors"); colors.id = "forge-creature-colors";
+  const row = el("label", "forge-cr-name");
   row.dataset.tipName = "Name"; row.dataset.tipWhat = "What the .glb is called in models/.";
   const nm = document.createElement("input"); nm.type = "text"; nm.id = "forge-creature-name"; nm.value = "creature";
   nm.setAttribute("aria-label", "Creature name");
-  row.append(el("span", "forge-slider-name", "N"), nm);
+  row.append(el("span", "forge-cr-head", "Name"), nm);
   const adv = document.createElement("details"); adv.className = "forge-advanced";
   adv.append(el("summary", "", "Advanced: edit the spec"));
   const ta = document.createElement("textarea"); ta.id = "forge-creature-spec"; ta.className = "forge-spec";
   ta.setAttribute("aria-label", "anyCreature ACS spec (JSON)"); ta.setAttribute("spellcheck", "false");
   ta.placeholder = '{"height": 1.8, "joints": { ... }, "volumes": [ ... ], "parts": [ ... ]}';
   adv.append(ta);
-  pane.append(presets, sliders, colors, row, adv);
+  pane.append(presets, acts, sliders, el("span", "forge-cr-head", "Coat"), coats, colors, row, adv);
   return pane;
+}
+
+// a labelled horizontal slider with its value (the creature form is a column, not the sculpt bar)
+function forgeCrSlider(s, value, onInput) {
+  const wrap = el("label", "forge-hslider forge-cr-slider");
+  wrap.dataset.tipName = s.label; wrap.dataset.tipWhat = s.what || s.label;
+  const top = el("span", "forge-hslider-top"), out = el("span", "forge-hslider-val");
+  top.append(el("span", "", s.label), out);
+  const r = document.createElement("input"); r.type = "range"; r.id = "forge-cr-" + s.id;
+  r.min = String(s.min); r.max = String(s.max); r.step = String(s.step || 0.01); r.value = String(value);
+  r.setAttribute("aria-label", s.label); r.dataset.cr = s.id;
+  const show = () => { const v = +r.value; out.textContent = s.id === "smooth" ? String(Math.round(v)) : (s.id === "size" ? v.toFixed(2) + "x" : Math.round(v * 100) + "%"); };
+  show();
+  r.addEventListener("input", () => { show(); onInput(+r.value); });
+  r.addEventListener("change", () => forgeCreatureChanged());
+  r.addEventListener("dblclick", () => { r.value = String(s.value); show(); onInput(+r.value); forgeCreatureChanged(); });   // back to the starter's 1.0
+  wrap.append(top, r);
+  wrap.setVal = (v) => { r.value = String(v); show(); };
+  return wrap;
 }
 
 // the form comes FROM the backend (engine/anycreature.schema()): the window draws whatever it is given
 async function forgeCreatureBuild() {
   if (forge.creature) return;
-  const r = await api("/forge/creature").catch(() => null);
-  const box = document.getElementById("forge-creature-presets");
-  if (!box) return;
-  if (!r || !r.ok) {
-    forgeSay("anyCreature is not ready here" + (r && r.node === false ? " (Node is needed)" : "."), true);
-    return;
+  if (forge.creatureLoading) return forge.creatureLoading;
+  forge.creatureLoading = (async () => {
+    const r = await api("/forge/creature").catch(() => null);
+    const box = document.getElementById("forge-creature-presets");
+    if (!box) return;
+    if (!r || !r.ok) {
+      forgeSay("anyCreature is not ready here" + (r && r.node === false ? " (Node is needed)" : "."), true);
+      return;
+    }
+    forge.crSchema = r;
+    forge.creature = { preset: "", size: 1, smooth: 50, shape: {}, coat: "", colors: {}, ui: {} };
+    box.replaceChildren();
+    for (const p of r.presets || []) {
+      const b = forgeBtn(p.icon || "models", p.label, p.what, () => forgeCreatureStart(p.id));
+      b.dataset.preset = p.id;
+      box.append(b);
+    }
+    const sl = document.getElementById("forge-creature-sliders");
+    sl.replaceChildren();
+    const groups = new Map();
+    for (const s of [...(r.sliders || []), ...(r.shape || [])]) {
+      const g = s.group || "Shape";
+      if (!groups.has(g)) {
+        const head = el("span", "forge-cr-head", g), grid = el("div", "forge-cr-group");
+        groups.set(g, grid); sl.append(head, grid);
+      }
+      const isShape = (r.shape || []).includes(s);
+      const w = forgeCrSlider(s, s.value, (v) => {
+        if (isShape) forge.creature.shape[s.id] = v; else forge.creature[s.id] = v;
+      });
+      forge.creature.ui[s.id] = w;
+      groups.get(g).append(w);
+    }
+    const coats = document.getElementById("forge-creature-coats");
+    coats.replaceChildren();
+    for (const c of r.coats || []) {
+      const b = el("button", "forge-coat"); b.type = "button"; b.dataset.coat = c.id;
+      b.dataset.tipName = c.label + " coat"; b.dataset.tipWhat = "Paint the whole creature in the " + c.label + " palette.";
+      b.setAttribute("aria-label", c.label + " coat");
+      for (const k of ["body", "back", "belly", "head"]) { const i = el("i"); i.style.background = c.colors[k]; b.append(i); }
+      b.addEventListener("click", () => { forgeCreatureCoat(c.id); forgeCreatureChanged(); });
+      coats.append(b);
+    }
+    const cols = document.getElementById("forge-creature-colors");
+    cols.replaceChildren();
+    for (const c of r.colors || []) {
+      const wrap = el("label", "forge-cr-swatch");
+      wrap.dataset.tipName = c.label; wrap.dataset.tipWhat = c.id === "shadow" ? "The colour the shading fades to at the feet."
+        : "The " + c.label.toLowerCase() + " colour.";
+      const inp = document.createElement("input"); inp.type = "color"; inp.value = c.value; inp.id = "forge-crc-" + c.id;
+      inp.setAttribute("aria-label", c.label);
+      inp.addEventListener("input", () => { forge.creature.colors[c.id] = inp.value; forge.creature.coat = ""; forgeCreatureMarks(); });
+      inp.addEventListener("change", () => forgeCreatureChanged());
+      wrap.append(inp, el("span", "", c.label));
+      cols.append(wrap);
+    }
+    forgeCreatureStart(((r.presets || [])[0] || {}).id || "");
+  })();
+  await forge.creatureLoading;
+  forge.creatureLoading = null;
+}
+
+function forgeCreatureMarks() {   // which preset / coat is on
+  const c = forge.creature;
+  for (const b of document.querySelectorAll("#forge-creature-presets [data-preset]")) b.classList.toggle("on", b.dataset.preset === c.preset);
+  for (const b of document.querySelectorAll("#forge-creature-coats [data-coat]")) b.classList.toggle("on", b.dataset.coat === c.coat);
+}
+
+function forgeCreatureCoat(id) {
+  const c = forge.creature, coat = (forge.crSchema.coats || []).find((x) => x.id === id);
+  if (!c || !coat) return;
+  c.coat = id;
+  c.colors = Object.assign({}, coat.colors);
+  for (const [k, v] of Object.entries(c.colors)) { const i = document.getElementById("forge-crc-" + k); if (i) i.value = v; }
+  forgeCreatureMarks();
+}
+
+function forgeCreatureSet(values) {   // {size, smooth, shape} -> the sliders and the state
+  const c = forge.creature;
+  for (const [k, v] of Object.entries(values.shape || {})) { c.shape[k] = v; if (c.ui[k]) c.ui[k].setVal(v); }
+  for (const k of ["size", "smooth"]) if (values[k] != null) { c[k] = values[k]; if (c.ui[k]) c.ui[k].setVal(values[k]); }
+}
+
+// a starter: its skeleton, its own proportions and its coat (the sliders show them)
+function forgeCreatureStart(pid) {
+  const c = forge.creature, p = ((forge.crSchema && forge.crSchema.presets) || []).find((x) => x.id === pid);
+  if (!c || !p) return;
+  c.preset = pid;
+  const st = p.start || {};
+  const smooth = ((forge.crSchema.sliders || []).find((x) => x.id === "smooth") || {}).value || 50;
+  forgeCreatureSet({ size: st.size || 1, smooth, shape: st.shape || {} });
+  forgeCreatureCoat(st.coat || "");
+  forgeCreatureMarks();
+  forgeCreatureChanged();
+}
+
+function forgeCreatureRandom() {
+  const c = forge.creature, sch = forge.crSchema;
+  if (!c || !sch) return;
+  const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
+  const presets = sch.presets || [];
+  c.preset = presets[Math.floor(Math.random() * presets.length)].id;
+  const shape = {};
+  for (const s of sch.shape || []) {   // mostly near the middle: two dice, like a creature, not a glitch
+    const t = (Math.random() + Math.random()) / 2;
+    shape[s.id] = +(s.min + t * (s.max - s.min)).toFixed(2);
   }
-  forge.creature = { preset: ((r.presets || [])[0] || {}).id || "", colors: {} };
-  box.replaceChildren();
-  for (const p of r.presets || []) {
-    const b = forgeBtn(p.icon || "models", p.label, p.what, () => {
-      forge.creature.preset = p.id;
-      for (const x of box.children) x.classList.toggle("on", x.dataset.preset === p.id);
-    }, p.id === forge.creature.preset ? "on" : "");
-    b.dataset.preset = p.id;
-    box.append(b);
+  forgeCreatureSet({ size: +rnd(0.75, 1.3).toFixed(2), shape });
+  const coats = sch.coats || [];
+  forgeCreatureCoat(coats[Math.floor(Math.random() * coats.length)].id);
+  forgeCreatureMarks();
+  const nm = document.getElementById("forge-creature-name");
+  if (nm && /^creature(-\d+)?$/.test(nm.value)) nm.value = "creature-" + Math.floor(Math.random() * 900 + 100);
+  forgeCreatureChanged(true);
+}
+
+// Live: rebuild a moment after the last change (a newer change wins; a stale result is dropped)
+function forgeCreatureChanged(now) {
+  const box = document.getElementById("forge-creature-live");
+  if (!box || !box.checked || forge.way !== "creature") return;
+  clearTimeout(forge.crTimer);
+  forge.crTimer = setTimeout(() => forgeMake(), now ? 0 : 650);
+}
+
+// Walk / Idle: a rigged model (a creature) plays its own clips; the bar only shows when it has some
+const FORGE_CLIPS = { move: ["play", "Walk", "Play the walk cycle."], idle: ["sparkle", "Idle", "Play the idle: breathing, a look round, the tail."] };
+function forgeAnimBar() {
+  const bar = document.getElementById("forge-anim"), v = forge.view;
+  if (!bar) return;
+  const clips = (v && v.anims) || [];
+  bar.hidden = !clips.length;
+  bar.replaceChildren();
+  if (!clips.length) return;
+  for (const name of clips) {
+    const [icon, label, what] = FORGE_CLIPS[name] || ["play", name[0].toUpperCase() + name.slice(1), "Play the " + name + " clip."];
+    const b = forgeBtn(icon, label, what, () => {
+      v.playAnim(v.anim === name ? null : name);
+      if (v.anim && v.quad) forgeQuad(false);
+      forgeAnimBar();
+    }, v.anim === name ? "on" : "");
+    b.dataset.clip = name;
+    bar.append(b);
   }
-  const sl = document.getElementById("forge-creature-sliders");
-  sl.replaceChildren();
-  for (const s of r.sliders || []) {
-    sl.append(forgeSlider(s.label, "forge-cr-" + s.id, s.min, s.max, s.value, (v) => { forge.creature[s.id] = v; }));
-  }
-  const cols = document.getElementById("forge-creature-colors");
-  cols.replaceChildren();
-  for (const c of r.colors || []) {
-    const wrap = el("label", "forge-color");
-    wrap.dataset.tipName = c.label; wrap.dataset.tipWhat = c.label;
-    const inp = document.createElement("input"); inp.type = "color"; inp.value = c.value; inp.id = "forge-cr-" + c.id;
-    inp.setAttribute("aria-label", c.label);
-    inp.addEventListener("input", () => { forge.creature.colors[c.id] = inp.value; });
-    forge.creature.colors[c.id] = c.value;
-    wrap.append(inp, el("span", "", c.label));
-    cols.append(wrap);
-  }
+  if (v.anim) bar.append(forgeBtn("stop", "Stop", "Stop and show the mesh you can sculpt or edit.", () => { v.playAnim(null); forgeAnimBar(); }));
 }
 
 function forgeQuad(on) {
@@ -418,6 +559,9 @@ function forgeWay(way) {
   for (const p of document.querySelectorAll("#forge .forge-pane")) p.hidden = p.dataset.pane !== way;
   const mk = document.getElementById("forge-make");
   if (mk) mk.textContent = way === "creature" ? "Make creature" : "Make 3D";
+  const pick = document.getElementById("forge-backend"), out = document.getElementById("forge-output");
+  if (pick) pick.hidden = way === "creature";          // the creature engine is its own backend: no picker, no picture options
+  if (out) out.hidden = way === "creature";
   if (way === "creature") forgeCreatureBuild();
   forgeOutputState();
 }
@@ -460,7 +604,7 @@ function forgeClose() {
 }
 
 // ------------------------------------------------------------------------------------------ making
-async function forgePoll(id, onDone) {
+async function forgePoll(id, onDone, onEnd) {
   clearTimeout(forge.jobTimer);
   forge.job = id;
   const prog = document.getElementById("forge-progress");
@@ -468,7 +612,8 @@ async function forgePoll(id, onDone) {
   const tick = async () => {
     const r = await api("/forge/status?id=" + encodeURIComponent(id)).catch(() => null);
     if (forge.job !== id) return;
-    if (!r || !r.ok) { prog.hidden = true; forgeSay((r && r.error) || "Lost the job.", true); return; }
+    if (!r || !r.ok) { prog.hidden = true; forge.job = ""; document.getElementById("forge-make").disabled = false;
+      forgeSay((r && r.error) || "Lost the job.", true); if (onEnd) onEnd(); return; }
     prog.querySelector(".forge-stage-text").textContent = r.stage || "";
     prog.querySelector(".forge-bar i").style.width = Math.round((r.progress || 0) * 100) + "%";
     if (!r.done) { forge.jobTimer = setTimeout(tick, 900); return; }
@@ -476,7 +621,7 @@ async function forgePoll(id, onDone) {
     forge.job = "";
     document.getElementById("forge-make").disabled = false;
     const res = r.result || {};
-    if (!res.ok) { forgeSay(res.error || "That did not work.", true); return; }
+    if (!res.ok) { forgeSay(res.error || "That did not work.", true); if (onEnd) onEnd(); return; }
     onDone(res);
   };
   tick();
@@ -503,23 +648,26 @@ async function forgeMake() {
     await forgeCreatureBuild();
     const name = document.getElementById("forge-creature-name").value.trim() || "creature";
     const spec = document.getElementById("forge-creature-spec").value.trim();
+    const c = forge.creature;
     let body;
     if (spec) body = { spec, name };
-    else if (forge.creature) body = { name, preset: forge.creature.preset, size: forge.creature.size,
-      smooth: forge.creature.smooth, colors: forge.creature.colors };
+    else if (c) body = { name, preset: c.preset, size: c.size, smooth: c.smooth, shape: Object.assign({}, c.shape), colors: Object.assign({}, c.colors) };
     else { forgeSay("anyCreature is not ready here.", true); return; }
+    if (forge.job) { forge.crPending = true; return; }    // one build at a time: the newest settings go next
     document.getElementById("forge-make").disabled = true;
     forgeSay("Shaping the creature…");
     const r = await api("/forge/creature", body).catch(() => null);
     if (!r || !r.ok) { document.getElementById("forge-make").disabled = false; forgeSay((r && r.error) || "Could not start.", true); return; }
+    const done = () => { if (forge.crPending) { forge.crPending = false; forgeMake(); } };
     forgePoll(r.id, (res) => {
       const sized = res.size ? (" It stands " + Number(res.size).toFixed(2) + "x"
         + (res.size_moved ? " (the nearest size that passed every check)" : "") + ".") : "";
-      forgeSay("Made " + res.name + "." + sized + " The four panels show its front, side, top and three-quarter "
-        + "views - Frame it, then sculpt it or export it.");
+      const eased = res.eased ? " Some sliders were eased " + Math.round((res.ease || 0) * 100) + "% back toward the starter so it stands - they show what was used." : "";
+      if (res.eased && c && res.shape && !spec) forgeCreatureSet({ shape: res.shape });
+      forgeSay("Made " + res.name + "." + sized + eased + " Walk / Idle play it; Frame, sculpt or export it.");
       forgeList();
-      forgeLoad(res.name).then(() => forgeQuad(true));
-    });
+      forgeLoad(res.name).then(() => { if (!forge.view || !forge.view.anim) forgeQuad(true); forgeAnimBar(); done(); });
+    }, done);
     return;
   }
   const body = { backend: forge.backend, options: forge.values };
@@ -569,6 +717,7 @@ async function forgeLoad(name) {
   try {
     await v.load(await resp.arrayBuffer());
     forge.model = name;
+    forgeAnimBar();
     document.getElementById("forge-empty").hidden = true;
     for (const b of document.querySelectorAll("#forge .forge-model")) b.classList.toggle("on", b.title === name);
   } catch (exc) {
@@ -595,28 +744,37 @@ async function forgeSave(kind) {
 // Sculpt mesh (sm): raw vertex arrays as the GPU sees them (pos, nrm, col, uv, idx) plus a "welded" view
 // (wid: raw -> welded id; wpos/wnrm per welded vertex; adjacency = SculptGL's vertex ring), so a UV seam never
 // tears when sculpted. Built from a three.js BufferGeometry (GLTFLoader's) and back.
-function forgeMeshFrom(pos, col, uv, idx) {
+function forgeMeshFrom(pos, col, uv, idx, given) {
   const n = pos.length / 3;
   const sm = { n, pos, nrm: new Float32Array(n * 3), col, uv, idx };
-  forgeWeld(sm);
+  forgeWeld(sm, given);
   forgeNormals(sm);
   return sm;
 }
 
-function forgeWeld(sm) {
+// given: a known raw -> welded map (a poly mesh's corners already know their vertex), else weld by position
+function forgeWeld(sm, given) {
   const { n, pos } = sm;
-  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], pos[i * 3 + k]); hi[k] = Math.max(hi[k], pos[i * 3 + k]); }
-  const q = 1e5 / Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], 1e-9);
-  const map = new Map(), wid = new Int32Array(n), first = [];
-  for (let i = 0; i < n; i++) {
-    const key = Math.round(pos[i * 3] * q) + "," + Math.round(pos[i * 3 + 1] * q) + "," + Math.round(pos[i * 3 + 2] * q);
-    let w = map.get(key);
-    if (w === undefined) { w = first.length; map.set(key, w); first.push(i); }
-    wid[i] = w;
+  let wid, first;
+  if (given) {
+    wid = Int32Array.from(given);
+    first = [];
+    for (let i = 0; i < n; i++) if (first[wid[i]] === undefined) first[wid[i]] = i;
+  } else {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], pos[i * 3 + k]); hi[k] = Math.max(hi[k], pos[i * 3 + k]); }
+    const q = 1e5 / Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], 1e-9);
+    const map = new Map();
+    wid = new Int32Array(n); first = [];
+    for (let i = 0; i < n; i++) {
+      const key = Math.round(pos[i * 3] * q) + "," + Math.round(pos[i * 3 + 1] * q) + "," + Math.round(pos[i * 3 + 2] * q);
+      let w = map.get(key);
+      if (w === undefined) { w = first.length; map.set(key, w); first.push(i); }
+      wid[i] = w;
+    }
   }
   const wn = first.length, wpos = new Float32Array(wn * 3);
-  for (let w = 0; w < wn; w++) for (let k = 0; k < 3; k++) wpos[w * 3 + k] = pos[first[w] * 3 + k];
+  for (let w = 0; w < wn; w++) if (first[w] !== undefined) for (let k = 0; k < 3; k++) wpos[w * 3 + k] = pos[first[w] * 3 + k];
   sm.wid = wid; sm.wn = wn; sm.wpos = wpos; sm.wnrm = new Float32Array(wn * 3);
   const sets = Array.from({ length: wn }, () => []);
   const idx = sm.idx;
@@ -855,6 +1013,7 @@ function forgeMakeView(lib, renderer, canvas) {
   function loop() {
     if (!view.running) return;
     resize();
+    if (anim.mixer) { anim.mixer.update(Math.min(0.1, anim.clock.getDelta())); view.dirty = true; }
     if (view.quad) {
       if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }
     } else {
@@ -901,6 +1060,24 @@ function forgeMakeView(lib, renderer, canvas) {
     if (!keepView) view.frame();
     view.dirty = true;
   }
+  // ---- playing a rigged model's own clips (idle, walk ...) with three.js' AnimationMixer
+  const anim = { scene: null, clips: [], mixer: null, clock: new THREE.Clock(), name: null };
+  view.anims = [];
+  view.anim = null;
+  view.playAnim = (name) => {
+    if (anim.mixer) { anim.mixer.stopAllAction(); anim.mixer = null; }
+    if (anim.scene && anim.scene.parent) anim.scene.parent.remove(anim.scene);
+    const clip = name && anim.clips.find((a) => a.name === name);
+    view.anim = clip ? clip.name : null;
+    if (mesh) mesh.visible = !clip;
+    if (clip) {
+      holder.add(anim.scene);
+      anim.mixer = new THREE.AnimationMixer(anim.scene);
+      anim.mixer.clipAction(clip).play();
+      anim.clock.getDelta();
+    }
+    view.dirty = true;
+  };
   // load a .glb with three.js' own GLTFLoader, then merge every mesh into one sculptable mesh
   view.load = async (buf) => {
     const gltf = await new lib.GLTFLoader().parseAsync(buf, "");
@@ -925,6 +1102,14 @@ function forgeMakeView(lib, renderer, canvas) {
     if (!count) throw new Error("no triangles in it");
     const pos = Float32Array.from(P), box = new THREE.Box3().setFromArray(pos), c = box.getCenter(new THREE.Vector3());
     for (let i = 0; i < pos.length; i += 3) { pos[i] -= c.x; pos[i + 1] -= c.y; pos[i + 2] -= c.z; }
+    view.playAnim(null);
+    if (anim.scene) { anim.scene.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); anim.scene = null; }
+    // a skinned, animated model (an anyCreature build): keep the rig so Walk / Idle can play it
+    let skinned = false;
+    gltf.scene.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
+    anim.clips = skinned ? (gltf.animations || []) : [];
+    if (anim.clips.length) { anim.scene = gltf.scene; anim.scene.position.set(-c.x, -c.y, -c.z); }
+    view.anims = anim.clips.map((a) => a.name);
     view.undoStack = []; view.redoStack = [];
     holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1);
     baseMap = map;
@@ -982,7 +1167,10 @@ function forgeMakeView(lib, renderer, canvas) {
     view.dirty = true;
     return name;
   };
-  view.setMode = (m) => { view.mode = m; ring.visible = false; controls.enableRotate = true; view.dirty = true; };
+  view.setMode = (m) => {
+    view.mode = m; ring.visible = false; controls.enableRotate = true; view.dirty = true;
+    if (m !== "view" && view.anim) { view.playAnim(null); if (typeof forgeAnimBar === "function") forgeAnimBar(); }   // edit the mesh, not the pose
+  };
   view.toggleTransform = (mode) => {
     if (!mesh) return;
     if (transform.object && !mode) { transform.detach(); }
@@ -1027,6 +1215,7 @@ function forgeMakeView(lib, renderer, canvas) {
   view.redo = () => restore(view.redoStack, view.undoStack);
   view.subdivide = () => {
     if (!view.sm) return;
+    if (view.anim) view.playAnim(null);
     if (view.sm.idx.length / 3 > 150000) { forgeSay("Already very detailed (" + (view.sm.idx.length / 3).toLocaleString() + " triangles).", true); return; }
     view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face }); view.redoStack = [];
     view.poly = null; view.select([]);
@@ -1215,35 +1404,48 @@ function forgeMakeView(lib, renderer, canvas) {
   // edges (every face its own corners, so the sculpt weld still joins them), faces picked by click, selection drawn
   // over the model, and every change undoable like a stroke.
   view.poly = null; view.tri2face = null;
-  function flatNormals() {
-    if (!view.poly || !view.sm || !view.polyCorners) return;
+  function flatNormals(poly) {
+    poly = poly || view.poly;
+    if (!poly || !view.sm || !view.polyCorners) return;
     const nrm = view.sm.nrm;
-    view.poly.f.forEach((f, fi) => {
-      const n = window.ForgePoly.faceNormal(view.poly, f), at = view.polyCorners[fi];
+    poly.f.forEach((f, fi) => {
+      const n = window.ForgePoly.faceNormal(poly, f), at = view.polyCorners[fi];
       for (let k = 0; k < f.length; k++) nrm.set(n, (at + k) * 3);
     });
     if (mesh) { mesh.geometry.attributes.normal.needsUpdate = true; view.dirty = true; }
   }
   view.showPoly = (poly, keepView, noUndo) => {
+    if (view.anim) view.playAnim(null);
+    anim.clips = []; view.anims = [];          // a poly mesh has no rig
     if (!noUndo && view.sm) snapshot();
     let corners = 0;
     for (const f of poly.f) corners += f.length;
-    const pos = new Float32Array(corners * 3), idx = [], tri2face = [], start = [];
+    const pos = new Float32Array(corners * 3), idx = [], tri2face = [], start = [], vid = new Int32Array(corners);
     let c = 0;
     poly.f.forEach((f, fi) => {
       start.push(c);
-      for (let k = 0; k < f.length; k++) pos.set(poly.v[f[k]], (c + k) * 3);
+      for (let k = 0; k < f.length; k++) { pos.set(poly.v[f[k]], (c + k) * 3); vid[c + k] = f[k]; }
       for (let k = 1; k + 1 < f.length; k++) { idx.push(c, c + k, c + k + 1); tri2face.push(fi); }
       c += f.length;
     });
     if (!keepView) { holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1); }
     view.poly = poly; view.tri2face = Int32Array.from(tri2face); view.polyCorners = start;
-    const sm = forgeMeshFrom(pos, null, null, Uint32Array.from(idx));
+    const sm = forgeMeshFrom(pos, null, null, Uint32Array.from(idx), vid);   // corners know their vertex: no weld by position
     view.polyCorners = start;
     view.sm = sm; flatNormals();
     useMesh(sm, keepView);
     view.select([]);
     if (view.onChange) view.onChange();
+  };
+  // a poly mesh of the SAME topology as view.poly, shown live (dragging vertices): positions and flat normals
+  // only, nothing rebuilt and nothing put on the undo stack - commit with showPoly once the drag is done
+  view.polyLive = (work) => {
+    if (!view.poly || !view.sm || !view.polyCorners || work.f.length !== view.poly.f.length) return;
+    const { pos, wpos, wid, n } = view.sm;
+    work.f.forEach((f, fi) => { const at = view.polyCorners[fi]; for (let k = 0; k < f.length; k++) pos.set(work.v[f[k]], (at + k) * 3); });
+    for (let i = 0; i < n; i++) { const w = wid[i] * 3; wpos[w] = pos[i * 3]; wpos[w + 1] = pos[i * 3 + 1]; wpos[w + 2] = pos[i * 3 + 2]; }
+    flatNormals(work);
+    refresh();
   };
   // the current model as triangles (welded, sculpted shape) - for DynaMesh and "edit as polygons"
   view.triangles = () => {
@@ -1252,36 +1454,13 @@ function forgeMakeView(lib, renderer, canvas) {
     for (let i = 0; i < idx.length; i++) idx[i] = sm.wid[sm.idx[i]];
     return { pos: sm.wpos.slice(), idx };
   };
-  const selMat = new THREE.MeshBasicMaterial({ color: 0xed782b, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: false });
-  let selMesh = null;
+  // selection, picking, box select, the move tool: app/ui/forge_edit.js (Blender's edit mode)
   view.selected = [];
-  view.select = (faces) => {
-    view.selected = faces.slice();
-    if (selMesh) { holder.remove(selMesh); selMesh.geometry.dispose(); selMesh = null; }
-    if (view.poly && faces.length) {
-      const P = [];
-      for (const fi of faces) {
-        const f = view.poly.f[fi];
-        if (!f) continue;
-        for (let k = 1; k + 1 < f.length; k++) P.push(...view.poly.v[f[0]], ...view.poly.v[f[k]], ...view.poly.v[f[k + 1]]);
-      }
-      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
-      selMesh = new THREE.Mesh(g, selMat); selMesh.renderOrder = 5; holder.add(selMesh);
-    }
-    view.dirty = true;
-  };
-  let tap = null;   // Model mode: a click (not a drag - that still turns the view) picks the face under it
-  canvas.addEventListener("pointerdown", (e) => { tap = view.mode === "poly" && e.button === 0 ? { x: e.clientX, y: e.clientY } : null; });
-  canvas.addEventListener("pointerup", (e) => {
-    if (!tap || view.mode !== "poly") return;
-    const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y);
-    tap = null;
-    if (moved > 5 || !view.tri2face) return;
-    const hit = hitAt(e);
-    const face = hit && hit.tri != null ? view.tri2face[hit.tri] : -1;
-    if (view.onPick) view.onPick(face, e.shiftKey || e.ctrlKey || e.metaKey);
-  });
+  view.select = (faces) => { view.selected = faces.slice(); };   // replaced by forge_edit.js
+  if (typeof forgeEditAttach === "function") {
+    forgeEditAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
+      mesh: () => mesh, refresh: () => refresh(), hitAt: (e) => hitAt(e) });
+  }
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;

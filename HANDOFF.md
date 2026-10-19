@@ -6,6 +6,20 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (more local models: uncensored builds + add your own; home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
 
+## 2026-10-19 00:05: Forge creature creator + Blender-style poly editing (Claude, cloud)
+
+Owner: "fix the creature creator, make it better ... poly modeling, vert selection, marquee selection, move tool works on faces and verts ... look at blender code".
+- Creature (engine/anycreature.py, app/ui/forge.js): 6 starters (hound, tall, low + fox, deer, bear) that are a skeleton + proportions + coat;
+  9 body-plan sliders (legs lift the hips, girth/head keep their seams, profiles stay on their bones); 10 coats + 13 colours incl. Shadow
+  (the engine's shading ramp); Surprise me, Reset, Live rebuild; more engine autofixes (proportion, containment, clearance, folds, self_clip,
+  negative joint limits) and easing toward the starter when a combo will not stand; the rigged GLB plays Walk / Idle in the viewer.
+  make_creature takes shape= and coat=. Tests: test_anycreature 33, test_forge_creature_ui 8 (new).
+- Poly editing (app/ui/forge_edit.js NEW, forge_poly.js, forge_model.js, forge.js): vertex/edge/face modes (1 2 3), ID-buffer picking,
+  click/Shift/box (Shift add, Ctrl subtract), X-ray Alt+Z, Alt+click loops, double-click/L linked, Ctrl +/-/I/L; G/R/S modal with X/Y/Z,
+  typed values, Ctrl snap, Esc/right-click cancel; proportional O (wheel radius, 7 falloffs); W handle (TransformControls); X deletes
+  verts/edges. MMB orbits in Model mode, Alt+LMB orbits. Tests: test_forge_poly 30, test_forge_edit_ui 20 (new), test_forge_model_ui 13, test_forge_ui 27.
+- Not done (see ZIVA_TASKS.md): bevel / loop cut / knife, extrude of loose verts/edges, faster commit on 50k+ face meshes (~0.7 s in software GL).
+
 ## 2026-10-18 (later): more local models - uncensored builds and your own (Ziva, the PC)
 
 Owner: "get more oblirated [abliterated] models download them and install ... if one model cant you need

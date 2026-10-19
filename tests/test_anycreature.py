@@ -133,24 +133,43 @@ sch = anycreature.schema()
 check("the backend declares the form the UI draws (presets, sliders, colours)",
       len(sch.get("presets", [])) >= 3 and all(p.get("id") and p.get("icon") for p in sch["presets"])
       and len(sch.get("sliders", [])) >= 2 and len(sch.get("colors", [])) >= 2, {k: len(v) for k, v in sch.items() if isinstance(v, list)})
-check("every starter is a whole creature, not just a name",
-      all((AC / "presets" / (p["id"] + ".json")).is_file()
-          and isinstance(json.loads((AC / "presets" / (p["id"] + ".json")).read_text()).get("joints"), dict)
+check("every starter is a whole creature, not just a name (a skeleton + its proportions + a coat)",
+      all(isinstance(anycreature._load_preset(p["id"]).get("joints"), dict)
+          and set(p["start"]["shape"]) == set(anycreature.SHAPE_IDS) and p["start"]["colors"]
           for p in sch["presets"]))
+check("the body-plan sliders and the coats are declared by the backend",
+      len(sch.get("shape", [])) >= 8 and all(s["min"] < 1.0 < s["max"] for s in sch["shape"])
+      and len(sch.get("coats", [])) >= 6 and len(sch["colors"]) >= 10, (len(sch.get("shape", [])), len(sch.get("coats", []))))
+base = anycreature.build_spec({"preset": "hound"})
+legs = anycreature.build_spec({"preset": "hound", "shape": {"legs": 1.3}})
+check("Legs lengthens the leg bones and lifts the hips by what they gained (the toes stay on the ground)",
+      legs["joints"]["LBackKnee"]["up"] < base["joints"]["LBackKnee"]["up"]
+      and legs["joints"]["Hips"][1] > base["joints"]["Hips"][1]
+      and legs["joints"]["LBackToe"]["ground"] == base["joints"]["LBackToe"]["ground"])
+tail = anycreature.build_spec({"preset": "hound", "shape": {"tail": 1.5}, "coat": "fox", "colors": {"belly": "#123456"}})
+arcs = [a for v in tail["volumes"] if v["chain"] == "body" for a in v["colors"]["arcs"]]
+check("Tail, a coat and one colour over it reach the spec (bones, palette and the belly marking)",
+      abs(tail["joints"]["TailTip"]["up"] - base["joints"]["TailTip"]["up"] * 1.5) < 1e-3
+      and tail["palette"]["fur_body"]["color"] == "#c8571d" and any(a["color"] == "#123456" for a in arcs))
 if node:
     d1 = TMP / "ctrl"
     got = anycreature.make_from_controls({"preset": sch["presets"][-1]["id"], "size": 1.0, "smooth": 44,
                                           "colors": {"body": "#556677"}, "name": "ctl"}, d1)
     check("make_from_controls: controls in, a .glb and its four views out",
           (d1 / "ctl.glb").is_file() and len(got.get("views", {})) == 4, got.get("name"))
-    spec = json.loads((d1 / "ctl.glb").read_bytes() and (AC / "presets" / (sch["presets"][-1]["id"] + ".json")).read_text())
     check("the controls are applied to the spec the backend builds",
           anycreature.build_spec({"preset": sch["presets"][-1]["id"], "size": 1.0,
                                   "colors": {"body": "#556677"}})["palette"]["fur_body"]["color"] == "#556677")
-    # a size the engine refuses is landed on nearby, and said so
+    # what the engine refuses is landed on nearby, and said so: the size, or the sliders eased back
     sized = anycreature.make_from_controls({"preset": "hound", "size": 0.85, "name": "near"}, TMP / "near")
     check("a size the floors refuse lands on the nearest that stands (and reports it)",
-          sized["size"] != sized["asked_size"] and (TMP / "near" / "near.glb").is_file(), sized.get("size"))
+          (TMP / "near" / "near.glb").is_file() and "size_moved" in sized
+          and (sized["size"] != sized["asked_size"]) == sized["size_moved"], sized.get("size"))
+    wild = anycreature.make_from_controls({"preset": "deer", "name": "wild", "shape": {
+        "legs": 1.35, "body": 0.8, "neck": 1.4, "head": 1.3, "ears": 1.6, "girth": 0.82}}, TMP / "wild")
+    check("an extreme body plan still stands - fixed by the engine's own measurements or eased toward the starter",
+          (TMP / "wild" / "wild.glb").is_file() and set(wild["shape"]) == set(anycreature.SHAPE_IDS)
+          and wild["eased"] == (wild["shape"] != wild["asked_shape"]), {k: wild.get(k) for k in ("eased", "shape", "fixes")})
 
 tools_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8", errors="replace")
 check("make_creature is an agent tool (registration + schema + creative category)",

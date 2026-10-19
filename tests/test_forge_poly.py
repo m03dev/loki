@@ -65,6 +65,34 @@ out.boundary = P.edges(_pl).filter((e) => e.faces.length === 1).length;
 const _rm = { v: [[0, 0, 0], [1, 0, 0], [1, 0, 1]], f: [[0, 1, 2]] };
 const _ring = [0, 1, 2];
 out.align = P.alignRing(_rm, _ring, [0, 1, 0]) && _ring.join(",") === "2,1,0";
+// edit-mode selection + transform (Blender's editmesh rules)
+const c3 = P.primitive("cube", { segments: 3 }), T3 = P.topology(c3);
+const vertical = T3.edges.findIndex((e) => { const a = c3.v[e.a], b = c3.v[e.b];
+  return Math.abs(a[2] - 0.5) < 1e-6 && Math.abs(b[2] - 0.5) < 1e-6 && Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[0] + 1 / 6) < 1e-3 && Math.abs(a[1] + b[1]) < 1e-6; });
+const corner = T3.edges.findIndex((e) => [e.a, e.b].some((i) => c3.v[i].every((x) => Math.abs(Math.abs(x) - 0.5) < 1e-6)));
+const usph = P.primitive("sphere", { segments: 16, rings: 8 }), TS = P.topology(usph);
+const eq = TS.edges.findIndex((e) => Math.abs(usph.v[e.a][1] - usph.v[e.b][1]) < 1e-9 && Math.abs(usph.v[e.a][1]) < 1e-6);
+const pl4 = P.primitive("plane", { segments: 4 }), TP = P.topology(pl4);
+const ring = P.edgeRing(c3, T3, vertical);
+const fl = P.flushSelection(c3, T3, { v: c3.f[0], e: [], f: [] }, "vert");
+const fe = P.flushSelection(c3, T3, { v: [], e: T3.faceEdges[0], f: [] }, "edge");
+const ff = P.flushSelection(c3, T3, { v: [], e: [], f: [0, 1] }, "face");
+const gr = P.grow(c3, T3, c3.f[0]);
+const wt = P.weights(c3, [0], 0.4, "smooth");
+const far = [...wt.keys()].every((i) => Math.hypot(...[0, 1, 2].map((k) => c3.v[i][k] - c3.v[0][k])) <= 0.4 + 1e-9);
+const M = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0.5, 0, 1];          // translate +0.5 in y (column-major)
+const moved = P.applyMatrix(c3, wt, M);
+out.edit = {
+  loop: P.edgeLoop(c3, T3, vertical).length, pole: P.edgeLoop(c3, T3, corner).length,
+  ringE: ring.edges.length, ringF: ring.faces.length, equator: P.edgeLoop(usph, TS, eq).length,
+  border: P.edgeLoop(pl4, TP, TP.edges.findIndex((e) => e.faces.length === 1)).length,
+  flushV: [fl.f.size, fl.e.size], flushE: [fe.f.size, fe.v.size], flushF: [ff.v.size, ff.e.size],
+  grow: gr.size, shrink: P.shrink(c3, T3, gr).size, linked: P.linked(c3, T3, [0]).size, nv: c3.v.length,
+  w1: wt.get(0), wn: wt.size, far, falloffEnds: Object.values(P.FALLOFF).every((fn) => Math.abs(fn(1) - 1) < 1e-9 && fn(0) >= 0 && fn(0) < 1e-9 || fn === P.FALLOFF.constant),
+  dy0: moved.v[0][1] - c3.v[0][1], partial: [...wt.entries()].filter(([i, x]) => x < 1).every(([i, x]) => Math.abs(moved.v[i][1] - c3.v[i][1] - 0.5 * x) < 1e-9),
+  still: c3.v.every((p, i) => wt.has(i) || moved.v[i].every((x, k) => x === p[k])),
+  delV: P.deleteVerts(c3, [0]).f.length, delE: P.deleteEdges(c3, T3, [vertical]).f.length, median: P.median(c3, c3.f[0]),
+};
 console.log(JSON.stringify(out));
 """
 
@@ -98,6 +126,21 @@ def main() -> int:
     check("DynaMesh: a closed all-quad mesh facing outward", d["quads"] and d["closed"] and d["vol"] > 0, d)
     check("DynaMesh keeps the sphere's size", 0.42 < d["rmin"] and d["rmax"] < 0.56 and abs(d["vol"] - 0.5236) < 0.08, d)
     check("DynaMesh closes a model with a hole in it", o["holed"]["closed"] and o["holed"]["vol"] > 0.7, o["holed"])
+    e = o["edit"]
+    check("edge loop: a valence-4 walk goes all the way round (12 edges on a 3x3x3 cube)", e["loop"] == 12, e)
+    check("edge loop stops at a pole (a cube corner has 3 edges)", e["pole"] < 12, e)
+    check("edge loop round a UV sphere's equator: one edge per segment (16)", e["equator"] == 16, e)
+    check("edge loop along an open border follows the border (16 on a 4x4 plane)", e["border"] == 16, e)
+    check("edge ring + face loop: across 12 quads and back to the start", e["ringE"] == 12 and e["ringF"] == 12, e)
+    check("selection flushes like Blender: a face's 4 vertices select the face and its 4 edges", e["flushV"] == [1, 4], e)
+    check("...4 edges select the face and its 4 vertices; 2 faces give their vertices and edges",
+          e["flushE"] == [1, 4] and e["flushF"][0] == 6 and e["flushF"][1] == 7, e)
+    check("Select More / Less / Linked", e["grow"] > 4 and e["shrink"] == 4 and e["linked"] == e["nv"], e)
+    check("proportional weights: the vertex 1, only neighbours inside the radius, Blender's falloffs end at 0 and 1",
+          e["w1"] == 1 and e["wn"] > 1 and e["far"] and e["falloffEnds"], e)
+    check("applyMatrix moves the selection the whole way, its neighbours by their weight, nothing else",
+          abs(e["dy0"] - 0.5) < 1e-9 and e["partial"] and e["still"], e)
+    check("delete vertices / edges takes the faces that use them", e["delV"] == 51 and e["delE"] == 52, e)
     print("\n%d passed, %d failed (DynaMesh at 48: %d ms)" % (len(PASS), len(FAIL), d["ms"]))
     if FAIL:
         print("FAILED: " + ", ".join(FAIL))

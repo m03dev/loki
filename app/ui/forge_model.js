@@ -1,5 +1,7 @@
 // Forge's Model bar (owner 2026-10-18: "primitives, dynomesh ... poly modeling", "loves modular things with sliders").
-// Add a primitive and shape it with sliders; click faces to select them, then Extrude / Inset / Delete / Flip /
+// Add a primitive and shape it with sliders; select vertices, edges or faces like Blender's edit mode (1 2 3, click,
+// box, Alt+click loops - app/ui/forge_edit.js), move / rotate / scale them (G R S or the W handle, proportional O),
+// then Extrude / Inset / Delete / Flip /
 // Smooth (Catmull-Clark); every last operation keeps a slider that re-does it live (like Blender's redo panel);
 // DynaMesh rebuilds any model - a sculpt included - as even quads at the resolution you pick, so you can sculpt
 // on, or edit its faces again. The geometry is app/ui/forge_poly.js (GoBuild's operations, GPL-3.0).
@@ -23,7 +25,7 @@ Object.assign(ICON_PATHS, {
 const forgeModel = { prim: null, last: null, dyna: { res: 96, smooth: 2 } };
 
 function forgeModelBar(viewBar) {
-  const mode = forgeBtn("poly", "Model", "Model mode: add primitives, click faces to pick them (Shift adds), extrude, inset, smooth, DynaMesh.",
+  const mode = forgeBtn("poly", "Model", "Model mode: add primitives; select vertices, edges or faces (1 2 3) - click, drag a box, Alt+click a loop; G / R / S moves them; extrude, inset, smooth, DynaMesh.",
     () => forgeModelMode(), "forge-model-mode");
   mode.id = "forge-model-mode";
   viewBar.prepend(mode);
@@ -36,14 +38,48 @@ function forgeModelBar(viewBar) {
   }
   const params = el("div", "forge-model-params"); params.id = "forge-model-params";
 
+  const sel = el("div", "forge-model-grid");
+  for (const [m, icon, name, what] of [["vert", "selvert", "Vertex", "Vertex select (1): click a point, drag a box round several."],
+    ["edge", "seledge", "Edge", "Edge select (2): click an edge; Alt+click selects the whole edge loop."],
+    ["face", "selface", "Face", "Face select (3): click a face; Alt+click selects a loop of faces."]]) {
+    const b = forgeBtn(icon, name, what, () => forge.view && forge.view.setSelMode && forge.view.setSelMode(m), m === "face" ? "on" : "");
+    b.dataset.selmode = m; sel.append(b);
+  }
+  const xr = forgeBtn("xray", "X-ray", "See and select through the model (Alt+Z): a box then takes the hidden side too.", () => forge.view && forge.view.setXray());
+  xr.dataset.xray = "1";
+  sel.append(xr,
+    forgeBtn("selectall", "All / none", "Select everything, or nothing (A).", () => forgeSelectAll()),
+    forgeBtn("grow", "More", "Grow the selection by one ring (Ctrl +).", () => forge.view && forge.view.selectGrow(true)),
+    forgeBtn("shrink", "Less", "Shrink the selection by one ring (Ctrl -).", () => forge.view && forge.view.selectGrow(false)),
+    forgeBtn("linked", "Linked", "Select everything connected to the selection (Ctrl+L; L or a double-click picks the piece under the mouse).", () => forge.view && forge.view.selectLinked()),
+    forgeBtn("invert", "Invert", "Select what is not selected (Ctrl+I).", () => forge.view && forge.view.selectInvert()));
+  const tools = el("div", "forge-model-grid");
+  for (const [t, icon, name, what, key] of [["translate", "move", "Move", "A move handle on the selection (W). Or press G and move the mouse.", "G"],
+    ["rotate", "rotate", "Rotate", "A rotate handle on the selection. Or press R.", "R"],
+    ["scale", "scale", "Scale", "A scale handle on the selection. Or press S.", "S"]]) {
+    const b = forgeBtn(icon, name, what + " X / Y / Z lock an axis, type a number for an exact value, Ctrl snaps.", () => forge.view && forge.view.setTool(t));
+    b.dataset.tool = t; b.dataset.key = key; tools.append(b);
+  }
+  const prop = forgeBtn("magnet", "Proportional", "Proportional editing (O): the vertices around the selection follow, fading with distance - the mouse wheel sets how far while you move.",
+    () => forge.view && forge.view.setProportional(!forge.view.edit.prop));
+  prop.dataset.prop = "1";
+  tools.append(prop);
+  const propRow = el("div", "forge-model-params");
+  propRow.append(forgeHSlider("Falloff radius", "How far the proportional pull reaches (a share of the model's size).", 0.02, 1, 0.01, 0.25,
+    (v) => forge.view && forge.view.setProportional(null, v)));
+  const fall = document.createElement("select"); fall.className = "forge-backend forge-falloff"; fall.setAttribute("aria-label", "Falloff");
+  fall.dataset.tipName = "Falloff"; fall.dataset.tipWhat = "The curve of the proportional pull (Blender's falloffs).";
+  for (const f of ["smooth", "sphere", "root", "inverse", "sharp", "linear", "constant"]) { const o = el("option", "", f[0].toUpperCase() + f.slice(1)); o.value = f; fall.append(o); }
+  fall.addEventListener("change", () => forge.view && forge.view.setProportional(null, null, fall.value));
+  propRow.append(fall);
+
   const faces = el("div", "forge-model-grid");
   faces.append(
     forgeBtn("extrude", "Extrude", "Pull the picked faces out as one piece (E). The slider below sets how far, live.", () => forgeFaceOp("extrude")),
     forgeBtn("inset", "Inset", "A smaller face inside each picked face (I); the slider sets how far in.", () => forgeFaceOp("inset")),
     forgeBtn("smooth", "Smooth", "Catmull-Clark: every face becomes quads, rounder (Ctrl+number like Maya's smooth).", () => forgeFaceOp("smooth")),
     forgeBtn("flip", "Flip", "Turn the picked faces (or all) inside out.", () => forgeFaceOp("flip")),
-    forgeBtn("trash", "Delete", "Delete the picked faces (Delete key).", () => forgeFaceOp("delete")),
-    forgeBtn("selectall", "All / none", "Pick every face, or none (A).", () => forgeSelectAll()));
+    forgeBtn("trash", "Delete", "Delete the selection (X or Delete): in vertex / edge mode the faces that use it go too.", () => forgeFaceOp("delete")));
   const redo = el("div", "forge-model-params"); redo.id = "forge-model-redo";
 
   const dyna = el("div", "forge-model-params");
@@ -52,7 +88,8 @@ function forgeModelBar(viewBar) {
     forgeHSlider("Relax", "How many smoothing passes take the voxel steps off.", 0, 6, 1, forgeModel.dyna.smooth, (v) => { forgeModel.dyna.smooth = v; }));
   const dynaBtn = forgeBtn("dynamesh", "DynaMesh", "Rebuild the whole model as even quads (like ZBrush's DynaMesh): closes holes, merges overlaps, ready to sculpt on.", () => forgeDynamesh(), "forge-wide");
 
-  bar.append(el("span", "forge-model-head", "Add"), add, params, el("span", "forge-model-head", "Faces"), faces, redo,
+  bar.append(el("span", "forge-model-head", "Add"), add, params, el("span", "forge-model-head", "Select"), sel,
+    el("span", "forge-model-head", "Transform"), tools, propRow, el("span", "forge-model-head", "Faces"), faces, redo,
     el("span", "forge-model-head", "Remesh"), dyna, dynaBtn);
   return bar;
 }
@@ -73,16 +110,7 @@ function forgeHSlider(name, what, min, max, step, value, onInput) {
 async function forgeModelView() {
   const v = await forgeViewer();
   if (!v) { forgeSay("3D view is not available here (WebGL).", true); return null; }
-  if (!v.onPick) {
-    v.onPick = (face, addTo) => {
-      if (face < 0) { if (!addTo) v.select([]); return; }
-      const s = new Set(addTo ? v.selected : []);
-      if (addTo && s.has(face)) s.delete(face); else s.add(face);
-      v.select([...s]);
-      forgeSay(v.selected.length + " face" + (v.selected.length === 1 ? "" : "s") + " picked");
-    };
-    v.onChange = () => forgeModelSync();
-  }
+  if (!v.onChange) v.onChange = () => forgeModelSync();
   return v;
 }
 
@@ -99,7 +127,9 @@ async function forgeModelMode(on) {
     const t = v.triangles();
     if (t.idx.length / 3 <= 60000) v.showPoly(window.ForgePoly.fromTriangles(t.pos, t.idx), true);
   }
-  forgeSay(want ? "Model: add a primitive, or click faces (Shift adds), then Extrude / Inset. Drag still turns the view." : "");
+  if (want && v.selStats) v.selStats();
+  if (want && !v.poly) forgeSay("Model: add a primitive. Then 1 2 3 pick vertices / edges / faces - click, drag a box, Alt+click a loop; G / R / S move them. Middle-drag (or Alt+drag) turns the view.");
+  else if (!want) forgeSay("");
   forgeModelSync();
 }
 
@@ -153,8 +183,19 @@ async function forgeAddPrimitive(kind) {
 function forgeFaceOp(kind) {
   const v = forge.view;
   if (!v || !v.poly) { forgeSay("Add a primitive first (or DynaMesh a sculpt).", true); return; }
-  const P = window.ForgePoly, base = v.poly, faces = v.selected.slice();
-  if ((kind === "extrude" || kind === "inset" || kind === "delete") && !faces.length) { forgeSay("Click a face first (Shift adds more).", true); return; }
+  const P = window.ForgePoly, base = v.poly, faces = v.selected.slice(), mode = v.edit ? v.edit.mode : "face";
+  if (kind === "delete" && mode !== "face" && v.edit && v.edit.sel.v.size) {   // Blender: deleting vertices / edges takes their faces
+    const out = mode === "vert" ? P.deleteVerts(base, [...v.edit.sel.v]) : P.deleteEdges(base, null, [...v.edit.sel.e]);
+    forgeModel.last = null;
+    v.showPoly(out, true);
+    forgeSay(out.f.length.toLocaleString() + " faces");
+    return;
+  }
+  if ((kind === "extrude" || kind === "inset" || kind === "delete") && !faces.length) {
+    forgeSay(mode === "face" ? "Select a face first (click; Shift adds, drag a box for several)."
+      : "Extrude and Inset work on whole faces: select all the corners / edges of a face, or switch to faces (3).", true);
+    return;
+  }
   let out, pick = () => [];
   if (kind === "extrude") {
     out = P.extrude(base, faces, 0.2);
@@ -177,6 +218,7 @@ function forgeFaceOp(kind) {
 function forgeSelectAll() {
   const v = forge.view;
   if (!v || !v.poly) return;
+  if (v.selectAll) { v.selectAll(); return; }
   v.select(v.selected.length ? [] : v.poly.f.map((_, i) => i));
 }
 
@@ -195,14 +237,33 @@ async function forgeDynamesh() {
   forgeSay("DynaMesh: " + out.f.length.toLocaleString() + " even quads in " + Math.round(performance.now() - t0) + " ms - sculpt on, or edit faces.");
 }
 
+// Model mode's keys - Blender's edit-mode keymap (the G / R / S keys while a move runs are forge_edit.js')
 document.addEventListener("keydown", (e) => {
-  const sheet = document.getElementById("forge");
-  if (!sheet || sheet.hidden || !forge.view || forge.view.mode !== "poly") return;
+  const sheet = document.getElementById("forge"), v = forge.view;
+  if (!sheet || sheet.hidden || !v || v.mode !== "poly") return;
   if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const k = e.key.toLowerCase();
-  if (k === "e") { e.preventDefault(); e.stopImmediatePropagation(); forgeFaceOp("extrude"); }
-  else if (k === "i") { e.preventDefault(); forgeFaceOp("inset"); }
-  else if (k === "a") { e.preventDefault(); forgeSelectAll(); }
-  else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); forgeFaceOp("delete"); }
+  if (v.modalActive && v.modalActive()) return;
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  const take = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+  if (mod) {
+    if (k === "i") { take(); v.selectInvert(); }
+    else if (k === "l") { take(); v.selectLinked(); }
+    else if (k === "=" || k === "+") { take(); v.selectGrow(true); }
+    else if (k === "-") { take(); v.selectGrow(false); }
+    return;                                              // Ctrl+Z / Ctrl+Shift+Z stay with forge.js
+  }
+  if (e.altKey) {
+    if (k === "z" || e.code === "KeyZ") { take(); v.setXray(); }
+    else if (k === "a" || e.code === "KeyA") { take(); v.selectAll(false); }
+    return;
+  }
+  if (k === "1" || k === "2" || k === "3") { take(); v.setSelMode({ 1: "vert", 2: "edge", 3: "face" }[k]); }
+  else if (k === "g" || k === "r" || k === "s") { take(); if (!v.modalStart(k.toUpperCase())) forgeSay("Select something to move first.", true); }
+  else if (k === "w") { take(); v.setTool("translate"); }
+  else if (k === "e") { take(); forgeFaceOp("extrude"); }
+  else if (k === "i") { take(); forgeFaceOp("inset"); }
+  else if (k === "a") { take(); forgeSelectAll(); }
+  else if (k === "o") { take(); v.setProportional(!v.edit.prop); }
+  else if (k === "l") { take(); const seed = v.edit.mouse && v.linkedSeed(v.edit.mouse); if (seed) v.selectLinked(seed, "add"); }
+  else if (k === "x" || e.key === "Delete" || e.key === "Backspace") { take(); forgeFaceOp("delete"); }
 }, true);

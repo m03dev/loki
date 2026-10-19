@@ -393,6 +393,207 @@
     if (n[0] * outward[0] + n[1] * outward[1] + n[2] * outward[2] < 0) { ring.reverse(); return true; }
     return false;
   };
+  // ---------------------------------------------------------------- edit-mode selection (Blender's editmesh model)
+  // A selection is three sets - vertex ids, edge ids (indices into topo.edges), face ids - kept consistent the way
+  // Blender flushes them (editmesh_select.cc): a face is selected when all its vertices / edges are, an edge when
+  // both its ends are. The walkers follow bmesh_walkers_impl.cc: an edge LOOP crosses a valence-4 vertex to the
+  // edge that shares no face with the one it came from (and follows the border along an open edge); an edge RING
+  // and a FACE loop step across a quad to its opposite edge. All pure, so tests/test_forge_poly.py runs them in node.
+  P.topology = (m) => {
+    const edges = [], index = new Map(), vertEdges = m.v.map(() => []), vertFaces = m.v.map(() => []), faceEdges = [];
+    m.f.forEach((face, fi) => {
+      const fe = [];
+      for (let k = 0; k < face.length; k++) {
+        const a = face[k], b = face[(k + 1) % face.length], key = ekey(a, b);
+        let ei = index.get(key);
+        if (ei === undefined) {
+          ei = edges.length; index.set(key, ei);
+          edges.push({ a: Math.min(a, b), b: Math.max(a, b), faces: [] });
+          vertEdges[a].push(ei); vertEdges[b].push(ei);
+        }
+        edges[ei].faces.push(fi);
+        fe.push(ei);
+        vertFaces[a].push(fi);
+      }
+      faceEdges.push(fe);
+    });
+    return { edges, index, vertEdges, vertFaces, faceEdges, edge: (a, b) => index.get(ekey(a, b)) };
+  };
+  P.edgeKey = ekey;
+
+  // flush: make the other two sets follow the one that was edited (mode = the select mode it was edited in)
+  P.flushSelection = (m, T, sel, mode) => {
+    const v = new Set(sel.v), e = new Set(sel.e), f = new Set(sel.f);
+    if (mode === "vert") {
+      e.clear(); f.clear();
+      T.edges.forEach((ed, i) => { if (v.has(ed.a) && v.has(ed.b)) e.add(i); });
+      m.f.forEach((face, i) => { if (face.every((x) => v.has(x))) f.add(i); });
+    } else if (mode === "edge") {
+      v.clear(); f.clear();
+      for (const i of e) { const ed = T.edges[i]; if (ed) { v.add(ed.a); v.add(ed.b); } }
+      T.faceEdges.forEach((fe, i) => { if (fe.every((x) => e.has(x))) f.add(i); });
+    } else {
+      v.clear(); e.clear();
+      for (const i of f) { const face = m.f[i]; if (!face) continue; for (const x of face) v.add(x); for (const x of T.faceEdges[i]) e.add(x); }
+    }
+    return { v, e, f };
+  };
+
+  // the next edge of a loop, standing on vertex `at` having come along edge `ei` (or -1: the loop ends)
+  function loopStep(m, T, ei, at) {
+    const ed = T.edges[ei], around = T.vertEdges[at];
+    if (ed.faces.length === 1) {                        // a border edge: follow the border
+      const nxt = around.filter((x) => x !== ei && T.edges[x].faces.length === 1);
+      return nxt.length === 1 ? nxt[0] : -1;
+    }
+    if (ed.faces.length !== 2 || around.length !== 4) return -1;   // a pole, a corner or non-manifold: stop
+    const mine = new Set(ed.faces);
+    const nxt = around.filter((x) => x !== ei && !T.edges[x].faces.some((f) => mine.has(f)));
+    return nxt.length === 1 ? nxt[0] : -1;
+  }
+  P.edgeLoop = (m, T, ei) => {
+    T = T || P.topology(m);
+    if (!T.edges[ei]) return [];
+    const out = new Set([ei]);
+    for (const start of [T.edges[ei].a, T.edges[ei].b]) {
+      let cur = ei, at = start === T.edges[ei].a ? T.edges[ei].b : T.edges[ei].a;
+      // walk away from `start`: stand on the far end and step on
+      for (let guard = 0; guard < T.edges.length; guard++) {
+        const nxt = loopStep(m, T, cur, at);
+        if (nxt < 0 || out.has(nxt)) break;
+        out.add(nxt);
+        const e2 = T.edges[nxt];
+        at = e2.a === at ? e2.b : e2.a;
+        cur = nxt;
+      }
+    }
+    return [...out];
+  };
+  function oppositeEdge(m, T, fi, ei) {              // across a quad: the edge that shares no vertex
+    const face = m.f[fi];
+    if (!face || face.length !== 4) return -1;
+    const k = T.faceEdges[fi].indexOf(ei);
+    return k < 0 ? -1 : T.faceEdges[fi][(k + 2) % 4];
+  }
+  // edge ring + the faces it crosses (a face loop): returns { edges, faces }
+  P.edgeRing = (m, T, ei) => {
+    T = T || P.topology(m);
+    if (!T.edges[ei]) return { edges: [], faces: [] };
+    const edges = new Set([ei]), faces = new Set();
+    for (const first of T.edges[ei].faces) {
+      let cur = ei, fi = first;
+      for (let guard = 0; guard < m.f.length + 1; guard++) {
+        if (faces.has(fi) || m.f[fi].length !== 4) break;
+        faces.add(fi);
+        const opp = oppositeEdge(m, T, fi, cur);
+        if (opp < 0) break;
+        edges.add(opp);
+        const next = T.edges[opp].faces.find((x) => x !== fi);
+        if (next === undefined) break;
+        cur = opp; fi = next;
+      }
+    }
+    return { edges: [...edges], faces: [...faces] };
+  };
+  // everything connected to the given vertices through faces (Blender's Select Linked)
+  P.linked = (m, T, verts) => {
+    T = T || P.topology(m);
+    const seen = new Set(verts), stack = [...verts];
+    while (stack.length) {
+      const x = stack.pop();
+      for (const fi of T.vertFaces[x] || []) for (const y of m.f[fi]) if (!seen.has(y)) { seen.add(y); stack.push(y); }
+    }
+    return seen;
+  };
+  // Select More / Less (Ctrl + / Ctrl -): one ring of faces around the selection out, or in
+  P.grow = (m, T, verts) => {
+    T = T || P.topology(m);
+    const out = new Set(verts);
+    for (const x of verts) for (const fi of T.vertFaces[x] || []) for (const y of m.f[fi]) out.add(y);
+    return out;
+  };
+  P.shrink = (m, T, verts) => {
+    T = T || P.topology(m);
+    const vs = new Set(verts), out = new Set();
+    for (const x of vs) {
+      const fs = T.vertFaces[x] || [];
+      if (fs.length && fs.every((fi) => m.f[fi].every((y) => vs.has(y)))) out.add(x);
+    }
+    return out;
+  };
+  // delete in vertex / edge mode (Blender): the faces that use any selected vertex / edge go
+  P.deleteVerts = (m, verts) => {
+    const s = new Set(verts);
+    return P.deleteFaces(m, m.f.map((f, i) => (f.some((x) => s.has(x)) ? i : -1)).filter((i) => i >= 0));
+  };
+  P.deleteEdges = (m, T, edges) => {
+    T = T || P.topology(m);
+    const drop = new Set();
+    for (const ei of edges) for (const fi of (T.edges[ei] || { faces: [] }).faces) drop.add(fi);
+    return P.deleteFaces(m, [...drop]);
+  };
+
+  // ---------------------------------------------------------------- transform (the move / rotate / scale tools)
+  // Proportional editing, as Blender's calculatePropRatio (transform_mode.cc): every unselected vertex within
+  // `radius` of the nearest selected one moves by factor(d), d = (radius - dist) / radius.
+  P.FALLOFF = {
+    smooth: (d) => Math.min(1, 3 * d * d - 2 * d * d * d), sphere: (d) => Math.sqrt(Math.max(0, 2 * d - d * d)),
+    root: (d) => Math.sqrt(d), sharp: (d) => d * d, linear: (d) => d, constant: () => 1, inverse: (d) => d * (2 - d),
+  };
+  P.weights = (m, verts, radius, falloff) => {
+    const w = new Map(), sel = [...new Set(verts)];
+    for (const i of sel) w.set(i, 1);
+    if (!(radius > 0) || !sel.length) return w;
+    const fn = P.FALLOFF[falloff] || P.FALLOFF.smooth, r2 = radius * radius;
+    // a grid over the selected vertices (cells a quarter of the radius): a vertex outside the selection's box or
+    // with no selected vertex in its coarse neighbourhood is skipped at once; the rest search outward shell by
+    // shell and stop as soon as no nearer selected vertex can be left - fast even with thousands selected
+    const S = 4, cell = radius / S, hash = (a, b, c) => ((a * 73856093) ^ (b * 19349663) ^ (c * 83492791)) | 0;
+    const fine = new Map(), coarse = new Set(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const i of sel) {
+      const p = m.v[i], a = Math.floor(p[0] / cell), b = Math.floor(p[1] / cell), c = Math.floor(p[2] / cell), k = hash(a, b, c);
+      if (!fine.has(k)) fine.set(k, []); fine.get(k).push(i);
+      coarse.add(hash(Math.floor(a / S), Math.floor(b / S), Math.floor(c / S)));
+      for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], p[d] - radius); hi[d] = Math.max(hi[d], p[d] + radius); }
+    }
+    m.v.forEach((p, i) => {
+      if (w.has(i) || p[0] < lo[0] || p[1] < lo[1] || p[2] < lo[2] || p[0] > hi[0] || p[1] > hi[1] || p[2] > hi[2]) return;
+      const c = [Math.floor(p[0] / cell), Math.floor(p[1] / cell), Math.floor(p[2] / cell)], C = c.map((x) => Math.floor(x / S));
+      let near = false;
+      for (let dx = -1; dx <= 1 && !near; dx++) for (let dy = -1; dy <= 1 && !near; dy++) for (let dz = -1; dz <= 1 && !near; dz++)
+        if (coarse.has(hash(C[0] + dx, C[1] + dy, C[2] + dz))) near = true;
+      if (!near) return;
+      let best = Infinity;
+      for (let sh = 0; sh <= S + 1; sh++) {
+        if (best < Infinity && (sh - 1) * cell > Math.sqrt(best)) break;
+        for (let dx = -sh; dx <= sh; dx++) for (let dy = -sh; dy <= sh; dy++) for (let dz = -sh; dz <= sh; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== sh) continue;   // this shell only
+          for (const j of fine.get(hash(c[0] + dx, c[1] + dy, c[2] + dz)) || []) {
+            const q = m.v[j], d2 = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+            if (d2 < best) best = d2;
+          }
+        }
+      }
+      if (best < r2) { const f = fn((radius - Math.sqrt(best)) / radius); if (f > 0) w.set(i, f); }
+    });
+    return w;
+  };
+  // p' = p + w (M p - p): M is a 4x4 column-major matrix (three.js' Matrix4.elements); weights from P.weights
+  P.applyMatrix = (m0, weights, M, into) => {
+    const m = into || clone(m0);
+    for (const [i, w] of weights) {
+      const p = m0.v[i], x = p[0], y = p[1], z = p[2];
+      const nx = M[0] * x + M[4] * y + M[8] * z + M[12], ny = M[1] * x + M[5] * y + M[9] * z + M[13], nz = M[2] * x + M[6] * y + M[10] * z + M[14];
+      m.v[i] = [x + (nx - x) * w, y + (ny - y) * w, z + (nz - z) * w];
+    }
+    return m;
+  };
+  P.median = (m, verts) => {
+    let s = [0, 0, 0], n = 0;
+    for (const i of verts) { s = add(s, m.v[i]); n++; }
+    return n ? mul(s, 1 / n) : [0, 0, 0];
+  };
+
   root.ForgePoly = P;
   if (typeof module !== "undefined" && module.exports) module.exports = P;
 })(typeof window !== "undefined" ? window : globalThis);
