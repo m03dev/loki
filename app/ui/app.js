@@ -959,7 +959,8 @@ function wire() {
     const main = $("#main");
     if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey && main.classList.contains("home")
         && !main.classList.contains("summoned") && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target || {}).tagName || "")
-        && $("#settings").hidden && !keyForControl(ev)) {
+        && $("#settings").hidden && !keyForControl(ev)
+        && !document.querySelector(".sheet:not([hidden])")) {   // a sheet (Forge, World, Studio...) owns the keys
       ev.preventDefault();
       summon(true);
       const prompt = $("#prompt");

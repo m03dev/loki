@@ -1461,6 +1461,11 @@ function forgeMakeView(lib, renderer, canvas) {
     forgeEditAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
       mesh: () => mesh, refresh: () => refresh(), hitAt: (e) => hitAt(e) });
   }
+  // Maya's markings, hotbox, hotkeys and camera: app/ui/forge_maya.js
+  if (typeof forgeMayaAttach === "function") {
+    forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
+      mesh: () => mesh, refresh: () => refresh() });
+  }
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;

@@ -171,6 +171,63 @@ async def main():
         side = sorted((WS / "models" / ".meta").glob("*.glb.json"))[-1]
         check("a drawing becomes a model, made with the slider's values", json.loads(side.read_text())["options"]["resolution"] == 96)
 
+        # -------- Maya's interaction layer (app/ui/forge_maya.js): hotkeys, the hotbox, marking menus, camera
+        view_box = await (await page.query_selector("#forge-view")).bounding_box()
+        vcx, vcy = view_box["x"] + view_box["width"] * 0.5, view_box["y"] + view_box["height"] * 0.5
+        await page.keyboard.press("4")
+        check("Maya hotkey 4 turns wireframe on", await page.evaluate("forge.view.wire === true"))
+        await page.keyboard.press("5")
+        check("Maya hotkey 5 goes back to shaded", await page.evaluate("forge.view.wire === false"))
+        await page.keyboard.press("w")
+        check("w attaches the move handle (Maya's move tool)", await page.evaluate("!!forge.view.transform.object"))
+        await page.keyboard.press("q")
+        q_state = await page.evaluate("""() => ({ obj: !!forge.view.transform.object,
+          ttype: typeof forge.view.transform, detach: typeof forge.view.transform.detach,
+          gizmo: !!(forge.view.gizmo && forge.view.gizmo.object), maya: !!forge.view.maya,
+          last: forge.view.maya && forge.view.maya.last && forge.view.maya.last[0],
+          status: (document.getElementById('forge-status') || {}).textContent })""")
+        check("q is Maya's select tool: it puts the handle away", not q_state["obj"], q_state)
+        await page.keyboard.down("Alt")
+        alt_right = await page.evaluate("forge.view.maya.controls.mouseButtons.RIGHT")
+        alt_dbg = await page.evaluate("""() => ({ right: forge.view.maya.controls.mouseButtons.RIGHT,
+          left: forge.view.maya.controls.mouseButtons.LEFT, saved: !!forge.view.maya.saved })""")
+        await page.keyboard.up("Alt")
+        rest_right = await page.evaluate("forge.view.maya.controls.mouseButtons.RIGHT")
+        check("Maya camera: Alt puts the dolly on the right button, and the marking menu owns it again on release",
+              alt_right is not None and rest_right is None, [alt_right, rest_right, alt_dbg])
+
+        # hold Space -> the hotbox opens over the window; release -> it goes
+        await page.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+        await page.keyboard.down(" ")
+        await page.wait_for_timeout(150)
+        hb_vis = await page.is_visible("#forge-maya-hotbox")
+        cols = await page.evaluate("document.querySelectorAll('#forge-maya-hotbox .forge-maya-col').length")
+        items = await page.evaluate("document.querySelectorAll('#forge-maya-hotbox .forge-maya-item').length")
+        await page.keyboard.up(" ")
+        await page.wait_for_timeout(120)
+        hb_gone = not await page.is_visible("#forge-maya-hotbox")
+        check("holding Space opens Maya's hotbox (menu columns with commands), releasing it closes", hb_vis and hb_gone and cols >= 5 and items >= 15,
+              [hb_vis, hb_gone, cols, items])
+
+        # hold the right button on the viewport -> the marking menu opens at the cursor; release over a wedge runs it
+        await page.mouse.move(vcx, vcy)
+        await page.mouse.down(button="right")
+        await page.wait_for_timeout(320)
+        wheel = await page.evaluate("!document.getElementById('forge-maya-marking').hidden")
+        wedges = await page.evaluate("[...document.querySelectorAll('#forge-maya-marking .forge-maya-wedge')].map((b) => b.dataset.mayaCmd)")
+        if wheel:
+            wb = await (await page.query_selector('#forge-maya-marking .forge-maya-wedge[data-maya-cmd="Rotate"]')).bounding_box()
+            await page.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2)
+        await page.mouse.up(button="right")
+        await page.wait_for_timeout(120)
+        check("holding the right button opens a marking menu at the cursor (8 wedges)", wheel and len(wedges) == 8, wedges)
+        check("releasing over a wedge runs it (Rotate puts the handle in rotate mode)",
+              await page.evaluate("!!forge.view.transform.object && forge.view.transform.mode === 'rotate'"))
+        check("the marking menu closes after the choice",
+              await page.evaluate("document.getElementById('forge-maya-marking').hidden"))
+        await page.keyboard.press("q")
+        await page.keyboard.press("5")   # tidy: select tool, shaded
+
         # -------- sculpt (SculptGL's brushes), undo, subdivide
         sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
         before = await page.evaluate(sum_js)
@@ -203,9 +260,13 @@ async def main():
         await page.click(".forge-tab[data-side='materials']")
         await page.wait_for_function("document.querySelectorAll('.fm-map-img canvas').length === 6", timeout=10000)
         check("the Materials side shows the six PBR maps", True)
-        applied = await page.evaluate("""() => { const m = forge.view.holder.children[0].material;
-          return { map: !!m.map, normal: !!m.normalMap, rough: !!m.roughnessMap }; }""")
-        check("the material is applied to the model live", all(applied.values()), applied)
+        applied = await page.evaluate("""() => { const kids = forge.view.holder.children;
+          const mesh = kids.find((o) => o.isMesh) || kids[0] || {};
+          const m = mesh.material || {};
+          return { map: !!m.map, normal: !!m.normalMap, rough: !!m.roughnessMap,
+                   kids: kids.map((o) => o.name || o.type) }; }""")
+        check("the material is applied to the model live",
+              all(applied[k] for k in ("map", "normal", "rough")), applied)
         await page.evaluate("""() => { const n = window.ForgeMaterials.state.graph.nodes.find((x) => x.type === 'material');
           window.ForgeMaterials.state.sel = n.name; }""")
         await page.evaluate("forgeSave('glb')")
