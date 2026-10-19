@@ -1466,6 +1466,10 @@ function forgeMakeView(lib, renderer, canvas) {
     forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
       mesh: () => mesh, refresh: () => refresh() });
   }
+  // the scene: objects, groups and the Outliner (docs/FORGE_MAYA.md, T1): app/ui/forge_scene.js
+  if (typeof forgeSceneAttach === "function") {
+    forgeSceneAttach(view, { THREE, scene, holder, material, camera });
+  }
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;

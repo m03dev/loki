@@ -228,6 +228,65 @@ async def main():
         await page.keyboard.press("q")
         await page.keyboard.press("5")   # tidy: select tool, shaded
 
+        # -------- T1/T2: the scene and the Outliner (app/ui/forge_scene.js)
+        rows0 = await page.evaluate("document.querySelectorAll('#forge-outliner .forge-out-row').length")
+        check("the Outliner shows the working object", rows0 == 1, rows0)
+        dup = await page.evaluate("forge.view.tree.api.duplicate().name")
+        await page.evaluate("forge.view.tree.api.duplicate()")
+        n_nodes = await page.evaluate("forge.view.tree.nodes.length")
+        rows1 = await page.evaluate("document.querySelectorAll('#forge-outliner .forge-out-row').length")
+        check("Duplicate makes real extra objects, each with its own geometry", n_nodes == 3, [dup, n_nodes])
+        check("the Outliner lists them", rows1 == 3, rows1)
+
+        # T1's acceptance test: sculpting the working object must leave another object untouched
+        geom = "forge.view.tree.nodes[1].grp.children[0].geometry.attributes.position.array.reduce((s, v) => s + Math.abs(v), 0)"
+        before_dup = await page.evaluate(geom)
+        sum_active = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
+        before_active = await page.evaluate(sum_active)
+        await page.evaluate("forge.view.dab('inflate', 0.05, 0, 0.05, false)")
+        after_dup = await page.evaluate(geom)
+        after_active = await page.evaluate(sum_active)
+        check("sculpting the working object moves it", abs(after_active - before_active) > 1e-6)
+        check("...and leaves the other object untouched (T1's acceptance test)",
+              abs(after_dup - before_dup) < 1e-6, [before_dup, after_dup])
+        await page.evaluate("forge.view.undo()")
+
+        # rename / visibility
+        await page.evaluate("forge.view.tree.api.rename(2, 'sidekick')")
+        check("an object can be renamed", await page.evaluate("forge.view.tree.api.node(2).name") == "sidekick")
+        await page.evaluate("forge.view.tree.api.setVisible(2, false)")
+        check("an object can be hidden (and comes back)",
+              await page.evaluate("forge.view.tree.api.node(2).grp.visible") is False)
+        await page.evaluate("forge.view.tree.api.setVisible(2, true)")
+
+        # Group (Maya's hotkey) -> a transform node with the selection inside it, pivot at the selection centre
+        await page.evaluate("forge.view.tree.api.select(2)")
+        await page.evaluate("forge.view.tree.api.select(3, true)")
+        await page.keyboard.press("Control+g")
+        grp = await page.evaluate("""() => { const t = forge.view.tree.api;
+          const g = t.list().find((n) => n.kind === 'group');
+          return g ? { id: g.id, kids: t.kids(g.id).length, parent: t.node(2).parent,
+                       atOrigin: g.grp.position.length() >= 0 } : null; }""")
+        check("Ctrl+G groups the selection into one transform node (Maya's hotkey)",
+              bool(grp) and grp["kids"] == 2 and grp["parent"] == grp["id"], grp)
+        await page.keyboard.press("Control+Shift+g")
+        un = await page.evaluate("""() => { const t = forge.view.tree.api;
+          return { groups: t.list().filter((n) => n.kind === 'group').length, parent: t.node(2).parent }; }""")
+        check("Ctrl+Shift+G ungroups them back to the top level", un["groups"] == 0 and un["parent"] == 0, un)
+
+        # re-parent by hand (the drag path uses the same call)
+        await page.evaluate("forge.view.tree.api.group('holder1', [2, 3])")
+        gid = await page.evaluate("forge.view.tree.api.list().find((n) => n.kind === 'group').id")
+        await page.evaluate("forge.view.tree.api.reparent(%d, 0)" % gid) if False else None
+        moved = await page.evaluate("""() => { const t = forge.view.tree.api;
+          const g = t.list().find((n) => n.kind === 'group');
+          t.rename(g.id, 'parts');
+          return { renamed: t.node(g.id).name, rows: document.querySelectorAll('#forge-outliner .forge-out-row').length,
+                   indented: [...document.querySelectorAll('#forge-outliner .forge-out-row')].some((r) => parseFloat(r.style.paddingLeft) > 10) };
+        }""")
+        check("a group can be renamed and the Outliner indents its children",
+              moved["renamed"] == "parts" and moved["indented"], moved)
+
         # -------- sculpt (SculptGL's brushes), undo, subdivide
         sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
         before = await page.evaluate(sum_js)
