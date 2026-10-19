@@ -104,12 +104,13 @@ function forgeLeft() {
   const ways = el("div", "forge-ways"); ways.setAttribute("role", "tablist");
   for (const [way, icon, name, what] of [["draw", "pen", "Draw", "Draw it on a canvas, then make it 3D."],
     ["image", "image", "Add an image", "Drop or pick a picture, then make it 3D."],
-    ["describe", "sparkle", "Describe it", "Say what you want: LOKI draws a picture first (redo it until you like it), then makes it 3D."]]) {
+    ["describe", "sparkle", "Describe it", "Say what you want: LOKI draws a picture first (redo it until you like it), then makes it 3D."],
+    ["creature", "grid", "Creature", "Paste an anyCreature spec (JSON) and compile it: a skinned, animated creature you judge in the four-view panel."]]) {
     const b = forgeBtn(icon, name, what, () => forgeWay(way), "forge-way");
     b.dataset.way = way; b.setAttribute("role", "tab");
     ways.append(b);
   }
-  side.append(ways, forgeDrawPane(), forgeImagePane(), forgeDescribePane());
+  side.append(ways, forgeDrawPane(), forgeImagePane(), forgeDescribePane(), forgeCreaturePane());
   const go = el("div", "forge-go");
   const pick = el("select", "forge-backend"); pick.id = "forge-backend";
   pick.setAttribute("aria-label", "How to make the 3D model");
@@ -298,11 +299,7 @@ function forgeStage() {
     forgeBtn("sun", "Lighting", "Change the light: studio, warm, cool, soft.", forgeLight),
     forgeBtn("frame", "Frame", "Fit the model in view (F).", () => forge.view && forge.view.frame()),
     forgeBtn("grid", "Quad view", "Front, side, top and the three-quarter view at once - the four views a modeller reads a shape from.",
-      (e) => {
-        forgeToggle("quad", e.currentTarget);
-        const L = document.getElementById("forge-quad-labels");
-        if (L) L.hidden = !(forge.view && forge.view.quad);
-      }));
+      () => forgeQuad(!(forge.view && forge.view.quad))));
   const sculpt = el("div", "forge-float forge-sculptbar"); sculpt.id = "forge-sculpt"; sculpt.hidden = true;
   const brushes = el("div", "forge-brushes");
   for (const [id, icon, name, what] of FORGE_BRUSHES) {
@@ -343,12 +340,41 @@ function forgeSlider(name, id, min, max, value, onInput) {
   return wrap;
 }
 
+function forgeCreaturePane() {
+  const pane = el("div", "forge-pane"); pane.dataset.pane = "creature"; pane.hidden = true;
+  pane.append(el("p", "note", "An anyCreature ACS spec, as JSON. The engine compiles it into a skinned, "
+    + "animated .glb and draws its front / side / top / three-quarter views - the four panels judge the shape. "
+    + "A copied example is refused, so make it your own (see contrib/anycreature)."));
+  const ta = document.createElement("textarea"); ta.id = "forge-creature-spec"; ta.className = "forge-spec";
+  ta.setAttribute("aria-label", "anyCreature ACS spec (JSON)");
+  ta.setAttribute("spellcheck", "false");
+  ta.placeholder = '{"height": 1.8, "joints": { ... }, "volumes": [ ... ], "parts": [ ... ]}';
+  const row = el("label", "forge-slider");
+  row.dataset.tipName = "Name"; row.dataset.tipWhat = "What the .glb is called in models/.";
+  const nm = document.createElement("input"); nm.type = "text"; nm.id = "forge-creature-name"; nm.value = "creature";
+  nm.setAttribute("aria-label", "Creature name");
+  row.append(el("span", "forge-slider-name", "N"), nm);
+  pane.append(ta, row);
+  return pane;
+}
+
+function forgeQuad(on) {
+  if (!forge.view) return;
+  forge.view.setLook("quad", !!on);
+  const btn = document.querySelector("#forge .forge-viewbar button[data-tip-name='Quad view']");
+  if (btn) btn.classList.toggle("on", !!on);
+  const L = document.getElementById("forge-quad-labels");
+  if (L) L.hidden = !on;
+}
+
 function forgeWay(way) {
   forge.way = way;
   for (const b of document.querySelectorAll("#forge .forge-way")) {
     b.classList.toggle("on", b.dataset.way === way); b.setAttribute("aria-selected", String(b.dataset.way === way));
   }
   for (const p of document.querySelectorAll("#forge .forge-pane")) p.hidden = p.dataset.pane !== way;
+  const mk = document.getElementById("forge-make");
+  if (mk) mk.textContent = way === "creature" ? "Make creature" : "Make 3D";
   forgeOutputState();
 }
 
@@ -429,6 +455,22 @@ async function forgePicture() {
 }
 
 async function forgeMake() {
+  if (forge.way === "creature") {
+    const spec = document.getElementById("forge-creature-spec").value.trim();
+    if (!spec) { forgeSay("Paste an anyCreature spec (JSON) first.", true); return; }
+    const name = document.getElementById("forge-creature-name").value.trim() || "creature";
+    document.getElementById("forge-make").disabled = true;
+    forgeSay("Compiling the creature…");
+    const r = await api("/forge/creature", { spec, name }).catch(() => null);
+    if (!r || !r.ok) { document.getElementById("forge-make").disabled = false; forgeSay((r && r.error) || "Could not start.", true); return; }
+    forgePoll(r.id, (res) => {
+      forgeSay("Made " + res.name + " - the four panels show its front, side, top and three-quarter views. "
+        + "Frame it, then sculpt it or export it.");
+      forgeList();
+      forgeLoad(res.name).then(() => forgeQuad(true));
+    });
+    return;
+  }
   const body = { backend: forge.backend, options: forge.values };
   if (forge.way === "draw") body.drawing = document.getElementById("forge-canvas").toDataURL("image/png");
   else if (forge.way === "image") {

@@ -242,6 +242,22 @@ async def main():
         back = await page.evaluate("() => ({ on: !!forge.view.quad, orbit: forge.view.controls.enabled, hidden: document.getElementById('forge-quad-labels').hidden })")
         check("toggling Quad view off returns to the orbit view", (not back["on"]) and back["orbit"] and back["hidden"], back)
 
+        # -------- the Creature way: an anyCreature spec -> a model in the four panels
+        await page.click(".forge-tab[data-side='make']")   # the ways live in the left column
+        await page.wait_for_timeout(200)
+        await page.click("#forge .forge-way[data-way='creature']")
+        await page.wait_for_timeout(250)
+        check("the Creature way shows the anyCreature spec box and relabels Make",
+              await page.is_visible("#forge-creature-spec")
+              and (await page.inner_text("#forge-make")).strip() == "Make creature")
+        await page.fill("#forge-creature-spec", "this is not JSON")
+        await page.click("#forge-make")
+        await page.wait_for_function("/not valid JSON/.test(document.getElementById('forge-status').textContent)", timeout=20000)
+        spec_err = await page.inner_text("#forge-status")
+        check("a spec that is not JSON is refused, with the reason shown", "not valid JSON" in spec_err, spec_err)
+        await page.click("#forge .forge-way[data-way='describe']")
+        await page.wait_for_timeout(150)
+
         # -------- layout: the panel fits 900x600, every button reachable
         await page.set_viewport_size({"width": 900, "height": 600})
         await page.click(".forge-tab[data-side='make']")
