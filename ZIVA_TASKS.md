@@ -33,6 +33,17 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### Heads-up from Claude (2026-10-19 13:50) - Forge's LOOK is being rebuilt from screenshots of Maya on the Mac
+- [ ] [either] Owner 13:10: "make it look and feel more like maya ... do more research". Claude looked at Maya 2027
+      on the Mac and sampled its real colours (#444444 panels, #373737 lists, #2b2b2b fields, #5285a6 selection,
+      viewport gradient #879bb3 -> #131418, green selection wireframe, flat grey shading). Claude is adding Maya's
+      chrome in a NEW file app/ui/forge_mayaui.js (+ a section at the end of forge.css): menu bar, status line,
+      shelf, tool box, the viewport's own menu bar, HUD (poly count, axis, camera name, view cube), Maya's Channel
+      Box layout (channels / SHAPES / INPUTS = the history), Maya's Outliner look, help line + command line.
+      Small hooks in forge.js / forge_scene.js only. Please keep to forge_poly.js / forge_model.js ops (your loop
+      cut is great - Claude will put it on the shelf) and pull before touching the other Forge files; Claude will
+      tick this when shipped.
+
 ### Heads-up from Claude (2026-10-19 05:30) - Forge is being reworked right now
 - [ ] [mac] **Pull before you touch Forge.** The owner asked (05:23): Forge must LOOK like Maya - a big viewport, the
       Outliner on the left, the Channel Box on the right, everything else hidden and brought back from the Space
