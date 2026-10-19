@@ -89,10 +89,15 @@ function forgeBuild() {
   }
   const status = el("span", "forge-status"); status.id = "forge-status"; status.setAttribute("role", "status");
   head.append(title, tabs, status, forgeBtn("close", "Close", "Close Forge (Esc).", forgeClose));
-  const body = el("div", "forge-body");
-  body.append(forgeLeft(), forgeStage());
+  const body = el("div", "forge-body maya");
+  // Maya's workspace (owner 2026-10-19): the Outliner on the left, the viewport, the Channel Box on the right;
+  // the Create panel, Materials, the shelf and the toolkit come back from the Space menu (Windows) - forge_maya.js
+  const outCol = el("aside", "forge-outcol"); outCol.id = "forge-outcol";
+  const chanCol = el("aside", "forge-chancol"); chanCol.id = "forge-chancol";
+  body.append(outCol, forgeLeft(), forgeStage());
   const mats = el("section", "forge-materials"); mats.id = "forge-materials"; mats.hidden = true;
-  body.append(mats);
+  body.append(mats, chanCol);
+  panel.classList.add("maya");
   panel.append(head, body);
   sheet.append(panel);
   document.body.append(sheet);
@@ -287,7 +292,7 @@ function forgeStage() {
   const stage = el("section", "forge-stage"); stage.id = "forge-stage";
   const cv = document.createElement("canvas"); cv.id = "forge-view"; cv.className = "forge-view";
   cv.setAttribute("aria-label", "3D view: drag to turn, wheel to zoom, right-drag to move");
-  const empty = el("p", "forge-empty", "Draw, add a picture or describe something - the model appears here.");
+  const empty = el("p", "forge-empty", "Hold Space for every menu. Shift + right-click on empty space: Create (cube, sphere ...). Alt/Option + mouse: the camera.");
   empty.id = "forge-empty";
   const viewBar = el("div", "forge-float forge-viewbar");
   const mode = forgeBtn("sculpt", "Sculpt", "Sculpt mode: shape the model with brushes. Drag off the model still turns it.", () => forgeMode(), "forge-mode");
@@ -577,6 +582,7 @@ function forgeSide(id) {
     mats.dataset.ready = "1";
     window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => forgeSay("Materials: " + e.message, true));
   }
+  if (typeof forgeMayaPanelsApply === "function") forgeMayaPanelsApply();   // Maya's workspace decides what shows
   if (forge.view) forge.view.resize();
 }
 
@@ -1366,7 +1372,7 @@ function forgeMakeView(lib, renderer, canvas) {
   // ---- pointer: in Sculpt mode a left-drag on the model sculpts (OrbitControls keeps everything else)
   let drag = null;
   canvas.addEventListener("pointerdown", (e) => {
-    if (view.mode !== "sculpt" || e.button !== 0 || transform.dragging) return;
+    if (view.mode !== "sculpt" || e.button !== 0 || e.altKey || transform.dragging) return;   // Alt/Option is the camera (Maya)
     const hit = hitAt(e);
     if (!hit || !view.sm) return;
     e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting
@@ -1375,7 +1381,7 @@ function forgeMakeView(lib, renderer, canvas) {
     view.stroked = true;                // forge_scene.js records the stroke in the history when it ends (T6c)
     if (view.poly) { view.poly = null; view.tri2face = null; view.select([]); }   // sculpted: the poly cage no longer fits
     const tool = e.shiftKey ? "smooth" : view.brush.tool;
-    drag = { tool, negative: e.altKey || e.ctrlKey || e.metaKey, last: hit.point.clone() };
+    drag = { tool, negative: e.ctrlKey || e.metaKey, last: hit.point.clone() };
     if (tool === "grab") drag.grab = grabStart(hit.point);
     else stroke(tool, hit.point, drag.negative);
   }, { capture: true });
@@ -1455,7 +1461,7 @@ function forgeMakeView(lib, renderer, canvas) {
     for (let i = 0; i < idx.length; i++) idx[i] = sm.wid[sm.idx[i]];
     return { pos: sm.wpos.slice(), idx };
   };
-  // selection, picking, box select, the move tool: app/ui/forge_edit.js (Blender's edit mode)
+  // selection, picking, box select, the move tool: app/ui/forge_edit.js (component mode, Maya's keys)
   view.selected = [];
   view.select = (faces) => { view.selected = faces.slice(); };   // replaced by forge_edit.js
   if (typeof forgeEditAttach === "function") {
@@ -1464,7 +1470,7 @@ function forgeMakeView(lib, renderer, canvas) {
   }
   // Maya's markings, hotbox, hotkeys and camera: app/ui/forge_maya.js
   if (typeof forgeMayaAttach === "function") {
-    forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
+    forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material, transform,
       mesh: () => mesh, refresh: () => refresh() });
   }
   // the scene layer (forge_scene.js) hands the tools another object's mesh: plain triangles in the holder's space
@@ -1577,7 +1583,7 @@ function forgeMode() {
   if (v.select) v.select([]);
   document.getElementById("forge-sculpt").hidden = v.mode !== "sculpt";
   document.getElementById("forge-mode").classList.toggle("on", v.mode === "sculpt");
-  forgeSay(v.mode === "sculpt" ? "Sculpt: drag on the model. Alt/Ctrl inverts, Shift smooths, [ ] radius, drag off the model to turn." : "");
+  forgeSay(v.mode === "sculpt" ? "Sculpt: drag on the model. Ctrl/Cmd inverts, Shift smooths, hold b and drag for the size, m for the strength; Alt/Option + mouse turns the view." : "");
 }
 
 function forgeToggle(what, btn) {

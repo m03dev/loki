@@ -114,7 +114,8 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   (`makeWorking`), Create = new pCube1/pSphere1 objects, Duplicate / Shift+D / Group / Parent / hide / isolate /
   pick-walk, viewport click + box selection with Maya's modifiers, context marking menus picked by direction,
   hotbox zones, Space tap one/four views, Top/Front/Side, pivot edit (d), view undo ([), Maya's Outliner. Maya is
-  the default hotkey set; "Hotkeys: Blender" in the hotbox keeps Blender's keys (test_forge_edit_ui runs on it).
+  Maya-only keys (the owner had the Blender set removed). Later the same morning: Maya's workspace (Outliner left,
+  Channel Box right, the rest from Space > Windows, Ctrl+Space), Maya's hotbox layout, x / c / v snapping and a grid.
   Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_MAYA.md T7-T12.
 
 ### Phone

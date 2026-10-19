@@ -1,6 +1,6 @@
 // Forge's Model bar (owner 2026-10-18: "primitives, dynomesh ... poly modeling", "loves modular things with sliders").
-// Add a primitive and shape it with sliders; select vertices, edges or faces like Blender's edit mode (1 2 3, click,
-// box, Alt+click loops - app/ui/forge_edit.js), move / rotate / scale them (G R S or the W handle, proportional O),
+// Add a primitive and shape it with sliders; select vertices, edges or faces the Maya way (F9 F10 F11, click,
+// box, double-click loops - app/ui/forge_edit.js), move / rotate / scale them (w e r handles, soft selection b),
 // then Extrude / Inset / Delete / Flip /
 // Smooth (Catmull-Clark); every last operation keeps a slider that re-does it live (like Blender's redo panel);
 // DynaMesh rebuilds any model - a sculpt included - as even quads at the resolution you pick, so you can sculpt
@@ -25,7 +25,7 @@ Object.assign(ICON_PATHS, {
 const forgeModel = { prim: null, last: null, dyna: { res: 96, smooth: 2 } };
 
 function forgeModelBar(viewBar) {
-  const mode = forgeBtn("poly", "Model", "Model mode: add primitives; select vertices, edges or faces (1 2 3) - click, drag a box, Alt+click a loop; G / R / S moves them; extrude, inset, smooth, DynaMesh.",
+  const mode = forgeBtn("poly", "Model", "Component mode (F8): add primitives; vertices / edges / faces on F9 / F10 / F11 - click, drag a box, double-click an edge for its loop; w / e / r handles; extrude (Ctrl+E), inset, smooth, DynaMesh.",
     () => forgeModelMode(), "forge-model-mode");
   mode.id = "forge-model-mode";
   viewBar.prepend(mode);
@@ -39,36 +39,36 @@ function forgeModelBar(viewBar) {
   const params = el("div", "forge-model-params"); params.id = "forge-model-params";
 
   const sel = el("div", "forge-model-grid");
-  for (const [m, icon, name, what] of [["vert", "selvert", "Vertex", "Vertex select (1): click a point, drag a box round several."],
-    ["edge", "seledge", "Edge", "Edge select (2): click an edge; Alt+click selects the whole edge loop."],
-    ["face", "selface", "Face", "Face select (3): click a face; Alt+click selects a loop of faces."]]) {
+  for (const [m, icon, name, what] of [["vert", "selvert", "Vertex", "Vertex (F9): click a point, drag a box round several."],
+    ["edge", "seledge", "Edge", "Edge (F10): click an edge; double-click selects the whole edge loop."],
+    ["face", "selface", "Face", "Face (F11): click a face; double-click selects the whole piece."]]) {
     const b = forgeBtn(icon, name, what, () => forge.view && forge.view.setSelMode && forge.view.setSelMode(m), m === "face" ? "on" : "");
     b.dataset.selmode = m; sel.append(b);
   }
-  const xr = forgeBtn("xray", "X-ray", "See and select through the model (Alt+Z): a box then takes the hidden side too.", () => forge.view && forge.view.setXray());
+  const xr = forgeBtn("xray", "X-ray", "X-ray (Alt+X): see and select through the model - a box then takes the hidden side too.", () => forge.view && forge.view.setXray());
   xr.dataset.xray = "1";
   sel.append(xr,
-    forgeBtn("selectall", "All / none", "Select everything, or nothing (A).", () => forgeSelectAll()),
-    forgeBtn("grow", "More", "Grow the selection by one ring (Ctrl +).", () => forge.view && forge.view.selectGrow(true)),
-    forgeBtn("shrink", "Less", "Shrink the selection by one ring (Ctrl -).", () => forge.view && forge.view.selectGrow(false)),
-    forgeBtn("linked", "Linked", "Select everything connected to the selection (Ctrl+L; L or a double-click picks the piece under the mouse).", () => forge.view && forge.view.selectLinked()),
-    forgeBtn("invert", "Invert", "Select what is not selected (Ctrl+I).", () => forge.view && forge.view.selectInvert()));
+    forgeBtn("selectall", "All / none", "Select everything (Ctrl+Shift+A), or nothing (Alt+D).", () => forgeSelectAll()),
+    forgeBtn("grow", "More", "Grow the selection by one ring (>).", () => forge.view && forge.view.selectGrow(true)),
+    forgeBtn("shrink", "Less", "Shrink the selection by one ring (<).", () => forge.view && forge.view.selectGrow(false)),
+    forgeBtn("linked", "Linked", "Select everything connected to the selection (a double-click picks the piece under the mouse).", () => forge.view && forge.view.selectLinked()),
+    forgeBtn("invert", "Invert", "Select what is not selected (Ctrl+Shift+I).", () => forge.view && forge.view.selectInvert()));
   const tools = el("div", "forge-model-grid");
-  for (const [t, icon, name, what, key] of [["translate", "move", "Move", "A move handle on the selection (W). Or press G and move the mouse.", "G"],
-    ["rotate", "rotate", "Rotate", "A rotate handle on the selection. Or press R.", "R"],
-    ["scale", "scale", "Scale", "A scale handle on the selection. Or press S.", "S"]]) {
-    const b = forgeBtn(icon, name, what + " X / Y / Z lock an axis, type a number for an exact value, Ctrl snaps.", () => forge.view && forge.view.setTool(t));
+  for (const [t, icon, name, what, key] of [["translate", "move", "Move", "A move handle on the selection (w).", "W"],
+    ["rotate", "rotate", "Rotate", "A rotate handle on the selection (e).", "E"],
+    ["scale", "scale", "Scale", "A scale handle on the selection (r).", "R"]]) {
+    const b = forgeBtn(icon, name, what + " Hold x to snap to the grid, v to a vertex, c to an edge.", () => forge.view && forge.view.setTool(t));
     b.dataset.tool = t; b.dataset.key = key; tools.append(b);
   }
-  const prop = forgeBtn("magnet", "Proportional", "Proportional editing (O): the vertices around the selection follow, fading with distance - the mouse wheel sets how far while you move.",
+  const prop = forgeBtn("magnet", "Proportional", "Soft selection (b): the vertices around the selection follow, fading with distance.",
     () => forge.view && forge.view.setProportional(!forge.view.edit.prop));
   prop.dataset.prop = "1";
   tools.append(prop);
   const propRow = el("div", "forge-model-params");
-  propRow.append(forgeHSlider("Falloff radius", "How far the proportional pull reaches (a share of the model's size).", 0.02, 1, 0.01, 0.25,
+  propRow.append(forgeHSlider("Falloff radius", "How far soft selection reaches (a share of the model's size).", 0.02, 1, 0.01, 0.25,
     (v) => forge.view && forge.view.setProportional(null, v)));
   const fall = document.createElement("select"); fall.className = "forge-backend forge-falloff"; fall.setAttribute("aria-label", "Falloff");
-  fall.dataset.tipName = "Falloff"; fall.dataset.tipWhat = "The curve of the proportional pull (Blender's falloffs).";
+  fall.dataset.tipName = "Falloff"; fall.dataset.tipWhat = "The curve of the soft-selection pull.";
   for (const f of ["smooth", "sphere", "root", "inverse", "sharp", "linear", "constant"]) { const o = el("option", "", f[0].toUpperCase() + f.slice(1)); o.value = f; fall.append(o); }
   fall.addEventListener("change", () => forge.view && forge.view.setProportional(null, null, fall.value));
   propRow.append(fall);
@@ -77,7 +77,7 @@ function forgeModelBar(viewBar) {
   faces.append(
     forgeBtn("extrude", "Extrude", "Pull the picked faces out as one piece (E). The slider below sets how far, live.", () => forgeFaceOp("extrude")),
     forgeBtn("inset", "Inset", "A smaller face inside each picked face (I); the slider sets how far in.", () => forgeFaceOp("inset")),
-    forgeBtn("smooth", "Smooth", "Catmull-Clark: every face becomes quads, rounder (Ctrl+number like Maya's smooth).", () => forgeFaceOp("smooth")),
+    forgeBtn("smooth", "Smooth", "Catmull-Clark: every face becomes quads, rounder.", () => forgeFaceOp("smooth")),
     forgeBtn("flip", "Flip", "Turn the picked faces (or all) inside out.", () => forgeFaceOp("flip")),
     forgeBtn("trash", "Delete", "Delete the selection (X or Delete): in vertex / edge mode the faces that use it go too.", () => forgeFaceOp("delete")));
   const redo = el("div", "forge-model-params"); redo.id = "forge-model-redo";
@@ -128,7 +128,7 @@ async function forgeModelMode(on) {
     if (t.idx.length / 3 <= 60000) { v.showPoly(window.ForgePoly.fromTriangles(t.pos, t.idx), true); forgeHistReset(); }
   }
   if (want && v.selStats) v.selStats();
-  if (want && !v.poly) forgeSay("Model: add a primitive. Then 1 2 3 pick vertices / edges / faces - click, drag a box, Alt+click a loop; G / R / S move them. Middle-drag (or Alt+drag) turns the view.");
+  if (want && !v.poly) forgeSay("Components: F9 vertex, F10 edge, F11 face - click, Shift toggles, drag a box, double-click an edge for its loop; w / e / r handles; Alt/Option + mouse turns the view.");
   else if (!want) forgeSay("");
   forgeModelSync();
 }
@@ -375,34 +375,4 @@ async function forgeDynamesh() {
   forgeSay("DynaMesh: " + out.f.length.toLocaleString() + " even quads in " + Math.round(performance.now() - t0) + " ms - sculpt on, or edit faces.");
 }
 
-// Model mode's keys with the Blender hotkey set - Blender's edit-mode keymap (the G / R / S keys while a move runs are forge_edit.js')
-document.addEventListener("keydown", (e) => {
-  const sheet = document.getElementById("forge"), v = forge.view;
-  if (!sheet || sheet.hidden || !v || v.mode !== "poly") return;
-  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-  if (v.modalActive && v.modalActive()) return;
-  if (typeof forgeKeymap === "function" && forgeKeymap() === "maya") return;   // Maya's keys: app/ui/forge_maya.js
-  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
-  const take = () => { e.preventDefault(); e.stopImmediatePropagation(); };
-  if (mod) {
-    if (k === "i") { take(); v.selectInvert(); }
-    else if (k === "l") { take(); v.selectLinked(); }
-    else if (k === "=" || k === "+") { take(); v.selectGrow(true); }
-    else if (k === "-") { take(); v.selectGrow(false); }
-    return;                                              // Ctrl+Z / Ctrl+Shift+Z stay with forge.js
-  }
-  if (e.altKey) {
-    if (k === "z" || e.code === "KeyZ") { take(); v.setXray(); }
-    else if (k === "a" || e.code === "KeyA") { take(); v.selectAll(false); }
-    return;
-  }
-  if (k === "1" || k === "2" || k === "3") { take(); v.setSelMode({ 1: "vert", 2: "edge", 3: "face" }[k]); }
-  else if (k === "g" || k === "r" || k === "s") { take(); if (!v.modalStart(k.toUpperCase())) forgeSay("Select something to move first.", true); }
-  else if (k === "w") { take(); v.setTool("translate"); }
-  else if (k === "e") { take(); forgeFaceOp("extrude"); }
-  else if (k === "i") { take(); forgeFaceOp("inset"); }
-  else if (k === "a") { take(); forgeSelectAll(); }
-  else if (k === "o") { take(); v.setProportional(!v.edit.prop); }
-  else if (k === "l") { take(); const seed = v.edit.mouse && v.linkedSeed(v.edit.mouse); if (seed) v.selectLinked(seed, "add"); }
-  else if (k === "x" || e.key === "Delete" || e.key === "Backspace") { take(); forgeFaceOp("delete"); }
-}, true);
+// Model mode's keys are Maya's now (app/ui/forge_maya.js) - the owner had Blender's keys removed (2026-10-19).

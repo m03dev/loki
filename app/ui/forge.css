@@ -349,8 +349,8 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 .forge-outliner .forge-out-row.working .forge-out-kind { color: #5b8db8; opacity: 1; }
 .forge-outliner .forge-out-row.drop-before { box-shadow: inset 0 2px 0 #5b8db8; }
 .forge-outliner .forge-out-row.drop-after { box-shadow: inset 0 -2px 0 #5b8db8; }
-.forge-outliner .forge-out-list.drop-world { outline: 1px dashed rgba(237,120,43,.6); outline-offset: -2px; }
-.forge-outliner .forge-out-list:focus-visible { outline: 1px solid rgba(237,120,43,.5); outline-offset: -1px; }
+.forge-outliner .forge-out-list.drop-world { outline: 1px dashed rgba(91,141,184,.7); outline-offset: -2px; }
+.forge-outliner .forge-out-list:focus-visible { outline: 1px solid rgba(91,141,184,.6); outline-offset: -1px; }
 .forge-outliner .forge-out-tw {
   flex: none; width: 14px; padding: 0; border: 0; background: transparent; color: inherit; font-size: 10px;
   opacity: .7; cursor: pointer;
@@ -420,3 +420,70 @@ button.forge-out-title { border: 0; background: transparent; color: inherit; cur
 button.forge-out-title:hover { opacity: 1; }
 .forge-outliner.collapsed .forge-out-title::after { content: " \25b8"; }
 .forge-outliner:not(.collapsed) .forge-out-title::after { content: " \25be"; opacity: .6; }
+/* ---------------------------------------------------------------- Maya's workspace (owner 2026-10-19)
+   viewport in the middle, the Outliner on the left, the Channel Box on the right, nothing else until you ask
+   for it from the Space menu (Windows): forge_maya.js forgeMayaPanels. */
+.sheet-panel.forge-panel.maya { width: 100%; height: 100%; border-radius: 10px; }
+.forge-panel.maya .forge-tabs { display: none; }
+.forge-panel.maya .forge-head { padding: 4px 10px; min-height: 0; }
+.forge-panel.maya .forge-head h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; margin: 0; }
+.forge-body.maya { display: flex; flex-direction: row; align-items: stretch; }
+.forge-body.maya > .forge-outcol { flex: 0 0 clamp(170px, 17%, 250px); min-width: 0; display: flex; flex-direction: column;
+  border-right: 1px solid var(--line); background: rgba(14,16,21,.6); overflow: hidden; }
+.forge-body.maya > .forge-chancol { flex: 0 0 clamp(190px, 19%, 270px); min-width: 0; display: flex; flex-direction: column;
+  border-left: 1px solid var(--line); background: rgba(14,16,21,.6); overflow-y: auto; scrollbar-width: thin; }
+.forge-body.maya > .forge-side { flex: 0 0 clamp(220px, 24%, 340px); }
+.forge-body.maya > .forge-stage { flex: 1 1 auto; min-width: 0; }
+.forge-body.maya > .forge-materials { flex: 0 0 38%; min-width: 0; }
+.forge-body.maya > [hidden] { display: none !important; }
+/* the shelf (the old floating bars) and the Modeling Toolkit only when switched on */
+.forge-body.maya:not(.show-shelf) .forge-viewbar,
+.forge-body.maya:not(.show-shelf) .forge-exportbar { display: none !important; }
+.forge-body.maya:not(.show-toolkit) #forge-model { display: none !important; }
+/* the Outliner fills its column */
+.forge-outcol .forge-outliner { margin: 0; flex: 1 1 auto; min-height: 0; max-height: none; min-width: 0;
+  border: 0; border-radius: 0; background: transparent; }
+.forge-outcol .forge-outliner .forge-out-list { max-height: none; flex: 1 1 auto; }
+.forge-outcol .forge-out-bar { gap: 2px; }
+.forge-outcol .forge-out-btn { padding: 2px 6px; font-size: 10.5px; }
+/* the Channel Box column */
+.forge-chancol .forge-ch-body { border-top: 0; border-bottom: 1px solid rgba(255,255,255,.08); padding: 6px 0; }
+.forge-chancol .forge-ch-title { font-size: 11px; opacity: .65; }
+.forge-chancol .forge-ch-row { padding: 3px 8px; }
+.forge-chancol .forge-hist-list { max-height: none; }
+/* Maya's snap chips, top-right of the viewport */
+.forge-snaps { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 4; display: flex; flex-direction: column; gap: 3px; }
+.forge-snap { padding: 2px 7px; border-radius: 5px; border: 1px solid rgba(255,255,255,.16); background: rgba(16,18,24,.7);
+  color: rgba(230,233,239,.6); font: inherit; font-size: 10.5px; cursor: pointer; }
+.forge-snap.on { background: #5dff9a; border-color: #5dff9a; color: #0d1310; }
+
+/* ---------------------------------------------------------------- the hotbox, Maya's layout */
+.forge-maya-hotbox { padding: 0; overflow: hidden; background: rgba(10,12,16,.42); backdrop-filter: none; }
+.forge-maya-hotbox .forge-maya-hbbox { position: fixed; transform: translate(-50%, -50%); width: 0; height: 0; }
+.forge-maya-hotbox .forge-maya-row { position: absolute; left: 0; transform: translateX(-50%); display: flex; gap: 2px;
+  white-space: nowrap; }
+.forge-maya-hotbox .forge-maya-row.up { bottom: 26px; }
+.forge-maya-hotbox .forge-maya-row.down { top: 26px; }
+.forge-maya-hotbox .forge-maya-col { position: relative; background: none; border: 0; padding: 0; border-radius: 0; }
+.forge-maya-hotbox .forge-maya-head { margin: 0; padding: 4px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 5px;
+  background: rgba(22,25,32,.95); color: #e6e9ef; font: inherit; font-size: 12px; letter-spacing: 0; text-transform: none;
+  opacity: 1; cursor: default; }
+.forge-maya-hotbox .forge-maya-head.open, .forge-maya-hotbox .forge-maya-head:hover { background: #5b8db8; border-color: #5b8db8; color: #12141a; }
+.forge-maya-hotbox .forge-maya-list { position: absolute; left: 0; top: 100%; margin-top: 2px; z-index: 2; min-width: 190px;
+  display: flex; flex-direction: column; padding: 4px; border-radius: 7px; background: rgba(22,25,32,.98);
+  border: 1px solid rgba(255,255,255,.14); box-shadow: 0 10px 26px rgba(0,0,0,.5); }
+.forge-maya-hotbox .forge-maya-row.up .forge-maya-list { top: auto; bottom: 100%; margin: 0 0 2px; }
+.forge-maya-hotbox .forge-maya-list[hidden] { display: none; }
+.forge-maya-hotbox .forge-maya-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; }
+.forge-maya-hotbox .forge-maya-tick { width: 12px; color: #5dff9a; }
+.forge-maya-hotbox .forge-maya-empty { padding: 4px 8px; opacity: .5; font-size: 12px; }
+.forge-maya-hotbox .forge-maya-zonehub { position: absolute; left: 0; top: 0; }
+.forge-maya-hotbox .forge-maya-zones span { position: absolute; transform: translate(-50%, -50%); font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase; opacity: .35; pointer-events: none; white-space: nowrap; }
+.forge-maya-hotbox .forge-maya-zones .z-north { left: 0; top: -150px; }
+.forge-maya-hotbox .forge-maya-zones .z-south { left: 0; top: 150px; }
+.forge-maya-hotbox .forge-maya-zones .z-east { left: 330px; top: 0; }
+.forge-maya-hotbox .forge-maya-zones .z-west { left: -330px; top: 0; }
+.forge-wheel-wedge.open { background: #5b8db8; border-color: #5b8db8; color: #12141a; }
+.forge-wheel-item { display: flex; align-items: center; gap: 4px; }
+.forge-wheel-item .forge-maya-tick { width: 12px; color: #5dff9a; }

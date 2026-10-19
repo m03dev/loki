@@ -38,7 +38,7 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | [ / ] | Undo / redo view change | yes (outside Sculpt, where they are the brush size) |
 | Alt+Home | Go to the default view | yes |
 | d (hold), Insert | Pivot edit mode (the manipulator moves the pivot, not the object) | yes |
-| x / c / v (hold) | Snap to grid / curve / point | x (grid); c / v not yet |
+| x / c / v (hold) | Snap to grid / curve / point | all three: grid, the nearest edge (curve), the vertex under the mouse; or switched on in the Snap menu / the Grid-Edge-Point chips |
 | j (hold) | Toggle step snap of the move/rotate/scale tool | yes |
 | - / = | Manipulator smaller / bigger | yes |
 | 0 / 1 / 2 / 3 | Display quality default / low / medium / high (smooth preview) | not yet (FORGE_MAYA.md T9) |
@@ -49,10 +49,13 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | Ctrl+E / Ctrl+B | Extrude / Bevel | Extrude; Bevel is a task (no bevel op yet) |
 | Shift+> / Shift+< (component) | Grow / shrink selection | yes |
 | Ctrl+A | Attribute Editor (or the Channel Box) | toggles the Channel Box |
-| Space (hold) | Hotbox | yes |
+| Space (hold) | Hotbox | yes - Maya's layout: Recent Commands + menu rows around the mouse, the five zones |
 | Space (tap) | Single view <-> four views; a tap over a pane maximises THAT pane | yes |
 | Alt+M | Hotbox display rows | - |
-| Return / Esc | Complete current tool / abort it | yes |
+| Return / Esc | Complete current tool / abort it | yes (Esc never closes Forge) |
+| Ctrl+Space | Hide the UI (only the viewport), again to bring it back | yes |
+| Alt+X | X-ray | yes |
+| b (component) / b, m + drag (sculpt) | Soft selection / brush size, strength | yes |
 
 Outliner-only keys: **Return** renames the selected item, **f** reveals (scrolls to) the selection.
 

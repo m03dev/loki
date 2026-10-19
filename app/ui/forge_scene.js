@@ -638,7 +638,7 @@ function forgeSceneAttach(view, ctx) {
 
   function panel() {
     if (tree.panel && document.body.contains(tree.panel)) return tree.panel;
-    const side = document.getElementById("forge-left") || document.getElementById("forge-stage");
+    const side = document.getElementById("forge-outcol") || document.getElementById("forge-left") || document.getElementById("forge-stage");
     if (!side) return null;
     const box = scnEl("div", "forge-outliner");
     box.id = "forge-outliner";
@@ -820,7 +820,7 @@ function forgeSceneAttach(view, ctx) {
   // ---------------------------------------------------------------- the Channel Box (Maya's exact numbers)
   const AXES = ["x", "y", "z"];
   function channelBox() {
-    const host = document.getElementById("forge-outliner");
+    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");   // Maya: the Channel Box on the right
     if (!host) return null;
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-channel";
@@ -870,7 +870,7 @@ function forgeSceneAttach(view, ctx) {
 
   // ---------------------------------------------------------------- the History (Maya's construction history)
   function historyBox() {
-    const host = document.getElementById("forge-outliner");
+    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");   // Maya: the Channel Box on the right
     if (!host) return null;
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-history";
@@ -878,7 +878,7 @@ function forgeSceneAttach(view, ctx) {
     head.append(scnEl("div", "forge-ch-title", "History"));
     const del = scnEl("button", "forge-out-btn", "Delete History");
     del.type = "button"; del.id = "forge-hist-clear";
-    del.title = "Forget how the mesh was built; the shape stays (Maya's Delete History).";
+    del.title = "Forget how the mesh was built; the shape stays (Delete History).";
     del.addEventListener("click", () => { if (window.forgeHistory) window.forgeHistory.clear(); tree.build(); });
     head.append(del);
     const list = scnEl("div", "forge-hist-list"); list.id = "forge-hist-list";
@@ -977,33 +977,59 @@ function forgeSceneAttach(view, ctx) {
   // Owner 2026-10-20: "improve all the ui everything should be abable to hide with slide or toggle". The
   // Outliner folds its own body, the left column slides away, and "floats" clears every bar off the viewport
   // (Maya's clean view). What is hidden is remembered, so Forge comes back the way it was left.
+  // One store for Forge's panels: Maya's workspace in forge_maya.js (forgeMayaPanels, key "loki-forge-panels") owns
+  // what shows; this keeps Ziva's API (forgePanels.*, the UI button, the Outliner's fold) on top of it, so the two
+  // never disagree (merged 2026-10-19 - both had picked the same storage key with different meanings).
   window.forgePanels = (function () {
-    const KEY = "loki-forge-panels";
-    let state = {};
-    try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (_) { state = {}; }
-    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
+    const has = () => typeof forgeMayaPanels === "function";
+    const read = () => (has() ? forgeMayaPanels() : {});
+    const write = (p) => { try { localStorage.setItem("loki-forge-panels", JSON.stringify(p)); } catch (_) { /* private mode */ } };
     function apply() {
+      const p = read();
+      if (has() && typeof forgeMayaPanelsApply === "function") forgeMayaPanelsApply(p);
       const sheet = document.getElementById("forge");
-      if (sheet) sheet.classList.toggle("forge-bare", state.floats === false);
+      if (sheet) sheet.classList.toggle("forge-bare", p.floats === false);
       const out = document.getElementById("forge-outliner");
-      if (out) out.classList.toggle("collapsed", state.outliner === false);
-      const side = document.getElementById("forge-left");
-      if (side) side.classList.toggle("collapsed", state.side === false);
-      const b = document.getElementById("forge-ui-btn");
-      if (b) b.classList.toggle("on", state.floats === false || state.side === false || state.outliner === false);
+      if (out) out.classList.toggle("collapsed", p.outlinerFold === true);
+      const ui = document.getElementById("forge-ui-btn");
+      if (ui) ui.classList.toggle("on", api2.anyHidden());
     }
-    function set(which, on) { state[which] = !!on; save(); apply(); return state[which]; }
-    return {
-      state: () => Object.assign({}, state),
+    function set(which, on) {
+      const p = read();
+      if (which === "outliner") p.outlinerFold = !on;           // the title folds the list; the column stays
+      else if (which === "side") p.create = !!on;               // the left column = the Create panel
+      else if (which === "floats") p.floats = !!on;             // every bar over the viewport
+      else p[which] = !!on;
+      write(p); apply();
+      return !!on;
+    }
+    const api2 = {
+      state: () => Object.assign({}, read()),
       apply: apply,
       set: set,
-      toggle: (which) => set(which, state[which] === false),
+      toggle: (which) => {
+        const p = read();
+        const now = which === "outliner" ? !p.outlinerFold : which === "side" ? !!p.create : which === "floats" ? p.floats !== false : !!p[which];
+        return set(which, !now);
+      },
       show: (which) => set(which, true),
       hide: (which) => set(which, false),
-      hideAll: () => { set("floats", false); set("outliner", false); set("side", false); return true; },
-      showAll: () => { set("floats", true); set("outliner", true); set("side", true); return true; },
-      anyHidden: () => state.floats === false || state.side === false || state.outliner === false,
+      hideAll: () => {                                          // only the viewport, like Maya's Ctrl+Space
+        const p = read();
+        if (!(p.outliner === false && p.channel === false)) { p._before = Object.assign({}, p); delete p._before._before; }
+        Object.assign(p, { outliner: false, channel: false, create: false, materials: false, shelf: false, toolkit: false, floats: false });
+        write(p); apply(); return true;
+      },
+      showAll: () => {
+        const p = read(), b = p._before || {};
+        const next = Object.assign({}, p, { outliner: true, channel: true, floats: true, outlinerFold: false },
+          { create: !!b.create, materials: !!b.materials, shelf: !!b.shelf, toolkit: !!b.toolkit });
+        delete next._before;
+        write(next); apply(); return true;
+      },
+      anyHidden: () => { const p = read(); return p.outliner === false || p.channel === false || p.floats === false || p.outlinerFold === true; },
     };
+    return api2;
   })();
 
   ensureRoot();
@@ -1016,7 +1042,7 @@ function forgeSceneAttach(view, ctx) {
     if (head && !document.getElementById("forge-ui-btn")) {
       const ui = scnEl("button", "mini icon-mini forge-btn", "UI");
       ui.type = "button"; ui.id = "forge-ui-btn"; ui.dataset.icon = "chevron";
-      ui.title = "Hide or show the panels (the left column, the Outliner and the bars over the model).";
+      ui.title = "Hide every panel (only the viewport), or bring them back - the same as Ctrl+Space.";
       ui.addEventListener("click", () => { if (window.forgePanels.anyHidden()) window.forgePanels.showAll(); else window.forgePanels.hideAll(); });
       head.insertBefore(ui, head.lastElementChild);
     }

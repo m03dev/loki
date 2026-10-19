@@ -1,4 +1,9 @@
-// Forge edit mode - selecting and moving the parts of a poly mesh the way Blender's edit mode does
+// Forge component mode - selecting and moving the parts of a poly mesh. Maya's hands since 2026-10-19 (owner: "remove
+// blender hotkeys and movements, only keep maya stuff"): F9 / F10 / F11 vertex / edge / face, click selects, Shift
+// toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds, a drag draws a box, a double-click on an edge takes the loop,
+// w / e / r put the handle on the selection, b soft selection, Alt/Option is only ever the camera. The keys live
+// in app/ui/forge_maya.js. The selection engine below is still the one re-written from Blender's (GPL-2.0+):
+// (the original notes on that, kept:)
 // (owner 2026-10-18: "poly modeling, vert selection, marquee selection, move tool works on faces and verts ...
 // look at blender code and do that").
 //
@@ -326,7 +331,7 @@ function forgeEditAttach(view, ctx) {
   view.clickSelect = (pt, how) => {
     const hit = view.pickElement(pt);
     if (hit.id < 0) { if (how === "set") setSel(empty()); return hit; }
-    view.selectItems(hit.kind, [hit.id], how === "set" ? "set" : "toggle");
+    view.selectItems(hit.kind, [hit.id], how === "remove" ? "sub" : (how === "set" || how === "toggle" || how === "add" || how === "sub") ? how : "toggle");
     return hit;
   };
   view.loopSelect = (pt, how) => {
@@ -436,6 +441,7 @@ function forgeEditAttach(view, ctx) {
   gizmo.addEventListener("mouseDown", () => { if (!begin("handle")) gizmo.detach(); });
   gizmo.addEventListener("objectChange", () => {
     if (!edit || edit.kind !== "handle") return;
+    if (view.snapPivot) view.snapPivot(pivot);        // Maya's x / c / v snapping (forge_maya.js) moves the handle first
     pivot.updateMatrix();
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });
@@ -576,11 +582,13 @@ function forgeEditAttach(view, ctx) {
     }
     if (e.button !== 0) return;                     // middle turns, right pans: the orbit controls keep those
     if (gizmo.object && gizmo.axis) return;        // the move handle
-    if (e.altKey) { gest = { alt: true, at: ed.mouse, shift: e.shiftKey }; return; }   // Alt-drag turns, Alt-click loops
+    if (e.altKey) return;                           // Alt / Option is Maya's camera, nothing else
     e.stopImmediatePropagation();
     canvas.setPointerCapture(e.pointerId);
-    gest = { at: ed.mouse, box: false, how: e.shiftKey ? "add" : (e.ctrlKey || e.metaKey) ? "sub" : "set",
-      click: e.shiftKey || e.ctrlKey || e.metaKey ? "toggle" : "set" };
+    // Maya's modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds
+    const mod = e.ctrlKey || e.metaKey;
+    const how = mod && e.shiftKey ? "add" : mod ? "sub" : e.shiftKey ? "toggle" : "set";
+    gest = { at: ed.mouse, box: false, how: how, click: how };
   }, { capture: true });
   canvas.addEventListener("pointermove", (e) => {
     if (view.mode !== "poly") return;
@@ -602,16 +610,13 @@ function forgeEditAttach(view, ctx) {
     const g = gest, p = local(e);
     gest = null;
     box.hidden = true;
-    if (g.alt) {
-      if (Math.hypot(p[0] - g.at[0], p[1] - g.at[1]) < 5) view.loopSelect(p, g.shift ? "add" : "set");
-      return;
-    }
     if (g.box) view.boxSelect(g.at[0], g.at[1], p[0], p[1], g.how);
     else view.clickSelect(p, g.click);
   }, { capture: true });
   canvas.addEventListener("pointercancel", () => { gest = null; box.hidden = true; });
   canvas.addEventListener("dblclick", (e) => {
     if (view.mode !== "poly" || !view.poly || modal) return;
+    if (ed.mode === "edge") { view.loopSelect(local(e), e.shiftKey ? "add" : "set"); return; }   // Maya: double-click an edge = its loop
     const verts = view.linkedSeed(local(e));
     if (verts) view.selectLinked(verts, e.shiftKey ? "add" : "set");
   });
@@ -650,7 +655,6 @@ function forgeEditAttach(view, ctx) {
   view.setMode = (m) => {
     if (modal) modalEnd(false);
     setMode(m);
-    controls.mouseButtons.MIDDLE = m === "poly" ? THREE.MOUSE.ROTATE : THREE.MOUSE.DOLLY;   // Blender turns on the middle button
     if (m !== "poly") { if (gizmo.object) gizmo.detach(); if (ed.xray) { ed.xray = false; xrayLook(); } }
     drawOverlay(); placePivot(); stats();
   };
@@ -658,8 +662,11 @@ function forgeEditAttach(view, ctx) {
   const showPoly = view.showPoly;
   view.showPoly = (poly, keepView, noUndo) => { showPoly(poly, keepView, noUndo); onChange(); };
   const undo = view.undo, redo = view.redo;
-  view.undo = () => { if (modal) { modalEnd(false); return; } undo(); onChange(); placePivot(); };
-  view.redo = () => { redo(); onChange(); placePivot(); };
+  // after an undo / redo the handle must start from where the selection is NOW: re-attach it, or the first drag
+  // after Ctrl+Z starts from the old place and does nothing (found 2026-10-19)
+  const rehandle = () => { if (gizmo.object) { gizmo.object.updateMatrixWorld(true); (gizmo.getHelper ? gizmo.getHelper() : gizmo).updateMatrixWorld(true); } };
+  view.undo = () => { if (modal) { modalEnd(false); return; } undo(); onChange(); placePivot(); rehandle(); };
+  view.redo = () => { redo(); onChange(); placePivot(); rehandle(); };
   view.gizmo = gizmo;
   view.project = (p) => projector()(p);            // a mesh point -> canvas pixels (tests, scripts)
 }

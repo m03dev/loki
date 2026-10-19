@@ -472,7 +472,7 @@ else:
                 # the Godot export shell (World tab) tries to load its audio worklets; this suite serves the UI
                 # from disk with a stub route, so that load can fail with a network error - LOKI's own page is fine
                 # (the real app logs no such error). Not a script error to fail on.
-                if "worklet module script" in t:
+                if "worklet module script" in t or "worklet's module" in t:
                     return
                 errs.append(t)
             page.on("pageerror", _page_error)

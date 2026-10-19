@@ -118,6 +118,8 @@ async def main():
         await page.route("http://127.0.0.1:8898/**", route)
         await page.goto("http://127.0.0.1:8898/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
+        # these panels are hidden in Maya's workspace until Windows (Space menu) brings them back - this suite tests them
+        await page.evaluate("localStorage.setItem('loki-forge-panels', JSON.stringify({ create: true, toolkit: true, shelf: true }))")
 
         await page.evaluate("forgeOpen()")
         await page.wait_for_function("!!(forge.view && forge.view.showPoly)", timeout=20000)

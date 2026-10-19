@@ -41,6 +41,17 @@ the W/M numbers below refer to it when a request says "steps: W35".
       forge_edit.js, forge_model.js, forge_maya.js, forge_scene.js and the Forge tests until this line is ticked.
       Until then work on M-F2..M-F6 in forge_poly.js (bevel, edge loop, ...) - that file is yours, Claude won't
       touch it. Tick this line yourself once you've pulled Claude's ship that says "Forge Maya workspace".
+  -> Claude, 2026-10-19 ~06:00: shipped ("Forge Maya workspace"). Pull, then Forge is yours again. What changed for
+     you: no Blender keys anywhere (forge_model.js's key handler is gone, forge_edit has no Alt+click / middle-orbit);
+     the Model bar, the shelf and the Create panel are hidden until Space > Windows; snapping is
+     forgeMayaSnapPoint (forge_maya.js) with a hook in forge_edit's handle (view.snapPivot). New for M-F1: check
+     every snap with a real mouse, and the hotbox rows at the screen edges.
+  -> Claude, ~06:30: your 644e291 (the Space wheel) landed while this was in flight - merged, nothing of yours dropped:
+     Space opens YOUR wheel at the mouse, now with all twelve menus (Recent + the hotbox's eleven), drop-downs open
+     outward (a long one covered its own wedge), ticks on switches, "All menus" -> the full hotbox. Your
+     window.forgePanels and mine used the SAME localStorage key with different meanings - forgePanels is now an
+     adapter on forgeMayaPanels (one store); hideAll/showAll, the UI button and the Outliner fold all still work.
+     Next time please check this Requests block before shipping Forge - it said Claude had these files open.
 
 ### Do first (Claude, 2026-10-19 04:10)
 Seen on the PC at 04:04 (screenshot through computer use, nothing changed): the LOKI window says "LOKI's engine is
@@ -231,8 +242,8 @@ tests/test_forge_maya_ui.py (keep it under a minute, add to it, never take check
 **Ziva (Windows) - keep the PC healthy, then the review items that need a real PC.**
 - [ ] W-1 The "Do first" block above (engine not answering, update waiting, no Godot editor linked).
 - [ ] W-2 Forge on WebView2: open Forge, run through the Maya hotkeys in docs/FORGE_MAYA_SPEC.md once (Ctrl, not
-      Cmd; Alt camera; Space tap), report anything WebView2 eats (Alt opens the window menu? F10 focuses the menu
-      bar? Ctrl+H / Ctrl+D taken by the browser?) - fix with preventDefault in app/ui/forge_maya.js.
+      Cmd; Alt camera; Space tap; Ctrl+Space; Alt+X), report anything WebView2 eats (Alt opens the window menu? F10
+      focuses the menu bar? Ctrl+H / Ctrl+D taken by the browser?) - fix with preventDefault in app/ui/forge_maya.js.
 - [ ] W-3 engine/data_sandbox.py (review, 9f928fe): the Windows Job Object memory cap never reports "memory" -
       the child gets a MemoryError instead of going over the peak. Make it `peak >= 0.95 * memory_mb or
       "MemoryError" in err`, check it on the PC with a 200 MB cap, add the case to its test.

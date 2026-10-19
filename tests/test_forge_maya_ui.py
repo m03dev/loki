@@ -116,8 +116,8 @@ async def main():
         check("Alt + left / middle / right = tumble / track / dolly", alt == [0, 2, 1], alt)   # THREE.MOUSE ROTATE 0, DOLLY 1, PAN 2
         check("...and back on release", back == [None, None, None], back)
 
-        # -------- the Space wheel: it floats WHERE THE MOUSE IS; hovering a wedge brings that menu down
-        # (owner 2026-10-20: "i want the space bar menue to float where my mouse is just like maya not a newhud
+        # -------- the Space wheel (Ziva, 644e291): it floats WHERE THE MOUSE IS; hovering a wedge brings that menu down
+        # (owner 2026-10-19: "i want the space bar menue to float where my mouse is just like maya not a newhud
         # its like a wheel and when you hover over it brings down a new menue")
         await page.mouse.move(cx, cy)
         await page.keyboard.down(" ")
@@ -127,51 +127,44 @@ async def main():
           const r = h.getBoundingClientRect();
           return { vis: !h.hidden, heads: [...h.querySelectorAll('.forge-wheel-wedge')].map((b) => b.dataset.mayaHead),
                    dx: Math.round(r.left - x), dy: Math.round(r.top - y) }; }""", [cx, cy])
-        wb = await (await page.query_selector("#forge-maya-wheel .forge-wheel-wedge")).bounding_box()
+        wb = await (await page.query_selector('#forge-maya-wheel .forge-wheel-wedge[data-maya-head="Edit"]')).bounding_box()
         await page.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2)
         await page.wait_for_timeout(150)
         wsub = await page.evaluate("""() => { const s = document.querySelector('#forge-maya-wheel .forge-wheel-sub');
           return s ? { head: s.dataset.head, n: s.querySelectorAll('.forge-wheel-item').length } : null; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
-        check("Space floats a wheel AT THE MOUSE (10 menus)", wh and wh["vis"] and len(wh["heads"]) >= 9
+        check("Space floats a wheel AT THE MOUSE with every menu (Recent + 11)", wh and wh["vis"] and len(wh["heads"]) == 12
               and abs(wh["dx"]) < 26 and abs(wh["dy"]) < 26, wh)
-        check("hovering a wedge brings that menu down beside it", bool(wsub) and wsub["n"] >= 2, wsub)
+        check("hovering a wedge brings that menu down beside it", bool(wsub) and wsub["head"] == "Edit" and wsub["n"] >= 9, wsub)
         check("the menu stays open after releasing Space, so an item can be clicked",
               not await page.evaluate("document.getElementById('forge-maya-wheel').hidden"))
+        await page.click('#forge-maya-wheel .forge-wheel-sub .forge-wheel-more')
+        hb = await page.evaluate("""() => ({ vis: !document.getElementById('forge-maya-hotbox').hidden,
+          cols: document.querySelectorAll('#forge-maya-hotbox .forge-maya-col').length,
+          items: document.querySelectorAll('#forge-maya-hotbox .forge-maya-item').length })""")
+        check("every wheel menu ends with All menus: Maya's full hotbox (Recent Commands + 11 menus, 80+ commands)",
+              hb["vis"] and hb["cols"] == 12 and hb["items"] >= 80, hb)
         await page.keyboard.press("Escape")
-        await page.wait_for_timeout(120)
-        check("Escape puts the wheel away", await page.evaluate("document.getElementById('forge-maya-wheel').hidden"))
-
-        # -------- every panel can hide, with a slide or a fold, and it is remembered
-        await page.evaluate("forgePanels.hideAll()")
-        await page.wait_for_timeout(280)
-        hid = await page.evaluate("""() => ({ bare: document.getElementById('forge').classList.contains('forge-bare'),
-          out: document.getElementById('forge-outliner').classList.contains('collapsed'),
-          side: document.getElementById('forge-left').classList.contains('collapsed'),
-          stored: JSON.parse(localStorage.getItem('loki-forge-panels') || '{}') })""")
-        check("hide all: the left column slides away, the Outliner folds and the bars clear - and it sticks",
-              hid["bare"] and hid["out"] and hid["side"] and hid["stored"].get("floats") is False, hid)
-        await page.click("#forge-ui-btn")
-        await page.wait_for_timeout(280)
-        back = await page.evaluate("""() => ({ bare: document.getElementById('forge').classList.contains('forge-bare'),
-          out: document.getElementById('forge-outliner').classList.contains('collapsed') })""")
-        check("the UI button in the title brings every panel back", not back["bare"] and not back["out"], back)
+        await page.keyboard.down(" ")
+        await page.wait_for_timeout(300)
+        await page.keyboard.up(" ")
+        await page.keyboard.press("Escape")
+        check("Escape puts the wheel away; a long hold does not switch views", await page.evaluate("document.getElementById('forge-maya-wheel').hidden && !forge.view.quad"))
         await page.keyboard.press(" ")
         quad = await page.evaluate("forge.view.quad")
         await page.mouse.move(vb["x"] + vb["width"] * 0.25, vb["y"] + vb["height"] * 0.25)
         await page.keyboard.press(" ")
         after = await page.evaluate("[forge.view.quad, forge.view.cam]")
         check("a Space tap goes to four views; a tap over the top-left pane makes Front big", quad is True and after == [False, "front"], [quad, after])
-        # the hotbox's centre zone (the full Maya layout, still reached from the wheel's last entry)
+        # the hotbox's centre zone (the full Maya layout, reached from the wheel's last entry)
         await page.evaluate("forgeMayaHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.mouse.move(cx, cy)
-        await page.wait_for_timeout(260)
+        await page.wait_for_timeout(120)
         await page.mouse.down()
         await page.mouse.move(cx, cy - 70, steps=4)
-        zone = await page.evaluate("document.getElementById('forge-maya-marking').dataset.set")
+        zone = await page.evaluate("(document.getElementById('forge-maya-marking') || {dataset: {}}).dataset.set")
         await page.mouse.up()
-        await page.keyboard.up(" ")
         check("the hotbox's centre zone is the views menu; flicking up picks Perspective", zone == "Views"
               and await page.evaluate("forge.view.cam") == "persp", [zone, await page.evaluate("forge.view.cam")])
         await page.evaluate(T + ".setTransform(1, 'translate', 0, -1.6)")            # the cube beside the sphere
@@ -334,15 +327,13 @@ async def main():
         await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[2])
         await page.keyboard.up("Shift")
         rng = await page.evaluate(T + ".selected()")
-        # macOS turns Ctrl+click into a SECONDARY click (the row's own menu), so the toggle is Cmd there -
-        # which is the Mac convention anyway, and the handler takes either.
+        # macOS turns Ctrl+click into a SECONDARY click, so the toggle is Cmd there (Ziva) - the handler takes either
         toggle_mod = "Meta" if sys.platform == "darwin" else "Control"
         await page.keyboard.down(toggle_mod)
         await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[1])
         await page.keyboard.up(toggle_mod)
         tog = await page.evaluate(T + ".selected()")
-        check("Outliner: Shift+click selects a range, Ctrl/Cmd+click toggles one out",
-              sorted(rng) == sorted(rows[:3]) and sorted(tog) == sorted([rows[0], rows[2]]), [rows, rng, tog, toggle_mod])
+        check("Outliner: Shift+click selects a range, Ctrl+click toggles one out", sorted(rng) == sorted(rows[:3]) and sorted(tog) == sorted([rows[0], rows[2]]), [rows, rng, tog])
         dd = await page.evaluate("""() => { const t = forge.view.tree.api;
           const a = t.list().find((x) => x.name === 'pCube3'), s = t.list().find((x) => x.name === 'pSphere1');
           t.dropOn(a.id, s.id, 'into'); const into = t.node(a.id).parent === s.id;
@@ -392,18 +383,112 @@ async def main():
         check("any object can be edited: the sphere takes the tools' mesh, and sculpting it leaves the cube alone",
               mk["nowRoot"] and mk["otherUntouched"] and mk["verts"] > 100, mk)
 
-        # -------- the Blender set brings Blender's edit keys back; Maya again by default
-        await page.evaluate("forgeSetKeymap('blender')")
+        # -------- Maya only: no Blender keys, no Blender mouse
         await page.evaluate("forgeModelMode(true)")
+        m0 = await page.evaluate("forge.view.edit.mode")
         await page.keyboard.press("2")
-        bl = await page.evaluate("forge.view.edit.mode")
-        bbtn = await page.evaluate(btn)
-        await page.evaluate("forgeSetKeymap('maya')")
-        await page.keyboard.press("2")
-        mm = await page.evaluate("forge.view.edit.mode")
+        m1 = await page.evaluate("forge.view.edit.mode")
+        await page.keyboard.press("g")
+        modal = await page.evaluate("forge.view.modalActive()")
+        bb = await page.evaluate(btn)
         await page.evaluate("forgeModelMode(false)")
-        check("Hotkeys: Blender - 2 is edge mode and the left button orbits; Maya set - 2 does nothing there", bl == "edge"
-              and bbtn[0] == 0 and mm == "edge", [bl, bbtn, mm])
+        check("Maya keys only: 2 / g are not Blender's edge mode / grab, and no mouse button turns the view without Alt",
+              m1 == m0 and not modal and bb == [None, None, None] and await page.evaluate("forgeKeymap()") == "maya", [m0, m1, modal, bb])
+
+        # -------- Maya's workspace: viewport in the middle, Outliner left, Channel Box right, the rest hidden
+        lay = await page.evaluate("""() => { const r = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return b.width > 0 ? [b.left, b.right] : null; };
+          const vis = (sel) => { const e = document.querySelector(sel); return !!(e && e.offsetParent !== null && getComputedStyle(e).display !== 'none'); };
+          return { out: r('forge-outcol'), stage: r('forge-stage'), chan: r('forge-chancol'), create: r('forge-left'), shelf: vis('#forge .forge-exportbar'),
+                   kit: vis('#forge-model'), outInOut: !!document.querySelector('#forge-outcol #forge-outliner'), chInChan: !!document.querySelector('#forge-chancol #forge-channel') }; }""")
+        check("Maya's layout: the Outliner left, the viewport, the Channel Box right - and nothing else showing",
+              lay["out"] and lay["stage"] and lay["chan"] and lay["out"][1] <= lay["stage"][0] + 1 and lay["stage"][1] <= lay["chan"][0] + 1
+              and lay["create"] is None and not lay["shelf"] and not lay["kit"] and lay["outInOut"] and lay["chInChan"], lay)
+        await page.click("#forge-ui-btn")
+        ui_off = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden, document.getElementById('forge').classList.contains('forge-bare')]")
+        await page.click("#forge-ui-btn")
+        ui_on = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden, document.getElementById('forge').classList.contains('forge-bare')]")
+        check("the UI button in Forge's title hides every panel and the bars, and brings them back (Ziva's, same store)",
+              ui_off == [True, True, True] and ui_on == [False, False, False], [ui_off, ui_on])
+        await page.click("#forge-out-fold")
+        fold = await page.evaluate("[document.getElementById('forge-outliner').classList.contains('collapsed'), document.getElementById('forge-outcol').hidden]")
+        await page.click("#forge-out-fold")
+        check("the Outliner's title folds its list (the column stays) and unfolds it", fold == [True, False], fold)
+        await page.keyboard.press("Control+Space")
+        bare = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden]")
+        await page.keyboard.press("Control+Space")
+        back_ = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden]")
+        check("Ctrl+Space hides every panel (only the viewport), and brings them back", bare == [True, True] and back_ == [False, False], [bare, back_])
+        # the Windows menu in the hotbox brings a panel back (here: the Create panel), with a tick
+        await page.mouse.move(cx, cy)
+        await page.evaluate("forgeMayaHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
+        await page.wait_for_timeout(100)
+        await page.hover('#forge-maya-hotbox .forge-maya-col[data-menu="Windows"] .forge-maya-head')
+        drop = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-hotbox .forge-maya-list')].filter((l) => !l.hidden).map((l) => l.parentElement.dataset.menu)""")
+        ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-hotbox .forge-maya-col[data-menu="Windows"] .forge-maya-item.on')].map((b) => b.dataset.mayaId)""")
+        await page.click('#forge-maya-hotbox .forge-maya-item[data-maya-id="winCreate"]')
+        cr = await page.evaluate("!document.getElementById('forge-left').hidden")
+        check("hovering a hotbox menu opens just that one; Windows ticks what is showing (Outliner, Channel Box)", drop == ["Windows"]
+              and "winOutliner" in ticked and "winChannel" in ticked and "winCreate" not in ticked, [drop, ticked])
+        check("...and Windows > Create panel brings the left panel back", cr)
+        await page.evaluate("forgeMayaPanel('create', false)")
+        await page.keyboard.down(" ")
+        await page.wait_for_timeout(120)
+        await page.hover('#forge-maya-wheel .forge-wheel-wedge[data-maya-head="Recent Commands"]')
+        await page.wait_for_timeout(100)
+        rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-wheel .forge-wheel-sub .forge-wheel-item[data-maya-id]')].map((b) => b.dataset.mayaId)""")
+        await page.keyboard.up(" ")
+        await page.keyboard.press("Escape")
+        check("the wheel's Recent Commands lists what you just ran, newest first", rec[:1] == ["winCreate"], rec)
+        await page.keyboard.press("Escape")
+        check("Esc never closes Forge (Maya)", await page.is_visible("#forge"))
+
+        # -------- snapping: hold x = grid, v = vertex, c = edge (objects, the pivot and components)
+        sn = await page.evaluate("""() => { const v = forge.view, t = v.tree.api, tc = v.transform, V = v.THREE;
+          const a = t.list().find((n) => n.name === 'pSphere1'), b = t.node(1);
+          t.makeWorking(b.id); t.select(a.id); t.attachTool('translate');
+          const drag = (to) => { a.grp.position.copy(to); tc.axis = 'XYZ'; tc.dispatchEvent({ type: 'objectChange' }); return a.grp.getWorldPosition(new V.Vector3()).toArray(); };
+          v.maya.held.add('x'); const g = drag(new V.Vector3(0.61, 0.37, -0.13)); v.maya.held.delete('x');
+          tc.axis = 'X'; v.maya.held.add('x'); a.grp.position.set(0.61, 0.37, -0.13); tc.dispatchEvent({ type: 'objectChange' }); v.maya.held.delete('x');
+          const gx = a.grp.position.toArray(); tc.axis = 'XYZ';
+          // v: put the mouse over a corner of the cube and drag the sphere: its pivot lands on that vertex
+          const box = t.worldBox([b.id]), corner = new V.Vector3(box.max.x, box.max.y, box.max.z);
+          const r = v.canvas.getBoundingClientRect(); v.camera.updateMatrixWorld(); const s = corner.clone().project(v.camera);
+          v.maya.mouse = [r.left + (s.x + 1) / 2 * r.width, r.top + (1 - s.y) / 2 * r.height];
+          v.maya.held.add('v'); const p = drag(new V.Vector3(2, 2, 2)); v.maya.held.delete('v');
+          const pd = Math.hypot(p[0] - corner.x, p[1] - corner.y, p[2] - corner.z);
+          // c: a point inside a face of the cube -> the nearest spot on that triangle's edges
+          const mid = new V.Vector3((box.min.x + box.max.x) / 2 + (box.max.x - box.min.x) * 0.2, box.max.y - (box.max.y - box.min.y) * 0.05, box.max.z);
+          const s2 = mid.clone().project(v.camera); v.maya.mouse = [r.left + (s2.x + 1) / 2 * r.width, r.top + (1 - s2.y) / 2 * r.height];
+          v.maya.held.add('c'); const e = drag(new V.Vector3(3, 3, 3)); v.maya.held.delete('c');
+          const tb = [box.min.toArray(), box.max.toArray()], near = (x, y) => Math.abs(x - y) < 1e-3;
+          const onEdge = [0, 1, 2].filter((k) => near(e[k], tb[0][k]) || near(e[k], tb[1][k])).length >= 2;   // a cube's edge: two coordinates on its box
+          tc.detach();
+          return { g, gx, pd, e, onEdge, step: v.maya.gridStep }; }""")
+        st = sn["step"]
+        check("hold x: the object snaps to the grid", all(abs(c / st - round(c / st)) < 1e-6 for c in sn["g"]), sn)
+        check("...and only along the handle's axis when you drag one arrow (X)", abs(sn["gx"][0] / st - round(sn["gx"][0] / st)) < 1e-6
+              and abs(sn["gx"][1] - 0.37) < 1e-6 and abs(sn["gx"][2] + 0.13) < 1e-6, sn["gx"])
+        check("hold v: the pivot lands exactly on the vertex under the mouse (another object's corner)", sn["pd"] < 1e-4, sn)
+        check("hold c: it lands on an edge of the face under the mouse", sn["onEdge"], sn)
+        chips = await page.evaluate("[...document.querySelectorAll('#forge-snaps .forge-snap')].map((b) => b.dataset.snap)")
+        await page.click('#forge-snaps [data-snap="grid"]')
+        sticky = await page.evaluate("forge.view.maya.snap.grid && document.querySelector('#forge-snaps [data-snap=\"grid\"]').classList.contains('on')")
+        await page.click('#forge-snaps [data-snap="grid"]')
+        check("the Grid / Edge / Point chips (Maya's status line) switch a snap on and off", chips == ["grid", "edge", "point"] and sticky, [chips, sticky])
+        comp = await page.evaluate("""() => { const v = forge.view, V = v.THREE, p = new V.Object3D(); v.holder.add(p);
+          p.position.set(0.33, 0.12, 0.07); v.maya.held.add('x'); v.snapPivot(p); v.maya.held.delete('x');
+          const w = p.getWorldPosition(new V.Vector3()).toArray(); v.holder.remove(p); return [w, v.maya.gridStep]; }""")
+        check("components snap too: the component handle lands on the grid with x", all(abs(c / comp[1] - round(c / comp[1])) < 1e-6 for c in comp[0]), comp)
+        check("there is a grid on the ground, like Maya's", await page.evaluate("!!(forge.view.maya.grid && forge.view.maya.grid.visible)"))
+        await page.evaluate("forgeModelMode(true)")
+        await page.keyboard.press("b")
+        soft = await page.evaluate("forge.view.edit.prop")
+        await page.keyboard.press("b")
+        await page.keyboard.press("Alt+x")
+        xr = await page.evaluate("forge.view.edit.xray")
+        await page.keyboard.press("Alt+x")
+        await page.evaluate("forgeModelMode(false)")
+        check("b is soft selection, Alt+X is X-ray (Maya's keys)", soft is True and xr is True, [soft, xr])
 
         # -------- the checks the first scene suite had (kept): rename, hide, indent, Channel Box, buttons, Shift+drag
         await page.evaluate("forgeModelMode(false)")

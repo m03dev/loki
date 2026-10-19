@@ -186,8 +186,27 @@ our own code. Everything Ziva built above is kept; this extends it.
   right = tumble / track / dolly; Cmd = Ctrl everywhere for the Mac.
 - **Outliner**: expand / collapse (Shift = the whole branch), Shift+click range, Ctrl/Cmd+click toggle, drag onto a
   row = parent, between rows = re-order, onto empty space = unparent, Return renames, f reveals, right-click menu.
-- **Hotkey sets**: Maya is the default; Edit > "Hotkeys: Blender" brings Blender's edit keys back (the Blender
-  suite tests/test_forge_edit_ui.py runs on that set). Nothing was removed.
+- **Maya only** (owner, 05:23): the Blender hotkeys and mouse moves are gone - no 1/2/3, no G/R/S, no middle-drag
+  orbit, no Alt+click loop (a double-click on an edge takes the loop, Maya's way); Alt/Option is only ever the camera.
+  tests/test_forge_edit_ui.py now drives component mode with Maya's keys.
+
+### DONE (Claude, 2026-10-19 later morning) - Maya's workspace, the hotbox, snapping
+- **Workspace**: Forge fills the window - the Outliner column on the left, the viewport, the Channel Box column
+  (with History) on the right. The Create panel, Materials, the shelf (the old floating bars) and the Modeling
+  Toolkit are hidden and come back from Space > Windows (ticked when showing), remembered per machine
+  (`loki-forge-panels` - ONE store: Ziva's `window.forgePanels`, the UI button and the Outliner fold now sit on it); Ctrl+Space hides everything but the viewport and brings it back; Esc never closes Forge.
+- **Space = Ziva's wheel at the mouse** (owner to Ziva: "float where my mouse is ... like a wheel and when you hover over
+  it brings down a new menu"): twelve wedges - Recent + the eleven menus below - each dropping its menu OUTWARD (never
+  over the ring), ticks on switches, and every menu ends with "All menus", the full hotbox:
+- **Hotbox like Maya's**: Recent Commands + File Edit Create Select Modify Display Windows above the mouse, Mesh / Edit
+  Mesh / Mesh Tools / Snap below it, each opening its own list on hover; the five zones around the middle.
+- **Snapping**: hold x (grid), c (edge / curve - the diagonal a quad was split along is not an edge), v (vertex under
+  the mouse, or the nearest on screen) while dragging a handle; keeps the handle's axis; works for objects, the pivot
+  (d) and components (onto other objects and the grid). Grid / Edge / Point chips bottom-left of the viewport and the
+  Snap menu keep them on. A ground grid like Maya's (Display > Grid).
+- Fixed: the first handle drag after Ctrl+Z did nothing (the handle's matrices were stale).
+- Open for Ziva: components snapping onto the SAME mesh's other vertices (needs the moving vertices left out of the
+  pick), and showing a new primitive's inputs (subdivisions) in the Channel Box like Maya's INPUTS section.
 
 ### OPEN - next, in this order (Ziva: these are yours, see ZIVA_TASKS.md "Ziva's long run")
 - **T7 Real-machine pass**: use Forge for 20 minutes the way the owner uses Maya (WebView2 on the PC, WKWebView on
