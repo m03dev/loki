@@ -26,7 +26,8 @@ it didn't give me an option. Find more or retry".
 - Fixed two real Windows bugs in the data sandbox (engine/data_sandbox.py), found because they made
   `test_documents` fail and so blocked every app/ui ship: (1) the child's result MARKER begins/ends with
   a newline, but Windows text-mode stdout turns "
-" into "
+" into "
+
 ", so `analyze()` never found the marker
   and reported "the analysis process ended (exit 0)" - every finding, table and chart was lost on the PC;
   the parent now normalises line endings before looking for the marker (a no-op on macOS/Linux).
@@ -34,6 +35,11 @@ it didn't give me an option. Find more or retry".
   into a big working set, so a runaway analysis was never stopped; a Windows Job Object with a
   committed-memory limit (PROCESS_MEMORY | KILL_ON_JOB_CLOSE) now enforces it and the child gets a real
   MemoryError. test_documents 143 passed.
+- Tool-calling harness (engine/tool_harness.py) now reads the other call shapes local and fine-tuned
+  models emit, so fewer calls are silently dropped: a `[TOOL_CALLS]` array (Llama 3.1), `<|tool_call|>` /
+  `<function_call>` wrappers, a `{"tool_calls": [...]}` wrapper, a list of calls, and arguments named
+  `input` / `parameters` / `args`. A parsed call is now fully stripped from the remaining text (no
+  leftover ``` fences or markers) so the assistant message stays clean. test_portal 208 passed.
 - Settings > Models now SHOWS it (app/ui/setup.js + app.css): an "Add a model by name" row (retry or find
   more by tag, POST /setup/pull), an opt-in "Uncensored models" list, and an "Ollama <v> is out of date" card
   with the update command when `ollama_advice.needs_update` (engine/model_setup.py `ollama_advice()`, also in

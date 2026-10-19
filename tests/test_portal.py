@@ -114,6 +114,19 @@ calls, _ = tool_harness.parse('{"name": "rm_rf", "arguments": {}}', ["read_file"
 check("only real tool names are accepted", calls == [])
 calls, rest = tool_harness.parse("Just an answer, no tools.", ["read_file"])
 check("plain answers are left alone", calls == [] and rest == "Just an answer, no tools.")
+calls, rest = tool_harness.parse('[TOOL_CALLS] [{"name": "read_file", "arguments": {"path": "g"}}]', ["read_file"])
+check("Llama 3.1's [TOOL_CALLS] array is parsed and stripped",
+      calls == [("read_file", {"path": "g"})] and rest.strip() in ("", "[]"), repr(rest))
+calls, _ = tool_harness.parse('{"tool_calls": [{"name": "list_files", "arguments": {}}]}', ["list_files"])
+check('a {"tool_calls": [...]} wrapper is unwrapped', calls == [("list_files", {})], calls)
+calls, _ = tool_harness.parse('<function_call>{"name": "read_file", "arguments": {"path": "h"}}</function_call>', ["read_file"])
+check("a <function_call> block is parsed", calls == [("read_file", {"path": "h"})], calls)
+calls, _ = tool_harness.parse('{"name": "read_file", "input": {"path": "i"}}', ["read_file"])
+check("args may be named input/parameters/args", calls == [("read_file", {"path": "i"})], calls)
+_go = chr(10).join(["Here you go:", "```json", '{"name": "read_file", "arguments": {"path": "j"}}', "```", "Done."])
+calls, rest = tool_harness.parse(_go, ["read_file"])
+check("a parsed fence is stripped from the remaining text (no leftover ```)",
+      calls == [("read_file", {"path": "j"})] and "```" not in rest and "Here you go:" in rest and "Done." in rest, repr(rest))
 
 
 class _Msg:

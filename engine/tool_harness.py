@@ -166,6 +166,10 @@ def prepare(kwargs: dict) -> dict:
 
 # --------------------------------------------------------------------------- incoming
 def _candidates(text: str) -> list:
+    # Normalise the wrapper markers other fine-tunes emit around a call so ONE parser reads them
+    # all: Llama 3.1's "[TOOL_CALLS]", some models' "<|tool_call|>" and "<function_call>".
+    for marker in ("[TOOL_CALLS]", "<|tool_call|>", "<function_call>", "</function_call>"):
+        text = text.replace(marker, " ")
     found = _CALL_RE.findall(text)
     if found:
         return found
@@ -200,31 +204,55 @@ def _loads(blob: str) -> Any:
             return None
 
 
+def _items(data) -> list:
+    """Flatten one model tool-call blob: a list, or a wrapper like {"tool_calls": [...]}."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("tool_calls", "tool_call", "calls", "function_call", "actions"):
+            inner = data.get(key)
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                return [inner]
+    return [data]
+
+
 def parse(text: str, known: list | set | None = None) -> tuple:
-    """(calls, remaining_text) from a model reply. calls = [(name, args_dict), ...]."""
+    """(calls, remaining_text) from a model reply. calls = [(name, args_dict), ...].
+
+    Tolerant on purpose: a local model writes a call as <tool_call>, a ```json fence, a bare
+    object, a list, or a wrapper ({"tool_calls": [...]}), and may name the args arguments,
+    parameters, args or input. Everything it recognises is stripped out of the remaining text.
+    """
     if not text:
         return [], text or ""
     names = set(known or [])
-    calls = []
+    calls, used = [], []
     for blob in _candidates(text):
-        data = _loads(blob)
-        if isinstance(data, list):
-            items = data
-        else:
-            items = [data]
-        for item in items:
+        for item in _items(_loads(blob)):
             if not isinstance(item, dict):
                 continue
             if isinstance(item.get("function"), dict):
                 item = item["function"]
-            name = item.get("name") or item.get("tool")
+            name = item.get("name") or item.get("tool") or item.get("function_name")
             if not isinstance(name, str) or (names and name not in names):
                 continue
-            args = item.get("arguments", item.get("parameters", item.get("args", {})))
+            args = item.get("arguments", item.get("parameters", item.get("args", item.get("input", {}))))
             if isinstance(args, str):
                 args = _loads(args) or {}
             calls.append((name, args if isinstance(args, dict) else {}))
-    rest = _CALL_RE.sub("", text).strip() if calls else text
+            if blob not in used:
+                used.append(blob)
+    rest = text
+    if calls:
+        rest = _CALL_RE.sub("", text)
+        rest = _FENCE_RE.sub("", rest)
+        for blob in used:
+            rest = rest.replace(blob, "")
+        for marker in ("[TOOL_CALLS]", "<|tool_call|>", "<function_call>", "</function_call>"):
+            rest = rest.replace(marker, "")
+        rest = rest.strip()
     return calls, rest
 
 
