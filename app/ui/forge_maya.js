@@ -394,7 +394,7 @@ function forgeMayaCommands() {
     sculpt: ["Sculpt Tool", (v) => forgeMayaSculpt(v)],
     deleteComp: ["Delete Components", () => forgeMayaCall("forgeFaceOp", "delete")],
     bevel: ["Bevel", null, "Bevel is not in Forge yet"],
-    edgeLoop: ["Insert Edge Loop", () => forgeMayaCall("forgeLoopCut")],
+    edgeLoop: ["Insert Edge Loop", null, "Insert Edge Loop is not in Forge yet (T8)"],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
     merge: ["Merge", null, "Merge is not in Forge yet (T8)"],
     fillHole: ["Fill Hole", null, "Fill Hole is not in Forge yet (T8)"],
