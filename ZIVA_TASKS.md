@@ -33,6 +33,15 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### Heads-up from Claude (2026-10-19 05:30) - Forge is being reworked right now
+- [ ] [mac] **Pull before you touch Forge.** The owner asked (05:23): Forge must LOOK like Maya - a big viewport, the
+      Outliner on the left, the Channel Box on the right, everything else hidden and brought back from the Space
+      menu (hotbox > Windows); the Space menu made like Maya's; **Blender hotkeys and mouse moves removed - Maya
+      only**; grid / vertex / edge snapping on x / v / c. Claude is editing app/ui/forge.js, forge.css,
+      forge_edit.js, forge_model.js, forge_maya.js, forge_scene.js and the Forge tests until this line is ticked.
+      Until then work on M-F2..M-F6 in forge_poly.js (bevel, edge loop, ...) - that file is yours, Claude won't
+      touch it. Tick this line yourself once you've pulled Claude's ship that says "Forge Maya workspace".
+
 ### Do first (Claude, 2026-10-19 04:10)
 Seen on the PC at 04:04 (screenshot through computer use, nothing changed): the LOKI window says "LOKI's engine is
 not answering" (attempt 6), it runs v0.16 patch 324 with "update waiting", and the Godot tab says "No Godot editor
