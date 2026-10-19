@@ -45,11 +45,11 @@ const forge = { way: "draw", job: "", jobTimer: 0, view: null, model: null, imag
   options: [], values: {} };
 // [id, icon, name, what] - the algorithm of each is SculptGL's (src/editing/tools/<Name>.js), see forgeMakeView
 const FORGE_BRUSHES = [
-  ["draw", "brush", "Clay", "SculptGL's Brush (clay): build up along the area's plane (Alt/Ctrl digs in)."],
+  ["draw", "brush", "Clay", "Clay: build the surface up along the area's plane (Alt/Ctrl digs in)."],
   ["inflate", "inflate", "Inflate", "Swell the surface, each point along its own normal (Alt/Ctrl deflates)."],
   ["smooth", "smooth", "Smooth", "Laplacian smooth toward the neighbours (Shift smooths with any brush)."],
   ["flatten", "flatten", "Flatten", "Press the surface onto the area's plane - planes and hard surfaces."],
-  ["grab", "grab", "Grab", "SculptGL's Move: pull a whole area along with the mouse."],
+  ["grab", "grab", "Grab", "Grab: pull a whole area along with the mouse."],
   ["pinch", "pinch", "Pinch", "Pull the surface toward the brush centre - sharpen edges."],
   ["crease", "crease", "Crease", "Pinch and dig at once - folds, cuts and wrinkles (Alt/Ctrl raises a ridge)."],
 ];
@@ -83,7 +83,7 @@ function forgeBuild() {
   const title = el("h2", "", "Forge"); title.id = "forge-title";
   const tabs = el("div", "forge-tabs"); tabs.setAttribute("role", "tablist");
   for (const [id, icon, name, what] of [["make", "cube", "Model", "Make, view and sculpt the 3D model."],
-    ["materials", "material", "Materials", "Procedural materials with Material Maker's nodes - applied to the model live."]]) {
+    ["materials", "material", "Materials", "Procedural materials from node graphs - applied to the model live."]]) {
     const b = forgeBtn(icon, name, what, () => forgeSide(id), "forge-tab"); b.dataset.side = id; b.setAttribute("role", "tab");
     tabs.append(b);
   }
@@ -316,8 +316,8 @@ function forgeStage() {
     forgeBtn("redo", "Redo", "Do it again (Ctrl+Shift+Z).", () => forge.view && forge.view.redo()),
     forgeBtn("subdivide", "Subdivide", "Split every triangle in four (curved), for finer detail.", () => forge.view && forge.view.subdivide()));
   const out = el("div", "forge-float forge-exportbar");
-  out.append(forgeBtn("save", "Save .glb", "Save this model (sculpting and material included) as .glb in models/ - Blender, Godot, Maya and the web open it.", () => forgeSave("glb")),
-    forgeBtn("file", "Save .obj", "Save it as .obj in models/ (ZBrush, Nomad Sculpt, any 3D app).", () => forgeSave("obj")),
+  out.append(forgeBtn("save", "Save .glb", "Save this model (sculpting and material included) as .glb in models/ - any 3D app opens it.", () => forgeSave("glb")),
+    forgeBtn("file", "Save .obj", "Save it as .obj in models/ (any 3D app).", () => forgeSave("obj")),
     forgeBtn("folder", "Show in Files", "Open the models folder in Files.", () => {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
     }));

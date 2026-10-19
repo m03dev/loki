@@ -6,13 +6,13 @@
 //
 // Maya's interaction DESIGN, re-written for a web canvas: no Autodesk code, MEL, art or icons are used.
 // Ctrl and Cmd are the same key here (Maya binds both on the Mac); Alt is Option.
-// Hotkeys: Maya is the default set; Blender's edit-mode keys (forge_model.js) come back with "Hotkeys: Blender"
+// Hotkeys: Maya is the default set; Blender's edit-mode keys (forge_model.js) come back with "Hotkeys: Classic"
 // in the hotbox (Edit > Hotkey set), saved per machine.
 "use strict";
 
 const FORGE_MAYA_R = 104;          // marking-menu ring radius, px
 const FORGE_MAYA_DEAD = 22;        // px from the centre before a direction counts (Maya's dead zone)
-const FORGE_MAYA_HOLD = 150;       // ms of right-button hold before the menu opens (a click just cancels)
+const FORGE_MAYA_HOLD = 85;        // ms of hold before the menu opens; a plain click opens it too and leaves it
 const FORGE_MAYA_TAP = 230;        // a Space press shorter than this, with nothing chosen, is a tap
 const FORGE_KEYMAP_STORE = "loki-forge-keymap";
 const FORGE_COMPASS = { N: -90, NE: -45, E: 0, SE: 45, S: 90, SW: 135, W: 180, NW: -135 };
@@ -256,7 +256,7 @@ function forgeMayaCommands() {
     dynamesh: ["DynaMesh", () => forgeMayaCall("forgeDynamesh")],
     sculpt: ["Sculpt Tool", (v) => forgeMayaSculpt(v)],
     deleteComp: ["Delete Components", () => forgeMayaCall("forgeFaceOp", "delete")],
-    bevel: ["Bevel", null, "Bevel needs GoBuild's bevel ported (docs/FORGE_MAYA.md T8)"],
+    bevel: ["Bevel", null, "Bevel is not in Forge yet."],
     edgeLoop: ["Insert Edge Loop", null, "Insert Edge Loop is not in Forge yet (T8)"],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
     merge: ["Merge", null, "Merge is not in Forge yet (T8)"],
@@ -286,8 +286,8 @@ function forgeMayaCommands() {
     worldAxes: ["World", (v) => forgeMayaSpace(v, "world")],
     objectAxes: ["Object", (v) => forgeMayaSpace(v, "local")],
     marquee: ["Marquee", () => "Drag a box to select (Shift toggles, Ctrl/Cmd removes)."],
-    keysMaya: ["Hotkeys: Maya", () => { forgeSetKeymap("maya"); return "Hotkey set: Maya."; }],
-    keysBlender: ["Hotkeys: Blender", () => { forgeSetKeymap("blender"); return "Hotkey set: Blender (G/R/S, 1/2/3, middle-drag turns)."; }],
+    keysMaya: ["Hotkeys: Forge", () => { forgeSetKeymap("maya"); return "Hotkey set: Forge (the default)."; }],
+    keysBlender: ["Hotkeys: Classic", () => { forgeSetKeymap("blender"); return "Hotkey set: Classic (G/R/S, 1/2/3, middle-drag turns)."; }],
     more: ["More...", (v) => { forgeMayaHotboxOpen(v); }],
     sculptModel: ["Sculpt/Model", () => forgeMayaCall("forgeMode")],
     quadToggle: ["Quad view", (v) => { v.setLook("quad", !v.quad); return v.quad ? "Four views." : "One view."; }],
@@ -522,7 +522,7 @@ function forgeMayaWheelSub(v, head, ids, angle) {
     });
     sub.append(b);
   }
-  const b2 = mayaEl("button", "forge-wheel-item forge-wheel-more", "All menus (Maya's hotbox)");
+  const b2 = mayaEl("button", "forge-wheel-item forge-wheel-more", "All menus (the full menu grid)");
   b2.type = "button";
   b2.addEventListener("click", (ev) => { ev.stopPropagation(); host._used = true; forgeMayaWheelClose(); forgeMayaHotboxOpen(v, host._at); });
   sub.append(b2);
@@ -674,7 +674,7 @@ function forgeMayaAttach(view, ctx) {
   let gest = null;
   canvas.addEventListener("pointerdown", (e) => {
     maya.mouse = [e.clientX, e.clientY];
-    if (e.button !== 0 || e.altKey || view.quad || forgeKeymap() !== "maya") return;
+    if (e.button !== 0 || e.altKey || forgeKeymap() !== "maya") return;
     const held = ["q", "w", "e"].find((k) => maya.held.has(k));
     if (held && view.mode !== "sculpt") {               // hold q / w / e + left button: that tool's marking menu
       e.preventDefault(); e.stopImmediatePropagation();
@@ -725,7 +725,7 @@ function forgeMayaAttach(view, ctx) {
 
   // ------------------------------------------------ right button: hold and a marking menu opens, picked by direction
   canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 2 || e.altKey || view.quad) return;
+    if (e.button !== 2 || e.altKey) return;              // every view, the four-view layout included
     maya.down = true; maya.at = [e.clientX, e.clientY];
     const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
     window.clearTimeout(maya.timer);
@@ -742,12 +742,29 @@ function forgeMayaAttach(view, ctx) {
   const endRight = (e) => {
     if (e.button !== 2) return;
     maya.down = false; window.clearTimeout(maya.timer);
-    if (maya.open !== "right") return;
-    maya.open = false;
-    const id = forgeMayaMarkPick(e.clientX, e.clientY);
-    forgeMayaMarkHide();
-    if (id) forgeMayaRun(view, id);
+    if (maya.open === "pinned") return;                   // already open from an earlier click: leave it
+    if (maya.open === "right") {                          // it was showing: a flick picks by direction
+      maya.open = false;
+      const id = forgeMayaMarkPick(e.clientX, e.clientY);
+      forgeMayaMarkHide();
+      if (id) forgeMayaRun(view, id);
+      return;
+    }
+    // a quick click opens the menu and leaves it open (a click is enough; you do not have to hold)
+    const at = maya.at || [e.clientX, e.clientY];
+    const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    const node = view.mode === "view" ? forgeMayaPickAt(view, at[0], at[1]) : null;
+    const t = forgeMayaTree(view);
+    if (node && t && !how.shift && !how.ctrl && !t.selected().includes(node.id)) t.select(node.id);
+    forgeMayaMarkShow(view, at[0], at[1], forgeMayaMenu(view, Object.assign({ node: node }, how)));
+    maya.open = "pinned";
   };
+  // a click away, or Escape, closes one that was opened by a click
+  document.addEventListener("pointerdown", (e) => {
+    if (maya.open !== "pinned") return;
+    const host = document.getElementById("forge-maya-marking");
+    if (host && !host.hidden && !host.contains(e.target)) { maya.open = false; forgeMayaMarkHide(); }
+  }, true);
   canvas.addEventListener("pointerup", endRight);
   window.addEventListener("pointerup", endRight);
   window.addEventListener("pointermove", (e) => { if (maya.open === "right") forgeMayaMarkHover(e.clientX, e.clientY); });

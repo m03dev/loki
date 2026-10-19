@@ -3,7 +3,7 @@
 // library is Material Maker's own .mmg files (app/ui/vendor/material_maker/nodes.json, tools/import_mm_nodes.py),
 // compiled by forge_mm.js; this file is the editor: a graph you drag nodes and wires in, a parameter panel,
 // live PBR maps (albedo, normal, roughness, metallic, AO, height) rendered with WebGL2 and applied to the Forge
-// model as you edit, PNG export, .ptex save/load (Material Maker's project format) and "Open in Material Maker".
+// model as you edit, PNG export, .ptex save/load (Material Maker's project format) and "Open in the node editor".
 //
 // window.ForgeMaterials = { open(host), bake(size) -> {albedo, normal, ...: canvas}, renderMap(graph, map, size) }
 // Uses el(), api(), state from app.js and forgeBtn/forgeSay from forge.js. Plain DOM, CSP-safe.
@@ -195,9 +195,9 @@
     size.addEventListener("change", () => { M.size = +size.value; });
     bar.append(add, size,
       forgeBtn("save", "Save maps", "Save the PBR maps as PNGs (albedo, normal, roughness, metallic, AO, height) into models/.", saveMaps),
-      forgeBtn("file", "Save .ptex", "Save this material as a Material Maker project (.ptex) into models/.", savePtex),
-      forgeBtn("upload", "Load .ptex", "Open a Material Maker project (.ptex).", loadPtex),
-      forgeBtn("external", "Open in Material Maker", "Open this material in the Material Maker app (download link when it is not installed).", openInMM),
+      forgeBtn("file", "Save .ptex", "Save this material as a node-graph project (.ptex) into models/.", savePtex),
+      forgeBtn("upload", "Load .ptex", "Open a node-graph project (.ptex).", loadPtex),
+      forgeBtn("external", "Open in the node editor", "Open this material in the node editor (download link when it is not installed).", openInMM),
       forgeBtn("trash", "New", "Start a new material.", () => { M.graph = window.ForgeMM.newGraph(); M.sel = ""; build(); changed(true); }));
     const status = el("span", "fm-status"); status.setAttribute("role", "status");
     const main = el("div", "fm-main");
@@ -433,7 +433,7 @@
 
   async function savePtex() {
     const r = await upload("material.ptex", new TextEncoder().encode(JSON.stringify(window.ForgeMM.toPtex(M.graph), null, 1)));
-    forgeSay(r.ok ? "Saved models/" + r.name + " (opens in Material Maker)" : r.error || "Could not save.", !r.ok);
+    forgeSay(r.ok ? "Saved models/" + r.name + " (opens in the node editor)" : r.error || "Could not save.", !r.ok);
     return r;
   }
 
@@ -445,7 +445,7 @@
       f.text().then((t) => {
         const { graph, skipped } = window.ForgeMM.fromPtex(JSON.parse(t));
         M.graph = graph; M.sel = ""; build(); changed(true);
-        forgeSay(skipped.length ? "Loaded; not in Forge yet (open in Material Maker): " + skipped.slice(0, 4).join(", ") : "Loaded " + f.name);
+        forgeSay(skipped.length ? "Loaded; not in Forge yet (open in the node editor): " + skipped.slice(0, 4).join(", ") : "Loaded " + f.name);
       }).catch((e) => forgeSay("Not a .ptex: " + e.message, true));
     });
     input.click();
@@ -454,14 +454,14 @@
   async function openInMM() {
     const st = await api("/forge/mm").catch(() => null);
     if (!st || !st.installed) {
-      forgeSay("Material Maker is not installed here - get it (free, MIT) from " + ((st && st.download) || "github.com/RodZill4/material-maker/releases"), true);
+      forgeSay("The node editor is not installed here - get it (free, MIT) from " + ((st && st.download) || "github.com/RodZill4/material-maker/releases"), true);
       if (st && st.download) api("/open", { url: st.download }).catch(() => {});
       return;
     }
     const saved = await savePtex();
     if (!saved.ok) return;
     const r = await api("/forge/mm/open", { name: saved.name }).catch(() => null);
-    forgeSay(r && r.ok ? "Opened " + saved.name + " in Material Maker" : (r && r.error) || "Could not open it.", !(r && r.ok));
+    forgeSay(r && r.ok ? "Opened " + saved.name + " in the node editor" : (r && r.error) || "Could not open it.", !(r && r.ok));
   }
 
   window.ForgeMaterials = { open, bake, renderMap, refresh, state: M, draw };
