@@ -40,6 +40,13 @@ it didn't give me an option. Find more or retry".
   `<function_call>` wrappers, a `{"tool_calls": [...]}` wrapper, a list of calls, and arguments named
   `input` / `parameters` / `args`. A parsed call is now fully stripped from the remaining text (no
   leftover ``` fences or markers) so the assistant message stays clean. test_portal 208 passed.
+- Forge poly (app/ui/forge_poly.js, E23): added the EDGE TABLE (`P.edges` - the sorted endpoint pair
+  plus the faces using each edge) and `P.alignRing` (orient a new ring outward), the prerequisite for
+  GoBuild's edge tools (bevel, loop cut, knife). test_forge_poly 19 passed (edge count, border edges,
+  ring flip). NOT shipped: the bevel port - a faithful port of GoBuild `bevel_operation.gd` was written
+  and gives the right counts (a cube with all 12 edges beveled -> 24 verts / 18 faces) but leaves the
+  mesh NON-CLOSED where three selected edges meet at a vertex (winding/sealing), so it was removed, not
+  shipped. It needs the shared-face expand/merge case worked out before it can land. Edge keys are "a,b".
 - Settings > Models now SHOWS it (app/ui/setup.js + app.css): an "Add a model by name" row (retry or find
   more by tag, POST /setup/pull), an opt-in "Uncensored models" list, and an "Ollama <v> is out of date" card
   with the update command when `ollama_advice.needs_update` (engine/model_setup.py `ollama_advice()`, also in

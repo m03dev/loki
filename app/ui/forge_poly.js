@@ -367,6 +367,32 @@
     return m;
   };
 
+  // ---------------------------------------------------------------- edges (GoBuildMesh edge table)
+  // GoBuild's edge tools (bevel, loop cut, knife) address EDGES; LOKI's mesh is {v,f}, so this
+  // rebuilds the edge table first: an edge is the sorted pair of its endpoints plus the faces that use
+  // it. alignRing orients a new ring (a bevel strip, a cap) to face outward like its neighbours.
+  const ekey = (a, b) => Math.min(a, b) + "," + Math.max(a, b);
+  P.edges = (m) => {
+    const map = new Map(), out = [];
+    m.f.forEach((face, fi) => {
+      for (let k = 0; k < face.length; k++) {
+        const a = face[k], b = face[(k + 1) % face.length], key = ekey(a, b);
+        let e = map.get(key);
+        if (!e) { e = { a: Math.min(a, b), b: Math.max(a, b), faces: [] }; map.set(key, e); out.push(e); }
+        e.faces.push(fi);
+      }
+    });
+    return out;
+  };
+  P.alignRing = (m, ring, outward) => {   // make the ring face outward; true when it flipped
+    let n = [0, 0, 0];
+    for (let i = 0; i < ring.length; i++) {
+      const a = m.v[ring[i]], b = m.v[ring[(i + 1) % ring.length]];
+      n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]);
+    }
+    if (n[0] * outward[0] + n[1] * outward[1] + n[2] * outward[2] < 0) { ring.reverse(); return true; }
+    return false;
+  };
   root.ForgePoly = P;
   if (typeof module !== "undefined" && module.exports) module.exports = P;
 })(typeof window !== "undefined" ? window : globalThis);

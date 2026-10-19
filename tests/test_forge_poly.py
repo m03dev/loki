@@ -59,6 +59,12 @@ out.dyna = { v: dm.v.length, f: dm.f.length, quads: dm.f.every((f) => f.length =
 const holed = P.deleteFaces(P.primitive("cube", { segments: 4 }), [0]);
 const ht = P.triangulate(holed), dh = P.dynamesh(ht.pos, ht.idx, 40);
 out.holed = { vol: P.volume(dh), closed: closed(dh) };
+out.edges = { cube: P.edges(cube).length, two: P.edges(cube).every((e) => e.faces.length === 2) };
+const _pl = P.primitive("plane", { segments: 1 });
+out.boundary = P.edges(_pl).filter((e) => e.faces.length === 1).length;
+const _rm = { v: [[0, 0, 0], [1, 0, 0], [1, 0, 1]], f: [[0, 1, 2]] };
+const _ring = [0, 1, 2];
+out.align = P.alignRing(_rm, _ring, [0, 1, 0]) && _ring.join(",") === "2,1,0";
 console.log(JSON.stringify(out));
 """
 
@@ -84,6 +90,10 @@ def main() -> int:
     check("Catmull-Clark: closed quads, rounder (smaller) than the cube", o["smooth"]["closed"] and o["smooth"]["quads"]
           and o["smooth"]["faces"] == 24 and 0.3 < o["smooth"]["vol"] < 1, o["smooth"])
     check("triangulate maps every triangle to its face", o["tri"]["ok"])
+    check("the edge table: a cube has 12 edges, each shared by 2 faces",
+          o["edges"]["cube"] == 12 and o["edges"]["two"], o["edges"])
+    check("...and a plane's border edges are used once", o["boundary"] == 4, o["boundary"])
+    check("alignRing flips a ring that faces the wrong way", o["align"])
     d = o["dyna"]
     check("DynaMesh: a closed all-quad mesh facing outward", d["quads"] and d["closed"] and d["vol"] > 0, d)
     check("DynaMesh keeps the sphere's size", 0.42 < d["rmin"] and d["rmax"] < 0.56 and abs(d["vol"] - 0.5236) < 0.08, d)
