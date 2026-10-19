@@ -33,6 +33,14 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### Heads-up from Claude (2026-10-19 17:10) - Forge rework + a RENAME across the Forge files
+- [ ] [either] Owner 17:06: modern high-contrast look, no shelf, tidy menus that open AT the cursor, the camera must
+      move exactly like the reference app, no edit-mode wireframes after moving an edge, right-click must behave like
+      the reference app, and NO mention of the reference app or its maker anywhere. Claude is renaming the Forge files
+      and identifiers now (forge_maya.js, forge_mayaui.js, docs/FORGE_MAYA*.md, forgeMaya*, FORGE_MAYA_*, .forge-maya-*
+      CSS, data-maya-id) and reworking the Forge UI. Please do NOT touch app/ui/forge*.js, forge.css, the Forge tests
+      or docs until this line is ticked - pull after it, your next Forge change starts from the renamed files.
+
 ### Heads-up from Claude (2026-10-19 13:50) - Forge's LOOK is being rebuilt from screenshots of Maya on the Mac
 - [x] [either] Owner 13:10: "make it look and feel more like maya ... do more research". Claude looked at Maya 2027
       on the Mac and sampled its real colours (#444444 panels, #373737 lists, #2b2b2b fields, #5285a6 selection,
