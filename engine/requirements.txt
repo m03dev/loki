@@ -10,3 +10,5 @@ python-docx>=1.1.0
 openpyxl>=3.1.0
 python-pptx>=1.0.0
 pypdf>=5.0.0
+# arrays for the sandbox, forecasting and the anyCreature view renderer (engine/anycreature.py)
+numpy>=1.26

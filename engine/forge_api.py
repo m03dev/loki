@@ -14,6 +14,10 @@ Every route needs the bridge's bearer token (the window fetches models with it, 
                                   saved into models/ (never overwrites)
   GET  /forge/mm                  Material Maker on this computer: {installed, path, download}
   POST /forge/mm/open {name}      open models/<name> (.ptex / .glb / .obj) in Material Maker
+  GET  /forge/creature            the anyCreature engine here: {ok, engine, outline, node}
+  GET  /forge/creature/view?name=&view=   one of the four silhouette PNGs (front | side | top | hero)
+  POST /forge/creature {spec, name?}  an anyCreature ACS spec -> a creature .glb in models/ (a job),
+                                  result {name, bytes, views: {front, side, top, hero}} (engine/anycreature.py)
 """
 from __future__ import annotations
 
@@ -78,6 +82,19 @@ def handle_get(state, path: str) -> tuple:
         return 200, {"ok": True, **forge_mm.status()}
     if route == "/forge/list":
         return 200, {"ok": True, "items": forge3d.list_models(models_dir(state)), "folder": "models"}
+    if route == "/forge/creature":
+        import anycreature  # pylint: disable=import-outside-toplevel
+        return 200, {"ok": True, **anycreature.available()}
+    if route == "/forge/creature/view":
+        import anycreature  # pylint: disable=import-outside-toplevel
+        view = q.get("view", "")
+        if view not in anycreature.VIEWS:
+            return 400, {"ok": False, "error": "view must be one of: " + ", ".join(anycreature.VIEWS)}
+        stem = Path(re.sub(r"[^A-Za-z0-9._-]", "", q.get("name", ""))).stem
+        png = models_dir(state) / (stem + ".views") / ("sil_%s.png" % view)
+        if not stem or not png.is_file():
+            return 404, {"ok": False, "error": "no such view"}
+        return 200, png.read_bytes(), "image/png"
     if route.startswith("/forge/file/"):
         name = unquote(route[len("/forge/file/"):])
         found = forge3d.model_file(models_dir(state), name)
@@ -149,6 +166,25 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             return {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
                 {"obj": Path(res["obj"]).name if res.get("obj") else ""} if res.get("ok") else {})
         return 200, forge3d.start_job(work, kind="model", label=prompt or "drawing", thread=thread)
+    if route == "/forge/creature":
+        import anycreature  # pylint: disable=import-outside-toplevel
+        spec = data.get("spec")
+        if not isinstance(spec, (dict, str)) or not spec:
+            return 400, {"ok": False, "error": "give an ACS spec (an object, or its JSON text) as spec"}
+        name = str(data.get("name") or "creature")
+        out_dir = models_dir(state)
+
+        def work(progress):
+            progress("compiling the creature", 0.2)
+            try:
+                res = anycreature.make(spec, out_dir, name)
+            except anycreature.AnyCreatureError as exc:
+                return {"ok": False, "error": str(exc)}
+            progress("drawing the front / side / top views", 0.85)
+            stem = res["stem"]
+            return {"ok": True, "name": res["name"], "bytes": res.get("bytes", 0), "views": {
+                v: "creature/view?name=%s&view=%s" % (stem, v) for v in res.get("views", {})}}
+        return 200, forge3d.start_job(work, kind="creature", label=name, thread=thread)
     return 404, {"ok": False, "error": "Unknown endpoint."}
 
 

@@ -7,6 +7,10 @@ The engine is zero-dependency Node (`node contrib/anycreature/engine/cli.js spec
 `harness/outline.py` is a pure-Python software rasteriser that draws the silhouettes the quality
 gates judge - the FRONT/SIDE/TOP/hero views Forge shows. Both are MIT - see
 contrib/anycreature/LICENSE and docs/THIRD_PARTY.md.
+
+Not here yet: make_creature (the agent tool). Registering a tool means touching engine/loki.py,
+which makes ship.py run every suite - including the pre-existing test_task_success failure on
+the Mac (see the Ziva memory). Add it on the PC, or once that suite is diagnosed.
 """
 from __future__ import annotations
 
@@ -72,6 +76,61 @@ if node and glb.is_file():
     check("they are four distinct views, not the same image four times", len(set(blobs)) == len(blobs))
     check("outline also writes a metrics report",
           (views / "metrics.json").is_file() and "views" in json.loads((views / "metrics.json").read_text()))
+
+# --------------------------------------------------------------- LOKI's glue (engine/anycreature.py)
+sys.path.insert(0, str(REPO / "engine"))
+import anycreature  # noqa: E402
+
+avail = anycreature.available()
+check("engine/anycreature.py finds the vendored engine, the renderer and node", avail["ok"], avail)
+
+
+def _refuses(fn, *a, **k):
+    try:
+        fn(*a, **k)
+        return False
+    except anycreature.AnyCreatureError:
+        return True
+
+
+check("a spec that is not JSON is refused with AnyCreatureError (nothing half-written)",
+      _refuses(anycreature.make, "{not json", TMP / "bad", "bad"))
+if node:
+    gres = anycreature.make(AC / "example" / "wolf.json", TMP / "glue", "wolf")
+    check("the glue compiles a spec and renders the four views",
+          (TMP / "glue" / "wolf.glb").is_file()
+          and all((TMP / "glue" / "wolf.views" / ("sil_%s.png" % v)).is_file() for v in ("front", "side", "top", "hero")),
+          gres)
+    check("a copied example is a hard floor (example_copy), surfaced as AnyCreatureError",
+          _refuses(anycreature.make, (AC / "example" / "wolf.json").read_text(encoding="utf-8"), TMP / "copy", "copy"))
+
+# --------------------------------------------------------------- the Forge routes (engine/forge_api.py)
+import forge_api  # noqa: E402
+import forge3d  # noqa: E402
+
+
+class _State:                     # the routes only read state.agent.WORKSPACE
+    class agent:                  # noqa: N801
+        WORKSPACE = TMP
+
+
+st = _State()
+code, body = forge_api.handle_get(st, "/forge/creature")
+check("GET /forge/creature reports the vendored engine", code == 200 and body.get("ok"), body)
+code, body = forge_api.handle_get(st, "/forge/creature/view?name=x&view=nope")
+check("GET /forge/creature/view refuses a view that is not one of the four", code == 400, body)
+
+if node:
+    spec_text = (AC / "example" / "wolf.json").read_text(encoding="utf-8")
+    code, job = forge_api.handle_post(st, "/forge/creature", json.dumps({"spec": spec_text, "name": "viaapi"}).encode(), thread=False)
+    result = (forge3d.job(job.get("id", "")) or {}).get("result", {}) if code == 200 else {}
+    check("POST /forge/creature runs the job and surfaces the engine's BLOCK when a spec is refused",
+          code == 200 and result.get("ok") is False and "example_copy" in str(result.get("error", "")), result)
+    anycreature.make(AC / "example" / "wolf.json", forge_api.models_dir(st), "viaapi")   # a real model + views
+    res2 = forge_api.handle_get(st, "/forge/creature/view?name=viaapi&view=front")
+    body2 = res2[1] if len(res2) > 1 else b""
+    check("GET /forge/creature/view serves the PNG the UI draws",
+          res2[0] == 200 and isinstance(body2, (bytes, bytearray)) and bytes(body2[:4]) == b"\x89PNG", res2[0])
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
