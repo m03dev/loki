@@ -772,6 +772,48 @@ def _model_of(provider: str) -> str:
     return str(getattr(cfg, "model", "") or "")
 
 
+_LOCAL_TAGS: dict = {"t": 0.0, "tags": []}
+
+
+def _installed_local_tags() -> list:
+    now = time.time()
+    if now - _LOCAL_TAGS["t"] > 30:
+        try:
+            import model_setup  # pylint: disable=import-outside-toplevel
+            _LOCAL_TAGS["tags"] = [str(m.get("name") or "") for m in (model_setup.ollama_models() or [])]
+        except Exception:  # noqa: BLE001 - Ollama down: keep what we had
+            _LOCAL_TAGS["tags"] = _LOCAL_TAGS["tags"] or []
+        _LOCAL_TAGS["t"] = now
+    return _LOCAL_TAGS["tags"]
+
+
+def resolve_local_model(provider: str) -> str:
+    """The tag to actually ask THIS machine's Ollama for. A local preset names a catalogue tag
+    ("qwen3.5:9b"), but a machine installs a particular build of it ("qwen3.5:9b-q4_K_M") or LOKI's
+    longer-context "loki-<tag>" variant, so the hardcoded name would 404. Fall back to the same family
+    that IS installed, then to whatever the engine scores best (model_setup.best_installed)."""
+    cfg = MODELS.get(provider or "")
+    if cfg is None or "11434" not in str(cfg.base_url or ""):
+        return str(getattr(cfg, "model", "") or "")
+    want = str(cfg.model or "")
+    tags = _installed_local_tags()
+    if not tags or want in tags or (want + ":latest") in tags:
+        return want
+    base = want.split(":")[0]
+    same = [t for t in tags if t.split(":")[0] == base or t.split(":")[0].startswith("loki-" + base)]
+    if same:
+        prefer = [t for t in same if t.startswith("loki-")] or same   # LOKI's longer-context variant first
+        return prefer[0]
+    try:
+        import model_setup  # pylint: disable=import-outside-toplevel
+        best = model_setup.best_installed(model_setup.ollama_models() or [], 8.0)
+        if best and best.get("name"):
+            return str(best["name"])
+    except Exception:  # noqa: BLE001
+        pass
+    return want
+
+
 _FORECAST_CACHE: dict = {"t": 0.0, "outlook": {}}
 
 
@@ -6730,6 +6772,8 @@ def model_down_hint(cfg) -> str:
 def make_client():
     """An AsyncOpenAI for HTTP providers, or the CLI-agent shim for subscription ones."""
     cfg = MODELS[active_model_name()]
+    if "11434" in str(cfg.base_url or ""):
+        cfg.model = resolve_local_model(active_model_name())   # a preset tag is per-machine: use what is installed
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         return cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
     base_url = cfg.base_url
