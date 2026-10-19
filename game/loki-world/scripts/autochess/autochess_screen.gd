@@ -251,29 +251,39 @@ func _place_or_remove(cell: Vector2i) -> void:
 
 func _draw() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
-	draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.025, 0.035, 0.065, 0.98))
-	draw_rect(Rect2(Vector2(14, 12), Vector2(viewport_size.x - 28, viewport_size.y - 24)), Color(0.06, 0.08, 0.13), false, 2.0)
+	# This is a modal game screen: make the backdrop truly opaque so the MMO HUD
+	# and world cannot bleed through beneath the board or shop.
+	draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.018, 0.025, 0.045, 1.0))
+	draw_rect(Rect2(Vector2(14, 12), Vector2(viewport_size.x - 28, viewport_size.y - 24)), Color(0.035, 0.05, 0.082), false, 2.0)
+	draw_rect(Rect2(Vector2(22, 70), Vector2(272, viewport_size.y - 96)), Color(0.055, 0.075, 0.115))
+	draw_rect(Rect2(Vector2(22, 70), Vector2(272, viewport_size.y - 96)), Color(0.18, 0.25, 0.34), false, 1.0)
+	draw_rect(Rect2(Vector2(306, 80), Vector2(648, 414)), Color(0.045, 0.065, 0.095))
+	draw_rect(Rect2(Vector2(306, 80), Vector2(648, 414)), Color(0.18, 0.25, 0.34), false, 1.0)
 	draw_string(ThemeDB.fallback_font, Vector2(318, 94), "RIVAL DEPLOYMENT", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.55, 0.45))
+	draw_string(ThemeDB.fallback_font, Vector2(318, 490), "YOUR FORMATION", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.45, 0.78, 1.0))
 	for y in ROWS:
 		for x in COLS:
 			var rect := Rect2(BOARD_ORIGIN + Vector2(x * CELL.x, y * CELL.y), CELL - Vector2(3, 3))
 			var player_side: bool = x < COLS / 2
-			var fill: Color = Color(0.14, 0.2, 0.26) if player_side else Color(0.25, 0.13, 0.16)
+			var fill: Color = Color(0.12, 0.2, 0.27) if player_side else Color(0.24, 0.12, 0.16)
 			if y >= 3:
-				fill = fill.darkened(0.17)
+				fill = fill.darkened(0.16)
 			draw_rect(rect, fill)
-			draw_rect(rect, Color(0.34, 0.48, 0.55) if player_side else Color(0.54, 0.32, 0.35), false, 1.0)
+			draw_rect(rect, Color(0.31, 0.52, 0.65) if player_side else Color(0.58, 0.32, 0.37), false, 1.0)
+	# Central deployment boundary and subtle floor markers.
+	var divider_x: float = BOARD_ORIGIN.x + COLS / 2.0 * CELL.x - 2.0
+	draw_line(Vector2(divider_x, BOARD_ORIGIN.y + 3.0), Vector2(divider_x, BOARD_ORIGIN.y + ROWS * CELL.y - 3.0), Color(0.95, 0.69, 0.32, 0.75), 2.0)
 	for unit in units:
 		var cell: Vector2i = unit["cell"]
 		var center := BOARD_ORIGIN + Vector2((cell.x + 0.5) * CELL.x, (cell.y + 0.5) * CELL.y)
 		var tint: Color = unit["color"]
-		draw_circle(center, 19.0, tint.darkened(0.3))
+		draw_circle(center + Vector2(0, 3), 21.0, Color(0.015, 0.02, 0.03, 0.8))
+		draw_circle(center, 19.0, tint.darkened(0.38))
 		draw_circle(center, 15.0, tint)
 		draw_string(ThemeDB.fallback_font, center + Vector2(-13, 4), str(unit["name"]).substr(0, 3).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color.WHITE)
 		var hp_ratio: float = clampf(float(unit["hp"]) / maxf(1.0, float(unit["max_hp"])), 0.0, 1.0)
 		draw_rect(Rect2(center.x - 22, center.y + 23, 44, 4), Color(0.15, 0.04, 0.05))
 		draw_rect(Rect2(center.x - 22, center.y + 23, 44 * hp_ratio, 4), Color(0.28, 0.9, 0.4) if not unit.get("enemy", false) else Color(0.95, 0.32, 0.3))
-	draw_string(ThemeDB.fallback_font, Vector2(318, 498), battle_log.substr(0, 80), HORIZONTAL_ALIGNMENT_LEFT, 620, 12, Color(0.77, 0.83, 0.91))
 
 
 func close_screen() -> void:

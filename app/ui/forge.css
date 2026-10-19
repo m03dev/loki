@@ -262,7 +262,7 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 /* ---------------------------------------------------------------- the Outliner (app/ui/forge_scene.js) */
 /* docked in the left column, the way Maya's Outliner is docked - never over the viewport's own bars */
 .forge-outliner {
-  margin-top: 8px; min-height: 118px; max-height: 210px; display: flex; flex-direction: column;
+  margin-top: 8px; min-width: 226px; min-height: 118px; max-height: 210px; display: flex; flex-direction: column;
   background: rgba(18,21,27,.55); border: 1px solid rgba(255,255,255,.14); border-radius: 9px;
   overflow: hidden; font-size: 12px;
 }
@@ -273,7 +273,7 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 }
 .forge-outliner .forge-out-title,
 .forge-channel .forge-out-title { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; flex: 1; }
-.forge-outliner .forge-out-bar { display: flex; gap: 3px; }
+.forge-outliner .forge-out-bar { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; }
 .forge-outliner .forge-out-btn,
 .forge-channel .forge-out-btn {
   padding: 3px 6px; font: inherit; font-size: 11px; border-radius: 5px; cursor: pointer;

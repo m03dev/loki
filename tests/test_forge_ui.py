@@ -311,6 +311,51 @@ async def main():
         reset = await page.evaluate("forge.view.tree.api.node(2).grp.position.toArray()")
         check("Reset puts the selected object back on the origin", reset == [0, 0, 0], reset)
 
+        # -------- T4b: Freeze Transformations and Center Pivot
+        hit2 = await page.evaluate("""() => ['forge-ch-pivot', 'forge-ch-freeze'].map((id) => {
+          const b = document.getElementById(id);
+          if (!b) return { id: id, ok: false };
+          const r = b.getBoundingClientRect();
+          const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { id: id, ok: el === b || b.contains(el) }; })""")
+        check("Center Pivot and Freeze are on the panel and really clickable", all(h["ok"] for h in hit2), hit2)
+        await page.evaluate("forge.view.tree.api.select(1)")
+        await page.evaluate("forge.view.tree.api.resetTransform(1)")
+        await page.evaluate("forge.view.tree.api.setTransform(1, 'translate', 1, 1)")   # lift it one unit
+        frozen = await page.evaluate("""() => { const t = forge.view.tree.api, sm = forge.view.sm;
+          const cOf = () => { let lo = 1e9, hi = -1e9;
+            for (let i = 0; i < sm.n; i++) { const y = sm.wpos[i * 3 + 1]; if (y < lo) lo = y; if (y > hi) hi = y; }
+            return (lo + hi) / 2; };
+          const c0 = cOf(); t.freeze(1); const c1 = cOf();
+          return { moved: c1 - c0, at: forge.view.holder.position.toArray(),
+                   rot: forge.view.holder.rotation.toArray().slice(0, 3) }; }""")
+        check("Freeze Transformations bakes the move into the mesh and leaves the object where it was",
+              abs(frozen["moved"] - 1) < 1e-4 and frozen["at"] == [0, 0, 0] and frozen["rot"] == [0, 0, 0], frozen)
+        piv = await page.evaluate("""() => { const t = forge.view.tree.api, sm = forge.view.sm;
+          const cOf = () => { const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+            for (let i = 0; i < sm.n; i++) for (let k = 0; k < 3; k++) { const x = sm.wpos[i * 3 + k];
+              if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; }
+            return [0, 1, 2].map((k) => (hi[k] + lo[k]) / 2); };
+          const before = cOf(); t.centerPivot(1); const after = cOf();
+          return { before: before, after: after, at: forge.view.holder.position.toArray() }; }""")
+        check("Center Pivot puts the manipulator's origin on the object's middle without moving the object",
+              all(abs(a) < 1e-4 for a in piv["after"])
+              and max(abs(piv["before"][k] - piv["at"][k]) for k in range(3)) < 1e-4, piv)
+
+        # -------- T5: Shift + drag on the manipulator leaves a copy behind and drags the new one
+        await page.evaluate("forge.view.tree.api.select(1)")
+        await page.evaluate("forge.view.toggleTransform('translate')")
+        n_before = await page.evaluate("forge.view.tree.nodes.length")
+        await page.keyboard.down("Shift")
+        await page.evaluate("forge.view.transform.dispatchEvent({ type: 'dragging-changed', value: true })")
+        await page.keyboard.up("Shift")
+        drag = await page.evaluate("""() => { const t = forge.view.tree.api, copy = t.active();
+          return { nodes: t.list().length, name: copy.name, root: !!copy.root,
+                   onGizmo: !!(forge.view.transform.object && forge.view.transform.object === copy.grp) }; }""")
+        check("Shift+drag leaves the original and hands the manipulator to a copy",
+              drag["nodes"] == n_before + 1 and not drag["root"] and drag["onGizmo"], drag)
+        await page.evaluate("forge.view.toggleTransform(null)")
+
         # -------- sculpt (SculptGL's brushes), undo, subdivide
         sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
         before = await page.evaluate(sum_js)

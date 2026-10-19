@@ -50,6 +50,36 @@ function forgeSceneAttach(view, ctx) {
   }
 
   function smOf(n) { return n.root ? view.sm : n.sm; }
+  function shapeOf(n) { return n.grp ? n.grp.children.find((o) => o.isMesh && o.geometry) : null; }
+
+  // the middle of the working mesh, in the holder's own space
+  function centreOf(sm) {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < sm.n; i++) for (let k = 0; k < 3; k++) {
+      const x = sm.wpos[i * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x;
+    }
+    return new THREE.Vector3((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+  }
+
+  // transform every welded vertex of the working mesh (undoable), then push it back to the GPU
+  function bakeRoot(m) {
+    const sm = view.sm;
+    if (!sm) return false;
+    if (view.undoStack) {
+      view.undoStack.push({ sm: sm, wpos: sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
+      if (view.undoStack.length > 40) view.undoStack.shift();
+      view.redoStack = [];
+    }
+    const v = new THREE.Vector3();
+    for (let i = 0; i < sm.n; i++) {
+      v.set(sm.wpos[i * 3], sm.wpos[i * 3 + 1], sm.wpos[i * 3 + 2]).applyMatrix4(m);
+      sm.wpos[i * 3] = v.x; sm.wpos[i * 3 + 1] = v.y; sm.wpos[i * 3 + 2] = v.z;
+    }
+    if (typeof forgeSync === "function") forgeSync(sm);
+    if (typeof forgeNormals === "function") forgeNormals(sm);
+    if (view.refreshMesh) view.refreshMesh();
+    return true;
+  }
 
   // ---------------------------------------------------------------- building extra objects
   function geometryFrom(tri, col) {
@@ -179,6 +209,44 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
+    // Maya's Modify > Center Pivot: the manipulator's origin moves to the middle of the object, and the
+    // object does NOT move - so the vertices shift one way by the centre and the node's transform shifts the
+    // other. Export bakes the node's transform, so the two cancel and what Save writes is unchanged.
+    centerPivot(id) {
+      const n = node(id || api.active().id);
+      if (!n || !n.grp) return false;
+      if (n.root) {
+        const sm = view.sm;
+        if (!sm) return false;
+        const c = centreOf(sm);
+        bakeRoot(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+        n.grp.position.add(c);
+      } else {
+        const m = shapeOf(n);
+        if (!m) return false;
+        m.geometry.computeBoundingBox();
+        const c = m.geometry.boundingBox.getCenter(new THREE.Vector3());
+        m.geometry.translate(-c.x, -c.y, -c.z);
+        n.grp.position.add(c);
+      }
+      n.grp.updateMatrixWorld(true);
+      return true;
+    },
+
+    // Maya's Modify > Freeze Transformations: the node's transform is baked into the vertices and the node
+    // goes back to identity, so the object does not appear to move at all.
+    freeze(id) {
+      const n = node(id || api.active().id);
+      if (!n || !n.grp) return false;
+      n.grp.updateMatrix();
+      const m = n.grp.matrix.clone();
+      if (n.root) bakeRoot(m);
+      else { const shape = shapeOf(n); if (!shape) return false; shape.geometry.applyMatrix4(m); }
+      n.grp.position.set(0, 0, 0); n.grp.rotation.set(0, 0, 0); n.grp.scale.set(1, 1, 1);
+      n.grp.updateMatrixWorld(true);
+      return true;
+    },
+
     resetTransform(id) {                              // Maya's Reset: the node back on the origin, unscaled
       const n = node(id || api.active().id);
       if (!n || !n.grp) return false;
@@ -216,6 +284,21 @@ function forgeSceneAttach(view, ctx) {
     reset.title = "Put the selected object back on the origin, unscaled (Maya's Reset).";
     reset.addEventListener("click", () => { api.resetTransform(); tree.build(); api.say("Transform reset."); });
     bar.append(reset);
+    const pivot = scnEl("button", "forge-out-btn", "Pivot");
+    pivot.type = "button"; pivot.id = "forge-ch-pivot";
+    pivot.title = "Center Pivot: put the manipulator's origin on the middle of the object (the object does not move).";
+    pivot.addEventListener("click", () => {
+      if (api.centerPivot()) { tree.build(); api.say("Pivot centered on the object (Modify > Center Pivot)."); }
+      else api.say("Select an object with a mesh first.", true);
+    });
+    const freeze = scnEl("button", "forge-out-btn", "Freeze");
+    freeze.type = "button"; freeze.id = "forge-ch-freeze";
+    freeze.title = "Freeze Transformations: bake the transform into the mesh, leave the object where it is.";
+    freeze.addEventListener("click", () => {
+      if (api.freeze()) { tree.build(); api.say("Transformations frozen into the mesh (Modify > Freeze Transformations)."); }
+      else api.say("Select an object with a mesh first.", true);
+    });
+    bar.append(pivot, freeze);
     head.append(bar);
     const list = scnEl("div", "forge-out-list"); list.id = "forge-out-list";
     box.append(head, list);
@@ -332,6 +415,25 @@ function forgeSceneAttach(view, ctx) {
 
   const load = view.load;
   if (typeof load === "function") view.load = async (buf) => { const r = await load(buf); tree.build(); return r; };
+
+  // ---------------------------------------------------------------- T5: Shift + drag duplicates (Maya)
+  // In Maya, shift-dragging a manipulator leaves the original where it was and drags a copy. The manipulator
+  // here is attached to the object, so on the moment a drag starts with Shift down we make the copy and hand
+  // the manipulator to it - the original stops moving at once and the copy follows the mouse.
+  let shiftDown = false;
+  document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftDown = true; }, true);
+  document.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftDown = false; }, true);
+  api.shiftDown = () => shiftDown;
+  const tc = ctx.transform || null;
+  if (tc && tc.addEventListener) {
+    tc.addEventListener("dragging-changed", (ev) => {
+      if (!ev || !ev.value || !shiftDown) return;
+      const from = api.active();
+      if (!from || from.kind !== "mesh") return;
+      const copy = api.duplicate(from.name + "_copy");
+      if (copy && tc.attach) { tc.attach(copy.grp); tree.build(); api.say("Shift-drag: " + copy.name + " is the copy, the original stayed."); }
+    });
+  }
 
   ensureRoot();
   panel();
