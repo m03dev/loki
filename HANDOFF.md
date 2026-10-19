@@ -23,9 +23,22 @@ it didn't give me an option. Find more or retry".
 - Tests: tests/test_models_media.py +7 (53 passed). Checked on the PC: test_models_media 53, test_routing_core
   142, test_systems 101, test_local_broken 11, test_keys_studio 30, --self-test OK. test_install's 6 failures
   are pre-existing (they need network / bundled Python) - identical with the unmodified file.
-- Follow-up (not done here): Settings > Models still does not SHOW the uncensored list or an "Add a model"
-  box - the bridge returns `"uncensored"` in `/models` status and reads `models_custom.json`, the UI needs to
-  surface both.
+- Fixed two real Windows bugs in the data sandbox (engine/data_sandbox.py), found because they made
+  `test_documents` fail and so blocked every app/ui ship: (1) the child's result MARKER begins/ends with
+  a newline, but Windows text-mode stdout turns "
+" into "
+", so `analyze()` never found the marker
+  and reported "the analysis process ended (exit 0)" - every finding, table and chart was lost on the PC;
+  the parent now normalises line endings before looking for the marker (a no-op on macOS/Linux).
+  (2) the memory cap polled the RESIDENT set, but a `bytearray` commits gigabytes without ever settling
+  into a big working set, so a runaway analysis was never stopped; a Windows Job Object with a
+  committed-memory limit (PROCESS_MEMORY | KILL_ON_JOB_CLOSE) now enforces it and the child gets a real
+  MemoryError. test_documents 143 passed.
+- Settings > Models now SHOWS it (app/ui/setup.js + app.css): an "Add a model by name" row (retry or find
+  more by tag, POST /setup/pull), an opt-in "Uncensored models" list, and an "Ollama <v> is out of date" card
+  with the update command when `ollama_advice.needs_update` (engine/model_setup.py `ollama_advice()`, also in
+  `status()`); a failed download names the exact update command. Checked: test_ui_smoke 10 passed (window
+  still boots, no script error), test_models_media 54, node --check setup.js.
 
 
 

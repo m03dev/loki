@@ -191,6 +191,24 @@ function renderSetup(box, data, compact) {
     box.append(s1);
   }
 
+  // An out-of-date Ollama: the one thing that makes "it will not download" look like Loki's fault.
+  const advice = data.ollama_advice || {};
+  if (advice.needs_update && !compact) {
+    const s0 = el("div", "setup-step");
+    s0.append(el("h3", "", "Ollama " + (advice.version || "") + " is out of date"),
+      el("p", "note", "Newer models need Ollama " + advice.recommended + " or newer, and an old Ollama " +
+        "can refuse to download or fail to load them. Update it, then come back here: " + ((advice.upgrade || {}).how || "")));
+    const cmd = (advice.upgrade || {}).command;
+    if (cmd) {
+      const copy = setupButton("quiet", "Copy update command", async () => {
+        try { await navigator.clipboard.writeText(cmd); setStatus("Command copied", true); }
+        catch (_) { addNotice(cmd); }
+      });
+      s0.append(copy);
+    }
+    box.append(s0);
+  }
+
   // Suggestions for this computer, by role, each one click.
   const roles = el("div", "setup-step");
   roles.append(el("h3", "", "Suggested for this computer"));
@@ -261,6 +279,49 @@ function renderSetup(box, data, compact) {
       s3.append(row);
     }
     box.append(s3);
+  }
+
+  // Your own model: any Ollama tag or Hugging Face GGUF, pulled by name (find more / retry).
+  if (!compact) {
+    const s4 = el("div", "setup-step");
+    s4.append(el("h3", "", "Add a model by name"));
+    const input = el("input", "add-model-input");
+    input.type = "text";
+    input.setAttribute("placeholder", "e.g. huihui_ai/qwen3-abliterated:8b  or  hf.co/user/repo:file");
+    const add = setupButton("send", "Download & use", async () => {
+      const tag = (input.value || "").trim();
+      if (!tag) { input.focus(); return; }
+      add.disabled = true;
+      const r = await api("/setup/pull", { tag });
+      if (!r.ok) { add.disabled = false; addNotice(r.error || "Could not start the download.", true); return; }
+      watchProgress(box, compact);
+    });
+    const line = el("div", "model-row");
+    line.append(input, add);
+    s4.append(line, el("p", "note", "Any model Ollama can pull - a tag off ollama.com, or your own GGUF. If a download fails, this is where you retry it by name."));
+    box.append(s4);
+  }
+
+  // Uncensored / abliterated builds: opt-in, never picked automatically (Settings > Models).
+  const unc = (data.uncensored || []).filter((r) => !r.installed && !shown.has(r.tag));
+  if (unc.length && !compact) {
+    const s5 = el("div", "setup-step");
+    s5.append(el("h3", "", "Uncensored models"),
+      el("p", "note", "Community abliterated builds that keep tool calling but do not refuse work. Opt-in: Loki never picks one for you."));
+    for (const rec of unc.slice(0, 5)) {
+      const row = el("div", "model-row");
+      const info = el("div", "grow");
+      info.append(document.createTextNode(rec.tag),
+        el("small", "", rec.why + " · " + gb(rec.size) + " download · needs ~" + gb(rec.need) + " memory"));
+      const get = setupButton("quiet", "Download & use", async () => {
+        get.disabled = true;
+        if (!(await downloadAndUse(rec.tag, box, compact))) get.disabled = false;
+      });
+      get.disabled = busy;
+      row.append(info, get);
+      s5.append(row);
+    }
+    box.append(s5);
   }
 
   const p = data.progress || {};

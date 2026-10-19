@@ -102,6 +102,10 @@ section("more models: uncensored builds and your own entries")
 check("uncensored builds carry a tag, roles and a why",
       bool(model_setup.UNCENSORED) and all(e.get("tag") and e.get("roles") and e.get("why")
                                            for e in model_setup.UNCENSORED), model_setup.UNCENSORED)
+check("an out-of-date Ollama raises an update prompt",
+      model_setup.ollama_advice("0.40.5")["needs_update"]
+      and not model_setup.ollama_advice("0.40.6")["needs_update"]
+      and model_setup.ollama_advice("0.40.5")["upgrade"].get("command"))
 check("the uncensored family has a known quality score",
       any("abliterat" in k or "dolphin" in k for k, _ in model_setup.KNOWN_SCORES))
 check("uncensored() reports what fits and what is installed",

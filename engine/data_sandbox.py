@@ -375,6 +375,88 @@ def _limits(memory_mb: int):
     return None
 
 
+def _win_job(memory_mb: int):
+    """(job handle, EXT_LIMIT class) capping a child's COMMITTED memory - Windows only, else (None, None).
+
+    Windows cannot set an address-space limit before the child starts (no setrlimit), and polling the
+    resident set misses a fast allocation: a bytearray commits gigabytes without ever settling into a
+    big working set (measured on the PC, 2026-10-18), so a runaway analysis slipped through. A Job
+    Object's PROCESS_MEMORY limit is enforced by the OS on committed memory, so it always catches it.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [("ReadOperationCount", ctypes.c_ulonglong), ("WriteOperationCount", ctypes.c_ulonglong),
+                        ("OtherOperationCount", ctypes.c_ulonglong), ("ReadTransferCount", ctypes.c_ulonglong),
+                        ("WriteTransferCount", ctypes.c_ulonglong), ("OtherTransferCount", ctypes.c_ulonglong)]
+
+        class BASIC_LIMIT(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class EXT_LIMIT(ctypes.Structure):
+            _fields_ = [("BasicLimitInformation", BASIC_LIMIT), ("IoInfo", IO_COUNTERS),
+                        ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                        ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            return None, None
+        info = EXT_LIMIT()
+        info.BasicLimitInformation.LimitFlags = 0x0100 | 0x2000   # PROCESS_MEMORY | KILL_ON_JOB_CLOSE
+        info.ProcessMemoryLimit = int(memory_mb) * 1048576
+        if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            k32.CloseHandle(job)
+            return None, None
+        return job, EXT_LIMIT
+    except (OSError, AttributeError, ValueError):
+        return None, None
+
+
+def _win_job_assign(job, pid: int) -> bool:
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        handle = k32.OpenProcess(0x0100 | 0x0001, False, int(pid))   # SET_QUOTA | TERMINATE
+        if not handle:
+            return False
+        try:
+            return bool(k32.AssignProcessToJobObject(job, handle))
+        finally:
+            k32.CloseHandle(handle)
+    except (OSError, AttributeError, ValueError):
+        return False
+
+
+def _win_job_peak_mb(job, ext_cls) -> float:
+    """Peak committed memory the job's processes reached (MB), 0.0 when unknown."""
+    try:
+        import ctypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        info = ext_cls()
+        if k32.QueryInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info), None):
+            return info.PeakProcessMemoryUsed / 1048576.0
+    except (OSError, AttributeError, ValueError):
+        pass
+    return 0.0
+
+
+def _win_job_close(job) -> None:
+    try:
+        import ctypes
+        ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(job)
+    except (OSError, AttributeError):
+        pass
+
+
 def run_child(args: dict, cwd: Path, timeout: int, memory_mb: int, python: str = "") -> tuple:
     """(returncode or None, stdout, stderr, why_killed)"""
     run_dir = Path(args["run_dir"])
@@ -388,7 +470,12 @@ def run_child(args: dict, cwd: Path, timeout: int, memory_mb: int, python: str =
         pre = _limits(memory_mb)
         if pre is not None:
             kwargs["preexec_fn"] = pre
+    job, ext = (None, None)
+    if sys.platform == "win32":
+        job, ext = _win_job(int(memory_mb))
     proc = subprocess.Popen(argv, **kwargs)   # no shell
+    if job is not None:
+        _win_job_assign(job, proc.pid)
     killed = {"why": ""}
 
     def watch():
@@ -405,6 +492,11 @@ def run_child(args: dict, cwd: Path, timeout: int, memory_mb: int, python: str =
         killed["why"] = "time"
         _kill(proc)
         out, err = proc.communicate()
+    if job is not None:
+        peak = _win_job_peak_mb(job, ext)
+        _win_job_close(job)
+        if not killed["why"] and peak > int(memory_mb):
+            killed["why"] = "memory"
     return proc.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace"), killed["why"]
 
 
@@ -455,6 +547,10 @@ def analyze(files: list, question: str = "", code: str = "", workspace: Path | N
             "tmp": str(tmp), "mark": MARK, "charts": bool(charts)}
     started = time.monotonic()
     code_rc, out, err, why = run_child(args, workspace, int(timeout or DEFAULT_TIMEOUT), int(memory_mb or DEFAULT_MEMORY_MB), python)
+    # Windows turns every newline the child prints into CRLF (text-mode stdout), which broke the
+    # result marker, so analyze() reported "the analysis process ended (exit 0)" and lost every
+    # finding/table/chart on the PC. Normalise line endings before looking for the marker.
+    out = out.replace("\r\n", "\n").replace("\r", "\n")
     result = {"ok": False, "finding": "", "stdout": "", "tables": [], "charts": [], "run_dir": _rel(run_dir, workspace),
               "seconds": round(time.monotonic() - started, 2), "error": ""}
     if MARK in out:

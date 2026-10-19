@@ -334,6 +334,16 @@ def bonsai_support(version: str, platform_name: str | None = None) -> dict:
     return {"ok": ok, "version": version, "needs": need, "message": msg, "upgrade": up}
 
 
+def ollama_advice(version: str, platform_name: str | None = None) -> dict:
+    """{version, recommended, needs_update, upgrade}: a general "update Ollama" prompt, not just for
+    Bonsai. An old Ollama both fails to LOAD the newest weight formats and refuses to pull some tags,
+    so LOKI offers the one-line update whenever the running version is behind what its models need."""
+    rec = ".".join(str(x) for x in BONSAI_MIN_OLLAMA)
+    return {"version": str(version or ""), "recommended": rec,
+            "needs_update": version_at_least(version, BONSAI_MIN_OLLAMA) is False,
+            "upgrade": ollama_upgrade(platform_name)}
+
+
 def model_context(model: str, opener=urllib.request.urlopen) -> dict:
     """{num_ctx, trained, loaded}: the context window an installed model really runs with.
 
@@ -659,10 +669,13 @@ def pull(tags: list[str], progress: Progress = PROGRESS, opener=urllib.request.u
         except Exception as exc:  # noqa: BLE001 - reported to the UI, then next tag
             progress.update(error=str(exc)[:200], message="%s failed: %s" % (tag, str(exc)[:120]))
             continue
+    ver = ollama_version()
+    old = (" Ollama %s looks out of date and may not pull these - update it (%s), then retry."
+           % (ver, ollama_upgrade()["command"])) if version_at_least(ver, BONSAI_MIN_OLLAMA) is False else ""
     progress.update(done=True, status="failed",
                     message="Could not download any model. Check the internet connection and try again, add a "
                             "model you know is there (Settings > Models > Add a model), or update Ollama and "
-                            "retry - an old Ollama cannot load the newest models.")
+                            "retry - an old Ollama cannot load the newest models." + old)
     return ""
 
 
@@ -1151,6 +1164,7 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
         "ollama": {"installed": ollama_installed() or models is not None, "running": models is not None,
                    "models": models or [], "version": version},
         "bonsai": bonsai_support(version),
+        "ollama_advice": ollama_advice(version),
         "best": best,
         "servers": servers,
         "recommend": recs,

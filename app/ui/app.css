@@ -706,3 +706,5 @@ button.danger:hover { color: var(--err); }
 .clip-paste.icon-btn { min-width: 32px; min-height: 30px; margin-left: 6px; }
 
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+
+.add-model-input { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; color: inherit; font: inherit; }
