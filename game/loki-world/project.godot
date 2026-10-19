@@ -31,7 +31,7 @@ window/size/viewport_height=720
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/loki_studio/plugin.cfg")
+enabled=PackedStringArray("res://addons/gator_model_studio/plugin.cfg", "res://addons/loki_studio/plugin.cfg")
 
 [physics]
 
