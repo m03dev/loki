@@ -116,25 +116,56 @@ async def main():
         check("Alt + left / middle / right = tumble / track / dolly", alt == [0, 2, 1], alt)   # THREE.MOUSE ROTATE 0, DOLLY 1, PAN 2
         check("...and back on release", back == [None, None, None], back)
 
-        # -------- the hotbox: hold Space; a tap toggles four views; a tap over a pane maximises it
+        # -------- the Space wheel: it floats WHERE THE MOUSE IS; hovering a wedge brings that menu down
+        # (owner 2026-10-20: "i want the space bar menue to float where my mouse is just like maya not a newhud
+        # its like a wheel and when you hover over it brings down a new menue")
+        await page.mouse.move(cx, cy)
         await page.keyboard.down(" ")
-        await page.wait_for_timeout(300)
-        hb = await page.evaluate("""() => ({ vis: !document.getElementById('forge-maya-hotbox').hidden,
-          cols: document.querySelectorAll('#forge-maya-hotbox .forge-maya-col').length,
-          items: document.querySelectorAll('#forge-maya-hotbox .forge-maya-item').length })""")
+        await page.wait_for_timeout(140)
+        wh = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-maya-wheel');
+          if (!h) return null;
+          const r = h.getBoundingClientRect();
+          return { vis: !h.hidden, heads: [...h.querySelectorAll('.forge-wheel-wedge')].map((b) => b.dataset.mayaHead),
+                   dx: Math.round(r.left - x), dy: Math.round(r.top - y) }; }""", [cx, cy])
+        wb = await (await page.query_selector("#forge-maya-wheel .forge-wheel-wedge")).bounding_box()
+        await page.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2)
+        await page.wait_for_timeout(150)
+        wsub = await page.evaluate("""() => { const s = document.querySelector('#forge-maya-wheel .forge-wheel-sub');
+          return s ? { head: s.dataset.head, n: s.querySelectorAll('.forge-wheel-item').length } : null; }""")
         await page.keyboard.up(" ")
-        gone = await page.evaluate("document.getElementById('forge-maya-hotbox').hidden && !forge.view.quad")
-        check("holding Space opens the hotbox (9 menus, 55+ commands); a long hold does not switch views", hb["vis"]
-              and hb["cols"] == 9 and hb["items"] >= 55 and gone, [hb, gone])
+        await page.wait_for_timeout(120)
+        check("Space floats a wheel AT THE MOUSE (10 menus)", wh and wh["vis"] and len(wh["heads"]) >= 9
+              and abs(wh["dx"]) < 26 and abs(wh["dy"]) < 26, wh)
+        check("hovering a wedge brings that menu down beside it", bool(wsub) and wsub["n"] >= 2, wsub)
+        check("the menu stays open after releasing Space, so an item can be clicked",
+              not await page.evaluate("document.getElementById('forge-maya-wheel').hidden"))
+        await page.keyboard.press("Escape")
+        await page.wait_for_timeout(120)
+        check("Escape puts the wheel away", await page.evaluate("document.getElementById('forge-maya-wheel').hidden"))
+
+        # -------- every panel can hide, with a slide or a fold, and it is remembered
+        await page.evaluate("forgePanels.hideAll()")
+        await page.wait_for_timeout(280)
+        hid = await page.evaluate("""() => ({ bare: document.getElementById('forge').classList.contains('forge-bare'),
+          out: document.getElementById('forge-outliner').classList.contains('collapsed'),
+          side: document.getElementById('forge-left').classList.contains('collapsed'),
+          stored: JSON.parse(localStorage.getItem('loki-forge-panels') || '{}') })""")
+        check("hide all: the left column slides away, the Outliner folds and the bars clear - and it sticks",
+              hid["bare"] and hid["out"] and hid["side"] and hid["stored"].get("floats") is False, hid)
+        await page.click("#forge-ui-btn")
+        await page.wait_for_timeout(280)
+        back = await page.evaluate("""() => ({ bare: document.getElementById('forge').classList.contains('forge-bare'),
+          out: document.getElementById('forge-outliner').classList.contains('collapsed') })""")
+        check("the UI button in the title brings every panel back", not back["bare"] and not back["out"], back)
         await page.keyboard.press(" ")
         quad = await page.evaluate("forge.view.quad")
         await page.mouse.move(vb["x"] + vb["width"] * 0.25, vb["y"] + vb["height"] * 0.25)
         await page.keyboard.press(" ")
         after = await page.evaluate("[forge.view.quad, forge.view.cam]")
         check("a Space tap goes to four views; a tap over the top-left pane makes Front big", quad is True and after == [False, "front"], [quad, after])
-        # the hotbox's centre zone: press on the middle, flick up = Perspective
+        # the hotbox's centre zone (the full Maya layout, still reached from the wheel's last entry)
+        await page.evaluate("forgeMayaHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.mouse.move(cx, cy)
-        await page.keyboard.down(" ")
         await page.wait_for_timeout(260)
         await page.mouse.down()
         await page.mouse.move(cx, cy - 70, steps=4)
@@ -303,11 +334,15 @@ async def main():
         await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[2])
         await page.keyboard.up("Shift")
         rng = await page.evaluate(T + ".selected()")
-        await page.keyboard.down("Control")
+        # macOS turns Ctrl+click into a SECONDARY click (the row's own menu), so the toggle is Cmd there -
+        # which is the Mac convention anyway, and the handler takes either.
+        toggle_mod = "Meta" if sys.platform == "darwin" else "Control"
+        await page.keyboard.down(toggle_mod)
         await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[1])
-        await page.keyboard.up("Control")
+        await page.keyboard.up(toggle_mod)
         tog = await page.evaluate(T + ".selected()")
-        check("Outliner: Shift+click selects a range, Ctrl+click toggles one out", sorted(rng) == sorted(rows[:3]) and sorted(tog) == sorted([rows[0], rows[2]]), [rows, rng, tog])
+        check("Outliner: Shift+click selects a range, Ctrl/Cmd+click toggles one out",
+              sorted(rng) == sorted(rows[:3]) and sorted(tog) == sorted([rows[0], rows[2]]), [rows, rng, tog, toggle_mod])
         dd = await page.evaluate("""() => { const t = forge.view.tree.api;
           const a = t.list().find((x) => x.name === 'pCube3'), s = t.list().find((x) => x.name === 'pSphere1');
           t.dropOn(a.id, s.id, 'into'); const into = t.node(a.id).parent === s.id;

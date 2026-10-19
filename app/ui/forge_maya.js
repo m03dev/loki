@@ -478,6 +478,97 @@ function forgeMayaHotboxHost() {
   return host;
 }
 
+// ================================================================== the Space wheel (floats at the mouse)
+// Owner, 2026-10-20: "i want the space bar menue to float where my mouse is just like maya not a newhud its
+// like a wheel and when you hover over it brings down a new menue". So Space opens a wheel AT THE POINTER, and
+// hovering a wedge brings that menu down beside it. The wedges are the same nine menus the hotbox uses and the
+// commands come from FORGE_MAYA_CMDS, so the two surfaces can never drift apart; the last wedge opens the full
+// hotbox for anyone who wants Maya's whole five-zone layout, so nothing was taken away.
+const FORGE_MAYA_WHEEL_R = 106;
+
+function forgeMayaWheelHost() {
+  let host = document.getElementById("forge-maya-wheel");
+  if (host) return host;
+  const stage = document.getElementById("forge-stage");
+  if (!stage) return null;
+  host = mayaEl("div", "forge-maya-wheel");
+  host.id = "forge-maya-wheel"; host.hidden = true;
+  host.setAttribute("role", "menu");
+  stage.append(host);
+  return host;
+}
+
+function forgeMayaWheelSub(v, head, ids, angle) {
+  const host = document.getElementById("forge-maya-wheel");
+  if (!host) return;
+  const old = host.querySelector(".forge-wheel-sub");
+  if (old) old.remove();
+  const sub = mayaEl("div", "forge-wheel-sub");
+  sub.dataset.head = head;
+  sub.append(mayaEl("span", "forge-wheel-subtitle", head));
+  for (const id of ids) {
+    const c = FORGE_MAYA_CMDS[id];
+    if (!c) continue;
+    const b = mayaEl("button", "forge-wheel-item" + (c[1] ? "" : " off"), c[0]);
+    b.type = "button"; b.dataset.mayaId = id;
+    if (!c[1]) b.title = c[2] || "";
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!c[1]) return;
+      const view = forge.view;
+      host._used = true;
+      forgeMayaWheelClose();
+      if (view) forgeMayaRun(view, id);
+    });
+    sub.append(b);
+  }
+  const b2 = mayaEl("button", "forge-wheel-item forge-wheel-more", "All menus (Maya's hotbox)");
+  b2.type = "button";
+  b2.addEventListener("click", (ev) => { ev.stopPropagation(); host._used = true; forgeMayaWheelClose(); forgeMayaHotboxOpen(v, host._at); });
+  sub.append(b2);
+  const r2 = FORGE_MAYA_WHEEL_R + 58;
+  sub.style.left = Math.round(Math.cos(angle) * r2) + "px";
+  sub.style.top = Math.round(Math.sin(angle) * r2) + "px";
+  host.append(sub);
+  host.dataset.open = head;
+}
+
+function forgeMayaWheelOpen(v, at) {
+  const host = forgeMayaWheelHost();
+  if (!host) return;
+  host.textContent = "";
+  const menus = FORGE_MAYA_ROWS.concat([["Panels", ["outliner", "channelBox", "panelModel", "panelMaterials"]]]);
+  const n = menus.length;
+  host.append(mayaEl("span", "forge-wheel-hub", "Space"));
+  menus.forEach(([head, ids], i) => {
+    const a = (-Math.PI / 2) + (i * 2 * Math.PI) / n;
+    const b = mayaEl("button", "forge-wheel-wedge", head);
+    b.type = "button"; b.dataset.mayaHead = head;
+    b.style.left = Math.round(Math.cos(a) * FORGE_MAYA_WHEEL_R) + "px";
+    b.style.top = Math.round(Math.sin(a) * FORGE_MAYA_WHEEL_R) + "px";
+    b.addEventListener("mouseenter", () => forgeMayaWheelSub(v, head, ids, a));
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeMayaWheelSub(v, head, ids, a); });
+    host.append(b);
+  });
+  host.addEventListener("click", (ev) => { if (ev.target === host) forgeMayaWheelClose(); });
+  const c = at || (v && v.maya && v.maya.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
+  const rect = (host.parentElement || document.body).getBoundingClientRect();
+  host._at = c;
+  host.style.left = Math.round(c[0] - rect.left) + "px";     // where the mouse is
+  host.style.top = Math.round(c[1] - rect.top) + "px";
+  host.hidden = false;
+}
+
+function forgeMayaWheelClose() {
+  const host = document.getElementById("forge-maya-wheel");
+  if (host) { host.hidden = true; host.textContent = ""; delete host.dataset.open; }
+}
+
+function forgeMayaWheelOpenNow() {
+  const wh = document.getElementById("forge-maya-wheel");
+  return !!(wh && !wh.hidden);
+}
+
 function forgeMayaHotboxOpen(v, at) {
   const host = forgeMayaHotboxHost();
   if (!host) return;
@@ -694,13 +785,15 @@ function forgeMayaKeys() {
       if (e.repeat) return;
       const hb = document.getElementById("forge-maya-hotbox");
       if (hb && !hb.hidden) return;
+      if (forgeMayaWheelOpenNow()) { forgeMayaWheelClose(); return; }   // Space again puts the wheel away
       m.spaceAt = performance.now();
-      forgeMayaHotboxOpen(v, m.mouse);
+      forgeMayaWheelOpen(v, m.mouse);                                   // at the mouse, like Maya's menus
       return;
     }
     if (k === "Escape") {
       const hb = document.getElementById("forge-maya-hotbox"), mk = document.getElementById("forge-maya-marking");
       if (hb && !hb.hidden) { take(e); forgeMayaHotboxHide(); return; }
+      if (forgeMayaWheelOpenNow()) { take(e); forgeMayaWheelClose(); return; }
       if (mk && !mk.hidden) { take(e); forgeMayaMarkHide(); m.open = false; return; }
       const t = forgeMayaTree(v);
       if (t && t.pivotMode) { take(e); forgeMayaPivotMode(v, false); return; }
@@ -800,6 +893,15 @@ function forgeMayaKeys() {
     const m = v.maya, k = e.key;
     if (k.length === 1) m.held.delete(k.toLowerCase());
     if (k === " " || e.code === "Space") {
+      const wh = document.getElementById("forge-maya-wheel");
+      if (wh && !wh.hidden) {                                  // the wheel (the owner's Space menus)
+        if (wh.dataset.open) return;                           // a menu is down: it stays so it can be clicked
+        const quickW = performance.now() - (m.spaceAt || 0) < FORGE_MAYA_TAP;
+        const usedW = !!wh._used;
+        forgeMayaWheelClose();
+        if (quickW && !usedW && sheetOpen()) mayaSay(forgeMayaTap(v));
+        return;
+      }
       const hb = document.getElementById("forge-maya-hotbox");
       if (!hb || hb.hidden || hb.dataset.pinned) return;
       const quick = performance.now() - (m.spaceAt || 0) < FORGE_MAYA_TAP;

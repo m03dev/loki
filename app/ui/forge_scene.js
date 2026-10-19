@@ -643,7 +643,16 @@ function forgeSceneAttach(view, ctx) {
     const box = scnEl("div", "forge-outliner");
     box.id = "forge-outliner";
     const head = scnEl("div", "forge-out-head");
-    head.append(scnEl("span", "forge-out-title", "Outliner"));
+    const title = scnEl("button", "forge-out-title", "Outliner");
+    title.type = "button"; title.id = "forge-out-fold";
+    title.title = "Click to fold the Outliner away, or bring it back.";
+    title.setAttribute("aria-expanded", "true");
+    title.addEventListener("click", () => {
+      if (!window.forgePanels) return;
+      window.forgePanels.toggle("outliner");
+      title.setAttribute("aria-expanded", String(!document.getElementById("forge-outliner").classList.contains("collapsed")));
+    });
+    head.append(title);
     const bar = scnEl("div", "forge-out-bar");
     const btn = (label, id, what, run) => {
       const b = scnEl("button", "forge-out-btn", label);
@@ -964,12 +973,56 @@ function forgeSceneAttach(view, ctx) {
     });
   }
 
+  // ---------------------------------------------------------------- hiding / collapsing (window.forgePanels)
+  // Owner 2026-10-20: "improve all the ui everything should be abable to hide with slide or toggle". The
+  // Outliner folds its own body, the left column slides away, and "floats" clears every bar off the viewport
+  // (Maya's clean view). What is hidden is remembered, so Forge comes back the way it was left.
+  window.forgePanels = (function () {
+    const KEY = "loki-forge-panels";
+    let state = {};
+    try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (_) { state = {}; }
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* private mode */ } };
+    function apply() {
+      const sheet = document.getElementById("forge");
+      if (sheet) sheet.classList.toggle("forge-bare", state.floats === false);
+      const out = document.getElementById("forge-outliner");
+      if (out) out.classList.toggle("collapsed", state.outliner === false);
+      const side = document.getElementById("forge-left");
+      if (side) side.classList.toggle("collapsed", state.side === false);
+      const b = document.getElementById("forge-ui-btn");
+      if (b) b.classList.toggle("on", state.floats === false || state.side === false || state.outliner === false);
+    }
+    function set(which, on) { state[which] = !!on; save(); apply(); return state[which]; }
+    return {
+      state: () => Object.assign({}, state),
+      apply: apply,
+      set: set,
+      toggle: (which) => set(which, state[which] === false),
+      show: (which) => set(which, true),
+      hide: (which) => set(which, false),
+      hideAll: () => { set("floats", false); set("outliner", false); set("side", false); return true; },
+      showAll: () => { set("floats", true); set("outliner", true); set("side", true); return true; },
+      anyHidden: () => state.floats === false || state.side === false || state.outliner === false,
+    };
+  })();
+
   ensureRoot();
   panel();
   channelBox();
   historyBox();
   tree.build();
-  view.treeRefresh = () => tree.build();
+  if (window.forgePanels) {
+    const head = document.querySelector("#forge .forge-head");
+    if (head && !document.getElementById("forge-ui-btn")) {
+      const ui = scnEl("button", "mini icon-mini forge-btn", "UI");
+      ui.type = "button"; ui.id = "forge-ui-btn"; ui.dataset.icon = "chevron";
+      ui.title = "Hide or show the panels (the left column, the Outliner and the bars over the model).";
+      ui.addEventListener("click", () => { if (window.forgePanels.anyHidden()) window.forgePanels.showAll(); else window.forgePanels.hideAll(); });
+      head.insertBefore(ui, head.lastElementChild);
+    }
+    window.forgePanels.apply();
+  }
+  view.treeRefresh = () => { tree.build(); if (window.forgePanels) window.forgePanels.apply(); };
   return api;
 }
 
