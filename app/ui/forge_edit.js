@@ -389,7 +389,7 @@ function forgeEditAttach(view, ctx) {
     if (edit) return;
     const verts = view.selectedVerts();
     if (!view.poly || !verts.length || view.mode !== "poly") { if (gizmo.object) gizmo.detach(); return; }
-    pivot.position.fromArray(P.median(view.poly, verts)); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
+    pivot.position.fromArray(P.median(view.poly, verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
     pivot.updateMatrix();
     if (ed.tool && !gizmo.object) { gizmo.attach(pivot); gizmo.setMode(ed.tool); }
     view.dirty = true;

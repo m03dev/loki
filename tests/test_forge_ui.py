@@ -340,6 +340,16 @@ async def main():
         check("every operation is recorded, in order, with its parameters",
               len(hist) == 2 and [h["kind"] for h in hist] == ["extrude", "extrude"], hist)
         check("the History panel lists them", rows == 2, rows)
+        undo_history = await page.evaluate("""() => { const v = forge.view; v.undo();
+          const afterUndo = window.forgeHistory.list().map((step) => step.kind);
+          v.redo();
+          const afterRedo = window.forgeHistory.list().map((step) => step.kind);
+          v.undo(); forge.view.select([0]); forgeFaceOp('extrude');
+          return { afterUndo: afterUndo, afterRedo: afterRedo,
+            afterNewEdit: window.forgeHistory.list().map((step) => step.kind), redoCleared: v.redoStack.length === 0 }; }""")
+        check("undo/redo restore history and a new operation after undo branches cleanly",
+              undo_history["afterUndo"] == ["extrude"] and undo_history["afterRedo"] == ["extrude", "extrude"]
+              and undo_history["afterNewEdit"] == ["extrude", "extrude"] and undo_history["redoCleared"], undo_history)
         sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
         before_amt = await page.evaluate(sum_js)
         await page.evaluate("window.forgeHistory.setAmount(1, 0.6)")

@@ -193,6 +193,17 @@ async function forgeAddPrimitive(kind) {
 // docs/FORGE_MAYA.md T6. Every operation that builds the mesh is kept, in order, with the parameters it was
 // made with, so any step can be re-opened, changed and the whole model rebuilt from the first one - Maya's
 // construction history. The ops were already pure functions of (mesh, faces, amount), so this is the stack.
+function forgeHistCopy(value) {
+  if (ArrayBuffer.isView(value)) return value.slice();
+  if (Array.isArray(value)) return value.map(forgeHistCopy);
+  if (value && typeof value === "object") {
+    const copy = {};
+    for (const [key, item] of Object.entries(value)) copy[key] = forgeHistCopy(item);
+    return copy;
+  }
+  return value;
+}
+
 function forgeHistReset() {
   forgeModel.hist = null;
   if (forge.view && forge.view.treeRefresh) forge.view.treeRefresh();
@@ -274,6 +285,12 @@ function forgeHistSculpt(op, which) {                 // which: "to" re-applies 
 
 // what the panel (app/ui/forge_scene.js) reads and writes
 window.forgeHistory = {
+  snapshot() { return forgeHistCopy(forgeModel.hist); },
+  restore(history) {
+    forgeModel.hist = forgeHistCopy(history);
+    forgeModel.last = null;
+    if (forge.view && forge.view.treeRefresh) forge.view.treeRefresh();
+  },
   list() {
     const h = forgeModel.hist;
     if (!h) return [];
@@ -319,9 +336,9 @@ function forgeFaceOp(kind) {
   if (kind === "delete" && mode !== "face" && v.edit && v.edit.sel.v.size) {   // Blender: deleting vertices / edges takes their faces
     const out = mode === "vert" ? P.deleteVerts(base, [...v.edit.sel.v]) : P.deleteEdges(base, null, [...v.edit.sel.e]);
     forgeModel.last = null;
+    v.showPoly(out, true);
     forgeHistPush(mode === "vert" ? { kind: "deleteVerts", verts: [...v.edit.sel.v] }
       : { kind: "deleteEdges", edges: [...v.edit.sel.e] }, base);
-    v.showPoly(out, true);
     forgeSay(out.f.length.toLocaleString() + " faces");
     return;
   }
@@ -344,8 +361,8 @@ function forgeFaceOp(kind) {
   else if (kind === "delete") out = P.deleteFaces(base, faces);
   else return;
   forgeModel.last = { kind, base, faces, amount: kind === "extrude" ? 0.2 : 0.25, out, pick };
-  forgeHistPush({ kind, faces: faces.slice(), amount: (kind === "extrude" || kind === "inset") ? forgeModel.last.amount : null }, base);
   v.showPoly(out, true);
+  forgeHistPush({ kind, faces: faces.slice(), amount: (kind === "extrude" || kind === "inset") ? forgeModel.last.amount : null }, base);
   v.select(pick(out));
   forgeSay(out.f.length.toLocaleString() + " faces");
 }

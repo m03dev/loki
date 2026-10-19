@@ -1201,16 +1201,19 @@ function forgeMakeView(lib, renderer, canvas) {
 
   // ---- sculpting: SculptGL's tools (src/editing/tools/*.js), on the welded vertices
   function snapshot() {
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
+    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
+      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null });
     if (view.undoStack.length > 40) view.undoStack.shift();
     view.redoStack = [];
   }
   function restore(from, to) {
     const snap = from.pop();
     if (!snap) return;
-    to.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
+    to.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
+      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null });
     const changed = snap.sm !== view.sm;
     view.poly = snap.poly || null; view.tri2face = snap.tri2face || null;
+    if (snap.history && window.forgeHistory && window.forgeHistory.restore) window.forgeHistory.restore(snap.history);
     snap.sm.wpos.set(snap.wpos);
     forgeSync(snap.sm); forgeNormals(snap.sm);
     if (changed) useMesh(snap.sm, true); else refresh();
@@ -1223,7 +1226,8 @@ function forgeMakeView(lib, renderer, canvas) {
     if (!view.sm) return;
     if (view.anim) view.playAnim(null);
     if (view.sm.idx.length / 3 > 150000) { forgeSay("Already very detailed (" + (view.sm.idx.length / 3).toLocaleString() + " triangles).", true); return; }
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face }); view.redoStack = [];
+    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
+      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null }); view.redoStack = [];
     view.poly = null; view.select([]);
     useMesh(forgeSubdivide(view.sm), true);
     forgeSay((view.sm.idx.length / 3).toLocaleString() + " triangles");
