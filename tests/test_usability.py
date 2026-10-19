@@ -390,6 +390,8 @@ wf = (REPO / ".github" / "workflows" / "installers.yml").read_text(encoding="utf
 check("the installers workflow runs only by hand or on a v* tag", "workflow_dispatch" in wf and 'tags: ["v*"]' in wf and "branches" not in wf)
 check("the workflow builds Windows and macOS", "loki.iss" in wf and "make_dmg.sh" in wf)
 check("the PyInstaller build carries the help articles", '"docs/help"' in (REPO / "packaging" / "loki.spec").read_text(encoding="utf-8"))
+check("the PyInstaller build carries Studio's sources (engine/godot_live imports studio_godot)",
+      '"studio"' in (REPO / "packaging" / "loki.spec").read_text(encoding="utf-8"))
 check("docs/INSTALL.md is written for other people", (REPO / "docs" / "INSTALL.md").is_file()
       and "Signing" in (REPO / "docs" / "INSTALL.md").read_text(encoding="utf-8"))
 app_src = (REPO / "app" / "loki_app.py").read_text(encoding="utf-8")

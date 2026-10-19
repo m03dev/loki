@@ -2727,3 +2727,61 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
   /peers/relay-test answers {"ok": true, "ms": 427} (signed hello through the relay). All suites
   green on this Mac via tools/ship.py --check. The between-machine link still needs Mohamed's PC
   link code (never pasted here).
+
+- 2026-10-18 mac (Ziva) M52 update: the Mac is NOT failing to update - it is already on the newest
+  commit. (1) /Volumes/LokiSSD IS mounted (/dev/disk5s1, apfs, local); ~/Documents/loki ->
+  /Volumes/LokiSSD/loki (symlink, OK). (2) In the repo: `git status --short` = " M
+  game/loki-world/project.godot" plus 5 untracked app/ui/world_godot/*.before-update; `git log -1`
+  = d65ecfc (ziva(windows), LOKI World headless tests); `git fetch origin` -> only updated
+  origin/macos-app 7593ce7..d65ecfc; `git status -sb` = "## master...origin/master" (no
+  ahead/behind); `git rev-list --left-right --count origin/master...HEAD` = 0 0, i.e. the checkout
+  == GitHub's newest. (3) .git/loki_update_last.json: {"updated": true, "note": "pre-flight passed;
+  carried 1 edited file(s) across the update (game/loki-world/project.godot; old state kept as
+  refs/loki/backup/edits-1792379261); updated a3e1b64a4463 -> d65ecfc7d53b"} (21:07:42).
+  The LIVE health record is .git/loki_update_health.json: last_good=d65ecfc7d53b, pending="",
+  good_at=21:07:43, skip=[fb6f66806db6], history ending a3e1b64a4463 -> d65ecfc7d53b "updated"
+  then d65ecfc7d53b "good". NOTE: the file the ask named, harness_data/app/update_health.json, is a
+  STALE legacy copy (last modified Oct 14 18:47; last_good=f39b620b73da, pending=be00adb90904 -
+  neither hash exists anywhere in the repo). (4) loki_app.log tail: 21:07:37 "starting Loki with
+  .../harness_data/.venv/bin/python3"; 21:07:38 window shown; 21:07:42 "update: pre-flight passed;
+  carried 1 edited file(s) ...; updated a3e1b64a4463 -> d65ecfc7d53b"; 21:07:43 "engine ready after
+  4.97s". Before that the log stops at 16:12:21.
+  CAUSE: nothing is broken. LOKI was not running on the Mac from ~16:12 until 21:07 (the app
+  process 2421 started 21:07:37, a COLD start - no "engine is restarting"/"restarting the whole
+  app" lines precede it), and the updater only runs while the app/engine is up (updater.run_forever
+  checks every LOKI_UPDATE_EVERY_S=600s). The 8:44 pm commit the PC named is d65ecfc, and the Mac
+  is on it - the PC's Machines panel was showing the Mac's stale last-seen commit a3e1b64 (16:12).
+  The single local edit, game/loki-world/project.godot, is only Godot re-saving the file (reordered
+  keys, dropped the hand-written header comment); the pre-flight CARRIED it across instead of
+  blocking, exactly as designed, so it is NOT blocking anything. Per the runbook I changed no code
+  and did not restart (the condition - game/loki-world/* edits blocking the update - is not met).
+  Harmless leftovers, left in place: the modified project.godot, 5 app/ui/world_godot/*.before-update
+  from Oct 18 03:17, and the stale harness_data/app/update_health.json.
+
+- 2026-10-18 mac (Ziva) M53 - every Windows CI run is red for ONE reason + repo deep-dive.
+  ROOT CAUSE (windows-build.yml, e.g. runs 39190963255 and 39190421217): packaging/loki.spec ships
+  engine/, app/ui/, capabilities/, skills/, docs/help as DATA but NOT studio/. engine/godot_live.py
+  does `sys.path.insert(0, REPO/"studio"); import studio_godot`, so the packaged Loki.exe has no studio/
+  folder and `Loki.exe --self-test` fails with exactly
+  "loki: ModuleNotFoundError: No module named 'studio_godot'" -> the job's "Self-test the packaged app"
+  step throws -> every push since Studio entered the engine import chain fails identically. It is NOT
+  the offline tests (they pass) and NOT the build (PyInstaller succeeds). They all fail alike because
+  they all hit this same step.
+  FIX (applied in this checkout, not yet published): add "studio" to the datas folder tuple in
+  packaging/loki.spec. Verified locally by reproducing the packaged layout exactly: the app's own
+  self-test prints the byte-for-byte CI error without studio/ (exit 1) and "Loki self-test: OK" with it
+  (exit 0). Added a guard check in tests/test_usability.py beside the existing docs/help one.
+  The release/installer path (installers.yml -> tools/make_release.py) is NOT affected: the seed is
+  built from `git ls-files` (all tracked files), so studio/ is already in it.
+  WINDOWS SYNC: the Mac<->PC relay link is LIVE right now - peers.status_all() (pc=relay,
+  http://127.0.0.1:50444) returns ok:true in 3.3 s and the PC's hello reports commit d65ecfc7d53b,
+  branch master, dirty:false, patch 305. This Mac is ALSO d65ecfc7d53b / patch 305. Both machines are
+  on the same newest commit, so code sync is currently fine - the failure (if still seen) is elsewhere
+  and needs the PC's app log. "Update everything" is engine/update_all.py (signed POST /peer/update/apply);
+  ship.py step 6 only asks linked peers to check the feed (peer_link.ask_peers_to_check_update).
+  anyCreature (github.com/Ariescar/anyCreature, MIT, JS engine + Python harness, v1.3.2, Node 18+):
+  text -> a skinned, rigged, vertex-coloured, AO-baked GLB from one JSON spec, plus a showroom viewer
+  with FRONT/SIDE/TOP orthographic views. The quad-view panel is the part to embed in LOKI's existing
+  forge UI (app/ui/forge_model.js + app/ui/vendor/three; there is NO multi-view there today). The ACS
+  text->creature engine can be imported as engine/anycreature/ behind a forge_api route + an agent tool
+  (creative/forge category). Plan tracked in the session todo list.

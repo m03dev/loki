@@ -62,3 +62,6 @@ packaging/launcher/target/
 # gzipped (index.wasm.gz, served with Content-Encoding: gzip); the uncompressed one is never committed.
 app/ui/world_godot/index.wasm
 app/ui/world_godot/index.worker.js
+
+# Update leftovers: updater._move_aside_untracked keeps the old web build aside
+*.before-update
