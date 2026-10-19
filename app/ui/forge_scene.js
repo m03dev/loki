@@ -360,6 +360,7 @@ function forgeSceneAttach(view, ctx) {
     const box = tree.panel;
     if (box) box.dataset.count = String(tree.nodes.length);
     if (tree.syncChannel) tree.syncChannel();
+    if (tree.syncHistory) tree.syncHistory();
   };
 
   // ---------------------------------------------------------------- Ctrl+G / Ctrl+Shift+G, like Maya
@@ -413,6 +414,48 @@ function forgeSceneAttach(view, ctx) {
     return box;
   }
 
+  // ---------------------------------------------------------------- the History (T6, Maya's construction history)
+  function historyBox() {
+    const host = document.getElementById("forge-outliner");
+    if (!host) return null;
+    const box = scnEl("div", "forge-ch-body");
+    box.id = "forge-history";
+    const head = scnEl("div", "forge-hist-head");
+    head.append(scnEl("div", "forge-ch-title", "History"));
+    const del = scnEl("button", "forge-out-btn", "Delete History");
+    del.type = "button"; del.id = "forge-hist-clear";
+    del.title = "Forget how the mesh was built; the shape stays (Maya's Delete History).";
+    del.addEventListener("click", () => { if (window.forgeHistory) window.forgeHistory.clear(); tree.build(); });
+    head.append(del);
+    const list = scnEl("div", "forge-hist-list"); list.id = "forge-hist-list";
+    box.append(head, list);
+    host.append(box);
+    tree.syncHistory = () => {
+      const H = window.forgeHistory;
+      const ops = H && H.list ? H.list() : [];
+      list.textContent = "";
+      if (!ops.length) { list.append(scnEl("div", "forge-hist-empty", "Nothing yet - extrude or inset a face.")); return; }
+      for (const op of ops) {
+        const row = scnEl("div", "forge-hist-row");
+        row.append(scnEl("span", "forge-hist-name", op.kind));
+        if (op.amount != null) {
+          const inp = document.createElement("input");
+          inp.type = "number"; inp.step = "0.05"; inp.className = "forge-ch-in";
+          inp.value = String(Math.round(op.amount * 1000) / 1000);
+          inp.title = "Change this step's amount - the model rebuilds from the first step.";
+          inp.addEventListener("input", () => H.setAmount(op.i, inp.value));
+          row.append(inp);
+        }
+        const x = scnEl("button", "forge-hist-x", "\u00d7");
+        x.type = "button"; x.title = "Remove this step and rebuild without it.";
+        x.addEventListener("click", () => H.remove(op.i));
+        row.append(x);
+        list.append(row);
+      }
+    };
+    return box;
+  }
+
   const load = view.load;
   if (typeof load === "function") view.load = async (buf) => { const r = await load(buf); tree.build(); return r; };
 
@@ -438,6 +481,7 @@ function forgeSceneAttach(view, ctx) {
   ensureRoot();
   panel();
   channelBox();
+  historyBox();
   tree.build();
   // the working object is created on the first Make, so the list keeps itself true
   view.treeRefresh = () => tree.build();

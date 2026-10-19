@@ -319,6 +319,13 @@ async def main():
           const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
           return { id: id, ok: el === b || b.contains(el) }; })""")
         check("Center Pivot and Freeze are on the panel and really clickable", all(h["ok"] for h in hit2), hit2)
+        await page.evaluate("document.getElementById('forge-hist-clear').scrollIntoView({ block: 'center' })")
+        hist_hit = await page.evaluate("""() => { const b = document.getElementById('forge-hist-clear');
+          if (!b) return { ok: false };
+          const r = b.getBoundingClientRect();
+          const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { ok: el === b || b.contains(el), rect: [Math.round(r.top), Math.round(r.height)] }; }""")
+        check("the History panel's Delete History button is really clickable", hist_hit["ok"], hist_hit)
         await page.evaluate("forge.view.tree.api.select(1)")
         await page.evaluate("forge.view.tree.api.resetTransform(1)")
         await page.evaluate("forge.view.tree.api.setTransform(1, 'translate', 1, 1)")   # lift it one unit
@@ -499,6 +506,42 @@ async def main():
             return r.right <= p.right + 0.5 && r.bottom <= p.bottom + 0.5; }); }""")
         check("the Materials toolbar fits at 900x600", mats_fit)
         await page.screenshot(path=str(TMP / "forge-900x600.png"))
+        # -------- T6: construction history - the poly ops, editable, with Delete History
+        # (the Forge window may already be closed by the earlier 900x600 section; the panel check below needs it)
+        was_closed = await page.evaluate("document.getElementById('forge').hidden")
+        if was_closed:
+            await page.click("#open-forge")
+            await page.wait_for_selector("#forge:not([hidden])", timeout=8000)
+        await page.evaluate("forgeAddPrimitive('cube')")
+        await page.wait_for_function("forge.view && forge.view.poly && forge.view.poly.f.length > 0", timeout=15000)
+        await page.evaluate("forge.view.select([0]); forgeFaceOp('extrude')")
+        await page.evaluate("forge.view.select([0]); forgeFaceOp('extrude')")
+        hist = await page.evaluate("window.forgeHistory.list()")
+        rows = await page.evaluate("document.querySelectorAll('#forge-history .forge-hist-row').length")
+        check("every operation is recorded, in order, with its parameters",
+              len(hist) == 2 and [h["kind"] for h in hist] == ["extrude", "extrude"], hist)
+        check("the History panel lists them", rows == 2, rows)
+        sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
+        before_amt = await page.evaluate(sum_js)
+        await page.evaluate("window.forgeHistory.setAmount(1, 0.6)")
+        after_amt = await page.evaluate(sum_js)
+        check("changing a step's amount rebuilds the model from the first step (and moves it)",
+              await page.evaluate("window.forgeHistory.list()[1].amount") == 0.6
+              and abs(after_amt - before_amt) > 1e-5, [before_amt, after_amt])
+        left = await page.evaluate("window.forgeHistory.remove(0); window.forgeHistory.list().length")
+        check("a step can be removed and the model rebuilds without it", left == 1, left)
+        await page.evaluate("window.forgeHistory.clear()")
+        check("Delete History empties the stack", await page.evaluate("window.forgeHistory.list().length") == 0)
+        await page.evaluate("forgeDynamesh()")
+        await page.wait_for_function("window.forgeHistory.list().length === 1", timeout=25000)
+        dm = await page.evaluate("""() => { const H = window.forgeHistory, res = forgeModel.dyna.res;
+          const f0 = forge.view.poly.f.length;
+          H.setAmount(0, res + 16);
+          return { ops: H.list(), f0: f0, f1: forge.view.poly.f.length, res: res }; }""")
+        check("DynaMesh is recorded as a re-runnable step: change its resolution and the mesh rebuilds",
+              bool(dm["ops"]) and dm["ops"][0]["kind"] == "dynamesh" and dm["ops"][0]["amount"] == dm["res"] + 16
+              and dm["f1"] != dm["f0"], dm)
+
         check("no script errors in Forge", not errors, errors[:3])
         await browser.close()
 

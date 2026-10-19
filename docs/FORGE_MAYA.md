@@ -92,7 +92,7 @@ are still open, below. Everything shipped has a test that would fail if it broke
   with the copy inserted as a sibling.
 - Acceptance: shift-drag, assert two nodes and that the original did not move.
 
-### OPEN - T6: Construction history   (smaller than it looked - good news)
+### PART DONE - T6: Construction history   (poly ops + DynaMesh in; sculpt strokes still open)
 Checked at T4b time: the poly operations are **already parameterised** - `P.extrude(base, faces, 0.2)`,
 `P.inset(base, faces, 0.25)` - and `app/ui/forge_model.js` already keeps
 `forgeModel.last = { kind, base, faces, amount, out, pick }`, i.e. a **one-step** history with a re-runnable
@@ -103,6 +103,28 @@ re-run, plus **Delete History** (which just re-bases on the current mesh). The o
 extrude, inset, delete faces / verts / edges, flip, smooth. Two do NOT fit and need their own representation
 first: a **sculpt stroke** (Maya stores a sculpt node with every stroke) and **DynaMesh** (a resolution
 change, not a mesh edit). Decision needed before starting: which of those two must be in the history, if any.
+
+**DONE (patch 325):** the stack, the panel and Delete History. `forgeModel.hist = { base, ops }` is built by
+`forgeFaceOp` (extrude, inset, delete faces / verts / edges, flip, smooth) and by `forgeDynamesh` (a `dynamesh`
+op carries its own source triangles because it IS the first mesh, so `base` is null). `forgeHistRebuild()`
+replays `base -> ops` through `forgeHistApplyOp`, the amount slider now rebuilds the WHOLE chain instead of
+one step, and the panel (History, under the Channel Box) lists each step with its number and a `x` to remove
+it. Tests: two extrudes are recorded in order, changing the second one's amount rebuilds from the first and
+moves the mesh, removing a step rebuilds without it, Delete History empties the stack, and a DynaMesh step
+rebuilds when its resolution is changed.
+
+### OPEN - T6c: a sculpt stroke in the history (the hard one)
+The sculpt engine lives inside the viewer's closure and works on the **welded** vertices (`view.sm.wpos`),
+while the history above is poly-based - so a stroke cannot be replayed the same way. Two honest ways:
+1. **Record deltas**: at stroke start, keep the welded vertex ids under the brush and their positions; at
+   stroke end, keep the new ones. Replay writes those positions back. Compact and exact, but only valid while
+   the topology is unchanged, so a poly step ABOVE it that is edited afterwards invalidates it (Maya has the
+   same constraint between history nodes - it warns rather than silently lying).
+2. **Make the sculpt engine callable on a snapshot** (the brush maths is already pure functions of
+   `(positions, normals, brush)`), so a stroke becomes a normal op in the chain. Cleaner, and a real refactor
+   of `app/ui/forge.js`.
+Either way a stroke is far larger than the other ops (one stroke is many dabs), so it should be stored as
+affected-vertices + deltas, never as a list of dabs.
 
 ### (the original T6 note, kept for the reasoning)
 - Each mesh node keeps an ordered list of operations (`{"extrude": {distance: 2}}`, `{"subdivide": 3}`, a

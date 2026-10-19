@@ -125,7 +125,7 @@ async function forgeModelMode(on) {
   const sm = document.getElementById("forge-mode"); if (sm && want) sm.classList.remove("on");
   if (want && !v.poly && v.sm) {   // a sculpt or a loaded .glb: edit it as polygons (DynaMesh first gives quads)
     const t = v.triangles();
-    if (t.idx.length / 3 <= 60000) v.showPoly(window.ForgePoly.fromTriangles(t.pos, t.idx), true);
+    if (t.idx.length / 3 <= 60000) { v.showPoly(window.ForgePoly.fromTriangles(t.pos, t.idx), true); forgeHistReset(); }
   }
   if (want && v.selStats) v.selStats();
   if (want && !v.poly) forgeSay("Model: add a primitive. Then 1 2 3 pick vertices / edges / faces - click, drag a box, Alt+click a loop; G / R / S move them. Middle-drag (or Alt+drag) turns the view.");
@@ -159,6 +159,14 @@ function forgeModelSync() {
     redo.append(forgeHSlider(ex ? "Distance" : "Inset", ex ? "How far the last extrude goes (negative pushes in)." : "How far in the last inset goes.",
       ex ? -1 : 0.02, ex ? 1 : 0.9, 0.01, last.amount, (x) => {
         last.amount = x;
+        if (forgeModel.hist && forgeModel.hist.ops.length) {         // rebuild the chain, not just this step
+          forgeModel.hist.ops[forgeModel.hist.ops.length - 1].amount = x;
+          const poly = forgeHistRebuild();
+          last.out = poly;
+          forge.view.showPoly(poly, true, true);
+          forge.view.select(last.pick(poly));
+          return;
+        }
         last.out = window.ForgePoly[last.kind](last.base, last.faces, x);
         forge.view.showPoly(last.out, true, true);
         forge.view.select(last.pick(last.out));
@@ -174,11 +182,92 @@ async function forgeAddPrimitive(kind) {
   forgeModel.prim = { kind, opts, poly };
   forgeModel.last = null;
   v.showPoly(poly, false);
+  forgeHistReset();
   forge.model = null;
   document.getElementById("forge-empty").hidden = true;
   v.start();
   forgeSay(window.ForgePoly.PRIMITIVES[kind].name + ": " + poly.f.length + " faces. Shape it with the sliders, or click faces.");
 }
+
+// --------------------------------------------------------------------------------- construction history
+// docs/FORGE_MAYA.md T6. Every operation that builds the mesh is kept, in order, with the parameters it was
+// made with, so any step can be re-opened, changed and the whole model rebuilt from the first one - Maya's
+// construction history. The ops were already pure functions of (mesh, faces, amount), so this is the stack.
+function forgeHistReset() {
+  forgeModel.hist = null;
+  if (forge.view && forge.view.treeRefresh) forge.view.treeRefresh();
+}
+
+function forgeHistApplyOp(base, op) {
+  const P = window.ForgePoly;
+  switch (op.kind) {
+    case "extrude": return P.extrude(base, op.faces, op.amount);
+    case "inset": return P.inset(base, op.faces, op.amount);
+    case "flip": return P.flip(base, op.faces);
+    case "delete": return P.deleteFaces(base, op.faces);
+    case "smooth": return P.smooth(base);
+    case "deleteVerts": return P.deleteVerts(base, op.verts);
+    case "deleteEdges": return P.deleteEdges(base, null, op.edges);
+    case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
+    default: return base;
+  }
+}
+
+function forgeHistRebuild() {
+  const hist = forgeModel.hist;
+  if (!hist) return null;
+  let m = hist.base ? window.ForgePoly.clone(hist.base) : null;
+  for (const op of hist.ops) m = forgeHistApplyOp(m, op);
+  return m;
+}
+
+function forgeHistPush(op, base) {
+  if (!forgeModel.hist) {
+    if (!base && op.kind !== "dynamesh") return;      // DynaMesh starts a history: it IS the first mesh
+    forgeModel.hist = { base: base ? window.ForgePoly.clone(base) : null, ops: [] };
+  }
+  forgeModel.hist.ops.push(op);
+  if (forge.view && forge.view.treeRefresh) forge.view.treeRefresh();
+}
+
+function forgeHistRebuildShow() {
+  const v = forge.view, poly = forgeHistRebuild();
+  if (!v || !poly) return false;
+  v.showPoly(poly, true, true);
+  if (v.treeRefresh) v.treeRefresh();
+  return true;
+}
+
+// what the panel (app/ui/forge_scene.js) reads and writes
+window.forgeHistory = {
+  list() {
+    const h = forgeModel.hist;
+    if (!h) return [];
+    return h.ops.map((o, i) => ({ i: i, kind: o.kind,
+      amount: o.kind === "dynamesh" ? o.res : (o.amount == null ? null : o.amount) }));
+  },
+  setAmount(i, value) {
+    const h = forgeModel.hist, op = h && h.ops[i];
+    if (!op) return false;
+    const x = Number(value);
+    if (!isFinite(x)) return false;
+    if (op.kind === "dynamesh") { op.res = Math.max(16, Math.min(256, Math.round(x))); return forgeHistRebuildShow(); }
+    if (op.amount == null) return false;
+    op.amount = x;
+    if (op.kind === "extrude" || op.kind === "inset") {
+      forgeModel.last = { kind: op.kind, base: null, faces: op.faces, amount: x, out: null, pick: () => op.faces };
+    }
+    return forgeHistRebuildShow();
+  },
+  remove(i) {
+    const h = forgeModel.hist;
+    if (!h || !h.ops[i]) return false;
+    h.ops.splice(i, 1);
+    if (!h.ops.length) { forgeHistReset(); return true; }
+    return forgeHistRebuildShow();
+  },
+  clear() { forgeHistReset(); forgeModel.last = null; if (typeof forgeSay === "function") forgeSay("History deleted - the mesh is now the model."); },
+};
 
 function forgeFaceOp(kind) {
   const v = forge.view;
@@ -187,6 +276,8 @@ function forgeFaceOp(kind) {
   if (kind === "delete" && mode !== "face" && v.edit && v.edit.sel.v.size) {   // Blender: deleting vertices / edges takes their faces
     const out = mode === "vert" ? P.deleteVerts(base, [...v.edit.sel.v]) : P.deleteEdges(base, null, [...v.edit.sel.e]);
     forgeModel.last = null;
+    forgeHistPush(mode === "vert" ? { kind: "deleteVerts", verts: [...v.edit.sel.v] }
+      : { kind: "deleteEdges", edges: [...v.edit.sel.e] }, base);
     v.showPoly(out, true);
     forgeSay(out.f.length.toLocaleString() + " faces");
     return;
@@ -210,6 +301,7 @@ function forgeFaceOp(kind) {
   else if (kind === "delete") out = P.deleteFaces(base, faces);
   else return;
   forgeModel.last = { kind, base, faces, amount: kind === "extrude" ? 0.2 : 0.25, out, pick };
+  forgeHistPush({ kind, faces: faces.slice(), amount: (kind === "extrude" || kind === "inset") ? forgeModel.last.amount : null }, base);
   v.showPoly(out, true);
   v.select(pick(out));
   forgeSay(out.f.length.toLocaleString() + " faces");
@@ -234,6 +326,9 @@ async function forgeDynamesh() {
   if (!out.f.length) { forgeSay("DynaMesh found no closed volume at this resolution - raise it.", true); return; }
   forgeModel.last = null; forgeModel.prim = null;
   v.showPoly(out, true);
+  forgeModel.last = null;
+  forgeHistPush({ kind: "dynamesh", src: { pos: t.pos.slice(), idx: t.idx.slice() },
+    res: forgeModel.dyna.res, smooth: forgeModel.dyna.smooth }, null);
   forgeSay("DynaMesh: " + out.f.length.toLocaleString() + " even quads in " + Math.round(performance.now() - t0) + " ms - sculpt on, or edit faces.");
 }
 
