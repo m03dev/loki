@@ -489,6 +489,14 @@ check("uninstall.sh ships for macOS/Linux and removes the login plist",
       _unin_sh.is_file() and "com.m03dev.loki.plist" in _unin_sh.read_text(encoding="utf-8"))
 check("uninstall keeps your data unless --purge", "harness_data" in _unin and "PURGE" in _unin)
 
+_ship_src = (REPO / "tools" / "ship.py").read_text(encoding="utf-8")
+_app_src = (REPO / "app" / "loki_app.py").read_text(encoding="utf-8")
+check("--self-test cleans its temp folder (no leftover %TEMP%/loki-selftest-*)",
+      "loki-selftest-" in _app_src and "atexit.register(shutil.rmtree" in _app_src)
+check("ship.py reuses ONE temp root instead of leaking a mkdtemp per subprocess",
+      "_SUITE_TMP" in _ship_src and 'mkdtemp(prefix="loki-userkeys-")' not in _ship_src
+      and 'mkdtemp(prefix="loki-health-")' not in _ship_src)
+
 
 check("doctor script ships", (REPO / "tools" / "loki_doctor.py").is_file())
 

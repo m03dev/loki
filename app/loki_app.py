@@ -880,8 +880,14 @@ def run_script(args: list[str]) -> int:
 
 def self_test() -> int:
     """`Loki --self-test`: import the engine and its modules and report. Used by CI."""
+    import atexit
+    import shutil
     import tempfile
-    os.environ.setdefault("LOKI_DATA", tempfile.mkdtemp(prefix="loki-selftest-"))
+    _selftest_data = tempfile.mkdtemp(prefix="loki-selftest-")
+    # remove it when this process exits: before, every --self-test (each ship and every CI run)
+    # left a %TEMP%/loki-selftest-* dir behind (2026-10-18).
+    atexit.register(shutil.rmtree, _selftest_data, True)
+    os.environ.setdefault("LOKI_DATA", _selftest_data)
     sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
     problems = []
     for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",

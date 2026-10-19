@@ -19,7 +19,10 @@ Steps, and it stops at the first one that fails (nothing is pushed then):
 from __future__ import annotations
 
 import argparse
+import atexit
+import itertools
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -36,6 +39,15 @@ SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
           "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_clipboard", "test_qr_links", "test_mmo_systems", "test_character", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability", "test_documents", "test_files_ui", "test_apps", "test_studio_godot", "test_qol", "test_install", "test_cad", "test_studio_destination", "test_ui_fit", "test_auto_setup", "test_local_broken", "test_forge3d", "test_forge_ui", "test_godogen", "test_wechaty", "test_keys_studio", "test_forge_poly", "test_forge_model_ui", "test_phone_web", "test_ninerouter", "test_studio_stream", "test_engine_stream", "test_world_build", "test_world_godot_tab", "test_godot_live", "test_godot_tab", "test_no_console"]
+
+
+# One temp root for the whole run: every subprocess (each suite, every git call) gets a slot
+# inside it, and the whole thing is removed when ship exits. Before, _suite_env() made two fresh
+# mkdtemp dirs per subprocess and never cleaned them - thousands of %TEMP%/loki-* dirs piled up on
+# the owner's PC (2026-10-18: 2299 of them found and deleted by hand).
+_SUITE_TMP = Path(tempfile.mkdtemp(prefix="loki-suite-"))
+_ENV_SEQ = itertools.count()
+atexit.register(lambda: shutil.rmtree(str(_SUITE_TMP), ignore_errors=True))
 
 
 def _suite_env() -> dict:
@@ -56,10 +68,12 @@ def _suite_env() -> dict:
     env["LOKI_UPDATE_PREFLIGHT"] = "0"   # suites' throwaway repos; tests/test_update_overhaul.py turns it on
     env["LOKI_EMBED"] = "off"            # memory search is plain BM25 in suites, the same with or without Ollama
     # suites never see the owner's real keys (engine/user_keys.py): an empty per-user key file of their own
-    env["LOKI_USER_KEYS"] = os.path.join(tempfile.mkdtemp(prefix="loki-userkeys-"), "keys.env")
+    slot = _SUITE_TMP / ("env-%d" % next(_ENV_SEQ))
+    slot.mkdir(parents=True, exist_ok=True)
+    env["LOKI_USER_KEYS"] = str(slot / "keys.env")
     # Each suite gets its own provider-health file (engine/provider_health.py), so one suite's
     # "gemini quota spent" never steers another's routing; and no background probes.
-    env["LOKI_HEALTH_FILE"] = os.path.join(tempfile.mkdtemp(prefix="loki-health-"), "provider_health.json")
+    env["LOKI_HEALTH_FILE"] = str(slot / "provider_health.json")
     env["LOKI_HEALTH_PROBES"] = "0"
     root =(os.environ.get("TEMP") or "") if os.name == "nt" else "/tmp"
     if not root or not os.path.isdir(root) or not os.access(root, os.W_OK):
