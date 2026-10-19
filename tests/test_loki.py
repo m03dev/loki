@@ -479,6 +479,16 @@ check("setup.bat creates the venv under harness_data",
 
 check("setup.sh ships for macOS/Linux", (REPO / "setup.sh").is_file())
 
+_unin = (REPO / "uninstall.bat").read_text(encoding="utf-8")
+check("uninstall.bat ships (the opposite of setup.bat)",
+      ('set "VENV=%DATA%' + _B + '.venv"') in _unin and "rmdir /s /q" in _unin and "--purge" in _unin)
+check("uninstall removes the start-at-login entry and the shortcuts",
+      "remove_loki_items.ps1" in _unin and (REPO / "tools" / "windows" / "remove_loki_items.ps1").is_file())
+_unin_sh = REPO / "uninstall.sh"
+check("uninstall.sh ships for macOS/Linux and removes the login plist",
+      _unin_sh.is_file() and "com.m03dev.loki.plist" in _unin_sh.read_text(encoding="utf-8"))
+check("uninstall keeps your data unless --purge", "harness_data" in _unin and "PURGE" in _unin)
+
 
 check("doctor script ships", (REPO / "tools" / "loki_doctor.py").is_file())
 
