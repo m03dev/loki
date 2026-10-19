@@ -287,6 +287,30 @@ async def main():
         check("a group can be renamed and the Outliner indents its children",
               moved["renamed"] == "parts" and moved["indented"], moved)
 
+        # -------- T4: the Channel Box - exact numbers for the selected object
+        await page.evaluate("forge.view.tree.api.select(2)")
+        await page.fill("#forge-ch-tx", "3")
+        moved_x = await page.evaluate("forge.view.tree.api.node(2).grp.position.x")
+        check("the Channel Box moves the selected object by typing a number", abs(moved_x - 3) < 1e-6, moved_x)
+        await page.fill("#forge-ch-ry", "90")
+        rot_y = await page.evaluate("forge.view.tree.api.node(2).grp.rotation.y * 180 / Math.PI")
+        check("...and rotates in degrees, the way Maya's Channel Box shows them", abs(rot_y - 90) < 1e-3, rot_y)
+        await page.evaluate("forge.view.tree.api.select(1)")
+        root_x = await page.evaluate("document.getElementById('forge-ch-tx').value")
+        await page.evaluate("forge.view.tree.api.select(2)")
+        back_x = await page.evaluate("document.getElementById('forge-ch-tx').value")
+        check("the numbers follow the selection", root_x == "0" and back_x == "3", [root_x, back_x])
+        hit = await page.evaluate("""() => { const b = document.getElementById('forge-ch-reset');
+          const r = b.getBoundingClientRect();
+          const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { ok: el === b || b.contains(el) || (el && el.contains(b)),
+                   at: (el && (el.id || el.getAttribute('class'))) || 'none',
+                   rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }; }""")
+        check("the Channel Box's Reset button is really clickable (nothing covers it)", hit["ok"], hit)
+        await page.evaluate("document.getElementById('forge-ch-reset').click()")
+        reset = await page.evaluate("forge.view.tree.api.node(2).grp.position.toArray()")
+        check("Reset puts the selected object back on the origin", reset == [0, 0, 0], reset)
+
         # -------- sculpt (SculptGL's brushes), undo, subdivide
         sum_js = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
         before = await page.evaluate(sum_js)
@@ -435,7 +459,7 @@ async def main():
 
 
 try:
-    asyncio.run(asyncio.wait_for(main(), 50))
+    asyncio.run(asyncio.wait_for(main(), 80))   # the suite grew: scene, Outliner, Channel Box and the Maya keys
 except asyncio.TimeoutError:
     check("the Forge window check finishes in time", False)
 srv.shutdown()

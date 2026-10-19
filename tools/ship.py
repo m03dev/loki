@@ -169,7 +169,10 @@ def run_fast(repo: Path, say=print, budget: float | None = None) -> bool:
         return suite, c, o, time.monotonic() - t0
 
     ok = True
-    with ThreadPoolExecutor(max_workers=min(8, len(suites))) as pool:
+    # 8 at once is fine on a big box, but each of these suites opens its own browser: on a loaded machine
+    # they starve each other and time out inside their own waits, which looks like a broken suite.
+    workers = max(1, min(int(os.getenv("LOKI_TEST_WORKERS", "8") or 8), len(suites)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         for suite, c, o, took in pool.map(one, suites):
             tail = [line for line in o.splitlines() if "passed," in line]
             if c == 124:

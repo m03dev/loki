@@ -157,6 +157,35 @@ function forgeSceneAttach(view, ctx) {
     },
 
     selected: () => tree.sel.slice(),
+
+    // the node's own transform, local to its parent - what Maya's Channel Box shows
+    transform(id) {
+      const n = node(id || api.active().id);
+      if (!n || !n.grp) return null;
+      const r = n.grp.rotation;
+      return { translate: n.grp.position.toArray(), rotate: [r.x, r.y, r.z].map((v) => v * 180 / Math.PI),
+               scale: n.grp.scale.toArray() };
+    },
+
+    setTransform(id, part, axis, value) {
+      const n = node(id || api.active().id);
+      const v = Number(value);
+      if (!n || !n.grp || !isFinite(v)) return false;
+      if (part === "translate") n.grp.position["xyz"[axis]] = v;
+      else if (part === "rotate") n.grp.rotation["xyz"[axis]] = v * Math.PI / 180;
+      else if (part === "scale") n.grp.scale["xyz"[axis]] = v;
+      n.grp.updateMatrixWorld(true);
+      if (n.root && view.dirty !== undefined) view.dirty = true;
+      return true;
+    },
+
+    resetTransform(id) {                              // Maya's Reset: the node back on the origin, unscaled
+      const n = node(id || api.active().id);
+      if (!n || !n.grp) return false;
+      n.grp.position.set(0, 0, 0); n.grp.rotation.set(0, 0, 0); n.grp.scale.set(1, 1, 1);
+      n.grp.updateMatrixWorld(true);
+      return true;
+    },
     active() { const n = node(tree.sel[tree.sel.length - 1]) || node(tree.rootId); return n || ensureRoot(); },
 
     groupSelected(name) { return api.group(name, tree.sel); },
@@ -182,6 +211,11 @@ function forgeSceneAttach(view, ctx) {
     btn("Ungroup", "Take the children out of the selected group (Ctrl+Shift+G).", () => {
       for (const id of tree.sel.slice()) api.ungroup(id);
     });
+    const reset = scnEl("button", "forge-out-btn", "Reset");
+    reset.type = "button"; reset.id = "forge-ch-reset";
+    reset.title = "Put the selected object back on the origin, unscaled (Maya's Reset).";
+    reset.addEventListener("click", () => { api.resetTransform(); tree.build(); api.say("Transform reset."); });
+    bar.append(reset);
     head.append(bar);
     const list = scnEl("div", "forge-out-list"); list.id = "forge-out-list";
     box.append(head, list);
@@ -242,6 +276,7 @@ function forgeSceneAttach(view, ctx) {
     walk(0, 0);
     const box = tree.panel;
     if (box) box.dataset.count = String(tree.nodes.length);
+    if (tree.syncChannel) tree.syncChannel();
   };
 
   // ---------------------------------------------------------------- Ctrl+G / Ctrl+Shift+G, like Maya
@@ -254,11 +289,53 @@ function forgeSceneAttach(view, ctx) {
     else { const g = api.groupSelected(); if (g) api.say("Grouped " + g.name + " about the selection's centre."); }
   }, true);
 
+  // ---------------------------------------------------------------- the Channel Box (T4): exact numbers
+  const AXES = ["x", "y", "z"];
+  function channelBox() {
+    const host = document.getElementById("forge-outliner");   // Maya keeps the Channel Box under the Outliner
+    if (!host) return null;
+    const box = scnEl("div", "forge-ch-body");
+    box.id = "forge-channel";
+    box.append(scnEl("div", "forge-ch-title", "Channel Box"));
+    const inputs = {};
+    for (const [part, label, step] of [["translate", "Translate", 0.1], ["rotate", "Rotate", 5], ["scale", "Scale", 0.1]]) {
+      const row = scnEl("div", "forge-ch-row");
+      row.append(scnEl("span", "forge-ch-label", label));
+      for (let a = 0; a < 3; a++) {
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = String(step);
+        inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
+        inp.className = "forge-ch-in";
+        inp.title = label + " " + AXES[a].toUpperCase() + " (the selected object's own transform).";
+        inp.addEventListener("input", () => {
+          api.setTransform(null, part, a, inp.value);
+          if (part === "scale" && Number(inp.value) === 0) inp.value = "1";   // a zero scale would vanish
+        });
+        inputs[part + a] = inp; row.append(inp);
+      }
+      box.append(row);
+    }
+    host.append(box);
+    tree.syncChannel = () => {
+      const t = api.transform();
+      if (!t) return;
+      for (const part of ["translate", "rotate", "scale"]) {
+        const vals = t[part];
+        for (let a = 0; a < 3; a++) {
+          const inp = inputs[part + a];
+          if (inp && document.activeElement !== inp) inp.value = String(Math.round(vals[a] * 1000) / 1000);
+        }
+      }
+    };
+    return box;
+  }
+
   const load = view.load;
   if (typeof load === "function") view.load = async (buf) => { const r = await load(buf); tree.build(); return r; };
 
   ensureRoot();
   panel();
+  channelBox();
   tree.build();
   // the working object is created on the first Make, so the list keeps itself true
   view.treeRefresh = () => tree.build();

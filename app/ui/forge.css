@@ -266,17 +266,21 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
   background: rgba(18,21,27,.55); border: 1px solid rgba(255,255,255,.14); border-radius: 9px;
   overflow: hidden; font-size: 12px;
 }
-.forge-outliner .forge-out-head {
+.forge-outliner .forge-out-head,
+.forge-channel .forge-out-head {
   display: flex; align-items: center; gap: 6px; padding: 6px 7px;
   border-bottom: 1px solid rgba(255,255,255,.1);
 }
-.forge-outliner .forge-out-title { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; flex: 1; }
+.forge-outliner .forge-out-title,
+.forge-channel .forge-out-title { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; flex: 1; }
 .forge-outliner .forge-out-bar { display: flex; gap: 3px; }
-.forge-outliner .forge-out-btn {
+.forge-outliner .forge-out-btn,
+.forge-channel .forge-out-btn {
   padding: 3px 6px; font: inherit; font-size: 11px; border-radius: 5px; cursor: pointer;
   border: 1px solid rgba(255,255,255,.16); background: transparent; color: inherit;
 }
-.forge-outliner .forge-out-btn:hover { background: #ed782b; border-color: #ed782b; color: #12141a; }
+.forge-outliner .forge-out-btn:hover,
+.forge-channel .forge-out-btn:hover { background: #ed782b; border-color: #ed782b; color: #12141a; }
 .forge-outliner .forge-out-list { overflow: auto; padding: 3px 0 5px; }
 .forge-outliner .forge-out-row {
   display: flex; align-items: center; gap: 5px; padding: 3px 6px; cursor: pointer; border-radius: 5px;
@@ -291,3 +295,14 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 .forge-outliner .forge-out-eye.off { opacity: .3; }
 .forge-outliner .forge-out-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .forge-outliner .forge-out-edit { width: 100%; font: inherit; font-size: 12px; padding: 1px 3px; }
+
+/* the Channel Box (T4): the selected object's own transform, as numbers */
+.forge-ch-body { border-top: 1px solid rgba(255,255,255,.1); padding: 3px 0 4px; }
+.forge-ch-title { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; opacity: .5; padding: 3px 8px 2px; }
+.forge-ch-row { display: flex; align-items: center; gap: 4px; padding: 3px 7px; }
+.forge-ch-label { width: 62px; opacity: .65; font-size: 11px; }
+.forge-ch-in {
+  width: 52px; font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.25); color: inherit;
+}
+.forge-ch-in:focus { border-color: #ed782b; outline: none; }
