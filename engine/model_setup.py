@@ -523,6 +523,30 @@ def best_installed(models: list[dict], budget_gb: float, caps=capabilities, vers
     return {**m, "tools": tools, "fits": fits, "score": value}
 
 
+def next_installed(exclude: list[str] | None = None, models: list[dict] | None = None,
+                   budget_gb: float = 0.0, version: str = "", caps=capabilities) -> dict | None:
+    """The best installed, tool-capable local model to try AFTER the ones in `exclude`.
+
+    For the offline "mix and match": when one local model cannot finish the work, LOKI moves
+    to the next installed one instead of reaching for the cloud - still offline and free.
+    The same weights under a different name (a loki-* long-context copy of a model already
+    tried) is NOT a new choice, so it is skipped too. Returns None when nothing is left."""
+    skipped = {_broken_key(n) for n in (exclude or []) if n}
+    rows = models if models is not None else ollama_models()
+    best: tuple[int, dict] | None = None
+    for m in rows or []:
+        name = str(m.get("name") or "")
+        if not name or "embed" in name.lower() or _broken_key(name) in skipped:
+            continue
+        fit = best_installed([m], budget_gb, caps=caps, version=version)
+        if not fit or not fit.get("tools") or not fit.get("fits"):
+            continue
+        value = score(name)
+        if best is None or value > best[0]:
+            best = (value, fit)
+    return best[1] if best else None
+
+
 def recommend(info: dict, installed: list[str] | None = None, include_uncensored: bool = False,
               env: dict | None = None) -> list[dict]:
     """Download candidates that fit this machine, best first. The owner's own entries are always

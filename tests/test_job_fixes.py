@@ -117,20 +117,43 @@ src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
 check("the 'DONE is premature' nudge no longer tells every task to write_file (it was Godot-only)",
       "build_3d_scene for a scene, write_file for a script" not in src and "conductor(role='image'" in src)
 
-section("a stuck job on the small local model is handed to a stronger free model")
-saved = (loki.model_name, loki.active_model_name, loki.routing_order, loki.provider_configured)
+section("a stuck job on the small local model: mix and match the local models, then the cloud")
+saved = (loki.model_name, loki.active_model_name, loki.routing_order, loki.provider_configured,
+         loki._local_chain_next, loki.resolve_local)
+_saved_env = os.environ.get("LOKI_LOCAL_MODEL")
 loki.model_name = "local"
-loki.active_model_name = lambda: loki.model_name if loki.model_name != "local" else "local"
+loki.active_model_name = lambda: loki.model_name
 loki.routing_order = lambda order: ["local", "groq", "openrouter"]
 loki.provider_configured = lambda name: name == "groq"
+
+
+def _chain(tried):
+    # one other local model until we hop (LOKI_LOCAL_MODEL gets set), then nothing is left
+    return {} if os.environ.get("LOKI_LOCAL_MODEL") else {"name": "qwen3:8b"}
+
+
+loki._local_chain_next = _chain
+loki.resolve_local = lambda force=False: {"name": "loki-qwen3-8b"}
+loki.__dict__["_ESCALATED"] = False
+loki.__dict__.pop("_LOCAL_TRIED", None)
 check("not in the window (only background jobs)", loki._escalate_model("test") is False)
 os.environ["LOKI_JOB_ID"] = "t1"
 loki.messages[:] = [{"role": "system", "content": "s"}]
-check("in a job: switches to the first free, set-up online model", loki._escalate_model("empty replies") is True
-      and loki.model_name == "groq" and "stronger model" in loki.messages[-1]["content"])
-check("only once per job", loki._escalate_model("again") is False)
+check("in a job: tries the NEXT local model first and stays offline",
+      loki._escalate_model("empty replies") is True and loki.model_name == "local"
+      and os.environ.get("LOKI_LOCAL_MODEL") == "qwen3:8b"
+      and "different local model" in loki.messages[-1]["content"])
+check("when no other local model fits, moves to the first free, set-up online model",
+      loki._escalate_model("again") is True and loki.model_name == "groq"
+      and "stronger model" in loki.messages[-1]["content"])
+check("the online step happens only once per job", loki._escalate_model("again") is False)
 os.environ.pop("LOKI_JOB_ID", None)
-loki.model_name, loki.active_model_name, loki.routing_order, loki.provider_configured = saved
+if _saved_env is None:
+    os.environ.pop("LOKI_LOCAL_MODEL", None)
+else:
+    os.environ["LOKI_LOCAL_MODEL"] = _saved_env
+(loki.model_name, loki.active_model_name, loki.routing_order, loki.provider_configured,
+ loki._local_chain_next, loki.resolve_local) = saved
 for word in ('_escalate_model("it kept returning empty replies")', '_escalate_model("it kept saying DONE without doing it")',
              '_escalate_model("it gave up: "', '_escalate_model("it stopped calling tools")'):
     check("the goal loop escalates when " + word.split('"')[1], word in src)

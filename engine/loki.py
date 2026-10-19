@@ -8124,13 +8124,49 @@ def _goal_names_file(goal: str) -> bool:
     return bool(_NAMED_FILE.search(text))
 
 
+def _local_chain_next(tried: set) -> dict:
+    """The next installed, tool-capable local model to try (offline mix and match), or {} when
+    none is left. Same weights under a different name (a loki-* copy) do not count as new."""
+    try:
+        models = model_setup.ollama_models() or []
+    except Exception:  # noqa: BLE001 - choosing a model must never break a job
+        return {}
+    info = HARDWARE or {}
+    return model_setup.next_installed(list(tried), models, float(info.get("budget_gb") or 0),
+                                      LOCAL_STATE.get("version", "")) or {}
+
+
 def _escalate_model(why: str) -> bool:
-    """A job on the small local model is failing: carry on with the best online model that is
-    set up and free (never a paid one on its own), instead of ending the task as failed. Once
-    per task; True when it switched."""
+    """A job on the small local model is failing. FIRST try the next installed local model - stay
+    offline and free (the owner: "if one model cant you need to figure out a way to mix and match
+    all the offline and free ones"). Only when no other local model is left, carry on with the
+    best free online model that is set up (never a paid one on its own). True when it switched."""
     global model_name
-    if (not os.getenv("LOKI_JOB_ID") or globals().get("_ESCALATED") or active_model_name() != "local"
+    if (not os.getenv("LOKI_JOB_ID") or active_model_name() != "local"
             or os.getenv("LOKI_NO_ESCALATE")):   # background jobs only (each is its own process)
+        return False
+    # 1) Another LOCAL model: keep working offline for free.
+    if not os.getenv("LOKI_NO_LOCAL_CHAIN"):
+        tried: set = globals().setdefault("_LOCAL_TRIED", set())
+        tried.update({LOCAL_STATE.get("name") or "", os.environ.get("LOKI_LOCAL_MODEL", ""),
+                      _model_of(active_model_name())})
+        nxt = str(_local_chain_next(tried).get("name") or "")
+        if nxt:
+            tried.add(nxt)
+            os.environ["LOKI_LOCAL_MODEL"] = nxt
+            try:
+                resolve_local(force=True)
+            except Exception:  # noqa: BLE001 - if it will not resolve, fall through to the cloud
+                pass
+            else:
+                _progress("thinking", "The local model is stuck (%s) - trying the next local model, %s "
+                          "(staying offline and free)." % (why, LOCAL_STATE.get("name") or nxt))
+                messages.append({"role": "user", "content": "A different local model takes over now. "
+                                 "Continue the task from here with real tool calls, then reply "
+                                 "DONE: <what you did> or BLOCKED: <why>."})
+                return True
+    # 2) No other local model fits: borrow the best free online one.
+    if globals().get("_ESCALATED"):
         return False
     target = ""
     for candidate in routing_order(SMART_ORDER):
@@ -8143,7 +8179,7 @@ def _escalate_model(why: str) -> bool:
         return False
     globals()["_ESCALATED"] = True
     model_name = target
-    _progress("thinking", "The local model is stuck (%s) - switching this task to %s." % (why, target))
+    _progress("thinking", "No other local model fits (%s) - switching this task to %s." % (why, target))
     messages.append({"role": "user", "content": "A stronger model takes over now. Continue the task from "
                      "here with real tool calls, then reply DONE: <what you did> or BLOCKED: <why>."})
     return True

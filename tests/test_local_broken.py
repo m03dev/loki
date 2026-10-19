@@ -56,6 +56,34 @@ check("NVIDIA's DeepSeek under its other name", ph.replacement("nvidia", "deepse
                                                                 ["nvidia/deepseek-v4.1-flash"]) == "nvidia/deepseek-v4.1-flash")
 check("a paid provider is never switched to a random model", ph.replacement("openai", "gpt-x", ["gpt-y"]) == "")
 
+# --- mix and match the local models, offline (the owner, 2026-10-18: "if one model cant you need
+# to figure out a way to mix and match all the offline and free ones"). When one local model is
+# stuck, LOKI tries the NEXT installed local model before ever reaching for the cloud.
+_caps = lambda n: ["tools"]  # noqa: E731
+pool = [{"name": "qwen3.5:9b", "size_gb": 6.6}, {"name": "qwen3:8b", "size_gb": 5.2},
+        {"name": "huihui_ai/qwen3-abliterated:8b", "size_gb": 5.0},
+        {"name": "nomic-embed-text:latest", "size_gb": 0.3}, {"name": "qwen3.5:35b", "size_gb": 22.0}]
+nxt = ms.next_installed(["qwen3.5:9b"], pool, 7.0, caps=_caps)
+check("the next local model is the best remaining tool-caller", nxt and nxt["name"] == "qwen3:8b", nxt)
+check("each step moves to a model not yet tried",
+      (ms.next_installed(["qwen3.5:9b", "qwen3:8b"], pool, 7.0, caps=_caps) or {}).get("name")
+      == "huihui_ai/qwen3-abliterated:8b")
+check("a loki-* long-context copy of a tried model is not a new choice",
+      ms.next_installed(["loki-qwen3-8b"], [{"name": "qwen3:8b", "size_gb": 5.2}], 7.0, caps=_caps) is None)
+check("when every local model is tried, nothing is left",
+      ms.next_installed(["qwen3.5:9b", "qwen3:8b", "huihui_ai/qwen3-abliterated:8b"], pool, 7.0, caps=_caps) is None)
+check("an embed model is never chosen",
+      (ms.next_installed([], pool, 7.0, caps=_caps) or {}).get("name") != "nomic-embed-text:latest")
+check("a model that does not fit is skipped",
+      ms.next_installed([], [{"name": "qwen3.5:35b", "size_gb": 22.0}], 7.0, caps=_caps) is None)
+check("a model without tool calling is skipped",
+      ms.next_installed([], [{"name": "llama3.2:3b", "size_gb": 2.0}], 7.0, caps=lambda n: []) is None)
+
+_esrc = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
+check("the engine tries the next local model before the cloud",
+      "_local_chain_next(" in _esrc and "model_setup.next_installed(" in _esrc
+      and "staying offline and free" in _esrc)
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))
