@@ -495,6 +495,37 @@
     }
     return { edges: [...edges], faces: [...faces] };
   };
+  // Split the quad faces crossed by an edge ring. `t` is measured from the lower-index
+  // endpoint of every edge, and is clamped away from degenerate zero-width faces.
+  P.loopCut = (m0, ei, t) => {
+    const m = clone(m0), T = P.topology(m), ring = P.edgeRing(m, T, ei);
+    if (ring.faces.length === 0) return m;
+    const amount = Math.max(0.01, Math.min(0.99, Number.isFinite(t) ? t : 0.5));
+    const cuts = new Map();
+    for (const edgeId of ring.edges) {
+      const edge = T.edges[edgeId];
+      const a = m.v[edge.a], b = m.v[edge.b];
+      cuts.set(edgeId, m.v.push(add(mul(a, 1 - amount), mul(b, amount))) - 1);
+    }
+    const replacements = new Map();
+    for (const faceId of ring.faces) {
+      const face = m.f[faceId], edgeIds = T.faceEdges[faceId];
+      if (face.length !== 4) continue;
+      const cutSides = edgeIds.map((id, i) => cuts.has(id) ? i : -1).filter((i) => i >= 0);
+      if (cutSides.length !== 2 || (cutSides[0] + 2) % 4 !== cutSides[1]) continue;
+      const i = cutSides[0], j = cutSides[1];
+      const cutA = cuts.get(edgeIds[i]), cutB = cuts.get(edgeIds[j]);
+      const first = [cutA];
+      for (let k = (i + 1) % 4; k !== (j + 1) % 4; k = (k + 1) % 4) first.push(face[k]);
+      first.push(cutB);
+      const second = [cutB];
+      for (let k = (j + 1) % 4; k !== (i + 1) % 4; k = (k + 1) % 4) second.push(face[k]);
+      second.push(cutA);
+      replacements.set(faceId, [first, second]);
+    }
+    for (const [faceId, pieces] of [...replacements].sort((a, b) => b[0] - a[0])) m.f.splice(faceId, 1, ...pieces);
+    return m;
+  };
   // everything connected to the given vertices through faces (Blender's Select Linked)
   P.linked = (m, T, verts) => {
     T = T || P.topology(m);

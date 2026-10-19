@@ -74,6 +74,10 @@ const usph = P.primitive("sphere", { segments: 16, rings: 8 }), TS = P.topology(
 const eq = TS.edges.findIndex((e) => Math.abs(usph.v[e.a][1] - usph.v[e.b][1]) < 1e-9 && Math.abs(usph.v[e.a][1]) < 1e-6);
 const pl4 = P.primitive("plane", { segments: 4 }), TP = P.topology(pl4);
 const ring = P.edgeRing(c3, T3, vertical);
+const cut = P.loopCut(c3, vertical, 0.5);
+const cutClosed = (() => { const directed = new Set(); for (const face of cut.f) for (let k = 0; k < face.length; k++) {
+  const a = face[k], b = face[(k + 1) % face.length]; if (directed.has(a + ">" + b)) return false; directed.add(a + ">" + b);
+} for (const key of directed) { const [a, b] = key.split(">"); if (!directed.has(b + ">" + a)) return false; } return true; })();
 const fl = P.flushSelection(c3, T3, { v: c3.f[0], e: [], f: [] }, "vert");
 const fe = P.flushSelection(c3, T3, { v: [], e: T3.faceEdges[0], f: [] }, "edge");
 const ff = P.flushSelection(c3, T3, { v: [], e: [], f: [0, 1] }, "face");
@@ -84,7 +88,8 @@ const M = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0.5, 0, 1];          // transl
 const moved = P.applyMatrix(c3, wt, M);
 out.edit = {
   loop: P.edgeLoop(c3, T3, vertical).length, pole: P.edgeLoop(c3, T3, corner).length,
-  ringE: ring.edges.length, ringF: ring.faces.length, equator: P.edgeLoop(usph, TS, eq).length,
+  ringE: ring.edges.length, ringF: ring.faces.length, cutFaces: cut.f.length, cutQuads: cut.f.every((f) => f.length === 4), cutClosed,
+  cutVertices: cut.v.length, cutFinite: cut.v.every((p) => p.every(Number.isFinite)), equator: P.edgeLoop(usph, TS, eq).length,
   border: P.edgeLoop(pl4, TP, TP.edges.findIndex((e) => e.faces.length === 1)).length,
   flushV: [fl.f.size, fl.e.size], flushE: [fe.f.size, fe.v.size], flushF: [ff.v.size, ff.e.size],
   grow: gr.size, shrink: P.shrink(c3, T3, gr).size, linked: P.linked(c3, T3, [0]).size, nv: c3.v.length,
@@ -132,6 +137,8 @@ def main() -> int:
     check("edge loop round a UV sphere's equator: one edge per segment (16)", e["equator"] == 16, e)
     check("edge loop along an open border follows the border (16 on a 4x4 plane)", e["border"] == 16, e)
     check("edge ring + face loop: across 12 quads and back to the start", e["ringE"] == 12 and e["ringF"] == 12, e)
+    check("loop cut splits each crossed quad into two closed quads", e["cutFaces"] == 66 and e["cutQuads"] and e["cutClosed"] and e["cutVertices"] > 64, e)
+    check("loop cut coordinates stay finite", e["cutFinite"], e)
     check("selection flushes like Blender: a face's 4 vertices select the face and its 4 edges", e["flushV"] == [1, 4], e)
     check("...4 edges select the face and its 4 vertices; 2 faces give their vertices and edges",
           e["flushE"] == [1, 4] and e["flushF"][0] == 6 and e["flushF"][1] == 7, e)

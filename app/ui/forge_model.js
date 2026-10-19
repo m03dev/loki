@@ -208,6 +208,7 @@ function forgeHistApplyOp(base, op) {
     case "smooth": return P.smooth(base);
     case "deleteVerts": return P.deleteVerts(base, op.verts);
     case "deleteEdges": return P.deleteEdges(base, null, op.edges);
+    case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
     default: return base;
   }
@@ -311,6 +312,23 @@ window.forgeHistory = {
   },
   clear() { forgeHistReset(); forgeModel.last = null; if (typeof forgeSay === "function") forgeSay("History deleted - the mesh is now the model."); },
 };
+
+function forgeLoopCut() {
+  const v = forge.view, P = window.ForgePoly;
+  if (!v || !v.poly || !v.edit || v.edit.mode !== "edge" || !v.edit.sel.e.size) {
+    forgeSay("Select an edge in Edge mode to insert a loop cut.", true); return;
+  }
+  const edge = [...v.edit.sel.e][0];
+  const out = P.loopCut(v.poly, edge, 0.5);
+  if (out.f.length === v.poly.f.length) { forgeSay("Loop cut needs a quad edge ring.", true); return; }
+  const base = v.poly;
+  const histEdge = P.topology(base).edges[edge];
+  forgeHistPush({ kind: "loopCut", a: histEdge.a, b: histEdge.b, position: 0.5 }, base);
+  forgeModel.last = null;
+  v.showPoly(out, true);
+  forgeSay("Inserted loop cut.");
+}
+window.forgeLoopCut = forgeLoopCut;
 
 function forgeFaceOp(kind) {
   const v = forge.view;

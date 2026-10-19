@@ -210,15 +210,16 @@ function forgeMayaSnapTarget(v, kind, skip) {
   }
   if (kind !== "point") return null;
   let best = null, bd = 40;                           // nothing under the mouse: the nearest vertex on screen (40 px)
+  const worldPoint = new THREE.Vector3(), screenPoint = new THREE.Vector3();
   for (const o of meshes) {
-    const pos = o.geometry.attributes.position, n = Math.min(pos.count, 200000), w = new THREE.Vector3();
+    const pos = o.geometry.attributes.position, n = Math.min(pos.count, 200000);
     o.updateMatrixWorld();
     for (let i = 0; i < n; i++) {
-      w.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-      const s = w.clone().project(v.camera);
-      if (s.z > 1) continue;
-      const d = Math.hypot(r.left + (s.x + 1) / 2 * r.width - m.mouse[0], r.top + (1 - s.y) / 2 * r.height - m.mouse[1]);
-      if (d < bd) { bd = d; best = w.clone(); }
+      worldPoint.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      screenPoint.copy(worldPoint).project(v.camera);
+      if (screenPoint.z > 1) continue;
+      const d = Math.hypot(r.left + (screenPoint.x + 1) / 2 * r.width - m.mouse[0], r.top + (1 - screenPoint.y) / 2 * r.height - m.mouse[1]);
+      if (d < bd) { bd = d; best = worldPoint.clone(); }
     }
   }
   return best;
@@ -393,7 +394,7 @@ function forgeMayaCommands() {
     sculpt: ["Sculpt Tool", (v) => forgeMayaSculpt(v)],
     deleteComp: ["Delete Components", () => forgeMayaCall("forgeFaceOp", "delete")],
     bevel: ["Bevel", null, "Bevel is not in Forge yet"],
-    edgeLoop: ["Insert Edge Loop", null, "Insert Edge Loop is not in Forge yet (T8)"],
+    edgeLoop: ["Insert Edge Loop", () => forgeMayaCall("forgeLoopCut")],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
     merge: ["Merge", null, "Merge is not in Forge yet (T8)"],
     fillHole: ["Fill Hole", null, "Fill Hole is not in Forge yet (T8)"],

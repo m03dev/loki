@@ -73,6 +73,7 @@ func _build_arena() -> void:
 	_arena_viewport.own_world_3d = true
 	_arena_viewport.size = Vector2i(1280, 720)
 	_arena_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	visibility_changed.connect(_update_arena_rendering)
 	_arena_viewport.msaa_3d = Viewport.MSAA_DISABLED
 	add_child(_arena_viewport)
 	_arena_node = ARENA_SCRIPT.new()
@@ -106,6 +107,14 @@ func _sync_unit_visuals() -> void:
 func _sync_unit_health_visuals() -> void:
 	if _arena_node != null:
 		_arena_node.update_unit_health(units)
+
+
+func _update_arena_rendering() -> void:
+	if _arena_viewport == null:
+		return
+	var next_mode: SubViewport.UpdateMode = SubViewport.UPDATE_ALWAYS if is_visible_in_tree() else SubViewport.UPDATE_DISABLED
+	if _arena_viewport.render_target_update_mode != next_mode:
+		_arena_viewport.render_target_update_mode = next_mode
 
 
 func _update_viewport_size() -> void:
