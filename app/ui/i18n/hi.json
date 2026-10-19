@@ -358,7 +358,13 @@
   "Your data": "आपका डेटा",
   "Paste": "चिपकाएँ",
   "Paste from the clipboard (works even when Ctrl+V does not).": "क्लिपबोर्ड से चिपकाएँ (Ctrl+V काम न करे तब भी काम करता है)।",
-  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "DeepSeek V4.1 के साथ खुद LOKI पर काम करें - Studio टैब (Ctrl/Cmd+2); Studio का अपना सर्वर है, इसलिए LOKI बंद होने पर भी यह काम करता है।"
+  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "DeepSeek V4.1 के साथ खुद LOKI पर काम करें - Studio टैब (Ctrl/Cmd+2); Studio का अपना सर्वर है, इसलिए LOKI बंद होने पर भी यह काम करता है।",
+  "Falloff": "फ़ॉलऑफ़",
+  "Live": "लाइव",
+  "Name": "नाम",
+  "Rebuild by itself a moment after you stop moving a slider.": "स्लाइडर रोकने के कुछ पल बाद अपने आप फिर से बनता है।",
+  "The curve of the proportional pull (Blender's falloffs).": "आनुपातिक खिंचाव का वक्र (Blender के फ़ॉलऑफ़)।",
+  "What the .glb is called in models/.": "models/ में .glb का नाम।"
  },
  "fb.email": "ईमेल लिखें",
  "fb.email_done": "{file} सहेजी गई। एक ईमेल ड्राफ़्ट खुला है - फ़ाइल जोड़ें और भेजें।",

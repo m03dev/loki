@@ -358,7 +358,13 @@
   "Your data": "Tus datos",
   "Paste": "Pegar",
   "Paste from the clipboard (works even when Ctrl+V does not).": "Pegar desde el portapapeles (funciona aunque Ctrl+V no funcione).",
-  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "Trabaja en el propio LOKI con DeepSeek V4.1: la pestaña Studio (Ctrl/Cmd+2). Studio tiene su propio servidor, así que funciona aunque LOKI esté caído."
+  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "Trabaja en el propio LOKI con DeepSeek V4.1: la pestaña Studio (Ctrl/Cmd+2). Studio tiene su propio servidor, así que funciona aunque LOKI esté caído.",
+  "Falloff": "Atenuación",
+  "Live": "En vivo",
+  "Name": "Nombre",
+  "Rebuild by itself a moment after you stop moving a slider.": "Se reconstruye solo un momento después de soltar un control deslizante.",
+  "The curve of the proportional pull (Blender's falloffs).": "La curva del arrastre proporcional (las atenuaciones de Blender).",
+  "What the .glb is called in models/.": "Cómo se llama el .glb en models/."
  },
  "fb.email": "Escribir un correo",
  "fb.email_done": "Guardado {file}. Se abrió un borrador de correo: adjunta el archivo y envíalo.",

@@ -6,6 +6,27 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (more local models: uncensored builds + add your own; home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
 
+## 2026-10-19 03:30: LOKI Spaces - your own Discord, peer to peer, on LOKI home and in LOKI World (Claude, cloud)
+
+Owner: "make an open source discord or voip that's p2p - people make their own and host people - seamless in LOKI
+World, where people can chat and create lobbies ... replace discord", and "help focus on LOKI home while Ziva does Forge".
+- engine/spaces.py + spaces_api.py (routes /spaces/... in loki_bridge, started at engine start): the machine that makes a
+  space hosts it (harness_data/spaces/, a spaces port 8795 on the LAN + the bore relay); invites are one loki-space: code
+  with the key; joins prove the key and hand over a member secret; every request and answer is HMAC-signed (no replay,
+  no forged answer from the relay); messages and WebRTC signals are AES-GCM sealed in the window (engines hold
+  ciphertext only). Rooms text/voice, lobbies (tidy away when empty), edits, deletes, reactions, typing, roles, kick,
+  ban, lock. docs/SPACES.md has the wire format and the threat model.
+- app/ui/spaces.js/css: the rail of spaces on LOKI home over the live world (and over the World tab's game), the space
+  panel (rooms, chat, people), lobby cards on the home screen, a WebRTC voice mesh (mute, deafen, push-to-talk, who is
+  speaking) and a voice bar that follows you through LOKI. Typing with a space open goes into its box.
+- Tests: test_spaces 33 (two engines over real HTTP + a tampering relay), test_spaces_ui 15 (two windows: make, invite,
+  join, encrypted chat, mention, react, lobby -> World tab, a REAL WebRTC call with Chromium's fake mic, DTLS, mute,
+  leave). test_ui_smoke 10, test_ui_fit 81. i18n tables 0 problems.
+- NOT verified: the mic inside pywebview (WKWebView on the Mac, WebView2 on the PC) - may need the OS microphone
+  permission; two real machines across the relay; the Godot side (ZIVA_TASKS.md has it).
+- Ziva's "Forge more like Maya" work is not on GitHub yet (nothing pushed after 01cc671), so it was not reviewed and
+  no Forge file was touched here.
+
 ## 2026-10-19 00:05: Forge creature creator + Blender-style poly editing (Claude, cloud)
 
 Owner: "fix the creature creator, make it better ... poly modeling, vert selection, marquee selection, move tool works on faces and verts ... look at blender code".

@@ -358,7 +358,13 @@
   "Your data": "بياناتك",
   "Paste": "لصق",
   "Paste from the clipboard (works even when Ctrl+V does not).": "لصق من الحافظة (يعمل حتى عندما لا يعمل Ctrl+V).",
-  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "اعمل على LOKI نفسه باستخدام DeepSeek V4.1 - علامة تبويب Studio (Ctrl/Cmd+2)؛ لـ Studio خادمه الخاص، لذا يعمل حتى عندما يتوقف LOKI."
+  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "اعمل على LOKI نفسه باستخدام DeepSeek V4.1 - علامة تبويب Studio (Ctrl/Cmd+2)؛ لـ Studio خادمه الخاص، لذا يعمل حتى عندما يتوقف LOKI.",
+  "Falloff": "التلاشي",
+  "Live": "مباشر",
+  "Name": "الاسم",
+  "Rebuild by itself a moment after you stop moving a slider.": "يعيد البناء تلقائيًا بعد لحظة من توقفك عن تحريك شريط التمرير.",
+  "The curve of the proportional pull (Blender's falloffs).": "منحنى السحب التناسبي (منحنيات التلاشي في Blender).",
+  "What the .glb is called in models/.": "اسم ملف ‎.glb في models/."
  },
  "fb.email": "كتابة بريد إلكتروني",
  "fb.email_done": "تم حفظ {file}. فُتحت مسودة بريد إلكتروني - أرفق الملف وأرسله.",

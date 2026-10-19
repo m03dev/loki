@@ -433,7 +433,7 @@ async function forgeCreatureBuild() {
     coats.replaceChildren();
     for (const c of r.coats || []) {
       const b = el("button", "forge-coat"); b.type = "button"; b.dataset.coat = c.id;
-      b.dataset.tipName = c.label + " coat"; b.dataset.tipWhat = "Paint the whole creature in the " + c.label + " palette.";
+      b.dataset.tipName = c.label + " coat"; b.dataset.tipWhat = ["Paint the whole creature in the", c.label, "palette."].join(" ");
       b.setAttribute("aria-label", c.label + " coat");
       for (const k of ["body", "back", "belly", "head"]) { const i = el("i"); i.style.background = c.colors[k]; b.append(i); }
       b.addEventListener("click", () => { forgeCreatureCoat(c.id); forgeCreatureChanged(); });

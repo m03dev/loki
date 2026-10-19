@@ -2793,3 +2793,13 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
 - [ ] Poly: speed up commit after a move on 50k+ face meshes (view.showPoly rebuild in forge.js).
 - [ ] Creature: a tail-curl / stance slider, and bipeds (a second skeleton base) - add to SHAPE/PRESETS in engine/anycreature.py, probe extremes so they stand.
 
+## LOKI Spaces in LOKI World (Claude, 2026-10-19) - the window side is done, the Godot side is yours
+- [ ] Push your Forge (Maya-style) work when it stands so it can be reviewed - nothing after 01cc671 is on GitHub.
+- [ ] game/loki-world: poll GET /spaces/world (bearer, like /world/presence) and draw each lobby / voice room as a
+      place on the island (a campfire + name plate + the people in it, colour = space_color). Walking into it:
+      JavaScriptBridge -> window.parent.postMessage({lokiSpaces: "join", space, room}, location.origin) - the
+      window (app/ui/spaces.js) joins its voice. docs/SPACES.md "LOKI World".
+- [ ] On the Mac AND the PC: Spaces rail on the home screen > + > Make it; copy the invite to the other machine > Join;
+      chat; open a lobby; join voice from both and talk. Report whether the mic works inside the LOKI window
+      (WKWebView / WebView2) and whether Windows / macOS asked to allow incoming connections.
+

@@ -358,7 +358,13 @@
   "Your data": "你的数据",
   "Paste": "粘贴",
   "Paste from the clipboard (works even when Ctrl+V does not).": "从剪贴板粘贴（即使 Ctrl+V 无效也能用）。",
-  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "用 DeepSeek V4.1 改进 LOKI 本身——Studio 标签页（Ctrl/Cmd+2）；Studio 有自己的服务器，即使 LOKI 停止也能工作。"
+  "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.": "用 DeepSeek V4.1 改进 LOKI 本身——Studio 标签页（Ctrl/Cmd+2）；Studio 有自己的服务器，即使 LOKI 停止也能工作。",
+  "Falloff": "衰减",
+  "Live": "实时",
+  "Name": "名称",
+  "Rebuild by itself a moment after you stop moving a slider.": "停止拖动滑块片刻后自动重建。",
+  "The curve of the proportional pull (Blender's falloffs).": "比例拖动的曲线（Blender 的衰减方式）。",
+  "What the .glb is called in models/.": ".glb 在 models/ 中的名称。"
  },
  "fb.email": "写邮件",
  "fb.email_done": "已保存 {file}。邮件草稿已打开——附上文件并发送。",
