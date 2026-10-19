@@ -84,44 +84,53 @@ async def main():
             return
         a, err_a = await page_for(browser, ADA)
         b, err_b = await page_for(browser, BO)
-        await a.wait_for_selector("#sp-rail", state="visible", timeout=8000)
-        r = await a.evaluate("() => { const d = document.getElementById('spaces'); return { shown: !d.hidden, mode: document.body.dataset.mode || 'loki' }; }")
-        check("the Spaces rail sits on LOKI home (over the live world)", r["shown"], r)
+        r = await a.evaluate("() => ({ overlay: !!document.querySelector('#main #spaces, body > #spaces'), tab: !!document.getElementById('mode-spaces') })")
+        check("nothing of Spaces floats over LOKI home; it is its own tab in the title bar", not r["overlay"] and r["tab"], r)
+        await a.click("#mode-spaces")
+        await a.wait_for_selector("#spaces .sp-welcome:not([hidden])", timeout=8000)
+        r = await a.evaluate("""() => { const app = document.getElementById('spaces').getBoundingClientRect(), strip = document.getElementById('titlestrip').getBoundingClientRect();
+          return { w: app.width, h: app.height, vw: innerWidth, vh: innerHeight, top: app.top, strip: strip.bottom }; }""")
+        check("the Spaces tab fills the whole window under the title bar (like Discord)",
+              abs(r["w"] - r["vw"]) < 2 and abs(r["top"] - r["strip"]) < 2 and abs(r["h"] - (r["vh"] - r["strip"])) < 2, r)
 
         # ---- Ada makes a space
-        await a.click("#sp-rail .sp-add")
+        await a.click("#sp-welcome .send")
         await a.fill("#sp-dlg input[type=text]", "Night Owls")
         await a.click("#sp-dlg .sp-half:first-child .sp-go")
         await a.wait_for_selector("#sp-dlg textarea.sp-code[readonly]", timeout=8000)
         code = await a.eval_on_selector("#sp-dlg textarea.sp-code", "t => t.value")
         check("making a space opens it and hands over the invite code", code.startswith("loki-space:"), code[:30])
         await a.keyboard.press("Escape")
-        r = await a.evaluate("() => ({ stones: document.querySelectorAll('#sp-stones .sp-stone').length, open: !document.getElementById('sp-panel').hidden, "
-                             "rooms: [...document.querySelectorAll('#sp-rooms .sp-room')].map((x) => x.dataset.kind) })")
-        check("the new space has a stone on the rail and a text and a voice room", r["stones"] == 1 and r["open"] and "text" in r["rooms"] and "voice" in r["rooms"], r)
+        r = await a.evaluate("() => ({ stones: document.querySelectorAll('#sp-stones .sp-stone').length, "
+                             "rooms: [...document.querySelectorAll('#sp-rooms .sp-room')].map((x) => x.dataset.kind), title: document.querySelector('#sp-head .sp-title').textContent })")
+        check("the new space: a stone on the rail, its name on top, a text and a voice room", r["stones"] == 1 and r["title"] == "Night Owls"
+              and "text" in r["rooms"] and "voice" in r["rooms"], r)
 
         # ---- Bo joins with the code
-        await b.click("#sp-rail .sp-add")
+        await b.click("#mode-spaces")
+        await b.wait_for_selector("#spaces .sp-welcome:not([hidden])", timeout=8000)
+        await b.click("#sp-welcome .sp-wjoin")
         await b.fill("#sp-dlg textarea.sp-code", "here you go: " + code)
         await b.click("#sp-dlg .sp-half:last-child .sp-go")
-        await b.wait_for_function("document.querySelectorAll('#sp-stones .sp-stone').length === 1 && !document.getElementById('sp-panel').hidden", timeout=15000)
-        await b.wait_for_function("[...document.querySelectorAll('#sp-people .sp-pn')].some((x) => x.textContent.startsWith('Ada'))", timeout=10000)
+        await b.wait_for_function("document.querySelectorAll('#sp-stones .sp-stone').length === 1", timeout=15000)
+        await b.wait_for_function("[...document.querySelectorAll('#sp-people .sp-pn b')].some((x) => x.textContent.startsWith('Ada'))", timeout=10000)
         check("Bo pastes the invite and is in: he sees Ada in the member list", True)
 
         # ---- chat, end to end
-        await a.wait_for_function("[...document.querySelectorAll('#sp-people .sp-pn')].some((x) => x.textContent.startsWith('Bo'))", timeout=10000)
-        await a.fill("#sp-input", "hello @Bo - raid tonight?")
+        await a.wait_for_function("[...document.querySelectorAll('#sp-people .sp-pn b')].some((x) => x.textContent.startsWith('Bo'))", timeout=10000)
+        await a.click("#sp-log")
+        await a.keyboard.type("hello @Bo - raid tonight?")      # typing anywhere goes into the box
         await a.keyboard.press("Enter")
         await b.wait_for_function("[...document.querySelectorAll('#sp-log .sp-text')].some((x) => x.textContent.includes('raid tonight'))", timeout=10000)
-        r = await b.evaluate("() => ({ mention: !!document.querySelector('#sp-log .sp-msg.mention .sp-at.me'), who: document.querySelector('#sp-log .sp-msg:not(.grouped) .sp-meta b')?.textContent })")
-        check("Ada's message reaches Bo, decrypted in his window, his @mention lit", r["mention"] and r["who"] == "Ada", r)
+        r = await b.evaluate("() => ({ mention: !!document.querySelector('#sp-log .sp-msg.mention .sp-at.me'), who: [...document.querySelectorAll('#sp-log .sp-msg:not(.grouped) .sp-meta b')].map((x) => x.textContent) })")
+        check("Ada's message (typed without clicking the box) reaches Bo, decrypted in his window, his @mention lit", r["mention"] and "Ada" in r["who"], r)
         sid = ADA.listing()["spaces"][0]["id"]
         stored = [e for e in ADA.hosted[sid].events if e.get("kind") == "msg"]
         raw = (TMP / "ada" / "hosted" / sid / "events.jsonl").read_text(encoding="utf-8")
         check("the host only ever stored ciphertext (the words are nowhere on its disk)",
               stored and "raid tonight" not in raw and "ct" in stored[-1], len(raw))
-        await b.hover("#sp-log .sp-msg")
-        await b.click("#sp-log .sp-msg .sp-hover .sp-hv")
+        await b.hover("#sp-log .sp-msg:last-child")
+        await b.click("#sp-log .sp-msg:last-child .sp-hover .sp-hv")
         await a.wait_for_selector("#sp-log .sp-react", timeout=10000)
         r = await a.inner_text("#sp-log .sp-react")
         check("Bo reacts; Ada sees it", r.strip().endswith("1"), r)
@@ -130,21 +139,16 @@ async def main():
         await a.wait_for_function("[...document.querySelectorAll('#sp-log .sp-text')].some((x) => x.textContent === 'in!')", timeout=10000)
         check("and answers", True)
 
-        # ---- a lobby: on the home screen, into LOKI World, and voice
-        await b.click("#sp-head .sp-tools .sp-ib:nth-child(2)")
+        # ---- a lobby: in the rooms list, into LOKI World, and voice
+        await b.click("#sp-rooms .sp-ib[aria-label='Open a lobby']")
         await b.fill("#sp-dlg input[type=text]", "Raid night")
         await b.click("#sp-dlg .sp-go")
         await b.wait_for_function("window.LokiSpaces.state.voice && document.body.dataset.mode === 'world'", timeout=15000)
-        r = await b.evaluate("() => ({ dock: !document.getElementById('spaces').hidden, world: document.getElementById('spaces').classList.contains('in-world'), bar: !document.getElementById('sp-voicebar').hidden })")
-        check("Bo opens a lobby: he is in its voice, taken into the World tab, the dock and the voice bar with him",
-              r["dock"] and r["world"] and r["bar"], r)
-        await a.click("#sp-head .sp-tools .sp-ib:last-child")      # Ada closes the panel: the home shows the lobby cards
-        await a.wait_for_selector("#sp-lobbies .sp-lcard", timeout=15000)
-        card = await a.inner_text("#sp-lobbies .sp-lcard")
-        if os.getenv("LOKI_SHOT"):
-            await a.screenshot(path=os.getenv("LOKI_SHOT").replace(".png", "-home.png"))
-        check("the lobby shows on Ada's home screen over the world, with who is in it", "Raid night" in card and "1/8" in card, card)
-        await a.click("#sp-lobbies .sp-lcard button")
+        r = await b.evaluate("() => ({ pill: !document.getElementById('sp-voicebar').hidden, app: !!document.querySelector('#spaces') && !document.querySelector('[data-mode-pane=spaces]').hidden })")
+        check("Bo opens a lobby: he is in its voice and taken into the World tab, with only the small call pill on top",
+              r["pill"] and not r["app"], r)
+        await a.wait_for_function("[...document.querySelectorAll('#sp-rooms .sp-room')].some((x) => x.dataset.kind === 'lobby')", timeout=15000)
+        await a.click("#sp-rooms .sp-room[data-kind='lobby']")
         await a.wait_for_function("""() => { const v = window.LokiSpaces.state.voice; return v && [...v.peers.values()].some((p) => p.pc.connectionState === 'connected'); }""", timeout=25000)
         await b.wait_for_function("""() => { const v = window.LokiSpaces.state.voice; return v && [...v.peers.values()].some((p) => p.pc.connectionState === 'connected'); }""", timeout=15000)
         r = await b.evaluate("""async () => { const v = window.LokiSpaces.state.voice, p = [...v.peers.values()][0];
@@ -153,20 +157,23 @@ async def main():
         await asyncio.sleep(1.5)
         r2 = await b.evaluate("""async () => { const p = [...window.LokiSpaces.state.voice.peers.values()][0], st = await p.pc.getStats(); let bytes = 0;
           st.forEach((x) => { if (x.type === 'inbound-rtp' && x.kind === 'audio') bytes += x.bytesReceived || 0; }); return bytes; }""")
-        check("Ada joins from the card: a real peer-to-peer WebRTC call, Bo receiving her audio", r["tracks"] == 1 and r2 > r["bytes"], (r, r2))
+        check("Ada clicks the lobby: a real peer-to-peer WebRTC call, Bo receiving her audio", r["tracks"] == 1 and r2 > r["bytes"], (r, r2))
         dtls = await a.evaluate("""async () => { const p = [...window.LokiSpaces.state.voice.peers.values()][0], st = await p.pc.getStats(); let s = '';
           st.forEach((x) => { if (x.type === 'transport') s = x.dtlsState; }); return s; }""")
         check("the call is encrypted (DTLS-SRTP)", dtls == "connected", dtls)
+        r = await a.evaluate("() => ({ tiles: document.querySelectorAll('#sp-stage .sp-tile').length, panel: !document.getElementById('sp-vpanel').hidden })")
+        check("Ada sees the lobby's stage (a tile each) and 'Voice connected' above her name, like Discord", r["tiles"] == 2 and r["panel"], r)
         await a.click("#sp-vmute")
         await asyncio.sleep(2.2)
         muted = await b.evaluate("() => (window.LokiSpaces.state.data[Object.keys(window.LokiSpaces.state.data)[0]].members.find((m) => m.name === 'Ada') || {}).voice")
         check("Ada mutes: Bo's side knows", bool(muted) and muted.get("muted") is True, muted)
         if os.getenv("LOKI_SHOT"):
-            await a.evaluate("window.LokiSpaces.open(Object.keys(window.LokiSpaces.state.data)[0])")
-            await asyncio.sleep(1.2)
             await a.screenshot(path=os.getenv("LOKI_SHOT"))
             await b.screenshot(path=os.getenv("LOKI_SHOT").replace(".png", "-b.png"))
-        await a.click("#sp-voicebar .sp-ib.hang")
+            await a.click("#sp-rooms .sp-room[data-kind='text']")
+            await asyncio.sleep(0.6)
+            await a.screenshot(path=os.getenv("LOKI_SHOT").replace(".png", "-chat.png"))
+        await a.click("#sp-vpanel .sp-ib.hang")
         await b.wait_for_function("() => window.LokiSpaces.state.voice && window.LokiSpaces.state.voice.peers.size === 0", timeout=12000)
         check("Ada leaves: Bo's call to her closes", True)
         real = [e for e in err_a + err_b if "favicon" not in e and "WebAssembly" not in e]   # the harness serves no Godot build

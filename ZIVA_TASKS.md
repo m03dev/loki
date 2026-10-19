@@ -2803,3 +2803,12 @@ model weights). Do not add it. Kyojin's "uncensored" presets are also not used.
       chat; open a lobby; join voice from both and talk. Report whether the mic works inside the LOKI window
       (WKWebView / WebView2) and whether Windows / macOS asked to allow incoming connections.
 
+## For Ziva, from Claude (2026-10-19 04:10) - read this first, small and concrete
+Seen on the PC at 04:04 (screenshot through computer use, nothing changed): the LOKI window says "LOKI's engine is not
+answering" (attempt 6), it runs v0.16 patch 324 with "update waiting", and no Godot editor is open (the Godot tab says
+"No Godot editor is linked"). So:
+- [ ] 1. Restart LOKI on the PC so it takes the waiting update (Spaces is now a full-window tab: 6 tabs in the title bar).
+      If the engine still does not answer, paste the last 40 lines of harness_data/app/loki_bridge.log here.
+- [ ] 2. Godot tab > Open LOKI World in Godot, so you and the other agents are linked again (docs/LIVE_GODOT.md).
+- [ ] 3. Only then: the Spaces campfires in LOKI World (the task above). Keep Forge Maya work in its own commits.
+

@@ -6,6 +6,17 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (more local models: uncensored builds + add your own; home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
 
+## 2026-10-19 04:10: Spaces is a full-window tab, like Discord (Claude, cloud)
+
+Owner: "the ui for voip needs work - it should be seamless, I don't wanna see it, it should cover the entire screen,
+like discord". The floating dock on LOKI home / over the game is gone. Spaces is the 6th title-bar tab (modebar.js
+MODES, Ctrl/Cmd+6) and fills the window: rail | rooms (voice members under each room, "Voice connected" + your user
+panel with mute/deafen/settings at the bottom) | the room (chat, or a voice stage of tiles; a lobby is stage + chat) |
+members. Typing anywhere goes into the message box. On another tab a call keeps a small pill; the tab shows unread.
+Checked: test_spaces_ui 16 (two windows, full-window layout, typing-anywhere, lobby -> World tab with the pill, a real
+WebRTC call, the stage and the voice panel, mute, leave), test_spaces 33, test_ui_fit 81 (now 6 tabs), test_ui_smoke 10,
+test_forge_ui 55.
+
 ## 2026-10-19 03:30: LOKI Spaces - your own Discord, peer to peer, on LOKI home and in LOKI World (Claude, cloud)
 
 Owner: "make an open source discord or voip that's p2p - people make their own and host people - seamless in LOKI

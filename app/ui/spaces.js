@@ -1,4 +1,4 @@
-// LOKI Spaces in the window: your own Discord, on LOKI home and over LOKI World (engine/spaces.py, docs/SPACES.md).
+// LOKI Spaces in the window: your own Discord, as a full-window tab (engine/spaces.py, docs/SPACES.md).
 // Owner, 2026-10-19: "an open source discord or voip that's p2p - people make their own and host people - seamless in
 // LOKI World, where people can chat and create lobbies ... reimagine the space ... replace discord, improve everything".
 //
@@ -98,56 +98,75 @@ async function spOpen(sid, ev, aad) {
   } catch (_) { return null; }
 }
 
-// ------------------------------------------------------------------------------------------ the dock
+// ------------------------------------------------------------------------------------------ the Spaces tab (full window)
+// Owner, 2026-10-19: "it should be seamless, I don't wanna see it, it should cover the entire screen ... like Discord".
+// So Spaces is its own tab in the title bar (Ctrl/Cmd+6) and fills the window: the rail of spaces, the rooms with the
+// people in voice and your own panel at the bottom, the room itself (chat, or the voice stage), and the members. Nothing
+// floats over LOKI home or the game; in a call, a small pill keeps the call when you go to another tab.
 function spBuild() {
   if (SP.built || !document.body) return;
   SP.built = true;
-  const root = el("div", "sp-dock"); root.id = "spaces";
-  const rail = el("nav", "sp-rail"); rail.id = "sp-rail"; rail.setAttribute("aria-label", "Spaces");
-  const stones = el("div", "sp-stones"); stones.id = "sp-stones";
-  const add = spB("plus", "Make or join a space", () => spDialog("new"), "sp-add");
-  const me = el("button", "sp-me"); me.type = "button"; me.id = "sp-me"; me.title = "Your name in Spaces";
-  me.addEventListener("click", () => spDialog("me"));
-  rail.append(stones, add, me);
-  const panel = el("section", "sp-panel"); panel.id = "sp-panel"; panel.hidden = true; panel.setAttribute("aria-label", "Space");
-  const lobbies = el("div", "sp-lobbies"); lobbies.id = "sp-lobbies"; lobbies.setAttribute("aria-label", "Open lobbies");
-  const toast = el("div", "sp-toast"); toast.id = "sp-toast"; toast.hidden = true; toast.setAttribute("role", "status");
-  root.append(rail, panel, lobbies, toast);
-  const bar = el("div", "sp-voicebar"); bar.id = "sp-voicebar"; bar.hidden = true;
+  const pill = el("div", "sp-pill"); pill.id = "sp-voicebar"; pill.hidden = true; pill.setAttribute("aria-label", "Voice call");
   const audio = el("div", "sp-audio"); audio.id = "sp-audio"; audio.hidden = true;
-  document.body.append(root, bar, audio);
-  window.addEventListener("resize", spPlace);
-  new MutationObserver(spPlace).observe(document.body, { attributes: true, attributeFilter: ["data-mode"] });
-  const main = document.getElementById("main");
-  if (main) new MutationObserver(spPlace).observe(main, { attributes: true, attributeFilter: ["class"] });
+  const toast = el("div", "sp-toast"); toast.id = "sp-toast"; toast.hidden = true; toast.setAttribute("role", "status");
+  document.body.append(pill, audio, toast);
   document.addEventListener("keydown", spKeys, true);
   document.addEventListener("keyup", spKeys, true);
-  spPlace();
 }
 
-// the dock sits on the home screen (over the live world) and on the World tab; the voice bar goes everywhere
-function spPlace() {
-  const root = document.getElementById("spaces");
-  if (!root) return;
-  const mode = document.body.dataset.mode || "loki", main = document.getElementById("main");
-  const home = mode === "loki" && main && main.classList.contains("home") && !main.classList.contains("summoned");
-  const world = mode === "world";
-  const show = home || world || root.classList.contains("pinned");
-  root.hidden = !show;
-  root.classList.toggle("in-world", world);
-  if (!show) return;
-  let r = main ? main.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
-  if (world) {   // over the game itself: the World tab's frame (world_godot/host.js lays the game on it)
-    const frame = document.querySelector('[data-panel="world"] .world-frame');
-    const fr = frame && frame.getBoundingClientRect();
-    if (fr && fr.width > 200 && fr.height > 200) r = fr;
-    else { const strip = document.getElementById("titlestrip"); r = { left: 0, top: strip ? strip.getBoundingClientRect().bottom : 0, right: innerWidth, bottom: innerHeight }; }
-    if (frame && !SP.watched) { SP.watched = true; try { new ResizeObserver(spPlace).observe(frame); } catch (_) { /* old webview */ } }
-  } else if (main) { const head = main.querySelector(".topbar, header"); if (head) r = { left: r.left, top: head.getBoundingClientRect().bottom, right: r.right, bottom: r.bottom }; }
-  Object.assign(root.style, { left: r.left + "px", top: r.top + "px", width: Math.max(0, r.right - r.left) + "px", height: Math.max(0, r.bottom - r.top) + "px" });
+function spMount(pane) {
+  spBuild();
+  SP.pane = pane; SP.mounted = true;
+  if (!pane.querySelector("#spaces")) pane.append(spSkeleton());
+  document.body.classList.add("sp-mounted");
+  if (!SP.open && SP.list.length) SP.open = spLoad().open && SP.list.some((s) => s.id === spLoad().open) ? spLoad().open : SP.list[0].id;
+  spRail(); spRender(); spVoiceBar(); spLoop();
+  if (SP.open) spSync(SP.open);
+}
+function spUnmount() { SP.mounted = false; document.body.classList.remove("sp-mounted"); spVoiceBar(); }
+
+function spSkeleton() {
+  const app = el("div", "sp-app"); app.id = "spaces";
+  const rail = el("nav", "sp-rail"); rail.id = "sp-rail"; rail.setAttribute("aria-label", "Spaces");
+  const home = el("button", "sp-home"); home.type = "button"; home.title = "Back to LOKI"; home.setAttribute("aria-label", "Back to LOKI");
+  home.append(el("span", "", "L"));
+  home.addEventListener("click", () => window.LokiModeBar && LokiModeBar.go("loki"));
+  const stones = el("div", "sp-stones"); stones.id = "sp-stones";
+  rail.append(home, el("i", "sp-sep"), stones, spB("plus", "Make or join a space", () => spDialog("new"), "sp-add"));
+  const side = el("aside", "sp-side");
+  const head = el("header", "sp-head"); head.id = "sp-head";
+  const rooms = el("div", "sp-rooms"); rooms.id = "sp-rooms";
+  const vpanel = el("div", "sp-vpanel"); vpanel.id = "sp-vpanel"; vpanel.hidden = true;
+  const user = el("div", "sp-user"); user.id = "sp-user";
+  side.append(head, rooms, vpanel, user);
+  const main = el("main", "sp-main");
+  const top = el("header", "sp-chat-top"); top.id = "sp-chat-top";
+  const stage = el("section", "sp-stage"); stage.id = "sp-stage"; stage.hidden = true;
+  const log = el("div", "sp-log"); log.id = "sp-log"; log.setAttribute("role", "log"); log.setAttribute("aria-live", "polite");
+  const typing = el("div", "sp-typing"); typing.id = "sp-typing";
+  const comp = el("div", "sp-compose"); comp.id = "sp-compose";
+  const ctx = el("div", "sp-ctx"); ctx.id = "sp-ctx"; ctx.hidden = true;
+  const ta = document.createElement("textarea"); ta.id = "sp-input"; ta.rows = 1; ta.maxLength = 4000; ta.setAttribute("aria-label", "Message");
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); spSend(); }
+    else if (e.key === "Escape") { SP.reply = null; SP.editing = null; spCtx(); }
+    else if (e.key === "ArrowUp" && !ta.value) spEditLast();
+  });
+  ta.addEventListener("input", () => {
+    ta.style.height = "auto"; ta.style.height = Math.min(200, ta.scrollHeight) + "px";
+    const sid = SP.open;
+    if (sid && Date.now() - SP.lastTyping > 3000 && ta.value) { SP.lastTyping = Date.now(); api("/spaces/act", { space: sid, action: "typing", room: SP.room[sid] }).catch(() => {}); }
+  });
+  comp.append(ctx, ta, spB("reply", "Send (Enter)", () => spSend(), "sp-send"));
+  const empty = el("div", "sp-welcome"); empty.id = "sp-welcome"; empty.hidden = true;
+  main.append(top, stage, log, typing, comp, empty);
+  const people = el("aside", "sp-people"); people.id = "sp-people";
+  app.append(rail, side, main, people);
+  return app;
 }
 
 function spRail() {
+  spBadge();
   const box = document.getElementById("sp-stones");
   if (!box) return;
   box.replaceChildren();
@@ -157,22 +176,247 @@ function spRail() {
     b.title = s.name + (s.hosted ? " (you host it)" : s.online ? "" : " (the host is offline)");
     b.style.setProperty("--c", s.color || "#8ccfc4");
     b.append(el("span", "sp-stone-t", s.icon || spInitials(s.name)));
-    const d = SP.data[s.id];
-    const unread = d ? spUnread(s.id) : 0;
+    const d = SP.data[s.id], unread = d ? spUnread(s.id) : 0;
     if (unread) b.append(el("i", "sp-dot" + (d && d.mention ? " at" : ""), unread > 99 ? "99+" : String(unread)));
-    if (d && SP.voice && SP.voice.space === s.id) b.classList.add("voice");
-    b.addEventListener("click", () => spOpenSpace(s.id === SP.open ? "" : s.id));
+    if (SP.voice && SP.voice.space === s.id) b.classList.add("voice");
+    b.addEventListener("click", () => spOpenSpace(s.id));
     box.append(b);
   }
-  const me = document.getElementById("sp-me");
-  if (me) { me.replaceChildren(spAvatar(SP.me.name, SP.me.color, 30)); me.title = SP.me.name + " - your name in Spaces"; }
+}
+
+// the Spaces tab in the title bar carries the unread count (and turns orange for an @mention)
+function spBadge() {
+  const tab = document.getElementById("mode-spaces");
+  if (!tab) return;
+  let n = 0, at = false;
+  for (const s of SP.list) { n += spUnread(s.id); if (SP.data[s.id] && SP.data[s.id].mention) at = true; }
+  let dot = tab.querySelector(".sp-tabdot");
+  if (!n) { if (dot) dot.remove(); return; }
+  if (!dot) { dot = el("i", "sp-tabdot"); tab.append(dot); }
+  dot.textContent = n > 99 ? "99+" : String(n);
+  dot.classList.toggle("at", at);
+}
+
+// open a space (and, from anywhere in LOKI, the Spaces tab)
+function spOpenSpace(sid) {
+  SP.open = sid || "";
+  if (sid) spSave({ open: sid });
+  if (sid && !SP.mounted && window.LokiModeBar) { LokiModeBar.go("spaces"); return; }
+  spRail();
+  if (!SP.mounted) return;
+  spRender();
+  if (sid) { spSync(sid); spLoop(); }
+}
+
+function spHeader() {
+  const head = document.getElementById("sp-head"), sid = SP.open, d = SP.data[sid], s = SP.list.find((x) => x.id === sid);
+  if (!head) return;
+  head.replaceChildren();
+  if (!s) { head.append(el("h3", "sp-title", "Spaces")); return; }
+  const t = el("div", "sp-head-t");
+  t.append(el("h3", "sp-title", (d && d.space && d.space.name) || s.name));
+  const sub = el("span", "sp-sub", s.hosted ? "you host it · peer to peer" : d && d.error ? d.error : "hosted by " + spOwnerName(sid));
+  if (d && d.error) sub.classList.add("bad");
+  t.append(sub);
+  const tools = el("div", "sp-tools");
+  tools.append(spB("link", "Invite people", () => spInvite(sid)), spB("dots", s.hosted ? "Space settings" : "Leave the space", () => spDialog("settings")));
+  head.append(t, tools);
+}
+const spOwnerName = (sid) => { const d = SP.data[sid]; if (!d || !d.space) return "…"; return spMember(sid, d.space.owner).name; };
+
+function spRender() {
+  if (!SP.mounted) return;
+  const sid = SP.open, d = sid && SP.data[sid];
+  spHeader();
+  spUserPanel();
+  const welcome = document.getElementById("sp-welcome");
+  const main = document.querySelector("#spaces .sp-main");
+  const none = !sid;
+  welcome.hidden = !none;
+  main.classList.toggle("empty", none);
+  document.getElementById("spaces").classList.toggle("no-space", none);
+  if (none) { spWelcome(welcome); spRoomsClear(); return; }
+  if (!d) return;
+  const rooms = (d.space && d.space.rooms) || [];
+  if (!SP.room[sid] || !rooms.some((r) => r.id === SP.room[sid])) {
+    const first = rooms.find((r) => r.kind === "text");
+    if (first) SP.room[sid] = first.id;
+  }
+  const room = rooms.find((r) => r.id === SP.room[sid]);
+  spRooms(sid, d, rooms);
+  const kind = room ? room.kind : "text";
+  main.dataset.kind = kind;
+  spStage(sid, d, room);
+  if (kind !== "voice") spLog(sid, d, room); else spVoiceTop(room);
+  spPeople(sid, d);
+}
+function spRoomsClear() { const r = document.getElementById("sp-rooms"); if (r) r.replaceChildren(); const p = document.getElementById("sp-people"); if (p) p.replaceChildren(); }
+
+function spWelcome(box) {
+  box.replaceChildren();
+  const card = el("div", "sp-wcard");
+  card.append(el("h2", "", SP.list.length ? "Pick a space on the left" : "Your own Discord"),
+    el("p", "", "A space is a community your LOKI hosts itself - chat, voice and lobbies, peer to peer, end-to-end "
+      + "encrypted. No account, no company in the middle. Make one and send the invite, or join with a code someone gave you."));
+  const row = el("div", "sp-wacts");
+  const make = el("button", "send", "Make a space"); make.type = "button"; make.addEventListener("click", () => spDialog("new"));
+  const join = el("button", "quiet sp-wjoin", "Join with an invite"); join.type = "button"; join.addEventListener("click", () => spDialog("new", { join: true }));
+  row.append(make, join);
+  card.append(row);
+  box.append(card);
+}
+
+function spRooms(sid, d, rooms) {
+  const box = document.getElementById("sp-rooms");
+  if (!box) return;
+  box.replaceChildren();
+  const me = spMe(sid), role = d.space && d.space.me ? d.space.me.role : "member";
+  const voiceIn = (rid) => d.members.filter((m) => m.online && m.voice && m.voice.room === rid);
+  for (const [kind, title] of [["text", "Text rooms"], ["voice", "Voice"], ["lobby", "Lobbies"]]) {
+    const list = rooms.filter((r) => r.kind === kind);
+    const h = el("div", "sp-group");
+    h.append(el("span", "", title));
+    if (kind === "lobby" || role === "owner" || role === "admin") {
+      h.append(spB("plus", kind === "lobby" ? "Open a lobby" : "Add a " + (kind === "text" ? "text" : "voice") + " room", () => spDialog(kind === "lobby" ? "lobby" : "room", { kind })));
+    }
+    if (!list.length && kind !== "lobby") continue;
+    box.append(h);
+    if (!list.length) box.append(el("p", "sp-hint", "A lobby is voice + chat for a game or a hangout. It goes away when it empties."));
+    for (const r of list) {
+      const row = el("button", "sp-room" + (SP.room[sid] === r.id ? " on" : "") + (SP.voice && SP.voice.room === r.id ? " live" : ""));
+      row.type = "button"; row.dataset.room = r.id; row.dataset.kind = r.kind;
+      row.innerHTML = spSvg(kind === "text" ? "hash" : kind === "voice" ? "speaker" : "lobby");
+      row.append(el("span", "sp-room-n", r.name));
+      const unread = kind !== "voice" ? d.order.filter((s) => { const m = d.msgs.get(s); return m && m.room === r.id && !m.sys && m.from !== me && s > (d.read[sid + ":" + r.id] || 0); }).length : 0;
+      if (unread && SP.room[sid] !== r.id) { row.classList.add("unread"); row.append(el("i", "sp-dot", String(unread))); }
+      if (r.kind === "lobby") row.append(el("span", "sp-room-a", (r.activity || "") + " · " + voiceIn(r.id).length + "/" + (r.cap || 8)));
+      row.addEventListener("click", () => {
+        SP.room[sid] = r.id; SP.reply = null; SP.editing = null; spRender();
+        if (r.kind !== "text" && (!SP.voice || SP.voice.room !== r.id)) spJoinVoice(sid, r.id);
+      });
+      box.append(row);
+      const inside = voiceIn(r.id);
+      if (inside.length) {
+        const who = el("div", "sp-room-who");
+        for (const m of inside) {
+          const p = el("span", "sp-vp" + (m.voice.speaking || spSpeaking(m.id === me ? "me" : m.id) ? " talk" : "") + (m.voice.muted ? " muted" : ""));
+          p.append(spAvatar(m.name, m.color, 22), el("span", "", m.name));
+          if (m.voice.muted) { const ic = el("i", "sp-mi"); ic.innerHTML = spSvg("micoff"); p.append(ic); }
+          if (m.voice.deaf) { const ic = el("i", "sp-mi"); ic.innerHTML = spSvg("headoff"); p.append(ic); }
+          who.append(p);
+        }
+        box.append(who);
+      }
+    }
+  }
+}
+
+// a voice room (or the top of a lobby): everyone in it as a tile, the one talking lit
+function spStage(sid, d, room) {
+  const stage = document.getElementById("sp-stage");
+  if (!stage) return;
+  const show = room && room.kind !== "text";
+  stage.hidden = !show;
+  if (!show) return;
+  const me = spMe(sid), inside = d.members.filter((m) => m.online && m.voice && m.voice.room === room.id);
+  const joined = SP.voice && SP.voice.room === room.id;
+  const sig = inside.map((m) => m.id + (m.voice.muted ? "m" : "") + (m.voice.deaf ? "d" : "")).join(",") + "|" + joined + "|" + room.kind;
+  if (stage.dataset.sig !== sig) {
+    stage.dataset.sig = sig;
+    stage.replaceChildren();
+    const grid = el("div", "sp-tiles");
+    for (const m of inside) {
+      const t = el("div", "sp-tile"); t.dataset.who = m.id === me ? "me" : m.id;
+      t.style.setProperty("--c", m.color);
+      t.append(spAvatar(m.name, m.color, room.kind === "lobby" ? 56 : 88), el("b", "", m.name + (m.id === me ? " (you)" : "")));
+      if (m.voice.muted || m.voice.deaf) { const ic = el("i", "sp-mi"); ic.innerHTML = spSvg(m.voice.deaf ? "headoff" : "micoff"); t.append(ic); }
+      grid.append(t);
+    }
+    if (!inside.length) grid.append(el("p", "sp-hint", "Nobody is here yet."));
+    stage.append(grid);
+    const ctl = el("div", "sp-stagectl");
+    if (joined) {
+      ctl.append(spB(SP.voice.muted ? "micoff" : "mic", SP.voice.muted ? "Unmute" : "Mute", () => spSetMute(!SP.voice.muted), "big" + (SP.voice.muted ? " bad" : "")),
+        spB(SP.voice.deaf ? "headoff" : "head", SP.voice.deaf ? "Undeafen" : "Deafen", () => spSetDeaf(!SP.voice.deaf), "big" + (SP.voice.deaf ? " bad" : "")),
+        spB("hangup", "Leave voice", () => spLeaveVoice(), "big hang"));
+      if (room.kind === "lobby" && room.world) ctl.append(spB("globe", "Go into LOKI World together", () => window.LokiModeBar && LokiModeBar.go("world"), "big"));
+    } else {
+      const j = el("button", "send sp-joinv", room.kind === "lobby" ? "Join the lobby" : "Join voice"); j.type = "button";
+      j.addEventListener("click", () => spJoinVoice(sid, room.id));
+      ctl.append(j);
+    }
+    stage.append(ctl);
+  }
+  for (const t of stage.querySelectorAll(".sp-tile")) t.classList.toggle("talk", spSpeaking(t.dataset.who));
+}
+
+function spVoiceTop(room) {
+  const top = document.getElementById("sp-chat-top");
+  if (!top) return;
+  top.replaceChildren();
+  top.innerHTML = spSvg("speaker");
+  top.append(el("b", "", room.name), el("span", "sp-topic", room.topic || "Voice room"));
+}
+
+// the bottom of the rooms column, Discord's way: your call (when in one), then you
+function spUserPanel() {
+  const vp = document.getElementById("sp-vpanel"), up = document.getElementById("sp-user"), v = SP.voice;
+  if (!up) return;
+  vp.hidden = !v;
+  if (v) {
+    const d = SP.data[v.space], room = d && d.space && d.space.rooms.find((r) => r.id === v.room), s = SP.list.find((x) => x.id === v.space);
+    const states = [...v.peers.values()].map((p) => p.state || "connecting");
+    const ok = !states.length || states.some((x) => x === "connected");
+    vp.replaceChildren();
+    const t = el("div", "sp-vp-t");
+    t.append(el("b", ok ? "" : "wait", ok ? "Voice connected" : "Connecting…"), el("span", "", (room ? room.name : "voice") + " / " + (s ? s.name : "")));
+    t.addEventListener("click", () => { SP.room[v.space] = v.room; spOpenSpace(v.space); });
+    vp.append(t, spB("hangup", "Leave voice", () => spLeaveVoice(), "hang"));
+  }
+  up.replaceChildren();
+  const me = el("button", "sp-user-me"); me.type = "button"; me.title = "Your name and voice settings";
+  const av = spAvatar(SP.me.name, SP.me.color, 32); if (spSpeaking("me")) av.classList.add("talk");
+  const n = el("span", "sp-user-n"); n.append(el("b", "", SP.me.name || "you"), el("span", "", v ? (v.muted ? "muted" : "in voice") : "online"));
+  me.append(av, n);
+  me.addEventListener("click", () => spDialog("me"));
+  const mute = spB(v && v.muted ? "micoff" : "mic", v ? (v.muted ? "Unmute" : "Mute") : "Mute (in a call)", () => v && spSetMute(!v.muted), v && v.muted ? "bad" : "");
+  const deaf = spB(v && v.deaf ? "headoff" : "head", v ? (v.deaf ? "Undeafen" : "Deafen") : "Deafen (in a call)", () => v && spSetDeaf(!v.deaf), v && v.deaf ? "bad" : "");
+  mute.id = "sp-vmute"; deaf.id = "sp-vdeaf"; mute.disabled = deaf.disabled = !v;
+  up.append(me, mute, deaf, spB("gear", "Settings", () => spDialog("me")));
+}
+
+function spPeople(sid, d) {
+  const box = document.getElementById("sp-people");
+  if (!box) return;
+  box.replaceChildren();
+  const me = spMe(sid), myRole = d.space && d.space.me ? d.space.me.role : "member";
+  const on = d.members.filter((m) => m.online), off = d.members.filter((m) => !m.online);
+  const order = (a, b) => ({ owner: 0, admin: 1 }[a.role] ?? 2) - ({ owner: 0, admin: 1 }[b.role] ?? 2) || a.name.localeCompare(b.name);
+  for (const [title, list] of [["Online", on], ["Offline", off]]) {
+    if (!list.length) continue;
+    box.append(el("div", "sp-group", title + " — " + list.length));
+    for (const m of list.sort(order)) {
+      const row = el("div", "sp-person" + (m.online ? "" : " off"));
+      const av = spAvatar(m.name, m.color, 32);
+      if (m.online) av.append(el("i", "sp-onl"));
+      const n = el("span", "sp-pn"); n.append(el("b", "", m.name + (m.id === me ? " (you)" : "")));
+      if (m.voice) n.append(el("span", "", "in voice"));
+      row.append(av, n);
+      if (m.role !== "member") { const c = el("i", "sp-crown"); c.innerHTML = spSvg("crown"); c.title = m.role; if (m.role === "admin") c.classList.add("adm"); row.append(c); }
+      if (m.id !== me && m.role !== "owner" && (myRole === "owner" || (myRole === "admin" && m.role !== "admin"))) {
+        const more = spB("dots", "Moderate " + m.name, () => spDialog("mod", { member: m }));
+        more.classList.add("sp-more"); row.append(more);
+      }
+      box.append(row);
+    }
+  }
 }
 
 async function spRefresh() {
   const r = await api("/spaces").catch(() => null);
   if (!r || !r.ok) return;
   SP.list = r.spaces || []; SP.me = r.me || SP.me; SP.serving = r.serving;
-  if (SP.open && !SP.list.some((s) => s.id === SP.open)) spOpenSpace("");
+  if (SP.open && !SP.list.some((s) => s.id === SP.open)) { SP.open = ""; spRender(); }
   spRail();
 }
 
@@ -196,8 +440,8 @@ async function spSync(sid) {
     for (const sg of r.signals || []) spSignal(sid, sg);
     if (SP.voice && SP.voice.space === sid) spVoicePeers(d);
     if (sid === SP.open) spRender();
+    else if (SP.voice && SP.voice.space === sid) spUserPanel();
     spRail();
-    spLobbies();
   } finally { d.busy = false; }
 }
 
@@ -252,119 +496,7 @@ function spLoop() {
   }, 8000);
 }
 
-// ------------------------------------------------------------------------------------------ the open space
-function spOpenSpace(sid) {
-  SP.open = sid;
-  const panel = document.getElementById("sp-panel");
-  panel.hidden = !sid;
-  document.getElementById("spaces").classList.toggle("open", !!sid);
-  spRail();
-  if (!sid) return;
-  panel.replaceChildren();
-  const head = el("header", "sp-head"); head.id = "sp-head";
-  const cols = el("div", "sp-cols");
-  const rooms = el("aside", "sp-rooms"); rooms.id = "sp-rooms";
-  const chat = el("div", "sp-chat");
-  const top = el("div", "sp-chat-top"); top.id = "sp-chat-top";
-  const log = el("div", "sp-log"); log.id = "sp-log"; log.setAttribute("role", "log"); log.setAttribute("aria-live", "polite");
-  const typing = el("div", "sp-typing"); typing.id = "sp-typing";
-  const comp = el("div", "sp-compose"); comp.id = "sp-compose";
-  const ctx = el("div", "sp-ctx"); ctx.id = "sp-ctx"; ctx.hidden = true;
-  const ta = document.createElement("textarea"); ta.id = "sp-input"; ta.rows = 1; ta.maxLength = 4000; ta.setAttribute("aria-label", "Message");
-  ta.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); spSend(); }
-    else if (e.key === "Escape") { SP.reply = null; SP.editing = null; spCtx(); }
-    else if (e.key === "ArrowUp" && !ta.value) spEditLast();
-  });
-  ta.addEventListener("input", () => {
-    ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px";
-    if (Date.now() - SP.lastTyping > 3000 && ta.value) { SP.lastTyping = Date.now(); api("/spaces/act", { space: sid, action: "typing", room: SP.room[sid] }).catch(() => {}); }
-  });
-  comp.append(ctx, ta, spB("reply", "Send (Enter)", () => spSend(), "sp-send"));
-  chat.append(top, log, typing, comp);
-  const people = el("aside", "sp-people"); people.id = "sp-people";
-  cols.append(rooms, chat, people);
-  panel.append(head, cols);
-  spState(sid);
-  spRender();
-  spSync(sid);
-  spLoop();
-}
-
-function spHeader() {
-  const head = document.getElementById("sp-head"), sid = SP.open, d = SP.data[sid], s = SP.list.find((x) => x.id === sid);
-  if (!head || !s) return;
-  head.replaceChildren();
-  const name = el("h3", "sp-title", (d && d.space && d.space.name) || s.name);
-  const sub = el("span", "sp-sub", s.hosted ? "you host it · peer to peer" : d && d.error ? d.error : "hosted by " + spOwnerName(sid));
-  if (d && d.error) sub.classList.add("bad");
-  const tools = el("div", "sp-tools");
-  tools.append(spB("link", "Invite people (copy the invite code)", () => spInvite(sid)),
-    spB("lobby", "Open a lobby (voice + chat, for a game or a hangout)", () => spDialog("lobby")),
-    spB("dots", s.hosted ? "Space settings" : "Leave or tidy", () => spDialog("settings")),
-    spB("shrink", "Close (Esc)", () => spOpenSpace("")));
-  head.append(el("span", "sp-lock", ""), name, sub, tools);
-}
-const spOwnerName = (sid) => { const d = SP.data[sid]; if (!d || !d.space) return "…"; return spMember(sid, d.space.owner).name; };
-
-function spRender() {
-  const sid = SP.open, d = SP.data[sid];
-  if (!sid || !d) return;
-  spHeader();
-  const rooms = (d.space && d.space.rooms) || [];
-  if (!SP.room[sid] || !rooms.some((r) => r.id === SP.room[sid] && r.kind === "text" || r.id === SP.room[sid] && r.kind === "lobby")) {
-    const first = rooms.find((r) => r.kind === "text");
-    if (first) SP.room[sid] = first.id;
-  }
-  spRooms(sid, d, rooms);
-  spLog(sid, d, rooms.find((r) => r.id === SP.room[sid]));
-  spPeople(sid, d);
-}
-
-function spRooms(sid, d, rooms) {
-  const box = document.getElementById("sp-rooms");
-  if (!box) return;
-  box.replaceChildren();
-  const me = spMe(sid), role = d.space && d.space.me ? d.space.me.role : "member";
-  const voiceIn = (rid) => d.members.filter((m) => m.online && m.voice && m.voice.room === rid);
-  for (const [kind, title] of [["text", "Text"], ["voice", "Voice"], ["lobby", "Lobbies"]]) {
-    const list = rooms.filter((r) => r.kind === kind);
-    if (!list.length && kind !== "lobby") continue;
-    const h = el("div", "sp-group");
-    h.append(el("span", "", title));
-    if (kind === "lobby" || role === "owner" || role === "admin") {
-      h.append(spB("plus", kind === "lobby" ? "Open a lobby" : "Add a " + kind + " room", () => spDialog(kind === "lobby" ? "lobby" : "room", { kind })));
-    }
-    box.append(h);
-    for (const r of list) {
-      const row = el("button", "sp-room" + (SP.room[sid] === r.id ? " on" : "") + (SP.voice && SP.voice.room === r.id ? " live" : ""));
-      row.type = "button"; row.dataset.room = r.id; row.dataset.kind = r.kind;
-      row.innerHTML = spSvg(kind === "text" ? "hash" : kind === "voice" ? "speaker" : "lobby");
-      row.append(el("span", "sp-room-n", r.name));
-      const unread = kind === "text" || kind === "lobby" ? d.order.filter((s) => { const m = d.msgs.get(s); return m && m.room === r.id && !m.sys && m.from !== me && s > (d.read[sid + ":" + r.id] || 0); }).length : 0;
-      if (unread && SP.room[sid] !== r.id) row.append(el("i", "sp-dot", String(unread)));
-      if (r.kind === "lobby") row.append(el("span", "sp-room-a", (r.activity || "") + " · " + voiceIn(r.id).length + "/" + (r.cap || 8)));
-      row.addEventListener("click", () => {
-        if (r.kind === "voice") { spJoinVoice(sid, r.id); return; }
-        SP.room[sid] = r.id; SP.reply = null; SP.editing = null; spRender();
-        if (r.kind === "lobby" && (!SP.voice || SP.voice.room !== r.id)) spJoinVoice(sid, r.id);
-      });
-      box.append(row);
-      const inside = voiceIn(r.id);
-      if (inside.length) {
-        const who = el("div", "sp-room-who");
-        for (const m of inside) {
-          const p = el("span", "sp-vp" + (m.voice.speaking || spSpeaking(m.id) ? " talk" : "") + (m.voice.muted ? " muted" : ""));
-          p.append(spAvatar(m.name, m.color, 20), el("span", "", m.name));
-          if (m.voice.muted) { const ic = el("i", "sp-mi"); ic.innerHTML = spSvg("micoff"); p.append(ic); }
-          who.append(p);
-        }
-        box.append(who);
-      }
-    }
-  }
-}
-
+// ------------------------------------------------------------------------------------------ the room
 function spFmtTime(ts) {
   const t = new Date(ts * 1000), now = new Date();
   const hm = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -472,29 +604,6 @@ function spLog(sid, d, room) {
   if (input) input.placeholder = "Message " + (room.kind === "lobby" ? "the lobby" : "#" + room.name) + " - Enter sends, Shift+Enter a new line";
 }
 
-function spPeople(sid, d) {
-  const box = document.getElementById("sp-people");
-  if (!box) return;
-  box.replaceChildren();
-  const me = spMe(sid), myRole = d.space && d.space.me ? d.space.me.role : "member";
-  const on = d.members.filter((m) => m.online), off = d.members.filter((m) => !m.online);
-  for (const [title, list] of [["Online", on], ["Offline", off]]) {
-    if (!list.length) continue;
-    box.append(el("div", "sp-group", title + " — " + list.length));
-    for (const m of list.sort((a, b) => ({ owner: 0, admin: 1 }[a.role] ?? 2) - ({ owner: 0, admin: 1 }[b.role] ?? 2) || a.name.localeCompare(b.name))) {
-      const row = el("div", "sp-person" + (m.online ? "" : " off"));
-      row.append(spAvatar(m.name, m.color, 26), el("span", "sp-pn", m.name + (m.id === me ? " (you)" : "")));
-      if (m.role !== "member") row.append(el("span", "sp-role", m.role));
-      if (m.voice) { const v = el("i", "sp-mi"); v.innerHTML = spSvg("speaker"); v.title = "in voice"; row.append(v); }
-      if (m.id !== me && m.role !== "owner" && (myRole === "owner" || (myRole === "admin" && m.role !== "admin"))) {
-        const more = spB("dots", "Moderate " + m.name, () => spDialog("mod", { member: m }));
-        more.classList.add("sp-more"); row.append(more);
-      }
-      box.append(row);
-    }
-  }
-}
-
 function spCtx() {
   const box = document.getElementById("sp-ctx"), d = SP.data[SP.open];
   if (!box || !d) return;
@@ -581,7 +690,7 @@ function spDialog(kind, opt) {
     b.append(el("h4", "", "Join with an invite"), code, join);
     const row = el("div", "sp-two"); row.append(a, b);
     card.append(row);
-    setTimeout(() => nm.focus(), 0);
+    setTimeout(() => (opt.join ? code : nm).focus(), 0);
   } else if (kind === "invite") {
     card.append(el("h3", "", "Invite people"), el("p", "note", "Send this code to whoever you want in. Their LOKI joins your LOKI directly - on your network, or through the free public relay when they are elsewhere. Anyone with the code can join, so share it like a key; lock the space in its settings when everyone is in."));
     const code = document.createElement("textarea"); code.readOnly = true; code.rows = 4; code.value = opt.code; code.className = "sp-code";
@@ -669,39 +778,7 @@ function spDialog(kind, opt) {
   }
   card.append(spB("close", "Close", close, "sp-x"));
   wrap.append(card);
-  (document.getElementById("spaces") || document.body).append(wrap);
-}
-
-// ------------------------------------------------------------------------------------------ lobbies over the world
-function spLobbies() {
-  const box = document.getElementById("sp-lobbies");
-  if (!box) return;
-  box.replaceChildren();
-  const cards = [];
-  for (const s of SP.list) {
-    const d = SP.data[s.id];
-    if (!d || !d.space) continue;
-    for (const r of d.space.rooms) {
-      if (r.kind !== "lobby") continue;
-      const inside = d.members.filter((m) => m.online && m.voice && m.voice.room === r.id);
-      cards.push({ s, d, r, inside });
-    }
-  }
-  box.hidden = !cards.length;
-  for (const { s, r, inside } of cards.slice(0, 6)) {
-    const c = el("div", "sp-lcard" + (SP.voice && SP.voice.room === r.id ? " live" : ""));
-    c.style.setProperty("--c", s.color || "#8ccfc4");
-    const t = el("div", "sp-lt");
-    t.append(el("b", "", r.name), el("span", "", (r.activity || "Hanging out") + " · " + s.name));
-    const faces = el("div", "sp-lf");
-    for (const m of inside.slice(0, 6)) faces.append(spAvatar(m.name, m.color, 22));
-    faces.append(el("span", "sp-lcap", inside.length + "/" + (r.cap || 8)));
-    const join = el("button", "send small", SP.voice && SP.voice.room === r.id ? "In it" : "Join");
-    join.type = "button"; join.disabled = !!(SP.voice && SP.voice.room === r.id);
-    join.addEventListener("click", () => { SP.room[s.id] = r.id; spOpenSpace(s.id); spJoinVoice(s.id, r.id); if (r.world && window.LokiModeBar) LokiModeBar.go("world"); });
-    c.append(t, faces, join);
-    box.append(c);
-  }
+  document.body.append(wrap);
 }
 
 // ------------------------------------------------------------------------------------------ voice (WebRTC mesh)
@@ -869,65 +946,39 @@ function spSetDeaf(on) {
   spVoiceBar();
 }
 
-// the voice bar is built once per call and then only updated (rebuilding it every sync made its buttons jump)
+// in a call and on another tab: a small pill keeps the call (Discord's in-game overlay, without the overlay)
 function spVoiceBar() {
   const bar = document.getElementById("sp-voicebar"), v = SP.voice;
-  if (!bar) return;
-  bar.hidden = !v;
   document.body.classList.toggle("sp-voice-on", !!v);
-  if (!v) { bar.replaceChildren(); delete bar.dataset.call; return; }
+  if (SP.mounted) { spUserPanel(); if (SP.open && SP.data[SP.open]) spRender(); }
+  if (!bar) return;
+  bar.hidden = !v || SP.mounted;
+  if (bar.hidden) return;
   if (bar.dataset.call !== String(v.started)) {
     bar.replaceChildren();
     bar.dataset.call = String(v.started);
-    const info = el("div", "sp-vinfo"); info.id = "sp-vinfo";
-    info.append(el("b", "sp-vlive"), el("span", "sp-vwhere"));
-    info.addEventListener("click", () => {
-      const vv = SP.voice; if (!vv) return;
-      const d = SP.data[vv.space], room = d && d.space && d.space.rooms.find((r) => r.id === vv.room);
-      if (room && room.kind === "lobby") SP.room[vv.space] = room.id;
-      spOpenSpace(vv.space);
-    });
-    const faces = el("div", "sp-vfaces"); faces.id = "sp-vfaces";
-    const mute = spB("mic", "Mute", () => spSetMute(!SP.voice.muted)); mute.id = "sp-vmute";
-    const deaf = spB("head", "Deafen (hear nobody)", () => spSetDeaf(!SP.voice.deaf)); deaf.id = "sp-vdeaf";
-    bar.append(info, faces, mute, deaf, spB("hangup", "Leave voice", () => spLeaveVoice(), "hang"));
+    const info = el("button", "sp-pill-t"); info.type = "button"; info.title = "Open Spaces";
+    info.append(el("i", "sp-pill-dot"), el("span", "sp-vwhere"));
+    info.addEventListener("click", () => { const vv = SP.voice; if (vv) { SP.room[vv.space] = vv.room; spOpenSpace(vv.space); } });
+    const mute = spB("mic", "Mute", () => spSetMute(!SP.voice.muted)); mute.id = "sp-pmute";
+    const deaf = spB("head", "Deafen", () => spSetDeaf(!SP.voice.deaf)); deaf.id = "sp-pdeaf";
+    bar.append(info, mute, deaf, spB("hangup", "Leave voice", () => spLeaveVoice(), "hang"));
   }
   const d = SP.data[v.space], room = d && d.space && d.space.rooms.find((r) => r.id === v.room);
-  const s = SP.list.find((x) => x.id === v.space);
-  const states = [...v.peers.values()].map((p) => p.state || "connecting");
-  const ok = states.filter((x) => x === "connected").length;
-  bar.querySelector(".sp-vlive").textContent = ok || !states.length ? "Voice connected" : "Connecting…";
-  bar.querySelector(".sp-vwhere").textContent = (room ? room.name : "voice") + " / " + (s ? s.name : "");
-  const faces = document.getElementById("sp-vfaces");
-  const want = ["me", ...v.peers.keys()];
-  if (faces.dataset.who !== want.join(",")) {
-    faces.dataset.who = want.join(",");
-    faces.replaceChildren();
-    for (const id of want) {
-      const m = id === "me" ? SP.me : spMember(v.space, id);
-      const a = spAvatar(m.name, m.color, 24); a.dataset.who = id; a.title = m.name; faces.append(a);
-    }
-  }
-  for (const a of faces.children) a.classList.toggle("talk", spSpeaking(a.dataset.who));
-  const mute = document.getElementById("sp-vmute"), deaf = document.getElementById("sp-vdeaf");
-  mute.innerHTML = spSvg(v.muted ? "micoff" : "mic"); mute.classList.toggle("bad", v.muted);
-  mute.title = v.muted ? "Unmute" : SP.ptt ? "Mute (push to talk: hold `)" : "Mute"; mute.setAttribute("aria-label", mute.title);
-  deaf.innerHTML = spSvg(v.deaf ? "headoff" : "head"); deaf.classList.toggle("bad", v.deaf);
-  deaf.title = v.deaf ? "Undeafen" : "Deafen (hear nobody)"; deaf.setAttribute("aria-label", deaf.title);
-  if (SP.open && SP.data[SP.open]) spRooms(SP.open, SP.data[SP.open], (SP.data[SP.open].space || {}).rooms || []);
+  bar.querySelector(".sp-vwhere").textContent = room ? room.name : "voice";
+  bar.classList.toggle("talk", spSpeaking("me") || [...v.peers.keys()].some((id) => spSpeaking(id)));
+  const mute = document.getElementById("sp-pmute"), deaf = document.getElementById("sp-pdeaf");
+  mute.innerHTML = spSvg(v.muted ? "micoff" : "mic"); mute.classList.toggle("bad", v.muted); mute.title = v.muted ? "Unmute" : "Mute";
+  deaf.innerHTML = spSvg(v.deaf ? "headoff" : "head"); deaf.classList.toggle("bad", v.deaf); deaf.title = v.deaf ? "Undeafen" : "Deafen";
 }
 
 function spKeys(e) {
-  // a space is open: start typing anywhere and it goes into its message box (not into LOKI's home prompt)
-  if (e.type === "keydown" && SP.open && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && e.key !== "`"
-      && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target || {}).tagName || "") && !document.getElementById("sp-dlg")
-      && !document.getElementById("spaces").hidden && !document.getElementById("sp-panel").hidden) {
-    const box = document.getElementById("sp-input");
-    if (box) { e.stopImmediatePropagation(); box.focus(); }
+  // the Spaces tab is open on a text room: start typing anywhere and it goes into the message box
+  if (e.type === "keydown" && SP.mounted && SP.open && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && e.key !== "`"
+      && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target || {}).tagName || "") && !document.getElementById("sp-dlg")) {
+    const box = document.getElementById("sp-input"), main = document.querySelector("#spaces .sp-main");
+    if (box && main && main.dataset.kind !== "voice") { e.stopImmediatePropagation(); box.focus(); }
     return;
-  }
-  if (e.key === "Escape" && e.type === "keydown" && SP.open && !document.getElementById("sp-dlg") && document.getElementById("spaces")?.contains(document.activeElement)) {
-    spOpenSpace(""); return;
   }
   if (!SP.voice || !SP.ptt || e.key !== "`" || (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName))) return;
   e.preventDefault();
@@ -943,13 +994,13 @@ async function spStart() {
   spLoop();
   for (const s of SP.list) spSync(s.id).catch(() => {});
 }
-window.LokiSpaces = { open: spOpenSpace, refresh: spRefresh, join: spJoinVoice, leave: spLeaveVoice, state: SP };
+window.LokiSpaces = { mount: spMount, unmount: spUnmount, open: spOpenSpace, refresh: spRefresh, join: spJoinVoice, leave: spLeaveVoice, state: SP };
 // LOKI World (the Godot game, in a same-origin frame) walks you into a lobby: {lokiSpaces: "join", space, room}
 window.addEventListener("message", (e) => {
   const m = e.data;
   if (e.origin !== location.origin || !m || typeof m !== "object" || m.lokiSpaces !== "join") return;
   if (typeof m.space === "string" && typeof m.room === "string" && SP.list.some((x) => x.id === m.space)) {
-    SP.room[m.space] = m.room; spOpenSpace(m.space); spJoinVoice(m.space, m.room);
+    SP.room[m.space] = m.room; spJoinVoice(m.space, m.room);
   }
 });
 window.addEventListener("beforeunload", () => { if (SP.voice) api("/spaces/act", { space: SP.voice.space, action: "voice", room: null }); });

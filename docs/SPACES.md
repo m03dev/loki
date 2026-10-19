@@ -14,9 +14,13 @@ integration in LOKI World, where people can chat and create lobbies ... reimagin
 
 - **A space** is a community. The machine that makes it **hosts** it: no company server, no account. Its LOKI keeps
   the rooms, the members and the (encrypted) history in `harness_data/spaces/hosted/<id>/` (never committed).
-- **Rooms**: text, voice, and **lobbies** - voice + text that anyone opens for a game or a hangout. Lobbies show on
-  everyone's **LOKI home** over the live world, take people into **LOKI World** when they are for it, and tidy
-  themselves away 90 s after the last person leaves.
+- **The Spaces tab** (title bar, Ctrl/Cmd+6) fills the whole window the way Discord does: the rail of spaces, the
+  rooms with who is in voice and your own panel (mute, deafen, settings) at the bottom, the room (chat, or the voice
+  stage with a tile per person), and the members. Nothing floats over LOKI home or the game (owner: "seamless, I
+  don't wanna see it, it should cover the entire screen"). In a call on another tab, a small pill keeps the call;
+  the tab shows the unread count.
+- **Rooms**: text, voice, and **lobbies** - voice + text that anyone opens for a game or a hangout. A lobby can take
+  everyone in it into **LOKI World**, and tidies itself away 90 s after the last person leaves.
 - **Invites**: one code, `loki-space:...`, carrying the space id, the space KEY and where to reach the host (its LAN
   address, the public relay address, loopback). Whoever has the code can join. The host can lock the space.
 - **Chat**: replies, edits (↑), deletes, reactions, typing, unread dots, @mentions, links. **End-to-end encrypted in
@@ -66,8 +70,7 @@ window <==== WebRTC voice, peer to peer (offers/answers relayed as encrypted sig
 ## LOKI World (the Godot side)
 
 `GET /spaces/world` (bearer) answers `{lobbies: [{space, space_name, space_color, room, name, kind: lobby|voice,
-activity, cap, people: [{name, color}]}]}` - every open lobby and voice room in every space this machine is in. The
-window already shows them on the home screen and over the World tab. The Godot client (`game/loki-world`) should poll
+activity, cap, people: [{name, color}]}]}` - every open lobby and voice room in every space this machine is in. The Godot client (`game/loki-world`) should poll
 it (like `/world/presence`) and draw each lobby as a place on the island - a campfire with a name plate and the
 people in it - and walking into it should post `{"lokiSpaces": "join", space, room}` to the parent window
 (`LokiSpaces.join(space, room)` there). Tracked in ZIVA_TASKS.md.
