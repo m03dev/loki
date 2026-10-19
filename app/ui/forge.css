@@ -487,3 +487,218 @@ button.forge-out-title:hover { opacity: 1; }
 .forge-wheel-wedge.open { background: #5b8db8; border-color: #5b8db8; color: #12141a; }
 .forge-wheel-item { display: flex; align-items: center; gap: 4px; }
 .forge-wheel-item .forge-maya-tick { width: 12px; color: #5dff9a; }
+
+/* ================================================================ Forge dressed as Maya (app/ui/forge_mayaui.js)
+   Colours sampled off Maya 2027 on the owner's Mac (2026-10-19): panels #444444, lists #373737, fields #2b2b2b,
+   selection #5285a6, active tool #487588, shelf #4a4643 under tabs #383639, viewport gradient #879bb3 -> #131418. */
+#forge.fmy-sheet { padding: 0; }
+#forge .forge-panel.fmy {
+  --my-panel: #444444; --my-list: #373737; --my-field: #2b2b2b; --my-sel: #5285a6; --my-tool: #487588; --my-text: #cfcfcf;
+  --my-dim: #9a9a9a; --my-line: #2f2f2f;
+  width: 100%; height: 100%; max-height: none; border-radius: 0; border: 0; box-shadow: none;
+  background: var(--my-panel); color: var(--my-text);
+  font: 12px/1.25 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+#forge .forge-panel.fmy .forge-head { min-height: 0; height: 22px; padding: 0 6px; background: #3c3c3c; border-bottom: 1px solid var(--my-line); }
+#forge .forge-panel.fmy .forge-head h2 { flex: 1; text-align: center; font-size: 11.5px; font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .8; }
+#forge .forge-panel.fmy .forge-head .forge-status { display: none; }
+#forge .forge-panel.fmy .forge-head .forge-btn, #forge .forge-panel.fmy .forge-head .mini { height: 18px; min-width: 18px; padding: 0 5px; border-radius: 3px; }
+#forge .forge-panel.fmy .forge-body { border-top: 0; background: var(--my-panel); }
+
+/* the menu bar */
+.fmy-menubar { flex: none; display: flex; align-items: center; height: 23px; padding: 0 4px; background: var(--my-panel); }
+.fmy-mb { border: 0; background: transparent; color: var(--my-text); font: inherit; padding: 3px 7px; border-radius: 2px; cursor: default; white-space: nowrap; }
+.fmy-mb:hover, .fmy-mb.open { background: var(--my-sel); color: #fff; }
+.fmy-grow { flex: 1; }
+.fmy-ws { color: var(--my-dim); padding: 0 6px; font-size: 11.5px; }
+.fmy-wsname { background: var(--my-field); padding: 2px 10px; border-radius: 2px; font-size: 11.5px; margin-right: 4px; }
+/* drop-downs: Maya's grey menus with a check column and a hotkey column */
+.fmy-drop { position: fixed; z-index: 90; min-width: 230px; max-height: calc(100vh - 60px); overflow-y: auto; padding: 3px 0;
+  background: #3f3f3f; border: 1px solid #262626; box-shadow: 0 4px 14px rgba(0,0,0,.5); color: #d8d8d8;
+  font: 12px/1.25 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+.fmy-ditem { display: flex; align-items: center; width: 100%; gap: 4px; padding: 3px 10px 3px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default; }
+.fmy-ditem:hover:not(.off) { background: var(--my-sel, #5285a6); color: #fff; }
+.fmy-ditem.off { color: #7a7a7a; }
+.fmy-tick { width: 16px; text-align: center; color: #d8d8d8; }
+.fmy-dlabel { flex: 1; white-space: nowrap; }
+.fmy-dkey { color: #9a9a9a; font-size: 11px; padding-left: 18px; white-space: nowrap; }
+.fmy-ditem:hover .fmy-dkey { color: #e6eef5; }
+.fmy-sep { height: 1px; margin: 3px 6px; background: #575757; }
+.fmy-dhead { padding: 4px 10px 2px 20px; color: #9a9a9a; font-size: 11px; }
+
+/* icon buttons (status line, tool box, shelf, panel bar) */
+.fmy-ib { flex: none; display: inline-grid; place-items: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 2px;
+  background: transparent; color: #d4d4d4; cursor: default; }
+.fmy-ib:hover { background: #575757; }
+.fmy-ib.on { background: var(--my-tool, #487588); color: #fff; }
+.fmy-ib.off { opacity: .4; }
+.fmy-vsep { flex: none; width: 1px; height: 18px; margin: 0 5px; background: #5c5c5c; }
+.fmy-hsep { flex: none; height: 1px; width: 22px; margin: 6px auto; background: #5c5c5c; }
+
+/* the status line */
+.fmy-status { flex: none; display: flex; align-items: center; gap: 1px; height: 28px; padding: 0 6px; background: var(--my-panel); border-top: 1px solid #3b3b3b; }
+.fmy-menuset { height: 20px; background: var(--my-field); color: var(--my-text); border: 1px solid #222; border-radius: 2px; font: inherit; font-size: 11.5px; padding: 0 4px; margin-right: 4px; }
+.fmy-snaps { display: inline-flex; gap: 1px; }
+.fmy-symlabel { padding: 0 6px; color: var(--my-text); font-size: 11.5px; background: var(--my-field); border-radius: 2px; height: 18px; line-height: 18px; margin-left: 2px; }
+.fmy-paneltoggles { display: inline-flex; gap: 1px; }
+
+/* the shelf: tabs on #383639, the icons on the warm grey Maya uses */
+.fmy-shelf { flex: none; background: #4a4643; border-top: 1px solid #3b3b3b; }
+.fmy-shelf-tabs { display: flex; gap: 1px; padding: 2px 6px 0 30px; background: #383639; height: 21px; align-items: flex-end; }
+.fmy-stab { border: 0; border-radius: 3px 3px 0 0; padding: 2px 10px; background: transparent; color: #b8b8b8; font: inherit; font-size: 11.5px; cursor: default; }
+.fmy-stab:hover { color: #fff; }
+.fmy-stab.on { background: #5b5856; color: #fff; }
+.fmy-shelf-row { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 8px 0 30px; overflow-x: auto; scrollbar-width: none; }
+.fmy-shelf-row::-webkit-scrollbar { display: none; }
+.fmy-shelf-btn { width: 32px; height: 32px; }
+.fmy-shelf-btn svg { width: 24px; height: 24px; color: #e9a35a; }
+.fmy-brush svg { color: #79b8e6; }
+.fmy-shelf-sep { width: 1px; height: 26px; margin: 0 8px; background: #6a6460; }
+.fmy-shelf-empty { color: #a49c96; font-size: 11.5px; }
+
+/* the tool box */
+.forge-body.maya > .fmy-toolbox { flex: 0 0 36px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0;
+  background: var(--my-panel); border-right: 1px solid var(--my-line); }
+.fmy-toolbox .fmy-ib { width: 30px; height: 30px; }
+.fmy-toolbox .fmy-ib svg { width: 20px; height: 20px; }
+
+/* the help line + command line */
+.fmy-helpline { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: var(--my-panel); border-top: 1px solid var(--my-line); }
+.fmy-help { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d8d8d8; font-size: 11.5px; }
+.fmy-help.bad { color: #f0b46a; }
+.fmy-mel { color: #bdbdbd; font-size: 11px; padding: 0 4px; }
+.fmy-cmd { flex: 0 1 320px; height: 18px; background: var(--my-field); color: #e6e6e6; border: 1px solid #222; border-radius: 1px; font: 11.5px Menlo, Consolas, monospace; padding: 0 5px; }
+.fmy-result { flex: 0 1 280px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--my-field); color: #c0c0c0;
+  height: 18px; line-height: 18px; padding: 0 6px; font: 11px Menlo, Consolas, monospace; }
+
+/* the side columns in Maya's greys */
+#forge .forge-panel.fmy .forge-body.maya > .forge-outcol,
+#forge .forge-panel.fmy .forge-body.maya > .forge-chancol { background: var(--my-panel); border-color: var(--my-line); }
+#forge .forge-panel.fmy .forge-outliner { background: var(--my-panel); font-size: 12px; }
+#forge .forge-panel.fmy .forge-outliner .forge-out-head { background: var(--my-panel); padding: 2px 4px; border-bottom: 0; }
+#forge .forge-panel.fmy button.forge-out-title { background: #3a3a3a; border-radius: 3px 3px 0 0; padding: 3px 10px; color: #e0e0e0;
+  font-size: 11.5px; letter-spacing: 0; text-transform: none; opacity: 1; }
+#forge .forge-panel.fmy .forge-out-bar .forge-out-btn { background: #555; border: 1px solid #333; color: #ddd; border-radius: 2px; font-size: 10.5px; padding: 1px 5px; }
+#forge .forge-panel.fmy .forge-out-bar .forge-out-btn:hover { background: var(--my-sel); color: #fff; border-color: var(--my-sel); }
+.forge-panel-menus { display: flex; gap: 0; padding: 0 4px; background: var(--my-panel, #444); }
+.forge-pm { border: 0; background: transparent; color: var(--my-text, #cfcfcf); font: inherit; font-size: 11.5px; padding: 2px 6px; border-radius: 2px; cursor: default; }
+.forge-pm:hover { background: var(--my-sel, #5285a6); color: #fff; }
+.forge-pm-pop { position: fixed; z-index: 90; min-width: 190px; padding: 3px 0; background: #3f3f3f; border: 1px solid #262626;
+  box-shadow: 0 4px 14px rgba(0,0,0,.5); font: 12px -apple-system, "Segoe UI", Arial, sans-serif; color: #d8d8d8; }
+.forge-pm-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; font: inherit; padding: 3px 12px; cursor: default; }
+.forge-pm-item:hover:not(:disabled) { background: #5285a6; color: #fff; }
+.forge-pm-item:disabled { color: #9a9a9a; }
+.forge-out-search { margin: 2px 4px 3px; height: 20px; background: var(--my-field, #2b2b2b); color: #ddd; border: 1px solid #222; border-radius: 1px; padding: 0 6px; font: inherit; font-size: 11.5px; }
+#forge .forge-panel.fmy .forge-out-list { background: var(--my-list); padding: 2px 0; }
+#forge .forge-panel.fmy .forge-out-row { height: 19px; padding-top: 0; padding-bottom: 0; border-radius: 0; color: #d6d6d6; box-shadow: none; }
+#forge .forge-panel.fmy .forge-out-row:hover { background: #474747; }
+#forge .forge-panel.fmy .forge-out-row.on { background: var(--my-sel); color: #fff; }
+#forge .forge-panel.fmy .forge-out-row.lead { box-shadow: none; }
+.forge-out-cam { display: flex; align-items: center; gap: 4px; height: 19px; color: #6a6a6a; cursor: default; font-size: 12px; }
+.forge-out-cam:hover { background: #474747; color: #9a9a9a; }
+.forge-out-cam.looking { color: #a8a8a8; }
+.forge-out-kind.kind-camera, .forge-out-kind.kind-mesh, .forge-out-kind.kind-group { width: 14px; height: 12px; opacity: 1; background-repeat: no-repeat; background-position: center; background-size: contain; }
+.forge-out-kind.kind-camera { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 12'%3E%3Crect x='1' y='3' width='9' height='7' rx='1' fill='%23676767'/%3E%3Cpath d='M10 5l5-3v8l-5-3z' fill='%23676767'/%3E%3C/svg%3E"); }
+.forge-out-kind.kind-mesh { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5l6 3.4v6.2L8 14.5 2 11.1V4.9z' fill='%2391a7b8' stroke='%23d9e2ea' stroke-width='.8'/%3E%3Cpath d='M2 4.9l6 3.4 6-3.4M8 8.3v6.2' stroke='%23e9eef2' stroke-width='.8' fill='none'/%3E%3C/svg%3E"); }
+.forge-out-kind.kind-group { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='3' width='12' height='10' rx='1' fill='none' stroke='%23d9d9d9' stroke-width='1.2'/%3E%3Cpath d='M2 6h12' stroke='%23d9d9d9'/%3E%3C/svg%3E"); }
+
+/* the Channel Box, Maya's layout */
+#forge .forge-panel.fmy #forge-channel { padding: 0 0 4px; border-bottom: 0; }
+.forge-panel-tab { padding: 4px 8px; background: #3a3a3a; color: #e0e0e0; font-size: 11.5px; font-weight: 600; }
+#forge .forge-panel.fmy #forge-ch-name { padding: 5px 8px 3px; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; opacity: 1; color: #e4e4e4; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-row { display: grid; grid-template-columns: 1fr 46%; align-items: center; gap: 4px; padding: 0 6px 0 4px; height: 19px; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-label { width: auto; text-align: right; opacity: 1; color: #cfcfcf; font-size: 12px; cursor: ew-resize; user-select: none; white-space: nowrap; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-label.scrub { color: #fff; background: var(--my-sel); }
+#forge .forge-panel.fmy #forge-channel .forge-ch-in { width: 100%; height: 17px; background: var(--my-field); border: 0; border-radius: 0; color: #e8e8e8; font: 12px -apple-system, "Segoe UI", Arial, sans-serif; padding: 0 5px; text-align: left; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-in:focus { outline: 1px solid var(--my-sel); background: #1f1f1f; }
+#forge .forge-panel.fmy .forge-ch-vis { cursor: default; }
+.forge-ch-section { padding: 6px 8px 2px; color: #d8d8d8; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; }
+.forge-ch-node { margin: 0 6px; padding: 2px 8px; background: #3b3b3b; color: #d8d8d8; font-size: 12px; }
+#forge-channel.no-shapes .forge-ch-shapes { display: none; }
+#forge .forge-panel.fmy #forge-history { padding: 0 0 6px; border-bottom: 0; }
+#forge .forge-panel.fmy #forge-history .forge-hist-head { padding-right: 6px; }
+#forge .forge-panel.fmy #forge-history .forge-hist-list { padding: 0 6px; gap: 1px; }
+#forge .forge-panel.fmy #forge-history .forge-hist-row { background: #3b3b3b; padding: 1px 4px 1px 8px; min-height: 19px; }
+#forge .forge-panel.fmy #forge-history .forge-hist-name { opacity: 1; color: #d8d8d8; font-size: 12px; }
+#forge .forge-panel.fmy #forge-history .forge-hist-empty { color: #8a8a8a; font-size: 11px; padding: 2px 2px; }
+#forge .forge-panel.fmy #forge-hist-clear { background: #555; border: 1px solid #333; color: #ddd; border-radius: 2px; font-size: 10.5px; padding: 1px 6px; }
+
+/* the viewport: Maya's gradient, its panel bar above the picture, the heads-up display */
+#forge .fmy-stage { background: linear-gradient(180deg, #879bb3 0%, #74879e 22%, #5f7187 46%, #3a4554 70%, #2a323d 84%, #131418 100%); border: 1px solid #262626; }
+.fmy-stage > .forge-view { top: 46px; height: calc(100% - 46px); cursor: default; }
+.fmy-stage > .forge-view:active { cursor: default; }
+.fmy-stage:not(:has(#fmy-panelbar:not([hidden]))) > .forge-view { top: 0; height: 100%; }
+.fmy-panelbar { position: absolute; left: 0; right: 0; top: 0; z-index: 6; background: #444; border-bottom: 1px solid #2b2b2b; }
+.fmy-panelmenus { display: flex; height: 21px; align-items: center; padding: 0 4px; }
+.fmy-pmb { padding: 2px 7px; font-size: 11.5px; }
+.fmy-panelicons { display: flex; align-items: center; height: 25px; padding: 0 4px; gap: 1px; border-top: 1px solid #3b3b3b; overflow: hidden; }
+.fmy-panelicons .fmy-ib { width: 22px; height: 20px; }
+.fmy-panelicons .fmy-ib svg { width: 16px; height: 16px; }
+.fmy-stage .forge-viewbar { top: 54px; }
+.fmy-stage .forge-modelbar { top: 102px; }
+.fmy-stage .forge-sculptbar { top: 54px; max-height: calc(100% - 110px); }
+.fmy-hud { position: absolute; inset: 46px 0 0 0; z-index: 3; pointer-events: none; }
+.fmy-polycount { position: absolute; left: 8px; top: 4px; border-collapse: collapse; color: #e9edf1; font: 600 10.5px/1.35 -apple-system, "Segoe UI", Arial, sans-serif;
+  text-shadow: 0 0 2px rgba(0,0,0,.35); }
+.fmy-polycount th { text-align: left; font-weight: 600; padding: 0 22px 0 0; }
+.fmy-polycount td { text-align: right; min-width: 52px; padding: 0 0 0 10px; font-weight: 500; }
+.fmy-camname { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); color: #f0f0f0; font: 600 11px -apple-system, "Segoe UI", Arial, sans-serif; }
+.fmy-triad { position: absolute; left: 6px; bottom: 4px; width: 40px; height: 40px; font-family: -apple-system, Arial, sans-serif; }
+.fmy-cube { position: absolute; right: 18px; top: 58px; z-index: 5; width: 58px; height: 58px; perspective: 400px; }
+.fmy-cube-inner { position: absolute; inset: 9px; transform-style: preserve-3d; }
+.fmy-cf { position: absolute; inset: 0; display: grid; place-items: center; padding: 0; border: 1px solid #9aa3ad; background: rgba(226,230,235,.86);
+  color: #6c7782; font: 700 7.5px -apple-system, Arial, sans-serif; letter-spacing: .02em; cursor: pointer; backface-visibility: hidden; }
+.fmy-cf:hover { background: rgba(132,196,240,.95); color: #24323e; }
+.fmy-cf-front { transform: translateZ(20px); }
+.fmy-cf-back { transform: rotateY(180deg) translateZ(20px); }
+.fmy-cf-right { transform: rotateY(90deg) translateZ(20px); }
+.fmy-cf-left { transform: rotateY(-90deg) translateZ(20px); }
+.fmy-cf-top { transform: rotateX(90deg) translateZ(20px); }
+.fmy-cf-bottom { transform: rotateX(-90deg) translateZ(20px); }
+.fmy-cube-home { position: absolute; left: -12px; top: -8px; width: 16px; height: 16px; padding: 0; border: 0; background: transparent; color: #e8edf2; opacity: 0; cursor: pointer; }
+.fmy-cube:hover .fmy-cube-home { opacity: .9; }
+.fmy-cube-home svg { width: 14px; height: 14px; }
+.fmy-stage #forge-snaps { top: 54px; transform: none; right: 84px; flex-direction: row; }
+.fmy-stage .forge-snap { background: rgba(68,68,68,.85); border-color: #2b2b2b; color: #cfcfcf; border-radius: 2px; }
+.fmy-stage .forge-snap.on { background: #487588; border-color: #487588; color: #fff; }
+.fmy-stage .forge-empty { color: rgba(240,244,248,.7); top: 46px; }
+.fmy-cf { border-radius: 0 !important; box-shadow: none !important; min-width: 0; min-height: 0; }
+#forge .forge-panel.fmy .forge-outliner .forge-out-head { flex-wrap: wrap; align-items: flex-end; gap: 2px; }
+#forge .forge-panel.fmy button.forge-out-title { white-space: nowrap; }
+#forge .forge-panel.fmy .forge-outliner .forge-out-bar { order: 3; flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; gap: 2px; padding: 3px 0 1px; }
+#forge .forge-panel.fmy .forge-head { height: 28px; overflow: visible; }
+#forge .forge-panel.fmy .forge-head button { height: 22px !important; min-height: 0 !important; width: auto; min-width: 22px; padding: 0 5px; }
+#forge .forge-panel.fmy .forge-head button svg { width: 14px; height: 14px; }
+/* the time slider and range slider (Maya: #2b2b2b strips on the panel grey) */
+.fmy-time { flex: none; background: var(--my-panel, #444); border-top: 1px solid var(--my-line, #2f2f2f); padding: 2px 8px 2px 40px; }
+.fmy-time[hidden] { display: none; }
+.fmy-trow { display: flex; align-items: center; gap: 8px; height: 30px; }
+.fmy-ruler { position: relative; flex: 1; height: 26px; background: #2b2b2b; cursor: pointer; overflow: hidden; }
+.fmy-ticks { position: absolute; inset: 0; pointer-events: none; }
+.fmy-tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: #6f6f6f; font-size: 0; }
+.fmy-tick.lab { height: 26px; background: linear-gradient(to top, #8a8a8a 0 9px, transparent 9px); font-size: 10px; color: #b8b8b8; padding: 1px 0 0 3px; }
+.fmy-tcursor { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: rgba(214, 74, 74, .55); border-left: 1px solid #e05a5a; border-right: 1px solid #e05a5a; pointer-events: none; }
+.fmy-tfield { width: 52px; height: 20px; background: #2b2b2b; color: #e0e0e0; border: 1px solid #222; border-radius: 1px; font: 11.5px -apple-system, "Segoe UI", Arial, sans-serif; padding: 0 4px; }
+.fmy-playback { display: inline-flex; gap: 1px; }
+.fmy-pbtn { width: 24px; height: 22px; padding: 0; border: 0; background: transparent; color: #dcdcdc; font-size: 11px; border-radius: 2px; cursor: default; }
+.fmy-pbtn:hover { background: #575757; }
+.fmy-pbtn.on { background: var(--my-tool, #487588); color: #fff; }
+.fmy-range { display: flex; align-items: center; gap: 8px; height: 26px; }
+.fmy-rbar { position: relative; flex: 1; height: 18px; background: #2b2b2b; display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
+.fmy-rknob { min-width: 34px; height: 14px; line-height: 14px; background: #6a6a6a; color: #e8e8e8; font-size: 10.5px; text-align: center; border-radius: 1px; }
+.fmy-clip { height: 20px; min-width: 120px; }
+.fmy-fps { color: #cfcfcf; font-size: 11.5px; background: #2b2b2b; padding: 2px 8px; }
+/* the Outliner's buttons: one tidy row that scrolls sideways instead of three rows */
+#forge .forge-panel.fmy .forge-outliner .forge-out-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#forge .forge-panel.fmy .forge-outliner .forge-out-bar::-webkit-scrollbar { display: none; }
+#forge .forge-panel.fmy .forge-out-bar .forge-out-btn { flex: none; }
+/* short windows: the range slider tucks away and the bars get slimmer, so the viewport keeps its room */
+@media (max-height: 720px) {
+  .fmy-range { display: none; }
+  .fmy-trow { height: 24px; }
+  .fmy-ruler { height: 20px; }
+  .fmy-shelf-row { height: 32px; }
+  .fmy-shelf-btn { width: 28px; height: 28px; }
+  .fmy-shelf-btn svg { width: 20px; height: 20px; }
+}

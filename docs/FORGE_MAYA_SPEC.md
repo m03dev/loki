@@ -119,3 +119,24 @@ A transform node's matrix (Maya's MTransformationMatrix, simplified to one pivot
 - **Group**: a new transform with translate 0 and its pivot at the centre of the contents; children keep their place.
 - **Duplicate** copies the node with its hierarchy as a sibling, renamed with the next free number (`pCube1` -> `pCube2`).
 - **Shift + drag** with a manipulator duplicates and drags the copy (owner's description of how they work).
+
+## The look (measured off Maya 2027 on the Mac, 2026-10-19 afternoon)
+
+Screenshots of the owner's Maya (General workspace, an unsaved scene with a cube) were sampled pixel by pixel:
+
+| Part | Maya | Forge |
+|---|---|---|
+| panels, menu bar, status line, tool box | #444444 | same |
+| Outliner list background | #373737 | same |
+| fields (Channel Box, time slider, command line) | #2b2b2b | same |
+| selected row / menu highlight | #5285a6 | same |
+| active tool button | #487588 | same |
+| shelf tabs / shelf | #383639 / #4a4643, orange-ish icons | same |
+| viewport gradient | #879bb3 top -> #5f7187 -> #2a323d -> #131418 bottom | same stops |
+| grid | dark lines over the gradient, darker axes through the origin | black at low opacity, axes darker |
+| shading | lambert1: flat matte grey, faces #626262-#717171 on screen | matte grey (view.mayaShade), Maya's default light from the camera |
+| selection | the object's own edges in teal-green (~#65fdcd), the others white | EdgesGeometry wire (a box only above 80k triangles) |
+| heads-up display | Verts / Edges / Faces / Tris / UVs, three columns (all / selected / components), top-left; camera name bottom-centre; axis triad bottom-left; view cube top-right | same |
+| Channel Box | Channels Edit Object Show menu, name, Translate X..Visibility rows (labels right-aligned), SHAPES, INPUTS | same; INPUTS = Forge's history with Maya's node names |
+| Outliner | Display Show Help menu, search field, persp / top / front / side greyed first | same |
+| bottom | time slider + range slider (1-120, 24 fps), help line ("Move Tool: ..."), MEL command line | same; the command line runs a small MEL (polyCube, move, select -cl, setAttr, xform -cp ...) |

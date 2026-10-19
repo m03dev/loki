@@ -60,6 +60,7 @@ const FORGE_LIGHTS = [
   ["Soft", 0xffffff, 0x60646e, 1.8, 0xffffff, 0.8],
 ];
 const FORGE_STORE = "loki-forge-output";
+const FORGE_MAYA_GREY = 0x9a9a9a;   // lambert1 under Maya's default light reads #626262-#717171 on screen (measured)
 
 function forgeBtn(icon, name, what, onClick, cls) {
   const b = el("button", "mini icon-mini forge-btn" + (cls ? " " + cls : ""), name);
@@ -588,6 +589,7 @@ function forgeSide(id) {
 
 function forgeOpen() {
   forgeBuild();
+  if (typeof forgeMayaChrome === "function") { try { forgeMayaChrome(); } catch (exc) { console.warn("forge: Maya chrome", exc); } }
   const sheet = document.getElementById("forge");
   sheet.hidden = false;
   forgeWay(forge.way);
@@ -944,7 +946,7 @@ function forgeMakeView(lib, renderer, canvas) {
   const rim = new THREE.DirectionalLight(0x9fb6d8, 1.2); rim.position.set(-2, 0.5, -2);
   scene.add(hemi); camera.add(key, rim);   // the light turns with the camera: the side you look at is lit
   const controls = new lib.OrbitControls(camera, canvas);
-  controls.enableDamping = true; controls.dampingFactor = 0.12;
+  controls.enableDamping = false;   // Maya's camera stops the moment the mouse does - no glide (owner: "feel like maya")
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   const holder = new THREE.Group(); scene.add(holder);
   const transform = new lib.TransformControls(camera, canvas);
@@ -1019,7 +1021,7 @@ function forgeMakeView(lib, renderer, canvas) {
   function loop() {
     if (!view.running) return;
     resize();
-    if (anim.mixer) { anim.mixer.update(Math.min(0.1, anim.clock.getDelta())); view.dirty = true; }
+    if (anim.mixer) { const dt = Math.min(0.1, anim.clock.getDelta()); if (!anim.paused) { anim.mixer.update(dt); view.dirty = true; } }
     if (view.quad) {
       if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }
     } else {
@@ -1084,6 +1086,13 @@ function forgeMakeView(lib, renderer, canvas) {
     }
     view.dirty = true;
   };
+  // the time slider (forge_mayaui.js) reads and moves the playing clip
+  view.animInfo = () => {
+    const clip = view.anim && anim.clips.find((a) => a.name === view.anim);
+    return clip && anim.mixer ? { name: clip.name, dur: clip.duration || 1, t: anim.mixer.time % (clip.duration || 1), paused: !!anim.paused } : null;
+  };
+  view.animSeek = (t) => { if (!anim.mixer) return false; anim.mixer.setTime(Math.max(0, t)); view.dirty = true; return true; };
+  view.animPause = (on) => { anim.paused = on == null ? !anim.paused : !!on; anim.clock.getDelta(); return anim.paused; };
   // load a .glb with three.js' own GLTFLoader, then merge every mesh into one sculptable mesh
   view.load = async (buf) => {
     const gltf = await new lib.GLTFLoader().parseAsync(buf, "");
@@ -1129,9 +1138,13 @@ function forgeMakeView(lib, renderer, canvas) {
     material.roughnessMap = !clay && m ? m.roughness : null;
     material.metalnessMap = !clay && m ? m.metallic : null;
     material.aoMap = !clay && m ? m.ao : null;
-    material.roughness = m ? 1 : 0.62;
+    // Maya's default look (view.mayaShade, on by default): a matte grey lambert1 - no shine - unless the model has its
+    // own colours or a material; Lighting > "Studio colours" turns it off (forge_mayaui.js)
+    const plain = !clay && !m && !material.map && !material.vertexColors;
+    const maya = !!view.mayaShade && plain;
+    material.roughness = m ? 1 : (maya ? 1 : 0.62);
     material.metalness = m ? 1 : 0;
-    material.color.copy(clay ? clayColor : new THREE.Color(0xffffff));
+    material.color.copy(clay ? clayColor : new THREE.Color(maya ? FORGE_MAYA_GREY : 0xffffff));
     material.wireframe = !!view.wire;
     material.needsUpdate = true;
     view.dirty = true;
@@ -1161,6 +1174,7 @@ function forgeMakeView(lib, renderer, canvas) {
     }
     applyLook();
   };
+  view.applyLook = () => applyLook();
   view.setLook = (what, on) => {
     view[what] = on;
     if (what === "quad") { controls.enabled = !on; if (on) frameQuad(); }
@@ -1527,7 +1541,7 @@ function forgeMakeView(lib, renderer, canvas) {
   };
   // Maya's [ and ]: undo / redo a view change (every camera move that ends is remembered)
   const views = { past: [], future: [], at: null };
-  const camState = () => ({ pos: camera.position.clone(), target: controls.target.clone(), fov: camera.fov });
+  const camState = () => ({ pos: camera.position.clone(), target: controls.target.clone(), fov: camera.fov, cam: view.cam || "persp" });
   controls.addEventListener("start", () => { views.at = camState(); });
   controls.addEventListener("end", () => {
     if (!views.at) return;
@@ -1540,6 +1554,8 @@ function forgeMakeView(lib, renderer, canvas) {
     const s = from.pop(); if (!s) return false;
     to.push(camState());
     camera.position.copy(s.pos); controls.target.copy(s.target); camera.fov = s.fov;
+    view.cam = s.cam || "persp"; controls.enableRotate = view.cam === "persp";   // the view's camera comes back with it
+    const d = camera.position.distanceTo(controls.target) || 3; camera.near = d / 100; camera.far = d * 100;
     camera.updateProjectionMatrix(); controls.update(); view.dirty = true;
     return true;
   };
@@ -1556,6 +1572,13 @@ function forgeMakeView(lib, renderer, canvas) {
   if (typeof forgeSceneAttach === "function") {
     forgeSceneAttach(view, { THREE, scene, holder, material, camera, transform: transform, canvas, controls,
       mesh: () => mesh });
+  }
+  // Maya's viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_mayaui.js
+  view.lights = { hemi, key, rim };
+  view.material = material;
+  if (typeof forgeMayaViewportAttach === "function") {
+    try { forgeMayaViewportAttach(view, { THREE, scene, camera, controls, renderer, canvas, holder, material, lights: view.lights }); }
+    catch (exc) { console.warn("forge: Maya viewport layer", exc); }
   }
   // the scene layer (app/ui/forge_scene.js) bakes geometry - Freeze Transformations, Center Pivot - and
   // needs the aliased buffers pushed back to the GPU afterwards

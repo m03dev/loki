@@ -208,6 +208,21 @@ our own code. Everything Ziva built above is kept; this extends it.
 - Open for Ziva: components snapping onto the SAME mesh's other vertices (needs the moving vertices left out of the
   pick), and showing a new primitive's inputs (subdivisions) in the Channel Box like Maya's INPUTS section.
 
+### DONE (Claude, 2026-10-19 afternoon) - Forge LOOKS like Maya (app/ui/forge_mayaui.js; measured, FORGE_MAYA_SPEC.md "The look")
+- Owner 13:10: "make it look and feel more like maya ... do more research". Maya 2027 was opened on the Mac and
+  screenshotted; colours sampled. Forge now has Maya's window: menu bar, status line (menu set, selection modes, snap
+  buttons, symmetry, panel toggles), shelf with tabs (Poly Modeling / Sculpting / Create / Custom = recent commands),
+  tool box, time slider + range slider (plays and scrubs a creature's clips), help line naming the tool, and a MEL
+  command line. The viewport has its own View / Shading / Lighting / Show / Renderer / Panels menus and icon bar, the
+  HUD poly count, camera name, axis triad and a working view cube, Maya's gradient, grid, matte grey shading and
+  default lighting, the teal-green selection wireframe, and no camera glide. Channel Box and Outliner in Maya's
+  layout. Every part hides from Windows > UI Elements; Ctrl+Space hides them all. Nothing was removed.
+- Fixed on the way: `[` (undo view) left the camera's name and its locked tumble behind; Esc now leaves the
+  Outliner's search field.
+- tests/test_forge_maya_ui.py 93 checks (~35 s).
+- Open: the manipulator is still three.js' (Maya's is thinner: thin lines, small cones, a hollow yellow centre); the
+  marking menus and hotbox are not yet re-skinned to Maya's exact look; the Attribute Editor (Ctrl+A) is not built.
+
 ### OPEN - next, in this order (Ziva: these are yours, see ZIVA_TASKS.md "Ziva's long run")
 - **T7 Real-machine pass**: use Forge for 20 minutes the way the owner uses Maya (WebView2 on the PC, WKWebView on
   the Mac): every hotkey in FORGE_MAYA_SPEC.md, Option-camera on the Mac trackpad and mouse, the hotbox zones, the

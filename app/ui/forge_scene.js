@@ -17,6 +17,11 @@
 // Maya, while the tools still edit one mesh.
 "use strict";
 
+// Maya's construction-history node for each Forge step
+const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
+  smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
+  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", bevel: "polyBevel" };
+
 function scnEl(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -24,7 +29,7 @@ function scnEl(tag, cls, text) {
   return n;
 }
 
-const FORGE_SEL_LEAD = 0x5dff9a, FORGE_SEL_REST = 0xf2f4f7;     // Maya: the last selected green, the rest white
+const FORGE_SEL_LEAD = 0x65fdcd, FORGE_SEL_REST = 0xf2f4f7;     // Maya: the last selected teal-green (measured off Maya 2027), the rest white
 
 function forgeSceneAttach(view, ctx) {
   const { THREE, scene, holder, material } = ctx;
@@ -196,15 +201,43 @@ function forgeSceneAttach(view, ctx) {
   }
 
   // ---------------------------------------------------------------- selection highlight in the viewport
-  const marks = new Map();
+  const marks = new Map(), edgeCache = new WeakMap();
   function drawMarks() {
     for (const [id, h] of marks) { if (h.parent) h.parent.remove(h); h.geometry.dispose(); marks.delete(id); }
     tree.sel.forEach((id, i) => {
       const n = node(id);
       if (!n) return;
+      const col = new THREE.Color(i === tree.sel.length - 1 ? FORGE_SEL_LEAD : FORGE_SEL_REST);
+      // Maya draws the selected object's own edges in the selection colour - a wireframe, not a box. The edges are the
+      // polygon edges (EdgesGeometry hides the flat diagonals a quad is split into); a very big mesh keeps the box.
+      const meshes = [];
+      n.inner.traverse((o) => { if (o.isMesh && o.geometry && o.name !== "forge-sel" && o.visible) meshes.push(o); });
+      const tris = meshes.reduce((t, o) => t + (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3, 0);
+      if (meshes.length && tris <= 80000) {
+        const grp = new THREE.Group(); grp.name = "forge-sel";
+        n.grp.updateMatrixWorld(true);
+        const inv = n.inner.matrixWorld.clone().invert();
+        for (const o of meshes) {
+          // the edges are cached per geometry and only rebuilt when the mesh changed (tree.build runs often)
+          const ver = o.geometry.attributes.position.version + ":" + (o.geometry.index ? o.geometry.index.version : 0);
+          let ec = edgeCache.get(o.geometry);
+          if (!ec || ec.ver !== ver) { ec = { ver, geo: new THREE.EdgesGeometry(o.geometry, 1) }; edgeCache.set(o.geometry, ec); }
+          const lines = new THREE.LineSegments(ec.geo,
+            new THREE.LineBasicMaterial({ color: col, depthTest: true, transparent: true, opacity: 0.95 }));
+          lines.matrixAutoUpdate = false;
+          lines.matrix.multiplyMatrices(inv, o.matrixWorld);
+          lines.renderOrder = 2; lines.raycast = () => {};
+          lines.material.polygonOffset = true;
+          grp.add(lines);
+        }
+        grp.raycast = () => {};
+        grp.geometry = { dispose: () => grp.children.forEach((c) => c.material.dispose()) };   // the edges stay cached
+        n.inner.add(grp); marks.set(id, grp);
+        return;
+      }
       const box = contentBox(n);
       if (box.isEmpty()) return;
-      const h = new THREE.Box3Helper(box, new THREE.Color(i === tree.sel.length - 1 ? FORGE_SEL_LEAD : FORGE_SEL_REST));
+      const h = new THREE.Box3Helper(box, col);
       h.name = "forge-sel"; h.raycast = () => {};
       n.inner.add(h); marks.set(id, h);
     });
@@ -632,6 +665,7 @@ function forgeSceneAttach(view, ctx) {
     }, true), 0);
   }
   api.outlinerMenu = rowMenu;
+  api.redrawSelection = () => { if (tree.selMarks) drawMarks(); };
   document.addEventListener("keydown", (e) => {     // Esc closes the menu, and only the menu
     if (e.key === "Escape" && menuEl) { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); }
   }, true);
@@ -674,6 +708,26 @@ function forgeSceneAttach(view, ctx) {
       if (api.freeze()) api.say("Transformations frozen (Modify > Freeze Transformations)."); else api.say("Select an object first.", true);
     });
     head.append(bar);
+    // Maya's Outliner: its own Display / Show / Help menu and a search field above the list
+    const menus = scnEl("div", "forge-panel-menus");
+    const mk = (label, items) => {
+      const m = scnEl("button", "forge-pm", label); m.type = "button";
+      m.addEventListener("click", (ev) => { ev.stopPropagation(); api.popMenu(m, items()); });
+      menus.append(m);
+    };
+    mk("Display", () => [["Expand All", () => { for (const k of tree.nodes) k.open = true; tree.build(); }],
+      ["Collapse All", () => { for (const k of tree.nodes) k.open = false; tree.build(); }],
+      [(tree.showCams === false ? "Show" : "Hide") + " Cameras", () => { tree.showCams = tree.showCams === false; tree.build(); }],
+      ["Reveal Selected", () => api.reveal()]]);
+    mk("Show", () => [["Select Hierarchy", () => api.selectHierarchy()], ["Invert Selection", () => api.invertSelection()],
+      ["Show All", () => api.showAll()], ["Hide Selected", () => api.hide()]]);
+    mk("Help", () => [["Click selects, Ctrl/Cmd+click toggles, Shift+click a range", null], ["Drag onto a row to parent, between rows to re-order", null],
+      ["Return renames, f reveals, right-click for more", null]]);
+    const search = document.createElement("input");
+    search.type = "search"; search.className = "forge-out-search"; search.id = "forge-out-search";
+    search.placeholder = "Search...";
+    search.addEventListener("input", () => { tree.filter = search.value.trim().toLowerCase(); tree.build(); });
+    search.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape" || e.key === "Enter") search.blur(); });   // Esc / Return hand the keys back
     const list = scnEl("div", "forge-out-list"); list.id = "forge-out-list";
     list.tabIndex = 0;
     list.setAttribute("role", "tree");
@@ -695,7 +749,7 @@ function forgeSceneAttach(view, ctx) {
       if (ev.key === "Enter") { ev.preventDefault(); ev.stopPropagation(); const lbl = list.querySelector('.forge-out-row[data-id="' + tree.sel[tree.sel.length - 1] + '"] .forge-out-name'); if (lbl) lbl.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); }
       else if (ev.key === "f" || ev.key === "F") { ev.preventDefault(); ev.stopPropagation(); api.reveal(); }
     });
-    box.append(head, list);
+    box.append(head, menus, search, list);
     side.append(box);
     tree.panel = box; tree.list = list;
     return box;
@@ -729,7 +783,7 @@ function forgeSceneAttach(view, ctx) {
     const eye = scnEl("button", "forge-out-eye" + (n.visible ? "" : " off"), n.visible ? "◉" : "○");
     eye.type = "button"; eye.tabIndex = -1; eye.title = "Show or hide (h toggles the selection).";
     eye.addEventListener("click", (ev) => { ev.stopPropagation(); api.setVisible(n.id, !n.visible); });
-    const kind = scnEl("span", "forge-out-kind", n.kind === "group" ? "□" : "▲");
+    const kind = scnEl("span", "forge-out-kind " + (n.kind === "group" ? "kind-group" : "kind-mesh"), "");
     kind.title = n.kind === "group" ? "Group (a transform node)" : n.root ? "Mesh - the one the tools are editing" : "Mesh";
     const lbl = scnEl("span", "forge-out-name", n.name);
     lbl.addEventListener("dblclick", (ev) => {
@@ -803,10 +857,23 @@ function forgeSceneAttach(view, ctx) {
     const list = tree.list;
     if (list) {
       list.textContent = "";
+      const f = tree.filter || "";
+      // Maya lists its four default cameras first, greyed; a click looks through that camera
+      if (tree.showCams !== false && !f) {
+        for (const cam of ["persp", "top", "front", "side"]) {
+          const r = scnEl("div", "forge-out-cam" + (view.cam === cam ? " looking" : ""));   // not a .forge-out-row: cameras are not scene nodes
+          r.dataset.cam = cam; r.style.paddingLeft = "18px";
+          r.append(scnEl("span", "forge-out-kind kind-camera", ""), scnEl("span", "forge-out-name", cam));
+          r.title = "Look through " + cam + ".";
+          r.addEventListener("click", () => { if (typeof forgeMayaView === "function") { forgeMayaView(view, cam); tree.build(); } });
+          list.append(r);
+        }
+      }
       const walk = (parent, depth) => {
         for (const n of tree.nodes) if (n.parent === parent) {
-          list.append(row(n, depth));
-          if (n.open) walk(n.id, depth + 1);
+          const hit = !f || n.name.toLowerCase().includes(f);
+          if (hit) list.append(row(n, f ? 0 : depth));
+          if (n.open || f) walk(n.id, depth + 1);
         }
       };
       walk(0, 0);
@@ -819,37 +886,82 @@ function forgeSceneAttach(view, ctx) {
 
   // ---------------------------------------------------------------- the Channel Box (Maya's exact numbers)
   const AXES = ["x", "y", "z"];
+  // Maya's Channel Box, as it looks in Maya 2027 (read off the owner's Mac): a Channels / Edit / Object / Show menu,
+  // the object's name, then one row per channel - the label right-aligned, a dark value field - Translate X..Z,
+  // Rotate X..Z, Scale X..Z, Visibility; then SHAPES (the mesh under the transform) and INPUTS (its construction
+  // history, below). Drag a channel's NAME left / right to scrub its value (Maya: select it, middle-drag).
   function channelBox() {
-    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");   // Maya: the Channel Box on the right
+    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");
     if (!host) return null;
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-channel";
-    const title = scnEl("div", "forge-ch-title", "Channel Box");
+    const tab = scnEl("div", "forge-panel-tab", "Channel Box / Layer Editor");
+    const menus = scnEl("div", "forge-panel-menus");
+    const mk = (label, items) => {
+      const m = scnEl("button", "forge-pm", label); m.type = "button";
+      m.addEventListener("click", (ev) => { ev.stopPropagation(); api.popMenu(m, items()); });
+      menus.append(m);
+    };
+    mk("Channels", () => [["Key Selected", null], ["Reset to Default", () => { api.resetTransform(); tree.build(); }]]);
+    mk("Edit", () => [["Delete History", () => { if (window.forgeHistory) window.forgeHistory.clear(); tree.build(); }],
+      ["Freeze Transformations", () => { api.freeze(); tree.build(); }], ["Reset Transformations", () => { api.resetTransform(); tree.build(); }]]);
+    mk("Object", () => [["Center Pivot", () => { api.centerPivot(); tree.build(); }], ["Reset Pivot", () => { api.resetPivot(); tree.build(); }],
+      ["Select Hierarchy", () => api.selectHierarchy()]]);
+    mk("Show", () => [["Shapes", () => { box.classList.toggle("no-shapes"); }], ["Inputs", () => { const h = document.getElementById("forge-history"); if (h) h.hidden = !h.hidden; }]]);
+    const title = scnEl("div", "forge-ch-title", "");
     title.id = "forge-ch-name";
-    box.append(title);
+    box.append(tab, menus, title);
     const inputs = {};
+    const ROWS = [];
     for (const [part, label, step] of [["translate", "Translate", 0.1], ["rotate", "Rotate", 5], ["scale", "Scale", 0.1]]) {
+      for (let a = 0; a < 3; a++) ROWS.push([part, label + " " + AXES[a].toUpperCase(), a, step]);
+    }
+    for (const [part, label, a, step] of ROWS) {
       const r = scnEl("div", "forge-ch-row");
-      r.append(scnEl("span", "forge-ch-label", label));
-      for (let a = 0; a < 3; a++) {
-        const inp = document.createElement("input");
-        inp.type = "number"; inp.step = String(step);
-        inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
-        inp.className = "forge-ch-in";
-        inp.title = label + " " + AXES[a].toUpperCase() + " - the selected object's own transform. Drag with the middle button to scrub.";
-        inp.addEventListener("input", () => {
-          if (inp.value === "" || inp.value === "-") return;
-          api.setTransform(null, part, a, inp.value);
-        });
-        inp.addEventListener("keydown", (e) => e.stopPropagation());      // typing a number is not a hotkey
-        inputs[part + a] = inp; r.append(inp);
-      }
+      const lbl = scnEl("span", "forge-ch-label", label);
+      lbl.title = label + ": drag left / right to scrub the value (Maya's virtual slider).";
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.step = String(step);
+      inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
+      inp.className = "forge-ch-in";
+      inp.title = label + " - the selected object's own transform.";
+      inp.addEventListener("input", () => {
+        if (inp.value === "" || inp.value === "-") return;
+        api.setTransform(null, part, a, inp.value);
+      });
+      inp.addEventListener("keydown", (e) => e.stopPropagation());      // typing a number is not a hotkey
+      // scrub: press on the channel's name and drag sideways
+      lbl.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 && e.button !== 1) return;
+        e.preventDefault();
+        const t0 = api.transform(); if (!t0) return;
+        const from = t0[part][a], x0 = e.clientX;
+        lbl.setPointerCapture(e.pointerId); lbl.classList.add("scrub");
+        const move = (ev) => { const v = from + (ev.clientX - x0) * step * (ev.shiftKey ? 0.1 : 0.25); api.setTransform(null, part, a, v); inp.value = String(Math.round(v * 1000) / 1000); };
+        const up = () => { lbl.classList.remove("scrub"); lbl.removeEventListener("pointermove", move); lbl.removeEventListener("pointerup", up); tree.build(); };
+        lbl.addEventListener("pointermove", move); lbl.addEventListener("pointerup", up);
+      });
+      inputs[part + a] = inp;
+      r.append(lbl, inp);
       box.append(r);
     }
+    const vis = scnEl("div", "forge-ch-row");
+    const visIn = scnEl("button", "forge-ch-in forge-ch-vis", "on");
+    visIn.type = "button"; visIn.id = "forge-ch-vis";
+    visIn.addEventListener("click", () => { const n = api.active(); if (n) api.setVisible(n.id, !n.visible); });
+    vis.append(scnEl("span", "forge-ch-label", "Visibility"), visIn);
+    box.append(vis);
+    const shapesHead = scnEl("div", "forge-ch-section", "SHAPES");
+    const shapeRow = scnEl("div", "forge-ch-node", "");
+    shapesHead.classList.add("forge-ch-shapes"); shapeRow.classList.add("forge-ch-shapes");
+    box.append(shapesHead, shapeRow);
     host.append(box);
     tree.syncChannel = () => {
-      const t = api.transform();
-      title.textContent = "Channel Box" + (t ? " - " + api.active().name : "");
+      const t = api.transform(), n = api.active();
+      title.textContent = n ? n.name : "";
+      shapeRow.textContent = n && n.kind === "mesh" ? n.name + "Shape" : "";
+      shapesHead.hidden = shapeRow.hidden = !(n && n.kind === "mesh");
+      visIn.textContent = n && !n.visible ? "off" : "on";
       if (!t) return;
       for (const part of ["translate", "rotate", "scale"]) {
         const vals = t[part];
@@ -861,6 +973,24 @@ function forgeSceneAttach(view, ctx) {
     };
     return box;
   }
+
+  // a small drop-down under a panel's menu name (the Channel Box's and the Outliner's own menus)
+  api.popMenu = (anchor, items) => {
+    document.querySelectorAll(".forge-pm-pop").forEach((x) => x.remove());
+    const pop = scnEl("div", "forge-pm-pop");
+    for (const [label, run] of items) {
+      const b = scnEl("button", "forge-pm-item", label); b.type = "button"; b.disabled = !run;
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); pop.remove(); if (run) run(); });
+      pop.append(b);
+    }
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.round(r.left) + "px"; pop.style.top = Math.round(r.bottom + 1) + "px";
+    document.body.append(pop);
+    setTimeout(() => document.addEventListener("pointerdown", function off(e) {
+      if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener("pointerdown", off, true); }
+    }, true), 0);
+    return pop;
+  };
   api.toggleChannelBox = () => {
     const b = document.getElementById("forge-channel"), h = document.getElementById("forge-history");
     if (!b) return false;
@@ -875,7 +1005,7 @@ function forgeSceneAttach(view, ctx) {
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-history";
     const head = scnEl("div", "forge-hist-head");
-    head.append(scnEl("div", "forge-ch-title", "History"));
+    head.append(scnEl("div", "forge-ch-section", "INPUTS"));
     const del = scnEl("button", "forge-out-btn", "Delete History");
     del.type = "button"; del.id = "forge-hist-clear";
     del.title = "Forget how the mesh was built; the shape stays (Delete History).";
@@ -888,10 +1018,17 @@ function forgeSceneAttach(view, ctx) {
       const H = window.forgeHistory;
       const ops = H && H.list ? H.list() : [];
       list.textContent = "";
-      if (!ops.length) { list.append(scnEl("div", "forge-hist-empty", "Nothing yet - extrude or inset a face.")); return; }
+      if (!ops.length) { list.append(scnEl("div", "forge-hist-empty", "No history - extrude, inset or sculpt and each step lands here.")); return; }
+      const count = {};
       for (const op of ops) {
         const r = scnEl("div", "forge-hist-row");
-        r.append(scnEl("span", "forge-hist-name", op.kind + (op.affected ? " \u00b7 " + op.affected + "v" : "")));
+        // Maya's node names for each step (polyExtrudeFace1, polySmoothFace1 ...); the step kind stays in the tooltip
+        const base = FORGE_HIST_NODE[op.kind] || op.kind;
+        count[base] = (count[base] || 0) + 1;
+        const nm = scnEl("span", "forge-hist-name", base + count[base] + (op.affected ? " \u00b7 " + op.affected + "v" : ""));
+        nm.title = op.kind;
+        r.dataset.kind = op.kind;
+        r.append(nm);
         if (op.amount != null) {
           const inp = document.createElement("input");
           inp.type = "number"; inp.step = "0.05"; inp.className = "forge-ch-in";
@@ -949,6 +1086,7 @@ function forgeSceneAttach(view, ctx) {
     }
     if (!verts.length) return;
     window.forgeHistPushSculpt({ kind: "sculpt", verts: verts });
+    if (tree.selMarks) drawMarks();                   // the selection wireframe follows the new shape
   }
   if (canvas && canvas.addEventListener) {
     view.sculptStrokeEnd = () => { view.stroked = true; sculptRecordAfterStroke(); };   // tests and scripts

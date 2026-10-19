@@ -116,6 +116,9 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   hotbox zones, Space tap one/four views, Top/Front/Side, pivot edit (d), view undo ([), Maya's Outliner. Maya is
   Maya-only keys (the owner had the Blender set removed). Later the same morning: Maya's workspace (Outliner left,
   Channel Box right, the rest from Space > Windows, Ctrl+Space), Maya's hotbox layout, x / c / v snapping and a grid.
+- **2026-10-19 afternoon (Claude): Forge LOOKS like Maya** - Maya 2027 screenshotted on the Mac, colours sampled
+  (docs/FORGE_MAYA_SPEC.md "The look"); new app/ui/forge_mayaui.js: menu bar, status line, shelf, tool box, time
+  slider, help + MEL command line, the viewport's menus, HUD, view cube, grid, lambert grey, teal selection wire.
   Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_MAYA.md T7-T12.
 
 ### Phone

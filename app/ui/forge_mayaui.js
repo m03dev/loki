@@ -1,0 +1,826 @@
+// Forge dressed as Maya - the window chrome and the viewport, matched to Maya 2027 on the owner's Mac (2026-10-19:
+// "make it look and feel more like maya ... do more research"). Everything here was checked against screenshots of the
+// real app: the colours were sampled off them (panels #444444, lists #373737, fields #2b2b2b, selection #5285a6,
+// viewport gradient #879bb3 -> #131418, matte grey shading, teal-green selection wireframe).
+//
+//   the window   menu bar (File Edit Create Select Modify Display Windows Mesh Edit Mesh Mesh Tools Mesh Display Help),
+//                status line (menu set, selection modes, snapping, symmetry, panel toggles), shelf with tabs, the tool
+//                box down the left, and the help line + command line along the bottom
+//   the viewport its own menu bar (View Shading Lighting Show Renderer Panels) and icon bar, the heads-up poly count,
+//                the camera name, the axis triad, the view cube, Maya's grid and Maya's default lighting
+//
+// Behaviour, not code: nothing of Autodesk's is used. Every command runs through FORGE_MAYA_CMDS (forge_maya.js), so
+// the menus, the shelf, the hotbox, the wheel and the hotkeys stay one set. Each part can be hidden from
+// Windows > UI Elements (or all at once with Ctrl+Space), and nothing that was there before was taken away.
+"use strict";
+
+const FMY_SVG = {
+  sphere: '<circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="8" ry="3"/><path d="M12 4v16"/>',
+  cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+  cylinder: '<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.5 3 2.6 7 2.6s7-1.1 7-2.6V6"/>',
+  cone: '<path d="M12 3l7 15c0 1.5-3 2.6-7 2.6s-7-1.1-7-2.6z"/><ellipse cx="12" cy="18" rx="7" ry="2.6"/>',
+  torus: '<ellipse cx="12" cy="12" rx="9" ry="5"/><ellipse cx="12" cy="11.5" rx="3.6" ry="1.6"/>',
+  plane: '<path d="M3 15l7-6h11l-7 6z"/>',
+  quadsphere: '<circle cx="12" cy="12" r="8"/><path d="M6 7.5c4 2 8 2 12 0M6 16.5c4-2 8-2 12 0M8 5c-1.5 4.5-1.5 9.5 0 14M16 5c1.5 4.5 1.5 9.5 0 14"/>',
+  extrude: '<path d="M5 15l7-4 7 4-7 4z"/><path d="M5 9l7-4 7 4-7 4z" stroke-dasharray="2 1.5"/><path d="M12 13v-6"/>',
+  inset: '<path d="M4 12l8-6 8 6-8 6z"/><path d="M8.5 12L12 9.4l3.5 2.6L12 14.6z"/>',
+  bevel: '<path d="M4 18V9l5-5h11v14z"/><path d="M9 4v5H4"/>',
+  edgeLoop: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16" stroke-dasharray="2 1.6"/>',
+  multiCut: '<path d="M5 19L19 5"/><path d="M14 5h5v5"/><circle cx="7" cy="17" r="1.6"/>',
+  smooth: '<rect x="5" y="5" width="14" height="14" rx="6"/>',
+  reverse: '<path d="M6 8h11l-3-3M18 16H7l3 3"/>',
+  dynamesh: '<path d="M4 4h16v16H4z"/><path d="M4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16"/>',
+  sculpt: '<path d="M4 20c3-1 5-4 7-8l5-7 3 3-7 5c-4 2-7 4-8 7z"/>',
+  select: '<path d="M6 3l12 9-6 1 3 7-2.5 1-3-7-3.5 4z" fill="currentColor"/>',
+  lasso: '<ellipse cx="13" cy="9" rx="7" ry="5"/><path d="M8 13c-2 2-1 5 1 6"/>',
+  paint: '<path d="M14 4l6 6-8 8-4-1-1-4z"/><path d="M5 19l3-3"/>',
+  move: '<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M21 12l-3-3M21 12l-3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3"/>',
+  rotate: '<path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19.5 4v4h-4"/>',
+  scale: '<rect x="4" y="11" width="9" height="9"/><path d="M11 4h9v9M20 4l-8 8"/>',
+  single: '<rect x="4" y="4" width="16" height="16"/>',
+  four: '<rect x="4" y="4" width="16" height="16"/><path d="M12 4v16M4 12h16"/>',
+  outliner: '<rect x="4" y="4" width="16" height="16"/><path d="M9 4v16M11 8h7M11 12h7M11 16h7"/>',
+  channel: '<rect x="4" y="4" width="16" height="16"/><path d="M14 4v16M5.5 8h7M5.5 12h7M5.5 16h7"/>',
+  toolkit: '<rect x="4" y="4" width="16" height="16"/><path d="M15 4v16M16.5 8h2M16.5 12h2"/>',
+  create: '<rect x="4" y="4" width="16" height="16"/><path d="M9 4v16M5.5 9h2M5.5 13h2"/>',
+  materials: '<circle cx="12" cy="12" r="8"/><path d="M6 10c3 2 9 2 12 0"/>',
+  objmode: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".35"/>',
+  vertmode: '<path d="M4 7l8-4 8 4v10l-8 4-8-4z" stroke-opacity=".35"/><circle cx="12" cy="3.8" r="2" fill="currentColor"/><circle cx="4.5" cy="7.5" r="2" fill="currentColor"/><circle cx="19.5" cy="7.5" r="2" fill="currentColor"/><circle cx="12" cy="20" r="2" fill="currentColor"/>',
+  edgemode: '<path d="M4 7l8-4 8 4v10l-8 4-8-4z" stroke-opacity=".35"/><path d="M4 7l8 4 8-4M12 11v10" stroke-width="2.4"/>',
+  facemode: '<path d="M4 7l8-4 8 4v10l-8 4-8-4z" stroke-opacity=".35"/><path d="M4 7l8 4v10l-8-4z" fill="currentColor"/>',
+  snapgrid: '<path d="M4 8h16M4 16h16M8 4v16M16 4v16"/><circle cx="16" cy="16" r="2.2" fill="currentColor"/>',
+  snapedge: '<path d="M4 18C8 6 16 6 20 18"/><circle cx="12" cy="9" r="2.2" fill="currentColor"/>',
+  snappoint: '<path d="M4 18L12 6l8 12z" stroke-opacity=".5"/><circle cx="12" cy="6" r="2.6" fill="currentColor"/>',
+  symmetry: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L4 12l5 5M15 7l5 5-5 5"/>',
+  save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -6)"/>',
+  redo: '<path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -6)"/>',
+  frameall: '<rect x="4" y="4" width="16" height="16" stroke-dasharray="3 2"/><rect x="8" y="8" width="8" height="8"/>',
+  framesel: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><rect x="9" y="9" width="6" height="6" fill="currentColor"/>',
+  wire: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l16 9M20 7.5l-16 9M12 3v18"/>',
+  shaded: '<circle cx="12" cy="12" r="8" fill="currentColor" fill-opacity=".55"/>',
+  textured: '<circle cx="12" cy="12" r="8"/><path d="M6 8l12 8M6 14l8 5M10 5l9 6"/>',
+  xray: '<rect x="4" y="4" width="11" height="11"/><rect x="9" y="9" width="11" height="11" stroke-dasharray="2 2"/>',
+  grid: '<path d="M3 15l9-5 9 5-9 5z"/><path d="M7.5 12.5l9 5M16.5 12.5l-9 5"/>',
+  light: '<circle cx="12" cy="10" r="5"/><path d="M10 16h4v3h-4z"/>',
+  isolate: '<rect x="4" y="4" width="16" height="16" stroke-dasharray="3 2"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
+  hud: '<rect x="4" y="5" width="16" height="14"/><path d="M6.5 8.5h5M6.5 11h5M6.5 13.5h5"/>',
+  camera: '<rect x="3" y="8" width="13" height="9" rx="1"/><path d="M16 11l5-3v9l-5-3z"/>',
+  home: '<path d="M4 12l8-7 8 7M7 10v9h10v-9"/>',
+};
+function fmySvg(name) {
+  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + (FMY_SVG[name] || FMY_SVG.cube) + "</svg>";
+}
+function fmyEl(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+const fmyView = () => (typeof forge !== "undefined" ? forge.view : null);
+const fmyCmd = (id) => (typeof FORGE_MAYA_CMDS !== "undefined" ? FORGE_MAYA_CMDS[id] : null);
+function fmyRun(id) {
+  const v = fmyView();
+  if (!v || typeof forgeMayaRun !== "function") { if (typeof forgeSay === "function") forgeSay("Make or add something first.", true); return; }
+  return forgeMayaRun(v, id);
+}
+function fmyOn(id) {                                          // is a switch command on? (the hotbox's ticks)
+  const v = fmyView();
+  try { return !!(typeof FORGE_MAYA_TOGGLES !== "undefined" && FORGE_MAYA_TOGGLES[id] && v && FORGE_MAYA_TOGGLES[id](v)); } catch (_) { return false; }
+}
+// hotkey hints shown in the menus, Maya-style
+const FMY_KEYS = { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", duplicate: "Ctrl+D", duplicateT: "Shift+D", group: "Ctrl+G", ungroup: "Ctrl+Shift+G",
+  parent: "P", unparent: "Shift+P", delete: "Del", selectAll: "Ctrl+Shift+A", selectNone: "Alt+D", invert: "Ctrl+Shift+I", grow: ">", shrink: "<",
+  objComp: "F8", vertex: "F9", edge: "F10", face: "F11", select: "Q", move: "W", rotate: "E", scale: "R", pivotEdit: "D", frameSel: "F", frameAll: "A",
+  wire: "4", shaded: "5", textured: "6", lights: "7", xray: "Alt+X", hide: "Ctrl+H", showLast: "Ctrl+Shift+H", hideOthers: "Alt+H", isolate: "Ctrl+1",
+  extrude: "Ctrl+E", bevel: "Ctrl+B", softSel: "B", hideUI: "Ctrl+Space", save: "Ctrl+S", snapGrid: "X", snapEdge: "C", snapPoint: "V", defaultView: "Alt+Home" };
+
+// ================================================================== drop-down menus (Maya's: click opens, hover switches)
+let fmyOpenMenu = null;
+function fmyCloseMenus() {
+  document.querySelectorAll(".fmy-drop").forEach((d) => d.remove());
+  document.querySelectorAll(".fmy-mb.open").forEach((b) => b.classList.remove("open"));
+  fmyOpenMenu = null;
+}
+function fmyDrop(anchor, items) {
+  fmyCloseMenus();
+  const d = fmyEl("div", "fmy-drop");
+  d.setAttribute("role", "menu");
+  for (const it of items) {
+    if (it === "-") { d.append(fmyEl("div", "fmy-sep")); continue; }
+    if (typeof it === "string" && it.startsWith("#")) { d.append(fmyEl("div", "fmy-dhead", it.slice(1))); continue; }
+    const [id, label, run, on] = Array.isArray(it) ? it : [it];
+    const c = fmyCmd(id);
+    const b = fmyEl("button", "fmy-ditem");
+    b.type = "button"; b.dataset.mayaId = id || "";
+    const enabled = run ? true : !!(c && c[1]);
+    if (!enabled) { b.classList.add("off"); b.title = (c && c[2]) || "Not in Forge yet"; }
+    const ticked = on != null ? on() : fmyOn(id);
+    b.append(fmyEl("span", "fmy-tick", ticked ? "✓" : ""), fmyEl("span", "fmy-dlabel", label || (c ? c[0] : id)),
+      fmyEl("span", "fmy-dkey", FMY_KEYS[id] || ""));
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      fmyCloseMenus();
+      if (run) run(); else if (enabled) fmyRun(id);
+      else if (typeof forgeSay === "function") forgeSay((c ? c[0] : id) + ": " + ((c && c[2]) || "not in Forge yet") + ".", true);
+    });
+    d.append(b);
+  }
+  const r = anchor.getBoundingClientRect();
+  d.style.left = Math.round(Math.min(r.left, window.innerWidth - 250)) + "px";
+  d.style.top = Math.round(r.bottom) + "px";
+  document.body.append(d);
+  anchor.classList.add("open");
+  fmyOpenMenu = anchor;
+  return d;
+}
+document.addEventListener("pointerdown", (e) => {
+  if (!fmyOpenMenu) return;
+  if (e.target.closest && (e.target.closest(".fmy-drop") || e.target.closest(".fmy-mb"))) return;
+  fmyCloseMenus();
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && fmyOpenMenu) { e.preventDefault(); e.stopImmediatePropagation(); fmyCloseMenus(); }
+}, true);
+function fmyMenuButton(label, items, cls) {
+  const b = fmyEl("button", "fmy-mb" + (cls ? " " + cls : ""), label);
+  b.type = "button";
+  b.dataset.menu = label;
+  b.addEventListener("click", (e) => { e.stopPropagation(); if (fmyOpenMenu === b) fmyCloseMenus(); else fmyDrop(b, typeof items === "function" ? items() : items); });
+  b.addEventListener("pointerenter", () => { if (fmyOpenMenu && fmyOpenMenu !== b && fmyOpenMenu.parentElement === b.parentElement) fmyDrop(b, typeof items === "function" ? items() : items); });
+  return b;
+}
+
+// ================================================================== the UI elements (Windows > UI Elements), remembered
+const FMY_UI = { statusline: "Status Line", shelfbar: "Shelf", toolbox: "Tool Box", timeslider: "Time Slider", helpline: "Help Line", hud: "Heads Up Display",
+  viewcube: "View Cube", panelbar: "Panel Menus and Toolbar" };
+function fmyUi() {
+  const p = typeof forgeMayaPanels === "function" ? forgeMayaPanels() : {};
+  const out = {};
+  for (const k of Object.keys(FMY_UI)) out[k] = p[k] !== false;
+  return out;
+}
+function fmyUiSet(k, on) {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem("loki-forge-panels") || "{}") || {}; } catch (_) { p = {}; }
+  p[k] = on == null ? p[k] === false : !!on;
+  try { localStorage.setItem("loki-forge-panels", JSON.stringify(p)); } catch (_) { /* private mode */ }
+  fmyApply();
+  return p[k];
+}
+function fmyApply() {
+  const u = fmyUi();
+  const show = (sel, on) => document.querySelectorAll(sel).forEach((e) => { e.hidden = !on; });
+  show("#fmy-status", u.statusline); show("#fmy-shelf", u.shelfbar); show("#fmy-toolbox", u.toolbox);
+  show("#fmy-helpline", u.helpline); show("#fmy-time", u.timeslider); show("#fmy-hud", u.hud); show("#fmy-cube", u.viewcube); show("#fmy-panelbar", u.panelbar);
+  fmySync();
+  const v = fmyView(); if (v && v.resize) v.resize();
+}
+// Ctrl+Space / the UI button / forgePanels.hideAll: Maya hides the UI elements too, and brings them back together
+(function wrapPanels() {
+  const wrap = () => {
+    const P = window.forgePanels;
+    if (!P || P.fmyWrapped) return !!P;
+    const hideAll = P.hideAll, showAll = P.showAll;
+    P.hideAll = () => { const r = hideAll(); for (const k of ["statusline", "shelfbar", "toolbox", "timeslider", "helpline"]) fmyUiSet(k, false); return r; };
+    P.showAll = () => { const r = showAll(); for (const k of ["statusline", "shelfbar", "toolbox", "timeslider", "helpline"]) fmyUiSet(k, true); return r; };
+    P.fmyWrapped = true;
+    return true;
+  };
+  if (!wrap()) document.addEventListener("DOMContentLoaded", () => { const t = setInterval(() => { if (wrap()) clearInterval(t); }, 300); });
+})();
+
+// ================================================================== the window: menu bar, status line, shelf, tool box, help line
+const FMY_MENUS = () => {
+  const rows = typeof FORGE_MAYA_ROWS !== "undefined" ? Object.fromEntries(FORGE_MAYA_ROWS) : {};
+  const uiItems = Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]);
+  return [
+    ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
+    ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
+    ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Make with LOKI", "draw", "image", "describe", "creature"]],
+    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "-", "objComp", "vertex", "edge", "face"]],
+    ["Modify", ["#Transform", "move", "rotate", "scale", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
+    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
+    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI"])],
+    ["Mesh", (rows.Mesh || ["smooth", "dynamesh", "sculptModel"])],
+    ["Edit Mesh", (rows["Edit Mesh"] || ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"])],
+    ["Mesh Tools", (rows["Mesh Tools"] || ["softSel", "sculpt", "multiCut", "edgeLoop"]).concat(["-", "snapGrid", "snapEdge", "snapPoint"])],
+    ["Mesh Display", ["wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
+    ["Help", [["help1", "Hold Space: the menus at the mouse (All menus = the hotbox)", () => {}], ["help2", "Right-click: marking menus (Shift / Ctrl for more)", () => {}],
+      ["help3", "Alt / Option + left / middle / right: tumble / track / dolly", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
+      ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]]],
+  ];
+};
+
+function fmyToolBtn(icon, id, title, run, extra) {
+  const b = fmyEl("button", "fmy-ib" + (extra ? " " + extra : ""));
+  b.type = "button";
+  b.innerHTML = fmySvg(icon);
+  b.dataset.mayaId = id || "";
+  const c = fmyCmd(id);
+  const off = !run && !(c && c[1]);
+  if (off) b.classList.add("off");
+  b.title = (title || (c ? c[0] : id)) + (FMY_KEYS[id] ? " (" + FMY_KEYS[id] + ")" : "") + (off && c && c[2] ? " - " + c[2] : "");
+  b.setAttribute("aria-label", title || (c ? c[0] : id));
+  b.addEventListener("click", (e) => { e.stopPropagation(); if (run) run(); else fmyRun(id); fmySync(); });
+  return b;
+}
+
+const FMY_SHELVES = {
+  "Poly Modeling": [["sphere", "sphere"], ["cube", "cube"], ["cylinder", "cylinder"], ["cone", "cone"], ["torus", "torus"], ["plane", "plane"],
+    ["quadsphere", "quadsphere"], "|", ["extrude", "extrude"], ["inset", "inset"], ["bevel", "bevel"], ["edgeLoop", "edgeLoop"],
+    ["multiCut", "multiCut"], "|", ["smooth", "smooth"], ["reverse", "reverse"], ["dynamesh", "dynamesh"], "|", ["sculpt", "sculpt"]],
+  "Sculpting": [["sculpt", "sculpt", "Sculpt Tool"], "|"].concat([["draw", "Sculpt"], ["inflate", "Inflate"], ["smooth", "Smooth"], ["flatten", "Flatten"],
+    ["grab", "Grab"], ["pinch", "Pinch"], ["crease", "Crease"]].map(([b, n]) => ["sculpt", "brush:" + b, n])),
+  "Create": [["sphere", "draw", "Draw it"], ["textured", "image", "From an image"], ["light", "describe", "Describe it"], ["toolkit", "creature", "Creature"]],
+  "Custom": [],
+};
+function fmyShelfItems(tab) {
+  const items = FMY_SHELVES[tab] || [];
+  if (tab === "Custom") {                          // Maya's Custom shelf = your recent commands
+    const v = fmyView();
+    return ((v && v.maya && v.maya.recent) || []).slice(0, 12).map((id) => ["cube", id]);
+  }
+  return items;
+}
+
+function fmyBuildShelf(shelf, tab) {
+  shelf.dataset.tab = tab;
+  const tabs = shelf.querySelector(".fmy-shelf-tabs"), row = shelf.querySelector(".fmy-shelf-row");
+  for (const t of tabs.querySelectorAll(".fmy-stab")) t.classList.toggle("on", t.dataset.tab === tab);
+  row.textContent = "";
+  for (const it of fmyShelfItems(tab)) {
+    if (it === "|") { row.append(fmyEl("span", "fmy-shelf-sep")); continue; }
+    const [icon, id, title] = it;
+    if (id.startsWith("brush:")) {
+      const brush = id.slice(6);
+      row.append(fmyToolBtn(icon, "", title + " brush", async () => {
+        const v = fmyView(); if (!v) return;
+        if (v.mode !== "sculpt") await fmyRun("sculpt");
+        if (typeof forgeBrush === "function") forgeBrush(brush);
+        if (typeof forgeSay === "function") forgeSay(title + " brush - drag on the model (Ctrl/Cmd inverts, Shift smooths, hold b and drag for the size).");
+      }, "fmy-shelf-btn fmy-brush"));
+    } else row.append(fmyToolBtn(icon, id, title, null, "fmy-shelf-btn"));
+  }
+  if (!row.children.length) row.append(fmyEl("span", "fmy-shelf-empty", tab === "Custom" ? "Your recent commands appear here." : ""));
+  try { localStorage.setItem("loki-forge-shelf", tab); } catch (_) { /* private mode */ }
+}
+
+function forgeMayaChrome() {
+  const panel = document.querySelector("#forge .forge-panel");
+  const body = panel && panel.querySelector(".forge-body");
+  if (!panel || !body || panel.querySelector("#fmy-menubar")) { fmySync(); return; }
+  panel.classList.add("fmy");
+  document.getElementById("forge")?.classList.add("fmy-sheet");
+  const head = panel.querySelector(".forge-head");
+  if (head) { const t = head.querySelector("h2"); if (t) t.textContent = "Forge - untitled"; }
+
+  // ---- the menu bar
+  const mb = fmyEl("div", "fmy-menubar"); mb.id = "fmy-menubar"; mb.setAttribute("role", "menubar");
+  for (const [label, items] of FMY_MENUS()) mb.append(fmyMenuButton(label, () => FMY_MENUS().find((m) => m[0] === label)[1]));
+  mb.append(fmyEl("span", "fmy-grow"), fmyEl("span", "fmy-ws", "Workspace:"), fmyEl("span", "fmy-wsname", "Forge (Maya)"));
+
+  // ---- the status line: menu set, history, selection mode, snapping, symmetry ... panel toggles
+  const st = fmyEl("div", "fmy-status"); st.id = "fmy-status";
+  const set = fmyEl("select", "fmy-menuset"); set.id = "fmy-menuset";
+  for (const m of ["Modeling", "Sculpting"]) { const o = fmyEl("option", "", m); o.value = m; set.append(o); }
+  set.title = "Menu set: Modeling or Sculpting (Sculpting switches to the sculpt tools).";
+  set.addEventListener("change", async () => {
+    const v = fmyView(); if (!v) return;
+    if (set.value === "Sculpting" && v.mode !== "sculpt") await fmyRun("sculpt");
+    if (set.value === "Modeling" && v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
+    fmySync();
+  });
+  const sep = () => fmyEl("span", "fmy-vsep");
+  st.append(set, sep(), fmyToolBtn("save", "save"), fmyToolBtn("undo", "undo"), fmyToolBtn("redo", "redo"), sep(),
+    fmyToolBtn("objmode", "objectMode", "Object mode", () => fmyRun("objectMode"), "fmy-selmode"),
+    fmyToolBtn("vertmode", "vertex", null, null, "fmy-selmode"), fmyToolBtn("edgemode", "edge", null, null, "fmy-selmode"),
+    fmyToolBtn("facemode", "face", null, null, "fmy-selmode"), sep());
+  const snaps = fmyEl("span", "fmy-snaps");
+  snaps.append(fmyToolBtn("snapgrid", "snapGrid", "Snap to grid", null, "fmy-snap"), fmyToolBtn("snapedge", "snapEdge", "Snap to curves / edges", null, "fmy-snap"),
+    fmyToolBtn("snappoint", "snapPoint", "Snap to points / vertices", null, "fmy-snap"));
+  const symm = fmyToolBtn("symmetry", "", "Symmetry: X (sculpting mirrors across the middle)", () => {
+    const v = fmyView(); if (!v) return;
+    v.brush.symmetry = !v.brush.symmetry;
+    if (typeof forgeSay === "function") forgeSay("Symmetry: " + (v.brush.symmetry ? "Object X" : "Off") + ".");
+  }, "fmy-symm");
+  symm.id = "fmy-symm";
+  const symLabel = fmyEl("span", "fmy-symlabel", "Symmetry: Off"); symLabel.id = "fmy-symlabel";
+  st.append(snaps, sep(), symm, symLabel, fmyEl("span", "fmy-grow"));
+  const toggles = fmyEl("span", "fmy-paneltoggles");
+  for (const [icon, id, title] of [["toolkit", "winToolkit", "Show / hide the Modeling Toolkit"], ["create", "winCreate", "Show / hide the Create panel (draw, picture, describe)"],
+    ["materials", "winMaterials", "Show / hide Materials"], ["outliner", "winOutliner", "Show / hide the Outliner"], ["channel", "winChannel", "Show / hide the Channel Box"]]) {
+    toggles.append(fmyToolBtn(icon, id, title, null, "fmy-ptoggle"));
+  }
+  st.append(toggles);
+
+  // ---- the shelf, with Maya's tabs
+  const shelf = fmyEl("div", "fmy-shelf"); shelf.id = "fmy-shelf";
+  const tabs = fmyEl("div", "fmy-shelf-tabs");
+  for (const t of Object.keys(FMY_SHELVES)) {
+    const b = fmyEl("button", "fmy-stab", t); b.type = "button"; b.dataset.tab = t;
+    b.addEventListener("click", () => fmyBuildShelf(shelf, t));
+    tabs.append(b);
+  }
+  shelf.append(tabs, fmyEl("div", "fmy-shelf-row"));
+  let tab0 = "Poly Modeling";
+  try { tab0 = localStorage.getItem("loki-forge-shelf") || tab0; } catch (_) { /* private mode */ }
+  fmyBuildShelf(shelf, FMY_SHELVES[tab0] ? tab0 : "Poly Modeling");
+
+  // ---- the tool box down the left: tools, then the quick layouts
+  const tb = fmyEl("div", "fmy-toolbox"); tb.id = "fmy-toolbox";
+  tb.append(fmyToolBtn("select", "select", "Select Tool", null, "fmy-tool"),
+    fmyToolBtn("lasso", "", "Lasso Tool - drag a box for now", () => { if (typeof forgeSay === "function") forgeSay("Lasso is not in Forge yet - drag a box to select."); }, "fmy-tool off"),
+    fmyToolBtn("paint", "", "Paint Selection Tool - not in Forge yet", () => { if (typeof forgeSay === "function") forgeSay("Paint selection is not in Forge yet."); }, "fmy-tool off"),
+    fmyToolBtn("move", "move", "Move Tool", null, "fmy-tool"), fmyToolBtn("rotate", "rotate", "Rotate Tool", null, "fmy-tool"),
+    fmyToolBtn("scale", "scale", "Scale Tool", null, "fmy-tool"), fmyEl("span", "fmy-hsep"),
+    fmyToolBtn("single", "single", "Single Perspective View", null, "fmy-layout"), fmyToolBtn("four", "four", "Four View", null, "fmy-layout"),
+    fmyToolBtn("outliner", "winOutliner", "Outliner", null, "fmy-layout"), fmyToolBtn("channel", "winChannel", "Channel Box", null, "fmy-layout"));
+
+  // ---- the help line and the command line along the bottom
+  const hl = fmyEl("div", "fmy-helpline"); hl.id = "fmy-helpline";
+  const help = fmyEl("span", "fmy-help", ""); help.id = "fmy-help";
+  const melLbl = fmyEl("span", "fmy-mel", "MEL");
+  const cmd = fmyEl("input", "fmy-cmd"); cmd.id = "fmy-cmd"; cmd.type = "text"; cmd.spellcheck = false;
+  cmd.placeholder = "polyCube; move 0 1 0; select -cl ...";
+  cmd.setAttribute("aria-label", "Command line");
+  const result = fmyEl("span", "fmy-result", ""); result.id = "fmy-result";
+  const hist = []; let hi = 0;
+  cmd.addEventListener("keydown", async (e) => {
+    e.stopPropagation();                                       // typing is not a hotkey
+    if (e.key === "Enter") {
+      const line = cmd.value.trim(); if (!line) return;
+      hist.push(line); hi = hist.length; cmd.value = "";
+      result.textContent = await forgeMayaCommandLine(line);
+    } else if (e.key === "ArrowUp") { e.preventDefault(); if (hi > 0) cmd.value = hist[--hi]; }
+    else if (e.key === "ArrowDown") { e.preventDefault(); hi = Math.min(hist.length, hi + 1); cmd.value = hist[hi] || ""; }
+    else if (e.key === "Escape") cmd.blur();
+  });
+  hl.append(help, melLbl, cmd, result);
+
+  // ---- the time slider and the range slider (Maya: frames 1-120 at 24 fps); it plays and scrubs a model's own clips
+  const ts = fmyEl("div", "fmy-time"); ts.id = "fmy-time";
+  const ruler = fmyEl("div", "fmy-ruler"); ruler.id = "fmy-ruler";
+  const ticks = fmyEl("div", "fmy-ticks");
+  const cursor = fmyEl("div", "fmy-tcursor"); cursor.id = "fmy-tcursor";
+  ruler.append(ticks, cursor);
+  const frameIn = fmyEl("input", "fmy-tfield"); frameIn.id = "fmy-frame"; frameIn.type = "number"; frameIn.value = "1";
+  const play = fmyEl("div", "fmy-playback");
+  const PB = [["start", "\u23EE", "Go to start"], ["back", "\u23F4\u2009|", "Step back one frame"], ["play", "\u25B6", "Play / stop the model's animation"],
+    ["fwd", "|\u2009\u23F5", "Step forward one frame"], ["end", "\u23ED", "Go to end"]];
+  for (const [k, sym, tip] of PB) {
+    const b = fmyEl("button", "fmy-pbtn", sym); b.type = "button"; b.dataset.pb = k; b.title = tip;
+    b.addEventListener("click", () => fmyPlayback(k));
+    play.append(b);
+  }
+  const range = fmyEl("div", "fmy-range");
+  const rs = fmyEl("input", "fmy-tfield"); rs.id = "fmy-rstart"; rs.type = "number"; rs.value = "1";
+  const bar = fmyEl("div", "fmy-rbar"); bar.append(fmyEl("span", "fmy-rknob", "1"), fmyEl("span", "fmy-rknob", "120"));
+  const re = fmyEl("input", "fmy-tfield"); re.id = "fmy-rend"; re.type = "number"; re.value = "120";
+  const clipSel = fmyEl("select", "fmy-menuset fmy-clip"); clipSel.id = "fmy-clip"; clipSel.title = "The model's animation (a creature's Walk / Idle)";
+  clipSel.addEventListener("change", () => { const v = fmyView(); if (v && v.playAnim) { v.playAnim(clipSel.value || null); if (typeof forgeAnimBar === "function") forgeAnimBar(); } fmyTimeSync(); });
+  const fps = fmyEl("span", "fmy-fps", "24 fps");
+  range.append(rs, bar, re, clipSel, fps);
+  for (const f of [frameIn, rs, re]) f.addEventListener("keydown", (e) => e.stopPropagation());
+  frameIn.addEventListener("change", () => fmySeekFrame(+frameIn.value));
+  rs.addEventListener("change", fmyTimeSync); re.addEventListener("change", fmyTimeSync);
+  const scrub = (e) => {
+    const r = ruler.getBoundingClientRect(), a = +rs.value || 1, b = +re.value || 120;
+    fmySeekFrame(Math.round(a + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (b - a)));
+  };
+  ruler.addEventListener("pointerdown", (e) => { ruler.setPointerCapture(e.pointerId); scrub(e); ruler.addEventListener("pointermove", scrub); });
+  ruler.addEventListener("pointerup", () => ruler.removeEventListener("pointermove", scrub));
+  const top = fmyEl("div", "fmy-trow"); top.append(ruler, frameIn, play);
+  ts.append(top, range);
+  // the help line repeats Forge's status (Maya's help line)
+  const status = document.getElementById("forge-status");
+  if (status) new MutationObserver(() => { help.textContent = status.textContent || fmyToolHint(); help.classList.toggle("bad", status.classList.contains("bad")); })
+    .observe(status, { childList: true, characterData: true, subtree: true, attributes: true });
+  help.textContent = fmyToolHint();
+
+  panel.insertBefore(mb, body);
+  panel.insertBefore(st, body);
+  panel.insertBefore(shelf, body);
+  body.insertBefore(tb, body.firstChild);
+  body.after(ts);
+  ts.after(hl);
+  // the snap chips stay where they were (they are the viewport's own, and tests and scripts click them)
+  fmyApply();
+  if (!fmySync.timer) fmySync.timer = setInterval(() => { const s = document.getElementById("forge"); if (s && !s.hidden && !document.hidden) fmySync(); }, 750);
+}
+
+// keep the status line, tool box and toggles showing the real state
+function fmySync() {
+  const v = fmyView();
+  const set = (sel, on) => document.querySelectorAll(sel).forEach((b) => b.classList.toggle("on", !!on));
+  if (v) {
+    const comp = v.mode === "poly", mode = v.edit ? v.edit.mode : "";
+    set('#fmy-status .fmy-selmode[data-maya-id="objectMode"]', !comp);
+    set('#fmy-status .fmy-selmode[data-maya-id="vertex"]', comp && mode === "vert");
+    set('#fmy-status .fmy-selmode[data-maya-id="edge"]', comp && mode === "edge");
+    set('#fmy-status .fmy-selmode[data-maya-id="face"]', comp && mode === "face");
+    for (const k of ["snapGrid", "snapEdge", "snapPoint"]) set('#fmy-status [data-maya-id="' + k + '"]', fmyOn(k));
+    const tc = comp ? v.gizmo : v.transform;
+    const tool = tc && tc.object ? tc.mode : null;
+    set('#fmy-toolbox [data-maya-id="select"]', !tool);
+    set('#fmy-toolbox [data-maya-id="move"]', tool === "translate");
+    set('#fmy-toolbox [data-maya-id="rotate"]', tool === "rotate");
+    set('#fmy-toolbox [data-maya-id="scale"]', tool === "scale");
+    set('#fmy-toolbox [data-maya-id="single"]', !v.quad);
+    set('#fmy-toolbox [data-maya-id="four"]', !!v.quad);
+    const sym = document.getElementById("fmy-symlabel");
+    if (sym) sym.textContent = "Symmetry: " + (v.brush && v.brush.symmetry && v.mode === "sculpt" ? "Object X" : "Off");
+    set("#fmy-symm", v.brush && v.brush.symmetry && v.mode === "sculpt");
+    const ms = document.getElementById("fmy-menuset");
+    if (ms && document.activeElement !== ms) ms.value = v.mode === "sculpt" ? "Sculpting" : "Modeling";
+    const camName = document.getElementById("fmy-camname");
+    if (camName) camName.textContent = v.quad ? "" : (v.cam || "persp");
+    set("#fmy-panelbar [data-maya-id='wire']", !!v.wire);
+    set("#fmy-panelbar [data-maya-id='shaded']", !v.wire);
+    set("#fmy-panelbar [data-maya-id='textured']", !v.clay);
+    set("#fmy-panelbar [data-maya-id='xray']", v.edit && v.edit.xray);
+    set("#fmy-panelbar [data-maya-id='grid']", v.maya && v.maya.grid && v.maya.grid.visible);
+    set("#fmy-panelbar [data-maya-id='wos']", !!v.wireOnShaded);
+  }
+  for (const [id, k] of [["winOutliner", "outliner"], ["winChannel", "channel"], ["winToolkit", "toolkit"], ["winCreate", "create"], ["winMaterials", "materials"]]) {
+    const on = typeof forgeMayaPanels === "function" ? !!forgeMayaPanels()[k] : false;
+    set('#fmy-status [data-maya-id="' + id + '"], #fmy-toolbox [data-maya-id="' + id + '"]', on);
+  }
+  if (v) fmyHudUpdate(v);
+  const help = document.getElementById("fmy-help"), status = document.getElementById("forge-status");
+  if (help && status && !status.textContent) help.textContent = fmyToolHint();
+  fmyTimeSync();
+}
+
+// Maya's help line names the tool and says what it does when nothing else is being said
+function fmyToolHint() {
+  const v = fmyView();
+  if (!v) return "Select Tool: select an object";
+  if (v.mode === "sculpt") return "Sculpt Tool: drag on the surface - Ctrl/Cmd inverts, Shift smooths, hold b and drag to resize";
+  const tc = v.mode === "poly" ? v.gizmo : v.transform, tool = tc && tc.object ? tc.mode : null;
+  const what = v.mode === "poly" ? ({ vert: "vertices", edge: "edges", face: "faces" }[v.edit && v.edit.mode] || "components") : "object(s)";
+  if (tool === "translate") return "Move Tool: use manipulator to move " + what + ". Shift+drag duplicates, hold x / c / v to snap.";
+  if (tool === "rotate") return "Rotate Tool: use manipulator to rotate " + what + ".";
+  if (tool === "scale") return "Scale Tool: use manipulator to scale " + what + ".";
+  return "Select Tool: select " + (v.mode === "poly" ? what : "an object");
+}
+
+// ---- the time slider
+const FMY_FPS = 24;
+function fmyTimeSync() {
+  const ts = document.getElementById("fmy-time");
+  if (!ts || ts.hidden) return;
+  const v = fmyView();
+  const a = +document.getElementById("fmy-rstart").value || 1, b = Math.max(a + 1, +document.getElementById("fmy-rend").value || 120);
+  const ticks = ts.querySelector(".fmy-ticks");
+  if (ticks.dataset.range !== a + ":" + b) {                      // Maya numbers every 5th frame
+    ticks.dataset.range = a + ":" + b; ticks.textContent = "";
+    const step = b - a > 200 ? 20 : b - a > 80 ? 5 : 1;
+    for (let f = a; f <= b; f++) {
+      if (f % step && f !== a) continue;                         // on the multiples (5, 10, 15 ...), like Maya
+      const t = fmyEl("span", "fmy-tick" + ((f % 5 === 0 || f === a) ? " lab" : ""), (f % 5 === 0 || f === a) ? String(f) : "");
+      t.style.left = ((f - a) / (b - a) * 100) + "%";
+      ticks.append(t);
+    }
+    const knobs = ts.querySelectorAll(".fmy-rknob"); if (knobs.length === 2) { knobs[0].textContent = String(a); knobs[1].textContent = String(b); }
+  }
+  const clipSel = document.getElementById("fmy-clip");
+  const names = (v && v.anims) || [];
+  if (clipSel.dataset.names !== names.join("|")) {
+    clipSel.dataset.names = names.join("|"); clipSel.textContent = "";
+    const none = fmyEl("option", "", names.length ? "No Animation" : "No Anim Layer"); none.value = ""; clipSel.append(none);
+    for (const n of names) { const o = fmyEl("option", "", n); o.value = n; clipSel.append(o); }
+  }
+  const info = v && v.animInfo ? v.animInfo() : null;
+  if (document.activeElement !== clipSel) clipSel.value = info ? info.name : "";
+  const frame = info ? Math.min(b, a + Math.floor(info.t * FMY_FPS) % (b - a + 1)) : (+document.getElementById("fmy-frame").value || a);
+  const cur = document.getElementById("fmy-tcursor");
+  if (cur) cur.style.left = ((Math.max(a, Math.min(b, frame)) - a) / (b - a) * 100) + "%";
+  const fi = document.getElementById("fmy-frame");
+  if (fi && document.activeElement !== fi) fi.value = String(frame);
+  const pb = ts.querySelector('[data-pb="play"]');
+  if (pb) { pb.textContent = info && !info.paused ? "\u25A0" : "\u25B6"; pb.classList.toggle("on", !!(info && !info.paused)); }
+}
+function fmySeekFrame(f) {
+  const v = fmyView();
+  const a = +document.getElementById("fmy-rstart").value || 1, b = +document.getElementById("fmy-rend").value || 120;
+  f = Math.max(a, Math.min(b, Math.round(f || a)));
+  document.getElementById("fmy-frame").value = String(f);
+  if (v && v.animInfo && v.animInfo()) { v.animPause(true); v.animSeek((f - a) / FMY_FPS); }
+  fmyTimeSync();
+}
+function fmyPlayback(k) {
+  const v = fmyView();
+  const a = +document.getElementById("fmy-rstart").value || 1, b = +document.getElementById("fmy-rend").value || 120;
+  const f = +document.getElementById("fmy-frame").value || a;
+  if (k === "start") return fmySeekFrame(a);
+  if (k === "end") return fmySeekFrame(b);
+  if (k === "back") return fmySeekFrame(f - 1);
+  if (k === "fwd") return fmySeekFrame(f + 1);
+  if (k === "play") {
+    if (!v) return;
+    if (!(v.animInfo && v.animInfo())) {
+      const first = (v.anims || [])[0];
+      if (!first) { if (typeof forgeSay === "function") forgeSay("Nothing is animated - a creature has Walk and Idle clips to play.", true); return; }
+      v.playAnim(first);
+      if (typeof forgeAnimBar === "function") forgeAnimBar();
+    } else v.animPause();
+    fmyTimeSync();
+  }
+}
+
+// ================================================================== the command line (a small MEL, Maya's names)
+async function forgeMayaCommandLine(line) {
+  const v = fmyView();
+  const t = v && v.tree && v.tree.api;
+  const out = [];
+  for (const raw of line.split(";")) {
+    const s = raw.trim(); if (!s) continue;
+    const [w, ...args] = s.split(/\s+/);
+    const nums = args.filter((a) => /^-?\d*\.?\d+$/.test(a)).map(Number);
+    const flags = args.filter((a) => a.startsWith("-"));
+    const names = args.filter((a) => !a.startsWith("-") && !/^-?\d*\.?\d+$/.test(a));
+    const prim = { polyCube: "cube", polySphere: "sphere", polyCylinder: "cylinder", polyCone: "cone", polyTorus: "torus", polyPlane: "plane" }[w];
+    try {
+      if (prim) { await fmyRun(prim); out.push(t ? t.root().name : prim); continue; }
+      if (!v || !t) { out.push("// Error: make or add something first"); continue; }
+      if (w === "select") {
+        if (flags.includes("-cl") || flags.includes("-clear")) t.selectNone();
+        else if (flags.includes("-all")) t.selectAll();
+        else {
+          const ids = names.map((n) => t.list().find((x) => x.name === n)).filter(Boolean).map((x) => x.id);
+          t.selectMany(ids, flags.includes("-add") || flags.includes("-tgl") ? "add" : flags.includes("-d") ? "remove" : "set");
+        }
+        out.push(t.selected().map((id) => t.node(id).name).join(" ") || "nothing selected");
+      } else if (w === "move" || w === "rotate" || w === "scale") {
+        const part = { move: "translate", rotate: "rotate", scale: "scale" }[w];
+        for (const id of t.selected()) {
+          const cur = t.transform(id)[part];
+          nums.slice(0, 3).forEach((n, a) => t.setTransform(id, part, a, flags.includes("-r") ? cur[a] + n : n));
+        }
+        v.tree.build(); out.push(w + " " + nums.join(" "));
+      } else if (w === "setAttr" && names[0] && nums.length) {
+        const [obj, attr] = names[0].split(".");
+        const n = t.list().find((x) => x.name === obj);
+        const m = /^(translate|rotate|scale)([XYZ])$/.exec(attr || "");
+        if (n && m) { t.setTransform(n.id, m[1], "XYZ".indexOf(m[2]), nums[0]); v.tree.build(); out.push(names[0] + " = " + nums[0]); }
+        else if (n && attr === "visibility") { t.setVisible(n.id, !!nums[0]); out.push(names[0] + " = " + nums[0]); }
+        else out.push("// Error: no attribute " + names[0]);
+      } else if (w === "rename" && names.length >= 1) {
+        const target = names.length > 1 ? t.list().find((x) => x.name === names[0]) : t.active();
+        if (target) { t.rename(target.id, names[names.length - 1]); out.push(t.node(target.id).name); }
+      } else {
+        const alias = { delete: "delete", duplicate: "duplicate", group: "group", ungroup: "ungroup", parent: "parent", undo: "undo", redo: "redo",
+          makeIdentity: "freeze", FreezeTransformations: "freeze", CenterPivot: "centerPivot", ResetTransformations: "resetXf", hide: "hide",
+          showHidden: "showAll", viewFit: "frameAll", fitPanel: "frameAll", polyExtrudeFacet: "extrude", polySmooth: "smooth", polyNormal: "reverse",
+          polySplitRing: "edgeLoop", polyBevel: "bevel", polyBevel3: "bevel", isolateSelect: "isolate" }[w];
+        let id = alias || w;
+        if (w === "xform" && flags.includes("-cp")) id = "centerPivot";
+        if (w === "parent" && flags.includes("-w")) id = "unparent";
+        if (!fmyCmd(id)) {
+          const byLabel = typeof FORGE_MAYA_CMDS !== "undefined" ? Object.entries(FORGE_MAYA_CMDS).find(([, c]) => c[0].toLowerCase() === s.toLowerCase()) : null;
+          if (byLabel) id = byLabel[0];
+        }
+        if (!fmyCmd(id)) { out.push("// Error: Cannot find procedure \"" + w + "\""); continue; }
+        await fmyRun(id);
+        out.push(fmyCmd(id)[0]);
+      }
+    } catch (exc) { out.push("// Error: " + exc.message); }
+  }
+  fmySync();
+  return out.length ? "// Result: " + out.join("; ") : "";
+}
+
+// ================================================================== the viewport: panel menus, HUD, view cube, grid, lighting
+function forgeMayaViewportAttach(view, ctx) {
+  const { THREE, scene, camera, controls, canvas, lights } = ctx;
+  const stage = canvas && canvas.parentElement;
+  if (!stage || stage.querySelector("#fmy-panelbar")) return;
+  stage.classList.add("fmy-stage");
+  view.mayaShade = true;                                      // matte grey lambert1, like Maya (forge.js applyLook)
+  view.cam = view.cam || "persp";
+
+  // ---- Maya's default lighting: one light from the camera, a little ambient, no rim; the old presets stay on 7
+  const defaultLight = () => {
+    if (!lights) return;
+    lights.hemi.color.setHex(0xffffff); lights.hemi.groundColor.setHex(0x9a9a9a); lights.hemi.intensity = 0.55;
+    lights.key.color.setHex(0xffffff); lights.key.intensity = 1.55; lights.key.position.set(0.25, 0.3, 1);
+    if (lights.rim) lights.rim.intensity = 0;
+    view.light = -1; view.dirty = true;
+  };
+  defaultLight();
+  const nextLight = view.nextLight;
+  view.nextLight = () => { const n = nextLight(); if (lights && lights.rim && lights.rim.intensity === 0) lights.rim.intensity = 1.2; return n; };
+  view.defaultLighting = () => { defaultLight(); return "Default Lighting"; };
+  if (view.applyLook) view.applyLook();
+
+  // ---- Maya's grid: dark lines over the gradient, a darker line on each axis through the origin
+  const g = view.maya && view.maya.grid;
+  if (g) {
+    const [fine, major] = g.children;
+    for (const [h, op] of [[fine, 0.2], [major, 0.42]]) {
+      if (!h) continue;
+      const mats = Array.isArray(h.material) ? h.material : [h.material];
+      for (const m of mats) { m.color && m.color.setHex(0x000000); m.vertexColors = false; m.opacity = op; m.transparent = true; m.needsUpdate = true; }
+    }
+    const axisGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-6, 0, 0), new THREE.Vector3(6, 0, 0), new THREE.Vector3(0, 0, -6), new THREE.Vector3(0, 0, 6)]);
+    const axes = new THREE.LineSegments(axisGeo, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8, depthWrite: false }));
+    axes.name = "forge-grid-axes"; axes.raycast = () => {};
+    g.add(axes);
+  }
+
+  // ---- the panel's own menu bar and icon bar
+  const pb = fmyEl("div", "fmy-panelbar"); pb.id = "fmy-panelbar";
+  const pm = fmyEl("div", "fmy-panelmenus");
+  const look = (cam) => () => fmyRun(cam);
+  pm.append(
+    fmyMenuButton("View", () => [["camSel", "Select Camera", () => { if (typeof forgeSay === "function") forgeSay("Camera: " + (view.cam || "persp") + "."); }], "-",
+      "frameAll", "frameSel", "defaultView", "-", ["prevView", "Previous View", () => view.viewUndo && view.viewUndo()], ["nextView", "Next View", () => view.viewRedo && view.viewRedo()], "-",
+      "#Look Through", ["persp", "persp", look("persp"), () => view.cam === "persp"], ["top", "top", look("top"), () => view.cam === "top"],
+      ["front", "front", look("front"), () => view.cam === "front"], ["side", "side", look("side"), () => view.cam === "side"]], "fmy-pmb"),
+    fmyMenuButton("Shading", () => ["wire", "shaded", "textured", "-", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!view.wireOnShaded], "xray",
+      ["mayaShade", "Default Material (lambert1)", () => { view.mayaShade = !view.mayaShade; if (view.applyLook) view.applyLook(); }, () => !!view.mayaShade]], "fmy-pmb"),
+    fmyMenuButton("Lighting", () => [["defLight", "Use Default Lighting", () => view.defaultLighting(), () => view.light === -1], "lights"], "fmy-pmb"),
+    fmyMenuButton("Show", () => [["grid", "Grid", () => fmyRun("grid"), () => !!(view.maya && view.maya.grid && view.maya.grid.visible)],
+      ["hudT", "Heads Up Display", () => fmyUiSet("hud"), () => fmyUi().hud], ["cubeT", "View Cube", () => fmyUiSet("viewcube"), () => fmyUi().viewcube],
+      ["snapsT", "Snap chips", () => { const s = document.getElementById("forge-snaps"); if (s) s.hidden = !s.hidden; }, () => { const s = document.getElementById("forge-snaps"); return !!(s && !s.hidden); }]], "fmy-pmb"),
+    fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true]], "fmy-pmb"),
+    fmyMenuButton("Panels", () => ["#Perspective", ["persp", "persp", look("persp"), () => view.cam === "persp"], "#Orthographic",
+      ["top", "top", look("top"), () => view.cam === "top"], ["front", "front", look("front"), () => view.cam === "front"], ["side", "side", look("side"), () => view.cam === "side"],
+      "-", "#Layouts", "single", "four", "-", "winOutliner", "winChannel"], "fmy-pmb"));
+  const icons = fmyEl("div", "fmy-panelicons");
+  icons.append(
+    fmyToolBtn("camera", "", "Select the camera", () => { if (typeof forgeSay === "function") forgeSay("Camera: " + (view.cam || "persp") + "."); }, "fmy-pib"),
+    fmyToolBtn("frameall", "frameAll", null, null, "fmy-pib"), fmyToolBtn("framesel", "frameSel", null, null, "fmy-pib"), fmyEl("span", "fmy-vsep"),
+    fmyToolBtn("grid", "grid", "Grid", null, "fmy-pib"), fmyEl("span", "fmy-vsep"),
+    fmyToolBtn("wire", "wire", "Wireframe", null, "fmy-pib"), fmyToolBtn("shaded", "shaded", "Smooth Shade All", null, "fmy-pib"),
+    fmyToolBtn("wire", "wos", "Wireframe on Shaded", () => fmyWireOnShaded(), "fmy-pib fmy-wos"),
+    fmyToolBtn("textured", "textured", "Textured", null, "fmy-pib"), fmyToolBtn("xray", "xray", "X-Ray", null, "fmy-pib"), fmyEl("span", "fmy-vsep"),
+    fmyToolBtn("light", "", "Use Default Lighting", () => view.defaultLighting(), "fmy-pib"), fmyToolBtn("isolate", "isolate", "Isolate Select", null, "fmy-pib"),
+    fmyToolBtn("hud", "", "Heads Up Display", () => fmyUiSet("hud"), "fmy-pib"));
+  pb.append(pm, icons);
+  stage.append(pb);
+
+  // ---- heads-up display: the poly count, the camera's name, the axis triad
+  const hud = fmyEl("div", "fmy-hud"); hud.id = "fmy-hud";
+  const table = fmyEl("table", "fmy-polycount"); table.id = "fmy-polycount";
+  for (const k of ["Verts", "Edges", "Faces", "Tris", "UVs"]) {
+    const tr = fmyEl("tr");
+    tr.append(fmyEl("th", "", k + ":"), fmyEl("td", "", "0"), fmyEl("td", "", "0"), fmyEl("td", "", "0"));
+    tr.dataset.k = k.toLowerCase();
+    table.append(tr);
+  }
+  const camName = fmyEl("div", "fmy-camname", "persp"); camName.id = "fmy-camname";
+  const triad = fmyEl("div", "fmy-triad"); triad.id = "fmy-triad";
+  triad.innerHTML = '<svg viewBox="-20 -20 40 40" width="40" height="40"><line id="fmy-tx" x1="0" y1="0" x2="10" y2="0" stroke="#e8423b" stroke-width="1.6"/><line id="fmy-ty" x1="0" y1="0" x2="0" y2="-10" stroke="#61e84a" stroke-width="1.6"/><line id="fmy-tz" x1="0" y1="0" x2="0" y2="10" stroke="#3b6ff0" stroke-width="1.6"/><text id="fmy-tlx" font-size="6" fill="#e8423b">x</text><text id="fmy-tly" font-size="6" fill="#61e84a">y</text><text id="fmy-tlz" font-size="6" fill="#3b6ff0">z</text></svg>';
+  hud.append(table, camName, triad);
+  stage.append(hud);
+
+  // ---- the view cube: turns with the camera; a face click looks from that side, the house goes home
+  const cubeWrap = fmyEl("div", "fmy-cube"); cubeWrap.id = "fmy-cube";
+  const cube = fmyEl("div", "fmy-cube-inner");
+  const FACES = [["front", "FRONT", [0, 0, 1]], ["back", "BACK", [0, 0, -1]], ["right", "RIGHT", [1, 0, 0]], ["left", "LEFT", [-1, 0, 0]],
+    ["top", "TOP", [0, 1, 0.0001]], ["bottom", "BOTTOM", [0, -1, 0.0001]]];
+  for (const [cls, label, dir] of FACES) {
+    const f = fmyEl("button", "fmy-cf fmy-cf-" + cls, label);
+    f.type = "button"; f.title = "Look from the " + label.toLowerCase();
+    f.addEventListener("click", (e) => { e.stopPropagation(); fmyLookFrom(view, THREE, camera, controls, cls, dir); });
+    cube.append(f);
+  }
+  const home = fmyEl("button", "fmy-cube-home"); home.type = "button"; home.innerHTML = fmySvg("home"); home.title = "Home view (Alt+Home)";
+  home.addEventListener("click", (e) => { e.stopPropagation(); fmyRun("defaultView"); });
+  cubeWrap.append(cube, home);
+  stage.append(cubeWrap);
+
+  // follow the camera: the cube and the triad turn with it, the HUD counts what is in the scene
+  let lastQ = "";
+  const tick = () => {
+    if (!document.body.contains(stage)) return;
+    const sheet = document.getElementById("forge");
+    if (sheet && !sheet.hidden) {
+      const q = camera.quaternion;
+      const key = q.x.toFixed(4) + q.y.toFixed(4) + q.z.toFixed(4) + q.w.toFixed(4);
+      if (key !== lastQ) {
+        lastQ = key;
+        const m = new THREE.Matrix4().makeRotationFromQuaternion(q.clone().invert());
+        const e = m.elements;
+        // CSS: the cube's world axes seen from the camera (y flipped for the screen)
+        cube.style.transform = "matrix3d(" + [e[0], -e[1], e[2], 0, -e[4], e[5], -e[6], 0, e[8], -e[9], e[10], 0, 0, 0, 0, 1].join(",") + ")";
+        for (const [axis, v3] of [["x", new THREE.Vector3(1, 0, 0)], ["y", new THREE.Vector3(0, 1, 0)], ["z", new THREE.Vector3(0, 0, 1)]]) {
+          const p = v3.applyQuaternion(q.clone().invert());
+          const ln = triad.querySelector("#fmy-t" + axis), tx = triad.querySelector("#fmy-tl" + axis);
+          if (ln) { ln.setAttribute("x2", (p.x * 12).toFixed(2)); ln.setAttribute("y2", (-p.y * 12).toFixed(2)); }
+          if (tx) { tx.setAttribute("x", (p.x * 15 - 1.5).toFixed(2)); tx.setAttribute("y", (-p.y * 15 + 2).toFixed(2)); }
+        }
+      }
+    }
+    const ai = view.animInfo ? view.animInfo() : null;          // the time slider's cursor runs with a playing clip
+    if (ai && !ai.paused && performance.now() - (tick.last || 0) > 80) { tick.last = performance.now(); fmyTimeSync(); }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  if (controls) controls.addEventListener("change", () => { lastQ = ""; });
+  fmyApply();
+}
+
+// look at the scene from one of the view cube's sides (top / front / side are Maya's orthographic cameras)
+function fmyLookFrom(view, THREE, camera, controls, side, dir) {
+  const ortho = { top: "top", front: "front", right: "side" }[side];
+  if (ortho) { fmyRun(ortho); return; }
+  if (view.cam !== "persp") fmyRun("persp");
+  if (view.rememberView) view.rememberView();
+  const t = controls.target.clone(), d = camera.position.distanceTo(t) || 3;
+  camera.position.copy(t).addScaledVector(new THREE.Vector3(dir[0], dir[1], dir[2]).normalize(), d);
+  camera.lookAt(t); controls.update(); view.dirty = true;
+}
+
+// Mesh Display / Shading > Wireframe on Shaded: every mesh shows its edges in dark grey (Maya)
+function fmyWireOnShaded() {
+  const v = fmyView();
+  if (!v || !v.tree) return "";
+  v.wireOnShaded = !v.wireOnShaded;
+  const THREE = v.THREE;
+  const scene = (() => { let s = v.holder; while (s.parent) s = s.parent; return s; })();
+  scene.traverse((o) => { if (o.userData && o.userData.fmyWos) o.visible = false; });
+  const old = []; scene.traverse((o) => { if (o.userData && o.userData.fmyWos) old.push(o); });
+  for (const o of old) { o.parent.remove(o); o.geometry.dispose(); o.material.dispose(); }
+  if (v.wireOnShaded) {
+    for (const m of v.tree.api.pickables()) {
+      const tris = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+      if (tris > 150000) continue;
+      const l = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 1), new THREE.LineBasicMaterial({ color: 0x1b1b1b, transparent: true, opacity: 0.6 }));
+      l.userData.fmyWos = true; l.raycast = () => {};
+      m.add(l);
+    }
+  }
+  v.dirty = true;
+  fmySync();
+  return v.wireOnShaded ? "Wireframe on Shaded." : "Shaded.";
+}
+
+// the heads-up poly count: all visible objects | the selected objects | the selected components (Maya's 3 columns)
+const fmyCountCache = new WeakMap(), fmyTopo = new WeakMap();
+function fmyCountGeo(g) {
+  let c = fmyCountCache.get(g);
+  const ver = (g.attributes.position && g.attributes.position.version) || 0;
+  if (c && c.ver === ver) return c;
+  const pos = g.attributes.position, n = pos ? pos.count : 0;
+  const idx = g.index ? g.index.array : null, tris = (idx ? idx.length : n) / 3;
+  // vertices and edges by position (a shape's corners are split per face for flat shading)
+  const key = (i) => pos.getX(i).toFixed(5) + "," + pos.getY(i).toFixed(5) + "," + pos.getZ(i).toFixed(5);
+  let verts = n, edges = Math.round(tris * 1.5);
+  if (n && n < 120000) {
+    const id = new Map(), vid = new Int32Array(n);
+    for (let i = 0; i < n; i++) { const k = key(i); let x = id.get(k); if (x == null) { x = id.size; id.set(k, x); } vid[i] = x; }
+    verts = id.size;
+    const es = new Set();
+    for (let t = 0; t < tris; t++) {
+      const a = vid[idx ? idx[t * 3] : t * 3], b = vid[idx ? idx[t * 3 + 1] : t * 3 + 1], cc = vid[idx ? idx[t * 3 + 2] : t * 3 + 2];
+      for (const [p, q] of [[a, b], [b, cc], [cc, a]]) es.add(p < q ? p * 1048576 + q : q * 1048576 + p);
+    }
+    edges = es.size;
+  }
+  c = { ver, verts, edges, faces: tris, tris, uvs: g.attributes.uv ? g.attributes.uv.count : 0 };
+  fmyCountCache.set(g, c);
+  return c;
+}
+function fmyHudUpdate(v) {
+  const table = document.getElementById("fmy-polycount");
+  if (!table || table.closest("[hidden]") || !v.tree) return;
+  const t = v.tree.api;
+  const sum = (ids) => {
+    const r = { verts: 0, edges: 0, faces: 0, tris: 0, uvs: 0 };
+    for (const id of ids) {
+      const n = t.node(id); if (!n || !n.visible) continue;
+      n.inner.children.forEach((o) => {
+        if (!o.isMesh || !o.geometry || o.name === "forge-sel") return;
+        let c;
+        if (n.root && v.sm && !v.poly) {              // the edited mesh: Forge already knows its welded vertices
+          const tris = v.sm.idx ? v.sm.idx.length / 3 : 0;
+          c = { verts: v.sm.n || 0, edges: Math.round(tris * 1.5), faces: tris, tris, uvs: v.sm.uv ? v.sm.uv.length / 2 : 0 };
+        } else c = fmyCountGeo(o.geometry);
+        if (n.root && v.poly) {                      // the edited mesh: its real polygons and edges
+          const P = window.ForgePoly;
+          let e = c.edges;
+          try {
+            if (P && P.topology) {
+              let T = fmyTopo.get(v.poly);
+              if (!T) { T = P.topology(v.poly); fmyTopo.set(v.poly, T); }
+              e = T.edges.length;
+            }
+          } catch (_) { /* keep the estimate */ }
+          c = Object.assign({}, c, { verts: v.poly.v.length, faces: v.poly.f.length, edges: e });
+        }
+        for (const k of Object.keys(r)) r[k] += c[k];
+      });
+    }
+    return r;
+  };
+  const all = sum(t.allIds()), sel = sum(t.selected());
+  const comp = v.mode === "poly" && v.edit ? { verts: v.edit.sel.v.size, edges: v.edit.sel.e.size, faces: v.edit.sel.f.size, tris: 0, uvs: 0 } : { verts: 0, edges: 0, faces: 0, tris: 0, uvs: 0 };
+  for (const tr of table.rows) {
+    const k = tr.dataset.k;
+    tr.cells[1].textContent = String(all[k]); tr.cells[2].textContent = String(sel[k]); tr.cells[3].textContent = String(comp[k]);
+  }
+}

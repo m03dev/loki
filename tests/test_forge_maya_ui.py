@@ -367,8 +367,8 @@ async def main():
         # -------- [ undoes a view change
         await page.evaluate("forge.view.rememberView(); forge.view.setView('top')")
         await page.keyboard.press("[")
-        vu = await page.evaluate("forge.view.camera.fov")
-        check("[ undoes the last view change", vu > 10, vu)
+        vu = await page.evaluate("[forge.view.camera.fov, forge.view.cam, forge.view.controls.enableRotate]")
+        check("[ undoes the last view change - the camera, its name and its tumble come back", vu[0] > 10 and vu[1] == "persp" and vu[2] is True, vu)
 
         # -------- every object editable: the tools' mesh moves into the one you edit
         mk = await page.evaluate("""() => { const t = forge.view.tree.api, v = forge.view;
@@ -546,6 +546,121 @@ async def main():
           return { nodes: t.list().length, root: !!c.root, onGizmo: forge.view.transform.object === c.grp, orig: t.node(%d).grp.visible }; }""" % rid)
         await page.evaluate("forge.view.transform.dispatchEvent({ type: 'dragging-changed', value: false }); forge.view.toggleTransform(null)")
         check("Shift+drag leaves the original and hands the manipulator to a copy", sd["nodes"] == n_before + 1 and not sd["root"] and sd["onGizmo"], sd)
+
+        # -------- Forge dressed as Maya (app/ui/forge_mayaui.js): checked against Maya 2027 on the owner's Mac
+        await page.evaluate("forgeModelMode(false)")
+        await page.evaluate("forgeMayaPanel('outliner', true); forgeMayaPanel('channel', true)")
+        look = await page.evaluate("""() => { const p = document.querySelector('#forge .forge-panel');
+          return { bg: getComputedStyle(p).backgroundColor,
+                   menus: [...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.dataset.menu),
+                   panelMenus: [...document.querySelectorAll('#fmy-panelbar .fmy-pmb')].map((b) => b.dataset.menu),
+                   shelfTabs: [...document.querySelectorAll('#fmy-shelf .fmy-stab')].map((b) => b.dataset.tab),
+                   tools: document.querySelectorAll('#fmy-toolbox .fmy-ib').length,
+                   stage: getComputedStyle(document.getElementById('forge-stage')).backgroundImage }; }""")
+        check("Maya's panel grey (#444444) and its menu bar: File Edit Create Select Modify Display Windows Mesh 'Edit Mesh' 'Mesh Tools' 'Mesh Display' Help",
+              look["bg"] == "rgb(68, 68, 68)" and look["menus"][:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
+              and "Edit Mesh" in look["menus"] and "Mesh Tools" in look["menus"], look)
+        check("the viewport has Maya's own menus (View Shading Lighting Show Renderer Panels), the shelf its tabs, a tool box",
+              look["panelMenus"] == ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"] and look["shelfTabs"][:2] == ["Poly Modeling", "Sculpting"]
+              and look["tools"] >= 8 and "135, 155, 179" in look["stage"], look)
+        # Create > Cube from the menu bar makes a new pCube
+        n0 = await page.evaluate(T + ".list().length")
+        await page.click('#fmy-menubar .fmy-mb[data-menu="Create"]')
+        await page.click('.fmy-drop .fmy-ditem[data-maya-id="cube"]')
+        await page.evaluate("forgeModelMode(false)")
+        made = await page.evaluate("[forge.view.tree.api.list().length, forge.view.tree.api.root().name]")
+        check("Create > Cube in the menu bar makes a new pCube (and the menu closes)", made[0] == n0 + 1 and made[1].startswith("pCube")
+              and not await page.evaluate("!!document.querySelector('.fmy-drop')"), [n0, made])
+        hud = await page.evaluate("""() => { forge.view.tree.api.select(forge.view.tree.api.root().id); fmySync();
+          const row = (k) => [...document.querySelector('#fmy-polycount tr[data-k="' + k + '"]').cells].slice(1).map((c) => +c.textContent);
+          return { verts: row('verts'), faces: row('faces'), edges: row('edges'), cam: document.getElementById('fmy-camname').textContent }; }""")
+        check("the heads-up poly count: the selected cube reads 8 verts, 12 edges, 6 faces (Maya's middle column)",
+              hud["verts"][1] == 8 and hud["edges"][1] == 12 and hud["faces"][1] in (6, 12) and hud["verts"][0] > 8 and hud["cam"] == "persp", hud)
+        wire = await page.evaluate("""() => { const t = forge.view.tree.api, n = t.root(); let lines = 0, box = 0;
+          n.inner.traverse((o) => { if (o.name === 'forge-sel') { o.traverse((c) => { if (c.isLineSegments && !c.isBox3Helper) lines++; if (c.type === 'Box3Helper') box++; }); } });
+          return [lines, box]; }""")
+        check("a selected object shows Maya's wireframe in the selection colour, not a box", wire[0] >= 1 and wire[1] == 0, wire)
+        # the shelf: Poly Modeling's sphere button
+        await page.click('#fmy-shelf .fmy-stab[data-tab="Poly Modeling"]')
+        await page.click('#fmy-shelf .fmy-shelf-btn[data-maya-id="sphere"]')
+        await page.evaluate("forgeModelMode(false)")
+        check("the shelf's sphere makes a pSphere", (await page.evaluate(T + ".root().name")).startswith("pSphere"))
+        # the tool box and the status line follow the tool and the selection mode
+        await page.click('#fmy-toolbox .fmy-ib[data-maya-id="rotate"]')
+        await page.evaluate("fmySync()")
+        tb = await page.evaluate("[forge.view.transform.mode, document.querySelector('#fmy-toolbox [data-maya-id=\"rotate\"]').classList.contains('on')]")
+        await page.click('#fmy-status .fmy-selmode[data-maya-id="vertex"]')
+        await page.wait_for_timeout(150)
+        await page.evaluate("fmySync()")
+        sm = await page.evaluate("[forge.view.mode, forge.view.edit.mode, document.querySelector('#fmy-status [data-maya-id=\"vertex\"]').classList.contains('on')]")
+        await page.click('#fmy-status .fmy-selmode[data-maya-id="objectMode"]')
+        await page.wait_for_timeout(150)
+        check("the tool box's Rotate is Maya's rotate tool and lights up", tb == ["rotate", True], tb)
+        check("the status line's vertex button is component mode, vertices (and lights up); Object goes back", sm == ["poly", "vert", True]
+              and await page.evaluate("forge.view.mode") == "view", sm)
+        await page.click('#fmy-status [data-maya-id="snapGrid"]')
+        sg = await page.evaluate("forge.view.maya.snap.grid")
+        await page.click('#fmy-status [data-maya-id="snapGrid"]')
+        check("the status line's snap buttons switch Maya's snapping (grid here)", sg is True and not await page.evaluate("forge.view.maya.snap.grid"))
+        # the viewport's own Panels menu looks through the top camera; the view cube's FRONT looks from the front
+        await page.click('#fmy-panelbar .fmy-pmb[data-menu="Panels"]')
+        await page.click('.fmy-drop .fmy-ditem[data-maya-id="top"]')
+        await page.evaluate("fmySync()")
+        topcam = await page.evaluate("[forge.view.cam, document.getElementById('fmy-camname').textContent]")
+        await page.evaluate("document.querySelector('#fmy-cube .fmy-cf-front').click()")
+        await page.evaluate("fmySync()")
+        frontcam = await page.evaluate("forge.view.cam")
+        await page.evaluate("forgeMayaRun(forge.view, 'persp')")
+        check("Panels > top looks through top (the HUD says 'top'); the view cube's FRONT looks from the front", topcam == ["top", "top"] and frontcam == "front", [topcam, frontcam])
+        # the command line runs Maya's commands
+        await page.fill("#fmy-cmd", "polySphere; move 0 2 0")
+        await page.press("#fmy-cmd", "Enter")
+        await page.wait_for_timeout(150)
+        cl = await page.evaluate("""() => { const t = forge.view.tree.api, n = t.active(); return [n.name, t.transform(n.id).translate[1], document.getElementById('fmy-result').textContent]; }""")
+        await page.fill("#fmy-cmd", "select -cl; nosuch")
+        await page.press("#fmy-cmd", "Enter")
+        cl2 = await page.evaluate("[forge.view.tree.api.selected().length, document.getElementById('fmy-result').textContent]")
+        await page.evaluate("forgeModelMode(false)")
+        check("the command line: polySphere; move 0 2 0 makes a sphere at y = 2, and says so", cl[0].startswith("pSphere") and abs(cl[1] - 2) < 1e-6 and "Result" in cl[2], cl)
+        check("...select -cl clears the selection, and an unknown word is an error like Maya's", cl2[0] == 0 and "Cannot find procedure" in cl2[1], cl2)
+        # the Channel Box: Maya's ten rows, a scrub on a channel's name, SHAPES and INPUTS (the history)
+        cb = await page.evaluate("""() => { const t = forge.view.tree.api; t.select(t.list().find((n) => n.name.startsWith('pCube')).id);
+          return { rows: [...document.querySelectorAll('#forge-channel .forge-ch-row .forge-ch-label')].map((l) => l.textContent),
+                   shape: document.querySelector('#forge-channel .forge-ch-node').textContent, name: document.getElementById('forge-ch-name').textContent }; }""")
+        check("the Channel Box lists Translate X ... Scale Z and Visibility, the object's name, and its shape under SHAPES",
+              cb["rows"][:3] == ["Translate X", "Translate Y", "Translate Z"] and cb["rows"][-1] == "Visibility" and len(cb["rows"]) == 10
+              and cb["shape"] == cb["name"] + "Shape", cb)
+        lbl = await (await page.query_selector('#forge-channel .forge-ch-row .forge-ch-label')).bounding_box()
+        tx0 = await page.evaluate(T + ".transform().translate[0]")
+        await page.mouse.move(lbl["x"] + lbl["width"] / 2, lbl["y"] + lbl["height"] / 2)
+        await page.mouse.down(); await page.mouse.move(lbl["x"] + lbl["width"] / 2 + 40, lbl["y"] + lbl["height"] / 2, steps=4); await page.mouse.up()
+        tx1 = await page.evaluate(T + ".transform().translate[0]")
+        check("dragging a channel's name scrubs its value (Maya's virtual slider)", tx1 > tx0 + 0.5, [tx0, tx1])
+        await page.evaluate("forgeModelMode(true)")
+        await page.evaluate("forge.view.select([0]); forgeFaceOp('extrude')")
+        inputs = await page.evaluate("[...document.querySelectorAll('#forge-history .forge-hist-name')].map((n) => n.textContent)")
+        await page.evaluate("forgeModelMode(false)")
+        check("INPUTS lists the history with Maya's node names (polyExtrudeFace1)", inputs[:1] == ["polyExtrudeFace1"], inputs)
+        # the Outliner: the four cameras, greyed, then the scene; the search field filters
+        cams = await page.evaluate("[...document.querySelectorAll('#forge-out-list .forge-out-cam')].map((r) => r.dataset.cam)")
+        await page.fill("#forge-out-search", "psphere")
+        found = await page.evaluate("[...document.querySelectorAll('#forge-out-list .forge-out-row .forge-out-name')].map((n) => n.textContent)")
+        await page.fill("#forge-out-search", "")
+        check("the Outliner shows persp / top / front / side first, and its search finds by name", cams == ["persp", "top", "front", "side"]
+              and found and all(f.lower().startswith("psphere") for f in found), [cams, found])
+        # Ctrl+Space hides Maya's UI elements as well, and brings them back
+        await page.press("#forge-out-search", "Escape")       # Esc leaves the search field, the keys go back to Forge
+        await page.mouse.move(cx, cy)
+        await page.keyboard.press("Control+Space")
+        gone = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
+        await page.keyboard.press("Control+Space")
+        back = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
+        if not any(gone):                                   # something was folded already: the first press showed everything
+            await page.keyboard.press("Control+Space")
+            gone = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
+            await page.keyboard.press("Control+Space")
+            back = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
+        check("Ctrl+Space hides the status line, shelf, tool box and help line too (Maya), and brings them back", all(gone) and not any(back), [gone, back])
 
         check("no script errors", not errors, errors[:5])
         await browser.close()
