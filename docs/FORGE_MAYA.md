@@ -92,7 +92,19 @@ are still open, below. Everything shipped has a test that would fail if it broke
   with the copy inserted as a sibling.
 - Acceptance: shift-drag, assert two nodes and that the original did not move.
 
-### OPEN - T6: Construction history
+### OPEN - T6: Construction history   (smaller than it looked - good news)
+Checked at T4b time: the poly operations are **already parameterised** - `P.extrude(base, faces, 0.2)`,
+`P.inset(base, faces, 0.25)` - and `app/ui/forge_model.js` already keeps
+`forgeModel.last = { kind, base, faces, amount, out, pick }`, i.e. a **one-step** history with a re-runnable
+op. So T6 is mostly turning that single step into an ordered **stack** per node
+(`node.history = { base, ops: [{ kind, args }] }`), rebuilding by replaying `base -> ops` through
+`v.showPoly(result, true, true)`, and giving the stack a panel row per op whose parameters can be typed and
+re-run, plus **Delete History** (which just re-bases on the current mesh). The ops that fit straight away:
+extrude, inset, delete faces / verts / edges, flip, smooth. Two do NOT fit and need their own representation
+first: a **sculpt stroke** (Maya stores a sculpt node with every stroke) and **DynaMesh** (a resolution
+change, not a mesh edit). Decision needed before starting: which of those two must be in the history, if any.
+
+### (the original T6 note, kept for the reasoning)
 - Each mesh node keeps an ordered list of operations (`{"extrude": {distance: 2}}`, `{"subdivide": 3}`, a
   sculpt stroke, ...) with the inputs they were applied with. The Channel Box shows them; selecting one
   re-opens its parameters and **rebuilds**; history can be deleted (Maya's "Delete History" freezes the mesh).

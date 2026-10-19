@@ -26,15 +26,182 @@ var _shop_row: HBoxContainer
 var _status: Label
 var _start_button: Button
 var _rng := RandomNumberGenerator.new()
+var _viewport_container: SubViewportContainer
+var _arena_viewport: SubViewport
+var _arena: Node3D
+var _camera: Camera3D
+var _avatar: Node3D
+var _camera_yaw: float = 0.0
+var _camera_pitch: float = -0.28
+var _camera_distance: float = 22.0
+var _dragging_camera: bool = false
+var _unit_visuals: Array[Node3D] = []
+var _last_view_size: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
 	_rng.seed = 13579
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_build_arena()
 	_build_ui()
 	_roll_shop()
+	_sync_unit_visuals()
 	queue_redraw()
+
+
+func _build_arena() -> void:
+	_viewport_container = SubViewportContainer.new()
+	_viewport_container.name = "ArenaView"
+	_viewport_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_viewport_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_viewport_container.stretch = true
+	_viewport_container.z_index = -1
+	add_child(_viewport_container)
+	_arena_viewport = SubViewport.new()
+	_arena_viewport.name = "Arena3D"
+	_arena_viewport.own_world_3d = true
+	_arena_viewport.handle_input_locally = false
+	_arena_viewport.msaa_3d = Viewport.MSAA_DISABLED
+	_viewport_container.add_child(_arena_viewport)
+	_arena = Node3D.new()
+	_arena.name = "AutoChessIsland"
+	_arena_viewport.add_child(_arena)
+	_build_island_environment()
+	_build_island_geometry()
+	_build_arena_camera()
+	_build_avatar()
+
+
+func _build_island_environment() -> void:
+	var environment_node := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_SKY
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.56, 0.7, 0.88)
+	environment.ambient_light_energy = 0.72
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	var sky := Sky.new()
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color(0.08, 0.2, 0.39)
+	sky_material.sky_horizon_color = Color(0.46, 0.7, 0.82)
+	sky_material.ground_bottom_color = Color(0.025, 0.06, 0.1)
+	sky_material.ground_horizon_color = Color(0.26, 0.42, 0.44)
+	sky.sky_material = sky_material
+	environment.sky = sky
+	environment_node.environment = environment
+	_arena.add_child(environment_node)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-28.0), 0.0)
+	sun.light_color = Color(1.0, 0.84, 0.65)
+	sun.light_energy = 1.5
+	sun.shadow_enabled = true
+	_arena.add_child(sun)
+
+
+func _build_island_geometry() -> void:
+	_add_primitive(_arena, "Ocean", BoxMesh.new(), Vector3(0.0, -15.0, 0.0), Vector3(180.0, 2.0, 180.0), Color(0.035, 0.19, 0.31))
+	_add_primitive(_arena, "IslandRock", CylinderMesh.new(), Vector3(0.0, -1.7, 0.0), Vector3(1.0, 1.8, 1.0), Color(0.19, 0.23, 0.27), 25.0, 28.0)
+	_add_primitive(_arena, "IslandGrass", CylinderMesh.new(), Vector3(0.0, -0.45, 0.0), Vector3(1.0, 0.58, 1.0), Color(0.19, 0.39, 0.29), 24.0, 24.0)
+	_add_primitive(_arena, "ArenaPlatform", CylinderMesh.new(), Vector3(0.0, 0.0, 0.0), Vector3(1.0, 0.18, 1.0), Color(0.27, 0.34, 0.3), 18.0, 48.0)
+	for x in 8:
+		for z in 6:
+			var side_color: Color = Color(0.14, 0.31, 0.27) if x < 4 else Color(0.34, 0.2, 0.21)
+			var tile_color: Color = side_color.lightened(0.04) if (x + z) % 2 == 0 else side_color.darkened(0.05)
+			_add_primitive(_arena, "Board_%d_%d" % [x, z], BoxMesh.new(), _board_world_position(Vector2i(x, z)), Vector3(2.45, 0.15, 2.45), tile_color)
+	_add_primitive(_arena, "BoardBorder", BoxMesh.new(), Vector3(0.0, 0.16, 0.0), Vector3(20.4, 0.16, 15.7), Color(0.48, 0.37, 0.2))
+	for index in 8:
+		var angle: float = TAU * float(index) / 8.0
+		var position := Vector3(cos(angle) * 16.5, -0.6, sin(angle) * 16.5)
+		_add_primitive(_arena, "RuinPillar_%d" % index, CylinderMesh.new(), position, Vector3(0.8, 2.6, 0.8), Color(0.3, 0.37, 0.39), 0.6, 8.0)
+		_add_primitive(_arena, "PillarCap_%d" % index, BoxMesh.new(), position + Vector3(0, 1.3, 0), Vector3(1.35, 0.3, 1.35), Color(0.63, 0.49, 0.28))
+	for index in 10:
+		var angle: float = TAU * float(index) / 10.0
+		var position := Vector3(cos(angle) * 13.8, 0.15, sin(angle) * 13.8)
+		_add_primitive(_arena, "Crystal_%d" % index, SphereMesh.new(), position, Vector3(0.35, 1.1, 0.35), Color(0.25, 0.76, 0.88))
+
+
+func _build_arena_camera() -> void:
+	var pivot := Node3D.new()
+	pivot.name = "CameraPivot"
+	pivot.position = Vector3(0.0, 1.4, 0.0)
+	_arena.add_child(pivot)
+	_camera = Camera3D.new()
+	_camera.name = "ThirdPersonCamera"
+	_camera.fov = 58.0
+	_camera.current = true
+	pivot.add_child(_camera)
+	_update_camera_transform()
+
+
+func _build_avatar() -> void:
+	_avatar = Node3D.new()
+	_avatar.name = "ThirdPersonAvatar"
+	_avatar.position = Vector3(0.0, 0.0, 7.5)
+	_arena.add_child(_avatar)
+	_add_primitive(_avatar, "Body", CapsuleMesh.new(), Vector3(0.0, 1.0, 0.0), Vector3(0.72, 1.15, 0.72), Color(0.28, 0.67, 0.91))
+	_add_primitive(_avatar, "Head", SphereMesh.new(), Vector3(0.0, 2.0, 0.0), Vector3(0.57, 0.57, 0.57), Color(0.91, 0.73, 0.55))
+	_add_primitive(_avatar, "Shoulders", SphereMesh.new(), Vector3(0.0, 1.48, 0.0), Vector3(1.0, 0.42, 0.58), Color(0.76, 0.56, 0.23))
+
+
+func _add_primitive(parent: Node3D, node_name: String, mesh: Mesh, position: Vector3, scale: Vector3, color: Color, top_radius: float = 0.5, bottom_radius: float = 0.5) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	if mesh is CylinderMesh:
+		var cylinder := mesh as CylinderMesh
+		cylinder.top_radius = top_radius
+		cylinder.bottom_radius = bottom_radius
+	instance.mesh = mesh
+	instance.position = position
+	instance.scale = scale
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.84
+	instance.material_override = material
+	parent.add_child(instance)
+	return instance
+
+
+func _board_world_position(cell: Vector2i) -> Vector3:
+	return Vector3((float(cell.x) - 3.5) * 2.5, 0.22, (float(cell.y) - 2.5) * 2.5)
+
+
+func _update_camera_transform() -> void:
+	if _camera == null:
+		return
+	var pivot := _camera.get_parent() as Node3D
+	if pivot == null:
+		return
+	pivot.rotation = Vector3(_camera_pitch, _camera_yaw, 0.0)
+	_camera.position = Vector3(0.0, 0.0, _camera_distance)
+	_camera.look_at(pivot.global_position, Vector3.UP)
+
+
+func _sync_unit_visuals() -> void:
+	for visual in _unit_visuals:
+		if is_instance_valid(visual):
+			visual.queue_free()
+	_unit_visuals.clear()
+	if _arena == null:
+		return
+	for unit in units:
+		var cell: Vector2i = unit["cell"]
+		var root := Node3D.new()
+		root.name = "Unit_%s" % str(unit["name"]).validate_node_name()
+		root.position = _board_world_position(cell) + Vector3(0.0, 0.35, 0.0)
+		_arena.add_child(root)
+		var tint: Color = unit["color"]
+		_add_primitive(root, "Body", CapsuleMesh.new(), Vector3(0.0, 0.9, 0.0), Vector3(0.55, 0.85, 0.55), tint)
+		_add_primitive(root, "Head", SphereMesh.new(), Vector3(0.0, 1.85, 0.0), Vector3(0.43, 0.43, 0.43), Color(0.94, 0.77, 0.61))
+		_add_primitive(root, "TeamCrest", SphereMesh.new(), Vector3(0.0, 2.45, 0.0), Vector3(0.28, 0.28, 0.28), Color(0.32, 0.92, 0.53) if not unit.get("enemy", false) else Color(0.98, 0.36, 0.3))
+		_unit_visuals.append(root)
+
+
+func _update_viewport_size() -> void:
+	var current_size := get_viewport_rect().size
+	if current_size != _last_view_size:
+		_last_view_size = current_size
+		_arena_viewport.size = Vector2i(maxi(1, int(current_size.x)), maxi(1, int(current_size.y)))
 
 
 func _build_ui() -> void:
@@ -152,6 +319,8 @@ func _start_battle() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_viewport_size()
+	_update_avatar_movement(delta)
 	if phase != "BATTLE":
 		return
 	battle_clock += delta
