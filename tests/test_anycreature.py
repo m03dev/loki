@@ -7,10 +7,6 @@ The engine is zero-dependency Node (`node contrib/anycreature/engine/cli.js spec
 `harness/outline.py` is a pure-Python software rasteriser that draws the silhouettes the quality
 gates judge - the FRONT/SIDE/TOP/hero views Forge shows. Both are MIT - see
 contrib/anycreature/LICENSE and docs/THIRD_PARTY.md.
-
-Not here yet: make_creature (the agent tool). Registering a tool means touching engine/loki.py,
-which makes ship.py run every suite - including the pre-existing test_task_success failure on
-the Mac (see the Ziva memory). Add it on the PC, or once that suite is diagnosed.
 """
 from __future__ import annotations
 
@@ -131,6 +127,11 @@ if node:
     body2 = res2[1] if len(res2) > 1 else b""
     check("GET /forge/creature/view serves the PNG the UI draws",
           res2[0] == 200 and isinstance(body2, (bytes, bytearray)) and bytes(body2[:4]) == b"\x89PNG", res2[0])
+
+tools_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8", errors="replace")
+check("make_creature is an agent tool (registration + schema + creative category)",
+      'LOCAL_TOOLS["make_creature"]' in tools_src and 'TOOL_CATEGORIES["creative"] += ["make_creature"]' in tools_src
+      and 'MODEL_TOOL_NAMES.add("make_creature")' in tools_src and '_CREATURE_SCHEMA' in tools_src)
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

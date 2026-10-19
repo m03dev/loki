@@ -5987,6 +5987,34 @@ MODEL_TOOL_SCHEMAS.append(_FORGE_SCHEMA)
 MODEL_TOOL_NAMES.add("make_3d")
 TOOL_CATEGORIES["creative"] += ["make_3d"]
 MODIFYING |= {"make_3d"}
+
+
+# --- anyCreature (contrib/anycreature/, MIT; engine/anycreature.py): an ACS spec -> a creature .glb --------
+async def make_creature_tool(spec: str = "", name: str = "creature") -> str:
+    """Make a creature (a skinned, animated .glb in models/) from an anyCreature ACS spec, plus its views."""
+    import anycreature  # pylint: disable=import-outside-toplevel
+    try:
+        res = await asyncio.to_thread(anycreature.make, spec, WORKSPACE / "models", name or "creature")
+    except anycreature.AnyCreatureError as exc:
+        return "error: %s" % exc
+    return ("made models/%s (%d bytes) and its front/side/top/hero views in models/%s.views/. Open it in Forge "
+            "(the cube in the sidebar): the Quad view shows the four views a modeller reads a shape from."
+            % (res["name"], res.get("bytes", 0), res["stem"]))
+
+
+LOCAL_TOOLS["make_creature"] = make_creature_tool
+_CREATURE_SCHEMA = schema(
+    "make_creature", "Make a creature (a skinned, animated .glb in models/) from an anyCreature ACS spec: pass "
+    "spec= the spec as JSON (an object or its JSON text). Author it per contrib/anycreature (a body from stacked "
+    "parts; copy example/wolf.json). A copied example is BLOCKED, and the engine's other BLOCK: lines are hard "
+    "floors - fix them and recompile. The front/side/top/hero views are rendered for you. Tell the user it opens "
+    "in Forge.",
+    {"spec": {"type": "string"}, "name": {"type": "string"}})
+TOOL_SCHEMAS.append(_CREATURE_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_CREATURE_SCHEMA)
+MODEL_TOOL_NAMES.add("make_creature")
+TOOL_CATEGORIES["creative"] += ["make_creature"]
+MODIFYING |= {"make_creature"}
 LOCAL_TOOL_PRIORITY[LOCAL_TOOL_PRIORITY.index("peer_files") + 1:LOCAL_TOOL_PRIORITY.index("peer_files") + 1] = [
     "home", "weather", "news"]
 
