@@ -44,7 +44,10 @@ core to hold a scene. That is the work below, in the order it has to happen.
 
 ## The tasks, in order
 
-### T1 - a scene: nodes, not an array  (the one that unblocks the rest)
+Status, 2026-10-20: **T1, T2, T3 and T4 shipped** (patches 317 and 321). T4b, T5's gesture and T6
+are still open, below. Everything shipped has a test that would fail if it broke.
+
+### DONE - T1: a scene of nodes (patch 317, app/ui/forge_scene.js)
 - `ForgeScene` holds `ForgeNode`s: `{ id, name, kind: "group"|"mesh", parent, children[], transform
   {translate, rotate, scale}, pivot, visible, mesh }`. A `mesh` node owns the welded `sm` the tools edit.
 - The viewer stops drawing one `holder` mesh and draws the tree, each node with its own `THREE.Object3D`.
@@ -52,32 +55,44 @@ core to hold a scene. That is the work below, in the order it has to happen.
 - Acceptance: two models can sit in the scene at once, each with its own transform, and sculpting one leaves
   the other untouched. `test_forge_ui` plus a new `test_forge_scene`.
 
-### T2 - the Outliner
+### DONE - T2: the Outliner (patch 317)
 - A panel down the left (Maya's Outliner shape): the tree, **rename** (double-click), **visibility** (v),
   **select**, **drag to re-parent**, and **middle-drag to re-order**.
 - Signals: `select(node)`, `reparent(node, newParent)`, `rename`, `visibility`.
 - Acceptance: the test builds a group, drags a node into it, and asserts the parent link and the drawn tree.
 
-### T3 - Group / Ungroup, with Maya's pivot rule
+### DONE - T3: Group / Ungroup with Maya's pivot rule (patch 317)
 - `Ctrl+G` groups the selection under a new transform node whose pivot is the **centre of the selection**
   (that is why Maya's groups rotate about the middle, not the world origin). `Ctrl+Shift+G` ungroups, keeping
   each child's world transform (Maya preserves position - it does not snap children to the origin).
 - Acceptance: group two nodes, rotate the group 90°, assert each child's world position rotated about the
   selection centre.
 
-### T4 - Channel Box + the transform stack
+### DONE - T4: the Channel Box (patch 321): translate / rotate in degrees / scale as numbers, and Reset
 - The selected node's translate / rotate / scale as **editable numbers** (Maya's Channel Box), plus
   **Center Pivot** and **Reset Pivot** and **Modify > Freeze Transformations** (bake the transform into the
   vertices, leave the node at identity - Maya's Freeze).
 - Acceptance: type 2 into translate Y and the node moves 2; Freeze then zeroes the transform without moving
   the model.
 
-### T5 - Shift + drag duplicate
+### OPEN - T4b: Center Pivot and Freeze Transformations
+- **Center Pivot** sets the object's pivot to the centre of its bounding box so the manipulator turns about the
+  middle (Maya's Modify > Center Pivot). Moving the pivot on its own means attaching the manipulator to a pivot
+  node that drives the object's transform by a delta - the same trick app/ui/forge_edit.js already uses for
+  component mode (`pivot` + `applyM`) - rather than moving the geometry, which would silently change what
+  Export/Save writes out.
+- **Freeze Transformations** bakes the node's transform into the vertices and leaves the node at identity.
+  For the WORKING object that means writing view.sm and having the viewer re-upload its buffers, so it needs a
+  small hook on the viewer (`sm` -> GPU) that does not exist yet.
+- Acceptance: Center Pivot then rotate the handle - the object turns about its middle and its mesh data is
+  untouched; Freeze then read the transform (all zero) and the exported mesh (unchanged in the world).
+
+### OPEN - T5: Shift + drag duplicate  (a Duplicate button and `tree.duplicate()` exist; the shift-drag gesture does not)
 - Shift-dragging a node with a manipulator leaves a copy behind and drags the new one (Maya's behaviour),
   with the copy inserted as a sibling.
 - Acceptance: shift-drag, assert two nodes and that the original did not move.
 
-### T6 - Construction history
+### OPEN - T6: Construction history
 - Each mesh node keeps an ordered list of operations (`{"extrude": {distance: 2}}`, `{"subdivide": 3}`, a
   sculpt stroke, ...) with the inputs they were applied with. The Channel Box shows them; selecting one
   re-opens its parameters and **rebuilds**; history can be deleted (Maya's "Delete History" freezes the mesh).
