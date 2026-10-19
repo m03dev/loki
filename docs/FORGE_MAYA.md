@@ -1,0 +1,98 @@
+# Forge, the way Maya works
+
+Owner, 2026-10-20: *"I want my forge to be like maya ... menus depending on where my mouse clicks ... maya hot
+keys ... space bar for selection menu with more menus ... the viewports the camera and the groups different
+object and hierarchy, history and transforms. Reset pivot all of it. Add it to Loki especially the outliner
+and the logic behind it all."*
+
+## What is already here (patch 315, app/ui/forge_maya.js)
+
+Maya's *interaction design*, re-implemented for a web canvas. No Autodesk code, art or icons are used - only
+the way it behaves, which is not something copyright protects.
+
+| Maya | Here | Where |
+|---|---|---|
+| marking menus (hold the right button) | a wheel of commands opens **at the cursor**; the object menu or the component menu by context; **Shift** = view menu, **Ctrl** = display menu; release over a wedge to run it, over the middle to cancel | `forgeMayaWheelShow` |
+| the hotbox (hold Space) | a grid of menu columns - File, Edit, Create, Modify, Display, Panels - with real commands | `FORGE_MAYA_COLUMNS` |
+| hotkeys q / w / e / r | select, move, rotate, scale | `forgeMayaKeys` |
+| hotkeys 4 / 5 | wireframe, shaded | same |
+| hotkeys F8 / F9 / F10 / F11 | component mode, vertex, edge, face | same |
+| hotkey g | repeat the last command | same |
+| **Alt + left / middle / right** | tumble / track / dolly - Maya's camera exactly | `mayaAlt` |
+
+Two real bugs were found while wiring it:
+
+1. `app/ui/app.js` treated **any** bare keystroke in an open sheet as "start typing in the chat box". Pressing
+   `w` in Forge (Maya's move tool) summoned the chat and stole the keyboard. An open sheet now owns its keys.
+2. The Maya keys register **with the viewer**, after `forge_edit.js` registers its own capture listener, so the
+   Blender-style modal move/rotate/scale keeps every key while it runs - typing `0.25` for an exact distance is
+   not eaten by the `4`/`5` display hotkeys.
+
+## Why the rest is a real job: Forge is one welded mesh
+
+Maya is a **DAG**: every object is a transform node with a shape under it, groups are transform nodes with
+children, and a model keeps its **construction history** - the list of operations that built it, each one
+still editable ("change the extrude distance from 2 to 3 and the model rebuilds").
+
+Forge is not that. `view.load` (app/ui/forge.js) *flattens* whatever it is given into one welded vertex/index
+array (`view.sm`) under a single `holder` group, and every tool edits that array. There is exactly one object,
+its transform is `holder`'s (used for the gizmo, not for the data), and there is no record of how the mesh was
+built - undo is a snapshot stack, not history.
+
+So the outliner, groups, Duplicate and a construction history cannot be bolted on; they need the modeler's
+core to hold a scene. That is the work below, in the order it has to happen.
+
+## The tasks, in order
+
+### T1 - a scene: nodes, not an array  (the one that unblocks the rest)
+- `ForgeScene` holds `ForgeNode`s: `{ id, name, kind: "group"|"mesh", parent, children[], transform
+  {translate, rotate, scale}, pivot, visible, mesh }`. A `mesh` node owns the welded `sm` the tools edit.
+- The viewer stops drawing one `holder` mesh and draws the tree, each node with its own `THREE.Object3D`.
+- Existing tools keep working by operating on the **active** node's `sm`.
+- Acceptance: two models can sit in the scene at once, each with its own transform, and sculpting one leaves
+  the other untouched. `test_forge_ui` plus a new `test_forge_scene`.
+
+### T2 - the Outliner
+- A panel down the left (Maya's Outliner shape): the tree, **rename** (double-click), **visibility** (v),
+  **select**, **drag to re-parent**, and **middle-drag to re-order**.
+- Signals: `select(node)`, `reparent(node, newParent)`, `rename`, `visibility`.
+- Acceptance: the test builds a group, drags a node into it, and asserts the parent link and the drawn tree.
+
+### T3 - Group / Ungroup, with Maya's pivot rule
+- `Ctrl+G` groups the selection under a new transform node whose pivot is the **centre of the selection**
+  (that is why Maya's groups rotate about the middle, not the world origin). `Ctrl+Shift+G` ungroups, keeping
+  each child's world transform (Maya preserves position - it does not snap children to the origin).
+- Acceptance: group two nodes, rotate the group 90°, assert each child's world position rotated about the
+  selection centre.
+
+### T4 - Channel Box + the transform stack
+- The selected node's translate / rotate / scale as **editable numbers** (Maya's Channel Box), plus
+  **Center Pivot** and **Reset Pivot** and **Modify > Freeze Transformations** (bake the transform into the
+  vertices, leave the node at identity - Maya's Freeze).
+- Acceptance: type 2 into translate Y and the node moves 2; Freeze then zeroes the transform without moving
+  the model.
+
+### T5 - Shift + drag duplicate
+- Shift-dragging a node with a manipulator leaves a copy behind and drags the new one (Maya's behaviour),
+  with the copy inserted as a sibling.
+- Acceptance: shift-drag, assert two nodes and that the original did not move.
+
+### T6 - Construction history
+- Each mesh node keeps an ordered list of operations (`{"extrude": {distance: 2}}`, `{"subdivide": 3}`, a
+  sculpt stroke, ...) with the inputs they were applied with. The Channel Box shows them; selecting one
+  re-opens its parameters and **rebuilds**; history can be deleted (Maya's "Delete History" freezes the mesh).
+- This is the one that changes how the tools are written: each tool becomes `apply(mesh, params) -> mesh`
+  plus a recorded node, instead of mutating `sm` in place. Do it after T1-T4, one tool at a time (extrude and
+  subdivide first - they already take plain parameters in app/ui/forge_poly.js).
+- Acceptance: extrude, change the recorded distance, and the mesh rebuilds; delete history and the mesh stays.
+
+### Not v1
+- Maya's Attribute Editor (a full property sheet per node type), the Node Editor / Hypergraph, referencing,
+  and animation curves. Out of scope until T1-T6 are solid.
+
+## The honesty note
+
+Maya's own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for
+this: this session had no web access (Ziva showed an upgrade card), so the interaction model above is from
+knowledge of Maya, not from re-reading Autodesk's documentation. Before T2/T3/T6 are called finished, check the
+current Maya docs for the exact behaviours - especially the group pivot rule and Freeze Transformations.
