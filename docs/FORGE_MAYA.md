@@ -92,7 +92,7 @@ are still open, below. Everything shipped has a test that would fail if it broke
   with the copy inserted as a sibling.
 - Acceptance: shift-drag, assert two nodes and that the original did not move.
 
-### PART DONE - T6: Construction history   (poly ops + DynaMesh in; sculpt strokes still open)
+### DONE - T6: Construction history   (poly ops, DynaMesh and sculpt strokes)
 Checked at T4b time: the poly operations are **already parameterised** - `P.extrude(base, faces, 0.2)`,
 `P.inset(base, faces, 0.25)` - and `app/ui/forge_model.js` already keeps
 `forgeModel.last = { kind, base, faces, amount, out, pick }`, i.e. a **one-step** history with a re-runnable
@@ -113,9 +113,20 @@ it. Tests: two extrudes are recorded in order, changing the second one's amount 
 moves the mesh, removing a step rebuilds without it, Delete History empties the stack, and a DynaMesh step
 rebuilds when its resolution is changed.
 
-### OPEN - T6c: a sculpt stroke in the history (the hard one)
-The sculpt engine lives inside the viewer's closure and works on the **welded** vertices (`view.sm.wpos`),
-while the history above is poly-based - so a stroke cannot be replayed the same way. Two honest ways:
+### DONE - T6c: a sculpt stroke in the history (the option the owner chose: recorded vertex deltas)
+**Shipped (patch 328).** A stroke is recorded as the **welded vertices it moved, with their positions before
+and after** - seven numbers per vertex, never a list of dabs (a stroke is thousands of dabs but usually a few
+hundred vertices). No change to the sculpting code was needed: `forge.js` calls `snapshot()` at the start of a
+stroke, so the top of `view.undoStack` when the pointer is released is the state **before** the stroke
+(`view.sculptStrokeEnd` is the same function, for tests and scripts). The History lists it as `sculpt · Nv`,
+and removing it writes those vertices' old positions straight back, which is exactly what deleting Maya's
+sculpt node does. Replaying the whole history walks the steps in order: the polygonal ones rebuild the mesh,
+the sculpt ones re-apply their vertices.
+
+**The known limitation, kept honest:** the vertex ids belong to the mesh as it was when the stroke was made, so
+a polygonal step ABOVE it that is later edited can make the record stale. `forgeHistSculpt` skips ids that no
+longer exist instead of writing into the wrong vertices; Maya warns in the same situation. The two ways it was
+considered are kept below for the record.
 1. **Record deltas**: at stroke start, keep the welded vertex ids under the brush and their positions; at
    stroke end, keep the new ones. Replay writes those positions back. Compact and exact, but only valid while
    the topology is unchanged, so a poly step ABOVE it that is edited afterwards invalidates it (Maya has the

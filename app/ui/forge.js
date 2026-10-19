@@ -1471,7 +1471,7 @@ function forgeMakeView(lib, renderer, canvas) {
   view.holder = holder;
   // the scene: objects, groups and the Outliner (docs/FORGE_MAYA.md T1/T2/T3): app/ui/forge_scene.js
   if (typeof forgeSceneAttach === "function") {
-    forgeSceneAttach(view, { THREE, scene, holder, material, camera, transform: transform });
+    forgeSceneAttach(view, { THREE, scene, holder, material, camera, canvas: canvas, transform: transform });
   }
   // the scene layer (app/ui/forge_scene.js) bakes geometry - Freeze Transformations, Center Pivot - and
   // needs the aliased buffers pushed back to the GPU afterwards

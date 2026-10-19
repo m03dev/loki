@@ -542,6 +542,33 @@ async def main():
               bool(dm["ops"]) and dm["ops"][0]["kind"] == "dynamesh" and dm["ops"][0]["amount"] == dm["res"] + 16
               and dm["f1"] != dm["f0"], dm)
 
+        # T6c: a sculpt stroke becomes a history step - the vertices it moved, never the dabs
+        await page.evaluate("window.forgeHistory.clear()")
+        if not await page.evaluate("forge.view.mode === 'sculpt'"):
+            await page.click("#forge-mode")
+            await page.wait_for_timeout(250)
+        await page.evaluate("forge.view.brush.radius = 0.35")                      # the DynaMesh cubes are coarse
+        sum_pre = await page.evaluate("forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)")
+        await page.evaluate("forge.view.dab('inflate', 0.05, 0, 0.05, false)")   # a real brush stroke
+        sum_post = await page.evaluate("forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)")
+        stroke_diag = await page.evaluate("""() => { const v = forge.view;
+          const top = v.undoStack[v.undoStack.length - 1];
+          return { mode: v.mode, radius: v.brush.radius, stack: v.undoStack.length,
+                   topIsSm: !!(top && top.sm === v.sm), hasPush: typeof window.forgeHistPushSculpt,
+                   hasEnd: typeof v.sculptStrokeEnd, moved: %s !== %s }; }""" % (sum_pre, sum_post))
+        await page.evaluate("forge.view.sculptStrokeEnd()")                        # what the pointer's release does
+        sh = await page.evaluate("window.forgeHistory.list()")
+        affected = sh[0]["affected"] if sh and sh[0]["kind"] == "sculpt" else 0
+        check("a sculpt stroke is recorded as a history step - the vertices it moved, not the dabs",
+              bool(sh) and sh[0]["kind"] == "sculpt" and affected > 0, [sh, stroke_diag, sum_pre, sum_post])
+        sum_now = "forge.view.sm.wpos.reduce((s, v) => s + Math.abs(v), 0)"
+        after_stroke = await page.evaluate(sum_now)
+        await page.evaluate("window.forgeHistory.remove(0)")
+        back = await page.evaluate(sum_now)
+        check("removing the stroke puts exactly those vertices back",
+              await page.evaluate("window.forgeHistory.list().length") == 0 and abs(back - after_stroke) > 1e-6,
+              [after_stroke, back])
+
         check("no script errors in Forge", not errors, errors[:3])
         await browser.close()
 

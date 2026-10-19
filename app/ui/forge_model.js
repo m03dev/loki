@@ -231,11 +231,45 @@ function forgeHistPush(op, base) {
 }
 
 function forgeHistRebuildShow() {
-  const v = forge.view, poly = forgeHistRebuild();
-  if (!v || !poly) return false;
-  v.showPoly(poly, true, true);
+  const v = forge.view, hist = forgeModel.hist;
+  if (!v || !hist) return false;
+  // walk the steps in order: the polygonal ones rebuild the mesh, the sculpt ones re-apply their vertices
+  let poly = hist.base ? window.ForgePoly.clone(hist.base) : null, sculpts = [], ok = true;
+  for (const op of hist.ops) {
+    if (op.kind === "sculpt") { sculpts.push(op); continue; }
+    if (!poly && op.kind !== "dynamesh") { ok = false; continue; }
+    poly = forgeHistApplyOp(poly, op);
+  }
+  if (poly) v.showPoly(poly, true, true);
+  for (const op of sculpts) forgeHistSculpt(op, "to");
   if (v.treeRefresh) v.treeRefresh();
-  return true;
+  return ok;
+}
+
+// a sculpt stroke (T6c): the welded vertices it moved, with their positions before and after
+window.forgeHistPushSculpt = function (op) {
+  if (!forgeModel.hist) forgeModel.hist = { base: null, ops: [] };   // the mesh came from the model, not a poly
+  forgeModel.hist.ops.push(op);
+  if (forge.view && forge.view.treeRefresh) forge.view.treeRefresh();
+};
+
+function forgeHistSculpt(op, which) {                 // which: "to" re-applies the stroke, "from" puts it back
+  const v = forge.view, sm = v && v.sm;
+  if (!sm || !sm.wpos || !op.verts) return false;
+  const at = which === "to" ? 4 : 1;                  // each record is [id, fx,fy,fz, tx,ty,tz]
+  let n = 0;
+  for (let k = 0; k + 6 < op.verts.length; k += 7) {
+    const id = op.verts[k];
+    if (id * 3 + 2 >= sm.wpos.length) continue;       // the mesh was rebuilt smaller: this record is stale
+    sm.wpos[id * 3] = op.verts[k + at]; sm.wpos[id * 3 + 1] = op.verts[k + at + 1]; sm.wpos[id * 3 + 2] = op.verts[k + at + 2];
+    n++;
+  }
+  if (n && typeof forgeSync === "function") {
+    forgeSync(sm);
+    if (typeof forgeNormals === "function") forgeNormals(sm);
+    if (v.refreshMesh) v.refreshMesh();
+  }
+  return n > 0;
 }
 
 // what the panel (app/ui/forge_scene.js) reads and writes
@@ -243,7 +277,7 @@ window.forgeHistory = {
   list() {
     const h = forgeModel.hist;
     if (!h) return [];
-    return h.ops.map((o, i) => ({ i: i, kind: o.kind,
+    return h.ops.map((o, i) => ({ i: i, kind: o.kind, affected: o.kind === "sculpt" ? o.verts.length / 7 : null,
       amount: o.kind === "dynamesh" ? o.res : (o.amount == null ? null : o.amount) }));
   },
   setAmount(i, value) {
@@ -252,7 +286,7 @@ window.forgeHistory = {
     const x = Number(value);
     if (!isFinite(x)) return false;
     if (op.kind === "dynamesh") { op.res = Math.max(16, Math.min(256, Math.round(x))); return forgeHistRebuildShow(); }
-    if (op.amount == null) return false;
+    if (op.kind === "sculpt" || op.amount == null) return false;   // a stroke has no number to type
     op.amount = x;
     if (op.kind === "extrude" || op.kind === "inset") {
       forgeModel.last = { kind: op.kind, base: null, faces: op.faces, amount: x, out: null, pick: () => op.faces };
@@ -260,9 +294,14 @@ window.forgeHistory = {
     return forgeHistRebuildShow();
   },
   remove(i) {
-    const h = forgeModel.hist;
-    if (!h || !h.ops[i]) return false;
+    const h = forgeModel.hist, op = h && h.ops[i];
+    if (!op) return false;
     h.ops.splice(i, 1);
+    if (op.kind === "sculpt") {                       // removing a stroke puts exactly those vertices back
+      forgeHistSculpt(op, "from");
+      if (h.ops.length) forgeHistRebuildShow(); else if (forge.view.treeRefresh) forge.view.treeRefresh();
+      return true;
+    }
     if (!h.ops.length) { forgeHistReset(); return true; }
     return forgeHistRebuildShow();
   },

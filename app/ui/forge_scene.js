@@ -437,7 +437,7 @@ function forgeSceneAttach(view, ctx) {
       if (!ops.length) { list.append(scnEl("div", "forge-hist-empty", "Nothing yet - extrude or inset a face.")); return; }
       for (const op of ops) {
         const row = scnEl("div", "forge-hist-row");
-        row.append(scnEl("span", "forge-hist-name", op.kind));
+        row.append(scnEl("span", "forge-hist-name", op.kind + (op.affected ? " \u00b7 " + op.affected + "v" : "")));
         if (op.amount != null) {
           const inp = document.createElement("input");
           inp.type = "number"; inp.step = "0.05"; inp.className = "forge-ch-in";
@@ -458,6 +458,32 @@ function forgeSceneAttach(view, ctx) {
 
   const load = view.load;
   if (typeof load === "function") view.load = async (buf) => { const r = await load(buf); tree.build(); return r; };
+
+  // ---------------------------------------------------------------- T6c: a sculpt stroke in the history
+  // A stroke moves WELDED vertices, not polygons, so it is recorded as the vertices it changed with their
+  // positions before and after - never as a list of dabs, which would be enormous. Maya's sculpt node keeps
+  // the same kind of record, and it shares the limitation: a step ABOVE it that is later changed can make the
+  // record stale (Maya warns too). forge.js calls snapshot() on stroke start, so the undo stack's top is the
+  // state BEFORE the stroke - no change to the sculpting code was needed to read both ends.
+  const canvas = ctx.canvas;
+  function sculptRecordAfterStroke() {
+    // forge.js snapshot()s at the START of a stroke, so the top of the undo stack is the state before it
+    const sm = view.sm, top = view.undoStack && view.undoStack[view.undoStack.length - 1];
+    if (!sm || !sm.wpos || !top || !top.wpos || top.sm !== sm || !window.forgeHistPushSculpt) return;
+    const before = top.wpos, after = sm.wpos, verts = [];
+    for (let i = 0; i + 2 < before.length && i + 2 < after.length; i += 3) {
+      if (before[i] !== after[i] || before[i + 1] !== after[i + 1] || before[i + 2] !== after[i + 2]) {
+        verts.push(i / 3, before[i], before[i + 1], before[i + 2], after[i], after[i + 1], after[i + 2]);
+      }
+    }
+    if (!verts.length) return;
+    window.forgeHistPushSculpt({ kind: "sculpt", verts: verts });
+  }
+  if (canvas && canvas.addEventListener) {
+    view.sculptStrokeEnd = sculptRecordAfterStroke;      // also the handle for tests and scripts
+    canvas.addEventListener("pointerup", (e) => { if (e.button === 0) sculptRecordAfterStroke(); });
+    canvas.addEventListener("pointerleave", () => sculptRecordAfterStroke());
+  }
 
   // ---------------------------------------------------------------- T5: Shift + drag duplicates (Maya)
   // In Maya, shift-dragging a manipulator leaves the original where it was and drags a copy. The manipulator
