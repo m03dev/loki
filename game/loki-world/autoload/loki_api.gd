@@ -53,6 +53,7 @@ const RETRY_EVERY := 10.0
 var base_url := ""
 var token := ""
 var offline := true
+var allow_connect := true   # the headless tests set false: never talk to a running engine, so the suite is deterministic
 var is_web := false
 var has_mmo := true          # the /mmo/* hooks answer (switched off on the first 404)
 var has_presence := true     # /world/presence answers
@@ -90,6 +91,11 @@ var _connecting := false
 
 
 func connect_engine() -> bool:
+	if not allow_connect:
+		# The tests run the game offline on purpose: with a real LOKI on this machine the suite would
+		# otherwise join it, and rewards (XP, loot) would arrive over HTTP after the test already checked.
+		go_offline("the test suite runs offline")
+		return false
 	if _connecting:          # the retry timer fired while a slow first check was still waiting: one at a time
 		return not offline
 	_connecting = true

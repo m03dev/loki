@@ -21,6 +21,7 @@ func _ready() -> void:
 	# never the player's saved profile (beaten monsters, XP), however the suite is started - with or without
 	# --no-save - so a played game can never make a test fail, and the tests never change the player's save
 	GameState.persist = false
+	LokiApi.allow_connect = false   # deterministic: run offline, never join a LOKI that happens to be running here
 	GameState._load_local()
 	_scripts_compile()
 	_levels()
