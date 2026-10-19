@@ -183,3 +183,15 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 .forge-spec:focus { outline: 2px solid rgba(120, 170, 255, .55); outline-offset: 1px; }
 .forge-pane[data-pane="creature"] input[type="text"] { width: 100%; color: #e7ebf2; background: rgba(16, 18, 24, .55);
   border: 1px solid rgba(185, 200, 222, .22); border-radius: 8px; padding: 5px 8px; font: 12px/1.2 ui-monospace, monospace; }
+
+/* Creature way: presets, colours (the form is drawn from the backend's schema) */
+.forge-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.forge-presets .forge-btn { height: 34px; padding: 0 10px; background: rgba(185, 200, 222, .1); border-radius: 9px; }
+.forge-presets .forge-btn.on { background: rgba(185, 200, 222, .28); box-shadow: inset 0 0 0 1px rgba(200, 212, 230, .35); }
+.forge-creature-sliders { display: flex; flex-direction: column; gap: 8px; }
+.forge-colors { display: flex; gap: 12px; align-items: center; }
+.forge-color { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c7cfdb; }
+.forge-color input[type="color"] { width: 30px; height: 24px; padding: 0; border: 1px solid rgba(185, 200, 222, .3);
+  border-radius: 6px; background: none; cursor: pointer; }
+.forge-advanced { margin-top: 2px; }
+.forge-advanced summary { cursor: pointer; font-size: 12px; color: #9fb0c8; }

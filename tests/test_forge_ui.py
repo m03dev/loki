@@ -242,19 +242,33 @@ async def main():
         back = await page.evaluate("() => ({ on: !!forge.view.quad, orbit: forge.view.controls.enabled, hidden: document.getElementById('forge-quad-labels').hidden })")
         check("toggling Quad view off returns to the orbit view", (not back["on"]) and back["orbit"] and back["hidden"], back)
 
-        # -------- the Creature way: an anyCreature spec -> a model in the four panels
+        # -------- the Creature way: controls, not JSON -> a model in the four panels
         await page.click(".forge-tab[data-side='make']")   # the ways live in the left column
         await page.wait_for_timeout(200)
         await page.click("#forge .forge-way[data-way='creature']")
-        await page.wait_for_timeout(250)
-        check("the Creature way shows the anyCreature spec box and relabels Make",
-              await page.is_visible("#forge-creature-spec")
-              and (await page.inner_text("#forge-make")).strip() == "Make creature")
-        await page.fill("#forge-creature-spec", "this is not JSON")
+        await page.wait_for_function("document.querySelectorAll('#forge-creature-presets button[data-preset]').length > 0", timeout=15000)
+        presets = await page.eval_on_selector_all("#forge-creature-presets button[data-preset]", "els => els.map((e) => e.dataset.preset)")
+        n_sliders = await page.eval_on_selector_all("#forge-creature-sliders input[type=range]", "els => els.length")
+        n_colours = await page.eval_on_selector_all("#forge-creature-colors input[type=color]", "els => els.length")
+        check("the Creature way draws a friendly form - presets, sliders, colour pickers, no JSON",
+              len(presets) >= 3 and n_sliders >= 2 and n_colours >= 2
+              and (await page.inner_text("#forge-make")).strip() == "Make creature",
+              {"presets": presets, "sliders": n_sliders, "colours": n_colours})
+        await page.click("#forge-creature-presets button[data-preset='%s']" % presets[-1])
+        await page.fill("#forge-creature-name", "ui_creature")
+        await page.click("#forge-make")
+        await page.wait_for_function("forge.view && forge.view.quad && forge.view.sm", timeout=60000)
+        made = await page.evaluate("() => ({quad: !!forge.view.quad, model: forge.model})")
+        check("Make creature compiles a preset and loads it into the four panels, Quad on",
+              made["quad"] and "ui_creature" in str(made["model"]), made)
+        # the advanced spec is tucked away; an invalid one is refused with the reason
+        await page.evaluate("document.querySelector('#forge .forge-advanced').open = true")
+        await page.evaluate("document.getElementById('forge-creature-spec').value = 'this is not JSON'")
         await page.click("#forge-make")
         await page.wait_for_function("/not valid JSON/.test(document.getElementById('forge-status').textContent)", timeout=20000)
         spec_err = await page.inner_text("#forge-status")
-        check("a spec that is not JSON is refused, with the reason shown", "not valid JSON" in spec_err, spec_err)
+        check("a pasted spec that is not JSON is refused, with the reason shown", "not valid JSON" in spec_err, spec_err)
+        await page.evaluate("document.getElementById('forge-creature-spec').value = ''")
         await page.click("#forge .forge-way[data-way='describe']")
         await page.wait_for_timeout(150)
 

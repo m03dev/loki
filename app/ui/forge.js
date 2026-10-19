@@ -342,20 +342,63 @@ function forgeSlider(name, id, min, max, value, onInput) {
 
 function forgeCreaturePane() {
   const pane = el("div", "forge-pane"); pane.dataset.pane = "creature"; pane.hidden = true;
-  pane.append(el("p", "note", "An anyCreature ACS spec, as JSON. The engine compiles it into a skinned, "
-    + "animated .glb and draws its front / side / top / three-quarter views - the four panels judge the shape. "
-    + "A copied example is refused, so make it your own (see contrib/anycreature)."));
-  const ta = document.createElement("textarea"); ta.id = "forge-creature-spec"; ta.className = "forge-spec";
-  ta.setAttribute("aria-label", "anyCreature ACS spec (JSON)");
-  ta.setAttribute("spellcheck", "false");
-  ta.placeholder = '{"height": 1.8, "joints": { ... }, "volumes": [ ... ], "parts": [ ... ]}';
+  pane.append(el("p", "note", "Pick a body plan, then make it yours. Every build is checked for you and "
+    + "lands on the nearest size that stands - no JSON, no guesswork."));
+  const presets = el("div", "forge-presets"); presets.id = "forge-creature-presets";
+  const sliders = el("div", "forge-creature-sliders"); sliders.id = "forge-creature-sliders";
+  const colors = el("div", "forge-colors"); colors.id = "forge-creature-colors";
   const row = el("label", "forge-slider");
   row.dataset.tipName = "Name"; row.dataset.tipWhat = "What the .glb is called in models/.";
   const nm = document.createElement("input"); nm.type = "text"; nm.id = "forge-creature-name"; nm.value = "creature";
   nm.setAttribute("aria-label", "Creature name");
   row.append(el("span", "forge-slider-name", "N"), nm);
-  pane.append(ta, row);
+  const adv = document.createElement("details"); adv.className = "forge-advanced";
+  adv.append(el("summary", "", "Advanced: edit the spec"));
+  const ta = document.createElement("textarea"); ta.id = "forge-creature-spec"; ta.className = "forge-spec";
+  ta.setAttribute("aria-label", "anyCreature ACS spec (JSON)"); ta.setAttribute("spellcheck", "false");
+  ta.placeholder = '{"height": 1.8, "joints": { ... }, "volumes": [ ... ], "parts": [ ... ]}';
+  adv.append(ta);
+  pane.append(presets, sliders, colors, row, adv);
   return pane;
+}
+
+// the form comes FROM the backend (engine/anycreature.schema()): the window draws whatever it is given
+async function forgeCreatureBuild() {
+  if (forge.creature) return;
+  const r = await api("/forge/creature").catch(() => null);
+  const box = document.getElementById("forge-creature-presets");
+  if (!box) return;
+  if (!r || !r.ok) {
+    forgeSay("anyCreature is not ready here" + (r && r.node === false ? " (Node is needed)" : "."), true);
+    return;
+  }
+  forge.creature = { preset: ((r.presets || [])[0] || {}).id || "", colors: {} };
+  box.replaceChildren();
+  for (const p of r.presets || []) {
+    const b = forgeBtn(p.icon || "models", p.label, p.what, () => {
+      forge.creature.preset = p.id;
+      for (const x of box.children) x.classList.toggle("on", x.dataset.preset === p.id);
+    }, p.id === forge.creature.preset ? "on" : "");
+    b.dataset.preset = p.id;
+    box.append(b);
+  }
+  const sl = document.getElementById("forge-creature-sliders");
+  sl.replaceChildren();
+  for (const s of r.sliders || []) {
+    sl.append(forgeSlider(s.label, "forge-cr-" + s.id, s.min, s.max, s.value, (v) => { forge.creature[s.id] = v; }));
+  }
+  const cols = document.getElementById("forge-creature-colors");
+  cols.replaceChildren();
+  for (const c of r.colors || []) {
+    const wrap = el("label", "forge-color");
+    wrap.dataset.tipName = c.label; wrap.dataset.tipWhat = c.label;
+    const inp = document.createElement("input"); inp.type = "color"; inp.value = c.value; inp.id = "forge-cr-" + c.id;
+    inp.setAttribute("aria-label", c.label);
+    inp.addEventListener("input", () => { forge.creature.colors[c.id] = inp.value; });
+    forge.creature.colors[c.id] = c.value;
+    wrap.append(inp, el("span", "", c.label));
+    cols.append(wrap);
+  }
 }
 
 function forgeQuad(on) {
@@ -375,6 +418,7 @@ function forgeWay(way) {
   for (const p of document.querySelectorAll("#forge .forge-pane")) p.hidden = p.dataset.pane !== way;
   const mk = document.getElementById("forge-make");
   if (mk) mk.textContent = way === "creature" ? "Make creature" : "Make 3D";
+  if (way === "creature") forgeCreatureBuild();
   forgeOutputState();
 }
 
@@ -456,16 +500,23 @@ async function forgePicture() {
 
 async function forgeMake() {
   if (forge.way === "creature") {
-    const spec = document.getElementById("forge-creature-spec").value.trim();
-    if (!spec) { forgeSay("Paste an anyCreature spec (JSON) first.", true); return; }
+    await forgeCreatureBuild();
     const name = document.getElementById("forge-creature-name").value.trim() || "creature";
+    const spec = document.getElementById("forge-creature-spec").value.trim();
+    let body;
+    if (spec) body = { spec, name };
+    else if (forge.creature) body = { name, preset: forge.creature.preset, size: forge.creature.size,
+      smooth: forge.creature.smooth, colors: forge.creature.colors };
+    else { forgeSay("anyCreature is not ready here.", true); return; }
     document.getElementById("forge-make").disabled = true;
-    forgeSay("Compiling the creature…");
-    const r = await api("/forge/creature", { spec, name }).catch(() => null);
+    forgeSay("Shaping the creature…");
+    const r = await api("/forge/creature", body).catch(() => null);
     if (!r || !r.ok) { document.getElementById("forge-make").disabled = false; forgeSay((r && r.error) || "Could not start.", true); return; }
     forgePoll(r.id, (res) => {
-      forgeSay("Made " + res.name + " - the four panels show its front, side, top and three-quarter views. "
-        + "Frame it, then sculpt it or export it.");
+      const sized = res.size ? (" It stands " + Number(res.size).toFixed(2) + "x"
+        + (res.size_moved ? " (the nearest size that passed every check)" : "") + ".") : "";
+      forgeSay("Made " + res.name + "." + sized + " The four panels show its front, side, top and three-quarter "
+        + "views - Frame it, then sculpt it or export it.");
       forgeList();
       forgeLoad(res.name).then(() => forgeQuad(true));
     });

@@ -128,6 +128,30 @@ if node:
     check("GET /forge/creature/view serves the PNG the UI draws",
           res2[0] == 200 and isinstance(body2, (bytes, bytearray)) and bytes(body2[:4]) == b"\x89PNG", res2[0])
 
+# --------------------------------------------------------------- the friendly form (backend-declared)
+sch = anycreature.schema()
+check("the backend declares the form the UI draws (presets, sliders, colours)",
+      len(sch.get("presets", [])) >= 3 and all(p.get("id") and p.get("icon") for p in sch["presets"])
+      and len(sch.get("sliders", [])) >= 2 and len(sch.get("colors", [])) >= 2, {k: len(v) for k, v in sch.items() if isinstance(v, list)})
+check("every starter is a whole creature, not just a name",
+      all((AC / "presets" / (p["id"] + ".json")).is_file()
+          and isinstance(json.loads((AC / "presets" / (p["id"] + ".json")).read_text()).get("joints"), dict)
+          for p in sch["presets"]))
+if node:
+    d1 = TMP / "ctrl"
+    got = anycreature.make_from_controls({"preset": sch["presets"][-1]["id"], "size": 1.0, "smooth": 44,
+                                          "colors": {"body": "#556677"}, "name": "ctl"}, d1)
+    check("make_from_controls: controls in, a .glb and its four views out",
+          (d1 / "ctl.glb").is_file() and len(got.get("views", {})) == 4, got.get("name"))
+    spec = json.loads((d1 / "ctl.glb").read_bytes() and (AC / "presets" / (sch["presets"][-1]["id"] + ".json")).read_text())
+    check("the controls are applied to the spec the backend builds",
+          anycreature.build_spec({"preset": sch["presets"][-1]["id"], "size": 1.0,
+                                  "colors": {"body": "#556677"}})["palette"]["fur_body"]["color"] == "#556677")
+    # a size the engine refuses is landed on nearby, and said so
+    sized = anycreature.make_from_controls({"preset": "hound", "size": 0.85, "name": "near"}, TMP / "near")
+    check("a size the floors refuse lands on the nearest that stands (and reports it)",
+          sized["size"] != sized["asked_size"] and (TMP / "near" / "near.glb").is_file(), sized.get("size"))
+
 tools_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8", errors="replace")
 check("make_creature is an agent tool (registration + schema + creative category)",
       'LOCAL_TOOLS["make_creature"]' in tools_src and 'TOOL_CATEGORIES["creative"] += ["make_creature"]' in tools_src

@@ -5990,26 +5990,41 @@ MODIFYING |= {"make_3d"}
 
 
 # --- anyCreature (contrib/anycreature/, MIT; engine/anycreature.py): an ACS spec -> a creature .glb --------
-async def make_creature_tool(spec: str = "", name: str = "creature") -> str:
-    """Make a creature (a skinned, animated .glb in models/) from an anyCreature ACS spec, plus its views."""
+async def make_creature_tool(preset: str = "", spec: str = "", size: float = 1.0, smooth: int = 0,
+                             body_color: str = "", accent_color: str = "", name: str = "creature") -> str:
+    """Make a creature (.glb in models/ + its four views) - from a starter + tweaks, or from an ACS spec."""
     import anycreature  # pylint: disable=import-outside-toplevel
     try:
-        res = await asyncio.to_thread(anycreature.make, spec, WORKSPACE / "models", name or "creature")
+        if spec:
+            res = await asyncio.to_thread(anycreature.make, spec, WORKSPACE / "models", name or "creature")
+        else:
+            controls = {"preset": preset or "hound", "size": size or 1.0,
+                        "colors": {"body": body_color, "ear": accent_color}}
+            if smooth:
+                controls["smooth"] = smooth
+            res = await asyncio.to_thread(anycreature.make_from_controls, controls,
+                                          WORKSPACE / "models", name or "creature")
     except anycreature.AnyCreatureError as exc:
         return "error: %s" % exc
-    return ("made models/%s (%d bytes) and its front/side/top/hero views in models/%s.views/. Open it in Forge "
+    sized = ""
+    if res.get("size"):
+        sized = " It stands %.2fx%s." % (res["size"], " (the nearest size that passed every check)"
+                                         if res.get("size_moved") else "")
+    return ("made models/%s (%d bytes) and its front/side/top/hero views in models/%s.views/.%s Open it in Forge "
             "(the cube in the sidebar): the Quad view shows the four views a modeller reads a shape from."
-            % (res["name"], res.get("bytes", 0), res["stem"]))
+            % (res["name"], res.get("bytes", 0), res["stem"], sized))
 
 
 LOCAL_TOOLS["make_creature"] = make_creature_tool
 _CREATURE_SCHEMA = schema(
-    "make_creature", "Make a creature (a skinned, animated .glb in models/) from an anyCreature ACS spec: pass "
-    "spec= the spec as JSON (an object or its JSON text). Author it per contrib/anycreature (a body from stacked "
-    "parts; copy example/wolf.json). A copied example is BLOCKED, and the engine's other BLOCK: lines are hard "
-    "floors - fix them and recompile. The front/side/top/hero views are rendered for you. Tell the user it opens "
-    "in Forge.",
-    {"spec": {"type": "string"}, "name": {"type": "string"}})
+    "make_creature", "Make a creature (a skinned, animated .glb in models/) plus its front/side/top/hero views. "
+    "The easy way: pick a starter (preset: hound | tall | low), then tweak size, smooth and the colours. The "
+    "engine checks every build and lands on the nearest size that stands. Or pass spec= a whole anyCreature ACS "
+    "spec (JSON) to author one from scratch (a copied example is BLOCKED and must be made its own). Use this "
+    "whenever someone asks for a creature, animal or monster. Tell the user it opens in Forge's four-view panel.",
+    {"preset": {"type": "string", "enum": ["hound", "tall", "low"]}, "spec": {"type": "string"},
+     "size": {"type": "number"}, "smooth": {"type": "integer"},
+     "body_color": {"type": "string"}, "accent_color": {"type": "string"}, "name": {"type": "string"}})
 TOOL_SCHEMAS.append(_CREATURE_SCHEMA)
 MODEL_TOOL_SCHEMAS.append(_CREATURE_SCHEMA)
 MODEL_TOOL_NAMES.add("make_creature")

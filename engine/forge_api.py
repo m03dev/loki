@@ -84,7 +84,7 @@ def handle_get(state, path: str) -> tuple:
         return 200, {"ok": True, "items": forge3d.list_models(models_dir(state)), "folder": "models"}
     if route == "/forge/creature":
         import anycreature  # pylint: disable=import-outside-toplevel
-        return 200, {"ok": True, **anycreature.available()}
+        return 200, {"ok": True, **anycreature.available(), **anycreature.schema()}
     if route == "/forge/creature/view":
         import anycreature  # pylint: disable=import-outside-toplevel
         view = q.get("view", "")
@@ -169,21 +169,26 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
     if route == "/forge/creature":
         import anycreature  # pylint: disable=import-outside-toplevel
         spec = data.get("spec")
-        if not isinstance(spec, (dict, str)) or not spec:
-            return 400, {"ok": False, "error": "give an ACS spec (an object, or its JSON text) as spec"}
+        controls = {k: data[k] for k in ("size", "smooth", "colors") if k in data}
+        if data.get("preset"):
+            controls["preset"] = data["preset"]
+        if not controls and (not isinstance(spec, (dict, str)) or not spec):
+            return 400, {"ok": False, "error": "pick a starter (preset), or give a spec"}
         name = str(data.get("name") or "creature")
         out_dir = models_dir(state)
 
         def work(progress):
-            progress("compiling the creature", 0.2)
+            progress("shaping the creature", 0.15)
             try:
-                res = anycreature.make(spec, out_dir, name)
+                res = (anycreature.make_from_controls(controls, out_dir, name) if controls
+                       else anycreature.make(spec, out_dir, name))
             except anycreature.AnyCreatureError as exc:
                 return {"ok": False, "error": str(exc)}
             progress("drawing the front / side / top views", 0.85)
-            stem = res["stem"]
-            return {"ok": True, "name": res["name"], "bytes": res.get("bytes", 0), "views": {
-                v: "creature/view?name=%s&view=%s" % (stem, v) for v in res.get("views", {})}}
+            return {"ok": True, "name": res["name"], "bytes": res.get("bytes", 0),
+                    "size": res.get("size"), "asked_size": res.get("asked_size"), "size_moved": res.get("size_moved", False),
+                    "fixes": res.get("fixes", 0), "views": {v: "creature/view?name=%s&view=%s" % (res["stem"], v)
+                                                            for v in res.get("views", {})}}
         return 200, forge3d.start_job(work, kind="creature", label=name, thread=thread)
     return 404, {"ok": False, "error": "Unknown endpoint."}
 
