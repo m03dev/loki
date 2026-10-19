@@ -440,11 +440,14 @@ async def main():
         })""")
         check("Reset, Pivot, Reset Pivot, Freeze, Copy, Group and Delete History are all on the panel",
               all(ok for _, ok in present), present)
+        # the Outliner's right-click menu is still open from the check above and covers the panel: close it
+        await page.evaluate("const m = document.querySelector('.forge-out-menu'); if (m) m.remove()")
         await page.evaluate(T + ".setTransform(%d, 'translate', 0, 3)" % rid)
         await page.click("#forge-ch-reset")                     # a real click: Playwright scrolls to it itself
         await page.wait_for_timeout(80)
-        reset_x = await page.evaluate(T + ".node(%d).grp.position.x" % rid)
-        check("...and Reset really is clickable: it clears the transformation", abs(reset_x) < 1e-6, reset_x)
+        reset_tr = await page.evaluate(T + ".transform(%d).translate" % rid)   # the node's translate, not grp.position
+        check("...and Reset really is clickable: it clears the transformation",
+              all(abs(v) < 1e-6 for v in reset_tr), reset_tr)
         await page.evaluate("document.getElementById('forge-ch-reset').click()")
         rs = await page.evaluate(T + ".transform(%d)" % rid)
         check("Reset puts the selected object back to 0 / 0 / 1", rs["translate"] == [0, 0, 0] and rs["rotate"] == [0, 0, 0], rs)
