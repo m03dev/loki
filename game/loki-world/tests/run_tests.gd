@@ -34,7 +34,7 @@ func _ready() -> void:
 
 
 func _scripts_compile() -> void:
-	for dir in ["res://autoload", "res://scripts", "res://scripts/world", "res://scripts/actors", "res://scripts/hud", "res://scripts/net", "res://shaders"]:
+	for dir in ["res://autoload", "res://scripts", "res://scripts/world", "res://scripts/actors", "res://scripts/hud", "res://scripts/net", "res://scripts/autochess", "res://shaders"]:
 		for f in DirAccess.get_files_at(dir):
 			if f.ends_with(".gd") or f.ends_with(".gdshader"):
 				var res = load(dir.path_join(f))

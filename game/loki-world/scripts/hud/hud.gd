@@ -17,6 +17,7 @@ var banner: Label
 var notices: VBoxContainer
 var status_line: Label
 var _banner_t := 0.0
+var auto_chess: Control = null
 
 
 func setup(world_node: Node, pixel: int) -> void:
@@ -62,6 +63,11 @@ func setup(world_node: Node, pixel: int) -> void:
 	windows = HudWindows.new()
 	windows.hud = self
 	root.add_child(windows)
+	var chess_button := UiKit.button("AUTO CHESS", open_auto_chess)
+	chess_button.position = Vector2(450, 16)
+	chess_button.custom_minimum_size = Vector2(150, 38)
+	chess_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(chess_button)
 	var p: Player = world.player
 	p.zone_entered.connect(func(z): show_banner(z + (" - you are here" if z == GameState.self_zone else ""), Color(0.6, 1.0, 0.9)))
 	p.wants_prompt.connect(windows.show_prompt)
@@ -73,12 +79,30 @@ func setup(world_node: Node, pixel: int) -> void:
 	_on_mode(GameState.mode)
 
 
+func open_auto_chess() -> void:
+	if auto_chess != null and is_instance_valid(auto_chess):
+		auto_chess.close_screen()
+		return
+	windows.close_all()
+	auto_chess = load("res://scripts/autochess/autochess_screen.gd").new() as Control
+	auto_chess.name = "AutoChessScreen"
+	root.add_child(auto_chess)
+	if world != null and world.player != null:
+		world.player.input_enabled = false
+	auto_chess.tree_exited.connect(func():
+		auto_chess = null
+		if world != null and world.player != null:
+			world.player.input_enabled = GameState.mode == "play")
+
+
 func camera() -> Camera3D:
 	return world.player.camera if world != null and world.player != null else null
 
 
 func _on_mode(m: String) -> void:
 	root.visible = m == "play"
+	if m != "play" and auto_chess != null and is_instance_valid(auto_chess):
+		auto_chess.close_screen()
 
 
 func show_banner(text_: String, color: Color) -> void:
@@ -130,6 +154,10 @@ func handle_key(event: InputEvent) -> bool:
 		return true
 	if event.is_action_pressed("chat_slash"):
 		chat.focus_input("/")
+		return true
+	if auto_chess != null and is_instance_valid(auto_chess):
+		if event.is_action_pressed("cancel"):
+			auto_chess.close_screen()
 		return true
 	if event.is_action_pressed("cancel"):
 		if minimap.big:
