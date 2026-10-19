@@ -272,6 +272,10 @@ class HostedSpace:
             if not old and self.doc.get("locked"):
                 raise SpaceError("this space is not taking new members right now", 403)
             secret = xor(enc, _stream(self.ka, nonce, 32))
+            # a re-join keeps the member's own secret (Spaces.join reuses it); anyone else naming an existing id -
+            # every member can see the owner's - must not take that member over (review 2026-10-19)
+            if old and not hmac.compare_digest(b64d(old.get("secret", "")), secret):
+                raise SpaceError("that member id is taken", 409)
             name = clean(req.get("name"), NAME_MAX) or "guest"
             first = old is None
             self.doc["members"][mid] = {

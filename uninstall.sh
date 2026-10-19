@@ -16,7 +16,8 @@ echo "[loki] This will remove LOKI from this computer:"
 echo "       - the 'start at login' entry (macOS: the Loki.app too)"
 echo "       - LOKI's private Python environment ($VENV)"
 if [ "$PURGE" = 1 ]; then
-  echo "       - ALL of harness_data: your keys, memory, jobs and models"
+  echo "       - ALL of harness_data: memory, jobs and models"
+  echo "       - your saved keys in $HOME/.loki/keys.env are KEPT (delete that folder yourself to remove them)"
 else
   echo "       - your data (keys, memory, jobs) is KEPT; pass --purge to delete it too"
 fi

@@ -17,6 +17,9 @@ installer, so it must "just work" - one click, no terminal, no setup stress, fas
    would ask, and file what broke as a new task for yourself or for LOKI (docs/EVOLVE.md roadmap line).
 
 ## Rules (never break these)
+- **Don't remove anything, only improve** (owner, 2026-10-19): never delete a feature, menu entry, test check,
+  file or doc to make something pass - move it, put it behind a setting, or archive it (docs/operations/archive/).
+- Run for hours: follow the loop in ZIVA_TASKS.md "Ziva's long run" - pull, next item, ship, report, repeat.
 - Publish ONLY with `tools/ship.py -m "..."` (Windows: `harness_data\.venv\Scripts\python.exe tools\ship.py`,
   Mac: `harness_data/.venv/bin/python tools/ship.py`). Never `git push --force`.
 - Tests: at most 1 minute per run (the owner's rule). ship.py's default is a 60 s budget; `--full` only overnight.

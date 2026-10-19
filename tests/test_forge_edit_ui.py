@@ -119,6 +119,8 @@ async def main():
         await page.route("http://127.0.0.1:8898/**", route)
         await page.goto("http://127.0.0.1:8898/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
+        # this suite checks the Blender hotkey set (1/2/3, G/R/S); Maya is the default (tests/test_forge_maya_ui.py)
+        await page.evaluate("localStorage.setItem('loki-forge-keymap', 'blender')")
         await page.evaluate("forgeOpen()")
         await page.wait_for_function("!!(forge.view && forge.view.showPoly && forge.view.setSelMode)", timeout=20000)
         await page.click("#forge-model-mode")

@@ -480,7 +480,7 @@ function forgeEditAttach(view, ctx) {
       else if (axis) {
         const o = toWorld(edit.pivot), dir = axis.clone().transformDirection(holder.matrixWorld);
         const t = axisParam(ray(modal.at), o, dir) - axisParam(ray(modal.from), o, dir);
-        d.copy(axis).multiplyScalar(t / holder.scale.x);
+        d.copy(axis).multiplyScalar(t / holder.getWorldScale(new THREE.Vector3()).x);
       } else {
         const o = toWorld(edit.pivot), plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), o);
         const a = ray(modal.from).intersectPlane(plane, new THREE.Vector3()), b = ray(modal.at).intersectPlane(plane, new THREE.Vector3());

@@ -69,6 +69,14 @@ check("a new space has a text room and a voice room; the guest sees both members
       "text" in rooms and "voice" in rooms and {m["name"] for m in s0["members"]} == {"Ada", "Bo"}, s0["space"]["rooms"])
 text = rooms["text"]["id"]
 
+# review 2026-10-19: a member who knows the owner's id (everyone does) must not take the owner over
+hs_ = host.hosted[sid]
+owner_id = hs_.doc["owner"]
+evil = spaces.join_request(sid, dec["key"], owner_id, b"\x07" * 32, "Mallory", "#ffffff")
+check("joining with someone else's member id (the owner's) is refused - no takeover",
+      "taken" in raises(hs_.join, evil) and hs_.role(owner_id) == "owner" and hs_.doc["members"][owner_id]["name"] == "Ada")
+again = guest.join(code)
+check("...while a real member re-joining with their own secret still works", again["space"] is not None, again)
 ct = spaces.b64e(b"\x01" * 40)
 iv = spaces.b64e(b"\x02" * 12)
 sent = guest.act(sid, "send", {"room": text, "ct": ct, "iv": iv})

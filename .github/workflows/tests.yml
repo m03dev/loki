@@ -33,4 +33,7 @@ jobs:
           python -m pip install -r engine/requirements.txt
 
       - name: Run every offline suite (same list as tools/ship.py)
+        # CI is not bound by the owner's 1-minute rule (that is for runs on his machines): run everything
+        env:
+          LOKI_TEST_FULL: "1"
         run: python tools/ship.py --check

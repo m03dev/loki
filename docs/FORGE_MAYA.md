@@ -1,6 +1,6 @@
 # Forge, the way Maya works
 
-Owner, 2026-10-20: *"I want my forge to be like maya ... menus depending on where my mouse clicks ... maya hot
+Owner, 2026-10-19 (the date was written as 10-20 by mistake): *"I want my forge to be like maya ... menus depending on where my mouse clicks ... maya hot
 keys ... space bar for selection menu with more menus ... the viewports the camera and the groups different
 object and hierarchy, history and transforms. Reset pivot all of it. Add it to Loki especially the outliner
 and the logic behind it all."*
@@ -44,7 +44,7 @@ core to hold a scene. That is the work below, in the order it has to happen.
 
 ## The tasks, in order
 
-Status, 2026-10-20: **T1, T2, T3 and T4 shipped** (patches 317 and 321). T4b, T5's gesture and T6
+Status, 2026-10-19 early morning: **T1, T2, T3 and T4 shipped** (patches 317 and 321). T4b, T5's gesture and T6
 are still open, below. Everything shipped has a test that would fail if it broke.
 
 ### DONE - T1: a scene of nodes (patch 317, app/ui/forge_scene.js)
@@ -150,7 +150,63 @@ affected-vertices + deltas, never as a list of dabs.
 - Maya's Attribute Editor (a full property sheet per node type), the Node Editor / Hypergraph, referencing,
   and animation curves. Out of scope until T1-T6 are solid.
 
-## The honesty note
+## 2026-10-19 (Claude): Maya 2027 read off the owner's own install, and the next layer built on it
+
+The honesty note at the bottom is answered: Maya 2027 is installed on the Mac mini, so its **own scripts** were read
+(the default hotkey set, every marking menu, the hotbox zones, the Outliner menus). The facts are in
+**docs/FORGE_MAYA_SPEC.md** - read it before changing anything here. Nothing of Autodesk's is copied: facts only,
+our own code. Everything Ziva built above is kept; this extends it.
+
+### DONE (Claude, tests/test_forge_maya_ui.py, 55 checks, ~23 s)
+- **Real pivots** (forge_scene.js): every node is outer (T+C+P, R, S) > inner (-P) > shape + children, i.e. Maya's
+  matrix. Moving / centring / resetting the pivot never moves the object and never changes the Channel Box's
+  translate (Maya's pivot-translate rule). Freeze keeps the pivot where it was in the world. T4b is now exact
+  (before, Center Pivot shifted the vertices).
+- **Every object is editable**: `api.makeWorking(id)` moves the tools' mesh (the viewer's holder) into the node you
+  edit; the old one keeps a static copy, its poly cage and its history. A component wedge, F9-F11, F8, Sculpt or
+  the Outliner's "Edit this mesh" does it.
+- **Create makes NEW objects** named the Maya way (pCube1, pSphere1 ...); the old object stays.
+- **Duplicate** copies the SELECTED node with its hierarchy as a sibling, next free number; **Shift+D**
+  repeats the last offset; Shift+drag (T5) uses it.
+- **Group** has translate 0 and its pivot at the centre (Maya), under the selection's own parent.
+- **Parent / Unparent** (p / Shift+P, last selected is the parent); parenting under ANY node, cycles refused.
+- **Hide / show** (h, Ctrl+H, Shift+H, Ctrl+Shift+H, Alt+H), **isolate** (Ctrl+1), **pick-walk** (arrows),
+  **nudge** (Alt+arrows), select all / none / invert / hierarchy.
+- **Viewport selection** in object mode: click, Shift toggles, Ctrl/Cmd removes, Ctrl/Cmd+Shift adds, box drag;
+  selected objects outlined (the last green, Maya's colours).
+- **Marking menus by context**, picked by DIRECTION past a dead zone like Maya: right button on an object (Maya's
+  exact compass: N Edge, W Vertex, E Face, S UV, NE Object Mode ...), on nothing (views), Shift (Create on nothing,
+  mesh/vertex/edge/face tools on a selection), Ctrl (convert selection), q / w / e + left button. Entries Forge
+  can't do yet are shown greyed in Maya's place with the reason.
+- **Hotbox** with nine menus and the five zones (centre = Persp/Top/Front/Side ...); **Space tap** = one/four views,
+  over a pane = that pane big; orthographic **Top / Front / Side** views (tumble off, like Maya).
+- **Pivot edit** (hold d, or Insert), **snap** (hold x grid, j step), manipulator size (- / =), **[ / ]** view
+  undo, Alt+Home default view, a / f frame all / selected, Ctrl+A Channel Box, Enter / Esc.
+- **Camera**: without Alt no button turns the view (left selects, right = menus); Alt/Option + left / middle /
+  right = tumble / track / dolly; Cmd = Ctrl everywhere for the Mac.
+- **Outliner**: expand / collapse (Shift = the whole branch), Shift+click range, Ctrl/Cmd+click toggle, drag onto a
+  row = parent, between rows = re-order, onto empty space = unparent, Return renames, f reveals, right-click menu.
+- **Hotkey sets**: Maya is the default; Edit > "Hotkeys: Blender" brings Blender's edit keys back (the Blender
+  suite tests/test_forge_edit_ui.py runs on that set). Nothing was removed.
+
+### OPEN - next, in this order (Ziva: these are yours, see ZIVA_TASKS.md "Ziva's long run")
+- **T7 Real-machine pass**: use Forge for 20 minutes the way the owner uses Maya (WebView2 on the PC, WKWebView on
+  the Mac): every hotkey in FORGE_MAYA_SPEC.md, Option-camera on the Mac trackpad and mouse, the hotbox zones, the
+  Outliner drag. Fix what feels wrong; write down what Maya does differently.
+- **T8 Missing modelling tools in Maya's places** (greyed wedges today): Bevel (Ctrl+B), Insert Edge Loop, Multi-Cut,
+  Merge / Merge to Center, Fill Hole, Chamfer, Poke - on `P.topology` / `P.edgeRing` (forge_poly.js; GoBuild is
+  GPL-3.0 and already vendored). Each one: a history op (T6), a test, and its wedge turned on.
+- **T9 Smooth preview (1 / 2 / 3)**: display-only Catmull-Clark of the working mesh (P.smooth on a copy), the cage
+  kept editable; 1 back to the cage.
+- **T10 Export the whole scene**: Save .glb writes every visible node with its hierarchy and transforms (today it
+  writes the working mesh only) - GLTFExporter on the outer groups, without the selection boxes / overlays.
+- **T11 Sculpt strokes in the history (T6c)** - DONE by Ziva in fa19bc1 (a stroke = the vertices it moved, before and
+  after); merged into the new forge_scene.js, recorded only when a stroke really happened. Still outside the history:
+  Freeze Transformations on the edited mesh - make it a step too.
+- **T12 Attribute Editor lite + UV editing**: per-node attributes (name, visibility, pivot numbers) and a first UV
+  view, then turn on the UV wedges.
+
+## The honesty note (answered 2026-10-19 - see the section above and docs/FORGE_MAYA_SPEC.md)
 
 Maya's own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for
 this: this session had no web access (Ziva showed an upgrade card), so the interaction model above is from

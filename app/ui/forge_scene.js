@@ -1,15 +1,20 @@
-// Forge's scene - the tree of objects Maya has and Forge did not (owner 2026-10-20: "the groups different
-// object and hierarchy, history and transforms ... especially the outliner and the logic behind it all").
+// Forge's scene - Maya's DAG: transform nodes with shapes and children, real pivots, and the Outliner
+// (owner 2026-10-19: "the groups different object and hierarchy, history and transforms. Reset pivot all of it ...
+// especially the outliner and the logic behind it all"). The behaviour is read off Maya 2027 itself -
+// docs/FORGE_MAYA_SPEC.md - and re-written here; no Autodesk code is used.
 //
-// This is task T1 of docs/FORGE_MAYA.md: Maya is a DAG of transform nodes with shapes under them, while Forge
-// used to flatten every model into ONE welded mesh. Here that mesh becomes node 1 - the WORKING object, still
-// the very same holder/mesh the sculpt and poly tools edit, so nothing that already works had to change - and
-// every other node is a real object with its own three.js transform and its own copy of the geometry.
+// Every node is two three.js groups:
+//     outer  (the transform node: position = T + C + P, rotation R, scale S)
+//       inner  (position -P: the pivot offset)
+//         shape mesh + the children's outer groups
+// so   world = parent * T(translate) * T(C) * T(P) * R * S * T(-P)   - Maya's matrix with one pivot P and the
+// pivot-translate C that keeps the object still when its pivot moves: C += (I - R*S)(P_old - P_new).
+// The Channel Box shows T, which a pivot move never changes (Maya's rule).
 //
-// With that, the Outliner (T2), Duplicate (T5) and Group / Ungroup (T3) become possible: a group is a
-// transform node with children, grouping puts the new node's ORIGIN at the centre of the selection (which is
-// why Maya's groups turn about the middle and not the world origin), and ungrouping re-parents each child
-// while three.js' attach() preserves its world transform (Maya does not snap children to the origin).
+// One node is the WORKING object: its inner group is the viewer's `holder`, the mesh the sculpt and poly tools
+// edit. Any other mesh node becomes the working one when you edit it (api.makeWorking) - the holder moves into
+// that node and the old working object keeps a static copy of its geometry - so every object is editable, like
+// Maya, while the tools still edit one mesh.
 "use strict";
 
 function scnEl(tag, cls, text) {
@@ -19,46 +24,121 @@ function scnEl(tag, cls, text) {
   return n;
 }
 
+const FORGE_SEL_LEAD = 0x5dff9a, FORGE_SEL_REST = 0xf2f4f7;     // Maya: the last selected green, the rest white
+
 function forgeSceneAttach(view, ctx) {
   const { THREE, scene, holder, material } = ctx;
   if (!scene || !holder) return null;
 
   const tree = view.tree = {
-    nodes: [], byId: {}, next: 1, sel: [],
+    nodes: [], byId: {}, next: 1, sel: [], anchor: 0, hiddenLast: [],
     rootId: 0, panel: null, list: null,
   };
-
   const node = (id) => tree.byId[id];
   const kidsOf = (id) => tree.nodes.filter((n) => n.parent === id);
 
+  // ---------------------------------------------------------------- pivots (Maya's transform matrix)
+  function rsMatrix(n) { return new THREE.Matrix4().compose(new THREE.Vector3(), n.grp.quaternion, n.grp.scale); }
+  function translateOf(n) { return n.grp.position.clone().sub(n.pc).sub(n.piv); }
+  function place(n, T) {
+    n.grp.position.copy(T).add(n.pc).add(n.piv);
+    n.inner.position.copy(n.piv).multiplyScalar(-1);
+    n.grp.updateMatrixWorld(true);
+    view.dirty = true;
+  }
+  function setPivot(n, P) {                          // the object does not move, its translate does not change
+    const T = translateOf(n);
+    const d = n.piv.clone().sub(P);
+    const rsd = d.clone().applyMatrix4(rsMatrix(n));
+    n.pc.add(d.sub(rsd));
+    n.piv.copy(P);
+    place(n, T);
+  }
+  function contentBox(n) {                           // the node's bounding box in its own (inner) space, children in
+    n.grp.updateMatrixWorld(true);
+    const inv = n.inner.matrixWorld.clone().invert();
+    const box = new THREE.Box3();
+    n.inner.traverse((o) => {
+      if (!o.isMesh || !o.geometry || o.name === "forge-sel" || !o.visible) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const b = o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      box.union(b);
+    });
+    return box;
+  }
+
   // ---------------------------------------------------------------- the nodes
-  function makeNode(name, grp, kind, parent, sm) {
-    const n = { id: tree.next++, name: name, grp: grp, kind: kind, parent: parent || 0, sm: sm || null,
-      visible: true };
+  function nextName(base) {                          // pCube1 -> pCube2: Maya's next free number
+    const stem = String(base || "object").replace(/\d+$/, "") || "object";
+    let hi = 0;
+    for (const n of tree.nodes) {
+      const m = n.name.match(/^(.*?)(\d+)$/);
+      if (m && m[1] === stem) hi = Math.max(hi, +m[2]);
+      else if (n.name === stem) hi = Math.max(hi, 0);
+    }
+    return stem + (hi + 1);
+  }
+  function makeNode(name, kind, parent, inner) {
+    const grp = new THREE.Group();
+    const inn = inner || new THREE.Group();
+    grp.add(inn);
+    const n = { id: tree.next++, name: name, grp: grp, inner: inn, kind: kind, parent: parent || 0, visible: true,
+      open: true, piv: new THREE.Vector3(), pc: new THREE.Vector3(), tri: null, poly: null, hist: null };
+    grp.name = name; grp.userData.forgeNode = n.id;
     tree.nodes.push(n); tree.byId[n.id] = n;
-    if (grp) grp.name = name;
+    const dest = parent ? node(parent).inner : scene;
+    dest.add(grp);
     return n;
   }
 
-  // node 1 is the working object - the one the tools edit (holder, with view.sm inside)
+  // the working object: an outer transform around the viewer's holder
   function ensureRoot() {
     if (tree.rootId) return node(tree.rootId);
-    const r = makeNode("object1", holder, "mesh", 0, null);
-    r.root = true;
+    const T = holder.position.clone(), Q = holder.quaternion.clone(), S = holder.scale.clone();
+    if (holder.parent) holder.parent.remove(holder);
+    holder.position.set(0, 0, 0); holder.quaternion.identity(); holder.scale.set(1, 1, 1);
+    const r = makeNode("object1", "mesh", 0, holder);
+    r.root = true; r.auto = true;              // named for real by the first Create / load
+    r.grp.position.copy(T); r.grp.quaternion.copy(Q); r.grp.scale.copy(S);
     tree.rootId = r.id;
     return r;
   }
+  const root = () => ensureRoot();
 
-  function smOf(n) { return n.root ? view.sm : n.sm; }
-  function shapeOf(n) { return n.grp ? n.grp.children.find((o) => o.isMesh && o.geometry) : null; }
+  function shapeOf(n) {                              // the node's own mesh (not its children's)
+    if (n.root) return ctx.mesh ? ctx.mesh() : (n.inner.children.find((o) => o.isMesh && o.name === "forge") || null);
+    return n.inner.children.find((o) => o.isMesh && o.name === "shape") || null;
+  }
+  function hasGeometry(n) { const s = shapeOf(n); return !!(s && s.geometry && s.geometry.attributes.position && s.geometry.attributes.position.count); }
 
-  // the middle of the working mesh, in the holder's own space
-  function centreOf(sm) {
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    for (let i = 0; i < sm.n; i++) for (let k = 0; k < 3; k++) {
-      const x = sm.wpos[i * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x;
+  function geometryFrom(tri, col) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(tri.pos.slice ? tri.pos.slice() : tri.pos, 3));
+    if (col && col.length) {
+      const c = new Float32Array(tri.pos.length);
+      if (col.length === tri.pos.length) c.set(col); else for (let i = 0; i < c.length; i++) c[i] = col[i % col.length];
+      g.setAttribute("color", new THREE.BufferAttribute(c, 3));
     }
-    return new THREE.Vector3((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+    g.setIndex(new THREE.BufferAttribute(tri.idx.slice ? tri.idx.slice() : tri.idx, 1));
+    g.computeVertexNormals();
+    g.computeBoundingBox();
+    return g;
+  }
+  function staticShape(tri, col) {
+    const m = new THREE.Mesh(geometryFrom(tri, col), material ? material.clone() : undefined);
+    if (m.material && !col) m.material.vertexColors = false;
+    m.name = "shape";
+    return m;
+  }
+  function triOfShape(n) {                           // a node's mesh as plain triangles in its own space
+    if (n.root) {
+      const t = view.triangles ? view.triangles() : null;
+      return t ? { pos: t.pos, idx: t.idx, col: view.sm && view.sm.col && view.sm.col.length === t.pos.length ? view.sm.col.slice() : null } : null;
+    }
+    const s = shapeOf(n);
+    if (!s) return null;
+    const g = s.geometry, idx = g.index ? g.index.array : Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i);
+    return { pos: g.attributes.position.array.slice(), idx: Uint32Array.from(idx), col: g.attributes.color ? g.attributes.color.array.slice() : null };
   }
 
   // transform every welded vertex of the working mesh (undoable), then push it back to the GPU
@@ -78,189 +158,484 @@ function forgeSceneAttach(view, ctx) {
     if (typeof forgeSync === "function") forgeSync(sm);
     if (typeof forgeNormals === "function") forgeNormals(sm);
     if (view.refreshMesh) view.refreshMesh();
+    if (view.poly) { view.poly = null; view.tri2face = null; }         // the poly cage no longer matches
     return true;
   }
 
-  // ---------------------------------------------------------------- building extra objects
-  function geometryFrom(tri, col) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(tri.pos, 3));
-    if (col) { const c = new Float32Array(tri.pos.length); for (let i = 0; i < c.length; i++) c[i] = col[i % col.length]; g.setAttribute("color", new THREE.BufferAttribute(c, 3)); }
-    g.setIndex(new THREE.BufferAttribute(tri.idx, 1));
-    g.computeVertexNormals();
-    return g;
+  function isAncestor(a, b) {                        // is a an ancestor of b?
+    for (let p = node(b) && node(b).parent; p; p = node(p) ? node(p).parent : 0) if (p === a) return true;
+    return false;
+  }
+  function order() {                                 // display order: depth first, siblings in array order
+    const out = [];
+    const walk = (parent) => { for (const n of tree.nodes) if (n.parent === parent) { out.push(n); walk(n.id); } };
+    walk(0);
+    return out;
+  }
+  function moveInArray(n, beforeId) {                // re-order n among its siblings (before another node or last)
+    tree.nodes = tree.nodes.filter((x) => x !== n);
+    const at = beforeId ? tree.nodes.findIndex((x) => x.id === beforeId) : -1;
+    if (at < 0) tree.nodes.push(n); else tree.nodes.splice(at, 0, n);
   }
 
-  function meshFor(src) {                       // a fresh object with its own copy of the geometry
-    const tri = src.root ? view.triangles() : src.tri;
-    if (!tri) return null;
-    const grp = new THREE.Group();
-    const m = new THREE.Mesh(geometryFrom(tri, src.root && view.sm ? view.sm.col : null),
-      material ? material.clone() : undefined);
-    m.name = "shape";
-    grp.add(m);
-    return grp;
+  function cloneNode(src, parentId) {                // a deep copy with its hierarchy (Maya's Duplicate)
+    const n = makeNode(nextName(src.name), src.kind, parentId, null);
+    n.grp.quaternion.copy(src.grp.quaternion); n.grp.scale.copy(src.grp.scale);
+    n.piv.copy(src.piv); n.pc.copy(src.pc);
+    place(n, translateOf(src));
+    n.visible = src.visible; n.grp.visible = src.visible;
+    if (src.kind === "mesh") {
+      const t = triOfShape(src);
+      if (t) n.inner.add(staticShape(t, t.col));
+      n.poly = src.root ? view.poly : src.poly;
+      n.hist = src.root ? (typeof forgeModel !== "undefined" && forgeModel.hist ? JSON.parse(JSON.stringify(forgeModel.hist)) : null)
+        : (src.hist ? JSON.parse(JSON.stringify(src.hist)) : null);
+    }
+    for (const k of kidsOf(src.id)) cloneNode(k, n.id);
+    return n;
   }
 
-  // ---------------------------------------------------------------- the API the menus and the Outliner use
+  // ---------------------------------------------------------------- selection highlight in the viewport
+  const marks = new Map();
+  function drawMarks() {
+    for (const [id, h] of marks) { if (h.parent) h.parent.remove(h); h.geometry.dispose(); marks.delete(id); }
+    tree.sel.forEach((id, i) => {
+      const n = node(id);
+      if (!n) return;
+      const box = contentBox(n);
+      if (box.isEmpty()) return;
+      const h = new THREE.Box3Helper(box, new THREE.Color(i === tree.sel.length - 1 ? FORGE_SEL_LEAD : FORGE_SEL_REST));
+      h.name = "forge-sel"; h.raycast = () => {};
+      n.inner.add(h); marks.set(id, h);
+    });
+    view.dirty = true;
+  }
+
+  // ---------------------------------------------------------------- the API (menus, hotkeys, Outliner, tests)
   const api = {
     node: node,
     kids: kidsOf,
     list: () => tree.nodes.slice(),
+    order: () => order().map((n) => n.id),
+    root: () => root(),
+    nextName: nextName,
 
+    // a static copy of the working mesh as a new object (kept for older callers - Duplicate is the Maya way)
     add(name) {
-      const grp = meshFor(ensureRoot());
-      if (!grp) return null;
-      const n = makeNode(name || ("object" + tree.next), grp, "mesh", 0, null);
-      n.tri = view.triangles();
-      if (holder.parent) holder.parent.add(grp); else scene.add(grp);
-      grp.position.copy(holder.position); grp.quaternion.copy(holder.quaternion); grp.scale.copy(holder.scale);
+      const r = root();
+      if (!hasGeometry(r)) return null;
+      const n = cloneNode(r, r.parent);
+      if (name) api.rename(n.id, name);
       tree.build(); api.select(n.id);
       return n;
     },
 
-    duplicate(name) { return api.add(name || (api.active().name + "_copy")); },
+    // Maya's Duplicate (Ctrl/Cmd+D): every selected node with its hierarchy, as a sibling, in place
+    duplicate(name, ids) {
+      const list = (ids || (tree.sel.length ? tree.sel : [root().id])).map(node).filter(Boolean)
+        .filter((n, _, all) => !all.some((o) => o !== n && isAncestor(o.id, n.id)));
+      if (!list.length) return null;
+      const made = list.map((src) => {
+        const c = cloneNode(src, src.parent);
+        moveInArray(c, (tree.nodes[tree.nodes.indexOf(src) + 1] || {}).id);
+        return c;
+      });
+      if (name && made.length === 1) api.rename(made[0].id, name);
+      tree.lastDup = made.map((c, i) => ({ src: list[i].id, copy: c.id }));
+      tree.sel = made.map((c) => c.id); tree.build();
+      return made[made.length - 1];
+    },
+
+    // Maya's Duplicate with Transform (Shift+D): one more copy, offset again by what moved the last copy
+    duplicateWithTransform() {
+      const pairs = (tree.lastDup || []).filter((p) => node(p.src) && node(p.copy) && tree.sel.includes(p.copy));
+      if (!pairs.length) return api.duplicate();
+      const made = pairs.map(({ src, copy }) => {
+        const a = node(src).grp, b = node(copy).grp;
+        a.updateMatrix(); b.updateMatrix();
+        const delta = b.matrix.clone().multiply(a.matrix.clone().invert());
+        const c = cloneNode(node(copy), node(copy).parent);
+        c.grp.matrix.copy(delta.multiply(b.matrix));
+        c.grp.matrix.decompose(c.grp.position, c.grp.quaternion, c.grp.scale);
+        c.grp.updateMatrixWorld(true);
+        return { src: copy, copy: c.id };
+      });
+      tree.lastDup = made;
+      tree.sel = made.map((p) => p.copy); tree.build();
+      return node(made[made.length - 1].copy);
+    },
 
     rename(id, name) {
       const n = node(id); if (!n || !name) return false;
-      n.name = name; if (n.grp) n.grp.name = name;
+      n.name = String(name).trim().replace(/\s+/g, "_") || n.name; n.grp.name = n.name;
       tree.build(); return true;
     },
 
     setVisible(id, on) {
       const n = node(id); if (!n) return false;
-      n.visible = !!on; if (n.grp) n.grp.visible = n.visible;
-      tree.build(); return true;
+      n.visible = !!on; n.grp.visible = n.visible;
+      tree.build(); view.dirty = true; return true;
     },
+    toggleVisible(ids) { for (const id of ids || tree.sel) { const n = node(id); if (n) api.setVisible(id, !n.visible); } },
+    hide(ids) { const l = (ids || tree.sel).filter((id) => node(id) && node(id).visible); for (const id of l) api.setVisible(id, false); tree.hiddenLast = l; return l.length; },
+    show(ids) { for (const id of ids || tree.sel) api.setVisible(id, true); },
+    showLastHidden() { const l = tree.hiddenLast || []; for (const id of l) api.setVisible(id, true); tree.hiddenLast = []; return l.length; },
+    hideUnselected() {
+      const keep = new Set();
+      for (const id of tree.sel) { keep.add(id); for (let p = node(id) && node(id).parent; p; p = node(p).parent) keep.add(p);
+        for (const n of tree.nodes) if (isAncestor(id, n.id)) keep.add(n.id); }
+      return api.hide(tree.nodes.filter((n) => !keep.has(n.id)).map((n) => n.id));
+    },
+    showAll() { for (const n of tree.nodes) api.setVisible(n.id, true); },
 
-    remove(id) {
+    remove(id) {                                     // the node and everything under it (Maya's Delete)
       const n = node(id);
-      if (!n || n.root) return false;                 // the working object stays (the tools edit it)
-      for (const k of kidsOf(id)) api.reparent(k.id, n.parent);
-      if (n.grp && n.grp.parent) n.grp.parent.remove(n.grp);
+      if (!n) return false;
+      if (n.root || isAncestor(id, tree.rootId)) {   // never delete the holder: keep the children, empty the mesh
+        if (n.root) { for (const k of kidsOf(id)) api.reparent(k.id, n.parent); return false; }
+        api.reparent(tree.rootId, n.parent);
+      }
+      for (const k of kidsOf(id)) api.remove(k.id);
+      if (n.grp.parent) n.grp.parent.remove(n.grp);
+      n.inner.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       tree.nodes = tree.nodes.filter((x) => x !== n); delete tree.byId[id];
       tree.sel = tree.sel.filter((x) => x !== id);
       tree.build(); return true;
     },
+    removeSelected() { let k = 0; for (const id of tree.sel.slice()) if (api.remove(id)) k++; return k; },
 
-    reparent(id, parentId) {                          // three.js' attach() keeps the world transform
+    // parent under ANY node (Maya parents under any transform); three.js' attach() keeps the world transform
+    reparent(id, parentId, beforeId) {
       const n = node(id), p = parentId ? node(parentId) : null;
-      if (!n || n === p || (p && p.kind !== "group" && p !== node(tree.rootId))) return false;
-      if (p === n.grp) return false;
-      const dest = p ? p.grp : (holder.parent || scene);
-      if (n.grp && dest && n.grp.parent !== dest) dest.attach(n.grp);
+      if (!n || (parentId && !p) || n === p || (p && isAncestor(n.id, p.id))) return false;
+      const dest = p ? p.inner : scene;
+      if (n.grp.parent !== dest) dest.attach(n.grp);
       n.parent = p ? p.id : 0;
+      moveInArray(n, beforeId || 0);
       tree.build(); return true;
     },
+    // Maya's p: the LAST selected is the parent of the others; Shift+P: back to the world
+    parentSelected() {
+      if (tree.sel.length < 2) return false;
+      const parent = tree.sel[tree.sel.length - 1];
+      for (const id of tree.sel.slice(0, -1)) api.reparent(id, parent);
+      return true;
+    },
+    unparentSelected() { for (const id of tree.sel) api.reparent(id, 0); return tree.sel.length > 0; },
 
-    // Maya's Group: a new transform node whose origin is the centre of the selection
+    // Maya's Group: a new transform, translate 0, pivot at the centre of its contents, under the selection's parent
     group(name, ids) {
-      const list = (ids && ids.length ? ids : tree.sel).map(node).filter((n) => n && !n.root);
-      const grp = new THREE.Group();
-      (holder.parent || scene).add(grp);
-      const box = new THREE.Box3();
-      for (const n of list) box.expandByObject(n.grp);
-      const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
-      grp.position.copy(centre);                      // the pivot Maya would put at the selection's centre
-      const g = makeNode(name || "group1", grp, "group", 0, null);
-      for (const n of list) { grp.attach(n.grp); n.parent = g.id; }
-      tree.build(); api.select(g.id);
+      const list = (ids && ids.length ? ids : tree.sel).map(node).filter(Boolean)
+        .filter((n, _, all) => !all.some((o) => o !== n && isAncestor(o.id, n.id)));
+      const parentId = list.length ? list[0].parent : 0;
+      const g = makeNode(name || nextName("group"), "group", parentId && list.every((n) => n.parent === parentId) ? parentId : 0, null);
+      if (list.length) moveInArray(g, list[0].id);
+      for (const n of list) { g.inner.attach(n.grp); n.parent = g.id; }
+      const box = contentBox(g);
+      if (!box.isEmpty()) setPivot(g, box.getCenter(new THREE.Vector3()));
+      tree.sel = [g.id]; tree.build();
       return g;
     },
 
     ungroup(id) {
       const g = node(id);
       if (!g || g.kind !== "group") return false;
-      const parent = g.parent ? node(g.parent) : null;
-      const dest = parent ? parent.grp : (holder.parent || scene);
-      for (const k of kidsOf(id)) { dest.attach(k.grp); k.parent = g.parent; }
+      const dest = g.parent ? node(g.parent).inner : scene;
+      for (const k of kidsOf(id)) { dest.attach(k.grp); k.parent = g.parent; moveInArray(k, g.id); }
       if (g.grp.parent) g.grp.parent.remove(g.grp);
       tree.nodes = tree.nodes.filter((x) => x !== g); delete tree.byId[id];
+      tree.sel = tree.sel.filter((x) => x !== id);
       tree.build(); return true;
     },
 
-    select(id, add) {
+    // how: "set" | "toggle" | "add" | "remove" | "range"  (true means toggle, for older callers)
+    select(id, how) {
+      if (how === true) how = "toggle";
       if (id == null) tree.sel = [];
-      else if (add) tree.sel = tree.sel.includes(id) ? tree.sel.filter((x) => x !== id) : tree.sel.concat([id]);
-      else tree.sel = [id];
-      tree.build(); return tree.sel.slice();
+      else if (how === "toggle") tree.sel = tree.sel.includes(id) ? tree.sel.filter((x) => x !== id) : tree.sel.concat([id]);
+      else if (how === "add") tree.sel = tree.sel.filter((x) => x !== id).concat([id]);
+      else if (how === "remove") tree.sel = tree.sel.filter((x) => x !== id);
+      else if (how === "range") {
+        const ids = order().map((n) => n.id), a = ids.indexOf(tree.anchor || id), b = ids.indexOf(id);
+        tree.sel = a < 0 || b < 0 ? [id] : ids.slice(Math.min(a, b), Math.max(a, b) + 1);
+        if (a > b) tree.sel.reverse();
+      } else tree.sel = node(id) ? [id] : [];
+      if (id != null && how !== "range") tree.anchor = id;
+      tree.build();
+      if (api.onSelect) api.onSelect();
+      return tree.sel.slice();
     },
-
+    selectMany(ids, how) {                           // a marquee: set / toggle / add / remove many at once
+      ids = ids.filter((id) => node(id));
+      if (how === "toggle") for (const id of ids) tree.sel = tree.sel.includes(id) ? tree.sel.filter((x) => x !== id) : tree.sel.concat([id]);
+      else if (how === "add") tree.sel = tree.sel.filter((x) => !ids.includes(x)).concat(ids);
+      else if (how === "remove") tree.sel = tree.sel.filter((x) => !ids.includes(x));
+      else tree.sel = ids.slice();
+      tree.build(); if (api.onSelect) api.onSelect();
+      return tree.sel.slice();
+    },
+    selectAll() { return api.selectMany(tree.nodes.filter((n) => n.parent === 0).map((n) => n.id), "set"); },
+    selectNone() { return api.selectMany([], "set"); },
+    invertSelection() { return api.selectMany(tree.nodes.filter((n) => n.parent === 0 && !tree.sel.includes(n.id)).map((n) => n.id), "set"); },
+    selectHierarchy() {
+      const ids = new Set(tree.sel);
+      for (const id of tree.sel) for (const n of tree.nodes) if (isAncestor(id, n.id)) ids.add(n.id);
+      return api.selectMany([...ids], "set");
+    },
     selected: () => tree.sel.slice(),
 
-    // the node's own transform, local to its parent - what Maya's Channel Box shows
+    // Maya's pick-walk (the arrow keys): up to the parent, down to the first child, left/right to the siblings
+    pickWalk(dir) {
+      const n = node(tree.sel[tree.sel.length - 1]);
+      if (!n) { const first = tree.nodes.find((x) => x.parent === 0); if (first) api.select(first.id); return !!first; }
+      let to = null;
+      if (dir === "up") to = n.parent ? node(n.parent) : null;
+      else if (dir === "down") to = kidsOf(n.id)[0] || null;
+      else {
+        const sib = kidsOf(n.parent), i = sib.indexOf(n);
+        to = sib.length > 1 ? sib[(i + (dir === "right" ? 1 : -1) + sib.length) % sib.length] : null;
+      }
+      if (!to) return false;
+      if (dir === "up" || dir === "down") { const p = node(to.parent); if (p) p.open = true; }
+      api.select(to.id);
+      return true;
+    },
+
+    // the node's own transform - what Maya's Channel Box shows (translate excludes the pivot terms)
     transform(id) {
       const n = node(id || api.active().id);
-      if (!n || !n.grp) return null;
+      if (!n) return null;
       const r = n.grp.rotation;
-      return { translate: n.grp.position.toArray(), rotate: [r.x, r.y, r.z].map((v) => v * 180 / Math.PI),
-               scale: n.grp.scale.toArray() };
+      return { translate: translateOf(n).toArray(), rotate: [r.x, r.y, r.z].map((v) => v * 180 / Math.PI),
+               scale: n.grp.scale.toArray(), pivot: n.piv.toArray() };
     },
 
     setTransform(id, part, axis, value) {
       const n = node(id || api.active().id);
       const v = Number(value);
-      if (!n || !n.grp || !isFinite(v)) return false;
-      if (part === "translate") n.grp.position["xyz"[axis]] = v;
-      else if (part === "rotate") n.grp.rotation["xyz"[axis]] = v * Math.PI / 180;
-      else if (part === "scale") n.grp.scale["xyz"[axis]] = v;
-      n.grp.updateMatrixWorld(true);
-      if (n.root && view.dirty !== undefined) view.dirty = true;
+      if (!n || !isFinite(v)) return false;
+      if (part === "translate") { const T = translateOf(n); T.setComponent(axis, v); place(n, T); }
+      else {
+        const T = translateOf(n);
+        if (part === "rotate") n.grp.rotation["xyz"[axis]] = v * Math.PI / 180;
+        else if (part === "scale") n.grp.scale["xyz"[axis]] = v === 0 ? 1e-4 : v;
+        place(n, T);
+      }
+      if (tree.selMarks) drawMarks();
       return true;
     },
 
-    // Maya's Modify > Center Pivot: the manipulator's origin moves to the middle of the object, and the
-    // object does NOT move - so the vertices shift one way by the centre and the node's transform shifts the
-    // other. Export bakes the node's transform, so the two cancel and what Save writes is unchanged.
+    // moving an object by the manipulator changes outer.position; tell the node to read T back
+    pivotOf: (id) => { const n = node(id || api.active().id); return n ? n.piv.clone() : null; },
+    setPivot(id, P) { const n = node(id || api.active().id); if (!n) return false; setPivot(n, P.isVector3 ? P : new THREE.Vector3(P[0], P[1], P[2])); return true; },
+    // the pivot's place in the world (where the manipulator sits)
+    pivotWorld(id) { const n = node(id || api.active().id); if (!n) return null; n.grp.updateMatrixWorld(true); return n.grp.getWorldPosition(new THREE.Vector3()); },
+
+    // Maya's Modify > Center Pivot: the pivot moves to the middle of the object (children included), nothing moves
     centerPivot(id) {
       const n = node(id || api.active().id);
-      if (!n || !n.grp) return false;
-      if (n.root) {
-        const sm = view.sm;
-        if (!sm) return false;
-        const c = centreOf(sm);
-        bakeRoot(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
-        n.grp.position.add(c);
-      } else {
-        const m = shapeOf(n);
-        if (!m) return false;
-        m.geometry.computeBoundingBox();
-        const c = m.geometry.boundingBox.getCenter(new THREE.Vector3());
-        m.geometry.translate(-c.x, -c.y, -c.z);
-        n.grp.position.add(c);
-      }
-      n.grp.updateMatrixWorld(true);
+      if (!n) return false;
+      const box = contentBox(n);
+      if (box.isEmpty()) return false;
+      setPivot(n, box.getCenter(new THREE.Vector3()));
+      return true;
+    },
+    // Maya's Reset Pivot: back on the object's own origin
+    resetPivot(id) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      setPivot(n, new THREE.Vector3());
       return true;
     },
 
-    // Maya's Modify > Freeze Transformations: the node's transform is baked into the vertices and the node
-    // goes back to identity, so the object does not appear to move at all.
+    // Maya's Freeze Transformations: translate/rotate/scale go into the geometry (and the children), the node reads
+    // 0 / 0 / 1, and the pivot stays where it was in the world
     freeze(id) {
       const n = node(id || api.active().id);
-      if (!n || !n.grp) return false;
-      n.grp.updateMatrix();
-      const m = n.grp.matrix.clone();
-      if (n.root) bakeRoot(m);
-      else { const shape = shapeOf(n); if (!shape) return false; shape.geometry.applyMatrix4(m); }
-      n.grp.position.set(0, 0, 0); n.grp.rotation.set(0, 0, 0); n.grp.scale.set(1, 1, 1);
-      n.grp.updateMatrixWorld(true);
+      if (!n) return false;
+      n.grp.updateMatrix(); n.inner.updateMatrix();
+      const F = n.grp.matrix.clone().multiply(n.inner.matrix);          // content space -> parent space
+      const W = n.grp.position.clone();                                 // the pivot, in the parent's space
+      if (n.kind === "mesh") {
+        if (n.root) { if (!bakeRoot(F)) return false; }
+        else { const s = shapeOf(n); if (s) { s.geometry.applyMatrix4(F); s.geometry.computeBoundingBox(); } }
+      }
+      for (const k of kidsOf(n.id)) { k.grp.applyMatrix4(F); k.grp.updateMatrixWorld(true); }
+      n.grp.quaternion.identity(); n.grp.scale.set(1, 1, 1);
+      n.pc.set(0, 0, 0); n.piv.copy(W);
+      place(n, new THREE.Vector3());
+      if (tree.selMarks) drawMarks();
       return true;
     },
 
-    resetTransform(id) {                              // Maya's Reset: the node back on the origin, unscaled
+    // Maya's Reset Transformations: translate/rotate/scale back to 0/0/1, the geometry is not touched
+    resetTransform(id) {
       const n = node(id || api.active().id);
-      if (!n || !n.grp) return false;
-      n.grp.position.set(0, 0, 0); n.grp.rotation.set(0, 0, 0); n.grp.scale.set(1, 1, 1);
-      n.grp.updateMatrixWorld(true);
+      if (!n) return false;
+      n.grp.quaternion.identity(); n.grp.scale.set(1, 1, 1); n.pc.set(0, 0, 0);
+      place(n, new THREE.Vector3());
+      if (tree.selMarks) drawMarks();
       return true;
     },
-    active() { const n = node(tree.sel[tree.sel.length - 1]) || node(tree.rootId); return n || ensureRoot(); },
 
+    active() { const n = node(tree.sel[tree.sel.length - 1]) || node(tree.rootId); return n || ensureRoot(); },
     groupSelected(name) { return api.group(name, tree.sel); },
+
+    // the box of the selection (or of everything) in world space - for f / a (frame)
+    worldBox(ids) {
+      const box = new THREE.Box3();
+      for (const id of ids || tree.sel) {
+        const n = node(id); if (!n || !n.visible) continue;
+        n.grp.updateMatrixWorld(true);
+        n.inner.traverse((o) => {
+          if (!o.isMesh || !o.geometry || o.name === "forge-sel") return;
+          if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+          box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+        });
+      }
+      return box;
+    },
+    allIds: () => tree.nodes.map((n) => n.id),
+
+    // which node does this three.js object belong to?
+    nodeOfObject(o) {
+      for (let x = o; x; x = x.parent) {
+        if (x === holder) return node(tree.rootId);
+        if (x.userData && x.userData.forgeNode && x.name !== "forge-sel") { const n = node(x.userData.forgeNode); if (n && n.grp === x) return n; }
+      }
+      return null;
+    },
+    // every visible mesh to pick against (the working mesh and every static shape)
+    pickables() {
+      const out = [];
+      for (const n of tree.nodes) {
+        if (!n.visible) continue;
+        let vis = true; for (let p = n.parent; p; p = node(p).parent) if (!node(p).visible) { vis = false; break; }
+        if (!vis) continue;
+        const s = shapeOf(n); if (s && s.geometry) out.push(s);
+      }
+      return out;
+    },
+
+    // ---- every object is editable: the holder (the tools' mesh) moves into the node you edit
+    makeWorking(id) {
+      const n = node(id), r = root();
+      if (!n || n.root || n.kind !== "mesh") return n ? n.root : false;
+      if (view.modalActive && view.modalActive()) return false;
+      // 1. the old working object keeps a static copy of what it is now
+      const t = triOfShape(r);
+      const keep = new THREE.Group();
+      keep.position.copy(holder.position);
+      if (t && t.pos.length) keep.add(staticShape(t, t.col));
+      r.poly = view.poly; r.hist = typeof forgeModel !== "undefined" ? forgeModel.hist : null;
+      for (const k of kidsOf(r.id)) keep.add(k.grp);                   // same local place: holder and keep match
+      r.grp.remove(holder); r.grp.add(keep); r.inner = keep; r.root = false;
+      // 2. the holder takes the node's place; its children move across
+      const old = n.inner, s = shapeOf(n), src = triOfShape(n);
+      holder.position.copy(old.position);
+      for (const k of kidsOf(n.id)) holder.add(k.grp);
+      n.grp.remove(old); n.grp.add(holder); n.inner = holder; n.root = true;
+      tree.rootId = n.id;
+      if (s) s.geometry.dispose();
+      // 3. the tools get the node's mesh
+      if (n.poly && view.showPoly) view.showPoly(n.poly, true, true);
+      else if (src && view.setTriangles) view.setTriangles(src.pos, src.idx, src.col);
+      if (typeof forgeModel !== "undefined") { forgeModel.hist = n.hist || null; forgeModel.last = null; forgeModel.prim = null; }
+      n.poly = null; n.hist = null;
+      if (view.undoStack) { view.undoStack.length = 0; view.redoStack.length = 0; }
+      tree.build();
+      return true;
+    },
+
+    // a new, empty working object (Maya: every Create command makes a new node) - the old one stays as it is
+    newObject(name) {
+      const r = root();
+      if (!hasGeometry(r)) { if (name) { r.name = "\u0000"; api.rename(r.id, nextName(name)); r.auto = false; } return r; }
+      const n = makeNode(nextName(name || "object"), "mesh", 0, null);
+      n.tri = null;
+      api.makeWorking(n.id);
+      tree.sel = [n.id]; tree.build();
+      return n;
+    },
   };
   tree.api = api;
+  api.say = (text, bad) => { if (typeof forgeSay === "function") forgeSay(text, bad); };
 
-  // ---------------------------------------------------------------- the Outliner
+  // the manipulator follows the selection (Maya: the tool's handle sits on the selected object's pivot)
+  const tc = ctx.transform || null;
+  api.attachTool = (mode) => {
+    if (!tc) return false;
+    const n = api.active();
+    if (!n || (view.mode === "poly")) return false;
+    if (mode === null) { tc.detach(); view.dirty = true; return true; }
+    tc.attach(n.grp);
+    if (mode) tc.setMode(mode);
+    view.dirty = true;
+    return true;
+  };
+  api.onSelect = () => {
+    if (tc && tc.object && view.mode !== "poly") { const n = api.active(); if (n && tc.object !== n.grp) tc.attach(n.grp); }
+    tree.selMarks = true; drawMarks();
+  };
+  if (tc && tc.addEventListener) {
+    tc.addEventListener("objectChange", () => { if (tree.syncChannel) tree.syncChannel(); });
+    tc.addEventListener("dragging-changed", (ev) => { if (!ev.value) { drawMarks(); if (tree.syncChannel) tree.syncChannel(); } });
+  }
+  // the viewer's own Move button attaches the handle to the SELECTED object, never to the bare holder
+  if (typeof view.toggleTransform === "function") {
+    const own = view.toggleTransform;
+    view.toggleTransform = (mode) => {
+      if (view.mode === "poly" || !tc) return own(mode);
+      const n = api.active();
+      if (!n || !n.grp) return own(mode);
+      if (tc.object && !mode) tc.detach();
+      else { tc.attach(n.grp); tc.setMode(mode || "translate"); }
+      for (const b of document.querySelectorAll("#forge .forge-transform")) b.classList.toggle("on", !!tc.object);
+      view.dirty = true;
+    };
+  }
+
+  // ---------------------------------------------------------------- the Outliner panel
+  let menuEl = null;
+  function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+  function rowMenu(x, y, n) {                         // the Outliner's right-click menu
+    closeMenu();
+    if (n && !tree.sel.includes(n.id)) api.select(n.id);
+    const m = menuEl = scnEl("div", "forge-out-menu");
+    m.setAttribute("role", "menu");
+    const item = (label, run, off) => {
+      const b = scnEl("button", "forge-out-mi", label); b.type = "button"; b.disabled = !!off; b.dataset.cmd = label;
+      b.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); run(); tree.build(); });
+      m.append(b);
+    };
+    const one = tree.sel.length > 0;
+    item("Select Hierarchy", () => api.selectHierarchy(), !one);
+    item("Duplicate", () => api.duplicate(), !one);
+    item("Group", () => api.groupSelected(), !one);
+    item("Ungroup", () => { for (const id of tree.sel.slice()) api.ungroup(id); }, !one || !tree.sel.some((id) => node(id).kind === "group"));
+    item("Rename", () => { const r = tree.list.querySelector('.forge-out-row[data-id="' + tree.sel[tree.sel.length - 1] + '"] .forge-out-name'); if (r) r.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); }, !one);
+    item(n && !n.visible ? "Show" : "Hide", () => { if (n && !n.visible) api.show(); else api.hide(); }, !one);
+    item("Edit this mesh", () => { if (api.makeWorking(n.id)) api.say(n.name + " is the one the tools edit now."); }, !n || n.kind !== "mesh" || n.root);
+    item("Center Pivot", () => api.centerPivot(), !one);
+    item("Reset Pivot", () => api.resetPivot(), !one);
+    item("Freeze Transformations", () => api.freeze(), !one);
+    item("Reset Transformations", () => api.resetTransform(), !one);
+    item("Expand All", () => { for (const k of tree.nodes) k.open = true; });
+    item("Collapse All", () => { for (const k of tree.nodes) k.open = false; });
+    item("Delete", () => api.removeSelected(), !one);
+    document.body.append(m);
+    const w = m.offsetWidth || 170, h = m.offsetHeight || 300;
+    m.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + "px";
+    m.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + "px";
+    setTimeout(() => document.addEventListener("pointerdown", function off(e) {
+      if (menuEl && !menuEl.contains(e.target)) { closeMenu(); document.removeEventListener("pointerdown", off, true); }
+    }, true), 0);
+  }
+  api.outlinerMenu = rowMenu;
+  document.addEventListener("keydown", (e) => {     // Esc closes the menu, and only the menu
+    if (e.key === "Escape" && menuEl) { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); }
+  }, true);
+
   function panel() {
     if (tree.panel && document.body.contains(tree.panel)) return tree.panel;
     const side = document.getElementById("forge-left") || document.getElementById("forge-stage");
@@ -270,138 +645,202 @@ function forgeSceneAttach(view, ctx) {
     const head = scnEl("div", "forge-out-head");
     head.append(scnEl("span", "forge-out-title", "Outliner"));
     const bar = scnEl("div", "forge-out-bar");
-    const btn = (label, what, run) => {
+    const btn = (label, id, what, run) => {
       const b = scnEl("button", "forge-out-btn", label);
-      b.type = "button"; b.title = what; b.addEventListener("click", run); bar.append(b); return b;
+      b.type = "button"; b.title = what; if (id) b.id = id;
+      b.addEventListener("click", () => { run(); tree.build(); });
+      bar.append(b); return b;
     };
-    btn("Copy", "Duplicate the selected object (T5).", () => { api.duplicate(); api.say("Duplicated."); });
-    btn("Group", "Group the selection under a new node whose pivot is the selection's centre (Ctrl+G).", () => api.groupSelected());
-    btn("Ungroup", "Take the children out of the selected group (Ctrl+Shift+G).", () => {
-      for (const id of tree.sel.slice()) api.ungroup(id);
+    btn("Copy", "forge-ch-dup", "Duplicate the selection with its hierarchy (Ctrl/Cmd+D; Shift+D repeats the last offset).", () => { if (api.duplicate()) api.say("Duplicated."); });
+    btn("Group", "forge-ch-group", "Group the selection: a new node, pivot at the centre of its contents (Ctrl/Cmd+G).", () => api.groupSelected());
+    btn("Ungroup", "forge-ch-ungroup", "Take the children out of the selected group (Ctrl/Cmd+Shift+G).", () => { for (const id of tree.sel.slice()) api.ungroup(id); });
+    btn("Reset", "forge-ch-reset", "Reset Transformations: translate, rotate, scale back to 0, 0, 1 (the mesh is not touched).", () => { api.resetTransform(); api.say("Transformations reset."); });
+    btn("Pivot", "forge-ch-pivot", "Center Pivot: the pivot moves to the middle of the object; the object does not move.", () => {
+      if (api.centerPivot()) api.say("Pivot centred (Modify > Center Pivot)."); else api.say("Select an object first.", true);
     });
-    const reset = scnEl("button", "forge-out-btn", "Reset");
-    reset.type = "button"; reset.id = "forge-ch-reset";
-    reset.title = "Put the selected object back on the origin, unscaled (Maya's Reset).";
-    reset.addEventListener("click", () => { api.resetTransform(); tree.build(); api.say("Transform reset."); });
-    bar.append(reset);
-    const pivot = scnEl("button", "forge-out-btn", "Pivot");
-    pivot.type = "button"; pivot.id = "forge-ch-pivot";
-    pivot.title = "Center Pivot: put the manipulator's origin on the middle of the object (the object does not move).";
-    pivot.addEventListener("click", () => {
-      if (api.centerPivot()) { tree.build(); api.say("Pivot centered on the object (Modify > Center Pivot)."); }
-      else api.say("Select an object with a mesh first.", true);
+    btn("Reset Pivot", "forge-ch-rpivot", "Reset Pivot: the pivot goes back to the object's own origin; the object does not move.", () => {
+      if (api.resetPivot()) api.say("Pivot back on the object's origin (Reset Pivot)."); else api.say("Select an object first.", true);
     });
-    const freeze = scnEl("button", "forge-out-btn", "Freeze");
-    freeze.type = "button"; freeze.id = "forge-ch-freeze";
-    freeze.title = "Freeze Transformations: bake the transform into the mesh, leave the object where it is.";
-    freeze.addEventListener("click", () => {
-      if (api.freeze()) { tree.build(); api.say("Transformations frozen into the mesh (Modify > Freeze Transformations)."); }
-      else api.say("Select an object with a mesh first.", true);
+    btn("Freeze", "forge-ch-freeze", "Freeze Transformations: bake the transform into the mesh; the object stays where it is and reads 0, 0, 1.", () => {
+      if (api.freeze()) api.say("Transformations frozen (Modify > Freeze Transformations)."); else api.say("Select an object first.", true);
     });
-    bar.append(pivot, freeze);
     head.append(bar);
     const list = scnEl("div", "forge-out-list"); list.id = "forge-out-list";
+    list.tabIndex = 0;
+    list.setAttribute("role", "tree");
+    list.title = "Click selects, Ctrl/Cmd+click toggles, Shift+click selects a range. Drag onto an object to parent, between two to re-order, onto empty space to unparent. Right-click for more.";
+    // dropping on empty space under the rows: back to the world, last
+    list.addEventListener("dragover", (ev) => { if (ev.target === list) { ev.preventDefault(); list.classList.add("drop-world"); } });
+    list.addEventListener("dragleave", () => list.classList.remove("drop-world"));
+    list.addEventListener("drop", (ev) => {
+      list.classList.remove("drop-world");
+      if (ev.target !== list) return;
+      ev.preventDefault();
+      const from = parseInt(ev.dataTransfer.getData("text/plain"), 10);
+      if (from && api.reparent(from, 0)) api.say(node(from).name + " is back under the world.");
+    });
+    list.addEventListener("contextmenu", (ev) => { if (ev.target === list) { ev.preventDefault(); rowMenu(ev.clientX, ev.clientY, null); } });
+    // the Outliner's own keys: Return renames, f reveals, Delete deletes
+    list.addEventListener("keydown", (ev) => {
+      if (ev.target !== list) return;
+      if (ev.key === "Enter") { ev.preventDefault(); ev.stopPropagation(); const lbl = list.querySelector('.forge-out-row[data-id="' + tree.sel[tree.sel.length - 1] + '"] .forge-out-name'); if (lbl) lbl.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); }
+      else if (ev.key === "f" || ev.key === "F") { ev.preventDefault(); ev.stopPropagation(); api.reveal(); }
+    });
     box.append(head, list);
     side.append(box);
     tree.panel = box; tree.list = list;
     return box;
   }
 
-  api.say = (text) => { if (typeof forgeSay === "function") forgeSay(text); };
+  api.reveal = () => {                               // Maya's Reveal Selected: open the parents, scroll to it
+    for (const id of tree.sel) for (let p = node(id) && node(id).parent; p; p = node(p).parent) node(p).open = true;
+    tree.build();
+    const r = tree.list && tree.list.querySelector(".forge-out-row.on");
+    if (r && r.scrollIntoView) r.scrollIntoView({ block: "nearest" });
+  };
 
   function row(n, depth) {
-    const r = scnEl("div", "forge-out-row" + (tree.sel.includes(n.id) ? " on" : ""));
+    const lead = tree.sel[tree.sel.length - 1] === n.id;
+    const r = scnEl("div", "forge-out-row" + (tree.sel.includes(n.id) ? " on" : "") + (lead ? " lead" : "") + (n.root ? " working" : ""));
     r.dataset.id = String(n.id); r.dataset.kind = n.kind;
-    r.style.paddingLeft = (6 + depth * 12) + "px";
-    r.draggable = !n.root;
-    const eye = scnEl("button", "forge-out-eye" + (n.visible ? "" : " off"), n.visible ? "\u25c9" : "\u25cb");
-    eye.type = "button"; eye.title = "Show or hide this object (v).";
+    r.setAttribute("role", "treeitem");
+    r.style.paddingLeft = (4 + depth * 12) + "px";
+    r.draggable = true;
+    const kids = kidsOf(n.id).length;
+    const tw = scnEl("button", "forge-out-tw" + (kids ? "" : " none"), kids ? (n.open ? "▾" : "▸") : "");
+    tw.type = "button"; tw.tabIndex = -1;
+    tw.title = kids ? "Open or close (Shift+click: the whole branch)." : "";
+    tw.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!kids) return;
+      const to = !n.open;
+      if (ev.shiftKey) { for (const k of tree.nodes) if (k === n || isAncestor(n.id, k.id)) k.open = to; } else n.open = to;
+      tree.build();
+    });
+    const eye = scnEl("button", "forge-out-eye" + (n.visible ? "" : " off"), n.visible ? "◉" : "○");
+    eye.type = "button"; eye.tabIndex = -1; eye.title = "Show or hide (h toggles the selection).";
     eye.addEventListener("click", (ev) => { ev.stopPropagation(); api.setVisible(n.id, !n.visible); });
+    const kind = scnEl("span", "forge-out-kind", n.kind === "group" ? "□" : "▲");
+    kind.title = n.kind === "group" ? "Group (a transform node)" : n.root ? "Mesh - the one the tools are editing" : "Mesh";
     const lbl = scnEl("span", "forge-out-name", n.name);
-    lbl.title = "Click to select, double-click to rename, drag onto a group to move it inside.";
     lbl.addEventListener("dblclick", (ev) => {
       ev.stopPropagation();
       const input = scnEl("input", "forge-out-edit"); input.value = n.name;
-      const done = (ok) => {
-        if (ok && input.value.trim()) api.rename(n.id, input.value.trim());
-        tree.build();
+      let done = false;
+      const finish = (ok) => {
+        if (done) return; done = true;
+        if (ok && input.value.trim()) api.rename(n.id, input.value.trim()); else tree.build();
       };
       input.addEventListener("keydown", (e2) => {
         e2.stopPropagation();
-        if (e2.key === "Enter") done(true); else if (e2.key === "Escape") done(false);
+        if (e2.key === "Enter") finish(true); else if (e2.key === "Escape") finish(false);
       });
-      input.addEventListener("blur", () => done(true));
+      input.addEventListener("blur", () => finish(true));
       lbl.replaceWith(input); input.focus(); input.select();
     });
-    r.append(eye, lbl);
-    r.addEventListener("click", () => api.select(n.id, false));
-    r.addEventListener("dragstart", (ev) => ev.dataTransfer.setData("text/plain", String(n.id)));
-    r.addEventListener("dragover", (ev) => { ev.preventDefault(); r.classList.add("drop"); });
-    r.addEventListener("dragleave", () => r.classList.remove("drop"));
+    r.append(tw, eye, kind, lbl);
+    r.addEventListener("click", (ev) => {
+      const how = ev.shiftKey ? "range" : (ev.ctrlKey || ev.metaKey) ? "toggle" : "set";
+      api.select(n.id, how);
+      if (tree.list) tree.list.focus({ preventScroll: true });
+    });
+    r.addEventListener("contextmenu", (ev) => { ev.preventDefault(); ev.stopPropagation(); rowMenu(ev.clientX, ev.clientY, n); });
+    r.addEventListener("dragstart", (ev) => { ev.dataTransfer.setData("text/plain", String(n.id)); ev.dataTransfer.effectAllowed = "move"; });
+    const zone = (ev) => {                           // top quarter: before, bottom quarter: after, middle: into
+      const b = r.getBoundingClientRect(), y = (ev.clientY - b.top) / (b.height || 1);
+      return y < 0.25 ? "before" : y > 0.75 ? "after" : "into";
+    };
+    r.addEventListener("dragover", (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      r.classList.remove("drop", "drop-before", "drop-after");
+      const z = zone(ev); r.classList.add(z === "into" ? "drop" : "drop-" + z);
+    });
+    r.addEventListener("dragleave", () => r.classList.remove("drop", "drop-before", "drop-after"));
     r.addEventListener("drop", (ev) => {
-      ev.preventDefault(); r.classList.remove("drop");
+      ev.preventDefault(); ev.stopPropagation();
+      r.classList.remove("drop", "drop-before", "drop-after");
       const from = parseInt(ev.dataTransfer.getData("text/plain"), 10);
-      if (from) { api.reparent(from, n.kind === "group" ? n.id : n.parent); api.say("Moved under " + api.node(n.kind === "group" ? n.id : n.parent).name + "."); }
+      if (!from || from === n.id) return;
+      api.dropOn(from, n.id, zone(ev));
     });
     return r;
   }
 
-  tree.build = () => {
-    const list = tree.list;
-    if (!list) return;
-    list.textContent = "";
-    const walk = (parent, depth) => {
-      for (const n of tree.nodes) if (n.parent === parent) {
-        list.append(row(n, depth));
-        walk(n.id, depth + 1);
-      }
-    };
-    walk(0, 0);
-    const box = tree.panel;
-    if (box) box.dataset.count = String(tree.nodes.length);
-    if (tree.syncChannel) tree.syncChannel();
-    if (tree.syncHistory) tree.syncHistory();
+  // drag-and-drop logic, testable without a mouse: into = parent under it; before / after = its sibling, there
+  api.dropOn = (from, target, where) => {
+    const t = node(target), f = node(from);
+    if (!t || !f) return false;
+    if (where === "into") {
+      if (!api.reparent(from, target)) { api.say("Can't parent " + f.name + " under its own child.", true); return false; }
+      t.open = true; tree.build();
+      api.say(f.name + " is under " + t.name + " now.");
+      return true;
+    }
+    const sib = kidsOf(t.parent).filter((x) => x !== f);
+    const i = sib.indexOf(t);
+    const before = where === "before" ? t.id : (sib[i + 1] ? sib[i + 1].id : 0);
+    if (t.parent && isAncestor(from, t.parent)) return false;
+    if (before === 0) {                              // after the last sibling: right after it in the array
+      if (!api.reparent(from, t.parent, 0)) return false;
+      const lastKid = order().filter((x) => isAncestor(t.id, x.id)).pop() || t;
+      moveInArray(f, (tree.nodes[tree.nodes.indexOf(lastKid) + 1] || {}).id || 0);
+      tree.build();
+      return true;
+    }
+    return api.reparent(from, t.parent, before);
   };
 
-  // ---------------------------------------------------------------- Ctrl+G / Ctrl+Shift+G, like Maya
-  document.addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.key !== "g" && e.key !== "G") return;
-    const sheet = document.getElementById("forge");
-    if (!sheet || sheet.hidden || !view.sm) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    if (e.shiftKey) { for (const id of tree.sel.slice()) api.ungroup(id); api.say("Ungrouped."); }
-    else { const g = api.groupSelected(); if (g) api.say("Grouped " + g.name + " about the selection's centre."); }
-  }, true);
+  tree.build = () => {
+    const list = tree.list;
+    if (list) {
+      list.textContent = "";
+      const walk = (parent, depth) => {
+        for (const n of tree.nodes) if (n.parent === parent) {
+          list.append(row(n, depth));
+          if (n.open) walk(n.id, depth + 1);
+        }
+      };
+      walk(0, 0);
+      if (tree.panel) tree.panel.dataset.count = String(tree.nodes.length);
+    }
+    if (tree.syncChannel) tree.syncChannel();
+    if (tree.syncHistory) tree.syncHistory();
+    if (tree.selMarks) drawMarks();
+  };
 
-  // ---------------------------------------------------------------- the Channel Box (T4): exact numbers
+  // ---------------------------------------------------------------- the Channel Box (Maya's exact numbers)
   const AXES = ["x", "y", "z"];
   function channelBox() {
-    const host = document.getElementById("forge-outliner");   // Maya keeps the Channel Box under the Outliner
+    const host = document.getElementById("forge-outliner");
     if (!host) return null;
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-channel";
-    box.append(scnEl("div", "forge-ch-title", "Channel Box"));
+    const title = scnEl("div", "forge-ch-title", "Channel Box");
+    title.id = "forge-ch-name";
+    box.append(title);
     const inputs = {};
     for (const [part, label, step] of [["translate", "Translate", 0.1], ["rotate", "Rotate", 5], ["scale", "Scale", 0.1]]) {
-      const row = scnEl("div", "forge-ch-row");
-      row.append(scnEl("span", "forge-ch-label", label));
+      const r = scnEl("div", "forge-ch-row");
+      r.append(scnEl("span", "forge-ch-label", label));
       for (let a = 0; a < 3; a++) {
         const inp = document.createElement("input");
         inp.type = "number"; inp.step = String(step);
         inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
         inp.className = "forge-ch-in";
-        inp.title = label + " " + AXES[a].toUpperCase() + " (the selected object's own transform).";
+        inp.title = label + " " + AXES[a].toUpperCase() + " - the selected object's own transform. Drag with the middle button to scrub.";
         inp.addEventListener("input", () => {
+          if (inp.value === "" || inp.value === "-") return;
           api.setTransform(null, part, a, inp.value);
-          if (part === "scale" && Number(inp.value) === 0) inp.value = "1";   // a zero scale would vanish
         });
-        inputs[part + a] = inp; row.append(inp);
+        inp.addEventListener("keydown", (e) => e.stopPropagation());      // typing a number is not a hotkey
+        inputs[part + a] = inp; r.append(inp);
       }
-      box.append(row);
+      box.append(r);
     }
     host.append(box);
     tree.syncChannel = () => {
       const t = api.transform();
+      title.textContent = "Channel Box" + (t ? " - " + api.active().name : "");
       if (!t) return;
       for (const part of ["translate", "rotate", "scale"]) {
         const vals = t[part];
@@ -413,8 +852,14 @@ function forgeSceneAttach(view, ctx) {
     };
     return box;
   }
+  api.toggleChannelBox = () => {
+    const b = document.getElementById("forge-channel"), h = document.getElementById("forge-history");
+    if (!b) return false;
+    b.hidden = !b.hidden; if (h) h.hidden = b.hidden;
+    return !b.hidden;
+  };
 
-  // ---------------------------------------------------------------- the History (T6, Maya's construction history)
+  // ---------------------------------------------------------------- the History (Maya's construction history)
   function historyBox() {
     const host = document.getElementById("forge-outliner");
     if (!host) return null;
@@ -436,38 +881,55 @@ function forgeSceneAttach(view, ctx) {
       list.textContent = "";
       if (!ops.length) { list.append(scnEl("div", "forge-hist-empty", "Nothing yet - extrude or inset a face.")); return; }
       for (const op of ops) {
-        const row = scnEl("div", "forge-hist-row");
-        row.append(scnEl("span", "forge-hist-name", op.kind + (op.affected ? " \u00b7 " + op.affected + "v" : "")));
+        const r = scnEl("div", "forge-hist-row");
+        r.append(scnEl("span", "forge-hist-name", op.kind + (op.affected ? " \u00b7 " + op.affected + "v" : "")));
         if (op.amount != null) {
           const inp = document.createElement("input");
           inp.type = "number"; inp.step = "0.05"; inp.className = "forge-ch-in";
           inp.value = String(Math.round(op.amount * 1000) / 1000);
           inp.title = "Change this step's amount - the model rebuilds from the first step.";
           inp.addEventListener("input", () => H.setAmount(op.i, inp.value));
-          row.append(inp);
+          inp.addEventListener("keydown", (e) => e.stopPropagation());
+          r.append(inp);
         }
-        const x = scnEl("button", "forge-hist-x", "\u00d7");
+        const x = scnEl("button", "forge-hist-x", "×");
         x.type = "button"; x.title = "Remove this step and rebuild without it.";
         x.addEventListener("click", () => H.remove(op.i));
-        row.append(x);
-        list.append(row);
+        r.append(x);
+        list.append(r);
       }
     };
     return box;
   }
 
+  // ---------------------------------------------------------------- the viewer's loads reset the working object
   const load = view.load;
-  if (typeof load === "function") view.load = async (buf) => { const r = await load(buf); tree.build(); return r; };
-
-  // ---------------------------------------------------------------- T6c: a sculpt stroke in the history
+  if (typeof load === "function") view.load = async (buf) => {
+    const r = root();
+    const out = await load(buf);
+    r.grp.quaternion.identity(); r.grp.scale.set(1, 1, 1); r.piv.set(0, 0, 0); r.pc.set(0, 0, 0);
+    place(r, new THREE.Vector3());
+    tree.build();
+    return out;
+  };
+  const showPoly = view.showPoly;
+  if (typeof showPoly === "function") view.showPoly = (poly, keepView, noUndo) => {
+    const r = root();
+    const out = showPoly(poly, keepView, noUndo);
+    if (!keepView) { r.grp.quaternion.identity(); r.grp.scale.set(1, 1, 1); r.piv.set(0, 0, 0); r.pc.set(0, 0, 0); place(r, new THREE.Vector3()); }
+    holder.position.copy(r.piv).multiplyScalar(-1);
+    if (tree.selMarks) drawMarks();
+    return out;
+  };
+  // ---------------------------------------------------------------- T6c (Ziva): a sculpt stroke in the history
   // A stroke moves WELDED vertices, not polygons, so it is recorded as the vertices it changed with their
-  // positions before and after - never as a list of dabs, which would be enormous. Maya's sculpt node keeps
-  // the same kind of record, and it shares the limitation: a step ABOVE it that is later changed can make the
-  // record stale (Maya warns too). forge.js calls snapshot() on stroke start, so the undo stack's top is the
-  // state BEFORE the stroke - no change to the sculpting code was needed to read both ends.
+  // positions before and after - never as a list of dabs. forge.js snapshot()s at the START of a stroke, so the
+  // undo stack's top is the state before it. Only a real stroke is recorded (view.stroked, set when one starts) -
+  // a left click that selects in object mode must not record the last stroke a second time.
   const canvas = ctx.canvas;
   function sculptRecordAfterStroke() {
-    // forge.js snapshot()s at the START of a stroke, so the top of the undo stack is the state before it
+    if (!view.stroked) return;
+    view.stroked = false;
     const sm = view.sm, top = view.undoStack && view.undoStack[view.undoStack.length - 1];
     if (!sm || !sm.wpos || !top || !top.wpos || top.sm !== sm || !window.forgeHistPushSculpt) return;
     const before = top.wpos, after = sm.wpos, verts = [];
@@ -480,27 +942,25 @@ function forgeSceneAttach(view, ctx) {
     window.forgeHistPushSculpt({ kind: "sculpt", verts: verts });
   }
   if (canvas && canvas.addEventListener) {
-    view.sculptStrokeEnd = sculptRecordAfterStroke;      // also the handle for tests and scripts
+    view.sculptStrokeEnd = () => { view.stroked = true; sculptRecordAfterStroke(); };   // tests and scripts
     canvas.addEventListener("pointerup", (e) => { if (e.button === 0) sculptRecordAfterStroke(); });
     canvas.addEventListener("pointerleave", () => sculptRecordAfterStroke());
   }
 
-  // ---------------------------------------------------------------- T5: Shift + drag duplicates (Maya)
-  // In Maya, shift-dragging a manipulator leaves the original where it was and drags a copy. The manipulator
-  // here is attached to the object, so on the moment a drag starts with Shift down we make the copy and hand
-  // the manipulator to it - the original stops moving at once and the copy follows the mouse.
+  // ---------------------------------------------------------------- Shift + drag duplicates (Maya)
+  // Shift held when a manipulator drag starts: the copy is made and takes the manipulator, the original stays.
   let shiftDown = false;
   document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftDown = true; }, true);
   document.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftDown = false; }, true);
+  window.addEventListener("blur", () => { shiftDown = false; });
   api.shiftDown = () => shiftDown;
-  const tc = ctx.transform || null;
   if (tc && tc.addEventListener) {
     tc.addEventListener("dragging-changed", (ev) => {
-      if (!ev || !ev.value || !shiftDown) return;
+      if (!ev || !ev.value || !shiftDown || view.mode === "poly" || api.pivotMode) return;
       const from = api.active();
-      if (!from || from.kind !== "mesh") return;
-      const copy = api.duplicate(from.name + "_copy");
-      if (copy && tc.attach) { tc.attach(copy.grp); tree.build(); api.say("Shift-drag: " + copy.name + " is the copy, the original stayed."); }
+      if (!from || !tc.object || tc.object !== from.grp) return;
+      const copy = api.duplicate(null, [from.id]);
+      if (copy) { tc.attach(copy.grp); tree.build(); api.say("Shift-drag: " + copy.name + " is the copy, the original stayed."); }
     });
   }
 
@@ -509,7 +969,28 @@ function forgeSceneAttach(view, ctx) {
   channelBox();
   historyBox();
   tree.build();
-  // the working object is created on the first Make, so the list keeps itself true
   view.treeRefresh = () => tree.build();
   return api;
+}
+
+// Maya's Create: a primitive is a NEW object (pCube1, pCube2 ...); whatever was there stays in the scene.
+// Wrapped at load so the very first primitive is named too (forge_model.js loads before this file).
+if (typeof window.forgeAddPrimitive === "function" && !window.forgeAddPrimitive.scene) {
+  const forgeAddPrimitiveOwn = window.forgeAddPrimitive;
+  const wrapped = async (kind) => {
+    const P = window.ForgePoly && window.ForgePoly.PRIMITIVES[kind];
+    const name = "p" + (P ? P.name.replace(/\s+/g, "") : "Mesh");
+    const before = typeof forge !== "undefined" && forge.view && forge.view.tree && forge.view.tree.api;
+    if (before) before.newObject(name);
+    const out = await forgeAddPrimitiveOwn(kind);
+    const t = forge.view && forge.view.tree && forge.view.tree.api;
+    if (t) {
+      const r = t.root();
+      if (r.auto) { r.name = "\u0000"; t.rename(r.id, t.nextName(name)); r.auto = false; }
+      t.select(r.id);
+    }
+    return out;
+  };
+  wrapped.scene = true;
+  window.forgeAddPrimitive = wrapped;
 }

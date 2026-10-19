@@ -802,7 +802,12 @@ def resolve_local_model(provider: str) -> str:
     base = want.split(":")[0]
     same = [t for t in tags if t.split(":")[0] == base or t.split(":")[0].startswith("loki-" + base)]
     if same:
-        prefer = [t for t in same if t.startswith("loki-")] or same   # LOKI's longer-context variant first
+        # the same SIZE first ("qwen3.5:9b" -> "qwen3.5:9b-q4_K_M" or "loki-qwen3.5:9b"), not just the family -
+        # a 0.8b or a 27b build is a different model (review 2026-10-19); LOKI's longer-context variant first
+        size = want.split(":")[1] if ":" in want else ""
+        sized = [t for t in same if size and t.split(":", 1)[-1].startswith(size)] if size else []
+        pool = sized or same
+        prefer = [t for t in pool if t.startswith("loki-")] or pool
         return prefer[0]
     try:
         import model_setup  # pylint: disable=import-outside-toplevel

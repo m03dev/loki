@@ -3,7 +3,7 @@ rem Loki uninstall for Windows - the opposite of setup.bat.
 rem Removes the start-at-login entry, the shortcuts and Loki's private Python environment,
 rem and stops Loki if it is running. Your data is kept unless you pass --purge.
 rem   uninstall.bat            keep harness_data (keys, memory, jobs, models)
-rem   uninstall.bat --purge    also delete harness_data (your keys and memory - cannot be undone)
+rem   uninstall.bat --purge    also delete harness_data (memory, jobs, models - cannot be undone); keys in %USERPROFILE%\.loki stay
 setlocal
 for %%I in ("%~dp0.") do set "REPO=%%~fI"
 set "DATA=%REPO%\harness_data"
@@ -21,7 +21,8 @@ echo [loki] This will remove LOKI from this computer:
 echo        - the "start at login" entry and the Desktop / Start menu shortcuts
 echo        - LOKI's private Python environment (%VENV%)
 if "%PURGE%"=="1" (
-  echo        - ALL of harness_data: your keys, memory, jobs and models
+  echo        - ALL of harness_data: memory, jobs and models
+  echo        - your saved keys in %USERPROFILE%\.loki\keys.env are KEPT ^(delete that folder yourself to remove them^)
 ) else (
   echo        - your data ^(keys, memory, jobs^) is KEPT; use --purge to delete it too
 )

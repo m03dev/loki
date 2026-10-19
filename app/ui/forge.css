@@ -221,7 +221,7 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 
 /* ---------------------------------------------------------------- Maya's markings (app/ui/forge_maya.js) */
 .forge-maya-marking {
-  position: absolute; z-index: 40; width: 0; height: 0; pointer-events: none;
+  position: fixed; z-index: 60; width: 0; height: 0; pointer-events: none;
 }
 .forge-maya-marking .forge-maya-hub {
   position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
@@ -235,16 +235,39 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
   white-space: nowrap; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.45);
 }
 .forge-maya-marking .forge-maya-wedge:hover,
+.forge-maya-marking .forge-maya-wedge.hot,
 .forge-maya-marking .forge-maya-wedge:focus-visible { background: #ed782b; border-color: #ed782b; color: #12141a; }
+.forge-maya-marking .forge-maya-wedge.off,
+.forge-maya-marking .forge-maya-litem.off,
+.forge-maya-hotbox .forge-maya-item.off { opacity: .42; }
+.forge-maya-marking .forge-maya-wedge.off.hot { background: rgba(22,25,32,.94); color: inherit; border-color: #ed782b; }
+.forge-maya-marking .forge-maya-mlist {
+  position: absolute; left: 0; transform: translateX(-50%); pointer-events: auto; min-width: 150px;
+  display: flex; flex-direction: column; padding: 4px; border-radius: 8px;
+  background: rgba(22,25,32,.96); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 8px 22px rgba(0,0,0,.45);
+}
+.forge-maya-marking .forge-maya-litem {
+  text-align: left; padding: 4px 8px; border: 0; border-radius: 5px; background: transparent;
+  color: inherit; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.forge-maya-marking .forge-maya-litem:hover,
+.forge-maya-marking .forge-maya-litem.hot { background: #ed782b; color: #12141a; }
 
 .forge-maya-hotbox {
-  position: absolute; inset: 0; z-index: 45; padding: 22px;
+  position: fixed; inset: 0; z-index: 45; padding: 18px; overflow: auto;
   background: rgba(10,12,16,.72); backdrop-filter: blur(2px);
 }
+.forge-maya-hotbox[hidden] { display: none; }
 .forge-maya-hotbox .forge-maya-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px; align-items: start; max-width: 900px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px; align-items: start; max-width: 1180px; margin: 0 auto;
 }
+.forge-maya-hotbox .forge-maya-zonehub {
+  position: fixed; transform: translate(-50%, -50%); padding: 7px 14px; border-radius: 8px;
+  font-size: 11px; letter-spacing: .07em; text-transform: uppercase; pointer-events: none;
+  background: rgba(237,120,43,.18); border: 1px solid rgba(237,120,43,.6); color: #ffd2b0;
+}
+.forge-stage.pivot-edit canvas, #forge-stage.pivot-edit canvas { cursor: crosshair; }
 .forge-maya-hotbox .forge-maya-col {
   background: rgba(20,23,30,.97); border: 1px solid rgba(255,255,255,.12); border-radius: 9px; padding: 8px;
 }
@@ -319,3 +342,29 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 }
 .forge-hist-x:hover { opacity: 1; color: #ed7831; }
 .forge-hist-empty { font-size: 11px; opacity: .45; padding: 1px 0 2px; }
+
+/* ---------------------------------------------------------------- the Outliner, Maya's way (app/ui/forge_scene.js) */
+.forge-outliner .forge-out-row { gap: 3px; }
+.forge-outliner .forge-out-row.lead { box-shadow: inset 2px 0 0 #5dff9a; }
+.forge-outliner .forge-out-row.working .forge-out-kind { color: #ed782b; opacity: 1; }
+.forge-outliner .forge-out-row.drop-before { box-shadow: inset 0 2px 0 #ed782b; }
+.forge-outliner .forge-out-row.drop-after { box-shadow: inset 0 -2px 0 #ed782b; }
+.forge-outliner .forge-out-list.drop-world { outline: 1px dashed rgba(237,120,43,.6); outline-offset: -2px; }
+.forge-outliner .forge-out-list:focus-visible { outline: 1px solid rgba(237,120,43,.5); outline-offset: -1px; }
+.forge-outliner .forge-out-tw {
+  flex: none; width: 14px; padding: 0; border: 0; background: transparent; color: inherit; font-size: 10px;
+  opacity: .7; cursor: pointer;
+}
+.forge-outliner .forge-out-tw.none { cursor: default; }
+.forge-outliner .forge-out-kind { flex: none; width: 12px; font-size: 9px; opacity: .45; text-align: center; }
+.forge-out-menu {
+  position: fixed; z-index: 70; min-width: 170px; display: flex; flex-direction: column; padding: 4px;
+  background: rgba(22,25,32,.98); border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.5);
+}
+.forge-out-menu .forge-out-mi {
+  text-align: left; padding: 4px 9px; border: 0; border-radius: 5px; background: transparent; color: #e6e9ef;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.forge-out-menu .forge-out-mi:hover:not(:disabled) { background: #ed782b; color: #12141a; }
+.forge-out-menu .forge-out-mi:disabled { opacity: .38; cursor: default; }

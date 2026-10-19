@@ -296,6 +296,10 @@ window.forgeHistory = {
   remove(i) {
     const h = forgeModel.hist, op = h && h.ops[i];
     if (!op) return false;
+    if (i === 0 && !h.base && op.kind === "dynamesh" && h.ops.length > 1) {   // DynaMesh made the first mesh
+      if (typeof forgeSay === "function") forgeSay("DynaMesh is the first step - it made the mesh the others work on. Delete History instead.", true);
+      return false;
+    }
     h.ops.splice(i, 1);
     if (op.kind === "sculpt") {                       // removing a stroke puts exactly those vertices back
       forgeHistSculpt(op, "from");
@@ -371,12 +375,13 @@ async function forgeDynamesh() {
   forgeSay("DynaMesh: " + out.f.length.toLocaleString() + " even quads in " + Math.round(performance.now() - t0) + " ms - sculpt on, or edit faces.");
 }
 
-// Model mode's keys - Blender's edit-mode keymap (the G / R / S keys while a move runs are forge_edit.js')
+// Model mode's keys with the Blender hotkey set - Blender's edit-mode keymap (the G / R / S keys while a move runs are forge_edit.js')
 document.addEventListener("keydown", (e) => {
   const sheet = document.getElementById("forge"), v = forge.view;
   if (!sheet || sheet.hidden || !v || v.mode !== "poly") return;
   if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (v.modalActive && v.modalActive()) return;
+  if (typeof forgeKeymap === "function" && forgeKeymap() === "maya") return;   // Maya's keys: app/ui/forge_maya.js
   const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
   const take = () => { e.preventDefault(); e.stopImmediatePropagation(); };
   if (mod) {

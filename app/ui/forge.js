@@ -1359,7 +1359,7 @@ function forgeMakeView(lib, renderer, canvas) {
     const n = a ? new THREE.Vector3(...a.n) : new THREE.Vector3(0, 0, 1);
     ring.position.copy(holder.localToWorld(hit.point.clone().addScaledVector(n, view.size * 0.002)));
     ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n.transformDirection(holder.matrixWorld));
-    ring.scale.setScalar(view.brush.radius * view.size * holder.scale.x);
+    ring.scale.setScalar(view.brush.radius * view.size * holder.getWorldScale(new THREE.Vector3()).x);
     ring.visible = true; view.dirty = true;
   }
 
@@ -1372,6 +1372,7 @@ function forgeMakeView(lib, renderer, canvas) {
     e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting
     canvas.setPointerCapture(e.pointerId);
     snapshot();
+    view.stroked = true;                // forge_scene.js records the stroke in the history when it ends (T6c)
     if (view.poly) { view.poly = null; view.tri2face = null; view.select([]); }   // sculpted: the poly cage no longer fits
     const tool = e.shiftKey ? "smooth" : view.brush.tool;
     drag = { tool, negative: e.altKey || e.ctrlKey || e.metaKey, last: hit.point.clone() };
@@ -1466,12 +1467,85 @@ function forgeMakeView(lib, renderer, canvas) {
     forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
       mesh: () => mesh, refresh: () => refresh() });
   }
+  // the scene layer (forge_scene.js) hands the tools another object's mesh: plain triangles in the holder's space
+  view.setTriangles = (pos, idx, col) => {
+    view.poly = null; view.tri2face = null;
+    useMesh(forgeMeshFrom(Float32Array.from(pos), col && col.length === pos.length ? Float32Array.from(col) : null, null, Uint32Array.from(idx)), true);
+    view.undoStack = []; view.redoStack = [];
+  };
+  // Maya's panels: the perspective camera, or top / front / side. An orthographic view here is the same camera far
+  // away with a 1.5-degree lens - it reads as orthographic, and picking, sculpting and the handles keep working.
+  const VIEWS = { top: [0, 1, 0.0001], front: [0, 0, 1], side: [1, 0, 0] };
+  view.cam = "persp";
+  let perspSaved = null;
+  view.setView = (name) => {
+    if (!VIEWS[name] && name !== "persp") return false;
+    const t = controls.target.clone();
+    const span = Math.max(view.size || 1, 0.2) * 1.4;
+    if (name === "persp") {
+      if (view.cam !== "persp" && perspSaved) {
+        camera.fov = perspSaved.fov; camera.position.copy(perspSaved.pos); controls.target.copy(perspSaved.target);
+      }
+      perspSaved = null; controls.enableRotate = true;
+    } else {
+      if (view.cam === "persp") perspSaved = { fov: camera.fov, pos: camera.position.clone(), target: t.clone() };
+      camera.fov = 1.5;
+      const d = span / Math.tan((camera.fov * Math.PI) / 360) / 2;
+      const dir = new THREE.Vector3(...VIEWS[name]).normalize();
+      camera.position.copy(t).addScaledVector(dir, d);
+      camera.near = d / 50; camera.far = d * 50;
+      controls.enableRotate = false;                       // Maya: no tumbling in an orthographic view
+    }
+    if (name === "persp") { const d = camera.position.distanceTo(controls.target) || 3; camera.near = d / 100; camera.far = d * 100; }
+    camera.updateProjectionMatrix(); controls.update();
+    view.cam = name; view.dirty = true;
+    return true;
+  };
+  // frame a box (Maya's f / a): keep the direction, fit the distance
+  view.frameBox = (box) => {
+    if (!box || box.isEmpty()) return view.frame();
+    const bs = box.getBoundingSphere(new THREE.Sphere());
+    const r = Math.max(bs.radius, 1e-3);
+    view.size = r * 2;
+    controls.target.copy(bs.center);
+    const dist = r / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    camera.position.copy(controls.target).addScaledVector(dir.lengthSq() ? dir : new THREE.Vector3(0, 0.15, 1).normalize(), dist);
+    camera.near = dist / 100; camera.far = dist * 100; camera.updateProjectionMatrix();
+    controls.update();
+    view.dirty = true;
+  };
+  // Maya's [ and ]: undo / redo a view change (every camera move that ends is remembered)
+  const views = { past: [], future: [], at: null };
+  const camState = () => ({ pos: camera.position.clone(), target: controls.target.clone(), fov: camera.fov });
+  controls.addEventListener("start", () => { views.at = camState(); });
+  controls.addEventListener("end", () => {
+    if (!views.at) return;
+    if (views.at.pos.distanceTo(camera.position) > 1e-6 || views.at.target.distanceTo(controls.target) > 1e-6) {
+      views.past.push(views.at); if (views.past.length > 50) views.past.shift(); views.future = [];
+    }
+    views.at = null;
+  });
+  const goView = (from, to) => {
+    const s = from.pop(); if (!s) return false;
+    to.push(camState());
+    camera.position.copy(s.pos); controls.target.copy(s.target); camera.fov = s.fov;
+    camera.updateProjectionMatrix(); controls.update(); view.dirty = true;
+    return true;
+  };
+  view.viewUndo = () => goView(views.past, views.future);
+  view.viewRedo = () => goView(views.future, views.past);
+  view.rememberView = () => { views.past.push(camState()); views.future = []; };
+  view.camera = camera;
+  view.canvas = canvas;
+  view.worldScale = () => holder.getWorldScale(new THREE.Vector3()).x;
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;
   // the scene: objects, groups and the Outliner (docs/FORGE_MAYA.md T1/T2/T3): app/ui/forge_scene.js
   if (typeof forgeSceneAttach === "function") {
-    forgeSceneAttach(view, { THREE, scene, holder, material, camera, canvas: canvas, transform: transform });
+    forgeSceneAttach(view, { THREE, scene, holder, material, camera, transform: transform, canvas, controls,
+      mesh: () => mesh });
   }
   // the scene layer (app/ui/forge_scene.js) bakes geometry - Freeze Transformations, Center Pivot - and
   // needs the aliased buffers pushed back to the GPU afterwards
