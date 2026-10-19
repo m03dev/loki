@@ -296,7 +296,13 @@ function forgeStage() {
     forgeBtn("wire", "Wireframe", "Show the mesh's triangles.", (e) => forgeToggle("wire", e.currentTarget)),
     forgeBtn("clay", "Clay", "Plain clay: hide the colours and material to judge the form.", (e) => forgeToggle("clay", e.currentTarget)),
     forgeBtn("sun", "Lighting", "Change the light: studio, warm, cool, soft.", forgeLight),
-    forgeBtn("frame", "Frame", "Fit the model in view (F).", () => forge.view && forge.view.frame()));
+    forgeBtn("frame", "Frame", "Fit the model in view (F).", () => forge.view && forge.view.frame()),
+    forgeBtn("grid", "Quad view", "Front, side, top and the three-quarter view at once - the four views a modeller reads a shape from.",
+      (e) => {
+        forgeToggle("quad", e.currentTarget);
+        const L = document.getElementById("forge-quad-labels");
+        if (L) L.hidden = !(forge.view && forge.view.quad);
+      }));
   const sculpt = el("div", "forge-float forge-sculptbar"); sculpt.id = "forge-sculpt"; sculpt.hidden = true;
   const brushes = el("div", "forge-brushes");
   for (const [id, icon, name, what] of FORGE_BRUSHES) {
@@ -319,7 +325,10 @@ function forgeStage() {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
     }));
   const model = typeof forgeModelBar === "function" ? forgeModelBar(viewBar) : null;   // forge_model.js
-  stage.append(cv, empty, viewBar, sculpt, out);
+  const quadLabels = el("div", "forge-quad-labels");
+  quadLabels.id = "forge-quad-labels"; quadLabels.hidden = true;
+  quadLabels.append(el("span", "", "Front"), el("span", "", "Side"), el("span", "", "Top"), el("span", "", "3/4 view"));
+  stage.append(cv, empty, viewBar, sculpt, out, quadLabels);
   if (model) stage.append(model);
   return stage;
 }
@@ -693,8 +702,55 @@ function forgeMakeView(lib, renderer, canvas) {
     opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
   ring.renderOrder = 10; ring.visible = false; scene.add(ring);
   const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true },
-    undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1, controls, lib };
+    undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1, quad: false, controls, lib };
   const raycaster = new THREE.Raycaster();
+
+  // Front / side / top / three-quarter at once, orthographic - the four views a modeller reads a shape
+  // from, the same four anyCreature's harness/outline.py draws (front, side, top, hero).
+  const quadCams = [["front", [0, 0, 1], [0, 1, 0]], ["side", [1, 0, 0], [0, 1, 0]],
+                    ["top", [0, 1, 0], [0, 0, -1]], ["hero", [0.62, 0.42, 0.86], [0, 1, 0]]]
+    .map(([name, dir, up]) => {
+      const c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 100);
+      c.userData = { name, dir: new THREE.Vector3(dir[0], dir[1], dir[2]).normalize() };
+      c.up.set(up[0], up[1], up[2]);
+      return c;
+    });
+
+  function frameQuad() {
+    const target = new THREE.Vector3();
+    let radius = 1;
+    if (mesh) {
+      mesh.geometry.computeBoundingSphere();
+      const bs = mesh.geometry.boundingSphere;
+      radius = bs.radius || 1;
+      target.copy(bs.center).applyMatrix4(holder.matrixWorld);
+    }
+    const aspect = (canvas.clientWidth || 1) / (canvas.clientHeight || 1) || 1;
+    const fit = radius * 1.12;
+    const hw = fit * Math.max(1, aspect), hh = Math.max(fit, fit / aspect);
+    for (const c of quadCams) {
+      c.left = -hw; c.right = hw; c.top = hh; c.bottom = -hh;
+      const d = radius * 4 + 1;
+      c.position.copy(target).addScaledVector(c.userData.dir, d);
+      c.near = 0.001; c.far = d * 4 + radius * 4;
+      c.lookAt(target);
+      c.updateProjectionMatrix();
+    }
+  }
+
+  function renderQuad() {
+    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    const vw = Math.max(1, Math.floor(w / 2)), vh = Math.max(1, Math.floor(h / 2));
+    renderer.setScissorTest(true);
+    for (let i = 0; i < quadCams.length; i++) {
+      const vx = (i % 2) * vw, vy = (i < 2 ? 1 : 0) * vh;   // front/side on top, top/hero below (WebGL y is up)
+      renderer.setViewport(vx, vy, vw, vh);
+      renderer.setScissor(vx, vy, vw, vh);
+      renderer.render(scene, quadCams[i]);
+    }
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, w, h);
+  }
 
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
@@ -706,8 +762,12 @@ function forgeMakeView(lib, renderer, canvas) {
   function loop() {
     if (!view.running) return;
     resize();
-    controls.update();
-    if (view.dirty) { renderer.render(scene, camera); view.dirty = false; }
+    if (view.quad) {
+      if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }
+    } else {
+      controls.update();
+      if (view.dirty) { renderer.render(scene, camera); view.dirty = false; }
+    }
     requestAnimationFrame(loop);
   }
   view.resize = () => { view.dirty = true; };
@@ -723,7 +783,9 @@ function forgeMakeView(lib, renderer, canvas) {
     const dir = camera.position.clone().sub(controls.target).normalize();
     camera.position.copy(controls.target).addScaledVector(dir.lengthSq() ? dir : new THREE.Vector3(0, 0.15, 1).normalize(), dist);
     camera.near = dist / 100; camera.far = dist * 100; camera.updateProjectionMatrix();
-    controls.update(); view.dirty = true;
+    controls.update();
+    if (view.quad) frameQuad();
+    view.dirty = true;
   };
 
   function geometryOf(sm) {
@@ -815,7 +877,11 @@ function forgeMakeView(lib, renderer, canvas) {
     }
     applyLook();
   };
-  view.setLook = (what, on) => { view[what] = on; applyLook(); };
+  view.setLook = (what, on) => {
+    view[what] = on;
+    if (what === "quad") { controls.enabled = !on; if (on) frameQuad(); }
+    applyLook();
+  };
   view.nextLight = () => {
     view.light = (view.light + 1) % FORGE_LIGHTS.length;
     const [name, sky, ground, hi, keyColor, ki] = FORGE_LIGHTS[view.light];

@@ -217,6 +217,31 @@ async def main():
               and forge3d.glb_counts(sculpted[-1])["triangles"] == tris * 4 and "baseColorTexture" in mat.get("pbrMetallicRoughness", {})
               and "normalTexture" in mat, mat)
 
+        # -------- quad view: front / side / top / three-quarter orthographic panels (anyCreature's views)
+        QUAD = "#forge .forge-viewbar button[data-tip-name='Quad view']"
+        check("the view bar has a Quad view toggle", await page.query_selector(QUAD) is not None)
+        await page.click(QUAD)
+        await page.wait_for_timeout(250)
+        q = await page.evaluate("""() => ({ on: !!forge.view.quad,
+          labels: [...document.querySelectorAll('#forge-quad-labels span')].map((s) => s.textContent),
+          shown: !document.getElementById('forge-quad-labels').hidden, orbit: forge.view.controls.enabled })""")
+        check("Quad view turns on, names the four panels and stops orbiting",
+              q["on"] and q["labels"] == ["Front", "Side", "Top", "3/4 view"] and q["shown"] and not q["orbit"], q)
+        quad_ink = await page.evaluate("""() => { const cv = document.getElementById('forge-view');
+          const g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height;
+          const c = g.getContext('2d'); c.drawImage(cv, 0, 0);
+          const d = c.getImageData(0, 0, g.width, g.height).data, W = g.width, H = g.height;
+          const ink = (x0, y0, x1, y1) => { let n = 0;
+            for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) if (d[(y * W + x) * 4 + 3] > 16) n++;
+            return n; };
+          return [ink(0, 0, W >> 1, H >> 1), ink(W >> 1, 0, W, H >> 1), ink(0, H >> 1, W >> 1, H), ink(W >> 1, H >> 1, W, H)]; }""")
+        check("all four orthographic panels draw the model (front, side, top, 3/4 view)",
+              all(n > 0 for n in quad_ink) and len(set(quad_ink)) >= 3, quad_ink)
+        await page.click(QUAD)
+        await page.wait_for_timeout(200)
+        back = await page.evaluate("() => ({ on: !!forge.view.quad, orbit: forge.view.controls.enabled, hidden: document.getElementById('forge-quad-labels').hidden })")
+        check("toggling Quad view off returns to the orbit view", (not back["on"]) and back["orbit"] and back["hidden"], back)
+
         # -------- layout: the panel fits 900x600, every button reachable
         await page.set_viewport_size({"width": 900, "height": 600})
         await page.click(".forge-tab[data-side='make']")

@@ -168,3 +168,11 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
   .forge-sculptbar .forge-btn { height: 28px; }
   .forge-viewbar .forge-btn, .forge-exportbar .forge-btn { width: 30px; height: 30px; }
 }
+/* Quad view: the front / side / top / three-quarter labels over the four orthographic panels */
+.forge-quad-labels { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr; pointer-events: none; }
+.forge-quad-labels span { font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #9fb0c8;
+  padding: 7px 9px; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+.forge-quad-labels span:nth-child(2), .forge-quad-labels span:nth-child(4) { justify-self: end; text-align: right; }
+.forge-quad-labels span:nth-child(3), .forge-quad-labels span:nth-child(4) { align-self: end; }
+.forge-quad-labels[hidden] { display: none; }
