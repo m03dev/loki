@@ -86,13 +86,20 @@ func open_auto_chess() -> void:
 	windows.close_all()
 	auto_chess = load("res://scripts/autochess/autochess_screen.gd").new() as Control
 	auto_chess.name = "AutoChessScreen"
-	root.add_child(auto_chess)
+	add_child(auto_chess)
+	root.visible = false
 	if world != null and world.player != null:
 		world.player.input_enabled = false
 	auto_chess.tree_exited.connect(func():
 		auto_chess = null
+		root.visible = GameState.mode == "play"
 		if world != null and world.player != null:
 			world.player.input_enabled = GameState.mode == "play")
+
+
+func close_auto_chess() -> void:
+	if auto_chess != null and is_instance_valid(auto_chess):
+		auto_chess.close_screen()
 
 
 func camera() -> Camera3D:
@@ -100,7 +107,7 @@ func camera() -> Camera3D:
 
 
 func _on_mode(m: String) -> void:
-	root.visible = m == "play"
+	root.visible = m == "play" and (auto_chess == null or not is_instance_valid(auto_chess))
 	if m != "play" and auto_chess != null and is_instance_valid(auto_chess):
 		auto_chess.close_screen()
 
