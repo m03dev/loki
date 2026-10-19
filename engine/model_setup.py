@@ -94,6 +94,70 @@ CATALOG = [
     {"tag": "llama3.2:3b", "size": 2.0, "need": 3, "score": 55, "roles": ["fast"],
      "why": "smallest that still calls tools"},
 ]
+# Uncensored / "abliterated" builds (the owner, 2026-10-18: "get more oblirated models ... local
+# models should not refuse work"). Community fine-tunes with the refusal direction ablated; the good
+# ones keep the base model's tool calling. These are OPT-IN and never the automatic agent pick:
+# Settings > Models lists them under "More models", and only an owner who asks gets one. Tags were
+# read off ollama.com / Hugging Face (October 2026); a tag that disappears falls through at pull time,
+# and the owner can add any other model by hand (extra_catalog / harness_data/models_custom.json).
+UNCENSORED = [
+    {"tag": "huihui_ai/qwen3.5-abliterated:9b", "size": 6.6, "need": 8.5, "score": 82,
+     "roles": ["agent", "code"], "family": "abliterated",
+     "why": "Qwen3.5 9B with refusals ablated: the strongest uncensored small model that still calls tools"},
+    {"tag": "huihui_ai/qwen3-abliterated:8b", "size": 5.2, "need": 7, "score": 76,
+     "roles": ["agent", "code"], "family": "abliterated",
+     "why": "Qwen3 8B abliterated: the tool calling of qwen3:8b, without the lectures"},
+    {"tag": "dolphin3:8b", "size": 4.9, "need": 7, "score": 70, "roles": ["agent"], "family": "uncensored",
+     "why": "Dolphin 3.0: uncensored Llama 3.1 8B, steady tool calls"},
+    {"tag": "huihui_ai/llama3.2-abliterate:3b", "size": 2.0, "need": 3, "score": 54,
+     "roles": ["fast"], "family": "abliterated",
+     "why": "Llama 3.2 3B abliterated: tiny and quick, no refusals"},
+]
+
+
+def extra_catalog(env: dict | None = None) -> list[dict]:
+    """Models the owner added by hand (Settings > Models > Add a model, a harness_data/models_custom.json
+    list, or the file named by LOKI_MODELS_EXTRA): {tag, size, need, score, roles, why[, family, moe]}.
+    Merged into what LOKI suggests and downloads. Invalid entries are skipped; this never raises."""
+    env = env if env is not None else os.environ
+    explicit = str(env.get("LOKI_MODELS_EXTRA", "") or "").strip()
+    if explicit:
+        path = Path(explicit).expanduser()
+    else:
+        base = Path(env.get("LOKI_DATA", "") or (Path(__file__).resolve().parent.parent / "harness_data"))
+        path = base / "models_custom.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    rows = data.get("models") if isinstance(data, dict) else data
+    out: list[dict] = []
+    for entry in rows if isinstance(rows, list) else []:
+        if not isinstance(entry, dict) or not str(entry.get("tag") or "").strip():
+            continue
+        try:
+            out.append({"tag": str(entry["tag"]).strip(), "size": float(entry.get("size") or 6.0),
+                        "need": float(entry.get("need") or 8.0), "score": int(entry.get("score") or 70),
+                        "roles": list(entry.get("roles") or ["agent"]), "family": str(entry.get("family") or ""),
+                        "moe": bool(entry.get("moe")), "why": str(entry.get("why") or "you added this model")})
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def full_catalog(env: dict | None = None) -> list[dict]:
+    """The built-in download catalog plus the owner's own entries."""
+    return CATALOG + extra_catalog(env)
+
+
+def uncensored(info: dict, installed: list[str] | None = None) -> list[dict]:
+    """Uncensored / abliterated builds that fit this machine (opt-in; never the automatic pick)."""
+    budget = float(info.get("budget_gb") or memory_budget(info))
+    installed = installed or []
+    return [dict(c, installed=is_installed(c["tag"], installed)) for c in UNCENSORED
+            if c["need"] <= max(budget * 1.15, 3)]
+
+
 # MLX alternatives on Apple Silicon (served by mlx_lm.server on port 8082, provider "mlx").
 # Bonsai 2's MLX packs need mlx-vlm >= 0.7.8 (mlx-lm 0.32 cannot load them yet).
 MLX_CATALOG = [
@@ -113,7 +177,8 @@ KNOWN_SCORES = [("bonsai-2-27b", 90), ("bonsai-2-9b", 83), ("bonsai-2-4b", 71), 
                 ("gemma4:12b", 83), ("gemma4", 80), ("qwen3.5:4b", 72), ("qwen3.5:2b", 58),
                 ("qwen3.5", 80), ("qwen3:8b", 78), ("qwen2.5-coder:14b", 76), ("granite4.1:8b", 74),
                 ("granite4.1:3b", 60), ("granite4", 70), ("llama3.1:8b", 72), ("hermes3", 70),
-                ("qwen3:4b", 68), ("qwen2.5", 65), ("llama3.2", 55)]
+                ("qwen3:4b", 68), ("qwen2.5", 65), ("llama3.2", 55),
+                ("abliterat", 72), ("dolphin", 70), ("uncensored", 70)]
 DERIVED_PREFIX = "loki-"
 TIMEOUT = 3.0
 
@@ -448,16 +513,21 @@ def best_installed(models: list[dict], budget_gb: float, caps=capabilities, vers
     return {**m, "tools": tools, "fits": fits, "score": value}
 
 
-def recommend(info: dict, installed: list[str] | None = None) -> list[dict]:
-    """Download candidates that fit this machine, best first."""
+def recommend(info: dict, installed: list[str] | None = None, include_uncensored: bool = False,
+              env: dict | None = None) -> list[dict]:
+    """Download candidates that fit this machine, best first. The owner's own entries are always
+    included; uncensored builds join only when asked for (`include_uncensored`)."""
     budget = float(info.get("budget_gb") or memory_budget(info))
     installed = installed or []
+    entries = full_catalog(env) + (UNCENSORED if include_uncensored else [])
     # a family this Ollama could not load (Bonsai 2 on the Mac, 2026-10-17) is not suggested again
-    bad_families = {c.get("family") for c in CATALOG for b in broken_models().values()
+    bad_families = {c.get("family") for c in entries for b in broken_models().values()
                     if _broken_key(b.get("model", "")) == _broken_key(c["tag"]) and c.get("family")}
     picks = [dict(c, installed=any(n == c["tag"] or n.startswith(c["tag"] + "-") for n in installed))
-             for c in CATALOG if c["need"] <= max(budget * 1.15, 3) and c.get("family") not in bad_families]
-    return picks or [dict(CATALOG[-1], installed=False)]
+             for c in entries if c["need"] <= max(budget * 1.15, 3) and c.get("family") not in bad_families]
+    if picks:
+        return picks
+    return [dict((entries or CATALOG)[-1], installed=False)]
 
 
 def derived_name(model: str) -> str:
@@ -590,7 +660,9 @@ def pull(tags: list[str], progress: Progress = PROGRESS, opener=urllib.request.u
             progress.update(error=str(exc)[:200], message="%s failed: %s" % (tag, str(exc)[:120]))
             continue
     progress.update(done=True, status="failed",
-                    message="Could not download any model. Check the internet connection and try again.")
+                    message="Could not download any model. Check the internet connection and try again, add a "
+                            "model you know is there (Settings > Models > Add a model), or update Ollama and "
+                            "retry - an old Ollama cannot load the newest models.")
     return ""
 
 
@@ -822,7 +894,7 @@ def plan(machine: dict, installed: list[str] | None = None) -> dict:
     installed = installed or []
     rows = []
     too_old = version_at_least(str(machine.get("ollama_version") or ""), BONSAI_MIN_OLLAMA) is False
-    for entry in CATALOG:
+    for entry in full_catalog():
         if too_old and entry.get("family") == "bonsai":
             continue   # this Ollama cannot run it: never suggest or auto-download it
         how = fit(entry, machine)
@@ -1086,6 +1158,7 @@ def status(env: dict | None = None, opener=urllib.request.urlopen, info: dict | 
         "blocked": advice["blocked"],
         "auto": advice["auto"],
         "quick": advice.get("quick"),
+        "uncensored": uncensored(info, names),
         "upgrade": upgrade_for(best, advice["picks"]) if best and best.get("tools") else None,
         "context": context_for(info),
         "cloud_keys": cloud_keys,

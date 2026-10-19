@@ -98,6 +98,31 @@ check("a known quality score for Bonsai 2", any(k.startswith("bonsai-2") for k, 
 check("every Bonsai tag names the Q2_0 FILE (the short :Q2_0 tag also matches the unloadable PQ2_0 pack)",
       all(":Ternary-Bonsai-2-" in str(t) and str(t).endswith("-Q2_0") for t in bonsai), bonsai)
 
+section("more models: uncensored builds and your own entries")
+check("uncensored builds carry a tag, roles and a why",
+      bool(model_setup.UNCENSORED) and all(e.get("tag") and e.get("roles") and e.get("why")
+                                           for e in model_setup.UNCENSORED), model_setup.UNCENSORED)
+check("the uncensored family has a known quality score",
+      any("abliterat" in k or "dolphin" in k for k, _ in model_setup.KNOWN_SCORES))
+check("uncensored() reports what fits and what is installed",
+      any(e["installed"] for e in model_setup.uncensored({"budget_gb": 16}, installed=["dolphin3:8b"])))
+check("recommend() offers uncensored builds only when asked",
+      any(e.get("family") in ("abliterated", "uncensored")
+          for e in model_setup.recommend({"budget_gb": 16}, include_uncensored=True))
+      and not any(e.get("family") in ("abliterated", "uncensored")
+                  for e in model_setup.recommend({"budget_gb": 16})))
+import tempfile as _tempfile  # noqa: E402
+_custom = Path(_tempfile.mkdtemp()) / "models_custom.json"
+_custom.write_text(json.dumps([{"tag": "my/model:7b", "size": 4, "need": 6, "score": 71, "why": "mine"},
+                               {"nope": True}, "junk"]), encoding="utf-8")
+_env = {"LOKI_MODELS_EXTRA": str(_custom)}
+check("your own models load from the file, bad entries skipped",
+      [e["tag"] for e in model_setup.extra_catalog(_env)] == ["my/model:7b"], model_setup.extra_catalog(_env))
+check("...and they join the suggested catalog",
+      any(e["tag"] == "my/model:7b" for e in model_setup.full_catalog(_env)))
+check("recommend() includes your own model",
+      any(e["tag"] == "my/model:7b" for e in model_setup.recommend({"budget_gb": 16}, env=_env)))
+
 
 class Reply(io.BytesIO):
     def __enter__(self):

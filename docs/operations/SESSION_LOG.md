@@ -4,6 +4,16 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-18 - more local models: uncensored builds and your own (Ziva, the PC)
+
+- `engine/model_setup.py`: opt-in `UNCENSORED` catalog (abliterated Qwen3.5/Qwen3, Dolphin 3,
+  abliterated Llama 3.2), never the automatic pick; `extra_catalog()`/`full_catalog()` merge the
+  owner's own models from `harness_data/models_custom.json` (or `LOKI_MODELS_EXTRA`) into what LOKI
+  suggests and downloads; `recommend(include_uncensored=)` + `uncensored()`; `status()` returns
+  `"uncensored"`; failed downloads now say retry / add a model / update Ollama.
+- tests/test_models_media.py +7 (53 passed). Checked: test_models_media, test_routing_core, test_systems,
+  test_local_broken, test_keys_studio, --self-test. test_install's 6 failures are pre-existing.
+
 ## 2026-10-17 - Session 30 (Claude, worktree): one-click install, a first run that never blocks, a faster start
 
 - Installers carry their own Python (tools/bundle_runtime.py: python-build-standalone + every package, pre-compiled);

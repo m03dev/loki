@@ -4,7 +4,30 @@ Read this, AGENTS.md and docs/BUILD_BRIEF.md before working. Update this file wh
 something significant (tools/ship.py), so the next agent - Ziva, Claude Code, Codex or
 LOKI itself - starts from the truth.
 
-Last updated: 2026-10-18 (later) (home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
+Last updated: 2026-10-18 (later) (more local models: uncensored builds + add your own; home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
+
+## 2026-10-18 (later): more local models - uncensored builds and your own (Ziva, the PC)
+
+Owner: "get more oblirated [abliterated] models download them and install ... if one model cant you need
+to figure out a way to mix and match all the offline and free ones" and "Bonsai wouldn't download ...
+it didn't give me an option. Find more or retry".
+
+- `engine/model_setup.py`: a new `UNCENSORED` catalog (Qwen3.5/Qwen3 abliterated, Dolphin 3, Llama 3.2
+  abliterated) - OPT-IN only, never the automatic agent pick; `extra_catalog()` / `full_catalog()` read the
+  owner's own entries from `harness_data/models_custom.json` (or `LOKI_MODELS_EXTRA`), so any model can be
+  added by hand and joins what LOKI suggests and downloads; `recommend(..., include_uncensored=)` + a new
+  `uncensored()` helper; `status()` now returns `"uncensored"`; and every failed download now says to
+  retry, add a model by hand, or update Ollama (an old Ollama cannot load the newest models).
+  Tags were read off ollama.com / Hugging Face (October 2026) and a tag that has gone falls through at pull
+  time - confirm any new tag with `ollama pull` once before trusting it.
+- Tests: tests/test_models_media.py +7 (53 passed). Checked on the PC: test_models_media 53, test_routing_core
+  142, test_systems 101, test_local_broken 11, test_keys_studio 30, --self-test OK. test_install's 6 failures
+  are pre-existing (they need network / bundled Python) - identical with the unmodified file.
+- Follow-up (not done here): Settings > Models still does not SHOW the uncensored list or an "Add a model"
+  box - the bridge returns `"uncensored"` in `/models` status and reads `models_custom.json`, the UI needs to
+  surface both.
+
+
 
 ## 2026-10-18 20:50: consoles (2), the live link shown in Godot and LOKI (Claude, cloud)
 

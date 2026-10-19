@@ -16,6 +16,11 @@ offers to set it up (Settings > Models shows the same screen any time).
 - **Makes local models smarter.** Ollama's default context window is too small for an agent
   prompt with tools, which is why local models used to look confused. Loki creates a
   `loki-<model>` copy with a bigger window (`/api/create`, no download, same weights).
+- **Uncensored, and your own.** Settings > Models offers opt-in abliterated builds (Qwen3.5/Qwen3
+  abliterated, Dolphin 3) that keep tool calling but do not refuse work; they are never the automatic
+  pick. Any other model - a Hugging Face GGUF, your own fine-tune - can be added by hand in
+  `harness_data/models_custom.json` (a JSON list of `{tag, size, need, score, roles, why}`) and joins
+  what LOKI suggests and downloads.
 - **Makes them faster.** The model is kept loaded (`keep_alive`), local models get a short
   list of core tools instead of every tool, and MCP servers start in the background so the
   window is ready at once.
