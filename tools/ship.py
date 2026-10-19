@@ -38,7 +38,7 @@ FULL = [False]   # --full: every suite, no time budget (slow; the PC's nightly r
 SUITES = ["test_loki", "test_hardening", "test_integrations", "test_workers",
           "test_offline_e2e", "test_peers", "test_first_layer", "test_updater", "test_team", "test_events",
           "test_portal", "test_phone_link", "test_systems",
-          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_clipboard", "test_qr_links", "test_mmo_systems", "test_character", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability", "test_documents", "test_files_ui", "test_apps", "test_studio_godot", "test_qol", "test_install", "test_cad", "test_studio_destination", "test_ui_fit", "test_auto_setup", "test_local_broken", "test_forge3d", "test_forge_ui", "test_godogen", "test_wechaty", "test_keys_studio", "test_forge_poly", "test_forge_model_ui", "test_phone_web", "test_ninerouter", "test_studio_stream", "test_engine_stream", "test_world_build", "test_world_godot_tab", "test_godot_live", "test_godot_tab", "test_no_console"]
+          "test_tool_guard", "test_autopilot", "test_role_routing", "test_stubs", "test_evals", "test_relay", "test_workbench", "test_models_media", "test_evolve", "test_play", "test_addons", "test_core_upgrade", "test_job_fixes", "test_mmo", "test_research_ports", "test_harvest", "test_godot_world", "test_update_overhaul", "test_ui_smoke", "test_clipboard", "test_qr_links", "test_mmo_systems", "test_character", "test_self_systems", "test_channels", "test_creative", "test_task_success", "test_routing_core", "test_memory_core2", "test_tools_core", "test_automations", "test_studio", "test_research3", "test_usability", "test_documents", "test_files_ui", "test_apps", "test_studio_godot", "test_qol", "test_install", "test_cad", "test_studio_destination", "test_ui_fit", "test_auto_setup", "test_local_broken", "test_forge3d", "test_forge_ui", "test_godogen", "test_wechaty", "test_keys_studio", "test_forge_poly", "test_forge_model_ui", "test_phone_web", "test_ninerouter", "test_studio_stream", "test_engine_stream", "test_world_build", "test_world_godot_tab", "test_godot_live", "test_godot_tab", "test_no_console", "test_anycreature"]
 
 
 # One temp root for the whole run: every subprocess (each suite, every git call) gets a slot
@@ -117,7 +117,10 @@ def pick_suites(repo: Path, files: list) -> list:
     """The suites that exercise the changed files: a changed test runs itself; a changed module
     runs every suite that names it. Always the window smoke test when the UI changed."""
     picked = []
-    stems = {Path(f).stem for f in files if f.endswith((".py", ".js", ".css", ".html"))} - {"ship", "index", "app"}
+    # Vendored third-party trees (contrib/) are not first-party modules: their generic file names
+    # (checks.js, compile.js, cli.js ...) must not drag in every suite that happens to mention the word.
+    stems = {Path(f).stem for f in files
+             if f.endswith((".py", ".js", ".css", ".html")) and not f.startswith("contrib/")} - {"ship", "index", "app"}
     for suite in SUITES:
         path = repo / "tests" / (suite + ".py")
         if not path.is_file():

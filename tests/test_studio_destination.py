@@ -444,11 +444,15 @@ else:
         pth = r.request.url.split("8897", 1)[1].split("?")[0].split("#")[0]
         if pth == "/":
             return r.fulfill(path=str(ui / "index.html"))
-        if pth.startswith("/ui/") and (ui / pth[4:]).is_file():
-            return r.fulfill(path=str(ui / pth[4:]))
-        if pth.endswith(".wasm") and (ui / (pth[4:] + ".gz")).is_file():   # LOKI World's engine (the bridge sends the .gz)
+        # LOKI World's engine: the TRACKED file is index.wasm.gz (index.wasm itself is gitignored, so a
+        # dev machine keeps a stale old export beside it) and the app serves it gzipped. Serve the .gz
+        # BEFORE the plain file, so a stale local index.wasm can never be handed to the current glue -
+        # on CI/PC the .wasm is absent and this is the only branch that ever runs.
+        if pth.endswith(".wasm") and (ui / (pth[4:] + ".gz")).is_file():
             import gzip  # pylint: disable=import-outside-toplevel
             return r.fulfill(body=gzip.decompress((ui / (pth[4:] + ".gz")).read_bytes()), headers={"Content-Type": "application/wasm"})
+        if pth.startswith("/ui/") and (ui / pth[4:]).is_file():
+            return r.fulfill(path=str(ui / pth[4:]))
         if r.request.method == "POST":
             posts.append(pth)
         if pth == "/studio/embed":
