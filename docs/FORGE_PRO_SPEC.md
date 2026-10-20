@@ -38,7 +38,7 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | x / c / v (hold) | Snap to grid / curve / point | all three: grid, the nearest edge (curve), the vertex under the mouse; or switched on in the Snap menu / the Grid-Edge-Point chips |
 | j (hold) | Toggle step snap of the move/rotate/scale tool | yes |
 | - / = | Manipulator smaller / bigger | yes |
-| 0 / 1 / 2 / 3 | Display quality default / low / medium / high (smooth preview) | not yet (FORGE_PRO.md T9) |
+| 1 / 2 / 3 | Smooth preview: the cage / smooth + cage / smooth (a display only; the selection wire stays the cage's) | yes |
 | 4 / 5 / 6 / 7 | Wireframe / Shaded / Textured / Use all lights | 4, 5, 7 |
 | Ctrl+1 | Isolate select | yes |
 | F8 | Object <-> component | yes |
@@ -184,4 +184,7 @@ Screenshots of the owner's reference package (General workspace, an unsaved scen
 | Mesh > Separate | each piece that shares no vertex becomes its own object, grouped under `<name>_parts` | polySeparate |
 | Mesh > Mirror (X / Y / Z) | the edited object gets a mirrored copy across the world plane through the origin, the seam welded, faces on the plane dropped; in the history as polyMirror | polyMirrorFace -axis 0/1/2 |
 | Edit Mesh > Insert Edge Loop | a loop half way round the quad ring the picked edge crosses; in the history as polySplitRing | polySplitRing |
+| Edit Mesh > Merge | picked vertices closer than 0.001 x the model size become one (their average); collapsed faces go; history polyMergeVert | polyMergeVertex |
+| Edit Mesh > Merge to Center | all the picked vertices become one, at their middle | - |
+| Edit Mesh > Fill Hole | each open border the picked components touch (all of them when nothing is picked) gets one face, wound to face out; history polyCloseBorder | polyCloseBorder |
 

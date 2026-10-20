@@ -220,6 +220,8 @@ function forgeHistApplyOp(base, op) {
     case "deleteVerts": return P.deleteVerts(base, op.verts);
     case "deleteEdges": return P.deleteEdges(base, null, op.edges);
     case "mirror": return P.mirror(base, op.point, op.normal);
+    case "merge": return P.mergeVerts(base, op.verts, op.dist, !!op.center);
+    case "fillHole": return P.fillHoles(base, op.verts);
     case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
     default: return base;
@@ -378,6 +380,40 @@ function forgeMirror(axis) {
   return msg;
 }
 window.forgeMirror = forgeMirror;
+
+// Edit Mesh > Merge / Merge to Center / Fill Hole, on the picked components (vertices, or the corners of the picked
+// edges / faces). Merge joins picked vertices closer than the threshold; Merge to Center makes them all one;
+// Fill Hole closes the open borders the picked vertices touch (every open border when nothing is picked).
+const FORGE_MERGE_DIST = 0.001;
+function forgeMeshOp(kind, dist) {
+  const v = forge.view, P = window.ForgePoly;
+  if (!v || !v.poly) { forgeSay("Add a primitive first (or DynaMesh a sculpt).", true); return ""; }
+  const base = v.poly, sel = v.edit ? v.edit.sel : { v: new Set(), e: new Set(), f: new Set() };
+  const verts = new Set(sel.v);
+  if (!verts.size && sel.e.size) { const T = P.topology(base); for (const ei of sel.e) { const e = T.edges[ei]; if (e) { verts.add(e.a); verts.add(e.b); } } }
+  if (!verts.size && sel.f.size) for (const fi of sel.f) for (const x of base.f[fi] || []) verts.add(x);
+  const list = [...verts];
+  let out, op, msg;
+  if (kind === "fillHole") {
+    out = P.fillHoles(base, list);
+    if (!out.filled) { forgeSay(list.length ? "No open border at the picked components." : "The mesh has no holes.", true); return ""; }
+    op = { kind: "fillHole", verts: list }; msg = "Filled " + out.filled + (out.filled === 1 ? " hole." : " holes.");
+  } else {
+    if (list.length < 2) { forgeSay("Pick two or more vertices (F9) to merge.", true); return ""; }
+    const center = kind === "mergeCenter", d = Number.isFinite(dist) ? dist : FORGE_MERGE_DIST * Math.max(1, v.size || 1);
+    out = P.mergeVerts(base, list, d, center);
+    const gone = base.v.length - out.v.length;
+    if (!gone) { forgeSay("Nothing within " + d.toPrecision(2) + " to merge - Merge to Center joins them all.", true); return ""; }
+    op = { kind: "merge", verts: list, dist: d, center }; msg = "Merged " + gone + (gone === 1 ? " vertex." : " vertices.");
+  }
+  delete out.filled;
+  forgeHistPush(op, base);
+  forgeModel.last = null;
+  v.showPoly(out, true);
+  forgeSay(msg);
+  return msg;
+}
+window.forgeMeshOp = forgeMeshOp;
 
 function forgeFaceOp(kind) {
   const v = forge.view;

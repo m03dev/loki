@@ -201,6 +201,16 @@ async def main():
         check("Separate: the two pieces become two objects again", len(r["parts"]) == 2, r)
         check("Mirror (polyMirrorFace -axis 0) adds the mirrored copy across X", r["fm1"] == r["fm0"] * 2 and "Mirror" in r["res"]
               and r["menu"][:3] == ["combine", "separate", "mirror"], r)
+        # Edit Mesh > Fill Hole and Merge to Center, from the hotbox's commands
+        r = await page.evaluate("""async () => { const v = forge.view, t = v.tree.api;
+          forgeModelMode(false); await forgeAddPrimitive('cube'); forgeModelMode(true);
+          v.setSelMode('face'); v.selectItems('face', [0], 'set'); forgeFaceOp('delete');
+          const holed = v.poly.f.length;
+          v.selectItems('face', [], 'set'); const a = forgeProRun(v, 'fillHole'); const filled = v.poly.f.length;
+          v.setSelMode('vert'); v.selectItems('vert', [0, 1], 'set'); const nv = v.poly.v.length; forgeProRun(v, 'mergeCenter');
+          return { holed, filled, nv, nv2: v.poly.v.length, hist: forgeModel.hist ? forgeModel.hist.length : 0 }; }""")
+        check("Fill Hole closes the hole a deleted face left; Merge to Center joins two vertices", r["filled"] == r["holed"] + 1
+              and r["nv2"] == r["nv"] - 1, r)
         real = [e for e in errors if "favicon" not in e]
         check("no page errors", not real, real[:5])
         await browser.close()

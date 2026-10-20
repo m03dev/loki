@@ -396,8 +396,9 @@ function forgeProCommands() {
     bevel: ["Bevel", null, "Bevel is not in Forge yet"],
     edgeLoop: ["Insert Edge Loop", () => forgeProCall("forgeLoopCut")],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
-    merge: ["Merge", null, "Merge is not in Forge yet (T8)"],
-    fillHole: ["Fill Hole", null, "Fill Hole is not in Forge yet (T8)"],
+    merge: ["Merge", () => forgeProCall("forgeMeshOp", "merge")],
+    mergeCenter: ["Merge to Center", () => forgeProCall("forgeMeshOp", "mergeCenter")],
+    fillHole: ["Fill Hole", () => forgeProCall("forgeMeshOp", "fillHole")],
     softHard: ["Soften/Harden", null, "Soft/hard edges are not in Forge yet"],
     chamfer: ["Chamfer Vertex", null, "Chamfer is not in Forge yet (T8)"],
     poke: ["Poke Face", null, "Poke is not in Forge yet (T8)"],
@@ -443,6 +444,9 @@ function forgeProCommands() {
     mirror: ["Mirror", async (v) => { const t = T(v), n = t && t.active(); if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id); return forgeProCall("forgeMirror", "x"); }],
     mirrorY: ["Mirror Y", async (v) => { const t = T(v), n = t && t.active(); if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id); return forgeProCall("forgeMirror", "y"); }],
     mirrorZ: ["Mirror Z", async (v) => { const t = T(v), n = t && t.active(); if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id); return forgeProCall("forgeMirror", "z"); }],
+    smooth1: ["Cage (1)", () => (typeof fmySmoothPreview === "function" ? fmySmoothPreview(1) : "")],
+    smooth2: ["Cage + Smooth (2)", () => (typeof fmySmoothPreview === "function" ? fmySmoothPreview(2) : "")],
+    smooth3: ["Smooth Preview (3)", () => (typeof fmySmoothPreview === "function" ? fmySmoothPreview(3) : "")],
     wheel: ["Radial Menus", (v) => { forgeProWheelOpen(v, v.pro && v.pro.mouse); }],
     completeTool: ["Complete Tool", (v) => { forgeProTool(v, null); return "Tool completed."; }],
     repeatLast: ["Repeat Last", (v) => { const id = v.pro && v.pro.last; if (!id || id === "repeatLast") return "Nothing to repeat yet."; forgeProRun(v, id); }],
@@ -586,11 +590,11 @@ const FORGE_PRO_ROWS = [
   ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
-  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
+  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI"]],
   // the modelling menu set (the pro second row)
   ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "smooth", "dynamesh", "sculptModel"]],
-  ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"]],
+  ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp"]],
   ["Mesh Tools", ["softSel", "sculpt", "multiCut", "edgeLoop"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
 ];
@@ -1311,6 +1315,9 @@ function forgeProKeys() {
       case "A": return run("frameAll");
       case "f": return run("frameSel");
       case "F": return run("frameSel");
+      case "1": return run("smooth1");
+      case "2": return run("smooth2");
+      case "3": return run("smooth3");
       case "4": return run("wire");
       case "5": return run("shaded");
       case "6": return run("textured");

@@ -104,6 +104,12 @@ const _mir = P.mirror(_half, [0, 0, 0], [1, 0, 0]);
 const _two = P.combine([_c2, P.transform(_c2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1])]);
 out.tools = { mirV: _mir.v.length, mirF: _mir.f.length, mirVol: P.volume(_mir), mirClosed: closed(_mir), halfF: _half.f.length,
   combF: _two.f.length, combVol: P.volume(_two), shells: P.shells(_two).map((m) => m.f.length), moved: P.transform(_c2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1]).v[0][0] - _c2.v[0][0] };
+const _holed = P.deleteFaces(_c2, _c2.f.map((f, i) => (P.centroid(_c2, f)[1] > 0.49 ? i : -1)).filter((i) => i >= 0));
+const _filled = P.fillHoles(_holed);
+const _mc = P.mergeVerts(_c2, _c2.f[0], 10, true);
+const _near = P.mergeVerts(P.combine([_c2, P.transform(_c2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.0005, 0, 0, 1])]), [...Array(52).keys()], 0.001, false);
+out.tools2 = { holedF: _holed.f.length, filledF: _filled.f.length, filled: _filled.filled, closed: closed({ v: _filled.v, f: _filled.f }), vol: P.volume(_filled),
+  mcV: _mc.v.length, mcF: _mc.f.length, nearV: _near.v.length };
 console.log(JSON.stringify(out));
 """
 
@@ -154,6 +160,11 @@ def main() -> int:
     check("applyMatrix moves the selection the whole way, its neighbours by their weight, nothing else",
           abs(e["dy0"] - 0.5) < 1e-9 and e["partial"] and e["still"], e)
     check("delete vertices / edges takes the faces that use them", e["delV"] == 51 and e["delE"] == 52, e)
+    t2 = o["tools2"]
+    check("Fill Hole closes the open top of a cube with one face, facing out (closed, volume 1)",
+          t2["holedF"] == 20 and t2["filledF"] == 21 and t2["filled"] == 1 and t2["closed"] and abs(t2["vol"] - 1) < 1e-6, t2)
+    check("Merge to Center makes a face's 4 corners one vertex (that face and its neighbours' slivers go); Merge joins near twins",
+          t2["mcV"] == 23 and t2["mcF"] == 23 and t2["nearV"] == 26, t2)
     t = o["tools"]
     check("Mirror: half a cube mirrored across x = 0 is the whole cube again - closed, welded on the seam, facing out",
           t["halfF"] == 12 and t["mirF"] == 24 and t["mirV"] == 26 and t["mirClosed"] and abs(t["mirVol"] - 1) < 1e-6, t)

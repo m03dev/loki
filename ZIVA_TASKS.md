@@ -51,9 +51,10 @@ What changed (owner 17:06), so your next Forge work builds on it - do not undo a
   and Autodesk"). Say "the pro way", "the standard layout". docs/operations/archive stays verbatim.
 - [ ] [either] Check it on a real screen (Mac Retina and the PC): tumble/track/dolly feel, the hotbox at the
       cursor, right-button hold, the sharper picture (pixel ratio 1.5-3). Report what feels off, with a screenshot.
-- [ ] [either] Next tools (pick from the top, one per ship, test each under 60 s): Edit Mesh > Merge (vertices
-      within a distance) and Fill Hole, Display quality keys 1 / 2 / 3 (smooth preview), an Attribute Editor panel
-      (Ctrl+A) for the selected node, Bevel. (Claude already did Combine, Separate, Mirror X/Y/Z and Insert Edge Loop.) Commands go in
+- [ ] [either] Next tools (pick from the top, one per ship, test each under 60 s): Bevel (edges and faces), an
+      Attribute Editor panel (Ctrl+A) for the selected node, Multi-Cut, Edit Mesh > Bridge. (Claude already did
+      Combine, Separate, Mirror X/Y/Z, Insert Edge Loop, Merge, Merge to Center, Fill Hole and the 1 / 2 / 3 smooth
+      preview - see docs/FORGE_PRO_SPEC.md "Mesh tools".) Commands go in
       FORGE_PRO_CMDS (forge_pro.js) so the menus, hotbox, marking menus and command line all get them.
 - [x] [either] Restore the loop-cut tool commit 8086bf2 deleted. -> Claude, 2026-10-19 evening: restored
       (`forgeLoopCut`, history op loopCut), wired to Edit Mesh > Insert Edge Loop, tested (test_forge_model_ui).

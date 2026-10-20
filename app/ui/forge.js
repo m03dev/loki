@@ -1590,6 +1590,7 @@ function forgeMakeView(lib, renderer, canvas) {
   // the scene layer (app/ui/forge_scene.js) bakes geometry - Freeze Transformations, Center Pivot - and
   // needs the aliased buffers pushed back to the GPU afterwards
   view.refreshMesh = () => refresh();
+  view.meshObj = () => mesh;                         // the edited object's mesh (the smooth preview hides it)
   return view;
 }
 

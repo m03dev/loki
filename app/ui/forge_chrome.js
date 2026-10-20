@@ -582,7 +582,8 @@ async function forgeProCommandLine(line) {
           makeIdentity: "freeze", FreezeTransformations: "freeze", CenterPivot: "centerPivot", ResetTransformations: "resetXf", hide: "hide",
           showHidden: "showAll", viewFit: "frameAll", fitPanel: "frameAll", polyExtrudeFacet: "extrude", polySmooth: "smooth", polyNormal: "reverse",
           polySplitRing: "edgeLoop", polyBevel: "bevel", polyBevel3: "bevel", isolateSelect: "isolate",
-          polyUnite: "combine", polySeparate: "separate", polyMirrorFace: "mirror", polyMirror: "mirror" }[w];
+          polyUnite: "combine", polySeparate: "separate", polyMirrorFace: "mirror", polyMirror: "mirror",
+          polyMergeVertex: "merge", polyMergeVert: "merge", polyCloseBorder: "fillHole" }[w];
         let id = alias || w;
         if (w === "xform" && flags.includes("-cp")) id = "centerPivot";
         if (w === "parent" && flags.includes("-w")) id = "unparent";
@@ -603,6 +604,7 @@ async function forgeProCommandLine(line) {
 
 // ================================================================== the viewport: panel menus, HUD, view cube, grid, lighting
 function forgeProViewportAttach(view, ctx) {
+  if (Array.isArray(view.frameHooks)) view.frameHooks.push(() => { if (view.smoothLevel > 1 || view.smoothPrev) fmySmoothRefresh(view, false); });
   const { THREE, scene, camera, controls, canvas, lights } = ctx;
   const stage = canvas && canvas.parentElement;
   if (!stage || stage.querySelector("#fmy-panelbar")) return;
@@ -742,6 +744,56 @@ function fmyLookFrom(view, THREE, camera, controls, side, dir) {
   const t = controls.target.clone(), d = camera.position.distanceTo(t) || 3;
   camera.position.copy(t).addScaledVector(new THREE.Vector3(dir[0], dir[1], dir[2]).normalize(), d);
   camera.lookAt(t); controls.update(); view.dirty = true;
+}
+
+// Display smoothness - the keys 1 / 2 / 3: 1 the cage as it is, 2 the smoothed surface with the cage drawn over it,
+// 3 only the smoothed surface. A display only: the cage is still what the tools edit. Two rounds of Catmull-Clark
+// (one when the cage is big); off while sculpting.
+const FMY_SMOOTH_LIMIT = 60000;
+function fmySmoothPreview(level) {
+  const v = fmyView();
+  if (!v) return "";
+  v.smoothLevel = Math.max(1, Math.min(3, level | 0));
+  fmySmoothRefresh(v, true);
+  if (v.smoothLevel > 1 && !v.poly) return "Smooth preview works on a modelled mesh (Create a primitive, or DynaMesh a sculpt).";
+  return ["", "Display: the cage (1).", "Display: smooth, with the cage (2).", "Display: smooth (3)."][v.smoothLevel];
+}
+function fmySmoothRefresh(v, force) {
+  const THREE = v.THREE, P = window.ForgePoly, base = v.meshObj && v.meshObj();
+  if (!THREE || !P || !v.holder) return;
+  const st = v.smoothPrev || (v.smoothPrev = { mesh: null, cage: null, of: null, ver: -1 });
+  const want = (v.smoothLevel || 1) >= 2 && !!v.poly && v.mode !== "sculpt";
+  const drop = () => {
+    for (const k of ["mesh", "cage"]) if (st[k]) { if (st[k].parent) st[k].parent.remove(st[k]); st[k].geometry.dispose(); st[k] = null; }
+    st.of = null;
+  };
+  if (!want) {
+    if (st.mesh || st.cage) drop();
+    if (base && !base.visible) { base.visible = true; v.dirty = true; }
+    return;
+  }
+  const ver = base && base.geometry && base.geometry.attributes.position ? base.geometry.attributes.position.version : 0;
+  if (force || st.of !== v.poly || st.ver !== ver) {
+    drop();
+    let m = v.poly;
+    for (let k = 0; k < 2 && m.f.length * 4 <= FMY_SMOOTH_LIMIT; k++) m = P.smooth(m);
+    const t = P.triangulate(m), g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(t.pos, 3)); g.setIndex(new THREE.BufferAttribute(t.idx, 1));
+    g.computeVertexNormals();
+    const mat = (base && base.material ? base.material : new THREE.MeshStandardMaterial()).clone();
+    mat.vertexColors = false; if (base && base.material && base.material.color) mat.color.copy(base.material.color);
+    st.mesh = new THREE.Mesh(g, mat); st.mesh.name = "forge-smooth"; st.mesh.raycast = () => {};
+    const E = P.edges(v.poly), lp = new Float32Array(E.length * 6);
+    E.forEach((e, i) => { lp.set(v.poly.v[e.a], i * 6); lp.set(v.poly.v[e.b], i * 6 + 3); });
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.BufferAttribute(lp, 3));
+    st.cage = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xc9d3de, transparent: true, opacity: 0.55 }));
+    st.cage.name = "forge-cage"; st.cage.raycast = () => {};
+    v.holder.add(st.mesh, st.cage);
+    st.of = v.poly; st.ver = ver;
+  }
+  st.cage.visible = v.smoothLevel === 2 && v.mode !== "poly";     // in component mode the component display is the cage
+  if (base) base.visible = false;
+  v.dirty = true;
 }
 
 // Mesh Display / Shading > Wireframe on Shaded: every mesh shows its edges in dark grey

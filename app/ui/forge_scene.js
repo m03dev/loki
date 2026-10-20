@@ -20,7 +20,7 @@
 // the pro construction-history node for each Forge step
 const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
   smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
-  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", bevel: "polyBevel" };
+  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", merge: "polyMergeVert", fillHole: "polyCloseBorder", bevel: "polyBevel" };
 
 function scnEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -229,7 +229,8 @@ function forgeSceneAttach(view, ctx) {
       // pro draws the selected object's own edges in the selection colour - a wireframe, not a box. The edges are the
       // polygon edges (EdgesGeometry hides the flat diagonals a quad is split into); a very big mesh keeps the box.
       const meshes = [];
-      n.inner.traverse((o) => { if (o.isMesh && o.geometry && o.name !== "forge-sel" && o.visible) meshes.push(o); });
+      // the smooth preview (keys 2 / 3) is a display: the wire is the cage's, even while the cage itself is hidden
+      n.inner.traverse((o) => { if (o.isMesh && o.geometry && o.name !== "forge-sel" && o.name !== "forge-smooth" && (o.visible || o === (ctx.mesh && ctx.mesh()))) meshes.push(o); });
       const tris = meshes.reduce((t, o) => t + (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3, 0);
       if (meshes.length && tris <= 80000) {
         const grp = new THREE.Group(); grp.name = "forge-sel";

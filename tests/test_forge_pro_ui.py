@@ -430,8 +430,14 @@ async def main():
         await page.keyboard.press("g")
         modal = await page.evaluate("forge.view.modalActive()")
         bb = await page.evaluate("() => { const b = forge.view.pro.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }")
+        await page.keyboard.press("3")
+        sm3 = await page.evaluate("() => { const v = forge.view, s = v.smoothPrev; return { on: !!(s && s.mesh && s.mesh.parent), baseHidden: !v.meshObj().visible, tris: s && s.mesh ? s.mesh.geometry.index.count / 3 : 0, cage: v.poly.f.length }; }")
+        await page.keyboard.press("1")
+        sm1 = await page.evaluate("() => { const v = forge.view, s = v.smoothPrev; return { on: !!(s && s.mesh), baseShown: v.meshObj().visible }; }")
+        check("3 shows the smoothed surface (display only), 1 the cage again", sm3["on"] and sm3["baseHidden"] and sm3["tris"] > sm3["cage"] * 4
+              and not sm1["on"] and sm1["baseShown"], [sm3, sm1])
         await page.evaluate("forgeModelMode(false)")
-        check("pro keys only: 2 / g are not Blender's edge mode / grab, and no mouse button turns the view without Alt",
+        check("pro keys only: 2 / g are not Blender's edge mode / grab (2 is the smooth preview), and no mouse button turns the view without Alt",
               m1 == m0 and not modal and bb == [None, None, None] and await page.evaluate("forgeKeymap()") == "pro", [m0, m1, modal, bb])
 
         # -------- the pro workspace: viewport in the middle, Outliner left, Channel Box right, the rest hidden

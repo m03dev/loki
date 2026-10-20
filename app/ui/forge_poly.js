@@ -672,6 +672,66 @@
     return P.compact(P.weld(both, tol / 4));
   };
 
+  // Merge: the given vertices that lie within `dist` of each other become one (at their average); faces that
+  // collapse go. Merge to Center: all the given vertices become one, at their middle.
+  P.mergeVerts = (m0, verts, dist, toCenter) => {
+    const m = clone(m0), list = [...new Set(verts)].filter((i) => i >= 0 && i < m.v.length);
+    if (list.length < 2) return m;
+    const map = m.v.map((_, i) => i);
+    const groups = [];
+    if (toCenter) groups.push(list);
+    else {
+      const left = new Set(list);
+      for (const i of list) {
+        if (!left.has(i)) continue;
+        const g = [i]; left.delete(i);
+        for (let k = 0; k < g.length; k++) for (const j of [...left]) {
+          const a = m.v[g[k]], b = m.v[j];
+          if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= dist) { g.push(j); left.delete(j); }
+        }
+        if (g.length > 1) groups.push(g);
+      }
+    }
+    for (const g of groups) {
+      const c = mul(g.reduce((s, i) => add(s, m.v[i]), [0, 0, 0]), 1 / g.length);
+      m.v[g[0]] = c;
+      for (const i of g.slice(1)) map[i] = g[0];
+    }
+    const f = [];
+    for (const face of m.f) {
+      const out = [];
+      for (const i of face) { const j = map[i]; if (out[out.length - 1] !== j) out.push(j); }
+      if (out.length > 1 && out[0] === out[out.length - 1]) out.pop();
+      if (new Set(out).size >= 3 && out.length >= 3) f.push(out);
+    }
+    return P.compact({ v: m.v, f });
+  };
+  // Fill Hole: every open border (a loop of edges with one face) - or only the borders touching `verts` - gets a
+  // face, wound to match its neighbours
+  P.fillHoles = (m0, verts) => {
+    const m = clone(m0), T = P.topology(m);
+    const next = new Map();                           // border edge a->b, in the direction its face does NOT use
+    for (const e of T.edges) {
+      if (e.faces.length !== 1) continue;
+      const face = m.f[e.faces[0]], k = face.indexOf(e.a);
+      const forward = face[(k + 1) % face.length] === e.b;    // the face goes a->b, so the hole goes b->a
+      if (forward) next.set(e.b, e.a); else next.set(e.a, e.b);
+    }
+    const want = verts && verts.length ? new Set(verts) : null, done = new Set();
+    let added = 0;
+    for (const start of next.keys()) {
+      if (done.has(start)) continue;
+      const loop = [];
+      let x = start, guard = 0;
+      while (x !== undefined && !done.has(x) && guard++ < 100000) { loop.push(x); done.add(x); x = next.get(x); }
+      if (x !== start || loop.length < 3) continue;
+      if (want && !loop.some((i) => want.has(i))) continue;
+      m.f.push(loop); added++;
+    }
+    m.filled = added;
+    return m;
+  };
+
   root.ForgePoly = P;
   if (typeof module !== "undefined" && module.exports) module.exports = P;
 })(typeof window !== "undefined" ? window : globalThis);
