@@ -1,5 +1,5 @@
-// Forge dressed as Maya - the window chrome and the viewport, matched to Maya 2027 on the owner's Mac (2026-10-19:
-// "make it look and feel more like maya ... do more research"). Everything here was checked against screenshots of the
+// Forge dressed as a pro package - the window chrome and the viewport, matched to the reference package on the owner's Mac (2026-10-19:
+// "make it look and feel more like pro ... do more research"). Everything here was checked against screenshots of the
 // real app: the colours were sampled off them (panels #444444, lists #373737, fields #2b2b2b, selection #5285a6,
 // viewport gradient #879bb3 -> #131418, matte grey shading, teal-green selection wireframe).
 //
@@ -7,9 +7,9 @@
 //                status line (menu set, selection modes, snapping, symmetry, panel toggles), shelf with tabs, the tool
 //                box down the left, and the help line + command line along the bottom
 //   the viewport its own menu bar (View Shading Lighting Show Renderer Panels) and icon bar, the heads-up poly count,
-//                the camera name, the axis triad, the view cube, Maya's grid and Maya's default lighting
+//                the camera name, the axis triad, the view cube, the pro grid and the pro default lighting
 //
-// Behaviour, not code: nothing of Autodesk's is used. Every command runs through FORGE_MAYA_CMDS (forge_maya.js), so
+// Behaviour, not code: nothing of the vendor's is used. Every command runs through FORGE_PRO_CMDS (forge_pro.js), so
 // the menus, the shelf, the hotbox, the wheel and the hotkeys stay one set. Each part can be hidden from
 // Windows > UI Elements (or all at once with Ctrl+Space), and nothing that was there before was taken away.
 "use strict";
@@ -79,24 +79,24 @@ function fmyEl(tag, cls, text) {
   return n;
 }
 const fmyView = () => (typeof forge !== "undefined" ? forge.view : null);
-const fmyCmd = (id) => (typeof FORGE_MAYA_CMDS !== "undefined" ? FORGE_MAYA_CMDS[id] : null);
+const fmyCmd = (id) => (typeof FORGE_PRO_CMDS !== "undefined" ? FORGE_PRO_CMDS[id] : null);
 function fmyRun(id) {
   const v = fmyView();
-  if (!v || typeof forgeMayaRun !== "function") { if (typeof forgeSay === "function") forgeSay("Make or add something first.", true); return; }
-  return forgeMayaRun(v, id);
+  if (!v || typeof forgeProRun !== "function") { if (typeof forgeSay === "function") forgeSay("Make or add something first.", true); return; }
+  return forgeProRun(v, id);
 }
 function fmyOn(id) {                                          // is a switch command on? (the hotbox's ticks)
   const v = fmyView();
-  try { return !!(typeof FORGE_MAYA_TOGGLES !== "undefined" && FORGE_MAYA_TOGGLES[id] && v && FORGE_MAYA_TOGGLES[id](v)); } catch (_) { return false; }
+  try { return !!(typeof FORGE_PRO_TOGGLES !== "undefined" && FORGE_PRO_TOGGLES[id] && v && FORGE_PRO_TOGGLES[id](v)); } catch (_) { return false; }
 }
-// hotkey hints shown in the menus, Maya-style
+// hotkey hints shown in the menus, pro-style
 const FMY_KEYS = { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", duplicate: "Ctrl+D", duplicateT: "Shift+D", group: "Ctrl+G", ungroup: "Ctrl+Shift+G",
   parent: "P", unparent: "Shift+P", delete: "Del", selectAll: "Ctrl+Shift+A", selectNone: "Alt+D", invert: "Ctrl+Shift+I", grow: ">", shrink: "<",
   objComp: "F8", vertex: "F9", edge: "F10", face: "F11", select: "Q", move: "W", rotate: "E", scale: "R", pivotEdit: "D", frameSel: "F", frameAll: "A",
   wire: "4", shaded: "5", textured: "6", lights: "7", xray: "Alt+X", hide: "Ctrl+H", showLast: "Ctrl+Shift+H", hideOthers: "Alt+H", isolate: "Ctrl+1",
   extrude: "Ctrl+E", bevel: "Ctrl+B", softSel: "B", hideUI: "Ctrl+Space", save: "Ctrl+S", snapGrid: "X", snapEdge: "C", snapPoint: "V", defaultView: "Alt+Home" };
 
-// ================================================================== drop-down menus (Maya's: click opens, hover switches)
+// ================================================================== drop-down menus (pro's: click opens, hover switches)
 let fmyOpenMenu = null;
 function fmyCloseMenus() {
   document.querySelectorAll(".fmy-drop").forEach((d) => d.remove());
@@ -113,7 +113,7 @@ function fmyDrop(anchor, items) {
     const [id, label, run, on] = Array.isArray(it) ? it : [it];
     const c = fmyCmd(id);
     const b = fmyEl("button", "fmy-ditem");
-    b.type = "button"; b.dataset.mayaId = id || "";
+    b.type = "button"; b.dataset.proId = id || "";
     const enabled = run ? true : !!(c && c[1]);
     if (!enabled) { b.classList.add("off"); b.title = (c && c[2]) || "Not in Forge yet"; }
     const ticked = on != null ? on() : fmyOn(id);
@@ -156,7 +156,7 @@ function fmyMenuButton(label, items, cls) {
 const FMY_UI = { statusline: "Status Line", shelfbar: "Shelf", toolbox: "Tool Box", timeslider: "Time Slider", helpline: "Help Line", hud: "Heads Up Display",
   viewcube: "View Cube", panelbar: "Panel Menus and Toolbar" };
 function fmyUi() {
-  const p = typeof forgeMayaPanels === "function" ? forgeMayaPanels() : {};
+  const p = typeof forgeProPanels === "function" ? forgeProPanels() : {};
   const out = {};
   for (const k of Object.keys(FMY_UI)) out[k] = p[k] !== false;
   return out;
@@ -177,7 +177,7 @@ function fmyApply() {
   fmySync();
   const v = fmyView(); if (v && v.resize) v.resize();
 }
-// Ctrl+Space / the UI button / forgePanels.hideAll: Maya hides the UI elements too, and brings them back together
+// Ctrl+Space / the UI button / forgePanels.hideAll: pro hides the UI elements too, and brings them back together
 (function wrapPanels() {
   const wrap = () => {
     const P = window.forgePanels;
@@ -193,7 +193,7 @@ function fmyApply() {
 
 // ================================================================== the window: menu bar, status line, shelf, tool box, help line
 const FMY_MENUS = () => {
-  const rows = typeof FORGE_MAYA_ROWS !== "undefined" ? Object.fromEntries(FORGE_MAYA_ROWS) : {};
+  const rows = typeof FORGE_PRO_ROWS !== "undefined" ? Object.fromEntries(FORGE_PRO_ROWS) : {};
   const uiItems = Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]);
   return [
     ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
@@ -217,7 +217,7 @@ function fmyToolBtn(icon, id, title, run, extra) {
   const b = fmyEl("button", "fmy-ib" + (extra ? " " + extra : ""));
   b.type = "button";
   b.innerHTML = fmySvg(icon);
-  b.dataset.mayaId = id || "";
+  b.dataset.proId = id || "";
   const c = fmyCmd(id);
   const off = !run && !(c && c[1]);
   if (off) b.classList.add("off");
@@ -238,9 +238,9 @@ const FMY_SHELVES = {
 };
 function fmyShelfItems(tab) {
   const items = FMY_SHELVES[tab] || [];
-  if (tab === "Custom") {                          // Maya's Custom shelf = your recent commands
+  if (tab === "Custom") {                          // the pro Custom shelf = your recent commands
     const v = fmyView();
-    return ((v && v.maya && v.maya.recent) || []).slice(0, 12).map((id) => ["cube", id]);
+    return ((v && v.pro && v.pro.recent) || []).slice(0, 12).map((id) => ["cube", id]);
   }
   return items;
 }
@@ -267,7 +267,7 @@ function fmyBuildShelf(shelf, tab) {
   try { localStorage.setItem("loki-forge-shelf", tab); } catch (_) { /* private mode */ }
 }
 
-function forgeMayaChrome() {
+function forgeProChrome() {
   const panel = document.querySelector("#forge .forge-panel");
   const body = panel && panel.querySelector(".forge-body");
   if (!panel || !body || panel.querySelector("#fmy-menubar")) { fmySync(); return; }
@@ -279,7 +279,7 @@ function forgeMayaChrome() {
   // ---- the menu bar
   const mb = fmyEl("div", "fmy-menubar"); mb.id = "fmy-menubar"; mb.setAttribute("role", "menubar");
   for (const [label, items] of FMY_MENUS()) mb.append(fmyMenuButton(label, () => FMY_MENUS().find((m) => m[0] === label)[1]));
-  mb.append(fmyEl("span", "fmy-grow"), fmyEl("span", "fmy-ws", "Workspace:"), fmyEl("span", "fmy-wsname", "Forge (Maya)"));
+  mb.append(fmyEl("span", "fmy-grow"), fmyEl("span", "fmy-ws", "Workspace:"), fmyEl("span", "fmy-wsname", "Forge"));
 
   // ---- the status line: menu set, history, selection mode, snapping, symmetry ... panel toggles
   const st = fmyEl("div", "fmy-status"); st.id = "fmy-status";
@@ -315,7 +315,7 @@ function forgeMayaChrome() {
   }
   st.append(toggles);
 
-  // ---- the shelf, with Maya's tabs
+  // ---- the shelf, with the pro tabs
   const shelf = fmyEl("div", "fmy-shelf"); shelf.id = "fmy-shelf";
   const tabs = fmyEl("div", "fmy-shelf-tabs");
   for (const t of Object.keys(FMY_SHELVES)) {
@@ -341,7 +341,7 @@ function forgeMayaChrome() {
   // ---- the help line and the command line along the bottom
   const hl = fmyEl("div", "fmy-helpline"); hl.id = "fmy-helpline";
   const help = fmyEl("span", "fmy-help", ""); help.id = "fmy-help";
-  const melLbl = fmyEl("span", "fmy-mel", "MEL");
+  const melLbl = fmyEl("span", "fmy-mel", "Cmd");
   const cmd = fmyEl("input", "fmy-cmd"); cmd.id = "fmy-cmd"; cmd.type = "text"; cmd.spellcheck = false;
   cmd.placeholder = "polyCube; move 0 1 0; select -cl ...";
   cmd.setAttribute("aria-label", "Command line");
@@ -352,14 +352,14 @@ function forgeMayaChrome() {
     if (e.key === "Enter") {
       const line = cmd.value.trim(); if (!line) return;
       hist.push(line); hi = hist.length; cmd.value = "";
-      result.textContent = await forgeMayaCommandLine(line);
+      result.textContent = await forgeProCommandLine(line);
     } else if (e.key === "ArrowUp") { e.preventDefault(); if (hi > 0) cmd.value = hist[--hi]; }
     else if (e.key === "ArrowDown") { e.preventDefault(); hi = Math.min(hist.length, hi + 1); cmd.value = hist[hi] || ""; }
     else if (e.key === "Escape") cmd.blur();
   });
   hl.append(help, melLbl, cmd, result);
 
-  // ---- the time slider and the range slider (Maya: frames 1-120 at 24 fps); it plays and scrubs a model's own clips
+  // ---- the time slider and the range slider (pro: frames 1-120 at 24 fps); it plays and scrubs a model's own clips
   const ts = fmyEl("div", "fmy-time"); ts.id = "fmy-time";
   const ruler = fmyEl("div", "fmy-ruler"); ruler.id = "fmy-ruler";
   const ticks = fmyEl("div", "fmy-ticks");
@@ -393,7 +393,7 @@ function forgeMayaChrome() {
   ruler.addEventListener("pointerup", () => ruler.removeEventListener("pointermove", scrub));
   const top = fmyEl("div", "fmy-trow"); top.append(ruler, frameIn, play);
   ts.append(top, range);
-  // the help line repeats Forge's status (Maya's help line)
+  // the help line repeats Forge's status (the pro help line)
   const status = document.getElementById("forge-status");
   if (status) new MutationObserver(() => { help.textContent = status.textContent || fmyToolHint(); help.classList.toggle("bad", status.classList.contains("bad")); })
     .observe(status, { childList: true, characterData: true, subtree: true, attributes: true });
@@ -416,19 +416,19 @@ function fmySync() {
   const set = (sel, on) => document.querySelectorAll(sel).forEach((b) => b.classList.toggle("on", !!on));
   if (v) {
     const comp = v.mode === "poly", mode = v.edit ? v.edit.mode : "";
-    set('#fmy-status .fmy-selmode[data-maya-id="objectMode"]', !comp);
-    set('#fmy-status .fmy-selmode[data-maya-id="vertex"]', comp && mode === "vert");
-    set('#fmy-status .fmy-selmode[data-maya-id="edge"]', comp && mode === "edge");
-    set('#fmy-status .fmy-selmode[data-maya-id="face"]', comp && mode === "face");
-    for (const k of ["snapGrid", "snapEdge", "snapPoint"]) set('#fmy-status [data-maya-id="' + k + '"]', fmyOn(k));
+    set('#fmy-status .fmy-selmode[data-pro-id="objectMode"]', !comp);
+    set('#fmy-status .fmy-selmode[data-pro-id="vertex"]', comp && mode === "vert");
+    set('#fmy-status .fmy-selmode[data-pro-id="edge"]', comp && mode === "edge");
+    set('#fmy-status .fmy-selmode[data-pro-id="face"]', comp && mode === "face");
+    for (const k of ["snapGrid", "snapEdge", "snapPoint"]) set('#fmy-status [data-pro-id="' + k + '"]', fmyOn(k));
     const tc = comp ? v.gizmo : v.transform;
     const tool = tc && tc.object ? tc.mode : null;
-    set('#fmy-toolbox [data-maya-id="select"]', !tool);
-    set('#fmy-toolbox [data-maya-id="move"]', tool === "translate");
-    set('#fmy-toolbox [data-maya-id="rotate"]', tool === "rotate");
-    set('#fmy-toolbox [data-maya-id="scale"]', tool === "scale");
-    set('#fmy-toolbox [data-maya-id="single"]', !v.quad);
-    set('#fmy-toolbox [data-maya-id="four"]', !!v.quad);
+    set('#fmy-toolbox [data-pro-id="select"]', !tool);
+    set('#fmy-toolbox [data-pro-id="move"]', tool === "translate");
+    set('#fmy-toolbox [data-pro-id="rotate"]', tool === "rotate");
+    set('#fmy-toolbox [data-pro-id="scale"]', tool === "scale");
+    set('#fmy-toolbox [data-pro-id="single"]', !v.quad);
+    set('#fmy-toolbox [data-pro-id="four"]', !!v.quad);
     const sym = document.getElementById("fmy-symlabel");
     if (sym) sym.textContent = "Symmetry: " + (v.brush && v.brush.symmetry && v.mode === "sculpt" ? "Object X" : "Off");
     set("#fmy-symm", v.brush && v.brush.symmetry && v.mode === "sculpt");
@@ -436,16 +436,16 @@ function fmySync() {
     if (ms && document.activeElement !== ms) ms.value = v.mode === "sculpt" ? "Sculpting" : "Modeling";
     const camName = document.getElementById("fmy-camname");
     if (camName) camName.textContent = v.quad ? "" : (v.cam || "persp");
-    set("#fmy-panelbar [data-maya-id='wire']", !!v.wire);
-    set("#fmy-panelbar [data-maya-id='shaded']", !v.wire);
-    set("#fmy-panelbar [data-maya-id='textured']", !v.clay);
-    set("#fmy-panelbar [data-maya-id='xray']", v.edit && v.edit.xray);
-    set("#fmy-panelbar [data-maya-id='grid']", v.maya && v.maya.grid && v.maya.grid.visible);
-    set("#fmy-panelbar [data-maya-id='wos']", !!v.wireOnShaded);
+    set("#fmy-panelbar [data-pro-id='wire']", !!v.wire);
+    set("#fmy-panelbar [data-pro-id='shaded']", !v.wire);
+    set("#fmy-panelbar [data-pro-id='textured']", !v.clay);
+    set("#fmy-panelbar [data-pro-id='xray']", v.edit && v.edit.xray);
+    set("#fmy-panelbar [data-pro-id='grid']", v.pro && v.pro.grid && v.pro.grid.visible);
+    set("#fmy-panelbar [data-pro-id='wos']", !!v.wireOnShaded);
   }
   for (const [id, k] of [["winOutliner", "outliner"], ["winChannel", "channel"], ["winToolkit", "toolkit"], ["winCreate", "create"], ["winMaterials", "materials"]]) {
-    const on = typeof forgeMayaPanels === "function" ? !!forgeMayaPanels()[k] : false;
-    set('#fmy-status [data-maya-id="' + id + '"], #fmy-toolbox [data-maya-id="' + id + '"]', on);
+    const on = typeof forgeProPanels === "function" ? !!forgeProPanels()[k] : false;
+    set('#fmy-status [data-pro-id="' + id + '"], #fmy-toolbox [data-pro-id="' + id + '"]', on);
   }
   if (v) fmyHudUpdate(v);
   const help = document.getElementById("fmy-help"), status = document.getElementById("forge-status");
@@ -453,7 +453,7 @@ function fmySync() {
   fmyTimeSync();
 }
 
-// Maya's help line names the tool and says what it does when nothing else is being said
+// the pro help line names the tool and says what it does when nothing else is being said
 function fmyToolHint() {
   const v = fmyView();
   if (!v) return "Select Tool: select an object";
@@ -474,11 +474,11 @@ function fmyTimeSync() {
   const v = fmyView();
   const a = +document.getElementById("fmy-rstart").value || 1, b = Math.max(a + 1, +document.getElementById("fmy-rend").value || 120);
   const ticks = ts.querySelector(".fmy-ticks");
-  if (ticks.dataset.range !== a + ":" + b) {                      // Maya numbers every 5th frame
+  if (ticks.dataset.range !== a + ":" + b) {                      // pro numbers every 5th frame
     ticks.dataset.range = a + ":" + b; ticks.textContent = "";
     const step = b - a > 200 ? 20 : b - a > 80 ? 5 : 1;
     for (let f = a; f <= b; f++) {
-      if (f % step && f !== a) continue;                         // on the multiples (5, 10, 15 ...), like Maya
+      if (f % step && f !== a) continue;                         // on the multiples (5, 10, 15 ...), like the pro tools
       const t = fmyEl("span", "fmy-tick" + ((f % 5 === 0 || f === a) ? " lab" : ""), (f % 5 === 0 || f === a) ? String(f) : "");
       t.style.left = ((f - a) / (b - a) * 100) + "%";
       ticks.append(t);
@@ -530,8 +530,8 @@ function fmyPlayback(k) {
   }
 }
 
-// ================================================================== the command line (a small MEL, Maya's names)
-async function forgeMayaCommandLine(line) {
+// ================================================================== the command line (a small command language)
+async function forgeProCommandLine(line) {
   const v = fmyView();
   const t = v && v.tree && v.tree.api;
   const out = [];
@@ -579,7 +579,7 @@ async function forgeMayaCommandLine(line) {
         if (w === "xform" && flags.includes("-cp")) id = "centerPivot";
         if (w === "parent" && flags.includes("-w")) id = "unparent";
         if (!fmyCmd(id)) {
-          const byLabel = typeof FORGE_MAYA_CMDS !== "undefined" ? Object.entries(FORGE_MAYA_CMDS).find(([, c]) => c[0].toLowerCase() === s.toLowerCase()) : null;
+          const byLabel = typeof FORGE_PRO_CMDS !== "undefined" ? Object.entries(FORGE_PRO_CMDS).find(([, c]) => c[0].toLowerCase() === s.toLowerCase()) : null;
           if (byLabel) id = byLabel[0];
         }
         if (!fmyCmd(id)) { out.push("// Error: Cannot find procedure \"" + w + "\""); continue; }
@@ -593,15 +593,15 @@ async function forgeMayaCommandLine(line) {
 }
 
 // ================================================================== the viewport: panel menus, HUD, view cube, grid, lighting
-function forgeMayaViewportAttach(view, ctx) {
+function forgeProViewportAttach(view, ctx) {
   const { THREE, scene, camera, controls, canvas, lights } = ctx;
   const stage = canvas && canvas.parentElement;
   if (!stage || stage.querySelector("#fmy-panelbar")) return;
   stage.classList.add("fmy-stage");
-  view.mayaShade = true;                                      // matte grey lambert1, like Maya (forge.js applyLook)
+  view.proShade = true;                                      // matte grey lambert1, like the pro tools (forge.js applyLook)
   view.cam = view.cam || "persp";
 
-  // ---- Maya's default lighting: one light from the camera, a little ambient, no rim; the old presets stay on 7
+  // ---- the pro default lighting: one light from the camera, a little ambient, no rim; the old presets stay on 7
   const defaultLight = () => {
     if (!lights) return;
     lights.hemi.color.setHex(0xffffff); lights.hemi.groundColor.setHex(0x9a9a9a); lights.hemi.intensity = 0.55;
@@ -615,8 +615,8 @@ function forgeMayaViewportAttach(view, ctx) {
   view.defaultLighting = () => { defaultLight(); return "Default Lighting"; };
   if (view.applyLook) view.applyLook();
 
-  // ---- Maya's grid: dark lines over the gradient, a darker line on each axis through the origin
-  const g = view.maya && view.maya.grid;
+  // ---- the pro grid: dark lines over the gradient, a darker line on each axis through the origin
+  const g = view.pro && view.pro.grid;
   if (g) {
     const [fine, major] = g.children;
     for (const [h, op] of [[fine, 0.2], [major, 0.42]]) {
@@ -640,9 +640,9 @@ function forgeMayaViewportAttach(view, ctx) {
       "#Look Through", ["persp", "persp", look("persp"), () => view.cam === "persp"], ["top", "top", look("top"), () => view.cam === "top"],
       ["front", "front", look("front"), () => view.cam === "front"], ["side", "side", look("side"), () => view.cam === "side"]], "fmy-pmb"),
     fmyMenuButton("Shading", () => ["wire", "shaded", "textured", "-", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!view.wireOnShaded], "xray",
-      ["mayaShade", "Default Material (lambert1)", () => { view.mayaShade = !view.mayaShade; if (view.applyLook) view.applyLook(); }, () => !!view.mayaShade]], "fmy-pmb"),
+      ["proShade", "Default Material (lambert1)", () => { view.proShade = !view.proShade; if (view.applyLook) view.applyLook(); }, () => !!view.proShade]], "fmy-pmb"),
     fmyMenuButton("Lighting", () => [["defLight", "Use Default Lighting", () => view.defaultLighting(), () => view.light === -1], "lights"], "fmy-pmb"),
-    fmyMenuButton("Show", () => [["grid", "Grid", () => fmyRun("grid"), () => !!(view.maya && view.maya.grid && view.maya.grid.visible)],
+    fmyMenuButton("Show", () => [["grid", "Grid", () => fmyRun("grid"), () => !!(view.pro && view.pro.grid && view.pro.grid.visible)],
       ["hudT", "Heads Up Display", () => fmyUiSet("hud"), () => fmyUi().hud], ["cubeT", "View Cube", () => fmyUiSet("viewcube"), () => fmyUi().viewcube],
       ["snapsT", "Snap chips", () => { const s = document.getElementById("forge-snaps"); if (s) s.hidden = !s.hidden; }, () => { const s = document.getElementById("forge-snaps"); return !!(s && !s.hidden); }]], "fmy-pmb"),
     fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true]], "fmy-pmb"),
@@ -724,7 +724,7 @@ function forgeMayaViewportAttach(view, ctx) {
   fmyApply();
 }
 
-// look at the scene from one of the view cube's sides (top / front / side are Maya's orthographic cameras)
+// look at the scene from one of the view cube's sides (top / front / side are the pro orthographic cameras)
 function fmyLookFrom(view, THREE, camera, controls, side, dir) {
   const ortho = { top: "top", front: "front", right: "side" }[side];
   if (ortho) { fmyRun(ortho); return; }
@@ -735,7 +735,7 @@ function fmyLookFrom(view, THREE, camera, controls, side, dir) {
   camera.lookAt(t); controls.update(); view.dirty = true;
 }
 
-// Mesh Display / Shading > Wireframe on Shaded: every mesh shows its edges in dark grey (Maya)
+// Mesh Display / Shading > Wireframe on Shaded: every mesh shows its edges in dark grey
 function fmyWireOnShaded() {
   const v = fmyView();
   if (!v || !v.tree) return "";
@@ -759,7 +759,7 @@ function fmyWireOnShaded() {
   return v.wireOnShaded ? "Wireframe on Shaded." : "Shaded.";
 }
 
-// the heads-up poly count: all visible objects | the selected objects | the selected components (Maya's 3 columns)
+// the heads-up poly count: all visible objects | the selected objects | the selected components (the pro 3 columns)
 const fmyCountCache = new WeakMap(), fmyTopo = new WeakMap();
 function fmyCountGeo(g) {
   let c = fmyCountCache.get(g);

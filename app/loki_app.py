@@ -936,7 +936,7 @@ def bring_up_engine(workspace: Path, holder: dict, stopping) -> tuple:
 
 # --------------------------------------------------------------------- the start screen
 # The window opens at once and shows a start screen while the engine starts (session 30). LOKI's own
-# evolve step E12 designs that screen (a Maya-like splash): it only has to add app/ui/splash.html, a
+# evolve step E12 designs that screen (a pro-style splash): it only has to add app/ui/splash.html, a
 # SELF-CONTAINED page (inline CSS/JS, images as data: URIs - it is shown before the engine serves
 # anything). It may call window.lokiSplash?.() hooks of its own; the app replaces the page with
 # LOKI's window as soon as the engine answers, and writes progress lines into it via

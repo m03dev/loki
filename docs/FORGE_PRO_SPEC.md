@@ -1,22 +1,19 @@
-# Maya 2027, as it really behaves - the spec Forge follows
+# Forge's modelling behaviour - the spec Forge follows
 
-Read off the owner's own install of **Autodesk Maya 2027** on the Mac mini (`/Applications/Autodesk/maya2027`) on
-2026-10-19 by Claude: `scripts/startup/hotkeySetup.mel` (the default hotkey set, 534 bindings),
-`scripts/others/dagMenuProc.mel` (the right-button menu), `contextPolyTools*MM.mel` (Shift+right-button),
-`polyConvertMM.mel` (Ctrl+right-button), `selectMarkingMenuImpl.mel` / `translateMarkingMenuImpl.mel` (q / w + left
-button), `startup/Hotbox*Menu.mel` (the hotbox zones) and `createOutlinerPanelMenu.mel` / `OutlinerEdMenu.mel`.
+Forge follows the conventions of the industry-standard professional modelling packages (owner, 2026-10-19: no
+product or vendor is named anywhere in LOKI). This file lists the *behaviour* - which key does what, which command
+sits at which compass point of a marking menu, how pivots and the Outliner work.
 
-**What this file is, legally:** a list of *facts* about how Maya behaves - which key does what, which command sits at
-which compass point. No Autodesk code, MEL, icon or text is copied into LOKI (LOKI is public AGPL-3.0; Maya's scripts
-are Autodesk's and are not licensed for that). Forge re-implements the behaviour in its own code
-(`app/ui/forge_maya.js`, `app/ui/forge_scene.js`). Keep it that way: read Maya, write LOKI.
+**Legally:** these are facts about behaviour. No third-party code, script, icon or text is copied into LOKI (LOKI is
+public AGPL-3.0). Forge implements the behaviour in its own code (`app/ui/forge_pro.js`, `app/ui/forge_chrome.js`,
+`app/ui/forge_scene.js`). Keep it that way.
 
-Mac: Maya binds every Ctrl shortcut to **Cmd** as well (`-cmd` twins of each `-ctl` line), and Alt is **Option**.
+Mac: every Ctrl shortcut also works with **Cmd**, and Alt is **Option**.
 Forge accepts Ctrl and Cmd alike everywhere.
 
 ## Hotkeys (object and component modelling - the ones Forge implements)
 
-| Key | Maya command | Forge |
+| Key | Command | Forge |
 |---|---|---|
 | q / w / e / r | Select / Move / Rotate / Scale tool | yes |
 | hold q / w / e / r + left button | that tool's marking menu (select: NW Marquee, NE Drag, W Paint, SW Lasso, E Camera-based, SE Clear) | q, w, e |
@@ -41,7 +38,7 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | x / c / v (hold) | Snap to grid / curve / point | all three: grid, the nearest edge (curve), the vertex under the mouse; or switched on in the Snap menu / the Grid-Edge-Point chips |
 | j (hold) | Toggle step snap of the move/rotate/scale tool | yes |
 | - / = | Manipulator smaller / bigger | yes |
-| 0 / 1 / 2 / 3 | Display quality default / low / medium / high (smooth preview) | not yet (FORGE_MAYA.md T9) |
+| 0 / 1 / 2 / 3 | Display quality default / low / medium / high (smooth preview) | not yet (FORGE_PRO.md T9) |
 | 4 / 5 / 6 / 7 | Wireframe / Shaded / Textured / Use all lights | 4, 5, 7 |
 | Ctrl+1 | Isolate select | yes |
 | F8 | Object <-> component | yes |
@@ -49,7 +46,7 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | Ctrl+E / Ctrl+B | Extrude / Bevel | Extrude; Bevel is a task (no bevel op yet) |
 | Shift+> / Shift+< (component) | Grow / shrink selection | yes |
 | Ctrl+A | Attribute Editor (or the Channel Box) | toggles the Channel Box |
-| Space (hold) | Hotbox | yes - Maya's layout: Recent Commands + menu rows around the mouse, the five zones |
+| Space (hold) | Hotbox | yes - the standard layout: Recent Commands + menu rows around the mouse, the five zones |
 | Space (tap) | Single view <-> four views; a tap over a pane maximises THAT pane | yes |
 | Alt+M | Hotbox display rows | - |
 | Return / Esc | Complete current tool / abort it | yes (Esc never closes Forge) |
@@ -67,10 +64,10 @@ is the marking menu.
 
 ## Marking menus - compass layout
 
-**Right button on an object (dagMenuProc).** For a polygon object the component wedges are, in Maya's own fill order
+**Right button on an object .** For a polygon object the component wedges are, in the standard fill order
 N, W, S, E, SW, SE, NW:
 N Edge, W Vertex, S UV, E Face, SW Vertex Face, SE UV Shell, NW Multi - and **NE Object Mode** whenever the object has
-components. Below the ring Maya lists Select, Select All, Deselect, Select Hierarchy, Inverse Selection, Select
+components. Below the ring the menu lists Select, Select All, Deselect, Select Hierarchy, Inverse Selection, Select
 Similar, then Inputs / Outputs, Paint, Actions, material assignment.
 
 **Shift + right button**
@@ -107,9 +104,9 @@ DAG Objects Only and Shapes.
 
 ## Transforms and pivots
 
-A transform node's matrix (Maya's MTransformationMatrix, simplified to one pivot):
+A transform node's matrix (the standard transformation matrix, simplified to one pivot):
 `world = parent * T(translate) * T(pivotTranslate) * T(pivot) * R * S * T(-pivot)`.
-- **Moving the pivot** (d / Insert) does not move the object: Maya keeps *translate* unchanged and absorbs the
+- **Moving the pivot** (d / Insert) does not move the object: Forge keeps *translate* unchanged and absorbs the
   difference in the pivot-translate term, `C += (I - R*S)(P_old - P_new)`.
 - **Center Pivot**: the pivot goes to the centre of the object's bounding box (its children included).
 - **Reset Pivot**: the pivot goes back to the object's own origin.
@@ -120,11 +117,11 @@ A transform node's matrix (Maya's MTransformationMatrix, simplified to one pivot
 - **Duplicate** copies the node with its hierarchy as a sibling, renamed with the next free number (`pCube1` -> `pCube2`).
 - **Shift + drag** with a manipulator duplicates and drags the copy (owner's description of how they work).
 
-## The look (measured off Maya 2027 on the Mac, 2026-10-19 afternoon)
+## The look (measured off the reference package on the Mac, 2026-10-19 afternoon)
 
-Screenshots of the owner's Maya (General workspace, an unsaved scene with a cube) were sampled pixel by pixel:
+Screenshots of the owner's reference package (General workspace, an unsaved scene with a cube) were sampled pixel by pixel:
 
-| Part | Maya | Forge |
+| Part | Reference | Forge |
 |---|---|---|
 | panels, menu bar, status line, tool box | #444444 | same |
 | Outliner list background | #373737 | same |
@@ -134,9 +131,9 @@ Screenshots of the owner's Maya (General workspace, an unsaved scene with a cube
 | shelf tabs / shelf | #383639 / #4a4643, orange-ish icons | same |
 | viewport gradient | #879bb3 top -> #5f7187 -> #2a323d -> #131418 bottom | same stops |
 | grid | dark lines over the gradient, darker axes through the origin | black at low opacity, axes darker |
-| shading | lambert1: flat matte grey, faces #626262-#717171 on screen | matte grey (view.mayaShade), Maya's default light from the camera |
+| shading | lambert1: flat matte grey, faces #626262-#717171 on screen | matte grey (view.proShade), the standard default light from the camera |
 | selection | the object's own edges in teal-green (~#65fdcd), the others white | EdgesGeometry wire (a box only above 80k triangles) |
 | heads-up display | Verts / Edges / Faces / Tris / UVs, three columns (all / selected / components), top-left; camera name bottom-centre; axis triad bottom-left; view cube top-right | same |
-| Channel Box | Channels Edit Object Show menu, name, Translate X..Visibility rows (labels right-aligned), SHAPES, INPUTS | same; INPUTS = Forge's history with Maya's node names |
+| Channel Box | Channels Edit Object Show menu, name, Translate X..Visibility rows (labels right-aligned), SHAPES, INPUTS | same; INPUTS = Forge's history with the standard node names |
 | Outliner | Display Show Help menu, search field, persp / top / front / side greyed first | same |
-| bottom | time slider + range slider (1-120, 24 fps), help line ("Move Tool: ..."), MEL command line | same; the command line runs a small MEL (polyCube, move, select -cl, setAttr, xform -cp ...) |
+| bottom | time slider + range slider (1-120, 24 fps), help line ("Move Tool: ..."), command line | same; the command line runs a small command language (polyCube, move, select -cl, setAttr, xform -cp ...) |

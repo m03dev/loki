@@ -60,7 +60,7 @@ const FORGE_LIGHTS = [
   ["Soft", 0xffffff, 0x60646e, 1.8, 0xffffff, 0.8],
 ];
 const FORGE_STORE = "loki-forge-output";
-const FORGE_MAYA_GREY = 0x9a9a9a;   // lambert1 under Maya's default light reads #626262-#717171 on screen (measured)
+const FORGE_PRO_GREY = 0x9a9a9a;   // lambert1 under the pro default light reads #626262-#717171 on screen (measured)
 
 function forgeBtn(icon, name, what, onClick, cls) {
   const b = el("button", "mini icon-mini forge-btn" + (cls ? " " + cls : ""), name);
@@ -90,15 +90,15 @@ function forgeBuild() {
   }
   const status = el("span", "forge-status"); status.id = "forge-status"; status.setAttribute("role", "status");
   head.append(title, tabs, status, forgeBtn("close", "Close", "Close Forge (Esc).", forgeClose));
-  const body = el("div", "forge-body maya");
-  // Maya's workspace (owner 2026-10-19): the Outliner on the left, the viewport, the Channel Box on the right;
-  // the Create panel, Materials, the shelf and the toolkit come back from the Space menu (Windows) - forge_maya.js
+  const body = el("div", "forge-body pro");
+  // the pro workspace (owner 2026-10-19): the Outliner on the left, the viewport, the Channel Box on the right;
+  // the Create panel, Materials, the shelf and the toolkit come back from the Space menu (Windows) - forge_pro.js
   const outCol = el("aside", "forge-outcol"); outCol.id = "forge-outcol";
   const chanCol = el("aside", "forge-chancol"); chanCol.id = "forge-chancol";
   body.append(outCol, forgeLeft(), forgeStage());
   const mats = el("section", "forge-materials"); mats.id = "forge-materials"; mats.hidden = true;
   body.append(mats, chanCol);
-  panel.classList.add("maya");
+  panel.classList.add("pro");
   panel.append(head, body);
   sheet.append(panel);
   document.body.append(sheet);
@@ -583,13 +583,13 @@ function forgeSide(id) {
     mats.dataset.ready = "1";
     window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => forgeSay("Materials: " + e.message, true));
   }
-  if (typeof forgeMayaPanelsApply === "function") forgeMayaPanelsApply();   // Maya's workspace decides what shows
+  if (typeof forgeProPanelsApply === "function") forgeProPanelsApply();   // the pro workspace decides what shows
   if (forge.view) forge.view.resize();
 }
 
 function forgeOpen() {
   forgeBuild();
-  if (typeof forgeMayaChrome === "function") { try { forgeMayaChrome(); } catch (exc) { console.warn("forge: Maya chrome", exc); } }
+  if (typeof forgeProChrome === "function") { try { forgeProChrome(); } catch (exc) { console.warn("forge: pro chrome", exc); } }
   const sheet = document.getElementById("forge");
   sheet.hidden = false;
   forgeWay(forge.way);
@@ -946,7 +946,7 @@ function forgeMakeView(lib, renderer, canvas) {
   const rim = new THREE.DirectionalLight(0x9fb6d8, 1.2); rim.position.set(-2, 0.5, -2);
   scene.add(hemi); camera.add(key, rim);   // the light turns with the camera: the side you look at is lit
   const controls = new lib.OrbitControls(camera, canvas);
-  controls.enableDamping = false;   // Maya's camera stops the moment the mouse does - no glide (owner: "feel like maya")
+  controls.enableDamping = false;   // the pro camera stops the moment the mouse does - no glide (owner: "feel like pro")
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   const holder = new THREE.Group(); scene.add(holder);
   const transform = new lib.TransformControls(camera, canvas);
@@ -1086,7 +1086,7 @@ function forgeMakeView(lib, renderer, canvas) {
     }
     view.dirty = true;
   };
-  // the time slider (forge_mayaui.js) reads and moves the playing clip
+  // the time slider (forge_chrome.js) reads and moves the playing clip
   view.animInfo = () => {
     const clip = view.anim && anim.clips.find((a) => a.name === view.anim);
     return clip && anim.mixer ? { name: clip.name, dur: clip.duration || 1, t: anim.mixer.time % (clip.duration || 1), paused: !!anim.paused } : null;
@@ -1138,13 +1138,13 @@ function forgeMakeView(lib, renderer, canvas) {
     material.roughnessMap = !clay && m ? m.roughness : null;
     material.metalnessMap = !clay && m ? m.metallic : null;
     material.aoMap = !clay && m ? m.ao : null;
-    // Maya's default look (view.mayaShade, on by default): a matte grey lambert1 - no shine - unless the model has its
-    // own colours or a material; Lighting > "Studio colours" turns it off (forge_mayaui.js)
+    // the pro default look (view.proShade, on by default): a matte grey lambert1 - no shine - unless the model has its
+    // own colours or a material; Lighting > "Studio colours" turns it off (forge_chrome.js)
     const plain = !clay && !m && !material.map && !material.vertexColors;
-    const maya = !!view.mayaShade && plain;
-    material.roughness = m ? 1 : (maya ? 1 : 0.62);
+    const pro = !!view.proShade && plain;
+    material.roughness = m ? 1 : (pro ? 1 : 0.62);
     material.metalness = m ? 1 : 0;
-    material.color.copy(clay ? clayColor : new THREE.Color(maya ? FORGE_MAYA_GREY : 0xffffff));
+    material.color.copy(clay ? clayColor : new THREE.Color(pro ? FORGE_PRO_GREY : 0xffffff));
     material.wireframe = !!view.wire;
     material.needsUpdate = true;
     view.dirty = true;
@@ -1390,7 +1390,7 @@ function forgeMakeView(lib, renderer, canvas) {
   // ---- pointer: in Sculpt mode a left-drag on the model sculpts (OrbitControls keeps everything else)
   let drag = null;
   canvas.addEventListener("pointerdown", (e) => {
-    if (view.mode !== "sculpt" || e.button !== 0 || e.altKey || transform.dragging) return;   // Alt/Option is the camera (Maya)
+    if (view.mode !== "sculpt" || e.button !== 0 || e.altKey || transform.dragging) return;   // Alt/Option is the camera
     const hit = hitAt(e);
     if (!hit || !view.sm) return;
     e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting
@@ -1479,16 +1479,16 @@ function forgeMakeView(lib, renderer, canvas) {
     for (let i = 0; i < idx.length; i++) idx[i] = sm.wid[sm.idx[i]];
     return { pos: sm.wpos.slice(), idx };
   };
-  // selection, picking, box select, the move tool: app/ui/forge_edit.js (component mode, Maya's keys)
+  // selection, picking, box select, the move tool: app/ui/forge_edit.js (component mode, the pro keys)
   view.selected = [];
   view.select = (faces) => { view.selected = faces.slice(); };   // replaced by forge_edit.js
   if (typeof forgeEditAttach === "function") {
     forgeEditAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material,
       mesh: () => mesh, refresh: () => refresh(), hitAt: (e) => hitAt(e) });
   }
-  // Maya's markings, hotbox, hotkeys and camera: app/ui/forge_maya.js
-  if (typeof forgeMayaAttach === "function") {
-    forgeMayaAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material, transform,
+  // the pro markings, hotbox, hotkeys and camera: app/ui/forge_pro.js
+  if (typeof forgeProAttach === "function") {
+    forgeProAttach(view, { THREE, lib, canvas, camera, renderer, holder, controls, scene, material, transform,
       mesh: () => mesh, refresh: () => refresh() });
   }
   // the scene layer (forge_scene.js) hands the tools another object's mesh: plain triangles in the holder's space
@@ -1497,7 +1497,7 @@ function forgeMakeView(lib, renderer, canvas) {
     useMesh(forgeMeshFrom(Float32Array.from(pos), col && col.length === pos.length ? Float32Array.from(col) : null, null, Uint32Array.from(idx)), true);
     view.undoStack = []; view.redoStack = [];
   };
-  // Maya's panels: the perspective camera, or top / front / side. An orthographic view here is the same camera far
+  // the pro panels: the perspective camera, or top / front / side. An orthographic view here is the same camera far
   // away with a 1.5-degree lens - it reads as orthographic, and picking, sculpting and the handles keep working.
   const VIEWS = { top: [0, 1, 0.0001], front: [0, 0, 1], side: [1, 0, 0] };
   view.cam = "persp";
@@ -1518,14 +1518,14 @@ function forgeMakeView(lib, renderer, canvas) {
       const dir = new THREE.Vector3(...VIEWS[name]).normalize();
       camera.position.copy(t).addScaledVector(dir, d);
       camera.near = d / 50; camera.far = d * 50;
-      controls.enableRotate = false;                       // Maya: no tumbling in an orthographic view
+      controls.enableRotate = false;                       // pro: no tumbling in an orthographic view
     }
     if (name === "persp") { const d = camera.position.distanceTo(controls.target) || 3; camera.near = d / 100; camera.far = d * 100; }
     camera.updateProjectionMatrix(); controls.update();
     view.cam = name; view.dirty = true;
     return true;
   };
-  // frame a box (Maya's f / a): keep the direction, fit the distance
+  // frame a box (the pro f / a): keep the direction, fit the distance
   view.frameBox = (box) => {
     if (!box || box.isEmpty()) return view.frame();
     const bs = box.getBoundingSphere(new THREE.Sphere());
@@ -1539,7 +1539,7 @@ function forgeMakeView(lib, renderer, canvas) {
     controls.update();
     view.dirty = true;
   };
-  // Maya's [ and ]: undo / redo a view change (every camera move that ends is remembered)
+  // the pro [ and ]: undo / redo a view change (every camera move that ends is remembered)
   const views = { past: [], future: [], at: null };
   const camState = () => ({ pos: camera.position.clone(), target: controls.target.clone(), fov: camera.fov, cam: view.cam || "persp" });
   controls.addEventListener("start", () => { views.at = camState(); });
@@ -1568,17 +1568,17 @@ function forgeMakeView(lib, renderer, canvas) {
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;
   view.holder = holder;
-  // the scene: objects, groups and the Outliner (docs/FORGE_MAYA.md T1/T2/T3): app/ui/forge_scene.js
+  // the scene: objects, groups and the Outliner (docs/FORGE_PRO.md T1/T2/T3): app/ui/forge_scene.js
   if (typeof forgeSceneAttach === "function") {
     forgeSceneAttach(view, { THREE, scene, holder, material, camera, transform: transform, canvas, controls,
       mesh: () => mesh });
   }
-  // Maya's viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_mayaui.js
+  // the pro viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_chrome.js
   view.lights = { hemi, key, rim };
   view.material = material;
-  if (typeof forgeMayaViewportAttach === "function") {
-    try { forgeMayaViewportAttach(view, { THREE, scene, camera, controls, renderer, canvas, holder, material, lights: view.lights }); }
-    catch (exc) { console.warn("forge: Maya viewport layer", exc); }
+  if (typeof forgeProViewportAttach === "function") {
+    try { forgeProViewportAttach(view, { THREE, scene, camera, controls, renderer, canvas, holder, material, lights: view.lights }); }
+    catch (exc) { console.warn("forge: pro viewport layer", exc); }
   }
   // the scene layer (app/ui/forge_scene.js) bakes geometry - Freeze Transformations, Center Pivot - and
   // needs the aliased buffers pushed back to the GPU afterwards

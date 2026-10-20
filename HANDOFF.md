@@ -19,7 +19,7 @@ Last updated: 2026-10-19 (cleanup; state as of c132c1f on origin/master).
 | --- | --- | --- |
 | Checkout | `~/Documents/loki` -> `/Volumes/LokiSSD/loki` (APFS sparse image on the 2 TB SSD; login item `sh.loki.attach-image` reattaches it) | `C:\Users\macul\Documents\loki` |
 | Python | `harness_data/.venv/bin/python` | `harness_data\.venv\Scripts\python.exe` |
-| Ziva | works on Forge (Maya roadmap) since 2026-10-19 | did W50-W52 on 2026-10-18 |
+| Ziva | works on Forge (pro roadmap) since 2026-10-19 | did W50-W52 on 2026-10-18 |
 | Godot | LOKI's own 4.7.2 for LOKI World; Godot_mono 4.8 dev is Ziva's - never open game/loki-world in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
 
 The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
@@ -102,24 +102,24 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 - app/ui/forge*.js: draw / picture / describe -> 3D (engine/forge3d.py: TripoSR -> TRELLIS Space -> offline lift),
   SculptGL-ported sculpting, Material Maker nodes, primitives + poly ops + DynaMesh (GoBuild port, GPL-3.0),
   Blender-style component editing (forge_edit.js: vert/edge/face, box select, G/R/S, proportional), Quad view.
-- **Maya layer** (forge_maya.js, forge_scene.js; docs/FORGE_MAYA.md): marking menus, hotbox, hotkeys, Alt camera;
+- **pro layer** (forge_pro.js, forge_scene.js; docs/FORGE_PRO.md): marking menus, hotbox, hotkeys, Alt camera;
   T1 scene, T2 Outliner, T3 Group/Ungroup, T4 Channel Box, T4b Freeze/Center Pivot, T5 Shift+drag duplicate,
   T6 construction history for poly ops + DynaMesh (c132c1f, test_forge_ui 62/62). Ziva (Mac) owns this.
 - **Creature creator** (engine/anycreature.py): 6 starters, 9 body-plan sliders, coats, Walk/Idle preview
   (test_anycreature 33, test_forge_creature_ui 8).
 - Not verified: TripoSR on the PC's CUDA / the Mac's MPS (`tools/setup_forge3d.py`), poly editing with a real GPU.
-- **2026-10-19 (Claude): Maya 2027 read off the Mac's own install** -> docs/FORGE_MAYA_SPEC.md (facts only, no
-  Autodesk code). Built on it (forge_scene.js, forge_maya.js; tests/test_forge_maya_ui.py 55 checks, ~23 s): real
-  pivots (Maya's matrix - pivot moves never move the object or change translate), every object editable
+- **2026-10-19 (Claude): the reference package read off the Mac's own install** -> docs/FORGE_PRO_SPEC.md (facts only, no
+  the vendor code). Built on it (forge_scene.js, forge_pro.js; tests/test_forge_pro_ui.py 55 checks, ~23 s): real
+  pivots (the pro matrix - pivot moves never move the object or change translate), every object editable
   (`makeWorking`), Create = new pCube1/pSphere1 objects, Duplicate / Shift+D / Group / Parent / hide / isolate /
-  pick-walk, viewport click + box selection with Maya's modifiers, context marking menus picked by direction,
-  hotbox zones, Space tap one/four views, Top/Front/Side, pivot edit (d), view undo ([), Maya's Outliner. Maya is
-  Maya-only keys (the owner had the Blender set removed). Later the same morning: Maya's workspace (Outliner left,
-  Channel Box right, the rest from Space > Windows, Ctrl+Space), Maya's hotbox layout, x / c / v snapping and a grid.
-- **2026-10-19 afternoon (Claude): Forge LOOKS like Maya** - Maya 2027 screenshotted on the Mac, colours sampled
-  (docs/FORGE_MAYA_SPEC.md "The look"); new app/ui/forge_mayaui.js: menu bar, status line, shelf, tool box, time
+  pick-walk, viewport click + box selection with the pro modifiers, context marking menus picked by direction,
+  hotbox zones, Space tap one/four views, Top/Front/Side, pivot edit (d), view undo ([), the pro Outliner. pro is
+  pro-only keys (the owner had the Blender set removed). Later the same morning: the pro workspace (Outliner left,
+  Channel Box right, the rest from Space > Windows, Ctrl+Space), the pro hotbox layout, x / c / v snapping and a grid.
+- **2026-10-19 afternoon (Claude): Forge LOOKS like the pro tools** - the reference package screenshotted on the Mac, colours sampled
+  (docs/FORGE_PRO_SPEC.md "The look"); new app/ui/forge_chrome.js: menu bar, status line, shelf, tool box, time
   slider, help + MEL command line, the viewport's menus, HUD, view cube, grid, lambert grey, teal selection wire.
-  Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_MAYA.md T7-T12.
+  Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_PRO.md T7-T12.
 
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
@@ -164,7 +164,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
    tested only with the fake desktop.
 6. **Forge**: bevel / loop cut / knife not done (the GoBuild bevel port left the mesh non-closed where three
    selected edges meet - removed, not shipped); extrude of loose verts/edges; commit after a move on 50k+ faces
-   takes ~0.7 s (software GL); a sculpt stroke is not in the construction history (FORGE_MAYA.md T6c).
+   takes ~0.7 s (software GL); a sculpt stroke is not in the construction history (FORGE_PRO.md T6c).
 7. **Small local models pick the wrong tool** (the Mac's qwen3.5-9b answered "draw an arrow on my pad" with
    computer use; a cloud model drew it first try). Model choice, not a missing tool.
 8. **Mac recall is keyword-only** - no embedding model in Ollama ("no embedding model installed in Ollama").
@@ -193,7 +193,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 ## Where to look
 
 - Owner's direction: docs/BUILD_BRIEF.md. Architecture: docs/ARCHITECTURE.md. Roadmap LOKI builds itself: docs/EVOLVE.md.
-- Live Godot: docs/LIVE_GODOT.md. Spaces: docs/SPACES.md. Forge Maya: docs/FORGE_MAYA.md. Studio: docs/STUDIO.md.
+- Live Godot: docs/LIVE_GODOT.md. Spaces: docs/SPACES.md. Forge pro: docs/FORGE_PRO.md. Studio: docs/STUDIO.md.
 - Installers: docs/INSTALL.md, docs/TESTERS.md, docs/SPEED.md. Phone: docs/PHONE.md, mobile/INSTALL_PHONE.md.
 - Off-network link: docs/operations/OFF_NETWORK.md. Session log: docs/operations/SESSION_LOG.md.
 - Full history: docs/operations/archive/HANDOFF_until_2026-10-19.md.

@@ -37,24 +37,28 @@ the W/M numbers below refer to it when a request says "steps: W35".
 - [ ] [either] Owner 17:06: modern high-contrast look, no shelf, tidy menus that open AT the cursor, the camera must
       move exactly like the reference app, no edit-mode wireframes after moving an edge, right-click must behave like
       the reference app, and NO mention of the reference app or its maker anywhere. Claude is renaming the Forge files
-      and identifiers now (forge_maya.js, forge_mayaui.js, docs/FORGE_MAYA*.md, forgeMaya*, FORGE_MAYA_*, .forge-maya-*
-      CSS, data-maya-id) and reworking the Forge UI. Please do NOT touch app/ui/forge*.js, forge.css, the Forge tests
+      and identifiers now (forge_pro.js, forge_chrome.js, docs/FORGE_PRO*.md, forgePro*, FORGE_PRO_*, .forge-pro-*
+      CSS, data-pro-id) and reworking the Forge UI. Please do NOT touch app/ui/forge*.js, forge.css, the Forge tests
       or docs until this line is ticked - pull after it, your next Forge change starts from the renamed files.
+      RENAME DONE (Claude, 17:40): forge_maya.js -> forge_pro.js, forge_mayaui.js -> forge_chrome.js,
+      tests/test_forge_pro_ui.py, docs/FORGE_PRO.md + docs/FORGE_PRO_SPEC.md, forgeMaya* -> forgePro*, view.maya ->
+      view.pro, .forge-maya-* -> .forge-pro-*, data-maya-* -> data-pro-*. Claude is still reworking the look, menus,
+      right-click, camera and edit overlays - keep off Forge until the box above is ticked; other areas are fine.
 
-### Heads-up from Claude (2026-10-19 13:50) - Forge's LOOK is being rebuilt from screenshots of Maya on the Mac
-- [x] [either] Owner 13:10: "make it look and feel more like maya ... do more research". Claude looked at Maya 2027
+### Heads-up from Claude (2026-10-19 13:50) - Forge's LOOK is being rebuilt from screenshots of pro on the Mac
+- [x] [either] Owner 13:10: "make it look and feel more like pro ... do more research". Claude looked at the reference package
       on the Mac and sampled its real colours (#444444 panels, #373737 lists, #2b2b2b fields, #5285a6 selection,
-      viewport gradient #879bb3 -> #131418, green selection wireframe, flat grey shading). Claude is adding Maya's
-      chrome in a NEW file app/ui/forge_mayaui.js (+ a section at the end of forge.css): menu bar, status line,
-      shelf, tool box, the viewport's own menu bar, HUD (poly count, axis, camera name, view cube), Maya's Channel
-      Box layout (channels / SHAPES / INPUTS = the history), Maya's Outliner look, help line + command line.
+      viewport gradient #879bb3 -> #131418, green selection wireframe, flat grey shading). Claude is adding pro's
+      chrome in a NEW file app/ui/forge_chrome.js (+ a section at the end of forge.css): menu bar, status line,
+      shelf, tool box, the viewport's own menu bar, HUD (poly count, axis, camera name, view cube), the pro Channel
+      Box layout (channels / SHAPES / INPUTS = the history), the pro Outliner look, help line + command line.
       Small hooks in forge.js / forge_scene.js only. Please keep to forge_poly.js / forge_model.js ops (your loop
       cut is great - Claude will put it on the shelf) and pull before touching the other Forge files; Claude will
       tick this when shipped.
-  -> Claude, ~14:45: shipped ("Forge looks like Maya"). Forge is yours again - pull first. New for you, in this order:
-     [mac] M-F9 The manipulator in Maya's style: re-skin three.js' TransformControls (thin axis lines, small cone tips,
-           hollow yellow centre square, small tinted plane squares; the active axis yellow) - look at Maya beside it.
-     [mac] M-F10 Re-skin the marking menus and the hotbox to Maya's exact look (light grey item boxes with dark text,
+  -> Claude, ~14:45: shipped ("Forge looks like the pro tools"). Forge is yours again - pull first. New for you, in this order:
+     [mac] M-F9 The manipulator in the pro style: re-skin three.js' TransformControls (thin axis lines, small cone tips,
+           hollow yellow centre square, small tinted plane squares; the active axis yellow) - look at pro beside it.
+     [mac] M-F10 Re-skin the marking menus and the hotbox to the pro exact look (light grey item boxes with dark text,
            the line from the centre to the mouse); they still use the blue-grey theme.
      [either] M-F11 Attribute Editor (Ctrl+A): tabs pCube1 / pCube1Shape / polyCube1 with folding sections - a panel
            in Windows, fed by the same node data as the Channel Box.
@@ -62,23 +66,23 @@ the W/M numbers below refer to it when a request says "steps: W35".
            command line usable, Ctrl+Space and the view cube work. Report what Windows does differently.
 
 ### Heads-up from Claude (2026-10-19 05:30) - Forge is being reworked right now
-- [ ] [mac] **Pull before you touch Forge.** The owner asked (05:23): Forge must LOOK like Maya - a big viewport, the
+- [ ] [mac] **Pull before you touch Forge.** The owner asked (05:23): Forge must LOOK like the pro tools - a big viewport, the
       Outliner on the left, the Channel Box on the right, everything else hidden and brought back from the Space
-      menu (hotbox > Windows); the Space menu made like Maya's; **Blender hotkeys and mouse moves removed - Maya
+      menu (hotbox > Windows); the Space menu made like the standard one; **Blender hotkeys and mouse moves removed - pro
       only**; grid / vertex / edge snapping on x / v / c. Claude is editing app/ui/forge.js, forge.css,
-      forge_edit.js, forge_model.js, forge_maya.js, forge_scene.js and the Forge tests until this line is ticked.
+      forge_edit.js, forge_model.js, forge_pro.js, forge_scene.js and the Forge tests until this line is ticked.
       Until then work on M-F2..M-F6 in forge_poly.js (bevel, edge loop, ...) - that file is yours, Claude won't
-      touch it. Tick this line yourself once you've pulled Claude's ship that says "Forge Maya workspace".
-  -> Claude, 2026-10-19 ~06:00: shipped ("Forge Maya workspace"). Pull, then Forge is yours again. What changed for
+      touch it. Tick this line yourself once you've pulled Claude's ship that says "Forge pro workspace".
+  -> Claude, 2026-10-19 ~06:00: shipped ("Forge pro workspace"). Pull, then Forge is yours again. What changed for
      you: no Blender keys anywhere (forge_model.js's key handler is gone, forge_edit has no Alt+click / middle-orbit);
      the Model bar, the shelf and the Create panel are hidden until Space > Windows; snapping is
-     forgeMayaSnapPoint (forge_maya.js) with a hook in forge_edit's handle (view.snapPivot). New for M-F1: check
+     forgeProSnapPoint (forge_pro.js) with a hook in forge_edit's handle (view.snapPivot). New for M-F1: check
      every snap with a real mouse, and the hotbox rows at the screen edges.
   -> Claude, ~06:30: your 644e291 (the Space wheel) landed while this was in flight - merged, nothing of yours dropped:
      Space opens YOUR wheel at the mouse, now with all twelve menus (Recent + the hotbox's eleven), drop-downs open
      outward (a long one covered its own wedge), ticks on switches, "All menus" -> the full hotbox. Your
      window.forgePanels and mine used the SAME localStorage key with different meanings - forgePanels is now an
-     adapter on forgeMayaPanels (one store); hideAll/showAll, the UI button and the Outliner fold all still work.
+     adapter on forgeProPanels (one store); hideAll/showAll, the UI button and the Outliner fold all still work.
      Next time please check this Requests block before shipping Forge - it said Claude had these files open.
 
 ### Do first (Claude, 2026-10-19 04:10)
@@ -88,7 +92,7 @@ is linked".
 - [ ] [windows] 1. Restart LOKI on the PC so it takes the waiting update (Spaces is now a full-window tab: 6 tabs in
       the title bar). If the engine still does not answer, paste the last 40 lines of harness_data/app/loki_bridge.log here.
 - [ ] [windows] 2. Godot tab > Open LOKI World in Godot, so you and the other agents are linked again (docs/LIVE_GODOT.md).
-- [ ] [windows] 3. Only then: the Spaces campfires in LOKI World (Spaces below). Keep Forge Maya work in its own commits.
+- [ ] [windows] 3. Only then: the Spaces campfires in LOKI World (Spaces below). Keep Forge pro work in its own commits.
 
 ### Spaces (Claude, 2026-10-19)
 - [ ] [either] game/loki-world: poll `GET /spaces/world` (bearer, like /world/presence) and draw each lobby / voice
@@ -100,7 +104,7 @@ is linked".
       WebView2), whether Windows / macOS asked to allow incoming connections, and (Mac) whether Loki.app was rebuilt
       with tools/macos/make_loki_app.sh (its Info.plist carries NSMicrophoneUsageDescription). (Claude, 2026-10-19)
 
-### Forge (Claude, 2026-10-19; Ziva Mac owns the Maya roadmap, docs/FORGE_MAYA.md)
+### Forge (Claude, 2026-10-19; Ziva Mac owns the pro roadmap, docs/FORGE_PRO.md)
 - [ ] [either] With a real GPU on the Mac AND the PC: Forge > Model, cube, 1/2/3 select, drag a box, G/R/S, W handle,
       Alt+click loop; Forge > Creature: every starter builds, Walk plays.
 - [ ] [either] Poly: loop cut (Ctrl+R) and bevel (Ctrl+B) using P.topology / P.edgeRing in app/ui/forge_poly.js (the
@@ -109,7 +113,7 @@ is linked".
 - [ ] [either] Poly: speed up commit after a move on 50k+ face meshes (view.showPoly rebuild in forge.js; ~0.7 s now).
 - [ ] [either] Creature: a tail-curl / stance slider, and bipeds (a second skeleton base) - add to SHAPE/PRESETS in
       engine/anycreature.py, probe extremes so they stand.
-- [ ] [mac] FORGE_MAYA.md T6c: a sculpt stroke in the construction history (recorded vertex deltas, or the sculpt
+- [ ] [mac] FORGE_PRO.md T6c: a sculpt stroke in the construction history (recorded vertex deltas, or the sculpt
       engine callable on a snapshot) - the design is in the doc.
 - [ ] [windows] Forge with TripoSR on the RTX 3070 Ti: `harness_data\.venv\Scripts\python.exe tools\setup_forge3d.py`,
       then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps
@@ -248,15 +252,15 @@ pass; move it, keep it behind a setting, or archive it (docs/operations/archive/
 5. About once an hour: run LOKI like a new user for 5 minutes (chat, a background job, Forge, Spaces); anything
    broken becomes a new request line for your machine and goes to the top of your list.
 
-**Ziva (Mac) - Forge, the Maya way.** Maya 2027 is installed on this Mac: open it next to Forge and copy how it
-*feels*. Spec: docs/FORGE_MAYA_SPEC.md (read off Maya's own scripts). Roadmap: docs/FORGE_MAYA.md. Suite:
-tests/test_forge_maya_ui.py (keep it under a minute, add to it, never take checks out).
-- [ ] M-F1 (T7) Twenty minutes in Forge with Maya open beside it, WKWebView, mouse AND trackpad: every hotkey in
+**Ziva (Mac) - Forge, the pro way.** the reference package is installed on this Mac: open it next to Forge and copy how it
+*feels*. Spec: docs/FORGE_PRO_SPEC.md (read off its own scripts). Roadmap: docs/FORGE_PRO.md. Suite:
+tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks out).
+- [ ] M-F1 (T7) Twenty minutes in Forge with pro open beside it, WKWebView, mouse AND trackpad: every hotkey in
       the spec table, Option + the three buttons, the hotbox zones, Space tap over each pane, marking menus flicked
       fast (direction only), Outliner drag / Shift-range / right-click, d pivot edit, Shift+drag duplicate. Report
-      every place Forge does something different from Maya, then fix the top 5.
+      every place Forge does something different from pro, then fix the top 5.
 - [ ] M-F2 (T8) Bevel (Ctrl+B) on edges and faces in app/ui/forge_poly.js (GoBuild, GPL-3.0, vendored) as a history
-      op, a forge_poly test, then turn on the greyed "Bevel" wedges in forge_maya.js (FORGE_MAYA_CMDS.bevel).
+      op, a forge_poly test, then turn on the greyed "Bevel" wedges in forge_pro.js (FORGE_PRO_CMDS.bevel).
 - [ ] M-F3 (T8) Insert Edge Loop and Multi-Cut, same way (P.edgeRing exists).
 - [ ] M-F4 (T8) Merge / Merge to Center, Fill Hole, Chamfer Vertex, Poke Face - one ship each.
 - [ ] M-F5 (T10) Save .glb writes the whole scene (every visible node, hierarchy, transforms, not the selection
@@ -269,9 +273,9 @@ tests/test_forge_maya_ui.py (keep it under a minute, add to it, never take check
 
 **Ziva (Windows) - keep the PC healthy, then the review items that need a real PC.**
 - [ ] W-1 The "Do first" block above (engine not answering, update waiting, no Godot editor linked).
-- [ ] W-2 Forge on WebView2: open Forge, run through the Maya hotkeys in docs/FORGE_MAYA_SPEC.md once (Ctrl, not
+- [ ] W-2 Forge on WebView2: open Forge, run through the pro hotkeys in docs/FORGE_PRO_SPEC.md once (Ctrl, not
       Cmd; Alt camera; Space tap; Ctrl+Space; Alt+X), report anything WebView2 eats (Alt opens the window menu? F10
-      focuses the menu bar? Ctrl+H / Ctrl+D taken by the browser?) - fix with preventDefault in app/ui/forge_maya.js.
+      focuses the menu bar? Ctrl+H / Ctrl+D taken by the browser?) - fix with preventDefault in app/ui/forge_pro.js.
 - [ ] W-3 engine/data_sandbox.py (review, 9f928fe): the Windows Job Object memory cap never reports "memory" -
       the child gets a MemoryError instead of going over the peak. Make it `peak >= 0.95 * memory_mb or
       "MemoryError" in err`, check it on the PC with a 200 MB cap, add the case to its test.
@@ -332,8 +336,8 @@ looks like a leftover debug script: ask there before touching it.
 
 <!-- newest first: YYYY-MM-DD machine (who) task: what happened. The last ~15 are kept here; older ones are in
      docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md. -->
-- 2026-10-19 ~05:00, Claude (cloud): Forge's Maya layer rebuilt from Maya 2027's own scripts on the Mac
-  (docs/FORGE_MAYA_SPEC.md; FORGE_MAYA.md "2026-10-19"); tests/test_forge_maya_ui.py 55/55 in 23 s, test_forge_ui
+- 2026-10-19 ~05:00, Claude (cloud): Forge's pro layer rebuilt from the reference package's own scripts on the Mac
+  (docs/FORGE_PRO_SPEC.md; FORGE_PRO.md "2026-10-19"); tests/test_forge_pro_ui.py 55/55 in 23 s, test_forge_ui
   34/34, test_forge_edit_ui 20/20 (Blender set), model/creature/poly suites green. Review fixes: Spaces member
   takeover refused (test_spaces 35/35), DynaMesh step 0 can't be removed, sculpt-history recorder (fa19bc1) merged and only records real strokes,
   local model resolve keeps the size, uninstall --purge says truthfully that keys stay, *.md eol=lf, Blender's

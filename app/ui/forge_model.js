@@ -1,5 +1,5 @@
 // Forge's Model bar (owner 2026-10-18: "primitives, dynomesh ... poly modeling", "loves modular things with sliders").
-// Add a primitive and shape it with sliders; select vertices, edges or faces the Maya way (F9 F10 F11, click,
+// Add a primitive and shape it with sliders; select vertices, edges or faces the pro way (F9 F10 F11, click,
 // box, double-click loops - app/ui/forge_edit.js), move / rotate / scale them (w e r handles, soft selection b),
 // then Extrude / Inset / Delete / Flip /
 // Smooth (Catmull-Clark); every last operation keeps a slider that re-does it live (like Blender's redo panel);
@@ -190,8 +190,8 @@ async function forgeAddPrimitive(kind) {
 }
 
 // --------------------------------------------------------------------------------- construction history
-// docs/FORGE_MAYA.md T6. Every operation that builds the mesh is kept, in order, with the parameters it was
-// made with, so any step can be re-opened, changed and the whole model rebuilt from the first one - Maya's
+// docs/FORGE_PRO.md T6. Every operation that builds the mesh is kept, in order, with the parameters it was
+// made with, so any step can be re-opened, changed and the whole model rebuilt from the first one - pro's
 // construction history. The ops were already pure functions of (mesh, faces, amount), so this is the stack.
 function forgeHistCopy(value) {
   if (ArrayBuffer.isView(value)) return value.slice();
@@ -392,4 +392,4 @@ async function forgeDynamesh() {
   forgeSay("DynaMesh: " + out.f.length.toLocaleString() + " even quads in " + Math.round(performance.now() - t0) + " ms - sculpt on, or edit faces.");
 }
 
-// Model mode's keys are Maya's now (app/ui/forge_maya.js) - the owner had Blender's keys removed (2026-10-19).
+// Model mode's keys are the pro now (app/ui/forge_pro.js) - the owner had Blender's keys removed (2026-10-19).

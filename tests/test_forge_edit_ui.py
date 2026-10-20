@@ -1,4 +1,4 @@
-"""Forge's component mode in headless Chromium (app/ui/forge_edit.js + forge_poly.js), with Maya's keys only (owner
+"""Forge's component mode in headless Chromium (app/ui/forge_edit.js + forge_poly.js), with the pro keys only (owner
 2026-10-19): F9 / F10 / F11 vertex / edge / face with REAL mouse events - a click picks the nearest vertex, Shift
 toggles, Ctrl takes away, a dragged box takes only what you can see (X-ray, Alt+X, takes the back too), a double-click
 on an edge selects its loop, Alt+click is only ever the camera - and the handles: w / e / r on the selection, dragging
@@ -122,7 +122,7 @@ async def main():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         await page.evaluate("forgeOpen()")
         await page.wait_for_function("!!(forge.view && forge.view.showPoly && forge.view.setSelMode)", timeout=20000)
-        await page.evaluate("forgeModelMode(true)")            # F8 / the Modeling Toolkit is hidden by default (Maya's workspace)
+        await page.evaluate("forgeModelMode(true)")            # F8 / the Modeling Toolkit is hidden by default (the pro workspace)
         await page.evaluate("document.querySelector(\"#forge [data-prim='cube']\").click()")
         await page.evaluate("forgeModelMode(true)")
         await page.evaluate("""() => { const i = document.querySelector('#forge-model-params input'); i.value = '3'; i.dispatchEvent(new Event('input')); forge.view.frame(); }""")
@@ -154,7 +154,7 @@ async def main():
         check("Shift+click adds a second vertex (and the edge between them follows)", r["v"] == 2 and r["e"] == 1, r)
         await page.keyboard.down("Control"); await page.mouse.click(pt2[0], pt2[1]); await page.keyboard.up("Control")
         r = await page.evaluate(sel)
-        check("Ctrl+click takes it away again (Maya)", r["v"] == 1, r)
+        check("Ctrl+click takes it away again", r["v"] == 1, r)
         await page.mouse.click(cx + 8, cy + ch - 8)
         r = await page.evaluate(sel)
         check("a click on nothing deselects", r["v"] == 0, r)
@@ -204,7 +204,7 @@ async def main():
         r = await page.evaluate("() => ({ on: !!forge.view.gizmo.object, mode: forge.view.gizmo.mode, at: forge.view.gizmo.object && forge.view.gizmo.object.position.toArray(), c: ForgePoly.median(forge.view.poly, forge.view.selectedVerts()) })")
         check("w puts the move handle on the selection's middle", r["on"] and r["mode"] == "translate" and all(abs(a - b) < 1e-6 for a, b in zip(r["at"], r["c"])), r)
         await page.keyboard.press("w")
-        check("...and w again keeps it (Maya does not toggle the tool off)", await page.evaluate("!!forge.view.gizmo.object"))
+        check("...and w again keeps it (pro does not toggle the tool off)", await page.evaluate("!!forge.view.gizmo.object"))
         await page.keyboard.press("e")
         rot = await page.evaluate("forge.view.gizmo.mode")
         await page.keyboard.press("r")
@@ -257,7 +257,7 @@ async def main():
         n2 = await page.evaluate("forge.view.selected.length")
         await page.keyboard.press("<")
         n3 = await page.evaluate("forge.view.selected.length")
-        check("> grows, Ctrl+Shift+I inverts, < shrinks (Maya)", n1 > n0 and n2 == 54 - n1 and n3 < n2, (n0, n1, n2, n3))
+        check("> grows, Ctrl+Shift+I inverts, < shrinks", n1 > n0 and n2 == 54 - n1 and n3 < n2, (n0, n1, n2, n3))
 
         await page.keyboard.press("F9")
         await page.evaluate("forge.view.selectItems('vert', [0], 'set')")

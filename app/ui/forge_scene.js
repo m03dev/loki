@@ -1,23 +1,23 @@
-// Forge's scene - Maya's DAG: transform nodes with shapes and children, real pivots, and the Outliner
+// Forge's scene - the pro DAG: transform nodes with shapes and children, real pivots, and the Outliner
 // (owner 2026-10-19: "the groups different object and hierarchy, history and transforms. Reset pivot all of it ...
-// especially the outliner and the logic behind it all"). The behaviour is read off Maya 2027 itself -
-// docs/FORGE_MAYA_SPEC.md - and re-written here; no Autodesk code is used.
+// especially the outliner and the logic behind it all"). The behaviour is read off the reference package itself -
+// docs/FORGE_PRO_SPEC.md - and re-written here; no the vendor code is used.
 //
 // Every node is two three.js groups:
 //     outer  (the transform node: position = T + C + P, rotation R, scale S)
 //       inner  (position -P: the pivot offset)
 //         shape mesh + the children's outer groups
-// so   world = parent * T(translate) * T(C) * T(P) * R * S * T(-P)   - Maya's matrix with one pivot P and the
+// so   world = parent * T(translate) * T(C) * T(P) * R * S * T(-P)   - the pro matrix with one pivot P and the
 // pivot-translate C that keeps the object still when its pivot moves: C += (I - R*S)(P_old - P_new).
-// The Channel Box shows T, which a pivot move never changes (Maya's rule).
+// The Channel Box shows T, which a pivot move never changes (the pro rule).
 //
 // One node is the WORKING object: its inner group is the viewer's `holder`, the mesh the sculpt and poly tools
 // edit. Any other mesh node becomes the working one when you edit it (api.makeWorking) - the holder moves into
 // that node and the old working object keeps a static copy of its geometry - so every object is editable, like
-// Maya, while the tools still edit one mesh.
+// pro, while the tools still edit one mesh.
 "use strict";
 
-// Maya's construction-history node for each Forge step
+// the pro construction-history node for each Forge step
 const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
   smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
   sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", bevel: "polyBevel" };
@@ -29,7 +29,7 @@ function scnEl(tag, cls, text) {
   return n;
 }
 
-const FORGE_SEL_LEAD = 0x65fdcd, FORGE_SEL_REST = 0xf2f4f7;     // Maya: the last selected teal-green (measured off Maya 2027), the rest white
+const FORGE_SEL_LEAD = 0x65fdcd, FORGE_SEL_REST = 0xf2f4f7;     // pro: the last selected teal-green (measured off the reference package), the rest white
 
 function forgeSceneAttach(view, ctx) {
   const { THREE, scene, holder, material } = ctx;
@@ -42,7 +42,7 @@ function forgeSceneAttach(view, ctx) {
   const node = (id) => tree.byId[id];
   const kidsOf = (id) => tree.nodes.filter((n) => n.parent === id);
 
-  // ---------------------------------------------------------------- pivots (Maya's transform matrix)
+  // ---------------------------------------------------------------- pivots (the pro transform matrix)
   function rsMatrix(n) { return new THREE.Matrix4().compose(new THREE.Vector3(), n.grp.quaternion, n.grp.scale); }
   function translateOf(n) { return n.grp.position.clone().sub(n.pc).sub(n.piv); }
   function place(n, T) {
@@ -73,7 +73,7 @@ function forgeSceneAttach(view, ctx) {
   }
 
   // ---------------------------------------------------------------- the nodes
-  function nextName(base) {                          // pCube1 -> pCube2: Maya's next free number
+  function nextName(base) {                          // pCube1 -> pCube2: the pro next free number
     const stem = String(base || "object").replace(/\d+$/, "") || "object";
     let hi = 0;
     for (const n of tree.nodes) {
@@ -183,7 +183,7 @@ function forgeSceneAttach(view, ctx) {
     if (at < 0) tree.nodes.push(n); else tree.nodes.splice(at, 0, n);
   }
 
-  function cloneNode(src, parentId) {                // a deep copy with its hierarchy (Maya's Duplicate)
+  function cloneNode(src, parentId) {                // a deep copy with its hierarchy (the pro Duplicate)
     const n = makeNode(nextName(src.name), src.kind, parentId, null);
     n.grp.quaternion.copy(src.grp.quaternion); n.grp.scale.copy(src.grp.scale);
     n.piv.copy(src.piv); n.pc.copy(src.pc);
@@ -208,7 +208,7 @@ function forgeSceneAttach(view, ctx) {
       const n = node(id);
       if (!n) return;
       const col = new THREE.Color(i === tree.sel.length - 1 ? FORGE_SEL_LEAD : FORGE_SEL_REST);
-      // Maya draws the selected object's own edges in the selection colour - a wireframe, not a box. The edges are the
+      // pro draws the selected object's own edges in the selection colour - a wireframe, not a box. The edges are the
       // polygon edges (EdgesGeometry hides the flat diagonals a quad is split into); a very big mesh keeps the box.
       const meshes = [];
       n.inner.traverse((o) => { if (o.isMesh && o.geometry && o.name !== "forge-sel" && o.visible) meshes.push(o); });
@@ -253,7 +253,7 @@ function forgeSceneAttach(view, ctx) {
     root: () => root(),
     nextName: nextName,
 
-    // a static copy of the working mesh as a new object (kept for older callers - Duplicate is the Maya way)
+    // a static copy of the working mesh as a new object (kept for older callers - Duplicate is the pro way)
     add(name) {
       const r = root();
       if (!hasGeometry(r)) return null;
@@ -263,7 +263,7 @@ function forgeSceneAttach(view, ctx) {
       return n;
     },
 
-    // Maya's Duplicate (Ctrl/Cmd+D): every selected node with its hierarchy, as a sibling, in place
+    // the pro Duplicate (Ctrl/Cmd+D): every selected node with its hierarchy, as a sibling, in place
     duplicate(name, ids) {
       const list = (ids || (tree.sel.length ? tree.sel : [root().id])).map(node).filter(Boolean)
         .filter((n, _, all) => !all.some((o) => o !== n && isAncestor(o.id, n.id)));
@@ -279,7 +279,7 @@ function forgeSceneAttach(view, ctx) {
       return made[made.length - 1];
     },
 
-    // Maya's Duplicate with Transform (Shift+D): one more copy, offset again by what moved the last copy
+    // the pro Duplicate with Transform (Shift+D): one more copy, offset again by what moved the last copy
     duplicateWithTransform() {
       const pairs = (tree.lastDup || []).filter((p) => node(p.src) && node(p.copy) && tree.sel.includes(p.copy));
       if (!pairs.length) return api.duplicate();
@@ -321,7 +321,7 @@ function forgeSceneAttach(view, ctx) {
     },
     showAll() { for (const n of tree.nodes) api.setVisible(n.id, true); },
 
-    remove(id) {                                     // the node and everything under it (Maya's Delete)
+    remove(id) {                                     // the node and everything under it (the pro Delete)
       const n = node(id);
       if (!n) return false;
       if (n.root || isAncestor(id, tree.rootId)) {   // never delete the holder: keep the children, empty the mesh
@@ -337,7 +337,7 @@ function forgeSceneAttach(view, ctx) {
     },
     removeSelected() { let k = 0; for (const id of tree.sel.slice()) if (api.remove(id)) k++; return k; },
 
-    // parent under ANY node (Maya parents under any transform); three.js' attach() keeps the world transform
+    // parent under ANY node (pro parents under any transform); three.js' attach() keeps the world transform
     reparent(id, parentId, beforeId) {
       const n = node(id), p = parentId ? node(parentId) : null;
       if (!n || (parentId && !p) || n === p || (p && isAncestor(n.id, p.id))) return false;
@@ -347,7 +347,7 @@ function forgeSceneAttach(view, ctx) {
       moveInArray(n, beforeId || 0);
       tree.build(); return true;
     },
-    // Maya's p: the LAST selected is the parent of the others; Shift+P: back to the world
+    // the pro p: the LAST selected is the parent of the others; Shift+P: back to the world
     parentSelected() {
       if (tree.sel.length < 2) return false;
       const parent = tree.sel[tree.sel.length - 1];
@@ -356,7 +356,7 @@ function forgeSceneAttach(view, ctx) {
     },
     unparentSelected() { for (const id of tree.sel) api.reparent(id, 0); return tree.sel.length > 0; },
 
-    // Maya's Group: a new transform, translate 0, pivot at the centre of its contents, under the selection's parent
+    // the pro Group: a new transform, translate 0, pivot at the centre of its contents, under the selection's parent
     group(name, ids) {
       const list = (ids && ids.length ? ids : tree.sel).map(node).filter(Boolean)
         .filter((n, _, all) => !all.some((o) => o !== n && isAncestor(o.id, n.id)));
@@ -417,7 +417,7 @@ function forgeSceneAttach(view, ctx) {
     },
     selected: () => tree.sel.slice(),
 
-    // Maya's pick-walk (the arrow keys): up to the parent, down to the first child, left/right to the siblings
+    // the pro pick-walk (the arrow keys): up to the parent, down to the first child, left/right to the siblings
     pickWalk(dir) {
       const n = node(tree.sel[tree.sel.length - 1]);
       if (!n) { const first = tree.nodes.find((x) => x.parent === 0); if (first) api.select(first.id); return !!first; }
@@ -434,7 +434,7 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
-    // the node's own transform - what Maya's Channel Box shows (translate excludes the pivot terms)
+    // the node's own transform - what the pro Channel Box shows (translate excludes the pivot terms)
     transform(id) {
       const n = node(id || api.active().id);
       if (!n) return null;
@@ -464,7 +464,7 @@ function forgeSceneAttach(view, ctx) {
     // the pivot's place in the world (where the manipulator sits)
     pivotWorld(id) { const n = node(id || api.active().id); if (!n) return null; n.grp.updateMatrixWorld(true); return n.grp.getWorldPosition(new THREE.Vector3()); },
 
-    // Maya's Modify > Center Pivot: the pivot moves to the middle of the object (children included), nothing moves
+    // the pro Modify > Center Pivot: the pivot moves to the middle of the object (children included), nothing moves
     centerPivot(id) {
       const n = node(id || api.active().id);
       if (!n) return false;
@@ -473,7 +473,7 @@ function forgeSceneAttach(view, ctx) {
       setPivot(n, box.getCenter(new THREE.Vector3()));
       return true;
     },
-    // Maya's Reset Pivot: back on the object's own origin
+    // the pro Reset Pivot: back on the object's own origin
     resetPivot(id) {
       const n = node(id || api.active().id);
       if (!n) return false;
@@ -481,7 +481,7 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
-    // Maya's Freeze Transformations: translate/rotate/scale go into the geometry (and the children), the node reads
+    // the pro Freeze Transformations: translate/rotate/scale go into the geometry (and the children), the node reads
     // 0 / 0 / 1, and the pivot stays where it was in the world
     freeze(id) {
       const n = node(id || api.active().id);
@@ -501,7 +501,7 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
-    // Maya's Reset Transformations: translate/rotate/scale back to 0/0/1, the geometry is not touched
+    // the pro Reset Transformations: translate/rotate/scale back to 0/0/1, the geometry is not touched
     resetTransform(id) {
       const n = node(id || api.active().id);
       if (!n) return false;
@@ -580,7 +580,7 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
-    // a new, empty working object (Maya: every Create command makes a new node) - the old one stays as it is
+    // a new, empty working object (pro: every Create command makes a new node) - the old one stays as it is
     newObject(name) {
       const r = root();
       if (!hasGeometry(r)) { if (name) { r.name = "\u0000"; api.rename(r.id, nextName(name)); r.auto = false; } return r; }
@@ -594,7 +594,7 @@ function forgeSceneAttach(view, ctx) {
   tree.api = api;
   api.say = (text, bad) => { if (typeof forgeSay === "function") forgeSay(text, bad); };
 
-  // the manipulator follows the selection (Maya: the tool's handle sits on the selected object's pivot)
+  // the manipulator follows the selection (pro: the tool's handle sits on the selected object's pivot)
   const tc = ctx.transform || null;
   api.attachTool = (mode) => {
     if (!tc) return false;
@@ -708,7 +708,7 @@ function forgeSceneAttach(view, ctx) {
       if (api.freeze()) api.say("Transformations frozen (Modify > Freeze Transformations)."); else api.say("Select an object first.", true);
     });
     head.append(bar);
-    // Maya's Outliner: its own Display / Show / Help menu and a search field above the list
+    // the pro Outliner: its own Display / Show / Help menu and a search field above the list
     const menus = scnEl("div", "forge-panel-menus");
     const mk = (label, items) => {
       const m = scnEl("button", "forge-pm", label); m.type = "button";
@@ -755,7 +755,7 @@ function forgeSceneAttach(view, ctx) {
     return box;
   }
 
-  api.reveal = () => {                               // Maya's Reveal Selected: open the parents, scroll to it
+  api.reveal = () => {                               // the pro Reveal Selected: open the parents, scroll to it
     for (const id of tree.sel) for (let p = node(id) && node(id).parent; p; p = node(p).parent) node(p).open = true;
     tree.build();
     const r = tree.list && tree.list.querySelector(".forge-out-row.on");
@@ -858,14 +858,14 @@ function forgeSceneAttach(view, ctx) {
     if (list) {
       list.textContent = "";
       const f = tree.filter || "";
-      // Maya lists its four default cameras first, greyed; a click looks through that camera
+      // pro lists its four default cameras first, greyed; a click looks through that camera
       if (tree.showCams !== false && !f) {
         for (const cam of ["persp", "top", "front", "side"]) {
           const r = scnEl("div", "forge-out-cam" + (view.cam === cam ? " looking" : ""));   // not a .forge-out-row: cameras are not scene nodes
           r.dataset.cam = cam; r.style.paddingLeft = "18px";
           r.append(scnEl("span", "forge-out-kind kind-camera", ""), scnEl("span", "forge-out-name", cam));
           r.title = "Look through " + cam + ".";
-          r.addEventListener("click", () => { if (typeof forgeMayaView === "function") { forgeMayaView(view, cam); tree.build(); } });
+          r.addEventListener("click", () => { if (typeof forgeProView === "function") { forgeProView(view, cam); tree.build(); } });
           list.append(r);
         }
       }
@@ -884,12 +884,12 @@ function forgeSceneAttach(view, ctx) {
     if (tree.selMarks) drawMarks();
   };
 
-  // ---------------------------------------------------------------- the Channel Box (Maya's exact numbers)
+  // ---------------------------------------------------------------- the Channel Box (the pro exact numbers)
   const AXES = ["x", "y", "z"];
-  // Maya's Channel Box, as it looks in Maya 2027 (read off the owner's Mac): a Channels / Edit / Object / Show menu,
+  // the pro Channel Box, as it looks in the reference package (read off the owner's Mac): a Channels / Edit / Object / Show menu,
   // the object's name, then one row per channel - the label right-aligned, a dark value field - Translate X..Z,
   // Rotate X..Z, Scale X..Z, Visibility; then SHAPES (the mesh under the transform) and INPUTS (its construction
-  // history, below). Drag a channel's NAME left / right to scrub its value (Maya: select it, middle-drag).
+  // history, below). Drag a channel's NAME left / right to scrub its value (pro: select it, middle-drag).
   function channelBox() {
     const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");
     if (!host) return null;
@@ -919,7 +919,7 @@ function forgeSceneAttach(view, ctx) {
     for (const [part, label, a, step] of ROWS) {
       const r = scnEl("div", "forge-ch-row");
       const lbl = scnEl("span", "forge-ch-label", label);
-      lbl.title = label + ": drag left / right to scrub the value (Maya's virtual slider).";
+      lbl.title = label + ": drag left / right to scrub the value (the pro virtual slider).";
       const inp = document.createElement("input");
       inp.type = "number"; inp.step = String(step);
       inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
@@ -998,9 +998,9 @@ function forgeSceneAttach(view, ctx) {
     return !b.hidden;
   };
 
-  // ---------------------------------------------------------------- the History (Maya's construction history)
+  // ---------------------------------------------------------------- the History (the pro construction history)
   function historyBox() {
-    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");   // Maya: the Channel Box on the right
+    const host = document.getElementById("forge-chancol") || document.getElementById("forge-outliner");   // pro: the Channel Box on the right
     if (!host) return null;
     const box = scnEl("div", "forge-ch-body");
     box.id = "forge-history";
@@ -1022,7 +1022,7 @@ function forgeSceneAttach(view, ctx) {
       const count = {};
       for (const op of ops) {
         const r = scnEl("div", "forge-hist-row");
-        // Maya's node names for each step (polyExtrudeFace1, polySmoothFace1 ...); the step kind stays in the tooltip
+        // the pro node names for each step (polyExtrudeFace1, polySmoothFace1 ...); the step kind stays in the tooltip
         const base = FORGE_HIST_NODE[op.kind] || op.kind;
         count[base] = (count[base] || 0) + 1;
         const nm = scnEl("span", "forge-hist-name", base + count[base] + (op.affected ? " \u00b7 " + op.affected + "v" : ""));
@@ -1094,7 +1094,7 @@ function forgeSceneAttach(view, ctx) {
     canvas.addEventListener("pointerleave", () => sculptRecordAfterStroke());
   }
 
-  // ---------------------------------------------------------------- Shift + drag duplicates (Maya)
+  // ---------------------------------------------------------------- Shift + drag duplicates
   // Shift held when a manipulator drag starts: the copy is made and takes the manipulator, the original stays.
   let shiftDown = false;
   document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftDown = true; }, true);
@@ -1114,17 +1114,17 @@ function forgeSceneAttach(view, ctx) {
   // ---------------------------------------------------------------- hiding / collapsing (window.forgePanels)
   // Owner 2026-10-20: "improve all the ui everything should be abable to hide with slide or toggle". The
   // Outliner folds its own body, the left column slides away, and "floats" clears every bar off the viewport
-  // (Maya's clean view). What is hidden is remembered, so Forge comes back the way it was left.
-  // One store for Forge's panels: Maya's workspace in forge_maya.js (forgeMayaPanels, key "loki-forge-panels") owns
+  // (the pro clean view). What is hidden is remembered, so Forge comes back the way it was left.
+  // One store for Forge's panels: the pro workspace in forge_pro.js (forgeProPanels, key "loki-forge-panels") owns
   // what shows; this keeps Ziva's API (forgePanels.*, the UI button, the Outliner's fold) on top of it, so the two
   // never disagree (merged 2026-10-19 - both had picked the same storage key with different meanings).
   window.forgePanels = (function () {
-    const has = () => typeof forgeMayaPanels === "function";
-    const read = () => (has() ? forgeMayaPanels() : {});
+    const has = () => typeof forgeProPanels === "function";
+    const read = () => (has() ? forgeProPanels() : {});
     const write = (p) => { try { localStorage.setItem("loki-forge-panels", JSON.stringify(p)); } catch (_) { /* private mode */ } };
     function apply() {
       const p = read();
-      if (has() && typeof forgeMayaPanelsApply === "function") forgeMayaPanelsApply(p);
+      if (has() && typeof forgeProPanelsApply === "function") forgeProPanelsApply(p);
       const sheet = document.getElementById("forge");
       if (sheet) sheet.classList.toggle("forge-bare", p.floats === false);
       const out = document.getElementById("forge-outliner");
@@ -1152,7 +1152,7 @@ function forgeSceneAttach(view, ctx) {
       },
       show: (which) => set(which, true),
       hide: (which) => set(which, false),
-      hideAll: () => {                                          // only the viewport, like Maya's Ctrl+Space
+      hideAll: () => {                                          // only the viewport, like the pro Ctrl+Space
         const p = read();
         if (!(p.outliner === false && p.channel === false)) { p._before = Object.assign({}, p); delete p._before._before; }
         Object.assign(p, { outliner: false, channel: false, create: false, materials: false, shelf: false, toolkit: false, floats: false });
@@ -1190,7 +1190,7 @@ function forgeSceneAttach(view, ctx) {
   return api;
 }
 
-// Maya's Create: a primitive is a NEW object (pCube1, pCube2 ...); whatever was there stays in the scene.
+// the pro Create: a primitive is a NEW object (pCube1, pCube2 ...); whatever was there stays in the scene.
 // Wrapped at load so the very first primitive is named too (forge_model.js loads before this file).
 if (typeof window.forgeAddPrimitive === "function" && !window.forgeAddPrimitive.scene) {
   const forgeAddPrimitiveOwn = window.forgeAddPrimitive;

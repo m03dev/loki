@@ -70,7 +70,7 @@ What would be next if the real machines show the window itself is slow (`window 
 
 - **A native start screen drawn by the launcher before Python starts** (Rust: a borderless window
   via the OS API - Win32 / Cocoa - or `tao`+`wry`), closed when the app's window reports ready. That
-  is the only place Rust can win visible time. LOKI's own evolve step **E12 (a Maya-like loading
+  is the only place Rust can win visible time. LOKI's own evolve step **E12 (a pro-style loading
   screen)** owns the design; the hook is ready either way:
   - today the app shows `app/ui/splash.html` (E12 adds it; self-contained HTML, inline assets) in its
     window while the engine starts, and calls `window.lokiSplashStatus(text)` with progress lines;

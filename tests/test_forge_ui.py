@@ -119,7 +119,7 @@ async def main():
         await page.route("http://127.0.0.1:8898/**", route)
         await page.goto("http://127.0.0.1:8898/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
-        # these panels are hidden in Maya's workspace until Windows (Space menu) brings them back - this suite tests them
+        # these panels are hidden in the pro workspace until Windows (Space menu) brings them back - this suite tests them
         await page.evaluate("localStorage.setItem('loki-forge-panels', JSON.stringify({ create: true, toolkit: true, shelf: true }))")
 
         # -------- the vendored three.js add-ons: export with GLTFExporter, read back with GLTFLoader
@@ -173,10 +173,10 @@ async def main():
         side = sorted((WS / "models" / ".meta").glob("*.glb.json"))[-1]
         check("a drawing becomes a model, made with the slider's values", json.loads(side.read_text())["options"]["resolution"] == 96)
 
-        # -------- Maya's layer and the scene are attached (their behaviour: tests/test_forge_maya_ui.py)
-        attached = await page.evaluate("""() => ({ maya: !!forge.view.maya, tree: !!(forge.view.tree && forge.view.tree.api),
+        # -------- the pro layer and the scene are attached (their behaviour: tests/test_forge_pro_ui.py)
+        attached = await page.evaluate("""() => ({ pro: !!forge.view.pro, tree: !!(forge.view.tree && forge.view.tree.api),
           rows: document.querySelectorAll('#forge-outliner .forge-out-row').length })""")
-        check("Maya's layer and the scene (Outliner) are attached to the viewer", attached["maya"] and attached["tree"]
+        check("the pro layer and the scene (Outliner) are attached to the viewer", attached["pro"] and attached["tree"]
               and attached["rows"] == 1, attached)
 
 
@@ -209,7 +209,7 @@ async def main():
         check("a 3-node Material Maker graph (perlin -> colorize -> material) renders to a texture",
               tex["red"] > 0 and tex["blue"] > 0 and tex["green"] == 0 and tex["distinct"] > 20, tex)
         check("the normal map comes from the height (blue up)", tex["normalB"] > 180, tex)
-        await page.evaluate("forgeMayaPanel('materials', true)")   # Windows > Materials (the old tab row is hidden in Maya's workspace)
+        await page.evaluate("forgeProPanel('materials', true)")   # Windows > Materials (the old tab row is hidden in the pro workspace)
         await page.wait_for_function("document.querySelectorAll('.fm-map-img canvas').length === 6", timeout=10000)
         check("the Materials side shows the six PBR maps", True)
         applied = await page.evaluate("""() => { const kids = forge.view.holder.children;
@@ -230,7 +230,7 @@ async def main():
               and forge3d.glb_counts(sculpted[-1])["triangles"] == tris * 4 and "baseColorTexture" in mat.get("pbrMetallicRoughness", {})
               and "normalTexture" in mat, mat)
 
-        await page.evaluate("forgeMayaPanel('materials', false)")   # the viewport gets its room back
+        await page.evaluate("forgeProPanel('materials', false)")   # the viewport gets its room back
         # -------- quad view: front / side / top / three-quarter orthographic panels (anyCreature's views)
         QUAD = "#forge .forge-viewbar button[data-tip-name='Quad view']"
         check("the view bar has a Quad view toggle", await page.query_selector(QUAD) is not None)
@@ -257,7 +257,7 @@ async def main():
         check("toggling Quad view off returns to the orbit view", (not back["on"]) and back["orbit"] and back["hidden"], back)
 
         # -------- the Creature way: controls, not JSON -> a model in the four panels
-        await page.evaluate("forgeMayaPanel('create', true)")   # the ways live in the Create panel (Windows > Create panel)
+        await page.evaluate("forgeProPanel('create', true)")   # the ways live in the Create panel (Windows > Create panel)
         await page.wait_for_timeout(200)
         await page.click("#forge .forge-way[data-way='creature']")
         await page.wait_for_function("document.querySelectorAll('#forge-creature-presets button[data-preset]').length > 0", timeout=15000)
@@ -288,7 +288,7 @@ async def main():
 
         # -------- layout: the panel fits 900x600, every button reachable
         await page.set_viewport_size({"width": 900, "height": 600})
-        await page.evaluate("forgeMayaPanel('create', true)")
+        await page.evaluate("forgeProPanel('create', true)")
         await page.wait_for_timeout(300)
         fit = await page.evaluate("""() => {
           const vw = innerWidth, vh = innerHeight, out = [];
@@ -317,14 +317,14 @@ async def main():
             return !(r.bottom <= st.bottom + 0.5 && r.top >= st.top - 0.5 && (hit === b || b.contains(hit))); })
             .map((b) => b.dataset.tipName); }""")
         check("every sculpt tool is on screen and clickable at 900x600 (no hidden scroll)", not sculpt_ok, sculpt_ok)
-        await page.evaluate("forgeMayaPanel('materials', true)")   # Windows > Materials (the old tab row is hidden in Maya's workspace)
+        await page.evaluate("forgeProPanel('materials', true)")   # Windows > Materials (the old tab row is hidden in the pro workspace)
         await page.wait_for_timeout(300)
         mats_fit = await page.evaluate("""() => { const p = document.querySelector('.forge-panel').getBoundingClientRect();
           return [...document.querySelectorAll('.fm-bar > *')].every((b) => { const r = b.getBoundingClientRect();
             return r.right <= p.right + 0.5 && r.bottom <= p.bottom + 0.5; }); }""")
         check("the Materials toolbar fits at 900x600", mats_fit)
         await page.screenshot(path=str(TMP / "forge-900x600.png"))
-        await page.evaluate("forgeMayaPanel('materials', false)")   # closed again: the history checks below don't need it
+        await page.evaluate("forgeProPanel('materials', false)")   # closed again: the history checks below don't need it
         # -------- T6: construction history - the poly ops, editable, with Delete History
         # (the Forge window may already be closed by the earlier 900x600 section; the panel check below needs it)
         was_closed = await page.evaluate("document.getElementById('forge').hidden")
@@ -403,7 +403,7 @@ async def main():
 
 
 try:
-    asyncio.run(asyncio.wait_for(main(), 60))   # Maya keys + scene moved to tests/test_forge_maya_ui.py
+    asyncio.run(asyncio.wait_for(main(), 60))   # pro keys + scene moved to tests/test_forge_pro_ui.py
 except asyncio.TimeoutError:
     check("the Forge window check finishes in time", False)
 srv.shutdown()

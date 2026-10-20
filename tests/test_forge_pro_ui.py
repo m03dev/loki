@@ -1,13 +1,13 @@
-"""Forge the way Maya works (app/ui/forge_maya.js + app/ui/forge_scene.js, spec docs/FORGE_MAYA_SPEC.md) in
-headless Chromium: Maya's hotkeys (Ctrl and Cmd alike), the camera on Alt, the hotbox and its zones, the Space tap
+"""Forge the way pro works (app/ui/forge_pro.js + app/ui/forge_scene.js, spec docs/FORGE_PRO_SPEC.md) in
+headless Chromium: the pro hotkeys (Ctrl and Cmd alike), the camera on Alt, the hotbox and its zones, the Space tap
 between one and four views, context marking menus picked by direction, Create making NEW objects, Duplicate /
 Duplicate with Transform, Group with its pivot at the centre, real pivots (move / centre / reset / freeze keep the
 object still and the Channel Box's translate unchanged), parent / unparent, hide / show, pick-walk, viewport
-click and box selection with Maya's modifiers, the Outliner's range / toggle selection and drag-and-drop, every
+click and box selection with the pro modifiers, the Outliner's range / toggle selection and drag-and-drop, every
 object editable (the tools' mesh moves into the one you edit), pivot edit mode (d), view undo ([) and the
 Blender hotkey set. No engine, no model download: everything starts from primitives. Under a minute.
 
-    python tests/test_forge_maya_ui.py
+    python tests/test_forge_pro_ui.py
 """
 from __future__ import annotations
 
@@ -75,12 +75,12 @@ async def main():
 
         # -------- names: Create makes pCube1, a NEW primitive is a new object and the old one stays
         names = await page.evaluate(T + ".list().map((n) => n.name)")
-        check("a primitive is named the Maya way (pCube1)", names == ["pCube1"], names)
+        check("a primitive is named the pro way (pCube1)", names == ["pCube1"], names)
         await page.evaluate("forgeAddPrimitive('sphere')")
         await page.evaluate("forgeModelMode(false)")
         made = await page.evaluate("""() => { const t = forge.view.tree.api;
           return { names: t.list().map((n) => n.name), root: t.root().name, cubeTris: t.node(1).inner.children.some((o) => o.isMesh && o.name === 'shape') }; }""")
-        check("Create adds a NEW object - the cube is still in the scene (Maya)", made["names"] == ["pCube1", "pSphere1"]
+        check("Create adds a NEW object - the cube is still in the scene", made["names"] == ["pCube1", "pSphere1"]
               and made["root"] == "pSphere1" and made["cubeTris"], made)
 
         # -------- hotkeys: 4 / 5, w on the SELECTED object, q puts it away
@@ -106,7 +106,7 @@ async def main():
               and await page.is_visible("#forge"))
 
         # -------- the camera: Alt / Option
-        btn = "() => { const b = forge.view.maya.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }"
+        btn = "() => { const b = forge.view.pro.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }"
         bare = await page.evaluate(btn)
         await page.keyboard.down("Alt")
         alt = await page.evaluate(btn)
@@ -117,20 +117,20 @@ async def main():
         check("...and back on release", back == [None, None, None], back)
 
         # -------- the Space wheel (Ziva, 644e291): it floats WHERE THE MOUSE IS; hovering a wedge brings that menu down
-        # (owner 2026-10-19: "i want the space bar menue to float where my mouse is just like maya not a newhud
+        # (owner 2026-10-19: "i want the space bar menue to float where my mouse is just like pro not a newhud
         # its like a wheel and when you hover over it brings down a new menue")
         await page.mouse.move(cx, cy)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(140)
-        wh = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-maya-wheel');
+        wh = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-pro-wheel');
           if (!h) return null;
           const r = h.getBoundingClientRect();
-          return { vis: !h.hidden, heads: [...h.querySelectorAll('.forge-wheel-wedge')].map((b) => b.dataset.mayaHead),
+          return { vis: !h.hidden, heads: [...h.querySelectorAll('.forge-wheel-wedge')].map((b) => b.dataset.proHead),
                    dx: Math.round(r.left - x), dy: Math.round(r.top - y) }; }""", [cx, cy])
-        wb = await (await page.query_selector('#forge-maya-wheel .forge-wheel-wedge[data-maya-head="Edit"]')).bounding_box()
+        wb = await (await page.query_selector('#forge-pro-wheel .forge-wheel-wedge[data-pro-head="Edit"]')).bounding_box()
         await page.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2)
         await page.wait_for_timeout(150)
-        wsub = await page.evaluate("""() => { const s = document.querySelector('#forge-maya-wheel .forge-wheel-sub');
+        wsub = await page.evaluate("""() => { const s = document.querySelector('#forge-pro-wheel .forge-wheel-sub');
           return s ? { head: s.dataset.head, n: s.querySelectorAll('.forge-wheel-item').length } : null; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
@@ -138,32 +138,32 @@ async def main():
               and abs(wh["dx"]) < 26 and abs(wh["dy"]) < 26, wh)
         check("hovering a wedge brings that menu down beside it", bool(wsub) and wsub["head"] == "Edit" and wsub["n"] >= 9, wsub)
         check("the menu stays open after releasing Space, so an item can be clicked",
-              not await page.evaluate("document.getElementById('forge-maya-wheel').hidden"))
-        await page.click('#forge-maya-wheel .forge-wheel-sub .forge-wheel-more')
-        hb = await page.evaluate("""() => ({ vis: !document.getElementById('forge-maya-hotbox').hidden,
-          cols: document.querySelectorAll('#forge-maya-hotbox .forge-maya-col').length,
-          items: document.querySelectorAll('#forge-maya-hotbox .forge-maya-item').length })""")
-        check("every wheel menu ends with All menus: Maya's full hotbox (Recent Commands + 11 menus, 80+ commands)",
+              not await page.evaluate("document.getElementById('forge-pro-wheel').hidden"))
+        await page.click('#forge-pro-wheel .forge-wheel-sub .forge-wheel-more')
+        hb = await page.evaluate("""() => ({ vis: !document.getElementById('forge-pro-hotbox').hidden,
+          cols: document.querySelectorAll('#forge-pro-hotbox .forge-pro-col').length,
+          items: document.querySelectorAll('#forge-pro-hotbox .forge-pro-item').length })""")
+        check("every wheel menu ends with All menus: the pro full hotbox (Recent Commands + 11 menus, 80+ commands)",
               hb["vis"] and hb["cols"] == 12 and hb["items"] >= 80, hb)
         await page.keyboard.press("Escape")
         await page.keyboard.down(" ")
         await page.wait_for_timeout(300)
         await page.keyboard.up(" ")
         await page.keyboard.press("Escape")
-        check("Escape puts the wheel away; a long hold does not switch views", await page.evaluate("document.getElementById('forge-maya-wheel').hidden && !forge.view.quad"))
+        check("Escape puts the wheel away; a long hold does not switch views", await page.evaluate("document.getElementById('forge-pro-wheel').hidden && !forge.view.quad"))
         await page.keyboard.press(" ")
         quad = await page.evaluate("forge.view.quad")
         await page.mouse.move(vb["x"] + vb["width"] * 0.25, vb["y"] + vb["height"] * 0.25)
         await page.keyboard.press(" ")
         after = await page.evaluate("[forge.view.quad, forge.view.cam]")
         check("a Space tap goes to four views; a tap over the top-left pane makes Front big", quad is True and after == [False, "front"], [quad, after])
-        # the hotbox's centre zone (the full Maya layout, reached from the wheel's last entry)
-        await page.evaluate("forgeMayaHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
+        # the hotbox's centre zone (the full pro layout, reached from the wheel's last entry)
+        await page.evaluate("forgeProHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.mouse.move(cx, cy)
         await page.wait_for_timeout(120)
         await page.mouse.down()
         await page.mouse.move(cx, cy - 70, steps=4)
-        zone = await page.evaluate("(document.getElementById('forge-maya-marking') || {dataset: {}}).dataset.set")
+        zone = await page.evaluate("(document.getElementById('forge-pro-marking') || {dataset: {}}).dataset.set")
         await page.mouse.up()
         check("the hotbox's centre zone is the views menu; flicking up picks Perspective", zone == "Views"
               and await page.evaluate("forge.view.cam") == "persp", [zone, await page.evaluate("forge.view.cam")])
@@ -209,12 +209,12 @@ async def main():
         await page.mouse.move(p1[1], p1[2])
         await page.mouse.down(button="right")
         await page.wait_for_timeout(260)
-        ring = await page.evaluate("Object.fromEntries([...document.querySelectorAll('#forge-maya-marking .forge-maya-wedge')].map((b) => [b.dataset.pos, b.dataset.mayaCmd]))")
+        ring = await page.evaluate("Object.fromEntries([...document.querySelectorAll('#forge-pro-marking .forge-pro-wedge')].map((b) => [b.dataset.pos, b.dataset.proCmd]))")
         await page.mouse.move(p1[1] + 75, p1[2] + 6, steps=4)                     # a flick east, not onto the button
         await page.mouse.up(button="right")
         await page.wait_for_timeout(250)
         st = await page.evaluate("[forge.view.mode, forge.view.edit && forge.view.edit.mode, forge.view.tree.api.root().id]")
-        check("right button on an object: Maya's ring (N Edge, W Vertex, E Face, S UV, NE Object Mode)",
+        check("right button on an object: the pro ring (N Edge, W Vertex, E Face, S UV, NE Object Mode)",
               ring.get("N") == "Edge" and ring.get("W") == "Vertex" and ring.get("E") == "Face" and ring.get("S") == "UV"
               and ring.get("NE") == "Object Mode", ring)
         check("...a flick east picks Face: that object becomes the edited one, in face mode", st == ["poly", "face", 1], st)
@@ -230,14 +230,14 @@ async def main():
         await page.keyboard.down("Shift")
         await page.mouse.down(button="right")
         await page.wait_for_timeout(260)
-        title = await page.evaluate("document.getElementById('forge-maya-marking').dataset.set")
+        title = await page.evaluate("document.getElementById('forge-pro-marking').dataset.set")
         await page.mouse.move(vb["x"] + 32, vb["y"] + vb["height"] - 40, steps=4)
         await page.mouse.up(button="right")
         await page.keyboard.up("Shift")
         await page.wait_for_timeout(250)
         await page.evaluate("forgeModelMode(false)")
         n1 = await page.evaluate("[forge.view.tree.api.list().length, forge.view.tree.api.root().name]")
-        check("Shift + right button on nothing is Maya's Create ring; flicking south makes a new cube", title == "Create"
+        check("Shift + right button on nothing is the pro Create ring; flicking south makes a new cube", title == "Create"
               and n1 == [n0 + 1, "pCube2"], [title, n0, n1])
 
         # -------- Duplicate (Ctrl/Cmd+D) and Duplicate with Transform (Shift+D)
@@ -270,7 +270,7 @@ async def main():
           const box2 = t.worldBox([g.id]).getCenter(new V.Vector3()).toArray();
           return { kind: g.kind, name: g.name, kids: t.kids(g.id).length, T: t.transform(g.id).translate,
                    stays: near(wa, w.wa), pivotAtCentre: near(piv, box, 1e-3), turnsAboutMiddle: near(box2, box, 1e-3) }; }""" % NEAR, grp)
-        check("Ctrl+G groups: a group1 node with both inside, translate 0 (Maya)", g["kind"] == "group" and g["name"] == "group1"
+        check("Ctrl+G groups: a group1 node with both inside, translate 0", g["kind"] == "group" and g["name"] == "group1"
               and g["kids"] == 2 and all(abs(x) < 1e-6 for x in g["T"]), g)
         check("...the children did not move, the pivot is the centre, and rotating the group turns about the middle",
               g["stays"] and g["pivotAtCentre"] and g["turnsAboutMiddle"], g)
@@ -307,7 +307,7 @@ async def main():
         down = await page.evaluate(T + ".selected()")
         await page.keyboard.press("Shift+P")
         unp = await page.evaluate(T + ".node(%d).parent" % par[0])
-        check("p parents the first under the LAST selected (Maya)", pp == par[1], [pp, par])
+        check("p parents the first under the LAST selected", pp == par[1], [pp, par])
         check("the arrow keys pick-walk: up to the parent, down to the child", up == [par[1]] and down == [par[0]], [up, down])
         check("Shift+P unparents to the world", unp == 0, unp)
         await page.keyboard.press("h")
@@ -353,7 +353,7 @@ async def main():
         # -------- pivot edit (hold d): the manipulator moves the pivot, the object stays
         await page.evaluate(T + ".select(1)")
         await page.keyboard.down("d")
-        pe = await page.evaluate("""() => { const t = forge.view.tree.api, v = forge.view, m = v.maya, V = v.THREE, near = %s;
+        pe = await page.evaluate("""() => { const t = forge.view.tree.api, v = forge.view, m = v.pro, V = v.THREE, near = %s;
           const on = t.pivotMode && v.transform.object === m.pivotProxy;
           const box0 = t.worldBox([1]).min.toArray();
           m.pivotProxy.position.add(new V.Vector3(0.3, 0.2, 0)); m.pivotProxy.updateMatrixWorld(true);
@@ -383,7 +383,7 @@ async def main():
         check("any object can be edited: the sphere takes the tools' mesh, and sculpting it leaves the cube alone",
               mk["nowRoot"] and mk["otherUntouched"] and mk["verts"] > 100, mk)
 
-        # -------- Maya only: no Blender keys, no Blender mouse
+        # -------- pro only: no Blender keys, no Blender mouse
         await page.evaluate("forgeModelMode(true)")
         m0 = await page.evaluate("forge.view.edit.mode")
         await page.keyboard.press("2")
@@ -392,15 +392,15 @@ async def main():
         modal = await page.evaluate("forge.view.modalActive()")
         bb = await page.evaluate(btn)
         await page.evaluate("forgeModelMode(false)")
-        check("Maya keys only: 2 / g are not Blender's edge mode / grab, and no mouse button turns the view without Alt",
-              m1 == m0 and not modal and bb == [None, None, None] and await page.evaluate("forgeKeymap()") == "maya", [m0, m1, modal, bb])
+        check("pro keys only: 2 / g are not Blender's edge mode / grab, and no mouse button turns the view without Alt",
+              m1 == m0 and not modal and bb == [None, None, None] and await page.evaluate("forgeKeymap()") == "pro", [m0, m1, modal, bb])
 
-        # -------- Maya's workspace: viewport in the middle, Outliner left, Channel Box right, the rest hidden
+        # -------- the pro workspace: viewport in the middle, Outliner left, Channel Box right, the rest hidden
         lay = await page.evaluate("""() => { const r = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return b.width > 0 ? [b.left, b.right] : null; };
           const vis = (sel) => { const e = document.querySelector(sel); return !!(e && e.offsetParent !== null && getComputedStyle(e).display !== 'none'); };
           return { out: r('forge-outcol'), stage: r('forge-stage'), chan: r('forge-chancol'), create: r('forge-left'), shelf: vis('#forge .forge-exportbar'),
                    kit: vis('#forge-model'), outInOut: !!document.querySelector('#forge-outcol #forge-outliner'), chInChan: !!document.querySelector('#forge-chancol #forge-channel') }; }""")
-        check("Maya's layout: the Outliner left, the viewport, the Channel Box right - and nothing else showing",
+        check("the pro layout: the Outliner left, the viewport, the Channel Box right - and nothing else showing",
               lay["out"] and lay["stage"] and lay["chan"] and lay["out"][1] <= lay["stage"][0] + 1 and lay["stage"][1] <= lay["chan"][0] + 1
               and lay["create"] is None and not lay["shelf"] and not lay["kit"] and lay["outInOut"] and lay["chInChan"], lay)
         await page.click("#forge-ui-btn")
@@ -420,50 +420,50 @@ async def main():
         check("Ctrl+Space hides every panel (only the viewport), and brings them back", bare == [True, True] and back_ == [False, False], [bare, back_])
         # the Windows menu in the hotbox brings a panel back (here: the Create panel), with a tick
         await page.mouse.move(cx, cy)
-        await page.evaluate("forgeMayaHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
+        await page.evaluate("forgeProHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.wait_for_timeout(100)
-        await page.hover('#forge-maya-hotbox .forge-maya-col[data-menu="Windows"] .forge-maya-head')
-        drop = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-hotbox .forge-maya-list')].filter((l) => !l.hidden).map((l) => l.parentElement.dataset.menu)""")
-        ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-hotbox .forge-maya-col[data-menu="Windows"] .forge-maya-item.on')].map((b) => b.dataset.mayaId)""")
-        await page.click('#forge-maya-hotbox .forge-maya-item[data-maya-id="winCreate"]')
+        await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-head')
+        drop = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-list')].filter((l) => !l.hidden).map((l) => l.parentElement.dataset.menu)""")
+        ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item.on')].map((b) => b.dataset.proId)""")
+        await page.click('#forge-pro-hotbox .forge-pro-item[data-pro-id="winCreate"]')
         cr = await page.evaluate("!document.getElementById('forge-left').hidden")
         check("hovering a hotbox menu opens just that one; Windows ticks what is showing (Outliner, Channel Box)", drop == ["Windows"]
               and "winOutliner" in ticked and "winChannel" in ticked and "winCreate" not in ticked, [drop, ticked])
         check("...and Windows > Create panel brings the left panel back", cr)
-        await page.evaluate("forgeMayaPanel('create', false)")
+        await page.evaluate("forgeProPanel('create', false)")
         await page.keyboard.down(" ")
         await page.wait_for_timeout(120)
-        await page.hover('#forge-maya-wheel .forge-wheel-wedge[data-maya-head="Recent Commands"]')
+        await page.hover('#forge-pro-wheel .forge-wheel-wedge[data-pro-head="Recent Commands"]')
         await page.wait_for_timeout(100)
-        rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-maya-wheel .forge-wheel-sub .forge-wheel-item[data-maya-id]')].map((b) => b.dataset.mayaId)""")
+        rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-wheel .forge-wheel-sub .forge-wheel-item[data-pro-id]')].map((b) => b.dataset.proId)""")
         await page.keyboard.up(" ")
         await page.keyboard.press("Escape")
         check("the wheel's Recent Commands lists what you just ran, newest first", rec[:1] == ["winCreate"], rec)
         await page.keyboard.press("Escape")
-        check("Esc never closes Forge (Maya)", await page.is_visible("#forge"))
+        check("Esc never closes Forge", await page.is_visible("#forge"))
 
         # -------- snapping: hold x = grid, v = vertex, c = edge (objects, the pivot and components)
         sn = await page.evaluate("""() => { const v = forge.view, t = v.tree.api, tc = v.transform, V = v.THREE;
           const a = t.list().find((n) => n.name === 'pSphere1'), b = t.node(1);
           t.makeWorking(b.id); t.select(a.id); t.attachTool('translate');
           const drag = (to) => { a.grp.position.copy(to); tc.axis = 'XYZ'; tc.dispatchEvent({ type: 'objectChange' }); return a.grp.getWorldPosition(new V.Vector3()).toArray(); };
-          v.maya.held.add('x'); const g = drag(new V.Vector3(0.61, 0.37, -0.13)); v.maya.held.delete('x');
-          tc.axis = 'X'; v.maya.held.add('x'); a.grp.position.set(0.61, 0.37, -0.13); tc.dispatchEvent({ type: 'objectChange' }); v.maya.held.delete('x');
+          v.pro.held.add('x'); const g = drag(new V.Vector3(0.61, 0.37, -0.13)); v.pro.held.delete('x');
+          tc.axis = 'X'; v.pro.held.add('x'); a.grp.position.set(0.61, 0.37, -0.13); tc.dispatchEvent({ type: 'objectChange' }); v.pro.held.delete('x');
           const gx = a.grp.position.toArray(); tc.axis = 'XYZ';
           // v: put the mouse over a corner of the cube and drag the sphere: its pivot lands on that vertex
           const box = t.worldBox([b.id]), corner = new V.Vector3(box.max.x, box.max.y, box.max.z);
           const r = v.canvas.getBoundingClientRect(); v.camera.updateMatrixWorld(); const s = corner.clone().project(v.camera);
-          v.maya.mouse = [r.left + (s.x + 1) / 2 * r.width, r.top + (1 - s.y) / 2 * r.height];
-          v.maya.held.add('v'); const p = drag(new V.Vector3(2, 2, 2)); v.maya.held.delete('v');
+          v.pro.mouse = [r.left + (s.x + 1) / 2 * r.width, r.top + (1 - s.y) / 2 * r.height];
+          v.pro.held.add('v'); const p = drag(new V.Vector3(2, 2, 2)); v.pro.held.delete('v');
           const pd = Math.hypot(p[0] - corner.x, p[1] - corner.y, p[2] - corner.z);
           // c: a point inside a face of the cube -> the nearest spot on that triangle's edges
           const mid = new V.Vector3((box.min.x + box.max.x) / 2 + (box.max.x - box.min.x) * 0.2, box.max.y - (box.max.y - box.min.y) * 0.05, box.max.z);
-          const s2 = mid.clone().project(v.camera); v.maya.mouse = [r.left + (s2.x + 1) / 2 * r.width, r.top + (1 - s2.y) / 2 * r.height];
-          v.maya.held.add('c'); const e = drag(new V.Vector3(3, 3, 3)); v.maya.held.delete('c');
+          const s2 = mid.clone().project(v.camera); v.pro.mouse = [r.left + (s2.x + 1) / 2 * r.width, r.top + (1 - s2.y) / 2 * r.height];
+          v.pro.held.add('c'); const e = drag(new V.Vector3(3, 3, 3)); v.pro.held.delete('c');
           const tb = [box.min.toArray(), box.max.toArray()], near = (x, y) => Math.abs(x - y) < 1e-3;
           const onEdge = [0, 1, 2].filter((k) => near(e[k], tb[0][k]) || near(e[k], tb[1][k])).length >= 2;   // a cube's edge: two coordinates on its box
           tc.detach();
-          return { g, gx, pd, e, onEdge, step: v.maya.gridStep }; }""")
+          return { g, gx, pd, e, onEdge, step: v.pro.gridStep }; }""")
         st = sn["step"]
         check("hold x: the object snaps to the grid", all(abs(c / st - round(c / st)) < 1e-6 for c in sn["g"]), sn)
         check("...and only along the handle's axis when you drag one arrow (X)", abs(sn["gx"][0] / st - round(sn["gx"][0] / st)) < 1e-6
@@ -472,14 +472,14 @@ async def main():
         check("hold c: it lands on an edge of the face under the mouse", sn["onEdge"], sn)
         chips = await page.evaluate("[...document.querySelectorAll('#forge-snaps .forge-snap')].map((b) => b.dataset.snap)")
         await page.click('#forge-snaps [data-snap="grid"]')
-        sticky = await page.evaluate("forge.view.maya.snap.grid && document.querySelector('#forge-snaps [data-snap=\"grid\"]').classList.contains('on')")
+        sticky = await page.evaluate("forge.view.pro.snap.grid && document.querySelector('#forge-snaps [data-snap=\"grid\"]').classList.contains('on')")
         await page.click('#forge-snaps [data-snap="grid"]')
-        check("the Grid / Edge / Point chips (Maya's status line) switch a snap on and off", chips == ["grid", "edge", "point"] and sticky, [chips, sticky])
+        check("the Grid / Edge / Point chips (the pro status line) switch a snap on and off", chips == ["grid", "edge", "point"] and sticky, [chips, sticky])
         comp = await page.evaluate("""() => { const v = forge.view, V = v.THREE, p = new V.Object3D(); v.holder.add(p);
-          p.position.set(0.33, 0.12, 0.07); v.maya.held.add('x'); v.snapPivot(p); v.maya.held.delete('x');
-          const w = p.getWorldPosition(new V.Vector3()).toArray(); v.holder.remove(p); return [w, v.maya.gridStep]; }""")
+          p.position.set(0.33, 0.12, 0.07); v.pro.held.add('x'); v.snapPivot(p); v.pro.held.delete('x');
+          const w = p.getWorldPosition(new V.Vector3()).toArray(); v.holder.remove(p); return [w, v.pro.gridStep]; }""")
         check("components snap too: the component handle lands on the grid with x", all(abs(c / comp[1] - round(c / comp[1])) < 1e-6 for c in comp[0]), comp)
-        check("there is a grid on the ground, like Maya's", await page.evaluate("!!(forge.view.maya.grid && forge.view.maya.grid.visible)"))
+        check("there is a grid on the ground, like the standard one", await page.evaluate("!!(forge.view.pro.grid && forge.view.pro.grid.visible)"))
         await page.evaluate("forgeModelMode(true)")
         await page.keyboard.press("b")
         soft = await page.evaluate("forge.view.edit.prop")
@@ -488,7 +488,7 @@ async def main():
         xr = await page.evaluate("forge.view.edit.xray")
         await page.keyboard.press("Alt+x")
         await page.evaluate("forgeModelMode(false)")
-        check("b is soft selection, Alt+X is X-ray (Maya's keys)", soft is True and xr is True, [soft, xr])
+        check("b is soft selection, Alt+X is X-ray (the pro keys)", soft is True and xr is True, [soft, xr])
 
         # -------- the checks the first scene suite had (kept): rename, hide, indent, Channel Box, buttons, Shift+drag
         await page.evaluate("forgeModelMode(false)")
@@ -509,7 +509,7 @@ async def main():
         check("the Channel Box moves the selected object by typing a number", abs(cx3 - 3) < 1e-6, cx3)
         await page.fill("#forge-ch-ry", "90")
         ry = await page.evaluate(T + ".node(%d).grp.rotation.y * 180 / Math.PI" % rid)
-        check("...and rotates in degrees, the way Maya's Channel Box shows them", abs(ry - 90) < 1e-3, ry)
+        check("...and rotates in degrees, the way the pro Channel Box shows them", abs(ry - 90) < 1e-3, ry)
         await page.evaluate(T + ".select(1)")
         other = await page.evaluate("document.getElementById('forge-ch-tx').value")
         await page.evaluate(T + ".select(%d)" % rid)
@@ -547,9 +547,9 @@ async def main():
         await page.evaluate("forge.view.transform.dispatchEvent({ type: 'dragging-changed', value: false }); forge.view.toggleTransform(null)")
         check("Shift+drag leaves the original and hands the manipulator to a copy", sd["nodes"] == n_before + 1 and not sd["root"] and sd["onGizmo"], sd)
 
-        # -------- Forge dressed as Maya (app/ui/forge_mayaui.js): checked against Maya 2027 on the owner's Mac
+        # -------- Forge dressed as a pro package (app/ui/forge_chrome.js): checked against the reference package on the owner's Mac
         await page.evaluate("forgeModelMode(false)")
-        await page.evaluate("forgeMayaPanel('outliner', true); forgeMayaPanel('channel', true)")
+        await page.evaluate("forgeProPanel('outliner', true); forgeProPanel('channel', true)")
         look = await page.evaluate("""() => { const p = document.querySelector('#forge .forge-panel');
           return { bg: getComputedStyle(p).backgroundColor,
                    menus: [...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.dataset.menu),
@@ -557,16 +557,16 @@ async def main():
                    shelfTabs: [...document.querySelectorAll('#fmy-shelf .fmy-stab')].map((b) => b.dataset.tab),
                    tools: document.querySelectorAll('#fmy-toolbox .fmy-ib').length,
                    stage: getComputedStyle(document.getElementById('forge-stage')).backgroundImage }; }""")
-        check("Maya's panel grey (#444444) and its menu bar: File Edit Create Select Modify Display Windows Mesh 'Edit Mesh' 'Mesh Tools' 'Mesh Display' Help",
+        check("the pro panel grey (#444444) and its menu bar: File Edit Create Select Modify Display Windows Mesh 'Edit Mesh' 'Mesh Tools' 'Mesh Display' Help",
               look["bg"] == "rgb(68, 68, 68)" and look["menus"][:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
               and "Edit Mesh" in look["menus"] and "Mesh Tools" in look["menus"], look)
-        check("the viewport has Maya's own menus (View Shading Lighting Show Renderer Panels), the shelf its tabs, a tool box",
+        check("the viewport has its own menus (View Shading Lighting Show Renderer Panels), the shelf its tabs, a tool box",
               look["panelMenus"] == ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"] and look["shelfTabs"][:2] == ["Poly Modeling", "Sculpting"]
               and look["tools"] >= 8 and "135, 155, 179" in look["stage"], look)
         # Create > Cube from the menu bar makes a new pCube
         n0 = await page.evaluate(T + ".list().length")
         await page.click('#fmy-menubar .fmy-mb[data-menu="Create"]')
-        await page.click('.fmy-drop .fmy-ditem[data-maya-id="cube"]')
+        await page.click('.fmy-drop .fmy-ditem[data-pro-id="cube"]')
         await page.evaluate("forgeModelMode(false)")
         made = await page.evaluate("[forge.view.tree.api.list().length, forge.view.tree.api.root().name]")
         check("Create > Cube in the menu bar makes a new pCube (and the menu closes)", made[0] == n0 + 1 and made[1].startswith("pCube")
@@ -574,45 +574,45 @@ async def main():
         hud = await page.evaluate("""() => { forge.view.tree.api.select(forge.view.tree.api.root().id); fmySync();
           const row = (k) => [...document.querySelector('#fmy-polycount tr[data-k="' + k + '"]').cells].slice(1).map((c) => +c.textContent);
           return { verts: row('verts'), faces: row('faces'), edges: row('edges'), cam: document.getElementById('fmy-camname').textContent }; }""")
-        check("the heads-up poly count: the selected cube reads 8 verts, 12 edges, 6 faces (Maya's middle column)",
+        check("the heads-up poly count: the selected cube reads 8 verts, 12 edges, 6 faces (the pro middle column)",
               hud["verts"][1] == 8 and hud["edges"][1] == 12 and hud["faces"][1] in (6, 12) and hud["verts"][0] > 8 and hud["cam"] == "persp", hud)
         wire = await page.evaluate("""() => { const t = forge.view.tree.api, n = t.root(); let lines = 0, box = 0;
           n.inner.traverse((o) => { if (o.name === 'forge-sel') { o.traverse((c) => { if (c.isLineSegments && !c.isBox3Helper) lines++; if (c.type === 'Box3Helper') box++; }); } });
           return [lines, box]; }""")
-        check("a selected object shows Maya's wireframe in the selection colour, not a box", wire[0] >= 1 and wire[1] == 0, wire)
+        check("a selected object shows the pro wireframe in the selection colour, not a box", wire[0] >= 1 and wire[1] == 0, wire)
         # the shelf: Poly Modeling's sphere button
         await page.click('#fmy-shelf .fmy-stab[data-tab="Poly Modeling"]')
-        await page.click('#fmy-shelf .fmy-shelf-btn[data-maya-id="sphere"]')
+        await page.click('#fmy-shelf .fmy-shelf-btn[data-pro-id="sphere"]')
         await page.evaluate("forgeModelMode(false)")
         check("the shelf's sphere makes a pSphere", (await page.evaluate(T + ".root().name")).startswith("pSphere"))
         # the tool box and the status line follow the tool and the selection mode
-        await page.click('#fmy-toolbox .fmy-ib[data-maya-id="rotate"]')
+        await page.click('#fmy-toolbox .fmy-ib[data-pro-id="rotate"]')
         await page.evaluate("fmySync()")
-        tb = await page.evaluate("[forge.view.transform.mode, document.querySelector('#fmy-toolbox [data-maya-id=\"rotate\"]').classList.contains('on')]")
-        await page.click('#fmy-status .fmy-selmode[data-maya-id="vertex"]')
+        tb = await page.evaluate("[forge.view.transform.mode, document.querySelector('#fmy-toolbox [data-pro-id=\"rotate\"]').classList.contains('on')]")
+        await page.click('#fmy-status .fmy-selmode[data-pro-id="vertex"]')
         await page.wait_for_timeout(150)
         await page.evaluate("fmySync()")
-        sm = await page.evaluate("[forge.view.mode, forge.view.edit.mode, document.querySelector('#fmy-status [data-maya-id=\"vertex\"]').classList.contains('on')]")
-        await page.click('#fmy-status .fmy-selmode[data-maya-id="objectMode"]')
+        sm = await page.evaluate("[forge.view.mode, forge.view.edit.mode, document.querySelector('#fmy-status [data-pro-id=\"vertex\"]').classList.contains('on')]")
+        await page.click('#fmy-status .fmy-selmode[data-pro-id="objectMode"]')
         await page.wait_for_timeout(150)
-        check("the tool box's Rotate is Maya's rotate tool and lights up", tb == ["rotate", True], tb)
+        check("the tool box's Rotate is the pro rotate tool and lights up", tb == ["rotate", True], tb)
         check("the status line's vertex button is component mode, vertices (and lights up); Object goes back", sm == ["poly", "vert", True]
               and await page.evaluate("forge.view.mode") == "view", sm)
-        await page.click('#fmy-status [data-maya-id="snapGrid"]')
-        sg = await page.evaluate("forge.view.maya.snap.grid")
-        await page.click('#fmy-status [data-maya-id="snapGrid"]')
-        check("the status line's snap buttons switch Maya's snapping (grid here)", sg is True and not await page.evaluate("forge.view.maya.snap.grid"))
+        await page.click('#fmy-status [data-pro-id="snapGrid"]')
+        sg = await page.evaluate("forge.view.pro.snap.grid")
+        await page.click('#fmy-status [data-pro-id="snapGrid"]')
+        check("the status line's snap buttons switch the pro snapping (grid here)", sg is True and not await page.evaluate("forge.view.pro.snap.grid"))
         # the viewport's own Panels menu looks through the top camera; the view cube's FRONT looks from the front
         await page.click('#fmy-panelbar .fmy-pmb[data-menu="Panels"]')
-        await page.click('.fmy-drop .fmy-ditem[data-maya-id="top"]')
+        await page.click('.fmy-drop .fmy-ditem[data-pro-id="top"]')
         await page.evaluate("fmySync()")
         topcam = await page.evaluate("[forge.view.cam, document.getElementById('fmy-camname').textContent]")
         await page.evaluate("document.querySelector('#fmy-cube .fmy-cf-front').click()")
         await page.evaluate("fmySync()")
         frontcam = await page.evaluate("forge.view.cam")
-        await page.evaluate("forgeMayaRun(forge.view, 'persp')")
+        await page.evaluate("forgeProRun(forge.view, 'persp')")
         check("Panels > top looks through top (the HUD says 'top'); the view cube's FRONT looks from the front", topcam == ["top", "top"] and frontcam == "front", [topcam, frontcam])
-        # the command line runs Maya's commands
+        # the command line runs the pro commands
         await page.fill("#fmy-cmd", "polySphere; move 0 2 0")
         await page.press("#fmy-cmd", "Enter")
         await page.wait_for_timeout(150)
@@ -622,8 +622,8 @@ async def main():
         cl2 = await page.evaluate("[forge.view.tree.api.selected().length, document.getElementById('fmy-result').textContent]")
         await page.evaluate("forgeModelMode(false)")
         check("the command line: polySphere; move 0 2 0 makes a sphere at y = 2, and says so", cl[0].startswith("pSphere") and abs(cl[1] - 2) < 1e-6 and "Result" in cl[2], cl)
-        check("...select -cl clears the selection, and an unknown word is an error like Maya's", cl2[0] == 0 and "Cannot find procedure" in cl2[1], cl2)
-        # the Channel Box: Maya's ten rows, a scrub on a channel's name, SHAPES and INPUTS (the history)
+        check("...select -cl clears the selection, and an unknown word is an error like the standard one", cl2[0] == 0 and "Cannot find procedure" in cl2[1], cl2)
+        # the Channel Box: the pro ten rows, a scrub on a channel's name, SHAPES and INPUTS (the history)
         cb = await page.evaluate("""() => { const t = forge.view.tree.api; t.select(t.list().find((n) => n.name.startsWith('pCube')).id);
           return { rows: [...document.querySelectorAll('#forge-channel .forge-ch-row .forge-ch-label')].map((l) => l.textContent),
                    shape: document.querySelector('#forge-channel .forge-ch-node').textContent, name: document.getElementById('forge-ch-name').textContent }; }""")
@@ -635,12 +635,12 @@ async def main():
         await page.mouse.move(lbl["x"] + lbl["width"] / 2, lbl["y"] + lbl["height"] / 2)
         await page.mouse.down(); await page.mouse.move(lbl["x"] + lbl["width"] / 2 + 40, lbl["y"] + lbl["height"] / 2, steps=4); await page.mouse.up()
         tx1 = await page.evaluate(T + ".transform().translate[0]")
-        check("dragging a channel's name scrubs its value (Maya's virtual slider)", tx1 > tx0 + 0.5, [tx0, tx1])
+        check("dragging a channel's name scrubs its value (the pro virtual slider)", tx1 > tx0 + 0.5, [tx0, tx1])
         await page.evaluate("forgeModelMode(true)")
         await page.evaluate("forge.view.select([0]); forgeFaceOp('extrude')")
         inputs = await page.evaluate("[...document.querySelectorAll('#forge-history .forge-hist-name')].map((n) => n.textContent)")
         await page.evaluate("forgeModelMode(false)")
-        check("INPUTS lists the history with Maya's node names (polyExtrudeFace1)", inputs[:1] == ["polyExtrudeFace1"], inputs)
+        check("INPUTS lists the history with the pro node names (polyExtrudeFace1)", inputs[:1] == ["polyExtrudeFace1"], inputs)
         # the Outliner: the four cameras, greyed, then the scene; the search field filters
         cams = await page.evaluate("[...document.querySelectorAll('#forge-out-list .forge-out-cam')].map((r) => r.dataset.cam)")
         await page.fill("#forge-out-search", "psphere")
@@ -648,7 +648,7 @@ async def main():
         await page.fill("#forge-out-search", "")
         check("the Outliner shows persp / top / front / side first, and its search finds by name", cams == ["persp", "top", "front", "side"]
               and found and all(f.lower().startswith("psphere") for f in found), [cams, found])
-        # Ctrl+Space hides Maya's UI elements as well, and brings them back
+        # Ctrl+Space hides the pro UI elements as well, and brings them back
         await page.press("#forge-out-search", "Escape")       # Esc leaves the search field, the keys go back to Forge
         await page.mouse.move(cx, cy)
         await page.keyboard.press("Control+Space")
@@ -660,7 +660,7 @@ async def main():
             gone = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
             await page.keyboard.press("Control+Space")
             back = await page.evaluate("['fmy-status', 'fmy-shelf', 'fmy-toolbox', 'fmy-helpline'].map((id) => document.getElementById(id).hidden)")
-        check("Ctrl+Space hides the status line, shelf, tool box and help line too (Maya), and brings them back", all(gone) and not any(back), [gone, back])
+        check("Ctrl+Space hides the status line, shelf, tool box and help line too, and brings them back", all(gone) and not any(back), [gone, back])
 
         check("no script errors", not errors, errors[:5])
         await browser.close()

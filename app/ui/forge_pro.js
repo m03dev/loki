@@ -1,48 +1,48 @@
-// Forge, the way Maya works: Maya's hotkeys, its marking menus (by context, released by direction), the
-// Space-bar hotbox with its zones, the Space tap between one and four views, Maya's Alt/Option camera, pick-walk,
-// pivot editing (d / Insert) and the rest of docs/FORGE_MAYA_SPEC.md - which was read off Maya 2027 itself.
-// (owner 2026-10-19: "maya is my love I want it exactly on here ... the hotkeys especially the movement command
+// Forge, the way pro works: the pro hotkeys, its marking menus (by context, released by direction), the
+// Space-bar hotbox with its zones, the Space tap between one and four views, the pro Alt/Option camera, pick-walk,
+// pivot editing (d / Insert) and the rest of docs/FORGE_PRO_SPEC.md - which was read off the reference package itself.
+// (owner 2026-10-19: "pro is my love I want it exactly on here ... the hotkeys especially the movement command
 // control option shift")
 //
-// Maya's interaction DESIGN, re-written for a web canvas: no Autodesk code, MEL, art or icons are used.
-// Ctrl and Cmd are the same key here (Maya binds both on the Mac); Alt is Option.
-// Maya only (owner 2026-10-19: "remove blender hotkeys and movements, only keep maya stuff"). The window is Maya's
+// the pro interaction DESIGN, re-written for a web canvas: no the vendor code, MEL, art or icons are used.
+// Ctrl and Cmd are the same key here (pro binds both on the Mac); Alt is Option.
+// pro only (owner 2026-10-19: "remove blender hotkeys and movements, only keep pro stuff"). The window is pro's
 // workspace: a big viewport, the Outliner on the left, the Channel Box on the right; everything else is hidden and
-// comes back from the Space menu (Windows) - see forgeMayaPanels. Snapping is Maya's: hold x (grid), c (edge /
+// comes back from the Space menu (Windows) - see forgeProPanels. Snapping is pro's: hold x (grid), c (edge /
 // curve), v (point / vertex), or switch them on in the hotbox's Snap menu.
 "use strict";
 
-const FORGE_MAYA_R = 104;          // marking-menu ring radius, px
-const FORGE_MAYA_DEAD = 22;        // px from the centre before a direction counts (Maya's dead zone)
-const FORGE_MAYA_HOLD = 85;        // ms of hold before the menu opens; a plain click opens it too and leaves it (Ziva)
-const FORGE_MAYA_TAP = 230;        // a Space press shorter than this, with nothing chosen, is a tap
+const FORGE_PRO_R = 104;          // marking-menu ring radius, px
+const FORGE_PRO_DEAD = 22;        // px from the centre before a direction counts (the pro dead zone)
+const FORGE_PRO_HOLD = 85;        // ms of hold before the menu opens; a plain click opens it too and leaves it (Ziva)
+const FORGE_PRO_TAP = 230;        // a Space press shorter than this, with nothing chosen, is a tap
 const FORGE_KEYMAP_STORE = "loki-forge-keymap";
 const FORGE_COMPASS = { N: -90, NE: -45, E: 0, SE: 45, S: 90, SW: 135, W: 180, NW: -135 };
 
-function forgeKeymap() { return "maya"; }          // Maya's keys only; the old Blender set is gone (owner, 2026-10-19)
+function forgeKeymap() { return "pro"; }          // the pro keys only; the old Blender set is gone (owner, 2026-10-19)
 function forgeSetKeymap() {
   try { localStorage.removeItem(FORGE_KEYMAP_STORE); } catch (_) { /* private mode */ }
-  return "maya";
+  return "pro";
 }
 try { localStorage.removeItem(FORGE_KEYMAP_STORE); } catch (_) { /* an old "blender" choice is not kept */ }
 
-function mayaEl(tag, cls, text) {
+function proEl(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
 }
-const mayaSay = (t, bad) => { if (t && typeof forgeSay === "function") forgeSay(t, bad); };
+const proSay = (t, bad) => { if (t && typeof forgeSay === "function") forgeSay(t, bad); };
 
 // ================================================================== the commands (menus, hotbox, hotkeys share them)
 // each returns a short note for the status line, or "" / undefined for silence
-function forgeMayaTree(v) { return v && v.tree && v.tree.api; }
-function forgeMayaComp(v) { return !!(v && v.mode === "poly"); }
+function forgeProTree(v) { return v && v.tree && v.tree.api; }
+function forgeProComp(v) { return !!(v && v.mode === "poly"); }
 
-function forgeMayaTool(v, mode) {                 // q / w / e / r
-  const t = forgeMayaTree(v);
-  if (v.maya) v.maya.tool = mode;
-  if (forgeMayaComp(v)) {                          // Maya: pressing w again keeps the move tool (no toggle)
+function forgeProTool(v, mode) {                 // q / w / e / r
+  const t = forgeProTree(v);
+  if (v.pro) v.pro.tool = mode;
+  if (forgeProComp(v)) {                          // pro: pressing w again keeps the move tool (no toggle)
     if (v.setTool && !(v.tool && v.tool() === mode)) v.setTool(mode);
     return "";
   }
@@ -52,62 +52,62 @@ function forgeMayaTool(v, mode) {                 // q / w / e / r
   return "";
 }
 
-async function forgeMayaComponents(v, sel) {      // F9 / F10 / F11, or a component wedge on an object
-  const t = forgeMayaTree(v);
+async function forgeProComponents(v, sel) {      // F9 / F10 / F11, or a component wedge on an object
+  const t = forgeProTree(v);
   const n = t && t.active();
   if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id);
-  if (!forgeMayaComp(v) && typeof forgeModelMode === "function") await forgeModelMode(true);
+  if (!forgeProComp(v) && typeof forgeModelMode === "function") await forgeModelMode(true);
   if (sel && v.setSelMode) v.setSelMode(sel);
   return "";
 }
-async function forgeMayaObjectMode(v) {
-  if (forgeMayaComp(v) && typeof forgeModelMode === "function") await forgeModelMode(false);
+async function forgeProObjectMode(v) {
+  if (forgeProComp(v) && typeof forgeModelMode === "function") await forgeModelMode(false);
   return "Object mode.";
 }
-async function forgeMayaF8(v) { return forgeMayaComp(v) ? forgeMayaObjectMode(v) : forgeMayaComponents(v, null); }
+async function forgeProF8(v) { return forgeProComp(v) ? forgeProObjectMode(v) : forgeProComponents(v, null); }
 
-async function forgeMayaSculpt(v) {
-  const t = forgeMayaTree(v), n = t && t.active();
+async function forgeProSculpt(v) {
+  const t = forgeProTree(v), n = t && t.active();
   if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id);
-  if (forgeMayaComp(v)) await forgeMayaObjectMode(v);
+  if (forgeProComp(v)) await forgeProObjectMode(v);
   if (v.mode !== "sculpt" && typeof forgeMode === "function") forgeMode();
   return "";
 }
 
-function forgeMayaFrame(v, all) {
-  const t = forgeMayaTree(v);
-  if (forgeMayaComp(v) || !t) { v.frame(); return ""; }
+function forgeProFrame(v, all) {
+  const t = forgeProTree(v);
+  if (forgeProComp(v) || !t) { v.frame(); return ""; }
   const ids = all || !t.selected().length ? t.allIds() : t.selected();
   if (v.rememberView) v.rememberView();
   v.frameBox(t.worldBox(ids));
   return "";
 }
 
-function forgeMayaView(v, name) {
+function forgeProView(v, name) {
   if (v.quad) v.setLook("quad", false);
   if (v.rememberView) v.rememberView();
   v.setView(name);
   return { persp: "Perspective", top: "Top", front: "Front", side: "Side" }[name] + " view.";
 }
 
-function forgeMayaLook(v, what, on) {
+function forgeProLook(v, what, on) {
   v.setLook(what, !!on);
   return what === "wire" ? (on ? "Wireframe (4)." : "Shaded (5).") : "";
 }
 
-function forgeMayaIsolate(v) {                     // Ctrl+1: show only the selection, again to come back
-  const t = forgeMayaTree(v);
+function forgeProIsolate(v) {                     // Ctrl+1: show only the selection, again to come back
+  const t = forgeProTree(v);
   if (!t) return "";
-  const m = v.maya;
+  const m = v.pro;
   if (m.isolated) { t.show(m.isolated); m.isolated = null; return "Isolate off."; }
   if (!t.selected().length) return "Select something to isolate.";
   t.hideUnselected(); m.isolated = v.tree.hiddenLast.slice();
   return "Isolate select (Ctrl+1 again to come back).";
 }
 
-function forgeMayaNudge(v, dx, dy) {               // Alt + arrows: a small step along the screen
-  const t = forgeMayaTree(v);
-  if (!t || forgeMayaComp(v) || !t.selected().length) return "";
+function forgeProNudge(v, dx, dy) {               // Alt + arrows: a small step along the screen
+  const t = forgeProTree(v);
+  if (!t || forgeProComp(v) || !t.selected().length) return "";
   const THREE = v.THREE, cam = v.camera;
   const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize();
   const up = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).normalize();
@@ -125,9 +125,9 @@ function forgeMayaNudge(v, dx, dy) {               // Alt + arrows: a small step
 }
 
 // pivot edit mode (hold d, or Insert to toggle): the manipulator moves the pivot, not the object
-function forgeMayaPivotMode(v, on) {
-  const t = forgeMayaTree(v), m = v.maya, tc = v.transform;
-  if (!t || !tc || forgeMayaComp(v)) return "";
+function forgeProPivotMode(v, on) {
+  const t = forgeProTree(v), m = v.pro, tc = v.transform;
+  if (!t || !tc || forgeProComp(v)) return "";
   if (on == null) on = !t.pivotMode;
   if (on === !!t.pivotMode) return "";
   const THREE = v.THREE;
@@ -164,25 +164,25 @@ function forgeMayaPivotMode(v, on) {
   return "";
 }
 
-function forgeMayaSpace(v, space) {                // w / e + left button: World / Object
+function forgeProSpace(v, space) {                // w / e + left button: World / Object
   const tc = v.transform;
   if (tc && tc.setSpace) tc.setSpace(space === "world" ? "world" : "local");
   if (v.gizmo && v.gizmo.setSpace) v.gizmo.setSpace(space === "world" ? "world" : "local");
   return space === "world" ? "Axes: World." : "Axes: Object.";
 }
 
-// ---- snapping, Maya's way: hold x = grid, c = curve / edge, v = point / vertex (or switch them on in the Snap menu)
+// ---- snapping, the pro way: hold x = grid, c = curve / edge, v = point / vertex (or switch them on in the Snap menu)
 const FORGE_SNAP_KEY = { grid: "x", edge: "c", point: "v" };
-function forgeMayaSnapOn(v, kind) {
-  const m = v && v.maya;
+function forgeProSnapOn(v, kind) {
+  const m = v && v.pro;
   return !!(m && (m.snap[kind] || m.held.has(FORGE_SNAP_KEY[kind])));
 }
-function forgeMayaSnapAny(v) { return forgeMayaSnapOn(v, "grid") || forgeMayaSnapOn(v, "edge") || forgeMayaSnapOn(v, "point"); }
-function forgeMayaGridStep(v) { return (v && v.maya && v.maya.gridStep) || 0.25; }
+function forgeProSnapAny(v) { return forgeProSnapOn(v, "grid") || forgeProSnapOn(v, "edge") || forgeProSnapOn(v, "point"); }
+function forgeProGridStep(v) { return (v && v.pro && v.pro.gridStep) || 0.25; }
 
 // the vertex (point) or the nearest spot on an edge (edge) under the mouse, on any mesh but the ones in `skip`
-function forgeMayaSnapTarget(v, kind, skip) {
-  const t = forgeMayaTree(v), m = v.maya;
+function forgeProSnapTarget(v, kind, skip) {
+  const t = forgeProTree(v), m = v.pro;
   if (!t || !m || !m.mouse || !v.camera || !v.canvas) return null;
   const THREE = v.THREE, r = v.canvas.getBoundingClientRect();
   const skipped = (o) => { for (let x = o; x; x = x.parent) if (skip.includes(x)) return true; return false; };
@@ -226,13 +226,13 @@ function forgeMayaSnapTarget(v, kind, skip) {
 }
 
 // a dragged world point -> where the active snaps put it; `axis` (the handle's "X", "XZ", "XYZ" ...) keeps the
-// drag's constraint: only those coordinates are taken from the snap target (Maya does the same)
-function forgeMayaSnapPoint(v, p, skip, axis) {
+// drag's constraint: only those coordinates are taken from the snap target (pro does the same)
+function forgeProSnapPoint(v, p, skip, axis) {
   let target = null;
-  if (forgeMayaSnapOn(v, "point")) target = forgeMayaSnapTarget(v, "point", skip);
-  if (!target && forgeMayaSnapOn(v, "edge")) target = forgeMayaSnapTarget(v, "edge", skip);
-  if (!target && forgeMayaSnapOn(v, "grid")) {
-    const s = forgeMayaGridStep(v);
+  if (forgeProSnapOn(v, "point")) target = forgeProSnapTarget(v, "point", skip);
+  if (!target && forgeProSnapOn(v, "edge")) target = forgeProSnapTarget(v, "edge", skip);
+  if (!target && forgeProSnapOn(v, "grid")) {
+    const s = forgeProGridStep(v);
     target = p.clone(); target.set(Math.round(p.x / s) * s, Math.round(p.y / s) * s, Math.round(p.z / s) * s);
   }
   if (!target) return null;
@@ -241,37 +241,37 @@ function forgeMayaSnapPoint(v, p, skip, axis) {
   return out;
 }
 
-function forgeMayaSnapToggle(v, kind) {
-  v.maya.snap[kind] = !v.maya.snap[kind];
-  forgeMayaSnapHud(v);
-  return { grid: "Snap to grid", edge: "Snap to edge (curve)", point: "Snap to point (vertex)" }[kind] + (v.maya.snap[kind] ? " on." : " off.");
+function forgeProSnapToggle(v, kind) {
+  v.pro.snap[kind] = !v.pro.snap[kind];
+  forgeProSnapHud(v);
+  return { grid: "Snap to grid", edge: "Snap to edge (curve)", point: "Snap to point (vertex)" }[kind] + (v.pro.snap[kind] ? " on." : " off.");
 }
-function forgeMayaSnapHud(v) {                       // the three snap chips in the viewport's corner (the status line)
+function forgeProSnapHud(v) {                       // the three snap chips in the viewport's corner (the status line)
   const hud = document.getElementById("forge-snaps");
-  if (!hud || !v || !v.maya) return;
-  for (const b of hud.querySelectorAll("[data-snap]")) b.classList.toggle("on", forgeMayaSnapOn(v, b.dataset.snap));
+  if (!hud || !v || !v.pro) return;
+  for (const b of hud.querySelectorAll("[data-snap]")) b.classList.toggle("on", forgeProSnapOn(v, b.dataset.snap));
 }
 
-function forgeMayaSnap(v, kind, on) {              // j: Maya's step snap for the move / rotate / scale handles
+function forgeProSnap(v, kind, on) {              // j: the pro step snap for the move / rotate / scale handles
   const tcs = [v.transform, v.gizmo].filter((x) => x && x.setTranslationSnap);
-  const step = forgeMayaGridStep(v);
+  const step = forgeProGridStep(v);
   for (const tc of tcs) if (kind === "step") { tc.setTranslationSnap(on ? step : null); tc.setRotationSnap(on ? Math.PI / 12 : null); tc.setScaleSnap(on ? 0.1 : null); }
   return "";
 }
 
-// ---- the workspace: which panels show (Maya: Windows menu, Ctrl+Space hides them all), remembered per machine
+// ---- the workspace: which panels show (pro: Windows menu, Ctrl+Space hides them all), remembered per machine
 const FORGE_PANELS_STORE = "loki-forge-panels";
 const FORGE_PANEL_DEFAULTS = { outliner: true, channel: true, create: false, materials: false, shelf: false, toolkit: false };
-function forgeMayaPanels() {
+function forgeProPanels() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(FORGE_PANELS_STORE) || "{}") || {}; } catch (_) { p = {}; }
   return Object.assign({}, FORGE_PANEL_DEFAULTS, p);
 }
-function forgeMayaPanelsApply(p) {
-  p = p || forgeMayaPanels();
+function forgeProPanelsApply(p) {
+  p = p || forgeProPanels();
   const body = document.querySelector("#forge .forge-body"), panel = document.querySelector("#forge .forge-panel");
   if (!body) return p;
-  body.classList.add("maya"); if (panel) panel.classList.add("maya");
+  body.classList.add("pro"); if (panel) panel.classList.add("pro");
   const show = (id, on) => { const e = document.getElementById(id); if (e) e.hidden = !on; };
   show("forge-outcol", p.outliner);
   show("forge-chancol", p.channel);
@@ -284,57 +284,57 @@ function forgeMayaPanelsApply(p) {
     const mats = document.getElementById("forge-materials");
     if (mats && !mats.dataset.ready) {
       mats.dataset.ready = "1";
-      window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => mayaSay("Materials: " + e.message, true));
+      window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => proSay("Materials: " + e.message, true));
     }
   }
   const v = typeof forge !== "undefined" && forge.view;
   if (v && v.resize) v.resize();
   return p;
 }
-function forgeMayaPanel(name, on) {
-  const p = forgeMayaPanels();
+function forgeProPanel(name, on) {
+  const p = forgeProPanels();
   p[name] = on == null ? !p[name] : !!on;
   try { localStorage.setItem(FORGE_PANELS_STORE, JSON.stringify(p)); } catch (_) { /* private mode */ }
-  forgeMayaPanelsApply(p);
+  forgeProPanelsApply(p);
   const label = { outliner: "Outliner", channel: "Channel Box", create: "Create panel", materials: "Materials", shelf: "Shelf", toolkit: "Modeling Toolkit" }[name];
   return label + (p[name] ? " shown." : " hidden.");
 }
-function forgeMayaHideUI() {                       // Ctrl+Space: every panel away, again to bring them back
+function forgeProHideUI() {                       // Ctrl+Space: every panel away, again to bring them back
   if (window.forgePanels && window.forgePanels.hideAll) {      // the same as the UI button in Forge's title
     const hidden = window.forgePanels.anyHidden();
     if (hidden) window.forgePanels.showAll(); else window.forgePanels.hideAll();
     return hidden ? "Panels back." : "Only the viewport (Ctrl+Space or the UI button brings the panels back).";
   }
-  const p = forgeMayaPanels();
+  const p = forgeProPanels();
   const any = Object.keys(FORGE_PANEL_DEFAULTS).some((k) => p[k]);
   let next;
   if (any) { next = Object.fromEntries(Object.keys(FORGE_PANEL_DEFAULTS).map((k) => [k, false])); next._before = p; }
   else next = Object.assign({}, FORGE_PANEL_DEFAULTS, p._before || {});
   delete (next._before || {})._before;
   try { localStorage.setItem(FORGE_PANELS_STORE, JSON.stringify(next)); } catch (_) { /* private mode */ }
-  forgeMayaPanelsApply(next);
+  forgeProPanelsApply(next);
   return any ? "Only the viewport (Ctrl+Space brings the panels back)." : "Panels back.";
 }
 
-function forgeMayaManipSize(v, bigger) {
+function forgeProManipSize(v, bigger) {
   for (const tc of [v.transform, v.gizmo]) if (tc && tc.setSize) tc.setSize(Math.max(0.2, Math.min(4, (tc.size || 1) * (bigger ? 1.25 : 0.8))));
   v.dirty = true;
   return "";
 }
 
-const forgeMayaHas = (name) => typeof window[name] === "function";
-const forgeMayaCall = (name, ...a) => (forgeMayaHas(name) ? window[name](...a) : undefined);
+const forgeProHas = (name) => typeof window[name] === "function";
+const forgeProCall = (name, ...a) => (forgeProHas(name) ? window[name](...a) : undefined);
 
 // the command table: id -> [label, run(v)] ; `null` run = not in Forge yet (shown greyed, with why)
-function forgeMayaCommands() {
-  const T = (v) => forgeMayaTree(v);
-  const comp = forgeMayaComp;
+function forgeProCommands() {
+  const T = (v) => forgeProTree(v);
+  const comp = forgeProComp;
   return {
-    select: ["Select", (v) => forgeMayaTool(v, null)],
-    move: ["Move", (v) => forgeMayaTool(v, "translate")],
-    rotate: ["Rotate", (v) => forgeMayaTool(v, "rotate")],
-    scale: ["Scale", (v) => forgeMayaTool(v, "scale")],
-    lastTool: ["Last Tool", (v) => forgeMayaTool(v, v.maya.lastTool || "translate")],
+    select: ["Select", (v) => forgeProTool(v, null)],
+    move: ["Move", (v) => forgeProTool(v, "translate")],
+    rotate: ["Rotate", (v) => forgeProTool(v, "rotate")],
+    scale: ["Scale", (v) => forgeProTool(v, "scale")],
+    lastTool: ["Last Tool", (v) => forgeProTool(v, v.pro.lastTool || "translate")],
     undo: ["Undo", (v) => { v.undo(); if (T(v)) v.tree.build(); }],
     redo: ["Redo", (v) => { v.redo(); if (T(v)) v.tree.build(); }],
     duplicate: ["Duplicate", (v) => { const n = T(v).duplicate(); return n ? "Duplicated: " + n.name + "." : ""; }],
@@ -349,50 +349,50 @@ function forgeMayaCommands() {
     showLast: ["Show Last Hidden", (v) => { T(v).showLastHidden(); }],
     hideOthers: ["Hide Unselected", (v) => { T(v).hideUnselected(); }],
     showAll: ["Show All", (v) => { T(v).showAll(); }],
-    isolate: ["Isolate Select", (v) => forgeMayaIsolate(v)],
+    isolate: ["Isolate Select", (v) => forgeProIsolate(v)],
     selectAll: ["Select All", (v) => { if (comp(v)) v.selectAll(true); else T(v).selectAll(); }],
     selectNone: ["Select None", (v) => { if (comp(v)) v.selectAll(false); else T(v).selectNone(); }],
     invert: ["Invert Selection", (v) => { if (comp(v)) v.selectInvert(); else T(v).invertSelection(); }],
     hierarchy: ["Select Hierarchy", (v) => { T(v).selectHierarchy(); }],
     grow: ["Grow Selection", (v) => { if (comp(v)) v.selectGrow(true); }],
     shrink: ["Shrink Selection", (v) => { if (comp(v)) v.selectGrow(false); }],
-    delete: ["Delete", (v) => { if (comp(v)) forgeMayaCall("forgeFaceOp", "delete"); else { const k = T(v).removeSelected(); return k ? "Deleted." : "The object being edited stays - select another, or empty it."; } }],
-    frameSel: ["Frame Selection", (v) => forgeMayaFrame(v, false)],
-    frameAll: ["Frame All", (v) => forgeMayaFrame(v, true)],
-    defaultView: ["Default View", (v) => { forgeMayaView(v, "persp"); forgeMayaFrame(v, true); return ""; }],
-    persp: ["Perspective", (v) => forgeMayaView(v, "persp")],
-    top: ["Top", (v) => forgeMayaView(v, "top")],
-    front: ["Front", (v) => forgeMayaView(v, "front")],
-    side: ["Side", (v) => forgeMayaView(v, "side")],
+    delete: ["Delete", (v) => { if (comp(v)) forgeProCall("forgeFaceOp", "delete"); else { const k = T(v).removeSelected(); return k ? "Deleted." : "The object being edited stays - select another, or empty it."; } }],
+    frameSel: ["Frame Selection", (v) => forgeProFrame(v, false)],
+    frameAll: ["Frame All", (v) => forgeProFrame(v, true)],
+    defaultView: ["Default View", (v) => { forgeProView(v, "persp"); forgeProFrame(v, true); return ""; }],
+    persp: ["Perspective", (v) => forgeProView(v, "persp")],
+    top: ["Top", (v) => forgeProView(v, "top")],
+    front: ["Front", (v) => forgeProView(v, "front")],
+    side: ["Side", (v) => forgeProView(v, "side")],
     single: ["Single View", (v) => { v.setLook("quad", false); return "One view."; }],
     four: ["Four View", (v) => { v.setLook("quad", true); return "Four views."; }],
-    wire: ["Wireframe", (v) => forgeMayaLook(v, "wire", true)],
-    shaded: ["Shaded", (v) => forgeMayaLook(v, "wire", false)],
+    wire: ["Wireframe", (v) => forgeProLook(v, "wire", true)],
+    shaded: ["Shaded", (v) => forgeProLook(v, "wire", false)],
     textured: ["Textured", (v) => { v.setLook("clay", !v.clay); return v.clay ? "Clay (6 again for colours)." : "Colours and textures."; }],
     lights: ["Next Light", (v) => "Light: " + v.nextLight()],
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
     resetPivot: ["Reset Pivot", (v) => (T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
-    pivotEdit: ["Edit Pivot", (v) => forgeMayaPivotMode(v, null)],
+    pivotEdit: ["Edit Pivot", (v) => forgeProPivotMode(v, null)],
     freeze: ["Freeze Transformations", (v) => (T(v).freeze() ? "Frozen: reads 0 / 0 / 1, nothing moved." : "")],
     resetXf: ["Reset Transformations", (v) => (T(v).resetTransform() ? "Back to 0 / 0 / 1." : "")],
-    channelBox: ["Channel Box", () => forgeMayaPanel("channel")],
-    outliner: ["Outliner", () => forgeMayaPanel("outliner")],
-    objComp: ["Object/Component", (v) => forgeMayaF8(v)],
-    vertex: ["Vertex", (v) => forgeMayaComponents(v, "vert")],
-    edge: ["Edge", (v) => forgeMayaComponents(v, "edge")],
-    face: ["Face", (v) => forgeMayaComponents(v, "face")],
-    objectMode: ["Object Mode", (v) => forgeMayaObjectMode(v)],
+    channelBox: ["Channel Box", () => forgeProPanel("channel")],
+    outliner: ["Outliner", () => forgeProPanel("outliner")],
+    objComp: ["Object/Component", (v) => forgeProF8(v)],
+    vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
+    edge: ["Edge", (v) => forgeProComponents(v, "edge")],
+    face: ["Face", (v) => forgeProComponents(v, "face")],
+    objectMode: ["Object Mode", (v) => forgeProObjectMode(v)],
     uv: ["UV", null, "UV editing is not in Forge yet"],
     vertexFace: ["Vertex Face", null, "Vertex faces are not in Forge yet"],
     uvShell: ["UV Shell", null, "UV shells are not in Forge yet"],
     multi: ["Multi", null, "Multi-component selection is not in Forge yet"],
-    extrude: ["Extrude", async (v) => { if (!comp(v)) await forgeMayaComponents(v, "face"); forgeMayaCall("forgeFaceOp", "extrude"); }],
-    inset: ["Inset", (v) => forgeMayaCall("forgeFaceOp", "inset")],
-    reverse: ["Reverse Normals", (v) => forgeMayaCall("forgeFaceOp", "flip")],
-    smooth: ["Smooth", (v) => forgeMayaCall("forgeFaceOp", "smooth")],
-    dynamesh: ["DynaMesh", () => forgeMayaCall("forgeDynamesh")],
-    sculpt: ["Sculpt Tool", (v) => forgeMayaSculpt(v)],
-    deleteComp: ["Delete Components", () => forgeMayaCall("forgeFaceOp", "delete")],
+    extrude: ["Extrude", async (v) => { if (!comp(v)) await forgeProComponents(v, "face"); forgeProCall("forgeFaceOp", "extrude"); }],
+    inset: ["Inset", (v) => forgeProCall("forgeFaceOp", "inset")],
+    reverse: ["Reverse Normals", (v) => forgeProCall("forgeFaceOp", "flip")],
+    smooth: ["Smooth", (v) => forgeProCall("forgeFaceOp", "smooth")],
+    dynamesh: ["DynaMesh", () => forgeProCall("forgeDynamesh")],
+    sculpt: ["Sculpt Tool", (v) => forgeProSculpt(v)],
+    deleteComp: ["Delete Components", () => forgeProCall("forgeFaceOp", "delete")],
     bevel: ["Bevel", null, "Bevel is not in Forge yet"],
     edgeLoop: ["Insert Edge Loop", null, "Insert Edge Loop is not in Forge yet (T8)"],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
@@ -405,63 +405,63 @@ function forgeMayaCommands() {
     toUV: ["To UVs", null, "UVs are not in Forge yet"],
     loopSel: ["To Edge Loop", null, "double-click an edge selects its loop"],
     ringSel: ["To Edge Ring", null, "Edge rings are not on a menu yet"],
-    cube: ["Cube", () => forgeMayaCall("forgeAddPrimitive", "cube")],
-    sphere: ["Sphere", () => forgeMayaCall("forgeAddPrimitive", "sphere")],
-    cylinder: ["Cylinder", () => forgeMayaCall("forgeAddPrimitive", "cylinder")],
-    cone: ["Cone", () => forgeMayaCall("forgeAddPrimitive", "cone")],
-    plane: ["Plane", () => forgeMayaCall("forgeAddPrimitive", "plane")],
-    torus: ["Torus", () => forgeMayaCall("forgeAddPrimitive", "torus")],
-    quadsphere: ["Quad Sphere", () => forgeMayaCall("forgeAddPrimitive", "quadsphere")],
-    draw: ["Draw it", () => { forgeMayaPanel("create", true); forgeMayaCall("forgeWay", "draw"); }],
-    image: ["From an image", () => { forgeMayaPanel("create", true); forgeMayaCall("forgeWay", "image"); }],
-    describe: ["Describe it", () => { forgeMayaPanel("create", true); forgeMayaCall("forgeWay", "describe"); }],
-    creature: ["Creature", () => { forgeMayaPanel("create", true); forgeMayaCall("forgeWay", "creature"); }],
+    cube: ["Cube", () => forgeProCall("forgeAddPrimitive", "cube")],
+    sphere: ["Sphere", () => forgeProCall("forgeAddPrimitive", "sphere")],
+    cylinder: ["Cylinder", () => forgeProCall("forgeAddPrimitive", "cylinder")],
+    cone: ["Cone", () => forgeProCall("forgeAddPrimitive", "cone")],
+    plane: ["Plane", () => forgeProCall("forgeAddPrimitive", "plane")],
+    torus: ["Torus", () => forgeProCall("forgeAddPrimitive", "torus")],
+    quadsphere: ["Quad Sphere", () => forgeProCall("forgeAddPrimitive", "quadsphere")],
+    draw: ["Draw it", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "draw"); }],
+    image: ["From an image", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "image"); }],
+    describe: ["Describe it", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "describe"); }],
+    creature: ["Creature", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "creature"); }],
     save: ["Save .glb", () => { document.querySelector('#forge-exportbar [data-icon="save"]')?.click(); }],
-    close: ["Close Forge", () => forgeMayaCall("forgeClose")],
-    panelModel: ["Create panel", () => forgeMayaPanel("create")],
-    panelMaterials: ["Materials", () => forgeMayaPanel("materials")],
-    worldAxes: ["World", (v) => forgeMayaSpace(v, "world")],
-    objectAxes: ["Object", (v) => forgeMayaSpace(v, "local")],
+    close: ["Close Forge", () => forgeProCall("forgeClose")],
+    panelModel: ["Create panel", () => forgeProPanel("create")],
+    panelMaterials: ["Materials", () => forgeProPanel("materials")],
+    worldAxes: ["World", (v) => forgeProSpace(v, "world")],
+    objectAxes: ["Object", (v) => forgeProSpace(v, "local")],
     marquee: ["Marquee", () => "Drag a box to select (Shift toggles, Ctrl/Cmd removes)."],
-    snapGrid: ["Snap to Grid", (v) => forgeMayaSnapToggle(v, "grid")],
-    snapEdge: ["Snap to Edge (Curve)", (v) => forgeMayaSnapToggle(v, "edge")],
-    snapPoint: ["Snap to Point (Vertex)", (v) => forgeMayaSnapToggle(v, "point")],
-    grid: ["Grid", (v) => { const g = v.maya && v.maya.grid; if (!g) return ""; g.visible = !g.visible; v.dirty = true; return g.visible ? "Grid on." : "Grid off."; }],
-    xray: ["X-Ray", async (v) => { if (!comp(v)) await forgeMayaComponents(v, null); v.setXray(); }],
+    snapGrid: ["Snap to Grid", (v) => forgeProSnapToggle(v, "grid")],
+    snapEdge: ["Snap to Edge (Curve)", (v) => forgeProSnapToggle(v, "edge")],
+    snapPoint: ["Snap to Point (Vertex)", (v) => forgeProSnapToggle(v, "point")],
+    grid: ["Grid", (v) => { const g = v.pro && v.pro.grid; if (!g) return ""; g.visible = !g.visible; v.dirty = true; return g.visible ? "Grid on." : "Grid off."; }],
+    xray: ["X-Ray", async (v) => { if (!comp(v)) await forgeProComponents(v, null); v.setXray(); }],
     softSel: ["Soft Selection", (v) => { if (!comp(v)) return "Soft selection works on components (F9 / F10 / F11)."; v.setProportional(!v.edit.prop); return v.edit.prop ? "Soft selection on (b)." : "Soft selection off."; }],
-    winOutliner: ["Outliner", () => forgeMayaPanel("outliner")],
-    winChannel: ["Channel Box", () => forgeMayaPanel("channel")],
-    winCreate: ["Create panel", () => forgeMayaPanel("create")],
-    winMaterials: ["Materials", () => forgeMayaPanel("materials")],
-    winShelf: ["Shelf", () => forgeMayaPanel("shelf")],
-    winToolkit: ["Modeling Toolkit", () => forgeMayaPanel("toolkit")],
-    hideUI: ["Hide UI (Ctrl+Space)", () => forgeMayaHideUI()],
-    saveObj: ["Save .obj", () => forgeMayaCall("forgeSave", "obj")],
-    more: ["More...", (v) => { forgeMayaHotboxOpen(v); }],
-    sculptModel: ["Sculpt/Model", () => forgeMayaCall("forgeMode")],
+    winOutliner: ["Outliner", () => forgeProPanel("outliner")],
+    winChannel: ["Channel Box", () => forgeProPanel("channel")],
+    winCreate: ["Create panel", () => forgeProPanel("create")],
+    winMaterials: ["Materials", () => forgeProPanel("materials")],
+    winShelf: ["Shelf", () => forgeProPanel("shelf")],
+    winToolkit: ["Modeling Toolkit", () => forgeProPanel("toolkit")],
+    hideUI: ["Hide UI (Ctrl+Space)", () => forgeProHideUI()],
+    saveObj: ["Save .obj", () => forgeProCall("forgeSave", "obj")],
+    more: ["More...", (v) => { forgeProHotboxOpen(v); }],
+    sculptModel: ["Sculpt/Model", () => forgeProCall("forgeMode")],
     quadToggle: ["Quad view", (v) => { v.setLook("quad", !v.quad); return v.quad ? "Four views." : "One view."; }],
     makeLive: ["Edit this mesh", (v) => { const t = T(v), n = t.active(); return n && t.makeWorking(n.id) ? n.name + " is the one the tools edit now." : ""; }],
   };
 }
-const FORGE_MAYA_CMDS = forgeMayaCommands();
+const FORGE_PRO_CMDS = forgeProCommands();
 
-async function forgeMayaRun(v, id) {
-  const c = FORGE_MAYA_CMDS[id];
+async function forgeProRun(v, id) {
+  const c = FORGE_PRO_CMDS[id];
   if (!c || !v) return;
-  if (!c[1]) { mayaSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
+  if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
   let note = "";
-  try { note = await c[1](v); } catch (exc) { mayaSay(c[0] + " could not run: " + exc.message, true); return; }
-  if (v.maya && !/^(undo|redo|select|lastTool)$/.test(id)) v.maya.last = id;     // g repeats this
-  if (v.maya && !/^__/.test(id)) { v.maya.recent = [id].concat((v.maya.recent || []).filter((x) => x !== id)).slice(0, 10); }
-  if (v.maya && /^(move|rotate|scale)$/.test(id)) v.maya.lastTool = { move: "translate", rotate: "rotate", scale: "scale" }[id];
+  try { note = await c[1](v); } catch (exc) { proSay(c[0] + " could not run: " + exc.message, true); return; }
+  if (v.pro && !/^(undo|redo|select|lastTool)$/.test(id)) v.pro.last = id;     // g repeats this
+  if (v.pro && !/^__/.test(id)) { v.pro.recent = [id].concat((v.pro.recent || []).filter((x) => x !== id)).slice(0, 10); }
+  if (v.pro && /^(move|rotate|scale)$/.test(id)) v.pro.lastTool = { move: "translate", rotate: "rotate", scale: "scale" }[id];
   if (v.tree) v.tree.build();
-  mayaSay(note || "");
+  proSay(note || "");
 }
 
-// ================================================================== marking menus (Maya's compass layout)
+// ================================================================== marking menus (the pro compass layout)
 // a menu: { title, ring: { N: id, NE: id, ... }, list: [id, ...] }
-function forgeMayaMenu(v, ctx) {
-  const comp = forgeMayaComp(v), mode = v.edit ? v.edit.mode : "face";
+function forgeProMenu(v, ctx) {
+  const comp = forgeProComp(v), mode = v.edit ? v.edit.mode : "face";
   if (ctx.key === "q") return { title: "Select", ring: { NW: "marquee", SE: "selectNone", E: "selectAll", W: "invert" }, list: [] };
   if (ctx.key === "w" || ctx.key === "e") return { title: ctx.key === "w" ? "Move" : "Rotate", ring: { W: "worldAxes", NW: "objectAxes", N: "pivotEdit", S: "resetPivot" }, list: [] };
   if (ctx.ctrl) {                                   // convert the selection (polyConvertMM)
@@ -484,39 +484,39 @@ function forgeMayaMenu(v, ctx) {
     list: ["selectAll", "selectNone", "frameAll", "defaultView", "wire", "shaded", "quadToggle", "lights", "undo", "redo", "more"] };
 }
 
-function forgeMayaMarkHost() {
-  let host = document.getElementById("forge-maya-marking");
+function forgeProMarkHost() {
+  let host = document.getElementById("forge-pro-marking");
   if (host) return host;
-  host = mayaEl("div", "forge-maya-marking");
-  host.id = "forge-maya-marking"; host.hidden = true;
+  host = proEl("div", "forge-pro-marking");
+  host.id = "forge-pro-marking"; host.hidden = true;
   host.setAttribute("role", "menu");
   document.body.append(host);
   return host;
 }
 
-function forgeMayaMarkShow(v, x, y, menu) {
-  const host = forgeMayaMarkHost();
+function forgeProMarkShow(v, x, y, menu) {
+  const host = forgeProMarkHost();
   host.textContent = "";
-  host.append(mayaEl("span", "forge-maya-hub", menu.title || ""));
+  host.append(proEl("span", "forge-pro-hub", menu.title || ""));
   for (const [pos, id] of Object.entries(menu.ring)) {
-    const c = FORGE_MAYA_CMDS[id]; if (!c) continue;
+    const c = FORGE_PRO_CMDS[id]; if (!c) continue;
     const a = FORGE_COMPASS[pos] * Math.PI / 180;
-    const b = mayaEl("button", "forge-maya-wedge pos-" + pos.toLowerCase() + (c[1] ? "" : " off"), c[0]);
-    b.type = "button"; b.dataset.mayaCmd = c[0]; b.dataset.mayaId = id; b.dataset.pos = pos;
+    const b = proEl("button", "forge-pro-wedge pos-" + pos.toLowerCase() + (c[1] ? "" : " off"), c[0]);
+    b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id; b.dataset.pos = pos;
     if (!c[1]) b.title = c[2] || "Not in Forge yet";
-    b.style.left = Math.round(Math.cos(a) * FORGE_MAYA_R) + "px";
-    b.style.top = Math.round(Math.sin(a) * FORGE_MAYA_R * 0.82) + "px";
-    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeMayaMarkHide(); forgeMayaRun(v, id); });
+    b.style.left = Math.round(Math.cos(a) * FORGE_PRO_R) + "px";
+    b.style.top = Math.round(Math.sin(a) * FORGE_PRO_R * 0.82) + "px";
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
     host.append(b);
   }
   if (menu.list && menu.list.length) {
-    const list = mayaEl("div", "forge-maya-mlist");
-    list.style.top = Math.round(FORGE_MAYA_R * 0.82 + 30) + "px";
+    const list = proEl("div", "forge-pro-mlist");
+    list.style.top = Math.round(FORGE_PRO_R * 0.82 + 30) + "px";
     for (const id of menu.list) {
-      const c = FORGE_MAYA_CMDS[id]; if (!c) continue;
-      const b = mayaEl("button", "forge-maya-litem" + (c[1] ? "" : " off"), c[0]);
-      b.type = "button"; b.dataset.mayaCmd = c[0]; b.dataset.mayaId = id;
-      b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeMayaMarkHide(); forgeMayaRun(v, id); });
+      const c = FORGE_PRO_CMDS[id]; if (!c) continue;
+      const b = proEl("button", "forge-pro-litem" + (c[1] ? "" : " off"), c[0]);
+      b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
       list.append(b);
     }
     host.append(list);
@@ -528,19 +528,19 @@ function forgeMayaMarkShow(v, x, y, menu) {
   host._at = [x, y]; host._menu = menu;
 }
 
-function forgeMayaMarkHide() {
-  const host = document.getElementById("forge-maya-marking");
+function forgeProMarkHide() {
+  const host = document.getElementById("forge-pro-marking");
   if (host) { host.hidden = true; host.textContent = ""; host._menu = null; }
 }
 
-// which wedge does a release at (x, y) mean? Maya picks by DIRECTION once past the dead zone
-function forgeMayaMarkPick(x, y) {
-  const host = document.getElementById("forge-maya-marking");
+// which wedge does a release at (x, y) mean? pro picks by DIRECTION once past the dead zone
+function forgeProMarkPick(x, y) {
+  const host = document.getElementById("forge-pro-marking");
   if (!host || host.hidden || !host._at) return null;
   const hit = document.elementFromPoint(x, y);
-  if (hit && hit.dataset && hit.dataset.mayaId && host.contains(hit)) return hit.dataset.mayaId;
+  if (hit && hit.dataset && hit.dataset.proId && host.contains(hit)) return hit.dataset.proId;
   const dx = x - host._at[0], dy = y - host._at[1];
-  if (Math.hypot(dx, dy) < FORGE_MAYA_DEAD) return null;
+  if (Math.hypot(dx, dy) < FORGE_PRO_DEAD) return null;
   const ang = Math.atan2(dy, dx) * 180 / Math.PI;
   let best = null, bestD = 999;
   for (const pos of Object.keys(host._menu.ring)) {
@@ -549,18 +549,18 @@ function forgeMayaMarkPick(x, y) {
   }
   return bestD <= 30 ? best : null;
 }
-function forgeMayaMarkHover(x, y) {
-  const host = document.getElementById("forge-maya-marking");
+function forgeProMarkHover(x, y) {
+  const host = document.getElementById("forge-pro-marking");
   if (!host || host.hidden) return;
-  const id = forgeMayaMarkPick(x, y);
-  for (const b of host.querySelectorAll("[data-maya-id]")) b.classList.toggle("hot", b.dataset.mayaId === id);
+  const id = forgeProMarkPick(x, y);
+  for (const b of host.querySelectorAll("[data-pro-id]")) b.classList.toggle("hot", b.dataset.proId === id);
 }
 
-// ================================================================== the hotbox (hold Space) - Maya's layout
-// Maya's hotbox: rows of menu names centred on the mouse (the common menus above the middle, the modelling menu
+// ================================================================== the hotbox (hold Space) - the pro layout
+// the pro hotbox: rows of menu names centred on the mouse (the common menus above the middle, the modelling menu
 // set below it), each opening its own list; "Recent Commands" first; the centre and the four zones around it
 // open marking menus (press, flick, release). Every command in Forge is in here - the panels are optional.
-const FORGE_MAYA_ROWS = [
+const FORGE_PRO_ROWS = [
   ["Recent Commands", []],                      // filled from what you ran last
   ["File", ["save", "saveObj", "close"]],
   ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete"]],
@@ -569,15 +569,15 @@ const FORGE_MAYA_ROWS = [
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "hideUI"]],
-  // the modelling menu set (Maya's second row)
+  // the modelling menu set (the pro second row)
   ["Mesh", ["smooth", "dynamesh", "sculptModel"]],
   ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"]],
   ["Mesh Tools", ["softSel", "sculpt", "multiCut", "edgeLoop"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
 ];
-const FORGE_MAYA_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
+const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)
-const FORGE_MAYA_ZONES = {
+const FORGE_PRO_ZONES = {
   center: { title: "Views", ring: { N: "persp", W: "top", S: "front", E: "side" } },
   north: { title: "Layouts", ring: { N: "single", E: "four", S: "winOutliner", W: "hideUI" } },
   south: { title: "Panels", ring: { N: "winOutliner", E: "winMaterials", W: "winCreate", S: "winChannel" } },
@@ -585,158 +585,158 @@ const FORGE_MAYA_ZONES = {
   west: { title: "Selection mode", ring: { NW: "objComp", NE: "hierarchy", SW: "face", N: "vertex", W: "edge" } },
 };
 // commands that are switches: the hotbox shows a tick when they are on
-const FORGE_MAYA_TOGGLES = {
-  snapGrid: (v) => !!v.maya.snap.grid, snapEdge: (v) => !!v.maya.snap.edge, snapPoint: (v) => !!v.maya.snap.point,
-  grid: (v) => !!(v.maya.grid && v.maya.grid.visible), xray: (v) => !!(v.edit && v.edit.xray),
+const FORGE_PRO_TOGGLES = {
+  snapGrid: (v) => !!v.pro.snap.grid, snapEdge: (v) => !!v.pro.snap.edge, snapPoint: (v) => !!v.pro.snap.point,
+  grid: (v) => !!(v.pro.grid && v.pro.grid.visible), xray: (v) => !!(v.edit && v.edit.xray),
   softSel: (v) => !!(v.edit && v.edit.prop), wire: (v) => !!v.wire, textured: (v) => !v.clay, quadToggle: (v) => !!v.quad,
-  winOutliner: () => forgeMayaPanels().outliner, winChannel: () => forgeMayaPanels().channel, winCreate: () => forgeMayaPanels().create,
-  winMaterials: () => forgeMayaPanels().materials, winShelf: () => forgeMayaPanels().shelf, winToolkit: () => forgeMayaPanels().toolkit,
+  winOutliner: () => forgeProPanels().outliner, winChannel: () => forgeProPanels().channel, winCreate: () => forgeProPanels().create,
+  winMaterials: () => forgeProPanels().materials, winShelf: () => forgeProPanels().shelf, winToolkit: () => forgeProPanels().toolkit,
 };
 
-function forgeMayaItem(id, host) {
-  const c = FORGE_MAYA_CMDS[id];
+function forgeProItem(id, host) {
+  const c = FORGE_PRO_CMDS[id];
   if (!c) return null;
-  const b = mayaEl("button", "forge-maya-item" + (c[1] ? "" : " off"));
-  b.type = "button"; b.dataset.mayaCmd = c[0]; b.dataset.mayaId = id;
-  b.append(mayaEl("span", "forge-maya-tick", ""), mayaEl("span", "forge-maya-label", c[0]));
+  const b = proEl("button", "forge-pro-item" + (c[1] ? "" : " off"));
+  b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
+  b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", c[0]));
   if (!c[1]) b.title = c[2] || "";
   b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
-  b.addEventListener("click", (ev) => { ev.stopPropagation(); const v = forge.view; host._used = true; forgeMayaHotboxHide(); if (v) forgeMayaRun(v, id); });
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); const v = forge.view; host._used = true; forgeProHotboxHide(); if (v) forgeProRun(v, id); });
   return b;
 }
 
-function forgeMayaHotboxHost() {
-  let host = document.getElementById("forge-maya-hotbox");
+function forgeProHotboxHost() {
+  let host = document.getElementById("forge-pro-hotbox");
   if (host) return host;
   const sheet = document.getElementById("forge");
   if (!sheet) return null;
-  host = mayaEl("div", "forge-maya-hotbox");
-  host.id = "forge-maya-hotbox"; host.hidden = true;
+  host = proEl("div", "forge-pro-hotbox");
+  host.id = "forge-pro-hotbox"; host.hidden = true;
   host.setAttribute("role", "menu");
-  const rows = [mayaEl("div", "forge-maya-row up"), mayaEl("div", "forge-maya-row down")];
-  FORGE_MAYA_ROWS.forEach(([head, ids], i) => {
-    const col = mayaEl("section", "forge-maya-col");
+  const rows = [proEl("div", "forge-pro-row up"), proEl("div", "forge-pro-row down")];
+  FORGE_PRO_ROWS.forEach(([head, ids], i) => {
+    const col = proEl("section", "forge-pro-col");
     col.dataset.menu = head;
-    const h = mayaEl("button", "forge-maya-head", head);
+    const h = proEl("button", "forge-pro-head", head);
     h.type = "button";
-    const list = mayaEl("div", "forge-maya-list");
+    const list = proEl("div", "forge-pro-list");
     list.hidden = true;
-    for (const id of ids) { const b = forgeMayaItem(id, host); if (b) list.append(b); }
+    for (const id of ids) { const b = forgeProItem(id, host); if (b) list.append(b); }
     const open = () => {
-      for (const l of host.querySelectorAll(".forge-maya-list")) l.hidden = l !== list;
-      for (const x of host.querySelectorAll(".forge-maya-head")) x.classList.toggle("open", x === h);
+      for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = l !== list;
+      for (const x of host.querySelectorAll(".forge-pro-head")) x.classList.toggle("open", x === h);
     };
     h.addEventListener("pointerenter", open);
     h.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); open(); });
     col.append(h, list);
-    rows[i < FORGE_MAYA_ROW_SPLIT ? 0 : 1].append(col);
+    rows[i < FORGE_PRO_ROW_SPLIT ? 0 : 1].append(col);
   });
-  const hub = mayaEl("div", "forge-maya-zonehub", "Forge");
+  const hub = proEl("div", "forge-pro-zonehub", "Forge");
   hub.title = "Press in the middle for the views (Perspective / Top / Front / Side); above, below, left and right are the other zones.";
-  const labels = mayaEl("div", "forge-maya-zones");
-  for (const [z, t] of [["north", "Layouts"], ["south", "Panels"], ["east", "UI"], ["west", "Selection"]]) labels.append(mayaEl("span", "z-" + z, t));
-  const box = mayaEl("div", "forge-maya-hbbox");
+  const labels = proEl("div", "forge-pro-zones");
+  for (const [z, t] of [["north", "Layouts"], ["south", "Panels"], ["east", "UI"], ["west", "Selection"]]) labels.append(proEl("span", "z-" + z, t));
+  const box = proEl("div", "forge-pro-hbbox");
   box.append(rows[0], hub, rows[1], labels);
   host.append(box);
   // a press in a zone (not on a menu) opens its marking menu; releasing picks by direction
   host.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0 || ev.target.closest(".forge-maya-col")) return;
+    if (ev.button !== 0 || ev.target.closest(".forge-pro-col")) return;
     ev.preventDefault();
     const c = host._center || [window.innerWidth / 2, window.innerHeight / 2];
     const dx = ev.clientX - c[0], dy = ev.clientY - c[1];
     const zone = Math.abs(dx) < 70 && Math.abs(dy) < 34 ? "center" : Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? "north" : "south") : (dx < 0 ? "west" : "east");
     host._used = true;
     host._zone = zone;
-    for (const l of host.querySelectorAll(".forge-maya-list")) l.hidden = true;
-    forgeMayaMarkShow(forge.view, ev.clientX, ev.clientY, FORGE_MAYA_ZONES[zone]);
+    for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = true;
+    forgeProMarkShow(forge.view, ev.clientX, ev.clientY, FORGE_PRO_ZONES[zone]);
   });
-  window.addEventListener("pointermove", (ev) => { if (host._zone) forgeMayaMarkHover(ev.clientX, ev.clientY); });
+  window.addEventListener("pointermove", (ev) => { if (host._zone) forgeProMarkHover(ev.clientX, ev.clientY); });
   window.addEventListener("pointerup", (ev) => {
     if (!host._zone) return;
     host._zone = null;
-    const id = forgeMayaMarkPick(ev.clientX, ev.clientY);
-    forgeMayaMarkHide(); forgeMayaHotboxHide();
-    if (id) forgeMayaRun(forge.view, id);
+    const id = forgeProMarkPick(ev.clientX, ev.clientY);
+    forgeProMarkHide(); forgeProHotboxHide();
+    if (id) forgeProRun(forge.view, id);
   });
   document.body.append(host);                     // not inside the sheet: its transform would shift fixed positions
   return host;
 }
 
-function forgeMayaHotboxRefresh(v, host) {        // ticks on the switches, and the Recent Commands list
-  for (const b of host.querySelectorAll(".forge-maya-item")) {
-    const st = FORGE_MAYA_TOGGLES[b.dataset.mayaId];
+function forgeProHotboxRefresh(v, host) {        // ticks on the switches, and the Recent Commands list
+  for (const b of host.querySelectorAll(".forge-pro-item")) {
+    const st = FORGE_PRO_TOGGLES[b.dataset.proId];
     let on = false;
     try { on = !!(st && v && st(v)); } catch (_) { on = false; }
     b.classList.toggle("on", on);
     b.firstChild.textContent = on ? "\u2713" : "";
   }
-  const recent = host.querySelector('.forge-maya-col[data-menu="Recent Commands"] .forge-maya-list');
+  const recent = host.querySelector('.forge-pro-col[data-menu="Recent Commands"] .forge-pro-list');
   if (recent) {
     recent.textContent = "";
-    const ids = (v && v.maya && v.maya.recent) || [];
-    if (!ids.length) recent.append(mayaEl("div", "forge-maya-empty", "Nothing yet"));
-    for (const id of ids) { const b = forgeMayaItem(id, host); if (b) recent.append(b); }
+    const ids = (v && v.pro && v.pro.recent) || [];
+    if (!ids.length) recent.append(proEl("div", "forge-pro-empty", "Nothing yet"));
+    for (const id of ids) { const b = forgeProItem(id, host); if (b) recent.append(b); }
   }
 }
 
 // ================================================================== the Space wheel (floats at the mouse) - Ziva, 644e291
-// Owner, 2026-10-19 (to Ziva): "i want the space bar menue to float where my mouse is just like maya not a newhud its
+// Owner, 2026-10-19 (to Ziva): "i want the space bar menue to float where my mouse is just like pro not a newhud its
 // like a wheel and when you hover over it brings down a new menue". So Space opens a wheel AT THE POINTER, and
-// hovering a wedge brings that menu down beside it. The wedges are the hotbox's own menus (FORGE_MAYA_ROWS, Recent
-// Commands first) and the commands come from FORGE_MAYA_CMDS, so the two can never drift apart; every list ends
-// with "All menus", which opens the full hotbox (Maya's five zones) - nothing was taken away.
-const FORGE_MAYA_WHEEL_R = 165;          // an ellipse (165 x 122 px): twelve wedges that never overlap
+// hovering a wedge brings that menu down beside it. The wedges are the hotbox's own menus (FORGE_PRO_ROWS, Recent
+// Commands first) and the commands come from FORGE_PRO_CMDS, so the two can never drift apart; every list ends
+// with "All menus", which opens the full hotbox (the pro five zones) - nothing was taken away.
+const FORGE_PRO_WHEEL_R = 165;          // an ellipse (165 x 122 px): twelve wedges that never overlap
 
-function forgeMayaWheelHost() {
-  let host = document.getElementById("forge-maya-wheel");
+function forgeProWheelHost() {
+  let host = document.getElementById("forge-pro-wheel");
   if (host) return host;
   const stage = document.getElementById("forge-stage");
   if (!stage) return null;
-  host = mayaEl("div", "forge-maya-wheel");
-  host.id = "forge-maya-wheel"; host.hidden = true;
+  host = proEl("div", "forge-pro-wheel");
+  host.id = "forge-pro-wheel"; host.hidden = true;
   host.setAttribute("role", "menu");
   stage.append(host);
   return host;
 }
 
-function forgeMayaWheelSub(v, head, ids, angle) {
-  const host = document.getElementById("forge-maya-wheel");
+function forgeProWheelSub(v, head, ids, angle) {
+  const host = document.getElementById("forge-pro-wheel");
   if (!host) return;
   const old = host.querySelector(".forge-wheel-sub");
   if (old) old.remove();
-  for (const w of host.querySelectorAll(".forge-wheel-wedge")) w.classList.toggle("open", w.dataset.mayaHead === head);
-  const sub = mayaEl("div", "forge-wheel-sub");
+  for (const w of host.querySelectorAll(".forge-wheel-wedge")) w.classList.toggle("open", w.dataset.proHead === head);
+  const sub = proEl("div", "forge-wheel-sub");
   sub.dataset.head = head;
-  sub.append(mayaEl("span", "forge-wheel-subtitle", head));
-  if (head === "Recent Commands") ids = (v && v.maya && v.maya.recent) || [];
-  if (!ids.length) sub.append(mayaEl("span", "forge-wheel-subtitle", "Nothing yet"));
+  sub.append(proEl("span", "forge-wheel-subtitle", head));
+  if (head === "Recent Commands") ids = (v && v.pro && v.pro.recent) || [];
+  if (!ids.length) sub.append(proEl("span", "forge-wheel-subtitle", "Nothing yet"));
   for (const id of ids) {
-    const c = FORGE_MAYA_CMDS[id];
+    const c = FORGE_PRO_CMDS[id];
     if (!c) continue;
-    const b = mayaEl("button", "forge-wheel-item" + (c[1] ? "" : " off"));
-    b.type = "button"; b.dataset.mayaId = id;
+    const b = proEl("button", "forge-wheel-item" + (c[1] ? "" : " off"));
+    b.type = "button"; b.dataset.proId = id;
     let on = false;
-    try { on = !!(FORGE_MAYA_TOGGLES[id] && FORGE_MAYA_TOGGLES[id](v)); } catch (_) { on = false; }
-    b.append(mayaEl("span", "forge-maya-tick", on ? "\u2713" : ""), mayaEl("span", "", c[0]));
+    try { on = !!(FORGE_PRO_TOGGLES[id] && FORGE_PRO_TOGGLES[id](v)); } catch (_) { on = false; }
+    b.append(proEl("span", "forge-pro-tick", on ? "\u2713" : ""), proEl("span", "", c[0]));
     b.classList.toggle("on", on);
     if (!c[1]) b.title = c[2] || "";
     b.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (!c[1]) { mayaSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
+      if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
       const view = forge.view;
       host._used = true;
-      forgeMayaWheelClose();
-      if (view) forgeMayaRun(view, id);
+      forgeProWheelClose();
+      if (view) forgeProRun(view, id);
     });
     sub.append(b);
   }
-  const b2 = mayaEl("button", "forge-wheel-item forge-wheel-more", "All menus (the full menu grid)");
+  const b2 = proEl("button", "forge-wheel-item forge-wheel-more", "All menus (the full menu grid)");
   b2.type = "button";
-  b2.addEventListener("click", (ev) => { ev.stopPropagation(); host._used = true; forgeMayaWheelClose(); forgeMayaHotboxOpen(v, host._at); });
+  b2.addEventListener("click", (ev) => { ev.stopPropagation(); host._used = true; forgeProWheelClose(); forgeProHotboxOpen(v, host._at); });
   sub.append(b2);
   // the menu opens OUTWARD from its wedge, its nearest edge just past it, so it never covers the ring
   const cx = Math.cos(angle), cy = Math.sin(angle);
-  const ex = Math.cos(angle) * (FORGE_MAYA_WHEEL_R + 48), ey = Math.sin(angle) * (FORGE_MAYA_WHEEL_R * 0.74 + 22);
+  const ex = Math.cos(angle) * (FORGE_PRO_WHEEL_R + 48), ey = Math.sin(angle) * (FORGE_PRO_WHEEL_R * 0.74 + 22);
   sub.style.left = Math.round(ex) + "px";
   sub.style.top = Math.round(ey) + "px";
   sub.style.transform = Math.abs(cx) >= Math.abs(cy)
@@ -746,25 +746,25 @@ function forgeMayaWheelSub(v, head, ids, angle) {
   host.dataset.open = head;
 }
 
-function forgeMayaWheelOpen(v, at) {
-  const host = forgeMayaWheelHost();
+function forgeProWheelOpen(v, at) {
+  const host = forgeProWheelHost();
   if (!host) return;
   host.textContent = "";
   host._used = false;
-  const menus = FORGE_MAYA_ROWS;
+  const menus = FORGE_PRO_ROWS;
   const n = menus.length;
-  host.append(mayaEl("span", "forge-wheel-hub", "Space"));
+  host.append(proEl("span", "forge-wheel-hub", "Space"));
   menus.forEach(([head, ids], i) => {
     const a = (-Math.PI / 2) + (i * 2 * Math.PI) / n;
-    const b = mayaEl("button", "forge-wheel-wedge", head === "Recent Commands" ? "Recent" : head);
-    b.type = "button"; b.dataset.mayaHead = head;
-    b.style.left = Math.round(Math.cos(a) * FORGE_MAYA_WHEEL_R) + "px";
-    b.style.top = Math.round(Math.sin(a) * FORGE_MAYA_WHEEL_R * 0.74) + "px";
-    b.addEventListener("mouseenter", () => forgeMayaWheelSub(v, head, ids, a));
-    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeMayaWheelSub(v, head, ids, a); });
+    const b = proEl("button", "forge-wheel-wedge", head === "Recent Commands" ? "Recent" : head);
+    b.type = "button"; b.dataset.proHead = head;
+    b.style.left = Math.round(Math.cos(a) * FORGE_PRO_WHEEL_R) + "px";
+    b.style.top = Math.round(Math.sin(a) * FORGE_PRO_WHEEL_R * 0.74) + "px";
+    b.addEventListener("mouseenter", () => forgeProWheelSub(v, head, ids, a));
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProWheelSub(v, head, ids, a); });
     host.append(b);
   });
-  const c = at || (v && v.maya && v.maya.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
+  const c = at || (v && v.pro && v.pro.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
   const rect = (host.parentElement || document.body).getBoundingClientRect();
   host._at = c;
   // where the mouse is - kept far enough inside the viewport that the ring fits
@@ -774,43 +774,43 @@ function forgeMayaWheelOpen(v, at) {
   host.hidden = false;
 }
 
-function forgeMayaWheelClose() {
-  const host = document.getElementById("forge-maya-wheel");
+function forgeProWheelClose() {
+  const host = document.getElementById("forge-pro-wheel");
   if (host) { host.hidden = true; host.textContent = ""; delete host.dataset.open; }
 }
 
-function forgeMayaWheelOpenNow() {
-  const wh = document.getElementById("forge-maya-wheel");
+function forgeProWheelOpenNow() {
+  const wh = document.getElementById("forge-pro-wheel");
   return !!(wh && !wh.hidden);
 }
 // a click anywhere outside the wheel puts it away
 document.addEventListener("pointerdown", (ev) => {
-  const wh = document.getElementById("forge-maya-wheel");
-  if (wh && !wh.hidden && !wh.contains(ev.target)) forgeMayaWheelClose();
+  const wh = document.getElementById("forge-pro-wheel");
+  if (wh && !wh.hidden && !wh.contains(ev.target)) forgeProWheelClose();
 }, true);
 
-function forgeMayaHotboxOpen(v, at) {
-  const host = forgeMayaHotboxHost();
+function forgeProHotboxOpen(v, at) {
+  const host = forgeProHotboxHost();
   if (!host) return;
-  const c = at || (v && v.maya && v.maya.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
+  const c = at || (v && v.pro && v.pro.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
   const x = Math.max(260, Math.min(window.innerWidth - 260, c[0])), y = Math.max(160, Math.min(window.innerHeight - 200, c[1]));
   host._center = [x, y]; host._used = false;
-  const box = host.querySelector(".forge-maya-hbbox");
+  const box = host.querySelector(".forge-pro-hbbox");
   if (box) { box.style.left = Math.round(x) + "px"; box.style.top = Math.round(y) + "px"; }
-  for (const l of host.querySelectorAll(".forge-maya-list")) l.hidden = true;
-  for (const h of host.querySelectorAll(".forge-maya-head")) h.classList.remove("open");
-  forgeMayaHotboxRefresh(v, host);
+  for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = true;
+  for (const h of host.querySelectorAll(".forge-pro-head")) h.classList.remove("open");
+  forgeProHotboxRefresh(v, host);
   host.hidden = false;
 }
 
-function forgeMayaHotboxHide() {
-  const host = document.getElementById("forge-maya-hotbox");
+function forgeProHotboxHide() {
+  const host = document.getElementById("forge-pro-hotbox");
   if (host) { host.hidden = true; delete host.dataset.pinned; }
 }
 
 // a Space tap: one view <-> four views; a tap over a pane of the four maximises that pane
-function forgeMayaTap(v) {
-  const m = v.maya;
+function forgeProTap(v) {
+  const m = v.pro;
   if (!v.quad) { v.setLook("quad", true); return "Four views (tap Space over one to make it big)."; }
   let name = "persp";
   const r = v.canvas && v.canvas.getBoundingClientRect();
@@ -824,8 +824,8 @@ function forgeMayaTap(v) {
 }
 
 // ================================================================== the mouse in the viewport
-function forgeMayaPickAt(v, x, y) {               // the node under the screen point (x, y), or null
-  const t = forgeMayaTree(v);
+function forgeProPickAt(v, x, y) {               // the node under the screen point (x, y), or null
+  const t = forgeProTree(v);
   if (!t || !v.canvas || !v.camera) return null;
   const THREE = v.THREE, r = v.canvas.getBoundingClientRect();
   v.camera.updateMatrixWorld();
@@ -835,8 +835,8 @@ function forgeMayaPickAt(v, x, y) {               // the node under the screen p
   return hit ? t.nodeOfObject(hit.object) : null;
 }
 
-function forgeMayaBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is inside a screen box
-  const t = forgeMayaTree(v);
+function forgeProBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is inside a screen box
+  const t = forgeProTree(v);
   if (!t) return [];
   const THREE = v.THREE, r = v.canvas.getBoundingClientRect();
   v.camera.updateMatrixWorld();
@@ -853,72 +853,72 @@ function forgeMayaBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is insi
   }
   return out;
 }
-// Maya's modifiers: Shift toggles, Ctrl/Cmd removes, Ctrl/Cmd+Shift adds
-const forgeMayaHow = (e) => ((e.ctrlKey || e.metaKey) && e.shiftKey ? "add" : (e.ctrlKey || e.metaKey) ? "remove" : e.shiftKey ? "toggle" : "set");
+// the pro modifiers: Shift toggles, Ctrl/Cmd removes, Ctrl/Cmd+Shift adds
+const forgeProHow = (e) => ((e.ctrlKey || e.metaKey) && e.shiftKey ? "add" : (e.ctrlKey || e.metaKey) ? "remove" : e.shiftKey ? "toggle" : "set");
 
 // ================================================================== attach to a viewer
-function forgeMayaAttach(view, ctx) {
+function forgeProAttach(view, ctx) {
   const { THREE, canvas, controls } = ctx;
-  const maya = view.maya = { timer: 0, at: null, down: false, last: null, open: false, saved: null, controls: controls,
+  const pro = view.pro = { timer: 0, at: null, down: false, last: null, open: false, saved: null, controls: controls,
     held: new Set(), mouse: null, spaceAt: 0, tool: null, lastTool: "translate", isolated: null,
     snap: { grid: false, edge: false, point: false }, gridStep: 0.25, recent: [], grid: null };
-  if (!canvas || !controls) return maya;
+  if (!canvas || !controls) return pro;
 
-  // Maya's grid on the ground plane: a line every unit, a fainter one every grid step (what x snaps to)
+  // the pro grid on the ground plane: a line every unit, a fainter one every grid step (what x snaps to)
   if (ctx.scene) {
     const g = new THREE.Group(); g.name = "forge-grid";
-    const fine = new THREE.GridHelper(12, 12 / maya.gridStep, 0x3a3f49, 0x2c3038);
+    const fine = new THREE.GridHelper(12, 12 / pro.gridStep, 0x3a3f49, 0x2c3038);
     const major = new THREE.GridHelper(12, 12, 0x7b818d, 0x4a505a);
     for (const h of [fine, major]) { h.material.transparent = true; h.material.depthWrite = false; h.raycast = () => {}; }
     fine.material.opacity = 0.35; major.material.opacity = 0.6;
     g.add(fine, major); g.renderOrder = -1;
     ctx.scene.add(g);
-    maya.grid = g;
+    pro.grid = g;
   }
 
-  // the buttons: Maya - Alt/Option + left / middle / right = tumble / track / dolly; without Alt the left button
+  // the buttons: pro - Alt/Option + left / middle / right = tumble / track / dolly; without Alt the left button
   // selects and the right button is the marking menu
-  const buttons = maya.buttons = () => {
+  const buttons = pro.buttons = () => {
     const mb = controls.mouseButtons;
-    if (maya.altOn) {
+    if (pro.altOn) {
       mb.LEFT = view.cam && view.cam !== "persp" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
       mb.MIDDLE = THREE.MOUSE.PAN;
       mb.RIGHT = THREE.MOUSE.DOLLY;
     } else { mb.LEFT = null; mb.MIDDLE = null; mb.RIGHT = null; }
   };
-  const mayaAlt = maya.alt = (on) => {
+  const proAlt = pro.alt = (on) => {
     on = !!on;
-    if (on === !!maya.altOn) return;
-    maya.altOn = on;
-    if (on) { maya.saved = Object.assign({}, controls.mouseButtons); Object.assign(controls.mouseButtons, { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY }); if (view.cam && view.cam !== "persp") controls.mouseButtons.LEFT = THREE.MOUSE.PAN; }
-    else { maya.saved = null; buttons(); }
+    if (on === !!pro.altOn) return;
+    pro.altOn = on;
+    if (on) { pro.saved = Object.assign({}, controls.mouseButtons); Object.assign(controls.mouseButtons, { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY }); if (view.cam && view.cam !== "persp") controls.mouseButtons.LEFT = THREE.MOUSE.PAN; }
+    else { pro.saved = null; buttons(); }
   };
   buttons();
   const setMode = view.setMode;
   view.setMode = (m) => { setMode(m); buttons(); };   // forge_edit puts orbit on the middle button in poly mode
 
   // ------------------------------------------------ left button: select (click / Shift / Ctrl / box), q/w/e + left = menu
-  const box = mayaEl("div", "forge-marquee"); box.hidden = true;
+  const box = proEl("div", "forge-marquee"); box.hidden = true;
   canvas.parentElement.append(box);
   let gest = null;
   canvas.addEventListener("pointerdown", (e) => {
-    maya.mouse = [e.clientX, e.clientY];
+    pro.mouse = [e.clientX, e.clientY];
     if (e.button !== 0 || e.altKey) return;              // every view, the four-view layout included (Ziva)
-    const held = ["q", "w", "e"].find((k) => maya.held.has(k));
+    const held = ["q", "w", "e"].find((k) => pro.held.has(k));
     if (held && view.mode !== "sculpt") {               // hold q / w / e + left button: that tool's marking menu
       e.preventDefault(); e.stopImmediatePropagation();
-      maya.open = "key";
-      forgeMayaMarkShow(view, e.clientX, e.clientY, forgeMayaMenu(view, { key: held }));
+      pro.open = "key";
+      forgeProMarkShow(view, e.clientX, e.clientY, forgeProMenu(view, { key: held }));
       return;
     }
     if (view.mode !== "view") return;                    // sculpt strokes and component picking own the button there
     const tc = view.transform;
     if (tc && tc.object && tc.axis) return;            // the handle
-    gest = { at: [e.clientX, e.clientY], how: forgeMayaHow(e), box: false, id: e.pointerId };
+    gest = { at: [e.clientX, e.clientY], how: forgeProHow(e), box: false, id: e.pointerId };
   }, { capture: true });
   canvas.addEventListener("pointermove", (e) => {
-    maya.mouse = [e.clientX, e.clientY];
-    if (maya.open) { forgeMayaMarkHover(e.clientX, e.clientY); return; }
+    pro.mouse = [e.clientX, e.clientY];
+    if (pro.open) { forgeProMarkHover(e.clientX, e.clientY); return; }
     if (!gest) return;
     if (!gest.box && Math.hypot(e.clientX - gest.at[0], e.clientY - gest.at[1]) > 4) {
       gest.box = true;
@@ -933,81 +933,81 @@ function forgeMayaAttach(view, ctx) {
   });
   const endLeft = (e) => {
     if (e.button !== 0) return;
-    if (maya.open === "key") {
-      maya.open = false;
-      const id = forgeMayaMarkPick(e.clientX, e.clientY);
-      forgeMayaMarkHide();
-      if (id) forgeMayaRun(view, id);
+    if (pro.open === "key") {
+      pro.open = false;
+      const id = forgeProMarkPick(e.clientX, e.clientY);
+      forgeProMarkHide();
+      if (id) forgeProRun(view, id);
       return;
     }
     if (!gest) return;
     const g = gest; gest = null; box.hidden = true;
-    const t = forgeMayaTree(view);
+    const t = forgeProTree(view);
     if (!t) return;
-    if (g.box) { t.selectMany(forgeMayaBoxPick(view, g.at[0], g.at[1], e.clientX, e.clientY), g.how === "set" ? "set" : g.how); return; }
-    const n = forgeMayaPickAt(view, e.clientX, e.clientY);
+    if (g.box) { t.selectMany(forgeProBoxPick(view, g.at[0], g.at[1], e.clientX, e.clientY), g.how === "set" ? "set" : g.how); return; }
+    const n = forgeProPickAt(view, e.clientX, e.clientY);
     if (n) t.select(n.id, g.how);
     else if (g.how === "set") t.selectNone();
   };
   canvas.addEventListener("pointerup", endLeft);
-  window.addEventListener("pointerup", (e) => { if (maya.open === "key") endLeft(e); });
+  window.addEventListener("pointerup", (e) => { if (pro.open === "key") endLeft(e); });
 
   // ------------------------------------------------ right button: hold and a marking menu opens, picked by direction
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 2 || e.altKey) return;              // every view, the four-view layout included
-    maya.down = true; maya.at = [e.clientX, e.clientY];
+    pro.down = true; pro.at = [e.clientX, e.clientY];
     const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
-    window.clearTimeout(maya.timer);
-    maya.timer = window.setTimeout(() => {
-      if (!maya.down) return;
-      const node = view.mode === "view" ? forgeMayaPickAt(view, maya.at[0], maya.at[1]) : null;
-      const t = forgeMayaTree(view);
+    window.clearTimeout(pro.timer);
+    pro.timer = window.setTimeout(() => {
+      if (!pro.down) return;
+      const node = view.mode === "view" ? forgeProPickAt(view, pro.at[0], pro.at[1]) : null;
+      const t = forgeProTree(view);
       if (node && t && !how.shift && !how.ctrl && !t.selected().includes(node.id)) t.select(node.id);
-      maya.open = "right";
-      forgeMayaMarkShow(view, maya.at[0], maya.at[1], forgeMayaMenu(view, Object.assign({ node: node }, how)));
-    }, FORGE_MAYA_HOLD);
+      pro.open = "right";
+      forgeProMarkShow(view, pro.at[0], pro.at[1], forgeProMenu(view, Object.assign({ node: node }, how)));
+    }, FORGE_PRO_HOLD);
   });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   const endRight = (e) => {
     if (e.button !== 2) return;
-    maya.down = false; window.clearTimeout(maya.timer);
-    if (maya.open === "pinned") return;                   // already open from an earlier click: leave it
-    if (maya.open === "right") {                          // it was showing: a flick picks by direction
-      maya.open = false;
-      const id = forgeMayaMarkPick(e.clientX, e.clientY);
-      forgeMayaMarkHide();
-      if (id) forgeMayaRun(view, id);
+    pro.down = false; window.clearTimeout(pro.timer);
+    if (pro.open === "pinned") return;                   // already open from an earlier click: leave it
+    if (pro.open === "right") {                          // it was showing: a flick picks by direction
+      pro.open = false;
+      const id = forgeProMarkPick(e.clientX, e.clientY);
+      forgeProMarkHide();
+      if (id) forgeProRun(view, id);
       return;
     }
     if (e.target !== canvas) return;
     // a quick click opens the menu and leaves it open (a click is enough; you do not have to hold) - Ziva
-    const at = maya.at || [e.clientX, e.clientY];
+    const at = pro.at || [e.clientX, e.clientY];
     const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
-    const node = view.mode === "view" ? forgeMayaPickAt(view, at[0], at[1]) : null;
-    const t = forgeMayaTree(view);
+    const node = view.mode === "view" ? forgeProPickAt(view, at[0], at[1]) : null;
+    const t = forgeProTree(view);
     if (node && t && !how.shift && !how.ctrl && !t.selected().includes(node.id)) t.select(node.id);
-    forgeMayaMarkShow(view, at[0], at[1], forgeMayaMenu(view, Object.assign({ node: node }, how)));
-    maya.open = "pinned";
+    forgeProMarkShow(view, at[0], at[1], forgeProMenu(view, Object.assign({ node: node }, how)));
+    pro.open = "pinned";
   };
   // a click away, or Escape, closes one that was opened by a click
   document.addEventListener("pointerdown", (e) => {
-    if (maya.open !== "pinned") return;
-    const host = document.getElementById("forge-maya-marking");
-    if (host && !host.hidden && !host.contains(e.target)) { maya.open = false; forgeMayaMarkHide(); }
+    if (pro.open !== "pinned") return;
+    const host = document.getElementById("forge-pro-marking");
+    if (host && !host.hidden && !host.contains(e.target)) { pro.open = false; forgeProMarkHide(); }
   }, true);
   canvas.addEventListener("pointerup", endRight);
   window.addEventListener("pointerup", endRight);
-  window.addEventListener("pointermove", (e) => { if (maya.open === "right") forgeMayaMarkHover(e.clientX, e.clientY); });
+  window.addEventListener("pointermove", (e) => { if (pro.open === "right") forgeProMarkHover(e.clientX, e.clientY); });
 
   // ------------------------------------------------ snapping while the handle drags (objects, the pivot, components)
   const tc = ctx.transform || view.transform;
   if (tc && tc.addEventListener) {
     tc.addEventListener("objectChange", () => {
-      if (!tc.object || tc.mode !== "translate" || !forgeMayaSnapAny(view)) return;
+      if (!tc.object || tc.mode !== "translate" || !forgeProSnapAny(view)) return;
       const o = tc.object, w = o.getWorldPosition(new THREE.Vector3());
-      const t = forgeMayaTree(view), n = t && t.pivotMode ? t.node(maya.pivotFor) : null;
+      const t = forgeProTree(view), n = t && t.pivotMode ? t.node(pro.pivotFor) : null;
       const skip = [o].concat(n ? [n.grp] : []);           // never snap onto the thing being moved
-      const s = forgeMayaSnapPoint(view, w, skip, tc.axis);
+      const s = forgeProSnapPoint(view, w, skip, tc.axis);
       if (!s || !o.parent) return;
       o.position.copy(o.parent.worldToLocal(s.clone()));
       o.updateMatrixWorld(true);
@@ -1015,28 +1015,28 @@ function forgeMayaAttach(view, ctx) {
     });
   }
   view.snapPivot = (pivot) => {                         // forge_edit.js asks before it moves the components
-    if (!forgeMayaSnapAny(view) || !pivot.parent) return;
+    if (!forgeProSnapAny(view) || !pivot.parent) return;
     pivot.parent.updateMatrixWorld(true);
     const w = pivot.getWorldPosition(new THREE.Vector3());
-    const s = forgeMayaSnapPoint(view, w, [view.holder], view.gizmo && view.gizmo.axis);   // onto other objects, or the grid
+    const s = forgeProSnapPoint(view, w, [view.holder], view.gizmo && view.gizmo.axis);   // onto other objects, or the grid
     if (s) pivot.position.copy(pivot.parent.worldToLocal(s.clone()));
   };
-  const hud = mayaEl("div", "forge-snaps"); hud.id = "forge-snaps";
+  const hud = proEl("div", "forge-snaps"); hud.id = "forge-snaps";
   for (const [k, label, key] of [["grid", "Grid", "x"], ["edge", "Edge", "c"], ["point", "Point", "v"]]) {
-    const b = mayaEl("button", "forge-snap", label);
+    const b = proEl("button", "forge-snap", label);
     b.type = "button"; b.dataset.snap = k;
     b.title = "Snap to " + label.toLowerCase() + ": hold " + key + " while you drag, or click to keep it on (the status line).";
-    b.addEventListener("click", () => mayaSay(forgeMayaSnapToggle(view, k)));
+    b.addEventListener("click", () => proSay(forgeProSnapToggle(view, k)));
     hud.append(b);
   }
   canvas.parentElement.append(hud);
 
-  // ------------------------------------------------ sculpt: hold b and drag = brush size, m and drag = strength (Maya)
+  // ------------------------------------------------ sculpt: hold b and drag = brush size, m and drag = strength
   let brushDrag = null;
   canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || view.mode !== "sculpt" || !(maya.held.has("b") || maya.held.has("m"))) return;
+    if (e.button !== 0 || view.mode !== "sculpt" || !(pro.held.has("b") || pro.held.has("m"))) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    brushDrag = { x: e.clientX, what: maya.held.has("b") ? "radius" : "strength", from: view.brush[maya.held.has("b") ? "radius" : "strength"] };
+    brushDrag = { x: e.clientX, what: pro.held.has("b") ? "radius" : "strength", from: view.brush[pro.held.has("b") ? "radius" : "strength"] };
     try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
   }, { capture: true });
   canvas.addEventListener("pointermove", (e) => {
@@ -1045,58 +1045,58 @@ function forgeMayaAttach(view, ctx) {
     const k = brushDrag.what, lo = k === "radius" ? 0.02 : 0.05, hi = k === "radius" ? 0.4 : 1;
     view.brush[k] = Math.max(lo, Math.min(hi, brushDrag.from * Math.pow(1.01, e.clientX - brushDrag.x)));
     const inp = document.getElementById(k === "radius" ? "forge-radius" : "forge-strength"); if (inp) inp.value = String(view.brush[k]);
-    mayaSay((k === "radius" ? "Brush size " : "Strength ") + view.brush[k].toFixed(2));
+    proSay((k === "radius" ? "Brush size " : "Strength ") + view.brush[k].toFixed(2));
   }, { capture: true });
   canvas.addEventListener("pointerup", (e) => { if (brushDrag) { e.stopImmediatePropagation(); brushDrag = null; } }, { capture: true });
 
-  view.mayaRestore = () => { mayaAlt(false); forgeMayaPivotMode(view, false); };
-  forgeMayaKeys();                       // after forge_edit's own keys, so its modal wins while it runs
-  return maya;
+  view.proRestore = () => { proAlt(false); forgeProPivotMode(view, false); };
+  forgeProKeys();                       // after forge_edit's own keys, so its modal wins while it runs
+  return pro;
 }
 
-// ================================================================== the hotkeys (Maya's default set)
-// Installed from forgeMayaAttach and NOT at page load: forge_edit.js registers its capture listener while the
+// ================================================================== the hotkeys (the pro default set)
+// Installed from forgeProAttach and NOT at page load: forge_edit.js registers its capture listener while the
 // viewer is built and its modal move owns every key while it runs; registering later keeps that order.
-function forgeMayaKeys() {
-  if (forgeMayaKeys.done) return;
-  forgeMayaKeys.done = true;
+function forgeProKeys() {
+  if (forgeProKeys.done) return;
+  forgeProKeys.done = true;
   const inField = (el) => el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
   const sheetOpen = () => { const s = document.getElementById("forge"); return !!(s && !s.hidden && forge.view); };
   const take = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
 
-  document.addEventListener("keydown", (e) => { if (e.key === "Alt" && sheetOpen() && !inField(e.target)) { const m = forge.view.maya; if (m && m.alt) m.alt(true); } }, true);
-  document.addEventListener("keyup", (e) => { if (e.key === "Alt" && sheetOpen()) { const m = forge.view.maya; if (m && m.alt) m.alt(false); } }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Alt" && sheetOpen() && !inField(e.target)) { const m = forge.view.pro; if (m && m.alt) m.alt(true); } }, true);
+  document.addEventListener("keyup", (e) => { if (e.key === "Alt" && sheetOpen()) { const m = forge.view.pro; if (m && m.alt) m.alt(false); } }, true);
   window.addEventListener("blur", () => {
     const v = typeof forge !== "undefined" && forge.view;
-    if (v && v.maya) { v.maya.held.clear(); if (v.maya.alt) v.maya.alt(false); forgeMayaSnap(v, "step", false); forgeMayaSnapHud(v); }
+    if (v && v.pro) { v.pro.held.clear(); if (v.pro.alt) v.pro.alt(false); forgeProSnap(v, "step", false); forgeProSnapHud(v); }
   });
 
   document.addEventListener("keydown", (e) => {
     if (!sheetOpen() || inField(e.target)) return;
-    const v = forge.view, m = v.maya || {};
+    const v = forge.view, m = v.pro || {};
     if (v.modalActive && v.modalActive()) return;            // Blender's G/R/S modal is running: its keys
     const k = e.key, mod = e.ctrlKey || e.metaKey, sh = e.shiftKey, alt = e.altKey;
-    const run = (id) => { take(e); forgeMayaRun(v, id); };
-    if ((k === " " || e.code === "Space") && mod) { take(e); if (!e.repeat) forgeMayaRun(v, "hideUI"); return; }   // Ctrl+Space
+    const run = (id) => { take(e); forgeProRun(v, id); };
+    if ((k === " " || e.code === "Space") && mod) { take(e); if (!e.repeat) forgeProRun(v, "hideUI"); return; }   // Ctrl+Space
     if (k === " " || e.code === "Space") {                   // Space: hold = hotbox, tap = one/four views
       take(e);
       if (e.repeat) return;
-      const hb = document.getElementById("forge-maya-hotbox");
+      const hb = document.getElementById("forge-pro-hotbox");
       if (hb && !hb.hidden) return;
-      if (forgeMayaWheelOpenNow()) { forgeMayaWheelClose(); return; }   // Space again puts the wheel away
+      if (forgeProWheelOpenNow()) { forgeProWheelClose(); return; }   // Space again puts the wheel away
       m.spaceAt = performance.now();
-      forgeMayaWheelOpen(v, m.mouse);                                   // at the mouse (the owner's wheel)
+      forgeProWheelOpen(v, m.mouse);                                   // at the mouse (the owner's wheel)
       return;
     }
     if (k === "Escape") {
-      const hb = document.getElementById("forge-maya-hotbox"), mk = document.getElementById("forge-maya-marking");
-      if (hb && !hb.hidden) { take(e); forgeMayaHotboxHide(); return; }
-      if (forgeMayaWheelOpenNow()) { take(e); forgeMayaWheelClose(); return; }
-      if (mk && !mk.hidden) { take(e); forgeMayaMarkHide(); m.open = false; return; }
-      const t = forgeMayaTree(v);
-      if (t && t.pivotMode) { take(e); forgeMayaPivotMode(v, false); return; }
-      take(e);                                                 // Maya: Esc cancels, it never closes the window
-      if ((v.transform && v.transform.object) || (v.gizmo && v.gizmo.object)) forgeMayaTool(v, null);
+      const hb = document.getElementById("forge-pro-hotbox"), mk = document.getElementById("forge-pro-marking");
+      if (hb && !hb.hidden) { take(e); forgeProHotboxHide(); return; }
+      if (forgeProWheelOpenNow()) { take(e); forgeProWheelClose(); return; }
+      if (mk && !mk.hidden) { take(e); forgeProMarkHide(); m.open = false; return; }
+      const t = forgeProTree(v);
+      if (t && t.pivotMode) { take(e); forgeProPivotMode(v, false); return; }
+      take(e);                                                 // pro: Esc cancels, it never closes the window
+      if ((v.transform && v.transform.object) || (v.gizmo && v.gizmo.object)) forgeProTool(v, null);
       return;
     }
     if (!e.repeat && /^[qwexcvbm]$/i.test(k) && !mod && !alt) m.held.add(k.toLowerCase());
@@ -1125,13 +1125,13 @@ function forgeMayaKeys() {
       if (lower === "h") return run("hideOthers");
       if (lower === "x") return run("xray");
       if (k === "Home") return run("defaultView");
-      if (k.startsWith("Arrow")) { take(e); forgeMayaNudge(v, k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0, k === "ArrowUp" ? 1 : k === "ArrowDown" ? -1 : 0); return; }
+      if (k.startsWith("Arrow")) { take(e); forgeProNudge(v, k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0, k === "ArrowUp" ? 1 : k === "ArrowDown" ? -1 : 0); return; }
       return;
     }
     // ---- bare keys (Shift for the capitals)
     if (k.startsWith("Arrow")) {                               // pick-walk the hierarchy
-      const t = forgeMayaTree(v);
-      if (!t || forgeMayaComp(v)) return;
+      const t = forgeProTree(v);
+      if (!t || forgeProComp(v)) return;
       take(e); t.pickWalk({ ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[k]); return;
     }
     if (e.repeat && !/^[\[\]\-=+]$/.test(k)) { if (/^[qwedxjcvbm]$/i.test(k)) take(e); return; }
@@ -1142,7 +1142,7 @@ function forgeMayaKeys() {
       case "r": return run("scale");
       case "y": return run("lastTool");
       case "t": return run("move");
-      case "g": take(e); if (m.last) forgeMayaRun(v, m.last); return;
+      case "g": take(e); if (m.last) forgeProRun(v, m.last); return;
       case "z": return run("undo");
       case "Z": return run("redo");
       case "D": return run("duplicateT");
@@ -1158,15 +1158,15 @@ function forgeMayaKeys() {
       case "5": return run("shaded");
       case "6": return run("textured");
       case "7": return run("lights");
-      case "d": take(e); mayaSay(forgeMayaPivotMode(v, true)); return;
-      case "Insert": take(e); mayaSay(forgeMayaPivotMode(v, null)); return;
+      case "d": take(e); proSay(forgeProPivotMode(v, true)); return;
+      case "Insert": take(e); proSay(forgeProPivotMode(v, null)); return;
       case "Home": return run("pivotEdit");
-      case "x": case "X": take(e); forgeMayaSnapHud(v); mayaSay("Snap to grid while x is held."); return;
-      case "c": case "C": take(e); forgeMayaSnapHud(v); mayaSay("Snap to edges while c is held."); return;
-      case "v": case "V": take(e); forgeMayaSnapHud(v); mayaSay("Snap to vertices while v is held."); return;
-      case "b": take(e); if (forgeMayaComp(v)) forgeMayaRun(v, "softSel"); else if (v.mode === "sculpt") mayaSay("Hold b and drag left / right: brush size."); return;
-      case "m": take(e); if (v.mode === "sculpt") mayaSay("Hold m and drag left / right: strength."); return;
-      case "j": case "J": take(e); forgeMayaSnap(v, "step", true); return;
+      case "x": case "X": take(e); forgeProSnapHud(v); proSay("Snap to grid while x is held."); return;
+      case "c": case "C": take(e); forgeProSnapHud(v); proSay("Snap to edges while c is held."); return;
+      case "v": case "V": take(e); forgeProSnapHud(v); proSay("Snap to vertices while v is held."); return;
+      case "b": take(e); if (forgeProComp(v)) forgeProRun(v, "softSel"); else if (v.mode === "sculpt") proSay("Hold b and drag left / right: brush size."); return;
+      case "m": take(e); if (v.mode === "sculpt") proSay("Hold m and drag left / right: strength."); return;
+      case "j": case "J": take(e); forgeProSnap(v, "step", true); return;
       case "-": return run("__smaller");
       case "=": case "+": return run("__bigger");
       case "Delete": case "Backspace": return run("delete");
@@ -1176,7 +1176,7 @@ function forgeMayaKeys() {
       case "F9": return run("vertex");
       case "F10": return run("edge");
       case "F11": return run("face");
-      case "Enter": take(e); forgeMayaTool(v, null); return;
+      case "Enter": take(e); forgeProTool(v, null); return;
       case "[": case "]":
         if (v.mode === "sculpt") return;                       // the brush size there (forge.js)
         take(e); if (k === "[") v.viewUndo(); else v.viewRedo(); return;
@@ -1186,41 +1186,41 @@ function forgeMayaKeys() {
 
   document.addEventListener("keyup", (e) => {
     const v = typeof forge !== "undefined" && forge.view;
-    if (!v || !v.maya) return;
-    const m = v.maya, k = e.key;
+    if (!v || !v.pro) return;
+    const m = v.pro, k = e.key;
     if (k.length === 1) m.held.delete(k.toLowerCase());
     if (k === " " || e.code === "Space") {
-      const wh = document.getElementById("forge-maya-wheel");
+      const wh = document.getElementById("forge-pro-wheel");
       if (wh && !wh.hidden) {                                  // the wheel (the owner's Space menus)
         if (wh.dataset.open) return;                           // a menu is down: it stays so it can be clicked
-        const quickW = performance.now() - (m.spaceAt || 0) < FORGE_MAYA_TAP;
+        const quickW = performance.now() - (m.spaceAt || 0) < FORGE_PRO_TAP;
         const usedW = !!wh._used;
-        forgeMayaWheelClose();
-        if (quickW && !usedW && sheetOpen()) mayaSay(forgeMayaTap(v));
+        forgeProWheelClose();
+        if (quickW && !usedW && sheetOpen()) proSay(forgeProTap(v));
         return;
       }
-      const hb = document.getElementById("forge-maya-hotbox");
+      const hb = document.getElementById("forge-pro-hotbox");
       if (!hb || hb.hidden || hb.dataset.pinned) return;
-      const quick = performance.now() - (m.spaceAt || 0) < FORGE_MAYA_TAP;
+      const quick = performance.now() - (m.spaceAt || 0) < FORGE_PRO_TAP;
       const used = !!hb._used;
       if (hb._zone) return;                                    // a zone menu is open: the mouse release decides
-      forgeMayaHotboxHide();
-      if (quick && !used && sheetOpen()) mayaSay(forgeMayaTap(v));
+      forgeProHotboxHide();
+      if (quick && !used && sheetOpen()) proSay(forgeProTap(v));
       return;
     }
-    if (k === "d" || k === "D") { const t = forgeMayaTree(v); if (t && t.pivotMode) forgeMayaPivotMode(v, false); }
-    if (/^[xcv]$/i.test(k)) forgeMayaSnapHud(v);
-    if (k === "j" || k === "J") forgeMayaSnap(v, "step", false);
+    if (k === "d" || k === "D") { const t = forgeProTree(v); if (t && t.pivotMode) forgeProPivotMode(v, false); }
+    if (/^[xcv]$/i.test(k)) forgeProSnapHud(v);
+    if (k === "j" || k === "J") forgeProSnap(v, "step", false);
   });
 }
 
 // manipulator size has no menu entry; give the two keys commands of their own
-FORGE_MAYA_CMDS.__smaller = ["Smaller manipulator", (v) => forgeMayaManipSize(v, false)];
-FORGE_MAYA_CMDS.__bigger = ["Bigger manipulator", (v) => forgeMayaManipSize(v, true)];
+FORGE_PRO_CMDS.__smaller = ["Smaller manipulator", (v) => forgeProManipSize(v, false)];
+FORGE_PRO_CMDS.__bigger = ["Bigger manipulator", (v) => forgeProManipSize(v, true)];
 
 // older callers (forge.js's buttons, tests) - the marking menu's 8 wedges and the hotbox, by name
-function forgeMayaSets(v) {
-  const toPairs = (menu) => Object.values(menu.ring).map((id) => [FORGE_MAYA_CMDS[id][0], () => forgeMayaRun(v, id)]);
-  return { object: toPairs(forgeMayaMenu(v, { node: v && forgeMayaTree(v) ? forgeMayaTree(v).active() : null })),
-           shift: toPairs(forgeMayaMenu(v, { shift: true })), ctrl: toPairs(forgeMayaMenu(v, { ctrl: true })) };
+function forgeProSets(v) {
+  const toPairs = (menu) => Object.values(menu.ring).map((id) => [FORGE_PRO_CMDS[id][0], () => forgeProRun(v, id)]);
+  return { object: toPairs(forgeProMenu(v, { node: v && forgeProTree(v) ? forgeProTree(v).active() : null })),
+           shift: toPairs(forgeProMenu(v, { shift: true })), ctrl: toPairs(forgeProMenu(v, { ctrl: true })) };
 }

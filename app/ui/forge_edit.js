@@ -1,8 +1,8 @@
-// Forge component mode - selecting and moving the parts of a poly mesh. Maya's hands since 2026-10-19 (owner: "remove
-// blender hotkeys and movements, only keep maya stuff"): F9 / F10 / F11 vertex / edge / face, click selects, Shift
+// Forge component mode - selecting and moving the parts of a poly mesh. the pro hands since 2026-10-19 (owner: "remove
+// blender hotkeys and movements, only keep pro stuff"): F9 / F10 / F11 vertex / edge / face, click selects, Shift
 // toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds, a drag draws a box, a double-click on an edge takes the loop,
 // w / e / r put the handle on the selection, b soft selection, Alt/Option is only ever the camera. The keys live
-// in app/ui/forge_maya.js. The selection engine below is still the one re-written from Blender's (GPL-2.0+):
+// in app/ui/forge_pro.js. The selection engine below is still the one re-written from Blender's (GPL-2.0+):
 // (the original notes on that, kept:)
 // (owner 2026-10-18: "poly modeling, vert selection, marquee selection, move tool works on faces and verts ...
 // look at blender code and do that").
@@ -18,7 +18,7 @@
 //   - G / R / S: grab, rotate, scale with the mouse; X / Y / Z lock to an axis (again to unlock); type a number
 //     for an exact value; Ctrl snaps; Enter or click confirms, Esc or right-click cancels (transform.cc's modal)
 //   - proportional editing (O), its radius on the mouse wheel while moving, and Blender's falloff curves
-//   - W shows a move handle on the selection (three.js' TransformControls, MIT) for people who think in Maya
+//   - W shows a move handle on the selection (three.js' TransformControls, MIT) for people who think in pro
 // The orbit view keeps working: middle-drag turns (Shift+middle pans), right-drag pans, Alt+left-drag turns.
 "use strict";
 
@@ -441,7 +441,7 @@ function forgeEditAttach(view, ctx) {
   gizmo.addEventListener("mouseDown", () => { if (!begin("handle")) gizmo.detach(); });
   gizmo.addEventListener("objectChange", () => {
     if (!edit || edit.kind !== "handle") return;
-    if (view.snapPivot) view.snapPivot(pivot);        // Maya's x / c / v snapping (forge_maya.js) moves the handle first
+    if (view.snapPivot) view.snapPivot(pivot);        // the pro x / c / v snapping (forge_pro.js) moves the handle first
     pivot.updateMatrix();
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });
@@ -582,10 +582,10 @@ function forgeEditAttach(view, ctx) {
     }
     if (e.button !== 0) return;                     // middle turns, right pans: the orbit controls keep those
     if (gizmo.object && gizmo.axis) return;        // the move handle
-    if (e.altKey) return;                           // Alt / Option is Maya's camera, nothing else
+    if (e.altKey) return;                           // Alt / Option is the pro camera, nothing else
     e.stopImmediatePropagation();
     canvas.setPointerCapture(e.pointerId);
-    // Maya's modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds
+    // the pro modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds
     const mod = e.ctrlKey || e.metaKey;
     const how = mod && e.shiftKey ? "add" : mod ? "sub" : e.shiftKey ? "toggle" : "set";
     gest = { at: ed.mouse, box: false, how: how, click: how };
@@ -616,7 +616,7 @@ function forgeEditAttach(view, ctx) {
   canvas.addEventListener("pointercancel", () => { gest = null; box.hidden = true; });
   canvas.addEventListener("dblclick", (e) => {
     if (view.mode !== "poly" || !view.poly || modal) return;
-    if (ed.mode === "edge") { view.loopSelect(local(e), e.shiftKey ? "add" : "set"); return; }   // Maya: double-click an edge = its loop
+    if (ed.mode === "edge") { view.loopSelect(local(e), e.shiftKey ? "add" : "set"); return; }   // pro: double-click an edge = its loop
     const verts = view.linkedSeed(local(e));
     if (verts) view.selectLinked(verts, e.shiftKey ? "add" : "set");
   });
