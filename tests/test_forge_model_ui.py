@@ -165,6 +165,11 @@ async def main():
         await page.wait_for_function("forge.view.poly && forge.view.poly.f.length > 100", timeout=20000)
         r = await page.evaluate("() => ({ f: forge.view.poly.f.length, quads: forge.view.poly.f.every((f) => f.length === 4), vol: ForgePoly.volume(forge.view.poly) })")
         check("DynaMesh rebuilds the model as even quads facing out", r["quads"] and r["vol"] > 0, r)
+        # Insert Edge Loop (restored): an edge in Edge mode -> a loop round its quad ring, kept in the history
+        r = await page.evaluate("""() => { const v = forge.view; forgeModelMode(true); v.setSelMode('edge'); v.selectItems('edge', [0], 'set');
+          const f0 = v.poly.f.length; const msg = forgeProRun(v, 'edgeLoop');
+          return { f0, f1: v.poly.f.length, quads: v.poly.f.every((f) => f.length === 4), hist: (forgeHistory.list ? forgeHistory.list() : []).map((h) => h.kind || h) }; }""")
+        check("Insert Edge Loop splits the quad ring the picked edge crosses (all quads still)", r["f1"] > r["f0"] and r["quads"], r)
         await page.set_viewport_size({"width": 900, "height": 600})
         await page.evaluate("forgeModelMode(true)")
         r = await page.evaluate("""() => { const s = document.getElementById('forge-stage').getBoundingClientRect(),

@@ -36,7 +36,9 @@ Object.assign(ICON_PATHS, {
   invert: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 20L20 4" /><path d="M4 4h8v8H4z" fill="currentColor" fill-opacity=".5"/>',
 });
 
-const FORGE_SEL_COLORS = { wire: 0x15181f, wireSel: 0xffa04a, vert: 0x0d0f14, vertSel: 0xff8a1f };
+// Component display (owner 17:06: no Blender look): the mesh's edges thin and light blue, the selected ones orange,
+// vertices purple dots only in vertex mode (selected yellow), selected faces a light orange tint. Nothing else.
+const FORGE_SEL_COLORS = { wire: 0x86c6e6, wireSel: 0xff8a1a, vert: 0xa94fd1, vertSel: 0xffd52e };
 
 function forgeEditAttach(view, ctx) {
   const { THREE, canvas, camera, renderer, holder, controls, material } = ctx;
@@ -53,9 +55,9 @@ function forgeEditAttach(view, ctx) {
   const say = (t, bad) => { if (typeof forgeSay === "function") forgeSay(t, bad); };
 
   // ---------------------------------------------------------------- overlays: wire, vertices, selected faces
-  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 });
-  const pointMat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, vertexColors: true });
-  const faceMat = new THREE.MeshBasicMaterial({ color: 0xed782b, transparent: true, opacity: 0.38, side: THREE.DoubleSide,
+  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 });
+  const pointMat = new THREE.PointsMaterial({ size: 5, sizeAttenuation: false, vertexColors: true });
+  const faceMat = new THREE.MeshBasicMaterial({ color: 0xff8a1a, transparent: true, opacity: 0.3, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, depthWrite: false });
   const over = new THREE.Group(); over.name = "forge-edit-overlay"; holder.add(over);
   let wire = null, dots = null, fill = null;

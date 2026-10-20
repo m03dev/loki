@@ -155,16 +155,18 @@ function fmyMenuButton(label, items, cls) {
 // ================================================================== the UI elements (Windows > UI Elements), remembered
 const FMY_UI = { statusline: "Status Line", shelfbar: "Shelf", toolbox: "Tool Box", timeslider: "Time Slider", helpline: "Help Line", hud: "Heads Up Display",
   viewcube: "View Cube", panelbar: "Panel Menus and Toolbar" };
+const FMY_UI_OFF = new Set(["shelfbar"]);         // off until switched on
 function fmyUi() {
   const p = typeof forgeProPanels === "function" ? forgeProPanels() : {};
   const out = {};
-  for (const k of Object.keys(FMY_UI)) out[k] = p[k] !== false;
+  // the shelf starts hidden (owner 17:06: "we don't need shelves") - Windows > UI Elements > Shelf brings it back
+  for (const k of Object.keys(FMY_UI)) out[k] = FMY_UI_OFF.has(k) ? p[k] === true : p[k] !== false;
   return out;
 }
 function fmyUiSet(k, on) {
   let p = {};
   try { p = JSON.parse(localStorage.getItem("loki-forge-panels") || "{}") || {}; } catch (_) { p = {}; }
-  p[k] = on == null ? p[k] === false : !!on;
+  p[k] = on == null ? !fmyUi()[k] : !!on;
   try { localStorage.setItem("loki-forge-panels", JSON.stringify(p)); } catch (_) { /* private mode */ }
   fmyApply();
   return p[k];
@@ -183,8 +185,13 @@ function fmyApply() {
     const P = window.forgePanels;
     if (!P || P.fmyWrapped) return !!P;
     const hideAll = P.hideAll, showAll = P.showAll;
-    P.hideAll = () => { const r = hideAll(); for (const k of ["statusline", "shelfbar", "toolbox", "timeslider", "helpline"]) fmyUiSet(k, false); return r; };
-    P.showAll = () => { const r = showAll(); for (const k of ["statusline", "shelfbar", "toolbox", "timeslider", "helpline"]) fmyUiSet(k, true); return r; };
+    const bars = ["statusline", "shelfbar", "toolbox", "timeslider", "helpline"];
+    P.hideAll = () => { const r = hideAll(); const u = fmyUi(); P.fmyWas = Object.fromEntries(bars.map((k) => [k, u[k]])); for (const k of bars) fmyUiSet(k, false); return r; };
+    P.showAll = () => {   // back to what was showing before (the shelf only if it was on)
+      const r = showAll(), was = P.fmyWas; P.fmyWas = null;
+      for (const k of bars) fmyUiSet(k, was ? !!was[k] : !FMY_UI_OFF.has(k));
+      return r;
+    };
     P.fmyWrapped = true;
     return true;
   };

@@ -12,9 +12,9 @@
 // curve), v (point / vertex), or switch them on in the hotbox's Snap menu.
 "use strict";
 
-const FORGE_PRO_R = 104;          // marking-menu ring radius, px
+const FORGE_PRO_R = 88;           // marking-menu ring radius, px (tight: owner 17:06 'too far apart')
 const FORGE_PRO_DEAD = 22;        // px from the centre before a direction counts (the pro dead zone)
-const FORGE_PRO_HOLD = 85;        // ms of hold before the menu opens; a plain click opens it too and leaves it (Ziva)
+const FORGE_PRO_HOLD = 0;         // the right-button menu opens the moment the button goes down (kept for scripts)
 const FORGE_PRO_TAP = 230;        // a Space press shorter than this, with nothing chosen, is a tap
 const FORGE_KEYMAP_STORE = "loki-forge-keymap";
 const FORGE_COMPASS = { N: -90, NE: -45, E: 0, SE: 45, S: 90, SW: 135, W: 180, NW: -135 };
@@ -394,7 +394,7 @@ function forgeProCommands() {
     sculpt: ["Sculpt Tool", (v) => forgeProSculpt(v)],
     deleteComp: ["Delete Components", () => forgeProCall("forgeFaceOp", "delete")],
     bevel: ["Bevel", null, "Bevel is not in Forge yet"],
-    edgeLoop: ["Insert Edge Loop", null, "Insert Edge Loop is not in Forge yet (T8)"],
+    edgeLoop: ["Insert Edge Loop", () => forgeProCall("forgeLoopCut")],
     multiCut: ["Multi-Cut", null, "Multi-Cut is not in Forge yet (T8)"],
     merge: ["Merge", null, "Merge is not in Forge yet (T8)"],
     fillHole: ["Fill Hole", null, "Fill Hole is not in Forge yet (T8)"],
@@ -438,6 +438,9 @@ function forgeProCommands() {
     hideUI: ["Hide UI (Ctrl+Space)", () => forgeProHideUI()],
     saveObj: ["Save .obj", () => forgeProCall("forgeSave", "obj")],
     more: ["More...", (v) => { forgeProHotboxOpen(v); }],
+    wheel: ["Radial Menus", (v) => { forgeProWheelOpen(v, v.pro && v.pro.mouse); }],
+    completeTool: ["Complete Tool", (v) => { forgeProTool(v, null); return "Tool completed."; }],
+    repeatLast: ["Repeat Last", (v) => { const id = v.pro && v.pro.last; if (!id || id === "repeatLast") return "Nothing to repeat yet."; forgeProRun(v, id); }],
     sculptModel: ["Sculpt/Model", () => forgeProCall("forgeMode")],
     quadToggle: ["Quad view", (v) => { v.setLook("quad", !v.quad); return v.quad ? "Four views." : "One view."; }],
     makeLive: ["Edit this mesh", (v) => { const t = T(v), n = t.active(); return n && t.makeWorking(n.id) ? n.name + " is the one the tools edit now." : ""; }],
@@ -451,7 +454,7 @@ async function forgeProRun(v, id) {
   if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
   let note = "";
   try { note = await c[1](v); } catch (exc) { proSay(c[0] + " could not run: " + exc.message, true); return; }
-  if (v.pro && !/^(undo|redo|select|lastTool)$/.test(id)) v.pro.last = id;     // g repeats this
+  if (v.pro && !/^(undo|redo|select|lastTool|repeatLast|completeTool|more)$/.test(id)) v.pro.last = id;     // g repeats this
   if (v.pro && !/^__/.test(id)) { v.pro.recent = [id].concat((v.pro.recent || []).filter((x) => x !== id)).slice(0, 10); }
   if (v.pro && /^(move|rotate|scale)$/.test(id)) v.pro.lastTool = { move: "translate", rotate: "rotate", scale: "scale" }[id];
   if (v.tree) v.tree.build();
@@ -480,8 +483,10 @@ function forgeProMenu(v, ctx) {
       list: ["select", "move", "rotate", "scale", "frameSel", "hierarchy", "invert", "duplicate", "group", "centerPivot", "resetPivot",
         "resetXf", "freeze", "makeLive", "delete", "more"] };
   }
-  return { title: "View", ring: { N: "persp", W: "top", S: "front", E: "side", NE: "four", NW: "single" },
-    list: ["selectAll", "selectNone", "frameAll", "defaultView", "wire", "shaded", "quadToggle", "lights", "undo", "redo", "more"] };
+  // on empty space: the short list of the standard empty-space menu - no camera ring (that lives in the hotbox's
+  // centre zone, Space + left button)
+  return { title: "", ring: {},
+    list: ["completeTool", "selectAll", "selectNone", "undo", "redo", "repeatLast", "frameAll", "more"] };
 }
 
 function forgeProMarkHost() {
@@ -497,7 +502,7 @@ function forgeProMarkHost() {
 function forgeProMarkShow(v, x, y, menu) {
   const host = forgeProMarkHost();
   host.textContent = "";
-  host.append(proEl("span", "forge-pro-hub", menu.title || ""));
+  host.append(proEl("span", "forge-pro-hub" + (menu.title ? "" : " dot"), menu.title || ""));
   for (const [pos, id] of Object.entries(menu.ring)) {
     const c = FORGE_PRO_CMDS[id]; if (!c) continue;
     const a = FORGE_COMPASS[pos] * Math.PI / 180;
@@ -511,7 +516,9 @@ function forgeProMarkShow(v, x, y, menu) {
   }
   if (menu.list && menu.list.length) {
     const list = proEl("div", "forge-pro-mlist");
-    list.style.top = Math.round(FORGE_PRO_R * 0.82 + 30) + "px";
+    const ringed = Object.keys(menu.ring || {}).length > 0;
+    list.classList.toggle("bare", !ringed);           // no ring (empty space): the list starts right at the pointer
+    list.style.top = (ringed ? Math.round(FORGE_PRO_R * 0.82 + 22) : 6) + "px";
     for (const id of menu.list) {
       const c = FORGE_PRO_CMDS[id]; if (!c) continue;
       const b = proEl("button", "forge-pro-litem" + (c[1] ? "" : " off"), c[0]);
@@ -525,6 +532,13 @@ function forgeProMarkShow(v, x, y, menu) {
   host.style.top = Math.round(y) + "px";
   host.dataset.set = menu.title || "";
   host.hidden = false;
+  // keep the list on screen: near the bottom it opens upward, near the right edge it shifts left
+  const ml = host.querySelector(".forge-pro-mlist");
+  if (ml) {
+    const r = ml.getBoundingClientRect();
+    if (r.bottom > window.innerHeight - 4) ml.style.top = (parseFloat(ml.style.top) - (r.bottom - window.innerHeight + 4)) + "px";
+    if (r.right > window.innerWidth - 4) ml.style.left = (-(r.right - window.innerWidth + 4)) + "px";
+  }
   host._at = [x, y]; host._menu = menu;
 }
 
@@ -568,7 +582,7 @@ const FORGE_PRO_ROWS = [
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
-  ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "hideUI"]],
+  ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI"]],
   // the modelling menu set (the pro second row)
   ["Mesh", ["smooth", "dynamesh", "sculptModel"]],
   ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"]],
@@ -598,7 +612,8 @@ function forgeProItem(id, host) {
   if (!c) return null;
   const b = proEl("button", "forge-pro-item" + (c[1] ? "" : " off"));
   b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
-  b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", c[0]));
+  const key = (typeof FMY_KEYS !== "undefined" && FMY_KEYS[id]) || "";
+  b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", c[0]), proEl("span", "forge-pro-key", key));
   if (!c[1]) b.title = c[2] || "";
   b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
   b.addEventListener("click", (ev) => { ev.stopPropagation(); const v = forge.view; host._used = true; forgeProHotboxHide(); if (v) forgeProRun(v, id); });
@@ -640,7 +655,9 @@ function forgeProHotboxHost() {
   host.append(box);
   // a press in a zone (not on a menu) opens its marking menu; releasing picks by direction
   host.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0 || ev.target.closest(".forge-pro-col")) return;
+    if (ev.target.closest(".forge-pro-col")) return;
+    if (host.dataset.pinned) { ev.preventDefault(); forgeProHotboxHide(); return; }   // Space is up: a click away closes
+    if (ev.button !== 0) return;
     ev.preventDefault();
     const c = host._center || [window.innerWidth / 2, window.innerHeight / 2];
     const dx = ev.clientX - c[0], dy = ev.clientY - c[1];
@@ -650,6 +667,11 @@ function forgeProHotboxHost() {
     for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = true;
     forgeProMarkShow(forge.view, ev.clientX, ev.clientY, FORGE_PRO_ZONES[zone]);
   });
+  // once Space is up and a menu stays dropped down, a press anywhere but on the menus closes the hotbox
+  document.addEventListener("pointerdown", (ev) => {
+    if (host.hidden || !host.dataset.pinned || (ev.target.closest && ev.target.closest("#forge-pro-hotbox .forge-pro-col"))) return;
+    ev.preventDefault(); ev.stopPropagation(); forgeProHotboxHide();
+  }, true);
   window.addEventListener("pointermove", (ev) => { if (host._zone) forgeProMarkHover(ev.clientX, ev.clientY); });
   window.addEventListener("pointerup", (ev) => {
     if (!host._zone) return;
@@ -793,14 +815,24 @@ function forgeProHotboxOpen(v, at) {
   const host = forgeProHotboxHost();
   if (!host) return;
   const c = at || (v && v.pro && v.pro.mouse) || [window.innerWidth / 2, window.innerHeight / 2];
-  const x = Math.max(260, Math.min(window.innerWidth - 260, c[0])), y = Math.max(160, Math.min(window.innerHeight - 200, c[1]));
-  host._center = [x, y]; host._used = false;
+  // centred ON the mouse (owner 17:06: menus must open at the cursor); moved only as far as needed to stay on screen
+  let x = c[0], y = c[1];
+  host._used = false; delete host.dataset.pinned;
   const box = host.querySelector(".forge-pro-hbbox");
-  if (box) { box.style.left = Math.round(x) + "px"; box.style.top = Math.round(y) + "px"; }
+  const place = () => { if (box) { box.style.left = Math.round(x) + "px"; box.style.top = Math.round(y) + "px"; } host._center = [x, y]; };
+  place();
   for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = true;
   for (const h of host.querySelectorAll(".forge-pro-head")) h.classList.remove("open");
   forgeProHotboxRefresh(v, host);
   host.hidden = false;
+  let lo = Infinity, hi = -Infinity, top = Infinity, bot = -Infinity;
+  for (const r of host.querySelectorAll(".forge-pro-row")) {
+    const b = r.getBoundingClientRect();
+    lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); top = Math.min(top, b.top); bot = Math.max(bot, b.bottom);
+  }
+  if (lo < 6) x += 6 - lo; else if (hi > window.innerWidth - 6) x -= hi - (window.innerWidth - 6);
+  if (top < 6) y += 6 - top; else if (bot > window.innerHeight - 6) y -= bot - (window.innerHeight - 6);
+  place();
 }
 
 function forgeProHotboxHide() {
@@ -856,6 +888,130 @@ function forgeProBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is insid
 // the pro modifiers: Shift toggles, Ctrl/Cmd removes, Ctrl/Cmd+Shift adds
 const forgeProHow = (e) => ((e.ctrlKey || e.metaKey) && e.shiftKey ? "add" : (e.ctrlKey || e.metaKey) ? "remove" : e.shiftKey ? "toggle" : "set");
 
+// ================================================================== the camera controller (tumble / track / dolly)
+const FORGE_CAM_TUMBLE = 0.0062;   // radians per pixel
+const FORGE_CAM_DOLLY = 0.0058;    // per pixel, exponential (so it feels the same near and far)
+const FORGE_CAM_WHEEL = 0.0014;    // per wheel delta unit
+function forgeProCamera(view, ctx) {
+  const { THREE, canvas, controls } = ctx;
+  const camera = ctx.camera;
+  if (!canvas || !controls || !camera) return;
+  const pro = view.pro;
+  const ortho = () => !!(view.cam && view.cam !== "persp");
+  const dist = () => camera.position.distanceTo(controls.target);
+  const clip = () => {                       // near / far follow the distance, so nothing clips while dollying
+    const d = dist() || 1;
+    camera.near = ortho() ? d / 50 : d / 100; camera.far = ortho() ? d * 50 : d * 100;
+    camera.updateProjectionMatrix();
+  };
+  const changed = () => { controls.dispatchEvent({ type: "change" }); view.dirty = true; };
+  const cam = view.camNav = {
+    tumble(dx, dy) {
+      if (ortho()) return false;
+      const off = camera.position.clone().sub(controls.target);
+      const up = new THREE.Vector3(0, 1, 0);
+      off.applyAxisAngle(up, -dx * FORGE_CAM_TUMBLE);
+      const right = new THREE.Vector3().crossVectors(up, off).normalize();
+      const tilted = off.clone().applyAxisAngle(right, -dy * FORGE_CAM_TUMBLE);
+      // stop just short of straight up / down (the up axis stays up, the way the default tumble does)
+      const ang = tilted.angleTo(up);
+      if (ang > 0.002 && ang < Math.PI - 0.002 && right.lengthSq() > 0) off.copy(tilted);
+      camera.position.copy(controls.target).add(off);
+      camera.lookAt(controls.target);
+      changed();
+      return true;
+    },
+    track(dx, dy) {
+      const h = canvas.clientHeight || 1;
+      const per = 2 * dist() * Math.tan((camera.fov * Math.PI) / 360) / h;      // world units per pixel at the COI
+      camera.updateMatrixWorld();
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+      const upv = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+      const move = right.multiplyScalar(-dx * per).add(upv.multiplyScalar(dy * per));
+      camera.position.add(move); controls.target.add(move);
+      changed();
+      return true;
+    },
+    dolly(amount) {                           // amount > 0 moves in
+      const off = camera.position.clone().sub(controls.target);
+      const len = off.length() || 1;
+      const next = Math.min(Math.max(len * Math.exp(-amount), 1e-3), 1e5);
+      camera.position.copy(controls.target).addScaledVector(off.normalize(), next);
+      clip(); changed();
+      return true;
+    },
+    boxDolly(x0, y0, x1, y1) {                // screen points (canvas-relative): left -> right in, right -> left out
+      const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+      const bw = Math.max(Math.abs(x1 - x0), 4), bh = Math.max(Math.abs(y1 - y0), 4);
+      const cx = (x0 + x1) / 2 - w / 2, cy = (y0 + y1) / 2 - h / 2;
+      cam.track(cx, cy);                      // the box's middle comes to the middle of the view
+      const f = Math.max(bw / w, bh / h);
+      cam.dolly(x1 >= x0 ? -Math.log(f) : Math.log(f));
+      return true;
+    },
+  };
+  // a drag: which button + which keys decide what it is, at the press
+  let drag = null;
+  const box = document.createElement("div"); box.className = "forge-marquee forge-boxdolly"; box.hidden = true;
+  canvas.parentElement.append(box);
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!e.altKey || view.quad) return;
+    const both = drag && drag.buttons !== e.buttons;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (both) { drag.kind = "dolly"; drag.buttons = e.buttons; return; }   // left + middle = dolly
+    let kind = e.button === 0 ? "tumble" : e.button === 1 ? "track" : e.button === 2 ? "dolly" : null;
+    if (!kind) return;
+    if (kind === "tumble" && (e.ctrlKey || e.metaKey)) kind = "box";
+    if (kind === "tumble" && ortho()) kind = "none";               // orthographic views do not tumble
+    drag = { kind, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, lock: null, shift: e.shiftKey, id: e.pointerId, buttons: e.buttons };
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
+    controls.dispatchEvent({ type: "start" });
+    canvas.classList.add("cam-" + kind);
+  }, { capture: true });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    e.stopImmediatePropagation();
+    let dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.shift && (drag.kind === "tumble" || drag.kind === "track")) {
+      if (!drag.lock) { const tx = e.clientX - drag.x0, ty = e.clientY - drag.y0; if (Math.hypot(tx, ty) > 3) drag.lock = Math.abs(tx) >= Math.abs(ty) ? "x" : "y"; }
+      if (drag.lock === "x") dy = 0; else if (drag.lock === "y") dx = 0; else return;
+    }
+    if (drag.kind === "tumble") cam.tumble(dx, dy);
+    else if (drag.kind === "track") cam.track(dx, dy);
+    else if (drag.kind === "dolly") cam.dolly((dx + dy) * FORGE_CAM_DOLLY);
+    else if (drag.kind === "box") {
+      const r = canvas.getBoundingClientRect();
+      box.hidden = false;
+      Object.assign(box.style, { left: Math.min(drag.x0, e.clientX) - r.left + canvas.offsetLeft + "px", top: Math.min(drag.y0, e.clientY) - r.top + canvas.offsetTop + "px",
+        width: Math.abs(e.clientX - drag.x0) + "px", height: Math.abs(e.clientY - drag.y0) + "px" });
+    }
+  }, { capture: true });
+  const end = (e) => {
+    if (!drag || (e.pointerId !== undefined && e.pointerId !== drag.id)) return;
+    if (e.buttons) { drag.buttons = e.buttons; if (drag.kind === "dolly" && e.buttons === 1) drag.kind = ortho() ? "none" : "tumble"; return; }   // one of two buttons let go
+    e.stopImmediatePropagation();
+    const d = drag; drag = null;
+    canvas.classList.remove("cam-" + d.kind);
+    if (d.kind === "box") {
+      box.hidden = true;
+      const r = canvas.getBoundingClientRect();
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6) cam.boxDolly(d.x0 - r.left, d.y0 - r.top, e.clientX - r.left, e.clientY - r.top);
+    }
+    controls.dispatchEvent({ type: "end" });
+  };
+  canvas.addEventListener("pointerup", end, { capture: true });
+  canvas.addEventListener("pointercancel", end, { capture: true });
+  canvas.addEventListener("wheel", (e) => {
+    if (view.quad || (view.mode === "sculpt" && (pro.held.has("b") || pro.held.has("m")))) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    controls.dispatchEvent({ type: "start" });
+    cam.dolly(-e.deltaY * unit * FORGE_CAM_WHEEL);
+    clearTimeout(cam.wheelEnd); cam.wheelEnd = setTimeout(() => controls.dispatchEvent({ type: "end" }), 220);
+  }, { passive: false });
+}
+
 // ================================================================== attach to a viewer
 function forgeProAttach(view, ctx) {
   const { THREE, canvas, controls } = ctx;
@@ -878,22 +1034,25 @@ function forgeProAttach(view, ctx) {
 
   // the buttons: pro - Alt/Option + left / middle / right = tumble / track / dolly; without Alt the left button
   // selects and the right button is the marking menu
+  // The camera is Forge's own (owner 17:06: "I want to move like im in [the pro app] right now it doesn't feel
+  // right"): OrbitControls only keeps the centre of interest (controls.target); no mouse button drives it. What
+  // the mouse does, read from each press (never from a remembered Alt state that a lost key-up can leave stuck):
+  //   Alt/Option + left drag    tumble about the centre of interest (left / right turns about the world's up axis,
+  //                             up / down tilts); an orthographic view (top / front / side) does not tumble
+  //   Alt/Option + middle drag  track: the picture moves 1:1 with the mouse
+  //   Alt/Option + right drag   dolly toward / away from the centre of interest: right or down = in, left or up = out
+  //   Alt/Option + left + middle dolly too;  + Shift locks a tumble / track to the first direction you move
+  //   Alt/Option + Ctrl/Cmd + left drag  box dolly: a box drawn left -> right moves in to fill the view with it,
+  //                             right -> left moves out
+  //   wheel                     dolly in / out in steps
   const buttons = pro.buttons = () => {
     const mb = controls.mouseButtons;
-    if (pro.altOn) {
-      mb.LEFT = view.cam && view.cam !== "persp" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
-      mb.MIDDLE = THREE.MOUSE.PAN;
-      mb.RIGHT = THREE.MOUSE.DOLLY;
-    } else { mb.LEFT = null; mb.MIDDLE = null; mb.RIGHT = null; }
+    mb.LEFT = null; mb.MIDDLE = null; mb.RIGHT = null;
+    controls.enableZoom = false; controls.enablePan = false;
   };
-  const proAlt = pro.alt = (on) => {
-    on = !!on;
-    if (on === !!pro.altOn) return;
-    pro.altOn = on;
-    if (on) { pro.saved = Object.assign({}, controls.mouseButtons); Object.assign(controls.mouseButtons, { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY }); if (view.cam && view.cam !== "persp") controls.mouseButtons.LEFT = THREE.MOUSE.PAN; }
-    else { pro.saved = null; buttons(); }
-  };
+  const proAlt = pro.alt = (on) => { pro.altOn = !!on; buttons(); };   // kept for older callers; the press decides now
   buttons();
+  forgeProCamera(view, ctx);
   const setMode = view.setMode;
   view.setMode = (m) => { setMode(m); buttons(); };   // forge_edit puts orbit on the middle button in poly mode
 
@@ -952,48 +1111,38 @@ function forgeProAttach(view, ctx) {
   canvas.addEventListener("pointerup", endLeft);
   window.addEventListener("pointerup", (e) => { if (pro.open === "key") endLeft(e); });
 
-  // ------------------------------------------------ right button: hold and a marking menu opens, picked by direction
+  // ------------------------------------------------ right button: press and HOLD - the marking menu is there at once,
+  // under the mouse, for as long as the button is down. Let go over a wedge or an item (or flick toward one) and it
+  // runs; let go in the middle and the menu just closes. A quick click does nothing - the menu never stays pinned
+  // open (owner 17:06: "right click doesnt do that ... fix the systems").
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 2 || e.altKey) return;              // every view, the four-view layout included
+    e.preventDefault();
     pro.down = true; pro.at = [e.clientX, e.clientY];
-    const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
     window.clearTimeout(pro.timer);
-    pro.timer = window.setTimeout(() => {
-      if (!pro.down) return;
-      const node = view.mode === "view" ? forgeProPickAt(view, pro.at[0], pro.at[1]) : null;
-      const t = forgeProTree(view);
-      if (node && t && !how.shift && !how.ctrl && !t.selected().includes(node.id)) t.select(node.id);
-      pro.open = "right";
-      forgeProMarkShow(view, pro.at[0], pro.at[1], forgeProMenu(view, Object.assign({ node: node }, how)));
-    }, FORGE_PRO_HOLD);
+    const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    const node = view.mode === "view" ? forgeProPickAt(view, pro.at[0], pro.at[1]) : null;
+    pro.open = "right";
+    forgeProMarkShow(view, pro.at[0], pro.at[1], forgeProMenu(view, Object.assign({ node: node }, how)));
   });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   const endRight = (e) => {
     if (e.button !== 2) return;
     pro.down = false; window.clearTimeout(pro.timer);
-    if (pro.open === "pinned") return;                   // already open from an earlier click: leave it
-    if (pro.open === "right") {                          // it was showing: a flick picks by direction
-      pro.open = false;
-      const id = forgeProMarkPick(e.clientX, e.clientY);
-      forgeProMarkHide();
-      if (id) forgeProRun(view, id);
-      return;
+    if (pro.open !== "right") return;
+    pro.open = false;
+    const id = forgeProMarkPick(e.clientX, e.clientY);
+    forgeProMarkHide();
+    if (id) {
+      // the menu was opened over an object that is not selected: what you pick acts on THAT object
+      const t = forgeProTree(view), at = pro.at || [e.clientX, e.clientY];
+      const node = view.mode === "view" ? forgeProPickAt(view, at[0], at[1]) : null;
+      if (node && t && !t.selected().includes(node.id) && !e.shiftKey && !e.ctrlKey && !e.metaKey) t.select(node.id);
+      forgeProRun(view, id);
     }
-    if (e.target !== canvas) return;
-    // a quick click opens the menu and leaves it open (a click is enough; you do not have to hold) - Ziva
-    const at = pro.at || [e.clientX, e.clientY];
-    const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
-    const node = view.mode === "view" ? forgeProPickAt(view, at[0], at[1]) : null;
-    const t = forgeProTree(view);
-    if (node && t && !how.shift && !how.ctrl && !t.selected().includes(node.id)) t.select(node.id);
-    forgeProMarkShow(view, at[0], at[1], forgeProMenu(view, Object.assign({ node: node }, how)));
-    pro.open = "pinned";
   };
-  // a click away, or Escape, closes one that was opened by a click
-  document.addEventListener("pointerdown", (e) => {
-    if (pro.open !== "pinned") return;
-    const host = document.getElementById("forge-pro-marking");
-    if (host && !host.hidden && !host.contains(e.target)) { pro.open = false; forgeProMarkHide(); }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && pro.open === "right") { pro.open = false; pro.down = false; forgeProMarkHide(); }
   }, true);
   canvas.addEventListener("pointerup", endRight);
   window.addEventListener("pointerup", endRight);
@@ -1085,7 +1234,10 @@ function forgeProKeys() {
       if (hb && !hb.hidden) return;
       if (forgeProWheelOpenNow()) { forgeProWheelClose(); return; }   // Space again puts the wheel away
       m.spaceAt = performance.now();
-      forgeProWheelOpen(v, m.mouse);                                   // at the mouse (the owner's wheel)
+      // Space: the hotbox, centred on the mouse - the menu rows tight around the pointer, each menu dropping
+      // down where you hover (owner 17:06: "neat and tidy", "open up on the cursor"). The wheel (Ziva) is kept:
+      // Windows > Radial Menus.
+      forgeProHotboxOpen(v, m.mouse);
       return;
     }
     if (k === "Escape") {
@@ -1204,6 +1356,8 @@ function forgeProKeys() {
       const quick = performance.now() - (m.spaceAt || 0) < FORGE_PRO_TAP;
       const used = !!hb._used;
       if (hb._zone) return;                                    // a zone menu is open: the mouse release decides
+      // a menu is dropped down under the mouse: it stays until you click an item (or anywhere else to close)
+      if (!quick && hb.querySelector(".forge-pro-list:not([hidden])")) { hb.dataset.pinned = "1"; return; }
       forgeProHotboxHide();
       if (quick && !used && sheetOpen()) proSay(forgeProTap(v));
       return;

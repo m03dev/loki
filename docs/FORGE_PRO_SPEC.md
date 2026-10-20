@@ -46,7 +46,7 @@ Forge accepts Ctrl and Cmd alike everywhere.
 | Ctrl+E / Ctrl+B | Extrude / Bevel | Extrude; Bevel is a task (no bevel op yet) |
 | Shift+> / Shift+< (component) | Grow / shrink selection | yes |
 | Ctrl+A | Attribute Editor (or the Channel Box) | toggles the Channel Box |
-| Space (hold) | Hotbox | yes - the standard layout: Recent Commands + menu rows around the mouse, the five zones |
+| Space (hold) | Hotbox | yes - centred on the mouse: the menu rows hug the pointer (12 px above / below), a menu drops down where you hover and stays after Space is released until you click; the five zones. The older radial wheel is Windows > Radial Menus |
 | Space (tap) | Single view <-> four views; a tap over a pane maximises THAT pane | yes |
 | Alt+M | Hotbox display rows | - |
 | Return / Esc | Complete current tool / abort it | yes (Esc never closes Forge) |
@@ -58,9 +58,29 @@ Outliner-only keys: **Return** renames the selected item, **f** reveals (scrolls
 
 ## Camera (the viewport)
 
-Alt+left tumble, Alt+middle track, Alt+right dolly, wheel zooms. In an orthographic view (top / front / side) tumbling
-is off. Without Alt the left button selects, the middle button drags the manipulator's active handle, the right button
-is the marking menu.
+Forge's own controller (`forgeProCamera` in `app/ui/forge_pro.js`, 2026-10-19 evening); OrbitControls only keeps the
+centre of interest. What a drag does is decided at the press, from the button and the keys held then:
+
+| Drag | Does |
+|---|---|
+| Alt/Option + left | tumble about the centre of interest: left/right turns about the world's up axis, up/down tilts (stops just short of straight up/down) |
+| Alt/Option + middle | track: the picture moves 1:1 with the mouse at the centre of interest |
+| Alt/Option + right | dolly toward / away from the centre of interest: right or down = in, left or up = out (exponential, so it feels the same near and far) |
+| Alt/Option + left + middle | dolly |
+| + Shift | tumble / track locked to the first direction moved |
+| Alt/Option + Ctrl/Cmd + left | box dolly: a box drawn left -> right fills the view with it, right -> left moves out |
+| wheel | dolly in / out in steps |
+
+In an orthographic view (top / front / side) tumbling is off. Without Alt the left button selects, the middle button
+drags the manipulator's active handle, the right button is the marking menu. Every camera move that ends can be
+undone with [ and redone with ].
+
+## Right button
+
+The marking menu appears the moment the button goes down, under the pointer, and only while it is held. Let go over a
+wedge or a list item - or flick toward a wedge - and it runs; let go in place and it closes with nothing run (a quick
+click does nothing). On empty space it is a short list: Complete Tool, Select All, Select None, Undo, Redo, Repeat
+Last, Frame All, More. Esc closes it.
 
 ## Marking menus - compass layout
 
@@ -117,7 +137,25 @@ A transform node's matrix (the standard transformation matrix, simplified to one
 - **Duplicate** copies the node with its hierarchy as a sibling, renamed with the next free number (`pCube1` -> `pCube2`).
 - **Shift + drag** with a manipulator duplicates and drags the copy (owner's description of how they work).
 
-## The look (measured off the reference package on the Mac, 2026-10-19 afternoon)
+## The look (2026-10-19 evening: modern, high contrast)
+
+Owner 17:06: "it looks old and washed out, bring up the contrast and make pixels sharper ... modern and seamless". The
+layout stays (menu bar, status line, tool box, Outliner, viewport, Channel Box, time slider, help line); the colours
+are re-tuned at the end of `app/ui/forge.css`:
+
+| Part | Forge |
+|---|---|
+| panels / menu bar / status line | #2b2c2f, text #ededed (font smoothing on, weight 500) |
+| lists / fields | #212225 / #161719 |
+| selection, menu highlight, active tool | #2f7fd0 |
+| menus (every drop-down, the hotbox, the marking list, the Outliner menu) | #26272a, 20 px rows, tick column, hotkey right-aligned in #9ea3aa, hairline separators |
+| viewport gradient | #8099b8 -> #627a98 -> #435570 -> #26303d -> #12161b -> #0b0c0e |
+| the picture | drawn at 1.5x a standard screen's pixels (supersampled), full density on high-DPI screens up to 3x |
+| shelf | hidden until Windows > UI Elements > Shelf |
+| component display | edges thin light blue (#86c6e6), selected orange (#ff8a1a), vertices purple (#a94fd1) only in vertex mode, selected yellow; selected faces a light orange tint; no object wire on the object being edited; the object wire always follows edits (no ghost of the old shape) |
+
+### Earlier measurements (afternoon, kept for reference)
+
 
 Screenshots of the owner's reference package (General workspace, an unsaved scene with a cube) were sampled pixel by pixel:
 

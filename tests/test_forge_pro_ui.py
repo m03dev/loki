@@ -105,59 +105,83 @@ async def main():
         check("Esc drops the tool (and does not close Forge)", not await page.evaluate("!!forge.view.transform.object")
               and await page.is_visible("#forge"))
 
-        # -------- the camera: Alt / Option
-        btn = "() => { const b = forge.view.pro.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }"
-        bare = await page.evaluate(btn)
-        await page.keyboard.down("Alt")
-        alt = await page.evaluate(btn)
-        await page.keyboard.up("Alt")
-        back = await page.evaluate(btn)
-        check("without Alt no button turns the camera (left selects, right is the marking menu)", bare == [None, None, None], bare)
-        check("Alt + left / middle / right = tumble / track / dolly", alt == [0, 2, 1], alt)   # THREE.MOUSE ROTATE 0, DOLLY 1, PAN 2
-        check("...and back on release", back == [None, None, None], back)
+        # -------- the camera: Alt / Option + left / middle / right = tumble / track / dolly, Forge's own controller
+        # (owner 17:06: "I want to move like im in [the pro app]"), read from each press
+        cs = "() => { const v = forge.view; return { p: v.camera.position.toArray(), t: v.controls.target.toArray(), d: v.camera.position.distanceTo(v.controls.target), mb: [v.controls.mouseButtons.LEFT, v.controls.mouseButtons.MIDDLE, v.controls.mouseButtons.RIGHT] }; }"
+        import math
+        async def alt_drag(button, dx, dy):
+            await page.mouse.move(cx, cy)
+            await page.keyboard.down("Alt")
+            await page.mouse.down(button=button)
+            await page.mouse.move(cx + dx, cy + dy, steps=5)
+            await page.mouse.up(button=button)
+            await page.keyboard.up("Alt")
+            await page.wait_for_timeout(30)
+            return await page.evaluate(cs)
+        c0 = await page.evaluate(cs)
+        c1 = await alt_drag("left", 80, 0)
+        c2 = await alt_drag("middle", 40, 30)
+        c3 = await alt_drag("right", 60, 0)
+        c4 = await alt_drag("right", 0, -60)
+        moved = lambda a, b: math.dist(a, b) > 1e-3
+        check("no mouse button turns the camera by itself (left selects, right is the marking menu)", c0["mb"] == [None, None, None], c0["mb"])
+        check("Alt + left drag tumbles about the centre of interest (same target, same distance)", moved(c0["p"], c1["p"])
+              and not moved(c0["t"], c1["t"]) and abs(c0["d"] - c1["d"]) < 1e-3, [c0, c1])
+        check("Alt + middle drag tracks: the camera and its centre of interest move together", moved(c1["t"], c2["t"]) and abs(c1["d"] - c2["d"]) < 1e-3, [c1, c2])
+        check("Alt + right drag dollies: to the right moves in, upward moves out", c3["d"] < c2["d"] * 0.9 and c4["d"] > c3["d"] * 1.1, [c2["d"], c3["d"], c4["d"]])
+        await page.mouse.move(cx, cy)
+        await page.mouse.wheel(0, -240)
+        await page.wait_for_timeout(60)
+        c5 = await page.evaluate(cs)
+        check("the wheel dollies in", c5["d"] < c4["d"], [c4["d"], c5["d"]])
+        await page.evaluate("forge.view.frame()")
 
-        # -------- the Space wheel (Ziva, 644e291): it floats WHERE THE MOUSE IS; hovering a wedge brings that menu down
-        # (owner 2026-10-19: "i want the space bar menue to float where my mouse is just like pro not a newhud
-        # its like a wheel and when you hover over it brings down a new menue")
+        # -------- Space: the hotbox CENTRED ON THE MOUSE, the menu rows tight around it (owner 17:06: menus "too far
+        # apart", "open up not on the cursor", "neat and tidy"); hovering a menu drops it down right there
         await page.mouse.move(cx, cy)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(140)
-        wh = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-pro-wheel');
+        hb = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-pro-hotbox');
           if (!h) return null;
-          const r = h.getBoundingClientRect();
-          return { vis: !h.hidden, heads: [...h.querySelectorAll('.forge-wheel-wedge')].map((b) => b.dataset.proHead),
-                   dx: Math.round(r.left - x), dy: Math.round(r.top - y) }; }""", [cx, cy])
-        wb = await (await page.query_selector('#forge-pro-wheel .forge-wheel-wedge[data-pro-head="Edit"]')).bounding_box()
-        await page.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2)
-        await page.wait_for_timeout(150)
-        wsub = await page.evaluate("""() => { const s = document.querySelector('#forge-pro-wheel .forge-wheel-sub');
-          return s ? { head: s.dataset.head, n: s.querySelectorAll('.forge-wheel-item').length } : null; }""")
+          const rows = [...h.querySelectorAll('.forge-pro-row')].map((r) => r.getBoundingClientRect());
+          return { vis: !h.hidden, c: h._center, cols: h.querySelectorAll('.forge-pro-col').length,
+                   items: h.querySelectorAll('.forge-pro-item').length,
+                   gapUp: Math.round(y - rows[0].bottom), gapDown: Math.round(rows[1].top - y) }; }""", [cx, cy])
+        eb = await (await page.query_selector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-head')).bounding_box()
+        await page.mouse.move(eb["x"] + eb["width"] / 2, eb["y"] + eb["height"] / 2)
+        await page.wait_for_timeout(120)
+        drop = await page.evaluate("""() => { const l = document.querySelector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-list');
+          const h = document.querySelector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-head').getBoundingClientRect();
+          if (!l || l.hidden) return null; const r = l.getBoundingClientRect();
+          return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
-        check("Space floats a wheel AT THE MOUSE with every menu (Recent + 11)", wh and wh["vis"] and len(wh["heads"]) == 12
-              and abs(wh["dx"]) < 26 and abs(wh["dy"]) < 26, wh)
-        check("hovering a wedge brings that menu down beside it", bool(wsub) and wsub["head"] == "Edit" and wsub["n"] >= 9, wsub)
-        check("the menu stays open after releasing Space, so an item can be clicked",
-              not await page.evaluate("document.getElementById('forge-pro-wheel').hidden"))
-        await page.click('#forge-pro-wheel .forge-wheel-sub .forge-wheel-more')
-        hb = await page.evaluate("""() => ({ vis: !document.getElementById('forge-pro-hotbox').hidden,
-          cols: document.querySelectorAll('#forge-pro-hotbox .forge-pro-col').length,
-          items: document.querySelectorAll('#forge-pro-hotbox .forge-pro-item').length })""")
-        check("every wheel menu ends with All menus: the pro full hotbox (Recent Commands + 11 menus, 80+ commands)",
-              hb["vis"] and hb["cols"] == 12 and hb["items"] >= 80, hb)
+        check("Space opens the hotbox centred on the mouse (Recent + 11 menus, 80+ commands), rows within 30 px of it",
+              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 12 and hb["items"] >= 80
+              and 0 <= hb["gapUp"] <= 30 and 0 <= hb["gapDown"] <= 30, hb)
+        check("hovering a menu drops it right at its name, with the hotkeys on the right", bool(drop) and drop["n"] >= 9
+              and abs(drop["dy"]) <= 4 and drop["keys"] >= 4, drop)
+        check("the dropped menu stays after releasing Space, so an item can be clicked",
+              not await page.evaluate("document.getElementById('forge-pro-hotbox').hidden"))
+        await page.mouse.click(5, 5)
+        check("a click away closes it", await page.evaluate("document.getElementById('forge-pro-hotbox').hidden"))
+        await page.evaluate("forgeProRun(forge.view, 'wheel')")
+        wh = await page.evaluate("""() => { const h = document.getElementById('forge-pro-wheel');
+          return h ? { vis: !h.hidden, n: h.querySelectorAll('.forge-wheel-wedge').length } : null; }""")
         await page.keyboard.press("Escape")
+        check("the wheel is still there: Windows > Radial Menus (Recent + 11)", bool(wh) and wh["vis"] and wh["n"] == 12, wh)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(300)
         await page.keyboard.up(" ")
         await page.keyboard.press("Escape")
-        check("Escape puts the wheel away; a long hold does not switch views", await page.evaluate("document.getElementById('forge-pro-wheel').hidden && !forge.view.quad"))
+        check("Escape puts it away; a long hold does not switch views", await page.evaluate("document.getElementById('forge-pro-hotbox').hidden && document.getElementById('forge-pro-wheel').hidden && !forge.view.quad"))
         await page.keyboard.press(" ")
         quad = await page.evaluate("forge.view.quad")
         await page.mouse.move(vb["x"] + vb["width"] * 0.25, vb["y"] + vb["height"] * 0.25)
         await page.keyboard.press(" ")
         after = await page.evaluate("[forge.view.quad, forge.view.cam]")
         check("a Space tap goes to four views; a tap over the top-left pane makes Front big", quad is True and after == [False, "front"], [quad, after])
-        # the hotbox's centre zone (the full pro layout, reached from the wheel's last entry)
+        # the hotbox's centre zone
         await page.evaluate("forgeProHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.mouse.move(cx, cy)
         await page.wait_for_timeout(120)
@@ -239,6 +263,21 @@ async def main():
         n1 = await page.evaluate("[forge.view.tree.api.list().length, forge.view.tree.api.root().name]")
         check("Shift + right button on nothing is the pro Create ring; flicking south makes a new cube", title == "Create"
               and n1 == [n0 + 1, "pCube2"], [title, n0, n1])
+
+        # right button: the menu is there the moment the button goes down, only while it is held; a quick click
+        # does nothing (owner 17:06: "right click doesnt do that ... fix the systems")
+        ex, ey = vb["x"] + 40, vb["y"] + 70
+        await page.mouse.move(ex, ey)
+        await page.mouse.down(button="right")
+        now = await page.evaluate("""() => { const h = document.getElementById('forge-pro-marking');
+          return { vis: !h.hidden, list: [...h.querySelectorAll('.forge-pro-litem')].map((b) => b.dataset.proId), wedges: h.querySelectorAll('.forge-pro-wedge').length }; }""")
+        await page.mouse.up(button="right")
+        await page.wait_for_timeout(60)
+        gone = await page.evaluate("document.getElementById('forge-pro-marking').hidden")
+        n2 = await page.evaluate(T + ".list().length")
+        check("right button on nothing: at once, the empty-space list (Complete Tool, Select All, Undo ...), no ring",
+              now["vis"] and now["list"][:2] == ["completeTool", "selectAll"] and "undo" in now["list"] and now["wedges"] == 0, now)
+        check("...a quick click (press and let go in place) just closes it - nothing runs, nothing stays open", gone and n2 == n1[0], [gone, n2])
 
         # -------- Duplicate (Ctrl/Cmd+D) and Duplicate with Transform (Shift+D)
         await page.evaluate(T + ".select(1)")
@@ -390,7 +429,7 @@ async def main():
         m1 = await page.evaluate("forge.view.edit.mode")
         await page.keyboard.press("g")
         modal = await page.evaluate("forge.view.modalActive()")
-        bb = await page.evaluate(btn)
+        bb = await page.evaluate("() => { const b = forge.view.pro.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }")
         await page.evaluate("forgeModelMode(false)")
         check("pro keys only: 2 / g are not Blender's edge mode / grab, and no mouse button turns the view without Alt",
               m1 == m0 and not modal and bb == [None, None, None] and await page.evaluate("forgeKeymap()") == "pro", [m0, m1, modal, bb])
@@ -433,12 +472,12 @@ async def main():
         await page.evaluate("forgeProPanel('create', false)")
         await page.keyboard.down(" ")
         await page.wait_for_timeout(120)
-        await page.hover('#forge-pro-wheel .forge-wheel-wedge[data-pro-head="Recent Commands"]')
+        await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Recent Commands"] .forge-pro-head')
         await page.wait_for_timeout(100)
-        rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-wheel .forge-wheel-sub .forge-wheel-item[data-pro-id]')].map((b) => b.dataset.proId)""")
+        rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Recent Commands"] .forge-pro-item[data-pro-id]')].map((b) => b.dataset.proId)""")
         await page.keyboard.up(" ")
         await page.keyboard.press("Escape")
-        check("the wheel's Recent Commands lists what you just ran, newest first", rec[:1] == ["winCreate"], rec)
+        check("the hotbox's Recent Commands lists what you just ran, newest first", rec[:1] == ["winCreate"], rec)
         await page.keyboard.press("Escape")
         check("Esc never closes Forge", await page.is_visible("#forge"))
 
@@ -557,12 +596,12 @@ async def main():
                    shelfTabs: [...document.querySelectorAll('#fmy-shelf .fmy-stab')].map((b) => b.dataset.tab),
                    tools: document.querySelectorAll('#fmy-toolbox .fmy-ib').length,
                    stage: getComputedStyle(document.getElementById('forge-stage')).backgroundImage }; }""")
-        check("the pro panel grey (#444444) and its menu bar: File Edit Create Select Modify Display Windows Mesh 'Edit Mesh' 'Mesh Tools' 'Mesh Display' Help",
-              look["bg"] == "rgb(68, 68, 68)" and look["menus"][:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
+        check("the dark, high-contrast panel (#2b2c2f, owner 17:06) and its menu bar: File Edit Create Select Modify Display Windows Mesh 'Edit Mesh' 'Mesh Tools' 'Mesh Display' Help",
+              look["bg"] == "rgb(43, 44, 47)" and look["menus"][:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
               and "Edit Mesh" in look["menus"] and "Mesh Tools" in look["menus"], look)
         check("the viewport has its own menus (View Shading Lighting Show Renderer Panels), the shelf its tabs, a tool box",
               look["panelMenus"] == ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"] and look["shelfTabs"][:2] == ["Poly Modeling", "Sculpting"]
-              and look["tools"] >= 8 and "135, 155, 179" in look["stage"], look)
+              and look["tools"] >= 8 and "128, 153, 184" in look["stage"] and "11, 12, 14" in look["stage"], look)
         # Create > Cube from the menu bar makes a new pCube
         n0 = await page.evaluate(T + ".list().length")
         await page.click('#fmy-menubar .fmy-mb[data-menu="Create"]')
@@ -580,7 +619,10 @@ async def main():
           n.inner.traverse((o) => { if (o.name === 'forge-sel') { o.traverse((c) => { if (c.isLineSegments && !c.isBox3Helper) lines++; if (c.type === 'Box3Helper') box++; }); } });
           return [lines, box]; }""")
         check("a selected object shows the pro wireframe in the selection colour, not a box", wire[0] >= 1 and wire[1] == 0, wire)
-        # the shelf: Poly Modeling's sphere button
+        # the shelf: hidden at first (owner 17:06: "we don't need shelves"), Windows > UI Elements > Shelf brings it
+        shelf0 = await page.evaluate("document.getElementById('fmy-shelf').hidden")
+        await page.evaluate("fmyUiSet('shelfbar', true)")
+        check("the shelf starts hidden and comes back from UI Elements", shelf0 and not await page.evaluate("document.getElementById('fmy-shelf').hidden"))
         await page.click('#fmy-shelf .fmy-stab[data-tab="Poly Modeling"]')
         await page.click('#fmy-shelf .fmy-shelf-btn[data-pro-id="sphere"]')
         await page.evaluate("forgeModelMode(false)")

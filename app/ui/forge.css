@@ -702,3 +702,119 @@ button.forge-out-title:hover { opacity: 1; }
   .fmy-shelf-btn { width: 28px; height: 28px; }
   .fmy-shelf-btn svg { width: 20px; height: 20px; }
 }
+
+/* ================================================================ the modern, high-contrast look (owner 17:06: "it looks
+   old and washed out, bring up the contrast and make pixels sharper ... modern and seamless")
+   Darker, flatter greys with brighter text, one crisp blue for selection, hairline separators instead of boxes,
+   tight 20 px menu rows. Everything above still applies; this only re-tunes the colours and the spacing. */
+#forge .forge-panel.fmy {
+  --my-panel: #2b2c2f; --my-list: #212225; --my-field: #161719; --my-sel: #2f7fd0; --my-tool: #2f7fd0; --my-text: #ededed;
+  --my-dim: #9ea3aa; --my-line: #18191b; --my-hover: #3a3c40; --my-menu: #252629; --my-menuline: #101113;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
+  font: 500 12px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: .005em;
+}
+#forge .forge-panel.fmy .forge-head { background: #1f2023; border-bottom: 1px solid var(--my-line); }
+#forge .forge-panel.fmy .forge-head h2 { opacity: .9; font-weight: 600; }
+.fmy-menubar, .fmy-status, .fmy-helpline, .fmy-time, .fmy-panelbar, .forge-panel-menus { background: var(--my-panel, #2b2c2f) !important; }
+.fmy-menubar { height: 24px; border-bottom: 1px solid var(--my-line, #18191b); }
+.fmy-mb { color: var(--my-text, #ededed); padding: 3px 8px; border-radius: 3px; }
+.fmy-mb:hover, .fmy-mb.open { background: var(--my-sel, #2f7fd0); color: #fff; }
+.fmy-wsname, .fmy-menuset, .fmy-symlabel, .fmy-fps, .fmy-tfield, .fmy-cmd, .fmy-result, .forge-out-search { background: var(--my-field, #161719) !important; border-color: #0c0c0d !important; color: #f1f1f1 !important; }
+.fmy-status { border-top: 0; border-bottom: 1px solid var(--my-line, #18191b); }
+.fmy-ib { color: #e8e8e8; border-radius: 3px; }
+.fmy-ib:hover { background: var(--my-hover, #3a3c40); }
+.fmy-ib.on { background: var(--my-tool, #2f7fd0); color: #fff; }
+.fmy-vsep, .fmy-hsep { background: #45474c; }
+.fmy-helpline { border-top: 1px solid var(--my-line, #18191b); }
+.fmy-help { color: #e6e6e6; }
+.fmy-mel { color: #9ea3aa; }
+.fmy-time { border-top: 1px solid var(--my-line, #18191b); }
+.fmy-ruler, .fmy-rbar { background: #161719; }
+.fmy-ticks .fmy-tick { background: #5d6066; }
+.fmy-ticks .fmy-tick.lab { background: linear-gradient(to top, #8d9198 0 9px, transparent 9px); color: #c9ccd1; }
+.fmy-rknob { background: #4a4d53; }
+.forge-body.pro > .fmy-toolbox { border-right: 1px solid var(--my-line, #18191b); }
+/* the side columns: one flat surface, the lists a step darker, separators as hairlines */
+#forge .forge-panel.fmy .forge-body.pro > .forge-outcol,
+#forge .forge-panel.fmy .forge-body.pro > .forge-chancol { background: var(--my-panel); border-color: var(--my-line); }
+#forge .forge-panel.fmy .forge-out-list { background: var(--my-list); }
+#forge .forge-panel.fmy .forge-out-row { color: #e9e9e9; height: 20px; }
+#forge .forge-panel.fmy .forge-out-row:hover { background: var(--my-hover); }
+#forge .forge-panel.fmy .forge-out-row.on { background: var(--my-sel); color: #fff; }
+.forge-out-cam { color: #7d8187; }
+.forge-out-cam:hover { background: var(--my-hover, #3a3c40); color: #c2c5ca; }
+#forge .forge-panel.fmy button.forge-out-title, .forge-panel-tab { background: #222326; color: #f0f0f0; }
+#forge .forge-panel.fmy .forge-out-bar .forge-out-btn, #forge .forge-panel.fmy #forge-hist-clear { background: #3a3c40; border-color: #1a1b1d; color: #f0f0f0; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-label { color: #e4e4e4; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-in { background: var(--my-field); color: #fafafa; font-variant-numeric: tabular-nums; }
+#forge .forge-panel.fmy #forge-channel .forge-ch-in:focus { outline: 1px solid var(--my-sel); background: #0f1011; }
+#forge .forge-panel.fmy #forge-ch-name { color: #fff; }
+.forge-ch-node, #forge .forge-panel.fmy #forge-history .forge-hist-row { background: #34363a; color: #eee; }
+.forge-ch-section { color: #f0f0f0; }
+.forge-pm { color: var(--my-text, #ededed); }
+.forge-pm:hover { background: var(--my-sel, #2f7fd0); }
+/* the viewport: a deeper gradient - more contrast between the model and the background */
+#forge .fmy-stage { background: linear-gradient(180deg, #8099b8 0%, #627a98 24%, #435570 50%, #26303d 76%, #12161b 92%, #0b0c0e 100%); border-color: #111214; }
+.fmy-panelbar { border-bottom: 1px solid var(--my-line, #18191b); }
+.fmy-panelicons { border-top: 1px solid #232427; }
+.fmy-polycount, .fmy-camname { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
+
+/* menus: one compact, crisp style for every drop-down - the menu bar, the panel menus, the hotbox and the marking
+   menu's list. 20 px rows, a tick column, the label, the hotkey right-aligned, a hairline between groups. */
+.fmy-drop, .forge-pm-pop, .forge-out-menu, .forge-pro-hotbox .forge-pro-list, .forge-pro-marking .forge-pro-mlist {
+  background: #26272a; border: 1px solid #0f1012; border-radius: 4px; padding: 3px 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04) inset; color: #ededed;
+  font: 500 12px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Inter", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.fmy-ditem, .forge-pm-item, .forge-out-menu .forge-out-mi, .forge-pro-hotbox .forge-pro-item, .forge-pro-marking .forge-pro-litem {
+  display: flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 12px 0 4px; border: 0; border-radius: 0;
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: default; white-space: nowrap;
+}
+.forge-pm-item, .forge-out-menu .forge-out-mi, .forge-pro-marking .forge-pro-litem { padding-left: 20px; width: 100%; }
+.fmy-ditem:hover:not(.off), .forge-pm-item:hover:not(:disabled), .forge-out-menu .forge-out-mi:hover:not(:disabled), .forge-pro-hotbox .forge-pro-item:hover,
+.forge-pro-hotbox .forge-pro-item:focus-visible, .forge-pro-marking .forge-pro-litem.hot {
+  background: #2f7fd0; color: #fff;
+}
+.fmy-ditem.off, .forge-pm-item:disabled, .forge-out-menu .forge-out-mi:disabled { color: #73777e; opacity: 1; }
+.fmy-dkey, .forge-pro-hotbox .forge-pro-key { margin-left: auto; padding-left: 22px; color: #9ea3aa; font-size: 11px; }
+.fmy-ditem:hover .fmy-dkey, .forge-pro-hotbox .forge-pro-item:hover .forge-pro-key { color: #e8f1fb; }
+.fmy-sep { background: #3a3c40; margin: 3px 0; }
+.fmy-dhead { color: #8d9198; font-size: 10.5px; padding: 5px 12px 2px 20px; text-transform: none; letter-spacing: .02em; }
+.forge-pro-hotbox .forge-pro-tick, .fmy-ditem .fmy-tick { position: static; height: auto; background: none; font-size: inherit; width: 16px; flex: none; text-align: center; color: #ededed; }
+.forge-pro-hotbox .forge-pro-label { flex: none; }
+
+/* the hotbox (Space): no curtain over the work, the two rows of menu names hugging the pointer */
+.forge-pro-hotbox { background: rgba(8,9,11,.12); }
+.forge-pro-hotbox .forge-pro-row { gap: 1px; padding: 1px; background: #1b1c1e; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.45); }
+.forge-pro-hotbox .forge-pro-row.up { bottom: 12px; }
+.forge-pro-hotbox .forge-pro-row.down { top: 12px; }
+.forge-pro-hotbox .forge-pro-head { padding: 3px 9px; border: 0; border-radius: 3px; background: #2e3033; color: #f0f0f0; font-weight: 500; font-size: 12px; }
+.forge-pro-hotbox .forge-pro-head.open, .forge-pro-hotbox .forge-pro-head:hover { background: #2f7fd0; color: #fff; }
+.forge-pro-hotbox .forge-pro-list { margin-top: 1px; min-width: 200px; }
+.forge-pro-hotbox .forge-pro-row.up .forge-pro-list { margin: 0 0 1px; }
+.forge-pro-hotbox .forge-pro-zonehub { padding: 1px 8px; border-radius: 3px; font-size: 10px; letter-spacing: .08em;
+  background: #2e3033; border: 1px solid #0f1012; color: #c9ccd1; }
+.forge-pro-hotbox .forge-pro-zones .z-north { top: -84px; }
+.forge-pro-hotbox .forge-pro-zones .z-south { top: 84px; }
+.forge-pro-hotbox .forge-pro-zones .z-east { left: 300px; }
+.forge-pro-hotbox .forge-pro-zones .z-west { left: -300px; }
+.forge-pro-hotbox .forge-pro-zones span { opacity: .55; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.forge-pro-hotbox .forge-pro-empty { padding: 2px 20px; color: #8d9198; opacity: 1; }
+
+/* the marking menu (right button held): small flat labels around the pointer, the hovered one blue */
+.forge-pro-marking .forge-pro-hub { opacity: .8; color: #fff; font-size: 10px; text-shadow: 0 1px 2px rgba(0,0,0,.7); top: -14px; }
+.forge-pro-marking .forge-pro-hub.dot { top: 0; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+.forge-pro-marking .forge-pro-wedge { padding: 2px 9px; border-radius: 3px; border: 1px solid #0f1012; background: #2e3033; color: #f0f0f0;
+  font-size: 12px; font-weight: 500; line-height: 16px; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+.forge-pro-marking .forge-pro-wedge:hover, .forge-pro-marking .forge-pro-wedge.hot, .forge-pro-marking .forge-pro-wedge:focus-visible { background: #2f7fd0; border-color: #2f7fd0; color: #fff; }
+.forge-pro-marking .forge-pro-wedge.off.hot { background: #2e3033; border-color: #2f7fd0; }
+.forge-pro-marking .forge-pro-mlist { min-width: 170px; }
+.forge-pro-marking .forge-pro-mlist.bare { transform: none; left: 6px; }
+.forge-pro-marking .forge-pro-wedge.off, .forge-pro-marking .forge-pro-litem.off, .forge-pro-hotbox .forge-pro-item.off { opacity: 1; color: #73777e; }
+.forge-pro-marking .forge-pro-litem:hover:not(.hot) { background: transparent; color: inherit; }   /* the held button's pick (.hot) is the one highlight */
+.forge-pro-hotbox .forge-pro-zones { position: absolute; z-index: 0; }
+.forge-pro-hotbox .forge-pro-row { z-index: 3; }
+.forge-pro-hotbox .forge-pro-list { z-index: 6; }
+.forge-pro-hotbox:has(.forge-pro-list:not([hidden])) .forge-pro-zones { visibility: hidden; }   /* a dropped menu hides the zone names */

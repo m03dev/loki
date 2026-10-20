@@ -219,6 +219,7 @@ function forgeHistApplyOp(base, op) {
     case "smooth": return P.smooth(base);
     case "deleteVerts": return P.deleteVerts(base, op.verts);
     case "deleteEdges": return P.deleteEdges(base, null, op.edges);
+    case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
     default: return base;
   }
@@ -328,6 +329,31 @@ window.forgeHistory = {
   },
   clear() { forgeHistReset(); forgeModel.last = null; if (typeof forgeSay === "function") forgeSay("History deleted - the mesh is now the model."); },
 };
+
+// Insert Edge Loop (restored 2026-10-19 evening - the owner's rule is "don't remove anything, only improve"): pick an
+// edge in Edge mode; a loop goes round the quad ring that edge crosses, half way along. It lands in the history
+// (polySplitRing) so it can be changed or rebuilt like every other step.
+function forgeLoopCut(position) {
+  const v = forge.view, P = window.ForgePoly;
+  if (!v || !v.poly || !v.edit || v.edit.mode !== "edge" || !v.edit.sel.e.size) {
+    forgeSay("Select an edge in Edge mode (F10), then Insert Edge Loop.", true); return "";
+  }
+  const at = Number.isFinite(position) ? position : 0.5;
+  const edge = [...v.edit.sel.e][0];
+  const base = v.poly;
+  const T = P.topology(base);
+  if (!T.edges[edge] || typeof T.edge !== "function") { forgeSay("That edge is gone - pick it again.", true); return ""; }
+  const out = P.loopCut(base, edge, at);
+  if (out.f.length === base.f.length) { forgeSay("Insert Edge Loop needs a ring of four-sided faces across that edge.", true); return ""; }
+  const histEdge = T.edges[edge];
+  forgeHistPush({ kind: "loopCut", a: histEdge.a, b: histEdge.b, position: at }, base);
+  forgeModel.last = null;
+  v.showPoly(out, true);
+  const msg = "Inserted an edge loop (" + (out.f.length - base.f.length) + " faces split).";
+  forgeSay(msg);
+  return msg;
+}
+window.forgeLoopCut = forgeLoopCut;
 
 function forgeFaceOp(kind) {
   const v = forge.view;

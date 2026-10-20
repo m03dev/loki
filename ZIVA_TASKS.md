@@ -33,8 +33,33 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-19 evening) - the Forge rework is in; Forge is open again. Pull first.
+What changed (owner 17:06), so your next Forge work builds on it - do not undo any of it:
+- **Camera**: Forge's own controller, `forgeProCamera()` in app/ui/forge_pro.js. OrbitControls keeps only the
+  centre of interest; its mouseButtons stay null and its zoom/pan are off - never set them again. Alt/Option +
+  left tumble, + middle track, + right dolly (right/down = in), + Shift axis lock, + Ctrl/Cmd box dolly, wheel dolly.
+- **Right button**: the marking menu opens on press and lives only while held; a quick click does nothing. Your
+  click-to-pin was removed on the owner's order ("right click doesnt do that ... fix the systems").
+- **Space** opens the hotbox centred on the mouse (rows 12 px from the pointer, menus drop where you hover, stay
+  after release until a click). Your wheel is kept: Windows > Radial Menus (`forgeProRun(v, "wheel")`).
+- **Look**: the modern high-contrast block at the end of app/ui/forge.css (#2b2c2f panels, #2f7fd0 selection,
+  one 20 px menu style for every drop-down). Shelf hidden by default (Windows > UI Elements > Shelf).
+- **Component display** (forge_edit.js): light-blue edges, orange selection, purple vertex dots only in vertex
+  mode. The object selection wire follows edits through `view.frameHooks` (forge.js loop) - that was the
+  "weird wireframes after I move an edge".
+- **No product or vendor names** anywhere in LOKI's UI, code, tests or docs (owner: "Remove any mention of maya
+  and Autodesk"). Say "the pro way", "the standard layout". docs/operations/archive stays verbatim.
+- [ ] [either] Check it on a real screen (Mac Retina and the PC): tumble/track/dolly feel, the hotbox at the
+      cursor, right-button hold, the sharper picture (pixel ratio 1.5-3). Report what feels off, with a screenshot.
+- [ ] [either] Next tools (pick from the top, one per ship, test each under 60 s): Mesh > Combine and Separate,
+      Mesh > Mirror, Edit Mesh > Merge (vertices within a distance) and Fill Hole, Display quality keys 1 / 2 / 3
+      (smooth preview), an Attribute Editor panel (Ctrl+A) for the selected node. Commands go in
+      FORGE_PRO_CMDS (forge_pro.js) so the menus, hotbox, marking menus and command line all get them.
+- [ ] [either] Restore the loop-cut tool your commit 8086bf2 deleted (`forgeLoopCut` in forge_model.js) and wire
+      it to Edit Mesh > Insert Edge Loop - the owner's rule is "don't remove anything, only improve".
+
 ### Heads-up from Claude (2026-10-19 17:10) - Forge rework + a RENAME across the Forge files
-- [ ] [either] Owner 17:06: modern high-contrast look, no shelf, tidy menus that open AT the cursor, the camera must
+- [x] [either] Owner 17:06: modern high-contrast look, no shelf, tidy menus that open AT the cursor, the camera must
       move exactly like the reference app, no edit-mode wireframes after moving an edge, right-click must behave like
       the reference app, and NO mention of the reference app or its maker anywhere. Claude is renaming the Forge files
       and identifiers now (forge_pro.js, forge_chrome.js, docs/FORGE_PRO*.md, forgePro*, FORGE_PRO_*, .forge-pro-*

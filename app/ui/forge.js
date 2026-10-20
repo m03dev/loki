@@ -936,7 +936,11 @@ async function forgeViewer() {
 
 function forgeMakeView(lib, renderer, canvas) {
   const { THREE } = lib;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // sharper (owner 17:06: "make pixels sharper higher density"): the picture is drawn at least 1.5x the screen's
+  // pixels on a standard screen (supersampled - thin, crisp edges and lines) and at the full density of a Retina /
+  // high-DPI screen up to 3x. Automated test browsers stay at 1x so the suites keep their minute.
+  const dpr = window.devicePixelRatio || 1;
+  renderer.setPixelRatio(navigator.webdriver ? Math.min(dpr, 2) : Math.min(3, Math.max(1.5, dpr)));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
   camera.position.set(0, 0.4, 2.6);
@@ -1018,9 +1022,12 @@ function forgeMakeView(lib, renderer, canvas) {
     }
   }
   controls.addEventListener("change", () => { view.dirty = true; });
+  view.frameHooks = view.frameHooks || [];      // run before a frame is drawn (the selection wire follows edits)
+  const hooks = () => { for (const f of view.frameHooks) { try { f(); } catch (exc) { console.warn("forge: frame hook", exc); } } };
   function loop() {
     if (!view.running) return;
     resize();
+    if (view.dirty) hooks();
     if (anim.mixer) { const dt = Math.min(0.1, anim.clock.getDelta()); if (!anim.paused) { anim.mixer.update(dt); view.dirty = true; } }
     if (view.quad) {
       if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }

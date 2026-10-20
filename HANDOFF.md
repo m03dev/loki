@@ -120,6 +120,17 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   (docs/FORGE_PRO_SPEC.md "The look"); new app/ui/forge_chrome.js: menu bar, status line, shelf, tool box, time
   slider, help + MEL command line, the viewport's menus, HUD, view cube, grid, lambert grey, teal selection wire.
   Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_PRO.md T7-T12.
+- **2026-10-19 evening (Claude), owner 17:06:** no product/vendor names anywhere (files renamed: forge_pro.js,
+  forge_chrome.js, test_forge_pro_ui.py, docs/FORGE_PRO*.md; identifiers forgePro*/view.pro). Forge's own camera
+  controller (`forgeProCamera`: Alt tumble / track / dolly, Shift lock, Ctrl box dolly, wheel; OrbitControls keeps
+  only the target). Right button = hold-only marking menu, opens on press, quick click does nothing; empty space =
+  Complete Tool / Select All / Undo ... list. Space = hotbox centred on the mouse (Ziva's wheel: Windows > Radial
+  Menus). Modern high-contrast theme + one 20 px menu style (end of forge.css), picture at 1.5-3x pixel ratio, shelf
+  hidden by default. Component display light-blue / orange / purple; the object wire follows edits via
+  `view.frameHooks` (the "weird wireframes after moving an edge" were the stale wire of the old shape). Insert Edge
+  Loop restored (Ziva's 8086bf2 had removed it). Checked: test_forge_pro_ui 99 (44 s), test_forge_ui 37,
+  test_forge_edit_ui 21, test_forge_model_ui 14, creature 8, poly 32, ui_fit 81, ui_smoke 10, studio_destination 81.
+  Next: ZIVA_TASKS "From Claude (2026-10-19 evening)" - real-screen check, then Combine/Separate/Mirror/Merge.
 
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat

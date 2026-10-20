@@ -228,6 +228,7 @@ function forgeSceneAttach(view, ctx) {
           lines.matrix.multiplyMatrices(inv, o.matrixWorld);
           lines.renderOrder = 2; lines.raycast = () => {};
           lines.material.polygonOffset = true;
+          lines.userData.src = o;
           grp.add(lines);
         }
         grp.raycast = () => {};
@@ -666,6 +667,28 @@ function forgeSceneAttach(view, ctx) {
   }
   api.outlinerMenu = rowMenu;
   api.redrawSelection = () => { if (tree.selMarks) drawMarks(); };
+  // The selection wire is the mesh's own edges. Owner 17:06: the wire left behind after moving an edge ("those weird
+  // wireframes ... get rid of it") was this wire still showing the OLD shape - so it now follows every edit, and the
+  // working object shows no object wire at all while you edit its components or sculpt (the component display or
+  // the clean surface is all you see).
+  const followEdits = () => {
+    const editing = view.mode === "poly" || view.mode === "sculpt";
+    for (const g of marks.values()) {
+      if (!g.isGroup) continue;
+      const working = g.parent === holder;
+      g.visible = !(editing && working);
+      if (!g.visible) continue;
+      for (const lines of g.children) {
+        const o = lines.userData.src;
+        if (!o || !o.geometry) continue;
+        const ver = o.geometry.attributes.position.version + ":" + (o.geometry.index ? o.geometry.index.version : 0);
+        let ec = edgeCache.get(o.geometry);
+        if (!ec || ec.ver !== ver) { ec = { ver, geo: new THREE.EdgesGeometry(o.geometry, 1) }; edgeCache.set(o.geometry, ec); }
+        if (lines.geometry !== ec.geo) lines.geometry = ec.geo;
+      }
+    }
+  };
+  if (Array.isArray(view.frameHooks)) view.frameHooks.push(followEdits); else view.frameHooks = [followEdits];
   document.addEventListener("keydown", (e) => {     // Esc closes the menu, and only the menu
     if (e.key === "Escape" && menuEl) { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); }
   }, true);
