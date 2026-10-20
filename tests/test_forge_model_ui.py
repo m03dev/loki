@@ -181,6 +181,26 @@ async def main():
           const last = document.getElementById('open-studio'); const b = last ? last.getBoundingClientRect() : null;
           return { n: row.length, inside: row.every((x) => x.getBoundingClientRect().right <= side.right - 1), studio: !!b && b.right <= side.right - 1 }; }""")
         check("the sidebar's icon row, LOKI Studio included, stays inside the sidebar", r["n"] >= 5 and r["inside"] and r["studio"], r)
+        # Mesh > Combine / Separate / Mirror (the menu bar's Mesh menu, the hotbox, the command line)
+        r = await page.evaluate("""async () => { const v = forge.view, t = v.tree.api;
+          forgeModelMode(false); await forgeAddPrimitive('cube'); forgeModelMode(false); const a = t.root().id;
+          await forgeAddPrimitive('cube'); forgeModelMode(false); const b = t.root().id;
+          t.setTransform(b, 'translate', 0, 3); t.selectMany([a, b], 'set');
+          const n0 = t.list().filter((n) => n.kind === 'mesh').length;
+          forgeProRun(v, 'combine');
+          const c = t.active(), n1 = t.list().filter((n) => n.kind === 'mesh').length, f1 = v.poly ? v.poly.f.length : -1;
+          forgeProRun(v, 'separate');
+          const parts = t.selected().map((id) => t.node(id).name);
+          t.select(parts.length ? t.selected()[0] : c.id);
+          t.setTransform(null, 'translate', 0, 2);
+          const fm0 = (t.active().root && v.poly) ? v.poly.f.length : 6;
+          const res = await forgeProCommandLine('polyMirrorFace -axis 0');
+          return { n0, n1, name: c.name, f1, parts, fm0, fm1: v.poly ? v.poly.f.length : -1, res,
+                   menu: [...(FORGE_PRO_ROWS.find((r) => r[0] === 'Mesh') || [0, []])[1]] }; }""")
+        check("Combine: two cubes become one object polySurface1 (12 faces), the edited one", r["n1"] == r["n0"] - 1 and r["name"].startswith("polySurface") and r["f1"] == 12, r)
+        check("Separate: the two pieces become two objects again", len(r["parts"]) == 2, r)
+        check("Mirror (polyMirrorFace -axis 0) adds the mirrored copy across X", r["fm1"] == r["fm0"] * 2 and "Mirror" in r["res"]
+              and r["menu"][:3] == ["combine", "separate", "mirror"], r)
         real = [e for e in errors if "favicon" not in e]
         check("no page errors", not real, real[:5])
         await browser.close()

@@ -210,12 +210,12 @@ const FMY_MENUS = () => {
     ["Modify", ["#Transform", "move", "rotate", "scale", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
     ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
     ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI"])],
-    ["Mesh", (rows.Mesh || ["smooth", "dynamesh", "sculptModel"])],
+    ["Mesh", ["#Combine", "combine", "separate", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "dynamesh", "-", "sculptModel"]],
     ["Edit Mesh", (rows["Edit Mesh"] || ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"])],
     ["Mesh Tools", (rows["Mesh Tools"] || ["softSel", "sculpt", "multiCut", "edgeLoop"]).concat(["-", "snapGrid", "snapEdge", "snapPoint"])],
     ["Mesh Display", ["wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
-    ["Help", [["help1", "Hold Space: the menus at the mouse (All menus = the hotbox)", () => {}], ["help2", "Right-click: marking menus (Shift / Ctrl for more)", () => {}],
-      ["help3", "Alt / Option + left / middle / right: tumble / track / dolly", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
+    ["Help", [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}], ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
+      ["help3", "Alt / Option + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
       ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]]],
   ];
 };
@@ -581,10 +581,12 @@ async function forgeProCommandLine(line) {
         const alias = { delete: "delete", duplicate: "duplicate", group: "group", ungroup: "ungroup", parent: "parent", undo: "undo", redo: "redo",
           makeIdentity: "freeze", FreezeTransformations: "freeze", CenterPivot: "centerPivot", ResetTransformations: "resetXf", hide: "hide",
           showHidden: "showAll", viewFit: "frameAll", fitPanel: "frameAll", polyExtrudeFacet: "extrude", polySmooth: "smooth", polyNormal: "reverse",
-          polySplitRing: "edgeLoop", polyBevel: "bevel", polyBevel3: "bevel", isolateSelect: "isolate" }[w];
+          polySplitRing: "edgeLoop", polyBevel: "bevel", polyBevel3: "bevel", isolateSelect: "isolate",
+          polyUnite: "combine", polySeparate: "separate", polyMirrorFace: "mirror", polyMirror: "mirror" }[w];
         let id = alias || w;
         if (w === "xform" && flags.includes("-cp")) id = "centerPivot";
         if (w === "parent" && flags.includes("-w")) id = "unparent";
+        if (id === "mirror") { const ax = nums.length ? nums[0] : 0; id = ["mirror", "mirrorY", "mirrorZ"][ax] || "mirror"; }   // -axis 0 / 1 / 2
         if (!fmyCmd(id)) {
           const byLabel = typeof FORGE_PRO_CMDS !== "undefined" ? Object.entries(FORGE_PRO_CMDS).find(([, c]) => c[0].toLowerCase() === s.toLowerCase()) : null;
           if (byLabel) id = byLabel[0];

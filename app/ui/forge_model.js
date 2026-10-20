@@ -219,6 +219,7 @@ function forgeHistApplyOp(base, op) {
     case "smooth": return P.smooth(base);
     case "deleteVerts": return P.deleteVerts(base, op.verts);
     case "deleteEdges": return P.deleteEdges(base, null, op.edges);
+    case "mirror": return P.mirror(base, op.point, op.normal);
     case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
     default: return base;
@@ -354,6 +355,29 @@ function forgeLoopCut(position) {
   return msg;
 }
 window.forgeLoopCut = forgeLoopCut;
+
+// Mesh > Mirror: the edited object gets a mirrored copy of itself across a world plane through the origin (X by
+// default: model one half, mirror the other), the seam welded. Kept in the history (polyMirror).
+function forgeMirror(axis) {
+  const v = forge.view, P = window.ForgePoly, THREE = v && v.THREE;
+  if (!v || !THREE || !v.holder) return "";
+  if (!v.poly && v.triangles) { const t = v.triangles(); if (t && t.pos.length) v.showPoly(P.fromTriangles(t.pos, t.idx), true); }
+  if (!v.poly) { forgeSay("Add or select a mesh first.", true); return ""; }
+  const k = { x: 0, y: 1, z: 2 }[String(axis || "x").toLowerCase()] ?? 0;
+  const nw = new THREE.Vector3(k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0);
+  v.holder.updateMatrixWorld(true);
+  const plane = new THREE.Plane(nw, 0).applyMatrix4(v.holder.matrixWorld.clone().invert());   // into the mesh's own space
+  const point = plane.normal.clone().multiplyScalar(-plane.constant);
+  const base = v.poly;
+  const out = P.mirror(base, point.toArray(), plane.normal.toArray());
+  forgeHistPush({ kind: "mirror", point: point.toArray(), normal: plane.normal.toArray() }, base);
+  forgeModel.last = null;
+  v.showPoly(out, true);
+  const msg = "Mirrored across " + "XYZ"[k] + " (" + out.f.length + " faces).";
+  forgeSay(msg);
+  return msg;
+}
+window.forgeMirror = forgeMirror;
 
 function forgeFaceOp(kind) {
   const v = forge.view;

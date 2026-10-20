@@ -175,3 +175,13 @@ Screenshots of the owner's reference package (General workspace, an unsaved scen
 | Channel Box | Channels Edit Object Show menu, name, Translate X..Visibility rows (labels right-aligned), SHAPES, INPUTS | same; INPUTS = Forge's history with the standard node names |
 | Outliner | Display Show Help menu, search field, persp / top / front / side greyed first | same |
 | bottom | time slider + range slider (1-120, 24 fps), help line ("Move Tool: ..."), command line | same; the command line runs a small command language (polyCube, move, select -cl, setAttr, xform -cp ...) |
+
+## Mesh tools (2026-10-19 evening)
+
+| Menu | Forge | Command line |
+|---|---|---|
+| Mesh > Combine | the selected meshes become one new object polySurfaceN (world space, pivot at its middle); the originals go, their children move to the world | polyUnite |
+| Mesh > Separate | each piece that shares no vertex becomes its own object, grouped under `<name>_parts` | polySeparate |
+| Mesh > Mirror (X / Y / Z) | the edited object gets a mirrored copy across the world plane through the origin, the seam welded, faces on the plane dropped; in the history as polyMirror | polyMirrorFace -axis 0/1/2 |
+| Edit Mesh > Insert Edge Loop | a loop half way round the quad ring the picked edge crosses; in the history as polySplitRing | polySplitRing |
+

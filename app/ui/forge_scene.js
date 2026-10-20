@@ -20,7 +20,7 @@
 // the pro construction-history node for each Forge step
 const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
   smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
-  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", bevel: "polyBevel" };
+  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", bevel: "polyBevel" };
 
 function scnEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -144,6 +144,24 @@ function forgeSceneAttach(view, ctx) {
     if (!s) return null;
     const g = s.geometry, idx = g.index ? g.index.array : Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i);
     return { pos: g.attributes.position.array.slice(), idx: Uint32Array.from(idx), col: g.attributes.color ? g.attributes.color.array.slice() : null };
+  }
+
+  // a node's mesh as a poly cage {v, f} in its own space: the edited object's cage, a kept cage, or its triangles
+  function polyOfNode(n) {
+    const P = window.ForgePoly;
+    if (!P) return null;
+    if (n.root && view.poly) return P.clone(view.poly);
+    if (!n.root && n.poly) return P.clone(n.poly);
+    const t = triOfShape(n);
+    return t && t.pos.length ? P.fromTriangles(t.pos, t.idx) : null;
+  }
+  function polyNode(name, poly, parentId) {         // a new static mesh node holding this cage
+    const P = window.ForgePoly;
+    const n = makeNode(nextName(name), "mesh", parentId || 0, null);
+    const t = P.triangulate(poly);
+    n.inner.add(staticShape({ pos: t.pos, idx: t.idx }, null));
+    n.poly = poly;
+    return n;
   }
 
   // transform every welded vertex of the working mesh (undoable), then push it back to the GPU
@@ -579,6 +597,46 @@ function forgeSceneAttach(view, ctx) {
       if (view.undoStack) { view.undoStack.length = 0; view.redoStack.length = 0; }
       tree.build();
       return true;
+    },
+
+    // Mesh > Combine: the selected meshes become ONE new object (polySurface1), in world space, the pivot at its
+    // middle. The originals go (their children stay, moved up to the world). If the object being edited was one of
+    // them, the combined one is the edited object now.
+    combine(ids) {
+      const P = window.ForgePoly;
+      const list = (ids || tree.sel).map(node).filter((n) => n && n.kind === "mesh" && hasGeometry(n));
+      if (list.length < 2 || !P) return null;
+      scene.updateMatrixWorld(true);
+      const parts = list.map((n) => { const m = polyOfNode(n); return m ? P.transform(m, n.inner.matrixWorld.elements) : null; }).filter(Boolean);
+      if (parts.length < 2) return null;
+      const wasWorking = list.some((n) => n.root);
+      const out = polyNode("polySurface", P.combine(parts), 0);
+      for (const n of list) for (const k of kidsOf(n.id)) api.reparent(k.id, 0);
+      if (wasWorking) api.makeWorking(out.id);
+      for (const n of list) api.remove(n.id);
+      tree.sel = [out.id]; api.centerPivot(out.id);
+      tree.build();
+      return out;
+    },
+    // Mesh > Separate: each piece of the selected mesh that shares no vertex with the rest becomes its own object,
+    // grouped under the original's name (polySurface1, polySurface2 ...).
+    separate(id) {
+      const P = window.ForgePoly;
+      const n = node(id || tree.sel[tree.sel.length - 1] || tree.rootId);
+      if (!n || n.kind !== "mesh" || !hasGeometry(n) || !P) return null;
+      scene.updateMatrixWorld(true);
+      const m = polyOfNode(n);
+      const shells = m ? P.shells(m) : [];
+      if (shells.length < 2) return [];
+      const M = n.inner.matrixWorld.elements.slice();
+      const grp = makeNode(nextName(n.name.replace(/\d+$/, "") + "_parts"), "group", 0, null);
+      const made = shells.map((sh) => polyNode("polySurface", P.transform(sh, M), grp.id));
+      for (const k of kidsOf(n.id)) api.reparent(k.id, 0);
+      if (n.root) api.makeWorking(made[0].id);
+      api.remove(n.id);
+      for (const x of made) api.centerPivot(x.id);
+      tree.sel = made.map((x) => x.id); tree.build();
+      return made;
     },
 
     // a new, empty working object (pro: every Create command makes a new node) - the old one stays as it is

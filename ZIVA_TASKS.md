@@ -51,12 +51,13 @@ What changed (owner 17:06), so your next Forge work builds on it - do not undo a
   and Autodesk"). Say "the pro way", "the standard layout". docs/operations/archive stays verbatim.
 - [ ] [either] Check it on a real screen (Mac Retina and the PC): tumble/track/dolly feel, the hotbox at the
       cursor, right-button hold, the sharper picture (pixel ratio 1.5-3). Report what feels off, with a screenshot.
-- [ ] [either] Next tools (pick from the top, one per ship, test each under 60 s): Mesh > Combine and Separate,
-      Mesh > Mirror, Edit Mesh > Merge (vertices within a distance) and Fill Hole, Display quality keys 1 / 2 / 3
-      (smooth preview), an Attribute Editor panel (Ctrl+A) for the selected node. Commands go in
+- [ ] [either] Next tools (pick from the top, one per ship, test each under 60 s): Edit Mesh > Merge (vertices
+      within a distance) and Fill Hole, Display quality keys 1 / 2 / 3 (smooth preview), an Attribute Editor panel
+      (Ctrl+A) for the selected node, Bevel. (Claude already did Combine, Separate, Mirror X/Y/Z and Insert Edge Loop.) Commands go in
       FORGE_PRO_CMDS (forge_pro.js) so the menus, hotbox, marking menus and command line all get them.
-- [ ] [either] Restore the loop-cut tool your commit 8086bf2 deleted (`forgeLoopCut` in forge_model.js) and wire
-      it to Edit Mesh > Insert Edge Loop - the owner's rule is "don't remove anything, only improve".
+- [x] [either] Restore the loop-cut tool commit 8086bf2 deleted. -> Claude, 2026-10-19 evening: restored
+      (`forgeLoopCut`, history op loopCut), wired to Edit Mesh > Insert Edge Loop, tested (test_forge_model_ui).
+      Please never delete a working tool to grey out a menu entry - fix it or ask (owner: "don't remove anything").
 
 ### Heads-up from Claude (2026-10-19 17:10) - Forge rework + a RENAME across the Forge files
 - [x] [either] Owner 17:06: modern high-contrast look, no shelf, tidy menus that open AT the cursor, the camera must

@@ -625,6 +625,53 @@
     return n ? mul(s, 1 / n) : [0, 0, 0];
   };
 
+  // ------------------------------------------------------------------ whole-mesh tools (Mesh > Combine / Separate / Mirror)
+  // a 4x4 matrix in three.js' column-major `elements` order applied to every vertex
+  P.transform = (m0, e) => {
+    const m = clone(m0);
+    m.v = m.v.map(([x, y, z]) => {
+      const w = e[3] * x + e[7] * y + e[11] * z + e[15] || 1;
+      return [(e[0] * x + e[4] * y + e[8] * z + e[12]) / w, (e[1] * x + e[5] * y + e[9] * z + e[13]) / w, (e[2] * x + e[6] * y + e[10] * z + e[14]) / w];
+    });
+    return m;
+  };
+  // Combine: several meshes as one (their vertices and faces side by side, nothing welded)
+  P.combine = (list) => {
+    const v = [], f = [];
+    for (const m of list) {
+      const base = v.length;
+      for (const p of m.v) v.push(p.slice());
+      for (const face of m.f) f.push(face.map((i) => i + base));
+    }
+    return { v, f };
+  };
+  // Separate: the pieces that share no vertex, each its own compact mesh (largest first)
+  P.shells = (m) => {
+    const parent = m.v.map((_, i) => i);
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    for (const face of m.f) for (let k = 1; k < face.length; k++) { const a = find(face[0]), b = find(face[k]); if (a !== b) parent[a] = b; }
+    const groups = new Map();
+    m.f.forEach((face, fi) => { const r = find(face[0]); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(fi); });
+    return [...groups.values()].map((fs) => P.compact({ v: m.v, f: fs.map((fi) => m.f[fi]) })).sort((a, b) => b.f.length - a.f.length);
+  };
+  // Mirror across the plane through `point` with normal `normal`: the mirrored copy is added (winding reversed so
+  // it faces out) and the vertices that land on each other on the plane are merged
+  P.mirror = (m0, point, normal, eps) => {
+    const n = normal.slice(), len = Math.hypot(n[0], n[1], n[2]) || 1;
+    n[0] /= len; n[1] /= len; n[2] /= len;
+    const refl = (p) => { const d = 2 * ((p[0] - point[0]) * n[0] + (p[1] - point[1]) * n[1] + (p[2] - point[2]) * n[2]); return [p[0] - d * n[0], p[1] - d * n[1], p[2] - d * n[2]]; };
+    const copy = { v: m0.v.map(refl), f: m0.f.map((f) => f.slice().reverse()) };
+    const tol = eps || 1e-4;
+    // snap what is on the plane exactly onto it, so the weld finds the pairs
+    const snap = (p) => { const d = (p[0] - point[0]) * n[0] + (p[1] - point[1]) * n[1] + (p[2] - point[2]) * n[2]; return Math.abs(d) < tol ? [p[0] - d * n[0], p[1] - d * n[1], p[2] - d * n[2]] : p; };
+    const both = P.combine([{ v: m0.v.map(snap), f: m0.f }, { v: copy.v.map(snap), f: copy.f }]);
+    // drop faces lying in the plane (they would be doubled, back to back)
+    const flat = (face) => face.every((i) => Math.abs((both.v[i][0] - point[0]) * n[0] + (both.v[i][1] - point[1]) * n[1] + (both.v[i][2] - point[2]) * n[2]) < tol);
+    const half = m0.f.length;
+    both.f = both.f.filter((face, i) => !(i >= half && flat(face)));
+    return P.compact(P.weld(both, tol / 4));
+  };
+
   root.ForgePoly = P;
   if (typeof module !== "undefined" && module.exports) module.exports = P;
 })(typeof window !== "undefined" ? window : globalThis);

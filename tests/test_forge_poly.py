@@ -98,6 +98,12 @@ out.edit = {
   still: c3.v.every((p, i) => wt.has(i) || moved.v[i].every((x, k) => x === p[k])),
   delV: P.deleteVerts(c3, [0]).f.length, delE: P.deleteEdges(c3, T3, [vertical]).f.length, median: P.median(c3, c3.f[0]),
 };
+const _c2 = P.primitive("cube", { segments: 2 });
+const _half = P.deleteFaces(_c2, _c2.f.map((f, i) => (P.centroid(_c2, f)[0] < 0 ? i : -1)).filter((i) => i >= 0));
+const _mir = P.mirror(_half, [0, 0, 0], [1, 0, 0]);
+const _two = P.combine([_c2, P.transform(_c2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1])]);
+out.tools = { mirV: _mir.v.length, mirF: _mir.f.length, mirVol: P.volume(_mir), mirClosed: closed(_mir), halfF: _half.f.length,
+  combF: _two.f.length, combVol: P.volume(_two), shells: P.shells(_two).map((m) => m.f.length), moved: P.transform(_c2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1]).v[0][0] - _c2.v[0][0] };
 console.log(JSON.stringify(out));
 """
 
@@ -148,6 +154,11 @@ def main() -> int:
     check("applyMatrix moves the selection the whole way, its neighbours by their weight, nothing else",
           abs(e["dy0"] - 0.5) < 1e-9 and e["partial"] and e["still"], e)
     check("delete vertices / edges takes the faces that use them", e["delV"] == 51 and e["delE"] == 52, e)
+    t = o["tools"]
+    check("Mirror: half a cube mirrored across x = 0 is the whole cube again - closed, welded on the seam, facing out",
+          t["halfF"] == 12 and t["mirF"] == 24 and t["mirV"] == 26 and t["mirClosed"] and abs(t["mirVol"] - 1) < 1e-6, t)
+    check("Combine puts two cubes in one mesh; Separate (shells) finds the two again; transform moves by the matrix",
+          t["combF"] == 48 and abs(t["combVol"] - 2) < 1e-6 and t["shells"] == [24, 24] and abs(t["moved"] - 3) < 1e-9, t)
     print("\n%d passed, %d failed (DynaMesh at 48: %d ms)" % (len(PASS), len(FAIL), d["ms"]))
     if FAIL:
         print("FAILED: " + ", ".join(FAIL))
