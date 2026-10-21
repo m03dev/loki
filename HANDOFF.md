@@ -165,6 +165,9 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   nodes, interactive Multi-Cut / Target Weld / Offset Edge Loop, the toolkit tab); Delete dissolves edges / vertices;
   calm hotbox; 4 wireframe-only; f on components; manipulator fix for Shift-extrude; the Generate panel. Cloud only.
 
+- **2026-10-21 night (Claude)**: In-View Editor + t, the full tool options, Mesh > Cleanup, the pro wireframe, camera based
+  selection / backface culling / preselection highlight - docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 night)". Cloud only.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

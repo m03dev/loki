@@ -294,6 +294,27 @@ tests/test_forge_polyops.py (78, node), and every Forge suite.
   extrude) and the tool carries across; Shift-drag extrudes edges and vertices too; Select To Edge Loop / Ring.
 - The Generate panel (draw / image / describe / creature) is a tool window like the Creature Editor.
 
+### DONE (Claude, 2026-10-21 night) - In-View Editor (t), full tool options, Mesh > Cleanup, wireframe, selection prefs
+Owner 02:37: "press t and get the tools to edit whatever action ... adjust the settings", "modeling rules fleshed out
+like nsides and whatever else the cleanup tool does", wireframe like the pro one, marquee through to hidden vertices.
+Research: docs/FORGE_PRO_TOOL_OPTIONS.md (the option boxes and Cleanup, with sources). Checked: test_forge_rules_ui 23,
+test_forge_polyops 135.
+- **In-View Editor** (forge_toolkit.js): every tool step opens its attributes beside the selection (polyBridgeEdge1:
+  Divisions / Bridge type / Twist / Taper); drag a name to scrub (Shift faster, Ctrl finer), type, pick; the step is
+  redone in place. `t` (Show Manipulator Tool) brings it back, or a new primitive's attributes. Display > Heads Up
+  Display > In-View Editors.
+- **Options** (forge_polyops.js): extrude divisions / taper / twist / local translate; bridge type (linear / smooth /
+  curve), twist, taper; bevel depth, chamfer (off = round arc), offset as fraction / absolute; chamfer vertex remove
+  face; connect segments / slide; offset and insert edge loops: count, equal distance; quadrangulate keep hard edges;
+  merge threshold. Insert Edge Loop Tool and Offset Edge Loop are settings-capable steps (click an edge).
+- **Mesh > Cleanup...** the pro Cleanup Options window (select / cleanup matching polygons; 4-sided, n-sided,
+  concave, holed, non-planar; lamina, non-manifold (normals and geometry / geometry only), zero-length edges,
+  zero-area faces; tolerances) and Mesh > Mesh Report (P.meshStats).
+- **Wireframe (4)**: back edges show, dark blue / white / lead light green, polygon edges only (selection wires too).
+- **Selection preferences** (Select menu, Modeling Toolkit): Camera Based Selection Automatic / On / Off (marquee
+  through the model), Backface Culling, Preselection Highlight (red under the mouse). The pick buffer is reused until
+  the camera or the mesh changes.
+
 ## The honesty note (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
 
 its own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for

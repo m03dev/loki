@@ -266,6 +266,35 @@ async def main():
         pre = await E("""() => { let n = null; forge.view.holder.traverse((o) => { if (o.name === 'forge-preselect') n = o.type; }); return n; }""")
         check("preselection highlight: the face under the mouse is outlined before you click", pre == "LineSegments", pre)
 
+        # -------- Mesh > Cleanup, Bridge's In-View Editor, Insert Edge Loop's settings
+        await E("forgeAddPrimitive('cylinder')")
+        cl = await E("""() => { const C = window.forgeToolkit.cleanup, v = forge.view; const f0 = v.poly.f.length;
+          C.apply({ op: 'select', nsided: true }); const picked = v.edit.sel.f.size; const said = document.getElementById('forge-status').textContent;
+          C.apply({ op: 'cleanup', nsided: true }); const st = window.ForgePoly.meshStats(v.poly);
+          return { f0, picked, said, ngons: st.ngons, faces: v.poly.f.length, hist: window.forgeHistory.list().map((h) => h.node || h.kind) }; }""")
+        check("Mesh > Cleanup: Select finds the cylinder's two n-sided caps; Cleanup tessellates them (no n-gons left, a polyCleanup step)",
+              cl["picked"] == 2 and "n-sided" in cl["said"] and cl["ngons"] == 0 and cl["faces"] > cl["f0"] and "polyCleanup" in cl["hist"], cl)
+        await E("forgeProRun(forge.view, 'cleanup')")
+        check("the Cleanup Options window has the pro sections and options",
+              await E("""(() => { const b = document.getElementById('forge-cleanup'); return !b.hidden && b.querySelectorAll('input[type=checkbox]').length >= 9 && !!b.querySelector('select[data-k=op]'); })()"""))
+        await E("document.getElementById('forge-cleanup').hidden = true")
+        await E("forgeAddPrimitive('cube')")
+        br = await E("""() => { const v = forge.view; v.setSelMode('face'); v.selectItems('face', [0, 1], 'set'); forgeFaceOp('delete');
+          const T = window.ForgePoly.topology(v.poly); const b = T.edges.map((e, i) => [e, i]).filter(([e]) => e.faces.length === 1).map(([, i]) => i);
+          v.setSelMode('edge'); v.selectItems('edge', b, 'set'); const ok = window.forgeToolkit.run('bridge');
+          const rows = [...document.querySelectorAll('#forge-ive .forge-ive-row')].map((r) => r.dataset.k);
+          const f1 = v.poly.f.length; window.forgeToolkit.tweak('divisions', 3);
+          const shown = document.querySelector('#forge-ive .forge-ive-row[data-k="divisions"] input').value;
+          return { ok, rows, f1, f2: v.poly.f.length, shown, closed: window.ForgePoly.meshCheck(v.poly).closed }; }""")
+        check("Bridge opens its In-View Editor (Divisions, Bridge type, Twist, Taper); Divisions 3 adds the rings and the editor shows it",
+              br["ok"] and br["rows"] == ["divisions", "bridgeType", "twist", "taper"] and br["f2"] > br["f1"] and br["shown"] == "3" and br["closed"], br)
+        await E("forgeAddPrimitive('torus')")
+        il = await E("""() => { const v = forge.view; v.setSelMode('edge'); const f = v.poly.f[0]; v.selectItems('edge', [v.edgeIdOf(f[0], f[1])], 'set');
+          const f0 = v.poly.f.length; forgeProRun(v, 'insertLoopTool'); return new Promise((ok) => setTimeout(() => { const f1 = v.poly.f.length;
+          window.forgeToolkit.tweak('count', 3); ok([f0, f1, v.poly.f.length]); }, 50)); }""")
+        check("Insert Edge Loop (tool): one loop, then Number of loops = 3 in its settings gives three",
+              il[1] > il[0] and il[2] - il[0] == 3 * (il[1] - il[0]), il)
+
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

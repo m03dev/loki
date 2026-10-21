@@ -985,3 +985,9 @@ body.forge-tk-tool #forge-view { cursor: crosshair; }
 /* the Channel Box column scrolls, so the Layer Editor (or a long INPUTS list) can never push the layout */
 .forge-body.pro > .forge-chancol { overflow-y: auto; min-height: 0; }
 .forge-layer-list { max-height: 140px; overflow-y: auto; }
+.forge-clean { width: min(400px, calc(100vw - 32px)); }
+.forge-clean-body { overflow: auto; padding: 4px 12px 8px; }
+.forge-clean-sec { margin: 8px 0 3px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #a9b0bb; }
+.forge-clean-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.forge-clean-row input[type="number"], .forge-clean-row select { margin-left: auto; background: #2b2b2b; color: #e6e6e6; border: 1px solid #222; border-radius: 2px; padding: 2px 5px; font: inherit; }
+.forge-clean-row input[type="number"] { width: 90px; }

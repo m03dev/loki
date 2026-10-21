@@ -639,10 +639,10 @@ const FORGE_PRO_ROWS = [
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
   // the modelling menu set (the pro second row)
-  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "dynamesh", "sculptModel"]],
+  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel"]],
   ["Edit Mesh", ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter",
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
-  ["Mesh Tools", ["edgeLoop", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
+  ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it

@@ -4,6 +4,14 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-21 (night) - Forge: In-View Editor, tool options, Cleanup, wireframe, selection preferences (Claude, cloud)
+
+- forge_toolkit.js (In-View Editor, choice settings, Cleanup window, Mesh Report, selection prefs), forge_polyops.js
+  options + P.cleanup / P.meshStats (subagent, test_forge_polyops 135, docs/FORGE_PRO_TOOL_OPTIONS.md), forge_chrome.js
+  wireframe, forge_edit.js camera based selection + preselection + pick-buffer reuse, forge_scene.js polygon-edge
+  selection wires. Mac: Ziva's colliding local forge_polyops.js resolved (her loop fallback + bevel check merged).
+  Checked: test_forge_rules_ui 23 and every Forge suite. Not run: --self-test (no openai / PyPI here).
+
 ## 2026-10-21 (later) - Forge: the pro polygon tools, Modeling Toolkit, modelling rules (Claude, cloud)
 
 - forge_polyops.js (32 ops + rules, test_forge_polyops 78, from a subagent), forge_toolkit.js (runner + toolkit tab +

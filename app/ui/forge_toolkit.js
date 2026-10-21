@@ -21,21 +21,21 @@
 // [id, label, op, takes, params, what]  takes: "f" faces, "e" edges, "v" vertices, "ve" vertices or edges, "fe" ...
 // params: [key, label, min, max, step, default]; the first is the one INPUTS shows as the step's amount
 const FORGE_TK_TOOLS = {
-  extrudeFaces: ["Extrude", "extrudeFaces", "f", [["thickness", "Thickness", -2, 2, 0.01, 0], ["offset", "Offset", -1, 1, 0.01, 0], ["keepTogether", "Keep Faces Together", 0, 1, 1, 1]], "Extrude the faces; drag the manipulator to place them."],
-  extrudeEdges: ["Extrude Edge", "extrudeEdges", "e", [["thickness", "Thickness", -2, 2, 0.01, 0], ["offset", "Offset", -1, 1, 0.01, 0]], "Extrude the edges into a strip of faces."],
+  extrudeFaces: ["Extrude", "extrudeFaces", "f", [["thickness", "Thickness", -2, 2, 0.01, 0], ["offset", "Offset", -1, 1, 0.01, 0], ["divisions", "Divisions", 1, 32, 1, 1], ["taper", "Taper", 0, 5, 0.01, 1], ["twist", "Twist", -360, 360, 1, 0], ["keepTogether", "Keep Faces Together", 0, 1, 1, 1]], "Extrude the faces; drag the manipulator to place them."],
+  extrudeEdges: ["Extrude Edge", "extrudeEdges", "e", [["thickness", "Thickness", -2, 2, 0.01, 0], ["offset", "Offset", -1, 1, 0.01, 0], ["divisions", "Divisions", 1, 32, 1, 1], ["taper", "Taper", 0, 5, 0.01, 1], ["twist", "Twist", -360, 360, 1, 0]], "Extrude the edges into a strip of faces."],
   extrudeVerts: ["Extrude Vertex", "extrudeVerts", "v", [["length", "Length", -2, 2, 0.01, 0.1], ["width", "Width", 0, 1, 0.01, 0.1]], "Pull each vertex out into a small point."],
-  bevel: ["Bevel", "bevel", "fe", [["fraction", "Fraction", 0.01, 1, 0.01, 0.5], ["segments", "Segments", 1, 12, 1, 1]], "Round the selected edges (faces: their border edges)."],
-  bridge: ["Bridge", "bridge", "e", [["divisions", "Divisions", 0, 20, 1, 0]], "Join two open border edge chains with faces."],
+  bevel: ["Bevel", "bevel", "fe", [["fraction", "Fraction", 0.01, 1, 0.01, 0.5], ["segments", "Segments", 1, 12, 1, 1], ["depth", "Depth", -1, 1, 0.01, 1], ["chamfer", "Chamfer", 0, 1, 1, 1], ["offsetAsFraction", "Offset as fraction", 0, 1, 1, 1], ["offset", "Offset", 0, 2, 0.01, 0.2]], "Round the selected edges (faces: their border edges)."],
+  bridge: ["Bridge", "bridge", "e", [["divisions", "Divisions", 0, 64, 1, 0], ["bridgeType", "Bridge type", 0, 0, 0, "linear", ["linear", "smooth", "curve"]], ["twist", "Twist", -360, 360, 1, 0], ["taper", "Taper", 0, 5, 0.01, 1]], "Join two open border edge chains with faces."],
   poke: ["Poke Face", "poke", "f", [["offset", "Offset", -1, 1, 0.01, 0]], "Add a vertex in the middle of each face."],
   wedge: ["Wedge", "wedge", "fw", [["angle", "Angle", -360, 360, 1, 90], ["divisions", "Divisions", 1, 32, 1, 4]], "Turn the faces round an edge of theirs (pick faces and one edge)."],
-  chamferVerts: ["Chamfer Vertex", "chamferVerts", "v", [["width", "Width", 0.01, 1, 0.01, 0.25]], "Cut each corner off."],
+  chamferVerts: ["Chamfer Vertex", "chamferVerts", "v", [["width", "Width", 0.01, 1, 0.01, 0.25], ["removeFace", "Remove face", 0, 1, 1, 0]], "Cut each corner off."],
   collapse: ["Collapse", "collapse", "fe", [], "Shrink each edge or face to its centre point."],
-  connect: ["Connect", "connect", "ve", [], "Join the selected edges' middles (or the selected vertices) across their faces."],
+  connect: ["Connect", "connect", "ve", [["edgeCount", "Segments", 1, 64, 1, 1], ["slide", "Slide", 0, 1, 0.01, 0.5]], "Join the selected edges' middles (or the selected vertices) across their faces."],
   detach: ["Detach", "detach", "ve", [], "Split the vertices so each face has its own."],
   dissolveEdges: ["Delete Edge", "dissolveEdges", "e", [["cleanVerts", "Clean up vertices", 0, 1, 1, 0]], "Remove the edges; their faces merge."],
   dissolveVerts: ["Delete Vertex", "dissolveVerts", "v", [], "Remove the vertices; their faces merge."],
   triangulate: ["Triangulate", "triangulateFaces", "f*", [], "Split the faces into triangles."],
-  quadrangulate: ["Quadrangulate", "quadrangulate", "f*", [], "Merge triangle pairs into quads."],
+  quadrangulate: ["Quadrangulate", "quadrangulate", "f*", [["angle", "Angle threshold", 0, 180, 1, 30], ["keepHardEdges", "Keep hard edges", 0, 1, 1, 0]], "Merge triangle pairs into quads."],
   duplicateFaces: ["Duplicate Face", "duplicateFaces", "f", [], "Copy the faces (a new piece of this mesh)."],
   extractFaces: ["Extract", "extractFaces", "f", [], "Cut the faces off into their own piece."],
   averageVerts: ["Average Vertices", "averageVerts", "v*", [["iterations", "Iterations", 1, 20, 1, 1]], "Smooth the selected vertices' positions."],
@@ -44,6 +44,9 @@ const FORGE_TK_TOOLS = {
   spinEdge: ["Spin Edge", "spinEdge", "e", [["dir", "Direction", -1, 1, 2, 1]], "Turn each edge to the next corners of its two faces."],
   slideEdge: ["Slide Edge", "slideEdge", "e", [["t", "Slide", -1, 1, 0.01, 0.3]], "Slide the edges along the edges beside them."],
   fillHole: ["Fill Hole", null, "e", [], "Close the holes the selection touches."],
+  offsetEdgeLoop: ["Offset Edge Loop", "offsetEdgeLoop", "e1", [["distance", "Distance", 0.01, 0.49, 0.01, 0.25], ["count", "Loops", 1, 32, 1, 1], ["equalDistance", "Equal distance", 0, 1, 1, 0]], "Two loops either side of the loop through the edge."],
+  insertEdgeLoop: ["Insert Edge Loop", "insertEdgeLoop", "e1", [["t", "Position", 0.01, 0.99, 0.01, 0.5], ["count", "Number of loops", 1, 64, 1, 1], ["equalDistance", "Equal distance", 0, 1, 1, 0]], "A loop across the ring of quads the edge crosses."],
+  mergeVerts: ["Merge", "merge", "v", [["threshold", "Threshold", 0, 2, 0.001, 0.001], ["alwaysMergeTwo", "Always merge two", 0, 1, 1, 0]], "Merge the selected vertices closer than the threshold."],
 };
 // the construction-history node each tool leaves (INPUTS)
 const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExtrudeEdge", extrudeVerts: "polyExtrudeVertex", bevel: "polyBevel",
@@ -51,7 +54,7 @@ const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExt
   connect: "polyConnectComponents", detach: "polySplitVert", dissolveEdges: "polyDelEdge", dissolveVerts: "polyDelVertex",
   triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
   averageVerts: "polyAverageVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
-  slideEdge: "polyTweak", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
+  slideEdge: "polyTweak", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
 
 const forgeTk = { last: null, tool: null };          // last: the op whose settings are live; tool: an interactive tool
@@ -90,6 +93,7 @@ function forgeTkItems(v, takes, sel) {
     case "fe": return sel.mode === "face" && sel.f.length ? { f: sel.f } : sel.e.length ? { e: sel.e } : sel.f.length ? { f: sel.f } : null;
     case "ve": return sel.mode === "vert" && sel.v.length ? { v: sel.v } : sel.e.length ? { e: sel.e } : sel.v.length ? { v: sel.v } : null;
     case "fv": return sel.f.length ? { f: sel.f } : sel.v.length ? { v: sel.v } : sel.e.length ? { e: sel.e } : null;
+    case "e1": return sel.e.length ? sel.e[0] : null;      // the loop tools work from one edge
     case "fw": {                                      // Wedge: the faces, turned about a border edge of theirs
       if (!sel.f.length) return null;
       const uses = new Map();
@@ -102,7 +106,7 @@ function forgeTkItems(v, takes, sel) {
   }
   void T;
 }
-const FORGE_TK_NEED = { f: "Select faces first (F11).", e: "Select edges first (F10).", v: "Select vertices first (F9).",
+const FORGE_TK_NEED = { f: "Select faces first (F11).", e: "Select edges first (F10).", e1: "Select an edge first (F10), or use the tool and click one.", v: "Select vertices first (F9).",
   fe: "Select edges or faces first.", ve: "Select vertices or edges first.", fv: "Select a loop of vertices or faces first." };
 
 /** Call a polyops function, whatever argument shape it takes: (m, items, opts) */
@@ -132,10 +136,10 @@ function forgeTkRun(id, override) {
   const items = forgeTkItems(v, takes, sel);
   if (items == null) { forgeTkSay(label + ": " + (FORGE_TK_NEED[takes.replace("*", "")] || "select components first."), true); return false; }
   const opts = {};
-  for (const [k, , , , , def] of params) opts[k] = forgeTkPref(id, k, def);
+  for (const [k, , , , , def, choices] of params) opts[k] = choices ? forgeTkPrefStr(id, k, def) : forgeTkPref(id, k, def);
+  for (const [k, , min, max, step] of params) if (max - min === 1 && step === 1) opts[k] = !!opts[k];
   if (override) Object.assign(opts, override);
-  if (params.some((p) => p[0] === "keepTogether")) opts.keepTogether = !!opts.keepTogether;
-  if (params.some((p) => p[0] === "cleanVerts")) opts.cleanVerts = !!opts.cleanVerts;
+
   const base = v.poly;
   const res = forgeTkCall(op, base, items, opts);
   if (res.warn) { forgeTkSay(/^[\w ]+: /.test(res.warn) ? res.warn : label + ": " + res.warn, true); return false; }
@@ -161,12 +165,23 @@ function forgeTkTweak(key, value) {
   if (!L || !H || !v) return false;
   const h = typeof forgeModel !== "undefined" && forgeModel.hist;
   if (!h || h.ops[L.histIndex] !== L.rec) { forgeTk.last = null; forgeTkSettings(); return false; }
-  L.rec.params[key] = typeof L.rec.params[key] === "boolean" ? !!+value : +value;
-  forgeTkPref(L.id, key, +value, true);
+  if (typeof L.rec.params[key] === "string") { L.rec.params[key] = String(value); forgeTkPrefStr(L.id, key, String(value), true); }
+  else { L.rec.params[key] = typeof L.rec.params[key] === "boolean" ? !!+value : +value; forgeTkPref(L.id, key, +value, true); }
   const ok = typeof forgeHistRebuildShow === "function" ? forgeHistRebuildShow() : false;
+  // keep the In-View Editor's fields in step (a change from Tool Settings, INPUTS or a script)
+  const ive = document.getElementById("forge-ive");
+  if (ive && !ive.hidden) for (const row of ive.querySelectorAll(".forge-ive-row")) {
+    const k = row.dataset.k, val = L.rec.params[k], inp = row.querySelector("input, select");
+    if (!inp || row.classList.contains("scrub") || document.activeElement === inp) continue;
+    if (inp.type === "checkbox") inp.checked = !!val; else inp.value = typeof val === "string" ? val : String(Math.round(+val * 1000) / 1000);
+  }
   return ok;
 }
 
+function forgeTkPrefStr(id, key, def, set) {
+  const k = "loki-forge-tk-" + id + "-" + key;
+  try { if (set) { localStorage.setItem(k, String(def)); return def; } const s = localStorage.getItem(k); return s == null ? def : s; } catch (_) { return def; }
+}
 // remembered tool settings (the pro option boxes keep what you set last)
 function forgeTkPref(id, key, def, set) {
   const k = "loki-forge-tk-" + id + "-" + key;
@@ -212,11 +227,12 @@ function forgeTkTool(kind) {
   if (!v) { forgeTkSay("Edit a polygon mesh first.", true); return false; }
   forgeTkToolEnd(false);
   if (kind === "targetWeld" && v.setSelMode) v.setSelMode("vert");
-  if (kind === "offsetEdgeLoop" && v.setSelMode) v.setSelMode("edge");
+  if ((kind === "offsetEdgeLoop" || kind === "insertEdgeLoop") && v.setSelMode) v.setSelMode("edge");
   forgeTk.tool = { kind: kind, pts: [], marks: [] };
   const help = { multiCut: "Multi-Cut: click on edges or vertices to cut; Enter or right-click finishes, Backspace undoes a point, Esc cancels.",
     targetWeld: "Target Weld: click the vertex to move, then the vertex to weld it to.",
-    offsetEdgeLoop: "Offset Edge Loop: click an edge - two loops are added either side of its loop." }[kind];
+    offsetEdgeLoop: "Offset Edge Loop: click an edge - two loops are added either side of its loop.",
+    insertEdgeLoop: "Insert Edge Loop Tool: click an edge - a loop goes across its ring (t: its settings)." }[kind];
   forgeTkSay(help);
   const h = document.getElementById("fmy-help"); if (h) h.textContent = help;
   document.body.classList.add("forge-tk-tool");
@@ -271,10 +287,13 @@ function forgeTkPointer(e) {
     if (t.pts.length === 2) { const [a, b] = t.pts; forgeTkToolEnd(false); forgeTkApplyOp("targetWeld", { from: a.v, to: b.v }, {}, "Target Weld"); }
     return;
   }
-  if (t.kind === "offsetEdgeLoop") {
+  if (t.kind === "offsetEdgeLoop" || t.kind === "insertEdgeLoop") {
     if (!hit.e) { forgeTkSay("Offset Edge Loop: click an edge.", true); return; }
     forgeTkToolEnd(false);
-    forgeTkApplyOp("offsetEdgeLoop", hit.e, { distance: forgeTkPref("offsetEdgeLoop", "distance", 0.25) }, "Offset Edge Loop");
+    const kind = t.kind;
+    const v2 = forgeTkView();
+    if (v2 && v2.selectItems) { const ei = v2.edgeIdOf(hit.e[0], hit.e[1]); if (ei >= 0) v2.selectItems("edge", [ei], "set"); }
+    forgeTkRun(kind);                                   // a normal step: undo, INPUTS, In-View Editor
   }
 }
 function forgeTkKey(e) {
@@ -323,7 +342,11 @@ function forgeTkCommands() {
     preselect: ["Preselection Highlight", (v) => (v.preselectHighlight ? (v.preselectHighlight(!v.preselectHighlight()) ? "Preselection highlight on." : "Preselection highlight off.") : "")],
     multiCut: ["Multi-Cut", async (v) => { await toComp(v, "edge"); forgeTkTool("multiCut"); return ""; }],
     targetWeld: ["Target Weld", async (v) => { await toComp(v, "vert"); forgeTkTool("targetWeld"); return ""; }],
-    offsetEdgeLoop: ["Offset Edge Loop", async (v) => { await toComp(v, "edge"); forgeTkTool("offsetEdgeLoop"); return ""; }],
+    offsetEdgeLoop: ["Offset Edge Loop", async (v) => { await toComp(v, "edge"); if (v.edit && v.edit.sel.e.size) forgeTkRun("offsetEdgeLoop"); else forgeTkTool("offsetEdgeLoop"); return ""; }],
+    insertLoopTool: ["Insert Edge Loop Tool", async (v) => { await toComp(v, "edge"); if (v.edit && v.edit.sel.e.size) forgeTkRun("insertEdgeLoop"); else forgeTkTool("insertEdgeLoop"); return ""; }],
+    mergeThreshold: ["Merge (threshold)", run("mergeVerts")],
+    cleanup: ["Cleanup...", () => { forgeCleanupDialog(true); return ""; }],
+    meshStats: ["Mesh Report", () => forgeCleanupReport()],
   });
   // Delete in component mode follows the pro rules (dissolve edges / vertices); objects as before
   const del = C.delete;
@@ -350,10 +373,10 @@ function forgeTkBackfaces(v, on) {
 
 // ---------------------------------------------------------------- the Modeling Toolkit panel
 const FORGE_TK_GROUPS = [
-  ["Mesh", ["combine", "separate", "extractFace", "mirror", "smooth", "triangulate", "quadrangulate", "fillHole", "dynamesh"]],
+  ["Mesh", ["combine", "separate", "extractFace", "mirror", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh"]],
   ["Components", ["extrude", "bevel", "bridge", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter",
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "duplicateFace", "deleteEdgeVert"]],
-  ["Tools", ["edgeLoop", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel"]],
+  ["Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel"]],
 ];
 function forgeTkPanel(show) {
   const col = document.getElementById("forge-chancol");
@@ -455,8 +478,15 @@ function forgeTkSettings() {
   const head = document.createElement("div"); head.className = "forge-tk-sethead";
   head.textContent = tool[0] + " - " + (FORGE_TK_NODES[L.rec.op] || "poly") + " (INPUTS)";
   body.append(head);
-  for (const [k, label, min, max, step] of tool[3]) {
-    if (max - min === 1 && step === 1) {
+  for (const [k, label, min, max, step, , choices] of tool[3]) {
+    if (choices) {
+      const row = document.createElement("label"); row.className = "forge-tk-slider";
+      const sel = document.createElement("select"); sel.className = "forge-tk-select";
+      for (const c of choices) { const o = document.createElement("option"); o.value = c; o.textContent = c[0].toUpperCase() + c.slice(1); o.selected = L.rec.params[k] === c; sel.append(o); }
+      sel.addEventListener("change", () => forgeTkTweak(k, sel.value));
+      const nm = document.createElement("span"); nm.textContent = label;
+      row.append(nm, sel); body.append(row);
+    } else if (max - min === 1 && step === 1) {
       const row = document.createElement("label"); row.className = "forge-tk-row";
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!L.rec.params[k];
       cb.addEventListener("change", () => forgeTkTweak(k, cb.checked ? 1 : 0));
@@ -497,8 +527,8 @@ function forgeIveRows() {                         // what the editor edits now: 
   if (L && h && h.ops[L.histIndex] === L.rec) {
     const tool = FORGE_TK_TOOLS[L.id], n = window.forgeHistory ? window.forgeHistory.list().filter((o, i) => i <= L.histIndex && o.node === FORGE_TK_NODES[L.rec.op]).length : 1;
     return { title: (FORGE_TK_NODES[L.rec.op] || "poly") + n, what: tool[0],
-      rows: tool[3].map(([k, label, min, max, step]) => ({ k, label, min, max, step, bool: max - min === 1 && step === 1,
-        get: () => +L.rec.params[k] || 0, set: (x) => forgeTkTweak(k, x) })) };
+      rows: tool[3].map(([k, label, min, max, step, , choices]) => ({ k, label, min, max, step, bool: !choices && max - min === 1 && step === 1, choices,
+        get: () => (choices ? L.rec.params[k] : +L.rec.params[k] || 0), set: (x) => forgeTkTweak(k, x) })) };
   }
   const v = forge.view, pr = typeof forgeModel !== "undefined" && forgeModel.prim;
   if (pr && v && v.poly === pr.poly) {
@@ -544,7 +574,12 @@ function forgeIveShow(force) {
     const row = document.createElement("div"); row.className = "forge-ive-row"; row.dataset.k = r.k;
     const lab = document.createElement("span"); lab.className = "forge-ive-label"; lab.textContent = r.label;
     row.append(lab);
-    if (r.bool) {
+    if (r.choices) {
+      const sel = document.createElement("select"); sel.className = "forge-ive-num";
+      for (const c of r.choices) { const o = document.createElement("option"); o.value = c; o.textContent = c; o.selected = r.get() === c; sel.append(o); }
+      sel.addEventListener("change", () => { r.set(sel.value); forgeTkSettings(); });
+      row.append(sel);
+    } else if (r.bool) {
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!r.get();
       cb.addEventListener("change", () => r.set(cb.checked ? 1 : 0));
       row.append(cb);
@@ -598,6 +633,7 @@ function forgeIveShow(force) {
 (function () {
   const run = forgeTkRun;
   forgeTkRun = function (id, override) { const ok = run(id, override); if (ok) forgeIveShow(false); return ok; };   // eslint-disable-line no-func-assign
+  window.forgeToolkit.run = forgeTkRun;
   document.addEventListener("pointerdown", (e) => {
     const b = document.getElementById("forge-ive"), v = forge.view;
     if (!b || b.hidden || !v || e.target !== v.canvas) return;
@@ -613,3 +649,116 @@ function forgeIveShow(force) {
     camSelOff: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "off"), backfaces: (v) => v.backfaceCull !== false, preselect: (v) => !!(v.preselectHighlight && v.preselectHighlight()) });
 })();
 window.forgeToolkit.ive = { show: forgeIveShow, hide: forgeIveHide, on: forgeIveOn, set: forgeIveSet };
+
+// ---------------------------------------------------------------- Mesh > Cleanup (the pro Cleanup options)
+// (owner 2026-10-21: "modeling rules fleshed out like nsides and whatever else the cleanup tool does"). A window with
+// the pro option layout: Operation (select matching polygons to look first, or clean them up), Fix by tessellation
+// (4-sided, more than 4 sides, concave, with holes, non-planar), Remove geometry (lamina, non-manifold - normals and
+// geometry / geometry only, zero-length edges, zero-area faces) and the tolerances. Apply runs P.cleanup on the edited
+// mesh: "select" selects what matches (and tells you how many of each), "cleanup" fixes it as ONE undo step with a
+// polyCleanup step in INPUTS. Mesh Report (Mesh > Mesh Report) prints the counts without changing anything.
+const FORGE_CLEAN_OPTS = [
+  ["Fix by tessellation", [["quads", "4-sided faces", false], ["nsided", "Faces with more than 4 sides", true], ["concave", "Concave faces", true],
+    ["holed", "Faces with holes", true], ["nonPlanar", "Non-planar faces", false]]],
+  ["Remove geometry", [["lamina", "Lamina faces (faces sharing all edges)", true], ["nonManifold", "Non-manifold geometry", true],
+    ["zeroEdges", "Edges with zero length", true], ["zeroFaces", "Faces with zero geometry area", true]]],
+];
+function forgeCleanupPrefs(patch) {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem("loki-forge-cleanup") || "{}") || {}; } catch (_) { p = {}; }
+  if (patch) { Object.assign(p, patch); try { localStorage.setItem("loki-forge-cleanup", JSON.stringify(p)); } catch (_) { /* */ } }
+  return p;
+}
+function forgeCleanupOpts() {
+  const p = forgeCleanupPrefs(), o = { op: p.op || "select", lengthTol: +(p.lengthTol || 1e-5), areaTol: +(p.areaTol || 1e-5), planarTol: +(p.planarTol || 1) };
+  for (const [, list] of FORGE_CLEAN_OPTS) for (const [k, , def] of list) o[k] = p[k] == null ? def : !!p[k];
+  if (o.nonManifold && p.nmMode === "geometry") o.nonManifold = "geometry";
+  return o;
+}
+function forgeCleanupText(rep) {
+  const names = { quads: "4-sided", nsided: "n-sided (5+)", concave: "concave", holed: "with holes", nonPlanar: "non-planar", lamina: "lamina",
+    nonManifoldEdges: "non-manifold edges", nonManifoldVerts: "non-manifold vertices", flipped: "flipped normals", zeroEdges: "zero-length edges", zeroFaces: "zero-area faces" };
+  const parts = Object.entries(rep || {}).filter(([, n]) => n).map(([k, n]) => n + " " + (names[k] || k));
+  return parts.length ? parts.join(", ") : "nothing";
+}
+/** Run Cleanup with the window's settings (or these), on the edited mesh. */
+function forgeCleanupApply(over) {
+  const v = forgeTkView(), P = window.ForgePoly;
+  if (!v || !P || !P.cleanup) { forgeTkSay("Cleanup works on a polygon mesh: Create a primitive, or DynaMesh a sculpt.", true); return null; }
+  const o = Object.assign(forgeCleanupOpts(), over || {});
+  const base = v.poly;
+  let res;
+  try { res = P.cleanup(base, o); } catch (exc) { forgeTkSay("Cleanup: " + exc.message, true); return null; }
+  const say = forgeCleanupText(res.report);
+  if (o.op === "select") {
+    if (v.setSelMode) forgeTkSelect(v, res.sel);
+    forgeTkSay(say === "nothing" ? "Cleanup: nothing matches - the mesh is clean." : "Cleanup found (selected): " + say + ".");
+  } else if (res.m === base || say === "nothing") {
+    forgeTkSay("Cleanup: nothing to fix - the mesh is clean.");
+  } else {
+    if (v.undoOpen) v.undoOpen("Cleanup");
+    try {
+      v.showPoly(res.m, true);
+      if (typeof forgeHistPush === "function") forgeHistPush({ kind: "op", op: "cleanup", tool: "cleanup", items: null, params: Object.assign({}, o), main: null }, base);
+    } finally { if (v.undoClose) v.undoClose(); }
+    forgeTkSay("Cleanup fixed: " + say + (res.warn ? " (" + res.warn + ")" : "") + ".");
+  }
+  const out = document.querySelector("#forge-cleanup .forge-hk-note");
+  if (out) out.textContent = (o.op === "select" ? "Found: " : "Fixed: ") + say;
+  return res;
+}
+function forgeCleanupReport() {
+  const v = forgeTkView(), P = window.ForgePoly;
+  if (!v || !P || !P.meshStats) return "Mesh Report works on a polygon mesh.";
+  const s = P.meshStats(v.poly);
+  return "Mesh: " + s.faces + " faces (" + s.tris + " tris, " + s.quads + " quads, " + s.ngons + " n-gons), " + s.verts + " vertices, "
+    + s.border + " border edges, " + s.nonManifoldEdges + " non-manifold edges, " + s.lamina + " lamina, " + s.concave + " concave, "
+    + s.nonPlanar + " non-planar, " + s.zeroEdges + " zero-length edges, " + s.zeroFaces + " zero-area faces, " + s.shells + " piece" + (s.shells === 1 ? "" : "s") + ".";
+}
+function forgeCleanupDialog(show) {
+  let box = document.getElementById("forge-cleanup");
+  if (!box) {
+    box = document.createElement("div"); box.id = "forge-cleanup"; box.className = "forge-hk forge-clean"; box.hidden = true;
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Cleanup Options");
+    const p = forgeCleanupPrefs();
+    let html = '<div class="forge-hk-title"><span>Cleanup Options</span><button type="button" class="forge-hk-x" title="Close">×</button></div><div class="forge-clean-body">'
+      + '<div class="forge-clean-sec">Cleanup effect</div><label class="forge-clean-row">Operation <select data-k="op"><option value="select">Select matching polygons</option><option value="cleanup">Cleanup matching polygons</option></select></label>';
+    for (const [title, list] of FORGE_CLEAN_OPTS) {
+      html += '<div class="forge-clean-sec">' + title + "</div>";
+      for (const [k, label] of list) html += '<label class="forge-clean-row"><input type="checkbox" data-k="' + k + '"> ' + label + (k === "nonManifold" ? ' <select data-k="nmMode"><option value="normals">Normals and geometry</option><option value="geometry">Geometry only</option></select>' : "") + "</label>";
+    }
+    html += '<div class="forge-clean-sec">Tolerance</div>'
+      + '<label class="forge-clean-row">Length tolerance <input type="number" step="0.00001" min="0" data-k="lengthTol"></label>'
+      + '<label class="forge-clean-row">Area tolerance <input type="number" step="0.00001" min="0" data-k="areaTol"></label>'
+      + '<label class="forge-clean-row">Non-planar tolerance (degrees) <input type="number" step="0.5" min="0" data-k="planarTol"></label>'
+      + '</div><div class="forge-hk-bar"><span class="forge-hk-note"></span><button type="button" data-act="report">Mesh Report</button><button type="button" data-act="apply">Apply</button><button type="button" data-act="applyClose">Cleanup</button></div>';
+    box.innerHTML = html;
+    document.body.append(box);
+    const o = forgeCleanupOpts();
+    for (const el of box.querySelectorAll("[data-k]")) {
+      const k = el.dataset.k;
+      if (el.type === "checkbox") el.checked = !!o[k];
+      else if (k === "nmMode") el.value = p.nmMode || "normals";
+      else el.value = String(k === "op" ? o.op : o[k]);
+      el.addEventListener("change", () => forgeCleanupPrefs({ [k]: el.type === "checkbox" ? el.checked : el.type === "number" ? +el.value : el.value }));
+      el.addEventListener("keydown", (e) => e.stopPropagation());
+    }
+    box.querySelector(".forge-hk-x").addEventListener("click", () => { box.hidden = true; });
+    box.querySelector('[data-act="apply"]').addEventListener("click", () => forgeCleanupApply());
+    box.querySelector('[data-act="applyClose"]').addEventListener("click", () => { if (forgeCleanupApply()) box.hidden = true; });
+    box.querySelector('[data-act="report"]').addEventListener("click", () => { const t = forgeCleanupReport(); box.querySelector(".forge-hk-note").textContent = t; forgeTkSay(t); });
+    box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.hidden = true; });
+    const title = box.querySelector(".forge-hk-title");
+    title.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      const r = box.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      title.setPointerCapture(e.pointerId);
+      const mv = (ev) => { box.style.left = Math.max(0, ev.clientX - dx) + "px"; box.style.top = Math.max(0, ev.clientY - dy) + "px"; box.style.right = "auto"; };
+      const up = () => { title.removeEventListener("pointermove", mv); title.removeEventListener("pointerup", up); };
+      title.addEventListener("pointermove", mv); title.addEventListener("pointerup", up);
+    });
+  }
+  box.hidden = show === false;
+  return box;
+}
+window.forgeToolkit.cleanup = { apply: forgeCleanupApply, report: forgeCleanupReport, dialog: forgeCleanupDialog, opts: forgeCleanupOpts };

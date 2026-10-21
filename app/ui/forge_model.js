@@ -229,7 +229,8 @@ function forgeHistApplyOp(base, op) {
       if (typeof fn !== "function") return base;
       const o = Object.assign({}, op.params || {}), it = op.items;
       const out = op.op === "slideEdge" ? fn(base, it, +o.t || 0) : op.op === "spinEdge" ? fn(base, it, +o.dir || 1)
-        : op.op === "targetWeld" ? fn(base, it.from, it.to) : op.op === "wedge" ? fn(base, it.faces, it.hinge, o) : fn(base, it, o);
+        : op.op === "targetWeld" ? fn(base, it.from, it.to) : op.op === "wedge" ? fn(base, it.faces, it.hinge, o)
+        : op.op === "cleanup" ? fn(base, o) : fn(base, it, o);
       return out && out.m ? (out.warn ? base : out.m) : (out && out.v ? out : base);
     }
     case "tweak": {                                    // moved vertices (polyTweak): their new places
