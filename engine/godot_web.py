@@ -9,6 +9,8 @@
   GET  /godot-editor/project.zip?name=   a project folder as a zip, to import in the web editor's Project Manager
   POST /godot-editor/import {name, confirm: true}   bring back the newest <name>*.zip from Downloads (the web editor's
                                      "Project > Tools > Download Project Source") into the project folder
+  POST /godot-editor/new {name}      a new empty Godot project in ~/LOKI Projects
+  POST /godot-editor/link {path}     add a Godot project that lives in another folder (it stays there)
   POST /godot-editor/native {name}   open the project in the installed Godot app with the LOKI Studio plugin
 
 The web editor works on a virtual file system in the browser (IndexedDB). Files flow: LOKI's project folder ->
@@ -72,14 +74,92 @@ def projects_dir() -> Path:
     return Path(os.getenv("LOKI_PROJECTS_DIR") or (Path.home() / "LOKI Projects"))
 
 
+# Godot projects the owner keeps somewhere else (~/new-game-project, ~/dungeon ...): "Add a project from a folder"
+# records them here, so the tab lists them beside ~/LOKI Projects/*. Never LOKI's own checkout, never ai_testin.
+HIDDEN = {"ai_testin"}
+
+
+def links_file() -> Path:
+    return projects_dir() / ".godot_links.json"
+
+
+def _links() -> list:
+    try:
+        got = json.loads(links_file().read_text(encoding="utf-8"))
+        return [str(x) for x in got if isinstance(x, str)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def _is_loki_repo(p: Path) -> bool:
+    try:
+        return p.resolve() == REPO.resolve() or (p / "engine" / "loki.py").is_file()
+    except OSError:
+        return False
+
+
 def projects() -> list:
-    out = []
+    out, seen = [], set()
+
+    def add(p: Path, linked: bool) -> None:
+        if not (p.is_dir() and (p / "project.godot").is_file()) or p.name.lower() in HIDDEN or _is_loki_repo(p):
+            return
+        key = str(p.resolve())
+        if key in seen:
+            return
+        seen.add(key)
+        name, n = p.name, 2
+        while any(o["name"] == name for o in out):
+            name, n = "%s (%d)" % (p.name, n), n + 1
+        out.append({"name": name, "label": name + (" - " + str(p.parent) if linked else ""), "path": str(p), "linked": linked})
+
     base = projects_dir()
     if base.is_dir():
         for p in sorted(base.iterdir()):
-            if p.is_dir() and (p / "project.godot").is_file() and NAME.match(p.name):
-                out.append({"name": p.name, "label": p.name, "path": str(p)})
+            if NAME.match(p.name):
+                add(p, False)
+    for raw in _links():
+        add(Path(raw).expanduser(), True)
     return out
+
+
+def link_project(path: str) -> dict:
+    """Add a Godot project folder that lives outside ~/LOKI Projects (it stays where it is)."""
+    p = Path(str(path or "").strip().strip('"')).expanduser()
+    if p.name == "project.godot":
+        p = p.parent
+    if not p.is_dir():
+        raise ValueError("no folder %s" % p)
+    if not (p / "project.godot").is_file():
+        raise ValueError("%s has no project.godot - pick the folder Godot shows in its Project Manager" % p)
+    if _is_loki_repo(p):
+        raise ValueError("that is LOKI's own folder, not a game project")
+    links = [x for x in _links() if Path(x).expanduser().resolve() != p.resolve()] + [str(p.resolve())]
+    projects_dir().mkdir(parents=True, exist_ok=True)
+    links_file().write_text(json.dumps(links, indent=1), encoding="utf-8")
+    name = next((o["name"] for o in projects() if Path(o["path"]).resolve() == p.resolve()), p.name)
+    return {"ok": True, "name": name, "note": "Added %s - it stays where it is." % p}
+
+
+def new_project(name: str) -> dict:
+    """A new, empty Godot 4 project in ~/LOKI Projects/<name> (a 3D scene with a camera and a light)."""
+    name = str(name or "").strip()
+    if not NAME.match(name):
+        raise ValueError("use letters, numbers, spaces, . _ - for the name")
+    root = projects_dir() / name
+    if root.exists():
+        raise ValueError("%s already exists" % root)
+    root.mkdir(parents=True)
+    (root / "project.godot").write_text(
+        "; Engine configuration file.\nconfig_version=5\n\n[application]\n\n"
+        'config/name="%s"\nrun/main_scene="res://main.tscn"\nconfig/features=PackedStringArray("4.4")\n\n'
+        '[rendering]\n\nrenderer/rendering_method="forward_plus"\n' % name.replace('"', ""), encoding="utf-8")
+    (root / "main.tscn").write_text(
+        '[gd_scene format=3]\n\n[node name="Main" type="Node3D"]\n\n'
+        '[node name="Camera3D" type="Camera3D" parent="."]\ntransform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 2, 5)\n\n'
+        '[node name="Sun" type="DirectionalLight3D" parent="."]\ntransform = Transform3D(1, 0, 0, 0, 0.7, 0.7, 0, -0.7, 0.7, 0, 5, 0)\n',
+        encoding="utf-8")
+    return {"ok": True, "name": name, "note": "Made %s." % root}
 
 
 def project_path(name: str) -> Path:
@@ -425,6 +505,10 @@ def http(handler: Any, method: str, allowed_hosts, data: Path | None = None, pop
                 if body.get("confirm") is not True:
                     return _json(handler, 400, {"ok": False, "error": "bringing files back needs your confirmation"})
                 return _json(handler, 200, import_back(str(body.get("name") or "")))
+            if route == "/godot-editor/new":
+                return _json(handler, 200, new_project(str(body.get("name") or "")))
+            if route == "/godot-editor/link":
+                return _json(handler, 200, link_project(str(body.get("path") or "")))
             if route == "/godot-editor/native":
                 return _json(handler, 200, open_native(str(body.get("name") or ""), popen=popen))
     except KeyError as exc:

@@ -2,7 +2,9 @@
 // "utilize the top tab like godot engine to switch between modes"). LOKI is a game engine, render studio and AI farm
 // hive (owner, 2026-10-21), so the modes are: Home (the preview hub + chat, app/ui/home.js - LOKI Studio lives inside
 // it), Forge (3D making, forge.js), Render (the Render Studio, when it is in this window) and Godot (the owner's game
-// projects in the real Godot editor). Ctrl/Cmd+1..4 switch, in the order shown.
+// projects in the real Godot editor). The keys are Godot's own (owner 2026-10-21: "clean up the hot keys"): Option+1..4
+// on a Mac, Ctrl+F1..F4 on Windows - they switch from anywhere, Forge too. Ctrl/Cmd+1..4 still switch outside Forge, but
+// in Forge those are its own (Ctrl/Cmd+1 = Isolate Select), so Forge keeps them.
 // Each mode keeps its state: panes are built once and only hidden, never rebuilt.
 // Uses app.js's api() and state.token; plain DOM, CSP script-src 'self'.
 "use strict";
@@ -89,9 +91,9 @@ const LokiModeBar = (() => {
     MODES.forEach((m, i) => {
       const b = mk("button", "modebar-tab"); b.type = "button"; b.id = "mode-" + m.id; b.dataset.mode = m.id;
       b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(m.id === active));
-      const key = (isMac ? "⌘" : "Ctrl+") + (i + 1);
+      const key = isMac ? "⌥" + (i + 1) : "Ctrl+F" + (i + 1);
       b.dataset.tipName = m.name + "  (" + key + ")"; b.dataset.tipWhat = m.tip; b.title = m.name + " (" + key + ") - " + m.tip;
-      b.setAttribute("aria-keyshortcuts", (isMac ? "Meta+" : "Control+") + (i + 1));
+      b.setAttribute("aria-keyshortcuts", isMac ? "Alt+" + (i + 1) : "Control+F" + (i + 1));
       b.innerHTML = svg(m.icon); b.append(mk("span", "", m.name));
       b.addEventListener("click", () => go(m.id));
       nav.append(b);
@@ -157,7 +159,35 @@ const LokiModeBar = (() => {
       open.disabled = false;
       setTimeout(refresh, 4000);
     }, "send small");
-    head.append(pick, open, status);
+    // never a dead end: make a new project, or add one that lives in another folder (~/new-game-project ...)
+    const addBox = mk("form", "godot-add"); addBox.hidden = true;
+    const addIn = mk("input"); addIn.setAttribute("aria-label", "Project name or folder");
+    const addGo = mk("button", "send small", "Add"); addGo.type = "submit";
+    const addX = btn("Cancel", "Close this without adding anything.", () => { addBox.hidden = true; });
+    addBox.append(addIn, addGo, addX);
+    let addKind = "new";
+    const showAdd = (kind) => {
+      addKind = kind; addBox.hidden = false; addIn.value = "";
+      addIn.placeholder = kind === "new" ? "Name of the new project, e.g. Racer" : "The project's folder, e.g. ~/new-game-project";
+      addGo.textContent = kind === "new" ? "Make it" : "Add it";
+      addIn.focus();
+    };
+    addIn.addEventListener("keydown", (e) => e.stopPropagation());
+    addBox.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const v = addIn.value.trim();
+      if (!v) return;
+      addGo.disabled = true;
+      let r;
+      try { r = await call(addKind === "new" ? "/godot-editor/new" : "/godot-editor/link", addKind === "new" ? { name: v } : { path: v }); }
+      catch (err) { r = { ok: false, error: err.message }; }
+      addGo.disabled = false;
+      status.textContent = r && r.ok ? r.note : ((r && r.error) || "failed");
+      if (r && r.ok) { addBox.hidden = true; wantProject = r.name; await projects(); refresh(); }
+    });
+    const newBtn = btn("New project", "Make a new, empty Godot project in ~/LOKI Projects.", () => showAdd("new"));
+    const linkBtn = btn("Add from folder", "Add a Godot project you already have somewhere else - it stays where it is.", () => showAdd("link"));
+    head.append(pick, open, newBtn, linkBtn, status, addBox);
 
     const link = mk("section", "godot-live");
     const linkHead = mk("h3", "", "Live link");
@@ -218,9 +248,9 @@ const LokiModeBar = (() => {
       const eds = (ed && ed.editors) || [];
       if (!eds.length) {
         linkBody.append(mk("p", "mode-note", "No Godot editor is linked right now. Open a project in Godot: the LOKI plugin links it to LOKI by itself within seconds, and every LOKI agent can then see and change it live."));
-        const go = btn("Open in Godot", "Opens the picked project in Godot, linked live.", () => open.click(), "send small");
-        go.disabled = open.disabled || !pick.value;
-        linkBody.append(go);
+        if (pick.value) linkBody.append(btn("Open in Godot", "Opens the picked project in Godot, linked live.", () => open.click(), "send small"));
+        else linkBody.append(btn("New project", "Make a new, empty Godot project.", () => showAdd("new"), "send small"),
+          btn("Add from folder", "Add a Godot project you already have.", () => showAdd("link")));
       }
       for (const e of eds) {   // studio_godot.Editor.summary()
         linkBody.append(mk("p", "godot-editor-row", "Godot " + (e.godot || "") + " - " + (e.name || e.project) +
@@ -251,7 +281,10 @@ const LokiModeBar = (() => {
       if (!s || !s.ok) { status.textContent = (s && s.error) || "LOKI's engine does not answer."; return; }
       const keep = wantProject || pick.value; pick.replaceChildren();
       for (const pr of s.projects || []) pick.append(new Option(pr.label, pr.name));
-      if (!pick.options.length) pick.append(new Option("no Godot project in " + s.projects_dir, ""));
+      if (!pick.options.length) {
+        pick.append(new Option("no Godot project yet", ""));
+        status.textContent = "No Godot project in " + s.projects_dir + " yet - make a New project, or Add from folder one you already have.";
+      }
       if ([...pick.options].some((o) => o.value === keep)) pick.value = keep;
       wantProject = "";
       // no Godot on this computer: LOKI gets its own Godot 4.7.2 on the first Open (engine/godot_web.py)
@@ -329,14 +362,29 @@ const LokiModeBar = (() => {
 
   function register(id, hook) { hooks[id] = hook || {}; }
 
+  // which mode a key asks for: Godot's keys (Option+1..4 Mac, Ctrl+F1..F4 Windows - Cmd+F1..F4 works on a Mac too),
+  // or Ctrl/Cmd+1..4 when Forge does not have that key (in Forge they are its own: Ctrl/Cmd+1 = Isolate Select)
+  function keyMode(e) {
+    if (e.shiftKey) return -1;
+    const code = e.code || "";
+    let f = /^F([1-9])$/.exec(code) || /^F([1-9])$/.exec(e.key || "");
+    if (f && (e.ctrlKey || e.metaKey) && !e.altKey) return Number(f[1]) - 1;
+    const d = /^Digit([1-9])$/.exec(code) || (!code && /^([1-9])$/.exec(e.key || ""));
+    if (!d) return -1;
+    if (e.altKey && !e.ctrlKey && !e.metaKey && isMac) return Number(d[1]) - 1;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      if (typeof window.forgeOwnsKey === "function" && window.forgeOwnsKey(e)) return -1;   // Forge's own key
+      return Number(d[1]) - 1;
+    }
+    return -1;
+  }
+
   function onKey(e) {
-    const mod = e.ctrlKey || e.metaKey;   // Ctrl+N is the shortcut on every OS; Cmd+N works on macOS too
-    if (!mod || e.altKey || e.shiftKey) return;
-    const n = /^Digit([1-9])$/.exec(e.code || "") || /^([1-9])$/.exec(e.key || "");
-    if (!n) return;
-    const m = MODES[Number(n[1]) - 1];
+    const i = keyMode(e);
+    const m = i >= 0 ? MODES[i] : null;
     if (!m) return;
     e.preventDefault();
+    e.stopPropagation();
     go(m.id);
   }
 
@@ -348,7 +396,7 @@ const LokiModeBar = (() => {
     document.addEventListener("keydown", onKey, true);
   }
 
-  return { init, go, register, buildStudio, modes: () => MODES.map((m) => m.id), active: () => active };
+  return { init, go, register, buildStudio, keyMode, modes: () => MODES.map((m) => m.id), active: () => active };
 })();
 window.LokiModeBar = LokiModeBar;
 document.addEventListener("DOMContentLoaded", LokiModeBar.init);

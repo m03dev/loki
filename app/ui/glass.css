@@ -450,6 +450,9 @@ html.has-titlestrip .art-canvas { top: var(--titlebar-h); }   /* the chat previe
 .godot-plugin { margin: 3px 0; }
 .godot-plugin-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .godot-plugin-add input { width: clamp(140px, 22%, 220px); }
+.godot-add { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+.godot-add[hidden] { display: none; }
+.godot-add input { flex: 1 1 220px; max-width: 480px; }
 #forge.in-mode { top: var(--titlebar-h); }
 @media (max-width: 760px) { .modebar-tab span { display: none; } .modebar-tab { padding: 4px 9px; } }
 html.u-hc .modebar, html.u-hc .titlestrip { background: #000 !important; border-color: #fff !important; backdrop-filter: none; }

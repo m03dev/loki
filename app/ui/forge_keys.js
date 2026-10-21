@@ -231,6 +231,20 @@ const forgeHotkeys = {
 };
 window.forgeHotkeys = forgeHotkeys;
 
+/** True when Forge is the open mode and this key is one of its hotkeys (or Space / Esc): the app-wide shortcuts
+ *  (the mode bar's Ctrl/Cmd+1..4, the chat's Mod+B / Alt+Up ...) listen in the capture phase, so without this
+ *  check they took Forge's keys first - Ctrl/Cmd+1 (Isolate Select) went Home (owner 2026-10-21). */
+function forgeOwnsKey(e) {
+  const s = typeof document !== "undefined" && document.getElementById("forge");
+  if (!s || s.hidden) return false;
+  if (window.LokiModeBar && window.LokiModeBar.active && window.LokiModeBar.active() !== "forge") return false;
+  const t = e.target;
+  if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || "") || t.isContentEditable)) return false;
+  if (e.key === "Escape" || e.key === " " || e.code === "Space") return true;
+  return !!forgeKeyAction(forgeKeyChord(e));
+}
+window.forgeOwnsKey = forgeOwnsKey;
+
 // ---------------------------------------------------------------- the Hotkey Editor
 function forgeHotkeyEditor(show) {
   let box = document.getElementById("forge-hotkeys");

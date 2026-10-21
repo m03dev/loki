@@ -845,6 +845,7 @@ const LokiQol = (function () {
     }
     const combo = comboOf(e);
     if (!combo || (!/Mod|Ctrl|Alt/.test(combo))) return;
+    if (typeof window.forgeOwnsKey === "function" && window.forgeOwnsKey(e)) return;   // Forge's Maya keys win in Forge (Ctrl+B bevel, Alt+Up nudge ...)
     if (document.querySelector('.sheet:not([hidden]) [role="dialog"]')) return;   // shortcuts pause while a dialog is open
     const a = ACTIONS.find((x) => comboOfAction(x) === combo);
     if (!a) return;
