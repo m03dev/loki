@@ -177,12 +177,56 @@ the rest, or run Render Studio's jobs as peer jobs on the PC.
    Skywork licence. Nothing in the repository is affected.
 2. **The creator's guide page could not be fetched**; the advanced post is gated. The Patreon workflow files were not seen
    (the owner does not have them). LOKI's graph is an independent one in the same spirit, not a copy.
-3. **No live ComfyUI run here**: the cloud box cannot reach PyPI or Hugging Face, so ComfyUI could not be installed and
-   `/object_info` was written from the sources (not captured from a server). To verify on the PC: `setup_comfyui.py
-   --install --models --yes-download --start`, then Render Studio > Preflight, then a 33-frame 832x480 job. Specifically
-   unverified: the APNG multi-frame read by `LoadImage`, the GGUF merge loading through `UnetLoaderGGUF` (the card says it
-   does; it notes two 5-D tensors needed a converter change), speed and memory on 8 GB.
+3. **No live ComfyUI run** when this was written (the cloud box could not reach PyPI or Hugging Face). **Now done on
+   macOS (Ziva, 2026-10-21)**: `tools/setup_comfyui.py --install` builds ComfyUI + ComfyUI-GGUF at the pinned commits
+   in their own venv (it came up as **0.42.0** on PyTorch 2.14.1, device **mps**), `--start` runs it on 127.0.0.1:8188,
+   and `tests/test_comfyui_live.py` then checks what a fake server cannot (10 checks, all passing):
+   - every node class, every input LOKI sets and every input the live server requires **match** the graphs;
+   - `tests/fixtures/comfyui_object_info.json` **matches the live schemas** (the fixture was written from the sources, so
+     this was worth proving);
+   - **`LoadImage` reads every frame of the multi-frame APNG** - a 3-frame APNG uploaded through `/upload/image` came
+     back as 3 images, so the control-video path (section 4, "Why APNG") is confirmed on a real server, PyAV included;
+   - `Canny` (the preprocess graph) and `ImageBlend` (the line art + depth guide) both run;
+   - the real 17-node `vace_render` graph passes the server's own validation: the only complaints are the three model
+     files that are not installed here, which is what a fresh install should say. The errors are precise
+     (`node 1 (UnetLoaderGGUF): Value not in list unet_name: '...-Q4_K_M.gguf'`), so Render Studio's preflight and the
+     job log will name the missing file too.
+   Still unverified: an actual generation (the 11.6 GB GGUF, both encoders and a VAE are not on this machine, and no
+   NVIDIA GPU here) and speed / memory on the owner's 8 GB card. Both need the PC.
+
+   How to run it again (the Mac, or the PC where ComfyUI always runs):
+   `python tools/setup_comfyui.py --install --start && python tests/test_comfyui_live.py`
+   (or `LOKI_COMFYUI_URL=http://<pc>:8188 python tests/test_comfyui_live.py`). With no server it skips, so it is safe in CI.
+
 4. **Long shots** (the creator's iterative mode with frame carry-over): not built - it needs the creator's custom pack or
    our own; the graph does single passes (the creator's standard workflow says up to ~121 frames).
 5. Only one reference image (VACE's `reference_image` takes the first of a batch); several references (Phantom-style)
    would need `WanPhantomSubjectToVideo` and are not wired.
+
+## 8. Other resources worth using (Ziva, macOS, 2026-10-21) - CANDIDATES, NOT YET VERIFIED
+
+`mickmumpitz.ai/posts/ai-renderer-2-0-153434545` could **not be fetched from this machine** (this Ziva plan has no web
+access), so nothing below is quoted from it: this is the standing option list for this kind of pipeline, each entry
+something to try and then verify. Every one is a ComfyUI custom-node pack or a model, so all of them drop into
+`harness_data/comfyui/ComfyUI/custom_nodes/` and none of them changes LOKI's own graphs unless we choose to.
+
+| Resource | What it would give LOKI | Where it touches us |
+| --- | --- | --- |
+| Kijai's `ComfyUI-WanVideoWrapper` | VACE 14B with block swap / attention modes - the practical way to run this model on an 8 GB card, where core nodes OOM or offload to disk | an alternative to `vace_render.json`'s loaders, same WanVace-style control video + reference image |
+| `ComfyUI-VideoHelperSuite` (Kosinkadink) | `VHS_LoadImagesPath` / `LoadVideoUpload` (robust multi-frame in) and **mp4 / h264 output** - ComfyUI core only writes WEBM | the documented fallback if PyAV's APNG probe fails (section 7 Blocker 3); also the only route to mp4 |
+| `comfyui_controlnet_aux` (Fannovel16) | more guide types (softedge, normal, MLSD, depth variants) and their preprocessors | today LOKI computes depth and line art itself in `forge_passes.js`; this is the fallback and the extra-pass source |
+| `ComfyUI_IPAdapter_plus` (cubiq) | several style references, weighted | section 7 Blocker 5: VACE's `reference_image` takes one image today |
+| `ComfyUI-SageAttention` / TeaCache nodes | faster attention and step skipping | speed only; matters on the 8 GB card |
+| ComfyUI-Manager | install and update the custom nodes above from the ComfyUI UI | saves the owner hand-cloning packs |
+| Core Wan routes (`WanImageToVideo`, `WanFirstLastFrameToVideo`, `WanFunControlToVideo`) | first/last-frame and fun-control conditioning without VACE | an alternative shape for the same job, all in core at our pinned commit |
+| LTX-Video / LTX-2 | a much smaller video model - fits 8 GB with room to spare | a second graph (`ltx_render.json`) if the 14B is too slow to be usable, at some cost in quality |
+| A rented GPU (RunPod & co.) | the creator ships a RunPod variant of his workflow, so remote is a supported shape | Render Studio's Address field already takes a public URL; it adds the upload consent prompt |
+
+**What was verified instead, on this machine.** A real ComfyUI *can* be installed here from the pinned commits
+(`tools/setup_comfyui.py --install`; PyAV, kornia and the GGUF node come with it) and `tests/test_comfyui_live.py` then
+checks the things a fake server cannot: the live node schemas against the ones the graphs assume, the fixture against
+the live server, and - the Blocker 3 item - whether ComfyUI really reads every frame of the multi-frame APNG the passes
+are sent as. Models are not needed for any of that. The test skips cleanly when no server answers, so it is safe in CI
+and useful on the PC, where a real ComfyUI runs 24/7:
+
+    python tools/setup_comfyui.py --install --start && python tests/test_comfyui_live.py
