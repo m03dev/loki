@@ -202,7 +202,7 @@ function forgeEditAttach(view, ctx) {
     if (!T || view.mode !== "poly") return;
     const s = ed.sel;
     say("Verts " + s.v.size + "/" + view.poly.v.length + " · Edges " + s.e.size + "/" + T.edges.length
-      + " · Faces " + s.f.size + "/" + view.poly.f.length + (ed.xray ? " · X-ray" : "") + (ed.prop ? " · Proportional" : ""));
+      + " · Faces " + s.f.size + "/" + view.poly.f.length + (ed.xray ? " · X-ray" : "") + (through() && !ed.xray ? " · Selects through" : "") + (ed.prop ? " · Proportional" : ""));
   }
   view.selStats = stats;
 
@@ -280,8 +280,20 @@ function forgeEditAttach(view, ctx) {
     }
     return false;
   }
-  const seesVert = (i, s) => ed.xray || seenNear(s[0], s[1], 3, topo().vertFaces[i]);
-  const seesEdge = (ei, s) => ed.xray || seenNear(s[0], s[1], 2, topo().edges[ei].faces);
+  // Camera based selection (the pro Selection preference, owner 2026-10-21: "when I marquee select I should be able to
+  // grab the verts I don't see as well, make that a toggle"): "auto" (default) = only what you can see in shaded mode,
+  // everything - front and back - in wireframe (4) and X-ray; "on" = always only what you see; "off" = always through
+  // (the marquee takes the hidden side too). A click still takes the nearest seen element unless it is "off".
+  const camSel = () => { try { return localStorage.getItem("loki-forge-camsel") || "auto"; } catch (_) { return "auto"; } };
+  const through = () => { const c = camSel(); return c === "off" || ed.xray || (c === "auto" && !!view.wireOnly); };
+  view.cameraBasedSelection = (mode) => {
+    if (mode) { try { localStorage.setItem("loki-forge-camsel", mode); } catch (_) { /* private mode */ } }
+    stats();
+    return camSel();
+  };
+  view.selectsThrough = through;
+  const seesVert = (i, s) => through() || seenNear(s[0], s[1], 3, topo().vertFaces[i]);
+  const seesEdge = (ei, s) => through() || seenNear(s[0], s[1], 2, topo().edges[ei].faces);
   function segDist(p, a, b) {
     const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
     const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
@@ -311,7 +323,7 @@ function forgeEditAttach(view, ctx) {
     return best;
   }
   function faceAt(pt, proj) {
-    if (!ed.xray) return idAtBuf(...bufXY(pt[0], pt[1]));
+    if (!ed.xray && !view.wireOnly) return idAtBuf(...bufXY(pt[0], pt[1]));   // wireframe: pick by the face centres, like X-ray
     let best = -1, bd = 26;                              // X-ray: the nearest face centre, like Blender's face dots
     view.poly.f.forEach((f, i) => {
       const s = proj(P.centroid(view.poly, f));
@@ -415,7 +427,7 @@ function forgeEditAttach(view, ctx) {
         const a = sv[e.a], b = sv[e.b];
         if (inside(a) && inside(b) && seesEdge(i, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])) hits.push(i);
       });
-    } else if (ed.xray) view.poly.f.forEach((f, i) => { if (inside(proj(P.centroid(view.poly, f)))) hits.push(i); });
+    } else if (through()) view.poly.f.forEach((f, i) => { const c = proj(P.centroid(view.poly, f)); if (c && inside(c)) hits.push(i); });
     else {
       const [bx0, by1] = bufXY(lo[0], lo[1]), [bx1, by0] = bufXY(hi[0], hi[1]), seen = new Set();
       for (let y = Math.max(0, by0); y <= Math.min(pick.h - 1, by1); y++) for (let x = Math.max(0, bx0); x <= Math.min(pick.w - 1, bx1); x++) {

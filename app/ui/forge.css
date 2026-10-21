@@ -946,3 +946,21 @@ button.forge-out-title:hover { opacity: 1; }
 .forge-tk-sethead { font-weight: 600; color: #e8e8e8; padding: 2px 0 4px; }
 .forge-tk-note { color: #9a9a9a; margin: 4px 0; font-size: 11.5px; }
 body.forge-tk-tool #forge-view { cursor: crosshair; }
+
+/* ---- the In-View Editor (forge_toolkit.js, t) */
+.forge-ive { position: absolute; z-index: 30; min-width: 190px; max-width: 260px; background: rgba(42, 42, 44, .94); color: #dedede;
+  border: 1px solid #1d1d1d; border-radius: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); font-size: 11.5px; user-select: none; }
+.forge-ive[hidden] { display: none; }
+.forge-ive-head { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; background: #353538; border-radius: 4px 4px 0 0; cursor: move; }
+.forge-ive-title { font-weight: 600; color: #f0f0f0; }
+.forge-ive-what { flex: 1; color: #9a9a9a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forge-ive-x { border: 0; background: transparent; color: #bbb; font-size: 14px; width: 18px; height: 18px; border-radius: 3px; cursor: pointer; }
+.forge-ive-x:hover { background: rgba(255, 255, 255, .12); }
+.forge-ive-row { display: grid; grid-template-columns: 1fr 70px; align-items: center; gap: 6px; padding: 2px 8px; }
+.forge-ive-row:last-child { padding-bottom: 6px; }
+.forge-ive-label { cursor: ew-resize; padding: 2px 0; color: #cfcfcf; }
+.forge-ive-row.scrub { background: rgba(82, 133, 166, .35); }
+.forge-ive-row.scrub .forge-ive-label { color: #fff; }
+.forge-ive-num { width: 100%; background: #1f1f20; color: #eee; border: 1px solid #111; border-radius: 2px; padding: 1px 4px; font: inherit; }
+.forge-ive-none { padding: 6px 8px; color: #9a9a9a; }
+.forge-tk-select { width: 100%; background: #2b2b2b; color: #eee; border: 1px solid #222; border-radius: 2px; padding: 2px 4px; font: inherit; font-size: 11.5px; }

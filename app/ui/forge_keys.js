@@ -22,7 +22,7 @@ const FORGE_KEYS_DEFAULT_SET = "Default";
 // [chord, action] - the pro default set. Order = the order the editor lists them in.
 const FORGE_KEY_DEFAULTS = [
   // tools (hold q / w / e + left button = that tool's marking menu)
-  ["q", "select"], ["w", "move"], ["e", "rotate"], ["r", "scale"], ["t", "move"], ["y", "lastTool"],
+  ["q", "select"], ["w", "move"], ["e", "rotate"], ["r", "scale"], ["t", "showManip"], ["y", "lastTool"],
   ["enter", "@completeTool"], ["g", "@repeatLast"],
   // edit
   ["z", "undo"], ["ctrl+z", "undo"], ["shift+z", "redo"], ["ctrl+shift+z", "redo"], ["ctrl+y", "redo"],
@@ -72,7 +72,7 @@ const FORGE_KEY_REPEATS = new Set(["__smaller", "__bigger", "@viewUndo", "@viewR
   "@pickLeft", "@pickRight", "@nudgeUp", "@nudgeDown", "@nudgeLeft", "@nudgeRight"]);
 // the editor's groups (by command id; anything not listed goes under "Other")
 const FORGE_KEY_GROUPS = [
-  ["Tools", ["select", "move", "rotate", "scale", "lastTool", "@completeTool", "@repeatLast", "softSel", "multiCut", "sculpt"]],
+  ["Tools", ["select", "move", "rotate", "scale", "showManip", "lastTool", "@completeTool", "@repeatLast", "softSel", "multiCut", "sculpt"]],
   ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
   ["Display", ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "xray", "smooth1", "smooth2", "smooth3",
     "wire", "shaded", "textured", "lights", "grid", "hideUI", "quadToggle"]],

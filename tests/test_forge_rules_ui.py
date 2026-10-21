@@ -219,6 +219,45 @@ async def main():
         else:
             check("the polygon tools library (forge_polyops.js) is loaded", False, "ForgePoly.bevel / dissolveEdges missing")
 
+        # -------- camera based selection, wireframe colours, the In-View Editor (t)
+        await E("forgeAddPrimitive('sphere')")
+        await E("forge.view.setSelMode('vert')")
+        r = await E("""() => { const v = forge.view, c = v.canvas.getBoundingClientRect(), out = {};
+          const box = () => { v.boxSelect(0, 0, c.width, c.height, 'set'); return v.edit.sel.v.size; };
+          out.n = v.poly.v.length;
+          v.cameraBasedSelection('auto'); out.shaded = box();
+          v.cameraBasedSelection('off'); out.off = box();
+          v.cameraBasedSelection('on'); out.on = box();
+          v.cameraBasedSelection('auto'); forgeProRun(v, 'wire'); out.wire = box(); forgeProRun(v, 'shaded');
+          return out; }""")
+        check("marquee: shaded takes only the front vertices; Camera Based Selection Off (or wireframe 4) takes the back ones too",
+              r["shaded"] < r["n"] and r["off"] == r["n"] and r["on"] == r["shaded"] and r["wire"] == r["n"], r)
+        await E("forgeModelMode(false)")
+        await E("forgeProRun(forge.view, 'wire')")
+        await page.wait_for_timeout(150)
+        cols = await E("""() => { const out = {}; let s = forge.view.holder; while (s.parent) s = s.parent; const t = forge.view.tree.api;
+          s.traverse((o) => { if (o.isMesh && o.userData.fmyWire) { const n = t.nodeOfObject(o); out[n ? n.name : o.name] = [o.userData.fmyWire.material.color.getHexString(), o.material.depthWrite]; } }); return out; }""")
+        await E("forgeProRun(forge.view, 'shaded')")
+        lead = [c for c, d in cols.values() if c == "65fdcd"]
+        check("wireframe: the selected object light green, the others dark blue, and nothing hides the back edges",
+              len(lead) == 1 and any(c == "101e66" for c, d in cols.values()) and all(d is False for c, d in cols.values()), cols)
+        await E("forgeModelMode(true)")
+        await E("forge.view.setSelMode('edge'); forge.view.selectItems('edge', [0], 'set')")
+        await page.keyboard.press("Control+b")
+        ive = await E("""() => { const b = document.getElementById('forge-ive'); return { open: b && !b.hidden, title: b && b.querySelector('.forge-ive-title').textContent,
+          rows: b ? [...b.querySelectorAll('.forge-ive-row')].map((r) => r.dataset.k) : [] }; }""")
+        await E("window.forgeToolkit.ive.hide()")
+        await page.mouse.move(650, 450)
+        await page.keyboard.press("t")
+        back = await E("!document.getElementById('forge-ive').hidden")
+        lab = await E("""() => { const r = document.querySelector('#forge-ive .forge-ive-row[data-k="segments"] .forge-ive-label').getBoundingClientRect(); return [r.left + 10, r.top + r.height / 2]; }""")
+        f0 = await E("forge.view.poly.f.length")
+        await page.mouse.move(lab[0], lab[1]); await page.mouse.down()
+        await page.mouse.move(lab[0] + 60, lab[1], steps=6); await page.mouse.up()
+        f1 = await E("forge.view.poly.f.length")
+        check("a tool opens the In-View Editor (polyBevel1: Fraction, Segments); t brings it back; dragging Segments' name redoes the bevel",
+              ive["open"] and ive["title"] == "polyBevel1" and ive["rows"][:2] == ["fraction", "segments"] and back and f1 > f0, [ive, back, f0, f1])
+
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

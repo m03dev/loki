@@ -221,6 +221,18 @@ function forgeSceneAttach(view, ctx) {
 
   // ---------------------------------------------------------------- selection highlight in the viewport
   const marks = new Map(), edgeCache = new WeakMap();
+  // the edges a selection wire shows: a modelled mesh's POLYGON edges (its cage), not the triangle diagonals
+  function wireEdges(o) {
+    const P = window.ForgePoly;
+    let cage = null;
+    if (ctx.mesh && o === ctx.mesh()) cage = view.poly;
+    else { const id = (() => { for (let p = o; p; p = p.parent) if (p.userData && p.userData.forgeNode) return p.userData.forgeNode; return 0; })(); const n = id && node(id); cage = n && n.poly; }
+    if (!cage || !P || !P.edges) return new THREE.EdgesGeometry(o.geometry, 1);
+    const E = P.edges(cage), lp = new Float32Array(E.length * 6);
+    E.forEach((e, i) => { lp.set(cage.v[e.a], i * 6); lp.set(cage.v[e.b], i * 6 + 3); });
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(lp, 3));
+    return g;
+  }
   function drawMarks() {
     for (const [id, h] of marks) { if (h.parent) h.parent.remove(h); h.geometry.dispose(); marks.delete(id); }
     tree.sel.forEach((id, i) => {
@@ -241,7 +253,7 @@ function forgeSceneAttach(view, ctx) {
           // the edges are cached per geometry and only rebuilt when the mesh changed (tree.build runs often)
           const ver = o.geometry.attributes.position.version + ":" + (o.geometry.index ? o.geometry.index.version : 0);
           let ec = edgeCache.get(o.geometry);
-          if (!ec || ec.ver !== ver) { ec = { ver, geo: new THREE.EdgesGeometry(o.geometry, 1) }; edgeCache.set(o.geometry, ec); }
+          if (!ec || ec.ver !== ver) { ec = { ver, geo: wireEdges(o) }; edgeCache.set(o.geometry, ec); }
           const lines = new THREE.LineSegments(ec.geo,
             new THREE.LineBasicMaterial({ color: col, depthTest: true, transparent: true, opacity: 0.95 }));
           lines.matrixAutoUpdate = false;
@@ -746,7 +758,7 @@ function forgeSceneAttach(view, ctx) {
         if (!o || !o.geometry) continue;
         const ver = o.geometry.attributes.position.version + ":" + (o.geometry.index ? o.geometry.index.version : 0);
         let ec = edgeCache.get(o.geometry);
-        if (!ec || ec.ver !== ver) { ec = { ver, geo: new THREE.EdgesGeometry(o.geometry, 1) }; edgeCache.set(o.geometry, ec); }
+        if (!ec || ec.ver !== ver) { ec = { ver, geo: wireEdges(o) }; edgeCache.set(o.geometry, ec); }
         if (lines.geometry !== ec.geo) lines.geometry = ec.geo;
       }
     }

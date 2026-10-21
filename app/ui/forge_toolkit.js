@@ -316,6 +316,10 @@ function forgeTkCommands() {
     spinEdgeBack: ["Spin Edge Backward", () => { forgeTkRun("spinEdge", { dir: -1 }); return ""; }],
     slideEdge: ["Slide Edge", run("slideEdge")],
     deleteEdgeVert: ["Delete Edge/Vertex", () => { forgeTkDelete(true); return ""; }],
+    camSelAuto: ["Camera Based Selection: Automatic", (v) => { if (v.cameraBasedSelection) v.cameraBasedSelection("auto"); forgeTkSyncModes(); return "Selection: only what you see when shaded; through the model in wireframe (4) and X-ray."; }],
+    camSelOn: ["Camera Based Selection: On", (v) => { if (v.cameraBasedSelection) v.cameraBasedSelection("on"); forgeTkSyncModes(); return "Selection: only what you can see."; }],
+    camSelOff: ["Camera Based Selection: Off (select through)", (v) => { if (v.cameraBasedSelection) v.cameraBasedSelection("off"); forgeTkSyncModes(); return "Selection: through the model - a marquee takes the hidden vertices too."; }],
+    backfaces: ["Backface Culling", (v) => forgeTkBackfaces(v)],
     multiCut: ["Multi-Cut", async (v) => { await toComp(v, "edge"); forgeTkTool("multiCut"); return ""; }],
     targetWeld: ["Target Weld", async (v) => { await toComp(v, "vert"); forgeTkTool("targetWeld"); return ""; }],
     offsetEdgeLoop: ["Offset Edge Loop", async (v) => { await toComp(v, "edge"); forgeTkTool("offsetEdgeLoop"); return ""; }],
@@ -325,6 +329,22 @@ function forgeTkCommands() {
   C.delete = ["Delete", (v) => { if (comp(v)) { forgeTkDelete(false); return ""; } return del[1](v); }];
   C.deleteComp = ["Delete Components", () => { forgeTkDelete(false); return ""; }];
   C.winToolkit = ["Modeling Toolkit", () => { forgeTkPanel(true); return "Modeling Toolkit (beside the Channel Box)."; }];
+}
+
+// Display > Backface Culling: faces pointing away from the camera are not drawn (every object), and in shaded mode
+// what is behind them cannot be picked through either way
+function forgeTkBackfaces(v, on) {
+  if (!v || !v.THREE) return "";
+  const was = v.backfaceCull !== false;              // three.js draws front faces only by default: culling starts on
+  v.backfaceCull = on == null ? !was : !!on;
+  let scene = v.holder; while (scene.parent) scene = scene.parent;
+  scene.traverse((o) => {
+    if (!o.isMesh || !(o.name === "forge" || o.name === "shape" || o.name === "forge-smooth")) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) { m.side = v.backfaceCull ? v.THREE.FrontSide : v.THREE.DoubleSide; m.needsUpdate = true; }
+  });
+  v.dirty = true;
+  forgeTkSyncModes();
+  return v.backfaceCull ? "Backface culling on." : "Backface culling off.";
 }
 
 // ---------------------------------------------------------------- the Modeling Toolkit panel
@@ -374,9 +394,21 @@ function forgeTkBuild(box) {
   soft.append(softBox, mk("span", "", "Soft Selection (b)"));
   const rad = forgeTkSlider("Falloff radius", 0.02, 2, 0.01, () => (forge.view && forge.view.edit ? forge.view.edit.propRadius : 0.25),
     (x) => { const v = forge.view; if (v && v.edit) { v.edit.propRadius = x; if (v.reweigh) v.reweigh(); } });
+  const cam = mk("label", "forge-tk-row");
+  const camSel = document.createElement("select"); camSel.id = "forge-tk-camsel"; camSel.className = "forge-tk-select";
+  for (const [k, t] of [["auto", "Camera based: Automatic"], ["on", "Camera based: On (only what you see)"], ["off", "Off - select through"]]) {
+    const o = document.createElement("option"); o.value = k; o.textContent = t; camSel.append(o);
+  }
+  camSel.title = "Whether a marquee / click can take vertices, edges and faces you cannot see (the back of the model).";
+  camSel.addEventListener("change", () => { const v = forge.view; if (v && v.cameraBasedSelection) v.cameraBasedSelection(camSel.value); });
+  cam.append(camSel);
+  const bf = mk("label", "forge-tk-row");
+  const bfBox = document.createElement("input"); bfBox.type = "checkbox"; bfBox.id = "forge-tk-backface";
+  bfBox.addEventListener("change", () => forgeTkBackfaces(forge.view, bfBox.checked));
+  bf.append(bfBox, mk("span", "", "Backface culling (hide faces pointing away)"));
   const loops = mk("div", "forge-tk-grid");
   for (const id of ["loopSel", "ringSel", "grow", "shrink", "invert", "selectAll"]) loops.append(forgeTkBtn(id));
-  selSec.append(modes, soft, rad, loops);
+  selSec.append(modes, cam, bf, soft, rad, loops);
   box.append(selSec);
   for (const [g, ids] of FORGE_TK_GROUPS) {
     const sec = mk("details", "forge-tk-sec"); sec.open = true; sec.append(mk("summary", "", g));
@@ -441,8 +473,142 @@ function forgeTkSyncModes() {
     b.classList.toggle("on", id === "objectMode" ? !comp : comp && ({ vertex: "vert", edge: "edge", face: "face" })[id] === mode);
   }
   const soft = document.getElementById("forge-tk-soft"); if (soft) soft.checked = !!(v.edit && v.edit.prop);
+  const cs = document.getElementById("forge-tk-camsel"); if (cs && v.cameraBasedSelection) cs.value = v.cameraBasedSelection();
+  const bf = document.getElementById("forge-tk-backface"); if (bf) bf.checked = v.backfaceCull !== false;
 }
 
 forgeTkCommands();
 window.forgeToolkit = { run: forgeTkRun, tweak: forgeTkTweak, extrude: forgeTkExtrude, del: forgeTkDelete, tool: forgeTkTool,
   end: forgeTkToolEnd, panel: forgeTkPanel, tools: FORGE_TK_TOOLS, state: forgeTk, select: forgeTkSelect, sel: () => forgeTk.tool };
+
+// ---------------------------------------------------------------- the In-View Editor (t: Show Manipulator Tool)
+// (owner 2026-10-21: "press t and get the tools to edit whatever action - as soon as you bridge you get them and then
+// you adjust the settings"). The pro In-View Editor: right after a tool runs, a small panel opens in the viewport
+// with that step's attributes (polyBridgeEdge1: Divisions, Twist ...). Drag an attribute's NAME left / right (left or
+// middle button) to scrub it - Shift faster, Ctrl / Cmd finer - or type a number; every change redoes the step in
+// place (no new undo step). t brings it back for the last step (or a fresh primitive's own attributes); Esc or a
+// click on the model closes it; Display > Heads Up Display > In-View Editors switches it off.
+function forgeIveOn() { try { return localStorage.getItem("loki-forge-ive") !== "0"; } catch (_) { return true; } }
+function forgeIveSet(on) { try { localStorage.setItem("loki-forge-ive", on ? "1" : "0"); } catch (_) { /* private mode */ } if (!on) forgeIveHide(); return on; }
+function forgeIveHide() { const b = document.getElementById("forge-ive"); if (b) b.hidden = true; }
+function forgeIveRows() {                         // what the editor edits now: the last tool step, else a fresh primitive
+  const L = forgeTk.last, h = typeof forgeModel !== "undefined" && forgeModel.hist;
+  if (L && h && h.ops[L.histIndex] === L.rec) {
+    const tool = FORGE_TK_TOOLS[L.id], n = window.forgeHistory ? window.forgeHistory.list().filter((o, i) => i <= L.histIndex && o.node === FORGE_TK_NODES[L.rec.op]).length : 1;
+    return { title: (FORGE_TK_NODES[L.rec.op] || "poly") + n, what: tool[0],
+      rows: tool[3].map(([k, label, min, max, step]) => ({ k, label, min, max, step, bool: max - min === 1 && step === 1,
+        get: () => +L.rec.params[k] || 0, set: (x) => forgeTkTweak(k, x) })) };
+  }
+  const v = forge.view, pr = typeof forgeModel !== "undefined" && forgeModel.prim;
+  if (pr && v && v.poly === pr.poly) {
+    const p = window.ForgePoly.PRIMITIVES[pr.kind];
+    return { title: "poly" + p.name.replace(/\s+/g, "") + "1", what: p.name,
+      rows: Object.entries(p.params).map(([k, [def, lo, hi]]) => ({ k, label: k[0].toUpperCase() + k.slice(1), min: lo, max: hi,
+        step: k === "thickness" ? 0.01 : 1, get: () => (pr.opts[k] != null ? pr.opts[k] : def),
+        set: (x) => { pr.opts[k] = x; const poly = window.ForgePoly.primitive(pr.kind, pr.opts); pr.poly = poly; v.showPoly(poly, true, true); if (typeof forgeModelSync === "function") forgeModelSync(); } })) };
+  }
+  return null;
+}
+function forgeIveShow(force) {
+  if (!force && !forgeIveOn()) return false;
+  const v = forge.view, info = forgeIveRows();
+  if (!v || !info) { if (force) forgeTkSay("Nothing to adjust: run a modelling tool (or create a primitive), then press t.", true); return false; }
+  let box = document.getElementById("forge-ive");
+  if (!box) {
+    box = document.createElement("div"); box.id = "forge-ive"; box.className = "forge-ive"; box.hidden = true;
+    box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") forgeIveHide(); });
+    box.addEventListener("pointerdown", (e) => e.stopPropagation());
+    (v.canvas.parentElement || document.body).append(box);
+  }
+  box.textContent = "";
+  const head = document.createElement("div"); head.className = "forge-ive-head";
+  const t = document.createElement("span"); t.className = "forge-ive-title"; t.textContent = info.title;
+  const w = document.createElement("span"); w.className = "forge-ive-what"; w.textContent = info.what;
+  const x = document.createElement("button"); x.type = "button"; x.className = "forge-ive-x"; x.textContent = "×"; x.title = "Close (Esc; t brings it back)";
+  x.addEventListener("click", forgeIveHide);
+  head.append(t, w, x);
+  box.append(head);
+  // drag the editor by its title
+  head.addEventListener("pointerdown", (e) => {
+    if (e.target === x) return;
+    const r = box.getBoundingClientRect(), pr = box.offsetParent ? box.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    head.setPointerCapture(e.pointerId);
+    const mv = (ev) => { box.style.left = (ev.clientX - dx - pr.left) + "px"; box.style.top = (ev.clientY - dy - pr.top) + "px"; box.dataset.moved = "1"; };
+    const up = () => { head.removeEventListener("pointermove", mv); head.removeEventListener("pointerup", up); };
+    head.addEventListener("pointermove", mv); head.addEventListener("pointerup", up);
+  });
+  if (!info.rows.length) { const p = document.createElement("div"); p.className = "forge-ive-none"; p.textContent = "No attributes to adjust."; box.append(p); }
+  for (const r of info.rows) {
+    const row = document.createElement("div"); row.className = "forge-ive-row"; row.dataset.k = r.k;
+    const lab = document.createElement("span"); lab.className = "forge-ive-label"; lab.textContent = r.label;
+    row.append(lab);
+    if (r.bool) {
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!r.get();
+      cb.addEventListener("change", () => r.set(cb.checked ? 1 : 0));
+      row.append(cb);
+    } else {
+      const n = document.createElement("input"); n.type = "number"; n.className = "forge-ive-num";
+      n.min = String(r.min); n.max = String(r.max); n.step = String(r.step);
+      const show = () => { n.value = String(Math.round(r.get() * 1000) / 1000); };
+      show();
+      n.addEventListener("change", () => { r.set(Math.max(r.min, Math.min(r.max, +n.value))); show(); });
+      // scrub: press on the name, drag sideways (the pro virtual slider)
+      lab.title = "Drag left / right to change (Shift faster, Ctrl/Cmd finer), or type a number.";
+      lab.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 && e.button !== 1) return;
+        e.preventDefault();
+        const x0 = e.clientX, v0 = r.get(), span = r.max - r.min;
+        lab.setPointerCapture(e.pointerId); row.classList.add("scrub");
+        const mv = (ev) => {
+          const k = (ev.shiftKey ? 4 : ev.ctrlKey || ev.metaKey ? 0.15 : 1) * (r.step >= 1 ? 0.08 : span / 400);
+          let val = v0 + (ev.clientX - x0) * k;
+          val = Math.max(r.min, Math.min(r.max, r.step >= 1 ? Math.round(val) : Math.round(val / r.step) * r.step));
+          if (val !== r.get()) { r.set(val); show(); }
+        };
+        const up = () => { row.classList.remove("scrub"); lab.removeEventListener("pointermove", mv); lab.removeEventListener("pointerup", up); forgeTkSettings(); };
+        lab.addEventListener("pointermove", mv); lab.addEventListener("pointerup", up);
+      });
+      row.append(n);
+    }
+    box.append(row);
+  }
+  box.hidden = false;
+  if (!box.dataset.moved) {                        // beside the selection, inside the view
+    const stage = box.parentElement.getBoundingClientRect();
+    let px = stage.width * 0.62, py = stage.height * 0.18;
+    try {
+      const ids = v.selectedVerts ? v.selectedVerts() : [];
+      if (ids.length && v.poly) {
+        const THREE = v.THREE, c = new THREE.Vector3();
+        for (const i of ids) c.add(new THREE.Vector3().fromArray(v.poly.v[i] || [0, 0, 0]));
+        c.multiplyScalar(1 / ids.length); v.holder.updateMatrixWorld(true); c.applyMatrix4(v.holder.matrixWorld).project(v.camera);
+        const cr = v.canvas.getBoundingClientRect();
+        px = cr.left - stage.left + (c.x + 1) / 2 * cr.width + 60; py = cr.top - stage.top + (1 - c.y) / 2 * cr.height - 40;
+      }
+    } catch (_) { /* keep the default place */ }
+    const bw = box.offsetWidth || 220, bh = box.offsetHeight || 120;
+    box.style.left = Math.max(8, Math.min(stage.width - bw - 8, px)) + "px";
+    box.style.top = Math.max(50, Math.min(stage.height - bh - 8, py)) + "px";
+  }
+  return true;
+}
+// open after every tool step; close when the model is clicked (a new selection) or the mode changes
+(function () {
+  const run = forgeTkRun;
+  forgeTkRun = function (id, override) { const ok = run(id, override); if (ok) forgeIveShow(false); return ok; };   // eslint-disable-line no-func-assign
+  document.addEventListener("pointerdown", (e) => {
+    const b = document.getElementById("forge-ive"), v = forge.view;
+    if (!b || b.hidden || !v || e.target !== v.canvas) return;
+    if ((v.gizmo && v.gizmo.axis) || (v.transform && v.transform.axis) || e.altKey || e.button !== 0) return;   // using a handle or the camera
+    forgeIveHide();
+  }, true);
+  if (typeof FORGE_PRO_CMDS !== "undefined") {
+    FORGE_PRO_CMDS.showManip = ["Show Manipulator Tool", () => { forgeIveShow(true); return ""; }];
+    FORGE_PRO_CMDS.iveToggle = ["In-View Editors", () => (forgeIveSet(!forgeIveOn()) ? "In-View Editors on (t shows the last step's)." : "In-View Editors off (t still opens one).")];
+  }
+  if (typeof FORGE_PRO_TOGGLES !== "undefined") Object.assign(FORGE_PRO_TOGGLES, { iveToggle: () => forgeIveOn(),
+    camSelAuto: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "auto"), camSelOn: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "on"),
+    camSelOff: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "off"), backfaces: (v) => v.backfaceCull !== false });
+})();
+window.forgeToolkit.ive = { show: forgeIveShow, hide: forgeIveHide, on: forgeIveOn, set: forgeIveSet };

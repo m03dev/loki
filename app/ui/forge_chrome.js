@@ -211,9 +211,9 @@ const FMY_MENUS = () => {
     ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
     ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "deleteHistory", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
     ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Make with LOKI", "draw", "image", "describe", "creature"]],
-    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "-", "objComp", "vertex", "edge", "face"]],
-    ["Modify", ["#Transform", "move", "rotate", "scale", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
-    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
+    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces"]],
+    ["Modify", ["#Transform", "move", "rotate", "scale", "showManip", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
+    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
     ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Settings/Preferences", "hotkeyEditor"])],
     ["Mesh", ["#Combine", "combine", "separate", "extractFace", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "triangulate", "quadrangulate", "dynamesh", "-", "fillHole", "-", "sculptModel"]],
     ["Edit Mesh", ["#Components", "extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
@@ -831,7 +831,11 @@ function fmyWireOnShaded() {
 // and its polygon edges draw instead (dark navy; the selection keeps its colour); 5 brings the shading back. The
 // edges follow edits (rebuilt when a geometry changes) and the hidden surfaces still pick. A very dense mesh
 // (> 150k triangles) shows its triangles instead of a polygon-edge overlay.
-const FMY_WIRE_COLOR = 0x0e1a2e;
+// the pro wireframe (owner 2026-10-21: "wireframe mode needs to be better, it's gotta work like [the pro tools]"):
+// every edge of every object shows - the back ones too, nothing hides them - unselected objects in dark blue, the
+// selected ones white and the last selected (the lead) light green; in component mode the cage colours of the
+// component display take over. Selection goes through the model in wireframe (camera based selection: automatic).
+const FMY_WIRE_COLOR = 0x101e66, FMY_WIRE_SEL = 0xffffff, FMY_WIRE_LEAD = 0x65fdcd;
 function fmyWireOnly(v, on) {
   if (!v) return "";
   v.wireOnly = !!on;
@@ -852,24 +856,39 @@ function fmyWireSync(v, force) {
   const want = !!v.wireOnly;
   for (const m of fmyWireTargets(v)) {
     const ud = m.userData;
-    const g = m.geometry, ver = (g.attributes.position ? g.attributes.position.version : 0) + ":" + g.uuid;
+    const g = m.geometry, ver = (g.attributes.position ? g.attributes.position.version : 0) + ":" + g.uuid + (m.name === "forge" && v.poly ? ":" + v.poly.v.length + "/" + v.poly.f.length : "");
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     if (!want) {
       if (ud.fmyWire) { m.remove(ud.fmyWire); ud.fmyWire.geometry.dispose(); ud.fmyWire.material.dispose(); ud.fmyWire = null; }
       if (ud.fmyHid) { for (const mt of mats) { mt.colorWrite = true; mt.depthWrite = true; mt.wireframe = false; } ud.fmyHid = false; }
       continue;
     }
-    // the surface keeps writing depth (so the far side's edges stay hidden, like the pro default) but draws no colour
-    if (!ud.fmyHid || force) { for (const mt of mats) { mt.colorWrite = false; } ud.fmyHid = true; }
+    // the surface draws nothing - no colour and no depth - so the far side's edges show through, the pro way
+    if (!ud.fmyHid || force) { for (const mt of mats) { mt.colorWrite = false; mt.depthWrite = false; } ud.fmyHid = true; }
     if (m.visible === false) continue;
     if (!ud.fmyWire || ud.fmyWireVer !== ver || force) {
       if (ud.fmyWire) { m.remove(ud.fmyWire); ud.fmyWire.geometry.dispose(); ud.fmyWire.material.dispose(); }
       const tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
-      const eg = tris > 150000 ? new v.THREE.WireframeGeometry(g) : new v.THREE.EdgesGeometry(g, 1);
+      // a modelled mesh draws its POLYGON edges (the cage's quads, never the triangles they are drawn with); a sculpt
+      // or a scan has no cage: its triangle edges, the flat diagonals left out
+      const tn = v.tree && v.tree.api && v.tree.api.nodeOfObject ? v.tree.api.nodeOfObject(m) : null;
+      const cage = m.name === "forge" ? v.poly : m.name === "forge-smooth" ? null : tn && tn.poly;
+      let eg;
+      if (cage && window.ForgePoly && window.ForgePoly.edges) {
+        const E = window.ForgePoly.edges(cage), lp = new Float32Array(E.length * 6);
+        E.forEach((e, i) => { lp.set(cage.v[e.a], i * 6); lp.set(cage.v[e.b], i * 6 + 3); });
+        eg = new v.THREE.BufferGeometry(); eg.setAttribute("position", new v.THREE.BufferAttribute(lp, 3));
+      } else eg = tris > 150000 ? new v.THREE.WireframeGeometry(g) : new v.THREE.EdgesGeometry(g, 1);
       const l = new v.THREE.LineSegments(eg, new v.THREE.LineBasicMaterial({ color: FMY_WIRE_COLOR }));
       l.name = "fmy-wire"; l.raycast = () => {}; l.renderOrder = 1;
       m.add(l); ud.fmyWire = l; ud.fmyWireVer = ver;
     }
+    // the colour says what is selected
+    let col = FMY_WIRE_COLOR;
+    const t = v.tree && v.tree.api, n = t && t.nodeOfObject ? t.nodeOfObject(m) : null, sel = t ? t.selected() : [];
+    if (n && sel.includes(n.id)) col = sel[sel.length - 1] === n.id ? FMY_WIRE_LEAD : FMY_WIRE_SEL;
+    if (v.mode === "poly" && m.name === "forge") col = 0x5c6f8a;      // component mode: the component display draws the cage
+    if (ud.fmyWire.material.color.getHex() !== col) ud.fmyWire.material.color.setHex(col);
   }
   v.dirty = true;
 }
