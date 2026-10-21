@@ -2012,6 +2012,10 @@ function forgeMakeView(lib, renderer, canvas) {
   if (typeof forgeGraphAttach === "function") {
     try { forgeGraphAttach(view); } catch (exc) { console.warn("forge: graph editor", exc); }
   }
+  // tool previews (the loop an Insert Edge Loop click would make, under the cursor): app/ui/forge_preview.js
+  if (typeof forgePreviewAttach === "function") {
+    try { forgePreviewAttach(); } catch (exc) { console.warn("forge: tool preview", exc); }
+  }
   // the pro viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_chrome.js
   view.lights = { hemi, key, rim };
   view.material = material;

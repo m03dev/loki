@@ -510,7 +510,8 @@ function forgeTkSyncModes() {
 
 forgeTkCommands();
 window.forgeToolkit = { run: forgeTkRun, tweak: forgeTkTweak, extrude: forgeTkExtrude, del: forgeTkDelete, tool: forgeTkTool,
-  end: forgeTkToolEnd, panel: forgeTkPanel, tools: FORGE_TK_TOOLS, state: forgeTk, select: forgeTkSelect, sel: () => forgeTk.tool };
+  end: forgeTkToolEnd, panel: forgeTkPanel, tools: FORGE_TK_TOOLS, state: forgeTk, select: forgeTkSelect, sel: () => forgeTk.tool,
+  last: () => forgeTk.last };   // the op whose Tool Settings are live (forge_preview.js previews with them)
 
 // ---------------------------------------------------------------- the In-View Editor (t: Show Manipulator Tool)
 // (owner 2026-10-21: "press t and get the tools to edit whatever action - as soon as you bridge you get them and then
