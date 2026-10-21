@@ -382,9 +382,10 @@ function forgeStage() {
     forgeBtn("undo", "Undo", "Take back the last stroke (Ctrl+Z).", () => forge.view && forge.view.undo()),
     forgeBtn("redo", "Redo", "Do it again (Ctrl+Shift+Z).", () => forge.view && forge.view.redo()),
     forgeBtn("subdivide", "Subdivide", "Split every triangle in four (curved), for finer detail.", () => forge.view && forge.view.subdivide()));
-  const out = el("div", "forge-float forge-exportbar");
+  const out = el("div", "forge-float forge-exportbar"); out.id = "forge-exportbar";   // the menubar commands select this by id
   out.append(forgeBtn("save", "Save .glb", "Save this model (sculpting and material included) as .glb in models/ - any 3D app opens it.", () => forgeSave("glb")),
     forgeBtn("file", "Save .obj", "Save it as .obj in models/ (any 3D app).", () => forgeSave("obj")),
+    forgeBtn("export", "Export\u2026", "Export with options: glTF / OBJ / STL (3D printing) / PLY, a unit scale and a name.", () => forgeExportDialog()),
     forgeBtn("folder", "Show in Files", "Open the models folder in Files.", () => {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
     }));
@@ -900,11 +901,160 @@ async function forgeLoad(name) {
   }
 }
 
-async function forgeSave(kind) {
+
+// ------------------------------------------------------------------------------------------ export
+// Formats three.js' vendored exporters do not cover (STL for printing, PLY for scan tools) - written here so
+// every export is one self-contained file. Geometry comes out of the baked mesh: positions, normals, indices.
+function forgeGeomArrays(bake, wantNormals) {
+  const g = bake.geometry;
+  if (wantNormals) g.computeVertexNormals();
+  const p = g.attributes.position;
+  if (!p) return { pos: new Float32Array(0), nrm: new Float32Array(0), idx: new Uint32Array(0) };
+  const n = p.count, pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3] = p.getX(i); pos[i * 3 + 1] = p.getY(i); pos[i * 3 + 2] = p.getZ(i);
+    if (wantNormals && g.attributes.normal) { nrm[i * 3] = g.attributes.normal.getX(i); nrm[i * 3 + 1] = g.attributes.normal.getY(i); nrm[i * 3 + 2] = g.attributes.normal.getZ(i); }
+  }
+  let idx;
+  if (g.index) idx = Uint32Array.from(g.index.array);
+  else { idx = new Uint32Array(n); for (let i = 0; i < n; i++) idx[i] = i; }
+  return { pos, nrm, idx };
+}
+
+function forgeTriNormal(pos, a, b, c) {
+  const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+  const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+  const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const L = Math.hypot(nx, ny, nz) || 1;
+  return [nx / L, ny / L, nz / L];
+}
+
+// STL: binary (80-byte header + count + 50 bytes a triangle) or the ASCII "solid" text form
+function forgeWriteStl(A, ascii, title) {
+  const { pos, idx } = A, tri = (idx.length / 3) | 0, num = (v) => (Number.isFinite(v) ? v : 0);
+  if (ascii) {
+    let out = "solid " + (title || "forge") + "\n";
+    for (let t = 0; t < tri; t++) {
+      const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3, n = forgeTriNormal(pos, a, b, c);
+      out += "  facet normal " + n.join(" ") + "\n    outer loop\n";
+      for (const o of [a, b, c]) out += "      vertex " + num(pos[o]) + " " + num(pos[o + 1]) + " " + num(pos[o + 2]) + "\n";
+      out += "    endloop\n  endfacet\n";
+    }
+    return new TextEncoder().encode(out + "endsolid " + (title || "forge") + "\n");
+  }
+  const buf = new ArrayBuffer(84 + tri * 50), dv = new DataView(buf);
+  dv.setUint32(80, tri, true);
+  let o = 84;
+  for (let t = 0; t < tri; t++) {
+    const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3, n = forgeTriNormal(pos, a, b, c);
+    for (const v of [n[0], n[1], n[2]]) { dv.setFloat32(o, num(v), true); o += 4; }
+    for (const p of [a, b, c]) for (let k = 0; k < 3; k++) { dv.setFloat32(o, num(pos[p + k]), true); o += 4; }
+    dv.setUint16(o, 0, true); o += 2;
+  }
+  return new Uint8Array(buf);
+}
+
+// PLY: binary little-endian, xyz + normals per vertex and a per-face index list
+function forgeWritePly(A, title) {
+  const { pos, nrm, idx } = A, n = pos.length / 3, tri = (idx.length / 3) | 0;
+  let h = "ply\nformat binary_little_endian 1.0\ncomment made by Forge\ncomment " + (title || "forge") + "\n";
+  h += "element vertex " + n + "\nproperty float x\nproperty float y\nproperty float z\nproperty float nx\nproperty float ny\nproperty float nz\n";
+  h += "element face " + tri + "\nproperty list uchar uint vertex_indices\nend_header\n";
+  const head = new TextEncoder().encode(h), vbytes = n * 24, fbytes = tri * 13;
+  const out = new Uint8Array(head.length + vbytes + fbytes);
+  out.set(head, 0);
+  const dv = new DataView(out.buffer, head.length, vbytes + fbytes);
+  let o = 0;
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 3; k++) { dv.setFloat32(o, pos[i * 3 + k], true); o += 4; }
+    for (let k = 0; k < 3; k++) { dv.setFloat32(o, nrm[i * 3 + k] || 0, true); o += 4; }
+  }
+  for (let t = 0; t < tri; t++) {
+    out[head.length + o] = 3; o += 1;
+    dv.setUint32(o, idx[t * 3], true); dv.setUint32(o + 4, idx[t * 3 + 1], true); dv.setUint32(o + 8, idx[t * 3 + 2], true); o += 12;
+  }
+  return out;
+}
+
+// the Export options dialog: format, name, a unit scale, and the STL text mode. One button exports it.
+const forgeExport = { fmt: "glb", scale: "1", stlAscii: false, dlg: null };
+const FORGE_EXPORT_FMTS = [
+  ["glb", "glTF (.glb)", "Binary glTF - geometry, vertex colours and the material in one file (any 3D app)."],
+  ["obj", "Wavefront (.obj)", "Geometry only - the format every tool reads."],
+  ["stl", "STL (.stl)", "Faceted triangles with per-face normals, for 3D printing and CAD."],
+  ["ply", "PLY (.ply)", "Binary point/face file with normals - what scan and print tools expect."],
+];
+function forgeExportDialog() {
+  const host = document.getElementById("forge");
+  if (!host) return;
+  if (!forge.view || !forge.view.sm) { forgeSay("Make or open a model first.", true); return; }
+  let dlg = forgeExport.dlg;
+  if (!dlg) {
+    dlg = el("div", "forge-float forge-exportdlg"); dlg.id = "forge-exportdlg";
+    const head = el("div", "fx-head"); head.append(el("b", "", "Export"));
+    const x = el("button", "mini forge-btn", "\u00d7"); x.type = "button"; x.dataset.icon = "close"; x.dataset.tipName = "Close";
+    x.addEventListener("click", () => { dlg.hidden = true; });
+    head.append(x);
+    const fmts = el("div", "fx-fmts"); fmts.id = "forge-export-fmts";
+    for (const [id, label, what] of FORGE_EXPORT_FMTS) {
+      const b = forgeBtn(id, label, what, () => { forgeExport.fmt = id; forgeExportRender(); });
+      b.dataset.fmt = id; fmts.append(b);
+    }
+    const nameRow = el("label", "fx-row"); nameRow.append(el("span", "", "Name"));
+    const name = el("input", "fx-name"); name.id = "forge-export-name"; name.type = "text"; name.setAttribute("aria-label", "File name");
+    name.addEventListener("input", () => { forgeExport.name = name.value; });
+    nameRow.append(name);
+    const scaleRow = el("label", "fx-row"); scaleRow.append(el("span", "", "Scale"));
+    const scale = el("input", "fx-scale"); scale.id = "forge-export-scale"; scale.type = "number"; scale.min = "0.001"; scale.step = "0.1"; scale.value = "1";
+    scale.addEventListener("input", () => { forgeExport.scale = scale.value; });
+    scaleRow.append(scale, el("em", "", "model units per metre"));
+    const stlRow = el("div", "fx-row fx-stlrow"); stlRow.id = "forge-export-stlrow"; stlRow.append(el("span", "", "STL"));
+    for (const [ascii, label] of [[false, "Binary"], [true, "ASCII"]]) {
+      const b = forgeBtn("file", label, label + " STL: binary is smaller and exact, ASCII is readable text.", () => { forgeExport.stlAscii = ascii; forgeExportRender(); });
+      b.dataset.stl = ascii ? "ascii" : "binary"; stlRow.append(b);
+    }
+    const info = el("div", "fx-info"); info.id = "forge-export-info";
+    const foot = el("div", "fx-foot");
+    const cancel = el("button", "mini forge-btn", "Cancel"); cancel.type = "button"; cancel.addEventListener("click", () => { dlg.hidden = true; });
+    const go = el("button", "mini forge-btn fx-go", "Export"); go.type = "button"; go.id = "forge-export-go";
+    go.addEventListener("click", () => { dlg.hidden = true; forgeSave(forgeExport.fmt === "stl" && forgeExport.stlAscii ? "stl-ascii" : forgeExport.fmt, { scale: forgeExport.scale }); });
+    foot.append(cancel, go);
+    dlg.append(head, fmts, nameRow, scaleRow, stlRow, info, foot);
+    host.append(dlg);
+    forgeExport.dlg = dlg;
+  }
+  const sm = forge.view.sm;
+  forgeExport.name = (forgeExport.name || "").trim() || (forge.model || "model.glb").replace(/\.(glb|gltf|obj|stl|ply)$/i, "").replace(/-sculpt(-\d+)?$/, "") + "-sculpt";
+  document.getElementById("forge-export-name").value = forgeExport.name;
+  dlg.hidden = false;
+  forgeExportRender();
+}
+function forgeExportRender() {
+  const dlg = forgeExport.dlg || document.getElementById("forge-exportdlg");
+  if (!dlg) return;
+  const fmt = forgeExport.fmt;
+  dlg.querySelectorAll("[data-fmt]").forEach((b) => b.classList.toggle("on", b.dataset.fmt === fmt));
+  dlg.querySelectorAll("[data-stl]").forEach((b) => b.classList.toggle("on", (b.dataset.stl === "ascii") === !!forgeExport.stlAscii));
+  const stlRow = document.getElementById("forge-export-stlrow");
+  if (stlRow) stlRow.style.display = fmt === "stl" ? "" : "none";
+  const info = document.getElementById("forge-export-info");
+  const sm = forge.view && forge.view.sm;
+  if (info && sm) {
+    const tris = (sm.idx ? sm.idx.length : 0) / 3 | 0;
+    info.textContent = (sm.n || 0).toLocaleString() + " vertices, " + tris.toLocaleString() + " triangles  \u00b7  scale " + (forgeExport.scale || "1");
+  }
+}
+
+async function forgeSave(kind, opts) {
+  opts = opts || {};
   if (!forge.view || !forge.view.sm) { forgeSay("Nothing to save yet.", true); return; }
-  const base = (forge.model || "model.glb").replace(/\.glb$/i, "").replace(/-sculpt(-\d+)?$/, "") + "-sculpt." + kind;
+  const ext = kind === "stl-ascii" ? "stl" : kind;
+  const given = opts.name || forgeExport.name;
+  const stem = (given && given.trim() ? given.trim() : (forge.model || "model.glb").replace(/\.(glb|gltf|obj|stl|ply)$/i, "").replace(/-sculpt(-\d+)?$/, "") + "-sculpt")
+    .replace(/\.(glb|gltf|obj|stl|ply)$/i, "").replace(/[^\w.-]+/g, "_") || "model";
+  const base = stem + "." + ext;
   let data;
-  try { data = await forge.view.exportFile(kind); } catch (exc) { forgeSay("Export failed: " + exc.message, true); return; }
+  try { data = await forge.view.exportFile(kind, opts); } catch (exc) { forgeSay("Export failed: " + exc.message, true); return; }
   const resp = await fetch("/forge/save?name=" + encodeURIComponent(base), {
     method: "POST", headers: { Authorization: "Bearer " + state.token, "Content-Type": "application/octet-stream" }, body: data,
   }).catch(() => null);
@@ -1403,11 +1553,17 @@ function forgeMakeView(lib, renderer, canvas) {
     view.dirty = true;
   };
   // export with three.js' own exporters (GLTFExporter binary / OBJExporter); my writer is only the fallback
-  view.exportFile = async (kind) => {
+  view.exportFile = async (kind, opts) => {
+    opts = opts || {};
+    const sc = Number(opts.scale) > 0 ? Number(opts.scale) : 1;
     const bake = new THREE.Mesh(mesh.geometry.clone(), material.clone());
     bake.geometry.applyMatrix4(holder.matrixWorld);
-    bake.name = "forge";
+    if (sc !== 1) bake.geometry.applyMatrix4(new THREE.Matrix4().makeScale(sc, sc, sc));
+    const title = ((opts.name || forgeExport.name || "forge").replace(/\.[a-z0-9]+$/i, "").replace(/[^\w.-]+/g, "_") || "forge");
+    bake.name = title;
     if (kind === "obj") return new TextEncoder().encode(new lib.OBJExporter().parse(bake));
+    if (kind === "stl" || kind === "stl-ascii") return forgeWriteStl(forgeGeomArrays(bake, false), kind === "stl-ascii", title);
+    if (kind === "ply") return forgeWritePly(forgeGeomArrays(bake, true), title);
     try {
       const out = await new lib.GLTFExporter().parseAsync(bake, { binary: true, maxTextureSize: 4096 });
       return new Uint8Array(out);

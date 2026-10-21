@@ -475,6 +475,7 @@ function forgeProCommands() {
     creature: ["Creature", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "creature"); }],
     winCreature: ["Creature Editor", () => { if (typeof forgeCreatureDock === "function") { forgeCreatureDock("open"); return "Creature Editor open (its bar: fold, float, close)."; } forgeProPanel("create", true); forgeProCall("forgeWay", "creature"); return ""; }],
     save: ["Save .glb", () => { document.querySelector('#forge-exportbar [data-icon="save"]')?.click(); }],
+    export: ["Export\u2026", () => { if (typeof forgeExportDialog !== "function") return "Open Forge first."; forgeExportDialog(); return "Pick a format (glTF / OBJ / STL / PLY), a unit scale and a name."; }],
     close: ["Close Forge", () => forgeProCall("forgeClose")],
     panelModel: ["Create panel", () => forgeProPanel("create")],
     panelMaterials: ["Materials", () => forgeProPanel("materials")],
@@ -645,7 +646,7 @@ function forgeProMarkHover(x, y) {
 // open marking menus (press, flick, release). Every command in Forge is in here - the panels are optional.
 const FORGE_PRO_ROWS = [
   ["Recent Commands", []],                      // filled from what you ran last
-  ["File", ["save", "saveObj", "close"]],
+  ["File", ["save", "saveObj", "export", "close"]],
   ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
   ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
