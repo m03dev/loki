@@ -179,10 +179,12 @@ async def main():
             await E("forgeProRun(forge.view, 'undo')")
             await E("forge.view.setSelMode('edge'); forge.view.selectItems('edge', [%d], 'set')" % e0)
             await page.keyboard.press("Control+b")
-            bev = await E("""() => ({ faces: forge.view.poly.f.length, hist: window.forgeHistory.list().map((h) => h.node || h.kind),
-              settings: [...document.querySelectorAll('#forge-tk-settings input[type=range]')].length })""")
-            check("Ctrl+B bevels the edge: a new face, a polyBevel step in INPUTS, and its settings in Tool Settings",
-                  bev["faces"] == f0 + 1 and "polyBevel" in bev["hist"] and bev["settings"] >= 1, bev)
+            bev = await E("""() => { const P = window.ForgePoly, T = P.topology(forge.view.poly); return {
+              faces: forge.view.poly.f.length, hist: window.forgeHistory.list().map((h) => h.node || h.kind),
+              settings: [...document.querySelectorAll('#forge-tk-settings input[type=range]')].length,
+              closed: T.edges.every((e) => e.faces.length === 2) }; }""")
+            check("Ctrl+B bevels the edge: a new face, a polyBevel step in INPUTS, its settings in Tool Settings, and every edge still on two faces (Ziva's check)",
+                  bev["faces"] == f0 + 1 and "polyBevel" in bev["hist"] and bev["settings"] >= 1 and bev["closed"], bev)
             moved = await E("""() => { const before = JSON.stringify(forge.view.poly.v); window.forgeToolkit.tweak('fraction', 0.2);
               return [JSON.stringify(forge.view.poly.v) !== before, forge.view.poly.f.length, forge.view.undoStack.length]; }""")
             check("changing Fraction redoes the bevel in place (same faces, new positions, no new undo step)",

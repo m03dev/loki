@@ -383,8 +383,20 @@ function forgeEditAttach(view, ctx) {
     if (!seeds.length) seeds = [...P.flushSelection(view.poly, T, { v: [...ed.sel.v], e: [], f: [...ed.sel.f] }, "edge").e];
     if (!seeds.length) return 0;
     const out = new Set();
+    const dirOf = (ei) => { const e = T.edges[ei]; const d = [0, 1, 2].map((k) => view.poly.v[e.b][k] - view.poly.v[e.a][k]); const l = Math.hypot(d[0], d[1], d[2]) || 1; return [d[0] / l, d[1] / l, d[2] / l]; };
     for (const ei of seeds) {
-      const got = kind === "ring" ? P.edgeRing(view.poly, T, ei).edges : P.edgeLoop(view.poly, T, ei);
+      let got;
+      if (kind === "ring") got = P.edgeRing(view.poly, T, ei).edges;
+      else {
+        got = P.edgeLoop(view.poly, T, ei);
+        // (Ziva, Mac, 2026-10-21) a loop needs valence-4 vertices; where none exists (a cube corner is a 3-pole) the
+        // standard tools fall back to the edge ring - the belt of edges around the pick; if a nearby edit stopped the
+        // ring walk early, the edges parallel to the pick
+        if (got.length < 3) {
+          got = P.edgeRing(view.poly, T, ei).edges;
+          if (got.length < 3) { const d0 = dirOf(ei); got = T.edges.map((e, i) => i).filter((i) => { const d = dirOf(i); return Math.abs(d0[0] * d[0] + d0[1] * d[1] + d0[2] * d[2]) > 0.98; }); }
+        }
+      }
       for (const x of got) out.add(x);
     }
     if (ed.mode !== "edge" && view.setSelMode) view.setSelMode("edge");

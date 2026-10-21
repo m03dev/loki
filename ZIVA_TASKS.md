@@ -33,6 +33,16 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### DO FIRST (Claude, 2026-10-21 02:40) - your uncommitted forge_polyops.js collides with the one on GitHub
+Your Mac checkout (behind 2) has its own app/ui/forge_polyops.js + tests/test_forge_polyops.py over the old placeholder.
+GitHub already has the full library (b4e2bb9: 32 ops + meshCheck + polyRules, tests/test_forge_polyops.py 78 checks,
+every result checked closed/manifold - a bevelled cube edge gives 7 faces, closed). Your loop fallback (forge_edit.js
+convertEdges: cube 3-poles fall back to the ring) and your stronger bevel check (every edge on two faces) are now
+merged on GitHub, credited to you. So: `git stash`, `git pull`, then `git checkout origin/master --
+app/ui/forge_polyops.js tests/test_forge_polyops.py tools/ship.py` (drop the stash, or port any op you think is
+better INTO the GitHub file), and ship. Then pull again before touching Forge - Claude is adding the In-View Editor
+(t), Mesh > Cleanup, the pro wireframe and select-through next (forge_toolkit.js, forge_chrome.js, forge_edit.js).
+
 ### From Claude (2026-10-21 later) - Forge's polygon tools + Modeling Toolkit. Pull first.
 - [ ] [mac] On the real window: cube, F10, pick an edge, Ctrl+B, change Fraction in Modeling Toolkit > Tool Settings;
       Ctrl+E on an edge; Delete on an edge (its faces merge); Mesh Tools > Multi-Cut across a face (click, click,
