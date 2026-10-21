@@ -153,16 +153,25 @@ void BrushEngine::beginStroke(const Brush& b, const Dab& d) {
     pendingRefit_.clear();
     inst_.clear();
     // Symmetry: every subset of enabled axes is one mirror instance (1, 2, 4 or 8).
+    // Radial: each of those is repeated `radial` times around the object-space axis.
+    const int rad = b.radial > 1 ? b.radial : 1;
+    const Vec3 raxis = b.radialAxis == 0 ? Vec3{1, 0, 0} : (b.radialAxis == 2 ? Vec3{0, 0, 1} : Vec3{0, 1, 0});
+    const float kTau = 6.283185307179586f;
     for (int mask = 0; mask < 8; ++mask) {
         if ((mask & ~b.symmetry) != 0) continue;
-        Instance in;
-        in.mirror = {(mask & 1) ? -1.f : 1.f, (mask & 2) ? -1.f : 1.f, (mask & 4) ? -1.f : 1.f};
-        inst_.push_back(in);
+        for (int k = 0; k < rad; ++k) {
+            Instance in;
+            in.mirror = {(mask & 1) ? -1.f : 1.f, (mask & 2) ? -1.f : 1.f, (mask & 4) ? -1.f : 1.f};
+            in.axis = raxis;
+            in.ang = rad > 1 ? kTau * (float)k / (float)rad : 0.0f;
+            inst_.push_back(in);
+        }
     }
 
     for (Instance& in : inst_) {
-        const Vec3 m = in.mirror;
-        auto M = [&](const Vec3& v) { return Vec3{v.x * m.x, v.y * m.y, v.z * m.z}; };
+        const Vec3 m = in.mirror, ax = in.axis;
+        const float ang = in.ang;
+        auto M = [&](const Vec3& v) { Vec3 d{v.x * m.x, v.y * m.y, v.z * m.z}; return ang != 0.0f ? rotate(d, ax, ang) : d; };
         in.startPos = M(d.position);
         in.startNormal = normalize(M(d.normal));
         in.grabVerts.clear();
@@ -537,8 +546,9 @@ void BrushEngine::smoothRegion(const std::vector<int>& vs, const std::vector<flo
 }
 
 void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
-    const Vec3 m = in.mirror;
-    auto M = [&](const Vec3& v) { return Vec3{v.x * m.x, v.y * m.y, v.z * m.z}; };
+    const Vec3 m = in.mirror, ax = in.axis;
+    const float ang = in.ang;
+    auto M = [&](const Vec3& v) { Vec3 q{v.x * m.x, v.y * m.y, v.z * m.z}; return ang != 0.0f ? rotate(q, ax, ang) : q; };
     Dab d = dIn;
     d.position = M(dIn.position);
     d.normal = normalize(M(dIn.normal));

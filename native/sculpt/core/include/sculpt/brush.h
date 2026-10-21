@@ -113,6 +113,11 @@ struct Brush {
 
     // Symmetry: bit 0 = X, 1 = Y, 2 = Z (mirror across object-space planes)
     int symmetry = 0;
+    // Radial symmetry: radial > 1 repeats the dab `radial` times around an
+    // object-space axis at 360/radial degree steps (0 or 1 = off). radialAxis:
+    // 0 = X, 1 = Y (default), 2 = Z. Composes with the mirror planes.
+    int radial = 0;
+    int radialAxis = 1;
 };
 
 // One brush sample.
@@ -171,8 +176,10 @@ public:
                       int iterations, float volume, bool tangentialOnly);
 
 private:
-    struct Instance {          // one per symmetry mirror
+    struct Instance {          // one per symmetry copy (a mirror plane and / or a rotation about an axis)
         Vec3 mirror{1, 1, 1};
+        Vec3 axis{0, 1, 0};    // radial symmetry: the object-space axis the dab spins about
+        float ang = 0.0f;      // ...and the angle (0 = mirror only)
         std::vector<int> grabVerts;
         std::vector<float> grabWeights;
         Vec3 startPos, startNormal;

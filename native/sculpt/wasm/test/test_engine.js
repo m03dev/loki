@@ -57,6 +57,23 @@ const ray = (x, y) => ({ origin: [x, y, 5], dir: [0, 0, -1] });
   check(d.some(i => P[i * 3] < 0) && d.some(i => P[i * 3] > 0), "X symmetry");
   e.setSymmetry(0);
 
+  // Radial symmetry: `radial` copies of the same dab about an object-space axis (here Y)
+  e.setBrush({ kernel: "Standard", strength: 0.8 });
+  e.setRadial(0, 1);
+  e.press(ray(0.6, 0.25), 1, 0.2); const m1 = e.takeDirty().length; e.release(); e.undo();
+  e.setRadial(4, 1);
+  e.press(ray(0.6, 0.25), 1, 0.2); const d4 = e.takeDirty(); e.release();
+  const P4 = e.positions();
+  let cx = 0, cz = 0; const sect = new Set();
+  for (const i of d4) {
+    cx += P4[i * 3]; cz += P4[i * 3 + 2];
+    sect.add(Math.floor(((Math.atan2(P4[i * 3 + 2], P4[i * 3]) + Math.PI + Math.PI / 4) % (2 * Math.PI)) / (Math.PI / 2)));
+  }
+  const n4 = d4.length || 1;
+  check(d4.length > m1 * 1.5 && Math.abs(cx / n4) < 0.25 && sect.size >= 3,
+    "radial symmetry: 4 copies about Y (" + m1 + " -> " + d4.length + " verts, " + sect.size + " sectors)");
+  e.undo(); e.setRadial(0, 1);
+
   const v0 = e.topologyVersion, n0 = e.triCount;
   e.setDyntopo(true, 0.05);
   e.setBrush({ kernel: "Standard", strength: 0.5 });

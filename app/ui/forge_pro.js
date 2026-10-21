@@ -359,6 +359,13 @@ const forgeProCall = (name, ...a) => (forgeProHas(name) ? window[name](...a) : u
 
 // the command table: id -> [label, run(v)] ; `null` run = not in Forge yet (shown greyed, with why)
 // Symmetry bitmask helpers (1 X, 2 Y, 4 Z) - the sculpt engine and the posing tools mirror across every active plane
+function forgeProRadial(v, n, axis) {
+  if (!v || !v.brush) return "";
+  v.brush.radial = n | 0;
+  if (axis != null) v.brush.radialAxis = axis | 0;
+  return "Symmetry: " + (v.brush.radial > 1 ? "Radial " + v.brush.radial + " " + ["X", "Y", "Z"][v.brush.radialAxis | 0] : "Off") + ".";
+}
+
 function forgeProSym(v, bits) {
   if (!v || !v.brush) return "";
   v.brush.symBits = bits | 0;
@@ -435,6 +442,14 @@ function forgeProCommands() {
     symZ: ["Symmetry Z", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 4)],
     symOff: ["Symmetry Off", (v) => forgeProSym(v, 0)],
     symModel: ["Modelling Symmetry", (v) => { if (!v || !v.brush) return ""; v.brush.symModel = !v.brush.symModel; return "Modelling symmetry " + (v.brush.symModel ? "on" : "off") + "."; }],
+    symRadialOff: ["Radial Symmetry Off", (v) => forgeProRadial(v, 0)],
+    symRadial3: ["Radial Symmetry 3", (v) => forgeProRadial(v, 3)],
+    symRadial4: ["Radial Symmetry 4", (v) => forgeProRadial(v, 4)],
+    symRadial6: ["Radial Symmetry 6", (v) => forgeProRadial(v, 6)],
+    symRadial8: ["Radial Symmetry 8", (v) => forgeProRadial(v, 8)],
+    symAxisX: ["Radial Axis X", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 0)],
+    symAxisY: ["Radial Axis Y", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 1)],
+    symAxisZ: ["Radial Axis Z", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 2)],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -661,7 +676,7 @@ const FORGE_PRO_ROWS = [
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
-  ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel"]],
+  ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial4", "symRadial6", "symRadial8"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

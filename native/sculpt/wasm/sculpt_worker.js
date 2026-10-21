@@ -107,6 +107,7 @@ onmessage = (ev) => {
         E.setBrush(m.preset);
         E.setStrength(m.strength);
         E.setSymmetry(m.symmetry);
+        if (m.radial != null) E.setRadial(m.radial, m.radialAxis == null ? 1 : m.radialAxis);
         // detail relative to the brush (default), or a fixed edge length (the window turns "N pixels on screen"
         // into one at the press point: screen-relative detail)
         E.setDyntopo(!!(m.dyn && m.dyn.on), (m.dyn && m.dyn.detail) || 0.12, !(m.dyn && m.dyn.relative === false),

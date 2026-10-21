@@ -61,6 +61,12 @@ Measured on a 1.05M-vertex sphere, Clay r = 0.3 (node 22, one thread), before ->
   Screen detail turns dynamic detail into "N pixels on screen" (zoom in = finer).
 - New presets: Bulge, Hook, Chisel, Tube, Insert Sphere (Basic), Smooth Classic, Smooth Volume, Insert Cube.
 
+- **Radial symmetry** (`radial` / `radialAxis` on the Brush, `ks_brush_radial`, `setRadial`): the dab is repeated
+  `radial` times around an object-space axis at 360/radial degree steps, composing with the mirror planes; the
+  window's Symmetry menu (right-click the status button) sets 3 / 4 / 6 / 8 and the axis. Checked by
+  `native/sculpt/wasm/test/test_engine.js` ("radial symmetry: 4 copies about Y").
+
+
 `build.sh` now also recompiles every object when any engine header changed (before, a changed class layout linked
 stale objects into a module that crashed); the committed `sculpt.wasm` is byte-identical to a fresh build of this
 source with wasi-sdk 25.

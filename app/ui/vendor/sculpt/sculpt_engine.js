@@ -113,6 +113,7 @@
     setStrength(v) { this.x.ks_brush_strength(v); }
     setInvert(on) { this.x.ks_brush_invert(on ? 1 : 0); }
     setSymmetry(bits) { this.x.ks_brush_symmetry(bits | 0); }  // 1 X, 2 Y, 4 Z
+    setRadial(count, axis) { this.x.ks_brush_radial(count | 0, axis | 0); }  // `count` copies about axis 0 X, 1 Y, 2 Z
     setColor(r, g, b) { this.x.ks_brush_color(r, g, b); }
     get spacing() { return this.x.ks_brush_spacing(); }
     get isGrab() { return !!this.x.ks_brush_is_grab(); }

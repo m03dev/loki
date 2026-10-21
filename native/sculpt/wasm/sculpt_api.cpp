@@ -269,6 +269,8 @@ KS_EXPORT(ks_brush_json) int ks_brush_json(const char* json, int len) {
     Brush b;  // presets start from defaults; size/strength/symmetry are kept
     b.radius = S->brush.radius;
     b.symmetry = S->brush.symmetry;
+    b.radial = S->brush.radial;
+    b.radialAxis = S->brush.radialAxis;
     std::string err;
     if (!applyPresetJson(std::string(json, (size_t)len), b, &err)) { S->text = err; return 0; }
     S->brush = b;
@@ -277,6 +279,7 @@ KS_EXPORT(ks_brush_json) int ks_brush_json(const char* json, int len) {
 KS_EXPORT(ks_brush_strength) void ks_brush_strength(float v) { if (S) S->brush.strength = v; }
 KS_EXPORT(ks_brush_invert) void ks_brush_invert(int v) { if (S) S->brush.invert = v != 0; }
 KS_EXPORT(ks_brush_symmetry) void ks_brush_symmetry(int bits) { if (S) S->brush.symmetry = bits; }
+KS_EXPORT(ks_brush_radial) void ks_brush_radial(int count, int axis) { if (S) { S->brush.radial = count; S->brush.radialAxis = axis; } }
 KS_EXPORT(ks_brush_color) void ks_brush_color(float r, float g, float b) { if (S) S->brush.color = Vec3(r, g, b); }
 KS_EXPORT(ks_brush_spacing) float ks_brush_spacing() { return S ? S->brush.spacing : 0.1f; }
 KS_EXPORT(ks_brush_is_grab) int ks_brush_is_grab() { return S && kernelIsGrab(S->brush.kernel) ? 1 : 0; }

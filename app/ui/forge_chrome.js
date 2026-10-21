@@ -69,7 +69,13 @@ const FMY_SVG = {
   home: '<path d="M4 12l8-7 8 7M7 10v9h10v-9"/>',
 };
 // the symmetry bitmask as text: 1 X, 2 Y, 4 Z (shared by the status button and the periodic label update)
-function fmySymText(bits) { bits = bits | 0; return bits ? "Object " + ["X", "Y", "Z"].filter((_, i) => bits & (1 << i)).join("") : "Off"; }
+function fmySymText(bits, radial, axis) {
+  bits = bits | 0; radial = radial | 0;
+  const out = [];
+  if (bits) out.push("Object " + ["X", "Y", "Z"].filter((_, i) => bits & (1 << i)).join(""));
+  if (radial > 1) out.push("Radial " + radial + " " + (["X", "Y", "Z"][axis | 0] || "Y"));
+  return out.length ? out.join(" \u00b7 ") : "Off";
+}
 
 function fmySvg(name) {
   return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
@@ -327,11 +333,17 @@ function forgeProChrome() {
     ev.preventDefault();
     const v = fmyView(), t = v && v.tree && v.tree.api; if (!v || !t || !t.popMenu) return;
     const tick = (b) => ((v.brush.symBits & b) ? "\u2713 " : "\u2003");
+    const rad = (n) => { v.brush.radial = n | 0; if (typeof forgeSay === "function") forgeSay("Symmetry: " + fmySymText(v.brush.symBits, n, v.brush.radialAxis) + "."); };
+    const axisName = (ax) => { v.brush.radialAxis = ax | 0; if (typeof forgeSay === "function") forgeSay("Symmetry: " + fmySymText(v.brush.symBits, v.brush.radial, ax) + "."); };
     t.popMenu(symm, [
       [tick(1) + "X (mirror across YZ)", () => setSym(v.brush.symBits ^ 1)],
       [tick(2) + "Y (mirror across XZ)", () => setSym(v.brush.symBits ^ 2)],
       [tick(4) + "Z (mirror across XY)", () => setSym(v.brush.symBits ^ 4)],
       ["Symmetry: Off", () => setSym(0)],
+      ["Radial 3", () => rad(3)], ["Radial 4", () => rad(4)], ["Radial 6", () => rad(6)], ["Radial 8", () => rad(8)], ["Radial Off", () => rad(0)],
+      [(v.brush.radialAxis === 0 ? "\u2713 " : "\u2003") + "Radial axis X", () => axisName(0)],
+      [(v.brush.radialAxis === 1 ? "\u2713 " : "\u2003") + "Radial axis Y", () => axisName(1)],
+      [(v.brush.radialAxis === 2 ? "\u2713 " : "\u2003") + "Radial axis Z", () => axisName(2)],
     ]);
   });
   const symLabel = fmyEl("span", "fmy-symlabel", "Symmetry: Off"); symLabel.id = "fmy-symlabel";
@@ -458,8 +470,8 @@ function fmySync() {
     set('#fmy-toolbox [data-pro-id="single"]', !v.quad);
     set('#fmy-toolbox [data-pro-id="four"]', !!v.quad);
     const sym = document.getElementById("fmy-symlabel");
-    if (sym) sym.textContent = "Symmetry: " + fmySymText(v.brush && v.brush.symBits);
-    set("#fmy-symm", !!(v.brush && v.brush.symBits));
+    if (sym) sym.textContent = "Symmetry: " + fmySymText(v.brush && v.brush.symBits, v.brush && v.brush.radial, v.brush && v.brush.radialAxis);
+    set("#fmy-symm", !!(v.brush && (v.brush.symBits || (v.brush.radial | 0) > 1)));
     const ms = document.getElementById("fmy-menuset");
     if (ms && document.activeElement !== ms) ms.value = v.mode === "sculpt" ? "Sculpting" : "Modeling";
     const camName = document.getElementById("fmy-camname");

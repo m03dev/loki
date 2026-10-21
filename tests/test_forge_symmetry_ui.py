@@ -90,7 +90,8 @@ async def main():
         await page.click("#fmy-symm", button="right")
         await page.wait_for_timeout(80)
         menu = await E("[...document.querySelectorAll('.forge-pm-pop .forge-pm-item')].map((b) => b.textContent.trim())")
-        check("right-click on the symmetry button opens the X / Y / Z / Off menu", len(menu) == 4 and "Off" in menu[-1] and "Z" in menu[2], menu)
+        check("right-click on the symmetry button opens the X / Y / Z / Off + radial menu",
+              len(menu) >= 8 and menu[0].endswith("X (mirror across YZ)") and menu[3].endswith("Off") and any("Radial 4" in m for m in menu), menu)
         await page.keyboard.press("Escape")
         await E("document.querySelectorAll('.forge-pm-pop').forEach((x) => x.remove())")
 
