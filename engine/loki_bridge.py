@@ -1026,6 +1026,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import home_projects  # pylint: disable=import-outside-toplevel
             self._send_json(*home_projects.route(self.server.state, route))
             return
+        if route.startswith("/render/"):   # Render Studio (engine/ai_renderer.py)
+            import ai_renderer  # pylint: disable=import-outside-toplevel
+            self._send_forge(ai_renderer.handle_get(self.server.state, self.path))
+            return
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             q = {k: (v[0] if v else "") for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1371,6 +1375,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(413, {"ok": False, "error": "Request body is too large."})
                 return
             self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
+            return
+        if route.startswith("/render/"):   # Render Studio: jobs, passes, ComfyUI (engine/ai_renderer.py)
+            import ai_renderer  # pylint: disable=import-outside-toplevel
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > ai_renderer.MAX_BODY:
+                self._send_json(413, {"ok": False, "error": "Request body is too large."})
+                return
+            self._send_forge(ai_renderer.handle_post(self.server.state, self.path, self.rfile.read(length)))
             return
         if route == "/files/upload":   # session 29: a dropped file's raw bytes (not JSON; engine/files_api.py)
             import files_api  # pylint: disable=import-outside-toplevel

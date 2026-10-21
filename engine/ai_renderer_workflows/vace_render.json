@@ -1,0 +1,523 @@
+{
+ "name": "vace_render",
+ "version": "1.0",
+ "label": "AI Renderer (Wan VACE + SkyReels R2V, GGUF)",
+ "license": "AGPL-3.0 (LOKI's own graph, written from the node sources; docs/AI_RENDERER.md)",
+ "about": "Forge's depth + line-art passes (blended, line art over a share of depth) drive WanVaceToVideo; the start image is VACE's reference_image; the merged VACE/SkyReels model is loaded as GGUF.",
+ "sources": {
+  "comfyui": "comfyanonymous/ComfyUI@7a28332047b6af638dc6c7f72ef3481a718769fd",
+  "gguf": "city96/ComfyUI-GGUF@6ea2651e7df66d7585f6ffee804b20e92fb38b8a"
+ },
+ "custom_nodes": {
+  "UnetLoaderGGUF": {
+   "repo": "https://github.com/city96/ComfyUI-GGUF",
+   "license": "Apache-2.0",
+   "commit": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a"
+  }
+ },
+ "constraints": {
+  "frames": {
+   "param": "frames",
+   "rule": "4n+1",
+   "min": 1,
+   "source": "comfy_extras/nodes_wan.py WanVaceToVideo length step=4, latent_length=((length-1)//4)+1"
+  },
+  "size_step": 16,
+  "size_min": 16,
+  "size_max": 16384
+ },
+ "uploads": {
+  "depth": {
+   "node": "7",
+   "input": "image",
+   "pass": "depth",
+   "format": "apng",
+   "frames": true
+  },
+  "lineart": {
+   "node": "8",
+   "input": "image",
+   "pass": "lineart",
+   "format": "apng",
+   "frames": true
+  },
+  "start": {
+   "node": "10",
+   "input": "image",
+   "pass": "start",
+   "format": "png",
+   "frames": false
+  }
+ },
+ "control_switch": {
+  "target": [
+   "11",
+   "control_video"
+  ],
+  "both": [
+   "9",
+   0
+  ],
+  "depth": [
+   "7",
+   0
+  ],
+  "lineart": [
+   "8",
+   0
+  ],
+  "drop": {
+   "depth": [
+    "8",
+    "9"
+   ],
+   "lineart": [
+    "7",
+    "9"
+   ]
+  }
+ },
+ "params": {
+  "prompt": {
+   "node": "5",
+   "input": "text",
+   "type": "string",
+   "default": ""
+  },
+  "negative": {
+   "node": "6",
+   "input": "text",
+   "type": "string",
+   "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+  },
+  "width": {
+   "node": "11",
+   "input": "width",
+   "type": "int",
+   "default": 832,
+   "min": 16,
+   "max": 16384,
+   "step": 16
+  },
+  "height": {
+   "node": "11",
+   "input": "height",
+   "type": "int",
+   "default": 480,
+   "min": 16,
+   "max": 16384,
+   "step": 16
+  },
+  "frames": {
+   "node": "11",
+   "input": "length",
+   "type": "int",
+   "default": 81,
+   "min": 1,
+   "max": 16384,
+   "step": 4
+  },
+  "strength": {
+   "node": "11",
+   "input": "strength",
+   "type": "float",
+   "default": 1.0,
+   "min": 0.0,
+   "max": 1000.0
+  },
+  "depth_share": {
+   "node": "9",
+   "input": "blend_factor",
+   "type": "float",
+   "default": 0.2,
+   "min": 0.0,
+   "max": 1.0
+  },
+  "seed": {
+   "node": "12",
+   "input": "seed",
+   "type": "int",
+   "default": 0,
+   "min": 0,
+   "max": 18446744073709551615
+  },
+  "steps": {
+   "node": "12",
+   "input": "steps",
+   "type": "int",
+   "default": 20,
+   "min": 1,
+   "max": 10000
+  },
+  "cfg": {
+   "node": "12",
+   "input": "cfg",
+   "type": "float",
+   "default": 6.0,
+   "min": 0.0,
+   "max": 100.0
+  },
+  "sampler": {
+   "node": "12",
+   "input": "sampler_name",
+   "type": "combo",
+   "default": "uni_pc"
+  },
+  "scheduler": {
+   "node": "12",
+   "input": "scheduler",
+   "type": "combo",
+   "default": "simple"
+  },
+  "shift": {
+   "node": "4",
+   "input": "shift",
+   "type": "float",
+   "default": 8.0,
+   "min": 0.0,
+   "max": 100.0
+  },
+  "fps": {
+   "node": "15",
+   "input": "fps",
+   "type": "float",
+   "default": 16.0,
+   "min": 0.01,
+   "max": 1000.0
+  },
+  "crf": {
+   "node": "15",
+   "input": "crf",
+   "type": "float",
+   "default": 10.0,
+   "min": 0.0,
+   "max": 63.0
+  },
+  "model": {
+   "node": "1",
+   "input": "unet_name",
+   "type": "model",
+   "default": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf"
+  },
+  "prefix": {
+   "nodes": [
+    [
+     "15",
+     "filename_prefix"
+    ],
+    [
+     "17",
+     "filename_prefix"
+    ]
+   ],
+   "type": "string",
+   "default": "loki_render/job"
+  }
+ },
+ "models": [
+  {
+   "node": "1",
+   "input": "unet_name",
+   "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf",
+   "folder": "models/unet",
+   "repo": "mickmumpitz/VACE_Skyreels_V3_R2V_Merge-GGUF",
+   "revision": "57045d4ab42eb76a53bdaadb37b5d8dc923ec67b",
+   "path": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf",
+   "size": 11627589408,
+   "license": "no licence in the repo metadata; base merge Inner-Reflections/VACE_Skyreels_V3_R2V_Merge says apache-2.0, but SkyReels-V3-R2V-14B is the Skywork Community License (other)",
+   "alternatives": [
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q3_K_M.gguf",
+     "size": 8624197408
+    },
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q5_K_M.gguf",
+     "size": 13025472288
+    },
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q8_0.gguf",
+     "size": 18651410208
+    }
+   ]
+  },
+  {
+   "node": "2",
+   "input": "clip_name",
+   "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "folder": "models/text_encoders",
+   "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+   "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+   "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "size": 6735906897,
+   "license": "apache-2.0"
+  },
+  {
+   "node": "3",
+   "input": "vae_name",
+   "file": "wan_2.1_vae.safetensors",
+   "folder": "models/vae",
+   "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+   "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+   "path": "split_files/vae/wan_2.1_vae.safetensors",
+   "size": 253815318,
+   "license": "apache-2.0"
+  }
+ ],
+ "outputs": {
+  "video": "15",
+  "thumb": "17"
+ },
+ "prompt": {
+  "1": {
+   "class_type": "UnetLoaderGGUF",
+   "inputs": {
+    "unet_name": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf"
+   },
+   "_meta": {
+    "title": "Model (GGUF)"
+   }
+  },
+  "2": {
+   "class_type": "CLIPLoader",
+   "inputs": {
+    "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "type": "wan",
+    "device": "default"
+   },
+   "_meta": {
+    "title": "Text encoder"
+   }
+  },
+  "3": {
+   "class_type": "VAELoader",
+   "inputs": {
+    "vae_name": "wan_2.1_vae.safetensors"
+   },
+   "_meta": {
+    "title": "VAE"
+   }
+  },
+  "4": {
+   "class_type": "ModelSamplingSD3",
+   "inputs": {
+    "model": [
+     "1",
+     0
+    ],
+    "shift": 8.0
+   },
+   "_meta": {
+    "title": "Shift"
+   }
+  },
+  "5": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Prompt"
+   }
+  },
+  "6": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Negative prompt"
+   }
+  },
+  "7": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/depth.png"
+   },
+   "_meta": {
+    "title": "Depth pass (APNG)"
+   }
+  },
+  "8": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/lineart.png"
+   },
+   "_meta": {
+    "title": "Line-art pass (APNG)"
+   }
+  },
+  "9": {
+   "class_type": "ImageBlend",
+   "inputs": {
+    "image1": [
+     "8",
+     0
+    ],
+    "image2": [
+     "7",
+     0
+    ],
+    "blend_factor": 0.2,
+    "blend_mode": "normal"
+   },
+   "_meta": {
+    "title": "Line art + share of depth"
+   }
+  },
+  "10": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/start.png"
+   },
+   "_meta": {
+    "title": "Start / reference image"
+   }
+  },
+  "11": {
+   "class_type": "WanVaceToVideo",
+   "inputs": {
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ],
+    "width": 832,
+    "height": 480,
+    "length": 81,
+    "batch_size": 1,
+    "strength": 1.0,
+    "control_video": [
+     "9",
+     0
+    ],
+    "reference_image": [
+     "10",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "VACE"
+   }
+  },
+  "12": {
+   "class_type": "KSampler",
+   "inputs": {
+    "model": [
+     "4",
+     0
+    ],
+    "seed": 0,
+    "steps": 20,
+    "cfg": 6.0,
+    "sampler_name": "uni_pc",
+    "scheduler": "simple",
+    "positive": [
+     "11",
+     0
+    ],
+    "negative": [
+     "11",
+     1
+    ],
+    "latent_image": [
+     "11",
+     2
+    ],
+    "denoise": 1.0
+   },
+   "_meta": {
+    "title": "Sampler"
+   }
+  },
+  "13": {
+   "class_type": "TrimVideoLatent",
+   "inputs": {
+    "samples": [
+     "12",
+     0
+    ],
+    "trim_amount": [
+     "11",
+     3
+    ]
+   },
+   "_meta": {
+    "title": "Drop the reference latent"
+   }
+  },
+  "14": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "13",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Decode"
+   }
+  },
+  "15": {
+   "class_type": "SaveWEBM",
+   "inputs": {
+    "images": [
+     "14",
+     0
+    ],
+    "filename_prefix": "loki_render/job",
+    "codec": "vp9",
+    "fps": 16.0,
+    "crf": 10.0
+   },
+   "_meta": {
+    "title": "Video"
+   }
+  },
+  "16": {
+   "class_type": "ImageFromBatch",
+   "inputs": {
+    "image": [
+     "14",
+     0
+    ],
+    "batch_index": 0,
+    "length": 1
+   },
+   "_meta": {
+    "title": "First frame"
+   }
+  },
+  "17": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "images": [
+     "16",
+     0
+    ],
+    "filename_prefix": "loki_render/job"
+   },
+   "_meta": {
+    "title": "Thumbnail"
+   }
+  }
+ }
+}

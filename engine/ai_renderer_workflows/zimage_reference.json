@@ -1,0 +1,256 @@
+{
+ "name": "zimage_reference",
+ "version": "1.0",
+ "label": "Reference frame: Z-Image Turbo (text to image)",
+ "license": "AGPL-3.0 (LOKI's own graph, written from the node sources; docs/AI_RENDERER.md)",
+ "sources": {
+  "comfyui": "comfyanonymous/ComfyUI@7a28332047b6af638dc6c7f72ef3481a718769fd",
+  "example": "comfyanonymous/ComfyUI_examples@f9431bb000ce792094ff345446e22cac1ea6cef3 z_image/"
+ },
+ "about": "Makes a start / reference image from the prompt with core ComfyUI's Z-Image Turbo support (the same node set and settings as ComfyUI_examples z_image).",
+ "custom_nodes": {},
+ "constraints": {
+  "size_step": 16,
+  "size_min": 16,
+  "size_max": 16384
+ },
+ "control_switch": null,
+ "uploads": {},
+ "params": {
+  "prompt": {
+   "node": "6",
+   "input": "text",
+   "type": "string",
+   "default": ""
+  },
+  "negative": {
+   "node": "7",
+   "input": "text",
+   "type": "string",
+   "default": "blurry ugly bad"
+  },
+  "width": {
+   "node": "13",
+   "input": "width",
+   "type": "int",
+   "default": 832,
+   "min": 16,
+   "max": 16384,
+   "step": 16
+  },
+  "height": {
+   "node": "13",
+   "input": "height",
+   "type": "int",
+   "default": 480,
+   "min": 16,
+   "max": 16384,
+   "step": 16
+  },
+  "seed": {
+   "node": "3",
+   "input": "seed",
+   "type": "int",
+   "default": 0,
+   "min": 0,
+   "max": 18446744073709551615
+  },
+  "steps": {
+   "node": "3",
+   "input": "steps",
+   "type": "int",
+   "default": 9,
+   "min": 1,
+   "max": 10000
+  },
+  "prefix": {
+   "nodes": [
+    [
+     "9",
+     "filename_prefix"
+    ]
+   ],
+   "type": "string",
+   "default": "loki_render/job"
+  }
+ },
+ "models": [
+  {
+   "node": "16",
+   "input": "unet_name",
+   "file": "z_image_turbo_bf16.safetensors",
+   "folder": "models/diffusion_models",
+   "repo": "Comfy-Org/z_image_turbo",
+   "revision": "6fc90a3b1b653e935a0d175e260736de25b84df5",
+   "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
+   "size": 12309866400,
+   "license": "apache-2.0",
+   "alternatives": [
+    {
+     "file": "z_image_turbo_int8_convrot.safetensors",
+     "size": 6201001296
+    }
+   ]
+  },
+  {
+   "node": "18",
+   "input": "clip_name",
+   "file": "qwen_3_4b.safetensors",
+   "folder": "models/text_encoders",
+   "repo": "Comfy-Org/z_image_turbo",
+   "revision": "6fc90a3b1b653e935a0d175e260736de25b84df5",
+   "path": "split_files/text_encoders/qwen_3_4b.safetensors",
+   "size": 8044982048,
+   "license": "apache-2.0",
+   "alternatives": [
+    {
+     "file": "qwen_3_4b_fp8_mixed.safetensors",
+     "size": 5631994051
+    }
+   ]
+  },
+  {
+   "node": "17",
+   "input": "vae_name",
+   "file": "ae.safetensors",
+   "folder": "models/vae",
+   "repo": "Comfy-Org/z_image_turbo",
+   "revision": "6fc90a3b1b653e935a0d175e260736de25b84df5",
+   "path": "split_files/vae/ae.safetensors",
+   "size": 335304388,
+   "license": "apache-2.0"
+  }
+ ],
+ "outputs": {
+  "image": "9",
+  "thumb": "9"
+ },
+ "prompt": {
+  "3": {
+   "class_type": "KSampler",
+   "inputs": {
+    "seed": 0,
+    "steps": 9,
+    "cfg": 1.0,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "model": [
+     "16",
+     0
+    ],
+    "positive": [
+     "6",
+     0
+    ],
+    "negative": [
+     "7",
+     0
+    ],
+    "latent_image": [
+     "13",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Sampler"
+   }
+  },
+  "6": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "",
+    "clip": [
+     "18",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Prompt"
+   }
+  },
+  "7": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "blurry ugly bad",
+    "clip": [
+     "18",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Negative prompt"
+   }
+  },
+  "8": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "3",
+     0
+    ],
+    "vae": [
+     "17",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Decode"
+   }
+  },
+  "9": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "filename_prefix": "loki_render/job",
+    "images": [
+     "8",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Reference frame"
+   }
+  },
+  "13": {
+   "class_type": "EmptySD3LatentImage",
+   "inputs": {
+    "width": 832,
+    "height": 480,
+    "batch_size": 1
+   },
+   "_meta": {
+    "title": "Size"
+   }
+  },
+  "16": {
+   "class_type": "UNETLoader",
+   "inputs": {
+    "unet_name": "z_image_turbo_bf16.safetensors",
+    "weight_dtype": "default"
+   },
+   "_meta": {
+    "title": "Z-Image Turbo"
+   }
+  },
+  "17": {
+   "class_type": "VAELoader",
+   "inputs": {
+    "vae_name": "ae.safetensors"
+   },
+   "_meta": {
+    "title": "VAE"
+   }
+  },
+  "18": {
+   "class_type": "CLIPLoader",
+   "inputs": {
+    "clip_name": "qwen_3_4b.safetensors",
+    "type": "lumina2",
+    "device": "default"
+   },
+   "_meta": {
+    "title": "Text encoder"
+   }
+  }
+ }
+}

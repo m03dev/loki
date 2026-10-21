@@ -695,7 +695,9 @@ function forgeProViewportAttach(view, ctx) {
     fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true],
       // the path tracer (app/ui/forge_render.js): the viewport refining itself, and the Render window
       ...(window.ForgeRender ? ["-", ["renderPreview", "Path Traced Preview", () => window.ForgeRender.togglePreview(), () => window.ForgeRender.previewOn()],
-        ["renderDialog", "Render...", () => window.ForgeRender.openDialog(true)]] : [])], "fmy-pmb"),
+        ["renderDialog", "Render...", () => window.ForgeRender.openDialog(true)]] : []),
+      // Render Studio (app/ui/render_studio.js): this camera and the Time Slider's range, in the Render tab
+      ...(window.LokiRenderStudio && window.LokiModeBar ? ["-", ["renderStudio", "Send to Render Studio", () => window.LokiModeBar.go("render", { fromForge: true })]] : [])], "fmy-pmb"),
     fmyMenuButton("Panels", () => ["#Perspective", ["persp", "persp", look("persp"), () => view.cam === "persp"], "#Orthographic",
       ["top", "top", look("top"), () => view.cam === "top"], ["front", "front", look("front"), () => view.cam === "front"], ["side", "side", look("side"), () => view.cam === "side"],
       "-", "#Layouts", "single", "four", "-", "winOutliner", "winChannel"], "fmy-pmb"));

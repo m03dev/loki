@@ -1,0 +1,92 @@
+{
+ "name": "preprocess_lineart",
+ "version": "1.0",
+ "label": "Preprocess: line art from a beauty / viewport pass (Canny)",
+ "license": "AGPL-3.0 (LOKI's own graph, written from the node sources; docs/AI_RENDERER.md)",
+ "sources": {
+  "comfyui": "comfyanonymous/ComfyUI@7a28332047b6af638dc6c7f72ef3481a718769fd"
+ },
+ "custom_nodes": {},
+ "about": "Optional. Forge renders its own line art; this turns any beauty pass (e.g. the path-traced frames) into white-on-black edges with the core Canny node and saves them as PNG frames that LOKI packs into the line-art APNG.",
+ "constraints": {},
+ "control_switch": null,
+ "uploads": {
+  "beauty": {
+   "node": "1",
+   "input": "image",
+   "pass": "beauty",
+   "format": "apng",
+   "frames": true
+  }
+ },
+ "params": {
+  "low": {
+   "node": "2",
+   "input": "low_threshold",
+   "type": "float",
+   "default": 0.4,
+   "min": 0.01,
+   "max": 0.99
+  },
+  "high": {
+   "node": "2",
+   "input": "high_threshold",
+   "type": "float",
+   "default": 0.8,
+   "min": 0.01,
+   "max": 0.99
+  },
+  "prefix": {
+   "nodes": [
+    [
+     "3",
+     "filename_prefix"
+    ]
+   ],
+   "type": "string",
+   "default": "loki_render/job"
+  }
+ },
+ "models": [],
+ "outputs": {
+  "frames": "3"
+ },
+ "prompt": {
+  "1": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/beauty.png"
+   },
+   "_meta": {
+    "title": "Beauty pass (APNG)"
+   }
+  },
+  "2": {
+   "class_type": "Canny",
+   "inputs": {
+    "image": [
+     "1",
+     0
+    ],
+    "low_threshold": 0.4,
+    "high_threshold": 0.8
+   },
+   "_meta": {
+    "title": "Edges"
+   }
+  },
+  "3": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "images": [
+     "2",
+     0
+    ],
+    "filename_prefix": "loki_render/job"
+   },
+   "_meta": {
+    "title": "Line-art frames"
+   }
+  }
+ }
+}

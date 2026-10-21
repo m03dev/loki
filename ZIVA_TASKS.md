@@ -33,6 +33,20 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 07:00) - Render Studio + the AI Renderer (ComfyUI on the PC). Pull first.
+The Render tab is now Render Studio (app/ui/render_studio.js): jobs | preview | settings, "Path traced" (Forge's path
+tracer) and "AI Renderer" (Forge's depth + line-art passes -> ComfyUI: Wan VACE + the VACE/SkyReels merge as GGUF).
+Everything is in docs/AI_RENDERER.md (sources, graphs, model files, blockers). Only cloud-checked (fake ComfyUI).
+- [ ] [pc] Read the Skywork Community License (huggingface.co/Skywork/SkyReels-V3-R2V-14B, LICENSE) and tell the owner
+      what it says about commercial use BEFORE downloading; the GGUF repo states no licence (docs/AI_RENDERER.md Blocker 1).
+- [ ] [pc] `harness_data\.venv\Scripts\python.exe tools\setup_comfyui.py --dry-run`, then `--install`, then
+      `--models --yes-download` (about 18.6 GB; `--quant Q3_K_M` if memory is short), then `--start`. Report errors verbatim.
+- [ ] [pc] In LOKI on the PC: Render tab > Test connection, Preflight (screenshot the report). Forge: a cube keyed over
+      frames 1-33, Render tab > Render passes (camera front, 832x480, frames 33) > Render. Report: did LoadImage read all 33
+      APNG frames (the job log / ComfyUI log says the frame count; docs Blocker 3), time per job, VRAM, the result video.
+- [ ] [mac] With ComfyUI on the PC started with `--listen <PC LAN address>` (the helper never does that by itself), set
+      `http://<pc>:8188` in Render Studio on the Mac and run Preflight. Different networks (relay) are not supported yet.
+
 ### From Claude (2026-10-21 05:40) - Home is the preview hub; Studio is inside Home; the world is gone. Pull first.
 Owner 04:30 / 05:17: "more game engine, render studio, AI farm hive ... we dont need the living world anymore ...
 combine studio with home". What changed - build on it, do not bring the old things back:

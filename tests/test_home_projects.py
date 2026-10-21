@@ -302,8 +302,8 @@ async def window():
               await E("[document.body.dataset.mode, window.__loaded]"))
         await page.keyboard.press("Control+3")
         await page.wait_for_timeout(300)
-        check("Ctrl+3 is Render (it says what to do when the Render Studio is not in this window yet)",
-              await E("document.body.dataset.mode") == "render" and await E("!!document.querySelector('[data-mode-pane=render] .render-empty')"))
+        check("Ctrl+3 is Render (the Render Studio, or what to do when it is not in this window yet)",
+              await E("document.body.dataset.mode") == "render" and await E("!!document.querySelector('[data-mode-pane=render] .render-empty, [data-mode-pane=render] #render-studio')"))
         await page.keyboard.press("Control+4")
         await page.wait_for_timeout(200)
         check("Ctrl+4 is Godot", await E("document.body.dataset.mode") == "godot")
