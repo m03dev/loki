@@ -61,6 +61,7 @@ const LokiRenderStudio = (() => {
     left.append(lhead, list);
 
     const centre = mk("section", "rs-centre"); centre.id = "rs-centre";
+    const viewbar = mk("div", "rs-viewbar"); viewbar.id = "rs-viewbar";               // the Render View's own menu bar
     const ptabs = mk("div", "rs-ptabs"); ptabs.id = "rs-ptabs";
     const stage = mk("div", "rs-stage"); stage.id = "rs-stage";
     const img = mk("img", "rs-img"); img.id = "rs-img"; img.alt = "";
@@ -68,7 +69,16 @@ const LokiRenderStudio = (() => {
     const vid = mk("video", "rs-video"); vid.id = "rs-video"; vid.controls = true; vid.loop = true; vid.hidden = true;
     const empty = mk("p", "rs-empty", "Render the passes from a Forge camera, or pick a job on the left.");
     empty.id = "rs-empty";
-    stage.append(img, cv, vid, empty);
+    const prog = mk("div", "rs-progress"); prog.id = "rs-progress"; prog.hidden = true;
+    const ptop = mk("div", "rs-progress-top");
+    const pname = mk("span", "rs-progress-name", ""); pname.id = "rs-progress-name";
+    const ppct = mk("span", "rs-progress-pct", ""); ppct.id = "rs-progress-pct";
+    ptop.append(pname, ppct);
+    const ptrack = mk("div", "rs-bar rs-progress-track"); const pfill = mk("i"); pfill.id = "rs-progress-bar"; ptrack.append(pfill);
+    const plast = mk("div", "rs-progress-last", ""); plast.id = "rs-progress-last";
+    prog.append(ptop, ptrack, plast, btn("stop", "Cancel", "Stop this job (ComfyUI is asked to interrupt it).",
+      () => { const j = liveJob(); if (j) cancelJob(j.job); }, "rs-progress-cancel"));
+    stage.append(img, cv, vid, empty, prog);
     const scrub = mk("div", "rs-scrub");
     const slider = mk("input"); slider.type = "range"; slider.id = "rs-frame"; slider.min = "0"; slider.max = "0"; slider.value = "0";
     slider.title = "Scrub the frames";
@@ -76,7 +86,8 @@ const LokiRenderStudio = (() => {
     const flabel = mk("span", "rs-flabel", ""); flabel.id = "rs-flabel";
     scrub.append(slider, flabel);
     const info = mk("div", "rs-info"); info.id = "rs-info";
-    centre.append(ptabs, stage, scrub, info);
+    centre.append(viewbar, ptabs, stage, scrub, info);
+    buildViewBar(viewbar);
 
     const right = mk("aside", "rs-settings"); right.id = "rs-settings";
     root.append(left, centre, right);
@@ -289,6 +300,7 @@ const LokiRenderStudio = (() => {
       r.addEventListener("click", () => select(j.job));
       list.append(r);
     }
+    updateProgress();
   }
 
   async function select(job) {
@@ -543,6 +555,88 @@ const LokiRenderStudio = (() => {
     if (opts && opts.fromForge && $("rs-start")) { const t = forgeTime(); $("rs-start").value = t.start; $("rs-end").value = t.end; $("rs-camera").value = "current"; }
   }
   function leave() { clearInterval(S.timer); S.timer = 0; }
+
+  // ------------------------------------------------------------------ the Render View: its own menu bar and a
+  // batch-render progress panel, the way a 3D app's render view carries File / View / Render.
+  function menu(label, items, id) {
+    const wrap = mk("div", "rs-menu"); wrap.id = id;
+    const b = mk("button", "rs-menubtn", label); b.type = "button"; b.dataset.menu = label.toLowerCase();
+    const list = mk("div", "rs-menulist"); list.hidden = true; list.dataset.for = label.toLowerCase();
+    for (const it of items) {
+      if (!it) { list.append(mk("div", "rs-menusep")); continue; }
+      const mi = mk("button", "rs-menuitem", it[0]); mi.type = "button"; mi.dataset.item = it[0];
+      if (it[2]) mi.dataset.kind = it[2];
+      mi.addEventListener("click", (e) => { e.stopPropagation(); closeMenus(); it[1](); });
+      list.append(mi);
+    }
+    b.addEventListener("click", (e) => { e.stopPropagation(); const was = !list.hidden; closeMenus(); list.hidden = was; });
+    wrap.append(b, list);
+    return wrap;
+  }
+  function closeMenus() { for (const l of document.querySelectorAll(".rs-menulist")) l.hidden = true; }
+  if (!window.__rsMenuClose) { window.__rsMenuClose = true; document.addEventListener("click", closeMenus); document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); }); }
+
+  function liveJob() {
+    const live = (S.jobs || []).filter((j) => j && !["succeeded", "failed", "cancelled", "idle"].includes(j.status));
+    return live.find((j) => j.job === S.sel) || live[0] || null;
+  }
+  function updateProgress() {
+    const el = $("rs-progress"); if (!el) return;
+    const j = liveJob();
+    el.hidden = !j;
+    if (!j) { S.pt0 = null; S.ptjob = null; return; }
+    if (!S.pt0 || S.ptjob !== j.job) { S.pt0 = Date.now(); S.ptjob = j.job; }
+    const p = Math.max(0, Math.min(1, Number(j.progress) || 0));
+    $("rs-progress-name").textContent = (j.name || j.job) + " - " + j.status;
+    $("rs-progress-bar").style.width = Math.round(p * 100) + "%";
+    $("rs-progress-pct").textContent = Math.round(p * 100) + "%";
+    const secs = Math.max(0, Math.round((Date.now() - S.pt0) / 1000));
+    $("rs-progress-last").textContent = (j.last || "") + (secs > 1 ? "   (" + Math.floor(secs / 60) + "m " + (secs % 60) + "s)" : "");
+  }
+  function setFit(on) { const st = $("rs-stage"); if (st) st.classList.toggle("rs-actual", !on); }
+  function shownSrc() {
+    const im = $("rs-img"), v = $("rs-video");
+    if (v && !v.hidden && v.getAttribute("src")) return v.getAttribute("src");
+    return (im && !im.hidden && im.getAttribute("src")) || null;
+  }
+  function clearKeep() { S.keep = null; const box = $("rs-held"); if (box) { box.hidden = true; box.removeAttribute("src"); } }
+  function toggleKeep() {
+    if (S.keep) { clearKeep(); say("Let go of the kept image."); return; }
+    const src = shownSrc(); if (!src) { say("Nothing is shown to keep yet.", true); return; }
+    S.keep = src;
+    const box = $("rs-held"); if (box) { box.src = src; box.hidden = false; }
+    say("Kept this image - Keep image again lets go of it.");
+  }
+  function saveImage() {
+    const src = shownSrc();
+    if (!src) { say("Nothing is shown to save yet - render, or pick a job on the left.", true); return; }
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = String((S.sel || "render") + (/[.](webm|mp4)([?#]|$)/.test(src) ? ".webm" : ".png")).replace(/[^\w.-]+/g, "_");
+    document.body.append(a); a.click(); a.remove();
+    say("Saving " + a.download + ".");
+  }
+  function showEmpty() {
+    const e = $("rs-empty"); if (e) e.hidden = false;
+    const i = $("rs-img"); if (i) i.hidden = true;
+    const v = $("rs-video"); if (v) v.hidden = true;
+  }
+  function buildViewBar(bar) {
+    const held = mk("img", "rs-held"); held.id = "rs-held"; held.alt = "kept image"; held.hidden = true;
+    bar.append(
+      menu("File", [["Save image...", saveImage, "save"], null,
+                    ["Reload", () => refresh(), "reload"],
+                    ["Close the view", () => { clearKeep(); S.sel = null; renderJobs(); showEmpty(); }, "close"]], "rs-menu-file"),
+      menu("View", [["Fit to window", () => setFit(true), "fit"],
+                    ["Actual size", () => setFit(false), "actual"], null,
+                    ["Keep image", toggleKeep, "keep"],
+                    ["Let go of the kept image", clearKeep, "unkeep"]], "rs-menu-view"),
+      menu("Render", [["Render", () => startJob(), "render"],
+                      ["Preflight", () => runPreflight(), "preflight"], null,
+                      ["Cancel", () => { const j = liveJob(); if (j) cancelJob(j.job); }, "cancel"],
+                      ["Retry", () => { if (S.sel) retryJob(S.sel); }, "retry"]], "rs-menu-render"),
+      held);
+  }
 
   return { open, show, leave, enter: open, refresh, renderPasses, collect, apply, aiParams, state: S, select, startJob, runPreflight };
 })();

@@ -58,3 +58,31 @@
 .rs-missing a { color: var(--accent, #8fb3d9); }
 .rs-ai[hidden], .rs-pt[hidden], .rs-btn[hidden] { display: none; }
 @media (max-width: 900px) { .rs-root { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; overflow-y: auto; } .rs-jobs, .rs-settings { max-height: 40vh; } }
+
+/* The Render View's own menu bar (File / View / Render), the way a 3D app's render view has one */
+.rs-viewbar { display: flex; align-items: center; gap: 2px; min-height: 26px; border-bottom: 1px solid var(--line, #34343c); padding: 0 2px 3px; }
+.rs-menu { position: relative; }
+.rs-menubtn { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; background: none; color: var(--text, #e6e9ee);
+  border: 0; cursor: pointer; }
+.rs-menubtn:hover { background: rgba(185, 200, 222, .14); }
+.rs-menulist { position: absolute; left: 0; top: 100%; z-index: 40; min-width: 190px; display: flex; flex-direction: column; padding: 4px;
+  background: #23262a; border: 1px solid #3c4046; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.rs-menulist[hidden] { display: none; }
+.rs-menuitem { font: inherit; font-size: 12px; text-align: left; padding: 5px 9px; border: 0; border-radius: 6px; background: none;
+  color: var(--text, #e6e9ee); cursor: pointer; white-space: nowrap; }
+.rs-menuitem:hover { background: rgba(185, 200, 222, .16); }
+.rs-menusep { height: 1px; margin: 4px 2px; background: var(--line, #34343c); }
+/* the image kept for comparison (View > Keep image) */
+.rs-held { position: absolute; right: 8px; bottom: 8px; max-width: 26%; max-height: 26%; border: 1px solid var(--accent, #8fb3d9);
+  border-radius: 6px; background: #000; z-index: 20; }
+/* View > Actual size */
+.rs-stage.rs-actual img, .rs-stage.rs-actual video { max-width: none; max-height: none; }
+/* the batch-render progress panel, over the view while a job runs */
+.rs-progress { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; padding: 8px 11px;
+  background: rgba(20, 22, 26, .92); border: 1px solid #3c4046; border-radius: 9px; box-shadow: 0 8px 26px rgba(0, 0, 0, .5); z-index: 25; }
+.rs-progress[hidden] { display: none; }
+.rs-progress-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text, #e6e9ee); }
+.rs-progress-pct { font-variant-numeric: tabular-nums; color: var(--muted, #9aa0aa); }
+.rs-progress-track { height: 6px; margin: 2px 0; }
+.rs-progress-last { font-size: 11px; color: var(--muted, #9aa0aa); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-progress .rs-btn { align-self: flex-start; }
