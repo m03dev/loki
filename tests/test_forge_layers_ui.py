@@ -116,6 +116,37 @@ async def main():
         back = await E(T + ".layerList().length")
         check("undo brings the deleted layer back", back == 1, back)
 
+        # the Default layer is real: its V / T / R work (owner's Mac: "the layer V did nothing" - a new object
+        # lands on Default, where these buttons were inert)
+        await E("%s.layerAssign(0, [%s.list().find((n) => n.kind === 'mesh').id])" % (T, T))
+        await page.wait_for_timeout(60)
+        dflt = await E("""() => { const r = document.querySelector('#forge-layer-list .forge-layer-row.default');
+          return [!!r, !!r.querySelector('[data-role="vis"]'), !!r.querySelector('[data-role="tpl"]'), !!r.querySelector('[data-role="ref"]')]; }""")
+        await page.evaluate("forge.view.tree.api.select(null)")
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"vis\"]")
+        await page.wait_for_timeout(60)
+        hidden = await E("[%s.layerNorm(%s.list().find((n) => n.kind === 'mesh')), forge.view.tree.defLayer.visible, document.querySelector('#forge-layer-list .forge-layer-row.default [data-role=\"vis\"]').classList.contains('on')]" % (T, T))
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"vis\"]")
+        await page.wait_for_timeout(60)
+        shown = await E("[%s.layerNorm(%s.list().find((n) => n.kind === 'mesh')), forge.view.tree.defLayer.visible]" % (T, T))
+        check("the Default layer's V hides and shows the objects on it",
+              dflt == [True, True, True, True] and hidden == [False, False, False] and shown == [True, True], [dflt, hidden, shown])
+
+        await page.evaluate("%s.select(%s.list().find((n) => n.kind === 'mesh').id)" % (T, T))
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"tpl\"]")
+        await page.wait_for_timeout(60)
+        tpl = await E("[%s.layersTemplate(%s.list().find((n) => n.kind === 'mesh').id), forge.view.tree.defLayer.template, %s.selected().length]" % (T, T, T))
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"ref\"]")
+        await page.wait_for_timeout(60)
+        rf = await E("[forge.view.tree.defLayer.ref, forge.view.tree.defLayer.template]")
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"tpl\"]")
+        await page.click("#forge-layer-list .forge-layer-row.default [data-role=\"ref\"]")
+        await page.wait_for_timeout(60)
+        off = await E("[forge.view.tree.defLayer.ref, forge.view.tree.defLayer.template, %s.layerNorm(%s.list().find((n) => n.kind === 'mesh'))]" % (T, T))
+        # T and R are one choice: whichever is clicked last is the one in force
+        check("Default's T templates (unselectable) and R references; T and R are one choice",
+              tpl == [True, True, 0] and rf == [True, False] and off == [True, False, True], [tpl, rf, off])
+
         # the commands and the Display menu expose it
         cmds = await E("(typeof FORGE_PRO_CMDS !== 'undefined') && !!(FORGE_PRO_CMDS.layerEditor && FORGE_PRO_CMDS.layerAdd && FORGE_PRO_CMDS.layerAssign)")
         check("Layer Editor / Create Empty Layer / Assign are commands (menu, hotbox, command line)", cmds, cmds)

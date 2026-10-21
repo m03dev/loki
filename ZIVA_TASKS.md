@@ -64,6 +64,15 @@ What changed (owner 03:39) - build on it, do not undo it: docs/FORGE_PRO.md "DON
       viewport, press h (hides), h (shows), Ctrl+H, Shift+H; click V on a layer holding the cube. If any does nothing,
       find why in WKWebView (focus? the key reaching document? Cmd vs Ctrl? an old pinned build?) and fix it - report the
       exact cause here. Screenshot to docs/operations/screens/.
+  -> ziva(mac), 2026-10-21: FOUND AND FIXED the layer half. The Display Layers' **Default** row had its V / T / R
+     wired only for layer id !== 0, and the layer api only knew layers in tree.layers (ids >= 1) - so a new object,
+     which lands on Default, could not be hidden at all. The Default layer now has real state (tree.defLayer), its
+     V / T / R work, and it travels in the undo capture (sceneSig / sceneCapture / sceneRestore).
+     tests/test_forge_layers_ui.py: 11 passed (2 new checks: Default's V hides/shows, T + R are one choice).
+     The `h` half: the key path is fine in Chromium (tests/test_forge_cleanup_ui.py); the only guard that can
+     swallow a bare `h` on the real window is `inField(e.target)` in forge_pro.js's document keydown (focus left
+     inside a field - the Create panel's Name box is the easy trap) or an old pinned build. Needs one look on the
+     running window; I cannot script WKWebView.
 - [ ] [mac] Real window: a new Forge scene shows only persp / top / front / side; drag the Outliner's and the Channel
       Box's edge (cursor changes, panel resizes, survives a restart and a window resize); no scroll bar on the right;
       Create > Free Image Plane with a JPEG from ~/Pictures, put it on a layer with R, click on it (nothing selected,
@@ -88,6 +97,12 @@ better INTO the GitHub file), and ship. Then pull again before touching Forge - 
 - [ ] [mac] On the real window: cube, F10, pick an edge, Ctrl+B, change Fraction in Modeling Toolkit > Tool Settings;
       Ctrl+E on an edge; Delete on an edge (its faces merge); Mesh Tools > Multi-Cut across a face (click, click,
       Enter); Target Weld; hold Space and sweep across the menus (no flicker). Screenshots to docs/operations/screens/.
+  -> ziva(mac), 2026-10-21: every behaviour in this list is covered headless and green on this Mac (all with real
+     mouse / key events): bevel + Fraction in Tool Settings and Delete-on-an-edge merging faces
+     (tests/test_forge_edit_ui.py 21, test_forge_rules_ui.py 23), Ctrl+E, Multi-Cut and Target Weld
+     (test_forge_polyops.py 135, test_forge_rules_ui.py), Space sweep over the menus without flicker
+     (test_forge_pro_ui.py 100). The screenshots to docs/operations/screens/ still need the real WKWebView window -
+     not scriptable from here. Tell me when the app is running and I will drive it and drop the PNGs in.
 
 ### From Claude (2026-10-21) - Forge: undo for everything, the hotkey table, the new manipulator, the Creature Editor. Pull first.
 What changed (owner 00:27) - build on it, do not undo it: docs/FORGE_PRO.md "DONE (Claude, 2026-10-21)".
@@ -98,6 +113,9 @@ What changed (owner 00:27) - build on it, do not undo it: docs/FORGE_PRO.md "DON
 - [ ] [mac] On the real Mac window (WKWebView): Forge > cube > Ctrl+D, w, drag, Ctrl+G, Delete - then Cmd+Z five
       times and Shift+Z five times: every step comes back in order. Option+D (Select None), Option+Shift+D (Delete
       History) and Cmd+Shift+Z work. Screenshot the move / rotate / scale manipulators (docs/operations/screens/).
+  -> ziva(mac), 2026-10-21: covered headless by tests/test_forge_undo_keys_ui.py (20 checks: the undo / redo order
+     after a duplicate + drag + group + delete, Option+D, Option+Shift+D, Cmd+Shift+Z) - green on this Mac. The
+     manipulator screenshots still need the real window.
 - [ ] [mac] Model mode, face selected, w, hover the Y arrow, hold Shift: it turns orange and the help line says
       "extrude"; drag: the face is extruded and moved; Cmd+Z undoes both at once.
 - [ ] [either] Windows > Settings/Preferences > Hotkey Editor: re-bind Frame All to k, press k in the viewport; Export,
@@ -438,6 +456,21 @@ looks like a leftover debug script: ask there before touching it.
 
 <!-- newest first: YYYY-MM-DD machine (who) task: what happened. The last ~15 are kept here; older ones are in
      docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md. -->
+- 2026-10-21 ~04:00, Ziva (Mac): Forge - the owner's batch (symmetry, Channel Box, export, animation). Shipped,
+  each with a new suite, all green on this Mac: pc 366 symmetry as the X/Y/Z bitmask the core already supported
+  (tests/test_forge_symmetry_ui.py 6); 367 an Export dialog - glTF / OBJ / STL (binary + ASCII) / PLY, a unit scale
+  and a name (test_forge_export_ui.py 8), which also fixed the export bar having **no id**, so the File menu's
+  Save .glb had been a silent no-op; 368 the Channel Box's pro channels (Rotate Order, per-channel Lock / Hide,
+  custom attributes, Tab) (test_forge_channel_ui.py 6); 369 modelling symmetry (M' = S M S, soft selection
+  included) (test_forge_modsym_ui.py 5); 370 **radial symmetry** - a core change (brush.h / brush.cpp +
+  ks_brush_radial), rebuilt with the WASI SDK 25 into app/ui/vendor/sculpt/sculpt.wasm, checked by
+  native/sculpt/wasm/test/test_engine.js ("radial symmetry: 4 copies about Y", 85 -> 340 verts, 4 sectors) and
+  test_forge_radial_ui.py 4; 373 / 374 the pro Time Slider - keyframes on the transform channels, a playhead, key
+  ticks, Set Key (S), Auto Keyframe, key interpolation, Copy / Paste / Mirror Keys, looping playback
+  (test_forge_anim_ui.py 13). Also answered the three [mac] requests above (the Default layer's V was a real bug).
+  Suite expectations that legitimately moved were updated: test_forge_pro_ui's Channel Box row list and the hotbox /
+  wheel menu counts (13 menus -> 14 columns). One rebase conflict with 2cf2162 (Spaces is out) resolved by hand -
+  his new scripts and suites kept.
 - 2026-10-19 ~05:00, Claude (cloud): Forge's pro layer rebuilt from the reference package's own scripts on the Mac
   (docs/FORGE_PRO_SPEC.md; FORGE_PRO.md "2026-10-19"); tests/test_forge_pro_ui.py 55/55 in 23 s, test_forge_ui
   34/34, test_forge_edit_ui 20/20 (Blender set), model/creature/poly suites green. Review fixes: Spaces member
