@@ -348,6 +348,19 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
   border: 1px solid rgba(255,255,255,.16); background: rgba(30,32,34,.5); color: inherit;
 }
 .forge-ch-in:focus { border-color: #5b8db8; outline: none; }
+/* the pro Channel Box extras: rotate order, locked / hidden channels, custom attributes */
+.forge-ch-row.locked .forge-ch-label, .forge-ch-row.locked .forge-ch-in { opacity: .5; }
+.forge-ch-row.locked .forge-ch-in { font-style: italic; }
+.forge-ch-order, .forge-ch-attrname {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, .16); background: rgba(30, 32, 34, .5); color: inherit;
+}
+.forge-ch-order:focus, .forge-ch-attrname:focus { border-color: #5b8db8; outline: none; }
+.forge-ch-attrs { padding-top: 2px; }
+.forge-ch-attrrow { gap: 4px; }
+.forge-ch-attrrow .forge-ch-attrname { flex: 1 1 54%; }
+.forge-ch-attrrow .forge-ch-in { flex: 1 1 46%; width: auto; }
+html.u-hc .forge-ch-row.locked .forge-ch-in { color: #000 !important; }
 
 /* the History (T6): how the mesh was built, each step open to change */
 .forge-hist-head { display: flex; align-items: center; gap: 6px; padding-right: 7px; }

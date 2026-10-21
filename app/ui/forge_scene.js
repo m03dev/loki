@@ -89,7 +89,8 @@ function forgeSceneAttach(view, ctx) {
     const inn = inner || new THREE.Group();
     grp.add(inn);
     const n = { id: tree.next++, name: name, grp: grp, inner: inn, kind: kind, parent: parent || 0, visible: true,
-      open: true, piv: new THREE.Vector3(), pc: new THREE.Vector3(), tri: null, poly: null, hist: null };
+      open: true, piv: new THREE.Vector3(), pc: new THREE.Vector3(), tri: null, poly: null, hist: null,
+      rotOrder: "XYZ", chLock: {}, chHide: {}, attrs: [] };   // the pro Channel Box: rotate order, locked / hidden channels, custom attributes
     grp.name = name; grp.userData.forgeNode = n.id;
     tree.nodes.push(n); tree.byId[n.id] = n;
     const dest = parent ? node(parent).inner : scene;
@@ -520,6 +521,17 @@ function forgeSceneAttach(view, ctx) {
         place(n, T);
       }
       if (tree.selMarks) drawMarks();
+      return true;
+    },
+
+    // the pro Channel Box "Rotate Order": the object keeps its orientation, the Euler angles are re-read in the new order
+    setRotateOrder(id, order) {
+      const n = node(id || api.active().id);
+      if (!n || !/^(XYZ|YZX|ZXY|XZY|YXZ|ZYX)$/.test(order) || n.rotOrder === order) return false;
+      const Q = n.grp.quaternion.clone();
+      n.rotOrder = order; n.grp.rotation.order = order;
+      n.grp.quaternion.copy(Q);
+      if (tree.syncChannel) tree.syncChannel();
       return true;
     },
 
@@ -1033,78 +1045,142 @@ function forgeSceneAttach(view, ctx) {
       m.addEventListener("click", (ev) => { ev.stopPropagation(); api.popMenu(m, items()); });
       menus.append(m);
     };
+    const cur = () => api.active();
+    const nd = () => cur() || {};
+    let showHidden = false, showAttrs = true;
+    const addAttr = () => { const n = cur(); if (!n) return; n.attrs = n.attrs || []; n.attrs.push({ name: "attr" + (n.attrs.length + 1), value: 0 }); if (tree.syncChannel) tree.syncChannel(); };
     mk("Channels", () => [["Key Selected", null], ["Reset to Default", () => { api.resetTransform(); tree.build(); }]]);
-    mk("Edit", () => [["Delete History", () => { if (window.forgeHistory) window.forgeHistory.clear(); tree.build(); }],
+    mk("Edit", () => [["Add Attribute", () => addAttr()],
+      ["Unlock All Channels", () => { const n = cur(); if (n) { n.chLock = {}; if (tree.syncChannel) tree.syncChannel(); } }],
+      ["Unhide All Channels", () => { const n = cur(); if (n) { n.chHide = {}; if (tree.syncChannel) tree.syncChannel(); } }],
+      ["Delete History", () => { if (window.forgeHistory) window.forgeHistory.clear(); tree.build(); }],
       ["Freeze Transformations", () => { api.freeze(); tree.build(); }], ["Reset Transformations", () => { api.resetTransform(); tree.build(); }]]);
     mk("Object", () => [["Center Pivot", () => { api.centerPivot(); tree.build(); }], ["Reset Pivot", () => { api.resetPivot(); tree.build(); }],
       ["Select Hierarchy", () => api.selectHierarchy()]]);
-    mk("Show", () => [["Shapes", () => { box.classList.toggle("no-shapes"); }], ["Inputs", () => { const h = document.getElementById("forge-history"); if (h) h.hidden = !h.hidden; }]]);
+    mk("Show", () => [["Shapes", () => { box.classList.toggle("no-shapes"); }], ["Inputs", () => { const h = document.getElementById("forge-history"); if (h) h.hidden = !h.hidden; }],
+      ["Custom Attributes", () => { const w = document.getElementById("forge-ch-attrs"); if (w) { showAttrs = !showAttrs; w.hidden = !showAttrs; } }],
+      ["Hidden Channels", () => { showHidden = !showHidden; if (tree.syncChannel) tree.syncChannel(); }]]);
     const title = scnEl("div", "forge-ch-title", "");
     title.id = "forge-ch-name";
     box.append(tab, menus, title);
-    const inputs = {};
-    const ROWS = [];
+
+    const focusNext = (inp, back) => {
+      const list = [...box.querySelectorAll(".forge-ch-in")].filter((x) => !x.readOnly && x.offsetParent !== null);
+      const i = list.indexOf(inp); if (i < 0 || !list.length) return;
+      const j = (i + (back ? -1 : 1) + list.length) % list.length;
+      list[j].focus(); if (list[j].select) list[j].select();
+    };
+    const locked = (key) => !!(nd().chLock && nd().chLock[key]);
+    const hidden = (key) => !!(nd().chHide && nd().chHide[key]);
+    const channelMenu = (row, part, a, key) => {
+      const n = cur(); if (!n) return;
+      n.chLock = n.chLock || {}; n.chHide = n.chHide || {};
+      const isZero = part === "scale" ? 1 : 0;
+      api.popMenu(row, [
+        [locked(key) ? "Unlock This Channel" : "Lock This Channel", () => { n.chLock[key] = !locked(key); tree.syncChannel(); }],
+        [hidden(key) ? "Show This Channel" : "Hide This Channel", () => { n.chHide[key] = !hidden(key); tree.syncChannel(); }],
+        ["Set to " + isZero, () => { if (tree.syncChannel) api.undoChunk("set channel", () => api.setTransform(null, part, a, isZero)); }],
+        ["Unlock All Channels", () => { n.chLock = {}; tree.syncChannel(); }],
+        ["Unhide All Channels", () => { n.chHide = {}; tree.syncChannel(); }],
+      ]);
+    };
+
+    const inputs = {}, rows = {};
     for (const [part, label, step] of [["translate", "Translate", 0.1], ["rotate", "Rotate", 5], ["scale", "Scale", 0.1]]) {
-      for (let a = 0; a < 3; a++) ROWS.push([part, label + " " + AXES[a].toUpperCase(), a, step]);
+      for (let a = 0; a < 3; a++) {
+        const key = part + a;
+        const r = scnEl("div", "forge-ch-row"); r.dataset.ch = key;
+        const lbl = scnEl("span", "forge-ch-label", label + " " + AXES[a].toUpperCase());
+        lbl.title = label + ": drag left / right to scrub the value (the pro virtual slider); right-click the row to lock or hide the channel.";
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = String(step);
+        inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
+        inp.className = "forge-ch-in";
+        inp.title = label + " - the selected object's own transform.";
+        inp.addEventListener("input", () => { if (inp.value === "" || inp.value === "-" || locked(key)) return; api.setTransform(null, part, a, inp.value); });
+        inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(inp, e.shiftKey); } });
+        lbl.addEventListener("pointerdown", (e) => {
+          if ((e.button !== 0 && e.button !== 1) || locked(key)) return;
+          e.preventDefault();
+          const t0 = api.transform(); if (!t0) return;
+          const from = t0[part][a], x0 = e.clientX;
+          lbl.setPointerCapture(e.pointerId); lbl.classList.add("scrub");
+          const move = (ev) => { const v = from + (ev.clientX - x0) * step * (ev.shiftKey ? 0.1 : 0.25); api.setTransform(null, part, a, v); inp.value = String(Math.round(v * 1000) / 1000); };
+          const up = () => { lbl.classList.remove("scrub"); lbl.removeEventListener("pointermove", move); lbl.removeEventListener("pointerup", up); tree.build(); };
+          lbl.addEventListener("pointermove", move); lbl.addEventListener("pointerup", up);
+        });
+        r.addEventListener("contextmenu", (ev) => { ev.preventDefault(); channelMenu(r, part, a, key); });
+        inputs[key] = inp; rows[key] = { r, inp };
+        r.append(lbl, inp);
+        box.append(r);
+      }
     }
-    for (const [part, label, a, step] of ROWS) {
-      const r = scnEl("div", "forge-ch-row");
-      const lbl = scnEl("span", "forge-ch-label", label);
-      lbl.title = label + ": drag left / right to scrub the value (the pro virtual slider).";
-      const inp = document.createElement("input");
-      inp.type = "number"; inp.step = String(step);
-      inp.id = "forge-ch-" + part.slice(0, 1) + AXES[a];
-      inp.className = "forge-ch-in";
-      inp.title = label + " - the selected object's own transform.";
-      inp.addEventListener("input", () => {
-        if (inp.value === "" || inp.value === "-") return;
-        api.setTransform(null, part, a, inp.value);
-      });
-      inp.addEventListener("keydown", (e) => e.stopPropagation());      // typing a number is not a hotkey
-      // scrub: press on the channel's name and drag sideways
-      lbl.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 && e.button !== 1) return;
-        e.preventDefault();
-        const t0 = api.transform(); if (!t0) return;
-        const from = t0[part][a], x0 = e.clientX;
-        lbl.setPointerCapture(e.pointerId); lbl.classList.add("scrub");
-        const move = (ev) => { const v = from + (ev.clientX - x0) * step * (ev.shiftKey ? 0.1 : 0.25); api.setTransform(null, part, a, v); inp.value = String(Math.round(v * 1000) / 1000); };
-        const up = () => { lbl.classList.remove("scrub"); lbl.removeEventListener("pointermove", move); lbl.removeEventListener("pointerup", up); tree.build(); };
-        lbl.addEventListener("pointermove", move); lbl.addEventListener("pointerup", up);
-      });
-      inputs[part + a] = inp;
-      r.append(lbl, inp);
-      box.append(r);
-    }
-    const vis = scnEl("div", "forge-ch-row");
+    // the pro Rotate Order channel
+    const orderRow = scnEl("div", "forge-ch-row"); orderRow.dataset.ch = "order";
+    const orderSel = document.createElement("select"); orderSel.className = "forge-ch-order"; orderSel.id = "forge-ch-order";
+    orderSel.title = "Rotate Order - the order the X / Y / Z angles are applied in. The object does not move.";
+    for (const o of ["XYZ", "YZX", "ZXY", "XZY", "YXZ", "ZYX"]) { const op = document.createElement("option"); op.value = o; op.textContent = o; orderSel.append(op); }
+    orderSel.addEventListener("change", () => api.undoChunk("rotate order", () => api.setRotateOrder(null, orderSel.value)));
+    orderRow.append(scnEl("span", "forge-ch-label", "Rotate Order"), orderSel);
+    box.append(orderRow);
+
+    const vis = scnEl("div", "forge-ch-row"); vis.dataset.ch = "vis";
     const visIn = scnEl("button", "forge-ch-in forge-ch-vis", "on");
     visIn.type = "button"; visIn.id = "forge-ch-vis";
-    visIn.addEventListener("click", () => { const n = api.active(); if (n) api.setVisible(n.id, !n.visible); });
+    visIn.addEventListener("click", () => { const n = cur(); if (n) api.setVisible(n.id, !n.visible); });
     vis.append(scnEl("span", "forge-ch-label", "Visibility"), visIn);
+    vis.addEventListener("contextmenu", (ev) => { ev.preventDefault(); channelMenu(vis, "vis", 0, "vis"); });
     box.append(vis);
+
     const shapesHead = scnEl("div", "forge-ch-section", "SHAPES");
     const shapeRow = scnEl("div", "forge-ch-node", "");
     shapesHead.classList.add("forge-ch-shapes"); shapeRow.classList.add("forge-ch-shapes");
-    box.append(shapesHead, shapeRow);
+    const attrHead = scnEl("div", "forge-ch-section", "ATTRIBUTES"); attrHead.id = "forge-ch-attrhead";
+    const attrWrap = scnEl("div", "forge-ch-attrs"); attrWrap.id = "forge-ch-attrs";
+    box.append(shapesHead, shapeRow, attrHead, attrWrap);
     host.append(box);
+
     tree.syncChannel = () => {
       const t = api.transform(), n = api.active();
       title.textContent = n ? n.name : "";
       shapeRow.textContent = n && n.kind === "mesh" ? n.name + "Shape" : "";
       shapesHead.hidden = shapeRow.hidden = !(n && n.kind === "mesh");
       visIn.textContent = n && !n.visible ? "off" : "on";
-      if (!t) return;
-      for (const part of ["translate", "rotate", "scale"]) {
+      orderSel.value = (n && n.rotOrder) || "XYZ";
+      if (t) for (const part of ["translate", "rotate", "scale"]) {
         const vals = t[part];
         for (let a = 0; a < 3; a++) {
-          const inp = inputs[part + a];
-          if (inp && document.activeElement !== inp) inp.value = String(Math.round(vals[a] * 1000) / 1000);
+          const key = part + a, cell = rows[key];
+          if (!cell) continue;
+          const isLocked = locked(key);
+          cell.inp.readOnly = isLocked;
+          cell.r.classList.toggle("locked", isLocked);
+          cell.r.hidden = hidden(key) && !showHidden;
+          if (document.activeElement !== cell.inp) cell.inp.value = String(Math.round(vals[a] * 1000) / 1000);
         }
       }
+      const attrs = (n && n.attrs) || [];
+      attrHead.hidden = !attrs.length;
+      attrHead.textContent = attrs.length ? "ATTRIBUTES" : "";
+      attrWrap.textContent = "";
+      attrWrap.hidden = !attrs.length || !showAttrs;
+      attrs.forEach((at, i) => {
+        const r = scnEl("div", "forge-ch-row forge-ch-attrrow");
+        const nm = document.createElement("input"); nm.type = "text"; nm.className = "forge-ch-attrname"; nm.value = at.name;
+        nm.title = "Custom attribute name (double-click to rename).";
+        nm.addEventListener("input", () => { at.name = nm.value; });
+        nm.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(nm, e.shiftKey); } });
+        const vl = document.createElement("input"); vl.type = "number"; vl.className = "forge-ch-in"; vl.step = "0.1"; vl.value = String(at.value);
+        vl.title = "Custom attribute value.";
+        vl.addEventListener("input", () => { at.value = Number(vl.value) || 0; });
+        vl.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(vl, e.shiftKey); } });
+        r.addEventListener("contextmenu", (ev) => { ev.preventDefault(); api.popMenu(r, [["Rename Attribute", () => { nm.focus(); nm.select(); }], ["Delete Attribute", () => { attrs.splice(i, 1); tree.syncChannel(); }]]); });
+        r.append(nm, vl);
+        attrWrap.append(r);
+      });
     };
     return box;
   }
-
   // ---------------------------------------------------------------- the Layer Editor (Display Layers, under the Channel Box)
   // The pro Layer Editor: a list of display layers, each with V (visibility), T (template - shown but not
   // selectable), a colour, its object count, a delete, and the current layer highlighted. Assign puts the
@@ -1366,7 +1442,7 @@ function forgeSceneAttach(view, ctx) {
     for (const l of tree.layers) a.push("L" + l.id, l.name, l.visible ? 1 : 0, l.template ? 1 : 0, [...l.nodes].sort().join("."));
     a.push("cur" + tree.curLayer);
     for (const n of tree.nodes) {
-      a.push(n.id, n.name, n.parent, n.visible ? 1 : 0, n.inner.uuid);
+      a.push(n.id, n.name, n.parent, n.visible ? 1 : 0, n.inner.uuid, n.rotOrder || "XYZ");
       a.push.apply(a, n.grp.position.toArray()); a.push.apply(a, n.grp.quaternion.toArray()); a.push.apply(a, n.grp.scale.toArray());
       a.push.apply(a, n.piv.toArray()); a.push.apply(a, n.pc.toArray());
     }
@@ -1377,6 +1453,7 @@ function forgeSceneAttach(view, ctx) {
     sig: sceneSig(),
     nodes: tree.nodes.map((n) => ({ n: n, name: n.name, kind: n.kind, parent: n.parent, visible: n.visible, open: n.open,
       root: !!n.root, auto: !!n.auto, inner: n.inner, innerPos: n.inner.position.clone(), piv: n.piv.clone(), pc: n.pc.clone(),
+      rotOrder: n.rotOrder || "XYZ", attrs: (n.attrs || []).map((a) => ({ name: a.name, value: a.value })),
       pos: n.grp.position.clone(), quat: n.grp.quaternion.clone(), scale: n.grp.scale.clone(),
       shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri })),
     sel: tree.sel.slice(), anchor: tree.anchor, next: tree.next, rootId: tree.rootId,
@@ -1403,6 +1480,8 @@ function forgeSceneAttach(view, ctx) {
         Object.assign(n, { name: x.name, kind: x.kind, parent: x.parent, visible: x.visible, open: x.open, root: x.root,
           auto: x.auto, inner: x.inner, poly: x.poly, hist: histCopy(x.hist), tri: x.tri });
         n.piv.copy(x.piv); n.pc.copy(x.pc);
+        n.rotOrder = x.rotOrder || "XYZ"; n.grp.rotation.order = n.rotOrder;   // before the quaternion, so the Euler re-derives in the right order
+        n.attrs = (x.attrs || []).map((a) => ({ name: a.name, value: a.value }));
         n.grp.position.copy(x.pos); n.grp.quaternion.copy(x.quat); n.grp.scale.copy(x.scale);
         n.inner.position.copy(x.innerPos);
         n.grp.visible = x.visible; n.grp.name = x.name;
