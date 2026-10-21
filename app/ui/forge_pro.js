@@ -100,7 +100,7 @@ function forgeProFrame(v, all) {
         edge += Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]); n++;
       }
       const s = v.holder.matrixWorld.getMaxScaleOnAxis ? v.holder.matrixWorld.getMaxScaleOnAxis() : 1;
-      const pad = (n ? edge / n : 0.1) * s * 0.75;
+      const pad = (n ? edge / n : 0.1) * s * (ids.length === 1 ? 0.25 : 0.12);
       box.expandByScalar(pad);
       v.frameBox(box);
       v.size = keep;
@@ -443,8 +443,8 @@ function forgeProCommands() {
     poke: ["Poke Face", null, "Poke is not in Forge yet (T8)"],
     wedge: ["Wedge", null, "Wedge is not in Forge yet"],
     toUV: ["To UVs", null, "UVs are not in Forge yet"],
-    loopSel: ["To Edge Loop", null, "double-click an edge selects its loop"],
-    ringSel: ["To Edge Ring", null, "Edge rings are not on a menu yet"],
+    loopSel: ["To Edge Loop", (v) => { if (!comp(v) || !v.convertEdges) return "Select edges first (F10)."; const n = v.convertEdges("loop"); return n ? n + " edges in the loop(s)." : "Select an edge first."; }],
+    ringSel: ["To Edge Ring", (v) => { if (!comp(v) || !v.convertEdges) return "Select edges first (F10)."; const n = v.convertEdges("ring"); return n ? n + " edges in the ring(s)." : "Select an edge first."; }],
     cube: ["Cube", () => forgeProCall("forgeAddPrimitive", "cube")],
     sphere: ["Sphere", () => forgeProCall("forgeAddPrimitive", "sphere")],
     cylinder: ["Cylinder", () => forgeProCall("forgeAddPrimitive", "cylinder")],
@@ -523,9 +523,9 @@ function forgeProMenu(v, ctx) {
     return { title: "Convert", ring: { W: "vertex", N: "edge", S: "face", E: "toUV", NE: "grow", NW: "shrink", SE: "loopSel", SW: "ringSel" }, list: [] };
   }
   if (ctx.shift) {
-    if (comp && mode === "vert") return { title: "Vertex tools", ring: { S: "extrude", E: "chamfer", SW: "deleteComp", N: "merge", NE: "smooth", W: "multiCut" }, list: ["grow", "shrink"] };
-    if (comp && mode === "edge") return { title: "Edge tools", ring: { S: "extrude", E: "bevel", SW: "deleteComp", N: "merge", NE: "edgeLoop", W: "multiCut" }, list: ["grow", "shrink"] };
-    if (comp) return { title: "Face tools", ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset" }, list: ["deleteComp", "smooth", "grow", "shrink"] };
+    if (comp && mode === "vert") return { title: "Vertex tools", ring: { S: "extrude", E: "chamfer", SW: "deleteEdgeVert", N: "merge", NE: "averageVerts", W: "multiCut", NW: "connect", SE: "targetWeld" }, list: ["mergeCenter", "detach", "relax", "circularize", "grow", "shrink"] };
+    if (comp && mode === "edge") return { title: "Edge tools", ring: { S: "extrude", E: "bevel", SW: "deleteEdgeVert", N: "bridge", NE: "edgeLoop", W: "multiCut", NW: "connect", SE: "offsetEdgeLoop" }, list: ["merge", "collapse", "slideEdge", "spinEdge", "detach", "fillHole", "loopSel", "ringSel", "grow", "shrink"] };
+    if (comp) return { title: "Face tools", ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset", N: "duplicateFace" }, list: ["extractFace", "collapse", "triangulate", "quadrangulate", "circularize", "deleteComp", "smooth", "grow", "shrink"] };
     if (ctx.node) return { title: "Mesh tools", ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" }, list: ["smooth", "dynamesh", "makeLive"] };
     return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" }, list: ["draw", "image", "describe", "creature"] };
   }
@@ -636,9 +636,10 @@ const FORGE_PRO_ROWS = [
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
   // the modelling menu set (the pro second row)
-  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "smooth", "dynamesh", "sculptModel"]],
-  ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp"]],
-  ["Mesh Tools", ["softSel", "sculpt", "multiCut", "edgeLoop"]],
+  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "dynamesh", "sculptModel"]],
+  ["Edit Mesh", ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter",
+    "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
+  ["Mesh Tools", ["edgeLoop", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
@@ -664,7 +665,7 @@ function forgeProItem(id, host) {
   if (!c) return null;
   const b = proEl("button", "forge-pro-item" + (c[1] ? "" : " off"));
   b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
-  const key = (typeof FMY_KEYS !== "undefined" && FMY_KEYS[id]) || "";
+  const key = typeof fmyKeyOf === "function" ? fmyKeyOf(id) : (typeof FMY_KEYS !== "undefined" && FMY_KEYS[id]) || "";
   b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", c[0]), proEl("span", "forge-pro-key", key));
   if (!c[1]) b.title = c[2] || "";
   b.addEventListener("pointerdown", (ev) => ev.stopPropagation());

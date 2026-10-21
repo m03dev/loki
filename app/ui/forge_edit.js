@@ -322,6 +322,25 @@ function forgeEditAttach(view, ctx) {
     return best >= 0 ? best : idAtBuf(...bufXY(pt[0], pt[1]));
   }
   // a click at canvas point pt -> {kind, id} under it (or id -1)
+  // what an interactive cut tool (Multi-Cut, Target Weld, Connect) clicked: a vertex when the mouse is within 10 px
+  // of one, else a point along the nearest edge ({ e: [a, b], t } - t from a to b, as seen on screen), else a face
+  view.cutPointAt = (pt) => {
+    if (!view.poly) return null;
+    renderPick();
+    const proj = projector();
+    const vi = nearestVert(pt, proj, 10);
+    if (vi >= 0) return { v: vi, at: view.poly.v[vi].slice() };
+    const ei = nearestEdge(pt, proj, 18);
+    if (ei < 0) { const fi = faceAt(pt, proj); return fi >= 0 ? { face: fi } : null; }
+    const T = topo(), e = T.edges[ei], a = proj(view.poly.v[e.a]), b = proj(view.poly.v[e.b]);
+    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    let t = l2 ? ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / l2 : 0.5;
+    t = Math.max(0.02, Math.min(0.98, t));
+    const pa = view.poly.v[e.a], pb = view.poly.v[e.b];
+    return { e: [e.a, e.b], t: t, at: [pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t, pa[2] + (pb[2] - pa[2]) * t] };
+  };
+  view.edgePairs = () => { const T = topo(); return T ? [...ed.sel.e].map((i) => [T.edges[i].a, T.edges[i].b]) : []; };
+  view.edgeIdOf = (a, b) => { const T = topo(); if (!T) return -1; const i = T.edge(a, b); return i == null ? -1 : i; };
   view.pickElement = (pt) => {
     if (!view.poly) return { kind: ed.mode, id: -1 };
     renderPick();
@@ -354,6 +373,23 @@ function forgeEditAttach(view, ctx) {
     }
     if (how === "add") for (const k of ["v", "e", "f"]) for (const x of ed.sel[k]) next[k].add(x);
     setSel(next);
+  };
+  // Select > Convert > To Edge Loop / To Edge Ring (the pro Ctrl + right-button menu): every selected edge grows
+  // into its whole loop / ring; from faces or vertices the edges they touch are used first
+  view.convertEdges = (kind) => {
+    if (!view.poly) return 0;
+    const T = topo();
+    let seeds = [...ed.sel.e];
+    if (!seeds.length) seeds = [...P.flushSelection(view.poly, T, { v: [...ed.sel.v], e: [], f: [...ed.sel.f] }, "edge").e];
+    if (!seeds.length) return 0;
+    const out = new Set();
+    for (const ei of seeds) {
+      const got = kind === "ring" ? P.edgeRing(view.poly, T, ei).edges : P.edgeLoop(view.poly, T, ei);
+      for (const x of got) out.add(x);
+    }
+    if (ed.mode !== "edge" && view.setSelMode) view.setSelMode("edge");
+    setSel(P.flushSelection(view.poly, T, { v: [], e: [...out], f: [] }, "edge"));
+    return out.size;
   };
   view.boxSelect = (x0, y0, x1, y1, how) => {
     if (!view.poly) return;
@@ -388,7 +424,8 @@ function forgeEditAttach(view, ctx) {
   document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftHeld = true; }, true);
   document.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftHeld = false; }, true);
   window.addEventListener("blur", () => { shiftHeld = false; });
-  gizmo.shiftHint = (tc) => (view.selected && view.selected.length
+  gizmo.shiftHint = (tc) => (ed.mode === "edge" && ed.sel.e.size ? "Shift + drag: extrude the edges and " + ({ translate: "move", rotate: "rotate", scale: "scale" }[tc.mode] || "move") + " them."
+    : ed.mode === "vert" && ed.sel.v.size ? "Shift + drag: extrude the vertices." : view.selected && view.selected.length
     ? "Shift + drag: extrude the " + (view.selected.length === 1 ? "face" : view.selected.length + " faces") + " and " + ({ translate: "move", rotate: "rotate", scale: "scale" }[tc.mode] || "move") + (view.selected.length === 1 ? " it." : " them.")
     : "Shift + drag extrudes faces - pick whole faces first.");
   ctx.scene.add(gizmo.getHelper ? gizmo.getHelper() : gizmo);
@@ -459,7 +496,24 @@ function forgeEditAttach(view, ctx) {
   }
   let shiftExtrude = false;
   gizmo.addEventListener("mouseDown", () => {
-    if (shiftHeld && view.poly && view.selected && view.selected.length) {
+    // Shift over the handle with EDGES or VERTICES picked: the pro edge / vertex extrude, then the drag moves them
+    const P2 = window.ForgePoly;
+    if (shiftHeld && view.poly && ed.mode !== "face" && P2 && (ed.mode === "edge" ? ed.sel.e.size && P2.extrudeEdges : ed.sel.v.size && P2.extrudeVerts)) {
+      if (view.undoOpen) view.undoOpen("Extrude");
+      shiftExtrude = true;
+      const base = view.poly, isE = ed.mode === "edge";
+      const items = isE ? view.edgePairs() : [...ed.sel.v];
+      const op = isE ? "extrudeEdges" : "extrudeVerts", opts = isE ? { thickness: 0, offset: 0 } : { length: 0, width: 0.1 };
+      const out = P2[op](base, items, opts);
+      if (out && out.m && !out.warn && out.m !== base) {
+        edit = { kind: "prep" };
+        try {
+          view.showPoly(out.m, true, true);
+          if (typeof forgeHistPush === "function") forgeHistPush({ kind: "op", op: op, tool: op, items: items, params: opts, main: isE ? "thickness" : "length" }, base);
+          if (typeof forgeTkSelect === "function") forgeTkSelect(view, out.sel);
+        } finally { edit = null; }
+      } else if (out && out.warn && typeof forgeSay === "function") forgeSay("Extrude: " + out.warn, true);
+    } else if (shiftHeld && view.poly && view.selected && view.selected.length) {
       // one undo step for the extrude and the drag (forge_scene.js undo chunk); the history gets the extrude
       if (view.undoOpen) view.undoOpen("Extrude");
       shiftExtrude = true;

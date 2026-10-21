@@ -1109,7 +1109,7 @@ function forgeSceneAttach(view, ctx) {
       for (const op of ops) {
         const r = scnEl("div", "forge-hist-row");
         // the pro node names for each step (polyExtrudeFace1, polySmoothFace1 ...); the step kind stays in the tooltip
-        const base = FORGE_HIST_NODE[op.kind] || op.kind;
+        const base = op.node || FORGE_HIST_NODE[op.kind] || op.kind;
         count[base] = (count[base] || 0) + 1;
         const nm = scnEl("span", "forge-hist-name", base + count[base] + (op.affected ? " \u00b7 " + op.affected + "v" : ""));
         nm.title = op.kind;

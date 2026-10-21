@@ -90,11 +90,16 @@ function fmyOn(id) {                                          // is a switch com
   try { return !!(typeof FORGE_PRO_TOGGLES !== "undefined" && FORGE_PRO_TOGGLES[id] && v && FORGE_PRO_TOGGLES[id](v)); } catch (_) { return false; }
 }
 // hotkey hints shown in the menus, pro-style
+// the key shown beside a command: the user's own hotkey set first (forge_keys.js), else the printed default
+function fmyKeyOf(id) {
+  if (window.forgeHotkeys) { const k = window.forgeHotkeys.keysFor(id); if (k.length) return window.forgeHotkeys.label(k[0]); }
+  return (typeof FMY_KEYS !== "undefined" && FMY_KEYS[id]) || "";
+}
 const FMY_KEYS = { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", duplicate: "Ctrl+D", duplicateT: "Shift+D", group: "Ctrl+G", ungroup: "Ctrl+Shift+G",
   parent: "P", unparent: "Shift+P", delete: "Del", selectAll: "Ctrl+Shift+A", selectNone: "Alt+D", invert: "Ctrl+Shift+I", grow: ">", shrink: "<",
   objComp: "F8", vertex: "F9", edge: "F10", face: "F11", select: "Q", move: "W", rotate: "E", scale: "R", pivotEdit: "D", frameSel: "F", frameAll: "A",
   wire: "4", shaded: "5", textured: "6", lights: "7", xray: "Alt+X", hide: "Ctrl+H", showLast: "Ctrl+Shift+H", hideOthers: "Alt+H", isolate: "Ctrl+1",
-  extrude: "Ctrl+E", bevel: "Ctrl+B", softSel: "B", hideUI: "Ctrl+Space", save: "Ctrl+S", snapGrid: "X", snapEdge: "C", snapPoint: "V", defaultView: "Alt+Home" };
+  extrude: "Ctrl+E", bevel: "Ctrl+B", deleteEdgeVert: "Ctrl+Delete", softSel: "B", hideUI: "Ctrl+Space", save: "Ctrl+S", snapGrid: "X", snapEdge: "C", snapPoint: "V", defaultView: "Alt+Home" };
 
 // ================================================================== drop-down menus (pro's: click opens, hover switches)
 let fmyOpenMenu = null;
@@ -118,7 +123,7 @@ function fmyDrop(anchor, items) {
     if (!enabled) { b.classList.add("off"); b.title = (c && c[2]) || "Not in Forge yet"; }
     const ticked = on != null ? on() : fmyOn(id);
     b.append(fmyEl("span", "fmy-tick", ticked ? "✓" : ""), fmyEl("span", "fmy-dlabel", label || (c ? c[0] : id)),
-      fmyEl("span", "fmy-dkey", FMY_KEYS[id] || ""));
+      fmyEl("span", "fmy-dkey", fmyKeyOf(id)));
     b.addEventListener("click", (ev) => {
       ev.stopPropagation();
       fmyCloseMenus();
@@ -210,9 +215,10 @@ const FMY_MENUS = () => {
     ["Modify", ["#Transform", "move", "rotate", "scale", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
     ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
     ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Settings/Preferences", "hotkeyEditor"])],
-    ["Mesh", ["#Combine", "combine", "separate", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "dynamesh", "-", "sculptModel"]],
-    ["Edit Mesh", (rows["Edit Mesh"] || ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"])],
-    ["Mesh Tools", (rows["Mesh Tools"] || ["softSel", "sculpt", "multiCut", "edgeLoop"]).concat(["-", "snapGrid", "snapEdge", "snapPoint"])],
+    ["Mesh", ["#Combine", "combine", "separate", "extractFace", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "triangulate", "quadrangulate", "dynamesh", "-", "fillHole", "-", "sculptModel"]],
+    ["Edit Mesh", ["#Components", "extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
+      "-", "#Edge", "spinEdge", "spinEdgeBack", "-", "#Face", "poke", "wedge", "duplicateFace", "reverse", "-", "deleteComp", "deleteEdgeVert"]],
+    ["Mesh Tools", ["#Tools", "edgeLoop", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "-", "softSel", "sculpt", "-", "winToolkit", "-", "snapGrid", "snapEdge", "snapPoint"]],
     ["Mesh Display", ["wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
     ["Help", [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}], ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
       ["help3", "Alt / Option + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
@@ -228,7 +234,7 @@ function fmyToolBtn(icon, id, title, run, extra) {
   const c = fmyCmd(id);
   const off = !run && !(c && c[1]);
   if (off) b.classList.add("off");
-  b.title = (title || (c ? c[0] : id)) + (FMY_KEYS[id] ? " (" + FMY_KEYS[id] + ")" : "") + (off && c && c[2] ? " - " + c[2] : "");
+  b.title = (title || (c ? c[0] : id)) + (fmyKeyOf(id) ? " (" + fmyKeyOf(id) + ")" : "") + (off && c && c[2] ? " - " + c[2] : "");
   b.setAttribute("aria-label", title || (c ? c[0] : id));
   b.addEventListener("click", (e) => { e.stopPropagation(); if (run) run(); else fmyRun(id); fmySync(); });
   return b;

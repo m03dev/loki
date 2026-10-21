@@ -224,6 +224,12 @@ function forgeHistApplyOp(base, op) {
     case "fillHole": return P.fillHoles(base, op.verts);
     case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
+    case "op": {                                       // a Modeling Toolkit tool (forge_toolkit.js / forge_polyops.js), redone
+      const fn = P[op.op];
+      if (typeof fn !== "function") return base;
+      const out = fn(base, op.items, Object.assign({}, op.params || {}));
+      return out && out.m ? (out.warn ? base : out.m) : (out && out.v ? out : base);
+    }
     case "tweak": {                                    // moved vertices (polyTweak): their new places
       const m = P.clone(base), t = op.verts || [];
       for (let k = 0; k + 3 < t.length; k += 4) if (m.v[t[k]]) m.v[t[k]] = [t[k + 1], t[k + 2], t[k + 3]];
@@ -304,7 +310,8 @@ window.forgeHistory = {
     const h = forgeModel.hist;
     if (!h) return [];
     return h.ops.map((o, i) => ({ i: i, kind: o.kind, affected: o.kind === "sculpt" ? o.verts.length / 7 : o.kind === "tweak" ? o.verts.length / 4 : null,
-      amount: o.kind === "dynamesh" ? o.res : (o.amount == null ? null : o.amount) }));
+      amount: o.kind === "dynamesh" ? o.res : o.kind === "op" ? (o.main && o.params && o.params[o.main] != null ? +o.params[o.main] : null) : (o.amount == null ? null : o.amount),
+      node: o.kind === "op" && typeof FORGE_TK_NODES !== "undefined" ? FORGE_TK_NODES[o.op] || null : null }));
   },
   setAmount(i, value) {
     const h = forgeModel.hist, op = h && h.ops[i];
@@ -312,6 +319,7 @@ window.forgeHistory = {
     const x = Number(value);
     if (!isFinite(x)) return false;
     if (op.kind === "dynamesh") { op.res = Math.max(16, Math.min(256, Math.round(x))); return forgeHistRebuildShow(); }
+    if (op.kind === "op") { if (!op.main) return false; op.params[op.main] = x; return forgeHistRebuildShow(); }
     if (op.kind === "sculpt" || op.amount == null) return false;   // a stroke has no number to type
     op.amount = x;
     if (op.kind === "extrude" || op.kind === "inset") {

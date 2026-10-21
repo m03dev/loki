@@ -923,3 +923,26 @@ button.forge-out-title:hover { opacity: 1; }
 #forge .forge-gen.floating { position: absolute; z-index: 41; width: 320px; max-height: calc(100% - 120px); border: 1px solid #222;
   border-radius: 4px; background: #2f3033; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
 #forge .forge-side:not(.floating) .forge-cr-pane:not(.floating) .forge-cr-make { display: none; }   /* docked: the Generate panel's own Make button is the one */
+
+/* ---- the Modeling Toolkit (forge_toolkit.js): a tab beside the Channel Box */
+.forge-tk-tabs { display: flex; gap: 1px; padding: 2px 2px 0; background: #3a3a3a; flex: none; }
+.forge-tk-tab { flex: 1; border: 0; background: #444; color: #bdbdbd; font: inherit; font-size: 11.5px; padding: 4px 6px; border-radius: 3px 3px 0 0; cursor: pointer; }
+.forge-tk-tab.on { background: #4f4f4f; color: #f0f0f0; }
+.forge-tk-away { display: none !important; }
+.forge-tk { overflow-y: auto; padding: 4px 6px 10px; font-size: 12px; color: #d6d6d6; min-height: 0; flex: 1 1 auto; }
+.forge-tk[hidden] { display: none; }
+.forge-tk-sec { border-top: 1px solid #2f2f2f; padding: 3px 0 6px; }
+.forge-tk-sec > summary { cursor: pointer; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #a5a5a5; padding: 3px 0; }
+.forge-tk-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin: 4px 0; }
+.forge-tk-mode, .forge-tk-btn { border: 1px solid #333; background: #5a5a5a; color: #eee; border-radius: 2px; font: inherit; font-size: 11.5px;
+  padding: 4px 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.forge-tk-mode.on { background: #5285a6; border-color: #5285a6; color: #fff; }
+.forge-tk-btn:hover:not(:disabled), .forge-tk-mode:hover { background: #6a6a6a; }
+.forge-tk-btn:disabled { opacity: .45; cursor: default; }
+.forge-tk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; margin-top: 4px; }
+.forge-tk-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.forge-tk-slider { display: grid; grid-template-columns: 92px 1fr 56px; align-items: center; gap: 6px; padding: 2px 0; }
+.forge-tk-slider input[type="number"] { width: 100%; background: #2b2b2b; color: #eee; border: 1px solid #222; border-radius: 2px; padding: 1px 3px; font: inherit; font-size: 11px; }
+.forge-tk-sethead { font-weight: 600; color: #e8e8e8; padding: 2px 0 4px; }
+.forge-tk-note { color: #9a9a9a; margin: 4px 0; font-size: 11.5px; }
+body.forge-tk-tool #forge-view { cursor: crosshair; }

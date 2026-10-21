@@ -50,7 +50,7 @@ const FORGE_KEY_DEFAULTS = [
   // windows
   ["ctrl+a", "channelBox"],
   // modelling
-  ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteComp"], ["ctrl+delete", "deleteComp"],
+  ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteEdgeVert"], ["ctrl+delete", "deleteEdgeVert"],
   // sculpting (held)
   ["b", "@brushSize"], ["m", "@brushStrength"],
 ];
@@ -81,7 +81,9 @@ const FORGE_KEY_GROUPS = [
   ["View", ["frameAll", "frameSel", "defaultView", "@viewUndo", "@viewRedo", "persp", "top", "front", "side", "single", "four"]],
   ["Pivot / Snap", ["@pivotHold", "@pivotToggle", "pivotEdit", "centerPivot", "resetPivot", "@snapGrid", "@snapEdge", "@snapPoint",
     "@snapStep", "snapGrid", "snapEdge", "snapPoint", "__smaller", "__bigger", "@nudgeUp", "@nudgeDown", "@nudgeLeft", "@nudgeRight"]],
-  ["Modelling", ["extrude", "inset", "bevel", "edgeLoop", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp", "smooth",
+  ["Modelling", ["extrude", "inset", "bevel", "bridge", "edgeLoop", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "connect",
+    "detach", "collapse", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp", "deleteEdgeVert", "smooth", "triangulate",
+    "quadrangulate", "averageVerts", "relax", "circularize", "spinEdge", "spinEdgeBack", "duplicateFace", "extractFace",
     "dynamesh", "combine", "separate", "mirror", "mirrorY", "mirrorZ", "chamfer", "poke", "wedge"]],
   ["Sculpting", ["@brushSize", "@brushStrength", "sculptRemesh", "sculptQuadRemesh", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
   ["Windows", ["channelBox", "outliner", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "wheel", "hotkeyEditor"]],
