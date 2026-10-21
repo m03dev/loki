@@ -428,7 +428,8 @@ print("== 5. the mode bar")
 index = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")
 mb = (REPO / "app" / "ui" / "modebar.js").read_text(encoding="utf-8")
 check("index.html loads modebar.js", '<script src="/ui/modebar.js" defer></script>' in index)
-check("modebar.js has the five modes", all('id: "%s"' % m in mb for m in ("loki", "studio", "godot", "world", "forge")))
+check("modebar.js has the four modes (Home, Forge, Render, Godot - Studio lives in Home, no World)",
+      all('id: "%s"' % m in mb for m in ("loki", "forge", "render", "godot")) and 'id: "studio"' not in mb and 'id: "world"' not in mb)
 try:
     from playwright.sync_api import sync_playwright  # type: ignore
 except ImportError:
@@ -444,13 +445,6 @@ else:
         pth = r.request.url.split("8897", 1)[1].split("?")[0].split("#")[0]
         if pth == "/":
             return r.fulfill(path=str(ui / "index.html"))
-        # LOKI World's engine: the TRACKED file is index.wasm.gz (index.wasm itself is gitignored, so a
-        # dev machine keeps a stale old export beside it) and the app serves it gzipped. Serve the .gz
-        # BEFORE the plain file, so a stale local index.wasm can never be handed to the current glue -
-        # on CI/PC the .wasm is absent and this is the only branch that ever runs.
-        if pth.endswith(".wasm") and (ui / (pth[4:] + ".gz")).is_file():
-            import gzip  # pylint: disable=import-outside-toplevel
-            return r.fulfill(body=gzip.decompress((ui / (pth[4:] + ".gz")).read_bytes()), headers={"Content-Type": "application/wasm"})
         if pth.startswith("/ui/") and (ui / pth[4:]).is_file():
             return r.fulfill(path=str(ui / pth[4:]))
         if r.request.method == "POST":
@@ -467,48 +461,40 @@ else:
             b = pw.chromium.launch(**({"executable_path": chromium} if chromium else {}))
             page = b.new_page(viewport={"width": 1240, "height": 820})
             errs = []
-            def _page_error(e):
-                t = str(e)
-                # the Godot export shell (World tab) tries to load its audio worklets; this suite serves the UI
-                # from disk with a stub route, so that load can fail with a network error - LOKI's own page is fine
-                # (the real app logs no such error). Not a script error to fail on.
-                if "worklet module script" in t or "worklet's module" in t:
-                    return
-                errs.append(t)
-            page.on("pageerror", _page_error)
+            page.on("pageerror", lambda e: errs.append(str(e)))
             page.route("http://127.0.0.1:8897/**", route)
             page.goto("http://127.0.0.1:8897/#token=t")
             page.wait_for_selector("#modebar .modebar-tab", timeout=15000)
             tabs = page.eval_on_selector_all("#modebar .modebar-tab", "els => els.map(e => e.dataset.mode)")
-            # Spaces was the sixth tab until 2026-10-21 (owner: "get rid of spaces"; archived)
-            check("the mode bar shows LOKI, Studio, Godot, World, Forge (Spaces taken out)",
-                  tabs == ["loki", "studio", "godot", "world", "forge"], tabs)
+            # 2026-10-21: Spaces, the World tab and the Studio tab are gone; Studio lives inside Home
+            check("the mode bar shows Home, Forge, Render, Godot", tabs == ["loki", "forge", "render", "godot"], tabs)
             page.evaluate("document.getElementById('prompt').value = 'half-typed message'")
-            page.keyboard.press("Control+2")
+            page.keyboard.press("Control+Shift+S")
             page.wait_for_timeout(500)
-            check("Ctrl+2 switches to Studio and frames it", page.evaluate("document.body.dataset.mode") == "studio"
-                  and page.evaluate("!!document.querySelector('[data-mode-pane=studio] iframe[src*=studio]')") and "/studio/embed" in posts)
-            page.keyboard.press("Control+3")
+            check("Ctrl+Shift+S opens Studio inside Home and frames it", page.evaluate("document.body.dataset.mode") == "loki"
+                  and page.evaluate("!!document.querySelector('#home-studio:not([hidden]) iframe[src*=studio]')") and "/studio/embed" in posts)
+            page.keyboard.press("Escape")
+            page.keyboard.press("Control+4")
             page.wait_for_timeout(400)
-            check("Ctrl+3 switches to Godot (the install button when the editor is missing)",
+            check("Ctrl+4 switches to Godot (the project picker)",
                   page.evaluate("document.body.dataset.mode") == "godot" and page.is_visible("[data-mode-pane=godot] select"))
             page.click("#mode-loki")
-            page.keyboard.press("Control+2")
+            page.keyboard.press("Control+Shift+S")
+            page.keyboard.press("Escape")
             page.keyboard.press("Control+1")
             page.wait_for_timeout(300)
             check("switching keeps each mode's state (the message, Studio's one frame, one embed call)",
                   page.evaluate("document.getElementById('prompt').value") == "half-typed message" and posts.count("/studio/embed") == 1
-                  and page.evaluate("document.querySelectorAll('[data-mode-pane=studio] iframe').length") == 1, posts)
+                  and page.evaluate("document.querySelectorAll('#home-studio iframe').length") == 1, posts)
             check("aria-selected follows the mode", page.get_attribute("#mode-loki", "aria-selected") == "true")
-            page.keyboard.press("Control+4")
+            page.keyboard.press("Control+3")
             page.wait_for_timeout(300)
-            check("Ctrl+4: World shows LOKI World's panel in its tab", page.evaluate(
-                "!!document.querySelector('[data-mode-pane=world] [data-panel=world]:not([hidden])')"))
-            page.keyboard.press("Control+5")
+            check("Ctrl+3: Render (says what to do when the Render Studio is not in this window)",
+                  page.evaluate("document.body.dataset.mode") == "render" and page.evaluate("!!document.querySelector('[data-mode-pane=render]')"))
+            page.keyboard.press("Control+2")
             page.wait_for_timeout(500)
-            check("Ctrl+5: Forge opens forge.js (or says it is coming); World's panel went back home",
-                  page.evaluate("document.body.dataset.mode") == "forge" and page.evaluate(
-                      "!!document.querySelector('#settings [data-panel=world]') || !document.querySelector('[data-mode-pane=world] [data-panel=world]')"))
+            check("Ctrl+2: Forge opens forge.js (or says it is coming); there is no World panel anywhere",
+                  page.evaluate("document.body.dataset.mode") == "forge" and not page.evaluate("!!document.querySelector('[data-panel=world]')"))
             page.keyboard.press("Control+1")
             check("no script errors", not errs, errs[:3])
             b.close()

@@ -38,15 +38,15 @@ FAKE_REPO = TMP / "repo"
 section("the real roadmap")
 real = evolve.roadmap(REPO)
 check("docs/EVOLVE.md has steps LOKI can take", len(real) >= 8 and all(i["id"].startswith("E") for i in real), real[:2])
-check("the owner's own tasks lead it (no L, ground texture, unique islands, loading screen); the game step is parked",
-      [i["id"] for i in real[:4]] == ["E13", "E15", "E14", "E12"] and not any(i["id"] == "E11" for i in real))
+check("the owner's own tasks lead it (no L, loading screen, Studio does everything); the world steps are gone (2026-10-21)",
+      [i["id"] for i in real[:3]] == ["E13", "E12", "E16"] and not any(i["id"] in ("E11", "E14", "E15", "E21", "E4") for i in real))
 
 section("what next: the owner's ideas first, then the roadmap; done steps skipped")
 clock = [1000.0]
 ev = evolve.Evolve(FAKE_REPO, TMP / "data", clock=lambda: clock[0])
 check("a finished roadmap step is skipped", ev.next_item()["id"] == "E2")
 check("a too-short idea is refused", not ev.add_idea("hi")["ok"])
-idea = ev.add_idea("Make the fox follow the cursor in LOKI World")["idea"]
+idea = ev.add_idea("Make the fox follow the cursor on the home screen")["idea"]
 check("the owner's idea goes first", ev.next_item()["id"] == idea["id"])
 loki_idea = ev.add_idea("A rabbit burrow by the pond", by="loki")["idea"]
 check("LOKI's own idea waits for the owner's OK", loki_idea["approved"] is False

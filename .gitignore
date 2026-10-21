@@ -30,8 +30,6 @@ engine/package-lock.json
 /scripts/
 /plugins/
 project.godot
-# ...except LOKI World, the MMO (AGENTS.md: the one Godot project, game/loki-world/)
-!game/loki-world/project.godot
 .git-rewrite/
 
 # Packaged builds and models
@@ -57,11 +55,5 @@ dist/
 # The Rust launcher (packaging/launcher) builds here
 packaging/launcher/target/
 
-# LOKI World's Godot web build (game/loki-world -> engine/world_build.py or Export -> Web) IS committed since
-# 2026-10-18, so the World tab is the Godot game on every machine without building it first. The engine is kept
-# gzipped (index.wasm.gz, served with Content-Encoding: gzip); the uncompressed one is never committed.
-app/ui/world_godot/index.wasm
-app/ui/world_godot/index.worker.js
-
-# Update leftovers: updater._move_aside_untracked keeps the old web build aside
+# Update leftovers: updater._move_aside_untracked keeps old untracked files aside
 *.before-update

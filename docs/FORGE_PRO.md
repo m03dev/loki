@@ -338,7 +338,6 @@ add r for ref cant click through", "free image plane ... png or jpeg", "all the 
 - **C++**: native/sculpt/core/src/cage_subdiv.cpp - Catmull-Clark of the modelling cage, bit-for-bit the JS
   ForgePoly.smooth, ~6x faster (25 600-face cage, 2 levels: 128 ms vs 783 ms) and in its own worker
   (app/ui/forge_geom.js), so the 2 / 3 smooth preview of a cage with 400+ faces never stalls the viewport.
-- Spaces (the P2P Discord tab) was taken out of LOKI (archived: docs/operations/archive/spaces/).
 - The modelling QoL research behind the next steps: docs/FORGE_QOL.md.
 
  (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)

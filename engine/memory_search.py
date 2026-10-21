@@ -52,7 +52,7 @@ SYNONYMS = {
     "wife": ["partner", "spouse"], "partner": ["wife", "husband"], "husband": ["partner", "spouse"],
     "boss": ["manager"], "manager": ["boss"], "theme": ["dark", "light", "mode"], "colour": ["color"],
     "color": ["colour"], "reply": ["answer", "response"], "answer": ["reply"], "short": ["brief", "concise"],
-    "brief": ["short", "concise"], "concise": ["short", "brief"], "game": ["godot", "mmo"],
+    "brief": ["short", "concise"], "concise": ["short", "brief"], "game": ["godot", "engine"],
     "model": ["llm", "ollama"], "llm": ["model"], "local": ["offline", "ollama"], "offline": ["local"],
     "phone": ["mobile", "ios", "android"], "mobile": ["phone"], "link": ["relay", "peer"],
     "relay": ["link", "peer"], "machine": ["computer", "pc", "mac"], "computer": ["machine", "pc", "mac"],

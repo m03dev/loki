@@ -9,7 +9,7 @@ A session is one conversation with Studio's agent about ONE thing it works on:
                 to this worktree), plus Studio's own tools (studio_tools.py). It can NEVER ship: the
                 owner's "Ship it" runs tools/ship.py (every suite must pass; the health-gated updater
                 does the rest on every machine). Discard removes the worktree and its branch.
-  kind "godot"  a Godot project - LOKI World or any of the owner's own games - live in the Godot
+  kind "godot"  a Godot project - any of the owner's own games - live in the Godot
                 editor through the LOKI Studio plugin (studio_godot.py). The agent reads and writes
                 the project's files, edits the open scene through the editor's UndoRedo, runs the
                 game, playtests it turn by turn, finds lag, reads the editor's and the game's errors.

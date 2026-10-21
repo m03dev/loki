@@ -249,7 +249,8 @@ section("wired into the engine")
 bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
 check("/events (long poll) and /world are served", 'route in ("/events", "/world")' in bridge and "events.wait(" in bridge)
 check("approvals are events", '"approval.required"' in bridge)
-check("the world protocol is documented for the Godot client", (REPO / "docs" / "WORLD.md").is_file())
+check("the live view is documented where it is served (events.py), the old world client docs are gone",
+      "GET /world" in (REPO / "engine" / "events.py").read_text(encoding="utf-8") and not (REPO / "docs" / "WORLD.md").exists())
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

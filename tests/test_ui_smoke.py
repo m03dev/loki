@@ -82,9 +82,7 @@ async def main() -> None:
             return
         page = await browser.new_page(viewport={"width": 1240, "height": 820})
         errors, missing, ui_posts = [], [], []
-        # LOKI World's Godot audio worklet is fetched outside Playwright's routing, so it cannot load in this fake
-        # server; through the real engine it loads (tests/test_world_godot_tab.py, checked 2026-10-18)
-        page.on("pageerror", lambda e: None if "worklet" in str(e).lower() else errors.append(str(e)))
+        page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "Failed to load resource" not in m.text else None)
 
         async def route(r):
@@ -95,10 +93,6 @@ async def main() -> None:
                 f = UI / path[4:]
                 if f.is_file():
                     return await r.fulfill(path=str(f))
-                gz = Path(str(f) + ".gz")
-                if path.endswith(".wasm") and gz.is_file():   # LOKI World's engine: the bridge serves index.wasm.gz
-                    import gzip  # pylint: disable=import-outside-toplevel
-                    return await r.fulfill(body=gzip.decompress(gz.read_bytes()), headers={"Content-Type": "application/wasm"})
                 if r.request.method != "GET" or path in ("/ui/error", "/ui/ready", "/ui/timing"):   # engine endpoints
                     ui_posts.append((path, r.request.post_data))
                     return await r.fulfill(json={"ok": True})

@@ -5,7 +5,7 @@ while it works on LOKI's code), and so can Claude Code, Codex or Ziva (docs/LOKI
 config snippet). Two halves:
 
   the running LOKI   status / version / update state, models doctor, General settings (never a
-                     secret), background jobs (list, start, stop, logs), world + presence, memory
+                     secret), background jobs (list, start, stop, logs), the live view (agents, machines), memory
                      search, tools health, creations, restart the engine. Through the engine's own
                      loopback API with its bridge token (harness_data/app/engine.token); when LOKI
                      is not running these say so - and the log files on disk can still be read.
@@ -267,8 +267,8 @@ class LokiAPI:
         return _redact(_tail(path, lines)) if path.is_file() else "(no %s log at %s yet)" % (which, path)
 
     def world_summary(self) -> str:
-        """LOKI World: the other machines' avatars and the world chat (presence)."""
-        return self._out(*self.bridge("GET", "/world/presence"))
+        """What is running right now: LOKI's agents, background jobs and teams, and the linked machines."""
+        return self._out(*self.bridge("GET", "/world"))
 
     def memory_search(self, query: str) -> str:
         """What LOKI would recall for `query` from its memory (the same retrieval a request uses)."""

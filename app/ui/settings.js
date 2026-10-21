@@ -934,7 +934,7 @@ function editAgent(a, isNew) {
               field("Goal", goal, "One line. Also how LOKI decides to hand work to it."),
               field("Harness", engine, "LOKI's own loop works offline with any model (prompted tools)."),
               field("Model", model, "Empty: LOKI's smart routing."), field("Fallback model", fallback),
-              field("Lives on", machine), field("Time per run", minutesBox), field("Colour in LOKI World", color));
+              field("Lives on", machine), field("Time per run", minutesBox), field("Colour in the agents list", color));
   const wide = el("div", "editor-wide");
   wide.append(field("Instructions", instructions), field("Tools", tools), field("Skills", skills),
               field("Memory", memoryCtl), field("May run commands (tests, builds) in its workspace", allowCtl));

@@ -67,13 +67,15 @@ How the pieces fit, as built. The direction for the next rounds of work is in
 | `conductor.py`, `capabilities.py`, `manifests.py`, `interfaces.py`, `runners/` | specialists and optional add-ons (capabilities/*/manifest.json) |
 | `workers.py`, `agents.py`, `cli_agents.py`, `sessions.py` | background agents and coding-agent subscriptions |
 | `team.py` | agent teams: roles chosen per goal, stages (plan, build, check, one fix round), a shared board |
-| `events.py` | the event stream (`/events`) and the world view (`/world`) for the in-app LOKI World (WebGL) |
+| `events.py` | the event stream (`/events`) and the live view of the agents at work (`/world`) |
 | `updater.py` | one version everywhere: update from GitHub on start, check while running (publish with `tools/ship.py`) |
 | `experience.py`, `usage.py`, `model_setup.py`, `federation.py` | learning, cost, local models, other machines' Ollama |
 | `peers.py`, `peer_link.py` | the Mac <-> PC link |
 | `phone_link.py` | the phone app (`mobile/`) <-> this machine: signed per-phone keys, Ask/Plan only, never approves ([PHONE.md](PHONE.md)) |
 | `knowledge.py`, `brain.py`, `project_state.py`, `repo_review.py`, `api_vault.py`, `ecc_sync.py` | context, memory, project state, skill libraries |
 | `godot_tools.py`, `godot_assets.py` | the optional Godot capability for game projects |
+| `godot_web.py`, `godot_live.py`, `godot_editor.py` | the Godot tab: the owner's projects in the real Godot editor, the live agent link, LOKI's own Godot 4.7.2 when the computer has none |
+| `home_projects.py` | the home screen's preview hub: renders, Forge models, Godot games, Studio sessions and farm jobs (`GET /home/projects`) |
 
 ## Data
 

@@ -14,7 +14,6 @@
 <script src="/ui/app.js" defer></script>
 <script src="/ui/setup.js" defer></script>
 <script src="/ui/machines.js" defer></script>
-<script src="/ui/world.js" defer></script>
 <script src="/ui/settings.js" defer></script>
 <script src="/ui/crm.js" defer></script>
 <script src="/ui/lab.js" defer></script>
@@ -33,6 +32,8 @@
 <script src="/ui/automations.js" defer></script>
 <script src="/ui/studio_link.js" defer></script>
 <script src="/ui/modebar.js" defer></script>
+<link rel="stylesheet" href="/ui/home.css">
+<script src="/ui/home.js" defer></script>
 <script src="/ui/artifacts.js" defer></script>
 <script src="/ui/chat_plus.js" defer></script>
 <script src="/ui/data_panel.js" defer></script>
@@ -73,6 +74,7 @@
 <script src="/ui/forge_options.js" defer></script>
 <script src="/ui/forge_chrome.js" defer></script>
 <script src="/ui/forge_sculpt.js" defer></script>
+<script src="/ui/forge_render.js" defer></script>
 <script src="/ui/apps.js" defer></script>
 <script src="/ui/modes.js" defer></script>
 <link rel="stylesheet" href="/ui/qol.css">
@@ -102,7 +104,6 @@
   </aside>
 
   <main class="main" id="main">
-    <div id="world-home" class="world-bg" aria-hidden="true"></div>
     <div id="update-banner" class="update-banner" hidden role="status">
       <span id="update-banner-text"></span>
       <button type="button" id="update-banner-go" class="send small">Update everything</button>
@@ -183,7 +184,6 @@
         <button type="button" role="tab" data-tab="general" aria-selected="false"><span class="ico" aria-hidden="true">◎</span>General</button>
         <button type="button" role="tab" data-tab="connections" aria-selected="true"><span class="ico" aria-hidden="true">⚡</span>Connections<span id="conn-count" class="count"></span></button>
         <button type="button" role="tab" data-tab="agents" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Agents</button>
-        <button type="button" role="tab" data-tab="world" aria-selected="false"><span class="ico" aria-hidden="true">◈</span>LOKI World</button>
         <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
         <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
         <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
@@ -202,7 +202,7 @@
     </nav>
     <div class="tab-body">
       <section data-panel="system" hidden>
-        <header class="panel-head"><h3>System check</h3><p class="note">One click proves LOKI's parts work together on this computer: a model answers through the smart route and uses a tool, a background agent runs and shows up in the world, a team plans, the safety rules hold. Anything that does not work says exactly what to do. It never spends money unless you allow paid providers.</p></header>
+        <header class="panel-head"><h3>System check</h3><p class="note">One click proves LOKI's parts work together on this computer: a model answers through the smart route and uses a tool, a background agent runs and shows up in the live view, a team plans, the safety rules hold. Anything that does not work says exactly what to do. It never spends money unless you allow paid providers.</p></header>
         <div id="system-panel" class="sc"></div>
       </section>
       <section data-panel="general" hidden>
@@ -228,11 +228,6 @@
       <section data-panel="agents" hidden>
         <header class="panel-head"><h3>Agents</h3><p class="note">Build agents you want to keep: a role, skills, tools, a model, a harness and the machine they live on. Teams still assemble themselves; these are your regulars.</p></header>
         <div id="agents-panel"></div>
-      </section>
-      <section data-panel="world" hidden>
-        <header class="panel-head"><h3>LOKI World</h3><p class="note">The Godot game of your agents and their real work. Edit it in the Godot editor (Godot tab &gt; Open in Godot); &quot;Rebuild the World tab&quot; brings your changes here.</p></header>
-        <div class="world-frame" aria-label="LOKI World (Godot)"></div>
-        <div id="world-legend" class="world-legend"></div>
       </section>
       <section data-panel="automations" hidden>
         <header class="panel-head"><h3>Automations</h3><p class="note">LOKI does things by itself: on a schedule, when a file lands in a folder, a new email, before a meeting, a webhook, a word on Telegram, a job ending or a machine coming online. Say it in one sentence; you see the card and turn it on. Anything that touches your accounts asks first unless you pre-approve that exact automation.</p></header>
@@ -283,7 +278,7 @@
         <div id="brain-panel" class="brain"></div>
       </section>
       <section data-panel="play" hidden>
-        <header class="panel-head"><h3>Play</h3><p class="note">Games made with LOKI's own Pixel Engine, in LOKI World's pixel cel-shaded look. Ask LOKI to make one ("make a game where the fox...") and it appears here. Games run sealed off from LOKI: they cannot see your files or keys.</p></header>
+        <header class="panel-head"><h3>Play</h3><p class="note">Games made with LOKI's own Pixel Engine, in a pixel cel-shaded look. Ask LOKI to make one ("make a game where the fox...") and it appears here. Games run sealed off from LOKI: they cannot see your files or keys.</p></header>
         <div id="play-panel" class="play"></div>
       </section>
       <section data-panel="lab" hidden>

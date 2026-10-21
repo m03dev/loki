@@ -8,12 +8,14 @@ or fix in LOKI; it works on LOKI's code in its own git worktree with DeepSeek V4
 every step and the diff, and ships only when you press **Ship it**. It keeps working when LOKI is
 broken, not running, or in the middle of an update.
 
-## One client: Studio is a tab of LOKI's window (owner, 2026-10-17)
+## One client: Studio lives inside Home (owner, 2026-10-17 and 2026-10-21)
 
-"loki studio should not be another window but the same client, just another tab; utilize the top tab like godot engine
-to switch between modes." The mode tabs **LOKI** (chat/home) / **Studio** / **Godot** / **World** / **Forge** sit IN the
-window's title bar (`app/ui/modebar.js`, a 38 px title strip), Ctrl+1..5 (Cmd on the Mac). Each mode keeps its state when
-you switch away (panes are built once and only hidden).
+"loki studio should not be another window but the same client" (2026-10-17), then "combine studio with home we dont need
+them both, they do the same thing" (2026-10-21). The mode tabs **Home** / **Forge** / **Render** / **Godot** sit IN the
+window's title bar (`app/ui/modebar.js`, a 38 px title strip), Ctrl+1..4 (Cmd on the Mac). Studio opens as a full-height
+pane inside Home (`app/ui/home.js`): the Studio icon in the home header, a Studio session's card, the sidebar's LOKI
+Studio button or Ctrl/Cmd+Shift+S; the back arrow or Esc closes it (Studio keeps running). Each mode keeps its state
+when you switch away (panes are built once and only hidden).
 - **macOS**: the native traffic lights stay; `app/loki_app.py` makes the title bar transparent and title-less over a
   full-size content view (pyobjc, on pywebview's `before_show`; every call guarded - a failure leaves the normal title
   bar) and tells the page (`#...&titlebar=mac`), so the strip starts after the traffic lights (78 px).
@@ -26,23 +28,24 @@ you switch away (panes are built once and only hidden).
   stays inside the window, caps its height and scrolls inside; dialogs are sized with vh/% and clamp() under the strip.
   `tests/test_ui_fit.py` opens them at 900x600, 960x1040 and 1920x1080.
 
-- **Studio**: the first time the tab opens, LOKI asks its engine (`POST /studio/embed`, engine/studio_api.py) to start
+- **Studio**: the first time Studio opens, LOKI asks its engine (`POST /studio/embed`, engine/studio_api.py) to start
   Studio's server in the background (`studio_app.py --headless`, no window; once - a second click while it comes up does
   not start another) and frames Studio's own loopback page with its token. Studio keeps its own process and server, so it
   still works when LOKI is broken, and the Godot plugin still links to it. Studio's CSP allows only a loopback page to
   frame it; LOKI's window allows framing only loopback (`frame-src`). `Loki Studio.cmd` / `loki_studio.sh` still open the
-  standalone window for those who want it. The sidebar's LOKI Studio button now switches to the tab.
+  standalone window for those who want it. A Studio card on the home screen opens Studio on that session (`#...&session=<id>`).
 - **Godot** (`engine/godot_web.py`): the official Godot 4 **web editor** (MIT), downloaded on first use from the
-  `4.7.2-stable` release (LOKI World is a 4.7 project) into `<data>/addons/godot-web-editor`, SHA-512 checked against the release's SHA512-SUMS
+  `4.7.2-stable` release into `<data>/addons/godot-web-editor`, SHA-512 checked against the release's SHA512-SUMS
   (nothing kept on a mismatch; zip members that are folders, absolute, `..` or odd types are refused), never committed.
   Served at `/godot-editor/app/` with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
-  require-corp` (SharedArrayBuffer). Projects: `~/LOKI Projects/<name>` and `game/loki-world`. **Which way files flow**
+  require-corp` (SharedArrayBuffer). Projects: `~/LOKI Projects/<name>`. **Which way files flow**
   (said in the tab): the project folder -> "Project to the web editor" (a zip) -> the editor's Import; back: the editor's
   Project > Tools > Download Project Source -> "Bring back from Downloads" (writes only inside the project folder).
   LOKI's own window is not cross-origin isolated, so the tab says so and offers "Web editor in its own window" (the page
   there IS isolated) and **Open in the Godot app** (the installed editor, `--editor --path`, with the LOKI Studio plugin
   installed first).
-- **World**: LOKI World's panel (the same one as Settings > LOKI World) shown in the tab. **Forge**: forge.js's sheet.
+- **Forge**: forge.js's sheet. **Render**: the Render Studio (it registers itself with `LokiModeBar.register("render", ...)` or
+  `window.LokiRenderStudio`); until then the tab offers Forge's own Render window. **Home**: the preview hub (`GET /home/projects`).
 
 ## Where is this going? (studio/studio_destination.py)
 
@@ -182,8 +185,8 @@ Ziva's public feature list and Godot's own APIs; no Ziva code or files were copi
    - or copy `studio/godot_plugin/addons/loki_studio/` to `<project>/addons/loki_studio/` and enable **LOKI Studio**
      in Project > Project Settings > Plugins.
    The installer also turns it on in `project.godot` (`[editor_plugins]`) and adds the game autoload
-   `LokiStudioGame`; `--remove` takes all of it out again. Works for LOKI World (`game/loki-world`) and the owner's
-   own games (`~/LOKI Projects/<name>`).
+   `LokiStudioGame`; `--remove` takes all of it out again. Works for the owner's own games
+   (`~/LOKI Projects/<name>`).
 3. Open the project in Godot (4.4+; 4.5+ for error capture, 4.6+ docks natively). The **LOKI Studio** dock appears
    on the right and links to Studio by itself (status "linked"). Studio's window shows "1 Godot editor linked" and
    offers the project as a target ("On: Godot: <name>").
@@ -211,7 +214,7 @@ studio/godot_plugin/addons/loki_studio/
 ```
 
 AGENTS.md: this folder is the third allowed place for Godot files (owner decision 2026-10-17); it has no
-`project.godot`. `tests/test_loki.py` and `tests/test_godot_world.py` allow its `.gd` files.
+`project.godot`. `tests/test_loki.py` and `tests/test_studio_godot.py` allow its `.gd` files.
 
 ## The Ziva-style workflow (in the window AND the dock)
 

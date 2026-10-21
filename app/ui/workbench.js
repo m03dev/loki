@@ -1,7 +1,7 @@
 // Workbench - Claude Code / Ziva habits in LOKI's window (engine/workbench.py on the engine side).
 //
 //   /commands   type "/" in the message box: a palette of commands (modes, review, rewind,
-//               background agents, teams, model switch, the world, the system check...)
+//               background agents, teams, model switch, the home screen, the system check...)
 //   @files      type "@" and part of a name: pick a workspace file; the engine attaches its
 //               contents to the message
 //   checkpoints every Build request is checkpointed first; after the reply a bar shows the
@@ -28,7 +28,8 @@ const Workbench = (function () {
     { name: "model", hint: "switch model (name)", arg: "name", run: (a) => model(a) },
     { name: "models", hint: "doctor: which model LOKI picks for each kind of task, and why", run: () => modelsDoctor() },
     { name: "clear", hint: "start a new chat", run: () => { if (typeof newChat === "function") newChat(); } },
-    { name: "world", hint: "open LOKI World", run: () => settings("world") },
+    { name: "home", hint: "the home screen: your renders and projects", run: () => { if (window.LokiModeBar) window.LokiModeBar.go("loki"); if (typeof showHome === "function") showHome(); } },
+    { name: "studio", hint: "open Studio: build or change an app with an agent", run: () => { if (window.LokiHome) window.LokiHome.openStudio(); } },
     { name: "machines", hint: "your linked machines", run: () => settings("machines") },
     { name: "check", hint: "prove every part of LOKI works", run: () => settings("system") },
     { name: "usage", hint: "what your requests cost", run: () => settings("usage") },
@@ -72,7 +73,7 @@ const Workbench = (function () {
   async function team(goal) {
     const data = await api("/teams", { goal }).catch((e) => ({ ok: false, error: String(e) }));
     if (typeof showChat === "function") showChat();
-    if (data.ok) addLoki("Started a team on: **" + goal + "**. Watch it in the work strip and in LOKI World.");
+    if (data.ok) addLoki("Started a team on: **" + goal + "**. Watch it in the work strip and on the home screen.");
     else addNotice(data.error || "Could not start the team.", true);
   }
 
@@ -135,7 +136,6 @@ const Workbench = (function () {
   function settings(tab) {
     if (typeof openSettings === "function") openSettings();
     if (typeof showTab === "function") showTab(tab);
-    if (tab === "world" && typeof showWorldPanel === "function") showWorldPanel();
   }
 
   async function checkpoint(label) {

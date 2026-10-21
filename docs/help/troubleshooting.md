@@ -18,7 +18,7 @@ Quit LOKI and open it again. If an update caused it, LOKI goes back to the versi
 ## It is slow
 
 - Local models are slower on computers without a strong graphics card or Apple Silicon. A free online model is faster.
-- Turn on **Reduce motion** (Settings > General) to stop the 3D world in the background.
+- Turn on **Reduce motion** (Settings > General) to stop animations.
 
 ## Still stuck?
 

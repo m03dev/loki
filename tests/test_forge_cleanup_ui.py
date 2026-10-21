@@ -74,7 +74,7 @@ async def main():
         await E("localStorage.removeItem('loki-forge-hotkeys'); localStorage.removeItem('loki-forge-split')")
 
         tabs = await E("[...document.querySelectorAll('.modebar-tab')].map((b) => b.dataset.mode)")
-        check("Spaces is out of the title bar (archived in docs/operations/archive/spaces/)",
+        check("Spaces is out of the title bar",
               "spaces" not in tabs and "forge" in tabs and not await E("!!window.LokiSpaces"), tabs)
 
         await page.click("#open-forge")

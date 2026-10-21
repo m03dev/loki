@@ -298,19 +298,12 @@ def callbacks(state: Any, agent: Any) -> dict:
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
             "restart": lambda: _restart_soon(state),
-            "presence": _presence_receive,
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
             "apps_sync": lambda origin, data: _apps_receive(agent, origin, data),
 
             "files": _files_receive,
             "automations": _automations_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
-
-
-def _presence_receive(origin: str, data: dict) -> dict:
-    """POST /peer/presence: another machine's avatar for LOKI World (presence.py)."""
-    import presence  # pylint: disable=import-outside-toplevel
-    return presence.HUB.receive(origin, data)
 
 
 def _memory_receive(agent: Any, origin: str, data: dict) -> dict:
@@ -450,16 +443,16 @@ def ask_peers_to_check_update() -> list:
     return told
 
 
-_WORLD_MACHINES: dict = {"t": 0.0, "list": [], "busy": False}
+_MACHINES_LIVE: dict = {"t": 0.0, "list": [], "busy": False}
 
 
-def world_machines(max_age_s: float = 30.0) -> list:
-    """Your other machines for LOKI World: name, online, latency, live jobs, version. Cached;
-    refreshed in the background, so GET /world (polled every few seconds) never waits on the
+def machines_live(max_age_s: float = 30.0) -> list:
+    """Your other machines (the worker farm): name, online, latency, live jobs, version. Cached;
+    refreshed in the background, so a poll (GET /world, the home screen) never waits on the
     network."""
     if not peers.peers():
         return []
-    state = _WORLD_MACHINES
+    state = _MACHINES_LIVE
     if time.time() - state["t"] > max_age_s and not state["busy"]:
         state["busy"] = True
 
@@ -477,11 +470,11 @@ def world_machines(max_age_s: float = 30.0) -> list:
                                 "queued": int(jobs.get("queued", 0) or 0), "blocked": int(jobs.get("blocked", 0) or 0),
                                 "models": len(hello.get("ollama_models") or [])})
                 state["list"] = out
-            except Exception:  # noqa: BLE001 - the world must never break on the network
+            except Exception:  # noqa: BLE001 - the view must never break on the network
                 pass
             finally:
                 state["t"], state["busy"] = time.time(), False
-        threading.Thread(target=refresh, daemon=True, name="loki-world-machines").start()
+        threading.Thread(target=refresh, daemon=True, name="loki-machines-live").start()
     return state["list"]
 
 

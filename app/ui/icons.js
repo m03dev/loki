@@ -56,7 +56,7 @@ function iconSvg(name) {
 // [selector, icon, name, what it does]
 const ICON_BUTTONS = [
   ["#new-chat", "plus", "New chat", "Start a fresh conversation with LOKI."],
-  ["#open-settings", "gear", "Settings", "Connections, models, add-ons, machines, creations, the world and more."],
+  ["#open-settings", "gear", "Settings", "Connections, models, add-ons, machines, creations and more."],
   ["#check-everything", "shield", "Check everything", "Prove every part of LOKI works together on this computer."],
   ["#update-banner-go", "update", "Update everything", "Update LOKI on every linked machine; each one restarts on the new version."],
   ["#update-banner-later", "clock", "Later", "Hide this until the next check."],
@@ -75,10 +75,9 @@ const ICON_BUTTONS = [
 
 const TAB_ICONS = {
   system: ["check", "Check this computer: what works, what is missing and how to fix it."],
-  general: ["sliders", "LOKI's options: the world's look, updates, keys you paste in, behaviour."],
+  general: ["sliders", "LOKI's options: the title bar, updates, keys you paste in, behaviour."],
   connections: ["plug", "Model providers and accounts: connect, test and pick models."],
   agents: ["people", "LOKI's agents and specialists: who does what, with which model."],
-  world: ["globe", "LOKI World: the islands, your machines and the agents at work."],
   machines: ["monitors", "Your computers running LOKI, linked together, and updating them all."],
   models: ["chip", "Models that run on this computer (Ollama, MLX): install and test them."],
   capabilities: ["puzzle", "Add-ons: extra powers LOKI can install and use."],

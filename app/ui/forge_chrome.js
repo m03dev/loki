@@ -692,7 +692,10 @@ function forgeProViewportAttach(view, ctx) {
     fmyMenuButton("Show", () => [["grid", "Grid", () => fmyRun("grid"), () => !!(view.pro && view.pro.grid && view.pro.grid.visible)],
       ["hudT", "Heads Up Display", () => fmyUiSet("hud"), () => fmyUi().hud], ["cubeT", "View Cube", () => fmyUiSet("viewcube"), () => fmyUi().viewcube],
       ["snapsT", "Snap chips", () => { const s = document.getElementById("forge-snaps"); if (s) s.hidden = !s.hidden; }, () => { const s = document.getElementById("forge-snaps"); return !!(s && !s.hidden); }]], "fmy-pmb"),
-    fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true]], "fmy-pmb"),
+    fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true],
+      // the path tracer (app/ui/forge_render.js): the viewport refining itself, and the Render window
+      ...(window.ForgeRender ? ["-", ["renderPreview", "Path Traced Preview", () => window.ForgeRender.togglePreview(), () => window.ForgeRender.previewOn()],
+        ["renderDialog", "Render...", () => window.ForgeRender.openDialog(true)]] : [])], "fmy-pmb"),
     fmyMenuButton("Panels", () => ["#Perspective", ["persp", "persp", look("persp"), () => view.cam === "persp"], "#Orthographic",
       ["top", "top", look("top"), () => view.cam === "top"], ["front", "front", look("front"), () => view.cam === "front"], ["side", "side", look("side"), () => view.cam === "side"],
       "-", "#Layouts", "single", "four", "-", "winOutliner", "winChannel"], "fmy-pmb"));

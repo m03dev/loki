@@ -282,9 +282,37 @@ def stronger_model(agent, job: dict, files: dict | None = None) -> str:
     return ""
 
 
+def retry_spec(job: dict | None, model: str = "") -> dict:
+    """A new job doing what a finished one tried, on another (stronger) model.
+
+    Only the prompt and harmless options are kept; the model is the one asked for (from the
+    app's model list) or left to the engine. Raises ValueError when there is nothing to retry.
+    """
+    if not job:
+        raise ValueError("no such job")
+    if str(job.get("status") or "") not in ("failed", "cancelled", "done"):
+        raise ValueError("only a finished job can be retried")
+    prompt = str(job.get("prompt") or "").strip()
+    commands = job.get("commands") or []
+    if not prompt and not commands:
+        raise ValueError("that job has nothing to run again")
+    spec: dict = {"backend": str(job.get("backend") or "local"), "agent": str(job.get("agent") or "loki"),
+                  "isolate": bool(job.get("isolate", True)), "title": ("Retry: " + str(job.get("title") or prompt))[:80]}
+    if prompt:
+        spec["prompt"] = prompt
+    if commands:
+        spec["commands"] = list(commands)
+    for key in ("timeout_s", "workspace", "color", "agent_id", "profile"):   # never allow_commands: no new powers
+        if job.get(key):
+            spec[key] = job[key]
+    model = re.sub(r"[\x00-\x1f\x7f]", "", str(model or "")).strip()[:60]
+    if model:
+        spec["model"] = model
+    return spec
+
+
 def retry_stronger(state, data: dict, job_action) -> tuple:
     """POST /jobs/retry_stronger {id}: start the job again on a stronger model."""
-    import presence  # pylint: disable=import-outside-toplevel
     jobs = getattr(state, "jobs", None)
     if jobs is None:
         return 503, {"ok": False, "error": "Background jobs are not running."}
@@ -297,7 +325,7 @@ def retry_stronger(state, data: dict, job_action) -> tuple:
     if not model:
         return 400, {"ok": False, "error": "no stronger free model is set up here - connect one in Settings > Connections"}
     try:
-        spec = presence.retry_spec(job, model)
+        spec = retry_spec(job, model)
     except ValueError as exc:
         return 400, {"ok": False, "error": str(exc)}
     spec["title"] = ("Retry on %s: %s" % (model, job.get("title") or ""))[:80]

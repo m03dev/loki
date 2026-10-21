@@ -144,8 +144,8 @@ function showEmpty() {
 function setView(view) {
   const home = view === "home";
   $("#main").classList.toggle("home", home);
-  if (typeof window.syncHomeWorld === "function") window.syncHomeWorld();   // the live LOKI World backdrop
-  // Home is just the world and the word "Loki"; the chat box appears when it is clicked.
+  if (window.LokiHome) window.LokiHome.sync();   // the preview hub (home.js)
+  // Home is the preview hub and the word "Loki"; the chat box appears when it is clicked (or you type).
   if (home) $("#main").classList.remove("summoned");
   const welcome = $("#welcome");
   if (welcome) welcome.hidden = !home;
@@ -532,8 +532,6 @@ function showTab(name) {
   if (name === "connections") { loadConnections(); if (typeof loadPortal === "function") loadPortal(); }
   if (name === "general" && typeof loadGeneral === "function") loadGeneral();
   if (name === "agents" && typeof loadAgents === "function") loadAgents();
-  if (name === "world" && typeof showWorldPanel === "function") showWorldPanel();
-  if (name !== "world" && typeof hideWorldPanel === "function") hideWorldPanel();
   if (name === "machines" && typeof loadUpdatePanel === "function") loadUpdatePanel();
   if (name === "tools") { loadCategories(); if (typeof loadUserTools === "function") loadUserTools(); if (typeof loadToolsPanel === "function") loadToolsPanel(); }
   if (name === "memory") loadMemory();
@@ -960,7 +958,7 @@ function wire() {
     if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey && main.classList.contains("home")
         && !main.classList.contains("summoned") && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target || {}).tagName || "")
         && $("#settings").hidden && !keyForControl(ev)
-        && !document.querySelector(".sheet:not([hidden])")) {   // a sheet (Forge, World, Studio...) owns the keys
+        && !document.querySelector(".sheet:not([hidden])")) {   // a sheet (Forge, Files, Settings...) owns the keys
       ev.preventDefault();
       summon(true);
       const prompt = $("#prompt");
@@ -990,14 +988,12 @@ function wire() {
   $("#settings-x").addEventListener("click", () => $("#close-settings").click());
   $("#close-settings").addEventListener("click", () => {
     $("#settings").hidden = true;
-    if (typeof hideWorldPanel === "function") hideWorldPanel();
   });
   $("#settings").addEventListener("click", (event) => { if (event.target === $("#settings")) $("#settings").hidden = true; });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if ($("#qr-modal") && !$("#qr-modal").hidden) { $("#qr-modal").hidden = true; return; }
     $("#settings").hidden = true;
-    if (typeof hideWorldPanel === "function") hideWorldPanel();
   });
   for (const tab of document.querySelectorAll(".tabs button")) tab.addEventListener("click", () => showTab(tab.dataset.tab));
   $("#save-memory").addEventListener("click", async () => {
@@ -1028,7 +1024,7 @@ async function start() {
   api("/ui/ready", { ua: navigator.userAgent.slice(0, 200), version: (window.LOKI_VERSION || "") }).catch(() => {});
   setStatus("Ready", true);
   // allSettled: one of these failing (a provider list that did not load) must never stop what follows - the
-  // World, the jobs, the home screen (with Promise.all a single failure left LOKI World never started)
+  // jobs and the home screen
   for (const r of await Promise.allSettled([loadModels(), loadMode(), loadConversations()])) {
     if (r.status === "rejected") console.warn("LOKI start:", r.reason);
   }
@@ -1037,8 +1033,8 @@ async function start() {
   wireChangedBanner();
   checkChangedCapabilities();
   if (typeof afterStart === "function") afterStart();
-  showHome();     // just the world and the word "Loki" until it is clicked
-  if (typeof window.startHomeWorld === "function") window.startHomeWorld();   // the live world behind it
+  showHome();     // the preview hub (home.js) and the word "Loki" until it is clicked
+  if (window.LokiHome) window.LokiHome.refresh();
 }
 
 document.addEventListener("DOMContentLoaded", start);

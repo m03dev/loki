@@ -38,13 +38,13 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Steam P2P transport | Proposed | not evaluated; the transport is replaceable (peers.py) |
 | School PC / laptop as conditional workers | Proposed | any machine running LOKI can be linked; nothing machine-specific built |
 
-## 3. World: agents as characters
+## 3. Home: the preview hub and the live view
 
 | Item | Status | Where / evidence |
 | --- | --- | --- |
-| Real-state API for the world | Tested | `GET /world`, `GET /events`, docs/WORLD.md |
-| 3D world in the app (plain WebGL) | Implemented | `app/ui/world.js`; WebView2/WKWebView check is ZIVA W6/M6 |
-| Characters only act on real events | Tested (engine side) | `events.world` builds agents from jobs/teams/events only |
+| Real-state live view | Tested | `GET /world`, `GET /events` (engine/events.py) |
+| Home preview hub (renders, models, games, Studio, farm jobs) | Tested (cloud) | `GET /home/projects` (engine/home_projects.py), `app/ui/home.js`; tests/test_home_projects.py |
+| The live view only shows real events | Tested (engine side) | `events.world` builds agents from jobs/teams/events only |
 | Nordic LOKI identity (L-geometry logo, navy + cyan/emerald) | Proposed | not in the app yet |
 
 ## 4. Bridge: integrations
@@ -80,8 +80,6 @@ on macOS and Windows in CI. Update this file when a status changes.
 | Update everything + rollback of a version that does not start | Tested | `update_all.py`, `updater.py` health, `loki_app.py` supervisor; two-machine run is ZIVA W7 |
 | Agent builder (skills, tools, harness, fallback, home machine, draft) | Tested | `agents.py`, `/agents/launch`; peer placement live run pending |
 | media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach) | Implemented | runners + manifests; real runs are ZIVA W5 |
-| LOKI World 3D in the app (WebGL) | Implemented | `world.js`; rendered in headless Chromium; WebView2/WKWebView check ZIVA W6/M6 |
-| Native (non-web) world client | Not planned | the world stays in the app (WebGL) |
 
 ## Session 17 additions (2026-10-15, on master)
 

@@ -226,7 +226,7 @@
     annotateStatic();
     await set(guess(), { quiet: true });
     readyResolve(lang);
-    // only what was added (cheap even when LOKI World's labels change every frame); every write
+    // only what was added (cheap even when labels change every frame); every write
     // above is skipped when the text is already right, so this never feeds itself
     let pending = [];
     new MutationObserver((records) => {

@@ -1,12 +1,11 @@
-"""The live Godot link: LOKI's agents work INSIDE the real Godot editor, on LOKI World (or any project).
+"""The live Godot link: LOKI's agents work INSIDE the real Godot editor, on the owner's own projects.
 
-Owner, 2026-10-18: "i want the loki world to be an editable project in godot - godot and loki world should be the same
-thing ... the agents should be able to roam around in a live project state, change everything ... the web godot is of no
-help to us, we want the godot and the assetstore and all the plugins". So:
+Owner, 2026-10-18: "the agents should be able to roam around in a live project state, change everything ... we want the
+godot and the assetstore and all the plugins". So:
 
-* LOKI World IS game/loki-world, opened in the owner's real Godot editor (Asset Library, every plugin). The LOKI Studio
-  plugin (studio/godot_plugin/addons/loki_studio) is installed into it and enabled by LOKI when it opens the project.
-* The plugin links to TWO hubs: LOKI Studio (its own app, as before) and - new - LOKI's engine, through this module.
+* A project (~/LOKI Projects/<name>) opens in the owner's real Godot editor (Asset Library, every plugin). The LOKI
+  Studio plugin (studio/godot_plugin/addons/loki_studio) is installed into it and enabled by LOKI when it opens it.
+* The plugin links to TWO hubs: LOKI Studio (its own app) and LOKI's engine, through this module.
   The engine writes ~/.loki/engine_connect.json (url + token, mode 600) when it starts; the plugin reads it.
   Routes, the same the plugin already speaks to Studio: POST /api/godot/hello | result | event, GET /api/godot/poll,
   GET /api/godot/editors, POST /api/godot/call {action, args, project?}.
@@ -15,14 +14,13 @@ help to us, we want the godot and the assetstore and all the plugins". So:
   run/stop the game, screenshots, input to the running game, its live tree) plus install_plugin. A job runs in its own
   process, so the tool calls the engine over loopback; in the engine it calls the hub directly. Every scene change goes
   through the editor's UndoRedo (Ctrl+Z), and Ask/Plan mode only gets the read actions.
-* Agents roam while they work: each editor action an agent makes is remembered for ACTIVE_S; LOKI World's /world puts
-  that agent at the "godot forge" station with what it is doing as its words (engine/events.world). The running game
-  (played from the editor) gets the edits live: the plugin turns on Debug > Synchronize Scene Changes and Synchronize
-  Script Changes.
+* Each editor action an agent makes is remembered for ACTIVE_S, so the Godot tab and the agents list (GET /world,
+  engine/events.world) show who is working in the editor and what it is doing. The running game (played from the
+  editor) gets the edits live: the plugin turns on Debug > Synchronize Scene Changes and Synchronize Script Changes.
 * Plugins from the Asset Library: install_plugin {asset_id} downloads the asset's pinned archive (GitHub, its exact
-  commit), copies only its addons/<name>/ into the project and records it in <project>/plugins.json - which IS
-  committed for LOKI World, while addons/ stays untracked (AGENTS.md) - so every machine installs the same plugins
-  (sync_plugins, run when LOKI opens the project).
+  commit), copies only its addons/<name>/ into the project and records it in <project>/plugins.json (addons/ itself
+  stays out of version control), so every machine installs the same plugins (sync_plugins, run when LOKI opens the
+  project).
 """
 from __future__ import annotations
 
@@ -43,7 +41,6 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "studio"))
 import studio_godot  # noqa: E402  (the hub and the action list are Studio's: one implementation)
 
-WORLD = REPO / "game" / "loki-world"
 ASSET_API = "https://godotengine.org/asset-library/api/asset/"
 ACTIVE_S = 90.0                     # an agent shows at the Godot station this long after its last editor action
 MAX_PLUGIN_ZIP = 80 * 1024 * 1024
@@ -86,7 +83,7 @@ def write_connect(port: int, token: str) -> Path:
     return studio_godot.write_connect(connect_path(), "http://127.0.0.1:%d" % int(port), token)
 
 
-# ------------------------------------------------------------------ who is doing what (LOKI World shows it)
+# ------------------------------------------------------------------ who is doing what (the Godot tab shows it)
 def actor() -> str:
     """The agent making this call: a background job, a team role, or LOKI (the chat)."""
     job = os.getenv("LOKI_JOB_ID", "").strip()
@@ -113,12 +110,12 @@ def active(now: float | None = None) -> dict:
 
 
 def apply_to_world(agents: list, now: float | None = None) -> list:
-    """engine/events.world: an agent working in the editor stands at the Godot forge and says what it is doing."""
+    """engine/events.world: an agent working in the editor is shown at the Godot editor, saying what it is doing."""
     act = active(now)
     for a in agents:
         hit = act.get(str(a.get("id", "")))
         if hit:
-            a["station"] = "godot forge"
+            a["station"] = "godot editor"
             a["state"] = "working"
             a["last_message"] = "Godot: " + hit["detail"]
             a["godot"] = hit
@@ -151,7 +148,7 @@ def _engine_call(body: dict, timeout: float) -> dict:
 
 
 def call(action: str, args: dict | None = None, project: str = "", who: str = "", timeout: float = 30.0) -> dict:
-    """One editor action through the engine's hub; remembers who did it (LOKI World shows them working)."""
+    """One editor action through the engine's hub; remembers who did it (the Godot tab shows them working)."""
     action = str(action or "").strip()
     args = dict(args or {})
     if action in EXTRA_ACTIONS:
@@ -165,7 +162,7 @@ def call(action: str, args: dict | None = None, project: str = "", who: str = ""
     try:
         res = hub().call(action, args, project=project, timeout=timeout)
     except studio_godot.GodotError as exc:
-        return {"ok": False, "error": str(exc) + " (LOKI World: open it from LOKI's Godot tab - \"Open LOKI World in Godot\")"}
+        return {"ok": False, "error": str(exc) + " (open a project from LOKI's Godot tab - \"Open in Godot\" - and its LOKI plugin links it here)"}
     if res.get("ok"):
         note_activity(who or actor(), action, args, project)
     return res
@@ -194,7 +191,7 @@ def godot_editor(action: str, args: Any = None, project: str = "") -> str:
 def tool_doc() -> str:
     acts = "; ".join("%s: %s" % (k, v[0]) for k, v in sorted(studio_godot.ACTIONS.items()) if k != "quit")
     acts += "; " + "; ".join("%s: %s" % kv for kv in EXTRA_ACTIONS.items())
-    return ("Work in the LIVE Godot editor (the owner's real Godot with LOKI World or another project open, linked by "
+    return ("Work in the LIVE Godot editor (the owner's real Godot with one of their projects open, linked by "
             "the LOKI Studio plugin): see and change the open scene, nodes, scripts, run the game and see it, install "
             "Asset Library plugins. Changes are undoable in the editor (Ctrl+Z) and show live in the running game. "
             "Use editor_state first. Values are Godot text like Vector3(0, 1, 0). Actions: " + acts)
@@ -307,12 +304,14 @@ def _project_for(project: str) -> Path:
     if project:
         return Path(project)
     live = hub().connected() if IN_ENGINE["on"] else []
-    return Path(live[0]["project"]) if live else WORLD
+    if not live:
+        raise ValueError("no Godot editor is linked - open a project from the Godot tab first")
+    return Path(live[0]["project"])
 
 
 def extra(action: str, args: dict, project: str = "") -> dict:
-    root = _project_for(project)
     try:
+        root = _project_for(project)
         if action == "plugins":
             return plugins(root)
         if action == "install_plugin":
@@ -328,7 +327,7 @@ def extra(action: str, args: dict, project: str = "") -> dict:
     return {"ok": False, "error": "unknown action"}
 
 
-# ------------------------------------------------------------------ LOKI World, always ready to open in Godot
+# ------------------------------------------------------------------ a project, ready to open in Godot
 def _tree_digest(folder: Path) -> str:
     import hashlib  # pylint: disable=import-outside-toplevel
     h = hashlib.sha256()
@@ -339,9 +338,9 @@ def _tree_digest(folder: Path) -> str:
     return h.hexdigest()
 
 
-def ensure_world(project: Path = WORLD, sync: bool = False, opener=None) -> dict:
-    """LOKI World has this LOKI's plugin (copied only when it differs: an open editor is not disturbed for nothing)
-    and, with sync, every plugin in its plugins.json. project.godot already enables both (committed)."""
+def ensure_plugin(project: Path, sync: bool = False, opener=None) -> dict:
+    """The project has this LOKI's plugin (copied only when it differs: an open editor is not disturbed for nothing)
+    and, with sync, every plugin in its plugins.json."""
     import install_godot_plugin  # pylint: disable=import-outside-toplevel
     project = Path(project)
     target = project / "addons" / "loki_studio"

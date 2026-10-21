@@ -31,7 +31,7 @@ ui = REPO / "app" / "ui"
 engine_js = (ui / "engine" / "pixel_engine.js").read_text(encoding="utf-8")
 html = (ui / "index.html").read_text(encoding="utf-8")
 
-section("the engine: LOKI World's look, its own code, no libraries")
+section("the engine: a pixel cel-shaded look, its own code, no libraries")
 check("pixel framebuffer + Bayer posterize + cel bands + ink outlines",
       all(x in engine_js for x in ("bayer4", "BANDS", "gl.cullFace(gl.FRONT)", "NEAREST")))
 check("no imports and no network in the engine", "import " not in engine_js.split('"use strict";', 1)[1]
@@ -104,9 +104,9 @@ creations_js = (ui / "creations.js").read_text(encoding="utf-8")
 check("Settings > Creations: the wall, a 'make it' box that starts a background job, more like this",
       'data-tab="creations"' in html and "/ui/creations.js" in html and 'api("/jobs"' in creations_js
       and "Make more like this" in creations_js)
-island = (REPO / "game" / "loki-world" / "scenes" / "home_island.tscn").read_text(encoding="utf-8")
-check("LOKI World (the Godot game) has a creations hall that hangs the newest pieces",
-      "creations" in island.lower() and "paintings" in (REPO / "game" / "loki-world" / "scripts" / "world" / "world.gd").read_text(encoding="utf-8"))
+home_js = (ui / "home.js").read_text(encoding="utf-8")
+check("the home screen previews what LOKI makes (renders, models, games...) from GET /home/projects",
+      "/home/projects" in home_js and 'route == "/home/projects"' in bridge)
 shutil.rmtree(TMP2, ignore_errors=True)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

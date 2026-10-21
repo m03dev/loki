@@ -531,7 +531,7 @@ class FakeBridge:
                     ("GET", "/memory/core"): {"ok": True, "items": [{"kind": "fact", "text": "the owner likes icons", "score": 3.2}]},
                     ("GET", "/tools/health"): {"ok": True, "tools": [{"name": "browse_page", "ok": True}]},
                     ("GET", "/creations"): {"ok": True, "creations": [{"title": "the fox", "kind": "image"}]},
-                    ("GET", "/world/presence"): {"ok": True, "players": []},
+                    ("GET", "/world"): {"ok": True, "players": [], "agents": []},
                     ("POST", "/engine/restart"): {"ok": True, "note": "the engine restarts in a moment"},
                 }
                 payload = table.get((method, path))

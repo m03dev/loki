@@ -121,7 +121,7 @@ agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
 check("AGENTS.md names the plugin folder as the third Godot place", "studio/godot_plugin/addons/loki_studio" in agents and "three" in agents.lower())
 tracked = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True).stdout.split()
 stray = [f for f in tracked if f.endswith((".gd", ".tscn", ".tres", ".uid", ".godot", ".import")) and
-         not f.startswith(("game/loki-world/", "studio/godot_plugin/addons/loki_studio/"))]
+         not f.startswith("studio/godot_plugin/addons/loki_studio/")]
 check("no Godot files tracked outside the three places", not stray, stray[:5])
 
 GP = TMP / "game"

@@ -503,12 +503,6 @@ class PeerServer:
             if "apply_update" not in cb:
                 return 404, {"ok": False, "error": "updates are not handled here"}
             return 200, {"ok": True, **cb["apply_update"]()}
-        if method == "POST" and path == "/peer/presence":
-            # LOKI World: the owner's avatar on that machine (position, name, level, chat lines),
-            # answered with this machine's own - display-only, sanitised in presence.py.
-            if "presence" not in cb:
-                return 404, {"ok": False, "error": "presence is not available here"}
-            return 200, {"ok": True, **cb["presence"](origin, data)}
         if method == "POST" and path == "/peer/memory":
             # One memory on every machine (memory_sync.py): the caller's memory operations in,
             # ours that it lacks out. Merging is last-writer-wins per item with tombstones, and

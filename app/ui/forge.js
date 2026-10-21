@@ -1995,6 +1995,8 @@ function forgeMakeView(lib, renderer, canvas) {
   view.rememberView = () => { views.past.push(camState()); views.future = []; };
   view.camera = camera;
   view.canvas = canvas;
+  view.renderer = renderer;                          // the path-traced preview draws with it (app/ui/forge_render.js)
+  view.scene = scene;
   view.worldScale = () => holder.getWorldScale(new THREE.Vector3()).x;
   view.dab = (tool, x, y, z, negative) => { snapshot(); stroke(tool, new THREE.Vector3(x, y, z), !!negative); };   // tests / scripts
   view.transform = transform;

@@ -8,7 +8,7 @@ the direction.
 I'll treat the project as five connected layers:
 1. LOKI Core — reasoning, routing, permissions, tools, memory, and the agent runtime.
 2. LOKI Workforce — specialized agents, vertical teams, task delegation, and cross-machine collaboration.
-3. LOKI World — your existing Godot visual environment, with agents represented as characters that can move, communicate, and reflect real system activity.
+3. LOKI Studio floor — the home screen as a preview hub: renders, models, game projects and the farm's jobs, reflecting real system activity.
 4. LOKI Bridge — integrations with Godot, Unreal Engine, Blender, Maya, Substance Painter, model providers, APIs, and external services.
 5. LOKI Evolution — testing, learning from failures, controlled self-improvement, and maintaining a reliable record of what changed.
 The key principle is that these should work as one coherent system, not a pile of disconnected AI tools.
@@ -36,7 +36,6 @@ The long-term goal is for you to manage outcomes rather than manually coordinate
 This is an important part of the history that should not get lost in a broad architecture proposal.
 You already have a repository:
 - LOKI — existing project
-- Steam MMO prototype
 - Render Studio
 The existing LOKI project was described as a Godot 4 editor add-on with a chat dock, viewport, Ask/Plan/Build modes, settings, approvals, a stop control, scene and script verification tools, memory, skills, a Python bridge and model/provider integrations.
 Its documented architecture reportedly includes a local Python HTTP bridge on port 8766, bearer-token authentication, a loki.py harness, Godot tools, CLI adapters such as Claude Code and Codex, optional Jev typed decisions, and MCP servers. The repository documentation also describes a substantial skills collection.
@@ -53,23 +52,12 @@ The audit should establish:
 - Which local changes must be preserved before any edits.
 - Which tests already exist and what they actually verify.
 A previous project handoff referenced 173 structural offline checks and a separate live-testing mode. These must be run and interpreted rather than treated as proof that the full system works.
-3. The LOKI visual world is a feature, not something to replace
-You explained that LOKI had effectively become a Godot game by mistake, but that the visual environment could become something much more interesting: a living world where the real agents are represented by characters.
-You already have assets, rigs and animations. The aim is to use what exists, preserving the current appearance and expanding it.
-
-
-These images are visual references for the direction, not a replacement design for your existing project.
-The world should show real system state, not merely decorative animation:
-- Agents appear as individual characters.
-- Agents walk to appropriate work areas or stations when assigned tasks.
-- Agents communicate when the runtime records messages or handoffs.
-- A working agent, blocked agent, idle agent and failed agent should be visually distinguishable.
-- The world reflects actual task progress, agent health, model activity and decisions.
-- Agent conversations in the world correspond to real message events.
-- Completed work, errors, approvals and handoffs appear as observable events.
-- The environment can be seeded or customized for each installation, so the visual identity reflects that installation's configuration and system state.
-The Godot environment should be a visualization and control surface for LOKI, not the place where all orchestration logic has to live.
-Keep the AI runtime, task coordination, permissions and provider routing independent of the game's frame loop. If Godot closes, LOKI's core tasks should not automatically disappear.
+3. The home screen shows real work (direction changed 2026-10-21)
+LOKI is a game engine, render studio and AI farm hive. The home screen is where that work is previewed: the latest render
+big, then every render, model, game project, Studio session and job on this machine or the worker farm. It shows real
+system state, never decorative animation: a job's card is its real status, a render's card is its real output.
+Keep the AI runtime, task coordination, permissions and provider routing independent of any view; if the window closes,
+LOKI's core tasks keep running.
 The Nordic LOKI identity
 You also wanted a creative LOKI logo built from interlocking or repeated L-shaped geometry, with a Nordic-inspired feel. Your initial acronym idea was “Local Omni Kit for Interface.”
 The design direction discussed was a midnight-navy background with cyan-to-emerald accents and angular, geometric shapes.
@@ -82,8 +70,8 @@ Intent interpretation, planning, decision routing, provider selection, permissio
 LOKI Workforce
 Local agent teams, task queues, capability discovery, delegation, leases, handoffs, communication, worker health and cross-machine collaboration.
 
-LOKI World
-Your existing Godot environment, agent characters, animations, status visualization, activity history and visual controls.
+LOKI Studio floor
+The home screen: render and project previews, status of the agents and the worker farm, activity history and visual controls.
 
 LOKI Bridge
 MCP, application adapters, APIs, provider connectors, creative software, repository inspection, file access and external services.
@@ -283,7 +271,7 @@ A repository appearing in this list is a research candidate, not a recommendatio
 You want LOKI to operate across creative software rather than being trapped in a single engine.
 The integration inventory should cover:
 Application	What LOKI should eventually be able to do
-Godot	Inspect scenes, edit scripts, run projects, collect errors, test gameplay and control the existing LOKI world.
+Godot	Inspect scenes, edit scripts, run projects, collect errors and test gameplay in the owner's projects.
 Unreal Engine 5	Inspect projects, edit supported assets and code, trigger builds and tests, inspect logs and verify results.
 Blender	Inspect and manipulate scenes, create or edit models, use scripts, render and verify output.
 Maya	Inspect and operate supported scenes, use licensed software and its available scripting or integration interfaces.
@@ -448,7 +436,7 @@ The full vision is large. The project needs a deliberate sequence so that each s
 7. Unify memory and skills. Integrate the existing system first, then compare external candidates.
 8. Establish task coordination. Add worker registration, task ownership, leases, handoffs, checkpoints and recovery.
 9. Connect Mac and Windows. Start with one real task dispatched to the other machine and verified end-to-end.
-10. Connect the Godot world to real events. Add or reuse agent characters and animate them based on genuine runtime state.
+10. Show real work on the home screen: renders, projects and the farm's jobs from genuine runtime state.
 11. Expand creative adapters. Prioritize the tools that work reliably and are most useful to the project.
 12. Add controlled improvement. Use isolated experiments and evaluation results to accept or reject changes.
 13. Expand the research, dashboard and business layers. Add more capabilities once the core path is dependable.

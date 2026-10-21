@@ -81,9 +81,9 @@ def resolve_godot_exe() -> str:
     for guess in _GODOT_GUESSES:
         if Path(guess).is_file():
             return guess
-    try:   # LOKI's own Godot 4.7.2 (engine/world_build.py) - the one LOKI World opens in
-        import world_build  # pylint: disable=import-outside-toplevel
-        own = world_build.editor_binary()
+    try:   # LOKI's own Godot 4.7.2 (engine/godot_editor.py), when the computer has none of its own
+        import godot_editor  # pylint: disable=import-outside-toplevel
+        own = godot_editor.editor_binary()
         if own:
             return str(own)
     except Exception:  # noqa: BLE001
@@ -1949,7 +1949,7 @@ def game_engine_guide() -> str:
         example = (ui / "games" / "fox_berries" / "game.js").read_text(encoding="utf-8")
     except OSError as exc:
         return "error: the game engine files are missing (%s)" % exc
-    return ("LOKI PIXEL ENGINE - make games that run inside LOKI (Settings > Play), in LOKI World's pixel "
+    return ("LOKI PIXEL ENGINE - make games that run inside LOKI (Settings > Play), in a pixel "
             "cel-shaded look.\n\nWORKFLOW: write ONE file games/<name>/game.js in the workspace (name: lowercase "
             "letters, digits, _ or -). Its FIRST line must be a comment '// <Title> - <one line about it>'. Wrap "
             "everything in an IIFE, get the canvas with document.getElementById(\"game\"), only use window.PixelEngine "
@@ -6140,8 +6140,8 @@ DELEGATING |= {"make_godot_game"}
 # (an unset Home Assistant is hidden from the model by the connectors' requirement loop above)
 
 # The live Godot editor (engine/godot_live.py, owner 2026-10-18: "agents ... in a live project state, change everything"):
-# every agent works in the owner's real Godot editor through the LOKI Studio plugin - LOKI World or any open project.
-# Read actions only in Plan mode (the tool enforces it); not hidden outside a Godot workspace (LOKI World is the project).
+# every agent works in the owner's real Godot editor through the LOKI Studio plugin - whichever project is open.
+# Read actions only in Plan mode (the tool enforces it); not hidden outside a Godot workspace.
 import godot_live  # noqa: E402
 LOCAL_TOOLS["godot_editor"] = godot_live.godot_editor
 _GODOT_EDITOR_SCHEMA = schema(

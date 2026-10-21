@@ -145,7 +145,7 @@ check("the session-26 file is migrated into the log, uses kept locally",
 # =========================================================================== kinds
 section("kinds and contradictions (memory_kinds)")
 cases = {"Mia is the owner's sister": "person", "The owner prefers short answers": "preference",
-         "The owner decided to use Godot for the MMO": "decision", "The owner's name is Mohamed": "profile",
+         "The owner decided to use Godot for the racing game": "decision", "The owner's name is Mohamed": "profile",
          "The owner is working on Waypoint, a Maya companion app": "project", "The relay port is 41234": "fact"}
 got = {t: memory_kinds.kind_of(t) for t in cases}
 check("rules name the kind", got == cases, got)
@@ -218,11 +218,11 @@ E = root("auto")
 noted = memory.after_request(msgs, "done", root=E)
 check("after_request learns them, marked for review", len(noted) == 3 and len(memory_core.learned_since(0, E)) == 3, noted)
 check("the same chat again teaches nothing new", memory.after_request(msgs, "done", root=E) == [])
-more = memory_extract.extract([{"role": "user", "content": "we decided to use Godot for the MMO. always answer in English. "
+more = memory_extract.extract([{"role": "user", "content": "we decided to use Godot for the racing game. always answer in English. "
                                                           "remember that the relay port is 41234. I like pizza right now. "
                                                           "make me a landing page."}])
 check("decisions, standing instructions and 'remember that' - not tasks or right-now things",
-      [t for t, _ in more] == ["The owner decided to use Godot for the MMO.", "The owner wants LOKI to always answer in English.",
+      [t for t, _ in more] == ["The owner decided to use Godot for the racing game.", "The owner wants LOKI to always answer in English.",
                                "The relay port is 41234."], more)
 check("at most three per request", len(memory_extract.extract([{"role": "user", "content": "I like tea. I like jazz. I like cats. I like rain."}])) == 3)
 os.environ["LOKI_MEMORY_EXTRACT"] = "off"
@@ -534,11 +534,11 @@ SEED = {
     "mia": "Mia is the owner's sister and lives in Oslo.",
     "dana": "Dana is the owner's manager at the studio.",
     "waypoint": "The owner is working on Waypoint, a background companion for Maya, ZBrush and Substance Painter.",
-    "godot": "The owner decided to build LOKI World as an MMO in Godot 4 so it can ship on Steam.",
+    "godot": "The owner decided to build his racing game in Godot 4 so it can ship on Steam.",
     "relay": "The owner decided to use LOKI's built-in public relay instead of Tailscale to link the Mac and the PC.",
     "editor_old": "The owner's editor is VS Code.",
     "editor": "The owner's editor is Zed.",
-    "look": "The owner likes the pixel cel-shaded look of LOKI World.",
+    "look": "The owner likes the pixel cel-shaded look of the Play games.",
     "costs": "The owner hates surprise costs: free and local models first, paid providers behind a budget.",
     "ship": "LOKI ships changes only with tools/ship.py, which runs every test suite first.",
     "ziva": "Instructions for Ziva go in ZIVA_TASKS.md in git, not in the chat reply.",
@@ -584,9 +584,9 @@ for text in NOISE:
 QUERIES = [("what's my name", "name"), ("how long should your answers be", "short"),
            ("should the interface show icons or words", "icons"), ("what GPU does the PC have", "gpu"),
            ("where does LOKI live on the mac", "macmini"), ("who is Mia", "mia"), ("who is my boss", "dana"),
-           ("what is Waypoint", "waypoint"), ("which engine is the MMO built in", "godot"),
+           ("what is Waypoint", "waypoint"), ("which engine is the racing game built in", "godot"),
            ("how are the Mac and PC linked", "relay"), ("which editor does the owner use", "editor"),
-           ("what look does LOKI World have", "look"), ("can I use paid models", "costs"),
+           ("what look do the Play games have", "look"), ("can I use paid models", "costs"),
            ("how do I publish a change", "ship"), ("where should tasks for Ziva go", "ziva"),
            ("what port is the relay on", "port"), ("what languages do I speak", "lang"),
            ("which city do I live in", "city"), ("when is my birthday", "bday"), ("what is my job", "job"),
@@ -658,7 +658,7 @@ else:
     WIN = root("window")
     (WIN / "memory.md").write_text("- Ziva tasks go in ZIVA_TASKS.md, never in the chat reply\n", encoding="utf-8")
     for text in ("The owner's editor is VS Code", "The owner's editor is Zed", "Dana is the owner's manager at the studio",
-                 "The owner decided to build LOKI World in Godot 4 for Steam"):
+                 "The owner decided to build his racing game in Godot 4 for Steam"):
         memory_core.learn(text, root=WIN)
     memory_core.learn("Lesson: local qwen3 models need /no_think", tier="episodic", root=WIN)
     memory.after_request([{"role": "user", "content": "I prefer short answers. Mia is my sister. "

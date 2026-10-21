@@ -664,14 +664,13 @@ def titlebar_mode() -> str:
 
 
 def window_url(token: str) -> str:
-    """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar, and
-    `worldbg=1` that the home screen should show the live LOKI World behind it. Only LOKI's own window says
-    worldbg=1 - the public web build and the test harnesses never boot a whole Godot game in the background."""
+    """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar
+    (`titlebar=win`: the frameless Windows window, the strip is its title bar)."""
     if TITLEBAR["mac"] or mac_custom_titlebar():
-        return f"{BASE}/#token={token}&titlebar=mac&worldbg=1"
+        return f"{BASE}/#token={token}&titlebar=mac"
     if TITLEBAR["win"] or win_custom_titlebar():
-        return f"{BASE}/#token={token}&titlebar=win&worldbg=1"
-    return f"{BASE}/#token={token}&worldbg=1"
+        return f"{BASE}/#token={token}&titlebar=win"
+    return f"{BASE}/#token={token}"
 
 
 def mac_custom_titlebar() -> bool:

@@ -64,8 +64,8 @@ Status: **=** matched, **+** LOKI Studio does more, **~** partly, **-** not yet.
 ## The parity benchmark (15 tasks)
 
 Ziva Windows runs each task twice - once in Ziva, once in LOKI Studio (the plugin dock, on the default model) - on
-fresh copies of the same project, and fills in the result columns honestly. Projects: **LW** = `game/loki-world`
-(copied to a temp folder first), **NEW** = a new empty Godot 4 project, **LOKI** = LOKI's own code (Studio only;
+fresh copies of the same project, and fills in the result columns honestly. Projects: **LW** = one of the owner's own games
+in `~/LOKI Projects/<name>` with a player and a main scene (copied to a temp folder first), **NEW** = a new empty Godot 4 project, **LOKI** = LOKI's own code (Studio only;
 Ziva works on it as a plain folder of files).
 
 | # | Task (say exactly this) | Proj | Ziva: how (public docs) | LOKI Studio: how | Ziva: time / ok / quality | Studio: time / ok / quality |

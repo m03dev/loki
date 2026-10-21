@@ -238,7 +238,7 @@ table.usage th { color: var(--muted); font-weight: 500; }
 
 /* Home: empty space on open, instead of dropping straight into a conversation. */
 .main.home .transcript { display: none; }
-/* Home is the world and one word. Clicking "Loki" brings the chat box in. */
+/* Home is the preview hub (home.css) and one word. Clicking "Loki" brings the chat box in. */
 .summon { display: none; }
 .main.home:not(.summoned) .summon { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: auto;
   background: transparent; border-radius: 22px; padding: 18px 34px; position: relative; z-index: 1; }
@@ -423,31 +423,11 @@ button.danger:hover { color: var(--err); }
 .field input[type="color"] { padding: 2px; height: 32px; width: 64px; }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 
-/* ===================================================================== LOKI World */
+/* ===================================================================== main area layers */
 .main { position: relative; isolation: isolate; }
-.main > :not(.world-bg) { position: relative; z-index: 1; }
+.main > * { position: relative; z-index: 1; }
 .main > .topbar { z-index: 5; }   /* its model menu opens over the home screen */
 .sheet { z-index: 10; }
-.world-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity .8s; overflow: hidden; }
-.world-bg.on { opacity: .5; }
-.world-bg .wlabel { opacity: .75; }
-.world-bg .wlabel i { display: none; }
-.world-bg canvas { width: 100%; height: 100%; display: block; }
-.world-bg::after { content: ""; position: absolute; inset: 0;
-  background: radial-gradient(ellipse at center, rgba(31,31,36,.15) 0%, rgba(31,31,36,.65) 60%, var(--bg) 100%); }
-.world-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.wlabel { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; white-space: nowrap; font-size: 11.5px; }
-.wlabel b { background: rgba(24,24,28,.8); padding: 1px 8px; border-radius: 999px; font-weight: 600; }
-.wlabel span { color: var(--muted); font-size: 10.5px; }
-.wlabel span:empty, .wlabel i:empty { display: none; }
-.wlabel i { font-style: normal; background: var(--text); color: var(--bg); padding: 3px 9px; border-radius: 10px; margin-bottom: 3px;
-  max-width: 240px; white-space: normal; text-align: center; order: -1; }
-.world-frame { position: relative; height: min(520px, 56vh); border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
-  background: radial-gradient(ellipse at 50% 35%, #262833 0%, #18181c 75%); }
-.world-frame canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
-.world-legend { display: flex; flex-direction: column; margin-top: 10px; }
-.legend-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--line); }
-.legend-row .muted { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 860px) {
   .sheet-panel.settings-panel { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 94vh; }
@@ -463,46 +443,7 @@ button.danger:hover { color: var(--err); }
 .ruflo-plugin b { margin-right: 8px; }
 .ruflo-plugin .pcard-blurb { margin: 4px 0 0; }
 
-/* world look: the pixel-art world is brighter than the old one, so its labels get a dark halo */
-.world-labels .wlabel span { color: #e6ecf5; text-shadow: 0 1px 2px #05060f, 0 0 3px #05060f; }
-.world-labels .wlabel b { box-shadow: 0 1px 3px rgba(0,0,0,.45); }
 
-/* world life sim: chat dots, team banners, the selected agent, the inspector card and the HUD */
-.wlabel em { font-style: normal; font-weight: 700; letter-spacing: 1px; background: rgba(230,233,238,.92); color: #1f1f24;
-  padding: 0 7px; border-radius: 9px; margin-bottom: 3px; order: -1; font-size: 11px; }
-.wlabel em:empty { display: none; }
-.wlabel.selected b { background: #2ee6d6; color: #0d1f22; }
-.wlabel.team b { background: rgba(18,40,48,.85); color: #bff6ef; font-weight: 500; font-size: 10.5px; }
-.world-bg .wlabel em { display: none; }
-/* every device has its own island: its name is a button that flies you there (yours brings you home) */
-.world-labels .wlabel.machine { pointer-events: auto; cursor: pointer; }
-.world-labels .wlabel.machine b { background: rgba(20,46,64,.88); color: #bff0ff; }
-.world-labels .wlabel.machine.home b { background: rgba(46,230,214,.9); color: #0d1f22; }
-.world-bg .wlabel.machine { pointer-events: none; }
-.world-home { position: absolute; left: 12px; bottom: 12px; pointer-events: auto; cursor: pointer; border: 0; border-radius: 999px;
-  padding: 5px 12px; background: rgba(46,230,214,.9); color: #0d1f22; font-weight: 600; font-size: 12px; }
-.world-bg .world-home { display: none; }
-.legend-row { cursor: pointer; }
-.legend-row.selected { background: rgba(46,230,214,.08); }
-.world-frame canvas:focus-visible { outline: 2px solid #2ee6d6; outline-offset: -2px; }
-.world-hud { position: absolute; left: 12px; top: 10px; pointer-events: none; font-size: 12px; color: #e6ecf5;
-  background: rgba(14,16,24,.62); border: 1px solid rgba(255,255,255,.08); padding: 4px 10px; border-radius: 999px;
-  text-shadow: 0 1px 2px #05060f; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.world-hud.alert { border-color: rgba(255,119,119,.55); }
-.world-card { position: absolute; right: 12px; top: 10px; width: min(280px, calc(100% - 24px)); background: rgba(20,22,30,.9);
-  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
-.world-card[hidden] { display: none; }
-.wc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.wc-head b { flex: 1; font-size: 14px; }
-.wc-close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
-.wc-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
-.wc-rows dt { color: var(--muted); }
-.wc-rows dd { margin: 0; overflow-wrap: anywhere; }
-.wc-said { margin: 8px 0 0; color: #dfe6ef; font-style: italic; }
-.wc-said:empty { display: none; }
-.wc-actions { margin-top: 8px; display: flex; gap: 8px; }
-.wc-follow { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
-.wc-follow:hover { border-color: #2ee6d6; }
 
 /* ===================================================================== System check (settings.js) */
 .sidebar-foot .foot-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -552,10 +493,6 @@ button.danger:hover { color: var(--err); }
 .settings-nav #system-dot { background: var(--err); }
 .sc-item .muted { flex: 1; min-width: 0; line-height: 1.4; }
 .sc-item button { flex: none; }
-.world-labels .wlabel.crowded { opacity: .55; }
-.world-labels .wlabel.crowded.selected, .world-labels .wlabel.crowded.speaking { opacity: 1; }
-.wlabel.machine b { background: linear-gradient(135deg, rgba(46,230,214,.85), rgba(77,124,255,.85)); color: #071417; }
-.wlabel.machine span { color: #dff8f4; }
 
 /* Settings > Creations: what LOKI made, big */
 .creations-make { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }

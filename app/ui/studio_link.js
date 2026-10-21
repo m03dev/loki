@@ -1,5 +1,5 @@
-// LOKI Studio is the Studio TAB of this window (modebar.js; owner 2026-10-17: "the same client, just another tab").
-// This sidebar button switches to that tab; without the mode bar it opens Studio's own window as before.
+// LOKI Studio lives inside Home (home.js; owner 2026-10-21: "combine studio with home we dont need them both").
+// This sidebar button opens it there; without the home hub it opens Studio's own window as before.
 "use strict";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -11,10 +11,10 @@ document.addEventListener("DOMContentLoaded", () => {
   b.className = "quiet";
   b.dataset.icon = "studio";
   b.dataset.tipName = "LOKI Studio";
-  b.dataset.tipWhat = "Work on LOKI itself with DeepSeek V4.1 - the Studio tab (Ctrl/Cmd+2); Studio keeps its own server, so it works even when LOKI is down.";
+  b.dataset.tipWhat = "Work on LOKI itself with DeepSeek V4.1 - Studio opens inside Home (Ctrl/Cmd+Shift+S); Studio keeps its own server, so it works even when LOKI is down.";
   b.textContent = "LOKI Studio";
   b.addEventListener("click", async () => {
-    if (window.LokiModeBar) { window.LokiModeBar.go("studio"); return; }
+    if (window.LokiHome) { window.LokiHome.openStudio(); return; }
     b.disabled = true;
     try {
       const r = await api("/studio/open", {});   // app.js's api(): resolves with the JSON, never throws on HTTP errors

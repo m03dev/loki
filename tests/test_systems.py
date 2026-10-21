@@ -9,7 +9,7 @@ servers, the network and the machine's hardware are faked:
      policy allows it (and refuses a path outside the project) -> usage counted -> experience
      and ReasoningBank remember it -> the next similar goal gets the lesson
   2. a background agent: the jobs API (with the policy) starts the built-in agent as a real
-     child process -> the event stream and LOKI World show it working, then done
+     child process -> the event stream and the live view show it working, then done
   3. a team: plan -> build -> check -> one fix round -> verified, with fake stage agents; the
      board, the events and the world reflect every step
   4. providers die mid-run (402, 401, 429): smart routing moves on and the turn finishes; the
@@ -274,7 +274,7 @@ job = SUP.store.get(job_id) or {}
 check("the child process ran and finished (no model, no tools)", job.get("status") == "done" and job.get("exit_code") == 0,
       {k: job.get(k) for k in ("status", "exit_code", "error", "output")})
 check("its report came back through the log", "system check job ran" in (job.get("output") or ""), job.get("output"))
-check("LOKI World showed the agent working, then done", "working" in seen_world and seen_world[-1] == "done", seen_world)
+check("the live view showed the agent working, then done", "working" in seen_world and seen_world[-1] == "done", seen_world)
 kinds = [e["type"] for e in events.read(mark) if e.get("task") == job_id]
 check("the event stream has created -> started -> completed for it",
       kinds[:1] == ["task.created"] and "task.started" in kinds and kinds[-1] == "task.completed", kinds)
@@ -348,7 +348,7 @@ check("every stage agent's job reported itself by role",
       {e["sender"] for e in mine if e["type"] == "task.completed"} >= {"Architect", "Builder", "Tester", "Reviewer"},
       {e["sender"] for e in mine if e["type"] == "task.completed"})
 check("the verdict was announced", any(e["type"] == "verification.completed" and e["payload"].get("verified") for e in mine))
-check("LOKI World showed the architect working first", world_states and world_states[0].get("Architect") == "working",
+check("the live view showed the architect working first", world_states and world_states[0].get("Architect") == "working",
       world_states[:2])
 final = events.world(TEAM_JOBS.store.all(), RUNNER.all(), False)
 check("and the whole team done at the end, with the team listed",
@@ -559,11 +559,11 @@ check("the model called the tool through the real request path and read the resu
       and len(tool_client.seen) == 2 and tool_client.seen[0]["tools"][0]["function"]["name"] == "list_tree",
       rows["tools"]["detail"])
 check("the background job was proven through the jobs API, the events and the world",
-      "LOKI World" in rows["jobs"]["detail"] and "task.completed" in rows["jobs"]["detail"], rows["jobs"]["detail"])
+      "the live view" in rows["jobs"]["detail"] and "task.completed" in rows["jobs"]["detail"], rows["jobs"]["detail"])
 check("the check cleaned up its test job", not [j for j in SUP.store.all() if j["title"] == "System check · background job"
                                                 and j["id"] != job_id])
 check("a team dry run reached the board, the events and the world - and was cleaned up",
-      "appeared in the event stream and in LOKI World" in rows["teams"]["detail"]
+      "appeared in the event stream and in the live view" in rows["teams"]["detail"]
       and not [x for x in loki.TEAMS.all() if x.get("dry_run")], rows["teams"]["detail"])
 check("the image specialist says which backend it would use", "Z-Image Turbo" in rows["specialists"]["detail"],
       rows["specialists"]["detail"])

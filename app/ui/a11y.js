@@ -230,7 +230,7 @@
     hc.box.setAttribute("aria-labelledby", "u-prefs-contrast");
     const rm = select([["auto", "prefs.motion_auto", "Follow this computer's setting"], ["reduce", "prefs.motion_reduce", "Reduce motion"],
       ["full", "prefs.motion_full", "Full motion"]], prefs.motion, (v) => save({ motion: v }));
-    wrap.append(choiceRow("prefs.motion", "Motion", "prefs.motion_hint", "Reduce motion stops animations and hides the moving 3D world.", rm));
+    wrap.append(choiceRow("prefs.motion", "Motion", "prefs.motion_hint", "Reduce motion stops animations and transitions.", rm));
     const cb = checkbox(prefs.cbsafe, (on) => save({ cbsafe: on }));
     wrap.append(choiceRow("prefs.cbsafe", "Colour-blind-safe colours", "prefs.cbsafe_hint", "Blue, orange and yellow status colours, always with a symbol.", cb.label));
     cb.box.setAttribute("aria-labelledby", "u-prefs-cbsafe");
@@ -258,7 +258,7 @@
     if (mq.addEventListener) mq.addEventListener("change", applyPrefs);
   }
   // A 3D engine (Babylon) gives its canvas tabindex="1", which jumps it ahead of everything in the
-  // Tab order; the world behind the home screen is decorative (aria-hidden) and must not take focus.
+  // Tab order; decorative parts (aria-hidden) must not take focus.
   function fixTabindex(n) {
     if (!n || n.nodeType !== 1 || !n.hasAttribute("tabindex")) return;
     const v = Number(n.getAttribute("tabindex"));

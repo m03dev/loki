@@ -211,7 +211,7 @@ app_py = (REPO / "app" / "loki_app.py").read_text(encoding="utf-8")
 check("boot.js loads first, not deferred, before the stylesheets", '<script src="/ui/boot.js"></script>' in idx
       and idx.index("/ui/boot.js") < idx.index("/ui/app.css"))
 check("it reports script errors to the engine and shows a rescue screen with them", "/ui/error" in boot and "rescue(" in boot
-      and "Reload without the 3D world" in boot and 'route == "/ui/error"' in bridge and '"ui_errors"' in bridge)
+      and "Reload in safe mode" in boot and 'route == "/ui/error"' in bridge and '"ui_errors"' in bridge)
 check("app.js marks the window ready", "window.LOKI_READY = true" in (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8"))
 check("the app never shows about:blank (white) when the engine fails; it shows the log", 'show_url("about:blank")' not in app_py
       and "show_problem(" in app_py and "log_tail(" in app_py)

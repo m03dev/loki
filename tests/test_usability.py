@@ -466,7 +466,7 @@ class Engine:
             return {"ok": True, "agents": [], "machines": [], "self": {"name": "test"}, "creations": {"count": 0, "latest": []}}
         if p == "/settings/general":
             return {"ok": True, "settings": {"LOKI_PREFER": {"kind": "choice", "default": "local", "choices": ["local", "cloud"], "label": "Prefer local models or the cloud"}},
-                    "values": {"LOKI_PREFER": "local", "LOKI_WORLD": "background" if FULL else "off"}, "secrets_saved": {}}
+                    "values": {"LOKI_PREFER": "local"}, "secrets_saved": {}}
         return {"ok": True}
 
 
@@ -716,7 +716,8 @@ async def headless() -> None:
         check("high contrast, colour-blind-safe and reduced motion apply", all(c in cls for c in ("u-hc", "u-cb", "u-rm")), cls)
         check("high contrast: black background, white text", await page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(0, 0, 0)"
               and await page.evaluate("getComputedStyle(document.body).color") == "rgb(255, 255, 255)")
-        check("reduced motion hides the moving world", await page.evaluate("getComputedStyle(document.querySelector('.world-bg')).visibility") == "hidden")
+        check("reduced motion stops animations (and there is no moving world behind the home screen any more)",
+              await page.evaluate("!document.querySelector('.world-bg') && parseFloat(getComputedStyle(document.body).animationDuration || '0') < 0.01"))
         check("status shows a symbol, not only a colour", await page.evaluate("getComputedStyle(document.querySelector('#status'), '::before').content") in ('"✓"', '"✕"', '"…"'))
         v = await rules(page)
         check("accessibility rules with high contrast (7:1 text)", not v, fmt(v))

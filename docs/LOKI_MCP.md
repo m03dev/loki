@@ -19,7 +19,7 @@ work because they read from disk.
 | `settings_set` | change one General setting - **asks** - never a secret or a key |
 | `jobs_list` / `job_start` / `job_stop` | background jobs; start and stop **ask** (the engine's own policy still decides) |
 | `job_logs` / `engine_logs` | a job's log, or LOKI's engine/app/bridge/studio log, from disk (keys redacted) |
-| `world_summary` | LOKI World presence |
+| `world_summary` | the live view: agents at work, jobs, teams, linked machines (GET /world) |
 | `memory_search` | what LOKI would recall for a query |
 | `tools_health` | every tool's health and one-click fixes |
 | `creations_list` | the newest things LOKI made |

@@ -10,7 +10,7 @@ people make about themselves and their work:
     "my editor is Zed" / "my PC has an RTX 3070 Ti"         -> profile
     "Mia is my sister" / "my boss is Dana"                  -> person
     "I'm working on Waypoint, a Maya companion"            -> project
-    "we decided to use Godot for the MMO"                   -> decision
+    "we decided to use Godot for the racing game"           -> decision
     "remember that the relay port is 41234"                 -> whatever kind it is
 
 Every candidate is rewritten in the third person ("The owner prefers short answers"), then filtered:

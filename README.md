@@ -78,8 +78,10 @@ Ziva: your task list and inbox is [ZIVA_TASKS.md](ZIVA_TASKS.md).
 - **Agents**: build agents you want to keep - role, goal, skills (SKILL.md), tools, harness
   (LOKI, Claude Code, Codex, Hermes, OpenCode), model and fallback, the machine they live on.
   "Draft it" makes one from a sentence.
-- **LOKI World**: your agents as characters in a small 3D world, behind the home screen and in
-  its own panel, driven only by real state (GET /world).
+- **Home**: the preview hub - the latest render big, then every render, Forge model, Godot game,
+  Studio session and background / farm job as a card (GET /home/projects); a click opens it where it
+  lives. **Studio** (build or change an app with an agent) opens inside Home. Title-bar tabs: Home,
+  Forge, Render, Godot (Ctrl/Cmd+1..4).
 - **Machines & updates**: **Update everything** updates every linked machine and restarts it,
   then this one. A version that does not start is rolled back on that machine.
 - **Ruflo, built in**: Ruflo's 95 agents and 38 skills (github.com/ruvnet/ruflo, MIT) are in
@@ -99,14 +101,11 @@ team board, and the team only reports "verified" when every check passes (one fi
 then it asks you). You see the team, its stage and its board above the message box. You
 never build agents by hand.
 
-## LOKI World
+## The live view
 
-Your agents as characters in a small **3D world inside the app** - no Godot, no other
-project. The engine serves `GET /world` (who is there, where they work and what they are
-doing) and `GET /events` (everything that happens, in order); the world is a viewer, never
-the brain - a character only moves, works or speaks when an event says so. It is drawn with
-plain WebGL, faintly behind the home screen and full size in Settings > LOKI World. Protocol:
-[docs/WORLD.md](docs/WORLD.md).
+The engine serves `GET /world` (which agents are at work, where and on what, the linked
+machines) and `GET /events` (everything that happens, in order), both from real state only.
+The home screen, the work strip and the MCP `world_summary` tool read them.
 
 ## Spending
 

@@ -49,7 +49,7 @@
     const again = document.createElement("button"); again.textContent = "Reload"; again.type = "button";
     again.style.padding = "8px 16px"; again.style.marginRight = "8px";
     again.addEventListener("click", () => location.reload());
-    const safe = document.createElement("button"); safe.textContent = "Reload without the 3D world"; safe.type = "button";
+    const safe = document.createElement("button"); safe.textContent = "Reload in safe mode"; safe.type = "button";
     safe.style.padding = "8px 16px";
     safe.addEventListener("click", () => { try { localStorage.setItem("loki.safeMode", "1"); } catch (_) { /* ignore */ } location.reload(); });
     box.append(h, p, pre, again, safe);

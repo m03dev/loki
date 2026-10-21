@@ -153,7 +153,6 @@ html.u-hc {
   --grad-soft: #1a1a1a; --shadow: none; --blur: none;
 }
 html.u-hc body { background: #000; color: #fff; }
-html.u-hc .world-bg { opacity: .18; }
 html.u-hc .sidebar, html.u-hc .topbar, html.u-hc .composer-box, html.u-hc .sheet-panel, html.u-hc .model-menu, html.u-hc .work,
 html.u-hc .approval, html.u-hc .update-banner, html.u-hc .turn.loki .text, html.u-hc .turn.user .bubble, html.u-hc .settings-nav,
 html.u-hc .set-card, html.u-hc .u-choice, html.u-hc .u-task, html.u-hc .u-help-item, html.u-hc .u-interest {
@@ -172,7 +171,6 @@ html.u-hc .sheet { background: rgba(0, 0, 0, .85); backdrop-filter: none; }
 /* ------------------------------------------------------------ reduced motion */
 html.u-rm *, html.u-rm *::before, html.u-rm *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important;
   transition-duration: .001ms !important; scroll-behavior: auto !important; }
-html.u-rm .world-bg { visibility: hidden; }
 
 /* ------------------------------------------------------------ colour-blind-safe status colours (Okabe-Ito), always with a symbol */
 html.u-cb { --ok: #56b4e9; --err: #e69f00; --warn: #f0e442; }

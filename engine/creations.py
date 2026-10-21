@@ -1,5 +1,5 @@
 """What LOKI made: the pictures, videos, sketches, sounds and games in the workspace, newest
-first, for Settings > Creations and the creations hall in LOKI World.
+first, for Settings > Creations and the home screen.
 
 Files are read straight from the workspace folders the makers write to (images/ from the image
 specialist and Higgsfield, videos/ from the video tools, sketches/ from the sketch pad, media/
@@ -12,7 +12,7 @@ parent}, so the wall can show the prompt on hover, star a favourite, "make more 
 (same prompt and style, the next seeds) and "animate this" (image-to-video). Delete never
 deletes: the file and its sidecar move to `<workspace>/trash/<kind>/`.
 
-API kept for other callers (the MMO, the bridge): list_creations(workspace, limit),
+API kept for other callers (the bridge, the home screen): list_creations(workspace, limit),
 creation_file(workspace, route), make_image(agent, prompt) - new arguments are keywords only.
 """
 from __future__ import annotations
@@ -343,8 +343,8 @@ def make_image(agent, prompt: str, *, style: str = "", enhance: bool = False, as
 
 
 # ----------------------------------------------------------------------------- likes (hearts)
-# Settings > Creations: the owner gives a creation 0-5 hearts. LOKI World turns a picture's hearts
-# into its painting's rarity (engine/mmo_state.py). Kept in <data>/creations/likes.json.
+# Settings > Creations: the owner gives a creation 0-5 hearts (the daily picture learns from them).
+# Kept in <data>/creations/likes.json.
 LIKES_MAX = 5
 _LIKES_LOCK = threading.Lock()
 

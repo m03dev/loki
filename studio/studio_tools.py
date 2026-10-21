@@ -5,7 +5,7 @@ Which tools a session gets depends on what it works on (`kind`) and its mode:
   kind "loki"   LOKI's own code in a session worktree: the LOKI MCP API (studio_core) + these:
                 repo_map, godot_docs, todos, questions, memory, skills, web_search, subagent,
                 generate_image, pc_worker
-  kind "godot"  a Godot project (any: LOKI World or the owner's own games), live in the editor
+  kind "godot"  a Godot project (any of the owner's own games), live in the editor
                 through the LOKI Studio plugin: project files (read/list/search/edit/write/delete,
                 each write checkpointed), project_index / project_graph, every editor action
                 (scene tree, nodes, properties, signals, scripts, scenes), run / stop the game,

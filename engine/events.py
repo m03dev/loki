@@ -1,4 +1,4 @@
-"""LOKI's event stream: one record of what really happened, for the world and every agent.
+"""LOKI's event stream: one record of what really happened, for the window and every agent.
 
 Everything that matters is an event with the same shape (docs/VISION.md section 9):
 
@@ -13,9 +13,9 @@ verification.completed, decision.made.
 Events are appended to harness_data/events/events.jsonl by any LOKI process on this machine
 (the engine and its background agents), so nothing depends on one process staying up. The
 engine serves them on GET /events?after=<seq>&wait=<s> (a long poll), and GET /world turns
-them, with the live jobs and teams, into the agents a visual client such as the Godot LOKI
-World draws (docs/WORLD.md). A client never invents activity: every character action maps
-to an event here.
+them, with the live jobs and teams, into the live view of the agents at work (the home screen,
+the work strip, the MCP world_summary). A client never invents activity: everything it shows
+maps to an event here.
 """
 from __future__ import annotations
 
@@ -188,14 +188,14 @@ def _tail_scan() -> dict:
         return {"last_seq": _tail["last_seq"], "msgs": dict(_tail["msgs"])}
 
 
-# --- the world: who is there and what they are doing ---------------------------------
+# --- the live view: who is there and what they are doing ---------------------------------
 
 STATIONS = {
     "LOKI": "hall", "Researcher": "library", "Architect": "drafting table", "Builder": "workshop",
     "Tester": "test bench", "Reviewer": "review desk", "Browser tester": "terminal",
     "Loki agent": "workshop", "claude-code": "workshop", "codex": "workshop", "hermes": "library",
     "opencode": "workshop", "openhands": "workshop", "nanocoder": "workshop",
-    "Godot": "godot forge",   # working in the live Godot editor (engine/godot_live.py)
+    "Godot": "godot editor",   # working in the live Godot editor (engine/godot_live.py)
 }
 JOB_STATE = {"queued": "waiting", "starting": "working", "working": "working", "blocked": "blocked",
              "done": "done", "failed": "failed", "cancelled": "idle"}
@@ -244,10 +244,10 @@ def world(jobs: list, teams: list, chat_busy: bool, last_decision: dict | None =
             "stage": team_stage.get(team_id, ""),
             "last_message": said(team_id, role),
         })
-    try:   # an agent working in the live Godot editor stands at the Godot forge (engine/godot_live.py)
+    try:   # an agent working in the live Godot editor shows there (engine/godot_live.py)
         import godot_live  # pylint: disable=import-outside-toplevel
         godot_live.apply_to_world(agents, now)
-    except Exception:  # noqa: BLE001 - the world never fails over this
+    except Exception:  # noqa: BLE001 - the view never fails over this
         pass
     return {"ok": True, "machine": machine_name(), "time": now, "agents": agents, "stats": stats,
             "teams": [{"id": t.get("id"), "goal": t.get("goal"), "status": t.get("status"),

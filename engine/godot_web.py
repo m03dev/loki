@@ -14,7 +14,7 @@
 The web editor works on a virtual file system in the browser (IndexedDB). Files flow: LOKI's project folder ->
 project.zip -> the web editor (Import), and back: the editor's "Download Project Source" zip -> Import here.
 The Godot web editor is MIT (godotengine.org); it is downloaded on first use and never committed.
-Projects: ~/LOKI Projects/<name> (LOKI_PROJECTS_DIR) and LOKI World (game/loki-world).
+Projects: ~/LOKI Projects/<name> (LOKI_PROJECTS_DIR).
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 REPO = Path(__file__).resolve().parent.parent
-# 4.7.2: LOKI World (game/loki-world) is a Godot 4.7 project; a 4.4 editor could not open it (2026-10-18)
+# 4.7.2: the same version as LOKI's own editor (engine/godot_editor.py)
 VERSION = "4.7.2-stable"
 ZIP_NAME = "Godot_v%s_web_editor.zip" % VERSION
 URL = "https://github.com/godotengine/godot/releases/download/%s/%s" % (VERSION, ZIP_NAME)
@@ -74,9 +74,6 @@ def projects_dir() -> Path:
 
 def projects() -> list:
     out = []
-    world = REPO / "game" / "loki-world"
-    if (world / "project.godot").is_file():
-        out.append({"name": "loki-world", "label": "LOKI World", "path": str(world)})
     base = projects_dir()
     if base.is_dir():
         for p in sorted(base.iterdir()):
@@ -89,7 +86,7 @@ def project_path(name: str) -> Path:
     for p in projects():
         if p["name"] == name:
             return Path(p["path"])
-    raise KeyError("no Godot project %r (in %s or game/loki-world)" % (name, projects_dir()))
+    raise KeyError("no Godot project %r (in %s)" % (name, projects_dir()))
 
 
 def native_godot() -> str:
@@ -260,18 +257,17 @@ def import_back(name: str, zip_path: str = "") -> dict:
 
 
 def loki_godot(install: bool = False) -> str:
-    """LOKI's own standard Godot 4.7.2 (engine/world_build.py keeps it in <data>/addons/godot-export), installed on
-    first use when `install`. LOKI World opens with it on every machine: the same version as the project, no C#
-    (the Mac's Godot_mono 4.8 dev rewrote LOKI World as a 4.8 C# project - 2026-10-18), the Asset Library included.
-    LOKI_GODOT_EDITOR=system uses the Godot installed on the computer instead."""
+    """LOKI's own standard Godot 4.7.2 (engine/godot_editor.py keeps it in <data>/addons/godot-export), installed on
+    first use when `install`: a project opens in it when the computer has no Godot of its own (standard, no C#, the
+    Asset Library included). LOKI_GODOT_EDITOR=system never uses it."""
     if os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() == "system":
         return ""
     try:
-        import world_build  # pylint: disable=import-outside-toplevel
-        exe = world_build.editor_binary()
+        import godot_editor  # pylint: disable=import-outside-toplevel
+        exe = godot_editor.editor_binary()
         if exe is None and install:
-            got = world_build.install(editor_only=True)
-            exe = world_build.editor_binary()
+            got = godot_editor.install()
+            exe = godot_editor.editor_binary()
             if exe is None:
                 _GET_GODOT["error"] = str(got.get("error") or "the download failed")
         return str(exe) if exe else ""
@@ -281,18 +277,19 @@ def loki_godot(install: bool = False) -> str:
 
 
 def prefetch(log=print) -> str:
-    """Engine start: get LOKI's Godot 4.7.2 in the background once, so Open in Godot opens LOKI World at once
-    (owner, 2026-10-18: Open in Godot "takes me to a completely different project" - the PC never had LOKI's Godot,
-    so nothing opened and the Godot already on screen was the other project). LOKI_GODOT_PREFETCH=off skips it."""
+    """Engine start: when this computer has no Godot, get LOKI's Godot 4.7.2 in the background once, so Open in
+    Godot opens a project at once. LOKI_GODOT_PREFETCH=off skips it."""
     if os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() == "system" or \
             os.getenv("LOKI_GODOT_PREFETCH", "on").strip().lower() in ("off", "0", "false", "no"):
         return ""
     if loki_godot():
         return loki_godot()
+    if native_godot():
+        return ""
     if _GET_GODOT["state"] == "downloading":
         return ""
-    _GET_GODOT.update(state="downloading", note="Getting Godot 4.7.2 for LOKI World (one time, checked)...", error="")
-    log("[loki-bridge] getting LOKI's Godot 4.7.2 for LOKI World (one time, ~80-170 MB)")
+    _GET_GODOT.update(state="downloading", note="Getting Godot 4.7.2 (one time, checked)...", error="")
+    log("[loki-bridge] getting LOKI's Godot 4.7.2 (one time, ~80-170 MB)")
     exe = loki_godot(install=True)
     if exe:
         _GET_GODOT.update(state="done", note="LOKI's Godot 4.7.2 is ready")
@@ -308,11 +305,10 @@ _GET_GODOT: dict = {"state": "idle", "note": "", "error": ""}
 
 def open_native(name: str, popen=subprocess.Popen, background: bool = True) -> dict:
     root = project_path(name)
-    world = root.resolve() == (REPO / "game" / "loki-world").resolve()
-    use_loki = world and os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() != "system"
+    # the computer's own Godot first; LOKI's own 4.7.2 when there is none (LOKI_GODOT_EDITOR=system: never)
+    use_loki = not native_godot() and os.getenv("LOKI_GODOT_EDITOR", "loki").strip().lower() != "system"
     if use_loki and not loki_godot():
         # first time: get LOKI's Godot 4.7.2 (~80-170 MB) in the background, then open - the window never hangs.
-        # LOKI World never opens in another Godot (a 4.8 / C# one rewrites it, or shows its own last project).
         if _GET_GODOT["state"] != "downloading":
             _GET_GODOT.update(state="downloading", note="", error="")
 
@@ -331,23 +327,19 @@ def open_native(name: str, popen=subprocess.Popen, background: bool = True) -> d
         if _GET_GODOT["state"] == "failed":
             return {"ok": False, "error": _GET_GODOT["note"]}
         return {"ok": True, "downloading": True,
-                "note": "Getting Godot 4.7.2 for LOKI World (one time, checked) - it opens by itself when ready."}
+                "note": "Getting Godot 4.7.2 (one time, checked) - the project opens by itself when ready."}
     exe = loki_godot() if use_loki else native_godot()
     if not exe:
         return {"ok": False, "error": "Godot is not installed here (or set GODOT_BIN). Get Godot 4 from godotengine.org."}
     note = ""
     try:
         sys.path.insert(0, str(REPO / "studio"))
-        if root.resolve() == (REPO / "game" / "loki-world").resolve():
-            import godot_live  # pylint: disable=import-outside-toplevel
-            got = godot_live.ensure_world(root, sync=True)   # the LOKI plugin + plugins.json, project.godot untouched
-            note = got.get("note", "")
-            failed = (got.get("plugins") or {}).get("failed") or []
-            if failed:
-                note += "; plugins not installed: " + "; ".join(failed)
-        else:
-            import install_godot_plugin  # pylint: disable=import-outside-toplevel
-            note = str(install_godot_plugin.install(root).get("note") or "")
+        import godot_live  # pylint: disable=import-outside-toplevel
+        got = godot_live.ensure_plugin(root, sync=True)   # the LOKI plugin + the project's plugins.json
+        note = got.get("note", "")
+        failed = (got.get("plugins") or {}).get("failed") or []
+        if failed:
+            note += "; plugins not installed: " + "; ".join(failed)
     except Exception as exc:  # noqa: BLE001 - the editor still opens without the plugin
         note = "the LOKI Studio plugin could not be added (%s)" % exc
     kwargs: dict = {"cwd": str(root), "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,

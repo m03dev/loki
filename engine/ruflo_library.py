@@ -22,7 +22,7 @@ LOKI-native:
 What LOKI adds on top ("better"): every Ruflo text passes LOKI's skill scan first - text that
 tries to override the rules is blocked and never loaded (one Ruflo skill is, today); Ruflo
 agents run on any model through LOKI's prompted tool harness, on any linked machine, inside
-LOKI's policy and approvals, and show up in LOKI World.
+LOKI's policy and approvals, and show up in the work strip.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ import skill_scan
 
 ROOT = Path(__file__).resolve().parent.parent / "contrib" / "ruflo"
 MAX_TEXT = 6000
-# Ruflo agent family (its folder) -> LOKI tool groups and a colour in LOKI World.
+# Ruflo agent family (its folder) -> LOKI tool groups and a colour in the agents list.
 FAMILY = {
     "core": (["files", "commands"], "#a3be8c"), "development": (["files", "commands"], "#a3be8c"),
     "testing": (["files", "commands"], "#ebcb8b"), "analysis": (["files"], "#b48ead"),

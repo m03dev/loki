@@ -63,11 +63,7 @@ already uses its code or data as-is), **skip** (with why).
 | github.com/D4Vinci/Scrapling | adaptive scraper | BSD-3-Clause | session 26: `web_reader.py` | - | **already ported** |
 | github.com/xiamuceer-j/MuMuAINovel | long-novel pipeline | GPL-3.0 | session 26: novel-writer skills | - | **already ported** |
 | github.com/penecho/penecho | shared drawing canvas | AGPL-3.0 | session 26: sketch_reply idea | - | **already ported** (idea) |
-| github.com/BabylonJS/Babylon.js | 3D engine | Apache-2.0 | LOKI World renderer (vendored build) | - | **in use** (UI is another agent's area) |
-| github.com/mrdoob/three.js | 3D engine | MIT | vendored, optional world look | - | **in use** |
-| github.com/stegu/webgl-noise | GLSL noise | MIT | `world_noise.js` | - | **in use** |
-| github.com/ashima/webgl-noise | original of the above | MIT | same code | - | **in use** |
-| github.com/paddy-exe/Godot-3D-Stylized-Water | water shader | MIT | world.js water | - | **in use** |
+| github.com/mrdoob/three.js | 3D engine | MIT | vendored: Forge, Render | - | **in use** |
 | github.com/coreyhaines31/marketingskills | 50 marketing skills | MIT | `skills/marketing/` | - | **in use** |
 | github.com/ruvnet/ruflo | agent meta-harness | MIT | `contrib/ruflo/` agents, skills, playbooks | - | **in use** |
 | github.com/ruvnet/claude-flow | ruflo's former name | MIT | inside contrib/ruflo | - | **in use** (same code) |

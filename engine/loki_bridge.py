@@ -198,7 +198,6 @@ UI_DIR: Path | None = None
 UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
             ".json": "application/json; charset=utf-8",
-            # LOKI World's Godot web export (app/ui/world_godot/): the engine and the game pack
             ".wasm": "application/wasm", ".pck": "application/octet-stream", ".gz": "application/gzip"}
 # style-src allows inline <style>: pywebview injects one for its drag regions (the Mac title bar)
 # and the bundled Mermaid adds one per diagram; both were blocked ("could not load (no address) -
@@ -206,11 +205,6 @@ UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
 UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; "
           "connect-src 'self'; frame-src 'self' http://127.0.0.1:* http://localhost:*; "   # the Studio tab: Studio's own loopback server
           "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-# The Godot world page only: WebAssembly needs 'wasm-unsafe-eval' (not 'unsafe-eval' - no JS eval),
-# and LOKI's own window frames it (same origin). Every other UI page keeps UI_CSP.
-GODOT_WORLD_PAGE = "/ui/world_godot/index.html"
-GODOT_WORLD_CSP = (UI_CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'")
-                   .replace("frame-ancestors 'none'", "frame-ancestors 'self'"))
 # Forge's sculpting engine runs in a Web Worker (app/ui/vendor/sculpt/sculpt_worker.js). A dedicated worker takes
 # its policy from its own response, so WebAssembly is allowed for that one script - it can only load LOKI's own
 # files and has no DOM - while every page keeps UI_CSP (no 'wasm-unsafe-eval' in the window itself).
@@ -283,27 +277,22 @@ def redact_line(text: str) -> str:
 
 
 def world_extras(agent: Any) -> dict:
-    """What LOKI World shows besides the agents: your other machines, the model answering
+    """The live view (GET /world) besides the agents: your other machines, the model answering
     right now, and today's usage. Cheap: cached, never waits on the network."""
     out: dict = {}
     try:
         import peer_link  # pylint: disable=import-outside-toplevel
-        out["machines"] = peer_link.world_machines()
+        out["machines"] = peer_link.machines_live()
     except Exception:  # noqa: BLE001
         out["machines"] = []
-    try:   # the creations hall: how many things LOKI made, and the newest few
+    try:   # how many things LOKI made, and the newest few
         import creations  # pylint: disable=import-outside-toplevel
         made = creations.list_creations(Path(getattr(agent, "WORKSPACE", ".")), limit=400)
         out["creations"] = {"count": len(made), "latest": [{"title": c["title"], "kind": c["kind"], "show": c["show"]}
                                                            for c in made[:5]]}
     except Exception:  # noqa: BLE001
         out["creations"] = {"count": 0, "latest": []}
-    try:   # the MMO: the owner's avatars on the other machines, and the world chat
-        import presence  # pylint: disable=import-outside-toplevel
-        out["presence"] = presence.world_part()
-    except Exception:  # noqa: BLE001
-        out["presence"] = {"players": [], "chat": [], "cursor": 0}
-    try:   # the island you stand on is this machine: its name and OS
+    try:   # this machine: its name and OS
         import platform  # pylint: disable=import-outside-toplevel
         import peers  # pylint: disable=import-outside-toplevel
         out["self"] = {"name": peers.my_name(), "os": platform.system()}
@@ -837,22 +826,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(403, {"ok": False, "error": "Host not allowed."})
             return True
         found = ui_file(UI_DIR, route)
-        gz = False
-        if route.startswith("/ui/world_godot/") and route.endswith(".wasm"):
-            # the Godot engine for LOKI World is committed gzipped (39 MB -> ~10 MB in git); the window receives it
-            # as Content-Encoding: gzip. A plain index.wasm can also be there - an export from the Godot app, or an
-            # older local build (the Mac's, 2026-10-18) - so the NEWER of the two is the one that matches index.js
-            packed = ui_file(UI_DIR, route + ".gz")
-            if packed is not None and (found is None or packed.stat().st_mtime >= found.stat().st_mtime):
-                found, gz = packed, True
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
-            return True
-        if gz:
-            self._send_static(found, kind=".wasm", encoding="gzip")
-            return True
-        if route == GODOT_WORLD_PAGE:
-            self._send_static(found, framed=True, csp=GODOT_WORLD_CSP)
             return True
         if route == SCULPT_WORKER:
             self._send_static(found, csp=SCULPT_WORKER_CSP)
@@ -863,7 +838,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     def _send_static(self, found: Path, framed: bool = False, csp: str = "", kind: str = "", encoding: str = "") -> None:
         """One static file. `framed`: the Play page, which LOKI's own window shows in a sandboxed
         frame - it may be framed by LOKI itself (same origin) and nothing else. `csp`: a page's
-        own policy (the Godot world page: GODOT_WORLD_CSP)."""
+        own policy (the sculpting worker: SCULPT_WORKER_CSP)."""
         body = found.read_bytes()
         try:
             self.send_response(200)
@@ -1047,9 +1022,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import studio_api  # pylint: disable=import-outside-toplevel
             self._send_json(*studio_api.route(self.server.state, "GET", route))
             return
-        if route == "/world/build":   # LOKI World's web build from game/loki-world (engine/world_build.py)
-            import world_build  # pylint: disable=import-outside-toplevel
-            self._send_json(*world_build.route("GET", route, {}))
+        if route == "/home/projects":   # the home screen's preview hub (engine/home_projects.py)
+            import home_projects  # pylint: disable=import-outside-toplevel
+            self._send_json(*home_projects.route(self.server.state, route))
             return
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
@@ -1060,8 +1035,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import forge_api  # pylint: disable=import-outside-toplevel
             self._send_forge(forge_api.handle_get(self.server.state, self.path))
             return
-        # LOKI Spaces (the P2P Discord) was taken out on 2026-10-21 (owner: "get rid of spaces, we dont need it in
-        # the directions we're going"); its code is kept in docs/operations/archive/spaces/.
         import usability_api  # pylint: disable=import-outside-toplevel - session 29: help, onboarding, language
         if usability_api.handles("GET", route):
             self._send_json(*usability_api.route(self.server.state, "GET", self.path))
@@ -1276,22 +1249,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/update":
             self._send_json(200, {"ok": True, **update_status()})
             return
-        if route.startswith("/mmo/"):   # LOKI World MMO game state (docs/MMO_API.md, engine/mmo_state.py)
-            import mmo_state  # pylint: disable=import-outside-toplevel
-            self._send_json(*mmo_state.route(self.server.state, "GET", route, {}, job_action))
-            return
-        if route == "/character":   # LOKI World: your character's name and look (engine/character.py)
-            import character  # pylint: disable=import-outside-toplevel
-            self._send_json(*character.route(self.server.state, "GET", route, {}))
-            return
-        if route == "/world/presence":   # LOKI World MMO: the other machines' avatars + chat
-            import presence  # pylint: disable=import-outside-toplevel
-            try:
-                after = int((parse_qs(urlparse(self.path).query).get("after") or ["0"])[0])
-            except ValueError:
-                after = 0
-            self._send_json(200, presence.HUB.snapshot(after))
-            return
         if route in ("/events", "/world"):
             import events  # pylint: disable=import-outside-toplevel
             state = self.server.state
@@ -1454,10 +1411,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
-        if route == "/world/build":   # rebuild LOKI World from game/loki-world (engine/world_build.py)
-            import world_build  # pylint: disable=import-outside-toplevel
-            self._send_json(*world_build.route("POST", route, data))
-            return
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             self._send_json(*godot_live.route("POST", route, data, {}))
@@ -1495,17 +1448,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/qol/"):   # session 29: chat quality of life (engine/qol.py)
             import qol  # pylint: disable=import-outside-toplevel
             self._send_json(*qol.route(state, "POST", self.path, data))
-            return
-        if route in ("/world/presence", "/world/retry"):
-            self._send_json(*world_action(state, route, data))
-            return
-        if route.startswith("/mmo/"):   # LOKI World MMO game actions (docs/MMO_API.md)
-            import mmo_state  # pylint: disable=import-outside-toplevel
-            self._send_json(*mmo_state.route(state, "POST", route, data, job_action))
-            return
-        if route == "/character":   # LOKI World: save your character (engine/character.py)
-            import character  # pylint: disable=import-outside-toplevel
-            self._send_json(*character.route(state, "POST", route, data))
             return
         if route.startswith("/peers"):
             self._send_json(*peer_ui(state, "POST", route, data))
@@ -2015,25 +1957,6 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
-
-
-def world_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    """LOKI World MMO (app/ui/mmo/): POST /world/presence {player, chat?, after} - this machine's
-    avatar, shared with the linked machines (presence.py); POST /world/retry {id, model?} - start
-    a failed job again on a stronger model (the loot of a defeated failure monster). The retry
-    goes through job_action, so the policy decides exactly as for any new job."""
-    import presence  # pylint: disable=import-outside-toplevel
-    if route == "/world/presence":
-        return 200, presence.app_post(data)
-    jobs = state.jobs
-    if jobs is None:
-        return 503, {"ok": False, "error": "Background jobs are not running."}
-    job_id = "".join(ch for ch in str(data.get("id") or "") if ch.isalnum())[:16]
-    try:
-        spec = presence.retry_spec(jobs.store.get(job_id), str(data.get("model") or ""))
-    except ValueError as exc:
-        return 400, {"ok": False, "error": str(exc)}
-    return job_action(state, "/jobs", spec)
 
 
 def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -2840,15 +2763,14 @@ async def serve() -> None:
     try:   # the live Godot link: a Godot editor with the LOKI Studio plugin finds this engine (engine/godot_live.py)
         import godot_live  # pylint: disable=import-outside-toplevel
         godot_live.write_connect(PORT, secret)
-        # LOKI World is ready to open in the real Godot editor: the plugin in it, its Asset Library plugins synced
-        def world_ready() -> None:
-            godot_live.ensure_world(sync=True)
-            try:   # LOKI's own Godot 4.7.2, so Open in Godot opens LOKI World at once (engine/godot_web.py)
+        # no Godot on this computer: LOKI's own Godot 4.7.2, so Open in Godot opens a project at once (engine/godot_web.py)
+        def godot_ready() -> None:
+            try:
                 import godot_web  # pylint: disable=import-outside-toplevel
                 godot_web.prefetch(lambda t: print(t, flush=True))
             except Exception as exc:  # noqa: BLE001
                 print(f"[loki-bridge] LOKI's Godot not fetched: {exc}", flush=True)
-        threading.Thread(target=world_ready, daemon=True, name="loki-world-ready").start()
+        threading.Thread(target=godot_ready, daemon=True, name="loki-godot-ready").start()
     except Exception as exc:  # noqa: BLE001 - the editor link is optional
         print(f"[loki-bridge] live Godot link unavailable: {exc}", flush=True)
     try:   # LOKI installs the add-ons it needs by itself, in the background (engine/auto_setup.py)

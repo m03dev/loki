@@ -1,4 +1,4 @@
-// LOKI Pixel Engine - LOKI's own small game engine, in LOKI World's look.
+// LOKI Pixel Engine - LOKI's own small game engine, in a pixel cel-shaded look.
 //
 // The same pixel cel-shaded style as the world: the scene is drawn into a low-resolution
 // framebuffer and blown up with NEAREST filtering, posterized with an ordered (Bayer) dither,
@@ -325,7 +325,7 @@
     return G;
   }
 
-  // ------------------------------------------------------------------ models (LOKI World's critters and props)
+  // ------------------------------------------------------------------ models (critters and props)
   const models = {
     fox() {
       const orange = [0.93, 0.47, 0.17], cream = [0.98, 0.93, 0.84], dark = [0.22, 0.14, 0.12];

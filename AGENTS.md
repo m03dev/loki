@@ -43,17 +43,14 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
   deleted to make something pass or look tidy: move it, put it behind a setting, or archive it under
   `docs/operations/archive/`.
 - Small steps. Add or update a test in `tests/` for what you change.
-- LOKI is its own app, not a Godot addon. Godot belongs in exactly three places (owner's decisions,
-  2026-10-17: "you can use godot we love godot", then LOKI Studio inside Godot like Ziva): the game
-  capability (`engine/godot_tools.py`, `engine/godot_assets.py`, kept); **LOKI World, the MMO**: one
-  Godot 4 project in `game/loki-world/`, exported as its own app (Steam) and as a web build that LOKI's
-  window shows - and, since 2026-10-18, THE project LOKI's agents work in live inside the owner's real Godot
-  editor (docs/LIVE_GODOT.md: the plugin links the editor to LOKI's engine, every agent has `godot_editor`,
-  Asset Library plugins are recorded in `game/loki-world/plugins.json` and installed by LOKI, `addons/` stays
-  untracked); and **the LOKI Studio editor plugin** in `studio/godot_plugin/addons/loki_studio/`
-  (a second front end for Studio that is copied into any Godot project - docs/STUDIO.md; no
-  `project.godot` there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder
-  anywhere else in the repo. The owner's own game projects live in `~/LOKI Projects/<name>`.
+- LOKI is its own app (a game engine, render studio and AI farm hive - owner, 2026-10-21), not a Godot addon.
+  Godot belongs in exactly three places (owner's decisions, 2026-10-17: "you can use godot we love godot"): the
+  game capability (`engine/godot_tools.py`, `engine/godot_assets.py`); the **live Godot link** (the Godot tab
+  opens the owner's projects in the real Godot editor, every agent has `godot_editor`, Asset Library plugins are
+  recorded in the project's `plugins.json` - docs/LIVE_GODOT.md); and **the LOKI Studio editor plugin** in
+  `studio/godot_plugin/addons/loki_studio/` (copied into any Godot project - docs/STUDIO.md; no `project.godot`
+  there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder anywhere in the repo besides
+  that plugin. The owner's own game projects live in `~/LOKI Projects/<name>`.
 - The repository is PUBLIC and LOKI is AGPL-3.0 (owner, 2026-10-17). Never commit a key, token, password,
   personal file or anything from `harness_data/`. Take code only under licences compatible with AGPL-3.0
   (MIT, BSD, Apache-2.0, ISC, MPL-2.0, LGPL, GPL-3.0, AGPL-3.0); never proprietary code (e.g. Ziva's) or

@@ -46,7 +46,7 @@ start only switches folders (`apply_ready`, no network). `LOKI_UPDATE_AT_START=1
   edit `loki.py` daily.
 - `serve()` before the API answers: ~0.3 s (workers, peers, autopilot, laya.warm). Starting the HTTP
   server first would need every route to cope with half-initialised state - risky for ~0.2 s.
-- The 3D world / UI first paint: measured by the UI's own `/ui/timing` (session 22); unchanged here.
+- The UI first paint: measured by the UI's own `/ui/timing` (session 22); unchanged here.
 
 ## The Rust question
 

@@ -28,7 +28,7 @@
     if (r.width === 0 && r.height === 0) return false;
     const cs = getComputedStyle(n);
     if (cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) === 0) return false;
-    return !n.closest("[hidden], [aria-hidden='true'], .world-bg");
+    return !n.closest("[hidden], [aria-hidden='true']");
   };
   const byId = (id) => document.getElementById(id);
   function accName(n) {

@@ -5,7 +5,7 @@ Open **Settings > General > Language and accessibility**. The settings are saved
 
 - **Text size** - 100%, 115%, 130% or 150%. Everything in the window grows.
 - **High contrast** - black and white with strong outlines and a yellow focus ring.
-- **Motion** - *Reduce motion* stops animations and hides the moving 3D world behind the home screen. *Follow this computer's setting* uses your system's "reduce motion" option.
+- **Motion** - *Reduce motion* stops animations and transitions. *Follow this computer's setting* uses your system's "reduce motion" option.
 - **Colour-blind-safe colours** - status colours become blue, orange and yellow, always with a symbol (✓, ✕, …) so colour is never the only signal.
 
 The welcome tour has **Bigger text** and **High contrast** buttons on its first page too.

@@ -1,5 +1,5 @@
 """The October 2026 build: Connections portal, sign-in and QR codes, the prompted tool
-harness, Update everything, the agent builder, new specialists and LOKI World.
+harness, Update everything, the agent builder, new specialists and the live view.
 
     python tests/test_portal.py
 
@@ -704,37 +704,41 @@ def api_world_ok(js: str) -> bool:
 
 ui = REPO / "app" / "ui"
 html = (ui / "index.html").read_text(encoding="utf-8")
-for marker in ('data-tab="general"', 'data-tab="agents"', 'data-tab="world"', 'id="portal"', 'id="qr-modal"',
-               'id="update-banner"', "/ui/settings.js", "/ui/world.js"):
+for marker in ('data-tab="general"', 'data-tab="agents"', 'id="portal"', 'id="qr-modal"',
+               'id="update-banner"', "/ui/settings.js", "/ui/home.js"):
     check("index.html has %s" % marker, marker in html)
+check("LOKI World is gone from the window (2026-10-21): no World panel, no world.js, no world backdrop",
+      'data-tab="world"' not in html and "/ui/world.js" not in html and "world-bg" not in html and not (ui / "world.js").exists()
+      and not (ui / "world_godot").exists())
 check("still CSP-clean (no inline script or style)", "<script>" not in html and " style=" not in html and "onclick" not in html)
 settings_js = (ui / "settings.js").read_text(encoding="utf-8")
-world_js = (ui / "world.js").read_text(encoding="utf-8")
+home_js = (ui / "home.js").read_text(encoding="utf-8")
 check("the portal tests, signs in, hands off and updates everywhere", all(s in settings_js for s in (
     "/providers/test", "/signin/openrouter", "/handoff", "/update/everywhere", "/agents/draft", "/agents/launch")))
-check("LOKI World is only the Godot game (2026-10-18): world.js hosts its web build, the JS worlds are gone",
-      'game: "godot"' in world_js and 'loadScript("/ui/world_godot/host.js")' in world_js and api_world_ok(world_js)
+check("the home hub reads one engine call through api() (GET /home/projects); the JS worlds stay gone",
+      'call("/home/projects")' in home_js and "fetch(" not in home_js
       and not any((ui / f).exists() for f in ("world_babylon.js", "world_three.js", "world_noise.js", "character.js", "mmo/mmo_core.js"))
-      and not (ui / "vendor" / "babylon").exists() and "world-bg-canvas" not in html and "getContext(" not in world_js)
-check("the world loads nothing from outside and never evals", all(s not in world_js for s in (
+      and not (ui / "vendor" / "babylon").exists() and "world-bg-canvas" not in html)
+check("the home hub loads nothing from outside and never evals", all(s not in home_js for s in (
     "http://", "https://", "eval(", "new Function", "XMLHttpRequest", "import(")))
 check("the old Godot ignore rules stay anchored to the repo root (they used to swallow the three add-ons)",
       not any(l.strip() in ("addons/", "scenes/", "scripts/") for l in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()))
 import loki_bridge as _lb_world  # noqa: E402
 _wx = _lb_world.world_extras(type("A", (), {"active_model_name": lambda self: "m"})())
-check("the world knows which machine it is on (its island is home)",
+check("the live view (GET /world) knows which machine it is on",
       isinstance(_wx.get("self"), dict) and bool(_wx["self"].get("name")) and "os" in _wx["self"])
 glass = (ui / "glass.css").read_text(encoding="utf-8")
-check("the glass look without live blur over the moving world (the lag): tinted panels, gradients",
+check("the glass look without live blur (the lag): tinted panels, gradients",
       "--blur: none;" in glass and "--grad:" in glass and "prefers-reduced-transparency" in glass
       and "backdrop-filter: blur(8px)" not in glass)
 setup_js = (ui / "setup.js").read_text(encoding="utf-8")
 check("setup.js no longer shares a global button() with settings.js (labels were swapped)",
       "function setupButton(" in setup_js and "function button(" not in setup_js)
-check("the world keeps the functions app.js and settings.js call", all(
-    ("function %s(" % f) in world_js for f in ("showWorldPanel", "hideWorldPanel", "setWorldMode")))
+check("nothing calls the old world functions any more", not any(f in (ui / n).read_text(encoding="utf-8")
+      for f in ("showWorldPanel", "hideWorldPanel", "startHomeWorld", "syncHomeWorld") for n in ("app.js", "settings.js", "workbench.js", "modebar.js")))
+check("the home hub has the functions app.js calls", all(("%s" % f) in home_js for f in ("refresh", "sync", "openStudio")))
 if shutil.which("node"):
-    for name in ("app.js", "settings.js", "world.js", "setup.js", "machines.js", "workbench.js", "lab.js", "sketch.js"):
+    for name in ("app.js", "settings.js", "home.js", "setup.js", "machines.js", "workbench.js", "lab.js", "sketch.js"):
         proc = subprocess.run(["node", "--check", str(ui / name)], capture_output=True, text=True)
         check("%s parses" % name, proc.returncode == 0, proc.stderr)
 

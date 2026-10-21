@@ -777,7 +777,7 @@ class Supervisor:
             "model": str(spec.get("model") or ""),
             "fallback": str(spec.get("fallback") or "")[:80],
             "team": str(spec.get("team") or "")[:40],
-            # The agent this job runs as (agent builder) and its colour in LOKI World.
+            # The agent this job runs as (agent builder) and its colour in the agents list.
             "agent_id": str(spec.get("agent_id") or "")[:40],
             "color": str(spec.get("color") or "")[:7],
             # LOKI's System check: the built-in agent proves the job path (spawn, log, poll,

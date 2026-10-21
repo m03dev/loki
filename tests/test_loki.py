@@ -164,13 +164,13 @@ check("DATA_DIR is named harness_data", loki.DATA_DIR.name == "harness_data", lo
 check("DATA_DIR is not inside engine/", "engine" not in loki.DATA_DIR.relative_to(REPO).parts if REPO in loki.DATA_DIR.parents else True, loki.DATA_DIR)
 for _godot_leftover in ("project.godot", "addons"):
     check("no %s in the checkout" % _godot_leftover, not (REPO / _godot_leftover).exists())
-# AGENTS.md: Godot files live in LOKI World (game/loki-world/) and the LOKI Studio plugin
-# (studio/godot_plugin/addons/loki_studio/, no project.godot) - nowhere else.
+# AGENTS.md: Godot files live only in the LOKI Studio plugin (studio/godot_plugin/addons/loki_studio/, no
+# project.godot); the owner's games live outside the repo, in ~/LOKI Projects/<name>.
 _tracked_godot = [f for f in subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True).stdout.split()
                   if (f.endswith((".gd", ".uid", ".tscn", ".tres", ".godot", ".import")) or f.startswith("addons/"))
-                  and not f.startswith("game/loki-world/")
                   and not (f.startswith("studio/godot_plugin/addons/loki_studio/") and f.endswith(".gd"))]
-check("no Godot files are tracked outside game/loki-world/ and the Studio plugin", not _tracked_godot, _tracked_godot[:5])
+check("no Godot files are tracked outside the Studio plugin", not _tracked_godot, _tracked_godot[:5])
+check("LOKI World's Godot project is gone from the repo (2026-10-21)", not (REPO / "game").exists())
 
 
 check("MCP_CONFIG ships with the code", loki.MCP_CONFIG.parent == loki.ROOT, loki.MCP_CONFIG)

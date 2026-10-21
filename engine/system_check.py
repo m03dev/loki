@@ -553,11 +553,11 @@ def check_jobs(ctx: Context) -> dict:
         return result("jobs", title, FAIL, "The job ran, but the event stream is missing %s." % ", ".join(missing),
                       fix("Re-run the check", action="recheck", label="Re-run"))
     if not in_world or in_world[0].get("state") != "done":
-        return result("jobs", title, FAIL, "The job ran and its events arrived, but LOKI World did not show it "
+        return result("jobs", title, FAIL, "The job ran and its events arrived, but the live view (GET /world) did not show it "
                       "as done (%s)." % (in_world[0].get("state") if in_world else "not there"),
                       fix("Re-run the check", action="recheck", label="Re-run"))
     return result("jobs", title, OK, "A background agent started on this computer, finished in %.1f s (%s), and "
-                  "showed up in the event stream (%s) and in LOKI World as %s." % (
+                  "showed up in the event stream (%s) and in the live view as %s." % (
                       secs, " > ".join(seen_states), ", ".join(dict.fromkeys(kinds)), in_world[0].get("name")))
 
 
@@ -600,12 +600,12 @@ def check_teams(ctx: Context) -> dict:
     if "verification.completed" not in [k for k, _ in kinds]:
         problems.append("its result was never announced")
     if not listed:
-        problems.append("LOKI World did not list it")
+        problems.append("the live view did not list it")
     if problems:
         return result("teams", title, FAIL, "A team dry run went wrong: %s." % "; ".join(problems),
                       fix("Re-run the check", action="recheck", label="Re-run"))
     return result("teams", title, OK, "A team was planned (%s), posted %d notes on its board, and appeared in "
-                  "the event stream and in LOKI World. No agent was started for this test." % (
+                  "the event stream and in the live view. No agent was started for this test." % (
                       ", ".join(team.get("roles") or []) or "roles chosen", len(posts)))
 
 

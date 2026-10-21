@@ -45,8 +45,8 @@ picks agents and models, runs them, verifies the result, and learns. It is a sta
 desktop app - <strong>never</strong> a Godot project.
 <h3>Hard rules (do not break)</h3>
 <ul>
-<li><strong>No Godot, ever.</strong> The "LOKI World" lives <em>inside the app</em> as a 3D
-WebGL scene. Never create a Godot project; never touch the <code>ai</code> project.</li>
+<li><strong>No Godot project in the repo.</strong> LOKI drives the owner's own Godot projects (in
+<code>~/LOKI Projects</code>); never touch the <code>ai</code> project.</li>
 <li><strong>One version, both machines.</strong> Publish only with
 <code>tools/ship.py -m "..."</code>; it runs every suite, commits, rebases, pushes
 <code>master</code>, and tells the other machine. Never force-push. Tests must pass.</li>
@@ -62,9 +62,8 @@ one card per provider with a toggle, a live <em>Test</em> (a real 1-token call),
 picker, <em>Make default</em>, <em>Disconnect</em>, and a <strong>QR pop-up</strong> so a
 phone on the same Wi-Fi hands over a key instantly. Sign-in where supported (OpenRouter OAuth,
 Hugging Face device flow).</li>
-<li><strong>The LOKI World, in the app, in 3D.</strong> Agents as characters that move, work,
-get blocked and speak <em>only</em> from real engine events; faint behind the home screen and
-full size in its own panel. Viewer, never the brain.</li>
+<li><strong>The home screen shows real work.</strong> Renders, models, game projects and the
+farm's jobs, <em>only</em> from real engine state. Viewer, never the brain.</li>
 <li><strong>An in-depth Agent Builder.</strong> Role, goal, skills (SKILL.md), tools, harness
 (LOKI / Claude Code / Codex / Hermes / OpenCode), model + fallback, home machine, memory, time
 limit. "Draft it" builds one from a sentence.</li>
@@ -97,8 +96,8 @@ it. The honest state:</p>
 <td><code>qr.py</code>, <code>signin.py</code>; real scan = <strong>W3</strong></td></tr>
 <tr><td>More free LLM hosts</td><td>Built (43), gaps remain</td>
 <td>groups: local / free / keyless / trial / subscription / paid</td></tr>
-<tr><td>LOKI World 3D in the app</td><td>Built (WebGL), in CI</td>
-<td><code>world.js</code>; WebView2/WKWebView = <strong>W6/M6</strong></td></tr>
+<tr><td>Home preview hub</td><td>Built, in CI</td>
+<td><code>home.js</code>, <code>home_projects.py</code></td></tr>
 <tr><td>In-depth agent builder + skills + harness</td><td>Built, in CI</td>
 <td><code>agents.py</code>, Settings &gt; Agents; live run = <strong>W5</strong></td></tr>
 <tr><td>"Any LLM can use any tool" harness</td><td>Built, in CI</td>
@@ -167,10 +166,10 @@ not part of the shipped system.</p>
 <h2>4. What I changed this session</h2>
 <ul>
 <li><strong>Pulled the other agent's work into <code>master</code></strong> - the 3-commit
-branch <code>claude/portal-world-updates</code> (portal, sign-in/QR, agent builder, 3D world,
+branch <code>claude/portal-world-updates</code> (portal, sign-in/QR, agent builder,
 Update everything, specialists), a clean fast-forward.</li>
-<li><strong>Cleaned the "still in Godot" story</strong>: rewrote the LOKI World sections in
-<code>README.md</code>, <code>docs/WORLD.md</code>, <code>docs/STATUS.md</code>,
+<li><strong>Cleaned the "still in Godot" story</strong> in
+<code>README.md</code>, <code>docs/STATUS.md</code>,
 <code>HANDOFF.md</code>, <code>docs/ARCHITECTURE.md</code>, cancelled the Godot task (W9) in
 <code>ZIVA_TASKS.md</code>, and removed the leftover Godot <code>addons/</code>.</li>
 <li><strong>Made the repo private</strong> (<code>m03dev/loki</code>) as you asked.</li>
@@ -186,12 +185,12 @@ session). Summary:</p>
 <tr><td><strong>Ziva (Windows)</strong> - PC, RTX 3070 Ti, 24/7</td>
 <td>W1 update+test &middot; W2 connections Test on every card &middot; W3 QR phone hand-off
 &middot; W4 OpenRouter sign-in &middot; W5 extras (media, opencode, reach, image-gen) &middot;
-W6 world screenshot on WebView2 &middot; W7 update-everything &middot; W8 prompted tools on a
+W7 update-everything &middot; W8 prompted tools on a
 local model &middot; W10 start at boot</td></tr>
 <tr><td><strong>Ziva (Mac)</strong> - Mac mini</td>
 <td>M1 checkout + <code>setup.sh</code> &middot; <strong>M2 <code>gh auth login</code></strong>
 (needed now the repo is private) &middot; M3 Tailscale link &middot; M4 MLX &middot; M5 Laya
-CoreML &middot; M6 world on WKWebView &middot; M7 images on MPS</td></tr>
+CoreML &middot; M7 images on MPS</td></tr>
 </table>
 <div class="box warn">
 <strong>Do this first now that the repo is private:</strong> the Mac must run

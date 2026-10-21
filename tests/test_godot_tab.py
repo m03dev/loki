@@ -2,7 +2,7 @@
 
     python tests/test_godot_tab.py      (< 30 s; skips without Playwright + Chromium)
 
-LOKI World is picked first and opens in the Godot app; the live link shows the linked editor and what each agent does
+The first of the owner's projects is picked and opens in the Godot app; the live link shows the linked editor and what each agent does
 in it; "Send to the agents" starts a background agent that works in the live editor (godot_editor); plugins from the
 Asset Library are listed and added; no web editor anywhere in the tab.
 """
@@ -34,7 +34,7 @@ except ImportError:
 
 NOW = time.time()
 API = {
-    "/godot-editor/status": {"ok": True, "projects": [{"name": "home", "label": "Home"}, {"name": "loki-world", "label": "LOKI World"}],
+    "/godot-editor/status": {"ok": True, "projects": [{"name": "Racer", "label": "Racer"}, {"name": "home", "label": "Home"}],
                              "native": "/Applications/Godot.app/Contents/MacOS/Godot", "projects_dir": "~/LOKI Projects"},
     "/api/godot/editors": {"ok": True, "editors": [],     # filled below from a REAL hub's summary (studio_godot.Editor)
                            "activity": {"job-7f3a": {"action": "add_node", "detail": "add node Lighthouse", "t": NOW - 5}}},
@@ -43,7 +43,7 @@ posts = []
 sys.path.insert(0, str(REPO / "studio"))
 import studio_godot  # noqa: E402
 _hub = studio_godot.GodotHub()
-_eid = _hub.hello({"project_path": "/x/game/loki-world", "project_name": "LOKI World", "godot_version": "4.8.0"})["editor"]
+_eid = _hub.hello({"project_path": "/x/LOKI Projects/Racer", "project_name": "Racer", "godot_version": "4.8.0"})["editor"]
 _hub.event(_eid, "state", {"edited_scene": "res://scenes/main.tscn", "playing": True})
 API["/api/godot/editors"]["editors"] = _hub.connected()
 
@@ -86,7 +86,7 @@ async def main():
             if path == "/jobs" and r.request.method == "POST":
                 return await r.fulfill(json={"ok": True, "id": "job-new"})
             if path == "/godot-editor/native":
-                return await r.fulfill(json={"ok": True, "note": "Godot is opening loki-world with the LOKI Studio plugin."})
+                return await r.fulfill(json={"ok": True, "note": "Godot is opening Racer with the LOKI Studio plugin."})
             return await r.fulfill(json=API.get(path, {"ok": True}))
 
         await pg.route("http://127.0.0.1:8896/**", route)
@@ -95,15 +95,17 @@ async def main():
         await pg.click("#mode-godot")
         await pg.wait_for_selector(".godot-editor-row", timeout=10000)
         pane = '[data-mode-pane="godot"]'
-        check("LOKI World is picked first", await pg.eval_on_selector(pane + " select", "s => s.value") == "loki-world")
+        check("the first project is picked (no built-in LOKI World any more)", await pg.eval_on_selector(pane + " select", "s => s.value") == "Racer"
+              and await pg.eval_on_selector(pane + " select", "s => [...s.options].every((o) => !/world/i.test(o.value + o.textContent))"))
         text = await pg.inner_text(pane)
-        check("the live link shows the linked Godot editor", "Godot 4.8.0 - LOKI World - editing res://scenes/main.tscn - the game is running" in text, text[:300])
+        check("the live link shows the linked Godot editor", "Godot 4.8.0 - Racer - editing res://scenes/main.tscn - the game is running" in text, text[:300])
         check("...and what each agent is doing in it", "Agent 7f3a: add node Lighthouse" in text, text[:500])
         check("plugins: the recorded ones, and the ones only on this machine", "Dialogue Manager 3.4 (MIT)" in text and "terrain3d" in text, text)
         check("no web editor in the tab", "web editor" not in text.lower() and not await pg.query_selector(pane + " iframe"))
+        check("no LOKI World and no 'Rebuild the World tab' in the Godot tab", "world" not in text.lower(), text[:300])
         await pg.click(pane + " button:has-text('Open in Godot')")
         await pg.wait_for_timeout(300)
-        check("Open in Godot opens the project in the Godot app", ("/godot-editor/native", {"name": "loki-world"}) in posts, posts)
+        check("Open in Godot opens the project in the Godot app", ("/godot-editor/native", {"name": "Racer"}) in posts, posts)
         await pg.fill(pane + " .godot-ask textarea", "add a lighthouse on the east cliff")
         await pg.click(pane + " .godot-ask button")
         await pg.wait_for_timeout(300)

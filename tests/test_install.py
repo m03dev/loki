@@ -383,7 +383,7 @@ class Engine:
             return {"ok": True, "progress": {"op": "auto", "done": False, "message": "Downloading", "total": 100, "completed": 40, "percent": 40}}
         if p == "/settings/general":
             return {"ok": True, "settings": {"LOKI_PREFER": {"kind": "choice", "default": "local", "choices": ["local", "cloud"], "label": "Prefer"}},
-                    "values": {"LOKI_PREFER": "local", "LOKI_WORLD": "off"}, "secrets_saved": {}}
+                    "values": {"LOKI_PREFER": "local"}, "secrets_saved": {}}
         if p == "/feedback/send":
             return {"ok": True, "zip": "/home/u/Desktop/LOKI-feedback-1.zip", "how": (body or {}).get("how"), "url": "https://github.com/m03dev/loki/issues/new"}
         if p == "/conversations":

@@ -28,9 +28,9 @@ installer, so it must "just work" - one click, no terminal, no setup stress, fas
 - Both platforms: every change must work on Windows AND macOS.
 - LOKI's own tasks (docs/EVOLVE.md: E12-E15 ...) are for LOKI to build. Watch, unblock and report them;
   don't write those fixes yourself unless the owner says so.
-- Don't focus on the game (LOKI World MMO is parked); core systems and ease of use come first.
+- Core systems and ease of use come first.
 - Ask the owner (Needs Mohamed in ZIVA_TASKS.md) before anything irreversible or that spends money.
 - Never open visible terminal windows on the owner's screen (2026-10-18: "the terminal keeps popping up" - they were
   Ziva's own "ZIVA_TEST3" cmd windows). Run commands in your own tool, or hidden: Windows
   `Start-Process -WindowStyle Hidden ...` (never `start "TITLE" cmd`), Mac: no `open -a Terminal`. Close any you opened.
-- Never open game/loki-world in Godot_v4.8-beta1_mono (it rewrites the project); LOKI's Godot tab opens it in 4.7.2.
+- Never open the owner's projects in Godot_v4.8-beta1_mono (it rewrites them); LOKI's Godot tab picks the right Godot.

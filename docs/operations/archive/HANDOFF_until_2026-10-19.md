@@ -8,38 +8,6 @@ LOKI itself - starts from the truth.
 
 Last updated: 2026-10-18 (later) (more local models: uncensored builds + add your own; home shows the live LOKI World; the repo + PC cleaned; Studio pin fixed)
 
-## 2026-10-19 04:10: Spaces is a full-window tab, like Discord (Claude, cloud)
-
-Owner: "the ui for voip needs work - it should be seamless, I don't wanna see it, it should cover the entire screen,
-like discord". The floating dock on LOKI home / over the game is gone. Spaces is the 6th title-bar tab (modebar.js
-MODES, Ctrl/Cmd+6) and fills the window: rail | rooms (voice members under each room, "Voice connected" + your user
-panel with mute/deafen/settings at the bottom) | the room (chat, or a voice stage of tiles; a lobby is stage + chat) |
-members. Typing anywhere goes into the message box. On another tab a call keeps a small pill; the tab shows unread.
-Checked: test_spaces_ui 16 (two windows, full-window layout, typing-anywhere, lobby -> World tab with the pill, a real
-WebRTC call, the stage and the voice panel, mute, leave), test_spaces 33, test_ui_fit 81 (now 6 tabs), test_ui_smoke 10,
-test_forge_ui 55.
-
-## 2026-10-19 03:30: LOKI Spaces - your own Discord, peer to peer, on LOKI home and in LOKI World (Claude, cloud)
-
-Owner: "make an open source discord or voip that's p2p - people make their own and host people - seamless in LOKI
-World, where people can chat and create lobbies ... replace discord", and "help focus on LOKI home while Ziva does Forge".
-- engine/spaces.py + spaces_api.py (routes /spaces/... in loki_bridge, started at engine start): the machine that makes a
-  space hosts it (harness_data/spaces/, a spaces port 8795 on the LAN + the bore relay); invites are one loki-space: code
-  with the key; joins prove the key and hand over a member secret; every request and answer is HMAC-signed (no replay,
-  no forged answer from the relay); messages and WebRTC signals are AES-GCM sealed in the window (engines hold
-  ciphertext only). Rooms text/voice, lobbies (tidy away when empty), edits, deletes, reactions, typing, roles, kick,
-  ban, lock. docs/SPACES.md has the wire format and the threat model.
-- app/ui/spaces.js/css: the rail of spaces on LOKI home over the live world (and over the World tab's game), the space
-  panel (rooms, chat, people), lobby cards on the home screen, a WebRTC voice mesh (mute, deafen, push-to-talk, who is
-  speaking) and a voice bar that follows you through LOKI. Typing with a space open goes into its box.
-- Tests: test_spaces 33 (two engines over real HTTP + a tampering relay), test_spaces_ui 15 (two windows: make, invite,
-  join, encrypted chat, mention, react, lobby -> World tab, a REAL WebRTC call with Chromium's fake mic, DTLS, mute,
-  leave). test_ui_smoke 10, test_ui_fit 81. i18n tables 0 problems.
-- NOT verified: the mic inside pywebview (WKWebView on the Mac, WebView2 on the PC) - may need the OS microphone
-  permission; two real machines across the relay; the Godot side (ZIVA_TASKS.md has it).
-- Ziva's "Forge more like Maya" work is not on GitHub yet (nothing pushed after 01cc671), so it was not reviewed and
-  no Forge file was touched here.
-
 ## 2026-10-19 00:05: Forge creature creator + Blender-style poly editing (Claude, cloud)
 
 Owner: "fix the creature creator, make it better ... poly modeling, vert selection, marquee selection, move tool works on faces and verts ... look at blender code".
@@ -231,25 +199,6 @@ cross-origin to every answer that sets none (COI_HEADERS), UI files send CORP cr
 sends both. The preview pane starts under the title strip (its Close button was covered). Checked: test_research3 154,
 test_apps 131, test_godot_world 83, all other suites on stubs. Not run: WebView2 / WKWebView (ZIVA_TASKS requests).
 
-## 2026-10-18 13:30: LOKI World is a real, editable scene in Godot (Claude, cloud + Mac files)
-
-Owner: "it takes me to a different godot project entirely nothing works". On the Mac, Godot DID open game/loki-world
-(recent files: main.tscn; the plugin set the live-sync flags) - but main.tscn was one empty Node and the island was
-built by code at runtime, so the editor showed nothing. And Godot_mono 4.8 dev rewrote project.godot as 4.8 + [dotnet].
-- scenes/main.tscn now holds WorldView > World3D > World (world.gd) > HomeIsland; scenes/home_island.tscn is the island
-  as named pieces (scripts/world/home_builder.gd, baked by tools/bake_world.gd, 240 nodes, ~930 KB, 5 shared materials).
-  world.gd uses the scene's island (paintings, shelf spots and stations found by group, so moving them in the editor
-  works), building from code only when the scene is missing. main.gd sets the mode in _enter_tree (the World readies
-  first now).
-- Open in Godot uses LOKI's own standard Godot 4.7.2 (world_build's, downloaded in the background on first Open, then
-  opened) - LOKI_GODOT_EDITOR=system for the computer's Godot. The engine logs "Godot x linked: <project>".
-- The character creator no longer opens behind the World tab's game frame.
-- Checked: a REAL Godot 4.7.2 editor in a window (Xvfb) shows the island in its 3D view; game tests 118/118 (scene's
-  island, move a station -> agents follow); test_godot_live 34 (the live editor's tree has World/HomeIsland; first Open
-  downloads then opens), test_godot_world 94, test_world_godot_tab 7, test_godot_tab 9, test_world_build 17,
-  test_ui_smoke, test_character 54, test_mmo 77, test_loki 533, --self-test OK. Not on the Mac yet: the download of
-  the macOS 4.7.2 editor and opening it there.
-
 ## 2026-10-18 12:30: LOKI World live in the real Godot editor - every LOKI agent works in it (Claude, cloud)
 
 Owner: "the loki world [should] be an editable project in godot ... agents ... roam around in a live project state,
@@ -273,35 +222,6 @@ docs/LIVE_GODOT.md has the design. Done:
   forge; live-sync flags set. test_godot_tab 9/9 (Chromium), test_godot_world 93, test_world_build 17, test_loki 533,
   test_tools_core 218, test_ui_fit 76, test_systems 101, --self-test OK. Not run on the Mac: the plugin in Godot 4.8 mono
   with a window, run_game live sync with a real window, an Asset Library install over the network.
-
-## 2026-10-18 04:20: LOKI World IS the Godot game, and one loop from the Godot editor to the World tab (Claude, cloud)
-
-Owner: "loki world wasnt build in godot where is it ... how are we going to incorporate into godot editor ... they feel like
-separate pieces". The Godot MMO (game/loki-world, 26 scripts, 107 tests) existed but was never exported, so the World tab
-silently ran the Babylon.js world (and a second, JavaScript MMO behind its "Join world").
-- **Exported and committed**: app/ui/world_godot/ (Godot 4.7.2 web, no threads; index.wasm kept gzipped - 39 MB -> 10 MB in
-  git - and served with Content-Encoding: gzip by engine/loki_bridge.py). The World tab plays it (World.game="godot",
-  default LOKI_WORLD_ENGINE=godot), loaded only when the tab / Settings > LOKI World opens; behind the home screen the light
-  Babylon island stays (startup unchanged). No build -> the light world plays.
-- **Bugs fixed on the way**: host.js removed the running game 12 s after EVERY start (its "nothing said" timer ignored a good
-  start); LokiApi's 3 s first /health timed out while the 39 MB engine started -> the made-up demo world although LOKI was
-  there (now 12 s + one retry on the page's own origin; one connect at a time); app.js started the World only if models,
-  mode AND chats all loaded (Promise.all -> allSettled); the game's tests read the player's saved profile (now isolated).
-- **Godot editor -> World tab**: engine/world_build.py + GET/POST /world/build + "Rebuild World" in the Godot tab (LOKI World
-  is picked first there). LOKI keeps its own standard Godot 4.7.2 (a C#/mono Godot - the Mac's 4.8 dev mono - cannot export
-  to the web) in <data>/addons/godot-export: the editor SHA-512 checked, only the 10 MB web template range-read out of the
-  1.3 GB template pack (SHA-512 pinned), a private Godot data folder (the owner's is never touched). 15 s from nothing on Linux.
-- The Godot web editor in the Godot tab is now 4.7.2 too (4.4.1 could not open a 4.7 project); installed + checked here.
-- **Forge -> LOKI World**: the Forge shelf - three pedestals in front of the creations hall show the newest Forge models
-  (GET /forge/list, the .glb loaded at runtime with GLTFDocument, ~1 m, turning, named). Character: the creator opens the
-  first time the World tab is clicked and saves to /mmo/profile, which the game uses - one character.
-- Checked: game tests 113/113 (Godot 4.7.2 headless), test_godot_world 86 (incl. the real Godot run), test_world_build 16,
-  test_world_godot_tab 6 (the real build in Chromium in the World tab), test_ui_smoke 10, test_ui_fit 76, test_portal 239,
-  test_forge_ui 20, test_forge_model_ui 13, test_character 54, test_mmo 77, test_mmo_systems 125, test_studio_destination 81,
-  test_files_ui 15, test_loki 533, --self-test OK. In a browser through the real engine: connected, live machine name and
-  profile, /forge/file/<model>.glb fetched. The engine serves the NEWER of index.wasm / index.wasm.gz (the Mac had
-  an older local export from Ziva; the update sets its clashing files aside as *.before-update). Not run on the Mac: the
-  World tab there, Rebuild World with the macOS editor.
 
 ## 2026-10-18 03:25: NVIDIA answers instead of timing out - streamed replies (Claude, Mac logs + cloud)
 
@@ -474,18 +394,6 @@ silicon) | everything (+ local-image, + local-video on NVIDIA) | off. Failures a
 and retried after 6 h, not in a loop. Installing never turns an add-on on (permissions stay the owner's OK). Settings >
 Add-ons shows progress + "Install what LOKI needs now" / "Everything". Routes: GET /autosetup/status, POST
 /autosetup/start {level}. Tested with fakes (tests/test_auto_setup.py); not run on the real Mac/PC yet.
-
-## 2026-10-17: LOKI World character creator, "Join world" (Claude, cloud)
-
-Owner: "i want a character creation screen and then play button should be join world". Settings > LOKI World's
-"Play" is now **Join world** (icon + tooltip, translated in all 8 tables) next to **Edit character**. With no character
-yet, Join world opens the creator (app/ui/character.js): name, role (Builder/Explorer/Artist/Scholar, one line each),
-body, skin, hair + colour, eyes + colour, top/bottom + colours, hat/scarf/none, Randomize; live preview drawn with
-world.js's own cel shader, ink and pixel blit; keyboard radios. Kept per machine: `GET/POST /character`
-(engine/character.py, <data>/world/character.json, fixed option lists). The avatar wears it (mmo_core.js `person()`,
-pooled; every renderer draws that scene list) with a name/role plate; role -> class. `GET /mmo/state` adds
-`profile.look` (docs/MMO_API.md); Godot player.gd uses its top colour, skin and hat (NOT compiled here - Ziva: run
-test_godot_world with Godot). tests/test_character.py (54, ~20 s, in SUITES). The "Play" games tab is unchanged.
 
 ## 2026-10-17 evening: provider Test, phone QR black page, model picker (Claude, cloud)
 
@@ -1224,61 +1132,6 @@ the bench must run on whichever machine it is pointed at.
 - The interactive halves (Play in the app window, the Godot editor window) are left to a human hand on
   purpose: no window was opened on the owner's screen.
 
-## Ziva (Mac), 2026-10-17 (patch 219): the Babylon world verified in the app's own WebKit - and the connection-drop bug behind broken windows
-
-Read with session 27/28 below: this is a *cause* of the same family of complaints, found on the Mac.
-
-- **BUG FIXED AND SHIPPED - the engine dropped connections while a page loaded.** `BridgeHTTPServer`
-  (engine/loki_bridge.py) used `socketserver`'s default accept backlog of **5**, while one page load asks for
-  ~25 files at once (index.html pulls every panel script). Measured against the live engine: 60 simultaneous
-  requests -> **46** "Connection reset by peer"; 120 -> 92. A browser shows that as ERR_CONNECTION_RESET /
-  ERR_SOCKET_NOT_CONNECTED, and it happened for real during a Chrome load of the UI: `play_panel.js`,
-  `creations.js`, `icons.js`, `brain.js`, `workbench.js` and `sketch.js` all failed to load - a window with
-  **dead panels** (Play, Creations, Brain, the drawing pad), or **blank** if `app.js`/`app.css` is one of the
-  dropped ones. That matches "the Mac shows a white window" and the PC reports. `request_queue_size = 128` now;
-  re-measured **0 resets** at 60 and 120 concurrent requests, guarded by
-  tests/test_systems.py ("the bridge takes a whole page load at once"). It costs nothing and helps every load.
-- **The blank-window guard works, and it is what caught the above**: boot.js wrote the failed loads to
-  engine.out and `/health` -> `ui_errors`. Its gap: a *script* error is reported as "error at ?:0:0" with no
-  message, file or line (both in the bridge log and in `ui_errors`), which cannot be diagnosed - worth adding
-  `e.error.stack` when the message is empty (not changed here; the cause would have been a guess).
-- **LOKI World is Babylon in the app's WKWebView, in the pixel cel-shaded look.** Verified in the real window
-  (`docs/operations/screens/babylon-world-mac.png`, `babylon-two-islands-mac.png`, `babylon-fox-mac.png`,
-  `babylon-world-panel-mac.png`): WebGL2 (no WebGL1 fallback), quality "high", 33.4-33.6 ms behind the glass =
-  its 30 fps cap with 0 late frames in 500+, 16.7 ms (~60 fps) in the World panel, the 3-px pixel grid and the
-  Bayer posterize confirmed pixel-by-pixel, no console errors (only the pre-existing `/favicon.ico` 401). CPU
-  with the world running (2 min): WebKit.WebContent 11.3% median + WebKit.GPU 8.0% + the app 5.1%.
-  Islands: the Mac's island, the PC's island out in the space around it, click to fly there, "back to <name>".
-  The Mac<->PC relay link came up during the session ("pc via relay - 3277 ms", `GET /peers` ok true, the PC's
-  hello = patch 219) - it works but is not perfectly steady (one "(timed out)" in the world while /peers was ok).
-- **Creations needed image-gen switched on** (it was off on this Mac, and the wall said so clearly); enabled,
-  a fox picture was made here through the free pollinations backend and now heads the wall and the island's
-  creations hall. Say if you want image-gen off again.
-- **test_research_ports failed on macOS only** (so `ship.py` refused to push): `repo_map.source_files`
-  walks the RESOLVED root while the test compared against the unresolved one - on macOS `/tmp` is
-  `/private/tmp`, so `relative_to` raised ValueError. The production path (`build()` resolves its root)
-  was fine; the test now resolves too and the function says so in its docstring. 141 passed.
-- **Bonsai 2 now works on the Mac - and pinning a local model no longer breaks its context.** Bonsai 2 9B
-  (Q2_0, 3.2 GB) was already pulled on this Mac; it loads and answers at 6-17 tok/s (vs the local qwen3:8b's
-  1.4). The bug: `POST /setup/use` ("use this model") pinned the RAW tag with no long context, while the
-  one-click setup has always wrapped it as `loki-<model>` with num_ctx. With Ollama's 4096 default the agent
-  prompt (system + 22 tool schemas + history) is already ~4k tokens, so Ollama truncated it, the user's message
-  fell off the front, and Bonsai 2's strict GGUF Jinja template answered HTTP 500 ("No user query found in
-  messages") - LOKI then answered from vireonix "auto" without telling the owner. Fixed:
-  `model_setup.with_long_context` (used by `/setup/use`; 16384 on this 16 GB Mac) + tests in
-  test_models_media; verified live: 0 template errors, all local calls 200, a 3-message chat and a background
-  job that really wrote its file. Still open: the second turn of a chat still reports provider vireonix in the
-  usage line even with prefer=local (an extra cloud call in that turn - unexplained).
-- **The app now restarts itself on an update** ("restarting the whole app on the updated code"): seen twice,
-  cleanly, one window each time (patches 211, 218, 219). Memory on the Mac is back to NORMAL (pressure 1, 78%
-  free, swap 1517/3072 MB, no llama-server) and `GET /forecast` is on the real TimesFM-3 (mlx) backend, p50
-  8.1 s / p90 37.4 s per forecast, nothing to unload. The Mac's local model answers at ~1.4 tok/s (~30 s a turn).
-- **Open on the Mac:** clicking panels *inside* the app window cannot be scripted - WKWebView has no usable AX,
-  the page CSP (`script-src 'self'`, no `unsafe-eval`) refuses scripted evaluation, and a real synthetic click
-  cannot hit a world label because the world spins. So Play (Fox & Berries) and the Brain map were verified in
-  Chrome over CDP; **one human click on Settings > Play in the app closes M12/M13's last gap**. M14/M15/M16/M17
-  (session 27) are untouched.
-
 ## Session 28 models & routing (worktree)
 
 The owner: "the core systems aren't fleshed out yet" - MODELS & ROUTING: always the right model per task, never a
@@ -1509,29 +1362,6 @@ reaches a machine (engine/updater.py, app/loki_app.py, engine/loki_bridge.py):
    engine (no script error, no missing file, reaches ready); skipped where Playwright is not installed.
 Together with session 27's boot.js rescue screen, the full-app relaunch and the no-about:blank rule.
 
-## Session 28 MMO systems (worktree) - stopped early
-
-The owner stopped the game work mid-session ("do not focus on the game, the core systems aren't
-fleshed out yet"). Only the **engine side of progression** was finished and is committed; nothing in
-`game/loki-world/` changed and no new game system was started.
-
-- **Done (engine only, tests/test_mmo_systems.py 121, in SUITES):** `engine/mmo_state.py` profile
-  extended - gold, bags, gear slots (head/chest/weapon/offhand/trinket/relic) with stats, seeded gear
-  drops from monsters and some quests, Trader Fenn's vendor (sell/buy), paintings from LOKI's pictures
-  whose rarity is the owner's hearts, 21 achievements with Steam ids (ACH_*), 3 daily quests a day from
-  real use, the guild of the owner's machines. New routes `/mmo/equip`, `/mmo/vendor/sell|buy`,
-  `/mmo/daily/claim`, `/mmo/like`, `GET /mmo/likes`, `/mmo/guild` (docs/MMO_API.md section 8).
-  The shared profile syncs between machines on the existing signed `/peer/presence` exchange
-  (`engine/presence.py`: hash first, document only when different, works with the world closed;
-  LWW for name/class/guild, per-machine counters for XP/gold/stats, per-item merge for bags/gear).
-  Presence chat lines carry a channel (say/guild/party/...). `engine/creations.py`: hearts storage
-  (`<data>/creations/likes.json`).
-- **Not done:** every client part - procedural sound, island wildlife, gear/vendor/achievement/daily
-  windows, party frames, /invite /who, Settings > Creations heart button, Steam folder/GodotSteam hook.
-  The Godot client ignores the new state fields. Sync was tested on loopback with two pretend machines
-  over a real signed peer link, never between the real Mac and PC.
-Last updated: 2026-10-17 (session 28 self-improvement systems, Claude worktree).
-
 ## Session 28 self-improvement systems (worktree)
 
 The owner: "keep working and implementing systems"; LOKI must improve and learn by itself, and jobs must
@@ -1725,40 +1555,6 @@ keeps text tool calls, `_specialist_made` counts a specialist-written file, and 
 DIRECTLY (POST /creations/make, no model). So I dropped my duplicate patch (no code shipped from this
 session) and VERIFIED the upstream fix on the PC instead: /creations/make made a real 1,056,903-byte PNG
 via zimage. Details, fps and screenshots are in ZIVA_TASKS.md (W21/W23).
-## Session 27 Godot MMO (worktree)
-
-The owner: LOKI World becomes a real MMO "like hordes.io ... mmo everything we can", in **Godot 4**. Built in a
-Claude worktree as **`game/loki-world/`** (AGENTS.md: the one Godot project), GL Compatibility so the desktop and
-web builds look the same. docs/WORLD.md "LOKI World in Godot 4" has the controls, options and export steps.
-
-- **Play:** your own character (class hat + weapon), WASD + mouse orbit camera, jump, click/Tab to target,
-  hotbar 1-9 (Strike, Bolt, Mend, then LOKI actions that start REAL jobs: picture, research, build, video, game,
-  then Hearth), cast bars, cooldowns, damage numbers, XP and level-ups, emotes, day/night from the clock.
-- **World:** this machine's island at home, every linked machine its own island out in the sky, walkable bridges
-  of light, fly via the map (M). LOKI's agents are NPCs at their stations (classes, levels from finished jobs);
-  quests = jobs (turn in at LOKI); failed jobs = monsters (beat one: XP + lesson scroll + "retry on a stronger
-  model"); loot = creations (hung in the creations hall, in the bags); the fox and two rabbits.
-- **HUD:** nameplates with bars, player/target/party frames, minimap + big map, chat (Say via presence, `/l` to
-  LOKI via POST /chat), quest tracker + log, bags, character sheet (name/class), loot window, help, pair window.
-- **Look:** 4-band cel shading with faceted normals, ink outlines (inverted hull; islands bake theirs - 2 draws
-  per island), 1/3 resolution upscaled nearest + posterize/Bayer dither, banded sky, crystals, waterfall.
-- **Net:** `autoload/loki_api.gd` follows docs/MMO_API.md (GET /mmo/state 3 s, /mmo/* actions, /world/presence
-  150 ms/1 s); falls back to deriving the game from /world+/jobs+/creations on an older engine; offline demo
-  world without LOKI. Token: page fragment (web) or LOKI's state folder / --token / Pair (desktop).
-- **Web hook:** Settings > General > LOKI World look = **godot** loads `/ui/world_godot/` in one frame laid over
-  the home background or the LOKI World panel (app/ui/world_godot/host.js; world.js: 4 small hooks); falls back
-  to Babylon when the export is missing. engine/loki_bridge.py serves `.wasm`/`.pck` and gives
-  `'wasm-unsafe-eval'` + same-origin framing ONLY to /ui/world_godot/index.html; portal_api lists "godot".
-- **Verified here:** Godot 4.7.2 built from source (release downloads are blocked here) - the project imports, its
-  own headless tests pass (107), and it plays headless against the REAL bridge (source=engine, quests/monster/loot
-  from fake jobs, presence and chat both ways); screenshots rendered with Mesa llvmpipe under Xvfb (software, ~13
-  fps - not a GPU number). A Linux release export (template built from source too) starts and runs the game.
-  tests/test_godot_world.py (84) is in SUITES; it runs Godot only when one is on PATH
-  (`LOKI_SUITE_GODOT`). tests/test_loki.py's "no Godot files" check now exempts game/loki-world/ only.
-- **Not done here:** the Web export (needs Emscripten-built templates; their download host is blocked) and the
-  Windows/macOS exports - ZIVA W26 (PC, Godot 4.8) and M17 (Mac). No real GPU, WebView2 or WKWebView run yet;
-  sound; Steam (notes in WORLD.md). The web export, once made, must be committed (index.js/.wasm/.pck).
-
 ## Session 27 (2026-10-17, Claude in the cloud): why every LOKI job failed, and the fixes
 
 From the PC's job logs (harness_data/jobs): background jobs run on qwen3:8b (PREFER=local, easy triage) and
@@ -1793,39 +1589,6 @@ TimesFM-3: the owner said yes (engine/data/owner_approvals.json); each engine in
 where missing (LOKI_TIMESFM_APPROVED=0 says no; suites never install). It forecasts numbers (usage, cost,
 trends) for the forecast_series tool - it does not make jobs succeed; the fixes above do.
 tests/test_job_fixes.py (33).
-
-## Session 27 MMO world (worktree)
-
-The owner: make LOKI World "more like hordes.io ... an actual mmo" (own character, MMO HUD, agents as
-NPCs with levels/classes, jobs as quests, failures as monsters, loot = creations, combat, and the Mac and
-PC seeing each other). Mid-session the owner changed plan: **the MMO client will be a Godot 4 game**
-(own repo; Steam desktop build + a web build inside LOKI's window replacing the Babylon world there).
-So this worktree built the **engine side every client uses** plus the first in-app stage as a fallback.
-
-- **Contract: docs/MMO_API.md** (auth = the bridge's bearer token, loopback Host/Origin rules, polling
-  rates, payloads, coordinates/zones, combat numbers, presence interpolation).
-- **engine/mmo_state.py** + bridge routes `GET /mmo/state`, `POST /mmo/profile|skill|quest/accept|
-  quest/turnin|monster/defeat|monster/retry|note`: quests = jobs, monsters = failed jobs (named from the
-  error, stable spawn), loot = creations (+ lesson scrolls), NPC classes/levels from roles and finished
-  jobs, a 9-slot hotbar whose LOKI actions start real jobs through the bridge's own `job_action` (policy
-  included; same prompts as Settings > Creations). First run turns the owner's past work into XP.
-  Progress: `<DATA_DIR>/mmo/profile.json`.
-- **engine/presence.py** + `POST/GET /world/presence`, `presence` in GET /world, signed
-  `POST /peer/presence` (peers.py route, peer_link callback): one exchange carries both machines'
-  avatars and chat (works over a one-way relay link), pushes only while a world is open (~350 ms moving,
-  2 s idle), back-off for a dead peer, everything sanitised. `/world/retry` = retry without the game.
-- **In-app stage 1** (`app/ui/mmo/mmo_core.js`, `mmo.css`, small guarded hooks in world.js): Settings >
-  LOKI World > Play: WASD/mouse/QE camera, jump, collisions, island edges, bridges of light to the other
-  machines' islands (zones), class avatars, WebAudio beeps; Spectate = the old view. No HUD/combat/
-  presence client in the browser (stopped per the new plan). Pooled drawing, no per-frame allocation.
-- Tests: `tests/test_mmo.py` (77, in SUITES): files/hooks/no-CDN/perf guards, presence over a real
-  signed peer link on loopback (both directions in one call, dedupe, expiry, back-off, wrong secret,
-  old peer 404), game rules, routes with a fake engine and over the real BridgeHTTPServer.
-  Screenshots: `tests/mmo_preview/shot.py` (headless Chromium + SwiftShader; checked babylon + classic).
-- **Not done / needs a machine**: fps of Play on the real Mac/PC; presence between the real Mac and PC
-  has only run on loopback (ZIVA W22/M14 ask for a two-machine `/world/presence` check); the Godot web
-  build needs `.wasm`/`.pck` in UI_TYPES and `'wasm-unsafe-eval'` for its page (see MMO_API.md section 1).
-Last updated: 2026-10-17 (session 27 harvest, Claude worktree; session 26 before it).
 
 ## Session 26 (2026-10-17, Claude in the cloud): Babylon.js world, one island per device, Creations
 
@@ -2366,57 +2129,6 @@ branch.** The old gap `backup/pc-merge-c25660f` is REVIEWED below.
   link code into the PC's Settings > Machines, so the pair is linked both ways - the PC reaches
   mohameds-mac-mini through the relay in 423-425 ms (relay-test ok 2935 ms), and link_back adds
   the PC on the Mac by itself. ZIVA_TASKS R1 is done; nothing left for the owner.
-
-## Session 19 (2026-10-15, cloud): LOKI World becomes a life sim, and stays smooth
-
-Owner: "go through what's not working, only add, make the LOKI world more like a sim, more
-features, improve the graphics, keep everything running smooth". All 16 suites pass.
-Rendered and checked in headless Chromium (software WebGL) with a mocked /world - screenshots
-docs/operations/screens/world-sim*.png. NOT yet seen on the real Mac/PC GPUs (ZIVA_TASKS W10).
-
-What was not working (fixed, tested):
-- **/world re-parsed the whole event log twice per poll** (up to 4 MB, every 2.5 s, per open
-  view). `engine/events.py _tail_scan()` now reads only what was appended (rotation and
-  half-written lines handled); `latest_seq()` uses it too. test_events proves no lines are
-  parsed when nothing is new.
-- **Two agents with the same role shared one speech line** (messages were keyed by sender
-  only): now by team + sender.
-- **A blocked agent's red light was always dropped** (exactly 10 lamps filled the shader's 10
-  lights): lights are ranked; alerts first.
-- The blocked/selected ground rings z-fought into invisibility (16-bit depth, near 0.1): rings are
-  now opaque dashes and the near plane is 0.5.
-- A lost WebGL context (sleep / GPU switch) left the world black forever: it is rebuilt.
-- Drag could stick (no pointercancel); no pinch zoom; agents stood inside lamps and each other;
-  labels piled on top of each other.
-- **False DONE in the main task loop** (Ziva's [claude] request): `make_dir` - or a write that
-  returned an error - counted as "changed a file", so "create notes/hello.txt" was accepted after
-  only `mkdir notes`. engine/loki.py: errors change nothing; a goal naming a file needs a file.
-
-Added (app/ui/world.js, docs/WORLD.md "The life-sim layer"):
-- Agents walk round the plaza (not through the pool), act out each station's work (book,
-  hammer + sparks, typing + lit screen, bubbling beakers, stamping, drawing), role hats, LOKI's
-  horns, state icons (cube / hourglass / red "!" with a hand up / cheer + confetti / grey cloud).
-- Done/idle agents leave the desk, sit on benches, wander and "chat" (a wordless ···).
-- Team banners in the plaza with one pip per real stage (`teams[].stages` from the engine).
-- Settings > LOKI World: click an agent or legend row -> inspector card (all from /world:
-  task, station, machine, time on task, team + stage, last line), double-click / Follow ->
-  camera follows, Esc, arrows, pinch. A HUD with local time and the real counts (`stats`).
-- Scenery: reflecting pool, pond + waterfall + mist, flowers, grass, benches, crystals under the
-  island, floating islets, birds, fireflies, twinkling stars, chimney smoke when building.
-- /world adds per agent `since`, `finished`, `stage`; per team `stages`; top-level `stats`.
-
-Smooth: the static scene is baked once (3 draws for everything that never moves, +2 for the
-turning clouds/islets) - ~200 draws per frame whatever the scenery, ~1 ms of JS per frame.
-A frame-time watcher steps world pixels one size coarser when frames run late and keeps it only
-if frames really got faster (`World.adaptive = false` pins it). `prefers-reduced-motion` stops
-the ambience.
-
-Libraries: none added on purpose. The UI is offline and CSP-clean, and test_portal forbids
-loading anything external; three.js/OGL/regl would add weight for things this renderer already
-does. If a library is ever wanted, vendor it into app/ui (no CDN).
-
-Next (ZIVA W10): open Settings > LOKI World on both machines, start a team, screenshot, report
-frame feel and `World.views.panel.perf` (ema ms, boost, draws).
 
 ## Session 17 (2026-10-15, cloud): local models that work, and an app that works by itself
 

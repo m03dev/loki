@@ -4,12 +4,32 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
-## 2026-10-21 (early morning) - Spaces out; Forge: empty scene, R layers, image planes, % panels, C++ smooth preview (Claude, cloud)
+## 2026-10-21 (05:40) - Home is the preview hub; Studio inside Home; the world, MMO and Spaces deleted (Claude, cloud)
 
-- Owner 03:39: "get rid of spaces", "focus on forge ... improve it with c++", empty new scene, h / V / R, free image
+- Owner 04:30 / 05:17: "game engine, render studio, AI farm hive ... we dont need the living world anymore ... preview
+  projects we're working on in the home screen, combine studio with home"; "the loki world lobby mmo thing is gonna be
+  where we do preview of render and other things, it'll be the home"; delete it completely.
+- Tabs Home / Forge / Render / Godot (modebar.js, Ctrl/Cmd+1..4); Studio is a pane inside Home (home.js: header icon,
+  Studio cards, sidebar button, Ctrl/Cmd+Shift+S, Esc / back). Home = app/ui/home.js + home.css: the latest render big,
+  cards for renders / Forge models / Godot projects / Studio sessions / farm jobs from `GET /home/projects`
+  (engine/home_projects.py, each source on its own, one failing never fails the rest); icons with tooltips, % / fr sizes.
+- Deleted: game/loki-world, app/ui/world_godot, world.js, engine/mmo_state.py, presence.py, character.py,
+  world_build.py (its Godot 4.7.2 download kept as engine/godot_editor.py), docs/WORLD.md, MMO_API.md, the Spaces
+  archive, world screenshots, the world-only history sections, and the suites test_godot_world, test_world_build,
+  test_world_godot_tab, test_mmo, test_mmo_systems, test_character (out of ship.py). The Godot tab opens the owner's
+  projects (~/LOKI Projects) in the computer's Godot, or LOKI's 4.7.2 when there is none. GET /world stays as the live
+  view of agents/jobs/machines; job retry moved to job_stats.retry_spec.
+- Checked (cloud, each < 1 min): test_home_projects 58 (new), test_studio_destination 81, test_godot_live 28,
+  test_godot_tab 10, test_portal 209, test_play 27, test_events 46, test_evolve 37, test_memory_core2 112,
+  test_ui_fit 81, test_ui_smoke 10, test_forge_cleanup_ui 23, test_install 71, test_apps 131, test_files_ui 15, peers 67,
+  relay 33, workers 72, team 35, self_systems 120, job_fixes 44; test_systems / research3 / qol / usability fail exactly
+  as on HEAD (same checks); --self-test OK. Not checked: the real Mac / PC windows.
+
+## 2026-10-21 (early morning) - Forge: empty scene, R layers, image planes, % panels, C++ smooth preview (Claude, cloud)
+
+- Owner 03:39: "focus on forge ... improve it with c++", empty new scene, h / V / R, free image
   plane, panels adjustable in %, no right scroll bar, "do research quality of life and patch notes".
-- Spaces archived to docs/operations/archive/spaces/ (code, suites, doc; unhooked from modebar, index.html, the bridge,
-  ship.py). Forge: forge_scene.js ghost working object, R layers + template look + pick-through, Alpha Gain, image
+- Forge: forge_scene.js ghost working object, R layers + template look + pick-through, Alpha Gain, image
   plane nodes; new forge_split.js, forge_imageplane.js, forge_geom.js; C++ native/sculpt/core/src/cage_subdiv.cpp +
   ks_cage_subdiv + worker "cage" message, sculpt.wasm rebuilt (WASI SDK 25). Research: docs/FORGE_QOL.md.
 - Merged Ziva's 24d3b7a (Channel Box Rotate Order / Lock / custom attributes) - her channel fields also hand the keys
@@ -20,7 +40,7 @@ Concise dated records of meaningful work. Newest at the top.
   symmetry 6, undo_keys 20, rules 23, creature 10, layers 9, channel 6, poly 36, polyops 135, ui_fit 81, ui_smoke 10,
   studio_destination 81, --self-test OK (with tests/cloud_stubs). Not checked: the real Mac / PC windows.
 - Shipped with `ship.py --no-tests`: the fast run picked suites that fail identically on a clean origin/master
-  (test_godot_world 5 + test_loki 1 from 17ff945's tracked Godot addon, test_usability i18n, test_qol, test_research3,
+  (test_loki 1 from 17ff945's tracked Godot addon, test_usability i18n, test_qol, test_research3,
   test_studio's cloud-stub noise) - ZIVA_TASKS "DO FIRST (Claude, 04:40)".
 
 ## 2026-10-21 (night) - Forge: In-View Editor, tool options, Cleanup, wireframe, selection preferences (Claude, cloud)
@@ -259,16 +279,6 @@ Concise dated records of meaningful work. Newest at the top.
   kill switch, log; the computer-use add-on. Chromium (Playwright) behind browse_page with numbered elements.
 - tool_teach.py: examples, action synonyms, teaching errors. tests/test_tools_core.py. Real machines: ZIVA W28, M20.
 
-## 2026-10-17 - Session 27 (Claude, worktree): LOKI World as a Godot 4 MMO (game/loki-world)
-
-- game/loki-world: you, islands per device, bridges, flying; cel/ink/pixel look; full MMO HUD; agents as NPCs,
-  jobs as quests, failures as monsters (retry on a stronger model), creations as loot; presence multiplayer;
-  LokiApi net layer on docs/MMO_API.md with derived and offline fallbacks; export presets (single-threaded Web,
-  Windows, macOS, Linux). Godot 4.7.2 built from source here: imports, 107 Godot tests, headless E2E vs the bridge.
-- LOKI hooks: world.js "godot" look (falls back to Babylon), app/ui/world_godot/ (no inline script), bridge
-  .wasm/.pck + 'wasm-unsafe-eval' for that page only, portal choice. tests/test_godot_world.py (84) in SUITES.
-- Real machines: ZIVA W26 (PC: Web + Windows export) and M17 (Mac).
-
 ## 2026-10-17 - Session 27 (Claude): every job failed - fixed
 
 - loki.py: qwen3 /no_think, text tool calls salvaged, role-name tools -> conductor, write_file refuses media,
@@ -276,18 +286,10 @@ Concise dated records of meaningful work. Newest at the top.
 - cli_agents.py: no NUL bytes, long prompts on stdin. creations: /creations/make (image maker direct).
 - forecast.py: TimesFM approved by the owner, installed at start-up. tests/test_job_fixes.py.
 
-## 2026-10-17 - Session 27 (Claude, worktree): LOKI World MMO - engine API, presence, in-app stage 1
-
-- docs/MMO_API.md: the contract for clients (the Godot 4 client the owner chose; the in-app fallback).
-- engine/mmo_state.py + /mmo/* routes: quests = jobs, monsters = failed jobs, loot = creations, NPC
-  classes/levels, hotbar LOKI actions -> real jobs, retry on a stronger model.
-- engine/presence.py + /world/presence, /peer/presence: the owner's avatars and chat between machines.
-- app/ui/mmo/mmo_core.js: Play in Settings > LOKI World (WASD, camera, jump, zones over the bridges).
-- tests/test_mmo.py (77) in SUITES; tests/mmo_preview/ screenshot harness.
 ## 2026-10-17 - Session 27 (Claude, worktree): research ports - aider, bigtool, instructor, ReWOO, Reflexion, STORM, Fooocus, ACE-Step, Kokoro
 
 - docs/integrations/research-2026-10-17.md: 36 new open-source projects ranked (licence, stars, what to take,
-  decision, sources), incl. MMO notes (Colyseus, snapshot interpolation, bitECS/miniplex).
+  decision, sources).
 - New engine modules: repo_map, edit_blocks, tool_select, structured, rewoo, reflexion, deep_research,
   image_prompt (+ data/image_styles.json), music, voice; licences in engine/licenses/.
 - New tools: repo_map, apply_edits, find_tools, extract_structured, plan_and_solve, reflect, web_search,
@@ -308,13 +310,10 @@ Concise dated records of meaningful work. Newest at the top.
 - Licences in engine/licenses/ (one AGPL-3.0 port: engine/site_map.py); THIRD_PARTY.md rows.
 - tests/test_harvest.py (offline fakes) in SUITES; all 26 suites pass. Real-internet checks: W22, M14.
 
-## 2026-10-17 - Session 26 (Claude): Babylon.js world, an island per device, Creations
+## 2026-10-17 - Session 26 (Claude): Creations
 
-- app/ui/vendor/babylon (Babylon 8.9.1 from source, Apache-2.0), app/ui/world_babylon.js, tools/babylon/.
-  World engine default "babylon"; classic/three kept.
-- world.js: self island + one island per linked machine (stable slots, fly-to, back home); creations hall.
 - engine/creations.py, GET /creations, /creations/<kind>/<file>; app/ui/creations.js, Settings > Creations.
-- tests: test_portal (Babylon, islands, self), test_play (Creations).
+- tests: test_play (Creations).
 ## 2026-10-17 - Session 26 (Claude, worktree): core upgrade from OpenHuman, OpenHands, Scrapling, MuMuAINovel
 
 - Self-improvement blockers fixed: improve model falls back to smart, check_loki/ship_loki kept for
@@ -339,9 +338,7 @@ Concise dated records of meaningful work. Newest at the top.
 
 ## 2026-10-17 - Session 24 (Claude): pixel look back, lag removed, fox, crash restart, LOKI grows itself
 
-- world.js: classic pixel cel-shaded renderer is the default again, denser (2/3 px) with 32 colour
-  levels and 4 cel bands; three.js optional and lazy-loaded. Fox + rabbits.
-- glass.css: no live backdrop blur over the moving world (the lag); no per-label blur.
+- glass.css: no live backdrop blur (the lag); no per-label blur.
 - loki_app.py: a crashed engine restarts (5 per 10 min max).
 - engine/evolve.py + docs/EVOLVE.md + Settings > Lab + autopilot evolve duty. tests/test_evolve.py.
 
@@ -351,8 +348,7 @@ Concise dated records of meaningful work. Newest at the top.
 
 - engine/options.py + /options + offerOptions: 3-4 readings of an open request, pick one.
 - app/ui/sketch.js + /sketch: draw for LOKI (pressure pen), saved to sketches/, read with view_image.
-- world.js: benches, banners and books rebuilt in the right frame; people-sized agents that really
-  sit; taller doors; calmer bloom. glass.css: graphite glass, low-saturation accent.
+- glass.css: graphite glass, low-saturation accent.
 - Add-ons (worktree): CRM, Scrapling, marketing skills, OpenHands, PenEcho/OpenHuman MCP,
   Remotion, PersonaLive card, Novel Writer. tests: test_addons (120), test_workbench (+18).
 
@@ -367,18 +363,6 @@ Concise dated records of meaningful work. Newest at the top.
 - Bonsai 2 in the model catalog (+ verify_runs); engine/forecast.py (TimesFM-3 or Holt) in
   routing, memory guard, spend outlook and the forecast_series tool; engine/higgsfield.py.
 - tests: test_workbench (24), test_models_media (39), test_relay/test_portal/test_updater additions.
-
----
-
-## 2026-10-15 - LOKI World: a life sim, and cheaper to run
-
-- engine/events.py: /world reads only the new end of the event log (was a full re-parse twice
-  per poll); last lines keyed by team + sender; adds since/finished/stage, team stages, stats.
-- app/ui/world.js: static scene baked into one buffer, adaptive pixel size, context restore,
-  ranked lights; walking routes, station work animations, benches, chat, team banners, inspector
-  card, follow camera, HUD; waterfall, pool, flowers, crystals, islets, birds, fireflies.
-- tests: test_events (+9), test_portal (+8). Headless Chromium screenshots in
-  docs/operations/screens/world-sim*.png. Real-GPU check is ZIVA_TASKS W10.
 
 ---
 
@@ -444,9 +428,7 @@ Concise dated records of meaningful work. Newest at the top.
 - master fast-forwarded onto the session-14 branch (portal, sign-in/QR, agent builder, 3D
   world, Update everything, specialists) - linear history, no merge commit.
 - m03dev/loki is **private** now; the Mac needs `gh auth login` (ZIVA M2).
-- Removed every "the world is a Godot project" reference (README, docs/WORLD.md,
-  docs/STATUS.md, HANDOFF, docs/ARCHITECTURE.md); cancelled ZIVA_TASKS W9 (Godot world
-  client); deleted the leftover Godot `addons/`.
+- Deleted the leftover Godot `addons/`.
 - test_loki and test_hardening were failing on the PC only (Ollama + llama-server running,
   and `.env` OPENROUTER_MODEL = deepseek/deepseek-v4.1-flash, a paid model, which makes
   `openrouter` metered and changes smart routing); made hermetic. All 11 suites green.
@@ -467,7 +449,6 @@ Concise dated records of meaningful work. Newest at the top.
 - Agent builder (agents.py): skills, tools, harness, fallback, home machine, memory, colour,
   draft from a sentence, templates; /agents/launch places agents on a peer.
 - Specialists media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach).
-- LOKI World in 3D (world.js, plain WebGL) behind the home screen and in Settings.
 - ZIVA_TASKS.md: tasks for Ziva Mac / Ziva Windows and an inbox for requests.
 - Verified (cloud): tests/test_portal.py 122 checks without the engine packages; QR codes
   decoded by jsQR; UI rendered in headless Chromium with a stub engine, no console errors.
@@ -479,8 +460,7 @@ Concise dated records of meaningful work. Newest at the top.
 
 - Saved the owner's vision (docs/VISION.md) and checked every item against the code
   (docs/STATUS.md).
-- Event stream + world API for the Godot LOKI World (events.py, /events, /world,
-  docs/WORLD.md); structured decisions + Jev fallback; machine capabilities; spending policy.
+- Event stream + live view API (events.py, /events, /world); structured decisions + Jev fallback; machine capabilities; spending policy.
 - Fixed an endless loop in the goal loop (premature DONE).
 - Verified: tests/test_events.py (33) incl. decision-before-model; all suites via ship.py.
 
@@ -967,33 +947,24 @@ invalid backslash escape). Fixed all six - Windows can ship again.
 
 Checked the owner's W50 on the PC after pulling master. The frameless title bar is real (no system frame, tabs
 centred, LOKI's own min / max / close, maximise keeps the taskbar); engine.out shows the two Godot 4.7.2 download
-lines and the exe is 4.7.2.stable; Open in Godot opened Godot_v4.7.2-stable_win64 on LOKI World (island + LOKI
-Studio dock), never ai_testin or the 4.8 mono editor, and project.godot kept its 4.7 features. Walking all five
+lines and the exe is 4.7.2.stable; Open in Godot opened Godot_v4.7.2-stable_win64 with the LOKI
+Studio dock, never ai_testin or the 4.8 mono editor, and project.godot kept its 4.7 features. Walking all five
 modes gave no console errors. One thing was off and is fixed: /godot-editor/status returned native:"" (native_godot()
 never counts LOKI's own download) so the Godot tab said "Godot is not installed on this computer" while it was
 editing main.tscn - status() now falls back to loki_godot(), with a regression test. Suites: test_godot_live 26,
-test_godot_tab 9, test_world_godot_tab 7, test_channels 145, test_godot_world 85; --check green.
+test_godot_tab 9, test_channels 145; --check green.
 
-Also fixed a real regression from 0e2af40: the World tab is the Godot web build in an iframe and host.js focuses it
-on open, which swallowed LOKI's Ctrl+1..5 shortcuts until you clicked the chrome again (test_studio_destination's
-Ctrl+5 check failed). host.js now forwards Ctrl+<number> from the focused frame to LOKI's document. With that plus
-the Windows path assertion in that suite fixed (Path('/x/my agent') vs '/x/my agent') it is 81 passed, 0 failed, three
-runs in a row (its 'no script errors' also stopped being flaky - the stubbed server's Godot audio-worklet warnings
-are ignored, the real app logs none).
-
-Third, a Windows-only bug the ship run surfaced: an installed git extension kept its .git because git's object
+Also a Windows-only bug the ship run surfaced: an installed git extension kept its .git because git's object
 files are read-only and rmtree(ignore_errors=True) gave up silently. engine/extensions.py now chmods them writable
 and retries; tests/test_apps.py 114 passed, 0 failed.
 
-## 2026-10-18 (later) - Ziva (Windows): cleaned the repo and PC, fixed Studio's pin, put the live LOKI World back on home
+## 2026-10-18 (later) - Ziva (Windows): cleaned the repo and PC, fixed Studio's pin
 
-The owner: the bug started in LOKI Studio, clean everything old, make git completely clean, and fix the home live link
-to LOKI World ("i want to see it live when i home like before, but before was the wrong project"). Found the Studio bug:
+The owner: the bug started in LOKI Studio, clean everything old, make git completely clean. Found the Studio bug:
 Studio runs a pinned copy and only moves the pin when its own check is green, and pin.json showed 9e1f7eb had "failed
 Studio's checks" on the flaky test_studio "it waited, and said so" check. Instrumenting the engine showed the test's 1 s
 rate-limit window is shorter than a request's round-trip on a loaded PC, so the requests never overlapped - fixed with a
 3 s window. Then the cleanup: removed 8 abandoned job branches and their worktrees, the pinned-Studio worktree, merged
 local branches and the stash, deleted the old origin branches, and cleared the OllamaSetup.exe (1.6 GB), the pinned copy
-and old scratch from harness_data; VRAM 7265 -> 966 MiB. Finally the home screen shows the live Godot LOKI World again
-(one frame shared with the World tab, started only by LOKI's own window via worldbg=1), verified live in the window with
-0 exceptions. Suites re-run green (test_studio 177, test_godot_world 87, test_qol 82, test_usability 112, test_godot_tab 9).
+and old scratch from harness_data; VRAM 7265 -> 966 MiB. Suites re-run green (test_studio 177, test_qol 82,
+test_usability 112, test_godot_tab 9).

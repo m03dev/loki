@@ -14,7 +14,7 @@ An agent is a profile:
     machine                  "here", "auto" (the best linked machine) or a peer's name
     memory                   none | agent | project: what it remembers between runs
     max_minutes              how long one run may take
-    color                    its colour in LOKI World
+    color                    its colour in the agents list
 
 Running one starts a background job (workers.py) - here, or on the machine it lives on.
 You never HAVE to build agents: teams (team.py) assemble roles on their own. The builder is

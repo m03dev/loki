@@ -28,10 +28,29 @@ the W/M numbers below refer to it when a request says "steps: W35".
   If tests fail after your change, fix it or revert it before shipping.
 - **No visible terminal windows on the owner's screen.** Run commands in your own tool or hidden (Windows
   `Start-Process -WindowStyle Hidden ...`, never `start "TITLE" cmd`; Mac never `open -a Terminal`); close any you opened.
-- Never open game/loki-world in Godot_v4.8-beta1_mono / Godot_mono 4.8 (it rewrites project.godot); LOKI's Godot
-  tab opens it in LOKI's own 4.7.2.
+- Never open the owner's projects in Godot_v4.8-beta1_mono / Godot_mono 4.8 (it rewrites project.godot); LOKI's
+  Godot tab picks the computer's own Godot or LOKI's 4.7.2.
 
 ## Requests
+
+### From Claude (2026-10-21 05:40) - Home is the preview hub; Studio is inside Home; the world is gone. Pull first.
+Owner 04:30 / 05:17: "more game engine, render studio, AI farm hive ... we dont need the living world anymore ...
+combine studio with home". What changed - build on it, do not bring the old things back:
+- Title-bar tabs: **Home / Forge / Render / Godot** (Ctrl/Cmd+1..4, app/ui/modebar.js). Studio opens INSIDE Home
+  (header icon, a Studio card, the sidebar button, Ctrl/Cmd+Shift+S; Esc / back arrow closes it).
+- Home = the preview hub (app/ui/home.js, home.css): the latest render big, then cards for renders, Forge models,
+  Godot projects (~/LOKI Projects), Studio sessions and jobs (this machine + the farm), from ONE call:
+  `GET /home/projects` (engine/home_projects.py). Renders come from `harness_data/renders/<job>/manifest.json`
+  `{name, kind, status, created, outputs: [...], thumb}` - the Render Studio should write those. A Render Studio script
+  plugs into the Render tab with `LokiModeBar.register("render", {enter(pane, opts), leave()})` (or
+  `window.LokiRenderStudio.open(pane, opts)`); a render card opens `LokiModeBar.go("render", {mode: "render", job})`.
+- LOKI World, the MMO / lobby, the character creator, presence, world_build, the web build and game/loki-world are
+  deleted (their suites too). LOKI's own Godot 4.7.2 download lives on in engine/godot_editor.py (used only when the
+  computer has no Godot). GET /world stays as the live view of agents/jobs/machines (events.py).
+- [ ] [mac] Real window, WKWebView: Home with a Forge model saved and a project in ~/LOKI Projects - do the cards show,
+      does a Forge card open Forge with the model, a Godot card the Godot tab on that project, Ctrl+Shift+S Studio?
+      Screenshot at 1400x860 and at the smallest window.
+- [ ] [windows] The same in WebView2, plus a job card for a job started on the PC from the Mac (machine "pc").
 
 ### From Claude (2026-10-21 05:15) - NEW DIRECTION (owner 04:30): game engine / render studio / AI farm hive. Pull first.
 Forge gets Alpaca3D's three labs as WORKSPACES (top right picker): Modeling | UV Editing | Retopology | Baking -
@@ -39,7 +58,7 @@ docs/FORGE_UV.md. New files: app/ui/forge_uv.js (map UVs on the cage: uv + fuv, 
 forge_uv_editor.js (the UV Editor + workspace picker), forge_retopo.js (Quad Draw + a JS ray BVH), forge_bake.js
 (high -> low maps). forge.js showPoly now puts the cage's UVs on the GPU mesh and carries them through modelling
 steps (keepView only). Build on it; don't undo it. Coming next from Claude: C++ unfold / layout / xatlas, OptCuts in
-WebAssembly, UVgami's seam logic (GPL-3.0), a path-traced Render, Home + Studio merged and LOKI World archived.
+WebAssembly, UVgami's seam logic (GPL-3.0), a path-traced Render, Home + Studio merged.
 - [ ] [mac] Real window: Workspace > UV Editing on a cube: Create > Auto, click a face in the UV Editor (it lights up
       in the viewport), drag it, Checker on; Workspace > Retopology on a sphere: click four dots, Shift-click = quad,
       Make Object; Workspace > Baking with a sphere (high) and a cube with UVs (low): Bake. Screenshots.
@@ -60,20 +79,14 @@ WebAssembly, UVgami's seam logic (GPL-3.0), a path-traced Render, Home + Studio 
 ### DO FIRST (Claude, 2026-10-21 04:40) - master has failing suites that block tools/ship.py for anyone on a fast machine
 Seen on a clean checkout of origin/master (b83d324), before any of Claude's changes - they pass for you only because
 they run over the 60 s budget on the Mac and are "not waited for":
-- test_godot_world 5 FAIL + test_loki 1 FAIL - from 17ff945 (P2P lobby): `game/loki-world/addons/gator_model_studio/`
-  is TRACKED (AGENTS.md: addons/ stays untracked; record it in game/loki-world/plugins.json and let LOKI install it),
-  its .gd files start with @tool, it has a ko-fi URL, gator.tres counts as a Godot file outside the allowed places,
-  and project.godot gained sections the format check does not know (multiplayer). Fix in a way that keeps the lobby
-  working (ask the owner before untracking - a pull would delete the files on the other machine).
 - test_usability 2 FAIL: `tools/i18n_tables.py --check` - 14 missing phrases (sculpt panel: Auto smooth, Resolution,
   Lit ...); `--write-en` + the other tables. test_qol 1 FAIL (notification text in a script) and test_research3 1 FAIL
   (chat menu icons) also fail on master.
 Claude shipped its 04:40 change with `ship.py --no-tests` after running every suite it touches (all green, listed in
 SESSION_LOG) because only these pre-existing failures blocked it.
 
-### From Claude (2026-10-21 04:10) - Spaces is OUT; Forge clean-up, R layers, image planes, % panels, C++ preview. Pull first.
+### From Claude (2026-10-21 04:10) - Forge clean-up, R layers, image planes, % panels, C++ preview. Pull first.
 What changed (owner 03:39) - build on it, do not undo it: docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 early morning)".
-- **Spaces** is archived in docs/operations/archive/spaces/ (tab, routes, host start, suites unhooked). Do not bring it back.
 - A new scene is EMPTY: the viewer's empty working object is a ghost (forge_scene.js `ghost()`) - never list, select or
   count it. Use `tree.api.sceneNodes()` for "what the user sees"; `list()` still has every node.
 - Display Layers: `layerSetRef` (R) next to `layerSetTemplate` (T); `pickables({ select: true })` for clicks (skips R / T),
@@ -233,20 +246,10 @@ What changed (owner 17:06), so your next Forge work builds on it - do not undo a
 Seen on the PC at 04:04 (screenshot through computer use, nothing changed): the LOKI window says "LOKI's engine is
 not answering" (attempt 6), it runs v0.16 patch 324 with "update waiting", and the Godot tab says "No Godot editor
 is linked".
-- [ ] [windows] 1. Restart LOKI on the PC so it takes the waiting update (Spaces is now a full-window tab: 6 tabs in
-      the title bar). If the engine still does not answer, paste the last 40 lines of harness_data/app/loki_bridge.log here.
-- [ ] [windows] 2. Godot tab > Open LOKI World in Godot, so you and the other agents are linked again (docs/LIVE_GODOT.md).
-- [ ] [windows] 3. Only then: the Spaces campfires in LOKI World (Spaces below). Keep Forge pro work in its own commits.
-
-### Spaces (Claude, 2026-10-19)
-- [ ] [either] game/loki-world: poll `GET /spaces/world` (bearer, like /world/presence) and draw each lobby / voice
-      room as a place on the island (a campfire + name plate + the people in it, colour = space_color). Walking into
-      it: JavaScriptBridge -> `window.parent.postMessage({lokiSpaces: "join", space, room}, location.origin)` - the
-      window (app/ui/spaces.js) joins its voice. docs/SPACES.md "LOKI World".
-- [ ] [mac] [windows] Spaces tab (Ctrl/Cmd+6) > + > Make it; copy the invite to the other machine > Join; chat; open a
-      lobby; join voice from both and talk. Report whether the mic works inside the LOKI window (WKWebView /
-      WebView2), whether Windows / macOS asked to allow incoming connections, and (Mac) whether Loki.app was rebuilt
-      with tools/macos/make_loki_app.sh (its Info.plist carries NSMicrophoneUsageDescription). (Claude, 2026-10-19)
+- [ ] [windows] 1. Restart LOKI on the PC so it takes the waiting update. If the engine still does not answer, paste
+      the last 40 lines of harness_data/app/loki_bridge.log here.
+- [ ] [windows] 2. Godot tab > pick a project from LOKI Projects > Open in Godot, so you and the other agents are linked
+      again (docs/LIVE_GODOT.md). Keep Forge pro work in its own commits.
 
 ### Forge (Claude, 2026-10-19; Ziva Mac owns the pro roadmap, docs/FORGE_PRO.md)
 - [ ] [either] With a real GPU on the Mac AND the PC: Forge > Model, cube, 1/2/3 select, drag a box, G/R/S, W handle,
@@ -263,27 +266,22 @@ is linked".
       then in Forge add a picture and make 3D; report the backend used, the time, and any error (the setup swaps
       torchmcubes for PyMCubes, untested). (claude, 2026-10-17)
 
-### LOKI World and the live Godot link
-- [ ] [mac] **LOKI World on the Mac (Claude, 2026-10-18; 6469d85, 4c951ac, 0c9965a, 9b160a0).** The PC verified all
-      of this in W50/W51; the Mac has not. (1) `git status`: if game/loki-world/project.godot or icon.svg.import show
-      as changed, `git checkout` them; delete the `app/ui/world_godot/*.before-update` leftovers. (2) Godot tab > Open
-      in Godot: LOKI downloads its own macOS Godot 4.7.2 once (harness_data/addons/godot-export) and opens LOKI World
-      with the island in the 3D view and the LOKI Studio dock - paste the "LOKI Studio plugin 1.2 ready" Output line
-      and any error; the tab's Live link must show "Godot 4.7.2 - LOKI World". (3) In LOKI's chat: "use godot_editor: in
-      LOKI World add a OmniLight3D named AgentLamp above the fountain and save" - is AgentLamp in the scene dock (Ctrl+Z
-      removes it) and did the Godot tab list the agent? (4) Press Play (F5) in Godot, ask for another change while it
-      runs - does it appear live (Debug > Synchronize Scene Changes)? (5) World tab (Cmd+4): the Godot game, "Connected
-      to LOKI", still running after 12 s; report fps. (6) Rebuild the World tab: time + status line. (7) Forge: save a
-      model, walk to the three pink pedestals in front of the creations hall - is it there, turning? (8) Godot tab >
-      Add plugin by Asset Library number (e.g. Phantom Camera): status line + game/loki-world/plugins.json.
+### The live Godot link
+- [ ] [mac] **Godot tab on the Mac.** Put a small Godot 4 project in ~/LOKI Projects/<name>. (1) Godot tab: pick it >
+      Open in Godot - with no Godot installed LOKI downloads its own macOS Godot 4.7.2 once (harness_data/addons/
+      godot-export); paste the "LOKI Studio plugin 1.2 ready" Output line and any error; the tab's Live link must show
+      the project. (2) In LOKI's chat: "use godot_editor: add a OmniLight3D named AgentLamp to the open scene and save" -
+      is AgentLamp in the scene dock (Ctrl+Z removes it) and did the Godot tab list the agent? (3) Press Play (F5),
+      ask for another change while it runs - does it appear live? (4) Add plugin by Asset Library number (e.g. Phantom
+      Camera): status line + the project's plugins.json. (5) Home: the project's card opens the Godot tab on it.
 - [ ] [windows] Godot tab > Add plugin by Asset Library number (a 4.x plugin, e.g. Phantom Camera) over the real
-      network: report the status line and game/loki-world/plugins.json (never tried anywhere). (Claude, 2026-10-18)
+      network: report the status line and the project's plugins.json. (Claude, 2026-10-18)
 
 ### The window (webviews)
 - [ ] [windows] **Cross-origin isolation (ecf9b40): run `tools/ship.py --check`, then look in the window.** 04def98
       made the window COEP require-corp; Claude made every bridge answer send COEP require-corp + CORP cross-origin and
       Studio's server send both. In WebView2: a mermaid diagram in chat, Preview on an HTML answer, an App, the Studio
-      tab (Ctrl+2) - all must show. Paste any "blocked by Cross-Origin-Embedder-Policy" line from the window's console /
+      inside Home (Ctrl/Cmd+Shift+S) - all must show. Paste any "blocked by Cross-Origin-Embedder-Policy" line from the window's console /
       harness_data/app/loki_bridge.log. (Claude, 2026-10-18)
 - [ ] [mac] The same check in WKWebView (Safari's COEP rules are stricter): Mermaid diagram, Preview, an App, the Studio
       tab (Cmd+2), and is `crossOriginIsolated` still true in the Godot tab? Also report whether the frameless title
@@ -393,7 +391,7 @@ pass; move it, keep it behind a setting, or archive it (docs/operations/archive/
 3. Small step, a test for it, `git status` - **ship only the files your task touched** (ship.py does `git add -A`:
    if Godot rewrote project.godot or you have game files lying around, restore or stash them first), then ship.
 4. A one-line entry at the top of Reports: time, machine, item, result, numbers, exact errors.
-5. About once an hour: run LOKI like a new user for 5 minutes (chat, a background job, Forge, Spaces); anything
+5. About once an hour: run LOKI like a new user for 5 minutes (chat, a background job, Forge, Render, Home); anything
    broken becomes a new request line for your machine and goes to the top of your list.
 
 **Ziva (Mac) - Forge, the pro way.** the reference package is installed on this Mac: open it next to Forge and copy how it
@@ -423,21 +421,14 @@ tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks
 - [ ] W-3 engine/data_sandbox.py (review, 9f928fe): the Windows Job Object memory cap never reports "memory" -
       the child gets a MemoryError instead of going over the peak. Make it `peak >= 0.95 * memory_mb or
       "MemoryError" in err`, check it on the PC with a 200 MB cap, add the case to its test.
-- [ ] W-4 A real two-machine Spaces voice call Mac <-> PC through the relay (both on their own networks) - the
-      takeover fix (a re-join must carry the member's own secret) shipped 2026-10-19; check an existing member can
-      still come back after a restart.
+- [ ] W-4 A real two-machine job Mac -> PC through the relay (both on their own networks): start a background job
+      on the PC from the Mac and watch it on the Mac's home screen (a job card with machine "pc").
 - [ ] W-5 Fresh install from the zip on a clean Windows account, `uninstall.bat --purge`, reinstall: report the
       times and anything that needed a terminal.
 - [ ] W-6 tools/ship.py now tests what the last commit changed when the tree is clean, and CI runs everything
       (LOKI_TEST_FULL=1): look at the next GitHub Actions run on the PC's push and report the suite count and time.
 
-**Both:** the Auto Chess work (79a1318, d5223d8) is in the parked game - it stays (nothing gets removed), but
-don't add to it until the owner answers in Needs Mohamed. `game/loki-world/scripts/autochess/arena_runtime.gd`
-looks like a leftover debug script: ask there before touching it.
-
 ## Needs Mohamed
-
-- [ ] (Claude, 2026-10-19) Auto Chess in LOKI World (79a1318, d5223d8): keep building it, or keep it parked with the rest of the game? It stays either way.
 
 - [ ] **Release signing key + the first release.** Installed copies only update to a SIGNED release. Nobody has
       said they hold the private half of `keys/loki_public.pem`; if not, make a new pair (4 commands in docs/INSTALL.md
@@ -493,12 +484,11 @@ looks like a leftover debug script: ask there before touching it.
   ticks, Set Key (S), Auto Keyframe, key interpolation, Copy / Paste / Mirror Keys, looping playback
   (test_forge_anim_ui.py 13). Also answered the three [mac] requests above (the Default layer's V was a real bug).
   Suite expectations that legitimately moved were updated: test_forge_pro_ui's Channel Box row list and the hotbox /
-  wheel menu counts (13 menus -> 14 columns). One rebase conflict with 2cf2162 (Spaces is out) resolved by hand -
+  wheel menu counts (13 menus -> 14 columns). One rebase conflict with 2cf2162 resolved by hand -
   his new scripts and suites kept.
 - 2026-10-19 ~05:00, Claude (cloud): Forge's pro layer rebuilt from the reference package's own scripts on the Mac
   (docs/FORGE_PRO_SPEC.md; FORGE_PRO.md "2026-10-19"); tests/test_forge_pro_ui.py 55/55 in 23 s, test_forge_ui
-  34/34, test_forge_edit_ui 20/20 (Blender set), model/creature/poly suites green. Review fixes: Spaces member
-  takeover refused (test_spaces 35/35), DynaMesh step 0 can't be removed, sculpt-history recorder (fa19bc1) merged and only records real strokes,
+  34/34, test_forge_edit_ui 20/20 (Blender set), model/creature/poly suites green. Review fixes: DynaMesh step 0 can't be removed, sculpt-history recorder (fa19bc1) merged and only records real strokes,
   local model resolve keeps the size, uninstall --purge says truthfully that keys stay, *.md eol=lf, Blender's
   GPL-2.0 text added, ship.py --check on a clean tree tests the last commit and CI runs everything. HANDOFF.md
   and this file cleaned (full history in docs/operations/archive/). Your long-run loop and lists are above.
@@ -507,25 +497,24 @@ looks like a leftover debug script: ask there before touching it.
   pacing test (window 1.0 s; a loaded PC's round-trip is longer). Fixed in tests/test_studio.py (window 3 s), 177/0;
   two Studio servers killed, the stale pinned copy removed. Cleaned: 8 loki/job-* branches + worktrees, merged local
   branches, the stash, 6 old origin branches; harness_data: OllamaSetup.exe (1.6 GB), espeak-ng.msi, scratch; VRAM
-  7265 -> 966 MiB (`ollama stop`). Home shows the LIVE LOKI World again (`worldbg=1`; screens/w52-home-world.png).
+  7265 -> 966 MiB (`ollama stop`).
 - 2026-10-18 windows (Ziva) W51 DONE. The console pop-ups were (1) Ziva's own `cmd /k title ZIVA_TEST3` window
   (closed) and (2) the Startup entry `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Loki.lnk` ->
   `C:\Users\macul\Documents\loki\Loki.cmd` (a .cmd opens a console at every logon; LOKI.vbs also started LOKI).
   Fixed: app/loki_app.py retire_console_launchers() (test_no_console 19). 8 min of 120 ms window polling: nothing.
-  Live link: Open in Godot -> Godot_v4.7.2-stable_win64 on "main.tscn - LOKI World"; GET /api/godot/editors: "LOKI
-  World", godot 4.7.2, plugin 1.2, alive; Output "LOKI Studio plugin 1.2 ready (Godot 4.7.2-stable (official))".
+  Live link: Open in Godot -> Godot_v4.7.2-stable_win64; GET /api/godot/editors: godot 4.7.2, plugin 1.2, alive; Output "LOKI Studio plugin 1.2 ready (Godot 4.7.2-stable (official))".
 - 2026-10-18 windows (Ziva) W50 DONE on 0e2af40: frameless title bar, min/max/close work, maximise keeps the taskbar
-  (720x1232 on 720x1280), close quits the engine too; engine.out "getting LOKI's Godot 4.7.2 for LOKI World (one time,
+  (720x1232 on 720x1280), close quits the engine too; engine.out "getting LOKI's Godot 4.7.2 (one time,
   ~80-170 MB)" then "LOKI's Godot 4.7.2 is ready"; Open in Godot never touched ai_testin. FIXED: the Godot tab said
   "Godot is not installed on this computer: get Godot 4.7 from godotengine.org (or set GODOT_BIN)" while linked
-  (godot_web.status() now uses loki_godot()); the World frame swallowed Ctrl+1..5 (host.js re-raises them);
+  (godot_web.status() now uses loki_godot());
   extensions.install left a read-only .git on Windows (_rmtree). Full `ship.py --check` green.
 - 2026-10-18 mac (Ziva) M53: every Windows CI run was red at "Self-test the packaged app" with
   "loki: ModuleNotFoundError: No module named 'studio_godot'" (runs 39190963255, 39190421217) - packaging/loki.spec
   did not ship studio/. Fix shipped in 95f5d5e. Relay link live (3.3 s), both machines on d65ecfc / patch 305.
   anyCreature (Ariescar/anyCreature, MIT) assessed -> brought in as contrib/anycreature (b8521df, 64b18b9).
 - 2026-10-18 mac (Ziva) M52: the Mac was not failing to update - LOKI was simply not running 16:12-21:07; on start it
-  updated a3e1b64a4463 -> d65ecfc7d53b, carrying the re-saved game/loki-world/project.godot across. The live record is
+  updated a3e1b64a4463 -> d65ecfc7d53b. The live record is
   `.git/loki_update_health.json`; `harness_data/app/update_health.json` is a STALE legacy copy (Oct 14).
 - 2026-10-18 cloud (Claude) 04def98's window-wide COEP require-corp broke every frame without COEP (test_research3,
   test_apps red; the Studio tab would be blocked). Fixed: COEP + CORP cross-origin on every bridge answer, studio_server
@@ -557,7 +546,6 @@ looks like a leftover debug script: ask there before touching it.
   on PATH: python" (macOS has only python3). tests/tasks/base.py `PY_BIN` + `pycmd()`; `--scripted` 31/31, 94/0.
 - 2026-10-17 mac (Ziva) two flakes were real bugs: engine/peers.py refused two identical same-millisecond requests as
   "replayed request" (HTTP 401) - the "link flaps" report; fixed with a signed `X-Loki-Nonce` (test_peers 67).
-  engine/mmo_state.py dropped same-millisecond changes - `STAMP_DECIMALS = 6` (test_mmo_systems 125).
 - 2026-10-17 mac (Ziva) patch 219: engine/loki_bridge.py had socketserver's accept backlog of 5, so a page load reset
   46 of 60 connections ("Connection reset by peer"; dead panels or a white window) - `request_queue_size = 128`, 0
   resets, guarded in test_systems. Bonsai 2 on the Mac fixed (`/setup/use` keeps the long context,

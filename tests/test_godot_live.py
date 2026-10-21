@@ -1,10 +1,10 @@
-"""The live Godot link (engine/godot_live.py): LOKI's agents work inside the REAL Godot editor on LOKI World.
+"""The live Godot link (engine/godot_live.py): LOKI's agents work inside the REAL Godot editor on the owner's projects.
 
     python tests/test_godot_live.py      (< 60 s; the real-editor half needs a Godot 4 binary: LOKI_SUITE_GODOT or GODOT_BIN)
 
-Without Godot: an agent's editor work puts it at the Godot forge in LOKI World with what it does; Plan mode only reads;
+Without Godot: an agent's editor work shows it at the Godot editor in the live view with what it does; Plan mode only reads;
 Asset Library plugins install only their addons/ folder, are recorded in plugins.json and re-install from it; the engine
-answers the plugin's routes. With Godot: a copy of LOKI World opens in a headless Godot editor with the LOKI Studio
+answers the plugin's routes. With Godot: a small game project opens in a headless Godot editor with the LOKI Studio
 plugin, the plugin links to the engine's hub by itself (~/.loki/engine_connect.json), and godot_editor calls read the
 live editor, add a node to the open main scene, set its property and save - the .tscn on disk has it, undoable.
 """
@@ -42,19 +42,17 @@ def check(name, ok, detail=""):
     print(("  PASS " if ok else "  FAIL ") + name + ("" if ok else "  <- %s" % (str(detail)[:400],)))
 
 
-# ------------------------------------------------------------------ agents roam: editor work -> the Godot forge
+# ------------------------------------------------------------------ agents at work: editor work -> the live view
 godot_live.note_activity("job-abc", "set_property", {"node": "Player", "property": "speed", "value": "6"}, now=1000.0)
 world = godot_live.apply_to_world([{"id": "loki", "station": "hall", "state": "idle"},
                                    {"id": "job-abc", "station": "workshop", "state": "working"}], now=1010.0)
-check("an agent working in the editor stands at the Godot forge", world[1]["station"] == "godot forge"
+check("an agent working in the editor shows at the Godot editor", world[1]["station"] == "godot editor"
       and world[1]["last_message"] == "Godot: set property Player.speed = 6", world[1])
 check("...the others stay where they are", world[0]["station"] == "hall")
 later = godot_live.apply_to_world([{"id": "job-abc", "station": "workshop"}], now=1000.0 + godot_live.ACTIVE_S + 1)
 check("...and goes back when it stops", later[0]["station"] == "workshop")
 import events  # noqa: E402
-check("the forge is a world station", events.STATIONS.get("Godot") == "godot forge")
-builder = (REPO / "game" / "loki-world" / "scripts" / "world" / "island_builder.gd").read_text(encoding="utf-8")
-check("LOKI World has the Godot forge station", '"godot forge"' in builder)
+check("the Godot editor is a station of the live view", events.STATIONS.get("Godot") == "godot editor")
 
 # ------------------------------------------------------------------ Plan mode only reads
 import loki  # noqa: E402
@@ -121,34 +119,46 @@ try:
 except ValueError as exc:
     check("a download that does not match the Asset Library's hash is refused", "hash" in str(exc))
 
-# ------------------------------------------------------------------ Open in Godot: LOKI World with LOKI's own Godot 4.7.2
+# ------------------------------------------------------------------ Open in Godot: LOKI's own Godot 4.7.2 when the computer has none
 import godot_web  # noqa: E402
-import world_build  # noqa: E402
+import godot_editor  # noqa: E402
 opened, got = [], []
-_real_bin, _real_install = world_build.editor_binary, world_build.install
+_real_bin, _real_install = godot_editor.editor_binary, godot_editor.install
+_real_native = godot_web.native_godot
+godot_web.native_godot = lambda: ""   # this computer has no Godot of its own
+(TMP / "projects" / "Racer").mkdir(parents=True, exist_ok=True)
+(TMP / "projects" / "Racer" / "project.godot").write_text("config_version=5\n", encoding="utf-8")
+os.environ["LOKI_PROJECTS_DIR"] = str(TMP / "projects")
 fake_exe = TMP / "Godot"
-world_build.editor_binary = lambda data=None: fake_exe if got else None
-world_build.install = lambda data=None, opener=None, say=None, editor_only=False: (got.append(editor_only), {"ok": True})[1]
-godot_live.ensure_world = lambda *a, **k: {"ok": True, "note": "ready"}
-r1 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv), background=False)
+godot_editor.editor_binary = lambda data=None: fake_exe if got else None
+godot_editor.install = lambda data=None, opener=None, say=None, editor_only=True: (got.append(editor_only), {"ok": True})[1]
+godot_live.ensure_plugin = lambda *a, **k: {"ok": True, "note": "ready"}
+r1 = godot_web.open_native("Racer", popen=lambda argv, **kw: opened.append(argv), background=False)
 check("the first Open gets LOKI's Godot 4.7.2 (never the window waiting on a download)", r1.get("downloading") and got == [True], r1)
-check("...then opens LOKI World in it, as an editor", opened and opened[-1][0] == str(fake_exe) and "--editor" in opened[-1]
-      and opened[-1][-1].endswith("loki-world"), opened)
-r2 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv))
+check("...then opens the project in it, as an editor", opened and opened[-1][0] == str(fake_exe) and "--editor" in opened[-1]
+      and opened[-1][-1].endswith("Racer"), opened)
+r2 = godot_web.open_native("Racer", popen=lambda argv, **kw: opened.append(argv))
 check("after that it opens at once with it", r2.get("ok") and not r2.get("downloading") and "4.7.2" in r2["note"], r2)
-# the PC (2026-10-18): no LOKI Godot yet and the download fails -> an error, NEVER the computer's other Godot
+# no Godot here and LOKI's download fails -> an error, nothing half-opened
 got.clear(); opened.clear(); godot_web._GET_GODOT.update(state="idle", note="", error="")
-world_build.install = lambda data=None, opener=None, say=None, editor_only=False: {"ok": False, "error": "offline"}
-_native = godot_web.native_godot
-godot_web.native_godot = lambda: str(TMP / "Godot_v4.8-beta1_mono_win64.exe")
-r3 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv), background=False)
-r4 = godot_web.open_native("loki-world", popen=lambda argv, **kw: opened.append(argv))
-check("a failed download never opens LOKI World in the computer's other Godot", not opened, opened)
+godot_editor.install = lambda data=None, opener=None, say=None, editor_only=True: {"ok": False, "error": "offline"}
+r3 = godot_web.open_native("Racer", popen=lambda argv, **kw: opened.append(argv), background=False)
+r4 = godot_web.open_native("Racer", popen=lambda argv, **kw: opened.append(argv))
+check("a failed download opens nothing (no half-installed editor)", not opened, opened)
 check("...and Open in Godot says why", r4.get("ok") is False and "offline" in r4.get("error", ""), r4)
 godot_web._GET_GODOT.update(state="idle", note="", error="")
 logged = []
-check("engine start fetches LOKI's Godot in the background (and says so in the log)",
+check("engine start fetches LOKI's Godot in the background when this computer has none (and says so in the log)",
       godot_web.prefetch(logged.append) == "" and any("4.7.2" in x for x in logged), logged)
+# the computer has its own Godot: the owner's projects open in it, nothing is downloaded
+_native = godot_web.native_godot
+godot_web.native_godot = lambda: str(TMP / "Godot_v4.8-stable_win64.exe")
+opened.clear(); logged.clear(); godot_web._GET_GODOT.update(state="idle", note="", error="")
+r5 = godot_web.open_native("Racer", popen=lambda argv, **kw: opened.append(argv))
+check("with a Godot of its own, a project opens in it (no download)", r5.get("ok") and opened
+      and opened[-1][0].endswith("Godot_v4.8-stable_win64.exe") and not r5.get("downloading"), (r5, opened))
+check("...and engine start fetches nothing", godot_web.prefetch(logged.append) == "" and not logged, logged)
+godot_web.native_godot = lambda: ""
 os.environ["LOKI_GODOT_PREFETCH"] = "off"
 logged.clear()
 check("LOKI_GODOT_PREFETCH=off skips it", godot_web.prefetch(logged.append) == "" and not logged, logged)
@@ -158,7 +168,8 @@ godot_web._GET_GODOT.update(state="idle", note="", error="")
 os.environ["LOKI_GODOT_EDITOR"] = "system"
 check("LOKI_GODOT_EDITOR=system uses the computer's own Godot", godot_web.loki_godot() == "")
 os.environ.pop("LOKI_GODOT_EDITOR")
-world_build.editor_binary, world_build.install = _real_bin, _real_install
+godot_editor.editor_binary, godot_editor.install = _real_bin, _real_install
+godot_web.native_godot = _real_native
 import importlib  # noqa: E402
 godot_live = importlib.reload(godot_live)
 
@@ -255,7 +266,7 @@ path = godot_live.write_connect(PORT, TOKEN)
 conn = json.loads(Path(path).read_text(encoding="utf-8"))
 check("the engine tells the editor where it is (url + token)", conn["url"] == "http://127.0.0.1:%d" % PORT and conn["token"] == TOKEN)
 check("...in a file only this user can read", os.name == "nt" or (Path(path).stat().st_mode & 0o077) == 0)
-check("no editor yet: a plain answer that says how to open LOKI World", "Open LOKI World" in json.dumps(
+check("no editor yet: a plain answer that says how to open a project", "Open in Godot" in json.dumps(
     godot_live.call("editor_state", {})))
 
 # ------------------------------------------------------------------ REAL Godot: the editor links to the engine
@@ -265,8 +276,12 @@ if not GODOT:
     print("  SKIP no Godot 4 binary (set LOKI_SUITE_GODOT) - the live-editor half runs on the Mac/PC")
 else:
     import install_godot_plugin  # noqa: E402
-    world = TMP / "loki-world"
-    shutil.copytree(REPO / "game" / "loki-world", world, ignore=shutil.ignore_patterns(".godot", "addons"))
+    world = TMP / "racer"
+    (world / "scenes").mkdir(parents=True)
+    (world / "project.godot").write_text('config_version=5\n\n[application]\n\nconfig/name="Racer"\nrun/main_scene="res://scenes/main.tscn"\n'
+                                         '\n[editor_plugins]\n\nenabled=PackedStringArray("res://addons/loki_studio/plugin.cfg")\n', encoding="utf-8")
+    (world / "scenes" / "main.tscn").write_text('[gd_scene format=3]\n\n[node name="World" type="Node3D"]\n\n'
+                                                '[node name="Track" type="Node3D" parent="."]\n', encoding="utf-8")
     install_godot_plugin.install(world)
     log = open(TMP / "editor.log", "w")
     env = dict(os.environ, LOKI_STUDIO_TEST="1")
@@ -284,18 +299,18 @@ else:
         check("...and to LOKI Studio at the same time (two links, one editor)", bool(STUDIO_HUB.connected()))
         if STUDIO_HUB.connected():
             sres = STUDIO_HUB.call("editor_state", {}, timeout=15)
-            check("Studio's link still answers on its own", sres.get("ok") and sres["result"]["project_name"] == "LOKI World", sres)
+            check("Studio's link still answers on its own", sres.get("ok") and sres["result"]["project_name"] == "Racer", sres)
         if eds:
             os.environ.pop("LOKI_JOB_ID", None)
             st = godot_live.call("editor_state", {}, who="job-live")
-            check("an agent reads the live editor (LOKI World, Godot 4)", st.get("ok") and st["result"]["project_name"] == "LOKI World", st)
+            check("an agent reads the live editor (the project, Godot 4)", st.get("ok") and st["result"]["project_name"] == "Racer", st)
             op = godot_live.call("open_scene", {"path": "res://scenes/main.tscn"}, who="job-live")
-            check("it opens LOKI World's main scene", op.get("ok"), op)
+            check("it opens the project's main scene", op.get("ok"), op)
             time.sleep(0.5)
             full = godot_live.call("scene_tree", {"depth": 6}, who="job-live")
             paths = [n.get("path", "") for n in (full.get("result") or {}).get("nodes", [])]
-            check("the editor shows LOKI World itself: the World and its home island, not an empty scene",
-                  any(p.endswith("World/HomeIsland") for p in paths) and any(p.endswith("World") for p in paths), paths[:15])
+            check("the editor shows the project's own scene, not an empty one",
+                  any(p.endswith("World/Track") or p.endswith("Track") for p in paths) and any(p.endswith("World") for p in paths), paths[:15])
             time.sleep(0.5)
             add = godot_live.call("add_node", {"parent": ".", "type": "Node3D", "name": "AgentBeacon",
                                                "properties": {"position": "Vector3(3, 1, -2)"}}, who="job-live")
@@ -310,8 +325,8 @@ else:
             check("saved: the .tscn on disk has it, with the property", sv.get("ok") and 'name="AgentBeacon"' in tscn
                   and "visible = false" in tscn, (sv, tscn[-400:]))
             w2 = godot_live.apply_to_world([{"id": "job-live", "station": "workshop"}])
-            check("meanwhile LOKI World shows that agent at the Godot forge, saying what it did",
-                  w2[0]["station"] == "godot forge" and "save scene" in w2[0]["last_message"], w2)
+            check("meanwhile the live view shows that agent at the Godot editor, saying what it did",
+                  w2[0]["station"] == "godot editor" and "save scene" in w2[0]["last_message"], w2)
             meta = world / ".godot" / "editor" / "project_metadata.cfg"
             md = meta.read_text(encoding="utf-8") if meta.is_file() else ""
             check("live sync is on (edits reach the running game)", "run_live_debug=true" in md and "run_reload_scripts=true" in md, md[:300])
