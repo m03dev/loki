@@ -147,8 +147,10 @@ def main() -> int:
     for name, wf in AR.workflows().items():
         for m in (wf.get("models") or []):
             want.append(m.get("file"))
+            # the graphs store the folder as "models/unet"; the map keys and ComfyUI's loader classes use the bare name
+            bare = (m.get("folder") or "").rstrip("/").split("/")[-1]
             folder = {"unet": "unet_gguf", "unet_gguf": "unet_gguf", "diffusion_models": "UNETLoader", "text_encoders": "CLIPLoader", "vae": "VAELoader",
-                      "model_patches": "ModelPatchLoader"}.get(m.get("folder") or "", m.get("folder"))
+                      "model_patches": "ModelPatchLoader"}.get(bare, bare)
             cls = {"unet_gguf": "UnetLoaderGGUF", "UNETLoader": "UNETLoader", "CLIPLoader": "CLIPLoader", "VAELoader": "VAELoader",
                    "ModelPatchLoader": "ModelPatchLoader"}.get(folder)
             if cls and cls in schema:

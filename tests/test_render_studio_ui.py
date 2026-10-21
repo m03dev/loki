@@ -48,6 +48,22 @@ REPORT = {"ok": True, "report": {"ok": False, "url": "http://192.168.1.50:8188",
           "gpu": {"name": "NVIDIA GeForce RTX 3070 Ti", "vram_total": 8589934592}}}
 
 
+def _graph_nodes():
+    out = []
+    for nid, node in WF["prompt"].items():
+        ins, links = {}, []
+        for name, val in (node.get("inputs") or {}).items():
+            if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str) and isinstance(val[1], int):
+                links.append({"from": val[0], "input": name})
+            else:
+                ins[name] = val
+        out.append({"id": nid, "class": node["class_type"], "title": node["class_type"], "inputs": ins, "links": links, "models": []})
+    return out
+
+
+GRAPH = {"ok": True, "workflow": "vace_render", "nodes": _graph_nodes()}
+
+
 async def main():
     async with async_playwright() as p:
         exe = next((x for x in (os.getenv("LOKI_SUITE_CHROMIUM", ""), "/opt/pw-browsers/chromium") if x and os.path.exists(x)), "")
@@ -71,6 +87,8 @@ async def main():
                 return await r.fulfill(path=str(UI / path[4:]))
             if path == "/render/status":
                 return await r.fulfill(json=STATUS)
+            if path == "/render/graph":
+                return await r.fulfill(json=GRAPH)
             if path == "/render/preflight":
                 posted.append(("preflight", json.loads(r.request.post_data or "{}")))
                 return await r.fulfill(json=REPORT)
@@ -175,6 +193,12 @@ async def main():
         check("Render sends every pass frame as a PNG to /render/upload-pass (depth + line art, 3 frames each)",
               len(ups) == 6 and kinds == ["depth", "lineart"] and all(u[2][:4] == b"\x89PNG" for u in ups), [u[1] for u in ups])
 
+        await page.click("#rs-nodes")
+        await page.wait_for_selector(".rs-graph-node", timeout=5000)
+        gnodes = await E("document.querySelectorAll('.rs-graph-node').length")
+        gedges = await E("document.querySelectorAll('.rs-graph-edge').length")
+        check("the Nodes view draws the workflow as a node graph (17 blocks with wiring between them)",
+              gnodes == 17 and gedges >= 10, [gnodes, gedges])
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

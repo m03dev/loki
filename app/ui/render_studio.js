@@ -11,7 +11,8 @@
 
 const LokiRenderStudio = (() => {
   const S = { built: false, pane: null, jobs: [], sel: null, wf: null, wfs: [], settings: null, timer: 0, passes: null,
-    previewKind: "lineart", frame: 0, engine: "ai", startImage: null, running: null, report: null, cache: {} };
+    previewKind: "lineart", frame: 0, engine: "ai", startImage: null, running: null, report: null, cache: {},
+    node: false, graph: null };
   const STORE = "loki-render-studio";
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const call = (path, body) => (typeof api === "function" ? api(path, body) : Promise.reject(new Error("not ready")));
@@ -78,7 +79,8 @@ const LokiRenderStudio = (() => {
     const plast = mk("div", "rs-progress-last", ""); plast.id = "rs-progress-last";
     prog.append(ptop, ptrack, plast, btn("stop", "Cancel", "Stop this job (ComfyUI is asked to interrupt it).",
       () => { const j = liveJob(); if (j) cancelJob(j.job); }, "rs-progress-cancel"));
-    stage.append(img, cv, vid, empty, prog);
+    const graphwrap = mk("div", "rs-graphwrap"); graphwrap.id = "rs-graphwrap"; graphwrap.hidden = true;
+    stage.append(img, cv, vid, empty, graphwrap, prog);
     const scrub = mk("div", "rs-scrub");
     const slider = mk("input"); slider.type = "range"; slider.id = "rs-frame"; slider.min = "0"; slider.max = "0"; slider.value = "0";
     slider.title = "Scrub the frames";
@@ -342,6 +344,7 @@ const LokiRenderStudio = (() => {
   }
 
   async function showPreview() {
+    if (S.node) return;   // the Nodes view owns the stage
     const img = $("rs-img"), cv = $("rs-canvas"), vid = $("rs-video"), slider = $("rs-frame"), empty = $("rs-empty");
     img.hidden = cv.hidden = vid.hidden = true; empty.hidden = true;
     const k = S.previewKind;
@@ -621,6 +624,91 @@ const LokiRenderStudio = (() => {
     const i = $("rs-img"); if (i) i.hidden = true;
     const v = $("rs-video"); if (v) v.hidden = true;
   }
+  // ------------------------------------------------------------------ the Nodes view: the workflow drawn as a node
+  // graph (like a ComfyUI canvas), so the render reads as a pipeline, not a form. Node colours come from the last
+  // Preflight report: red = a missing node class or model file, green = ready, grey = not checked yet.
+  function toggleNodes() {
+    S.node = !S.node;
+    const b = $("rs-nodes"); if (b) b.classList.toggle("on", S.node);
+    if (S.node) { showNodes(); } else { const w = $("rs-graphwrap"); if (w) w.hidden = true; showPreview(); }
+  }
+  function shortTitle(t) { t = String(t || "?"); return t.length > 22 ? t.slice(0, 21) + "…" : t; }
+  function showNodeInfo(n) {
+    const lines = [n.class + "  (" + n.title + ")"];
+    const ins = Object.entries(n.inputs || {});
+    if (ins.length) lines.push("inputs: " + ins.map(([k, v]) => k + "=" + String(v).slice(0, 24)).join(", "));
+    for (const m of n.models || []) lines.push("model: " + m.file + "  -> ComfyUI/" + m.folder);
+    say(lines.join("\n"));
+  }
+  async function showNodes() {
+    const wrap = $("rs-graphwrap"); if (!wrap) return;
+    $("rs-img").hidden = true; $("rs-canvas").hidden = true; $("rs-video").hidden = true; $("rs-empty").hidden = true;
+    wrap.hidden = false;
+    const wf = ($("rs-wf") && $("rs-wf").value) || "vace_render";
+    if (!S.graph || S.graph.workflow !== wf) {
+      const r = await call("/render/graph?workflow=" + encodeURIComponent(wf));
+      if (!r || !r.ok) { wrap.replaceChildren(mk("p", "rs-note", (r && r.error) || "Could not read the graph.")); return; }
+      S.graph = r;
+    }
+    drawGraph(wrap, S.graph);
+    say("Nodes: " + S.graph.nodes.length + " blocks (" + wf + "). Click a block for its inputs. " +
+        (S.report ? "Green = ready, red = missing." : "Press Preflight to colour it."));
+  }
+  function drawGraph(wrap, g) {
+    const NS = "http://www.w3.org/2000/svg";
+    const nodes = g.nodes || [], byId = new Map(nodes.map((n) => [n.id, n]));
+    const rank = {}; for (const n of nodes) rank[n.id] = 0;
+    for (let it = 0; it < nodes.length + 2; it++) {
+      let moved = false;
+      for (const n of nodes) for (const l of n.links) if (byId.has(l.from) && rank[l.from] + 1 > rank[n.id]) { rank[n.id] = rank[l.from] + 1; moved = true; }
+      if (!moved) break;
+    }
+    const cols = {};
+    for (const n of nodes) { const r = rank[n.id]; if (!cols[r]) cols[r] = []; cols[r].push(n); }
+    const NW = 172, NH = 62, GX = 74, GY = 24, M = 22;
+    const pos = {}; let maxX = 0, maxY = 0;
+    for (const r of Object.keys(cols).map(Number).sort((a, b) => a - b)) {
+      let y = M;
+      for (const n of cols[r]) { const x = M + r * (NW + GX); pos[n.id] = { x, y }; y += NH + GY; maxY = Math.max(maxY, y); }
+      maxX = Math.max(maxX, M + r * (NW + GX) + NW);
+    }
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", String(maxX + M)); svg.setAttribute("height", String(maxY + M));
+    svg.setAttribute("class", "rs-graph");
+    const badClasses = new Set(((S.report && S.report.missing_nodes) || []).map((m) => m.class));
+    const badModels = new Set(((S.report && S.report.missing_models) || []).map((m) => m.file));
+    const hasReport = !!S.report;
+    for (const n of nodes) for (const l of n.links) {
+      if (!byId.has(l.from)) continue;
+      const a = pos[l.from], b = pos[n.id], x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
+      path.setAttribute("class", "rs-graph-edge"); svg.append(path);
+    }
+    for (const n of nodes) {
+      const q = pos[n.id];
+      const bad = badClasses.has(n.class) || (n.models || []).some((m) => badModels.has(m.file));
+      const grp = document.createElementNS(NS, "g");
+      grp.setAttribute("class", "rs-graph-node " + (hasReport ? (bad ? "bad" : "ok") : ""));
+      grp.dataset.id = n.id;
+      const rect = document.createElementNS(NS, "rect");
+      rect.setAttribute("x", q.x); rect.setAttribute("y", q.y); rect.setAttribute("rx", 9);
+      rect.setAttribute("width", NW); rect.setAttribute("height", NH);
+      const t1 = document.createElementNS(NS, "text");
+      t1.setAttribute("x", q.x + 11); t1.setAttribute("y", q.y + 22); t1.textContent = shortTitle(n.title);
+      const t2 = document.createElementNS(NS, "text");
+      t2.setAttribute("x", q.x + 11); t2.setAttribute("y", q.y + 39); t2.setAttribute("class", "rs-graph-sub"); t2.textContent = n.class;
+      const t3 = document.createElementNS(NS, "text");
+      t3.setAttribute("x", q.x + 11); t3.setAttribute("y", q.y + 54); t3.setAttribute("class", "rs-graph-sub");
+      t3.textContent = (n.models || []).length ? "model: " + shortTitle((n.models[0].file || "").replace(/\.(gguf|safetensors)$/, "")) : Object.keys(n.inputs || {}).length + " inputs";
+      grp.append(rect, t1, t2, t3);
+      grp.addEventListener("click", () => showNodeInfo(n));
+      svg.append(grp);
+    }
+    const inner = mk("div", "rs-graph-inner"); inner.append(svg);
+    wrap.replaceChildren(inner);
+  }
+
   function buildViewBar(bar) {
     const held = mk("img", "rs-held"); held.id = "rs-held"; held.alt = "kept image"; held.hidden = true;
     bar.append(
@@ -635,6 +723,7 @@ const LokiRenderStudio = (() => {
                       ["Preflight", () => runPreflight(), "preflight"], null,
                       ["Cancel", () => { const j = liveJob(); if (j) cancelJob(j.job); }, "cancel"],
                       ["Retry", () => { if (S.sel) retryJob(S.sel); }, "retry"]], "rs-menu-render"),
+      btn("connections", "Nodes", "Show this workflow as a node graph: the blocks it runs, how they are wired and what is missing.", toggleNodes, "rs-nodes"),
       held);
   }
 

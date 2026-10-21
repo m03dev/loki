@@ -500,6 +500,14 @@ o = json.loads(out)
 check("GET /render/status: settings, the graphs' verified params, jobs", s_ == 200 and o["settings"]["url"] == URL
       and any(w["name"] == "vace_render" and "frames" in w["params"] for w in o["workflows"]) and len(o["jobs"]) >= 5)
 check("the bridge wants the token for /render", call("/render/status", token="nope")[0] == 401)
+s_, out, _ = call("/render/graph?workflow=vace_render")
+g = json.loads(out)
+gnodes = {n["id"]: n for n in g["nodes"]}
+check("GET /render/graph: the graph's nodes, links and models (for the Nodes view)",
+      s_ == 200 and len(g["nodes"]) == 17 and gnodes["1"]["class"] == "UnetLoaderGGUF"
+      and gnodes["1"]["models"][0]["file"].endswith(".gguf") and {"from": "1", "input": "model"} in gnodes["4"]["links"]
+      and "shift" in gnodes["4"]["inputs"], out[:200])
+check("GET /render/graph rejects a graph that does not exist", call("/render/graph?workflow=nope")[0] == 400)
 s_, out, _ = call("/render/test", {})
 check("POST /render/test reaches the fake ComfyUI", s_ == 200 and json.loads(out)["version"] == "0.9.9", out[:200])
 s_, out, _ = call("/render/new", {"kind": "ai", "params": {"frames": 5}, "size": [64, 64]})

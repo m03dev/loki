@@ -52,6 +52,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 ### App window and tabs
 - Four title-bar tabs (app/ui/modebar.js MODES): **Home / Forge / Render / Godot**, Ctrl/Cmd+1..4 (Ctrl works on macOS
   too). Render shows the Render Studio once its script registers (`LokiModeBar.register("render", ...)` or
+- **Render Studio Nodes view (PC, 2026-10-21):** the Render View bar has a **Nodes** button that draws the workflow as a
+  node canvas (`/render/graph` derives nodes/links/models from the graph's own JSON; nodes colour green/red from the last
+  Preflight). **ComfyUI runs on the PC** at D:\loki\harness_data\comfyui (0.42.0, PyTorch 2.14.1+cu130,
+  RTX 3070 Ti) with the 3 VACE model files (18.6 GB) installed. **The PC's LOKI now lives at D:\loki** (junction at the
+  old path) - the C: drive was full. See ZIVA_TASKS 2026-10-21 for the numbers.
   `window.LokiRenderStudio`); until then it offers Forge's Render window.
 - **Home = the preview hub** (app/ui/home.js, home.css; owner 2026-10-21): the latest render big, then cards for renders
   (`harness_data/renders/<job>/manifest.json`), Forge models, Godot projects (~/LOKI Projects), Studio sessions and jobs

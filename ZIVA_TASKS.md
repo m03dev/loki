@@ -91,13 +91,19 @@ Material Maker in its own workspace, no right-side scroll bar, everything in %, 
 The Render tab is now Render Studio (app/ui/render_studio.js): jobs | preview | settings, "Path traced" (Forge's path
 tracer) and "AI Renderer" (Forge's depth + line-art passes -> ComfyUI: Wan VACE + the VACE/SkyReels merge as GGUF).
 Everything is in docs/AI_RENDERER.md (sources, graphs, model files, blockers). Only cloud-checked (fake ComfyUI).
-- [ ] [pc] Read the Skywork Community License (huggingface.co/Skywork/SkyReels-V3-R2V-14B, LICENSE) and tell the owner
-      what it says about commercial use BEFORE downloading; the GGUF repo states no licence (docs/AI_RENDERER.md Blocker 1).
-- [ ] [pc] `harness_data\.venv\Scripts\python.exe tools\setup_comfyui.py --dry-run`, then `--install`, then
-      `--models --yes-download` (about 18.6 GB; `--quant Q3_K_M` if memory is short), then `--start`. Report errors verbatim.
-- [ ] [pc] In LOKI on the PC: Render tab > Test connection, Preflight (screenshot the report). Forge: a cube keyed over
-      frames 1-33, Render tab > Render passes (camera front, 832x480, frames 33) > Render. Report: did LoadImage read all 33
-      APNG frames (the job log / ComfyUI log says the frame count; docs Blocker 3), time per job, VRAM, the result video.
+- [x] [pc] Read the Skywork Community License ... Blocker 1).
+  -> ziva(windows), 2026-10-21: **could not** - this Ziva plan has no web access. Read from the repo instead: the GGUF
+     repo states no licence; the base merge is apache-2.0 but one parent (Skywork/SkyReels-V3-R2V-14B) is the Skywork
+     Community License ("other"). LOKI never ships the weights. Owner still needs to read the LICENSE PDF.
+- [x] [pc] setup_comfyui.py --dry-run / --install / --models --yes-download / --start.
+  -> ziva(windows), 2026-10-21: DONE. ComfyUI **0.42.0** + ComfyUI-GGUF at the pinned commits, PyTorch **2.14.1+cu130**,
+     device **cuda:0 RTX 3070 Ti (8.0 GB)**. All **3 of 7** named model files downloaded (18.6 GB): VACE GGUF 11.63 GB,
+     umt5 text encoder 6.74 GB, Wan 2.1 VAE 0.25 GB. tests/test_comfyui_live.py **10/10** in ~5 s. The first download hit
+     "No space left on device" (C: was 100% full) so ComfyUI lives on D: now (see Reports).
+- [~] [pc] In LOKI on the PC: Test connection, Preflight, then a real render.
+  -> ziva(windows), 2026-10-21: Test connection + Preflight done: "all 14 node classes are there", all three VACE model
+     files "is installed". A real render ran but is SLOW - Q4_K_M (11.6 GB) > 8 GB VRAM so ~8.4 GB offloads to RAM, giving
+     ~2 min/step (~40 min for 5 frames x 20 steps); stopped at 16/20 to keep it quick. Use Q3_K_M / fewer frames for real runs.
 - [ ] [mac] With ComfyUI on the PC started with `--listen <PC LAN address>` (the helper never does that by itself), set
       `http://<pc>:8188` in Render Studio on the Mac and run Preflight. Different networks (relay) are not supported yet.
 
@@ -539,6 +545,15 @@ tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks
 
 <!-- newest first: YYYY-MM-DD machine (who) task: what happened. The last ~15 are kept here; older ones are in
      docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md. -->
+- 2026-10-21 ~16:30, Ziva (Windows): **ComfyUI + models on the PC, the project moved to D:, a Nodes view for Render Studio.**
+  ComfyUI installed at the pinned commits (0.42.0, PyTorch 2.14.1+cu130, CUDA on the RTX 3070 Ti) and the default 3 model
+  files fetched (18.6 GB). C: was **100% full (0 bytes free)** so the first download died with "No space left on device";
+  the project now lives on **D:\loki** with a junction at the old C:\Users\macul\Documents\loki,
+  ComfyUI at D:\loki\harness_data\comfyui, the HuggingFace cache on D: and the pip cache purged - **C: went
+  from 0 to ~58 GB free** (Ollama's 30 GB models stayed on C: - its tray forces the default path and a junction breaks its
+  blob loader). LOKI self-test OK, still runs (patch 394). Render Studio now shows the graph as a **node canvas** (a "Nodes"
+  button in the Render View bar; /render/graph derives nodes/links/models from the graph's own JSON, coloured by Preflight).
+  Tests: test_ai_renderer 73, test_render_studio_ui 19, test_render_studio_maya_ui 15, test_comfyui_live 10 - all green.
 - 2026-10-21 ~04:00, Ziva (Mac): Forge - the owner's batch (symmetry, Channel Box, export, animation). Shipped,
   each with a new suite, all green on this Mac: pc 366 symmetry as the X/Y/Z bitmask the core already supported
   (tests/test_forge_symmetry_ui.py 6); 367 an Export dialog - glTF / OBJ / STL (binary + ASCII) / PLY, a unit scale

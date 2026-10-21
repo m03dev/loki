@@ -86,3 +86,18 @@
 .rs-progress-track { height: 6px; margin: 2px 0; }
 .rs-progress-last { font-size: 11px; color: var(--muted, #9aa0aa); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-progress .rs-btn { align-self: flex-start; }
+
+/* The Nodes view: the workflow drawn like a ComfyUI canvas (View bar > Nodes). */
+.rs-nodes.on { background: rgba(143, 179, 217, .22); }
+.rs-graphwrap { position: absolute; inset: 0; overflow: auto; background: #191b1f; z-index: 5; }
+.rs-graphwrap[hidden] { display: none; }
+.rs-graph-inner { padding: 6px; min-width: min-content; }
+.rs-graph { display: block; font-family: inherit; }
+.rs-graph-edge { fill: none; stroke: #4a5568; stroke-width: 1.6; }
+.rs-graph-node { cursor: pointer; }
+.rs-graph-node rect { fill: #262b33; stroke: #3c4450; stroke-width: 1.5; }
+.rs-graph-node.ok rect { stroke: #3f8f5f; }
+.rs-graph-node.bad rect { stroke: #c0564f; }
+.rs-graph-node:hover rect { fill: #2f3641; }
+.rs-graph-node text { fill: #e6e9ee; font-size: 12px; }
+.rs-graph-node .rs-graph-sub { fill: #9aa0aa; font-size: 10px; }

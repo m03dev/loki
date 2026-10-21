@@ -375,6 +375,30 @@ def describe(wf: dict) -> dict:
         "models": [{**m, "url": HF % (m["repo"], m["revision"], m["path"])} for m in wf.get("models", [])]}
 
 
+def graph(wf: dict) -> dict:
+    """The workflow's node graph for Render Studio's Nodes view, derived from the graph's own prompt JSON.
+    Each node carries its non-link inputs, the links into it (from node id -> this input) and the model file(s)
+    it loads, so the window can draw the wiring and colour a node the server/preflight says is missing."""
+    prompt = wf.get("prompt") or {}
+    models_by_node: dict = {}
+    for m in wf.get("models") or []:
+        models_by_node.setdefault(str(m.get("node")), []).append(
+            {"file": m.get("file"), "folder": m.get("folder"), "size": m.get("size"), "license": m.get("license"),
+             "alternatives": [{"file": a.get("file"), "size": a.get("size")} for a in (m.get("alternatives") or [])]})
+    nodes = []
+    for nid, node in prompt.items():
+        ins, links = {}, []
+        for name, val in (node.get("inputs") or {}).items():
+            if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str) and isinstance(val[1], int):
+                links.append({"from": str(val[0]), "input": name})
+            else:
+                ins[name] = val
+        nodes.append({"id": str(nid), "class": node.get("class_type"),
+                      "title": (node.get("_meta") or {}).get("title") or node.get("class_type"),
+                      "inputs": ins, "links": links, "models": models_by_node.get(str(nid), [])})
+    return {"workflow": wf.get("name"), "nodes": nodes}
+
+
 def _option_list(spec: Any) -> list | None:
     """A combo input's options from /object_info: V1 [[a, b], {...}] or V3 ["COMBO", {"options": [...]}]."""
     if not isinstance(spec, (list, tuple)) or not spec:
@@ -1097,6 +1121,8 @@ def handle_get(state: Any, path: str) -> tuple:
             return 200, {"ok": True, "presets": presets(state, q.get("project", ""))}
         if route == "/render/workflows":
             return 200, {"ok": True, "workflows": [describe(w) for w in workflows().values()]}
+        if route == "/render/graph":
+            return 200, {"ok": True, **graph(workflow(q.get("workflow") or "vace_render"))}
     except RenderError as exc:
         return 400, {"ok": False, "error": str(exc)}
     return 404, {"ok": False, "error": "Unknown endpoint."}
