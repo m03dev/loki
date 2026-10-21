@@ -68,6 +68,9 @@ const FMY_SVG = {
   camera: '<rect x="3" y="8" width="13" height="9" rx="1"/><path d="M16 11l5-3v9l-5-3z"/>',
   home: '<path d="M4 12l8-7 8 7M7 10v9h10v-9"/>',
 };
+// the symmetry bitmask as text: 1 X, 2 Y, 4 Z (shared by the status button and the periodic label update)
+function fmySymText(bits) { bits = bits | 0; return bits ? "Object " + ["X", "Y", "Z"].filter((_, i) => bits & (1 << i)).join("") : "Off"; }
+
 function fmySvg(name) {
   return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + (FMY_SVG[name] || FMY_SVG.cube) + "</svg>";
@@ -313,12 +316,24 @@ function forgeProChrome() {
   const snaps = fmyEl("span", "fmy-snaps");
   snaps.append(fmyToolBtn("snapgrid", "snapGrid", "Snap to grid", null, "fmy-snap"), fmyToolBtn("snapedge", "snapEdge", "Snap to curves / edges", null, "fmy-snap"),
     fmyToolBtn("snappoint", "snapPoint", "Snap to points / vertices", null, "fmy-snap"));
-  const symm = fmyToolBtn("symmetry", "", "Symmetry: X (sculpting mirrors across the middle)", () => {
+  const setSym = (bits) => { const v = fmyView(); if (!v) return; v.brush.symBits = bits | 0; if (bits) v.brush.symLast = v.brush.symBits; v.brush.symmetry = !!v.brush.symBits;
+    if (typeof forgeSay === "function") forgeSay("Symmetry: " + fmySymText(v.brush.symBits) + "."); };
+  const symm = fmyToolBtn("symmetry", "", "Symmetry: mirror strokes and edits across the object's planes (right-click to choose X / Y / Z)", () => {
     const v = fmyView(); if (!v) return;
-    v.brush.symmetry = !v.brush.symmetry;
-    if (typeof forgeSay === "function") forgeSay("Symmetry: " + (v.brush.symmetry ? "Object X" : "Off") + ".");
+    setSym(v.brush.symBits ? 0 : (v.brush.symLast || 1));
   }, "fmy-symm");
   symm.id = "fmy-symm";
+  symm.addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
+    const v = fmyView(), t = v && v.tree && v.tree.api; if (!v || !t || !t.popMenu) return;
+    const tick = (b) => ((v.brush.symBits & b) ? "\u2713 " : "\u2003");
+    t.popMenu(symm, [
+      [tick(1) + "X (mirror across YZ)", () => setSym(v.brush.symBits ^ 1)],
+      [tick(2) + "Y (mirror across XZ)", () => setSym(v.brush.symBits ^ 2)],
+      [tick(4) + "Z (mirror across XY)", () => setSym(v.brush.symBits ^ 4)],
+      ["Symmetry: Off", () => setSym(0)],
+    ]);
+  });
   const symLabel = fmyEl("span", "fmy-symlabel", "Symmetry: Off"); symLabel.id = "fmy-symlabel";
   st.append(snaps, sep(), symm, symLabel, fmyEl("span", "fmy-grow"));
   const toggles = fmyEl("span", "fmy-paneltoggles");
@@ -443,8 +458,8 @@ function fmySync() {
     set('#fmy-toolbox [data-pro-id="single"]', !v.quad);
     set('#fmy-toolbox [data-pro-id="four"]', !!v.quad);
     const sym = document.getElementById("fmy-symlabel");
-    if (sym) sym.textContent = "Symmetry: " + (v.brush && v.brush.symmetry && v.mode === "sculpt" ? "Object X" : "Off");
-    set("#fmy-symm", v.brush && v.brush.symmetry && v.mode === "sculpt");
+    if (sym) sym.textContent = "Symmetry: " + fmySymText(v.brush && v.brush.symBits);
+    set("#fmy-symm", !!(v.brush && v.brush.symBits));
     const ms = document.getElementById("fmy-menuset");
     if (ms && document.activeElement !== ms) ms.value = v.mode === "sculpt" ? "Sculpting" : "Modeling";
     const camName = document.getElementById("fmy-camname");

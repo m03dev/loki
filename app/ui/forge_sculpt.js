@@ -214,7 +214,7 @@ const ForgeSculpt = {
     this.sync(view);
     const preset = this.effectivePreset(view);
     const at = this.hover && this.hover.point;
-    this.worker.postMessage({ t: "brush", preset, strength: view.brush.strength, symmetry: view.brush.symmetry ? 1 : 0, dyn: this.dynFor(view, at) });
+    this.worker.postMessage({ t: "brush", preset, strength: view.brush.strength, symmetry: view.brush.symBits | 0, dyn: this.dynFor(view, at) });
     const mods = e.shiftKey && (e.ctrlKey || e.metaKey) ? 3 : e.shiftKey ? 2 : (e.ctrlKey || e.metaKey) ? 1 : 0;
     const pressure = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 1;
     // Tube (curve) and Insert Mesh presets add geometry instead of sculpting (Shift / Ctrl still sculpt)

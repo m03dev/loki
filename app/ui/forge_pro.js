@@ -358,6 +358,16 @@ const forgeProHas = (name) => typeof window[name] === "function";
 const forgeProCall = (name, ...a) => (forgeProHas(name) ? window[name](...a) : undefined);
 
 // the command table: id -> [label, run(v)] ; `null` run = not in Forge yet (shown greyed, with why)
+// Symmetry bitmask helpers (1 X, 2 Y, 4 Z) - the sculpt engine and the posing tools mirror across every active plane
+function forgeProSym(v, bits) {
+  if (!v || !v.brush) return "";
+  v.brush.symBits = bits | 0;
+  if (bits) v.brush.symLast = v.brush.symBits;
+  v.brush.symmetry = !!v.brush.symBits;
+  const names = ["X", "Y", "Z"].filter((_, i) => v.brush.symBits & (1 << i));
+  return "Symmetry: " + (names.length ? "Object " + names.join("") : "Off") + ".";
+}
+
 function forgeProCommands() {
   const T = (v) => forgeProTree(v);
   const comp = forgeProComp;
@@ -419,6 +429,10 @@ function forgeProCommands() {
     layerEditor: ["Layer Editor", () => { const b = document.getElementById("forge-layer-editor"); if (!b) return "The Layer Editor is not built here."; b.hidden = !b.hidden; if (!b.hidden && !forgeProPanels().channel) forgeProPanel("channel", true); return b.hidden ? "Layer Editor hidden." : "Layer Editor shown (under the Channel Box)."; }],
     layerAdd: ["Create Empty Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; const l = t.layerAdd(); return "Layer " + l.name + " created."; }],
     layerAssign: ["Assign to Current Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; t.layerAssign(t.curLayer, t.sel); return "Assigned the selection to the current layer."; }],
+    symX: ["Symmetry X", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 1)],
+    symY: ["Symmetry Y", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 2)],
+    symZ: ["Symmetry Z", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 4)],
+    symOff: ["Symmetry Off", (v) => forgeProSym(v, 0)],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -644,6 +658,7 @@ const FORGE_PRO_ROWS = [
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
+  ["Symmetry", ["symX", "symY", "symZ", "symOff"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

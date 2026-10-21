@@ -1138,7 +1138,7 @@ function forgeMakeView(lib, renderer, canvas) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: 0xbfd4ff, transparent: true,
     opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
   ring.renderOrder = 10; ring.visible = false; scene.add(ring);
-  const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true },
+  const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true, symBits: 1 },   // symBits: 1 X, 2 Y, 4 Z (the core bitmask)
     undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1, quad: false, controls, lib };
   const raycaster = new THREE.Raycaster();
 
@@ -1598,17 +1598,29 @@ function forgeMakeView(lib, renderer, canvas) {
       }
     }
   }
+  // every non-empty subset of the active symmetry axes is one mirror instance (the core does the same)
+  function symCopies(p, bits) {
+    bits = bits | 0; const out = [];
+    for (let m = 1; m < 8; m++) {
+      if ((m & ~bits) !== 0) continue;
+      const sign = [1, 1, 1];
+      for (let i = 0; i < 3; i++) if (m & (1 << i)) sign[i] = -1;
+      out.push({ p: new THREE.Vector3(p.x * sign[0], p.y * sign[1], p.z * sign[2]), sign: sign });
+    }
+    return out;
+  }
+  view.symCopies = (p, bits) => symCopies(new THREE.Vector3(p[0], p[1], p[2]), bits).map((c) => ({ p: c.p.toArray(), sign: c.sign }));
   function stroke(tool, c, negative) {
     dab(tool, c, negative);
-    if (view.brush.symmetry && Math.abs(c.x) > view.brush.radius * view.size * 0.05) dab(tool, new THREE.Vector3(-c.x, c.y, c.z), negative);
+    for (const cp of symCopies(c, view.brush.symBits)) dab(tool, cp.p, negative);
     forgeSync(view.sm); forgeNormals(view.sm); refresh();
   }
   // Move.js: the picked vertices and their proxy positions, moved along the mouse's drag in the view plane
   function grabStart(c) {
     const sm = view.sm, R = view.brush.radius * view.size, sel = [];
-    const pick = (cx, mirror) => { for (const w of picked(new THREE.Vector3(cx, c.y, c.z), R * R)) sel.push([w, fall(Math.hypot(sm.wpos[w * 3] - cx, sm.wpos[w * 3 + 1] - c.y, sm.wpos[w * 3 + 2] - c.z) / R), mirror]); };
-    pick(c.x, false);
-    if (view.brush.symmetry && Math.abs(c.x) > R * 0.5) pick(-c.x, true);
+    const pick = (pt, sign) => { for (const w of picked(new THREE.Vector3(pt.x, pt.y, pt.z), R * R)) sel.push([w, fall(Math.hypot(sm.wpos[w * 3] - pt.x, sm.wpos[w * 3 + 1] - pt.y, sm.wpos[w * 3 + 2] - pt.z) / R), sign]); };
+    pick(c, [1, 1, 1]);
+    for (const cp of symCopies(c, view.brush.symBits)) pick(cp.p, cp.sign);
     const world = holder.localToWorld(c.clone());
     return { sel, orig: sm.wpos.slice(), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), world), from: c.clone() };
   }
@@ -1618,10 +1630,10 @@ function forgeMakeView(lib, renderer, canvas) {
     const p = raycaster.ray.intersectPlane(g.plane, new THREE.Vector3());
     if (!p) return;
     const d = toLocal(p).sub(g.from).multiplyScalar(view.brush.strength * 0.6 + 0.4), sm = view.sm;
-    for (const [w, f, mirror] of g.sel) {
-      sm.wpos[w * 3] = g.orig[w * 3] + (mirror ? -d.x : d.x) * f;
-      sm.wpos[w * 3 + 1] = g.orig[w * 3 + 1] + d.y * f;
-      sm.wpos[w * 3 + 2] = g.orig[w * 3 + 2] + d.z * f;
+    for (const [w, f, sign] of g.sel) {
+      sm.wpos[w * 3] = g.orig[w * 3] + d.x * sign[0] * f;
+      sm.wpos[w * 3 + 1] = g.orig[w * 3 + 1] + d.y * sign[1] * f;
+      sm.wpos[w * 3 + 2] = g.orig[w * 3 + 2] + d.z * sign[2] * f;
     }
     forgeSync(sm); forgeNormals(sm); refresh();
   }
@@ -1668,9 +1680,9 @@ function forgeMakeView(lib, renderer, canvas) {
     if (dist < step) return;
     const n = Math.floor(dist / step);
     for (let i = 1; i <= n; i++) dab(drag.tool, drag.last.clone().lerp(hit.point, i / n), drag.negative);
-    if (view.brush.symmetry) for (let i = 1; i <= n; i++) {
+    for (let i = 1; i <= n; i++) {
       const p = drag.last.clone().lerp(hit.point, i / n);
-      if (Math.abs(p.x) > view.brush.radius * view.size * 0.05) dab(drag.tool, new THREE.Vector3(-p.x, p.y, p.z), drag.negative);
+      for (const cp of symCopies(p, view.brush.symBits)) dab(drag.tool, cp.p, drag.negative);
     }
     forgeSync(view.sm); forgeNormals(view.sm); refresh();
     drag.last.copy(hit.point);
