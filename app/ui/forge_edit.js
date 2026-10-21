@@ -383,6 +383,14 @@ function forgeEditAttach(view, ctx) {
   const pivot = new THREE.Object3D(); pivot.name = "forge-edit-pivot"; holder.add(pivot);
   const gizmo = new ctx.lib.TransformControls(camera, canvas);
   gizmo.setSize(0.8);
+  // the pro Shift + drag on a component manipulator: extrude first, then move / rotate / scale the new faces
+  let shiftHeld = false;
+  document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftHeld = true; }, true);
+  document.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftHeld = false; }, true);
+  window.addEventListener("blur", () => { shiftHeld = false; });
+  gizmo.shiftHint = (tc) => (view.selected && view.selected.length
+    ? "Shift + drag: extrude the " + (view.selected.length === 1 ? "face" : view.selected.length + " faces") + " and " + ({ translate: "move", rotate: "rotate", scale: "scale" }[tc.mode] || "move") + (view.selected.length === 1 ? " it." : " them.")
+    : "Shift + drag extrudes faces - pick whole faces first.");
   ctx.scene.add(gizmo.getHelper ? gizmo.getHelper() : gizmo);
   gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
   gizmo.addEventListener("change", () => { view.dirty = true; });
@@ -428,6 +436,15 @@ function forgeEditAttach(view, ctx) {
     edit = null;
     view.polyLive(base);                              // put the shown mesh back so undo has the true "before"
     view.showPoly(work, true);
+    // the move lands in the construction history (polyTweak), so changing an earlier step's amount keeps it
+    if (typeof forgeHistPush === "function" && typeof forgeModel !== "undefined" && forgeModel.hist) {
+      const moved = [];
+      for (let i = 0; i < work.v.length; i++) {
+        const a = base.v[i], b = work.v[i];
+        if (a && b && (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2])) moved.push(i, b[0], b[1], b[2]);
+      }
+      if (moved.length) forgeHistPush({ kind: "tweak", verts: moved });
+    }
     setSel(keep);
     if (typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
     if (typeof forgeModelSync === "function") forgeModelSync();
@@ -440,14 +457,33 @@ function forgeEditAttach(view, ctx) {
     moveOverlay(base);
     placePivot();
   }
-  gizmo.addEventListener("mouseDown", () => { if (!begin("handle")) gizmo.detach(); });
+  let shiftExtrude = false;
+  gizmo.addEventListener("mouseDown", () => {
+    if (shiftHeld && view.poly && view.selected && view.selected.length) {
+      // one undo step for the extrude and the drag (forge_scene.js undo chunk); the history gets the extrude
+      if (view.undoOpen) view.undoOpen("Extrude");
+      shiftExtrude = true;
+      const base = view.poly, faces = view.selected.slice();
+      edit = { kind: "prep" };                        // keep the handle attached while the mesh is swapped
+      try {
+        view.showPoly(P.extrude(base, faces, 0), true, true);
+        if (typeof forgeHistPush === "function") forgeHistPush({ kind: "extrude", faces: faces, amount: 0 }, base);
+        view.select(faces);
+      } finally { edit = null; }
+      if (typeof forgeSay === "function") forgeSay("Extruded " + faces.length + " face" + (faces.length === 1 ? "" : "s") + " - drag to place them.");
+    }
+    if (!begin("handle")) gizmo.detach();
+  });
   gizmo.addEventListener("objectChange", () => {
     if (!edit || edit.kind !== "handle") return;
     if (view.snapPivot) view.snapPivot(pivot);        // the pro x / c / v snapping (forge_pro.js) moves the handle first
     pivot.updateMatrix();
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });
-  gizmo.addEventListener("mouseUp", () => { if (edit && edit.kind === "handle") { commit(); stats(); } });
+  gizmo.addEventListener("mouseUp", () => {
+    if (edit && edit.kind === "handle") { commit(); stats(); }
+    if (shiftExtrude) { shiftExtrude = false; if (view.undoClose) view.undoClose(); }
+  });
 
   // G / R / S, Blender's modal transform
   let modal = null;

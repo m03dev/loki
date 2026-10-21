@@ -835,3 +835,69 @@ button.forge-out-title:hover { opacity: 1; }
   font-size: 10px; color: #dfe4ec; display: flex; align-items: center; justify-content: center; }
 .forge-matcap img { width: 100%; height: 100%; border-radius: 50%; display: block; }
 .forge-matcap.on { border-color: #2f7fd0; }
+
+/* ---- the Creature Editor (forge.js forgeCreaturePane, 2026-10-21): a title bar to fold / float / close it, foldable
+   sections, its own Make button. Docked it fills the side panel; floating it sits over the viewport. */
+#forge .forge-cr-pane { gap: 0; min-height: 0; background: #2f3033; border: 1px solid #222; border-radius: 4px; overflow: hidden; }
+#forge .forge-cr-pane.closed { display: none; }
+#forge .forge-cr-bar { display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px; background: #3a3b3f;
+  border-bottom: 1px solid #222; cursor: default; user-select: none; flex: none; }
+#forge .forge-cr-pane.floating .forge-cr-bar { cursor: move; }
+#forge .forge-cr-bar .forge-btn { height: 20px; min-width: 20px; padding: 0 4px; border-radius: 3px; background: transparent; }
+#forge .forge-cr-bar .forge-btn:hover { background: rgba(255, 255, 255, .1); }
+#forge .forge-cr-title { font-size: 12px; font-weight: 600; color: #e4e6ea; white-space: nowrap; }
+#forge .forge-cr-who { flex: 1; min-width: 0; font-size: 11px; color: #9aa3b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#forge .forge-cr-pane .forge-cr-fold { transition: transform .12s; transform: rotate(0deg); }
+#forge .forge-cr-pane.folded .forge-cr-fold { transform: rotate(-90deg); }
+#forge .forge-cr-pane.folded > :not(.forge-cr-bar) { display: none; }
+#forge .forge-cr-note { margin: 6px 8px 2px; font-size: 11.5px; }
+#forge .forge-cr-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 6px 6px; overflow: auto; min-height: 0; flex: 1 1 auto; }
+#forge .forge-cr-sec { border-top: 1px solid rgba(255, 255, 255, .06); padding: 2px 0 4px; }
+#forge .forge-cr-sec > :not(summary) { margin-top: 6px; }
+#forge .forge-cr-sum { list-style: none; display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; user-select: none; }
+#forge .forge-cr-sum::-webkit-details-marker { display: none; }
+#forge .forge-cr-sum::before { content: ""; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid #9aa3b0; transition: transform .1s; }
+#forge .forge-cr-sec:not([open]) > .forge-cr-sum::before { transform: rotate(-90deg); }
+#forge .forge-cr-sum .forge-cr-head { margin: 0; }
+#forge .forge-cr-sec.sub { border-top: 0; padding-left: 8px; }
+#forge .forge-cr-sec .forge-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
+#forge .forge-cr-foot { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-top: 1px solid #222; background: #34353a; flex: none; }
+#forge .forge-cr-foot .forge-cr-live { margin-left: 0; }
+#forge .forge-cr-make { margin-left: auto; height: 26px; padding: 0 12px; }
+#forge .forge-cr-pane.floating { position: absolute; z-index: 40; width: 300px; max-height: calc(100% - 120px); display: flex;
+  flex-direction: column; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+#forge .forge-cr-pane.floating[hidden] { display: none; }
+
+/* ---- the Hotkey Editor (forge_keys.js) */
+.forge-hk { position: fixed; z-index: 1000; right: 40px; top: 70px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 100px);
+  display: flex; flex-direction: column; background: #3c3d40; color: #dcdcdc; border: 1px solid #222; border-radius: 4px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5); font-size: 12px; }
+.forge-hk[hidden] { display: none; }
+.forge-hk-title { display: flex; align-items: center; height: 26px; padding: 0 6px 0 10px; background: #2f3033; cursor: move; user-select: none; font-weight: 600; }
+.forge-hk-title span { flex: 1; }
+.forge-hk-x { border: 0; background: transparent; color: #ccc; font-size: 16px; width: 22px; height: 22px; border-radius: 3px; cursor: pointer; }
+.forge-hk-x:hover { background: rgba(255, 255, 255, .12); }
+.forge-hk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid #2c2c2c; }
+.forge-hk-bar label { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+.forge-hk select, .forge-hk input[type="search"], .forge-hk textarea { background: #2b2b2b; color: #e6e6e6; border: 1px solid #222; border-radius: 2px; padding: 3px 6px; font: inherit; }
+.forge-hk input[type="search"] { flex: 1; min-width: 140px; }
+.forge-hk-bar button, .forge-hk-text button { background: #5d5d5d; color: #eee; border: 0; border-radius: 2px; padding: 3px 9px; font: inherit; cursor: pointer; }
+.forge-hk-bar button:hover:not(:disabled), .forge-hk-text button:hover { background: #6d6d6d; }
+.forge-hk-bar button:disabled { opacity: .45; cursor: default; }
+.forge-hk-note { color: #9fd18a; font-size: 11.5px; }
+.forge-hk-note.bad { color: #f0a070; }
+.forge-hk-text { padding: 6px 10px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #2c2c2c; }
+.forge-hk-text textarea { width: 100%; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+.forge-hk-list { overflow: auto; padding: 2px 0 6px; min-height: 120px; }
+.forge-hk-group { position: sticky; top: 0; background: #34353a; padding: 3px 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #a9b0bb; }
+.forge-hk-row { display: flex; align-items: center; gap: 8px; padding: 2px 10px; }
+.forge-hk-row:hover { background: rgba(82, 133, 166, .25); }
+.forge-hk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forge-hk-keys { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.forge-hk-key { min-width: 34px; background: #2b2b2b; color: #e8e8e8; border: 1px solid #555; border-radius: 3px; padding: 1px 7px; font: inherit;
+  font-family: ui-monospace, Menlo, monospace; font-size: 11px; cursor: pointer; }
+.forge-hk-key.add { border-style: dashed; color: #9a9a9a; font-family: inherit; }
+.forge-hk-key:hover { border-color: #5285a6; }
+.forge-hk-key.capturing { background: #5285a6; color: #fff; border-color: #5285a6; }
+.forge-hk-foot { padding: 6px 10px; color: #9a9a9a; font-size: 11px; border-top: 1px solid #2c2c2c; }

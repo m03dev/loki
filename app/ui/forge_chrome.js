@@ -204,12 +204,12 @@ const FMY_MENUS = () => {
   const uiItems = Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]);
   return [
     ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
-    ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
+    ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "deleteHistory", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
     ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Make with LOKI", "draw", "image", "describe", "creature"]],
     ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "-", "objComp", "vertex", "edge", "face"]],
     ["Modify", ["#Transform", "move", "rotate", "scale", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
     ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
-    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI"])],
+    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Settings/Preferences", "hotkeyEditor"])],
     ["Mesh", ["#Combine", "combine", "separate", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "dynamesh", "-", "sculptModel"]],
     ["Edit Mesh", (rows["Edit Mesh"] || ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "reverse", "deleteComp"])],
     ["Mesh Tools", (rows["Mesh Tools"] || ["softSel", "sculpt", "multiCut", "edgeLoop"]).concat(["-", "snapGrid", "snapEdge", "snapPoint"])],

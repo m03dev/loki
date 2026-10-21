@@ -300,7 +300,7 @@ async def main():
             if (r.width === 0) continue;
             const inside = r.left >= panel.left - 0.5 && r.right <= panel.right + 0.5 && r.top >= panel.top - 0.5 && r.bottom <= panel.bottom + 0.5;
             const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-            if (!inside || !(hit === b || b.contains(hit))) out.push(b.dataset.tipName || b.textContent);
+            if (!inside || !(hit === b || b.contains(hit))) out.push((b.dataset.tipName || b.textContent) + (hit ? " <" + (hit.id || hit.className) + ">" : ""));
           }
           const side = document.getElementById('forge-left');
           return { bad: out, sideScrolls: side.scrollHeight > side.clientHeight ? getComputedStyle(side).overflowY : 'fits',

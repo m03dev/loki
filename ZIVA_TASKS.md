@@ -33,6 +33,25 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21) - Forge: undo for everything, the hotkey table, the new manipulator, the Creature Editor. Pull first.
+What changed (owner 00:27) - build on it, do not undo it: docs/FORGE_PRO.md "DONE (Claude, 2026-10-21)".
+- Undo / redo now hold the whole scene (forge.js `state()`, forge_scene.js `view.undoOpen/undoClose`). New scene
+  changes go through `tree.api` (already recorded) or wrap them: `view.undoChunk("label", () => ...)`.
+- Hotkeys are a table: app/ui/forge_keys.js (FORGE_KEY_DEFAULTS). Add a key there, not in forge_pro.js's switch.
+- The manipulator is app/ui/forge_manip.js (ForgeManip, a TransformControls subclass; lib.TransformControls is it).
+- [ ] [mac] On the real Mac window (WKWebView): Forge > cube > Ctrl+D, w, drag, Ctrl+G, Delete - then Cmd+Z five
+      times and Shift+Z five times: every step comes back in order. Option+D (Select None), Option+Shift+D (Delete
+      History) and Cmd+Shift+Z work. Screenshot the move / rotate / scale manipulators (docs/operations/screens/).
+- [ ] [mac] Model mode, face selected, w, hover the Y arrow, hold Shift: it turns orange and the help line says
+      "extrude"; drag: the face is extruded and moved; Cmd+Z undoes both at once.
+- [ ] [either] Windows > Settings/Preferences > Hotkey Editor: re-bind Frame All to k, press k in the viewport; Export,
+      then Import the text; switch back to Default. Report anything a real keyboard does differently (AZERTY, F-keys
+      on a Mac keyboard need fn).
+- [ ] [either] Forge > Create > Creature: the Creature Editor's bar folds / floats (drag it) / docks / closes; Windows >
+      Creature Editor brings it back; Make creature from the floating editor builds one.
+- [ ] [windows] ByHand (the free sculpting app) is Windows-only, so the owner's download is probably on the PC: say where
+      it is installed and whether it runs; do NOT unpack or copy its files into the repo (it is not open source).
+
 ### From Claude (2026-10-19 evening) - the Forge rework is in; Forge is open again. Pull first.
 What changed (owner 17:06), so your next Forge work builds on it - do not undo any of it:
 - **Camera**: Forge's own controller, `forgeProCamera()` in app/ui/forge_pro.js. OrbitControls keeps only the

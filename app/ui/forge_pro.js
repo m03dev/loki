@@ -424,6 +424,7 @@ function forgeProCommands() {
     image: ["From an image", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "image"); }],
     describe: ["Describe it", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "describe"); }],
     creature: ["Creature", () => { forgeProPanel("create", true); forgeProCall("forgeWay", "creature"); }],
+    winCreature: ["Creature Editor", () => { if (typeof forgeCreatureDock === "function") { forgeCreatureDock("open"); return "Creature Editor open (its bar: fold, float, close)."; } forgeProPanel("create", true); forgeProCall("forgeWay", "creature"); return ""; }],
     save: ["Save .glb", () => { document.querySelector('#forge-exportbar [data-icon="save"]')?.click(); }],
     close: ["Close Forge", () => forgeProCall("forgeClose")],
     panelModel: ["Create panel", () => forgeProPanel("create")],
@@ -469,7 +470,10 @@ async function forgeProRun(v, id) {
   if (!c || !v) return;
   if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
   let note = "";
+  const rec = !/^(undo|redo)$/.test(id) && v.undoOpen;      // every command is one undo step (forge_scene.js)
+  if (rec) v.undoOpen(c[0]);
   try { note = await c[1](v); } catch (exc) { proSay(c[0] + " could not run: " + exc.message, true); return; }
+  finally { if (rec && v.undoClose) v.undoClose(); }
   if (v.pro && !/^(undo|redo|select|lastTool|repeatLast|completeTool|more)$/.test(id)) v.pro.last = id;     // g repeats this
   if (v.pro && !/^__/.test(id)) { v.pro.recent = [id].concat((v.pro.recent || []).filter((x) => x !== id)).slice(0, 10); }
   if (v.pro && /^(move|rotate|scale)$/.test(id)) v.pro.lastTool = { move: "translate", rotate: "rotate", scale: "scale" }[id];
@@ -593,12 +597,12 @@ function forgeProMarkHover(x, y) {
 const FORGE_PRO_ROWS = [
   ["Recent Commands", []],                      // filled from what you ran last
   ["File", ["save", "saveObj", "close"]],
-  ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete"]],
+  ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
   ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
-  ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI"]],
+  ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
   // the modelling menu set (the pro second row)
   ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "smooth", "dynamesh", "sculptModel"]],
   ["Edit Mesh", ["extrude", "inset", "bevel", "edgeLoop", "multiCut", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp"]],
@@ -1238,6 +1242,8 @@ function forgeProKeys() {
 
   document.addEventListener("keydown", (e) => {
     if (!sheetOpen() || inField(e.target)) return;
+    const hk = document.getElementById("forge-hotkeys");
+    if (hk && !hk.hidden && (hk.dataset.capturing || hk.contains(e.target))) return;   // the Hotkey Editor has the keys
     const v = forge.view, m = v.pro || {};
     if (v.modalActive && v.modalActive()) return;            // Blender's G/R/S modal is running: its keys
     const k = e.key, mod = e.ctrlKey || e.metaKey, sh = e.shiftKey, alt = e.altKey;
@@ -1257,6 +1263,7 @@ function forgeProKeys() {
       return;
     }
     if (k === "Escape") {
+      if (hk && !hk.hidden) { take(e); hk.hidden = true; return; }   // Esc closes the Hotkey Editor first
       const hb = document.getElementById("forge-pro-hotbox"), mk = document.getElementById("forge-pro-marking");
       if (hb && !hb.hidden) { take(e); forgeProHotboxHide(); return; }
       if (forgeProWheelOpenNow()) { take(e); forgeProWheelClose(); return; }
@@ -1266,6 +1273,17 @@ function forgeProKeys() {
       take(e);                                                 // pro: Esc cancels, it never closes the window
       if ((v.transform && v.transform.object) || (v.gizmo && v.gizmo.object)) forgeProTool(v, null);
       return;
+    }
+    // ---- every other key: the hotkey table (app/ui/forge_keys.js - the pro default set, or the owner's own set
+    // from the Hotkey Editor). The old switch is kept below as the fallback when forge_keys.js is missing.
+    if (typeof forgeKeyChord === "function") {
+      const chord = forgeKeyChord(e), act = forgeKeyAction(chord);
+      if (!act) return;                                        // unbound: Ctrl/Cmd+S, C, V ... stay the app's
+      const hold = forgeHotkeys.hold(act);
+      if (hold && !e.repeat) { m.held.add(hold); (m.holdCodes = m.holdCodes || {})[e.code || k] = hold; }
+      if (act.startsWith("@") && !e.repeat) (m.holdActs = m.holdActs || {})[e.code || k] = act;
+      if (e.repeat && !forgeHotkeys.repeats(act)) { take(e); return; }
+      return forgeProKeyAct(v, act, e, take, run);
     }
     if (!e.repeat && /^[qwexcvbm]$/i.test(k) && !mod && !alt) m.held.add(k.toLowerCase());
     const lower = k.length === 1 ? k.toLowerCase() : k;
@@ -1360,6 +1378,15 @@ function forgeProKeys() {
     if (!v || !v.pro) return;
     const m = v.pro, k = e.key;
     if (k.length === 1) m.held.delete(k.toLowerCase());
+    const hc = m.holdCodes && m.holdCodes[e.code || k];
+    if (hc) { m.held.delete(hc); delete m.holdCodes[e.code || k]; }
+    const ha = m.holdActs && m.holdActs[e.code || k];
+    if (ha) {
+      delete m.holdActs[e.code || k];
+      if (ha === "@pivotHold") { const t = forgeProTree(v); if (t && t.pivotMode) forgeProPivotMode(v, false); }
+      if (ha === "@snapStep") forgeProSnap(v, "step", false);
+      if (/^@snap(Grid|Edge|Point)$/.test(ha)) forgeProSnapHud(v);
+    }
     if (k === " " || e.code === "Space") {
       const wh = document.getElementById("forge-pro-wheel");
       if (wh && !wh.hidden) {                                  // the wheel (the owner's Space menus)
@@ -1387,7 +1414,35 @@ function forgeProKeys() {
   });
 }
 
+// what a hotkey does (forge_keys.js maps the key to this action): a command, or one of the special "@" actions
+function forgeProKeyAct(v, act, e, take, run) {
+  if (!act.startsWith("@")) return run(act);
+  const nudge = { "@nudgeUp": [0, 1], "@nudgeDown": [0, -1], "@nudgeLeft": [-1, 0], "@nudgeRight": [1, 0] }[act];
+  if (nudge) { take(e); forgeProNudge(v, nudge[0], nudge[1]); return; }
+  const walk = { "@pickUp": "up", "@pickDown": "down", "@pickLeft": "left", "@pickRight": "right" }[act];
+  if (walk) { const t = forgeProTree(v); if (!t || forgeProComp(v)) return; take(e); t.pickWalk(walk); return; }
+  const m = v.pro || {};
+  take(e);
+  switch (act) {
+    case "@repeatLast": if (m.last) forgeProRun(v, m.last); return;
+    case "@completeTool": forgeProTool(v, null); return;
+    case "@pivotHold": proSay(forgeProPivotMode(v, true)); return;
+    case "@pivotToggle": proSay(forgeProPivotMode(v, null)); return;
+    case "@snapGrid": forgeProSnapHud(v); proSay("Snap to grid while the key is held."); return;
+    case "@snapEdge": forgeProSnapHud(v); proSay("Snap to edges while the key is held."); return;
+    case "@snapPoint": forgeProSnapHud(v); proSay("Snap to vertices while the key is held."); return;
+    case "@snapStep": forgeProSnap(v, "step", true); return;
+    case "@brushSize": if (forgeProComp(v)) forgeProRun(v, "softSel"); else if (v.mode === "sculpt") proSay("Hold the key and drag left / right: brush size."); return;
+    case "@brushStrength": if (v.mode === "sculpt") proSay("Hold the key and drag left / right: strength."); return;
+    case "@viewUndo": if (v.mode === "sculpt") return; v.viewUndo(); return;
+    case "@viewRedo": if (v.mode === "sculpt") return; v.viewRedo(); return;
+    default: return;
+  }
+}
+
 // manipulator size has no menu entry; give the two keys commands of their own
+FORGE_PRO_CMDS.hotkeyEditor = ["Hotkey Editor", () => { if (typeof forgeHotkeyEditor === "function") { forgeHotkeyEditor(true); return "Hotkey Editor: click a key box and press the new key."; } return "The Hotkey Editor is not loaded."; }];
+FORGE_PRO_CMDS.deleteHistory = ["Delete History", (v) => { if (!window.forgeHistory) return ""; window.forgeHistory.clear(); if (v.tree) v.tree.build(); return "History deleted (Alt+Shift+D)."; }];
 FORGE_PRO_CMDS.__smaller = ["Smaller manipulator", (v) => forgeProManipSize(v, false)];
 FORGE_PRO_CMDS.__bigger = ["Bigger manipulator", (v) => forgeProManipSize(v, true)];
 

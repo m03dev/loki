@@ -38,6 +38,7 @@ Object.assign(ICON_PATHS, {
   move: '<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
   material: '<circle cx="12" cy="12" r="8.5"/><path d="M5 9.5c4 1.5 10 1.5 14 0M4 14c5 2 11 2 16 0"/>',
   chevron: '<path d="M8 10l4 4 4-4"/>',
+  popout: '<path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
 });
 
 const forge = { way: "draw", job: "", jobTimer: 0, view: null, model: null, imageRel: "", backend: "auto", side: "make",
@@ -347,9 +348,96 @@ function forgeSlider(name, id, min, max, value, onInput) {
   return wrap;
 }
 
+// The Creature Editor (owner 2026-10-21: "the creature tab needs a panel so we can hide it, creature tab needs
+// rework"): its own panel with a title bar - fold it to the bar, float it over the viewport (drag it by the bar) or
+// dock it back, close it (Windows > Creature Editor or Create > Creature brings it back) - and every part of the
+// form is a section you can fold (remembered). Its own Make button and Live switch sit at the bottom, so it works
+// floating too. Nothing was taken out: the same starters, sliders, coats, colours, name and spec.
+const FORGE_CR_UI = FORGE_STORE + "-crui";
+
+function forgeCrUi(patch) {
+  let ui = {};
+  try { ui = JSON.parse(localStorage.getItem(FORGE_CR_UI) || "{}") || {}; } catch (_) { ui = {}; }
+  if (patch) { Object.assign(ui, patch); try { localStorage.setItem(FORGE_CR_UI, JSON.stringify(ui)); } catch (_) { /* private mode */ } }
+  return ui;
+}
+// a foldable section of the editor; its open state is remembered by name
+function forgeCrSection(name, ...kids) {
+  const d = document.createElement("details");
+  d.className = "forge-cr-sec"; d.dataset.sec = name;
+  const shut = (forgeCrUi().shut || []).includes(name);
+  d.open = !shut;
+  const sum = el("summary", "forge-cr-sum");
+  sum.append(el("span", "forge-cr-head", name));
+  d.append(sum, ...kids);
+  d.addEventListener("toggle", () => {
+    const list = new Set(forgeCrUi().shut || []);
+    if (d.open) list.delete(name); else list.add(name);
+    forgeCrUi({ shut: [...list] });
+  });
+  return d;
+}
+function forgeCreatureDock(how) {               // "dock" | "float" | "fold" | "unfold" | "close" | "open"
+  const pane = document.querySelector('#forge .forge-pane[data-pane="creature"]');
+  if (!pane) return false;
+  const ui = forgeCrUi();
+  if (how === "fold" || how === "unfold") { forgeCrUi({ folded: how === "fold" }); pane.classList.toggle("folded", how === "fold"); return true; }
+  if (how === "close") {
+    pane.classList.add("closed"); forgeCrUi({ closed: true });
+    if (pane.classList.contains("floating")) pane.hidden = true;
+    else if (typeof forgeProPanel === "function") forgeProPanel("create", false);
+    forgeSay("Creature Editor closed - Windows > Creature Editor (or Create > Creature) brings it back.");
+    return true;
+  }
+  if (how === "open") {
+    pane.classList.remove("closed"); forgeCrUi({ closed: false });
+    if (!pane.classList.contains("floating") && typeof forgeProPanel === "function") forgeProPanel("create", true);
+    forgeWay("creature");
+    return true;
+  }
+  const float = how === "float" ? true : how === "dock" ? false : !!ui.floating;
+  const home = document.querySelector("#forge .forge-side");
+  const stage = document.querySelector("#forge .forge-panel");
+  if (float && stage && pane.parentElement !== stage) {
+    pane._home = pane._home || { parent: pane.parentElement, next: pane.nextSibling };
+    stage.append(pane);
+    const pos = ui.pos || [Math.round(window.innerWidth * 0.62), 90];
+    pane.style.left = Math.max(0, Math.min(window.innerWidth - 260, pos[0])) + "px";
+    pane.style.top = Math.max(0, Math.min(window.innerHeight - 80, pos[1])) + "px";
+  } else if (!float && pane._home && pane.parentElement !== pane._home.parent) {
+    pane._home.parent.insertBefore(pane, pane._home.next && pane._home.next.parentElement === pane._home.parent ? pane._home.next : null);
+    pane.style.left = pane.style.top = "";
+  } else if (!float && home && !home.contains(pane) && !pane._home) home.append(pane);
+  pane.classList.toggle("floating", float);
+  forgeCrUi({ floating: float });
+  return true;
+}
+function forgeCreatureBar(pane) {
+  const bar = el("div", "forge-cr-bar");
+  const title = el("span", "forge-cr-title", "Creature Editor");
+  const who = el("span", "forge-cr-who", ""); who.id = "forge-creature-who";
+  const fold = forgeBtn("chevron", "Fold", "Fold the Creature Editor to its title bar (click again to open it).", () => forgeCreatureDock(pane.classList.contains("folded") ? "unfold" : "fold"), "forge-cr-fold");
+  const flo = forgeBtn("popout", "Float", "Float the editor over the viewport (drag it by this bar), or dock it back in the side panel.", () => forgeCreatureDock(pane.classList.contains("floating") ? "dock" : "float"), "forge-cr-float");
+  const x = forgeBtn("close", "Close", "Close the Creature Editor (Windows > Creature Editor brings it back).", () => forgeCreatureDock("close"), "forge-cr-close");
+  bar.append(fold, title, who, flo, x);
+  bar.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) forgeCreatureDock(pane.classList.contains("folded") ? "unfold" : "fold"); });
+  bar.addEventListener("pointerdown", (e) => {          // drag the floating editor by its bar
+    if (!pane.classList.contains("floating") || e.target.closest("button")) return;
+    const r = pane.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    bar.setPointerCapture(e.pointerId);
+    const mv = (ev) => { pane.style.left = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - dx)) + "px"; pane.style.top = Math.max(0, Math.min(window.innerHeight - 30, ev.clientY - dy)) + "px"; };
+    const up = () => { bar.removeEventListener("pointermove", mv); bar.removeEventListener("pointerup", up); const q = pane.getBoundingClientRect(); forgeCrUi({ pos: [Math.round(q.left), Math.round(q.top)] }); };
+    bar.addEventListener("pointermove", mv); bar.addEventListener("pointerup", up);
+  });
+  return bar;
+}
+
 function forgeCreaturePane() {
-  const pane = el("div", "forge-pane"); pane.dataset.pane = "creature"; pane.hidden = true;
-  pane.append(el("p", "note", "Pick a body plan, shape it with the sliders, give it a coat. Every build is checked "
+  const pane = el("div", "forge-pane forge-cr-pane"); pane.dataset.pane = "creature"; pane.hidden = true;
+  const ui0 = forgeCrUi();
+  if (ui0.folded) pane.classList.add("folded");
+  pane.append(forgeCreatureBar(pane));
+  pane.append(el("p", "note forge-cr-note", "Pick a body plan, shape it with the sliders, give it a coat. Every build is checked "
     + "for you and lands on the nearest build that stands - then it walks."));
   const presets = el("div", "forge-presets"); presets.id = "forge-creature-presets";
   const acts = el("div", "forge-cr-acts");
@@ -360,8 +448,7 @@ function forgeCreaturePane() {
   const liveBox = document.createElement("input"); liveBox.type = "checkbox"; liveBox.id = "forge-creature-live";
   try { liveBox.checked = localStorage.getItem(FORGE_STORE + "-crlive") === "1"; } catch (_) { /* private mode */ }
   liveBox.addEventListener("change", () => { try { localStorage.setItem(FORGE_STORE + "-crlive", liveBox.checked ? "1" : "0"); } catch (_) { /* */ } });
-  live.append(liveBox, el("span", "", "Live"));
-  acts.append(live);
+  live.append(liveBox, el("span", "", "Live"));          // sits in the editor's footer, next to Make creature
   const sliders = el("div", "forge-creature-sliders"); sliders.id = "forge-creature-sliders";
   const coats = el("div", "forge-coats"); coats.id = "forge-creature-coats";
   const colors = el("div", "forge-cr-colors"); colors.id = "forge-creature-colors";
@@ -376,7 +463,18 @@ function forgeCreaturePane() {
   ta.setAttribute("aria-label", "anyCreature ACS spec (JSON)"); ta.setAttribute("spellcheck", "false");
   ta.placeholder = '{"height": 1.8, "joints": { ... }, "volumes": [ ... ], "parts": [ ... ]}';
   adv.append(ta);
-  pane.append(presets, acts, sliders, el("span", "forge-cr-head", "Coat"), coats, colors, row, adv);
+  // the form, in sections you can fold (the sliders' own groups - Build, Body, Head, Tail - are folds too)
+  const body = el("div", "forge-cr-body");
+  body.append(forgeCrSection("Starter", presets, acts), forgeCrSection("Shape", sliders),
+    forgeCrSection("Coat", coats, colors), forgeCrSection("Export", row, adv));
+  // its own Make button and Live switch, so the editor works floating too
+  const foot = el("div", "forge-cr-foot");
+  const mk = el("button", "send forge-cr-make", "Make creature"); mk.type = "button"; mk.id = "forge-creature-make";
+  mk.title = "Build the creature with these settings (it lands in the viewport, rigged, with Walk / Idle).";
+  mk.addEventListener("click", () => { if (forge.way !== "creature") forgeWay("creature"); forgeMake(); });
+  foot.append(live, mk);
+  pane.append(body, foot);
+  setTimeout(() => { if (forgeCrUi().floating) forgeCreatureDock("float"); }, 0);
   return pane;
 }
 
@@ -425,8 +523,9 @@ async function forgeCreatureBuild() {
     for (const s of [...(r.sliders || []), ...(r.shape || [])]) {
       const g = s.group || "Shape";
       if (!groups.has(g)) {
-        const head = el("span", "forge-cr-head", g), grid = el("div", "forge-cr-group");
-        groups.set(g, grid); sl.append(head, grid);
+        const grid = el("div", "forge-cr-group");
+        const sec = forgeCrSection(g, grid); sec.classList.add("sub");
+        groups.set(g, grid); sl.append(sec);
       }
       const isShape = (r.shape || []).includes(s);
       const w = forgeCrSlider(s, s.value, (v) => {
@@ -490,6 +589,8 @@ function forgeCreatureStart(pid) {
   const c = forge.creature, p = ((forge.crSchema && forge.crSchema.presets) || []).find((x) => x.id === pid);
   if (!c || !p) return;
   c.preset = pid;
+  const who = document.getElementById("forge-creature-who");
+  if (who) who.textContent = p.label || pid;
   const st = p.start || {};
   const smooth = ((forge.crSchema.sliders || []).find((x) => x.id === "smooth") || {}).value || 50;
   forgeCreatureSet({ size: st.size || 1, smooth, shape: st.shape || {} });
@@ -568,7 +669,11 @@ function forgeWay(way) {
   const pick = document.getElementById("forge-backend"), out = document.getElementById("forge-output");
   if (pick) pick.hidden = way === "creature";          // the creature engine is its own backend: no picker, no picture options
   if (out) out.hidden = way === "creature";
-  if (way === "creature") forgeCreatureBuild();
+  if (way === "creature") {
+    forgeCreatureBuild();
+    const cp = document.querySelector('#forge .forge-pane[data-pane="creature"]');
+    if (cp && cp.classList.contains("closed")) { cp.classList.remove("closed"); forgeCrUi({ closed: false }); }
+  }
   forgeOutputState();
 }
 
@@ -922,8 +1027,12 @@ async function forgeViewer() {
         import("/ui/vendor/three/addons/controls/OrbitControls.js"),
         import("/ui/vendor/three/addons/controls/TransformControls.js"),
       ]);
+      // the manipulator drawn the pro way (app/ui/forge_manip.js); the plain three.js one if that file fails
+      let manip = null;
+      try { manip = await import("/ui/forge_manip.js"); } catch (exc) { console.warn("forge_manip.js:", exc); }
       lib = { THREE, GLTFLoader: gl.GLTFLoader, GLTFExporter: ge.GLTFExporter, OBJExporter: oe.OBJExporter,
-        OrbitControls: oc.OrbitControls, TransformControls: tc.TransformControls };
+        OrbitControls: oc.OrbitControls, TransformControls: manip && manip.ForgeManip ? manip.ForgeManip : tc.TransformControls,
+        TransformControlsPlain: tc.TransformControls };
     } catch (exc) { forgeSay("3D view could not load: " + exc.message, true); return null; }
     const canvas = document.getElementById("forge-view");
     let renderer;
@@ -954,6 +1063,8 @@ function forgeMakeView(lib, renderer, canvas) {
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   const holder = new THREE.Group(); scene.add(holder);
   const transform = new lib.TransformControls(camera, canvas);
+  // Shift held over a handle: the drag makes a copy and moves it (forge_scene.js) - the manipulator turns orange
+  transform.shiftHint = (tc) => (view.mode === "poly" ? "" : "Shift + drag: duplicate the object and " + ({ translate: "move", rotate: "rotate", scale: "scale" }[tc.mode] || "move") + " the copy.");
   transform.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
   transform.addEventListener("change", () => { view.dirty = true; });
   const gizmo = transform.getHelper ? transform.getHelper() : transform;
@@ -1248,25 +1359,64 @@ function forgeMakeView(lib, renderer, canvas) {
   view.internals = { THREE, holder, camera, canvas, raycaster, material, useMesh: (sm, keep) => useMesh(sm, keep),
     get mesh() { return mesh; }, refresh: () => refresh(), snapshot: () => snapshot(), applyLook: () => applyLook() };
   // ---- sculpting: SculptGL's tools (src/editing/tools/*.js), on the welded vertices
-  function snapshot() {
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
-      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null });
-    if (view.undoStack.length > 40) view.undoStack.shift();
+  // ---- undo / redo: ONE queue for everything (owner 2026-10-21: "the history in forge doesn't work").
+  // Every entry is the whole state: the working mesh (its welded vertices, poly cage, construction history) AND the
+  // scene (forge_scene.js view.sceneCapture: every object, its transform, pivot, parent, visibility, the selection,
+  // which object the tools edit). So Create, Delete, Group, a manipulator drag, a channel typed in, a sculpt stroke and
+  // an extrude are all one undo step each, in the order they happened - like the pro tools' undo queue. Switching
+  // the object you edit no longer empties the queue. The queue size is a preference (50 by default).
+  let wposCache = null;                                  // vertices unchanged since the last entry share one copy
+  function wposCopy(sm) {
+    const w = sm.wpos, c = wposCache;
+    if (c && c.sm === sm && c.arr.length === w.length) {
+      let same = true;
+      for (let i = 0; i < w.length; i++) if (w[i] !== c.arr[i]) { same = false; break; }
+      if (same) return c.arr;
+    }
+    const arr = w.slice();
+    wposCache = { sm: sm, arr: arr };
+    return arr;
+  }
+  function state() {
+    const sm = view.sm || null;
+    return { sm: sm, wpos: sm && sm.wpos ? wposCopy(sm) : null, poly: view.poly, tri2face: view.tri2face,
+      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null,
+      scene: view.sceneCapture ? view.sceneCapture() : null };
+  }
+  view.undoLimit = (() => { try { return Math.max(5, Math.min(500, +localStorage.getItem("loki-forge-undo-limit") || 50)); } catch (_) { return 50; } })();
+  function pushUndo(entry) {
+    if (view.undoHold && view.undoHold()) return;       // inside a recorded chunk: the chunk is the one step
+    view.undoStack.push(entry);
+    while (view.undoStack.length > view.undoLimit) view.undoStack.shift();
     view.redoStack = [];
+    if (view.onUndoChange) view.onUndoChange();
+  }
+  view.undoState = state;                                // forge_scene.js records scene steps with these
+  view.pushUndo = pushUndo;
+  function snapshot() {
+    pushUndo(state());
   }
   function restore(from, to) {
     const snap = from.pop();
-    if (!snap) return;
-    to.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
-      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null });
-    const changed = snap.sm !== view.sm;
-    view.poly = snap.poly || null; view.tri2face = snap.tri2face || null;
-    if (snap.history && window.forgeHistory && window.forgeHistory.restore) window.forgeHistory.restore(snap.history);
-    snap.sm.wpos.set(snap.wpos);
-    forgeSync(snap.sm); forgeNormals(snap.sm);
-    if (changed) useMesh(snap.sm, true); else refresh();
-    if (view.poly) flatNormals(); else view.select([]);
+    if (!snap) { forgeSay(from === view.undoStack ? "There are no more commands to undo." : "There are no more commands to redo.", true); return false; }
+    const back = state(); back.label = snap.label; to.push(back);
+    if (snap.label) forgeSay((from === view.undoStack ? "Undo: " : "Redo: ") + snap.label);
+    if (snap.scene && view.sceneRestore) view.sceneRestore(snap.scene);
+    if (snap.sm) {
+      const changed = snap.sm !== view.sm;
+      view.poly = snap.poly || null; view.tri2face = snap.tri2face || null;
+      if (window.forgeHistory && window.forgeHistory.restore) window.forgeHistory.restore(snap.history || null);
+      if (snap.wpos) snap.sm.wpos.set(snap.wpos);
+      forgeSync(snap.sm); forgeNormals(snap.sm);
+      if (changed) useMesh(snap.sm, true); else refresh();
+      if (view.poly) flatNormals(); else view.select([]);
+    }
+    if (snap.scene && view.sceneRestored) view.sceneRestored(snap.scene);
+    wposCache = null;
+    view.dirty = true;
     if (view.onChange) view.onChange();
+    if (view.onUndoChange) view.onUndoChange();
+    return true;
   }
   view.undo = () => restore(view.undoStack, view.redoStack);
   view.redo = () => restore(view.redoStack, view.undoStack);
@@ -1274,8 +1424,7 @@ function forgeMakeView(lib, renderer, canvas) {
     if (!view.sm) return;
     if (view.anim) view.playAnim(null);
     if (view.sm.idx.length / 3 > 150000) { forgeSay("Already very detailed (" + (view.sm.idx.length / 3).toLocaleString() + " triangles).", true); return; }
-    view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
-      history: window.forgeHistory && window.forgeHistory.snapshot ? window.forgeHistory.snapshot() : null }); view.redoStack = [];
+    snapshot();
     view.poly = null; view.select([]);
     useMesh(forgeSubdivide(view.sm), true);
     forgeSay((view.sm.idx.length / 3).toLocaleString() + " triangles");
@@ -1537,7 +1686,7 @@ function forgeMakeView(lib, renderer, canvas) {
   view.setTriangles = (pos, idx, col) => {
     view.poly = null; view.tri2face = null;
     useMesh(forgeMeshFrom(Float32Array.from(pos), col && col.length === pos.length ? Float32Array.from(col) : null, null, Uint32Array.from(idx)), true);
-    view.undoStack = []; view.redoStack = [];
+    // the undo queue is kept: its entries hold the whole scene, so switching the edited object is undoable too
   };
   // the pro panels: the perspective camera, or top / front / side. An orthographic view here is the same camera far
   // away with a 1.5-degree lens - it reads as orthographic, and picking, sculpting and the handles keep working.

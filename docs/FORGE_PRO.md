@@ -240,6 +240,37 @@ our own code. Everything Ziva built above is kept; this extends it.
 - **T12 Attribute Editor lite + UV editing**: per-node attributes (name, visibility, pivot numbers) and a first UV
   view, then turn on the UV wedges.
 
+### DONE (Claude, 2026-10-21) - one undo queue, the hotkey table, the pro manipulator, the Creature Editor panel
+Owner 00:27: "the history in forge doesn't work", hotkeys "more like" the pro tools and "modular and custimizable",
+Shift over the manipulator changes what it does, the manipulator should not look like Blender's, the creature tab needs
+a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (19 checks, ~11 s) and test_forge_creature_ui (10).
+- **Undo** (forge.js `state()` / `restore()`, forge_scene.js `view.sceneCapture` / `sceneRestore` / `undoOpen` /
+  `undoClose`): every entry is the whole state - the working mesh AND the scene (objects, transforms, pivots, parents,
+  visibility, selection, which object the tools edit). Before, only the working mesh was undoable and `makeWorking` /
+  `setTriangles` EMPTIED the queue, so Create, Delete, Group, a manipulator drag or a typed channel could not be undone
+  and editing another object lost everything. Now each api call, menu / hotkey command (forgeProRun), manipulator
+  drag, Channel Box edit or scrub is one step (nested calls collapse into the outermost chunk), labelled
+  ("Undo: Group"); an empty queue says "There are no more commands to undo."; the queue size is
+  `loki-forge-undo-limit` (50). Vertex arrays that did not change are shared between entries.
+- **Construction history**: component moves are recorded (`tweak` -> INPUTS row polyTweak), so changing an earlier
+  step's amount no longer throws the moves away.
+- **Hotkeys** (app/ui/forge_keys.js): the switch in forge_pro.js became a table (FORGE_KEY_DEFAULTS, the pro default
+  set, + Alt+Shift+D Delete History, Ctrl+F9/F10/F11, F12). Windows > Settings/Preferences > Hotkey Editor: sets
+  (Default is locked; binding a key copies it into My_Hotkeys), search, click a key box and press the new key,
+  Backspace clears, Reset, Export / Import JSON. Chords are layout-safe (Option+D on a Mac is alt+d). Holds (q/w/e
+  marking menus, b/m brush drags, x/c/v snaps, d pivot, j step) follow their key when re-bound. `window.forgeHotkeys`
+  is the API. The old switch stays as the fallback if forge_keys.js is missing.
+- **Manipulator** (app/ui/forge_manip.js, on top of three.js' TransformControls - behaviour unchanged): one-way arrows
+  with cones, plane squares, a screen-facing centre square; front-half rotate rings, a light-blue view ring, a grey
+  trackball; scale cubes and a light-blue centre cube; hover = yellow. **Shift over a handle** turns it orange and the
+  help line says what the drag does: objects = duplicate and move the copy (T5), faces = extrude then move / rotate /
+  scale the new faces - one undo step, extrude + polyTweak in the history.
+- **Creature Editor** (forge.js `forgeCreaturePane` / `forgeCreatureDock`): its own title bar (fold to the bar, float
+  over the viewport and drag it, dock back, close), foldable sections (Starter, Shape with Build / Body / Head / Tail,
+  Coat, Export; remembered), the starter's name in the bar, its own Make creature + Live at the bottom.
+  Windows > Creature Editor brings it back.
+- Not verified on the Mac's WKWebView or the PC's WebView2 yet (ZIVA_TASKS).
+
 ## The honesty note (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
 
 its own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for

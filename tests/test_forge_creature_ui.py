@@ -154,6 +154,23 @@ async def main():
         await page.click("#forge-model-mode")
         r = await page.evaluate("forge.view.anim")
         check("editing (Model mode) stops the clip, so you edit the mesh, not a pose", r is None, r)
+        # the Creature Editor panel (2026-10-21): a title bar that folds, floats, closes - and comes back
+        r = await page.evaluate("""() => { const pane = document.querySelector('#forge .forge-pane[data-pane="creature"]');
+          const out = { bar: !!pane.querySelector('.forge-cr-bar'), secs: pane.querySelectorAll('details.forge-cr-sec').length,
+            who: (document.getElementById('forge-creature-who') || {}).textContent || '', make: !!document.getElementById('forge-creature-make') };
+          pane.querySelector('.forge-cr-fold').click(); out.folded = pane.classList.contains('folded') && !pane.querySelector('.forge-cr-body').offsetHeight;
+          pane.querySelector('.forge-cr-fold').click(); out.unfolded = !pane.classList.contains('folded');
+          pane.querySelector('.forge-cr-float').click(); out.floating = pane.classList.contains('floating') && getComputedStyle(pane).position === 'absolute';
+          pane.querySelector('.forge-cr-float').click(); out.docked = !pane.classList.contains('floating') && !!pane.closest('.forge-side');
+          pane.querySelector('.forge-cr-close').click(); out.closed = !pane.offsetParent;
+          forgeProRun(forge.view, 'winCreature'); out.back = !!pane.offsetParent && !pane.classList.contains('closed');
+          return out; }""")
+        check("the Creature Editor is a panel: its bar folds it, floats it over the viewport and docks it, closes it, Windows brings it back",
+              r["bar"] and r["secs"] >= 6 and r["who"] and r["make"] and r["folded"] and r["unfolded"] and r["floating"]
+              and r["docked"] and r["closed"] and r["back"], r)
+        r = await page.evaluate("""() => { const d = document.querySelector('#forge .forge-cr-sec[data-sec="Coat"]'); d.open = false;
+          return new Promise((ok) => setTimeout(() => ok(JSON.parse(localStorage.getItem('loki-forge-output-crui') || '{}').shut || []), 50)); }""")
+        check("a folded section is remembered", "Coat" in r, r)
         real = [e for e in errors if "favicon" not in e]
         check("no page errors", not real, real[:5])
         await browser.close()

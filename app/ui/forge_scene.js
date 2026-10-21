@@ -20,7 +20,7 @@
 // the pro construction-history node for each Forge step
 const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
   smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
-  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", merge: "polyMergeVert", fillHole: "polyCloseBorder", bevel: "polyBevel" };
+  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", merge: "polyMergeVert", fillHole: "polyCloseBorder", bevel: "polyBevel", tweak: "polyTweak" };
 
 function scnEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -168,7 +168,8 @@ function forgeSceneAttach(view, ctx) {
   function bakeRoot(m) {
     const sm = view.sm;
     if (!sm) return false;
-    if (view.undoStack) {
+    if (view.pushUndo && view.undoState) view.pushUndo(view.undoState());
+    else if (view.undoStack) {
       view.undoStack.push({ sm: sm, wpos: sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face });
       if (view.undoStack.length > 40) view.undoStack.shift();
       view.redoStack = [];
@@ -595,7 +596,7 @@ function forgeSceneAttach(view, ctx) {
       else if (src && view.setTriangles) view.setTriangles(src.pos, src.idx, src.col);
       if (typeof forgeModel !== "undefined") { forgeModel.hist = n.hist || null; forgeModel.last = null; forgeModel.prim = null; }
       n.poly = null; n.hist = null;
-      if (view.undoStack) { view.undoStack.length = 0; view.redoStack.length = 0; }
+      // the undo queue is kept (2026-10-21): every entry holds the whole scene, so this switch undoes too
       tree.build();
       return true;
     },
@@ -656,6 +657,9 @@ function forgeSceneAttach(view, ctx) {
 
   // the manipulator follows the selection (pro: the tool's handle sits on the selected object's pivot)
   const tc = ctx.transform || null;
+  if (tc && tc.addEventListener) {                     // a manipulator drag is ONE undo step, Shift-drag's copy included
+    tc.addEventListener("dragging-changed", (ev) => { if (!view.undoOpen) return; if (ev && ev.value) view.undoOpen(tc.mode || "move"); else view.undoClose(); });
+  }
   api.attachTool = (mode) => {
     if (!tc) return false;
     const n = api.active();
@@ -1252,6 +1256,126 @@ function forgeSceneAttach(view, ctx) {
     return api2;
   })();
 
+  // ---------------------------------------------------------------- undo for the scene (2026-10-21)
+  // Owner: "the history in forge doesn't work". The undo queue (forge.js) only knew the working mesh: Create, Delete,
+  // Group, Parent, a manipulator drag, a typed channel, a rename, hide/show or picking another object were not
+  // undoable, and editing another object wiped the queue. Now every entry carries the scene too, and every scene
+  // change is ONE entry: api calls, menu / hotkey commands (forgeProRun), manipulator drags, Channel Box edits and
+  // scrubs, the Outliner's drag-and-drop. Nested calls (Group calls reparent ...) collapse into the outermost chunk.
+  let undoDepth = 0, undoBefore = null, undoLabel = "", restoring = false;
+  function sceneSig() {
+    const a = [tree.rootId, tree.sel.join(",")];
+    for (const n of tree.nodes) {
+      a.push(n.id, n.name, n.parent, n.visible ? 1 : 0, n.inner.uuid);
+      a.push.apply(a, n.grp.position.toArray()); a.push.apply(a, n.grp.quaternion.toArray()); a.push.apply(a, n.grp.scale.toArray());
+      a.push.apply(a, n.piv.toArray()); a.push.apply(a, n.pc.toArray());
+    }
+    return a.join("|");
+  }
+  const histCopy = (h) => (h && typeof forgeHistCopy === "function" ? forgeHistCopy(h) : h ? JSON.parse(JSON.stringify(h)) : null);
+  view.sceneCapture = () => ({
+    sig: sceneSig(),
+    nodes: tree.nodes.map((n) => ({ n: n, name: n.name, kind: n.kind, parent: n.parent, visible: n.visible, open: n.open,
+      root: !!n.root, auto: !!n.auto, inner: n.inner, innerPos: n.inner.position.clone(), piv: n.piv.clone(), pc: n.pc.clone(),
+      pos: n.grp.position.clone(), quat: n.grp.quaternion.clone(), scale: n.grp.scale.clone(),
+      shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri })),
+    sel: tree.sel.slice(), anchor: tree.anchor, next: tree.next, rootId: tree.rootId,
+    hiddenLast: (tree.hiddenLast || []).slice(), lastDup: tree.lastDup ? tree.lastDup.slice() : null,
+  });
+  view.sceneRestore = (st) => {
+    if (!st || !st.nodes) return;
+    restoring = true;
+    try {
+      const keep = new Set(st.nodes.map((x) => x.n));
+      for (const n of tree.nodes) if (!keep.has(n) && n.grp.parent) n.grp.parent.remove(n.grp);
+      const rootChanged = st.rootId !== tree.rootId;
+      for (const x of st.nodes) {
+        const n = x.n;
+        for (const c of n.grp.children.slice()) if (c !== x.inner) n.grp.remove(c);
+        if (x.inner.parent !== n.grp) n.grp.add(x.inner);
+        for (const c of x.inner.children.slice()) {
+          if (c.isMesh && c.name === "shape" && c !== x.shape) x.inner.remove(c);
+          else if (c.userData && c.userData.forgeNode) x.inner.remove(c);          // children go back below
+        }
+        if (x.shape && x.shape.parent !== x.inner) x.inner.add(x.shape);
+        Object.assign(n, { name: x.name, kind: x.kind, parent: x.parent, visible: x.visible, open: x.open, root: x.root,
+          auto: x.auto, inner: x.inner, poly: x.poly, hist: histCopy(x.hist), tri: x.tri });
+        n.piv.copy(x.piv); n.pc.copy(x.pc);
+        n.grp.position.copy(x.pos); n.grp.quaternion.copy(x.quat); n.grp.scale.copy(x.scale);
+        n.inner.position.copy(x.innerPos);
+        n.grp.visible = x.visible; n.grp.name = x.name;
+      }
+      tree.nodes = st.nodes.map((x) => x.n);
+      tree.byId = {}; for (const n of tree.nodes) tree.byId[n.id] = n;
+      for (const n of tree.nodes) {
+        const dest = n.parent && tree.byId[n.parent] ? tree.byId[n.parent].inner : scene;
+        if (n.grp.parent !== dest) dest.add(n.grp);
+      }
+      tree.sel = st.sel.filter((id) => tree.byId[id]); tree.anchor = st.anchor; tree.next = Math.max(tree.next, st.next);
+      tree.rootId = st.rootId; tree.hiddenLast = st.hiddenLast.slice(); tree.lastDup = st.lastDup ? st.lastDup.slice() : null;
+      if (rootChanged && typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
+      scene.updateMatrixWorld(true);
+    } finally { restoring = false; }
+  };
+  view.sceneRestored = () => {
+    for (const tcx of [tc]) if (tcx && tcx.object) {
+      const n = api.active();
+      let inScene = false; tcx.object.traverseAncestors((o) => { if (o === scene) inScene = true; });
+      if (!inScene || !n) tcx.detach(); else if (view.mode !== "poly" && tcx.object !== n.grp) tcx.attach(n.grp);
+    }
+    tree.selMarks = true;
+    drawMarks(); tree.build();
+    view.dirty = true;
+  };
+  function undoChanged(b) {
+    if (!b) return false;
+    if (!b.scene || b.scene.sig !== sceneSig()) return true;
+    if (b.sm !== (view.sm || null) || b.poly !== view.poly) return true;
+    const w = view.sm && view.sm.wpos;
+    if (b.wpos && w) { if (b.wpos.length !== w.length) return true; for (let i = 0; i < w.length; i++) if (w[i] !== b.wpos[i]) return true; }
+    const h = window.forgeHistory && window.forgeHistory.list ? window.forgeHistory.list().length : 0;
+    const hb = b.history && b.history.ops ? b.history.ops.length : 0;
+    return h !== hb;
+  }
+  view.undoOpen = (label) => {
+    if (restoring || !view.undoState) return;
+    if (undoDepth++ === 0) { undoBefore = view.undoState(); undoLabel = label || ""; }
+  };
+  view.undoClose = () => {
+    if (restoring || undoDepth <= 0) return;
+    if (--undoDepth > 0) return;
+    const b = undoBefore; undoBefore = null;
+    if (b && undoChanged(b)) { b.label = undoLabel; view.pushUndo(b); }
+  };
+  view.undoHold = () => undoDepth > 0;
+  view.undoQuiet = (fn) => { const was = restoring; restoring = true; try { return fn(); } finally { restoring = was; } };
+  view.undoChunk = (label, fn) => { view.undoOpen(label); try { return fn(); } finally { view.undoClose(); } };
+  api.undoChunk = view.undoChunk;
+  const RECORDED = ["add", "duplicate", "duplicateWithTransform", "rename", "setVisible", "toggleVisible", "hide", "show",
+    "showLastHidden", "hideUnselected", "showAll", "remove", "removeSelected", "reparent", "parentSelected", "unparentSelected",
+    "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
+    "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
+    "combine", "separate", "newObject", "dropOn"];
+  for (const name of RECORDED) {
+    const fn = api[name];
+    if (typeof fn !== "function" || fn.recorded) continue;
+    const w = function () { view.undoOpen(name); try { return fn.apply(this, arguments); } finally { view.undoClose(); } };
+    w.recorded = true;
+    api[name] = w;
+  }
+  for (const id of ["forge-channel", "forge-history"]) {   // a typed or scrubbed channel, a history amount: one step
+    const box = () => document.getElementById(id);
+    setTimeout(() => {
+      const b = box(); if (!b) return;
+      b.addEventListener("focusin", (e) => { if (e.target.tagName === "INPUT") view.undoOpen("setAttr"); });
+      b.addEventListener("focusout", (e) => { if (e.target.tagName === "INPUT") view.undoClose(); });
+      b.addEventListener("pointerdown", (e) => { if (e.target.classList && e.target.classList.contains("forge-ch-label")) { view.undoOpen("scrub");
+        const up = () => { document.removeEventListener("pointerup", up, true); setTimeout(() => view.undoClose(), 0); };
+        document.addEventListener("pointerup", up, true); } });
+      b.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("button")) { /* buttons run their own recorded api calls */ } }, true);
+    }, 0);
+  }
+
   ensureRoot();
   panel();
   channelBox();
@@ -1280,14 +1404,23 @@ if (typeof window.forgeAddPrimitive === "function" && !window.forgeAddPrimitive.
     const P = window.ForgePoly && window.ForgePoly.PRIMITIVES[kind];
     const name = "p" + (P ? P.name.replace(/\s+/g, "") : "Mesh");
     const before = typeof forge !== "undefined" && forge.view && forge.view.tree && forge.view.tree.api;
+    const v0 = typeof forge !== "undefined" && forge.view;
+    if (v0 && v0.undoOpen) v0.undoOpen("create " + kind);              // Create is ONE undo step
+    let out;
+    try {
     if (before) before.newObject(name);
-    const out = await forgeAddPrimitiveOwn(kind);
+    out = await forgeAddPrimitiveOwn(kind);
     const t = forge.view && forge.view.tree && forge.view.tree.api;
     if (t) {
       const r = t.root();
-      if (r.auto) { r.name = "\u0000"; t.rename(r.id, t.nextName(name)); r.auto = false; }
-      t.select(r.id);
+      const name1 = () => {
+        if (r.auto) { r.name = "\u0000"; t.rename(r.id, t.nextName(name)); r.auto = false; }
+        t.select(r.id);
+      };
+      // the very first object of the session: naming it is part of making it, not a step of its own to undo
+      if (!(v0 && v0.undoOpen) && forge.view.undoQuiet) forge.view.undoQuiet(name1); else name1();
     }
+    } finally { if (v0 && v0.undoClose) v0.undoClose(); }
     return out;
   };
   wrapped.scene = true;

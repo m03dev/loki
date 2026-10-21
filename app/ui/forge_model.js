@@ -224,6 +224,11 @@ function forgeHistApplyOp(base, op) {
     case "fillHole": return P.fillHoles(base, op.verts);
     case "loopCut": { const T = P.topology(base), edge = T.edge(op.a, op.b); return edge == null ? base : P.loopCut(base, edge, op.position); }
     case "dynamesh": return P.dynamesh(op.src.pos, op.src.idx, op.res, op.smooth);   // its own source, not the base
+    case "tweak": {                                    // moved vertices (polyTweak): their new places
+      const m = P.clone(base), t = op.verts || [];
+      for (let k = 0; k + 3 < t.length; k += 4) if (m.v[t[k]]) m.v[t[k]] = [t[k + 1], t[k + 2], t[k + 3]];
+      return m;
+    }
     default: return base;
   }
 }
@@ -298,7 +303,7 @@ window.forgeHistory = {
   list() {
     const h = forgeModel.hist;
     if (!h) return [];
-    return h.ops.map((o, i) => ({ i: i, kind: o.kind, affected: o.kind === "sculpt" ? o.verts.length / 7 : null,
+    return h.ops.map((o, i) => ({ i: i, kind: o.kind, affected: o.kind === "sculpt" ? o.verts.length / 7 : o.kind === "tweak" ? o.verts.length / 4 : null,
       amount: o.kind === "dynamesh" ? o.res : (o.amount == null ? null : o.amount) }));
   },
   setAmount(i, value) {
