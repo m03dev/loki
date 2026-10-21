@@ -11,8 +11,8 @@ config_version=5
 [application]
 
 config/name="LOKI World"
-config/description="An MMO made of LOKI's real work: your agents, quests from jobs, monsters from failures, loot from creations."
-run/main_scene="res://scenes/main.tscn"
+config/description="P2P Multiplayer Lobby for 3D Modeling and Sculpting - LOKI World"
+run/main_scene="res://scenes/lobby.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.05, 0.07, 0.12, 1)
 boot_splash/show_image=false
@@ -31,7 +31,12 @@ window/size/viewport_height=720
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gator_model_studio/plugin.cfg", "res://addons/loki_studio/plugin.cfg")
+enabled=PackedStringArray("res://addons/gator_model_studio/plugin.cfg", "res://addons/loki_studio/plugin.cfg", "res://addons/godot_steam/plugin.cfg")
+
+[multiplayer]
+
+local_server/max_peers=4
+local_server/visible=true
 
 [physics]
 

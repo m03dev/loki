@@ -526,6 +526,166 @@
     for (const [faceId, pieces] of [...replacements].sort((a, b) => b[0] - a[0])) m.f.splice(faceId, 1, ...pieces);
     return m;
   };
+  // ---------------------------------------------------------------- Bevel / Poke / Chamfer (the pro modelling tools)
+  // Bevel an edge: the two faces beside it pull their shared edge inward by `width`, the strip between them
+  // becomes a face, and each end vertex gets a corner face that closes it (turn the corner the pro way). The
+  // windings are fixed once at the end by a BFS over shared edges - that is the part the earlier port got wrong
+  // at a vertex where three beveled edges meet (it left the mesh open).
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  function orientFaces(faces) {             // make neighbours traverse their shared edge in opposite directions
+    const edges = new Map();
+    faces.forEach((f, fi) => {
+      for (let k = 0; k < f.length; k++) {
+        const a = f[k], b = f[(k + 1) % f.length], key = a < b ? a + "|" + b : b + "|" + a;
+        let list = edges.get(key); if (!list) { list = []; edges.set(key, list); }
+        list.push({ fi, forward: a <= b });
+      }
+    });
+    const state = new Int8Array(faces.length).fill(-1);
+    for (let seed = 0; seed < faces.length; seed++) {
+      if (state[seed] !== -1) continue;
+      state[seed] = 0;
+      const stack = [seed];
+      while (stack.length) {
+        const cur = stack.pop();
+        const f = state[cur] === 1 ? faces[cur].slice().reverse() : faces[cur];
+        for (let k = 0; k < f.length; k++) {
+          const a = f[k], b = f[(k + 1) % f.length], key = a < b ? a + "|" + b : b + "|" + a;
+          for (const e of edges.get(key)) {
+            if (e.fi === cur || state[e.fi] !== -1) continue;
+            state[e.fi] = ((a <= b) === e.forward) ? 1 : 0;
+            stack.push(e.fi);
+          }
+        }
+      }
+    }
+    return faces.map((f, i) => state[i] === 1 ? f.slice().reverse() : f);
+  }
+  // the vertices around `v`, in the order of the edges that meet there (walks the face cycle)
+  function edgesAroundVertex(m, T, v) {
+    const at = [...new Set(T.vertEdges[v])];
+    const link = new Map(), faceAt = new Map();
+    for (const ei of at) link.set(ei, []);
+    for (const fi of new Set(T.vertFaces[v])) {
+      const f = m.f[fi], arr = [];
+      for (let k = 0; k < f.length; k++) { const a = f[k], b = f[(k + 1) % f.length]; if (a === v || b === v) arr.push(T.edge(a, b)); }
+      if (arr.length !== 2) continue;
+      link.get(arr[0]).push(arr[1]); link.get(arr[1]).push(arr[0]);
+      faceAt.set(Math.min(arr[0], arr[1]) + "," + Math.max(arr[0], arr[1]), fi);
+    }
+    const order = [], seen = new Set(); let cur = at[0], prev = null;
+    for (let g = 0; g < at.length + 2; g++) { if (cur == null || seen.has(cur)) break; order.push(cur); seen.add(cur); const nxt = link.get(cur).find((x) => x !== prev) ?? link.get(cur)[0]; prev = cur; cur = nxt; }
+    return order.length === at.length ? { order, faceAt } : null;
+  }
+  // Bevel: selected EDGES get a flat strip of `width`; interior edges only (a border edge has no second face).
+  P.bevel = (m0, edges, width) => {
+    const m = clone(m0), T = P.topology(m), w = +width;
+    const sel = new Set((edges || []).filter((i) => i >= 0 && i < T.edges.length && T.edges[i].faces.length === 2));
+    if (!sel.size || !(w > 0)) return m;
+    const fn = m.f.map((f) => P.faceNormal(m, f));
+    const off = new Map(), okey = (ei, fi, vid) => ei + "|" + fi + "|" + vid;
+    for (const ei of sel) {
+      const e = T.edges[ei], a = m.v[e.a], b = m.v[e.b], dir = norm(sub(b, a));
+      for (const fi of e.faces) {
+        const f = m.f[fi], n = fn[fi], mid = mul(add(a, b), 0.5);
+        let perp = norm(cross(dir, n));
+        if (dot3(perp, sub(P.centroid(m, f), mid)) < 0) perp = mul(perp, -1);
+        const wid = Math.min(w, 0.49 * len(sub(b, a)));
+        off.set(okey(ei, fi, e.a), add(a, mul(perp, wid)));
+        off.set(okey(ei, fi, e.b), add(b, mul(perp, wid)));
+      }
+    }
+    const pos = new Map();
+    const tok = (ei, fi, vid) => { if (sel.has(ei)) { const k = "p:" + ei + "|" + fi + "|" + vid; pos.set(k, off.get(okey(ei, fi, vid))); return k; } const k = "o:" + vid; pos.set(k, m.v[vid]); return k; };
+    let faces = [];
+    m.f.forEach((f, fi) => {                       // each face pulls its beveled edges inward
+      const n = f.length, seq = [];
+      for (let k = 0; k < n; k++) { const a = f[k], b = f[(k + 1) % n]; seq.push(tok(T.edge(a, b), fi, a), tok(T.edge(a, b), fi, b)); }
+      const out = [];
+      for (const t of seq) if (out.length === 0 || out[out.length - 1] !== t) out.push(t);
+      if (out.length > 1 && out[0] === out[out.length - 1]) out.pop();
+      if (out.length >= 3) faces.push(out);
+    });
+    for (const ei of sel) {                        // the strip itself
+      const e = T.edges[ei], f1 = e.faces[0], f2 = e.faces[1];
+      faces.push(["p:" + ei + "|" + f1 + "|" + e.a, "p:" + ei + "|" + f1 + "|" + e.b, "p:" + ei + "|" + f2 + "|" + e.b, "p:" + ei + "|" + f2 + "|" + e.a]);
+    }
+    const touched = new Set();
+    for (const ei of sel) { touched.add(T.edges[ei].a); touched.add(T.edges[ei].b); }
+    for (const v of touched) {                     // the corner face that closes each end vertex
+      const ring = edgesAroundVertex(m, T, v); if (!ring) continue;
+      const { order, faceAt } = ring, seq = [];
+      for (let i = 0; i < order.length; i++) {
+        const em = order[(i - 1 + order.length) % order.length], ep = order[i];
+        const fi = faceAt.get(Math.min(em, ep) + "," + Math.max(em, ep));
+        if (fi == null) continue;
+        seq.push(sel.has(em) ? tok(em, fi, v) : "o:" + v, sel.has(ep) ? tok(ep, fi, v) : "o:" + v);
+      }
+      const out = [];
+      for (const t of seq) if (out.length === 0 || out[out.length - 1] !== t) out.push(t);
+      if (out.length > 1 && out[0] === out[out.length - 1]) out.pop();
+      if (out.length >= 3) faces.push(out);
+    }
+    faces = orientFaces(faces);
+    const v = [], f = [], idOf = new Map();
+    for (const face of faces) {
+      const ids = face.map((t) => { if (!idOf.has(t)) { idOf.set(t, v.length); v.push(pos.get(t).slice()); } return idOf.get(t); });
+      if (ids.length >= 3) f.push(ids);
+    }
+    return { v, f };
+  };
+  // Poke Face: a centre vertex in every picked face, fanned to its corners (polyPoke)
+  P.poke = (m0, faces) => {
+    const m = clone(m0), sel = [...new Set(faces || [])].filter((i) => i >= 0 && i < m.f.length);
+    const add2 = [];
+    for (const fi of sel) {
+      const face = m.f[fi], c = P.centroid(m, face), ci = m.v.push(c) - 1;
+      for (let k = 0; k < face.length; k++) add2.push([face[k], face[(k + 1) % face.length], ci]);
+    }
+    for (const fi of sel.slice().sort((a, b) => b - a)) m.f.splice(fi, 1);
+    m.f.push(...add2);
+    return m;
+  };
+  // Chamfer Vertex: every picked vertex is cut off at `width` along each edge that meets it; the cuts close as a
+  // face in the middle (polyChamfer for points in the pro tools)
+  P.chamferVertex = (m0, verts, width) => {
+    const m = clone(m0), T = P.topology(m), w = +width;
+    const sel = new Set((verts || []).filter((i) => i >= 0 && i < m.v.length));
+    if (!sel.size || !(w > 0)) return m;
+    const vn = m.v.map(() => [0, 0, 0]);
+    m.f.forEach((f) => { const n = P.faceNormal(m, f); for (const i of f) vn[i] = add(vn[i], n); });
+    const pt = new Map(), pkey = (v, u) => v + "|" + u;
+    for (const v of sel) for (const ei of T.vertEdges[v]) {
+      const e = T.edges[ei], u = e.a === v ? e.b : e.a, d = sub(m.v[u], m.v[v]);
+      pt.set(pkey(v, u), add(m.v[v], mul(norm(d), Math.min(w, 0.49 * len(d)))));
+    }
+    const v = [], idOf = new Map();
+    const idP = (k) => { if (!idOf.has(k)) { idOf.set(k, v.length); v.push(pt.get(k).slice()); } return idOf.get(k); };
+    const idO = (vid) => { const k = "o" + vid; if (!idOf.has(k)) { idOf.set(k, v.length); v.push(m.v[vid].slice()); } return idOf.get(k); };
+    const f = [];
+    for (const face of m.f) {
+      const ids = [];
+      for (let k = 0; k < face.length; k++) {
+        const x = face[k];
+        if (!sel.has(x)) { ids.push(idO(x)); continue; }
+        ids.push(idP(pkey(x, face[(k - 1 + face.length) % face.length])), idP(pkey(x, face[(k + 1) % face.length])));
+      }
+      const ded = [];
+      for (const x of ids) if (ded.length === 0 || ded[ded.length - 1] !== x) ded.push(x);
+      if (ded.length > 2 && ded[0] === ded[ded.length - 1]) ded.pop();
+      if (ded.length >= 3) f.push(ded);
+    }
+    for (const v0 of sel) {
+      const ring = edgesAroundVertex(m, T, v0); if (!ring) continue;
+      const ids = ring.order.map((ei) => { const e = T.edges[ei]; return idP(pkey(v0, e.a === v0 ? e.b : e.a)); });
+      let N = [0, 0, 0];
+      for (let i = 0; i < ids.length; i++) { const A = v[ids[i]], B = v[ids[(i + 1) % ids.length]]; N = add(N, [(A[1] - B[1]) * (A[2] + B[2]), (A[2] - B[2]) * (A[0] + B[0]), (A[0] - B[0]) * (A[1] + B[1])]); }
+      if (dot3(N, vn[v0]) < 0) ids.reverse();
+      if (ids.length >= 3) f.push(ids);
+    }
+    return { v, f };
+  };
+
   // everything connected to the given vertices through faces (Blender's Select Linked)
   P.linked = (m, T, verts) => {
     T = T || P.topology(m);
