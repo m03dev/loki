@@ -19,7 +19,13 @@
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const len = (a) => Math.hypot(a[0], a[1], a[2]);
   const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
-  const clone = (m) => ({ v: m.v.map((p) => p.slice()), f: m.f.map((f) => f.slice()) });
+  // per-edge flags (crease weights, hard edges: Map edgeKey -> value, set by forge_polyops.js) travel with the copy
+  const clone = (m) => {
+    const o = { v: m.v.map((p) => p.slice()), f: m.f.map((f) => f.slice()) };
+    if (m.creases instanceof Map) o.creases = new Map(m.creases);
+    if (m.hard instanceof Map) o.hard = new Map(m.hard);
+    return o;
+  };
   P.clone = clone;
 
   // Newell's method, as GoBuildMesh.compute_face_normal
