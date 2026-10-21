@@ -1367,6 +1367,7 @@ function forgeMakeView(lib, renderer, canvas) {
     resize();
     if (view.dirty) hooks();
     if (anim.mixer) { const dt = Math.min(0.1, anim.clock.getDelta()); if (!anim.paused) { anim.mixer.update(dt); view.dirty = true; } }
+    if (view.tickTime) view.tickTime();   // the Time Slider's clock (keyframe playback)
     if (view.quad) {
       if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }
     } else {
@@ -1995,6 +1996,10 @@ function forgeMakeView(lib, renderer, canvas) {
   if (typeof forgeSceneAttach === "function") {
     forgeSceneAttach(view, { THREE, scene, holder, material, camera, transform: transform, canvas, controls,
       mesh: () => mesh });
+  }
+  // the pro Time Slider (keyframes on the transform channels, the playhead and playback): app/ui/forge_anim.js
+  if (typeof forgeTimeAttach === "function") {
+    try { forgeTimeAttach(view); } catch (exc) { console.warn("forge: time slider", exc); }
   }
   // the pro viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_chrome.js
   view.lights = { hemi, key, rim };

@@ -97,6 +97,22 @@
 .forge-hslider input { width: 100%; accent-color: #9fb6d8; margin: 0; }
 .forge-modelbar .forge-wide { justify-content: center; height: 32px; gap: 6px; }
 .forge-exportbar { right: 8px; bottom: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* the pro Time Slider (animation): a playhead, key ticks, Set Key and the frame range */
+.forge-timebar { left: 50%; bottom: 8px; transform: translateX(-50%); align-items: center; gap: 4px; padding: 5px 10px;
+  background: #2b2d30; border: 1px solid #3c4046; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); z-index: 10; }
+.forge-timebar .forge-btn { padding: 3px 9px; border-radius: 6px; font-size: 11px; }
+.forge-timebar .forge-time-play { min-width: 46px; background: #23262a; }
+.forge-timebar .forge-time-play.on { background: #5b8db8; color: #0f1113; }
+.forge-timebar .forge-time-setkey { background: #23262a; }
+.forge-time-num { width: 46px; background: #1e2024; color: #e6eaf2; border: 1px solid #3c4046; border-radius: 5px;
+  padding: 3px 5px; font: inherit; font-size: 11px; text-align: center; }
+.forge-time-track { position: relative; width: clamp(150px, 34vw, 340px); height: 24px; }
+.forge-time-slider { width: 100%; margin: 0; height: 24px; }
+.forge-time-ticks { position: absolute; left: 0; right: 0; bottom: 1px; height: 7px; pointer-events: none; }
+.forge-tick { position: absolute; top: 0; width: 2px; height: 7px; background: #d8674f; border-radius: 1px; transform: translateX(-1px); }
+.forge-ch-row.keyed .forge-ch-label { color: #e08a6f; }
+.forge-ch-row.keyed .forge-ch-in { border-color: #a5563c; }
+html.u-hc .forge-timebar { background: #000; border-color: #fff; }
 .forge-exportdlg { right: 8px; bottom: 52px; flex-direction: column; align-items: stretch; gap: 6px; width: clamp(230px, 30%, 300px);
   padding: 10px 12px; background: #2b2d30; border: 1px solid #3c4046; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); z-index: 12; }
 .forge-exportdlg .fx-head { display: flex; align-items: center; justify-content: space-between; }

@@ -39,6 +39,7 @@ function forgeSceneAttach(view, ctx) {
     nodes: [], byId: {}, next: 1, sel: [], anchor: 0, hiddenLast: [],
     rootId: 0, panel: null, list: null,
     layers: [], layerNext: 1, curLayer: 0,          // the pro Display Layers (the Layer Editor under the Channel Box); 0 = Default
+    time: { frame: 1, start: 1, end: 24, fps: 24, playing: false },   // the pro Time Slider + the playing flag
   };
   const node = (id) => tree.byId[id];
   const kidsOf = (id) => tree.nodes.filter((n) => n.parent === id);
@@ -46,6 +47,24 @@ function forgeSceneAttach(view, ctx) {
   // ---------------------------------------------------------------- pivots (the pro transform matrix)
   function rsMatrix(n) { return new THREE.Matrix4().compose(new THREE.Vector3(), n.grp.quaternion, n.grp.scale); }
   function translateOf(n) { return n.grp.position.clone().sub(n.pc).sub(n.piv); }
+  // one channel's value at a frame: before the first key / after the last it holds, between them the key's own
+  // interpolation (step, linear, bezier = a smooth in / out ease) - the pro Time Slider's keys
+  function keyValue(arr, f) {
+    if (!arr || !arr.length) return null;
+    if (f <= arr[0].f) return arr[0].v;
+    const last = arr[arr.length - 1];
+    if (f >= last.f) return last.v;
+    for (let i = 0; i < arr.length - 1; i++) {
+      const a = arr[i], b = arr[i + 1];
+      if (f >= a.f && f <= b.f) {
+        if (a.i === "step") return a.v;
+        const t = (f - a.f) / Math.max(1e-9, b.f - a.f);
+        const e = a.i === "bezier" ? t * t * (3 - 2 * t) : t;
+        return a.v + (b.v - a.v) * e;
+      }
+    }
+    return last.v;
+  }
   function place(n, T) {
     n.grp.position.copy(T).add(n.pc).add(n.piv);
     n.inner.position.copy(n.piv).multiplyScalar(-1);
@@ -90,7 +109,7 @@ function forgeSceneAttach(view, ctx) {
     grp.add(inn);
     const n = { id: tree.next++, name: name, grp: grp, inner: inn, kind: kind, parent: parent || 0, visible: true,
       open: true, piv: new THREE.Vector3(), pc: new THREE.Vector3(), tri: null, poly: null, hist: null,
-      rotOrder: "XYZ", chLock: {}, chHide: {}, attrs: [] };   // the pro Channel Box: rotate order, locked / hidden channels, custom attributes
+      rotOrder: "XYZ", chLock: {}, chHide: {}, attrs: [], keys: null };   // the pro Channel Box (rotate order, locked / hidden channels, custom attributes) + the animation keys
     grp.name = name; grp.userData.forgeNode = n.id;
     tree.nodes.push(n); tree.byId[n.id] = n;
     const dest = parent ? node(parent).inner : scene;
@@ -556,6 +575,97 @@ function forgeSceneAttach(view, ctx) {
       }
       if (tree.selMarks) drawMarks();
       return true;
+    },
+
+    // ---- the pro Time Slider: keyframes on the transform channels, the playhead, playback
+    keyTimes(id) {
+      const n = node(id || api.active().id);
+      if (!n || !n.keys) return [];
+      const set = new Set();
+      for (const k of Object.keys(n.keys)) for (const x of n.keys[k]) set.add(x.f);
+      return [...set].sort((a, b) => a - b);
+    },
+    setKey(id, frame, part, axis, value) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      n.keys = n.keys || {};
+      const k = part + axis, arr = (n.keys[k] = n.keys[k] || []), f = Math.round(frame), v = Number(value);
+      const at = arr.findIndex((x) => x.f === f);
+      if (at >= 0) { arr[at].v = Number.isFinite(v) ? v : arr[at].v; }
+      else { arr.push({ f: f, v: Number.isFinite(v) ? v : 0, i: "linear" }); arr.sort((a, b) => a.f - b.f); }
+      if (tree.syncChannel) tree.syncChannel();
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    deleteKey(id, frame, part, axis) {
+      const n = node(id || api.active().id);
+      if (!n || !n.keys) return false;
+      const f = Math.round(frame);
+      const drop = (k) => { const arr = n.keys[k]; if (!arr) return; const i = arr.findIndex((x) => x.f === f); if (i >= 0) { arr.splice(i, 1); if (!arr.length) delete n.keys[k]; } };
+      if (part == null) for (const k of Object.keys(n.keys)) drop(k);
+      else drop(part + axis);
+      if (!Object.keys(n.keys).length) n.keys = null;
+      if (tree.syncChannel) tree.syncChannel();
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    clearKeys(id) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      n.keys = null;
+      if (tree.syncChannel) tree.syncChannel();
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    setInterp(id, frame, part, axis, how) {
+      const n = node(id || api.active().id), k = part + axis, arr = n && n.keys && n.keys[k];
+      if (!arr) return false;
+      const f = Math.round(frame);
+      const at = part == null ? [] : arr.filter((x) => x.f === f);
+      if (part == null) for (const kk of Object.keys(n.keys)) for (const x of n.keys[kk]) if (x.f === f) x.i = how;
+      else for (const x of at) x.i = how;
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    stepKey(id, dir) {
+      const f = tree.time.frame, ts = api.keyTimes(id);
+      const next = dir > 0 ? ts.find((t) => t > f + 1e-6) : [...ts].reverse().find((t) => t < f - 1e-6);
+      if (next == null) return false;
+      api.setFrame(next);
+      return true;
+    },
+    evalKeys(n) {
+      if (!n || !n.keys) return;
+      const f = tree.time.frame;
+      for (const k of Object.keys(n.keys)) {
+        const v = keyValue(n.keys[k], f);
+        if (v == null) continue;
+        const part = k.slice(0, -1), axis = Number(k.slice(-1));
+        if (part === "translate") { const T = translateOf(n); T.setComponent(axis, v); place(n, T); }
+        else if (part === "rotate") { n.grp.rotation.order = n.rotOrder || "XYZ"; n.grp.rotation["xyz"[axis]] = v * Math.PI / 180; }
+        else if (part === "scale") { n.grp.scale["xyz"[axis]] = v === 0 ? 1e-4 : v; }
+      }
+    },
+    setFrame(f) {
+      const t = tree.time;
+      t.frame = Math.max(t.start, Math.min(t.end, Number(f) || t.start));
+      for (const n of tree.nodes) if (n.keys) api.evalKeys(n);
+      view.dirty = true;
+      if (tree.syncChannel) tree.syncChannel();
+      if (tree.syncKeys) tree.syncKeys();
+      return t.frame;
+    },
+    play(on) { tree.time.playing = on == null ? true : !!on; if (tree.syncKeys) tree.syncKeys(); return tree.time.playing; },
+    stop() { tree.time.playing = false; if (tree.syncKeys) tree.syncKeys(); return false; },
+    togglePlay() { return api.play(!tree.time.playing); },
+    playState() { return tree.time.playing; },
+    setRange(start, end) {
+      const t = tree.time;
+      if (Number.isFinite(Number(start))) t.start = Math.round(Number(start));
+      if (Number.isFinite(Number(end))) t.end = Math.max(t.start + 1, Math.round(Number(end)));
+      t.frame = Math.max(t.start, Math.min(t.end, t.frame));
+      if (tree.syncKeys) tree.syncKeys();
+      return [t.start, t.end];
     },
 
     // the pro Channel Box "Rotate Order": the object keeps its orientation, the Euler angles are re-read in the new order
@@ -1087,6 +1197,7 @@ function forgeSceneAttach(view, ctx) {
     if (tree.syncChannel) tree.syncChannel();
     if (tree.syncHistory) tree.syncHistory();
     if (tree.syncLayers) tree.syncLayers();
+    if (tree.syncKeys) tree.syncKeys();
     if (tree.selMarks) drawMarks();
   };
 
@@ -1228,6 +1339,7 @@ function forgeSceneAttach(view, ctx) {
           const key = part + a, cell = rows[key];
           if (!cell) continue;
           const isLocked = locked(key);
+          cell.r.classList.toggle("keyed", !!(n && n.keys && n.keys[key]));
           cell.inp.readOnly = isLocked;
           cell.r.classList.toggle("locked", isLocked);
           cell.r.hidden = hidden(key) && !showHidden;
@@ -1521,6 +1633,7 @@ function forgeSceneAttach(view, ctx) {
     a.push("cur" + tree.curLayer);
     for (const n of tree.nodes) {
       a.push(n.id, n.name, n.parent, n.visible ? 1 : 0, n.inner.uuid, n.rotOrder || "XYZ");
+      if (n.keys) a.push(JSON.stringify(n.keys));
       a.push.apply(a, n.grp.position.toArray()); a.push.apply(a, n.grp.quaternion.toArray()); a.push.apply(a, n.grp.scale.toArray());
       a.push.apply(a, n.piv.toArray()); a.push.apply(a, n.pc.toArray());
     }
@@ -1532,6 +1645,7 @@ function forgeSceneAttach(view, ctx) {
     nodes: tree.nodes.map((n) => ({ n: n, name: n.name, kind: n.kind, parent: n.parent, visible: n.visible, open: n.open,
       root: !!n.root, auto: !!n.auto, inner: n.inner, innerPos: n.inner.position.clone(), piv: n.piv.clone(), pc: n.pc.clone(),
       rotOrder: n.rotOrder || "XYZ", attrs: (n.attrs || []).map((a) => ({ name: a.name, value: a.value })),
+      keys: n.keys ? JSON.parse(JSON.stringify(n.keys)) : null,
       pos: n.grp.position.clone(), quat: n.grp.quaternion.clone(), scale: n.grp.scale.clone(),
       shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri })),
     sel: tree.sel.slice(), anchor: tree.anchor, next: tree.next, rootId: tree.rootId,
@@ -1560,6 +1674,7 @@ function forgeSceneAttach(view, ctx) {
         n.piv.copy(x.piv); n.pc.copy(x.pc);
         n.rotOrder = x.rotOrder || "XYZ"; n.grp.rotation.order = n.rotOrder;   // before the quaternion, so the Euler re-derives in the right order
         n.attrs = (x.attrs || []).map((a) => ({ name: a.name, value: a.value }));
+        n.keys = x.keys ? JSON.parse(JSON.stringify(x.keys)) : null;
         n.grp.position.copy(x.pos); n.grp.quaternion.copy(x.quat); n.grp.scale.copy(x.scale);
         n.inner.position.copy(x.innerPos);
         n.grp.visible = x.visible; n.grp.name = x.name;
@@ -1617,7 +1732,8 @@ function forgeSceneAttach(view, ctx) {
     "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
     "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
     "combine", "separate", "newObject", "dropOn",
-    "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane"];
+    "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane",
+    "setKey", "deleteKey", "clearKeys"];
   for (const name of RECORDED) {
     const fn = api[name];
     if (typeof fn !== "function" || fn.recorded) continue;

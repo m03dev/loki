@@ -451,6 +451,17 @@ function forgeProCommands() {
     symAxisX: ["Radial Axis X", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 0)],
     symAxisY: ["Radial Axis Y", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 1)],
     symAxisZ: ["Radial Axis Z", (v) => forgeProRadial(v, (v.brush && v.brush.radial) || 0, 2)],
+    setKey: ["Set Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.active(); if (!n) return "Select an object first."; const tr = t.api.transform(); if (!tr) return "Select an object first."; let c = 0;
+      t.api.undoChunk("set key", () => { for (const part of ["translate", "rotate", "scale"]) for (let a = 0; a < 3; a++) if (t.api.setKey(n.id, t.time.frame, part, a, tr[part][a])) c++; });
+      return "Keyed " + c + " channels of " + n.name + " at frame " + Math.round(t.time.frame) + "."; }],
+    deleteKey: ["Delete Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.active(); if (!n || !n.keys) return "Nothing is keyed here."; const f = Math.round(t.time.frame);
+      t.api.undoChunk("delete key", () => t.api.deleteKey(n.id, f)); return "Took the keys off " + n.name + " at frame " + f + "."; }],
+    clearKeys: ["Delete All Keys", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.active(); if (!n || !n.keys) return "Nothing is keyed here."; t.api.undoChunk("clear keys", () => t.api.clearKeys(n.id)); return "Cleared " + n.name + "'s keys."; }],
+    playPause: ["Play / Stop", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const on = t.api.togglePlay(); return on ? "Playing." : "Stopped at frame " + Math.round(t.time.frame) + "."; }],
+    prevKey: ["Previous Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return t.api.stepKey(null, -1) ? "Frame " + Math.round(t.time.frame) + "." : "No earlier key."; }],
+    nextKey: ["Next Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return t.api.stepKey(null, 1) ? "Frame " + Math.round(t.time.frame) + "." : "No later key."; }],
+    rangeStart: ["Set Range Start", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.frame, t.time.end); return "Range " + t.time.start + "-" + t.time.end + "."; }],
+    rangeEnd: ["Set Range End", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.start, t.time.frame); return "Range " + t.time.start + "-" + t.time.end + "."; }],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -678,6 +689,7 @@ const FORGE_PRO_ROWS = [
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
   ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial4", "symRadial6", "symRadial8"]],
+  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

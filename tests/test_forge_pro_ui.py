@@ -156,8 +156,8 @@ async def main():
           return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
-        check("Space opens the hotbox centred on the mouse (Recent + 12 menus, 80+ commands), rows within 30 px of it",
-              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 13 and hb["items"] >= 80
+        check("Space opens the hotbox centred on the mouse (Recent + 13 menus, 80+ commands), rows within 30 px of it",
+              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 14 and hb["items"] >= 80
               and 0 <= hb["gapUp"] <= 30 and 0 <= hb["gapDown"] <= 30, hb)
         check("hovering a menu drops it right at its name, with the hotkeys on the right", bool(drop) and drop["n"] >= 9
               and abs(drop["dy"]) <= 4 and drop["keys"] >= 4, drop)
@@ -169,7 +169,7 @@ async def main():
         wh = await page.evaluate("""() => { const h = document.getElementById('forge-pro-wheel');
           return h ? { vis: !h.hidden, n: h.querySelectorAll('.forge-wheel-wedge').length } : null; }""")
         await page.keyboard.press("Escape")
-        check("the wheel is still there: Windows > Radial Menus (Recent + 12)", bool(wh) and wh["vis"] and wh["n"] == 13, wh)
+        check("the wheel is still there: Windows > Radial Menus (Recent + 13)", bool(wh) and wh["vis"] and wh["n"] == 14, wh)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(300)
         await page.keyboard.up(" ")

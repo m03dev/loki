@@ -49,6 +49,8 @@ const FORGE_KEY_DEFAULTS = [
   ["alt+arrowup", "@nudgeUp"], ["alt+arrowdown", "@nudgeDown"], ["alt+arrowleft", "@nudgeLeft"], ["alt+arrowright", "@nudgeRight"],
   // windows
   ["ctrl+a", "channelBox"],
+  // animation (the Time Slider)
+  ["s", "setKey"], ["alt+v", "playPause"], ["alt+shift+v", "playPause"],
   // modelling
   ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteEdgeVert"], ["ctrl+delete", "deleteEdgeVert"],
   // sculpting (held)
