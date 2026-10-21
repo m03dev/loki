@@ -2016,6 +2016,10 @@ function forgeMakeView(lib, renderer, canvas) {
   if (typeof forgePreviewAttach === "function") {
     try { forgePreviewAttach(); } catch (exc) { console.warn("forge: tool preview", exc); }
   }
+  // the Options panel (the cog): app/ui/forge_options.js
+  if (typeof forgeOptionsAttach === "function") {
+    try { forgeOptionsAttach(view); } catch (exc) { console.warn("forge: options", exc); }
+  }
   // the pro viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_chrome.js
   view.lights = { hemi, key, rim };
   view.material = material;
