@@ -15,30 +15,44 @@
 // m.creases / m.hard (Map edgeKey -> value) are carried through every op (remapped, and dropped with their edge).
 //
 // THE OPS (signature -> what is selected afterwards)
-//   extrudeFaces(m, faces, { thickness=0, offset=0, keepTogether=true })   -> the extruded caps (faces)
+//   extrudeFaces(m, faces, { thickness=0, offset=0, keepTogether=true,      -> the extruded caps (faces)
+//                            divisions=1, taper=1, twist=0, localTranslate=[0,0,0] })
 //       keepTogether: edge-connected faces move as one region (no inner walls); false: each face on its own.
 //       thickness moves along the (averaged) normal, offset pulls the cap's border inward in its plane.
-//   extrudeEdges(m, edges, { thickness=0, offset=0 })                      -> the new outer edges
+//       divisions: rings of walls along the extrusion; taper: the cap's scale (0..100, the rings in between go
+//       linearly); twist: degrees the cap turns round the extrusion axis; localTranslate: x / y in the face's
+//       plane (x along its first edge), z along the normal (adds to thickness).
+//   extrudeEdges(m, edges, { thickness=0, offset=0, divisions=1, taper=1, twist=0, localTranslate=[0,0,0] })
+//       -> the new outer edges. Each connected chain: x along it, y outward, z its normal; taper / twist work
+//       round the way it moves.
 //       each edge gets a quad to a copy of itself; connected edges share the new vertices. Border edges grow the
 //       surface (offset = outward in the face's plane); an INTERIOR edge makes a fin (that edge then has 3 faces,
 //       as in the pro tool). thickness 0 + offset 0: the new edges sit on the old (zero-area quads to be dragged).
 //   extrudeVerts(m, verts, { width=0.1, length=0 })                        -> the tip vertices
 //       width: fraction of each edge (max 0.49); every face around the vertex is cut and a triangle fan rises to
 //       the vertex, moved `length` along its normal.
-//   bevel(m, edges | { e } | { f }, { fraction=0.5, segments=1 })          -> the new bevel faces
-//       width = fraction * 0.49 * the shortest edge at the bevelled vertices. Corners where 3+ bevelled edges meet
+//   bevel(m, edges | { e } | { f }, { fraction=0.5, segments=1,            -> the new bevel faces
+//         offsetAsFraction=true, offset=0.2, depth=1, chamfer=true, mitering="basic" })
+//       width = fraction * 0.49 * the shortest edge at the bevelled vertices (offsetAsFraction false: width =
+//       offset, limited to that maximum with a warning). depth -1..1 scales the rounded profile (segments > 1):
+//       0 flat, negative hollow. chamfer false: a true circular arc instead of the quadratic profile.
+//       Corners where 3+ bevelled edges meet
 //       get a cap polygon; a cube with all 12 edges bevelled has 26 faces. segments > 1 rounds the profile.
 //       faces: their border edges are bevelled. Border edges of the mesh cannot be bevelled.
-//   bridge(m, edges, { divisions=0 })                                      -> the bridge faces
+//   bridge(m, edges, { divisions=0, bridgeType="linear", twist=0, taper=1, curve=[] })   -> the bridge faces
 //       two border chains (open or closed) with the same edge count, joined by quads (closed loops twist-aligned).
+//       bridgeType "smooth": the rows follow a curve leaving each border square to its faces; "curve": smooth and
+//       the middle passes through the `curve` points. twist (degrees) / taper (the middle's width) on any type.
 //   appendPolygon(m, verts)                                                -> the new face
 //   fillHole(m, borderEdges)                                               -> the new faces
 //   poke(m, faces, { offset=0 })                                           -> the new triangles
 //   wedge(m, faces, hingeEdge, { angle=90, divisions=4 })                  -> the swung caps
-//   chamferVerts(m, verts, { width=0.25 })                                 -> the new corner faces
+//   chamferVerts(m, verts, { width=0.25, removeFace=false })               -> the new corner faces
+//       removeFace: the corners are left open (then the new border edges are selected).
 //   collapse(m, { e } | { f })                                             -> the merged vertices
-//   connect(m, { v } | { e })                                              -> the new edges
+//   connect(m, { v } | { e }, { edgeCount=1, slide=0.5 })                  -> the new edges
 //       edges: midpoints; a face with 2 of them is split, with 3+ they meet at a new centre vertex.
+//       edgeCount: parallel cuts per edge (evenly spaced); slide 0..1 moves them along the edges.
 //       verts: a face with 2 (not neighbours) is split between them; with 3+ an inner polygon joins them.
 //   detach(m, { v } | { e })                                               -> the split vertices / both sides' edges
 //   dissolveEdges(m, edges, { cleanVerts=false })                          -> nothing (the pro Delete clears it)
@@ -46,13 +60,18 @@
 //       (Ctrl+Delete) also removes the winged vertices (2 edges) left behind. (P.deleteEdges stays: it deletes faces.)
 //   dissolveVerts(m, verts)                                                -> nothing
 //       a winged vertex leaves its faces; an interior vertex's faces merge into one n-gon without it.
-//   offsetEdgeLoop(m, edge(s), { distance=0.25 })                          -> the two new loops
-//       distance: fraction of the side edges (max 0.95).
+//   offsetEdgeLoop(m, edge(s), { distance=0.25, count=1, equalDistance=false })   -> the new loops
+//       distance: fraction of the side edges (max 0.95); count: loops each side, out to distance; equalDistance:
+//       distance is an absolute length on every side edge (limited by the shortest).
+//   insertEdgeLoop(m, edge, { t=0.5, count=1, equalDistance=false, distance })   -> the new loop(s)
+//       cuts the edge's ring of quads (P.loopCut stays); t from the given edge's first vertex; count > 1: evenly
+//       spaced loops; equalDistance: the same absolute distance on every ring edge.
+//   merge(m, verts, { threshold=0, alwaysMergeTwo=false })                 -> the merged vertices ([] = all)
 //   multiCut(m, points)                                                    -> the new edges
 //       points in order, each { v: id } or { e: [a, b], t: 0..1 from a }; consecutive points must share a face.
 //   sliceFaces(m, faces, planePoint, planeNormal)                          -> the new edges ([] faces = all)
 //   triangulateFaces(m, faces)  (P.triangulate is the GPU fan; kept)       -> the triangles ([] = all)
-//   quadrangulate(m, faces, { angle=30 })                                  -> the resulting faces ([] = all)
+//   quadrangulate(m, faces, { angle=30, keepHardEdges=false })             -> the resulting faces ([] = all)
 //   duplicateFaces(m, faces)                                               -> the copies
 //   extractFaces(m, faces)                                                 -> the extracted faces (same ids)
 //   averageVerts(m, verts, { iterations=1 }) / relax(m, verts, { iterations=1 })   -> the same vertices
@@ -63,6 +82,9 @@
 //   slideEdge(m, edges, t)                                                 -> the same edges (t -1..1)
 //   crease(m, edges, value=1) / setHard(m, edges, hard=true) / softHard(m, edges, { angle=30 })  -> the edges
 //   meshCheck(m) -> { ok, closed, volume, border, nonManifold, flipped, degenerate, duplicate, unused, zeroArea }
+//   cleanup(m, { op="cleanup"|"select", quads, nsided, concave, holed, nonPlanar (off), lamina, nonManifold,
+//            zeroEdges, zeroFaces (on), lengthTol=1e-5, areaTol=1e-5, planarTol=1 })  -> { m, sel, warn, report }
+//   meshStats(m) -> { verts, edges, faces, tris, quads, ngons, border, nonManifoldEdges, nonManifoldVerts, lamina, ... }
 //   rules: P.polyRules (text) and P.canRun(op, m, ...args) (true when the op would run without a warning).
 "use strict";
 
@@ -300,6 +322,9 @@
     slideEdge: "Needs edges; each end slides along a side edge of the faces beside it (borders stay put on their open side).",
     crease: "Edges get a crease weight for the subdivision preview (0 removes it).",
     softHard: "Edges whose faces meet at more than the angle become hard; the others soft. Border edges are hard.",
+    insertEdgeLoop: "Needs an edge with a quad beside it; the loop runs across the ring of quads and stops at other faces.",
+    merge: "Needs two or more vertices closer than the threshold (or exactly two with Always Merge).",
+    cleanup: "Select finds the faces / edges / vertices that match; Cleanup fixes them. Non-manifold fixes run last.",
   };
   P.canRun = (op, m, ...args) => { try { return typeof P[op] === "function" && !P[op](m, ...args).warn; } catch (e) { return false; } };
 
@@ -330,10 +355,40 @@
     return r;
   };
 
+  // ------------------------------------------------------------------ shaping helpers (taper / twist / frames)
+  const DEG = Math.PI / 180;
+  const vec3 = (x) => (Array.isArray(x) && x.length === 3 && x.every((y) => Number.isFinite(+y)) ? x.map(Number) : [0, 0, 0]);
+  function perp(n) {                                   // any unit vector perpendicular to n
+    const a = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    return norm(sub(a, mul(n, dot(a, n))));
+  }
+  function rotAxis(p, c, axis, th) {                   // p turned th radians round the axis through c
+    const v = sub(p, c), cs = Math.cos(th), sn = Math.sin(th);
+    return add(c, add(add(mul(v, cs), mul(cross(axis, v), sn)), mul(axis, dot(axis, v) * (1 - cs))));
+  }
+  // p scaled by f about c across the axis (the part along the axis is kept), then turned th round it
+  function taperTwist(p, c, axis, f, th) {
+    let v = sub(p, c);
+    const h = dot(v, axis);
+    v = add(mul(axis, h), mul(sub(v, mul(axis, h)), f));
+    const q = add(c, v);
+    return th ? rotAxis(q, c, axis, th) : q;
+  }
+  const centreOf = (pts) => mul(pts.reduce((s, p) => add(s, p), [0, 0, 0]), 1 / (pts.length || 1));
+  function shapeOpts(o, dDef) {
+    const D = clamp(Math.round(num(o.divisions, dDef)), dDef === 0 ? 0 : 1, 256);
+    const taper = clamp(num(o.taper, 1), 0, 100), twist = clamp(num(o.twist, 0), -3600, 3600) * DEG;
+    return { D, taper, twist, lt: vec3(o.localTranslate), shaped: taper !== 1 || twist !== 0 };
+  }
+
   // ------------------------------------------------------------------ extrude
+  // the extra options (pro Extrude option box): divisions (segments along the extrusion), taper (scale of the cap,
+  // 1 = none, the middle segments go linearly), twist (degrees round the extrusion axis, spread over the segments),
+  // localTranslate [x, y, z] in the face frame (z = along the normal, adds to thickness; x along the first edge).
   P.extrudeFaces = (m0, faces, o) => {
     o = o || {};
     const th = num(o.thickness, 0), off = num(o.offset, 0), together = o.keepTogether !== false;
+    const S = shapeOpts(o, 1);
     const sel = faceIds(m0, faces);
     if (!sel.length) return fail(m0, "Extrude: select one or more faces.");
     const T = P.topology(m0), m = cp(m0), inSel = new Set(sel);
@@ -361,7 +416,17 @@
           for (const x of [a, b]) push(inward, x, p);
         }
       }
-      const top = new Map();
+      // the group's frame: z = the averaged normal, x = along its first face's first edge
+      let gn = [0, 0, 0];
+      for (const fi of g) gn = add(gn, P.faceNormal(m0, m0.f[fi]));
+      gn = norm(gn);
+      if (!len(gn)) gn = [0, 1, 0];
+      const f0 = m0.f[g[0]];
+      let gu = sub(m0.v[f0[1]], m0.v[f0[0]]);
+      gu = norm(sub(gu, mul(gn, dot(gu, gn))));
+      if (!len(gu)) gu = perp(gn);
+      const gw = cross(gn, gu), shift = add(add(mul(gu, S.lt[0]), mul(gw, S.lt[1])), mul(gn, S.lt[2]));
+      const end = new Map();
       for (const [i, ns] of nrm) {
         let p = add(m0.v[i], mul(norm(ns), th));
         const w = inward.get(i);
@@ -370,10 +435,22 @@
           const c = Math.max(0.25, w.reduce((s, q) => s + dot(mi, q), 0) / w.length);
           p = add(p, mul(mi, off / c));
         }
-        top.set(i, m.v.length); m.v.push(p);
+        end.set(i, S.lt[0] || S.lt[1] || S.lt[2] ? add(p, shift) : p);
       }
-      for (const [a, b] of bnd) m.f.push([a, b, top.get(b), top.get(a)]);
-      for (const fi of g) m.f[fi] = m0.f[fi].map((i) => top.get(i));
+      const layers = [];
+      for (let k = 1; k <= S.D; k++) {
+        const s = k / S.D, pos = new Map(), L = new Map();
+        for (const [i, p] of end) pos.set(i, k === S.D ? p : lerp(m0.v[i], p, s));
+        const c = S.shaped ? centreOf([...pos.values()]) : null;
+        for (const [i, p] of pos) {
+          L.set(i, m.v.length);
+          m.v.push(S.shaped ? taperTwist(p, c, gn, 1 + (S.taper - 1) * s, S.twist * s) : p);
+        }
+        layers.push(L);
+      }
+      const at = (k, i) => (k === 0 ? i : layers[k - 1].get(i));
+      for (const [a, b] of bnd) for (let k = 0; k < S.D; k++) m.f.push([at(k, a), at(k, b), at(k + 1, b), at(k + 1, a)]);
+      for (const fi of g) m.f[fi] = m0.f[fi].map((i) => at(S.D, i));
     }
     return finish(m, faceSel(m, sel));
   };
@@ -396,20 +473,62 @@
       }
       spans.push([x, y]);
     }
-    const nv = new Map();
+    const S = shapeOpts(o, 1), end = new Map();
     for (const [i, n] of nrm) {
       let p = add(m0.v[i], mul(norm(n), th));
       const ou = out.get(i);
       if (off && ou) p = add(p, mul(norm(ou), off));
-      nv.set(i, m.v.length); m.v.push(p);
+      end.set(i, p);
     }
+    // each connected chain gets a frame (z = its averaged normal, x = along the chain, y = outward) for
+    // localTranslate, and an axis (the way it moves) that taper and twist work round
+    const pos = new Map();                                 // i -> the positions of its copies, layer 1..D
+    const moved = S.shaped || S.lt[0] || S.lt[1] || S.lt[2];
+    if (!moved) for (const [i, p] of end) pos.set(i, Array.from({ length: S.D }, (_, k) => (k + 1 === S.D ? p : lerp(m0.v[i], p, (k + 1) / S.D))));
+    else {
+      const uf = UF();
+      for (const [x, y] of spans) uf.union(x, y);
+      const comps = new Map();
+      for (const i of nrm.keys()) push(comps, uf.find(i), i);
+      for (const [root, vs] of comps) {
+        let z = [0, 0, 0], ou = [0, 0, 0];
+        for (const i of vs) { z = add(z, nrm.get(i)); if (out.has(i)) ou = add(ou, out.get(i)); }
+        z = norm(z);
+        if (!len(z)) z = [0, 1, 0];
+        const sp = spans.find(([x]) => uf.find(x) === root);
+        let x = sub(m0.v[sp[1]], m0.v[sp[0]]);
+        x = norm(sub(x, mul(z, dot(x, z))));
+        if (!len(x)) x = perp(z);
+        let y = cross(z, x);
+        if (dot(y, ou) < 0) y = mul(y, -1);
+        const shift = add(add(mul(x, S.lt[0]), mul(y, S.lt[1])), mul(z, S.lt[2]));
+        let disp = [0, 0, 0];
+        for (const i of vs) disp = add(disp, sub(add(end.get(i), shift), m0.v[i]));
+        const axis = len(disp) > 1e-12 ? norm(disp) : z;
+        for (const i of vs) pos.set(i, []);
+        for (let k = 1; k <= S.D; k++) {
+          const s = k / S.D, lay = vs.map((i) => lerp(m0.v[i], add(end.get(i), shift), s)), c = centreOf(lay);
+          vs.forEach((i, j) => pos.get(i).push(S.shaped ? taperTwist(lay[j], c, axis, 1 + (S.taper - 1) * s, S.twist * s) : lay[j]));
+        }
+      }
+    }
+    const lay = [];                                       // lay[k]: i -> id (k = 1..D), ids made in today's order
+    for (let k = 1; k <= S.D; k++) {
+      const L = new Map();
+      for (const i of nrm.keys()) { L.set(i, m.v.length); m.v.push(pos.get(i)[k - 1]); }
+      lay[k] = L;
+    }
+    const at = (k, i) => (k === 0 ? i : lay[k].get(i));
     const newE = [];
-    for (const [x, y] of spans) { m.f.push([y, x, nv.get(x), nv.get(y)]); newE.push([nv.get(x), nv.get(y)]); }
+    for (const [x, y] of spans) {
+      for (let k = 0; k < S.D; k++) m.f.push([at(k, y), at(k, x), at(k + 1, x), at(k + 1, y)]);
+      newE.push([at(S.D, x), at(S.D, y)]);
+    }
     return finish(m, edgeSel(newE));
   };
 
   // cut every face corner at the given vertices `t` along its two edges (chamfer), or raise a spike (vertex extrude)
-  function cornerCut(m0, verts, t, tip) {
+  function cornerCut(m0, verts, t, tip, noFace) {
     const T = P.topology(m0), S = new Set(vertIds(m0, verts).filter((x) => T.vertFaces[x].length));
     if (!S.size) return null;
     const m = cp(m0), pt = new Map(), around = new Map(), newF = [], tips = [];
@@ -444,7 +563,7 @@
       const loop = [];
       for (let y = start, g = 0; y !== undefined && g <= list.length; g++) { loop.push(y); y = nx.get(y); if (y === start) break; }
       const ring = uniq(loop);
-      if (ring.length >= 3) { newF.push(m.f.length); m.f.push(ring); }
+      if (ring.length >= 3 && !noFace) { newF.push(m.f.length); m.f.push(ring); }
     }
     return { m, newF, tips };
   }
@@ -456,8 +575,13 @@
   };
   P.chamferVerts = (m0, verts, o) => {
     o = o || {};
-    const r = cornerCut(m0, verts, clamp(num(o.width, 0.25), 0.001, 0.49), null);
+    // removeFace (the pro "Remove the face after chamfer"): the cut corners are left open (border edges)
+    const r = cornerCut(m0, verts, clamp(num(o.width, 0.25), 0.001, 0.49), null, !!o.removeFace);
     if (!r) return fail(m0, "Chamfer Vertex: select one or more vertices that belong to faces.");
+    if (o.removeFace) {
+      const T = P.topology(r.m), e = T.edges.filter((x) => x.faces.length === 1 && x.a >= m0.v.length && x.b >= m0.v.length).map((x) => [x.a, x.b]);
+      return finish(r.m, edgeSel(e));
+    }
     return finish(r.m, faceSel(r.m, r.newF));
   };
 
@@ -579,7 +703,19 @@
     for (const ei of ids) { BV.add(T.edges[ei].a); BV.add(T.edges[ei].b); }
     let minLen = Infinity;
     for (const x of BV) for (const ei of T.vertEdges[x]) minLen = Math.min(minLen, dist(m0.v[T.edges[ei].a], m0.v[T.edges[ei].b]));
-    const d = frac * 0.49 * minLen;
+    // offsetAsFraction (default true): width = fraction of the shortest edge; false: `offset` is an absolute width
+    // (limited so the bevel cannot turn inside out). depth (1) scales the rounded profile's bulge (0 flat, -1 hollow);
+    // chamfer (true) keeps the quadratic profile, false gives a true circular (fillet) arc. mitering: "basic" only.
+    let d = frac * 0.49 * minLen;
+    const warnB = [];
+    if (o.offsetAsFraction === false) {
+      const want = Math.max(1e-9, num(o.offset, 0.2));
+      d = Math.min(want, 0.49 * minLen);
+      if (want > d + 1e-12) warnB.push("the offset was limited to " + +d.toFixed(6) + " so the bevel cannot turn inside out");
+    }
+    const depth = clamp(num(o.depth, 1), -1, 1), arc = o.chamfer === false;
+    const miter = String(o.mitering == null ? "basic" : o.mitering).toLowerCase();
+    if (!["basic", "uniform", "auto"].includes(miter)) warnB.push("only basic mitering is supported (used basic)");
     const m = cp(m0), slideD = new Map(), corners = [], owner = new Map();
     m0.f.forEach((f, fi) => {
       const n = f.length;
@@ -628,10 +764,14 @@
       const pts = [A];
       if (segs > 1) {
         const pa = m.v[A], pb = m.v[B], mid = lerp(pa, pb, 0.5), ax = sub(m0.v[q], m0.v[p]);
-        const K = add(m0.v[p], mul(ax, dot(sub(mid, m0.v[p]), ax) / (dot(ax, ax) || 1)));
+        const K0 = add(m0.v[p], mul(ax, dot(sub(mid, m0.v[p]), ax) / (dot(ax, ax) || 1)));
+        const K = depth === 1 ? K0 : add(mid, mul(sub(K0, mid), depth));
+        // a rational quadratic with the weight cos(chord, tangent) lies on a circle (chamfer off); weight 1 is today's
+        const w = arc ? clamp(dot(norm(sub(K, pa)), norm(sub(pb, pa))), 0, 1) : 1;
         for (let i = 1; i < segs; i++) {
-          const s = i / segs;
-          pts.push(newPt(add(add(mul(pa, (1 - s) * (1 - s)), mul(K, 2 * s * (1 - s))), mul(pb, s * s)), v));
+          const s = i / segs, b0 = (1 - s) * (1 - s), b1 = 2 * s * (1 - s) * w, b2 = s * s;
+          const pq = add(add(mul(pa, b0), mul(K, b1)), mul(pb, b2));
+          pts.push(newPt(w === 1 ? pq : mul(pq, 1 / (b0 + b1 + b2)), v));
         }
       }
       pts.push(B);
@@ -693,7 +833,7 @@
         }
       }
     }
-    return finish(m, faceSel(m, newF));
+    return finish(m, faceSel(m, newF), warnB.length ? "Bevel: " + warnB.join("; ") + "." : "");
   };
 
   // ------------------------------------------------------------------ bridge / append / fill
@@ -740,15 +880,63 @@
       }
       pairOf = (i) => (((bs - i) % count) + count) % count;
     }
+    // bridgeType "linear" (default: straight rows), "smooth" (a curve that leaves each border at right angles to
+    // its faces, in the faces' plane - the pro "Smooth path"), "curve" (smooth + `curve`: points the middle of the
+    // bridge passes through). twist (degrees, spread along the bridge) and taper (the width in the middle, 1 = none)
+    // work on every type here (the pro tool greys them out for a linear path).
+    const type = String(o.bridgeType || o.curveType || "linear").toLowerCase();
+    const smooth = type !== "linear" && type !== "0";
+    const taper = clamp(num(o.taper, 1), 0, 100), twist = clamp(num(o.twist, 0), -3600, 3600) * DEG;
+    const curvePts = Array.isArray(o.curve) ? o.curve.filter((p) => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite)) : [];
+    const plain = !smooth && taper === 1 && !twist && !curvePts.length;
+    const cA = centreOf(A.vs.map((i) => m0.v[i])), cB = centreOf(B.vs.map((i) => m0.v[i]));
+    const outDir = (c) => {                     // away from the chain's faces, in their plane
+      let ou = [0, 0, 0];
+      const ne = c.closed ? c.vs.length : c.vs.length - 1;
+      for (let i = 0; i < ne; i++) {
+        const x = c.vs[i], y = c.vs[(i + 1) % c.vs.length], e = T.edges[T.edge(x, y)];
+        ou = add(ou, norm(cross(sub(m0.v[y], m0.v[x]), P.faceNormal(m0, m0.f[e.faces[0]]))));
+      }
+      return norm(ou);
+    };
+    const Ld = dist(cA, cB), TA = mul(outDir(A), Ld), TB = mul(outDir(B), -Ld);
+    const herm = (a, ta, b, tb, s) => {
+      const s2 = s * s, s3 = s2 * s;
+      return add(add(mul(a, 2 * s3 - 3 * s2 + 1), mul(ta, s3 - 2 * s2 + s)), add(mul(b, -2 * s3 + 3 * s2), mul(tb, s3 - s2)));
+    };
+    const hermD = (a, ta, b, tb, s) => {
+      const s2 = s * s;
+      return add(add(mul(a, 6 * s2 - 6 * s), mul(ta, 3 * s2 - 4 * s + 1)), add(mul(b, -6 * s2 + 6 * s), mul(tb, 3 * s2 - 2 * s)));
+    };
+    const poly = [cA, ...curvePts, cB], segL = [];
+    let tot = 0;
+    for (let i = 0; i + 1 < poly.length; i++) { segL.push(dist(poly[i], poly[i + 1])); tot += segL[i]; }
+    const along = (s) => {                      // the curve's point at fraction s of its length
+      let want = s * tot;
+      for (let i = 0; i < segL.length; i++) {
+        if (want <= segL[i] || i === segL.length - 1) return lerp(poly[i], poly[i + 1], segL[i] ? clamp(want / segL[i], 0, 1) : 0);
+        want -= segL[i];
+      }
+      return cB;
+    };
     const m = cp(m0), R = [];
     for (let r = 0; r <= D + 1; r++) {
       R.push([]);
+      const s = r / (D + 1), row = [];
       for (let i = 0; i < count; i++) {
         const a = A.vs[i], b = B.vs[pairOf(i)];
         if (r === 0) R[r].push(a);
         else if (r === D + 1) R[r].push(b);
-        else { R[r].push(m.v.length); m.v.push(lerp(m0.v[a], m0.v[b], r / (D + 1))); }
+        else if (plain) { R[r].push(m.v.length); m.v.push(lerp(m0.v[a], m0.v[b], s)); }
+        else row.push(smooth ? herm(m0.v[a], TA, m0.v[b], TB, s) : lerp(m0.v[a], m0.v[b], s));
       }
+      if (!row.length) continue;
+      const H = smooth ? herm(cA, TA, cB, TB, s) : lerp(cA, cB, s);
+      const shift = curvePts.length ? sub(along(s), H) : [0, 0, 0];
+      let axis = smooth ? norm(hermD(cA, TA, cB, TB, s)) : norm(sub(cB, cA));
+      if (!len(axis)) axis = [0, 1, 0];
+      const c = centreOf(row), f = 1 + (taper - 1) * Math.sin(Math.PI * s);
+      for (const p of row) { R[r].push(m.v.length); m.v.push(add(taperTwist(p, c, axis, f, twist * s), shift)); }
     }
     const newF = [], quads = A.closed ? count : count - 1;
     for (let r = 0; r <= D; r++) for (let i = 0; i < quads; i++) {
@@ -878,23 +1066,74 @@
   };
 
   // ------------------------------------------------------------------ connect / multi-cut / slice
-  P.connect = (m0, c) => {
+  // edges: o.edgeCount (1) cuts per edge, evenly spaced; o.slide (0.5) moves them along the edges (0..1, measured
+  // the same way round the faces the cuts cross, from the first vertex of the first given edge)
+  P.connect = (m0, c, o) => {
     c = comp(c);
+    o = o || {};
     const T = P.topology(m0), m = cp(m0), newE = [];
     if (c.e && c.e.length) {
       const ids = edgeIds(m0, T, c.e);
       if (!ids.length) return fail(m0, "Connect: select edges or vertices.");
-      const mids = new Set(), touched = new Set();
+      const n = clamp(Math.round(num(o.edgeCount != null ? o.edgeCount : o.segments, 1)), 1, 64);
+      const lim = 1 / (n + 1) - 0.01, sh = clamp(num(o.slide, 0.5) - 0.5, -lim, lim);
+      const ts = Array.from({ length: n }, (_, i) => (i + 1) / (n + 1) + sh);
+      const start = new Map();
+      if (sh !== 0) {                          // which end each edge's slide is measured from, consistent across faces
+        const first = new Map(), inF = new Map();
+        for (const x of c.e) {
+          const pr = Array.isArray(x) ? x : x && x.a != null ? [x.a, x.b] : null;
+          if (pr) { const ei = T.edge(pr[0], pr[1]); if (ei !== undefined && !first.has(ei)) first.set(ei, pr[0]); }
+        }
+        for (const ei of ids) for (const fi of T.edges[ei].faces) push(inF, fi, ei);
+        const faceDir = (f, ei) => { const e = T.edges[ei], k = f.indexOf(e.a); return f[(k + 1) % f.length] === e.b ? [e.a, e.b] : [e.b, e.a]; };
+        for (const root of ids) {
+          if (start.has(root)) continue;
+          start.set(root, first.has(root) ? first.get(root) : T.edges[root].a);
+          const queue = [root];
+          while (queue.length) {
+            const ei = queue.shift(), s = start.get(ei);
+            for (const fi of T.edges[ei].faces) {
+              const list = uniq(inF.get(fi) || []);
+              if (list.length !== 2) continue;
+              const other = list[0] === ei ? list[1] : list[0];
+              if (start.has(other)) continue;
+              const f = m0.f[fi], [u1] = faceDir(f, ei), [u2, v2] = faceDir(f, other);
+              start.set(other, s === u1 ? v2 : u2);       // opposite sides of a face run opposite ways
+              queue.push(other);
+            }
+          }
+        }
+      }
+      const mids = new Set(), touched = new Set(), edgeOf = new Map();
       for (const ei of ids) {
-        const e = T.edges[ei], id = m.v.length;
-        m.v.push(lerp(m0.v[e.a], m0.v[e.b], 0.5));
-        mids.add(id);
-        insertOnEdge(m, e.a, e.b, [id], e.faces);
+        const e = T.edges[ei], s = start.has(ei) ? start.get(ei) : e.a, oth = s === e.a ? e.b : e.a;
+        const list = ts.map((t) => { const id = m.v.length; m.v.push(lerp(m0.v[s], m0.v[oth], t)); mids.add(id); edgeOf.set(id, ei); return id; });
+        insertOnEdge(m, e.a, e.b, s === e.a ? list : list.slice().reverse(), e.faces);
         e.faces.forEach((fi) => touched.add(fi));
       }
       for (const fi of [...touched].sort((a, b) => a - b)) {
-        const f = m.f[fi], pos = [];
-        f.forEach((x, k) => { if (mids.has(x)) pos.push(k); });
+        let f = m.f[fi], pos = [];
+        if (n > 1) {
+          const es = uniq(f.filter((x) => edgeOf.has(x)).map((x) => edgeOf.get(x)));
+          if (es.length < 2) continue;
+          if (es.length === 2) {                // n parallel cuts: strips, pairing the k-th cut with the k-th from the far end
+            const Pp = f.filter((x) => edgeOf.get(x) === es[0]), Qq = f.filter((x) => edgeOf.get(x) === es[1]);
+            const pieces = [];
+            let cur = f;
+            for (let i = 0; i < n; i++) {
+              const p = Pp[i], q = Qq[n - 1 - i], [A, B] = splitAt(cur, cur.indexOf(p), cur.indexOf(q));
+              pieces.push(B); newE.push([p, q]); cur = A;
+            }
+            pieces.push(cur);
+            m.f[fi] = pieces[0];
+            pieces.slice(1).forEach((pc) => m.f.push(pc));
+            continue;
+          }
+          // 3+ cut edges in one face: the middle cut of each meets a centre vertex (the others stay on the edges)
+          const pick = new Set(es.map((ei) => f.filter((x) => edgeOf.get(x) === ei)[Math.floor((n - 1) / 2)]));
+          f.forEach((x, k) => { if (pick.has(x)) pos.push(k); });
+        } else f.forEach((x, k) => { if (mids.has(x)) pos.push(k); });
         if (pos.length < 2) continue;
         if (pos.length === 2) {
           const [A, B] = splitAt(f, pos[0], pos[1]);
@@ -1119,9 +1358,11 @@
     const fs = faces && faces.length ? faceIds(m0, faces) : m0.f.map((_, i) => i);
     const inS = new Set(fs.filter((fi) => m0.f[fi].length === 3)), maxA = clamp(num(o.angle, 30), 0, 180);
     if (!inS.size) return fail(m0, "Quadrangulate: select triangles.");
-    const T = P.topology(m0), cands = [];
+    // keepHardEdges (false here; the pro tool's default is on): an edge marked hard (m.hard) is never merged away
+    const T = P.topology(m0), cands = [], keepHard = !!o.keepHardEdges && m0.hard instanceof Map;
     for (const e of T.edges) {
       if (e.faces.length !== 2) continue;
+      if (keepHard && m0.hard.has(ekey(e.a, e.b))) continue;
       let [f1, f2] = e.faces;
       if (f1 === f2 || !inS.has(f1) || !inS.has(f2)) continue;
       const A = m0.f[f1], k = A.indexOf(e.a);
@@ -1332,32 +1573,53 @@
     const perFace = new Map();
     for (const ei of loop) for (const fi of T.edges[ei].faces) perFace.set(fi, (perFace.get(fi) || 0) + 1);
     if ([...perFace.values()].some((c) => c > 1)) return fail(m0, "Offset Edge Loop: the loop runs through a face twice; it needs quads either side.");
-    const m = cp(m0), pts = new Map(), onEdge = new Map(), jobs = [];
-    const pt = (x, y) => {
-      const k = x + ">" + y;
-      if (!pts.has(k)) {
-        const ei = T.edge(x, y), t = loopV.has(y) ? Math.min(t0, 0.49) : t0, id = m.v.length;
-        m.v.push(lerp(m0.v[x], m0.v[y], t));
-        pts.set(k, id);
-        push(onEdge, ei, { id, d: T.edges[ei].a === x ? t : 1 - t });
-      }
-      return pts.get(k);
-    };
+    // count (1): that many loops each side, evenly spaced out to `distance`; equalDistance (false): `distance` is an
+    // absolute length on every side edge (limited by the shortest one) instead of a fraction of each
+    const cnt = clamp(Math.round(num(o.count, 1)), 1, 32), sides = [];
     for (const ei of loop) for (const fi of T.edges[ei].faces) {
       const e = T.edges[ei], f = m0.f[fi], n = f.length;
       if (n < 4) return fail(m0, "Offset Edge Loop: a triangle touches the loop; it needs quads (or bigger) either side.");
       const k0 = f.indexOf(e.a), [x, y] = f[(k0 + 1) % n] === e.b ? [e.a, e.b] : [e.b, e.a], k = f.indexOf(x);
-      const px = f[(k + n - 1) % n], ny = f[(k + 2) % n];
-      jobs.push({ fi, sx: pt(x, px), sy: pt(y, ny) });
+      sides.push({ fi, x, px: f[(k + n - 1) % n], y, ny: f[(k + 2) % n] });
     }
+    const cap = (y) => (loopV.has(y) ? Math.min(t0, 0.49) : t0);
+    let dAbs = 0;
+    if (o.equalDistance) {
+      dAbs = Math.max(1e-9, num(o.distance, 0.25));
+      for (const j of sides) for (const [a, b] of [[j.x, j.px], [j.y, j.ny]]) dAbs = Math.min(dAbs, (loopV.has(b) ? 0.49 : 0.95) * dist(m0.v[a], m0.v[b]));
+    }
+    const m = cp(m0), pts = new Map(), onEdge = new Map(), jobs = [];
+    const pt = (x, y) => {                     // the cnt new points on x-y, nearest x first
+      const k = x + ">" + y;
+      if (!pts.has(k)) {
+        const ei = T.edge(x, y), L = dist(m0.v[x], m0.v[y]);
+        const t = o.equalDistance ? (L ? Math.min(dAbs / L, 0.95) : 0.5) : cap(y), ids = [];
+        for (let j = 1; j <= cnt; j++) {
+          const tj = cnt === 1 ? t : (t * j) / cnt, id = m.v.length;
+          m.v.push(lerp(m0.v[x], m0.v[y], tj));
+          ids.push(id);
+          push(onEdge, ei, { id, d: T.edges[ei].a === x ? tj : 1 - tj });
+        }
+        pts.set(k, ids);
+      }
+      return pts.get(k);
+    };
+    for (const j of sides) jobs.push({ fi: j.fi, sx: pt(j.x, j.px), sy: pt(j.y, j.ny) });
     for (const [ei, l] of onEdge) {
       l.sort((p, q) => p.d - q.d);
       insertOnEdge(m, T.edges[ei].a, T.edges[ei].b, l.map((p) => p.id), T.edges[ei].faces);
     }
     const newE = [];
     for (const j of jobs) {
-      const f = m.f[j.fi], [A, B] = splitAt(f, f.indexOf(j.sx), f.indexOf(j.sy));
-      m.f[j.fi] = A; m.f.push(B); newE.push([j.sx, j.sy]);
+      // split at the outermost pair first; the face keeps the innermost piece (as with one loop)
+      let cur = m.f[j.fi];
+      const outer = [];
+      for (let i = cnt - 1; i >= 0; i--) {
+        const [A, B] = splitAt(cur, cur.indexOf(j.sx[i]), cur.indexOf(j.sy[i]));
+        outer.push(B); newE.push([j.sx[i], j.sy[i]]); cur = A;
+      }
+      m.f[j.fi] = cur;
+      for (const pc of outer) m.f.push(pc);
     }
     return finish(m, edgeSel(newE));
   };
@@ -1390,6 +1652,419 @@
       }
       if (hard) mp.set(k, 1); else mp.delete(k);
     }) || fail(m0, "Soften/Harden: select edges.");
+  };
+
+  // ------------------------------------------------------------------ insert edge loop (P.loopCut stays: the old one)
+  // the edge's ring of quads is cut across. t (0.5): where on each ring edge, measured the same way round the ring
+  // from the first vertex of the given edge. equalDistance (false): the cut sits the same absolute distance
+  // (t * the given edge's length, or `distance`) from that side on every ring edge, limited by the shortest.
+  // count (1): more than 1 inserts that many evenly spaced loops (t / equalDistance are then not used).
+  P.insertEdgeLoop = (m0, edge, o) => {
+    o = o || {};
+    const T = P.topology(m0);
+    const pr = Array.isArray(edge) && edge.length === 2 && typeof edge[0] === "number" ? edge : edge && edge.a != null ? [edge.a, edge.b] : null;
+    const ei = typeof edge === "number" ? (T.edges[edge] ? edge : undefined) : pr ? T.edge(pr[0], pr[1]) : undefined;
+    if (ei === undefined) return fail(m0, "Insert Edge Loop: pick an edge of the mesh.");
+    const ring = P.edgeRing(m0, T, ei);
+    if (!ring.faces.length) return fail(m0, "Insert Edge Loop: the edge needs a quad beside it (the loop runs across quads).");
+    const n = clamp(Math.round(num(o.count, 1)), 1, 64), t = clamp(num(o.t != null ? o.t : o.weight, 0.5), 0.01, 0.99);
+    const ringF = new Set(ring.faces), start = new Map([[ei, pr ? pr[0] : T.edges[ei].a]]), queue = [ei];
+    while (queue.length) {                     // across a quad q0 q1 q2 q3 (cut q0-q1 and q2-q3): q0 pairs with q3
+      const e = queue.shift(), s = start.get(e);
+      for (const fi of T.edges[e].faces) {
+        if (!ringF.has(fi)) continue;
+        const f = m0.f[fi], fe = T.faceEdges[fi], k = fe.indexOf(e), opp = fe[(k + 2) % 4];
+        if (start.has(opp)) continue;
+        start.set(opp, s === f[k] ? f[(k + 3) % 4] : f[(k + 2) % 4]);
+        queue.push(opp);
+      }
+    }
+    const eq = !!o.equalDistance && n === 1;
+    let dAbs = 0;
+    if (eq) {
+      const e0 = T.edges[ei];
+      dAbs = o.distance != null ? Math.max(1e-9, num(o.distance, 0)) : t * dist(m0.v[e0.a], m0.v[e0.b]);
+      for (const e of ring.edges) dAbs = Math.min(dAbs, 0.99 * dist(m0.v[T.edges[e].a], m0.v[T.edges[e].b]));
+    }
+    const m = cp(m0), pts = new Map();
+    for (const e of ring.edges) {
+      const ed = T.edges[e], s = start.has(e) ? start.get(e) : ed.a, oth = s === ed.a ? ed.b : ed.a, L = dist(m0.v[s], m0.v[oth]);
+      const ts = n > 1 ? Array.from({ length: n }, (_, i) => (i + 1) / (n + 1)) : [eq ? (L ? clamp(dAbs / L, 0.01, 0.99) : 0.5) : t];
+      pts.set(e, { s, list: ts.map((x) => { const id = m.v.length; m.v.push(lerp(m0.v[s], m0.v[oth], x)); return id; }) });
+      const others = ed.faces.filter((fi) => !ringF.has(fi));
+      if (others.length) insertOnEdge(m, s, oth, pts.get(e).list, others);
+    }
+    const newE = [];
+    for (const fi of ring.faces) {
+      const f = m0.f[fi], fe = T.faceEdges[fi];
+      const k = [0, 1].find((j) => pts.has(fe[j]) && pts.has(fe[j + 2]));
+      if (k === undefined) continue;
+      const q = [0, 1, 2, 3].map((j) => f[(k + j) % 4]), A = pts.get(fe[k]), B = pts.get(fe[k + 2]);
+      const Pp = A.s === q[0] ? A.list : A.list.slice().reverse(), Qq = B.s === q[3] ? B.list : B.list.slice().reverse();
+      const pieces = [[q[0], Pp[0], Qq[0], q[3]]];
+      for (let i = 1; i < Pp.length; i++) pieces.push([Pp[i - 1], Pp[i], Qq[i], Qq[i - 1]]);
+      pieces.push([Pp[Pp.length - 1], q[1], q[2], Qq[Qq.length - 1]]);
+      m.f[fi] = pieces[0];
+      pieces.slice(1).forEach((pc) => m.f.push(pc));
+      Pp.forEach((p, i) => newE.push([p, Qq[i]]));
+    }
+    return finish(m, edgeSel(newE));
+  };
+
+  // ------------------------------------------------------------------ merge (P.mergeVerts stays: the old one)
+  // the given vertices (none: all) closer than `threshold` (0: only where they coincide) become one, at their middle.
+  // alwaysMergeTwo: exactly two selected vertices merge whatever the distance.
+  P.merge = (m0, verts, o) => {
+    o = o || {};
+    const vs = verts && verts.length ? vertIds(m0, verts) : m0.v.map((_, i) => i);
+    if (vs.length < 2) return fail(m0, "Merge: select two or more vertices.");
+    const th = Math.max(0, num(o.threshold != null ? o.threshold : o.distance, 0));
+    let groups;
+    if (o.alwaysMergeTwo && vs.length === 2) groups = [vs];
+    else {
+      const cell = Math.max(th, 1e-9), grid = new Map(), uf = UF(), key = (p) => p.map((x) => Math.floor(x / cell));
+      for (const i of vs) { const k = key(m0.v[i]).join(","); push(grid, k, i); }
+      for (const i of vs) {
+        const [x, y, z] = key(m0.v[i]);
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+          for (const j of grid.get([x + a, y + b, z + c].join(",")) || []) if (j > i && dist(m0.v[i], m0.v[j]) <= th + 1e-12) uf.union(i, j);
+        }
+      }
+      const gm = new Map();
+      for (const i of vs) push(gm, uf.find(i), i);
+      groups = [...gm.values()].filter((g) => g.length > 1);
+    }
+    if (!groups.length) return fail(m0, "Merge: no selected vertices are within the threshold of each other.");
+    const r = mergeGroups(m0, groups);
+    return finish(r.m, { v: r.reps, e: [], f: [] });
+  };
+
+  // ------------------------------------------------------------------ Mesh > Cleanup and the heads-up statistics
+  function facePlane(m, f) {                  // { n, c, u, w } (n by Newell; u, w span the plane)
+    let n = [0, 0, 0];
+    for (let i = 0; i < f.length; i++) {
+      const a = m.v[f[i]], b = m.v[f[(i + 1) % f.length]];
+      n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]);
+    }
+    n = norm(n);
+    const c = centreOf(f.map((i) => m.v[i]));
+    const u = len(n) ? perp(n) : [1, 0, 0];
+    return { n, c, u, w: cross(n, u) };
+  }
+  function isConcave(m, f) {
+    if (f.length < 4) return false;
+    const { n } = facePlane(m, f);
+    if (!len(n)) return false;
+    for (let k = 0; k < f.length; k++) {
+      const p = m.v[f[(k + f.length - 1) % f.length]], x = m.v[f[k]], q = m.v[f[(k + 1) % f.length]];
+      if (dot(cross(sub(x, p), sub(q, x)), n) < -1e-12 * (dist(p, x) * dist(x, q) + 1e-30)) return true;
+    }
+    return false;
+  }
+  function planarDeviation(m, f) {            // degrees: the most any corner leans out of the face's plane
+    if (f.length < 4) return 0;
+    const { n, c } = facePlane(m, f);
+    if (!len(n)) return 0;
+    let worst = 0;
+    for (const i of f) {
+      const d = sub(m.v[i], c), l = len(d);
+      if (l > 1e-12) worst = Math.max(worst, Math.asin(clamp(Math.abs(dot(d, n)) / l, 0, 1)) / DEG);
+    }
+    return worst;
+  }
+  // ear clipping that tolerates a face touching itself (a hole joined by a bridge edge): corners that are the same
+  // vertex never block an ear
+  function earClipWeak(m, f) {
+    const { n, u, w } = facePlane(m, f), o0 = m.v[f[0]];
+    const p2 = f.map((i) => { const d = sub(m.v[i], o0); return [dot(d, u), dot(d, w)]; });
+    const ar = (a, b, c) => (p2[b][0] - p2[a][0]) * (p2[c][1] - p2[a][1]) - (p2[b][1] - p2[a][1]) * (p2[c][0] - p2[a][0]);
+    void n;
+    const idx = f.map((_, i) => i), tris = [];
+    for (let guard = 0; idx.length > 3 && guard < 100000; guard++) {
+      let cutAt = -1, bestQ = -Infinity;
+      for (let i = 0; i < idx.length; i++) {
+        const a = idx[(i + idx.length - 1) % idx.length], b = idx[i], c = idx[(i + 1) % idx.length], A = ar(a, b, c);
+        if (A <= 1e-12) continue;
+        const ids = new Set([f[a], f[b], f[c]]);
+        if (idx.some((q) => !ids.has(f[q]) && ar(a, b, q) >= 0 && ar(b, c, q) >= 0 && ar(c, a, q) >= 0)) continue;
+        const e2 = (x, y) => (p2[x][0] - p2[y][0]) ** 2 + (p2[x][1] - p2[y][1]) ** 2;
+        const q = A / (e2(a, b) + e2(b, c) + e2(c, a));
+        if (q > bestQ) { bestQ = q; cutAt = i; }
+      }
+      if (cutAt < 0) cutAt = 0;
+      const a = idx[(cutAt + idx.length - 1) % idx.length], b = idx[cutAt], c = idx[(cutAt + 1) % idx.length];
+      tris.push([f[a], f[b], f[c]]);
+      idx.splice(cutAt, 1);
+    }
+    tris.push(idx.map((i) => f[i]));
+    return tris.filter((t) => new Set(t).size === 3);
+  }
+  // triangles of one face merged back across their inner diagonals while the piece stays convex (Hertel-Mehlhorn);
+  // maxSides 4: quads and triangles only
+  function convexPieces(m, face, tris, maxSides) {
+    const { n } = facePlane(m, face);
+    let polys = tris.map((t) => t.slice());
+    const convex = (g) => {
+      for (let k = 0; k < g.length; k++) {
+        const p = m.v[g[(k + g.length - 1) % g.length]], x = m.v[g[k]], q = m.v[g[(k + 1) % g.length]];
+        if (dot(cross(sub(x, p), sub(q, x)), n) <= 1e-12) return false;
+      }
+      return true;
+    };
+    const outer = new Set();
+    for (let k = 0; k < face.length; k++) outer.add(face[k] + ">" + face[(k + 1) % face.length]);
+    for (let changed = true; changed;) {
+      changed = false;
+      const owner = new Map();
+      polys.forEach((g, gi) => { for (let k = 0; k < g.length; k++) owner.set(g[k] + ">" + g[(k + 1) % g.length], gi); });
+      const cands = [];
+      polys.forEach((g, gi) => {
+        for (let k = 0; k < g.length; k++) {
+          const a = g[k], b = g[(k + 1) % g.length], gj = owner.get(b + ">" + a);
+          if (gj === undefined || gj <= gi || outer.has(a + ">" + b)) continue;
+          const h = polys[gj], ka = h.indexOf(b);
+          // g runs a->b, h runs b->a: g's path b..a (without the diagonal) then h's path a..b
+          const pa = cyc(g, (k + 1) % g.length, k), pb = cyc(h, (ka + 1) % h.length, ka);
+          const merged = dedupeCyc([...pa, ...pb.slice(1, -1)]);
+          if (merged.length > maxSides || new Set(merged).size !== merged.length || !convex(merged)) continue;
+          cands.push({ gi, gj, merged, score: merged.length === 4 ? 0 : 1 });
+        }
+      });
+      cands.sort((x, y) => x.score - y.score);
+      if (cands.length) {
+        const c = cands[0];
+        polys = polys.filter((_, i) => i !== c.gi && i !== c.gj).concat([c.merged]);
+        changed = true;
+      }
+    }
+    return polys;
+  }
+  function analyse(m, o) {
+    const T = P.topology(m), lt = Math.max(0, num(o.lengthTol, 1e-5)), at = Math.max(0, num(o.areaTol, 1e-5));
+    const pt = Math.max(0, num(o.planarTol, 1));
+    const r = { quads: [], nsided: [], concave: [], holed: [], nonPlanar: [], lamina: [], zeroFaces: [], zeroEdges: [], nmEdges: [], nmVerts: [], flipped: [] };
+    const seen = new Map();
+    m.f.forEach((f, fi) => {
+      const holed = new Set(f).size !== f.length;
+      if (holed) r.holed.push(fi);
+      if (f.length === 4 && !holed) r.quads.push(fi);
+      if (f.length > 4 && !holed) r.nsided.push(fi);
+      if (!holed && isConcave(m, f)) r.concave.push(fi);
+      if (!holed && planarDeviation(m, f) > pt + 1e-9) r.nonPlanar.push(fi);
+      if (newellArea(m, f) <= at) r.zeroFaces.push(fi);
+      const k = f.slice().sort((a, b) => a - b).join(",");
+      if (seen.has(k)) r.lamina.push(fi); else seen.set(k, fi);
+    });
+    const dir = new Map();
+    m.f.forEach((f) => { for (let k = 0; k < f.length; k++) { const d = f[k] + ">" + f[(k + 1) % f.length]; dir.set(d, (dir.get(d) || 0) + 1); } });
+    T.edges.forEach((e, ei) => {
+      if (dist(m.v[e.a], m.v[e.b]) <= lt) r.zeroEdges.push(ei);
+      if (e.faces.length > 2) r.nmEdges.push(ei);
+      if ((dir.get(e.a + ">" + e.b) || 0) > 1 || (dir.get(e.b + ">" + e.a) || 0) > 1) r.flipped.push(ei);
+    });
+    r.nmVerts = fanSplit(m, T).verts;
+    return { T, r, lt, at };
+  }
+  // the fans round every vertex: faces joined across an edge they share properly. At an edge with 3+ faces each face
+  // that runs a->b is paired with the next face round the edge (on its inner side) that runs b->a, so two solids
+  // that touch along an edge come apart. A vertex with 2+ fans is non-manifold; `split` gives each extra fan a copy.
+  function edgeLinks(m, T) {
+    return T.edges.map((e) => {
+      const fs = uniq(e.faces);
+      if (fs.length < 2) return [];
+      if (fs.length === 2) return [[fs[0], fs[1]]];        // a plain edge (or a flipped one: still one surface)
+      const d = norm(sub(m.v[e.b], m.v[e.a])), e1 = perp(d), e2 = cross(d, e1), info = [];
+      for (const fi of fs) {
+        const f = m.f[fi], k = f.indexOf(e.a), fwd = f[(k + 1) % f.length] === e.b;
+        let r = sub(P.centroid(m, f), m.v[e.a]);
+        r = sub(r, mul(d, dot(r, d)));
+        const n = P.faceNormal(m, f), ang = Math.atan2(dot(r, e2), dot(r, e1));
+        info.push({ fi, fwd, ang, sense: dot(cross(r, mul(n, -1)), d) >= 0 ? 1 : -1 });
+      }
+      const out = [], used = new Set();
+      for (const a of info) {
+        if (!a.fwd || used.has(a.fi)) continue;
+        let best = null, bd = Infinity;
+        for (const b of info) {
+          if (b.fwd || used.has(b.fi)) continue;
+          let da = (b.ang - a.ang) * a.sense;
+          while (da <= 1e-9) da += 2 * Math.PI;
+          if (da < bd) { bd = da; best = b; }
+        }
+        if (best) { used.add(a.fi); used.add(best.fi); out.push([a.fi, best.fi]); }
+      }
+      return out;
+    });
+  }
+  function fanSplit(m, T, split) {
+    const links = edgeLinks(m, T), verts = [];
+    const out = split ? { v: m.v.map((p) => p.slice()), f: m.f.map((f) => f.slice()) } : null;
+    m.v.forEach((_, x) => {
+      const fs = uniq(T.vertFaces[x]);
+      if (fs.length < 2) return;
+      const uf = UF();
+      fs.forEach((fi) => uf.find(fi));
+      for (const ei of T.vertEdges[x]) for (const [a, b] of links[ei]) uf.union(a, b);
+      const groups = new Map();
+      for (const fi of fs) push(groups, uf.find(fi), fi);
+      if (groups.size < 2) return;
+      verts.push(x);
+      if (!out) return;
+      [...groups.values()].slice(1).forEach((g) => {
+        const id = out.v.length;
+        out.v.push(m.v[x].slice());
+        for (const fi of g) out.f[fi] = out.f[fi].map((y) => (y === x ? id : y));
+      });
+    });
+    return { verts, m: out };
+  }
+  function orientShells(m) {                   // conform normals: neighbours agree, closed shells point outward
+    const T = P.topology(m), seen = new Int8Array(m.f.length), flips = [];
+    for (let s0 = 0; s0 < m.f.length; s0++) {
+      if (seen[s0]) continue;
+      const shell = [s0];
+      seen[s0] = 1;
+      for (let qi = 0; qi < shell.length; qi++) {
+        const fi = shell[qi], f = m.f[fi];
+        for (let k = 0; k < f.length; k++) {
+          const a = f[k], b = f[(k + 1) % f.length], e = T.edges[T.edge(a, b)];
+          if (e.faces.length !== 2) continue;
+          const g = e.faces[0] === fi ? e.faces[1] : e.faces[0];
+          if (g === fi || seen[g]) continue;
+          const h = m.f[g], j = h.indexOf(a);
+          if (h[(j + 1) % h.length] === b) { m.f[g] = h.slice().reverse(); flips.push(g); }
+          seen[g] = 1; shell.push(g);
+        }
+      }
+      const sub2 = { v: m.v, f: shell.map((fi) => m.f[fi]) };
+      if (P.meshCheck(sub2).closed && P.volume(sub2) < 0) for (const fi of shell) { m.f[fi] = m.f[fi].slice().reverse(); flips.push(fi); }
+    }
+    return uniq(flips).length;
+  }
+  // P.cleanup(m, opts) -> { m, sel, warn, report }
+  //   op: "cleanup" (default: fix what is found) | "select" (m unchanged; sel = the offending faces / edges / verts)
+  //   Fix by tessellation (all off by default): quads (4-sided -> triangles), nsided (n-gons -> quads + triangles),
+  //   concave (-> convex pieces), holed (a face that touches itself -> triangulated without filling the hole),
+  //   nonPlanar (corners leaning more than planarTol degrees (1) out of the plane -> triangles)
+  //   Remove geometry (on by default): lamina (a face on the same vertices as another; one copy stays),
+  //   nonManifold (true | "normals": also conform normals | "geometry": split only), zeroEdges (shorter than
+  //   lengthTol 1e-5: collapsed), zeroFaces (area under areaTol 1e-5: removed, their vertices merged / the
+  //   sliver's points passed to the neighbour). zeroMap is not available (Forge meshes carry no UVs).
+  //   report: how many of each were found (select) or fixed (cleanup).
+  P.cleanup = (m0, o) => {
+    o = o || {};
+    const on = (k, d) => (o[k] == null ? d : !!o[k]);
+    const want = { quads: on("quads", false), nsided: on("nsided", false), concave: on("concave", false), holed: on("holed", false),
+      nonPlanar: on("nonPlanar", false), lamina: on("lamina", true), nonManifold: on("nonManifold", true), zeroEdges: on("zeroEdges", true), zeroFaces: on("zeroFaces", true) };
+    const nmMode = o.nonManifold === "geometry" ? "geometry" : "normals";
+    const { T, r } = analyse(m0, o);
+    const report = { quads: 0, nsided: 0, concave: 0, holed: 0, nonPlanar: 0, lamina: 0, nonManifoldEdges: 0, nonManifoldVerts: 0, flipped: 0, zeroEdges: 0, zeroFaces: 0 };
+    if (o.op === "select") {
+      const fs = new Set(), es = new Set(), vs = new Set();
+      for (const k of ["quads", "nsided", "concave", "holed", "nonPlanar", "lamina", "zeroFaces"]) if (want[k]) { report[k] = r[k].length; r[k].forEach((fi) => fs.add(fi)); }
+      if (want.zeroEdges) { report.zeroEdges = r.zeroEdges.length; r.zeroEdges.forEach((ei) => es.add(ei)); }
+      if (want.nonManifold) {
+        report.nonManifoldEdges = r.nmEdges.length; report.nonManifoldVerts = r.nmVerts.length;
+        r.nmEdges.forEach((ei) => es.add(ei)); r.nmVerts.forEach((x) => vs.add(x));
+        if (nmMode === "normals") { report.flipped = r.flipped.length; r.flipped.forEach((ei) => es.add(ei)); }
+      }
+      const pairs = [...es].map((ei) => [T.edges[ei].a, T.edges[ei].b]);
+      return { m: m0, sel: { v: [...vs], e: pairs, f: [...fs].sort((a, b) => a - b) }, warn: "", report };
+    }
+    let m = cp(m0);
+    const warns = [];
+    const compact = (mm) => { const x = finish(mm, NONE()).m; return x; };
+    // 1. lamina: the later copies of a face go
+    if (want.lamina && r.lamina.length) {
+      const drop = new Set(r.lamina);
+      report.lamina = drop.size;
+      m.f = m.f.filter((_, i) => !drop.has(i));
+    }
+    // 2. zero-length edges collapse (their ends merge at the middle)
+    if (want.zeroEdges || want.zeroFaces) {
+      const lt = Math.max(0, num(o.lengthTol, 1e-5)), Tm = P.topology(m), uf = UF(), hit = new Set();
+      Tm.edges.forEach((e) => { if (dist(m.v[e.a], m.v[e.b]) <= lt) { uf.union(e.a, e.b); hit.add(e.a); hit.add(e.b); if (want.zeroEdges) report.zeroEdges++; } });
+      if (want.zeroFaces && !want.zeroEdges) {      // only the short edges of zero-area faces merge
+        const at = Math.max(0, num(o.areaTol, 1e-5)), keep = new Set();
+        m.f.forEach((f) => { if (newellArea(m, f) <= at) for (const x of f) keep.add(x); });
+        for (const x of [...hit]) if (!keep.has(x)) hit.delete(x);
+      }
+      if (hit.size) {
+        const before = m.f.length, gm = new Map();
+        for (const x of hit) push(gm, uf.find(x), x);
+        const mg = mergeGroups(m, [...gm.values()]);
+        m = mg.m;
+        if (want.zeroFaces) report.zeroFaces += Math.max(0, before - m.f.length);
+      }
+    }
+    // 3. zero-area faces left (slivers: long but flat): the face goes, its middle points join the neighbour across
+    //    its longest edge, so the surface stays closed
+    if (want.zeroFaces) {
+      const at = Math.max(0, num(o.areaTol, 1e-5));
+      let slivers = 0;
+      for (let pass = 0; pass < 100000; pass++) {
+        const fi = m.f.findIndex((f) => newellArea(m, f) <= at);
+        if (fi < 0) break;
+        const f = m.f[fi];
+        let best = -1, bl = -1;
+        for (let k = 0; k < f.length; k++) { const l = dist(m.v[f[k]], m.v[f[(k + 1) % f.length]]); if (l > bl) { bl = l; best = k; } }
+        const w = f[best], u = f[(best + 1) % f.length], mids = cyc(f, (best + 2) % f.length, (best + f.length - 1) % f.length);
+        // the face runs u -> mids -> w and closes with w -> u
+        const order = [u, ...(f.length > 2 ? mids : []), w];
+        const Tm = P.topology(m), ei = Tm.edge(u, w), nb = ei === undefined ? [] : Tm.edges[ei].faces.filter((g) => g !== fi);
+        m.f.splice(fi, 1);
+        const nbIds = nb.map((g) => (g > fi ? g - 1 : g));
+        if (nbIds.length === 1 && order.length > 2) insertOnEdge(m, u, w, order.slice(1, -1), nbIds);
+        else if (nbIds.length !== 1) warns.push("a zero-area face on a border or non-manifold edge was removed (it leaves a gap)");
+        report.zeroFaces++;
+        slivers++;
+      }
+      if (slivers) m.f = cleanMesh(m.f);
+    }
+    // 4. tessellation
+    const tess = (test, key, fn) => {
+      if (!want[key]) return;
+      const nf = [];
+      m.f.forEach((f) => {
+        if (!test(f)) { nf.push(f); return; }
+        const pieces = fn(f);
+        if (pieces.length > 1 || (pieces[0] && pieces[0].length !== f.length)) report[key]++;
+        nf.push(...pieces);
+      });
+      m.f = nf;
+    };
+    tess((f) => new Set(f).size !== f.length, "holed", (f) => convexPieces(m, f, earClipWeak(m, f), 4));
+    tess((f) => isConcave(m, f), "concave", (f) => convexPieces(m, f, earClip(m, f), Infinity));
+    tess((f) => f.length > 4, "nsided", (f) => convexPieces(m, f, earClip(m, f), 4));
+    const pt = Math.max(0, num(o.planarTol, 1));
+    tess((f) => planarDeviation(m, f) > pt + 1e-9, "nonPlanar", (f) => earClip(m, f));
+    tess((f) => f.length === 4, "quads", (f) => earClip(m, f));
+    // 5. non-manifold last (the pro tools' advice): every vertex with 2+ fans is split, then normals conformed
+    if (want.nonManifold) {
+      m = compact(m);
+      const Tm = P.topology(m);
+      report.nonManifoldEdges = Tm.edges.filter((e) => e.faces.length > 2).length;
+      const fs = fanSplit(m, Tm, true);
+      report.nonManifoldVerts = fs.verts.length;
+      if (fs.m) m = { ...fs.m, creases: m.creases, hard: m.hard };
+      if (nmMode === "normals") report.flipped = orientShells(m);
+      const left = P.topology(m).edges.filter((e) => e.faces.length > 2).length;
+      if (left) warns.push(left + " non-manifold edges could not be split");
+    }
+    if (!warns.length && Object.values(report).every((x) => !x)) return { m: m0, sel: NONE(), warn: "", report };   // nothing to fix
+    const res = finish(m, NONE(), warns.length ? "Cleanup: " + uniq(warns).join("; ") + "." : "");
+    res.report = report;
+    return res;
+  };
+  // the heads-up display: what the mesh is made of
+  P.meshStats = (m) => {
+    const T = P.topology(m), { r } = analyse(m, {});
+    let tris = 0, quads = 0, ngons = 0;
+    for (const f of m.f) { if (f.length === 3) tris++; else if (f.length === 4) quads++; else if (f.length > 4) ngons++; }
+    return { verts: m.v.length, edges: T.edges.length, faces: m.f.length, tris, quads, ngons,
+      border: T.edges.filter((e) => e.faces.length === 1).length, nonManifoldEdges: r.nmEdges.length, nonManifoldVerts: r.nmVerts.length,
+      lamina: r.lamina.length, concave: r.concave.length, nonPlanar: r.nonPlanar.length, zeroEdges: r.zeroEdges.length, zeroFaces: r.zeroFaces.length,
+      shells: P.shells(m).length };
   };
 
   root.ForgePoly = P;
