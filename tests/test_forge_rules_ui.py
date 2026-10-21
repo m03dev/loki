@@ -258,6 +258,14 @@ async def main():
         check("a tool opens the In-View Editor (polyBevel1: Fraction, Segments); t brings it back; dragging Segments' name redoes the bevel",
               ive["open"] and ive["title"] == "polyBevel1" and ive["rows"][:2] == ["fraction", "segments"] and back and f1 > f0, [ive, back, f0, f1])
 
+        # -------- preselection highlight: the face under the mouse lights up before the click
+        await E("forge.view.setSelMode('face')")
+        await page.mouse.move(640, 440)
+        await page.mouse.move(650, 450)
+        await page.wait_for_timeout(120)
+        pre = await E("""() => { let n = null; forge.view.holder.traverse((o) => { if (o.name === 'forge-preselect') n = o.type; }); return n; }""")
+        check("preselection highlight: the face under the mouse is outlined before you click", pre == "LineSegments", pre)
+
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

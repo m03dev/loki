@@ -248,6 +248,12 @@ function forgeEditAttach(view, ctx) {
       pick.scene.add(pick.mesh); pick.geoOf = mesh.geometry;
     }
     holder.updateMatrixWorld(); camera.updateMatrixWorld();
+    // the buffer only changes when the camera, the object or the mesh does: reuse it otherwise (hover picking asks
+    // every frame the mouse moves)
+    const key = camera.matrixWorld.elements.join(",") + "|" + camera.projectionMatrix.elements[0] + "|" + holder.matrixWorld.elements.join(",")
+      + "|" + mesh.geometry.attributes.position.version + "|" + w + "x" + h + "|" + mesh.geometry.uuid;
+    if (pick.key === key && pick.rect) return true;
+    pick.key = key;
     pick.mesh.matrix.copy(holder.matrixWorld); pick.mesh.matrixWorldNeedsUpdate = true;
     const prev = renderer.getRenderTarget(), cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
     renderer.setScissorTest(false);
@@ -730,6 +736,45 @@ function forgeEditAttach(view, ctx) {
     else view.clickSelect(p, g.click);
   }, { capture: true });
   canvas.addEventListener("pointercancel", () => { gest = null; box.hidden = true; });
+
+  // Preselection highlight (the pro Selection preference, on by default): the vertex / edge / face under the mouse
+  // lights up red before you click, so you know what a click will take. Off: localStorage loki-forge-preselect = 0.
+  const preOn = () => { try { return localStorage.getItem("loki-forge-preselect") !== "0"; } catch (_) { return true; } };
+  view.preselectHighlight = (on) => { if (on != null) { try { localStorage.setItem("loki-forge-preselect", on ? "1" : "0"); } catch (_) { /* */ } if (!on) preClear(); } return preOn(); };
+  const preMat = new THREE.LineBasicMaterial({ color: 0xff3d3d, depthTest: false, transparent: true });
+  const prePt = new THREE.PointsMaterial({ color: 0xff3d3d, size: 8, sizeAttenuation: false, depthTest: false, transparent: true });
+  let pre = null, preAt = null, preQueued = false, preKey = "";
+  function preClear() { if (pre) { if (pre.parent) pre.parent.remove(pre); pre.geometry.dispose(); pre = null; preKey = ""; view.dirty = true; } }
+  function preDraw() {
+    preQueued = false;
+    if (!preAt || view.mode !== "poly" || !view.poly || gest || modal || edit || !preOn() || (gizmo.object && gizmo.axis)
+      || (typeof window.forgeToolkit !== "undefined" && window.forgeToolkit.sel && window.forgeToolkit.sel())) { preClear(); return; }
+    const hit = view.pickElement(preAt);
+    const k = hit.kind + ":" + hit.id + ":" + view.poly.v.length;
+    if (k === preKey) return;
+    preClear();
+    if (hit.id < 0) return;
+    preKey = k;
+    const g = new THREE.BufferGeometry(), m = view.poly;
+    let obj;
+    if (hit.kind === "vert") { g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(m.v[hit.id]), 3)); obj = new THREE.Points(g, prePt); }
+    else {
+      const segs = [];
+      if (hit.kind === "edge") { const e = topo().edges[hit.id]; segs.push(m.v[e.a], m.v[e.b]); }
+      else { const f = m.f[hit.id]; for (let i = 0; i < f.length; i++) segs.push(m.v[f[i]], m.v[f[(i + 1) % f.length]]); }
+      const a = new Float32Array(segs.length * 3); segs.forEach((p, i) => a.set(p, i * 3));
+      g.setAttribute("position", new THREE.BufferAttribute(a, 3));
+      obj = new THREE.LineSegments(g, preMat);
+    }
+    obj.name = "forge-preselect"; obj.renderOrder = 20; obj.raycast = () => {};
+    holder.add(obj); pre = obj; view.dirty = true;
+  }
+  canvas.addEventListener("pointermove", (e) => {
+    if (view.mode !== "poly" || e.buttons) { if (pre) preClear(); return; }
+    preAt = local(e);
+    if (!preQueued) { preQueued = true; requestAnimationFrame(preDraw); }
+  });
+  canvas.addEventListener("pointerleave", () => { preAt = null; preClear(); });
   canvas.addEventListener("dblclick", (e) => {
     if (view.mode !== "poly" || !view.poly || modal) return;
     if (ed.mode === "edge") { view.loopSelect(local(e), e.shiftKey ? "add" : "set"); return; }   // pro: double-click an edge = its loop

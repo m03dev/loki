@@ -320,6 +320,7 @@ function forgeTkCommands() {
     camSelOn: ["Camera Based Selection: On", (v) => { if (v.cameraBasedSelection) v.cameraBasedSelection("on"); forgeTkSyncModes(); return "Selection: only what you can see."; }],
     camSelOff: ["Camera Based Selection: Off (select through)", (v) => { if (v.cameraBasedSelection) v.cameraBasedSelection("off"); forgeTkSyncModes(); return "Selection: through the model - a marquee takes the hidden vertices too."; }],
     backfaces: ["Backface Culling", (v) => forgeTkBackfaces(v)],
+    preselect: ["Preselection Highlight", (v) => (v.preselectHighlight ? (v.preselectHighlight(!v.preselectHighlight()) ? "Preselection highlight on." : "Preselection highlight off.") : "")],
     multiCut: ["Multi-Cut", async (v) => { await toComp(v, "edge"); forgeTkTool("multiCut"); return ""; }],
     targetWeld: ["Target Weld", async (v) => { await toComp(v, "vert"); forgeTkTool("targetWeld"); return ""; }],
     offsetEdgeLoop: ["Offset Edge Loop", async (v) => { await toComp(v, "edge"); forgeTkTool("offsetEdgeLoop"); return ""; }],
@@ -609,6 +610,6 @@ function forgeIveShow(force) {
   }
   if (typeof FORGE_PRO_TOGGLES !== "undefined") Object.assign(FORGE_PRO_TOGGLES, { iveToggle: () => forgeIveOn(),
     camSelAuto: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "auto"), camSelOn: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "on"),
-    camSelOff: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "off"), backfaces: (v) => v.backfaceCull !== false });
+    camSelOff: (v) => !!(v.cameraBasedSelection && v.cameraBasedSelection() === "off"), backfaces: (v) => v.backfaceCull !== false, preselect: (v) => !!(v.preselectHighlight && v.preselectHighlight()) });
 })();
 window.forgeToolkit.ive = { show: forgeIveShow, hide: forgeIveHide, on: forgeIveOn, set: forgeIveSet };

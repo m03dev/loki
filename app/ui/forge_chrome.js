@@ -211,7 +211,7 @@ const FMY_MENUS = () => {
     ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
     ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "deleteHistory", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
     ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Make with LOKI", "draw", "image", "describe", "creature"]],
-    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces"]],
+    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]],
     ["Modify", ["#Transform", "move", "rotate", "scale", "showManip", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
     ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
     ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Settings/Preferences", "hotkeyEditor"])],
