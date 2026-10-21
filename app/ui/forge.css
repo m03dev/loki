@@ -211,9 +211,18 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
   .forge-sculptbar .forge-slider { grid-column: 1 / -1; flex-direction: row; }
   .forge-slider input { writing-mode: horizontal-tb; direction: ltr; width: 56px; height: 18px; }
 }
+@media (max-height: 760px) {   /* short windows: the Time Slider keeps one row (the range and the interpolation picker live in the Animation menu there) */
+  .forge-timebar #forge-time-start, .forge-timebar #forge-time-end, .forge-timebar .forge-time-interp { display: none; }
+  .forge-time-track { width: clamp(80px, 18vw, 200px); }
+}
 @media (max-height: 640px) {
   .forge-sculptbar .forge-btn { height: 28px; }
   .forge-viewbar .forge-btn, .forge-exportbar .forge-btn { width: 30px; height: 30px; }
+  /* a 900x600 stage is ~320 px wide: keep the Time Slider to one short row (Set Key is on S, the rest is in the
+     Animation menu) so it cannot reach the sculpt bar above it */
+  .forge-timebar .forge-time-setkey, .forge-timebar .forge-time-autokey, .forge-timebar .forge-time-graph,
+  .forge-timebar .forge-time-prev, .forge-timebar .forge-time-next { display: none; }
+  .forge-time-track { width: clamp(60px, 12vw, 120px); }
 }
 /* Quad view: the front / side / top / three-quarter labels over the four orthographic panels */
 .forge-quad-labels { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr;
