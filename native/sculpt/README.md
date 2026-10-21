@@ -5,7 +5,7 @@ inside LOKI's window (no native install, the same file on macOS and Windows).
 
 | Folder | What |
 | --- | --- |
-| `core/` | the engine: mesh + BVH, 40 brush kernels (`brush.cpp`), dynamic detail (`dyntopo.cpp`), voxel remesh (`voxel_remesh.cpp`, dual contouring), field-aligned quad remesh (`quad_remesh.cpp` + `instant_meshes.cpp`), subdivision levels (`multires.cpp`, Catmull-Clark with per-level detail in tangent frames), cluster LOD, paged store, SDF volumes |
+| `core/` | the engine: mesh + BVH, 40 brush kernels (`brush.cpp`), dynamic detail (`dyntopo.cpp`), voxel remesh (`voxel_remesh.cpp`, dual contouring), field-aligned quad remesh (`quad_remesh.cpp` + `instant_meshes.cpp`), subdivision levels (`multires.cpp`, Catmull-Clark with per-level detail in tangent frames), cluster LOD, paged store, SDF volumes, and `cage_subdiv.cpp` - Catmull-Clark of Forge's modelling cage for the 2 / 3 smooth preview (the JS ForgePoly.smooth result exactly, ~6x faster; Forge runs it in its own worker, app/ui/forge_geom.js) |
 | `wasm/` | the WebAssembly build: `sculpt_api.cpp` (the C API), `st_compat.h` (single-thread stand-ins for std::thread/mutex), `sculpt_engine.js` (JS wrapper, browser + node), `sculpt_worker.js` (the worker Forge talks to), `build.sh`, `test/test_engine.js` |
 | `brushes/` | the brush library (212 presets over the kernels) and its alpha stamps |
 | `tools/gen_matcaps.py` | draws the six matcaps procedurally (numpy + PIL) into `app/ui/vendor/sculpt/matcaps/` |
@@ -22,6 +22,7 @@ built the committed file):
 ```
 WASI_SDK=/path/to/wasi-sdk-25.0 bash native/sculpt/wasm/build.sh /tmp/sculpt-build
 node native/sculpt/wasm/test/test_engine.js /tmp/sculpt-build/sculpt.wasm     # every engine call, ~4 s
+node native/sculpt/wasm/test/test_cage.js /tmp/sculpt-build/sculpt.wasm       # the cage subdivision vs the JS, ~2 s
 cp /tmp/sculpt-build/sculpt.wasm native/sculpt/wasm/sculpt_engine.js native/sculpt/wasm/sculpt_worker.js app/ui/vendor/sculpt/
 ```
 

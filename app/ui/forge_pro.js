@@ -319,6 +319,7 @@ function forgeProPanelsApply(p) {
       window.ForgeMaterials.open(mats, (maps) => forge.view && forge.view.setMaterial(maps)).catch((e) => proSay("Materials: " + e.message, true));
     }
   }
+  if (typeof forgeSplitAttach === "function") forgeSplitAttach();   // the panels' drag-to-resize edges (forge_split.js)
   const v = typeof forge !== "undefined" && forge.view;
   if (v && v.resize) v.resize();
   return p;
@@ -562,7 +563,7 @@ function forgeProMenu(v, ctx) {
     if (comp && mode === "edge") return { title: "Edge tools", ring: { S: "extrude", E: "bevel", SW: "deleteEdgeVert", N: "bridge", NE: "edgeLoop", W: "multiCut", NW: "connect", SE: "offsetEdgeLoop" }, list: ["merge", "collapse", "slideEdge", "spinEdge", "detach", "fillHole", "loopSel", "ringSel", "grow", "shrink"] };
     if (comp) return { title: "Face tools", ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset", N: "duplicateFace" }, list: ["extractFace", "collapse", "triangulate", "quadrangulate", "circularize", "deleteComp", "smooth", "grow", "shrink"] };
     if (ctx.node) return { title: "Mesh tools", ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" }, list: ["smooth", "dynamesh", "makeLive"] };
-    return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" }, list: ["draw", "image", "describe", "creature"] };
+    return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" }, list: ["imagePlane", "draw", "image", "describe", "creature"] };
   }
   if (ctx.node || comp) {                           // dagMenuProc: N Edge, W Vertex, S UV, E Face, SW VF, SE Shell, NW Multi, NE Object
     return { title: ctx.node ? ctx.node.name : "Components",
@@ -665,7 +666,7 @@ const FORGE_PRO_ROWS = [
   ["Recent Commands", []],                      // filled from what you ran last
   ["File", ["save", "saveObj", "export", "close"]],
   ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
-  ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "draw", "image", "describe", "creature"]],
+  ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "imagePlane", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
   ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
@@ -967,7 +968,7 @@ function forgeProPickAt(v, x, y) {               // the node under the screen po
   v.camera.updateMatrixWorld();
   const ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), v.camera);
-  const hit = ray.intersectObjects(t.pickables(), false)[0];
+  const hit = ray.intersectObjects(t.pickables({ select: true }), false)[0];   // R / T layers: the click goes through
   return hit ? t.nodeOfObject(hit.object) : null;
 }
 
@@ -981,6 +982,7 @@ function forgeProBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is insid
   for (const id of t.allIds()) {
     const n = t.node(id);
     if (!n || n.kind !== "mesh" || !n.visible) continue;
+    if (t.layerNorm && (!t.layerNorm(n) || t.layersLocked(id))) continue;   // hidden or R / T layers: the box goes through
     const b = t.worldBox([id]);
     if (b.isEmpty()) continue;
     const p = b.getCenter(new THREE.Vector3()).project(v.camera);

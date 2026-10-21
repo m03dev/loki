@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-21 (Forge: undo for the scene, hotkey table, pro manipulator, Creature Editor, smoother sculpting).
+Last updated: 2026-10-21 early morning (Spaces taken out; Forge: empty new scene, R layers, image planes, % panels, C++ smooth preview).
 
 ## The machines
 
@@ -49,8 +49,8 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 - Subprocesses never open a console on Windows: engine/no_console.py makes CREATE_NO_WINDOW the default
   (LOKI_SHOW_CONSOLES=1 turns it off); verified on the PC with an 8-minute visible-window poll (W51).
 
-### App window and tabs (incl. Spaces)
-- Six title-bar tabs (app/ui/modebar.js MODES): LOKI / Studio / Godot / World / Forge / Spaces, Ctrl/Cmd+1..6
+### App window and tabs
+- Five title-bar tabs (app/ui/modebar.js MODES): LOKI / Studio / Godot / World / Forge, Ctrl/Cmd+1..5
   (Ctrl works on macOS too). Ctrl+<n> is re-raised from inside the World game frame (world_godot/host.js).
 - **Windows:** frameless, LOKI's strip is the title bar with its own min/max/close, Aero snap via WM_NCLBUTTONDOWN
   (app/loki_app.py win_hit) - **verified on the PC** (W50, docs/operations/screens/w50-titlebar.png).
@@ -62,12 +62,10 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   editor); every bridge answer adds COEP + CORP cross-origin (loki_bridge.py COI_HEADERS, ecf9b40) so Mermaid,
   Preview, LOKI Apps, Play and the Studio tab frame again. Cloud only (test_research3 154, test_apps 131) -
   **not checked in WebView2 / WKWebView**.
-- **Spaces** (engine/spaces.py, spaces_api.py, app/ui/spaces.js/.css, docs/SPACES.md): your own peer-to-peer
-  Discord. The machine that makes a space hosts it (harness_data/spaces/, port 8795 + the bore relay); HMAC-signed
-  requests, AES-GCM-sealed messages and WebRTC signals; text/voice rooms, lobbies, roles. Full-window tab since
-  d04c132 (rail | rooms | room | members; a call keeps a pill on other tabs). Cloud: test_spaces 33,
-  test_spaces_ui 16 (a real WebRTC call with Chromium's fake mic). **Not verified:** the mic inside
-  WKWebView/WebView2, two real machines over the relay, the Godot side.
+- **Spaces** (the P2P Discord tab) was TAKEN OUT on 2026-10-21 (owner: "get rid of spaces, we dont need it in the
+  directions we're going"). Nothing deleted: the code, its two suites and SPACES.md are in
+  docs/operations/archive/spaces/ (README there says how to bring it back); the tab, the /spaces routes, the port-8795
+  host start and the suites are unhooked.
 - Background mode: closing the window keeps LOKI running; it starts hidden at login (Startup LOKI.vbs /
   LaunchAgent). The stray Startup `Loki.lnk` -> Loki.cmd that opened a console at every logon is removed by
   `retire_console_launchers()` (847a78b).
@@ -165,6 +163,14 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   nodes, interactive Multi-Cut / Target Weld / Offset Edge Loop, the toolkit tab); Delete dissolves edges / vertices;
   calm hotbox; 4 wireframe-only; f on components; manipulator fix for Shift-extrude; the Generate panel. Cloud only.
 
+- **2026-10-21 early morning (Claude)**: a new scene is empty (only the four cameras in the Outliner, empty Channel
+  Box, the 3/4 persp view); Display Layers get R (reference: clicks go through, snapping still works) and T draws as a
+  grey wire; Free Image Plane (forge_imageplane.js: PNG / JPEG / WebP, menu, hotbox, drop on the viewport, Alpha
+  Gain); every side panel resizes by its edge in % (forge_split.js); no scroll bars; channel fields give the keys back on
+  Enter; hidden objects grey in the Outliner. C++: native/sculpt/core/src/cage_subdiv.cpp (Catmull-Clark, the JS
+  result exactly, ~6x faster) runs the 2 / 3 smooth preview of 400+ face cages in a worker (forge_geom.js);
+  sculpt.wasm rebuilt (WASI SDK 25, test_engine ALL OK). docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 early morning)",
+  research: docs/FORGE_QOL.md. Cloud only - Mac check in ZIVA_TASKS.
 - **2026-10-21 night (Claude)**: In-View Editor + t, the full tool options, Mesh > Cleanup, the pro wireframe, camera based
   selection / backface culling / preselection highlight - docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 night)". Cloud only.
 
@@ -194,7 +200,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   `/peers/restart` work (diagnose verified PC -> Mac, redacted).
 - It still drops at times: 2026-10-18 the Mac saw "cannot reach pc at http://127.0.0.1:49952 ([Errno 54] Connection
   reset by peer)" while the PC was down; later the same day M53 saw it live (3.3 s, both on d65ecfc).
-- Shared over the link: memory (engine/memory_sync.py), automations, apps, MMO profile, Spaces (own port 8795).
+- Shared over the link: memory (engine/memory_sync.py), automations, apps, MMO profile (Spaces, port 8795, was taken out 2026-10-21).
   None of the two-machine flows (memory, automations, apps sync, Update everything) has been checked live.
 
 ## Open problems (still open as of c132c1f)
@@ -204,8 +210,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 2. **No release signing key** - Needs Mohamed (docs/INSTALL.md "Signing"); blocks the first v* release.
 3. **COEP in the real webviews**: whether Mermaid/Preview/Apps/Play/Studio tab frames show in WebView2 and
    WKWebView (Safari's COEP is stricter) after ecf9b40 is unknown.
-4. **Spaces mic** inside pywebview (may need the OS microphone permission; macOS Loki.app needs
-   NSMicrophoneUsageDescription - tools/macos/make_loki_app.sh) and Spaces across two real machines.
+4. ~~Spaces mic~~ - Spaces was taken out on 2026-10-21 (archived); nothing to check.
 5. **Mac computer use**: Accessibility + Screen Recording are not granted ("screencapture failed - give the app
    running LOKI Screen Recording permission"); the open_app-activate / never-type-into-LOKI fix (0d544bf) is
    tested only with the fake desktop.
@@ -227,12 +232,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 1. PC: restart LOKI so it takes the waiting update; if the engine still does not answer, read the last 40 lines of
    harness_data/app/loki_bridge.log. Then Godot tab > Open LOKI World in Godot so the agents are linked again.
 2. Mac: the same LOKI World loop (Open in Godot with LOKI's macOS 4.7.2, live link, World tab, Rebuild World).
-3. Check the COEP frames and the Spaces tab (two machines, voice) in the real windows on both machines.
+3. Check the COEP frames in the real windows on both machines.
 4. Mohamed: the release signing key; then run the Installers workflow and install on a clean account per OS.
 5. Real models through the task bench on the PC (`tools/task_bench.py --model local|bonsai|smart`) - the owner's
    #1 core system; the failures it finds are the next engine fixes.
-6. Spaces in LOKI World (Godot side): poll `GET /spaces/world`, draw lobbies/voice rooms as campfires, join via
-   `postMessage({lokiSpaces: "join", space, room})` (docs/SPACES.md "LOKI World").
+6. (was: Spaces in LOKI World - dropped with Spaces on 2026-10-21.)
 7. Forge: loop cut + bevel on `P.topology` / `P.edgeRing` (app/ui/forge_poly.js), then T6c.
 8. Let LOKI's own evolve loop do E15, E14, E12 (docs/EVOLVE.md; E13 done in 2ddc73d) - watch, do not write them.
 9. After Mohamed's macOS grants: re-run computer use on the Mac (TextEdit) and the PC (Notepad).
@@ -240,7 +244,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 ## Where to look
 
 - Owner's direction: docs/BUILD_BRIEF.md. Architecture: docs/ARCHITECTURE.md. Roadmap LOKI builds itself: docs/EVOLVE.md.
-- Live Godot: docs/LIVE_GODOT.md. Spaces: docs/SPACES.md. Forge pro: docs/FORGE_PRO.md. Studio: docs/STUDIO.md.
+- Live Godot: docs/LIVE_GODOT.md. Spaces (archived): docs/operations/archive/spaces/. Forge pro: docs/FORGE_PRO.md. Studio: docs/STUDIO.md.
 - Installers: docs/INSTALL.md, docs/TESTERS.md, docs/SPEED.md. Phone: docs/PHONE.md, mobile/INSTALL_PHONE.md.
 - Off-network link: docs/operations/OFF_NETWORK.md. Session log: docs/operations/SESSION_LOG.md.
 - Full history: docs/operations/archive/HANDOFF_until_2026-10-19.md.

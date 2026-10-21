@@ -1060,10 +1060,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import forge_api  # pylint: disable=import-outside-toplevel
             self._send_forge(forge_api.handle_get(self.server.state, self.path))
             return
-        if route == "/spaces" or route.startswith("/spaces/"):   # LOKI Spaces, your own Discord (engine/spaces_api.py)
-            import spaces_api  # pylint: disable=import-outside-toplevel
-            self._send_json(*spaces_api.route("GET", self.path))
-            return
+        # LOKI Spaces (the P2P Discord) was taken out on 2026-10-21 (owner: "get rid of spaces, we dont need it in
+        # the directions we're going"); its code is kept in docs/operations/archive/spaces/.
         import usability_api  # pylint: disable=import-outside-toplevel - session 29: help, onboarding, language
         if usability_api.handles("GET", route):
             self._send_json(*usability_api.route(self.server.state, "GET", self.path))
@@ -1443,12 +1441,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(*apps_api.handle(self.server.state, "POST", self.path, body))
             except Exception as exc:  # noqa: BLE001
                 self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
-            return
-        if route.startswith("/spaces/"):   # LOKI Spaces (engine/spaces_api.py)
-            import spaces_api  # pylint: disable=import-outside-toplevel
-            data = self._read_json()
-            if data is not None:
-                self._send_json(*spaces_api.route("POST", self.path, data))
             return
         data = self._read_json()
         if data is None:
@@ -2807,11 +2799,6 @@ async def serve() -> None:
         state.phone_server = phone_link.start(state, loki)
     except Exception as exc:  # noqa: BLE001 - the phone link is optional; chat must still start
         print(f"[loki-bridge] phone link unavailable: {exc}", flush=True)
-    try:   # LOKI Spaces: serve the spaces this machine hosts (engine/spaces.py; nothing listens when it hosts none)
-        import spaces_api  # pylint: disable=import-outside-toplevel
-        spaces_api.start()
-    except Exception as exc:  # noqa: BLE001 - Spaces is optional; chat must still start
-        print(f"[loki-bridge] spaces unavailable: {exc}", flush=True)
     try:
         import channels  # pylint: disable=import-outside-toplevel
         channels.start(state, loki)   # Telegram: idle until a bot token is saved and this machine polls

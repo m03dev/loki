@@ -3,11 +3,11 @@
  * the worker sends back the vertices that moved (positions + normals, transferred, not copied) or, after a
  * topology change (dynamic detail, remesh, subdivision levels), the whole new mesh.
  *
- * Messages in:  load {pos, idx} | brush {preset, strength, symmetry, dyn {on, detail, relative, constant}}
+ * Messages in:  cage {seq, v, sizes, idx, levels, max} (smooth preview of a polygon cage) | load {pos, idx} | brush {preset, strength, symmetry, dyn {on, detail, relative, constant}}
  *               press {ray, pressure, radius, mods, mode?, tube?, insert?} (mode "curve": the stroke draws a Tube on
  *               release; mode "insert": a primitive is added where it lands)
  *               drag {rays, pressure, pressures?, radius, angle} | release | hit {seq, ray} | setPositions {pos} | op {name, arg}
- * Messages out: ready | fail | loaded | dirty {ids, pos, nrm, ms} | topology {pos, nrm, idx, polys, levels, level}
+ * Messages out: cage {seq, steps, faces, pos, idx, ms} | ready | fail | loaded | dirty {ids, pos, nrm, ms} | topology {pos, nrm, idx, polys, levels, level}
  *               hit {seq, point, normal} | released {kind} | done {name, ok, info} */
 /* global SculptEngine, importScripts */
 "use strict";
@@ -177,6 +177,12 @@ onmessage = (ev) => {
       case "setPositions":
         E.setPositions(m.pos);
         break;
+      case "cage": {   // the modelling cage's smooth preview (no sculpt mesh needed): {seq, v, sizes, idx, levels, max}
+        const t0 = performance.now();
+        const r = E.cageSubdivide(m.v, m.sizes, m.idx, m.levels || 2, m.max || 60000);
+        postMessage({ t: "cage", seq: m.seq, steps: r.steps, faces: r.faces, pos: r.pos, idx: r.idx, ms: performance.now() - t0 }, [r.pos.buffer, r.idx.buffer]);
+        break;
+      }
       case "op": {
         const t0 = performance.now();
         const ok = !!OPS[m.name](m.arg);

@@ -14,7 +14,7 @@ CXX=("$W/bin/clang++" --target=wasm32-wasip1 --sysroot="$W/share/wasi-sysroot" -
      -Ithird_party/meshoptimizer/src -Ithird_party/meshoptimizer -DEIGEN_MPL2_ONLY -DEIGEN_NO_EXCEPTIONS -DNDEBUG)
 SRC=(wasm/sculpt_api.cpp core/src/mesh.cpp core/src/bvh.cpp core/src/brush.cpp core/src/dyntopo.cpp
      core/src/voxel_remesh.cpp core/src/quad_remesh.cpp core/src/preset_io.cpp core/src/instant_meshes.cpp
-     core/src/multires.cpp core/src/curve_tube.cpp third_party/instant-meshes/src/*.cpp)
+     core/src/multires.cpp core/src/curve_tube.cpp core/src/cage_subdiv.cpp third_party/instant-meshes/src/*.cpp)
 pids=(); objs=()
 for f in "${SRC[@]}"; do
   o="$OUT/obj/$(echo "$f" | tr / _).o"; objs+=("$o")

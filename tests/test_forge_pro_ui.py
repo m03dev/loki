@@ -267,6 +267,14 @@ async def main():
         # right button: the menu is there the moment the button goes down, only while it is held; a quick click
         # does nothing (owner 17:06: "right click doesnt do that ... fix the systems")
         ex, ey = vb["x"] + 40, vb["y"] + 70
+        # the empty spot: the first point near the top-left with no object under it (the 3/4 default camera of
+        # 2026-10-21 can put a cube under the old fixed point)
+        spot = await page.evaluate("""() => { const v = forge.view, r = v.canvas.getBoundingClientRect();
+          for (let y = r.top + 70; y < r.bottom - 20; y += 20) for (let x = r.left + 40; x < r.right - 20; x += 20)
+            if (!forgeProPickAt(v, x, y)) return [x, y];
+          return null; }""")
+        if spot:
+            ex, ey = spot
         await page.mouse.move(ex, ey)
         await page.mouse.down(button="right")
         now = await page.evaluate("""() => { const h = document.getElementById('forge-pro-marking');
@@ -678,7 +686,7 @@ async def main():
         check("...select -cl clears the selection, and an unknown word is an error like the standard one", cl2[0] == 0 and "Cannot find procedure" in cl2[1], cl2)
         # the Channel Box: the pro channels (now including Rotate Order, patch 368), a scrub on a channel's name, SHAPES and INPUTS (the history)
         cb = await page.evaluate("""() => { const t = forge.view.tree.api; t.select(t.list().find((n) => n.name.startsWith('pCube')).id);
-          return { rows: [...document.querySelectorAll('#forge-channel .forge-ch-row .forge-ch-label')].map((l) => l.textContent),
+          return { rows: [...document.querySelectorAll('#forge-channel .forge-ch-row:not([hidden]) .forge-ch-label')].map((l) => l.textContent),
                    shape: document.querySelector('#forge-channel .forge-ch-node').textContent, name: document.getElementById('forge-ch-name').textContent }; }""")
         check("the Channel Box lists Translate X ... Scale Z, Rotate Order and Visibility, the object's name, and its shape under SHAPES",
               cb["rows"] == ["Translate X", "Translate Y", "Translate Z", "Rotate X", "Rotate Y", "Rotate Z",

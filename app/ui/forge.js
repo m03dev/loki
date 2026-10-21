@@ -1264,7 +1264,9 @@ function forgeMakeView(lib, renderer, canvas) {
   renderer.setPixelRatio(navigator.webdriver ? Math.min(dpr, 2) : Math.min(3, Math.max(1.5, dpr)));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
-  camera.position.set(0, 0.4, 2.6);
+  // the pro default persp camera: up and to the right, looking down at the origin (the reference package's persp sits
+  // at 28, 21, 28) - a 3/4 view of the grid, not edge-on from the front (owner 2026-10-21: "just like" the pro tool)
+  camera.position.set(28, 21, 28).normalize().multiplyScalar(4.6);
   scene.add(camera);
   const hemi = new THREE.HemisphereLight(0xdfe6f2, 0x2a2e36, 1.0);
   const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(1.2, 1.6, 2);

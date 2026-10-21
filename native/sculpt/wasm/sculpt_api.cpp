@@ -7,6 +7,7 @@
 // Memory: positions / normals / colors are float[3] per vertex, triangles are
 // int32[3], all read straight out of the module's memory via the *_ptr calls.
 #include "sculpt/brush.h"
+#include "sculpt/cage_subdiv.h"
 #include "sculpt/curve_tube.h"
 #include "sculpt/dyntopo.h"
 #include "sculpt/multires.h"
@@ -201,7 +202,31 @@ Mesh meshFromPolys(const std::vector<Vec3>& p, const std::vector<int>& counts, c
 KS_EXPORT(ks_alloc) void* ks_alloc(int bytes) { return std::malloc((size_t)bytes); }
 KS_EXPORT(ks_free) void ks_free(void* p) { std::free(p); }
 
-// ---------------------------------------------------------------- mesh in / out
+// ---------------------------------------------------------------- the modelling cage's smooth preview
+// Catmull-Clark of a polygon cage (Forge's 2 / 3 smooth preview), independent of the sculpt mesh: in go the cage's
+// vertices (float xyz), corners per face and the faces' indices; out come the smoothed vertices and their fan
+// triangles, read with ks_cage_pos / ks_cage_tris until the next ks_cage_subdiv. Returns the steps done (-1: bad cage).
+namespace { std::vector<float> gCagePos; std::vector<int> gCageTris; int gCageFaces = 0; }
+KS_EXPORT(ks_cage_subdiv) int ks_cage_subdiv(const float* v, int nv, const int* sizes, int nf, const int* idx, int nIdx, int levels, int maxFaces) {
+    Cage in;
+    in.v.assign(v, v + (size_t)nv * 3);
+    in.sizes.assign(sizes, sizes + nf);
+    in.idx.assign(idx, idx + nIdx);
+    Cage out;
+    const int done = cageSubdivide(in, levels, maxFaces, out);
+    if (done < 0) { gCagePos.clear(); gCageTris.clear(); gCageFaces = 0; return -1; }
+    gCagePos.resize(out.v.size());
+    for (size_t i = 0; i < out.v.size(); ++i) gCagePos[i] = (float)out.v[i];
+    cageTriangulate(out, gCageTris);
+    gCageFaces = (int)out.sizes.size();
+    return done;
+}
+KS_EXPORT(ks_cage_pos) const float* ks_cage_pos() { return gCagePos.data(); }
+KS_EXPORT(ks_cage_nverts) int ks_cage_nverts() { return (int)(gCagePos.size() / 3); }
+KS_EXPORT(ks_cage_tris) const int* ks_cage_tris() { return gCageTris.data(); }
+KS_EXPORT(ks_cage_ntris) int ks_cage_ntris() { return (int)(gCageTris.size() / 3); }
+KS_EXPORT(ks_cage_nfaces) int ks_cage_nfaces() { return gCageFaces; }
+
 
 // Triangles, or polygons when counts != null (quads kept for subdivision levels).
 KS_EXPORT(ks_load) int ks_load(const float* pos, int nVerts, const int* idx, int nIdx, const int* counts, int nCounts) {

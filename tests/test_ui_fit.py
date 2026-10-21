@@ -172,8 +172,8 @@ def run(pw, size, mac):
           tabsDrag: tabs.some(t => t.classList.contains('pywebview-drag-region') || t.closest('.modebar').classList.contains('pywebview-drag-region')),
           firstTab: tabs[0] ? tabs[0].getBoundingClientRect().left : 0, shellTop: shell.top, bannerTop: br.top, sideTop: side.top,
           mac: document.documentElement.classList.contains('titlebar-mac')}; }""")
-    check("[%s] the title strip spans the top with the 6 tabs (LOKI, Studio, Godot, World, Forge, Spaces)" % tag, strip and strip["top"] == 0 and 30 <= strip["h"] <= 44
-          and strip["w"] == size[0] and strip["tabs"] == 6, strip)
+    check("[%s] the title strip spans the top with the 5 tabs (LOKI, Studio, Godot, World, Forge)" % tag, strip and strip["top"] == 0 and 30 <= strip["h"] <= 44
+          and strip["w"] == size[0] and strip["tabs"] == 5, strip)
     if not win:
         check("[%s] the strip drags the window, the tabs do not" % tag, strip and strip["drag"] and not strip["tabsDrag"], strip)
     else:   # Windows (2026-10-18 "the tabs are floating here"): frameless, the strip IS the title bar

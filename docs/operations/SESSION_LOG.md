@@ -4,6 +4,25 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-21 (early morning) - Spaces out; Forge: empty scene, R layers, image planes, % panels, C++ smooth preview (Claude, cloud)
+
+- Owner 03:39: "get rid of spaces", "focus on forge ... improve it with c++", empty new scene, h / V / R, free image
+  plane, panels adjustable in %, no right scroll bar, "do research quality of life and patch notes".
+- Spaces archived to docs/operations/archive/spaces/ (code, suites, doc; unhooked from modebar, index.html, the bridge,
+  ship.py). Forge: forge_scene.js ghost working object, R layers + template look + pick-through, Alpha Gain, image
+  plane nodes; new forge_split.js, forge_imageplane.js, forge_geom.js; C++ native/sculpt/core/src/cage_subdiv.cpp +
+  ks_cage_subdiv + worker "cage" message, sculpt.wasm rebuilt (WASI SDK 25). Research: docs/FORGE_QOL.md.
+- Merged Ziva's 24d3b7a (Channel Box Rotate Order / Lock / custom attributes) - her channel fields also hand the keys
+  back on Enter now; rebased on her b83d324 (modelling symmetry) and kept her test_forge_pro_ui expectations, adding only
+  visible-row counting and a really empty spot for the right-button check (the 3/4 camera put a cube under the old one).
+- Checked (cloud, each < 1 min): test_forge_cleanup_ui 23 (new), test_forge_native_geom 13 (new; node test_cage 9),
+  native test_engine ALL OK, test_forge_pro_ui 100, test_forge_ui 37, sculpt_engine 30, edit 21, model 18, export 8,
+  symmetry 6, undo_keys 20, rules 23, creature 10, layers 9, channel 6, poly 36, polyops 135, ui_fit 81, ui_smoke 10,
+  studio_destination 81, --self-test OK (with tests/cloud_stubs). Not checked: the real Mac / PC windows.
+- Shipped with `ship.py --no-tests`: the fast run picked suites that fail identically on a clean origin/master
+  (test_godot_world 5 + test_loki 1 from 17ff945's tracked Godot addon, test_usability i18n, test_qol, test_research3,
+  test_studio's cloud-stub noise) - ZIVA_TASKS "DO FIRST (Claude, 04:40)".
+
 ## 2026-10-21 (night) - Forge: In-View Editor, tool options, Cleanup, wireframe, selection preferences (Claude, cloud)
 
 - forge_toolkit.js (In-View Editor, choice settings, Cleanup window, Mesh Report, selection prefs), forge_polyops.js

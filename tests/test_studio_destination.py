@@ -480,9 +480,9 @@ else:
             page.goto("http://127.0.0.1:8897/#token=t")
             page.wait_for_selector("#modebar .modebar-tab", timeout=15000)
             tabs = page.eval_on_selector_all("#modebar .modebar-tab", "els => els.map(e => e.dataset.mode)")
-            # Spaces became the sixth title-bar tab (shipped from the PC while Forge's pro work was in flight)
-            check("the mode bar shows LOKI, Studio, Godot, World, Forge, Spaces",
-                  tabs == ["loki", "studio", "godot", "world", "forge", "spaces"], tabs)
+            # Spaces was the sixth tab until 2026-10-21 (owner: "get rid of spaces"; archived)
+            check("the mode bar shows LOKI, Studio, Godot, World, Forge (Spaces taken out)",
+                  tabs == ["loki", "studio", "godot", "world", "forge"], tabs)
             page.evaluate("document.getElementById('prompt').value = 'half-typed message'")
             page.keyboard.press("Control+2")
             page.wait_for_timeout(500)

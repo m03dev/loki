@@ -1023,3 +1023,39 @@ body.forge-tk-tool #forge-view { cursor: crosshair; }
 .forge-clean-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .forge-clean-row input[type="number"], .forge-clean-row select { margin-left: auto; background: #2b2b2b; color: #e6e6e6; border: 1px solid #222; border-radius: 2px; padding: 2px 5px; font: inherit; }
 .forge-clean-row input[type="number"] { width: 90px; }
+
+/* ---- 2026-10-21 (owner: "make all the ui panels adjustable ... everything is %", "get rid of the scroll bar on the
+   right side", "clean everything up"). The splitters (forge_split.js): a thin edge between each side panel and the
+   viewport; hover = resize cursor + a blue line, drag = wider / narrower (stored as % of Forge's width). */
+#forge .forge-split { flex: 0 0 5px; width: 5px; margin: 0 -2px; position: relative; z-index: 6; cursor: col-resize;
+  background: transparent; touch-action: none; }
+#forge .forge-split::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: transparent; transition: background .12s; }
+#forge .forge-split:hover::after, #forge .forge-split.drag::after { background: #2f7fd0; width: 2px; left: 1.5px; }
+#forge .forge-split[hidden], #forge .forge-split-h[hidden] { display: none; }
+#forge .forge-split-h { flex: 0 0 5px; height: 5px; margin: -2px 0; position: relative; z-index: 6; cursor: row-resize; touch-action: none; }
+#forge .forge-split-h::after { content: ""; position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: rgba(255,255,255,.06); }
+#forge .forge-split-h:hover::after, #forge .forge-split-h.drag::after { background: #2f7fd0; height: 2px; }
+body.forge-splitting, body.forge-splitting * { cursor: col-resize !important; user-select: none !important; }
+body.forge-splitting #forge .forge-split-h, body.forge-splitting:has(.forge-split-h.drag) * { cursor: row-resize !important; }
+/* the Channel Box column splits in two: the channels + history scroll on their own above, the Display Layers below */
+#forge .forge-chancol.forge-split-col { overflow: hidden; }
+#forge .forge-chancol.forge-split-col > #forge-channel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#forge .forge-chancol.forge-split-col > #forge-history { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+#forge .forge-chancol.forge-split-col > #forge-layer-editor { min-height: 0; overflow-y: auto; }
+/* no scroll bars anywhere in Forge: every panel still scrolls with the wheel / trackpad, without the bar */
+#forge, #forge * { scrollbar-width: none; }
+#forge ::-webkit-scrollbar, #forge::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* the pro Channel Box with nothing selected: empty (no channels, no shape) */
+#forge .forge-panel #forge-channel.forge-ch-none > .forge-ch-row, #forge .forge-panel #forge-channel.forge-ch-none > .forge-ch-shapes,
+#forge .forge-panel #forge-channel.forge-ch-none > .forge-ch-title, #forge .forge-panel #forge-channel.forge-ch-none > .forge-ch-section,
+#forge .forge-panel #forge-channel.forge-ch-none > .forge-ch-attrs { display: none; }
+/* R (reference) in the Display Layers */
+#forge .forge-layer-tog[data-role="ref"].on { background: #6b4f2a; color: #ffd9a0; }
+/* free image planes (forge_imageplane.js): their Outliner icon and the viewport while a picture is dragged over it */
+.forge-out-kind.kind-imagePlane { width: 14px; height: 12px; opacity: 1; background-repeat: no-repeat; background-position: center; background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='3' width='12' height='10' rx='1' fill='none' stroke='%23d9e2ea' stroke-width='1.1'/%3E%3Cpath d='M3.5 11.5l3.2-3.5 2.3 2.2 1.6-1.6 2 2.9z' fill='%2391a7b8'/%3E%3Ccircle cx='10.6' cy='6' r='1.1' fill='%23d9e2ea'/%3E%3C/svg%3E"); }
+#forge .forge-stage.forge-drop-image { outline: 2px dashed #2f7fd0; outline-offset: -4px; }
+/* the pro Outliner: a hidden object's name is grey; R / T layer objects get a small mark after the name */
+#forge .forge-out-row.hid > .forge-out-name { color: #7a7e85; }
+#forge .forge-out-row.ref > .forge-out-name::after { content: "  R"; color: #c79a5a; font-size: 9px; }
+#forge .forge-out-row.tpl > .forge-out-name::after { content: "  T"; color: #7fa6c9; font-size: 9px; }

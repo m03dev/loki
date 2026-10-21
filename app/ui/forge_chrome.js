@@ -217,9 +217,9 @@ const FMY_MENUS = () => {
   const rows = typeof FORGE_PRO_ROWS !== "undefined" ? Object.fromEntries(FORGE_PRO_ROWS) : {};
   const uiItems = Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]);
   return [
-    ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "-", "close"]],
+    ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "imagePlane", "-", "close"]],
     ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "deleteHistory", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
-    ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Make with LOKI", "draw", "image", "describe", "creature"]],
+    ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Image Planes", "imagePlane", "#Make with LOKI", "draw", "image", "describe", "creature"]],
     ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]],
     ["Modify", ["#Transform", "move", "rotate", "scale", "showManip", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
     ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
@@ -784,6 +784,7 @@ function fmyLookFrom(view, THREE, camera, controls, side, dir) {
 // 3 only the smoothed surface. A display only: the cage is still what the tools edit. Two rounds of Catmull-Clark
 // (one when the cage is big); off while sculpting.
 const FMY_SMOOTH_LIMIT = 60000;
+const FMY_SMOOTH_NATIVE_MIN = 400;   // cages with this many faces or more are smoothed by the C++ engine (forge_geom.js)
 function fmySmoothPreview(level) {
   const v = fmyView();
   if (!v) return "";
@@ -807,24 +808,52 @@ function fmySmoothRefresh(v, force) {
     return;
   }
   const ver = base && base.geometry && base.geometry.attributes.position ? base.geometry.attributes.position.version : 0;
-  if (force || st.of !== v.poly || st.ver !== ver) {
+  // the smoothed mesh + the cage lines, from triangles (the JS's or the C++ engine's - the same result)
+  const build = (t, poly, at) => {
     drop();
-    let m = v.poly;
-    for (let k = 0; k < 2 && m.f.length * 4 <= FMY_SMOOTH_LIMIT; k++) m = P.smooth(m);
-    const t = P.triangulate(m), g = new THREE.BufferGeometry();
+    const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(t.pos, 3)); g.setIndex(new THREE.BufferAttribute(t.idx, 1));
     g.computeVertexNormals();
     const mat = (base && base.material ? base.material : new THREE.MeshStandardMaterial()).clone();
     mat.vertexColors = false; if (base && base.material && base.material.color) mat.color.copy(base.material.color);
     st.mesh = new THREE.Mesh(g, mat); st.mesh.name = "forge-smooth"; st.mesh.raycast = () => {};
-    const E = P.edges(v.poly), lp = new Float32Array(E.length * 6);
-    E.forEach((e, i) => { lp.set(v.poly.v[e.a], i * 6); lp.set(v.poly.v[e.b], i * 6 + 3); });
+    const E = P.edges(poly), lp = new Float32Array(E.length * 6);
+    E.forEach((e, i) => { lp.set(poly.v[e.a], i * 6); lp.set(poly.v[e.b], i * 6 + 3); });
     const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.BufferAttribute(lp, 3));
     st.cage = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xc9d3de, transparent: true, opacity: 0.55 }));
     st.cage.name = "forge-cage"; st.cage.raycast = () => {};
     v.holder.add(st.mesh, st.cage);
-    st.of = v.poly; st.ver = ver;
+    st.of = poly; st.ver = at;
+  };
+  if (force || st.of !== v.poly || st.ver !== ver) {
+    // a big cage goes to the C++ engine, off the window's thread (6x faster, and the viewport never stalls):
+    // the last preview stays on screen until the new one is back; one request at a time, the latest wins
+    const G = window.ForgeGeom;
+    if (G && G.usable() && v.poly.f.length >= FMY_SMOOTH_NATIVE_MIN) {
+      if (st.pending) { st.again = true; }
+      else {
+        const poly = v.poly, at = ver;
+        st.pending = G.smooth(poly, 2, FMY_SMOOTH_LIMIT).then((t) => {
+          st.pending = null;
+          const again = st.again; st.again = false;
+          if (v.smoothPrev !== st || !((v.smoothLevel || 1) >= 2 && v.poly && v.mode !== "sculpt")) return;
+          if (t && v.poly === poly) { build(t, poly, at); fmySmoothShow(v, st, base); }
+          if (!t || again || v.poly !== poly) fmySmoothRefresh(v, !t);    // the cage moved on meanwhile: once more
+        });
+        st.native = true;
+      }
+      if (!st.mesh) { if (base && !base.visible) { base.visible = true; v.dirty = true; } return; }   // the first one is on its way
+    } else {
+      let m = v.poly;
+      for (let k = 0; k < 2 && m.f.length * 4 <= FMY_SMOOTH_LIMIT; k++) m = P.smooth(m);
+      build(P.triangulate(m), v.poly, ver);
+      st.native = false;
+    }
   }
+  fmySmoothShow(v, st, base);
+}
+function fmySmoothShow(v, st, base) {
+  if (!st.mesh || !st.cage) return;
   st.cage.visible = v.smoothLevel === 2 && v.mode !== "poly";     // in component mode the component display is the cage
   if (base) base.visible = false;
   v.dirty = true;

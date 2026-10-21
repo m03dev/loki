@@ -94,6 +94,19 @@
       const n = this.x.ks_poly_count(); if (!n) return null;
       return { counts: this._i32(this.x.ks_poly_counts(), n).slice(), indices: this._i32(this.x.ks_poly_indices(), this.x.ks_poly_index_count()).slice() };
     }
+    /** Catmull-Clark of a polygon cage (Forge's smooth preview), independent of the sculpt mesh.
+     *  verts: xyz floats; sizes: corners per face; idx: the faces' vertex ids. Up to `levels` steps while
+     *  faces * 4 <= maxFaces. Returns {steps, pos (Float32Array), idx (Uint32Array, fan triangles), faces} - copies. */
+    cageSubdivide(verts, sizes, idx, levels = 2, maxFaces = 60000) {
+      const vp = this._put(verts, Float32Array), sp = this._put(sizes, Int32Array), ip = this._put(idx, Int32Array);
+      const steps = this.x.ks_cage_subdiv(vp, verts.length / 3, sp, sizes.length, ip, idx.length, levels, maxFaces);
+      this.x.ks_free(vp); this.x.ks_free(sp); this.x.ks_free(ip);
+      if (steps < 0) throw new Error("sculpt engine: bad cage");
+      const pos = this._f32(this.x.ks_cage_pos(), this.x.ks_cage_nverts() * 3).slice();
+      const tri = new Uint32Array(this._i32(this.x.ks_cage_tris(), this.x.ks_cage_ntris() * 3));
+      return { steps, pos, idx: tri, faces: this.x.ks_cage_nfaces() };
+    }
+
     /** Vertex ids changed since the last call (a copy). */
     takeDirty() { const n = this.x.ks_take_dirty(); return n ? this._i32(this.x.ks_dirty(), n).slice() : new Int32Array(0); }
 

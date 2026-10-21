@@ -315,7 +315,33 @@ test_forge_polyops 135.
   through the model), Backface Culling, Preselection Highlight (red under the mouse). The pick buffer is reused until
   the camera or the mesh changes.
 
-## The honesty note (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
+### DONE (Claude, 2026-10-21 early morning) - clean scene, hide/show, R layers, image planes, % panels, C++ smooth preview
+Owner 03:39: "nothing in the scene ... just the hidden cams", "h to hide doesn't work and v visibility doesnt work
+add r for ref cant click through", "free image plane ... png or jpeg", "all the ui panels adjustable ... everything is
+%", "get rid of the scroll bar on the right side", "improve it with c++". tests/test_forge_cleanup_ui.py (23 checks,
+~10 s), tests/test_forge_native_geom.py (13 checks, ~5 s).
+- **New scene = empty**: the viewer's empty working object is a "ghost" (forge_scene.js `ghost()`), never listed,
+  selected or counted; the Outliner shows only persp / top / front / side; nothing selected = empty Channel Box.
+  The default persp camera is the pro 3/4 view (direction 28, 21, 28), not edge-on from the front.
+- **Hide / show**: h / Ctrl+H / Shift+H / Ctrl+Shift+H / Alt+H were already bound and work with real keys in
+  Chromium; a Channel Box field now hands the keys back on Enter / Esc (h right after typing a value works). Hidden
+  objects are grey in the Outliner. If h still fails on the Mac window, it is WKWebView-specific: ZIVA_TASKS.
+- **Display Layers V / T / R**: R (reference) is new - drawn as it is, a viewport click or box goes THROUGH it to
+  what is behind, snapping still sees it, the Outliner can still pick it (the pro rule); T (template) is now drawn
+  as a grey wire and is not snapped to; T and R are one choice; both undo. V-off layers can no longer be picked.
+- **Free Image Plane** (app/ui/forge_imageplane.js): Create / File menu, hotbox, `imagePlane` command, or drop a
+  PNG / JPEG / WebP on the viewport. Its own node (imagePlane1), the picture's proportions, faces the view you are in
+  (top: flat, side: YZ), Alpha Gain in the Channel Box, duplicates, undoes; put it on an R layer to model over it.
+- **Panels resize in %** (app/ui/forge_split.js): a drag edge on every side panel (Outliner, Create, Materials,
+  Channel Box) + one above the Display Layers; hover = resize cursor + blue line; stored as % of Forge's width in
+  localStorage `loki-forge-split`; double-click = default. **No scroll bars** anywhere in Forge (wheel still scrolls).
+- **C++**: native/sculpt/core/src/cage_subdiv.cpp - Catmull-Clark of the modelling cage, bit-for-bit the JS
+  ForgePoly.smooth, ~6x faster (25 600-face cage, 2 levels: 128 ms vs 783 ms) and in its own worker
+  (app/ui/forge_geom.js), so the 2 / 3 smooth preview of a cage with 400+ faces never stalls the viewport.
+- Spaces (the P2P Discord tab) was taken out of LOKI (archived: docs/operations/archive/spaces/).
+- The modelling QoL research behind the next steps: docs/FORGE_QOL.md.
+
+ (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
 
 its own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for
 this: this session had no web access (Ziva showed an upgrade card), so the interaction model above is from

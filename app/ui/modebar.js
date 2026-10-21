@@ -2,6 +2,7 @@
 // "loki studio should not be another window but the same client, just another tab; utilize the top tab like godot
 // engine to switch between modes"). Modes: LOKI (chat/home), Studio (LOKI Studio in this window), Godot (the Godot
 // web editor + the native editor), World (LOKI World), Forge (3D making, forge.js). Ctrl/Cmd+1..5 switch.
+// Spaces (the P2P Discord tab) was taken out on 2026-10-21 - archived in docs/operations/archive/spaces/.
 // Each mode keeps its state: panes are built once and only hidden, never rebuilt.
 // Uses app.js's api() and state.token; plain DOM, CSP script-src 'self'.
 "use strict";
@@ -13,7 +14,6 @@ const LokiModeBar = (() => {
     { id: "godot", name: "Godot", tip: "Godot: open LOKI World (or any project) in the Godot app; LOKI's agents work in it live, plugins from the Asset Library.", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
     { id: "world", name: "World", tip: "LOKI World: your agents and machines as a living island.", icon: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"/>' },
     { id: "forge", name: "Forge", tip: "Forge: draw, add a picture or describe it - LOKI makes a 3D model you can sculpt and export.", icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>' },
-    { id: "spaces", name: "Spaces", tip: "Spaces: your own Discord - communities, chat and voice that your LOKI hosts, peer to peer.", icon: '<path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H11l-4.5 3.5V16h0a2 2 0 0 1-2-2z"/><circle cx="9" cy="10.3" r=".9"/><circle cx="15" cy="10.3" r=".9"/>' },
   ];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   let active = "loki";
@@ -304,7 +304,6 @@ const LokiModeBar = (() => {
     const was = active;
     if (was === "world") leaveWorld();
     if (was === "forge") leaveForge();
-    if (was === "spaces" && window.LokiSpaces) window.LokiSpaces.unmount();
     if (panes[was]) panes[was].hidden = true;
     active = id;
     document.body.dataset.mode = id;
@@ -313,7 +312,6 @@ const LokiModeBar = (() => {
     const p = pane(id); p.hidden = false;
     if (id === "world") return enterWorld(p);
     if (id === "forge") return enterForge(p);
-    if (id === "spaces") { if (window.LokiSpaces) window.LokiSpaces.mount(p); return; }
     if (!built[id]) { built[id] = true; (id === "studio" ? buildStudio : buildGodot)(p); }
   }
 

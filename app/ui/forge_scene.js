@@ -117,6 +117,18 @@ function forgeSceneAttach(view, ctx) {
     return n.inner.children.find((o) => o.isMesh && o.name === "shape") || null;
   }
   function hasGeometry(n) { const s = shapeOf(n); return !!(s && s.geometry && s.geometry.attributes.position && s.geometry.attributes.position.count); }
+  // the empty working object (the viewer's holder before anything is made, or after its mesh was deleted) is not a
+  // scene object yet: like a new pro scene, the Outliner shows only the hidden cameras until you Create or load
+  // something (owner 2026-10-21: "nothing in the scene no empty transform or box just the hidden cams")
+  // the pro template look: a templated object draws as a thin grey wire, unlit (and back when the T goes off)
+  function templateLook(n, on) {
+    const s = shapeOf(n); if (!s || !s.material || Array.isArray(s.material)) return;
+    const m = s.material, u = s.userData;
+    if (on && !u.tplKeep) { u.tplKeep = { wireframe: m.wireframe, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite };
+      m.wireframe = true; m.transparent = true; m.opacity = 0.35; m.depthWrite = false; m.needsUpdate = true; }
+    else if (!on && u.tplKeep) { Object.assign(m, u.tplKeep); delete u.tplKeep; m.needsUpdate = true; }
+  }
+  const ghost = (n) => !!(n && n.root && n.kind === "mesh" && !hasGeometry(n) && !kidsOf(n.id).length);
 
   function geometryFrom(tri, col) {
     const g = new THREE.BufferGeometry();
@@ -217,6 +229,11 @@ function forgeSceneAttach(view, ctx) {
       n.hist = src.root ? (typeof forgeModel !== "undefined" && forgeModel.hist ? JSON.parse(JSON.stringify(forgeModel.hist)) : null)
         : (src.hist ? JSON.parse(JSON.stringify(src.hist)) : null);
     }
+    if (src.kind === "imagePlane") {                 // a free image plane: the same picture on a new plane
+      const sh = shapeOf(src);
+      if (sh) { const c = sh.clone(); c.material = sh.material.clone(); c.name = "shape"; n.inner.add(c); }
+      n.image = src.image;
+    }
     for (const k of kidsOf(src.id)) cloneNode(k, n.id);
     return n;
   }
@@ -284,6 +301,8 @@ function forgeSceneAttach(view, ctx) {
     node: node,
     kids: kidsOf,
     list: () => tree.nodes.slice(),
+    isGhost: (id) => ghost(node(id)),
+    sceneNodes: () => tree.nodes.filter((n) => !ghost(n)),     // what the Outliner shows (the empty working object is not one)
     order: () => order().map((n) => n.id),
     root: () => root(),
     nextName: nextName,
@@ -360,21 +379,36 @@ function forgeSceneAttach(view, ctx) {
     // ---- Display Layers (the pro Layer Editor under the Channel Box). A layer owns a set of nodes and can hide
     // or template them together; 0 is the Default layer (always there). An object shows when it is visible AND no
     // layer it is on is hidden or templated - the pro layer-over-object rule.
-    layerList() { return tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, count: l.nodes.size, current: l.id === tree.curLayer })); },
+    layerList() { return tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, count: l.nodes.size, current: l.id === tree.curLayer })); },
     layerOf(nid) { for (const l of tree.layers) if (l.nodes.has(nid)) return l.id; return 0; },
     layersTemplate(nid) { for (const l of tree.layers) if (l.nodes.has(nid) && l.template) return true; return false; },
+    layersRef(nid) { for (const l of tree.layers) if (l.nodes.has(nid) && l.ref) return true; return false; },
+    // R (reference) and T (template) both lock the objects: shown, never selected by a click, a box or the Outliner
+    layersLocked(nid) { return api.layersTemplate(nid) || api.layersRef(nid); },
     layerNorm(n) { if (!n.visible) return false; for (const l of tree.layers) if (l.nodes.has(n.id) && !l.visible) return false; return true; },   // T templates (unselectable), it does not hide
 
-    applyLayers() { for (const n of tree.nodes) { n.templated = api.layersTemplate(n.id); n.grp.visible = api.layerNorm(n); } view.dirty = true; return true; },
+    applyLayers() {
+      for (const n of tree.nodes) {
+        n.templated = api.layersTemplate(n.id); n.referenced = api.layersRef(n.id);
+        n.grp.visible = api.layerNorm(n);
+        templateLook(n, n.templated);
+      }
+      // a templated object leaves the selection (the pro layer rule: a template cannot be selected at all)
+      const keep = tree.sel.filter((id) => !api.layersTemplate(id));
+      if (keep.length !== tree.sel.length) { tree.sel = keep; if (api.onSelect) api.onSelect(); }
+      view.dirty = true; return true;
+    },
     layerAdd(name) {
-      const l = { id: tree.layerNext++, name: String(name || ("layer" + tree.layerNext)).trim().replace(/\s+/g, "_"), color: 0x6e8fa8, visible: true, template: false, nodes: new Set() };
+      const l = { id: tree.layerNext++, name: String(name || ("layer" + tree.layerNext)).trim().replace(/\s+/g, "_"), color: 0x6e8fa8, visible: true, template: false, ref: false, nodes: new Set() };
       tree.layers.push(l); tree.curLayer = l.id;
       if (tree.syncLayers) tree.syncLayers(); return l;
     },
     layerRemove(id) { const i = tree.layers.findIndex((l) => l.id === id); if (i < 0) return false; tree.layers.splice(i, 1); if (tree.curLayer === id) tree.curLayer = 0; api.applyLayers(); tree.build(); return true; },
     layerRename(id, name) { const l = tree.layers.find((x) => x.id === id); if (!l || !String(name || "").trim()) return false; l.name = String(name).trim().replace(/\s+/g, "_"); tree.build(); return true; },
     layerSetVisible(id, on) { const l = tree.layers.find((x) => x.id === id); if (!l) return false; l.visible = !!on; api.applyLayers(); tree.build(); return true; },
-    layerSetTemplate(id, on) { const l = tree.layers.find((x) => x.id === id); if (!l) return false; l.template = !!on; api.applyLayers(); tree.build(); return true; },
+    layerSetTemplate(id, on) { const l = tree.layers.find((x) => x.id === id); if (!l) return false; l.template = !!on; if (on) l.ref = false; api.applyLayers(); tree.build(); return true; },
+    // R: reference - drawn as it is, but a click goes through it (T and R are one choice in the pro layer: blank / T / R)
+    layerSetRef(id, on) { const l = tree.layers.find((x) => x.id === id); if (!l) return false; l.ref = !!on; if (on) l.template = false; api.applyLayers(); tree.build(); return true; },
     layerSetColor(id, c) { const l = tree.layers.find((x) => x.id === id); if (!l) return false; l.color = c; tree.build(); return true; },
     layerCurrent(id) { tree.curLayer = tree.layers.some((l) => l.id === id) ? id : 0; tree.build(); return true; },
     layerAssign(id, ids) {                            // move nodes onto one layer (off every other)
@@ -448,7 +482,7 @@ function forgeSceneAttach(view, ctx) {
 
     // how: "set" | "toggle" | "add" | "remove" | "range"  (true means toggle, for older callers)
     select(id, how) {
-      if (id != null && id !== 0 && api.layersTemplate(id)) return tree.sel.slice();   // templated: shown, not selectable
+      if (id != null && id !== 0 && (api.layersTemplate(id) || ghost(node(id)))) return tree.sel.slice();   // templated: shown, not selectable (a referenced one still picks from the Outliner, as in pro)
       if (how === true) how = "toggle";
       if (id == null) tree.sel = [];
       else if (how === "toggle") tree.sel = tree.sel.includes(id) ? tree.sel.filter((x) => x !== id) : tree.sel.concat([id]);
@@ -465,7 +499,7 @@ function forgeSceneAttach(view, ctx) {
       return tree.sel.slice();
     },
     selectMany(ids, how) {                           // a marquee: set / toggle / add / remove many at once
-      ids = ids.filter((id) => node(id) && !api.layersTemplate(id));
+      ids = ids.filter((id) => node(id) && !api.layersLocked(id) && !ghost(node(id)));
       if (how === "toggle") for (const id of ids) tree.sel = tree.sel.includes(id) ? tree.sel.filter((x) => x !== id) : tree.sel.concat([id]);
       else if (how === "add") tree.sel = tree.sel.filter((x) => !ids.includes(x)).concat(ids);
       else if (how === "remove") tree.sel = tree.sel.filter((x) => !ids.includes(x));
@@ -616,10 +650,15 @@ function forgeSceneAttach(view, ctx) {
       return null;
     },
     // every visible mesh to pick against (the working mesh and every static shape)
-    pickables() {
-      const out = [];
+    // opts.select: only what a click may select - a referenced (R) layer's objects are skipped, so a click goes
+    // through them to what is behind (the pro reference layer) while snapping still sees them; a templated (T) one
+    // is skipped by both
+    pickables(opts) {
+      const out = [], sel = !!(opts && opts.select);
       for (const n of tree.nodes) {
-        if (!n.visible) continue;
+        if (!n.visible || !api.layerNorm(n)) continue;
+        if (sel && (api.layersLocked(n.id) || ghost(n))) continue;
+        if (api.layersTemplate(n.id)) continue;            // a template is not even snapped to (R still is - the pro rule)
         let vis = true; for (let p = n.parent; p; p = node(p).parent) if (!node(p).visible) { vis = false; break; }
         if (!vis) continue;
         const s = shapeOf(n); if (s && s.geometry) out.push(s);
@@ -696,6 +735,28 @@ function forgeSceneAttach(view, ctx) {
       tree.sel = made.map((x) => x.id); tree.build();
       return made;
     },
+
+    // Create > Free Image Plane: a picture on a plane in the scene, its own node (imagePlane1 ...) that you move,
+    // rotate, scale, hide, put on a reference layer ... like any object; the tools never edit it (forge_imageplane.js)
+    addImagePlane(name, mesh, info) {
+      const n = makeNode(nextName(name || "imagePlane"), "imagePlane", 0, null);
+      mesh.name = "shape"; n.inner.add(mesh); n.image = info || null;
+      const cur = tree.layers.find((l) => l.id === tree.curLayer); if (cur) cur.nodes.add(n.id);
+      api.applyLayers(); tree.sel = [n.id]; tree.anchor = n.id;
+      tree.build(); if (api.onSelect) api.onSelect();
+      view.dirty = true;
+      return n;
+    },
+    // an image plane's Alpha Gain (0 = invisible, 1 = solid), the pro image plane attribute
+    setAlphaGain(id, a) {
+      const n = node(id); const sh = n && n.kind === "imagePlane" && shapeOf(n);
+      if (!sh) return false;
+      const v = Math.max(0, Math.min(1, Number(a)));
+      if (!isFinite(v)) return false;
+      sh.material.opacity = v; sh.material.transparent = v < 1; sh.material.depthWrite = v >= 1; sh.material.needsUpdate = true;
+      view.dirty = true; return true;
+    },
+    alphaGain(id) { const n = node(id); const sh = n && n.kind === "imagePlane" && shapeOf(n); return sh ? sh.material.opacity : null; },
 
     // a new, empty working object (pro: every Create command makes a new node) - the old one stays as it is
     newObject(name) {
@@ -906,7 +967,8 @@ function forgeSceneAttach(view, ctx) {
 
   function row(n, depth) {
     const lead = tree.sel[tree.sel.length - 1] === n.id;
-    const r = scnEl("div", "forge-out-row" + (tree.sel.includes(n.id) ? " on" : "") + (lead ? " lead" : "") + (n.root ? " working" : ""));
+    const r = scnEl("div", "forge-out-row" + (tree.sel.includes(n.id) ? " on" : "") + (lead ? " lead" : "") + (n.root ? " working" : "")
+      + (!n.visible || !api.layerNorm(n) ? " hid" : "") + (api.layersRef(n.id) ? " ref" : "") + (api.layersTemplate(n.id) ? " tpl" : ""));
     r.dataset.id = String(n.id); r.dataset.kind = n.kind;
     r.setAttribute("role", "treeitem");
     r.style.paddingLeft = (4 + depth * 12) + "px";
@@ -925,7 +987,7 @@ function forgeSceneAttach(view, ctx) {
     const eye = scnEl("button", "forge-out-eye" + (n.visible ? "" : " off"), n.visible ? "◉" : "○");
     eye.type = "button"; eye.tabIndex = -1; eye.title = "Show or hide (h toggles the selection).";
     eye.addEventListener("click", (ev) => { ev.stopPropagation(); api.setVisible(n.id, !n.visible); });
-    const kind = scnEl("span", "forge-out-kind " + (n.kind === "group" ? "kind-group" : "kind-mesh"), "");
+    const kind = scnEl("span", "forge-out-kind " + (n.kind === "group" ? "kind-group" : n.kind === "imagePlane" ? "kind-imagePlane" : "kind-mesh"), "");
     kind.title = n.kind === "group" ? "Group (a transform node)" : n.root ? "Mesh - the one the tools are editing" : "Mesh";
     const lbl = scnEl("span", "forge-out-name", n.name);
     lbl.addEventListener("dblclick", (ev) => {
@@ -1013,13 +1075,14 @@ function forgeSceneAttach(view, ctx) {
       }
       const walk = (parent, depth) => {
         for (const n of tree.nodes) if (n.parent === parent) {
+          if (ghost(n)) continue;
           const hit = !f || n.name.toLowerCase().includes(f);
           if (hit) list.append(row(n, f ? 0 : depth));
           if (n.open || f) walk(n.id, depth + 1);
         }
       };
       walk(0, 0);
-      if (tree.panel) tree.panel.dataset.count = String(tree.nodes.length);
+      if (tree.panel) tree.panel.dataset.count = String(tree.nodes.filter((n) => !ghost(n)).length);
     }
     if (tree.syncChannel) tree.syncChannel();
     if (tree.syncHistory) tree.syncHistory();
@@ -1098,7 +1161,8 @@ function forgeSceneAttach(view, ctx) {
         inp.className = "forge-ch-in";
         inp.title = label + " - the selected object's own transform.";
         inp.addEventListener("input", () => { if (inp.value === "" || inp.value === "-" || locked(key)) return; api.setTransform(null, part, a, inp.value); });
-        inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(inp, e.shiftKey); } });
+        inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(inp, e.shiftKey); }
+          else if (e.key === "Enter" || e.key === "Escape") inp.blur(); });   // Enter / Esc give the keys back to the viewport (h, w, e ... work again)
         lbl.addEventListener("pointerdown", (e) => {
           if ((e.button !== 0 && e.button !== 1) || locked(key)) return;
           e.preventDefault();
@@ -1131,7 +1195,14 @@ function forgeSceneAttach(view, ctx) {
     vis.append(scnEl("span", "forge-ch-label", "Visibility"), visIn);
     vis.addEventListener("contextmenu", (ev) => { ev.preventDefault(); channelMenu(vis, "vis", 0, "vis"); });
     box.append(vis);
-
+    // an image plane's own attribute: Alpha Gain (shown only when one is selected)
+    const ag = scnEl("div", "forge-ch-row forge-ch-ip"); ag.hidden = true;
+    const agIn = document.createElement("input"); agIn.type = "number"; agIn.step = "0.05"; agIn.min = "0"; agIn.max = "1";
+    agIn.id = "forge-ch-alpha"; agIn.className = "forge-ch-in"; agIn.title = "Alpha Gain: how see-through the picture is (0 - 1).";
+    agIn.addEventListener("input", () => { const n = api.active(); if (n && agIn.value !== "") api.setAlphaGain(n.id, agIn.value); });
+    agIn.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") agIn.blur(); });
+    ag.append(scnEl("span", "forge-ch-label", "Alpha Gain"), agIn);
+    box.append(ag);
     const shapesHead = scnEl("div", "forge-ch-section", "SHAPES");
     const shapeRow = scnEl("div", "forge-ch-node", "");
     shapesHead.classList.add("forge-ch-shapes"); shapeRow.classList.add("forge-ch-shapes");
@@ -1142,9 +1213,13 @@ function forgeSceneAttach(view, ctx) {
 
     tree.syncChannel = () => {
       const t = api.transform(), n = api.active();
-      title.textContent = n ? n.name : "";
-      shapeRow.textContent = n && n.kind === "mesh" ? n.name + "Shape" : "";
-      shapesHead.hidden = shapeRow.hidden = !(n && n.kind === "mesh");
+      // pro: with nothing selected the Channel Box is empty (the values still follow the working object underneath)
+      box.classList.toggle("forge-ch-none", !tree.sel.length || ghost(n));
+      title.textContent = n && tree.sel.length ? n.name : "";
+      shapeRow.textContent = n && (n.kind === "mesh" || n.kind === "imagePlane") ? n.name + "Shape" : "";
+      shapesHead.hidden = shapeRow.hidden = !(n && (n.kind === "mesh" || n.kind === "imagePlane"));
+      ag.hidden = !(n && n.kind === "imagePlane" && tree.sel.length);
+      if (!ag.hidden && document.activeElement !== agIn) agIn.value = String(Math.round((api.alphaGain(n.id) ?? 1) * 100) / 100);
       visIn.textContent = n && !n.visible ? "off" : "on";
       orderSel.value = (n && n.rotOrder) || "XYZ";
       if (t) for (const part of ["translate", "rotate", "scale"]) {
@@ -1203,9 +1278,10 @@ function forgeSceneAttach(view, ctx) {
     box.append(head, list);
     host.append(box);
     const hex = (c) => "#" + ((c >>> 0) & 0xffffff).toString(16).padStart(6, "0");
+    if (typeof forgeSplitAttach === "function") setTimeout(forgeSplitAttach, 0);   // its drag edge (forge_split.js)
     tree.syncLayers = () => {
       list.textContent = "";
-      const rows = [{ id: 0, name: "Default", color: 0x8a8f98, visible: true, template: false, count: 0, current: tree.curLayer === 0 }].concat(api.layerList());
+      const rows = [{ id: 0, name: "Default", color: 0x8a8f98, visible: true, template: false, ref: false, count: 0, current: tree.curLayer === 0 }].concat(api.layerList());
       for (const l of rows) {
         const r = scnEl("div", "forge-layer-row" + (l.current ? " cur" : "") + (l.id === 0 ? " default" : ""));
         r.dataset.layer = String(l.id);
@@ -1213,10 +1289,12 @@ function forgeSceneAttach(view, ctx) {
         v.title = "Visibility"; if (l.id !== 0) v.addEventListener("click", (e) => { e.stopPropagation(); api.undoChunk("layer visibility", () => api.layerSetVisible(l.id, !l.visible)); });
         const t = scnEl("button", "forge-layer-tog" + (l.template ? " on" : ""), "T"); t.type = "button"; t.dataset.role = "tpl";
         t.title = "Template: shown but not selectable"; if (l.id !== 0) t.addEventListener("click", (e) => { e.stopPropagation(); api.undoChunk("layer template", () => api.layerSetTemplate(l.id, !l.template)); });
+        const rf = scnEl("button", "forge-layer-tog" + (l.ref ? " on" : ""), "R"); rf.type = "button"; rf.dataset.role = "ref";
+        rf.title = "Reference: shown as it is, but you cannot click it - clicks go through to what is behind"; if (l.id !== 0) rf.addEventListener("click", (e) => { e.stopPropagation(); api.undoChunk("layer reference", () => api.layerSetRef(l.id, !l.ref)); });
         const sw = scnEl("span", "forge-layer-swatch"); sw.style.background = hex(l.color);
         const nm = scnEl("span", "forge-layer-name", l.name); nm.title = "Click to make current; double-click to rename.";
         const ct = scnEl("span", "forge-layer-count", l.count ? String(l.count) : "");
-        r.append(v, t, sw, nm, ct);
+        r.append(v, t, rf, sw, nm, ct);
         if (l.id !== 0) { const x = scnEl("button", "forge-ch-x", "\u00d7"); x.type = "button"; x.title = "Delete this layer (its objects stay in the scene).";
           x.addEventListener("click", (e) => { e.stopPropagation(); api.undoChunk("delete layer", () => api.layerRemove(l.id)); }); r.append(x); }
         r.addEventListener("click", () => { if (l.id !== 0) api.layerCurrent(l.id); });
@@ -1439,7 +1517,7 @@ function forgeSceneAttach(view, ctx) {
   let undoDepth = 0, undoBefore = null, undoLabel = "", restoring = false;
   function sceneSig() {
     const a = [tree.rootId, tree.sel.join(",")];
-    for (const l of tree.layers) a.push("L" + l.id, l.name, l.visible ? 1 : 0, l.template ? 1 : 0, [...l.nodes].sort().join("."));
+    for (const l of tree.layers) a.push("L" + l.id, l.name, l.visible ? 1 : 0, l.template ? 1 : 0, l.ref ? 1 : 0, [...l.nodes].sort().join("."));
     a.push("cur" + tree.curLayer);
     for (const n of tree.nodes) {
       a.push(n.id, n.name, n.parent, n.visible ? 1 : 0, n.inner.uuid, n.rotOrder || "XYZ");
@@ -1458,7 +1536,7 @@ function forgeSceneAttach(view, ctx) {
       shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri })),
     sel: tree.sel.slice(), anchor: tree.anchor, next: tree.next, rootId: tree.rootId,
     hiddenLast: (tree.hiddenLast || []).slice(), lastDup: tree.lastDup ? tree.lastDup.slice() : null,
-    layers: tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, nodes: [...l.nodes] })),
+    layers: tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, nodes: [...l.nodes] })),
     layerNext: tree.layerNext, curLayer: tree.curLayer,
   });
   view.sceneRestore = (st) => {
@@ -1494,7 +1572,7 @@ function forgeSceneAttach(view, ctx) {
       }
       tree.sel = st.sel.filter((id) => tree.byId[id]); tree.anchor = st.anchor; tree.next = Math.max(tree.next, st.next);
       tree.rootId = st.rootId; tree.hiddenLast = st.hiddenLast.slice(); tree.lastDup = st.lastDup ? st.lastDup.slice() : null;
-      tree.layers = (st.layers || []).map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, nodes: new Set(l.nodes) }));
+      tree.layers = (st.layers || []).map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, nodes: new Set(l.nodes) }));
       tree.layerNext = st.layerNext || tree.layerNext; tree.curLayer = st.curLayer || 0; api.applyLayers();
       if (rootChanged && typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
       scene.updateMatrixWorld(true);
@@ -1539,7 +1617,7 @@ function forgeSceneAttach(view, ctx) {
     "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
     "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
     "combine", "separate", "newObject", "dropOn",
-    "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerAssign", "layerCurrent"];
+    "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane"];
   for (const name of RECORDED) {
     const fn = api[name];
     if (typeof fn !== "function" || fn.recorded) continue;
