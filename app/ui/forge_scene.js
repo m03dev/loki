@@ -601,6 +601,7 @@ function forgeSceneAttach(view, ctx) {
       else { arr.push({ f: f, v: Number.isFinite(v) ? v : 0, i: "linear" }); arr.sort((a, b) => a.f - b.f); }
       if (tree.syncChannel) tree.syncChannel();
       if (tree.syncKeys) tree.syncKeys();
+    if (tree.syncGraph) tree.syncGraph();
       return true;
     },
     deleteKey(id, frame, part, axis) {

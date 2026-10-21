@@ -478,6 +478,7 @@ function forgeProCommands() {
     nextKey: ["Next Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return t.api.stepKey(null, 1) ? "Frame " + Math.round(t.time.frame) + "." : "No later key."; }],
     rangeStart: ["Set Range Start", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.frame, t.time.end); return "Range " + t.time.start + "-" + t.time.end + "."; }],
     rangeEnd: ["Set Range End", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.start, t.time.frame); return "Range " + t.time.start + "-" + t.time.end + "."; }],
+    graphEditor: ["Graph Editor", (v) => { const t = v && v.tree; if (!t || !t.api || !t.api.graphOpen) return "Open Forge first."; return "Graph Editor " + (t.api.graphOpen() ? "open" : "closed") + "."; }],
     animAutoKey: ["Auto Keyframe", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return "Auto Keyframe " + (t.api.setAutoKey() ? "on" : "off") + "."; }],
     keyLinear: ["Keys: Linear", (v) => forgeProInterp(v, "linear")],
     keySmooth: ["Keys: Smooth", (v) => forgeProInterp(v, "bezier")],
@@ -714,7 +715,7 @@ const FORGE_PRO_ROWS = [
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
   ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial4", "symRadial6", "symRadial8"]],
-  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "animAutoKey", "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]],
+  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey", "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

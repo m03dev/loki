@@ -105,6 +105,8 @@
 .forge-timebar .forge-time-play.on { background: #5b8db8; color: #0f1113; }
 .forge-timebar .forge-time-setkey { background: #23262a; }
 .forge-timebar .forge-time-autokey { background: #23262a; }
+.forge-timebar .forge-time-graph { background: #23262a; }
+.forge-timebar .forge-time-graph.on { background: #5b8db8; color: #0f1113; }
 .forge-timebar .forge-time-autokey.on { background: #d8674f; color: #12141a; }
 .forge-time-interp { background: #1e2024; color: #e6eaf2; border: 1px solid #3c4046; border-radius: 5px; padding: 3px 4px; font: inherit; font-size: 11px; }
 .forge-time-num { width: 46px; background: #1e2024; color: #e6eaf2; border: 1px solid #3c4046; border-radius: 5px;
@@ -113,6 +115,13 @@
 .forge-time-slider { width: 100%; margin: 0; height: 24px; }
 .forge-time-ticks { position: absolute; left: 0; right: 0; bottom: 1px; height: 7px; pointer-events: none; }
 .forge-tick { position: absolute; top: 0; width: 2px; height: 7px; background: #d8674f; border-radius: 1px; transform: translateX(-1px); }
+/* the Graph Editor: the keyframe curves of the selected object */
+.forge-graph { right: 8px; top: 96px; flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px;
+  background: #2b2d30; border: 1px solid #3c4046; width: clamp(300px, 34vw, 420px); box-shadow: 0 8px 30px rgba(0, 0, 0, .5); z-index: 11; }
+.forge-graph .fx-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.forge-graph .fx-head b { color: #e6eaf2; font-size: 12px; }
+.forge-graph canvas { display: block; width: 100%; height: auto; border-radius: 6px; }
+.forge-graph .fx-info { font-size: 11px; color: #8b93a0; }
 .forge-ch-row.keyed .forge-ch-label { color: #e08a6f; }
 .forge-ch-row.keyed .forge-ch-in { border-color: #a5563c; }
 html.u-hc .forge-timebar { background: #000; border-color: #fff; }

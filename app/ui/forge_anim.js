@@ -24,6 +24,8 @@ function forgeTimeAttach(view) {
   const next = mk("\u25b6", "Jump to the next key.", "forge-time-next");
   const setk = mk("Set Key", "Key the selected object's translate / rotate / scale at this frame (S).", "forge-time-setkey", "forge-time-setkey");
   const akey = mk("Auto Key", "Auto Keyframe: while it is on, moving or typing a channel writes a key at the playhead.", "forge-time-autokey", "forge-time-autokey");
+  const graph = mk("Graph", "Open the Graph Editor: the keyframe curves of the selected object.", "forge-time-graph", "forge-time-graph");
+  graph.addEventListener("click", () => { if (api.graphOpen) api.graphOpen(); });
   const interp = document.createElement("select");
   interp.className = "forge-time-interp"; interp.id = "forge-time-interp";
   interp.title = "Interpolation of the keys at this frame.";
@@ -58,7 +60,7 @@ function forgeTimeAttach(view) {
     api.setFrame(T.time.start + Math.round((e.clientX - r.left) / Math.max(1, r.width) * (T.time.end - T.time.start)));
   });
 
-  bar.append(play, prev, next, setk, akey, interp, frame, track, start, end);
+  bar.append(play, prev, next, setk, akey, graph, interp, frame, track, start, end);
   stage.append(bar);
 
   function sync() {
@@ -68,6 +70,7 @@ function forgeTimeAttach(view) {
     if (document.activeElement !== frame) frame.value = String(Math.round(t.frame));
     akey.classList.toggle("on", !!T.autoKey);
     bar.dataset.autokey = T.autoKey ? "1" : "0";
+    graph.classList.toggle("on", !!(api.graphShown && api.graphShown()));
     if (document.activeElement !== start) start.value = String(t.start);
     if (document.activeElement !== end) end.value = String(t.end);
     slider.min = String(t.start); slider.max = String(t.end); slider.value = String(Math.round(t.frame));

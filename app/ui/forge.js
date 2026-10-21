@@ -2001,6 +2001,10 @@ function forgeMakeView(lib, renderer, canvas) {
   if (typeof forgeTimeAttach === "function") {
     try { forgeTimeAttach(view); } catch (exc) { console.warn("forge: time slider", exc); }
   }
+  // the Graph Editor (the keyframe curves of the selected object): app/ui/forge_graph.js
+  if (typeof forgeGraphAttach === "function") {
+    try { forgeGraphAttach(view); } catch (exc) { console.warn("forge: graph editor", exc); }
+  }
   // the pro viewport dressing - its panel menu bar, heads-up display, view cube, grid and lighting: app/ui/forge_chrome.js
   view.lights = { hemi, key, rim };
   view.material = material;

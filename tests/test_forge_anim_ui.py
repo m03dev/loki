@@ -100,6 +100,24 @@ async def main():
         check("key interpolation: Step holds, Smooth eases, Linear is a straight line",
               abs(step5) < 1e-6 and abs(smooth5 - 912.0 / 729.0) < 1e-3 and abs(lin5 - 4.0 / 3.0) < 1e-6, [step5, smooth5, lin5])
 
+        # the Graph Editor: the curves of the selected object, and dragging a key changes it
+        await E("forge.view.tree.api.setFrame(1)")
+        opened = await E("forgeProRun(forge.view, 'graphEditor')")
+        shown = await E("[!document.getElementById('forge-graph').hidden, !!document.getElementById('forge-time-graph'), Object.keys(forge.view.graphData().channels).length]")
+        before = await E("forge.view.graphData().channels.find((c) => c.k === 'translate0').keys.map((k) => k.slice())")
+        pk = before[1]                              # the middle key of translate x (frame 10)
+        px = await E("(() => { const c = document.getElementById('forge-graph-canvas'), r = c.getBoundingClientRect(); const [x, y] = forge.view.graphXY(%f, %f); return [r.left + x * (r.width / c.width), r.top + y * (r.height / c.height)]; })()" % (pk[0], pk[1]))
+        await page.mouse.move(px[0], px[1]); await page.mouse.down()
+        await page.mouse.move(px[0] + 4, px[1] - 30, steps=5); await page.mouse.up()
+        await page.wait_for_timeout(80)
+        after = await E("forge.view.graphData().channels.find((c) => c.k === 'translate0').keys.map((k) => k.slice())")
+        check("the Graph Editor shows the curves and dragging a key raises its value",
+              shown == [True, True, 9] and len(after) == len(before) and max(k[1] for k in after) > max(k[1] for k in before) + 0.05,
+              [shown, before, after])
+        await E("forgeProRun(forge.view, 'graphEditor')")
+        closed = await E("document.getElementById('forge-graph').hidden")
+        check("Graph Editor closes again", closed is True, closed)
+
         # Auto Keyframe: a moved object writes a key at the playhead
         auto_ui = await E("[!!document.getElementById('forge-time-autokey'), !!document.getElementById('forge-time-interp')]")
         await E("forge.view.tree.api.setFrame(12)")
@@ -112,11 +130,13 @@ async def main():
               auto_ui == [True, True] and c == 9 and 12 in keys2 and abs(x12 - 5) < 1e-6, [auto_ui, c, keys2, x12])
         await E("forge.view.tree.api.setAutoKey(false)")
 
-        # mirror the keys across YZ: translate x flips
+        # mirror the keys across YZ: the keyed translate x flips sign
+        await E("forge.view.tree.api.setFrame(10)")
+        xb = await E(E_)
         await E("forgeProRun(forge.view, 'mirrorKeysX')")
         await E("forge.view.tree.api.setFrame(10)")
-        mx = await E(E_)
-        check("Mirror Keys across YZ flips the keyed translate x", abs(mx + 3) < 1e-6, mx)
+        xa = await E(E_)
+        check("Mirror Keys across YZ flips the keyed translate x", abs(xa + xb) < 1e-6 and abs(xb) > 0.1, [xb, xa])
         await E("forgeProRun(forge.view, 'mirrorKeysX')")
 
         # prev / next key
