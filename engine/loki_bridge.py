@@ -211,6 +211,11 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inlin
 GODOT_WORLD_PAGE = "/ui/world_godot/index.html"
 GODOT_WORLD_CSP = (UI_CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'")
                    .replace("frame-ancestors 'none'", "frame-ancestors 'self'"))
+# Forge's sculpting engine runs in a Web Worker (app/ui/vendor/sculpt/sculpt_worker.js). A dedicated worker takes
+# its policy from its own response, so WebAssembly is allowed for that one script - it can only load LOKI's own
+# files and has no DOM - while every page keeps UI_CSP (no 'wasm-unsafe-eval' in the window itself).
+SCULPT_WORKER = "/ui/vendor/sculpt/sculpt_worker.js"
+SCULPT_WORKER_CSP = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
 
 
 def memory_guard(state: Any, every_s: float = 60.0) -> None:
@@ -848,6 +853,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return True
         if route == GODOT_WORLD_PAGE:
             self._send_static(found, framed=True, csp=GODOT_WORLD_CSP)
+            return True
+        if route == SCULPT_WORKER:
+            self._send_static(found, csp=SCULPT_WORKER_CSP)
             return True
         self._send_static(found, framed=(route == "/ui/play.html"))
         return True

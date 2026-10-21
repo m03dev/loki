@@ -4,6 +4,16 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-20 - Forge gets a native sculpting engine (Claude, cloud)
+
+- `native/sculpt/`: the C++ sculpting core (brushes, dynamic detail, voxel remesh, quad remesh, subdivision levels,
+  BVH, cluster LOD, paged store, SDF) with Instant Meshes / Eigen / meshoptimizer; vendor names and the old namespace
+  reworded. `wasm/` builds it with the WASI SDK into one single-threaded `sculpt.wasm` (`st_compat.h` stands in for
+  std::thread/mutex, `sculpt_api.cpp` is the C API, `sculpt_engine.js` the wrapper, `sculpt_worker.js` the worker).
+- `app/ui/forge_sculpt.js` + small hooks in forge.js (pointer, hitAt, ring, matcap/wire look, `view.internals`),
+  forge_pro.js commands, forge.css panel, `engine/loki_bridge.py` worker CSP. Test: tests/test_forge_sculpt_engine.py
+  (19, in ship.py's list). test_godot_world's 3 failures (Gator addon files) were already failing on master.
+
 ## 2026-10-18 - more local models: uncensored builds and your own (Ziva, the PC)
 
 - `engine/model_setup.py`: opt-in `UNCENSORED` catalog (abliterated Qwen3.5/Qwen3, Dolphin 3,

@@ -1,0 +1,1699 @@
+{
+ "version": 1,
+ "categories": [
+  "Basic",
+  "Clay",
+  "Hard Surface",
+  "Detail",
+  "Move",
+  "Smooth",
+  "Surface",
+  "Alpha Textures",
+  "Cloth",
+  "Morph & History",
+  "Mask & Paint",
+  "Insert & Curve"
+ ],
+ "brushes": [
+  {
+   "name": "Standard",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.5
+  },
+  {
+   "name": "Standard Soft",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.35,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Standard Sharp",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.5,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Standard Root",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.5,
+   "falloff": "Root"
+  },
+  {
+   "name": "Standard Flat Top",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.4,
+   "falloffPoints": [
+    [
+     0,
+     1
+    ],
+    [
+     0.5,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ]
+  },
+  {
+   "name": "Draw Sharp",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.6,
+   "falloff": "Sharp",
+   "spacing": 0.05
+  },
+  {
+   "name": "Mallet",
+   "kernel": "Standard",
+   "category": "Basic",
+   "strength": 0.8,
+   "falloff": "Constant",
+   "squareTip": true,
+   "tipRoundness": 0.2,
+   "invert": true
+  },
+  {
+   "name": "Inflate",
+   "kernel": "Inflate",
+   "category": "Basic",
+   "strength": 0.4
+  },
+  {
+   "name": "Inflate Balloon",
+   "kernel": "Inflate",
+   "category": "Basic",
+   "strength": 0.6,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Inflate Sharp",
+   "kernel": "Inflate",
+   "category": "Basic",
+   "strength": 0.4,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Blob",
+   "kernel": "Blob",
+   "category": "Basic",
+   "strength": 0.5
+  },
+  {
+   "name": "Blob Soft",
+   "kernel": "Blob",
+   "category": "Basic",
+   "strength": 0.3,
+   "falloff": "Sphere",
+   "autoSmooth": 0.15
+  },
+  {
+   "name": "Blob Lumpy",
+   "kernel": "Blob",
+   "category": "Basic",
+   "strength": 0.6,
+   "falloff": "Root"
+  },
+  {
+   "name": "Displace",
+   "kernel": "Displace",
+   "category": "Basic",
+   "strength": 0.4
+  },
+  {
+   "name": "Displace Soft",
+   "kernel": "Displace",
+   "category": "Basic",
+   "strength": 0.25,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Magnify",
+   "kernel": "Magnify",
+   "category": "Basic",
+   "strength": 0.5
+  },
+  {
+   "name": "Pinch",
+   "kernel": "Pinch",
+   "category": "Basic",
+   "strength": 0.5
+  },
+  {
+   "name": "Pinch Sharp",
+   "kernel": "Pinch",
+   "category": "Basic",
+   "strength": 0.7,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Layer",
+   "kernel": "Layer",
+   "category": "Basic",
+   "strength": 0.6,
+   "layerHeight": 0.05
+  },
+  {
+   "name": "Layer Thin",
+   "kernel": "Layer",
+   "category": "Basic",
+   "strength": 0.6,
+   "layerHeight": 0.02
+  },
+  {
+   "name": "Layer Thick",
+   "kernel": "Layer",
+   "category": "Basic",
+   "strength": 0.6,
+   "layerHeight": 0.12
+  },
+  {
+   "name": "Layer Plateau",
+   "kernel": "Layer",
+   "category": "Basic",
+   "strength": 0.8,
+   "layerHeight": 0.06,
+   "falloffPoints": [
+    [
+     0,
+     1
+    ],
+    [
+     0.7,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ]
+  },
+  {
+   "name": "Nudge",
+   "kernel": "Nudge",
+   "category": "Basic",
+   "strength": 0.5
+  },
+  {
+   "name": "Rotate",
+   "kernel": "Rotate",
+   "category": "Basic",
+   "strength": 1.0
+  },
+  {
+   "name": "Snake Hook",
+   "kernel": "SnakeHook",
+   "category": "Basic",
+   "strength": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Snake Hook Pinch",
+   "kernel": "SnakeHook",
+   "category": "Basic",
+   "strength": 1.0,
+   "pinch": 0.6,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Snake Hook Soft",
+   "kernel": "SnakeHook",
+   "category": "Basic",
+   "strength": 1.0,
+   "falloff": "Sphere",
+   "autoSmooth": 0.1,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Horn",
+   "kernel": "SnakeHook",
+   "category": "Basic",
+   "strength": 1.0,
+   "pinch": 1.0,
+   "falloff": "Sharp",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Clay",
+   "kernel": "Clay",
+   "category": "Clay",
+   "strength": 0.4
+  },
+  {
+   "name": "Clay Soft",
+   "kernel": "Clay",
+   "category": "Clay",
+   "strength": 0.25,
+   "falloff": "Sphere",
+   "autoSmooth": 0.1
+  },
+  {
+   "name": "Clay Buildup",
+   "kernel": "ClayBuildup",
+   "category": "Clay",
+   "strength": 0.5,
+   "squareTip": true,
+   "tipRoundness": 0.6
+  },
+  {
+   "name": "Clay Buildup Round",
+   "kernel": "ClayBuildup",
+   "category": "Clay",
+   "strength": 0.5
+  },
+  {
+   "name": "Clay Strips",
+   "kernel": "ClayStrips",
+   "category": "Clay",
+   "strength": 0.5,
+   "squareTip": true,
+   "tipRoundness": 0.3,
+   "spacing": 0.06
+  },
+  {
+   "name": "Clay Tubes",
+   "kernel": "ClayStrips",
+   "category": "Clay",
+   "strength": 0.45,
+   "squareTip": true,
+   "tipRoundness": 0.5,
+   "autoSmooth": 0.05
+  },
+  {
+   "name": "Clay Line",
+   "kernel": "ClayStrips",
+   "category": "Clay",
+   "strength": 0.6,
+   "squareTip": true,
+   "tipRoundness": 0.1,
+   "spacing": 0.04
+  },
+  {
+   "name": "Clay Flat",
+   "kernel": "Clay",
+   "category": "Clay",
+   "strength": 0.5,
+   "planeOffset": 0.02,
+   "falloff": "Constant",
+   "squareTip": true,
+   "tipRoundness": 0.7
+  },
+  {
+   "name": "Clay Thumb",
+   "kernel": "Clay",
+   "category": "Clay",
+   "strength": 0.3,
+   "planeOffset": -0.05,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Clay Ridge",
+   "kernel": "ClayStrips",
+   "category": "Clay",
+   "strength": 0.5,
+   "squareTip": true,
+   "tipRoundness": 0.3,
+   "alpha": "chisel"
+  },
+  {
+   "name": "Clay Polish",
+   "kernel": "Clay",
+   "category": "Clay",
+   "strength": 0.3,
+   "autoSmooth": 0.35
+  },
+  {
+   "name": "Clay Stack",
+   "kernel": "ClayBuildup",
+   "category": "Clay",
+   "strength": 0.7,
+   "planeOffset": 0.35,
+   "squareTip": true,
+   "tipRoundness": 0.4
+  },
+  {
+   "name": "Clay Fine",
+   "kernel": "ClayStrips",
+   "category": "Clay",
+   "strength": 0.3,
+   "squareTip": true,
+   "tipRoundness": 0.4,
+   "spacing": 0.03,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Flatten",
+   "kernel": "Flatten",
+   "category": "Hard Surface",
+   "strength": 0.5
+  },
+  {
+   "name": "Flatten Hard",
+   "kernel": "Flatten",
+   "category": "Hard Surface",
+   "strength": 0.9,
+   "falloff": "Constant"
+  },
+  {
+   "name": "Fill",
+   "kernel": "Fill",
+   "category": "Hard Surface",
+   "strength": 0.5
+  },
+  {
+   "name": "Scrape",
+   "kernel": "Scrape",
+   "category": "Hard Surface",
+   "strength": 0.5
+  },
+  {
+   "name": "Scrape Square",
+   "kernel": "Scrape",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "squareTip": true,
+   "tipRoundness": 0.2
+  },
+  {
+   "name": "Planar",
+   "kernel": "Planar",
+   "category": "Hard Surface",
+   "strength": 0.8,
+   "falloff": "Constant"
+  },
+  {
+   "name": "Planar Cut",
+   "kernel": "Planar",
+   "category": "Hard Surface",
+   "strength": 1.0,
+   "falloff": "Constant",
+   "planeTrim": 1.0
+  },
+  {
+   "name": "Planar Soft",
+   "kernel": "Planar",
+   "category": "Hard Surface",
+   "strength": 0.5,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Trim Dynamic",
+   "kernel": "TrimDynamic",
+   "category": "Hard Surface",
+   "strength": 0.6
+  },
+  {
+   "name": "Trim Dynamic Square",
+   "kernel": "TrimDynamic",
+   "category": "Hard Surface",
+   "strength": 0.7,
+   "squareTip": true,
+   "tipRoundness": 0.2
+  },
+  {
+   "name": "Trim Adaptive",
+   "kernel": "TrimAdaptive",
+   "category": "Hard Surface",
+   "strength": 0.6
+  },
+  {
+   "name": "Trim Smooth Border",
+   "kernel": "TrimDynamic",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "autoSmooth": 0.3
+  },
+  {
+   "name": "Polish",
+   "kernel": "Polish",
+   "category": "Hard Surface",
+   "strength": 0.5
+  },
+  {
+   "name": "Polish Hard",
+   "kernel": "Polish",
+   "category": "Hard Surface",
+   "strength": 0.8,
+   "falloff": "Constant"
+  },
+  {
+   "name": "Polish Square",
+   "kernel": "Polish",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "squareTip": true,
+   "tipRoundness": 0.3
+  },
+  {
+   "name": "Polish Crisp",
+   "kernel": "Polish",
+   "category": "Hard Surface",
+   "strength": 0.5,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Chisel Bevel",
+   "kernel": "Planar",
+   "category": "Hard Surface",
+   "strength": 1.0,
+   "falloff": "Constant",
+   "squareTip": true,
+   "tipRoundness": 0.0,
+   "planeTrim": 0.3
+  },
+  {
+   "name": "Edge Soften",
+   "kernel": "SmoothRelax",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Panel Cut",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "invert": true,
+   "alpha": "panel_lines",
+   "falloff": "Constant"
+  },
+  {
+   "name": "Rivet Stamp",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "alpha": "rivet",
+   "spacing": 1.0
+  },
+  {
+   "name": "Rivet Row",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "alpha": "rivets_row",
+   "spacing": 0.9
+  },
+  {
+   "name": "Bolt Hex",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.7,
+   "alpha": "bolt_hex",
+   "spacing": 1.0
+  },
+  {
+   "name": "Screw Head",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "alpha": "screw_cross",
+   "spacing": 1.0
+  },
+  {
+   "name": "Vent Slots",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "invert": true,
+   "alpha": "vent_slots",
+   "spacing": 1.0
+  },
+  {
+   "name": "Knurl Grip",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.3,
+   "alpha": "grip_knurl"
+  },
+  {
+   "name": "Tread",
+   "kernel": "Standard",
+   "category": "Hard Surface",
+   "strength": 0.5,
+   "alpha": "tread"
+  },
+  {
+   "name": "Multiplane Scrape",
+   "kernel": "MultiplaneScrape",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "planeAngle": 30
+  },
+  {
+   "name": "Multiplane Ridge Sharp",
+   "kernel": "MultiplaneScrape",
+   "category": "Hard Surface",
+   "strength": 0.8,
+   "planeAngle": 45,
+   "falloffPoints": [
+    [
+     0,
+     1
+    ],
+    [
+     0.6,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ]
+  },
+  {
+   "name": "Multiplane Ridge Soft",
+   "kernel": "MultiplaneScrape",
+   "category": "Hard Surface",
+   "strength": 0.4,
+   "planeAngle": 15,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Multiplane Valley",
+   "kernel": "MultiplaneScrape",
+   "category": "Hard Surface",
+   "strength": 0.6,
+   "planeAngle": 30,
+   "invert": true
+  },
+  {
+   "name": "Bevel Edge",
+   "kernel": "MultiplaneScrape",
+   "category": "Hard Surface",
+   "strength": 0.7,
+   "planeAngle": 40,
+   "falloffPoints": [
+    [
+     0,
+     1
+    ],
+    [
+     0.7,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "spacing": 0.05
+  },
+  {
+   "name": "Dam Standard",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.5,
+   "pinch": 0.5,
+   "spacing": 0.05
+  },
+  {
+   "name": "Dam Fine",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.35,
+   "pinch": 0.6,
+   "falloff": "Sharp",
+   "spacing": 0.03
+  },
+  {
+   "name": "Dam Deep",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.8,
+   "pinch": 0.4
+  },
+  {
+   "name": "Crease",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.5,
+   "pinch": 0.7,
+   "spacing": 0.05
+  },
+  {
+   "name": "Crease Soft",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.3,
+   "pinch": 0.4,
+   "falloff": "Sphere",
+   "autoSmooth": 0.1
+  },
+  {
+   "name": "Crease Sharp",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.6,
+   "pinch": 1.0,
+   "falloff": "Sharp",
+   "spacing": 0.03
+  },
+  {
+   "name": "Crease Ridge",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.5,
+   "pinch": 0.8,
+   "invert": true
+  },
+  {
+   "name": "Eyelid Crease",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.3,
+   "pinch": 0.9,
+   "spacing": 0.03
+  },
+  {
+   "name": "Skin Fold",
+   "kernel": "Crease",
+   "category": "Detail",
+   "strength": 0.4,
+   "pinch": 0.5,
+   "falloff": "Sphere",
+   "spacing": 0.04
+  },
+  {
+   "name": "Crease Old",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.4,
+   "pinch": 0.8,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Slash",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.7,
+   "pinch": 1.0,
+   "falloff": "Sharp",
+   "spacing": 0.03
+  },
+  {
+   "name": "Ridge",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.5,
+   "pinch": 0.7,
+   "invert": true
+  },
+  {
+   "name": "Groove",
+   "kernel": "Standard",
+   "category": "Detail",
+   "strength": 0.5,
+   "invert": true,
+   "falloff": "Sharp",
+   "alpha": "line_soft"
+  },
+  {
+   "name": "Wrinkle",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.3,
+   "pinch": 0.5,
+   "falloff": "Sphere",
+   "spacing": 0.04
+  },
+  {
+   "name": "Fold Line",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.4,
+   "pinch": 0.9,
+   "autoSmooth": 0.05
+  },
+  {
+   "name": "Stitches",
+   "kernel": "Standard",
+   "category": "Detail",
+   "strength": 0.5,
+   "alpha": "stitches",
+   "spacing": 0.5
+  },
+  {
+   "name": "Zipper",
+   "kernel": "Standard",
+   "category": "Detail",
+   "strength": 0.5,
+   "alpha": "zipper",
+   "spacing": 0.9
+  },
+  {
+   "name": "Seam",
+   "kernel": "DamStandard",
+   "category": "Detail",
+   "strength": 0.3,
+   "pinch": 0.3,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Move",
+   "kernel": "Move",
+   "category": "Move",
+   "strength": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Soft",
+   "kernel": "Move",
+   "category": "Move",
+   "strength": 1.0,
+   "falloff": "Sphere",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Sharp",
+   "kernel": "Move",
+   "category": "Move",
+   "strength": 1.0,
+   "falloff": "Sharp",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Elastic",
+   "kernel": "MoveElastic",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.4,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Elastic Volume",
+   "kernel": "MoveElastic",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.49,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Elastic Soft",
+   "kernel": "MoveElastic",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.15,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Infinite Depth",
+   "kernel": "MoveInfiniteDepth",
+   "category": "Move",
+   "strength": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Topological",
+   "kernel": "MoveTopological",
+   "category": "Move",
+   "strength": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Move Topological Soft",
+   "kernel": "MoveTopological",
+   "category": "Move",
+   "strength": 1.0,
+   "falloff": "Sphere",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Grab",
+   "kernel": "Move",
+   "category": "Move",
+   "strength": 1.0,
+   "falloff": "Smooth",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Twist",
+   "kernel": "ElasticTwist",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.4,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Twist Tight",
+   "kernel": "ElasticTwist",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.2,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Twist Volume",
+   "kernel": "ElasticTwist",
+   "category": "Move",
+   "strength": 1.0,
+   "poisson": 0.49,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Scale",
+   "kernel": "ElasticScale",
+   "category": "Move",
+   "strength": 0.5,
+   "poisson": 0.4,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Scale Soft",
+   "kernel": "ElasticScale",
+   "category": "Move",
+   "strength": 0.3,
+   "poisson": 0.15,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Swell",
+   "kernel": "ElasticScale",
+   "category": "Move",
+   "strength": 0.7,
+   "poisson": 0.49,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Elastic Shrink",
+   "kernel": "ElasticScale",
+   "category": "Move",
+   "strength": 0.5,
+   "poisson": 0.4,
+   "invert": true,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Pose",
+   "kernel": "Pose",
+   "category": "Move",
+   "strength": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Pose Bend Back",
+   "kernel": "Pose",
+   "category": "Move",
+   "strength": 1.0,
+   "invert": true,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Thumb",
+   "kernel": "Thumb",
+   "category": "Move",
+   "strength": 0.5
+  },
+  {
+   "name": "Thumb Soft",
+   "kernel": "Thumb",
+   "category": "Move",
+   "strength": 0.3,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Thumb Smear",
+   "kernel": "Thumb",
+   "category": "Move",
+   "strength": 0.8,
+   "falloff": "Smooth",
+   "spacing": 0.05
+  },
+  {
+   "name": "Smooth",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 0.5
+  },
+  {
+   "name": "Smooth Strong",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 0.8,
+   "smoothIterations": 3
+  },
+  {
+   "name": "Smooth Gentle",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 0.2,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Smooth Relax",
+   "kernel": "SmoothRelax",
+   "category": "Smooth",
+   "strength": 0.6
+  },
+  {
+   "name": "Slide Relax",
+   "kernel": "SmoothRelax",
+   "category": "Smooth",
+   "strength": 0.8,
+   "smoothIterations": 2
+  },
+  {
+   "name": "Smooth Stronger",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 1.0,
+   "smoothIterations": 5
+  },
+  {
+   "name": "Smooth Peaks",
+   "kernel": "Polish",
+   "category": "Smooth",
+   "strength": 0.3,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Skin Pores",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.15,
+   "noiseScale": 24
+  },
+  {
+   "name": "Skin Fine",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.1,
+   "noiseScale": 40
+  },
+  {
+   "name": "Skin Bumpy",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.25,
+   "noiseScale": 12
+  },
+  {
+   "name": "Rock Noise",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.6,
+   "noiseScale": 3
+  },
+  {
+   "name": "Rock Grainy",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.4,
+   "noiseScale": 10
+  },
+  {
+   "name": "Erosion",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.5,
+   "noiseScale": 5,
+   "invert": true
+  },
+  {
+   "name": "Hammered Metal",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.2,
+   "noiseScale": 8,
+   "falloff": "Constant"
+  },
+  {
+   "name": "Orange Peel",
+   "kernel": "SurfaceNoise",
+   "category": "Surface",
+   "strength": 0.08,
+   "noiseScale": 30,
+   "falloff": "Constant"
+  },
+  {
+   "name": "Pores",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.25,
+   "alpha": "pores",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Pores Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.175,
+   "alpha": "pores",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Skin Grain",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.2,
+   "alpha": "skin_fine",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Skin Grain Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.13999999999999999,
+   "alpha": "skin_fine",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Wrinkle Field",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "wrinkles",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Wrinkle Field Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "wrinkles",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Crows Feet",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "crows_feet",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Crows Feet Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.24499999999999997,
+   "alpha": "crows_feet",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Scales Round",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "scales_round",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Scales Round Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "scales_round",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Scales Ridged",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "scales_ridged",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Scales Ridged Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "scales_ridged",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Lizard Skin",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "lizard",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Lizard Skin Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.24499999999999997,
+   "alpha": "lizard",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Bark",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "bark",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Bark Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "bark",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Rock Surface",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "rock",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Rock Surface Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "rock",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Rock Cracks",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "rock_cracks",
+   "falloff": "Smooth",
+   "invert": true
+  },
+  {
+   "name": "Rock Cracks Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "rock_cracks",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Pitted Stone",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "stone_pitted",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Pitted Stone Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "stone_pitted",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Fabric Weave",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.2,
+   "alpha": "cloth_weave",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Fabric Weave Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.13999999999999999,
+   "alpha": "cloth_weave",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Knit",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "knit",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Knit Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "knit",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Leather",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "leather",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Leather Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "leather",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Hair Strands",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "hair_strands",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Hair Strands Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "hair_strands",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Veins",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "veins",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Veins Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "veins",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Feather",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "feather",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Feather Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "feather",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Ring Stamp",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "ring",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Ring Stamp Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "ring",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Star Stamp",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "star",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Star Stamp Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "star",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Spiral",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "spiral",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Spiral Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "spiral",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Cloud Noise",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "noise_soft",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Cloud Noise Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "noise_soft",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Blotches",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "noise_sharp",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Blotches Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "noise_sharp",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Random Dots",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.4,
+   "alpha": "dots_random",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Random Dots Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.27999999999999997,
+   "alpha": "dots_random",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Tri Grid",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.3,
+   "alpha": "tri_grid",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Tri Grid Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.21,
+   "alpha": "tri_grid",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Square Stamp",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "square_soft",
+   "falloff": "Constant",
+   "spacing": 1.0
+  },
+  {
+   "name": "Square Stamp Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "square_soft",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Soft Dot",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.5,
+   "alpha": "dot_soft",
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Soft Dot Drag",
+   "kernel": "Standard",
+   "category": "Alpha Textures",
+   "strength": 0.35,
+   "alpha": "dot_soft",
+   "alphaFollowStroke": true,
+   "spacing": 0.15
+  },
+  {
+   "name": "Cloth Grab",
+   "kernel": "Cloth",
+   "category": "Cloth",
+   "strength": 1.0,
+   "clothIterations": 6,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Cloth Folds",
+   "kernel": "Cloth",
+   "category": "Cloth",
+   "strength": 1.0,
+   "clothIterations": 10,
+   "clothDamping": 0.05,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Cloth Soft",
+   "kernel": "Cloth",
+   "category": "Cloth",
+   "strength": 1.0,
+   "clothIterations": 4,
+   "clothDamping": 0.3,
+   "falloff": "Sphere",
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Cloth Gravity",
+   "kernel": "Cloth",
+   "category": "Cloth",
+   "strength": 1.0,
+   "clothIterations": 8,
+   "clothGravity": 1.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Cloth Tight",
+   "kernel": "Cloth",
+   "category": "Cloth",
+   "strength": 1.0,
+   "clothIterations": 16,
+   "clothDamping": 0.0,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Morph",
+   "kernel": "Morph",
+   "category": "Morph & History",
+   "strength": 0.6
+  },
+  {
+   "name": "Morph Exaggerate",
+   "kernel": "Morph",
+   "category": "Morph & History",
+   "strength": 0.3,
+   "invert": true
+  },
+  {
+   "name": "Morph Soft",
+   "kernel": "Morph",
+   "category": "Morph & History",
+   "strength": 0.3,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "History Recall",
+   "kernel": "HistoryRecall",
+   "category": "Morph & History",
+   "strength": 0.6
+  },
+  {
+   "name": "History Recall Soft",
+   "kernel": "HistoryRecall",
+   "category": "Morph & History",
+   "strength": 0.3,
+   "falloff": "Sphere"
+  },
+  {
+   "name": "Mask Pen",
+   "kernel": "Mask",
+   "category": "Mask & Paint",
+   "strength": 1.0,
+   "falloff": "Sharp"
+  },
+  {
+   "name": "Mask Soft",
+   "kernel": "Mask",
+   "category": "Mask & Paint",
+   "strength": 0.5,
+   "falloff": "Smooth"
+  },
+  {
+   "name": "Mask Square",
+   "kernel": "Mask",
+   "category": "Mask & Paint",
+   "strength": 1.0,
+   "falloff": "Constant",
+   "squareTip": true,
+   "tipRoundness": 0.0
+  },
+  {
+   "name": "Unmask",
+   "kernel": "Mask",
+   "category": "Mask & Paint",
+   "strength": 1.0,
+   "invert": true
+  },
+  {
+   "name": "Mask Noise",
+   "kernel": "Mask",
+   "category": "Mask & Paint",
+   "strength": 0.8,
+   "alpha": "noise_sharp"
+  },
+  {
+   "name": "Paint",
+   "kernel": "Paint",
+   "category": "Mask & Paint",
+   "strength": 0.8,
+   "color": [
+    0.8,
+    0.2,
+    0.2
+   ]
+  },
+  {
+   "name": "Paint Soft",
+   "kernel": "Paint",
+   "category": "Mask & Paint",
+   "strength": 0.3,
+   "falloff": "Sphere",
+   "color": [
+    0.8,
+    0.2,
+    0.2
+   ]
+  },
+  {
+   "name": "Paint Spray",
+   "kernel": "Paint",
+   "category": "Mask & Paint",
+   "strength": 0.5,
+   "alpha": "dots_random",
+   "color": [
+    0.8,
+    0.2,
+    0.2
+   ]
+  },
+  {
+   "name": "Paint Skin Mottle",
+   "kernel": "Paint",
+   "category": "Mask & Paint",
+   "strength": 0.2,
+   "alpha": "noise_soft",
+   "color": [
+    0.75,
+    0.45,
+    0.4
+   ]
+  },
+  {
+   "name": "Insert Mesh",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "insert"
+  },
+  {
+   "name": "Insert Multi Mesh",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "insert",
+   "imm": true
+  },
+  {
+   "name": "Curve Tube",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "curve",
+   "tube": {
+    "sides": 12,
+    "taperStart": 0.0,
+    "taperEnd": 0.0
+   }
+  },
+  {
+   "name": "Curve Strap",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "curve",
+   "tube": {
+    "sides": 4
+   }
+  },
+  {
+   "name": "Curve Tapered",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "curve",
+   "tube": {
+    "sides": 12,
+    "taperStart": 0.6,
+    "taperEnd": 0.9
+   }
+  },
+  {
+   "name": "Curve Rope",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "curve",
+   "tube": {
+    "sides": 8
+   }
+  }
+ ]
+}

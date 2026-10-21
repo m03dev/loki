@@ -336,6 +336,13 @@ function forgeProCommands() {
     scale: ["Scale", (v) => forgeProTool(v, "scale")],
     lastTool: ["Last Tool", (v) => forgeProTool(v, v.pro.lastTool || "translate")],
     undo: ["Undo", (v) => { v.undo(); if (T(v)) v.tree.build(); }],
+    // the sculpting engine (forge_sculpt.js)
+    sculptRemesh: ["Remesh (Even Surface)", () => { window.ForgeSculpt && window.ForgeSculpt.op("voxelRemesh", +((document.getElementById("forge-sculpt-res") || {}).value || 128)); }],
+    sculptQuadRemesh: ["Quad Remesh", () => { window.ForgeSculpt && window.ForgeSculpt.op("quadRemesh", 4000); }],
+    sculptDivide: ["Divide (Subdivision Level)", () => { window.ForgeSculpt && window.ForgeSculpt.op("divide"); }],
+    sculptDynamic: ["Toggle Dynamic Detail", () => { const b = document.getElementById("forge-sculpt-dyn"); if (b) b.click(); }],
+    matcapNext: ["Next Matcap", () => { if (typeof forgeCycleMatcap === "function") forgeCycleMatcap(1); }],
+    matcapPrev: ["Previous Matcap", () => { if (typeof forgeCycleMatcap === "function") forgeCycleMatcap(-1); }],
     redo: ["Redo", (v) => { v.redo(); if (T(v)) v.tree.build(); }],
     duplicate: ["Duplicate", (v) => { const n = T(v).duplicate(); return n ? "Duplicated: " + n.name + "." : ""; }],
     duplicateT: ["Duplicate with Transform", (v) => { const n = T(v).duplicateWithTransform(); return n ? n.name + " (Shift+D repeats the offset)." : ""; }],

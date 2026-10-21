@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-19 (cleanup; state as of c132c1f on origin/master).
+Last updated: 2026-10-20 (Forge's native sculpting engine; earlier state as of c132c1f).
 
 ## The machines
 
@@ -131,6 +131,23 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   Loop restored (Ziva's 8086bf2 had removed it). Checked: test_forge_pro_ui 99 (44 s), test_forge_ui 37,
   test_forge_edit_ui 21, test_forge_model_ui 14, creature 8, poly 32, ui_fit 81, ui_smoke 10, studio_destination 81.
   Next: ZIVA_TASKS "From Claude (2026-10-19 evening)" - real-screen check, then Combine/Separate/Mirror/Merge.
+
+- **2026-10-20 (Claude): the native sculpting engine** - LOKI's own C++ sculpting core (`native/sculpt/`, AGPL-3.0;
+  from the owner's sculpting plug-in, brought in on his decision) built to WebAssembly (`app/ui/vendor/sculpt/`,
+  371 KB) and run in a Web Worker by `app/ui/forge_sculpt.js`. Forge's strokes go to it when it is loaded (the
+  SculptGL brushes stay the fallback, `view.dab` unchanged): 40 kernels + the 204-preset library ("More brushes"),
+  dynamic detail, Remesh (voxel, even surface), Quad remesh (field-aligned), subdivision levels (Divide / Lower /
+  Higher), six matcaps + Lit, and a wire overlay that fades as edges crowd on screen (never solid). Hover picking
+  uses the engine's BVH and the brush ring its hit normal (no per-move scan of every vertex). Only moved vertices
+  come back (+ one-ring), into the GPU buffers' update range. ~1 ms per dab at 2.1M vertices (node). The worker has
+  its own CSP with 'wasm-unsafe-eval' (`SCULPT_WORKER_CSP`); pages keep UI_CSP. Forge's undo/history: a stroke is
+  one history step, recorded when the worker has sent its last vertices. Commands: sculptRemesh, sculptQuadRemesh,
+  sculptDivide, sculptDynamic, matcapNext/Prev (FORGE_PRO_CMDS). Rebuild: native/sculpt/README.md. Cloud-checked:
+  test_forge_sculpt_engine 19 (26 s, real mouse strokes in headless Chromium), test_forge_ui 37, test_forge_pro_ui
+  100, test_forge_edit_ui 21, test_forge_model_ui 18, creature 8, poly 36, ui_fit 81, ui_smoke 10. Not verified on
+  the Mac's WebKit window or the PC's WebView2 yet (worker CSP + WebAssembly there). Not wired yet: the Mask and
+  Paint brushes (engine has them; Forge needs a mask/colour display), alphas, the threaded build (the window is
+  cross-origin isolated, so SharedArrayBuffer threads are possible).
 
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat

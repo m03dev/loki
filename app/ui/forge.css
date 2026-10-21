@@ -818,3 +818,20 @@ button.forge-out-title:hover { opacity: 1; }
 .forge-pro-hotbox .forge-pro-row { z-index: 3; }
 .forge-pro-hotbox .forge-pro-list { z-index: 6; }
 .forge-pro-hotbox:has(.forge-pro-list:not([hidden])) .forge-pro-zones { visibility: hidden; }   /* a dropped menu hides the zone names */
+
+/* the sculpting engine's panel (forge_sculpt.js): beside the brush column, % sized so it always fits */
+.forge-enginebar { left: 64px; top: 56px; width: min(212px, 40%); max-height: calc(100% - 116px); overflow-y: auto; flex-direction: column;
+  align-items: stretch; gap: 4px; scrollbar-width: none; }
+.forge-enginebar::-webkit-scrollbar { display: none; }
+.forge-engine-title { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #8d97a8; padding: 2px 4px 0; }
+.forge-engine-row { display: flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+.forge-engine-row .forge-btn { width: 34px; height: 30px; justify-content: center; }
+.forge-enginebar .forge-slider { flex-direction: row; }
+.forge-sculpt-lib { width: 100%; font-size: 12px; background: #23252a; color: #dfe4ec; border: 1px solid #3a3e46; border-radius: 6px; padding: 3px 4px; }
+.forge-sculpt-level { font-size: 11px; color: #b9c4d6; padding-left: 4px; }
+.forge-flip { transform: rotate(180deg); }
+.forge-matcaps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.forge-matcap { aspect-ratio: 1; min-width: 0; padding: 2px; border-radius: 50%; background: transparent; border: 2px solid transparent;
+  font-size: 10px; color: #dfe4ec; display: flex; align-items: center; justify-content: center; }
+.forge-matcap img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.forge-matcap.on { border-color: #2f7fd0; }

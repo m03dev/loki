@@ -1,0 +1,45 @@
+# LOKI's sculpting engine
+
+The C++ sculpting core behind Forge's Sculpt mode, built to one WebAssembly module that runs in a Web Worker
+inside LOKI's window (no native install, the same file on macOS and Windows).
+
+| Folder | What |
+| --- | --- |
+| `core/` | the engine: mesh + BVH, 40 brush kernels (`brush.cpp`), dynamic detail (`dyntopo.cpp`), voxel remesh (`voxel_remesh.cpp`, dual contouring), field-aligned quad remesh (`quad_remesh.cpp` + `instant_meshes.cpp`), subdivision levels (`multires.cpp`, Catmull-Clark with per-level detail in tangent frames), cluster LOD, paged store, SDF volumes |
+| `wasm/` | the WebAssembly build: `sculpt_api.cpp` (the C API), `st_compat.h` (single-thread stand-ins for std::thread/mutex), `sculpt_engine.js` (JS wrapper, browser + node), `sculpt_worker.js` (the worker Forge talks to), `build.sh`, `test/test_engine.js` |
+| `brushes/` | the brush library (204 presets over the kernels) and its alpha stamps |
+| `tools/gen_matcaps.py` | draws the six matcaps procedurally (numpy + PIL) into `app/ui/vendor/sculpt/matcaps/` |
+| `third_party/` | Instant Meshes (BSD-3), Eigen (MPL-2.0, headers), meshoptimizer (MIT) - notices in `THIRD_PARTY_NOTICES.md` |
+
+The built files Forge loads are committed in `app/ui/vendor/sculpt/` (`sculpt.wasm`, `sculpt_engine.js`,
+`sculpt_worker.js`, `brushes.json`, `matcaps/`), so no machine needs a compiler.
+
+## Rebuild
+
+Needs the [WASI SDK](https://github.com/WebAssembly/wasi-sdk) (clang + libc++ for wasm32; release 25 is what
+built the committed file):
+
+```
+WASI_SDK=/path/to/wasi-sdk-25.0 bash native/sculpt/wasm/build.sh /tmp/sculpt-build
+node native/sculpt/wasm/test/test_engine.js /tmp/sculpt-build/sculpt.wasm     # every engine call, ~5 s
+cp /tmp/sculpt-build/sculpt.wasm native/sculpt/wasm/sculpt_engine.js native/sculpt/wasm/sculpt_worker.js app/ui/vendor/sculpt/
+```
+
+## Speed (single thread, node 22, x86-64)
+
+| Mesh | Load | Clay dab | Standard dab | Move dab |
+| --- | --- | --- | --- | --- |
+| 526k vertices | 1.3 s | 0.6 ms | 0.3 ms | 0.07 ms |
+| 2.1M vertices | 5.0 s | 1.3 ms | 0.9 ms | 0.5 ms |
+
+The window only receives the vertices a stroke moved (plus their one-ring, whose normals change), copied
+straight into the GPU buffers' update range - no whole-mesh normal pass or re-upload per dab.
+
+## How Forge uses it
+
+`app/ui/forge_sculpt.js`: loads the worker, keeps the engine's mesh equal to Forge's `view.sm` (welded
+vertices; Forge's undo and transform tools are noticed and sent over), sends one ray per dab spaced along the
+cursor's path, applies the replies, and adds the sculpt panel (brush library, dynamic detail, remesh, quad
+remesh, subdivision levels, matcaps). The worker has its own Content-Security-Policy
+(`engine/loki_bridge.py` `SCULPT_WORKER_CSP`): WebAssembly is allowed for that one script only; LOKI's pages
+keep `UI_CSP`.

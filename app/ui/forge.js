@@ -960,7 +960,8 @@ function forgeMakeView(lib, renderer, canvas) {
   scene.add(gizmo);
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0, vertexColors: true });
   const clayColor = new THREE.Color(0xc9b8a8);
-  let mesh = null, baseMap = null, matMaps = null;
+  let mesh = null, baseMap = null, matMaps = null, wireMesh = null;
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x0b0e14, wireframe: true, transparent: true, opacity: 0.5, depthWrite: false });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: 0xbfd4ff, transparent: true,
     opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
   ring.renderOrder = 10; ring.visible = false; scene.add(ring);
@@ -1022,7 +1023,19 @@ function forgeMakeView(lib, renderer, canvas) {
     }
   }
   controls.addEventListener("change", () => { view.dirty = true; });
-  view.frameHooks = view.frameHooks || [];      // run before a frame is drawn (the selection wire follows edits)
+  view.frameHooks = view.frameHooks || [];
+  // wire opacity from the average edge length on screen: full at >= 10 px apart, gone below ~2 px
+  view.frameHooks.push(function wireLook() {
+    if (!wireMesh || !wireMesh.visible || !view.sm) return;
+    const geo = mesh.geometry; if (!geo.boundingSphere) geo.computeBoundingSphere();
+    const r = geo.boundingSphere.radius * holder.getWorldScale(new THREE.Vector3()).x, tris = Math.max(1, view.sm.idx.length / 3);
+    const edge = Math.sqrt((4 * Math.PI * r * r) * 4 / (Math.sqrt(3) * tris));
+    const c = geo.boundingSphere.center.clone().applyMatrix4(mesh.matrixWorld);
+    const dist = Math.max(1e-6, camera.position.distanceTo(c) - r * 0.5);
+    const px = edge / (2 * dist * Math.tan(camera.fov * Math.PI / 360)) * (canvas.clientHeight || 600);
+    const o = Math.max(0, Math.min(1, (px - 2) / 8)) * (view.wireOpacity == null ? 0.55 : view.wireOpacity);
+    if (Math.abs(o - wireMat.opacity) > 0.01) { wireMat.opacity = o; wireMesh.visible = o > 0.01 || !!view.wire; view.dirty = true; }
+  });      // run before a frame is drawn (the selection wire follows edits)
   const hooks = () => { for (const f of view.frameHooks) { try { f(); } catch (exc) { console.warn("forge: frame hook", exc); } } };
   function loop() {
     if (!view.running) return;
@@ -1070,6 +1083,9 @@ function forgeMakeView(lib, renderer, canvas) {
     view.sm = sm;
     mesh = new THREE.Mesh(geometryOf(sm), material);
     mesh.name = "forge";
+    wireMesh = new THREE.Mesh(mesh.geometry, wireMat);   // the wire overlay shares the geometry (no copy)
+    wireMesh.name = "forge-wire"; wireMesh.visible = !!view.wire; wireMesh.raycast = () => {};
+    mesh.add(wireMesh);
     holder.add(mesh);
     applyLook();
     if (!keepView) view.frame();
@@ -1152,8 +1168,16 @@ function forgeMakeView(lib, renderer, canvas) {
     material.roughness = m ? 1 : (pro ? 1 : 0.62);
     material.metalness = m ? 1 : 0;
     material.color.copy(clay ? clayColor : new THREE.Color(pro ? FORGE_PRO_GREY : 0xffffff));
-    material.wireframe = !!view.wire;
+    // the wire is an overlay that fades as edges get closer than a few pixels on screen (wireLook, every
+    // frame), so a dense sculpt never turns solid black; the surface itself stays shaded under it
+    material.wireframe = false;
+    material.polygonOffset = !!view.wire; material.polygonOffsetFactor = 1; material.polygonOffsetUnits = 1;
     material.needsUpdate = true;
+    // matcap (forge_sculpt.js gallery): a lit-sphere look to judge the form, unless the model shows its own maps
+    const useCap = !!view.matcapMat && !m && !(material.map) && !material.vertexColors;
+    if (mesh) mesh.material = useCap ? view.matcapMat : material;
+    if (view.matcapMat) { view.matcapMat.polygonOffset = !!view.wire; view.matcapMat.polygonOffsetFactor = 1; view.matcapMat.polygonOffsetUnits = 1; }
+    if (wireMesh) wireMesh.visible = !!view.wire;
     view.dirty = true;
   }
   // Material Maker maps (canvases) -> textures on the model, live
@@ -1220,6 +1244,9 @@ function forgeMakeView(lib, renderer, canvas) {
     }
   };
 
+  // what forge_sculpt.js (the native sculpting engine) works with
+  view.internals = { THREE, holder, camera, canvas, raycaster, material, useMesh: (sm, keep) => useMesh(sm, keep),
+    get mesh() { return mesh; }, refresh: () => refresh(), snapshot: () => snapshot(), applyLook: () => applyLook() };
   // ---- sculpting: SculptGL's tools (src/editing/tools/*.js), on the welded vertices
   function snapshot() {
     view.undoStack.push({ sm: view.sm, wpos: view.sm.wpos.slice(), poly: view.poly, tri2face: view.tri2face,
@@ -1262,6 +1289,9 @@ function forgeMakeView(lib, renderer, canvas) {
   const toLocal = (p) => holder.worldToLocal(p.clone());
   function hitAt(e) {
     if (!mesh) return null;
+    // the engine's BVH answers in microseconds; three.js' raycast walks every triangle (slow on dense sculpts)
+    const fast = window.ForgeSculpt && window.ForgeSculpt.ready(view) ? window.ForgeSculpt.hit(view, e) : undefined;
+    if (fast !== undefined) return fast;
     const r = canvas.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
@@ -1386,7 +1416,8 @@ function forgeMakeView(lib, renderer, canvas) {
   }
   function showRing(hit) {
     if (!hit || view.mode !== "sculpt") { if (ring.visible) { ring.visible = false; view.dirty = true; } return; }
-    const iv = picked(hit.point, (view.brush.radius * view.size) ** 2), a = iv.length ? areaNormalCenter(iv) : null;
+    const en = hit.normal || null;   // the engine's hit carries the surface normal: no scan of every vertex
+    const iv = en ? [] : picked(hit.point, (view.brush.radius * view.size) ** 2), a = en ? { n: en } : (iv.length ? areaNormalCenter(iv) : null);
     const n = a ? new THREE.Vector3(...a.n) : new THREE.Vector3(0, 0, 1);
     ring.position.copy(holder.localToWorld(hit.point.clone().addScaledVector(n, view.size * 0.002)));
     ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n.transformDirection(holder.matrixWorld));
@@ -1406,6 +1437,9 @@ function forgeMakeView(lib, renderer, canvas) {
     view.stroked = true;                // forge_scene.js records the stroke in the history when it ends (T6c)
     if (view.poly) { view.poly = null; view.tri2face = null; view.select([]); }   // sculpted: the poly cage no longer fits
     const tool = e.shiftKey ? "smooth" : view.brush.tool;
+    // the native sculpting engine (forge_sculpt.js) runs the stroke when it is loaded; the brushes above are the fallback
+    const engine = window.ForgeSculpt && window.ForgeSculpt.ready(view) ? window.ForgeSculpt : null;
+    if (engine && engine.press(view, e)) { drag = { engine, last: hit.point.clone() }; return; }
     drag = { tool, negative: e.ctrlKey || e.metaKey, last: hit.point.clone() };
     if (tool === "grab") drag.grab = grabStart(hit.point);
     else stroke(tool, hit.point, drag.negative);
@@ -1413,6 +1447,7 @@ function forgeMakeView(lib, renderer, canvas) {
   canvas.addEventListener("pointermove", (e) => {
     if (!drag) { if (view.mode === "sculpt") showRing(hitAt(e)); return; }
     e.stopImmediatePropagation();
+    if (drag.engine) { drag.engine.drag(view, e); return; }
     if (drag.grab) { grabMove(drag.grab, e); return; }
     const hit = hitAt(e);
     showRing(hit);
@@ -1429,7 +1464,7 @@ function forgeMakeView(lib, renderer, canvas) {
     forgeSync(view.sm); forgeNormals(view.sm); refresh();
     drag.last.copy(hit.point);
   }, { capture: true });
-  const end = () => { drag = null; };
+  const end = () => { if (drag && drag.engine) drag.engine.release(view); drag = null; };
   canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end);
   canvas.addEventListener("pointerleave", () => { if (!drag) showRing(null); });
   // ---- poly modelling + DynaMesh (app/ui/forge_poly.js, the bar is forge_model.js): a poly mesh shown with hard
