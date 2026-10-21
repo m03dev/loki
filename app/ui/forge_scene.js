@@ -658,7 +658,7 @@ function forgeSceneAttach(view, ctx) {
   // the manipulator follows the selection (pro: the tool's handle sits on the selected object's pivot)
   const tc = ctx.transform || null;
   if (tc && tc.addEventListener) {                     // a manipulator drag is ONE undo step, Shift-drag's copy included
-    tc.addEventListener("dragging-changed", (ev) => { if (!view.undoOpen) return; if (ev && ev.value) view.undoOpen(tc.mode || "move"); else view.undoClose(); });
+    tc.addEventListener("dragging-changed", (ev) => { if (!view.undoOpen) return; if (ev && ev.value) view.undoOpen({ translate: "Move", rotate: "Rotate", scale: "Scale" }[tc.mode] || "Move"); else view.undoClose(); });
   }
   api.attachTool = (mode) => {
     if (!tc) return false;

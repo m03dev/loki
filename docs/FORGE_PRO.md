@@ -243,7 +243,7 @@ our own code. Everything Ziva built above is kept; this extends it.
 ### DONE (Claude, 2026-10-21) - one undo queue, the hotkey table, the pro manipulator, the Creature Editor panel
 Owner 00:27: "the history in forge doesn't work", hotkeys "more like" the pro tools and "modular and custimizable",
 Shift over the manipulator changes what it does, the manipulator should not look like Blender's, the creature tab needs
-a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (19 checks, ~11 s) and test_forge_creature_ui (10).
+a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (20 checks, ~12 s) and test_forge_creature_ui (10).
 - **Undo** (forge.js `state()` / `restore()`, forge_scene.js `view.sceneCapture` / `sceneRestore` / `undoOpen` /
   `undoClose`): every entry is the whole state - the working mesh AND the scene (objects, transforms, pivots, parents,
   visibility, selection, which object the tools edit). Before, only the working mesh was undoable and `makeWorking` /
@@ -264,7 +264,8 @@ a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (19 checks, ~1
   with cones, plane squares, a screen-facing centre square; front-half rotate rings, a light-blue view ring, a grey
   trackball; scale cubes and a light-blue centre cube; hover = yellow. **Shift over a handle** turns it orange and the
   help line says what the drag does: objects = duplicate and move the copy (T5), faces = extrude then move / rotate /
-  scale the new faces - one undo step, extrude + polyTweak in the history.
+  scale the new faces - one undo step, extrude + polyTweak in the history. **Middle-button drag** anywhere moves the
+  selection along the handle used last (the view plane before any), like the pro tools.
 - **Creature Editor** (forge.js `forgeCreaturePane` / `forgeCreatureDock`): its own title bar (fold to the bar, float
   over the viewport and drag it, dock back, close), foldable sections (Starter, Shape with Build / Body / Head / Tail,
   Coat, Export; remembered), the starter's name in the bar, its own Make creature + Live at the bottom.

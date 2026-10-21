@@ -161,6 +161,22 @@ async def main():
         check("the manipulator is the pro one: one-way arrows, a screen-facing centre square, 3 rings + the view ring",
               sty["styled"] and sty["obj"] and sty["center"] and sty["oneWay"] and sty["rings"] == 3 and sty["view"], sty)
 
+        # -------- the middle button drags the manipulator from anywhere (the last handle used, else the view plane)
+        await E("forgeModelMode(false)")
+        await E(T + ".select(" + T + ".list()[0].id); forgeProRun(forge.view, 'move')")
+        await page.wait_for_timeout(100)
+        x0 = await E(T + ".transform().translate")
+        n0 = await E("forge.view.undoStack.length")
+        await page.mouse.move(420, 640)
+        await page.mouse.down(button="middle")
+        for i in range(5):
+            await page.mouse.move(420 + 14 * (i + 1), 640)
+            await page.wait_for_timeout(20)
+        await page.mouse.up(button="middle")
+        mm = await E("[" + T + ".transform().translate, forge.view.undoStack.length, (forge.view.undoStack[forge.view.undoStack.length - 1] || {}).label]")
+        check("a middle-button drag anywhere moves the selection with the manipulator - one 'Move' undo step",
+              abs(mm[0][0] - x0[0]) > 0.05 and mm[1] == n0 + 1 and mm[2] == "Move", [x0, mm])
+
         # -------- hotkeys: a table
         ch = await E("""() => { const K = (o) => forgeKeyChord(Object.assign({ key: '', code: '', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }, o));
           return [K({ key: 'z', code: 'KeyZ', metaKey: true, shiftKey: true }), K({ key: '∂', code: 'KeyD', altKey: true }),

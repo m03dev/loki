@@ -145,6 +145,25 @@ export class ForgeManip extends TransformControls {
     this.shiftHint = null;                 // (tc) => text for the help line while Shift is held over a handle
     forgeManipRestyle(this);
     live.add(this);
+    // the pro middle-button drag: anywhere in the view, the manipulator moves along the handle you used last (or the
+    // view plane / view axis before any), without having to grab the handle itself
+    this.middleDrag = true;
+    this.addEventListener("mouseDown", () => { if (this.axis) this.lastAxis = this.axis; });
+    if (domElement) {
+      domElement.addEventListener("pointerdown", (e) => {
+        if (!this.middleDrag || e.button !== 1 || e.altKey || !this.enabled || !this.object || this.dragging) return;
+        const ax = this.lastAxis && (this.mode !== "rotate" ? /^(X|Y|Z|XY|YZ|XZ|XYZ)$/ : /^(X|Y|Z|E|XYZE)$/).test(this.lastAxis)
+          ? this.lastAxis : (this.mode === "rotate" ? "E" : "XYZ");
+        e.preventDefault(); e.stopImmediatePropagation();
+        const ptr = (ev, b) => { const p = this._getPointer(ev); p.button = b; return p; };   // TransformControls: down/up 0, move -1
+        this.axis = ax;
+        this.getHelper().updateMatrixWorld(true);         // the drag plane follows the axis just set
+        this.pointerDown(ptr(e, 0));
+        const mv = (ev) => { this.axis = ax; this.pointerMove(ptr(ev, -1)); };
+        const up = (ev) => { document.removeEventListener("pointermove", mv, true); document.removeEventListener("pointerup", up, true); this.pointerUp(ptr(ev, 0)); };
+        document.addEventListener("pointermove", mv, true); document.addEventListener("pointerup", up, true);
+      }, true);
+    }
   }
   get shiftHeld() { return shiftHeld; }
   dispose() { live.delete(this); super.dispose(); }
