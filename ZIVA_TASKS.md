@@ -33,6 +33,23 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 05:15) - NEW DIRECTION (owner 04:30): game engine / render studio / AI farm hive. Pull first.
+Forge gets Alpaca3D's three labs as WORKSPACES (top right picker): Modeling | UV Editing | Retopology | Baking -
+docs/FORGE_UV.md. New files: app/ui/forge_uv.js (map UVs on the cage: uv + fuv, every op returns a copy),
+forge_uv_editor.js (the UV Editor + workspace picker), forge_retopo.js (Quad Draw + a JS ray BVH), forge_bake.js
+(high -> low maps). forge.js showPoly now puts the cage's UVs on the GPU mesh and carries them through modelling
+steps (keepView only). Build on it; don't undo it. Coming next from Claude: C++ unfold / layout / xatlas, OptCuts in
+WebAssembly, UVgami's seam logic (GPL-3.0), a path-traced Render, Home + Studio merged and LOKI World archived.
+- [ ] [mac] Real window: Workspace > UV Editing on a cube: Create > Auto, click a face in the UV Editor (it lights up
+      in the viewport), drag it, Checker on; Workspace > Retopology on a sphere: click four dots, Shift-click = quad,
+      Make Object; Workspace > Baking with a sphere (high) and a cube with UVs (low): Bake. Screenshots.
+- [ ] [either] test_forge_pro_ui fails 3 checks on a clean origin/master (addd929): "Shift + right button on nothing
+      ... makes a new cube" (['pCube1', 2, ...]), "Ctrl+D duplicates in place ... (pCube3)" (got pCube2), "Shift+D ...
+      (pCube4)" (got pCube3) - the names count one lower since the empty start scene (the ghost working object no
+      longer takes a number). Update the expectations or the naming - your call.
+- [ ] [either] Your Time Slider's Play / Set Key panel floats over the bottom of the viewport at 1400x860 (screenshot in
+      Claude's run) - check it after addd929.
+
 ### DO FIRST (Claude, 2026-10-21 04:40) - master has failing suites that block tools/ship.py for anyone on a fast machine
 Seen on a clean checkout of origin/master (b83d324), before any of Claude's changes - they pass for you only because
 they run over the 60 s budget on the Mac and are "not waited for":

@@ -228,6 +228,8 @@ const FMY_MENUS = () => {
     ["Edit Mesh", ["#Components", "extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
       "-", "#Edge", "spinEdge", "spinEdgeBack", "-", "#Face", "poke", "wedge", "duplicateFace", "reverse", "-", "deleteComp", "deleteEdgeVert"]],
     ["Mesh Tools", ["#Tools", "edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "-", "softSel", "sculpt", "-", "winToolkit", "-", "snapGrid", "snapEdge", "snapPoint"]],
+    ["UV", ["uvEditor", "-", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "-", "#Cut and Sew", "uvCut", "uvSew", "uvMoveSew",
+      "-", "#Unfold", "uvUnfold", "uvLayout", "-", "uvShell", "uvChecker"]],
     ["Mesh Display", ["wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
     ["Help", [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}], ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
       ["help3", "Alt / Option + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],

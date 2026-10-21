@@ -1878,8 +1878,15 @@ function forgeMakeView(lib, renderer, canvas) {
       c += f.length;
     });
     if (!keepView) { holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1); }
+    // map UVs (forge_uv.js): a modelling step's new cage keeps the old one's UVs where its faces are still there
+    if (window.ForgeUV && keepView && view.poly && view.poly !== poly && !ForgeUV.has(poly) && ForgeUV.has(view.poly)) {   // a step, not a new object
+      const kept = ForgeUV.carry(view.poly, poly);
+      if (kept && kept !== poly) { poly.uv = kept.uv; poly.fuv = kept.fuv; poly.uvNew = kept.uvNew; }
+    }
     view.poly = poly; view.tri2face = Int32Array.from(tri2face); view.polyCorners = start;
     const sm = forgeMeshFrom(pos, null, null, Uint32Array.from(idx), vid);   // corners know their vertex: no weld by position
+    const cuv = window.ForgeUV ? ForgeUV.cornerUVs(poly) : null;
+    if (cuv) sm.uv = cuv;                                                     // one UV per corner: seams for free
     view.polyCorners = start;
     view.sm = sm; flatNormals();
     useMesh(sm, keepView);

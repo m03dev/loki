@@ -1096,3 +1096,41 @@ body.forge-splitting #forge .forge-split-h, body.forge-splitting:has(.forge-spli
 #forge .forge-out-row.hid > .forge-out-name { color: #7a7e85; }
 #forge .forge-out-row.ref > .forge-out-name::after { content: "  R"; color: #c79a5a; font-size: 9px; }
 #forge .forge-out-row.tpl > .forge-out-name::after { content: "  T"; color: #7fa6c9; font-size: 9px; }
+
+/* ---- the UV Editor (UV Editing workspace, forge_uv_editor.js) */
+#forge .forge-uvpanel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #232427; border-left: 1px solid var(--my-line, #3a3c40); }
+#forge .forge-uvpanel[hidden] { display: none; }
+#forge .fuv-head { display: flex; align-items: flex-start; gap: 6px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07); background: #2b2c2f; }
+#forge .fuv-title { font-size: 11px; font-weight: 600; color: #d6d9de; padding: 4px 4px 0 0; white-space: nowrap; }
+#forge .fuv-toolbar { display: flex; flex-wrap: wrap; gap: 4px 8px; flex: 1 1 auto; min-width: 0; }
+#forge .fuv-group { display: flex; align-items: center; gap: 2px; }
+#forge .fuv-glabel { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #7d838c; margin-right: 2px; }
+#forge .fuv-btn { height: 20px; padding: 0 6px; font-size: 11px; color: #d8dbe0; background: #3a3c41; border: 1px solid #4a4d53; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+#forge .fuv-btn:hover { background: #474a50; }
+#forge .fuv-btn.on { background: #2f7fd0; border-color: #2f7fd0; color: #fff; }
+#forge .fuv-settings { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 12px; padding: 8px; background: #26272a; border-bottom: 1px solid rgba(255,255,255,.07); max-height: 45%; overflow: auto; }
+#forge .fuv-settings[hidden] { display: none; }
+#forge .fuv-sec-title { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #8fb3d9; margin-bottom: 3px; }
+#forge .fuv-set-row { display: grid; grid-template-columns: 1fr 46%; align-items: center; gap: 4px; font-size: 11px; color: #c8ccd2; margin: 2px 0; }
+#forge .fuv-set-row input[type="number"], #forge .fuv-set-row select { height: 19px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; min-width: 0; }
+#forge .fuv-stage { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
+#forge .fuv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; outline: none; touch-action: none; }
+#forge .fuv-info, #forge .fuv-status { font-size: 11px; padding: 2px 8px; color: #9aa0a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#forge .fuv-status.bad { color: #ff9b7a; }
+#forge .fmy-wspick { height: 20px; }
+/* the Quad Draw bar (Retopology workspace, forge_retopo.js): along the top of the viewport */
+#forge .forge-retopo-bar { position: absolute; left: 8px; right: 8px; top: 52px; z-index: 7; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+  padding: 4px 6px; background: rgba(35,36,39,.92); border: 1px solid #44474d; border-radius: 4px; font-size: 11px; color: #d6d9de; }
+#forge .forge-retopo-bar[hidden] { display: none; }
+#forge .frt-num { display: inline-flex; align-items: center; gap: 3px; color: #9aa0a8; }
+#forge .frt-num input { width: 52px; height: 19px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; }
+#forge .frt-info { color: #9aa0a8; margin-left: auto; }
+#forge .frt-status { color: #c9ced8; flex-basis: 100%; }
+#forge .frt-status.bad { color: #ff9b7a; }
+/* the Baking panel (forge_bake.js) */
+#forge .fbk-high { height: 20px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; max-width: 160px; }
+#forge .fbk-bar { height: 4px; background: #1d1e21; }
+#forge .fbk-progress { height: 100%; width: 0; background: #2f7fd0; transition: width .1s; }
+#forge .fbk-maps { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; padding: 8px; align-content: start; }
+#forge .fbk-fig { margin: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #9aa0a8; }
+#forge .fbk-thumb { width: 100%; aspect-ratio: 1; image-rendering: auto; border: 1px solid #44474d; cursor: pointer; background: #111; }

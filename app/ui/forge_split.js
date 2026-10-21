@@ -13,6 +13,7 @@ const FORGE_SPLIT_PANELS = [
   ["forge-outcol", "left", 17, 8, 45],
   ["forge-left", "left", 24, 12, 50],
   ["forge-materials", "right", 36, 15, 60],
+  ["forge-uvpanel", "right", 44, 20, 75],          // the UV Editor (UV Editing workspace, forge_uv_editor.js)
   ["forge-chancol", "right", 19, 10, 45],
 ];
 const FORGE_SPLIT_LAYERS = { def: 28, min: 8, max: 80 };     // Display Layers: % of the Channel Box column
@@ -75,11 +76,22 @@ function forgeSplitDrag(handle, onMove, onEnd) {
 
 function forgeSplitAttach() {
   const body = document.querySelector("#forge .forge-body");
-  if (!body || body.dataset.split) { forgeSplitApply(); return; }
+  if (!body) return;
+  if (body.dataset.split) { forgeSplitHandles(body); forgeSplitApply(); return; }
   body.dataset.split = "1";
+  // panels come and go (Windows menu, Ctrl+Space, the toolkit tab): keep the splitters beside the visible ones
+  forgeSplitAttach.mo = new MutationObserver(() => forgeSplitSync());
+  forgeSplitAttach.mo.observe(body, { attributes: true, attributeFilter: ["class"] });
+  forgeSplitHandles(body);
+  forgeSplitApply();
+}
+// a drag edge for every side panel that has none yet (panels made later - the UV Editor - get theirs on the next apply)
+function forgeSplitHandles(body) {
   for (const [id, side, def, lo, hi] of FORGE_SPLIT_PANELS) {
     const p = document.getElementById(id);
-    if (!p || p.parentElement !== body) continue;
+    if (!p || p.parentElement !== body || p.dataset.splitEdge) continue;
+    p.dataset.splitEdge = "1";
+    if (forgeSplitAttach.mo) forgeSplitAttach.mo.observe(p, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
     const h = document.createElement("div");
     h.className = "forge-split"; h.dataset.panel = id; h.dataset.side = side;
     h.title = "Drag to resize - double-click for the default size.";
@@ -96,11 +108,6 @@ function forgeSplitAttach() {
     });
     h.addEventListener("dblclick", () => { const s = forgeSplitLoad(); delete s[id]; forgeSplitSave(s); forgeSplitApply(); if (window.forge && forge.view) forge.view.dirty = true; });
   }
-  // panels come and go (Windows menu, Ctrl+Space, the toolkit tab): keep the splitters beside the visible ones
-  const mo = forgeSplitAttach.mo = new MutationObserver(() => forgeSplitSync());
-  for (const [id] of FORGE_SPLIT_PANELS) { const p = document.getElementById(id); if (p) mo.observe(p, { attributes: true, attributeFilter: ["hidden", "style", "class"] }); }
-  mo.observe(body, { attributes: true, attributeFilter: ["class"] });
-  forgeSplitApply();
 }
 
 // the Channel Box / Display Layers split - the Layer Editor is built with the scene, after the workspace, so this
