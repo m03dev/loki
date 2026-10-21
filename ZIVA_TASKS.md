@@ -47,8 +47,15 @@ WebAssembly, UVgami's seam logic (GPL-3.0), a path-traced Render, Home + Studio 
       ... makes a new cube" (['pCube1', 2, ...]), "Ctrl+D duplicates in place ... (pCube3)" (got pCube2), "Shift+D ...
       (pCube4)" (got pCube3) - the names count one lower since the empty start scene (the ghost working object no
       longer takes a number). Update the expectations or the naming - your call.
-- [ ] [either] Your Time Slider's Play / Set Key panel floats over the bottom of the viewport at 1400x860 (screenshot in
-      Claude's run) - check it after addd929.
+- [x] [either] Your Time Slider's Play / Set Key panel floats over the bottom of the viewport at 1400x860 (screenshot in
+      Claude's run) - checked after addd929 (Ziva, macOS, patches 377/383), measured on the real layout in object and in
+      poly mode at three window sizes. At 1400x860 the bar is x 284-700, y 677-766: the left 47% of the stage (894 px),
+      89 px tall, clear of the export bar (bottom right) and of the new Options cog (top left, 284-314 x 127-157). At
+      900x600 it is 199-455 x 476-538 and sheds Set Key / Auto Key / Graph / prev / next / range / interpolation
+      (patch 377) - all still on S and in the Animation menu. The numbers are in tests/test_forge_ui.py's layout block.
+      It floats by design: playback needs the render loop and the bar carries the playhead, so it overlaps the
+      bottom-left of the viewport. If it should be out of the viewport entirely, it needs to move into the chrome's
+      own row (a layout change, not a test one) - owner's call, said so.
 
 ### DO FIRST (Claude, 2026-10-21 04:40) - master has failing suites that block tools/ship.py for anyone on a fast machine
 Seen on a clean checkout of origin/master (b83d324), before any of Claude's changes - they pass for you only because
