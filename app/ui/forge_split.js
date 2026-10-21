@@ -12,7 +12,7 @@ const FORGE_SPLIT_STORE = "loki-forge-split";
 const FORGE_SPLIT_PANELS = [
   ["forge-outcol", "left", 17, 8, 45],
   ["forge-left", "left", 24, 12, 50],
-  ["forge-materials", "right", 36, 15, 60],
+  ["forge-materials", "left", 58, 20, 80],        // Material Maker (Materials workspace): the graph left, the preview right
   ["forge-uvpanel", "right", 44, 20, 75],          // the UV Editor (UV Editing workspace, forge_uv_editor.js)
   ["forge-chancol", "right", 19, 10, 45],
 ];

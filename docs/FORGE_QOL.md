@@ -56,3 +56,33 @@ Sources: the reference package's online help (Display Layer Editor, image plane 
 Display menu, Outliner), CG Channel's release write-ups 2022-2027, the open-source modeller's 4.0-4.2 modelling
 release notes, Polycount threads (modelling toolkit wishes, symmetry, script requests, ortho cameras),
 tech-artists.org (startup cameras), 80.lv (a popular hard-surface add-on's 3.0 release).
+
+## Second pass (2026-10-21 10:00) - layout, menus, sculpt, UV and node-editor wishes
+
+Owner 09:49: "research quality of life and patch notes deep dive what we need and what people want". Sources: recent
+release notes of the big modellers / sculptors / painters (2024-2026) and user wish lists (paper-cut threads, idea
+forums, Polycount, sculpting-app forums). Paraphrased; links for checking.
+
+| # | Wish | Why | Status after this session |
+| --- | --- | --- | --- |
+| L1 | Drag any panel onto an edge to dock it, with drop zones | the newest open-source modeller only got this in 4.3, after years of asking ([notes](https://developer.blender.org/docs/release_notes/4.3/user_interface/)) | **done** (forge_dock.js) |
+| L2 | Save / load / reset named layouts | resetting one workspace without a factory reset is a classic complaint; Material Maker 1.7 added it | **done** (Windows > Layouts) |
+| L3 | Correct scaling on mixed-DPI and small / big screens | popups whose close button cannot be reached on 4K + 1080p setups | **done**: interface size Auto / fixed % |
+| L4 | Separate UI / font / panel-width controls | a mobile sculpting app ships four sliders ([manual](https://nomadsculpt.com/manual/interface)) | part: size + every panel width in % |
+| L5 | Panels remember where they were; vertical monitors | toolbars forgetting their side | **done**: per workspace AND per screen shape |
+| L6 | Editable radial / marking menus as data | the main reason people stay with a tool; pie-menu editors are top add-ons | **done** (Menu Settings editor) |
+| L7 | Resizable radial menus | one sculpting app lets you resize and rotate its wheel | **done** size + opacity; rotate open |
+| L8 | Tear-off menus | a pro-tool staple | **done** (menu bar, hotbox, wheel) |
+| L9 | A favourites / Quick Menu | top request on a sculpting forum | **done** (Alt+Q, right-click to add) |
+| L10 | Search every command | quick search / command palettes | part (the command line); a fuzzy palette is open |
+| L11 | Scroll bars only where something scrolls | small regions should not show bars | **done** (also the app-wide 38 px page scroll fixed) |
+| M1 | Crash-proof undo, autosave with rotating backups | the most-cited complaint is crashes and settings resetting, not missing tools | open (autosave) |
+| M2 | Multi-Cut that snaps reliably and stays active | | part |
+| M3 | Shape-aware bevel with live width / segments | the newest pro release's headline | open (HANDOFF problem 5) |
+| S1 | Dense-mesh speed; entering sculpt fast | an open-source sculpt refactor went 11 s -> 1.9 s on 16M faces | part (C++ engine) |
+| S2 | Reduce / decimate | export and games need light meshes | **done** (C++, meshoptimizer's simplifier) |
+| U1 | UV packing with pixel padding, holes filled | users leave for dedicated packers | part (xatlas) |
+| U2 | Moving UVs never moves the mesh | a known pro UV complaint | check |
+| N1 | Typo-tolerant node search; drop a node on a wire to insert it | node-editor basics in a material designer's 13.1 | open (Materials workspace) |
+| N2 | Frames, sticky notes, reroute dots, auto-layout | | open |
+| N3 | Preview any node's output | | part (the map thumbnails) |

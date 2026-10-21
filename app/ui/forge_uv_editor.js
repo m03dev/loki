@@ -605,7 +605,10 @@ const ForgeUVEditor = (() => {
       else if (ws !== "retopo" && ForgeRetopo.state.on) ForgeRetopo.stop();
     }
     if (typeof ForgeBake !== "undefined") ForgeBake.show(ws === "bake");
-    document.querySelector("#forge .forge-body")?.classList.toggle("ws-uv", ws === "uv");
+    const fb = document.querySelector("#forge .forge-body");
+    fb?.classList.toggle("ws-uv", ws === "uv");
+    fb?.classList.toggle("ws-mat", ws === "mat");                 // Material Maker's own workspace
+    if (typeof forgeProPanelsApply === "function") forgeProPanelsApply();
     if (typeof forgeSplitAttach === "function") forgeSplitAttach();   // its drag edge (forge_split.js)
     applyChecker();
     if (ws === "uv") {
@@ -615,14 +618,15 @@ const ForgeUVEditor = (() => {
     }
     if (S.view) { S.view.dirty = true; if (S.view.resize) S.view.resize(); }
     return ws === "uv" ? "UV Editing workspace." : ws === "retopo" ? (note || "Retopology workspace: select the object to draw over, then pick Retopology again.")
-      : ws === "bake" ? "Baking workspace: the edited object (with UVs) is the low; pick the high, then Bake." : "Modeling workspace.";
+      : ws === "bake" ? "Baking workspace: the edited object (with UVs) is the low; pick the high, then Bake."
+      : ws === "mat" ? "Materials workspace: Material Maker's node graph beside the viewport - the selected model shows the material live." : "Modeling workspace.";
   }
   function workspacePicker() {
     const name = document.querySelector("#forge .fmy-wsname");
     if (!name || document.getElementById("forge-workspace")) return;
     const sel = el("select", "fmy-menuset fmy-wspick"); sel.id = "forge-workspace";
-    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport) Retopology (Quad Draw on a live surface) or Baking (high to low maps).";
-    for (const [v, t] of [["model", "Modeling"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
+    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport), Retopology (Quad Draw on a live surface), Baking (high to low maps) or Materials (Material Maker's node graph beside a live preview).";
+    for (const [v, t] of [["model", "Modeling"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"], ["mat", "Materials"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
     sel.value = workspace();
     sel.addEventListener("change", () => say(setWorkspace(sel.value)));
     name.replaceWith(sel);

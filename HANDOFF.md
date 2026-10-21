@@ -179,6 +179,12 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   GPL-3.0, docs/FORGE_UVGAMI.md): UV Editor > Smart (seams + unfold + straighten + layout), Atlas (xatlas), Seams.
   sculpt.wasm 924 KB (build ~1.5 min). Cloud only.
 
+- **2026-10-21 10:20 (Claude): the layout system + menus your way** - forge_dock.js (dock / float / close every panel,
+  top-bottom docks for vertical monitors, per-workspace + per-screen-shape layouts, named layouts, interface size, bar
+  grips, Channel Box column folds), forge_menus.js (tear-offs, Quick Menu Alt+Q, Menu Settings + marking menu editor),
+  Workspace: Materials, C++ Reduce (ks_decimate), no page scroll bar (glass.css margin collapse). Cloud only
+  (test_forge_dock_ui 22, test_forge_menus_ui 16). Research: docs/FORGE_QOL.md "Second pass".
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).
@@ -233,7 +239,8 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 
 ## Next, in order
 
-1. PC: restart LOKI so it takes the waiting update; if the engine still does not answer, read the last 40 lines of
+1. PC: restart LOKI so it takes the waiting update (it was blocked by 4 edited game/loki-world files - set aside
+   2026-10-21 10:10, the updater now handles that case); if the engine still does not answer, read the last 40 lines of
    harness_data/app/loki_bridge.log. Then Godot tab > a project in LOKI Projects > Open in Godot (agents linked again).
 2. Both machines: the new Home in the real window (cards, open from a card, Studio inside Home) - ZIVA_TASKS.
 3. Check the COEP frames in the real windows on both machines.

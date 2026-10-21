@@ -78,7 +78,7 @@ async def ui():
 
         # ---- the workspace picker: Modeling | UV Editing
         ws = await E("[...document.getElementById('forge-workspace').options].map((o) => o.textContent)")
-        check("the Workspace picker offers Modeling, UV Editing, Retopology and Baking", ws == ["Modeling", "UV Editing", "Retopology", "Baking"], ws)
+        check("the Workspace picker offers Modeling, UV Editing, Retopology, Baking and Materials", ws == ["Modeling", "UV Editing", "Retopology", "Baking", "Materials"], ws)
         await page.select_option("#forge-workspace", "uv")
         await page.wait_for_timeout(250)
         pan = await E("""(() => { const p = document.getElementById('forge-uvpanel'), b = p.getBoundingClientRect(), s = document.getElementById('forge-stage').getBoundingClientRect();

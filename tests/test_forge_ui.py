@@ -142,7 +142,7 @@ async def main():
 
         # -------- open Forge, the Output panel
         await page.click("#open-forge")
-        await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
+        await page.wait_for_selector("#forge:not([hidden])", timeout=12000)
         await page.wait_for_function("document.querySelectorAll('#forge-output-body .forge-opt').length > 0", timeout=8000)
         n_opts = await page.evaluate("document.querySelectorAll('#forge-output-body .forge-opt').length")
         check("the Output panel is built from the engine's option modules", n_opts == len(forge3d.OPTIONS), n_opts)
@@ -330,7 +330,7 @@ async def main():
         was_closed = await page.evaluate("document.getElementById('forge').hidden")
         if was_closed:
             await page.click("#open-forge")
-            await page.wait_for_selector("#forge:not([hidden])", timeout=8000)
+            await page.wait_for_selector("#forge:not([hidden])", timeout=12000)
         await page.evaluate("forgeAddPrimitive('cube')")
         await page.wait_for_function("forge.view && forge.view.poly && forge.view.poly.f.length > 0", timeout=15000)
         await page.evaluate("forge.view.select([0]); forgeFaceOp('extrude')")

@@ -308,6 +308,10 @@ function forgeProPanelsApply(p) {
   show("forge-outcol", p.outliner);
   show("forge-chancol", p.channel);
   show("forge-left", p.create);
+  // Material Maker has its own workspace now (owner 2026-10-21: "material maker needs to go to its own work space"):
+  // it shows in Workspace: Materials, never as a side panel of Modeling
+  let ws = "model"; try { ws = localStorage.getItem("loki-forge-workspace") || "model"; } catch (_) { /* private mode */ }
+  p = Object.assign({}, p, { materials: ws === "mat" });
   show("forge-materials", p.materials);
   body.classList.toggle("show-shelf", !!p.shelf);
   body.classList.toggle("show-toolkit", !!p.toolkit);
@@ -325,6 +329,12 @@ function forgeProPanelsApply(p) {
   return p;
 }
 function forgeProPanel(name, on) {
+  if (name === "materials" && typeof ForgeUVEditor !== "undefined") {      // Material Maker = Workspace: Materials (owner 2026-10-21)
+    const now = ForgeUVEditor.workspace() === "mat";
+    const want = on == null ? !now : !!on;
+    if (want === now) return want ? "Materials workspace." : "";
+    return ForgeUVEditor.setWorkspace(want ? "mat" : "model");
+  }
   const p = forgeProPanels();
   p[name] = on == null ? !p[name] : !!on;
   try { localStorage.setItem(FORGE_PANELS_STORE, JSON.stringify(p)); } catch (_) { /* private mode */ }
@@ -547,7 +557,7 @@ function forgeProCommands() {
     winOutliner: ["Outliner", () => forgeProPanel("outliner")],
     winChannel: ["Channel Box", () => forgeProPanel("channel")],
     winCreate: ["Generate panel", () => forgeProPanel("create")],
-    winMaterials: ["Materials", () => forgeProPanel("materials")],
+    winMaterials: ["Material Maker (Materials workspace)", () => (typeof ForgeUVEditor !== "undefined" ? ForgeUVEditor.setWorkspace(ForgeUVEditor.workspace() === "mat" ? "model" : "mat") : forgeProPanel("materials"))],
     winShelf: ["Shelf", () => forgeProPanel("shelf")],
     winToolkit: ["Modeling Toolkit", () => forgeProPanel("toolkit")],
     hideUI: ["Hide UI (Ctrl+Space)", () => forgeProHideUI()],
@@ -733,7 +743,7 @@ const FORGE_PRO_TOGGLES = {
   grid: (v) => !!(v.pro.grid && v.pro.grid.visible), xray: (v) => !!(v.edit && v.edit.xray),
   softSel: (v) => !!(v.edit && v.edit.prop), wire: (v) => !!v.wire, textured: (v) => !v.clay, quadToggle: (v) => !!v.quad,
   winOutliner: () => forgeProPanels().outliner, winChannel: () => forgeProPanels().channel, winCreate: () => forgeProPanels().create,
-  winMaterials: () => forgeProPanels().materials, winShelf: () => forgeProPanels().shelf, winToolkit: () => forgeProPanels().toolkit,
+  winMaterials: () => { try { return localStorage.getItem("loki-forge-workspace") === "mat"; } catch (_) { return false; } }, winShelf: () => forgeProPanels().shelf, winToolkit: () => forgeProPanels().toolkit,
 };
 
 function forgeProItem(id, host) {

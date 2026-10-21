@@ -32,7 +32,7 @@ const FORGE_DOCK_PANELS = [
   ["fmy-toolbox", "Tool Box", "bar", "left", "toolbox"],
   ["forge-outcol", "Outliner", "panel", "left", "outliner"],
   ["forge-left", "Create", "panel", "left", "create"],
-  ["forge-materials", "Material Maker", "panel", "right", "materials"],
+  ["forge-materials", "Material Maker", "panel", "left", "materials"],
   ["forge-uvpanel", "UV Editor", "panel", "right", "uv"],
   ["forge-bakepanel", "Baking", "panel", "right", "uv"],
   ["forge-chancol", "Channel Box / Layer Editor", "panel", "right", "channel"],
@@ -183,7 +183,9 @@ function forgeDockRowBar(body, where, on, ord) {
 // so a panel waits to be dressed until its title is there.
 const FORGE_DOCK_TITLES = { "forge-outcol": ".forge-out-title", "forge-chancol": "#forge-channel .forge-panel-tab" };
 function forgeDockDress(p) {
-  if (p.dataset.fdock) return;
+  // a panel that rebuilds its own content (Material Maker clears its host) loses the title bar: dress it again
+  if (p.dataset.fdock && p.querySelector(":scope > .fdock-btns")) return;
+  delete p.dataset.fdock;
   const def = FORGE_DOCK_PANELS.find((x) => x[0] === p.id) || [p.id, p.id, "panel"];
   let grip = FORGE_DOCK_TITLES[p.id] ? p.querySelector(FORGE_DOCK_TITLES[p.id]) : null;
   if (FORGE_DOCK_TITLES[p.id] && !grip) return;
@@ -216,6 +218,8 @@ function forgeDockDress(p) {
   if (def[2] === "bar") btns.querySelector(".fdock-b-float").remove();
   p.classList.add("fdock-panel");
   p.append(btns);
+  if (grip.dataset.fdockGrip) { p.classList.add("fdock-panel"); return; }
+  grip.dataset.fdockGrip = "1";
   forgeDockDrag(grip, p, null, null);
   grip.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); forgeDockMenu(p.id, e.clientX, e.clientY); });
   grip.addEventListener("dblclick", (e) => {
@@ -224,7 +228,8 @@ function forgeDockDress(p) {
     const L = forgeDockLayout(), st = forgeDockOf(L, p.id);
     forgeDockSet(p.id, st.back || def[3]);
   });
-  if (typeof ResizeObserver === "function") {           // a floating panel's corner resize is kept, in %
+  if (typeof ResizeObserver === "function" && !p._fdockRO) {   // a floating panel's corner resize is kept, in %
+    p._fdockRO = true;
     let t = 0;
     new ResizeObserver(() => {
       if (p.dataset.dock !== "float" || document.body.classList.contains("fdock-dragging")) return;
@@ -366,7 +371,7 @@ function forgeDockClose(id) {
   let msg = "";
   if (how === "toolbox" && typeof fmyUiSet === "function") { fmyUiSet("toolbox", false); msg = "Tool Box hidden (Windows > UI Elements brings it back)."; }
   else if (how === "uv" || how === "materials") {
-    if (window.ForgeUVEditor) msg = ForgeUVEditor.setWorkspace("model");
+    if (typeof ForgeUVEditor !== "undefined") msg = ForgeUVEditor.setWorkspace("model");
   } else if (how && typeof forgeProPanel === "function") msg = forgeProPanel(how, false);
   else { const p = document.getElementById(id); if (p) p.hidden = true; }
   forgeDockApply();
@@ -616,7 +621,7 @@ function forgeDockUse(n) {
     if (!body || !body.isConnected) return;
     const k = forgeDockKey();
     if (k !== lastKey) { lastKey = k; forgeDockApply(); if (typeof forgeSplitApply === "function") forgeSplitApply(); }
-    for (const [id] of forgeDockList()) { const p = document.getElementById(id); if (p && !p.dataset.fdock && p.parentElement === body) forgeDockDress(p); }
+    for (const [id] of forgeDockList()) { const p = document.getElementById(id); if (p && p.parentElement === body && !p.querySelector(":scope > .fdock-btns")) forgeDockDress(p); }
     forgeDockBars();
   };
   window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { tick(); forgeDockScale(); forgeDockBarsApply(); }, 120); });

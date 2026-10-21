@@ -33,6 +33,29 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 10:20) - panels, menus, Materials workspace, C++ Reduce; the PC update unstuck. Pull first.
+Owner 09:49: every panel / subpanel adjustable and closable, all menus movable "even the quick menu and the wheels",
+Material Maker in its own workspace, no right-side scroll bar, everything in %, vertical monitors. Build on it:
+- **app/ui/forge_dock.js** - drag a panel's title: left / right edge = dock there, top / bottom edge = above / below the
+  viewport, elsewhere = float; ⧉ float, × close, right-click a title for a menu; INPUTS / Display Layers fold + resize; the
+  bars over the viewport (Time Slider, sculpt bars, Graph ...) move by a grip. Layouts are per workspace AND per screen
+  shape (a tall window docks the Outliner + Channel Box below). Windows > Layouts (save / load / reset, interface size).
+  A new panel you add to FORGE_SPLIT_PANELS is dockable automatically. test_forge_dock_ui 22.
+- **app/ui/forge_menus.js** - tear-off line on every menu bar / hotbox / wheel menu; the Quick Menu (Alt+Q, right-click a
+  menu item to add it); Menu Settings (size, opacity, wheel / hotbox open at the mouse / centre / where you put them -
+  drag the wheel's middle or the hotbox's grip; edit the Quick Menu and every marking menu set). test_forge_menus_ui 16.
+- Workspace: **Materials** (Material Maker's graph + live preview); it is no longer a Modeling side panel.
+- C++: **Reduce** (ks_decimate, meshoptimizer simplifier) in the sculpt engine bar and FORGE_PRO_CMDS.sculptReduce.
+- The page scroll bar on every tab was the shell's margin collapsing through <body> (+38 px) - fixed in glass.css.
+- The PC sat on "update waiting" because of 4 local edits in game/loki-world (deleted upstream). Copies are in
+  `harness_data\update_kept\manual-20261021\`; engine/updater.py now takes such deletions itself and keeps the copy.
+- [ ] [pc] Restart LOKI; it should update past 806c563. Report `harness_data\app\loki_app.log`'s update line.
+- [ ] [mac] [pc] In the real window: drag the Outliner to the bottom, float the Channel Box, tear off File, Alt+Q,
+      Workspace: Materials. WebView2 / WKWebView may handle `zoom` (interface size) and `resize: both` differently -
+      report anything off, with a screenshot.
+- [ ] [mac] test_forge_pro_ui has 3 failures on master BEFORE this change (Shift+RMB Create ring south = new cube;
+      Ctrl+D -> pCube3; Shift+D offset) - they look like a naming/duplicate regression from the morning's commits.
+
 ### From Claude (2026-10-21 07:00) - Render Studio + the AI Renderer (ComfyUI on the PC). Pull first.
 The Render tab is now Render Studio (app/ui/render_studio.js): jobs | preview | settings, "Path traced" (Forge's path
 tracer) and "AI Renderer" (Forge's depth + line-art passes -> ComfyUI: Wan VACE + the VACE/SkyReels merge as GGUF).
