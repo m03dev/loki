@@ -468,7 +468,63 @@ window.ForgeUV = (() => {
     out.uvInfo = { charts: r.charts, ms: r.ms };
     return out;
   }
-  return { autoAtlas, has, clone, cornerUVs, edges, seams, shells, shellOfFace, rebuild, cut, sew, moveAndSew, planar, camera, cylindrical,
+  // OptCuts (C++ -> WebAssembly, its own worker, app/ui/vendor/optcuts): seams and the unfold optimised together - the
+  // shortest seams that keep the distortion under a bound, no overlaps. opts: {distortionBound (4.1 = little stretch,
+  // up to ~5 = fewer seams), timeBudgetMs, seed, useBijectivity}; onProgress({iter, distortion, phase}).
+  let ocWorker = null, ocSeq = 0;
+  const ocWait = new Map();
+  function ocStart() {
+    if (ocWorker) return ocWorker;
+    ocWorker = new Worker("/ui/vendor/optcuts/optcuts_worker.js");
+    ocWorker.onmessage = (ev) => {
+      const r = ev.data || {}, w = ocWait.get(r.seq);
+      if (r.t === "fail" && r.seq == null) { for (const x of ocWait.values()) x.reject(new Error(r.error || "OptCuts did not load")); ocWait.clear(); return; }
+      if (!w) return;
+      if (r.t === "progress") { if (w.onProgress) w.onProgress(r); return; }
+      ocWait.delete(r.seq);
+      if (r.t === "optcuts") w.resolve(r); else w.reject(new Error(r.error || "OptCuts failed"));
+    };
+    ocWorker.onerror = (e) => { for (const x of ocWait.values()) x.reject(new Error("OptCuts worker: " + (e.message || "error"))); ocWait.clear(); ocWorker = null; };
+    return ocWorker;
+  }
+  function optcutsCancel() { if (ocWorker) for (const seq of ocWait.keys()) ocWorker.postMessage({ t: "cancel", seq }); }
+  async function optcuts(m, opts, onProgress) {
+    if (typeof Worker === "undefined") throw new Error("OptCuts needs Web Workers.");
+    const pos = new Float32Array(m.v.length * 3); m.v.forEach((p, i) => pos.set(p, i * 3));
+    const tris = [], cornerOf = [];                    // tri corner -> [face, k]
+    m.f.forEach((f, fi) => { for (let k = 1; k + 1 < f.length; k++) { tris.push(f[0], f[k], f[k + 1]); cornerOf.push([fi, 0], [fi, k], [fi, k + 1]); } });
+    const w = ocStart(), seq = ++ocSeq;
+    const r = await new Promise((resolve, reject) => {
+      ocWait.set(seq, { resolve, reject, onProgress });
+      w.postMessage({ t: "optcuts", seq, pos, tris: Int32Array.from(tris), opts: Object.assign({ distortionBound: 4.1, useBijectivity: 1, timeBudgetMs: 20000, seed: 1 }, opts || {}) });
+    });
+    if (!r.ok) throw new Error(r.error || "OptCuts found no map.");
+    // OptCuts works on triangles and may cut along a quad's diagonal, which a polygon cage cannot hold: such a seam is
+    // moved onto the polygon's border (below). The C++ unfold then flattens the shells.
+    const polyEdges = new Set(); for (const f of m.f) for (let k = 0; k < f.length; k++) polyEdges.add(ekey(f[k], f[(k + 1) % f.length]));
+    const pairs = []; let diag = 0;
+    // a seam across a polygon (a diagonal a-c of a b c d) is moved onto the polygon's border: a-b-c or a-d-c, whichever
+    // is shorter - the cut keeps its path (so a torus cut into a disk stays a disk), it just follows the edge flow
+    const faceOf = new Map(); m.f.forEach((f, fi) => { for (let i = 0; i < f.length; i++) for (let j = i + 2; j < f.length; j++) if (!(i === 0 && j === f.length - 1)) faceOf.set(ekey(f[i], f[j]), fi); });
+    const dist = (x, y) => Math.hypot(m.v[x][0] - m.v[y][0], m.v[x][1] - m.v[y][1], m.v[x][2] - m.v[y][2]);
+    for (let i = 0; i < r.seams.length; i += 2) {
+      const a2 = r.seams[i], c2 = r.seams[i + 1], k = ekey(a2, c2);
+      if (polyEdges.has(k)) { pairs.push([a2, c2]); continue; }
+      const fi = faceOf.get(k); if (fi == null) continue;
+      diag++;
+      const f = m.f[fi], ia = f.indexOf(a2), ic = f.indexOf(c2), n = f.length;
+      const walk = (step) => { const out = []; for (let t = ia; t !== ic; t = (t + step + n) % n) out.push([f[t], f[(t + step + n) % n]]); return out; };
+      const fw = walk(1), bw = walk(-1), len = (p) => p.reduce((acc, [x, y]) => acc + dist(x, y), 0);
+      for (const e of (len(fw) <= len(bw) ? fw : bw)) pairs.push(e);
+    }
+    const base = has(m) ? m : planar(m, [], "best");
+    const seamSet = new Set(pairs.map(([a2, b2]) => ekey(a2, b2)));
+    let out = rebuild(base, seamSet);                 // exactly OptCuts' seams (the old ones dropped)
+    out = await unfold(out, [], { iterations: (opts && opts.unfoldIterations) || 6 });
+    out.uvInfo = Object.assign({}, out.uvInfo, { distortion: r.distortion, iterations: r.iterations, converged: r.converged, ms: r.ms, seams: pairs.length, diagonal: diag });
+    return out;
+  }
+  return { optcuts, optcutsCancel, autoAtlas, has, clone, cornerUVs, edges, seams, shells, shellOfFace, rebuild, cut, sew, moveAndSew, planar, camera, cylindrical,
     spherical, automatic, transform, flip, density, setDensity, distortion, overlapCount, carry, unfold, layout, layoutBasic, uvsOfFaces,
     bbox, faceAreaUV, faceArea3, compact, ekey };
 })();

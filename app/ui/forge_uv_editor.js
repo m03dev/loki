@@ -20,7 +20,7 @@ const FORGE_UV_DEFAULTS = {
   density: 512, densityRes: 1024,
   checkerTiles: 8, showDistortion: false, showChecker: false, showGrid: true,
   // Smart Unwrap (UVgami's seam logic, app/ui/forge_uvgami.js)
-  smartMode: "auto", smartAngle: 66, smartPriority: "BALANCED", smartSymmetry: false, smartSymAxis: "x", smartStack: false, smartRectify: true,
+  optcutsBudget: 20, smartMode: "auto", smartAngle: 66, smartPriority: "BALANCED", smartSymmetry: false, smartSymAxis: "x", smartStack: false, smartRectify: true,
 };
 
 function forgeUvSettings() {
@@ -144,6 +144,20 @@ const ForgeUVEditor = (() => {
       try { const next = await U().autoAtlas(m, { opts: { padding: forgeUvSettings().layoutPadding, resolution: forgeUvSettings().layoutResolution } });
         commit(next, "Atlas: " + next.uvInfo.charts + " charts in " + Math.round(next.uvInfo.ms || 0) + " ms.", null, m); }
       catch (e) { say("Atlas: " + e.message, true); }
+    },
+    // OptCuts: seams + unfold optimised together (C++), then Layout. Cancel = the Stop button (keeps the best map so far)
+    async optcuts() {
+      const m = need(false); if (!m) return;
+      const st = forgeUvSettings(), bound = { LESS_STRETCH: 4.05, BALANCED: 4.2, FEWER_SEAMS: 5.0 }[st.smartPriority] || 4.2;
+      say("OptCuts: optimising seams and the unfold...");
+      try {
+        let next = await U().optcuts(m, { distortionBound: bound, timeBudgetMs: Math.max(1, st.optcutsBudget) * 1000 },
+          (p) => say("OptCuts: iteration " + p.iter + ", distortion " + (p.distortion || 0).toFixed(2) + " (aim " + bound + ")..."));
+        const i = next.uvInfo;
+        next = await U().layout(next, [], layoutOpts());
+        commit(next, "OptCuts: " + U().shells(next).length + " shells, distortion " + (i.distortion || 0).toFixed(2) + (i.converged ? "" : " (stopped at the time limit - the best map so far)")
+          + ", " + Math.round(i.ms || 0) + " ms.", null, m);
+      } catch (e) { say("OptCuts: " + e.message, true); }
     },
     // Auto Seams: only the seams (cut where Smart Unwrap would), nothing flattened - then Unfold yourself
     autoSeams() {
@@ -510,6 +524,8 @@ const ForgeUVEditor = (() => {
         iconBtn("Sph", "Spherical projection.", OPS.spherical, "spherical"),
         iconBtn("Auto", "Automatic: one shell per facing direction (Settings: 3 / 4 / 6 planes), then Layout.", OPS.automatic, "automatic"),
         iconBtn("Atlas", "Atlas: a fully automatic unwrap (charts, seams, unfold and packing) by the C++ engine.", () => OPS.atlas(), "atlas"),
+        iconBtn("OptCuts", "OptCuts: the shortest seams that keep stretch under the Priority's bound, unfolded together, no overlaps (C++; Stop keeps the best so far).", () => OPS.optcuts(), "optcuts"),
+        iconBtn("Stop", "Stop OptCuts (keeps the best map found so far).", () => U().optcutsCancel()),
         iconBtn("Smart", "Smart Unwrap: seams where a texture artist would put them (hard edges, cylinders, symmetry), cut, unfold, straighten, layout - one click.", () => OPS.smart(), "smart")]),
       group("Cut & Sew", [iconBtn("Seams", "Auto Seams: only place the seams (Smart Unwrap's rules), then Unfold yourself.", () => OPS.autoSeams(), "autoSeams"), iconBtn("Cut", "Cut the edges selected in the viewport: they become UV seams.", OPS.cut, "cut"),
         iconBtn("Sew", "Sew the selected edges: the two sides become one again.", OPS.sew, "sew"),
@@ -535,6 +551,7 @@ const ForgeUVEditor = (() => {
         settingRow("Hard edge angle", "smartAngle", "num", { min: 1, max: 179, step: 1 }),
         settingRow("Priority", "smartPriority", "select", [["BALANCED", "Balanced"], ["LESS_STRETCH", "Less stretch"], ["FEWER_SEAMS", "Fewer seams"]]),
         settingRow("Symmetry", "smartSymmetry", "bool"), settingRow("Symmetry axis", "smartSymAxis", "select", [["x", "X"], ["y", "Y"], ["z", "Z"]]),
+        settingRow("OptCuts time limit (s)", "optcutsBudget", "num", { min: 1, max: 600, step: 1 }),
         settingRow("Stack identical pieces", "smartStack", "bool"), settingRow("Straighten strips", "smartRectify", "bool")]),
       sec("Layout", [settingRow("Padding (px)", "layoutPadding", "num", { min: 0, max: 64, step: 1 }),
         settingRow("Texture size (px)", "layoutResolution", "select", [[256, "256"], [512, "512"], [1024, "1024"], [2048, "2048"], [4096, "4096"], [8192, "8192"]]),
@@ -647,5 +664,6 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("uvSmart", "Smart Unwrap", () => O.smart());
   add("uvAutoSeams", "Auto Seams", () => O.autoSeams());
   add("uvAtlas", "Atlas Unwrap", () => O.atlas());
+  add("uvOptCuts", "OptCuts Unwrap", () => O.optcuts());
   add("uvChecker", "UV Checker on the Model", () => O.checker());
 }

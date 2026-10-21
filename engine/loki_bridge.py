@@ -210,6 +210,9 @@ UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inlin
 # files and has no DOM - while every page keeps UI_CSP (no 'wasm-unsafe-eval' in the window itself).
 SCULPT_WORKER = "/ui/vendor/sculpt/sculpt_worker.js"
 SCULPT_WORKER_CSP = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
+# Every Web Worker that runs LOKI's own WebAssembly gets SCULPT_WORKER_CSP: the sculpting engine and OptCuts
+# (app/ui/vendor/optcuts/optcuts_worker.js, Forge's UV unwrap).
+WORKER_PAGES = {SCULPT_WORKER, "/ui/vendor/optcuts/optcuts_worker.js"}
 
 
 def memory_guard(state: Any, every_s: float = 60.0) -> None:
@@ -829,7 +832,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if found is None:
             self._send_json(404, {"ok": False, "error": "Not found."})
             return True
-        if route == SCULPT_WORKER:
+        if route in WORKER_PAGES:
             self._send_static(found, csp=SCULPT_WORKER_CSP)
             return True
         self._send_static(found, framed=(route == "/ui/play.html"))
