@@ -211,6 +211,9 @@
     voxelRemesh(resolution = 128, relax = 2, sharp = true) { return !!this.x.ks_voxel_remesh(resolution, relax, sharp ? 1 : 0); }
     /** Field-aligned quad remesh to about `targetFaces` quads; returns the quad count. */
     quadRemesh(targetFaces = 5000) { return this.x.ks_quad_remesh(targetFaces); }
+    /** Reduce (decimation): quadric edge collapse to about `percent` % of the triangles; colour kept, masked
+     *  vertices locked, `lockBorder` keeps open edges. One undo step. Returns the triangle count after (0 = no change). */
+    decimate(percent = 50, lockBorder = true, maxError = 0) { return this.x.ks_decimate(percent, lockBorder ? 1 : 0, maxError); }
     /** Tube (Curve Tube): sweep a circle of `radius` along points (xyz floats) and add it as a new shell
      *  (one undo step). Returns the vertex count added (0 = nothing). */
     tube(points, radius, sides = 12, taperStart = 0, taperEnd = 0) {

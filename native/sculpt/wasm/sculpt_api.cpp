@@ -14,8 +14,10 @@
 #include "sculpt/preset_io.h"
 #include "sculpt/quad_remesh.h"
 #include "sculpt/voxel_remesh.h"
+#include "meshoptimizer.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -490,6 +492,64 @@ KS_EXPORT(ks_quad_remesh) int ks_quad_remesh(int targetFaces) {
     S->levels = Multires();
     replaceMesh(std::move(res.mesh));
     return res.quads;
+}
+
+// Reduce (decimation, like ZBrush's Decimation Master / the pro tools' Reduce): quadric edge collapse with
+// meshoptimizer's simplifier down to about `percent` % of the triangles. The silhouette and detail where the
+// surface bends most are kept; polypaint colour is an attribute so painted borders stay; masked vertices
+// (mask > 0.5) are locked and never move or collapse; `lockBorder` keeps open edges exactly where they are.
+// `maxError` (0..1, relative to the model's size) stops early when the next collapse would cost more. One undo
+// step; subdivision levels restart. Returns the triangle count after (0 = nothing done).
+KS_EXPORT(ks_decimate) int ks_decimate(float percent, int lockBorder, float maxError) {
+    if (!S || S->mesh.tris.empty()) return 0;
+    const Mesh& M = S->mesh;
+    const size_t nv = M.positions.size();
+    std::vector<unsigned> idx;
+    idx.reserve(M.tris.size() * 3);
+    for (const Tri& t : M.tris)
+        if (t[0] >= 0 && t[1] >= 0 && t[2] >= 0 && t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
+            idx.insert(idx.end(), {(unsigned)t[0], (unsigned)t[1], (unsigned)t[2]});
+    if (idx.size() < 36) return 0;
+    const float pct = std::max(0.1f, std::min(100.f, percent));
+    size_t target = (size_t)((double)(idx.size() / 3) * pct / 100.0) * 3;
+    target = std::max<size_t>(target, 12);
+    if (target >= idx.size()) return (int)(idx.size() / 3);
+    std::vector<float> attr(nv * 3, 0.8f);
+    const bool hasColor = M.color.size() == nv;
+    if (hasColor) for (size_t i = 0; i < nv; ++i) { attr[i * 3] = M.color[i].x; attr[i * 3 + 1] = M.color[i].y; attr[i * 3 + 2] = M.color[i].z; }
+    const float w[3] = {0.5f, 0.5f, 0.5f};
+    std::vector<unsigned char> lock(nv, 0);
+    if (M.mask.size() == nv) for (size_t i = 0; i < nv; ++i) lock[i] = M.mask[i] > 0.5f ? 1 : 0;
+    std::vector<unsigned> out(idx.size());
+    float err = 0.f;
+    const unsigned opts = lockBorder ? meshopt_SimplifyLockBorder : 0;
+    size_t n = meshopt_simplifyWithAttributes(out.data(), idx.data(), idx.size(), &M.positions[0].x, nv, sizeof(Vec3),
+                                              hasColor ? attr.data() : nullptr, sizeof(float) * 3, w, hasColor ? 3 : 0,
+                                              lock.data(), target, maxError > 0.f ? maxError : 1.f, opts, &err);
+    if (n < 12 || n >= idx.size()) return 0;
+    out.resize(n);
+    std::vector<int> remap(nv, -1);
+    std::vector<Vec3> pts; std::vector<Vec3> col; std::vector<float> msk;
+    std::vector<int> counts(n / 3, 3), fidx(n);
+    for (size_t i = 0; i < n; ++i) {
+        unsigned o = out[i];
+        if (remap[o] < 0) {
+            remap[o] = (int)pts.size();
+            pts.push_back(M.positions[o]);
+            col.push_back(hasColor ? M.color[o] : Vec3{0.8f, 0.8f, 0.8f});
+            msk.push_back(M.mask.size() == nv ? M.mask[o] : 0.f);
+        }
+        fidx[i] = remap[o];
+    }
+    Mesh m = meshFromPolys(pts, counts, fidx);
+    m.color = std::move(col);
+    m.mask = std::move(msk);
+    S->levels = Multires();
+    replaceMesh(std::move(m));
+    char buf[96];
+    std::snprintf(buf, sizeof buf, "reduced %zu -> %zu triangles (error %.4f)", idx.size() / 3, n / 3, err);
+    S->text = buf;
+    return (int)(n / 3);
 }
 
 // ---------------------------------------------------------------- tube / insert (add geometry)

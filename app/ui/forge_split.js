@@ -34,10 +34,12 @@ function forgeSplitSizes() {
 }
 
 function forgeSplitApply() {
+  if (typeof forgeDockApply === "function") forgeDockApply();     // where each panel is docked (forge_dock.js)
   forgeSplitLayers();
   const sz = forgeSplitSizes();
   for (const [id] of FORGE_SPLIT_PANELS) {
     const p = document.getElementById(id);
+    if (p && p.dataset.dock && !/^(left|right)$/.test(p.dataset.dock)) continue;   // above / below / floating: forge_dock.js sizes it
     if (p) { p.style.flex = "0 0 " + sz[id] + "%"; p.style.width = sz[id] + "%"; p.style.minWidth = "0"; p.style.maxWidth = "none"; }
   }
   const col = document.getElementById("forge-chancol"), lay = document.getElementById("forge-layer-editor");
@@ -52,7 +54,7 @@ function forgeSplitApply() {
 function forgeSplitSync() {
   for (const s of document.querySelectorAll("#forge .forge-split")) {
     const p = document.getElementById(s.dataset.panel);
-    s.hidden = !p || p.hidden || getComputedStyle(p).display === "none";
+    s.hidden = !!s.dataset.dockOff || !p || p.hidden || getComputedStyle(p).display === "none";
   }
   const hs = document.getElementById("forge-split-layers"), lay = document.getElementById("forge-layer-editor");
   if (hs) hs.hidden = !lay || lay.hidden || getComputedStyle(lay).display === "none";
@@ -98,8 +100,8 @@ function forgeSplitHandles(body) {
     h.setAttribute("role", "separator"); h.setAttribute("aria-orientation", "vertical");
     if (side === "left") p.after(h); else p.before(h);
     forgeSplitDrag(h, (ev) => {
-      const b = body.getBoundingClientRect(), r = p.getBoundingClientRect();
-      const px = side === "left" ? ev.clientX - r.left : r.right - ev.clientX;
+      const b = body.getBoundingClientRect(), r = p.getBoundingClientRect(), sd = h.dataset.side || side;
+      const px = sd === "left" ? ev.clientX - r.left : r.right - ev.clientX;
       const pct = Math.max(lo, Math.min(hi, (px / (b.width || 1)) * 100));
       p.style.flex = "0 0 " + pct.toFixed(2) + "%"; p.style.width = pct.toFixed(2) + "%";
       h.dataset.pct = pct.toFixed(1);

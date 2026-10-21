@@ -194,7 +194,9 @@ async def main():
 
         # ---- no scroll bars
         sb = await E("[getComputedStyle(document.getElementById('forge-chancol')).scrollbarWidth, getComputedStyle(document.getElementById('forge-out-list')).scrollbarWidth]")
-        check("no scroll bars in Forge (the Channel Box column and the Outliner still scroll with the wheel)", sb == ["none", "none"], sb)
+        # owner 2026-10-21: "it should only show up in places that need scrolling" - thin and invisible until hovered
+        col = await E("getComputedStyle(document.getElementById('forge-out-list')).scrollbarColor")
+        check("scroll bars in Forge are thin and only show on hover where something scrolls", sb == ["thin", "thin"] and ("transparent" in col or "rgba(0, 0, 0, 0)" in col), [sb, col])
 
         check("no script errors", not errors, errors[:5])
         await browser.close()

@@ -87,6 +87,11 @@ const ray = (x, y) => ({ origin: [x, y, 5], dir: [0, 0, -1] });
   t0 = Date.now();
   check(e.voxelRemesh(96), "voxel remesh -> " + e.vertexCount + " verts (" + (Date.now() - t0) + " ms)");
   t0 = Date.now();
+  { const n0 = e.triCount, t0 = Date.now();
+    const k = e.decimate(25, true, 0);
+    check(k > 0 && k < n0 * 0.3 && e.triCount === k, "reduce (decimate) " + n0 + " -> " + k + " tris (" + (Date.now() - t0) + " ms)");
+    check(e.undo() > 0 && e.triCount === n0, "reduce is one undo step");
+    e.redo(); e.undo(); }
   const q = e.quadRemesh(1500);
   check(q > 500 && e.polygons(), "quad remesh -> " + q + " quads (" + (Date.now() - t0) + " ms)");
   const base = e.vertexCount;

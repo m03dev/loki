@@ -93,6 +93,7 @@ function flush(midStroke) {
 const OPS = {
   voxelRemesh: (a) => E.voxelRemesh(a || 128),
   quadRemesh: (a) => E.quadRemesh(a || 4000) > 0,
+  decimate: (a) => E.decimate(a && a.percent != null ? a.percent : (typeof a === "number" ? a : 50), !a || a.lockBorder !== false, (a && a.maxError) || 0) > 0,
   divide: () => E.divide() > 0,
   setLevel: (a) => E.setLevel(a),
   smoothAll: (a) => { E.smoothAll(a || 0.5, 2); return true; },

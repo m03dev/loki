@@ -593,6 +593,12 @@ def _carry_plan(repo: Path, edited: list, target: str) -> tuple:
             return None, "cannot read %s (%s)" % (path, exc)
         code_b, base = _blob(repo, "HEAD", path)
         code_t, theirs = _blob(repo, target, path)
+        if code_b == 0 and code_t != 0:
+            # GitHub deleted the file on purpose (a retired feature - LOKI World on 2026-10-21 left the PC stuck on
+            # "update waiting" for hours over four edited files in the deleted folder). Take the deletion; the local
+            # edit is kept in the backup ref AND as a copy under harness_data/update_kept/, so nothing is lost.
+            plan[path] = None
+            continue
         if code_b != 0 or code_t != 0:
             return None, "%s is new or removed on one side" % path
         crlf = b"\r\n" in ours
@@ -638,6 +644,25 @@ def _backup_edits(repo: Path) -> str:
     ref = "refs/loki/backup/edits-%d" % int(time.time())
     code, _ = git(repo, "update-ref", ref, sha)
     return ref if code == 0 else ""
+
+
+def _keep_copies(repo: Path, files: list) -> str:
+    """Copy edited files GitHub deleted to harness_data/update_kept/<time>/<path> (never committed)."""
+    if not files:
+        return ""
+    dest = repo / "harness_data" / "update_kept" / time.strftime("%Y%m%d-%H%M%S")
+    done = 0
+    for rel in files:
+        src = repo / rel
+        try:
+            if src.is_file():
+                out = dest / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(src.read_bytes())
+                done += 1
+        except OSError:
+            continue
+    return str(dest.relative_to(repo)) if done else ""
 
 
 def _names(files: list, most: int = 5) -> str:
@@ -903,7 +928,13 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
             carried, why = _carry_plan(repo, state["blocking"], target)
             if carried is not None:
                 backup = _backup_edits(repo)
+                gone = [p for p, d in carried.items() if d is None]
+                kept_dir = _keep_copies(repo, gone)
                 git(repo, "checkout", "HEAD", "--", *carried.keys())   # clean them for the move
+                carried = {p: d for p, d in carried.items() if d is not None}
+                if gone:
+                    notes.append("GitHub removed %d file(s) you had edited (%s); took the removal, your copies are in %s"
+                                 % (len(gone), _names(gone), kept_dir or backup or "the backup ref"))
                 state["can_update"] = True
                 notes.append("carried %d edited file(s) across the update (%s; old state kept as %s)"
                              % (len(state["blocking"]), _names(state["blocking"]), backup or "-"))

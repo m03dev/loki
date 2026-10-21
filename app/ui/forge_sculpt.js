@@ -359,7 +359,7 @@ const ForgeSculpt = {
 window.ForgeSculpt = ForgeSculpt;
 
 function forgeSculptOpName(name) {
-  return { voxelRemesh: "Remesh", quadRemesh: "Quad remesh", divide: "Divide", setLevel: "Level", smoothAll: "Relax" }[name] || name;
+  return { voxelRemesh: "Remesh", quadRemesh: "Quad remesh", decimate: "Reduce", divide: "Divide", setLevel: "Level", smoothAll: "Relax" }[name] || name;
 }
 
 // welded vertex -> every raw (GPU) vertex that shows it (UV seams split one welded vertex into several)
@@ -490,6 +490,15 @@ function forgeSculptDecorate() {
   res.querySelector("input").step = "8";
   res.dataset.tipName = "Resolution"; res.dataset.tipWhat = "Remesh resolution: voxels across the model (more = more detail kept).";
   const quad = forgeBtn("grid", "Quad remesh", "Quad remesh: clean, flowing quads that follow the shape - for animation, subdivision levels and export.", () => ForgeSculpt.op("quadRemesh", 4000));
+  // Reduce (C++ decimation, meshoptimizer's quadric simplifier in the engine): fewer triangles, same shape - for
+  // export, games and a lighter scene; colour kept, masked areas never move, open edges stay
+  const reduce = forgeBtn("compress", "Reduce", "Reduce (decimate): keep the shape with far fewer triangles - for export, games and a lighter scene. Painted colour stays, masked areas are left alone, open edges stay put.", () => {
+    const pct = +(document.getElementById("forge-sculpt-reduce") || { value: 50 }).value || 50;
+    ForgeSculpt.op("decimate", { percent: pct, lockBorder: true });
+  });
+  reduce.id = "forge-sculpt-reduce-btn";
+  const reducePct = forgeSlider("Keep %", "forge-sculpt-reduce", 2, 95, 50, () => {});
+  reducePct.dataset.tipName = "Keep %"; reducePct.dataset.tipWhat = "Reduce keeps about this many percent of the triangles.";
   const divide = forgeBtn("subdivide", "Divide", "Add a subdivision level (4x the faces); the lower levels keep the big forms and detail rides along.", () => ForgeSculpt.op("divide"));
   const lower = forgeBtn("chevron", "Lower level", "Step down a subdivision level to move big forms (detail comes back when you go up).", () => {
     const t = (document.getElementById("forge-sculpt-level") || {}).textContent || "";
@@ -513,9 +522,9 @@ function forgeSculptDecorate() {
     b.append(img); b.addEventListener("click", () => forgeSetMatcap(id)); caps.append(b);
   }
   const topo = el("div", "forge-engine-row"), levels = el("div", "forge-engine-row");
-  topo.append(dyn, screenDetail, remesh, quad); levels.append(divide, lower, higher, level);
+  topo.append(dyn, screenDetail, remesh, quad, reduce); levels.append(divide, lower, higher, level);
   screenDetail.classList.toggle("on", ForgeSculpt.dyn.mode === "screen");
-  row.append(el("span", "forge-engine-title", "Sculpting"), lib, topo, detail, res, levels,
+  row.append(el("span", "forge-engine-title", "Sculpting"), lib, topo, detail, res, reducePct, levels,
     el("span", "forge-engine-title", "Stroke"), lazy, autoS, fall, el("span", "forge-engine-title", "Look"), caps);
   bar.parentNode.append(row);
   // always below the view bar (it wraps onto more rows on a small screen) and beside the brush column

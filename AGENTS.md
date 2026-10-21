@@ -39,8 +39,9 @@ LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
 
 ## While you work
 
-- **Don't remove anything, only improve** (owner, 2026-10-19). No feature, menu entry, test check, file or doc is
-  deleted to make something pass or look tidy: move it, put it behind a setting, or archive it under
+- **Keep anything that could be useful; bloat can go** (owner, 2026-10-21 - replaces "don't remove anything" of
+  2026-10-19). Never delete something just to make a test pass. Retired features (LOKI World, the MMO, Spaces) are
+  removed outright; when unsure whether something is still useful, move it behind a setting or archive it under
   `docs/operations/archive/`.
 - Small steps. Add or update a test in `tests/` for what you change.
 - LOKI is its own app (a game engine, render studio and AI farm hive - owner, 2026-10-21), not a Godot addon.

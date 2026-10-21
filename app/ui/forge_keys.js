@@ -87,7 +87,7 @@ const FORGE_KEY_GROUPS = [
     "detach", "collapse", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp", "deleteEdgeVert", "smooth", "triangulate",
     "quadrangulate", "averageVerts", "relax", "circularize", "spinEdge", "spinEdgeBack", "duplicateFace", "extractFace",
     "dynamesh", "combine", "separate", "mirror", "mirrorY", "mirrorZ", "chamfer", "poke", "wedge", "cleanup", "meshStats", "insertLoopTool", "mergeThreshold"]],
-  ["Sculpting", ["@brushSize", "@brushStrength", "sculptRemesh", "sculptQuadRemesh", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
+  ["Sculpting", ["@brushSize", "@brushStrength", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
   ["Windows", ["channelBox", "outliner", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "wheel", "hotkeyEditor"]],
 ];
 

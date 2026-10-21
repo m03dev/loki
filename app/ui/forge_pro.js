@@ -406,6 +406,7 @@ function forgeProCommands() {
     // the sculpting engine (forge_sculpt.js)
     sculptRemesh: ["Remesh (Even Surface)", () => { window.ForgeSculpt && window.ForgeSculpt.op("voxelRemesh", +((document.getElementById("forge-sculpt-res") || {}).value || 128)); }],
     sculptQuadRemesh: ["Quad Remesh", () => { window.ForgeSculpt && window.ForgeSculpt.op("quadRemesh", 4000); }],
+    sculptReduce: ["Reduce (Decimate)", () => { window.ForgeSculpt && window.ForgeSculpt.op("decimate", { percent: +((document.getElementById("forge-sculpt-reduce") || {}).value || 50), lockBorder: true }); }],
     sculptDivide: ["Divide (Subdivision Level)", () => { window.ForgeSculpt && window.ForgeSculpt.op("divide"); }],
     sculptDynamic: ["Toggle Dynamic Detail", () => { const b = document.getElementById("forge-sculpt-dyn"); if (b) b.click(); }],
     matcapNext: ["Next Matcap", () => { if (typeof forgeCycleMatcap === "function") forgeCycleMatcap(1); }],

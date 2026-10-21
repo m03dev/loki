@@ -422,7 +422,12 @@ html.titlebar-win .titlestrip-side:last-child { display: flex; justify-content: 
 .modebar-tab svg { width: 15px; height: 15px; flex: none; }
 .modebar-tab:hover { background: rgba(176, 190, 210, .12); color: var(--text); }
 .modebar-tab[aria-selected="true"] { background: rgba(176, 190, 210, .2); border-color: rgba(190, 205, 225, .28); color: var(--text); }
-html.has-titlestrip .shell { height: calc(100vh - var(--titlebar-h)); margin-top: var(--titlebar-h); }
+/* the shell's top margin collapsed through <body>, so the page was 38 px taller than the window and a scroll bar showed
+   down the right side of every tab (owner 2026-10-21: "get rid of the scroll bar on the right side"). Padding on the
+   body instead, and the page itself never scrolls - only the parts that hold more than fits do. */
+html.has-titlestrip body { padding-top: var(--titlebar-h); box-sizing: border-box; }
+html.has-titlestrip .shell { height: calc(100vh - var(--titlebar-h)); margin-top: 0; }
+html, body { overflow: hidden; }
 html.has-titlestrip .sheet { top: var(--titlebar-h); }
 html.has-titlestrip .art-canvas { top: var(--titlebar-h); }   /* the chat preview pane: its Close/Wide bar sat under the title strip and could not be clicked */
 .mode-pane { position: fixed; inset: var(--titlebar-h) 0 0 0; z-index: 9; display: flex; flex-direction: column; background: var(--bg, #15161b); }

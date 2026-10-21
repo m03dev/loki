@@ -33,6 +33,7 @@ Object.assign(ICON_PATHS, {
   pinch: '<path d="M4 6l6 6-6 6M20 6l-6 6 6 6"/>',
   crease: '<path d="M3.5 8c4 0 6 8 8.5 8s4.5-8 8.5-8"/>',
   mirror: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L4 12l5 5zM15 7l5 5-5 5z"/>',
+  compress: '<path d="M12 3.5l8.5 15h-17z"/><path d="M8 7.5h8M9.5 4.5l2.5 2.5 2.5-2.5M9.5 21l2.5-2.5 2.5 2.5"/>',
   subdivide: '<path d="M12 3.5l8.5 15h-17z"/><path d="M7.75 11h8.5M12 18.5l-4.25-7.5M12 18.5l4.25-7.5"/>',
   save: '<path d="M5 3.5h11l3.5 3.5v13.5H5z"/><path d="M8 3.5v5h7v-5M8 20.5v-6h8v6"/>',
   move: '<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
