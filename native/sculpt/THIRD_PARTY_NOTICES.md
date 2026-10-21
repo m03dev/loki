@@ -121,6 +121,12 @@ misrepresented as being the original software.
 * T. Ju et al., *Dual Contouring of Hermite Data*, SIGGRAPH 2002 — voxel remesh sharp features.
 * W. Jakob, M. Tarini, D. Panozzo, O. Sorkine-Hornung, *Instant Field-Aligned Meshes*,
   SIGGRAPH Asia 2015 — the quad remesher (code above).
+* B. Lévy, S. Petitjean, N. Ray, J. Maillot, *Least Squares Conformal Maps for Automatic Texture
+  Atlas Generation*, SIGGRAPH 2002 — `uv_unwrap.cpp` uvUnfold (LSCM with pins).
+* L. Liu, L. Zhang, Y. Xu, C. Gotsman, S. Gortler, *A Local/Global Approach to Mesh
+  Parameterization*, SGP 2008 — `uv_unwrap.cpp` uvUnfold (ARAP rounds).
+* Skyline bin packing (as surveyed by J. Jylänki, *A Thousand Ways to Pack the Bin*, 2010) and
+  rotating calipers (G. Toussaint 1983) — `uv_unwrap.cpp` uvLayout.
 
 ## meshoptimizer — MIT
 
@@ -132,3 +138,39 @@ simplified on worker threads and very large inputs are clusterized in parallel
 spatial chunks (output order unchanged). Full license text in
 third_party/meshoptimizer/LICENSE.md.
 
+
+## xatlas — MIT
+
+https://github.com/jpcy/xatlas (third_party/xatlas, commit in COMMIT.txt), the automatic chart
+cutting / parameterization / packing behind `uvAuto` (`core/src/uv_unwrap.cpp`). Built single-threaded
+(`XA_MULTITHREADED=0`) with no default print (`XA_DEFAULT_PRINT=nullptr`). LOKI's changes, each marked
+`LOKI` in xatlas.cpp: polygon input (MeshDecl::faceVertexCount) reads corner `firstCorner + i` instead of
+`face * faceVertexCount + i` (mixed polygon sizes were read wrong) and checks that the sizes sum to the
+index count; the degenerate-edge test wraps at the polygon's size (was `% 3`); triangle corners map back
+to polygon *corners* (was the vertex id, which wrote outside the index array); ignored triangles of a
+polygon mesh are counted and written at their polygon corners; the output index array starts as
+UINT32_MAX (= a corner no chart wrote); the default print function can be set at build time.
+
+```
+MIT License
+
+Copyright (c) 2018-2020 Jonathan Young
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

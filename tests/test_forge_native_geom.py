@@ -31,6 +31,9 @@ if node:
     r = subprocess.run([node, str(REPO / "native" / "sculpt" / "wasm" / "test" / "test_cage.js")], capture_output=True, text=True, timeout=40)
     print(r.stdout.strip())
     check("the engine's cage subdivision matches the JS on every test cage (test_cage.js)", r.returncode == 0, (r.stdout + r.stderr)[-400:])
+    r = subprocess.run([node, str(REPO / "native" / "sculpt" / "wasm" / "test" / "test_uv.js")], capture_output=True, text=True, timeout=40)
+    print(r.stdout.strip()[-1500:])
+    check("the engine's UV unfold / layout / xatlas auto-unwrap pass their suite (test_uv.js)", r.returncode == 0, (r.stdout + r.stderr)[-400:])
 else:
     print("SKIP part 1: no node here")
 

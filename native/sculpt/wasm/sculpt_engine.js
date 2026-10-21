@@ -107,6 +107,60 @@
       return { steps, pos, idx: tri, faces: this.x.ks_cage_nfaces() };
     }
 
+    // ---- UV unwrapping of a polygon cage with map UVs (independent of the sculpt mesh; core/src/uv_unwrap.cpp).
+    // pos: xyz floats; sizes: corners per face; fv: a vertex id per corner; fuv: a UV index per corner; uv: u,v
+    // floats per UV index. A shell = faces sharing UV indices.
+    _uvCall(pos, sizes, fv, fuv, uv, fn) {
+      const ptrs = [], put = (a, T) => { const p = this._put(a, T); ptrs.push(p); return p; };
+      try {
+        const nuv = uv ? uv.length / 2 : 0;
+        return fn(put(pos, Float32Array), pos.length / 3, put(sizes, Int32Array), sizes.length, put(fv, Int32Array),
+          fuv ? put(fuv, Int32Array) : 0, fv.length, nuv, uv ? put(uv, Float32Array) : 0, put);
+      } finally { for (const p of ptrs) this.x.ks_free(p); }
+    }
+    /** Unfold every shell: LSCM with pins, then `iterations` ARAP rounds; shells without user pins get
+     *  2D area = 3D area * scaleToDensity and keep their place. pinned: nuv flags (0/1) or null.
+     *  Returns {shells, uv (Float32Array copy, 2 per UV index), flips, stretch}. */
+    uvUnfold(pos, sizes, fv, fuv, uv, { pinned = null, iterations = 6, scaleToDensity = 1 } = {}) {
+      const r = this._uvCall(pos, sizes, fv, fuv, uv, (pp, nv, sp, nf, fp, up, nc, nuv, ip, put) => {
+        const pin = pinned ? put(Uint8Array.from(pinned, (x) => (x ? 1 : 0)), Uint8Array) : 0;
+        if (pinned && pinned.length !== nuv) return -1;
+        return this.x.ks_uv_unfold(pp, nv, sp, nf, fp, up, nc, nuv, ip, pin, iterations | 0, scaleToDensity);
+      });
+      if (r < 0) throw new Error("sculpt engine: bad UV input");
+      return { shells: r, uv: this._f32(this.x.ks_uv_out(), this.x.ks_uv_nuv() * 2).slice(), flips: this.x.ks_uv_flips(), stretch: this.x.ks_uv_stretch() };
+    }
+    /** Pack the shells into 0-1. rotate 0 none / 1 90-degree steps / 2 free; scaleMode 0 keep relative size /
+     *  1 uniform texel density / 2 translate only. Returns {shells, uv}. */
+    uvLayout(pos, sizes, fv, fuv, uv, { paddingPx = 4, resolution = 1024, rotate = 1, scaleMode = 1, margin = 0.005 } = {}) {
+      const r = this._uvCall(pos, sizes, fv, fuv, uv, (pp, nv, sp, nf, fp, up, nc, nuv, ip) =>
+        this.x.ks_uv_layout(pp, nv, sp, nf, fp, up, nc, nuv, ip, paddingPx, resolution, rotate | 0, scaleMode | 0, margin));
+      if (r < 0) throw new Error("sculpt engine: bad UV input");
+      return { shells: r, uv: this._f32(this.x.ks_uv_out(), this.x.ks_uv_nuv() * 2).slice() };
+    }
+    /** Fully automatic UVs (xatlas cuts, parameterizes and packs). With fuv (the existing seams; opts.uv
+     *  optional, opts.keepSeams !== false) the existing shells are unfolded and only packed. Returns a NEW UV set: {uv, fuv (a UV index per corner,
+     *  Int32Array), charts, ms}. opts: xatlas ChartOptions (maxChartArea, maxBoundaryLength, normalDeviationWeight,
+     *  roundnessWeight, straightnessWeight, normalSeamWeight, textureSeamWeight, maxCost, maxIterations) and
+     *  PackOptions (padding px, resolution, bilinear, blockAlign, bruteForce, rotateCharts, rotateChartsToAxis,
+     *  texelsPerUnit), plus unfoldIterations (ARAP rounds for keepSeams). */
+    uvAuto(pos, sizes, fv, fuv = null, opts = {}) {
+      const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const keep = !!fuv && opts.keepSeams !== false;
+      const D = { maxChartArea: 0, maxBoundaryLength: 0, normalDeviationWeight: 2, roundnessWeight: 0.01, straightnessWeight: 6,
+        normalSeamWeight: 4, textureSeamWeight: 0.5, maxCost: 2, maxIterations: 1, padding: 4, resolution: 1024, bilinear: true,
+        blockAlign: false, bruteForce: false, rotateCharts: true, rotateChartsToAxis: true, texelsPerUnit: 0, unfoldIterations: 6 };
+      const o = Float32Array.from(Object.keys(D), (k) => { const v = opts[k] === undefined ? D[k] : opts[k]; return typeof v === "boolean" ? (v ? 1 : 0) : +v; });
+      let uv = opts.uv || null;
+      if (keep && !uv) { let m = -1; for (const i of fuv) if (i > m) m = i; uv = new Float32Array(2 * (m + 1)); }
+      const r = this._uvCall(pos, sizes, fv, keep ? fuv : null, keep ? uv : null, (pp, nv, sp, nf, fp, up, nc, nuv, ip, put) =>
+        this.x.ks_uv_auto(pp, nv, sp, nf, fp, nc, keep ? 1 : 0, up, nuv, ip, put(o, Float32Array), o.length));
+      if (r < 0) throw new Error("sculpt engine: bad UV input");
+      const out = this._f32(this.x.ks_uv_out(), this.x.ks_uv_auto_nuv() * 2).slice();
+      const f = this._i32(this.x.ks_uv_auto_fuv(), fv.length).slice();
+      return { uv: out, fuv: f, charts: r, ms: (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0 };
+    }
+
     /** Vertex ids changed since the last call (a copy). */
     takeDirty() { const n = this.x.ks_take_dirty(); return n ? this._i32(this.x.ks_dirty(), n).slice() : new Int32Array(0); }
 

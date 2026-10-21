@@ -7,8 +7,16 @@
  *               press {ray, pressure, radius, mods, mode?, tube?, insert?} (mode "curve": the stroke draws a Tube on
  *               release; mode "insert": a primitive is added where it lands)
  *               drag {rays, pressure, pressures?, radius, angle} | release | hit {seq, ray} | setPositions {pos} | op {name, arg}
+ *               UV unwrapping of a polygon cage with map UVs (no sculpt mesh needed, like cage; pos xyz, sizes corners
+ *               per face, fv / fuv a vertex id / UV index per corner, uv u,v per UV index):
+ *               uvUnfold {seq, pos, sizes, fv, fuv, uv, pinned?, iterations?, scaleToDensity?}
+ *               uvLayout {seq, pos, sizes, fv, fuv, uv, paddingPx?, resolution?, rotate?, scaleMode?, margin?}
+ *               uvAuto {seq, pos, sizes, fv, fuv?, uv?, opts?} (fuv given = keep those seams unless opts.keepSeams false)
  * Messages out: cage {seq, steps, faces, pos, idx, ms} | ready | fail | loaded | dirty {ids, pos, nrm, ms} | topology {pos, nrm, idx, polys, levels, level}
- *               hit {seq, point, normal} | released {kind} | done {name, ok, info} */
+ *               hit {seq, point, normal} | released {kind} | done {name, ok, info}
+ *               uvUnfold {seq, shells, uv, flips, stretch, ms} | uvLayout {seq, shells, uv, ms} | uvAuto {seq, uv, fuv, charts, ms}
+ *               ready carries ops: the message types this worker understands; an unknown type or a failed UV call
+ *               posts fail {seq, during, error} (Forge waits on replies by seq) */
 /* global SculptEngine, importScripts */
 "use strict";
 importScripts("/ui/vendor/sculpt/sculpt_engine.js");
@@ -18,10 +26,11 @@ let E = null, adjStart = null, adj = null, topoSent = 0, lastTopoPost = 0;
 // one-ring: brush.cpp applyDisplacements), so padding it with another ring here re-sent only ~4% more vertices
 // for ~2.7 ms of JS per flush at 1M vertices (measured). Kept behind this switch (brush message padRing).
 let padRing = false;
-let curve = null, inserted = false, dragMs = 0;   // Tube stroke in progress / Insert done at press / engine time
+let curve = null, inserted = false, dragMs = 0;
+const WORKER_OPS = ["load", "brush", "press", "drag", "release", "hit", "setPositions", "cage", "op", "uvUnfold", "uvLayout", "uvAuto"];   // Tube stroke in progress / Insert done at press / engine time
 
 SculptEngine.create("/ui/vendor/sculpt/sculpt.wasm")
-  .then((e) => { E = e; postMessage({ t: "ready" }); })
+  .then((e) => { E = e; postMessage({ t: "ready", ops: WORKER_OPS }); })
   .catch((err) => postMessage({ t: "fail", error: String(err && err.message || err) }));
 
 function buildAdjacency() {  // vertex one-rings: a moved vertex changes its neighbours' normals too
@@ -190,7 +199,33 @@ onmessage = (ev) => {
         postMessage({ t: "done", name: m.name, ok, ms: performance.now() - t0, verts: E.vertexCount, levels: E.levelCount, level: E.level });
         break;
       }
+      case "uvUnfold":   // map-UV unfold of a polygon cage (no sculpt mesh needed)
+      case "uvLayout":
+      case "uvAuto": {
+        const t0 = performance.now();
+        try {
+          if (m.t === "uvUnfold") {
+            const r = E.uvUnfold(m.pos, m.sizes, m.fv, m.fuv, m.uv, { pinned: m.pinned || null, iterations: m.iterations === undefined ? 6 : m.iterations, scaleToDensity: m.scaleToDensity || 1 });
+            postMessage({ t: "uvUnfold", seq: m.seq, shells: r.shells, uv: r.uv, flips: r.flips, stretch: r.stretch, ms: performance.now() - t0 }, [r.uv.buffer]);
+          } else if (m.t === "uvLayout") {
+            const o = {};
+            for (const k of ["paddingPx", "resolution", "rotate", "scaleMode", "margin"]) if (m[k] !== undefined) o[k] = m[k];
+            if (m.settings) Object.assign(o, m.settings);
+            const r = E.uvLayout(m.pos, m.sizes, m.fv, m.fuv, m.uv, o);
+            postMessage({ t: "uvLayout", seq: m.seq, shells: r.shells, uv: r.uv, ms: performance.now() - t0 }, [r.uv.buffer]);
+          } else {
+            const o = Object.assign({}, m.opts || {});
+            if (m.uv && o.uv === undefined) o.uv = m.uv;
+            const r = E.uvAuto(m.pos, m.sizes, m.fv, m.fuv || null, o);
+            postMessage({ t: "uvAuto", seq: m.seq, uv: r.uv, fuv: r.fuv, charts: r.charts, ms: performance.now() - t0 }, [r.uv.buffer, r.fuv.buffer]);
+          }
+        } catch (err) {
+          postMessage({ t: "fail", seq: m.seq, during: m.t, error: String(err && err.message || err) });
+        }
+        break;
+      }
       default:
+        postMessage({ t: "fail", seq: m.seq, during: m.t, error: "unknown message " + m.t });
         break;
     }
   } catch (err) {

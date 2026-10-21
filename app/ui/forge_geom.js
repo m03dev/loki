@@ -22,8 +22,8 @@ window.ForgeGeom = (() => {
       if (m.t === "ready") { state = "on"; ops = Array.isArray(m.ops) ? new Set(m.ops) : null; ready.splice(0).forEach((f) => f(true)); return; }
       if (m.t === "fail" && state === "starting") { off(); return; }
       if (m.t === "cage") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w({ pos: m.pos, idx: m.idx, ms: m.ms, faces: m.faces, steps: m.steps }); } return; }
-      if (m.t === "uvUnfold" || m.t === "uvLayout") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w(m); } return; }
-      if (m.t === "fail" && (m.during === "uvUnfold" || m.during === "uvLayout") && waiting.has(m.seq)) {
+      if (m.t === "uvUnfold" || m.t === "uvLayout" || m.t === "uvAuto") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w(m); } return; }
+      if (m.t === "fail" && (m.during === "uvUnfold" || m.during === "uvLayout" || m.during === "uvAuto") && waiting.has(m.seq)) {
         const w = waiting.get(m.seq); waiting.delete(m.seq); lastError = m.error || "engine error"; w(null); return; }
       if (m.t === "fail" && m.during === "cage") { for (const w of waiting.values()) w(null); waiting.clear(); }
     };
@@ -82,6 +82,12 @@ window.ForgeGeom = (() => {
       o = o || {};
       return ask({ t: "uvLayout", pos: F.pos, sizes: F.sizes, fv: F.fv, fuv: F.fuv, uv: F.uv, paddingPx: o.paddingPx == null ? 4 : o.paddingPx,
         resolution: o.resolution || 1024, rotate: o.rotate == null ? 1 : o.rotate, scaleMode: o.scaleMode == null ? 1 : o.scaleMode, margin: o.margin == null ? 0.005 : o.margin });
+    },
+    // fully automatic unwrap (xatlas in C++: charts + parameterization + packing); keepSeams: keep the cage's own shells
+    uvAuto(F, o) {
+      o = o || {};
+      return ask({ t: "uvAuto", pos: F.pos, sizes: F.sizes, fv: F.fv, fuv: o.keepSeams ? F.fuv : null, uv: o.keepSeams ? F.uv : null,
+        opts: Object.assign({ padding: 4, resolution: 1024 }, o.opts || {}) }, [], 120000);
     },
     // true while the engine can take work (starting counts: the first request waits for it)
     usable() { if (state === "idle") start(); return state === "on" || state === "starting"; },

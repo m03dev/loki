@@ -19,6 +19,8 @@ const FORGE_UV_DEFAULTS = {
   autoPlanes: 6, planarAxis: "best", cylAxis: "y",
   density: 512, densityRes: 1024,
   checkerTiles: 8, showDistortion: false, showChecker: false, showGrid: true,
+  // Smart Unwrap (UVgami's seam logic, app/ui/forge_uvgami.js)
+  smartMode: "auto", smartAngle: 66, smartPriority: "BALANCED", smartSymmetry: false, smartSymAxis: "x", smartStack: false, smartRectify: true,
 };
 
 function forgeUvSettings() {
@@ -38,8 +40,10 @@ const ForgeUVEditor = (() => {
   const selFaces = () => { const v = S.view; return v && v.edit && v.mode === "poly" ? [...v.edit.sel.f] : []; };
 
   // ---------------------------------------------------------------- committing a change (one undo step)
-  function commit(next, label, keepFaces) {
+  function commit(next, label, keepFaces, base) {
     const v = S.view; if (!v || !next) return false;
+    // an engine answer that arrives after the mesh changed (an undo, another step) must not overwrite it
+    if (base && poly() !== base) { say("The mesh changed while that ran - nothing applied; run it again.", true); return false; }
     const faces = keepFaces || selFaces();
     if (poly() && poly().uvPins) next.uvPins = poly().uvPins.filter((i) => i < next.uv.length);
     v.showPoly(next, true);
@@ -76,7 +80,7 @@ const ForgeUVEditor = (() => {
       const st = forgeUvSettings();
       let next = U().automatic(m, selFaces(), st.autoPlanes);
       try { next = await U().layout(next, selFaces(), layoutOpts()); } catch (e) { say("Automatic made the shells; Layout could not run: " + e.message, true); }
-      commit(next, "Automatic: " + U().shells(next).length + " shells, laid out.");
+      commit(next, "Automatic: " + U().shells(next).length + " shells, laid out.", null, m);
     },
     cut() {
       const m = need(true); if (!m) return;
@@ -104,14 +108,50 @@ const ForgeUVEditor = (() => {
       try {
         const next = await U().unfold(m, selFaces(), { iterations: st.unfoldIterations, pinned: new Set(m.uvPins || []), scaleToDensity: 1 });
         const i = next.uvInfo || {};
-        commit(next, "Unfolded " + i.shells + " shell(s) in " + Math.round(i.ms || 0) + " ms" + (i.flips ? ", " + i.flips + " flipped triangle(s) left" : ", no flips") + ".");
+        commit(next, "Unfolded " + i.shells + " shell(s) in " + Math.round(i.ms || 0) + " ms" + (i.flips ? ", " + i.flips + " flipped triangle(s) left" : ", no flips") + ".", null, m);
       } catch (e) { say("Unfold: " + e.message + (window.ForgeGeom && ForgeGeom.lastError ? " (" + ForgeGeom.lastError + ")" : ""), true); }
     },
     async layout() {
       const m = need(true); if (!m) return;
       say("Laying out...");
-      try { const next = await U().layout(m, selFaces(), layoutOpts()); commit(next, "Layout: " + (next.uvInfo || {}).shells + " shell(s) packed into 0-1" + ((next.uvInfo || {}).basic ? " (basic packer - the C++ engine is not in this build)." : ".")); }
+      try { const next = await U().layout(m, selFaces(), layoutOpts()); commit(next, "Layout: " + (next.uvInfo || {}).shells + " shell(s) packed into 0-1" + ((next.uvInfo || {}).basic ? " (basic packer - the C++ engine is not in this build)." : "."), null, m); }
       catch (e) { say("Layout: " + e.message + (window.ForgeGeom && ForgeGeom.lastError ? " (" + ForgeGeom.lastError + ")" : ""), true); }
+    },
+    // Smart Unwrap: seams placed by UVgami's rules (hard edges, cylinders, sweeps, symmetry ...), cut, flattened by the
+    // C++ unfold (UVgami's own rigid unfold when the engine build has none), split / straightened / stacked, then Layout
+    async smart() {
+      const m = need(false); if (!m) return;
+      if (typeof window.ForgeUVgami === "undefined") { say("Smart Unwrap is not loaded.", true); return; }
+      const st = forgeUvSettings(), base = U().has(m) ? m : U().planar(m, [], "best");
+      say("Smart Unwrap: placing seams...");
+      let engine = "C++ unfold";
+      const flatten = async (c) => {
+        try { return await U().unfold(c, [], { iterations: st.unfoldIterations }); }
+        catch (_) { engine = "rigid unfold (the C++ unfold is not in this engine build)"; return ForgeUVgami.flattenRigid(c); }
+      };
+      try {
+        const next = await ForgeUVgami.unwrap(base, { surfaceMode: st.smartMode, hardAngle: st.smartAngle, priority: st.smartPriority,
+          useSymmetry: !!st.smartSymmetry, symAxes: [st.smartSymAxis], stackSimilar: !!st.smartStack, rectify: !!st.smartRectify,
+          flatten, pack: (c) => U().layout(c, [], layoutOpts()) });
+        const i = next.uvInfo || {};
+        commit(next, "Smart Unwrap: " + U().shells(next).length + " shells, " + (i.seams || 0) + " seam edges, " + engine + ", " + Math.round(i.ms || 0) + " ms.", null, m);
+      } catch (e) { say("Smart Unwrap: " + e.message, true); }
+    },
+    // Atlas: xatlas in C++ - fully automatic charts + unfold + packing (fast to read, slower on big meshes)
+    async atlas() {
+      const m = need(false); if (!m) return;
+      say("Atlas: unwrapping (C++)...");
+      try { const next = await U().autoAtlas(m, { opts: { padding: forgeUvSettings().layoutPadding, resolution: forgeUvSettings().layoutResolution } });
+        commit(next, "Atlas: " + next.uvInfo.charts + " charts in " + Math.round(next.uvInfo.ms || 0) + " ms.", null, m); }
+      catch (e) { say("Atlas: " + e.message, true); }
+    },
+    // Auto Seams: only the seams (cut where Smart Unwrap would), nothing flattened - then Unfold yourself
+    autoSeams() {
+      const m = need(false); if (!m || typeof window.ForgeUVgami === "undefined") return;
+      const st = forgeUvSettings(), base = U().has(m) ? m : U().planar(m, [], "best");
+      let seams = ForgeUVgami.hardSurfaceSeams(base, { surfaceMode: st.smartMode === "organic" ? "hard" : st.smartMode, hardAngle: st.smartAngle });
+      if (st.smartSymmetry) seams = ForgeUVgami.symmetrySeams(base, seams, { useSymmetry: true, symAxes: [st.smartSymAxis] });
+      commit(ForgeUVgami.applySeams(base, seams), "Auto Seams: " + seams.size + " seam edges placed - Unfold next.");
     },
     flipU() { xform({ scale: [-1, 1] }, "Flipped U."); },
     flipV() { xform({ scale: [1, -1] }, "Flipped V."); },
@@ -468,8 +508,10 @@ const ForgeUVEditor = (() => {
         iconBtn("Planar", "Planar projection on the best plane (Settings: or X / Y / Z).", () => OPS.planar(), "planar"),
         iconBtn("Cyl", "Cylindrical projection around the axis in Settings.", OPS.cylindrical, "cylindrical"),
         iconBtn("Sph", "Spherical projection.", OPS.spherical, "spherical"),
-        iconBtn("Auto", "Automatic: one shell per facing direction (Settings: 3 / 4 / 6 planes), then Layout.", OPS.automatic, "automatic")]),
-      group("Cut & Sew", [iconBtn("Cut", "Cut the edges selected in the viewport: they become UV seams.", OPS.cut, "cut"),
+        iconBtn("Auto", "Automatic: one shell per facing direction (Settings: 3 / 4 / 6 planes), then Layout.", OPS.automatic, "automatic"),
+        iconBtn("Atlas", "Atlas: a fully automatic unwrap (charts, seams, unfold and packing) by the C++ engine.", () => OPS.atlas(), "atlas"),
+        iconBtn("Smart", "Smart Unwrap: seams where a texture artist would put them (hard edges, cylinders, symmetry), cut, unfold, straighten, layout - one click.", () => OPS.smart(), "smart")]),
+      group("Cut & Sew", [iconBtn("Seams", "Auto Seams: only place the seams (Smart Unwrap's rules), then Unfold yourself.", () => OPS.autoSeams(), "autoSeams"), iconBtn("Cut", "Cut the edges selected in the viewport: they become UV seams.", OPS.cut, "cut"),
         iconBtn("Sew", "Sew the selected edges: the two sides become one again.", OPS.sew, "sew"),
         iconBtn("Move+Sew", "Move the smaller shell onto the bigger one, then sew.", OPS.moveSew, "moveSew")]),
       group("Unfold", [iconBtn("Unfold", "Unfold the selected shells (or all): flat, with little stretch (C++). Pinned UVs stay put.", OPS.unfold, "unfold"),
@@ -489,6 +531,11 @@ const ForgeUVEditor = (() => {
     const sec = (name, rows) => { const d = el("div", "fuv-sec"); d.append(el("div", "fuv-sec-title", name), ...rows); return d; };
     set.append(
       sec("Unfold", [settingRow("Optimise iterations", "unfoldIterations", "num", { min: 0, max: 50, step: 1 })]),
+      sec("Smart Unwrap", [settingRow("Surface", "smartMode", "select", [["auto", "Auto (per part)"], ["hard", "Hard surface"], ["organic", "Organic"]]),
+        settingRow("Hard edge angle", "smartAngle", "num", { min: 1, max: 179, step: 1 }),
+        settingRow("Priority", "smartPriority", "select", [["BALANCED", "Balanced"], ["LESS_STRETCH", "Less stretch"], ["FEWER_SEAMS", "Fewer seams"]]),
+        settingRow("Symmetry", "smartSymmetry", "bool"), settingRow("Symmetry axis", "smartSymAxis", "select", [["x", "X"], ["y", "Y"], ["z", "Z"]]),
+        settingRow("Stack identical pieces", "smartStack", "bool"), settingRow("Straighten strips", "smartRectify", "bool")]),
       sec("Layout", [settingRow("Padding (px)", "layoutPadding", "num", { min: 0, max: 64, step: 1 }),
         settingRow("Texture size (px)", "layoutResolution", "select", [[256, "256"], [512, "512"], [1024, "1024"], [2048, "2048"], [4096, "4096"], [8192, "8192"]]),
         settingRow("Rotate shells", "layoutRotate", "select", [[0, "No"], [1, "90 degree steps"], [2, "Free (tightest)"]]),
@@ -597,5 +644,8 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("uvUnfold", "Unfold", () => O.unfold());
   add("uvLayout", "Layout", () => O.layout());
   add("uvShell", "Select UV Shell", () => O.selectShell());
+  add("uvSmart", "Smart Unwrap", () => O.smart());
+  add("uvAutoSeams", "Auto Seams", () => O.autoSeams());
+  add("uvAtlas", "Atlas Unwrap", () => O.atlas());
   add("uvChecker", "UV Checker on the Model", () => O.checker());
 }

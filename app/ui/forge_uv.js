@@ -456,7 +456,19 @@ window.ForgeUV = (() => {
     return out;
   }
 
-  return { has, clone, cornerUVs, edges, seams, shells, shellOfFace, rebuild, cut, sew, moveAndSew, planar, camera, cylindrical,
+  // fully automatic UVs with xatlas (C++): new charts, seams, unfold and packing in one go
+  async function autoAtlas(m, opts) {
+    const G = window.ForgeGeom;
+    if (!G || !G.uvAuto) throw new Error("The C++ engine is not available here.");
+    const base = has(m) ? m : Object.assign(clone(m), { uv: [[0, 0]], fuv: m.f.map((f) => f.map(() => 0)) });
+    const r = await G.uvAuto(flat(base), opts || {});
+    if (!r) throw new Error("The C++ engine could not unwrap this" + (G.lastError ? ": " + G.lastError : "."));
+    const out = clone(m); out.uv = []; for (let i = 0; i < r.uv.length; i += 2) out.uv.push([r.uv[i], r.uv[i + 1]]);
+    let c = 0; out.fuv = m.f.map((f) => f.map(() => r.fuv[c++]));
+    out.uvInfo = { charts: r.charts, ms: r.ms };
+    return out;
+  }
+  return { autoAtlas, has, clone, cornerUVs, edges, seams, shells, shellOfFace, rebuild, cut, sew, moveAndSew, planar, camera, cylindrical,
     spherical, automatic, transform, flip, density, setDensity, distortion, overlapCount, carry, unfold, layout, layoutBasic, uvsOfFaces,
     bbox, faceAreaUV, faceArea3, compact, ekey };
 })();

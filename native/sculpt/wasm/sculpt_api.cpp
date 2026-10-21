@@ -621,3 +621,63 @@ KS_EXPORT(ks_smooth_all) void ks_smooth_all(float strength, int iterations) {
 // thread_local objects with destructors (the engine's per-thread scratch): one
 // thread that lives as long as the page, so their destructors never need to run.
 extern "C" int __cxa_thread_atexit(void (*)(void*), void*, void*) { return 0; }
+
+// ---------------------------------------------------------------- UV unwrapping (map UVs of a polygon cage)
+// Independent of the sculpt mesh, like the cage preview. In: the cage (float xyz per vertex, corners per face, the
+// faces' vertex ids, nc = the corner count, checked against the sizes) and its map UVs (a UV index per corner,
+// float u,v per UV index). Out (until the next ks_uv_* call): ks_uv_out() 2 floats per UV index (ks_uv_nuv() of
+// them); ks_uv_auto also ks_uv_auto_fuv() (a UV index per corner) and ks_uv_auto_nuv(). -1 = bad input.
+// sculpt/uv_unwrap.h has the algorithms; native/sculpt/wasm/test/test_uv.js checks them.
+#include "sculpt/uv_unwrap.h"
+namespace { std::vector<float> gUvOut; std::vector<int> gUvFuv; int gUvFlips = 0; float gUvStretch = 1.0f; }
+KS_EXPORT(ks_uv_unfold) int ks_uv_unfold(const float* pos, int nv, const int* sizes, int nf, const int* fv, const int* fuv, int nc,
+                                         int nuv, const float* uvIn, const unsigned char* pinned, int iterations, float scaleToDensity) {
+    UvCage c; c.pos = pos; c.nv = nv; c.sizes = sizes; c.nf = nf; c.fv = fv; c.fuv = fuv; c.nuv = nuv; c.nc = nc;
+    UvUnfoldStats st;
+    const int r = uvUnfold(c, uvIn, pinned, iterations, scaleToDensity, gUvOut, &st);
+    gUvFuv.clear();
+    if (r < 0) { gUvOut.clear(); gUvFlips = 0; gUvStretch = 1.0f; return -1; }
+    gUvFlips = st.flips; gUvStretch = st.stretch;
+    return r;
+}
+KS_EXPORT(ks_uv_layout) int ks_uv_layout(const float* pos, int nv, const int* sizes, int nf, const int* fv, const int* fuv, int nc,
+                                         int nuv, const float* uvIn, float paddingPx, float resolution, int rotate, int scaleMode, float margin) {
+    UvCage c; c.pos = pos; c.nv = nv; c.sizes = sizes; c.nf = nf; c.fv = fv; c.fuv = fuv; c.nuv = nuv; c.nc = nc;
+    UvLayoutSettings s; s.paddingPx = paddingPx; s.resolution = resolution; s.rotate = rotate; s.scaleMode = scaleMode; s.margin = margin;
+    const int r = uvLayout(c, uvIn, s, gUvOut);
+    gUvFuv.clear();
+    if (r < 0) gUvOut.clear();
+    return r;
+}
+// opts: up to 18 floats in this order (missing ones keep xatlas's defaults): maxChartArea, maxBoundaryLength,
+// normalDeviationWeight, roundnessWeight, straightnessWeight, normalSeamWeight, textureSeamWeight, maxCost,
+// maxIterations, padding, resolution, bilinear, blockAlign, bruteForce, rotateCharts, rotateChartsToAxis,
+// texelsPerUnit, unfoldIterations. keepSeams 1: fuv / nuv (and uvIn, may be null) are the existing seams.
+KS_EXPORT(ks_uv_auto) int ks_uv_auto(const float* pos, int nv, const int* sizes, int nf, const int* fv, int nc, int keepSeams,
+                                     const int* fuv, int nuv, const float* uvIn, const float* opts, int nopts) {
+    UvCage c; c.pos = pos; c.nv = nv; c.sizes = sizes; c.nf = nf; c.fv = fv; c.nc = nc;
+    if (keepSeams) { c.fuv = fuv; c.nuv = nuv; }
+    UvAutoOptions o;
+    auto g = [&](int i, float d) { return opts && i < nopts ? opts[i] : d; };
+    o.maxChartArea = g(0, o.maxChartArea); o.maxBoundaryLength = g(1, o.maxBoundaryLength);
+    o.normalDeviationWeight = g(2, o.normalDeviationWeight); o.roundnessWeight = g(3, o.roundnessWeight);
+    o.straightnessWeight = g(4, o.straightnessWeight); o.normalSeamWeight = g(5, o.normalSeamWeight);
+    o.textureSeamWeight = g(6, o.textureSeamWeight); o.maxCost = g(7, o.maxCost);
+    o.maxIterations = (int)g(8, (float)o.maxIterations); o.padding = (int)g(9, (float)o.padding);
+    o.resolution = (int)g(10, (float)o.resolution);
+    o.bilinear = g(11, o.bilinear ? 1.f : 0.f) != 0; o.blockAlign = g(12, o.blockAlign ? 1.f : 0.f) != 0;
+    o.bruteForce = g(13, o.bruteForce ? 1.f : 0.f) != 0; o.rotateCharts = g(14, o.rotateCharts ? 1.f : 0.f) != 0;
+    o.rotateChartsToAxis = g(15, o.rotateChartsToAxis ? 1.f : 0.f) != 0;
+    o.texelsPerUnit = g(16, o.texelsPerUnit); o.unfoldIterations = (int)g(17, (float)o.unfoldIterations);
+    UvAutoResult res;
+    const int r = uvAuto(c, keepSeams ? uvIn : nullptr, keepSeams != 0, o, res);
+    if (r < 0) { gUvOut.clear(); gUvFuv.clear(); return -1; }
+    gUvOut.swap(res.uv); gUvFuv.swap(res.fuv);
+    return r;
+}
+KS_EXPORT(ks_uv_out) const float* ks_uv_out() { return gUvOut.data(); }
+KS_EXPORT(ks_uv_nuv) int ks_uv_nuv() { return (int)(gUvOut.size() / 2); }
+KS_EXPORT(ks_uv_flips) int ks_uv_flips() { return gUvFlips; }
+KS_EXPORT(ks_uv_stretch) float ks_uv_stretch() { return gUvStretch; }
+KS_EXPORT(ks_uv_auto_fuv) const int* ks_uv_auto_fuv() { return gUvFuv.data(); }
+KS_EXPORT(ks_uv_auto_nuv) int ks_uv_auto_nuv() { return (int)(gUvOut.size() / 2); }

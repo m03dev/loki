@@ -174,6 +174,13 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 - **2026-10-21 night (Claude)**: In-View Editor + t, the full tool options, Mesh > Cleanup, the pro wireframe, camera based
   selection / backface culling / preselection highlight - docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 night)". Cloud only.
 
+- **2026-10-21 morning (Claude): UV Editing / Retopology / Baking workspaces** (docs/FORGE_UV.md): forge_uv.js (map UVs),
+  forge_uv_editor.js, forge_retopo.js (Quad Draw), forge_bake.js; then the C++ UV core in native/sculpt (uv_unwrap.cpp:
+  LSCM + ARAP unfold, shell packing; xatlas f700c77 vendored, MIT, its polygon input fixed - `ks_uv_unfold / ks_uv_layout /
+  ks_uv_auto`, worker uvUnfold / uvLayout / uvAuto, ready.ops), and UVgami's seam logic ported (app/ui/forge_uvgami.js,
+  GPL-3.0, docs/FORGE_UVGAMI.md): UV Editor > Smart (seams + unfold + straighten + layout), Atlas (xatlas), Seams.
+  sculpt.wasm 924 KB (build ~1.5 min). Cloud only.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

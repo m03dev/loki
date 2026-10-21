@@ -11,10 +11,11 @@ mkdir -p "$OUT/obj"
 CXX=("$W/bin/clang++" --target=wasm32-wasip1 --sysroot="$W/share/wasi-sysroot" -std=c++17 -O3 -msimd128
      -fno-exceptions -Wno-keyword-macro -include wasm/st_compat.h
      -Icore/include -Ithird_party/instant-meshes/src -Ithird_party/instant-meshes/shim -Ithird_party/eigen
-     -Ithird_party/meshoptimizer/src -Ithird_party/meshoptimizer -DEIGEN_MPL2_ONLY -DEIGEN_NO_EXCEPTIONS -DNDEBUG)
+     -Ithird_party/meshoptimizer/src -Ithird_party/meshoptimizer -DEIGEN_MPL2_ONLY -DEIGEN_NO_EXCEPTIONS -DNDEBUG -DXA_MULTITHREADED=0 -DXA_DEFAULT_PRINT=nullptr)
 SRC=(wasm/sculpt_api.cpp core/src/mesh.cpp core/src/bvh.cpp core/src/brush.cpp core/src/dyntopo.cpp
      core/src/voxel_remesh.cpp core/src/quad_remesh.cpp core/src/preset_io.cpp core/src/instant_meshes.cpp
-     core/src/multires.cpp core/src/curve_tube.cpp core/src/cage_subdiv.cpp third_party/instant-meshes/src/*.cpp)
+     core/src/multires.cpp core/src/curve_tube.cpp core/src/cage_subdiv.cpp core/src/uv_unwrap.cpp
+     third_party/xatlas/xatlas.cpp third_party/instant-meshes/src/*.cpp)
 pids=(); objs=()
 for f in "${SRC[@]}"; do
   o="$OUT/obj/$(echo "$f" | tr / _).o"; objs+=("$o")

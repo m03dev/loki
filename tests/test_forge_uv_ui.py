@@ -35,7 +35,7 @@ if node:
 
 T = "forge.view.tree.api"
 # the screen point at the middle of face 2's UVs in the UV Editor
-CENTRE = """(() => { const S = ForgeUVEditor.state, m = forge.view.poly, c = m.fuv[2]; let u = 0, v = 0; for (const i of c) { u += m.uv[i][0]; v += m.uv[i][1]; }
+CENTRE = """(() => { const S = ForgeUVEditor.state, m = forge.view.poly, c = m.fuv[window._fi == null ? 2 : window._fi]; let u = 0, v = 0; for (const i of c) { u += m.uv[i][0]; v += m.uv[i][1]; }
   u /= c.length; v /= c.length; const r = S.canvas.getBoundingClientRect(), z = S.cam.z;
   return [r.left + r.width / 2 + (u - S.cam.u) * z, r.top + r.height / 2 - (v - S.cam.v) * z]; })()"""
 
@@ -94,7 +94,7 @@ async def ui():
           return [ForgeUV.has(m), ForgeUV.shells(m).length, a.length === c.length && a.every((x, i) => Math.abs(x - c[i]) < 1e-6)]; })()""")
         check("Planar: the cube has map UVs, one shell, and the GPU mesh shows exactly those UVs", gpu == [True, 1, True], gpu)
         await E("ForgeUVEditor.OPS.automatic()")
-        await page.wait_for_timeout(500)
+        await page.wait_for_function("/^Automatic|Layout could not/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent)", timeout=15000)
         auto = await E("ForgeUV.shells(forge.view.poly).length")
         check("Automatic: six shells on a cube (one per side)", auto == 6, auto)
 
@@ -107,7 +107,9 @@ async def ui():
         await E("forge.view.select([0, 1, 2, 3, 4, 5]); ForgeUVEditor.draw()")
         await E("ForgeUVEditor.OPS.planar('z')")
         await page.wait_for_timeout(150)
-        await E("forge.view.select([2]); ForgeUVEditor.frame(true)")
+        # the face with the most UV area (a planar Z map squashes the side faces to lines)
+        await E("window._fi = forge.view.poly.f.map((_, i) => i).sort((a, b) => Math.abs(ForgeUV.faceAreaUV(forge.view.poly, b)) - Math.abs(ForgeUV.faceAreaUV(forge.view.poly, a)))[0]")
+        await E("forge.view.select([window._fi]); ForgeUVEditor.frame(true)")
         pt = await E(CENTRE)
         await page.mouse.dblclick(pt[0], pt[1])
         shell = await E("[...forge.view.edit.sel.f].sort((a, b) => a - b)")
@@ -164,7 +166,7 @@ async def ui():
         has = await E("ForgeGeom.supports('uvUnfold') && ForgeGeom.supports('uvLayout')")
         if has:
             await E("ForgeUVEditor.OPS.automatic()")
-            await page.wait_for_timeout(400)
+            await page.wait_for_function("/^Automatic/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent)", timeout=15000)
             await E("ForgeUVEditor.OPS.unfold()")
             await page.wait_for_function("/Unfolded|Unfold:/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent)", timeout=10000)
             uf = await E("[document.querySelector('#forge-uvpanel .fuv-status').textContent, ForgeUV.distortion(forge.view.poly).filter((d) => d.flipped).length]")
@@ -175,6 +177,27 @@ async def ui():
             check("Layout (C++): every UV inside 0-1, no shells overlapping", lay == [True, 0], lay)
         else:
             print("  SKIP unfold / layout: this engine build has no uvUnfold / uvLayout yet")
+
+        # ---- Smart Unwrap (UVgami's seams + unfold + layout) on a cylinder: shells that are disks, inside 0-1
+        await E("forgeAddPrimitive('cylinder')")
+        await page.wait_for_timeout(200)
+        await E("ForgeUVEditor.OPS.smart()")
+        await page.wait_for_function("/Smart Unwrap:/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent) && !/placing/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent)", timeout=15000)
+        sm = await E("""(() => { const m = forge.view.poly, sh = ForgeUV.shells(m);
+          return [document.querySelector('#forge-uvpanel .fuv-status').textContent, sh.length, sh.every((s) => ForgeUVgami.topology(m, s.faces, ForgeUV.seams(m)).disk),
+                  m.uv.every((p) => p[0] >= -1e-6 && p[0] <= 1 + 1e-6 && p[1] >= -1e-6 && p[1] <= 1 + 1e-6), ForgeUV.overlapCount(m)]; })()""")
+        check("Smart Unwrap on a cylinder: seams placed, every shell a flat disk, packed inside 0-1 with no overlaps", sm[0].startswith("Smart Unwrap:") and sm[1] >= 2 and sm[2] and sm[3] and sm[4] == 0, sm)
+        await E("forgeAddPrimitive('torus')")
+        await page.wait_for_timeout(200)
+        await E("ForgeUVEditor.OPS.atlas()")
+        await page.wait_for_function("/^Atlas:/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent) && !/unwrapping/.test(document.querySelector('#forge-uvpanel .fuv-status').textContent)", timeout=15000)
+        at = await E("[document.querySelector('#forge-uvpanel .fuv-status').textContent, ForgeUV.has(forge.view.poly), forge.view.poly.uv.every((p) => p[0] >= -1e-6 && p[0] <= 1 + 1e-6 && p[1] >= -1e-6 && p[1] <= 1 + 1e-6)]")
+        check("Atlas (xatlas, C++) on a torus: charts made, every UV inside 0-1", at[0].startswith("Atlas:") and "charts" in at[0] and at[1] and at[2], at)
+        await E("forgeAddPrimitive('cube')")
+        await page.wait_for_timeout(200)
+        await E("ForgeUVEditor.OPS.autoSeams()")
+        seams = await E("ForgeUV.seams(forge.view.poly).size")
+        check("Auto Seams on a cube places the seams only (the 7-edge cross of the original add-on)", seams == 7, seams)
 
         # ---- settings persist; the checker; Modeling hides the editor again
         await E("document.getElementById('forge-uv-gear').click()")
