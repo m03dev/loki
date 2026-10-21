@@ -160,6 +160,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   The owner's Maya sculpting plug-in source was not reachable from this session (not in ~/Documents, ~/Downloads or
   GitHub); ByHand is Windows-only and was not on the Mac.
 
+- **2026-10-21 later (Claude): the pro polygon tools + Modeling Toolkit + rules** - docs/FORGE_PRO.md "DONE (Claude,
+  2026-10-21 later)": app/ui/forge_polyops.js (32 ops), app/ui/forge_toolkit.js (runner, live Tool Settings, INPUTS
+  nodes, interactive Multi-Cut / Target Weld / Offset Edge Loop, the toolkit tab); Delete dissolves edges / vertices;
+  calm hotbox; 4 wireframe-only; f on components; manipulator fix for Shift-extrude; the Generate panel. Cloud only.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

@@ -128,7 +128,7 @@ async def main():
         axis = await E("forge.view.gizmo.axis")
         await page.keyboard.down("Shift")
         await E("forge.view.dirty = true")
-        await page.wait_for_timeout(120)
+        await page.wait_for_timeout(260)
         look = await E("""() => ({ col: forge.view.gizmo._gizmo.materialLib.active.color.getHexString(),
           help: (document.getElementById('fmy-help') || {}).textContent || '' })""")
         check("Shift over a handle turns it orange and the help line says the drag will extrude",

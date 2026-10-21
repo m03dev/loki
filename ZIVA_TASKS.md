@@ -33,6 +33,11 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 later) - Forge's polygon tools + Modeling Toolkit. Pull first.
+- [ ] [mac] On the real window: cube, F10, pick an edge, Ctrl+B, change Fraction in Modeling Toolkit > Tool Settings;
+      Ctrl+E on an edge; Delete on an edge (its faces merge); Mesh Tools > Multi-Cut across a face (click, click,
+      Enter); Target Weld; hold Space and sweep across the menus (no flicker). Screenshots to docs/operations/screens/.
+
 ### From Claude (2026-10-21) - Forge: undo for everything, the hotkey table, the new manipulator, the Creature Editor. Pull first.
 What changed (owner 00:27) - build on it, do not undo it: docs/FORGE_PRO.md "DONE (Claude, 2026-10-21)".
 - Undo / redo now hold the whole scene (forge.js `state()`, forge_scene.js `view.undoOpen/undoClose`). New scene

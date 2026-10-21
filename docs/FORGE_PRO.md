@@ -272,6 +272,28 @@ a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (20 checks, ~1
   Windows > Creature Editor brings it back.
 - Not verified on the Mac's WKWebView or the PC's WebView2 yet (ZIVA_TASKS).
 
+### DONE (Claude, 2026-10-21 later) - the pro polygon tools, the Modeling Toolkit, the rules
+Owner 01:50: tools and rules like the pro modeller's, every tool, the UI organised, the Space jitter, 1-7, no viewport
+snap chips, f on components, Shift over a face handle must extrude. Checked: tests/test_forge_rules_ui.py (15),
+tests/test_forge_polyops.py (78, node), and every Forge suite.
+- **app/ui/forge_polyops.js** (32 ops, LOKI's own code): extrude faces (keep together) / edges / vertices, bevel
+  (segments), bridge, poke, wedge, chamfer vertex, collapse, connect, multi-cut, slice, detach, duplicate / extract
+  faces, delete edge / vertex (DISSOLVE, Ctrl+Delete cleans winged vertices), offset edge loop, slide edge, spin edge,
+  triangulate, quadrangulate, average, relax, circularize, target weld, append polygon, fill hole, crease, soft/hard;
+  `P.polyRules` / `P.canRun` write down what each tool refuses (bridge only border chains, ...).
+- **app/ui/forge_toolkit.js**: one runner - the selection the tool needs (converted the pro way), the tool's refusal
+  message, ONE undo step, an INPUTS node (polyBevel1, polyExtrudeEdge1 ...; its amount re-runs the step), the pro
+  selection afterwards. Tool Settings stay live (change Fraction and the bevel is redone in place). Context Ctrl+E
+  (faces / edges / vertices) hands you the move tool. Delete in component mode follows the pro rules. Interactive
+  Multi-Cut (click edges / vertices, Enter / right-click), Target Weld, Offset Edge Loop. The Modeling Toolkit is a tab
+  beside the Channel Box (Windows > Modeling Toolkit): selection modes, soft selection, Mesh / Components / Tools,
+  Tool Settings. Edit Mesh / Mesh Tools menus, the hotbox and the Shift + right-button marking menus list them all.
+- Fixes: Space hotbox menus open on hover intent / press (no flicker while sweeping), press-drag-release picks; 4 =
+  wireframe only on every object; viewport Grid / Edge / Point chips hidden; f frames the selected components, a
+  everything; the object manipulator leaves in component mode (it caused Shift-drag to duplicate instead of
+  extrude) and the tool carries across; Shift-drag extrudes edges and vertices too; Select To Edge Loop / Ring.
+- The Generate panel (draw / image / describe / creature) is a tool window like the Creature Editor.
+
 ## The honesty note (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
 
 its own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for

@@ -4,6 +4,13 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-21 (later) - Forge: the pro polygon tools, Modeling Toolkit, modelling rules (Claude, cloud)
+
+- forge_polyops.js (32 ops + rules, test_forge_polyops 78, from a subagent), forge_toolkit.js (runner + toolkit tab +
+  interactive tools), Delete dissolves, calm hotbox, 4 wireframe only, f on components, object manipulator leaves in
+  component mode, Generate panel. Checked: test_forge_rules_ui 15 (new), every Forge suite, test_ui_fit 81,
+  test_ui_smoke 10. Not run: --self-test (no openai module, PyPI blocked here).
+
 ## 2026-10-21 - Forge: undo for everything, hotkey table, pro manipulator, Creature Editor, smoother sculpting (Claude, cloud)
 
 - Owner 00:27: history broken; hotkeys like the pro tools and customizable; Shift over the manipulator; not the

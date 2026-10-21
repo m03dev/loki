@@ -27,14 +27,14 @@ const FORGE_TK_TOOLS = {
   bevel: ["Bevel", "bevel", "fe", [["fraction", "Fraction", 0.01, 1, 0.01, 0.5], ["segments", "Segments", 1, 12, 1, 1]], "Round the selected edges (faces: their border edges)."],
   bridge: ["Bridge", "bridge", "e", [["divisions", "Divisions", 0, 20, 1, 0]], "Join two open border edge chains with faces."],
   poke: ["Poke Face", "poke", "f", [["offset", "Offset", -1, 1, 0.01, 0]], "Add a vertex in the middle of each face."],
-  wedge: ["Wedge", "wedge", "f", [["angle", "Angle", -360, 360, 1, 90], ["divisions", "Divisions", 1, 32, 1, 4]], "Turn the faces round an edge of theirs (pick faces and one edge)."],
+  wedge: ["Wedge", "wedge", "fw", [["angle", "Angle", -360, 360, 1, 90], ["divisions", "Divisions", 1, 32, 1, 4]], "Turn the faces round an edge of theirs (pick faces and one edge)."],
   chamferVerts: ["Chamfer Vertex", "chamferVerts", "v", [["width", "Width", 0.01, 1, 0.01, 0.25]], "Cut each corner off."],
   collapse: ["Collapse", "collapse", "fe", [], "Shrink each edge or face to its centre point."],
   connect: ["Connect", "connect", "ve", [], "Join the selected edges' middles (or the selected vertices) across their faces."],
   detach: ["Detach", "detach", "ve", [], "Split the vertices so each face has its own."],
   dissolveEdges: ["Delete Edge", "dissolveEdges", "e", [["cleanVerts", "Clean up vertices", 0, 1, 1, 0]], "Remove the edges; their faces merge."],
   dissolveVerts: ["Delete Vertex", "dissolveVerts", "v", [], "Remove the vertices; their faces merge."],
-  triangulate: ["Triangulate", "triangulate", "f*", [], "Split the faces into triangles."],
+  triangulate: ["Triangulate", "triangulateFaces", "f*", [], "Split the faces into triangles."],
   quadrangulate: ["Quadrangulate", "quadrangulate", "f*", [], "Merge triangle pairs into quads."],
   duplicateFaces: ["Duplicate Face", "duplicateFaces", "f", [], "Copy the faces (a new piece of this mesh)."],
   extractFaces: ["Extract", "extractFaces", "f", [], "Cut the faces off into their own piece."],
@@ -49,7 +49,7 @@ const FORGE_TK_TOOLS = {
 const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExtrudeEdge", extrudeVerts: "polyExtrudeVertex", bevel: "polyBevel",
   bridge: "polyBridgeEdge", poke: "polyPoke", wedge: "polyWedgeFace", chamferVerts: "polyChamferVtx", collapse: "polyCollapseEdge",
   connect: "polyConnectComponents", detach: "polySplitVert", dissolveEdges: "polyDelEdge", dissolveVerts: "polyDelVertex",
-  triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
+  triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
   averageVerts: "polyAverageVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
   slideEdge: "polyTweak", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
@@ -87,9 +87,17 @@ function forgeTkItems(v, takes, sel) {
     case "f": return sel.f.length ? sel.f : (takes.endsWith("*") ? allF() : null);
     case "e": return sel.e.length ? sel.e : (sel.f.length ? edgesOfFaces(sel.f) : null);
     case "v": { const vs = vertsOf(); return vs.length ? vs : (takes.endsWith("*") ? v.poly.v.map((_, i) => i) : null); }
-    case "fe": return sel.mode === "face" && sel.f.length ? { faces: sel.f } : sel.e.length ? { edges: sel.e } : sel.f.length ? { faces: sel.f } : null;
-    case "ve": return sel.mode === "vert" && sel.v.length ? { verts: sel.v } : sel.e.length ? { edges: sel.e } : sel.v.length ? { verts: sel.v } : null;
-    case "fv": return sel.f.length ? { faces: sel.f } : sel.v.length ? { verts: sel.v } : sel.e.length ? { verts: vertsOf() } : null;
+    case "fe": return sel.mode === "face" && sel.f.length ? { f: sel.f } : sel.e.length ? { e: sel.e } : sel.f.length ? { f: sel.f } : null;
+    case "ve": return sel.mode === "vert" && sel.v.length ? { v: sel.v } : sel.e.length ? { e: sel.e } : sel.v.length ? { v: sel.v } : null;
+    case "fv": return sel.f.length ? { f: sel.f } : sel.v.length ? { v: sel.v } : sel.e.length ? { e: sel.e } : null;
+    case "fw": {                                      // Wedge: the faces, turned about a border edge of theirs
+      if (!sel.f.length) return null;
+      const uses = new Map();
+      for (const e of edgesOfFaces(sel.f)) uses.set(e.join(","), 0);
+      for (const fi of sel.f) { const f = v.poly.f[fi]; for (let k = 0; k < f.length; k++) { const a = f[k], b = f[(k + 1) % f.length]; const key = Math.min(a, b) + "," + Math.max(a, b); uses.set(key, (uses.get(key) || 0) + 1); } }
+      const border = [...uses.entries()].filter(([, n]) => n === 1).map(([k]) => k.split(",").map(Number));
+      return border.length ? { faces: sel.f, hinge: border[0] } : null;
+    }
     default: return null;
   }
   void T;
@@ -102,7 +110,11 @@ function forgeTkCall(op, m, items, opts) {
   const P = window.ForgePoly, fn = P && P[op];
   if (typeof fn !== "function") return { m: m, sel: null, warn: "This tool is not in this build of Forge yet." };
   let out;
-  try { out = fn(m, items, opts || {}); } catch (exc) { return { m: m, sel: null, warn: (exc && exc.message) || String(exc) }; }
+  opts = opts || {};
+  // the ops whose settings are plain arguments, not an options object (forge_polyops.js)
+  const call = { slideEdge: () => fn(m, items, +opts.t || 0), spinEdge: () => fn(m, items, +opts.dir || 1),
+    targetWeld: () => fn(m, items.from, items.to), wedge: () => fn(m, items.faces, items.hinge, opts) }[op];
+  try { out = call ? call() : fn(m, items, opts); } catch (exc) { return { m: m, sel: null, warn: (exc && exc.message) || String(exc) }; }
   if (!out) return { m: m, sel: null, warn: "Nothing changed." };
   if (out.v && out.f && !out.m) return { m: out, sel: null, warn: "" };     // a bare mesh
   return { m: out.m || m, sel: out.sel || null, warn: out.warn || "" };
@@ -126,7 +138,7 @@ function forgeTkRun(id, override) {
   if (params.some((p) => p[0] === "cleanVerts")) opts.cleanVerts = !!opts.cleanVerts;
   const base = v.poly;
   const res = forgeTkCall(op, base, items, opts);
-  if (res.warn) { forgeTkSay(label + ": " + res.warn, true); return false; }
+  if (res.warn) { forgeTkSay(/^[\w ]+: /.test(res.warn) ? res.warn : label + ": " + res.warn, true); return false; }
   if (res.m === base) { forgeTkSay(label + ": nothing to do here.", true); return false; }
   if (v.undoOpen) v.undoOpen(label);
   try {
@@ -232,7 +244,7 @@ function forgeTkApplyOp(op, items, opts, label) {
   const v = forgeTkView();
   if (!v) return false;
   const base = v.poly, res = forgeTkCall(op, base, items, opts);
-  if (res.warn || res.m === base) { forgeTkSay(label + ": " + (res.warn || "nothing to do here."), true); return false; }
+  if (res.warn || res.m === base) { forgeTkSay(res.warn && /^[\w ]+: /.test(res.warn) ? res.warn : label + ": " + (res.warn || "nothing to do here."), true); return false; }
   if (v.undoOpen) v.undoOpen(label);
   try {
     v.showPoly(res.m, true);

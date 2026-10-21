@@ -262,9 +262,11 @@ async def main():
         await page.keyboard.press("F9")
         await page.evaluate("forge.view.selectItems('vert', [0], 'set')")
         f0 = await page.evaluate("forge.view.poly.f.length")
+        k = await page.evaluate("forge.view.poly.f.filter((f) => f.includes(0)).length")
         await page.keyboard.press("Delete")
         f1 = await page.evaluate("forge.view.poly.f.length")
-        check("Delete in vertex mode deletes the vertex and the faces round it", f0 - f1 in (3, 4), (f0, f1))
+        # the pro rule (owner 2026-10-21): Delete on a vertex DISSOLVES it - the faces round it become one face
+        check("Delete in vertex mode dissolves the vertex: the faces round it merge into one", k >= 3 and f0 - f1 == k - 1, (f0, f1, k))
         await page.keyboard.press("Control+z")
 
         await page.mouse.dblclick(cx + cw / 2, cy + ch / 2)
