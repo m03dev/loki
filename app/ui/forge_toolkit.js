@@ -396,7 +396,7 @@ function forgeTkPanel(show) {
   }
   const on = show == null ? box.hidden : !!show;
   box.hidden = !on;
-  for (const id of ["forge-channel", "forge-history"]) { const e = document.getElementById(id); if (e) e.classList.toggle("forge-tk-away", on); }
+  for (const id of ["forge-channel", "forge-history", "forge-layer-editor"]) { const e = document.getElementById(id); if (e) e.classList.toggle("forge-tk-away", on); }
   for (const b of tabs.querySelectorAll(".forge-tk-tab")) b.classList.toggle("on", (b.dataset.tab === "toolkit") === on);
   if (on) { const p = typeof forgeProPanels === "function" ? forgeProPanels() : {}; if (!p.channel && typeof forgeProPanel === "function") forgeProPanel("channel", true); forgeTkSettings(); forgeTkSyncModes(); }
   try { localStorage.setItem("loki-forge-tk-open", on ? "1" : "0"); } catch (_) { /* private mode */ }
