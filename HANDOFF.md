@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-20 (Forge's native sculpting engine; earlier state as of c132c1f).
+Last updated: 2026-10-21 (Forge: undo for the scene, hotkey table, pro manipulator, Creature Editor, smoother sculpting).
 
 ## The machines
 
@@ -148,6 +148,17 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   the Mac's WebKit window or the PC's WebView2 yet (worker CSP + WebAssembly there). Not wired yet: the Mask and
   Paint brushes (engine has them; Forge needs a mask/colour display), alphas, the threaded build (the window is
   cross-origin isolated, so SharedArrayBuffer threads are possible).
+
+- **2026-10-21 (Claude): undo, hotkeys, manipulator, Creature Editor, sculpt quality** - docs/FORGE_PRO.md "DONE (Claude,
+  2026-10-21)". Undo/redo now hold the whole scene (Create/Delete/Group/drags/channels/editing another object, one
+  labelled step each; the queue is no longer wiped by makeWorking). Moves land in the history (polyTweak). Hotkeys are a
+  table (app/ui/forge_keys.js) with a Hotkey Editor (Windows > Settings/Preferences). New manipulator look
+  (app/ui/forge_manip.js); Shift over a handle = duplicate (objects) / extrude (faces); middle-drag from anywhere.
+  Creature Editor: fold / float / dock / close. Sculpt engine: HC smooth that keeps volume, falloff-aware auto-smooth,
+  stabiliser + spacing + pressure, changed-range uploads, screen detail, Tube / Insert Mesh (native/sculpt/README.md).
+  Cloud-checked (see SESSION_LOG); **not verified** in WKWebView / WebView2 - ZIVA_TASKS "From Claude (2026-10-21)".
+  The owner's Maya sculpting plug-in source was not reachable from this session (not in ~/Documents, ~/Downloads or
+  GitHub); ByHand is Windows-only and was not on the Mac.
 
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat

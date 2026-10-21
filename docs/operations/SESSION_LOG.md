@@ -4,6 +4,21 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-21 - Forge: undo for everything, hotkey table, pro manipulator, Creature Editor, smoother sculpting (Claude, cloud)
+
+- Owner 00:27: history broken; hotkeys like the pro tools and customizable; Shift over the manipulator; not the
+  Blender-looking gizmo; a hideable creature panel; study ByHand and improve high-poly / smooth / brushes.
+- Undo: forge.js `state()/restore()` + forge_scene.js scene capture/restore and recorded chunks - the scene is in the
+  queue; makeWorking/setTriangles no longer empty it. History records component moves (polyTweak).
+- app/ui/forge_keys.js (hotkey table, sets, Hotkey Editor), app/ui/forge_manip.js (pro-style handles, Shift-over-
+  handle duplicate/extrude, middle-button drag), Creature Editor panel (forge.js), engine bar follows the view bar.
+- Sculpt engine (from a subagent): volume-preserving Smooth (HC), falloff-aware auto-smooth, stroke stabiliser +
+  spacing + pressure, range uploads (4.4 MB -> 0.33 MB per dab at 1M verts), screen-relative dynamic detail, Tube and
+  Insert Mesh, 8 presets (212). ByHand studied from public pages only (closed source; nothing copied).
+- Checked (cloud, headless Chromium): test_forge_undo_keys_ui 20 (new), test_forge_sculpt_engine 30, test_forge_ui 37,
+  test_forge_pro_ui 100, test_forge_edit_ui 21, test_forge_model_ui 18, test_forge_creature_ui 10, test_forge_poly 36,
+  test_ui_fit 81, test_ui_smoke 10, node test_engine.js. Not run: --self-test (PyPI blocked here, no openai module).
+
 ## 2026-10-20 - Forge gets a native sculpting engine (Claude, cloud)
 
 - `native/sculpt/`: the C++ sculpting core (brushes, dynamic detail, voxel remesh, quad remesh, subdivision levels,

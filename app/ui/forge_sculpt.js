@@ -526,7 +526,12 @@ function forgeSculptDecorate() {
     const left = Math.max(64, br && br.width ? Math.round(br.right - st.left + 6) : 64);
     row.style.top = top + "px"; row.style.left = left + "px"; row.style.maxHeight = "calc(100% - " + (top + 60) + "px)";
   };
-  if (typeof ResizeObserver === "function") new ResizeObserver(place).observe(stage);
+  if (typeof ResizeObserver === "function") {
+    const ro = new ResizeObserver(place);
+    ro.observe(stage);
+    const vb = stage.querySelector(".forge-viewbar");   // the view bar wraps onto a 2nd row on a small window: follow it
+    if (vb) ro.observe(vb);
+  }
   new MutationObserver(place).observe(bar, { attributes: true, attributeFilter: ["hidden"] });
   place();
   forgeSculptFillLibrary();
