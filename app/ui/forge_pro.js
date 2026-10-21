@@ -416,6 +416,9 @@ function forgeProCommands() {
     resetXf: ["Reset Transformations", (v) => (T(v).resetTransform() ? "Back to 0 / 0 / 1." : "")],
     channelBox: ["Channel Box", () => forgeProPanel("channel")],
     outliner: ["Outliner", () => forgeProPanel("outliner")],
+    layerEditor: ["Layer Editor", () => { const b = document.getElementById("forge-layer-editor"); if (!b) return "The Layer Editor is not built here."; b.hidden = !b.hidden; if (!b.hidden && !forgeProPanels().channel) forgeProPanel("channel", true); return b.hidden ? "Layer Editor hidden." : "Layer Editor shown (under the Channel Box)."; }],
+    layerAdd: ["Create Empty Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; const l = t.layerAdd(); return "Layer " + l.name + " created."; }],
+    layerAssign: ["Assign to Current Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; t.layerAssign(t.curLayer, t.sel); return "Assigned the selection to the current layer."; }],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -633,7 +636,7 @@ const FORGE_PRO_ROWS = [
   ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
-  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll"]],
+  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
   // the modelling menu set (the pro second row)
   ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "dynamesh", "sculptModel"]],
