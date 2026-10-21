@@ -901,3 +901,25 @@ button.forge-out-title:hover { opacity: 1; }
 .forge-hk-key:hover { border-color: #5285a6; }
 .forge-hk-key.capturing { background: #5285a6; color: #fff; border-color: #5285a6; }
 .forge-hk-foot { padding: 6px 10px; color: #9a9a9a; font-size: 11px; border-top: 1px solid #2c2c2c; }
+#forge-snaps[hidden] { display: none !important; }
+
+/* ---- the Generate panel (forge.js forgeLeft, 2026-10-21): a tool window like the Creature Editor */
+#forge .forge-side.forge-gen { gap: 8px; padding: 0 8px 0; }
+#forge .forge-gen-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 4px; height: 26px; margin: 0 -8px;
+  padding: 0 4px; background: #3a3b3f; border-bottom: 1px solid #222; flex: none; user-select: none; }
+#forge .forge-gen.floating .forge-gen-bar { cursor: move; }
+#forge .forge-gen-bar .forge-btn { height: 20px; min-width: 20px; padding: 0 4px; border-radius: 3px; background: transparent; }
+#forge .forge-gen-bar .forge-btn:hover { background: rgba(255, 255, 255, .1); }
+#forge .forge-gen-title { font-size: 12px; font-weight: 600; color: #e4e6ea; }
+#forge .forge-gen-what { flex: 1; min-width: 0; font-size: 11px; color: #9aa3b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#forge .forge-gen.folded .forge-gen-fold { transform: rotate(-90deg); }
+#forge .forge-gen.folded > :not(.forge-gen-bar) { display: none !important; }
+#forge .forge-gen.folded { flex-basis: auto !important; }
+#forge .forge-gen .forge-ways .forge-way { height: 44px; flex-direction: column; gap: 2px; padding: 4px 2px; }
+#forge .forge-gen .forge-way::after { content: attr(data-lab); font-size: 10.5px; line-height: 1; color: #c9d0da; }
+#forge .forge-gen-models > summary { list-style: none; cursor: pointer; }
+#forge .forge-gen-models > summary::-webkit-details-marker { display: none; }
+#forge .forge-gen-foot { position: sticky; bottom: 0; z-index: 2; margin: auto -8px 0; padding: 8px; background: #2f3033; border-top: 1px solid #222; }
+#forge .forge-gen.floating { position: absolute; z-index: 41; width: 320px; max-height: calc(100% - 120px); border: 1px solid #222;
+  border-radius: 4px; background: #2f3033; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+#forge .forge-side:not(.floating) .forge-cr-pane:not(.floating) .forge-cr-make { display: none; }   /* docked: the Generate panel's own Make button is the one */

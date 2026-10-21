@@ -117,7 +117,13 @@ function forgeLeft() {
     b.dataset.way = way; b.setAttribute("role", "tab");
     ways.append(b);
   }
-  side.append(ways, forgeDrawPane(), forgeImagePane(), forgeDescribePane(), forgeCreaturePane());
+  // the Generate panel (owner 2026-10-21: "improve the ui like you did with the creature ... all those ai gen tools
+  // ... organize everything better and more logical"): one tool window with a title bar (fold / float / close, like
+  // the Creature Editor), named tabs for the four ways in, the way's own input, then Output and Your models as
+  // folds, and the Make button pinned at the bottom.
+  for (const b of ways.querySelectorAll(".forge-way")) b.dataset.lab = ({ draw: "Draw", image: "Image", describe: "Describe", creature: "Creature" })[b.dataset.way];   // a label under the icon (CSS ::after)
+  side.classList.add("forge-gen");
+  side.append(forgeGenBar(side), ways, forgeDrawPane(), forgeImagePane(), forgeDescribePane(), forgeCreaturePane());
   const go = el("div", "forge-go");
   const pick = el("select", "forge-backend"); pick.id = "forge-backend";
   pick.setAttribute("aria-label", "How to make the 3D model");
@@ -139,8 +145,62 @@ function forgeLeft() {
   prog.lastChild.append(el("i"));
   const listHead = el("div", "forge-sub", "Your models");
   const list = el("div", "forge-models"); list.id = "forge-models";
-  side.append(go, out, prog, listHead, list);
+  const models = document.createElement("details"); models.className = "forge-gen-models"; models.open = !forgeGenUi().modelsShut;
+  const msum = el("summary", "forge-gen-sum"); msum.append(listHead);
+  models.append(msum, list);
+  models.addEventListener("toggle", () => forgeGenUi({ modelsShut: !models.open }));
+  go.classList.add("forge-gen-foot");
+  side.append(out, prog, models, go);
+  setTimeout(() => { if (forgeGenUi().floating) forgeGenDock("float"); if (forgeGenUi().folded) side.classList.add("folded"); }, 0);
   return side;
+}
+
+const FORGE_GEN_UI = "loki-forge-genui";
+function forgeGenUi(patch) {
+  let ui = {};
+  try { ui = JSON.parse(localStorage.getItem(FORGE_GEN_UI) || "{}") || {}; } catch (_) { ui = {}; }
+  if (patch) { Object.assign(ui, patch); try { localStorage.setItem(FORGE_GEN_UI, JSON.stringify(ui)); } catch (_) { /* private mode */ } }
+  return ui;
+}
+function forgeGenBar(side) {
+  const bar = el("div", "forge-gen-bar");
+  const fold = forgeBtn("chevron", "Fold", "Fold the Generate panel to its title bar.", () => forgeGenDock(side.classList.contains("folded") ? "unfold" : "fold"), "forge-gen-fold");
+  const title = el("span", "forge-gen-title", "Generate");
+  const what = el("span", "forge-gen-what", ""); what.id = "forge-gen-what";
+  const flo = forgeBtn("popout", "Float", "Float the Generate panel over the viewport (drag it by this bar), or dock it back.", () => forgeGenDock(side.classList.contains("floating") ? "dock" : "float"), "forge-gen-float");
+  const x = forgeBtn("close", "Close", "Close the Generate panel (Windows > Generate panel, or Create > Draw it / From an image / Describe it / Creature brings it back).", () => forgeGenDock("close"), "forge-gen-close");
+  bar.append(fold, title, what, flo, x);
+  bar.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) forgeGenDock(side.classList.contains("folded") ? "unfold" : "fold"); });
+  bar.addEventListener("pointerdown", (e) => {
+    if (!side.classList.contains("floating") || e.target.closest("button")) return;
+    const r = side.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    bar.setPointerCapture(e.pointerId);
+    const mv = (ev) => { side.style.left = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - dx)) + "px"; side.style.top = Math.max(0, Math.min(window.innerHeight - 30, ev.clientY - dy)) + "px"; };
+    const up = () => { bar.removeEventListener("pointermove", mv); bar.removeEventListener("pointerup", up); const q = side.getBoundingClientRect(); forgeGenUi({ pos: [Math.round(q.left), Math.round(q.top)] }); };
+    bar.addEventListener("pointermove", mv); bar.addEventListener("pointerup", up);
+  });
+  return bar;
+}
+function forgeGenDock(how) {                  // "fold" | "unfold" | "float" | "dock" | "close"
+  const side = document.getElementById("forge-left");
+  if (!side) return false;
+  if (how === "fold" || how === "unfold") { side.classList.toggle("folded", how === "fold"); forgeGenUi({ folded: how === "fold" }); return true; }
+  if (how === "close") { if (typeof forgeProPanel === "function") forgeProPanel("create", false); else side.hidden = true; forgeSay("Generate panel closed - Windows > Generate panel brings it back."); return true; }
+  const panel = document.querySelector("#forge .forge-panel");
+  if (how === "float" && panel) {
+    if (!side._home) side._home = { parent: side.parentElement, next: side.nextSibling };
+    panel.append(side);
+    const pos = forgeGenUi().pos || [Math.round(window.innerWidth * 0.3), 96];
+    side.style.left = Math.max(0, Math.min(window.innerWidth - 260, pos[0])) + "px";
+    side.style.top = Math.max(0, Math.min(window.innerHeight - 80, pos[1])) + "px";
+    side.classList.add("floating"); forgeGenUi({ floating: true });
+  } else if (how === "dock" && side._home) {
+    side._home.parent.insertBefore(side, side._home.next && side._home.next.parentElement === side._home.parent ? side._home.next : null);
+    side.style.left = side.style.top = "";
+    side.classList.remove("floating"); forgeGenUi({ floating: false });
+  }
+  if (forge.view) forge.view.resize();
+  return true;
 }
 
 // ------------------------------------------------------------------------------------------ Output (modular)
@@ -660,6 +720,8 @@ function forgeQuad(on) {
 
 function forgeWay(way) {
   forge.way = way;
+  const gw = document.getElementById("forge-gen-what");
+  if (gw) gw.textContent = ({ draw: "Draw it", image: "From an image", describe: "Describe it", creature: "Creature" })[way] || "";
   for (const b of document.querySelectorAll("#forge .forge-way")) {
     b.classList.toggle("on", b.dataset.way === way); b.setAttribute("aria-selected", String(b.dataset.way === way));
   }

@@ -692,8 +692,15 @@ function forgeEditAttach(view, ctx) {
   const setMode = view.setMode;
   view.setMode = (m) => {
     if (modal) modalEnd(false);
+    const was = view.mode;
+    // one tool, two manipulators (the pro rule): the object manipulator never stays up in component mode - that
+    // was why Shift over a face's handle duplicated the OBJECT instead of extruding the face - and the tool you had
+    // carries across (move in object mode = move on the components, and back)
+    const ot = view.transform;
+    if (m === "poly" && was !== "poly" && ot && ot.object) { if (!ed.tool) ed.tool = ot.mode; ot.detach(); }
     setMode(m);
     if (m !== "poly") { if (gizmo.object) gizmo.detach(); if (ed.xray) { ed.xray = false; xrayLook(); } }
+    if (m !== "poly" && was === "poly" && ed.tool && view.tree && view.tree.api && view.tree.api.active()) view.tree.api.attachTool(ed.tool);
     drawOverlay(); placePivot(); stats();
   };
   const onChange = () => { ed.topoOf = null; if (!edit) drawOverlay(); };

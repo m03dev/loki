@@ -74,13 +74,44 @@ async function forgeProSculpt(v) {
   return "";
 }
 
+// f / a, the pro way (owner 2026-10-21: "when you have a vert selected and you press f you should zoom to that vert, a
+// is everything in the scene, f is whatever is selected ... works on edge as well"):
+//   a  every object in the scene (components or not)
+//   f  in component mode the selected vertices / edges / faces (one vertex frames it and its edges); otherwise the
+//      selected objects; with nothing selected, everything
+// Framing moves the camera only - the brush / soft-selection scale (view.size) stays the model's.
 function forgeProFrame(v, all) {
   const t = forgeProTree(v);
-  if (forgeProComp(v) || !t) { v.frame(); return ""; }
-  const ids = all || !t.selected().length ? t.allIds() : t.selected();
+  const keep = v.size;
   if (v.rememberView) v.rememberView();
+  if (!all && forgeProComp(v) && v.poly && v.selectedVerts) {
+    const ids = v.selectedVerts().filter((i) => v.poly.v[i]);
+    if (ids.length) {
+      const THREE = v.THREE, box = new THREE.Box3(), p = new THREE.Vector3();
+      v.holder.updateMatrixWorld(true);
+      for (const i of ids) box.expandByPoint(p.fromArray(v.poly.v[i]).applyMatrix4(v.holder.matrixWorld));
+      // pad by the length of the edges around the selection, so one vertex (or a tiny edge) is not a dot on screen
+      let edge = 0, n = 0;
+      const sel = new Set(ids);
+      for (const f of v.poly.f) for (let k = 0; k < f.length; k++) {
+        const a = f[k], b = f[(k + 1) % f.length];
+        if (!sel.has(a) && !sel.has(b)) continue;
+        const pa = v.poly.v[a], pb = v.poly.v[b];
+        edge += Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]); n++;
+      }
+      const s = v.holder.matrixWorld.getMaxScaleOnAxis ? v.holder.matrixWorld.getMaxScaleOnAxis() : 1;
+      const pad = (n ? edge / n : 0.1) * s * 0.75;
+      box.expandByScalar(pad);
+      v.frameBox(box);
+      v.size = keep;
+      return ids.length === 1 ? "Framed the vertex." : "Framed " + ids.length + " vertices.";
+    }
+  }
+  if (!t) { v.frame(); return ""; }
+  const ids = all || !t.selected().length ? t.allIds() : t.selected();
   v.frameBox(t.worldBox(ids));
-  return "";
+  v.size = keep || v.size;
+  return all ? "Framed everything." : "";
 }
 
 function forgeProView(v, name) {
@@ -92,6 +123,7 @@ function forgeProView(v, name) {
 
 function forgeProLook(v, what, on) {
   v.setLook(what, !!on);
+  if (what === "wire" && typeof fmyWireOnly === "function") return fmyWireOnly(v, !!on && v.mode !== "sculpt");   // 4: edges only
   return what === "wire" ? (on ? "Wireframe (4)." : "Shaded (5).") : "";
 }
 
@@ -440,7 +472,7 @@ function forgeProCommands() {
     softSel: ["Soft Selection", (v) => { if (!comp(v)) return "Soft selection works on components (F9 / F10 / F11)."; v.setProportional(!v.edit.prop); return v.edit.prop ? "Soft selection on (b)." : "Soft selection off."; }],
     winOutliner: ["Outliner", () => forgeProPanel("outliner")],
     winChannel: ["Channel Box", () => forgeProPanel("channel")],
-    winCreate: ["Create panel", () => forgeProPanel("create")],
+    winCreate: ["Generate panel", () => forgeProPanel("create")],
     winMaterials: ["Materials", () => forgeProPanel("materials")],
     winShelf: ["Shelf", () => forgeProPanel("shelf")],
     winToolkit: ["Modeling Toolkit", () => forgeProPanel("toolkit")],
@@ -657,12 +689,27 @@ function forgeProHotboxHost() {
     const list = proEl("div", "forge-pro-list");
     list.hidden = true;
     for (const id of ids) { const b = forgeProItem(id, host); if (b) list.append(b); }
+    // calm menus (owner 2026-10-21: holding Space the menus "glitch ... jittering"): a menu opens when the mouse
+    // RESTS on its name (a short hover intent) or at once on a press - sweeping across the row no longer flips every
+    // menu open and shut - and nothing is rewritten when it is already that way.
     const open = () => {
-      for (const l of host.querySelectorAll(".forge-pro-list")) l.hidden = l !== list;
-      for (const x of host.querySelectorAll(".forge-pro-head")) x.classList.toggle("open", x === h);
+      clearTimeout(host._intent);
+      for (const l of host.querySelectorAll(".forge-pro-list")) { const hide = l !== list; if (l.hidden !== hide) l.hidden = hide; }
+      for (const x of host.querySelectorAll(".forge-pro-head")) { const on = x === h; if (x.classList.contains("open") !== on) x.classList.toggle("open", on); }
     };
-    h.addEventListener("pointerenter", open);
+    h.addEventListener("pointerenter", () => {
+      clearTimeout(host._intent);
+      if (!list.hidden) return;
+      host._intent = setTimeout(open, host.querySelector(".forge-pro-list:not([hidden])") ? 160 : 90);
+    });
+    h.addEventListener("pointerleave", () => clearTimeout(host._intent));
     h.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); open(); });
+    // press on a menu name, drag to an item, let go: that item runs (the pro hotbox's press-drag-release)
+    list.addEventListener("pointerup", (ev) => {
+      const it = ev.target.closest && ev.target.closest(".forge-pro-item");
+      if (it && ev.button === 0 && host._dragFrom === h) { host._dragFrom = null; it.click(); }
+    });
+    h.addEventListener("pointerdown", () => { host._dragFrom = h; });
     col.append(h, list);
     rows[i < FORGE_PRO_ROW_SPLIT ? 0 : 1].append(col);
   });
@@ -857,7 +904,7 @@ function forgeProHotboxOpen(v, at) {
 
 function forgeProHotboxHide() {
   const host = document.getElementById("forge-pro-hotbox");
-  if (host) { host.hidden = true; delete host.dataset.pinned; }
+  if (host) { clearTimeout(host._intent); host._dragFrom = null; host.hidden = true; delete host.dataset.pinned; }
 }
 
 // a Space tap: one view <-> four views; a tap over a pane of the four maximises that pane
@@ -1198,6 +1245,10 @@ function forgeProAttach(view, ctx) {
     b.addEventListener("click", () => proSay(forgeProSnapToggle(view, k)));
     hud.append(b);
   }
+  // the viewport's Grid / Edge / Point chips are not part of the pro viewport (owner 2026-10-21: "get rid of the ...
+  // grid edge point buttons on the top right"): kept, hidden; snapping lives on the status line, the hotbox's Snap
+  // menu and the x / c / v holds
+  hud.hidden = true;
   canvas.parentElement.append(hud);
 
   // ------------------------------------------------ sculpt: hold b and drag = brush size, m and drag = strength

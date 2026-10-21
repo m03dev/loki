@@ -605,6 +605,7 @@ async function forgeProCommandLine(line) {
 // ================================================================== the viewport: panel menus, HUD, view cube, grid, lighting
 function forgeProViewportAttach(view, ctx) {
   if (Array.isArray(view.frameHooks)) view.frameHooks.push(() => { if (view.smoothLevel > 1 || view.smoothPrev) fmySmoothRefresh(view, false); });
+  if (Array.isArray(view.frameHooks)) view.frameHooks.push(() => { if (view.wireOnly || view._wireWas) { fmyWireSync(view, false); view._wireWas = !!view.wireOnly; } });
   const { THREE, scene, camera, controls, canvas, lights } = ctx;
   const stage = canvas && canvas.parentElement;
   if (!stage || stage.querySelector("#fmy-panelbar")) return;
@@ -818,6 +819,53 @@ function fmyWireOnShaded() {
   v.dirty = true;
   fmySync();
   return v.wireOnShaded ? "Wireframe on Shaded." : "Shaded.";
+}
+
+// Display 4 = wireframe ONLY, the pro way (owner 2026-10-21: "4 is wireframe"): every object's shaded surface hides
+// and its polygon edges draw instead (dark navy; the selection keeps its colour); 5 brings the shading back. The
+// edges follow edits (rebuilt when a geometry changes) and the hidden surfaces still pick. A very dense mesh
+// (> 150k triangles) shows its triangles instead of a polygon-edge overlay.
+const FMY_WIRE_COLOR = 0x0e1a2e;
+function fmyWireOnly(v, on) {
+  if (!v) return "";
+  v.wireOnly = !!on;
+  fmyWireSync(v, true);
+  return on ? "Wireframe (4)." : "Shaded (5).";
+}
+function fmyWireTargets(v) {
+  const out = [];
+  if (!v || !v.holder) return out;
+  let scene = v.holder; while (scene.parent) scene = scene.parent;
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.material) return;
+    if (o.name === "forge" || o.name === "shape" || o.name === "forge-smooth") out.push(o);
+  });
+  return out;
+}
+function fmyWireSync(v, force) {
+  const want = !!v.wireOnly;
+  for (const m of fmyWireTargets(v)) {
+    const ud = m.userData;
+    const g = m.geometry, ver = (g.attributes.position ? g.attributes.position.version : 0) + ":" + g.uuid;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    if (!want) {
+      if (ud.fmyWire) { m.remove(ud.fmyWire); ud.fmyWire.geometry.dispose(); ud.fmyWire.material.dispose(); ud.fmyWire = null; }
+      if (ud.fmyHid) { for (const mt of mats) { mt.colorWrite = true; mt.depthWrite = true; mt.wireframe = false; } ud.fmyHid = false; }
+      continue;
+    }
+    // the surface keeps writing depth (so the far side's edges stay hidden, like the pro default) but draws no colour
+    if (!ud.fmyHid || force) { for (const mt of mats) { mt.colorWrite = false; } ud.fmyHid = true; }
+    if (m.visible === false) continue;
+    if (!ud.fmyWire || ud.fmyWireVer !== ver || force) {
+      if (ud.fmyWire) { m.remove(ud.fmyWire); ud.fmyWire.geometry.dispose(); ud.fmyWire.material.dispose(); }
+      const tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
+      const eg = tris > 150000 ? new v.THREE.WireframeGeometry(g) : new v.THREE.EdgesGeometry(g, 1);
+      const l = new v.THREE.LineSegments(eg, new v.THREE.LineBasicMaterial({ color: FMY_WIRE_COLOR }));
+      l.name = "fmy-wire"; l.raycast = () => {}; l.renderOrder = 1;
+      m.add(l); ud.fmyWire = l; ud.fmyWireVer = ver;
+    }
+  }
+  v.dirty = true;
 }
 
 // the heads-up poly count: all visible objects | the selected objects | the selected components (the pro 3 columns)

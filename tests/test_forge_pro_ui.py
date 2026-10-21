@@ -468,6 +468,7 @@ async def main():
         await page.evaluate("forgeProHotboxOpen(forge.view, [%d, %d])" % (cx, cy))
         await page.wait_for_timeout(100)
         await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-head')
+        await page.wait_for_timeout(220)                 # menus open when the mouse rests on them (hover intent, 2026-10-21)
         drop = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-list')].filter((l) => !l.hidden).map((l) => l.parentElement.dataset.menu)""")
         ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item.on')].map((b) => b.dataset.proId)""")
         await page.click('#forge-pro-hotbox .forge-pro-item[data-pro-id="winCreate"]')
@@ -479,7 +480,7 @@ async def main():
         await page.keyboard.down(" ")
         await page.wait_for_timeout(120)
         await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Recent Commands"] .forge-pro-head')
-        await page.wait_for_timeout(100)
+        await page.wait_for_timeout(250)
         rec = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Recent Commands"] .forge-pro-item[data-pro-id]')].map((b) => b.dataset.proId)""")
         await page.keyboard.up(" ")
         await page.keyboard.press("Escape")
@@ -515,11 +516,15 @@ async def main():
               and abs(sn["gx"][1] - 0.37) < 1e-6 and abs(sn["gx"][2] + 0.13) < 1e-6, sn["gx"])
         check("hold v: the pivot lands exactly on the vertex under the mouse (another object's corner)", sn["pd"] < 1e-4, sn)
         check("hold c: it lands on an edge of the face under the mouse", sn["onEdge"], sn)
+        # the viewport's Grid / Edge / Point chips are hidden (owner 2026-10-21: not in the pro viewport); the status
+        # line's snap buttons switch a snap on and off
         chips = await page.evaluate("[...document.querySelectorAll('#forge-snaps .forge-snap')].map((b) => b.dataset.snap)")
-        await page.click('#forge-snaps [data-snap="grid"]')
-        sticky = await page.evaluate("forge.view.pro.snap.grid && document.querySelector('#forge-snaps [data-snap=\"grid\"]').classList.contains('on')")
-        await page.click('#forge-snaps [data-snap="grid"]')
-        check("the Grid / Edge / Point chips (the pro status line) switch a snap on and off", chips == ["grid", "edge", "point"] and sticky, [chips, sticky])
+        chips_hidden = await page.evaluate("!document.getElementById('forge-snaps').offsetParent")
+        await page.click('#fmy-status [data-pro-id="snapGrid"]')
+        sticky = await page.evaluate("forge.view.pro.snap.grid && document.querySelector('#fmy-status [data-pro-id=\"snapGrid\"]').classList.contains('on')")
+        await page.click('#fmy-status [data-pro-id="snapGrid"]')
+        check("the snap buttons on the status line switch a snap on and off (the viewport chips are hidden)",
+              chips == ["grid", "edge", "point"] and chips_hidden and sticky, [chips, chips_hidden, sticky])
         comp = await page.evaluate("""() => { const v = forge.view, V = v.THREE, p = new V.Object3D(); v.holder.add(p);
           p.position.set(0.33, 0.12, 0.07); v.pro.held.add('x'); v.snapPivot(p); v.pro.held.delete('x');
           const w = p.getWorldPosition(new V.Vector3()).toArray(); v.holder.remove(p); return [w, v.pro.gridStep]; }""")
