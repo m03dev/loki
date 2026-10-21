@@ -159,6 +159,8 @@ async def main():
             await page.wait_for_function("window.ForgeSculpt && (window.ForgeSculpt.ok || window.ForgeSculpt.failed)", timeout=15000)
         except Exception:  # noqa: BLE001
             pass
+        # the full engine settings are under the sculpt header's More (forge_sculpt_ui.js, 2026-10-21)
+        await page.evaluate("document.getElementById('forge').classList.add('fsc-more')")
         st = await page.evaluate("({ ok: ForgeSculpt.ok, failed: ForgeSculpt.failed, panel: !!document.getElementById('forge-sculpt-engine'), visible: !document.getElementById('forge-sculpt-engine').hidden })")
         check("the sculpting engine loads in its worker and the Sculpting panel shows in Sculpt mode", st["ok"] and st["panel"] and st["visible"], st)
         if not st["ok"]:

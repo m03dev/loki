@@ -33,6 +33,13 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 14:40) - sculpt mode redone; you could not leave sculpt mode. Pull first.
+docs/FORGE_SCULPT_UI.md has it all (app/ui/forge_sculpt_ui.js): header (Done), Size / Strength sliders + sticky Invert /
+Smooth, the sliding brush strip (categories, search, favourites, 1-9), the right-button brush wheel, q / F8 / Esc / Done
+/ Exit Sculpt / Menu Set all leave sculpt mode. The old brush column and the big engine panel are hidden (More shows the
+engine panel). test_forge_sculpt_ui 25; test_forge_sculpt_engine / test_forge_dock_ui now open More first.
+- [ ] [mac] Real window: sculpt a sphere, the wheel on the right button, slide the strip, Done. Screenshot it.
+
 ### From Claude (2026-10-21 13:40) - owner's bug batch: Multi-Cut, soft/hard + normals, Animation workspace, clean screen. Pull first.
 Owner 12:46 (after using Forge on the Mac): knife preview + Maya modifiers in Multi-Cut, lingering wires, soften / harden +
 show normals, the floating key bar "hide it in a bar", animation stuff into an Animation workspace, no button top right.

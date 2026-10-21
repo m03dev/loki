@@ -1284,3 +1284,82 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .forge-mc-tag { position: fixed; z-index: 90; pointer-events: none; padding: 2px 7px; border-radius: 4px; font: 11px/1.4 var(--sans, sans-serif);
   color: #111; background: rgba(255, 214, 120, .95); box-shadow: 0 2px 8px rgba(0,0,0,.4); white-space: nowrap; }
 .forge-mc-tag[hidden] { display: none; }
+/* ============================================================ sculpt mode, redone (forge_sculpt_ui.js, owner 13:59)
+   one neutral dark glass, one accent, line icons, nothing on screen that is not used while sculpting */
+#forge:not(.fsc-on) .fsc-head, #forge:not(.fsc-on) .fsc-side, #forge:not(.fsc-on) .fsc-strip { display: none !important; }
+#forge.fsc-on #forge-sculpt { display: none !important; }                       /* the old brush column */
+#forge.fsc-on:not(.fsc-more) #forge-sculpt-engine { display: none !important; } /* the full settings: More */
+#forge.fsc-on.fsc-more #forge-sculpt-engine { left: auto !important; right: 12px !important; top: 58px !important; max-height: calc(100% - 190px) !important; z-index: 30; }
+#forge.fsc-on #fmy-hud { display: none !important; }   /* the poly count sat under the header; the header shows what matters while sculpting */
+.fsc-head, .fsc-side, .fsc-strip { position: absolute; z-index: 26; color: #e8ebef; font: 12px/1.3 var(--sans, system-ui, sans-serif);
+  background: rgba(28, 30, 34, .82); border: 1px solid rgba(255, 255, 255, .08); box-shadow: 0 8px 26px rgba(0, 0, 0, .35); backdrop-filter: blur(10px); }
+.fsc-head { top: 54px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; border-radius: 999px;
+  max-width: calc(100% - 24px); white-space: nowrap; }
+.fsc-name { font-weight: 600; letter-spacing: .01em; min-width: 6.5em; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
+.fsc-sep { width: 1px; height: 18px; margin: 0 6px; background: rgba(255, 255, 255, .12); }
+.fsc-group { display: inline-flex; align-items: center; gap: 1px; }
+.fsc-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 999px;
+  background: transparent; color: inherit; cursor: pointer; opacity: .82; }
+.fsc-btn:hover { background: rgba(255, 255, 255, .09); opacity: 1; }
+.fsc-btn.on { background: #5b8db8; color: #0e1114; opacity: 1; }
+.fsc-txt { font-weight: 600; font-size: 11px; min-width: 24px; }
+.fsc-level { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; opacity: .9; }
+.fsc-cap { width: 24px; min-width: 24px; height: 24px; margin: 0 2px; border-radius: 50%; background: #8d8f94 center / cover no-repeat; border: 1px solid rgba(255,255,255,.25); }
+.fsc-done { display: inline-flex; align-items: center; gap: 5px; height: 28px; margin-left: 6px; padding: 0 12px 0 9px; border: 0; border-radius: 999px;
+  background: #e8ebef; color: #121418; font-weight: 600; cursor: pointer; }
+.fsc-done:hover { background: #fff; }
+/* the sliders on the left edge */
+.fsc-side { left: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; padding: 12px 8px; border-radius: 18px; }
+.fsc-slider { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: ns-resize; user-select: none; }
+.fsc-track { position: relative; width: 8px; height: clamp(90px, 18vh, 170px); border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.fsc-fill { position: absolute; left: 0; right: 0; bottom: 0; background: #5b8db8; border-radius: 999px; }
+.fsc-slider:hover .fsc-track, .fsc-slider.drag .fsc-track { width: 12px; }
+.fsc-slabel { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; opacity: .6; }
+.fsc-sval { font-size: 11px; font-variant-numeric: tabular-nums; }
+/* the brush strip */
+.fsc-strip { left: 50%; bottom: 12px; transform: translateX(-50%); width: min(920px, calc(100% - 120px)); padding: 6px 6px 4px; border-radius: 16px; }
+.fsc-striptop { display: flex; align-items: center; gap: 6px; padding: 0 6px 4px; }
+.fsc-chips { flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.fsc-chips::-webkit-scrollbar { display: none; }
+.fsc-chip { flex: none; height: 22px; padding: 0 9px; border: 0; border-radius: 999px; background: transparent; color: #c9ced6; font-size: 11px; cursor: pointer; }
+.fsc-chip:hover { background: rgba(255, 255, 255, .08); }
+.fsc-chip.on { background: rgba(255, 255, 255, .16); color: #fff; }
+.fsc-search { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); opacity: .85; }
+.fsc-search input { width: 9em; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 11px; }
+.fsc-rowwrap { display: flex; align-items: center; gap: 2px; }
+.fsc-arrow { flex: none; height: 54px; min-width: 22px; border-radius: 10px; }
+.fsc-list { flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; cursor: grab; }
+.fsc-list::-webkit-scrollbar { display: none; }
+.fsc-tile { position: relative; flex: 0 0 64px; height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 2px; border: 0; border-radius: 12px; background: transparent; color: #dfe3e8; cursor: pointer; scroll-snap-align: start; }
+.fsc-tile:hover { background: rgba(255, 255, 255, .07); }
+.fsc-tile.on { background: rgba(91, 141, 184, .28); color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 175, 220, .7); }
+.fsc-tname { max-width: 60px; font-size: 10px; line-height: 1.15; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsc-key { position: absolute; top: 3px; left: 6px; font-size: 9px; opacity: .45; }
+.fsc-tile.fav::after { content: ""; position: absolute; top: 5px; right: 7px; width: 5px; height: 5px; border-radius: 50%; background: #e7c46a; }
+.fsc-empty { padding: 16px 10px; opacity: .6; font-size: 11px; }
+/* the wheel on the right button */
+.fsc-wheel { position: fixed; z-index: 95; width: 0; height: 0; pointer-events: none; font: 11px/1.2 var(--sans, system-ui, sans-serif); color: #e8ebef; }
+.fsc-wheel::before { content: ""; position: absolute; left: -128px; top: -128px; width: 256px; height: 256px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 22, 26, .25) 0 30%, rgba(20, 22, 26, .55) 31% 70%, transparent 71%); pointer-events: none; }
+.fsc-hub { position: absolute; transform: translate(-50%, -50%); padding: 4px 10px; border-radius: 999px; background: rgba(28, 30, 34, .9); white-space: nowrap; font-weight: 600; }
+.fsc-wtile { position: absolute; transform: translate(-50%, -50%); width: 62px; height: 54px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 3px; border: 0; border-radius: 12px; background: rgba(28, 30, 34, .92); color: inherit; pointer-events: auto; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.fsc-wtile.on { box-shadow: inset 0 0 0 1px rgba(120, 175, 220, .8), 0 4px 14px rgba(0,0,0,.35); }
+.fsc-wtile.hot, .fsc-wtile:hover { background: #5b8db8; color: #0e1114; }
+.fsc-wacts { position: absolute; left: 0; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, auto); gap: 3px; padding: 5px;
+  border-radius: 14px; background: rgba(28, 30, 34, .92); pointer-events: auto; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.fsc-wact { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 0; border-radius: 9px; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.fsc-wact:hover, .fsc-wact.hot { background: rgba(255, 255, 255, .12); }
+.fsc-wact[data-act="Exit Sculpt"] { background: rgba(255, 255, 255, .9); color: #121418; font-weight: 600; }
+/* a short or narrow view: the strip and header stay inside it */
+@media (max-height: 640px) { .fsc-track { height: 80px; } .fsc-tile { flex-basis: 56px; height: 50px; } }
+.fsc-chip-mode { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; padding: 2px 9px 2px 7px; border-radius: 999px;
+  background: rgba(91, 141, 184, .25); color: #cfe3f5; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.fsc-chip-mode i { width: 7px; height: 7px; border-radius: 50%; background: #6fb2ec; box-shadow: 0 0 6px #6fb2ec; }
+.fsc-redo svg { transform: scaleX(-1); }
+#forge.fsc-on #forge-stage::after { content: ""; position: absolute; inset: 0; border: 2px solid rgba(111, 178, 236, .45); pointer-events: none; z-index: 25; }
+.fsc-sticky { width: 34px; height: 34px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.fsc-head.fsc-narrow { flex-wrap: wrap; justify-content: center; border-radius: 16px; row-gap: 2px; }
+.fsc-head.fsc-narrow .fsc-name, .fsc-head.fsc-narrow .fsc-chip-mode { display: none; }

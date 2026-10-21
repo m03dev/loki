@@ -190,6 +190,9 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   Editor; Modeling is clean), Preferences in Windows > Settings/Preferences (no cog), marking-menu list above the ring near
   the bottom (fixed test_forge_pro_ui's 3 failures). Cloud only: test_forge_mcut_ui 22, test_forge_pro_ui 100.
 
+- **2026-10-21 14:40 (Claude): sculpt mode redone** (docs/FORGE_SCULPT_UI.md, forge_sculpt_ui.js): header with Done,
+  sliders, brush strip, right-button brush wheel, every way out of sculpt mode. Cloud only (test_forge_sculpt_ui 25).
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

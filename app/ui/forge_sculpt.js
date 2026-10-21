@@ -216,7 +216,10 @@ const ForgeSculpt = {
     const at = this.hover && this.hover.point;
     this.worker.postMessage({ t: "brush", preset, strength: view.brush.strength, symmetry: view.brush.symBits | 0,
       radial: view.brush.radial | 0, radialAxis: view.brush.radialAxis | 0, dyn: this.dynFor(view, at) });
-    const mods = e.shiftKey && (e.ctrlKey || e.metaKey) ? 3 : e.shiftKey ? 2 : (e.ctrlKey || e.metaKey) ? 1 : 0;
+    // the sticky Invert / Smooth toggles of the sculpt UI (forge_sculpt_ui.js) act as if Ctrl / Shift were held
+    const st = (window.forgeSculptUI && forgeSculptUI.sticky) || {};
+    const sh = e.shiftKey || !!st.smooth, ct = e.ctrlKey || e.metaKey || !!st.invert;
+    const mods = sh && ct ? 3 : sh ? 2 : ct ? 1 : 0;
     const pressure = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 1;
     // Tube (curve) and Insert Mesh presets add geometry instead of sculpting (Shift / Ctrl still sculpt)
     this.mode = mods === 0 && (preset.mode === "curve" || preset.mode === "insert") ? preset.mode : "";
