@@ -364,6 +364,7 @@ function forgeProSym(v, bits) {
   v.brush.symBits = bits | 0;
   if (bits) v.brush.symLast = v.brush.symBits;
   v.brush.symmetry = !!v.brush.symBits;
+  v.brush.symModel = !!v.brush.symBits;   // turning symmetry on enables the modelling mirror too (its own command turns it off)
   const names = ["X", "Y", "Z"].filter((_, i) => v.brush.symBits & (1 << i));
   return "Symmetry: " + (names.length ? "Object " + names.join("") : "Off") + ".";
 }
@@ -433,6 +434,7 @@ function forgeProCommands() {
     symY: ["Symmetry Y", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 2)],
     symZ: ["Symmetry Z", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 4)],
     symOff: ["Symmetry Off", (v) => forgeProSym(v, 0)],
+    symModel: ["Modelling Symmetry", (v) => { if (!v || !v.brush) return ""; v.brush.symModel = !v.brush.symModel; return "Modelling symmetry " + (v.brush.symModel ? "on" : "off") + "."; }],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -659,7 +661,7 @@ const FORGE_PRO_ROWS = [
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
-  ["Symmetry", ["symX", "symY", "symZ", "symOff"]],
+  ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

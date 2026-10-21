@@ -316,7 +316,7 @@ function forgeProChrome() {
   const snaps = fmyEl("span", "fmy-snaps");
   snaps.append(fmyToolBtn("snapgrid", "snapGrid", "Snap to grid", null, "fmy-snap"), fmyToolBtn("snapedge", "snapEdge", "Snap to curves / edges", null, "fmy-snap"),
     fmyToolBtn("snappoint", "snapPoint", "Snap to points / vertices", null, "fmy-snap"));
-  const setSym = (bits) => { const v = fmyView(); if (!v) return; v.brush.symBits = bits | 0; if (bits) v.brush.symLast = v.brush.symBits; v.brush.symmetry = !!v.brush.symBits;
+  const setSym = (bits) => { const v = fmyView(); if (!v) return; v.brush.symBits = bits | 0; if (bits) v.brush.symLast = v.brush.symBits; v.brush.symmetry = !!v.brush.symBits; v.brush.symModel = !!v.brush.symBits;
     if (typeof forgeSay === "function") forgeSay("Symmetry: " + fmySymText(v.brush.symBits) + "."); };
   const symm = fmyToolBtn("symmetry", "", "Symmetry: mirror strokes and edits across the object's planes (right-click to choose X / Y / Z)", () => {
     const v = fmyView(); if (!v) return;

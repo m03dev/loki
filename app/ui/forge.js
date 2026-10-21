@@ -1288,7 +1288,7 @@ function forgeMakeView(lib, renderer, canvas) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: 0xbfd4ff, transparent: true,
     opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
   ring.renderOrder = 10; ring.visible = false; scene.add(ring);
-  const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true, symBits: 1 },   // symBits: 1 X, 2 Y, 4 Z (the core bitmask)
+  const view = { THREE, sm: null, mode: "view", brush: { tool: "draw", radius: 0.12, strength: 0.5, symmetry: true, symBits: 1, symModel: false },   // symBits: 1 X, 2 Y, 4 Z (the core bitmask); symModel: modelling symmetry (off until asked, like the pro package)
     undoStack: [], redoStack: [], light: 0, running: false, dirty: true, size: 1, quad: false, controls, lib };
   const raycaster = new THREE.Raycaster();
 

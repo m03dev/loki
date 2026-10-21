@@ -156,8 +156,8 @@ async def main():
           return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
-        check("Space opens the hotbox centred on the mouse (Recent + 11 menus, 80+ commands), rows within 30 px of it",
-              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 12 and hb["items"] >= 80
+        check("Space opens the hotbox centred on the mouse (Recent + 12 menus, 80+ commands), rows within 30 px of it",
+              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 13 and hb["items"] >= 80
               and 0 <= hb["gapUp"] <= 30 and 0 <= hb["gapDown"] <= 30, hb)
         check("hovering a menu drops it right at its name, with the hotkeys on the right", bool(drop) and drop["n"] >= 9
               and abs(drop["dy"]) <= 4 and drop["keys"] >= 4, drop)
@@ -169,7 +169,7 @@ async def main():
         wh = await page.evaluate("""() => { const h = document.getElementById('forge-pro-wheel');
           return h ? { vis: !h.hidden, n: h.querySelectorAll('.forge-wheel-wedge').length } : null; }""")
         await page.keyboard.press("Escape")
-        check("the wheel is still there: Windows > Radial Menus (Recent + 11)", bool(wh) and wh["vis"] and wh["n"] == 12, wh)
+        check("the wheel is still there: Windows > Radial Menus (Recent + 12)", bool(wh) and wh["vis"] and wh["n"] == 13, wh)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(300)
         await page.keyboard.up(" ")
@@ -676,12 +676,13 @@ async def main():
         await page.evaluate("forgeModelMode(false)")
         check("the command line: polySphere; move 0 2 0 makes a sphere at y = 2, and says so", cl[0].startswith("pSphere") and abs(cl[1] - 2) < 1e-6 and "Result" in cl[2], cl)
         check("...select -cl clears the selection, and an unknown word is an error like the standard one", cl2[0] == 0 and "Cannot find procedure" in cl2[1], cl2)
-        # the Channel Box: the pro ten rows, a scrub on a channel's name, SHAPES and INPUTS (the history)
+        # the Channel Box: the pro channels (now including Rotate Order, patch 368), a scrub on a channel's name, SHAPES and INPUTS (the history)
         cb = await page.evaluate("""() => { const t = forge.view.tree.api; t.select(t.list().find((n) => n.name.startsWith('pCube')).id);
           return { rows: [...document.querySelectorAll('#forge-channel .forge-ch-row .forge-ch-label')].map((l) => l.textContent),
                    shape: document.querySelector('#forge-channel .forge-ch-node').textContent, name: document.getElementById('forge-ch-name').textContent }; }""")
-        check("the Channel Box lists Translate X ... Scale Z and Visibility, the object's name, and its shape under SHAPES",
-              cb["rows"][:3] == ["Translate X", "Translate Y", "Translate Z"] and cb["rows"][-1] == "Visibility" and len(cb["rows"]) == 10
+        check("the Channel Box lists Translate X ... Scale Z, Rotate Order and Visibility, the object's name, and its shape under SHAPES",
+              cb["rows"] == ["Translate X", "Translate Y", "Translate Z", "Rotate X", "Rotate Y", "Rotate Z",
+                             "Scale X", "Scale Y", "Scale Z", "Rotate Order", "Visibility"]
               and cb["shape"] == cb["name"] + "Shape", cb)
         lbl = await (await page.query_selector('#forge-channel .forge-ch-row .forge-ch-label')).bounding_box()
         tx0 = await page.evaluate(T + ".transform().translate[0]")

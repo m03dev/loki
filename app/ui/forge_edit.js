@@ -486,14 +486,63 @@ function forgeEditAttach(view, ctx) {
     const radius = ed.prop ? ed.propRadius * (view.size || 1) : 0;
     edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: P.weights(view.poly, verts, radius, ed.falloff),
       pivot: P.median(view.poly, verts), start: pivot.matrix.clone(), keep: ed.sel };
+    edit.sym = planSymmetry();
     return true;
   }
   function reweigh() {
     if (!edit) return;
     edit.weights = P.weights(edit.base, edit.verts, ed.prop ? ed.propRadius * (view.size || 1) : 0, ed.falloff);
+    edit.sym = planSymmetry();
   }
+
+  // ---- modelling symmetry: mirror the weighted vertices onto their mirror images and move them with the mirror
+  // of the same matrix (M' = S M S), so the two halves move as one. Every non-empty subset of the active axes gets
+  // its own mirrored weight map - the same rule the sculpt core uses (view.brush.symBits: 1 X, 2 Y, 4 Z).
+  function mirrorMatrix(M, S) {          // S is the diagonal of +-1; M is a column-major 4x4 array
+    const out = M.slice();
+    for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) out[c * 4 + r] = S[r] * M[c * 4 + r] * S[c];
+    for (let r = 0; r < 3; r++) out[12 + r] = S[r] * M[12 + r];
+    return out;
+  }
+  function planSymmetry() {
+    const bits = (view.brush && view.brush.symBits) | 0;
+    if (!bits || !view.brush.symModel || !edit || !edit.base) return null;   // modelling symmetry is opt-in
+    const V = edit.base.v, sel = [...edit.weights.keys()].sort((a, b) => a - b);
+    if (!sel.length) return null;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const p of V) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], p[d]); hi[d] = Math.max(hi[d], p[d]); }
+    const eps = Math.max(1e-6, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1e-4), cell = eps * 2;
+    const gkey = (a, b, c) => a + "/" + b + "/" + c;
+    const grid = new Map();
+    V.forEach((p, i) => { const k = gkey(Math.floor(p[0] / cell), Math.floor(p[1] / cell), Math.floor(p[2] / cell)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); });
+    const find = (q) => {
+      const a = Math.floor(q[0] / cell), b = Math.floor(q[1] / cell), c = Math.floor(q[2] / cell);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++)
+        for (const j of grid.get(gkey(a + dx, b + dy, c + dz)) || []) {
+          const r = V[j];
+          if (Math.abs(r[0] - q[0]) <= eps && Math.abs(r[1] - q[1]) <= eps && Math.abs(r[2] - q[2]) <= eps) return j;
+        }
+      return -1;
+    };
+    const out = [];
+    for (let m = 1; m < 8; m++) {
+      if ((m & ~bits) !== 0) continue;
+      const S = [(m & 1) ? -1 : 1, (m & 2) ? -1 : 1, (m & 4) ? -1 : 1], map = new Map(), done = new Set();
+      for (const i of sel) {                  // ascending, so a mirrored pair splits once: the lower keeps M, the higher takes M'
+        if (done.has(i)) continue;
+        const p = V[i], j = find([p[0] * S[0], p[1] * S[1], p[2] * S[2]]);
+        if (j < 0 || j === i) continue;
+        map.set(j, Math.max(map.get(j) || 0, edit.weights.get(i)));
+        done.add(j);
+      }
+      if (map.size) out.push({ map, S });
+    }
+    return out.length ? out : null;
+  }
+
   function applyM(M) {
     P.applyMatrix(edit.base, edit.weights, M.elements, edit.work);   // writes only the weighted vertices
+    if (edit.sym) for (const s of edit.sym) P.applyMatrix(edit.base, s.map, mirrorMatrix(M.elements, s.S), edit.work);
     view.polyLive(edit.work);
     moveOverlay(edit.work);
   }
