@@ -143,6 +143,18 @@
     voxelRemesh(resolution = 128, relax = 2, sharp = true) { return !!this.x.ks_voxel_remesh(resolution, relax, sharp ? 1 : 0); }
     /** Field-aligned quad remesh to about `targetFaces` quads; returns the quad count. */
     quadRemesh(targetFaces = 5000) { return this.x.ks_quad_remesh(targetFaces); }
+    /** Tube (Curve Tube): sweep a circle of `radius` along points (xyz floats) and add it as a new shell
+     *  (one undo step). Returns the vertex count added (0 = nothing). */
+    tube(points, radius, sides = 12, taperStart = 0, taperEnd = 0) {
+      const a = points instanceof Float32Array ? points : Float32Array.from(points);
+      if (a.length < 6) return 0;
+      const p = this._put(a, Float32Array);
+      const k = this.x.ks_tube(p, a.length / 3, radius, sides, taperStart, taperEnd); this.x.ks_free(p); return k;
+    }
+    /** Insert Mesh: a sphere (kind 0) or cube (1) of `radius` at a surface point, along its normal, sunk by depth x radius. */
+    insert(kind, point, normal, radius, depth = 0.3) {
+      return this.x.ks_insert(kind | 0, point[0], point[1], point[2], normal[0], normal[1], normal[2], radius, depth);
+    }
     /** Subdivision levels (Catmull-Clark, details kept per level). */
     divide() { return this.x.ks_divide(); }
     setLevel(k) { return !!this.x.ks_set_level(k); }

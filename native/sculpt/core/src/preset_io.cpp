@@ -150,6 +150,8 @@ bool applyPresetJson(const std::string& json, Brush& b, std::string* error) {
         else if (k == "clothGravity") b.clothGravity = f();
         else if (k == "autoSmooth") b.autoSmooth = f();
         else if (k == "smoothIterations") b.smoothIterations = (int)f();
+        else if (k == "smoothVolume") b.smoothVolume = f();
+        else if (k == "autoSmoothVolume") b.autoSmoothVolume = f();
         else if (k == "noiseScale") b.noiseScale = f();
         else if (k == "color" && v.arr.size() >= 3) b.color = {(float)v.arr[0], (float)v.arr[1], (float)v.arr[2]};
         else if (k == "symmetry") b.symmetry = (int)f();
@@ -173,7 +175,7 @@ std::string presetToJson(const Brush& b) {
       << ",\"usePressure\":" << (b.usePressure ? "true" : "false")
       << ",\"alphaFollowStroke\":" << (b.alphaFollowStroke ? "true" : "false")
       << ",\"clothIterations\":" << b.clothIterations << ",\"clothDamping\":" << b.clothDamping
-      << ",\"clothGravity\":" << b.clothGravity << ",\"smoothIterations\":" << b.smoothIterations
+      << ",\"clothGravity\":" << b.clothGravity << ",\"smoothIterations\":" << b.smoothIterations << ",\"smoothVolume\":" << b.smoothVolume << ",\"autoSmoothVolume\":" << b.autoSmoothVolume
       << ",\"color\":[" << b.color.x << "," << b.color.y << "," << b.color.z << "]";
     if (b.falloff.preset == FalloffPreset::Custom && !b.falloff.points.empty()) {
         o << ",\"falloffPoints\":[";

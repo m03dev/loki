@@ -1,7 +1,9 @@
 """Forge's native sculpting engine in headless Chromium (app/ui/forge_sculpt.js + app/ui/vendor/sculpt/: the C++
 engine built to WebAssembly, running in a Web Worker). Real mouse strokes go through the worker and come back as
 moved vertices; a library brush, dynamic detail (more triangles under the brush), remesh, quad remesh, subdivision
-levels, the matcap gallery and the wire overlay; Forge's undo and history still work; the worker alone may run
+levels, the matcap gallery and the wire overlay; the stroke (stabiliser, even dab spacing, pen pressure, GPU uploads
+as runs of changed vertices, screen-relative detail) and the Tube / Insert Sphere brushes; Forge's undo and history
+still work; the worker alone may run
 WebAssembly (its own CSP) while LOKI's pages keep UI_CSP. The engine itself: native/sculpt/wasm/test/test_engine.js
 (run here too when node is installed).
 Skips without Playwright + Chromium. Well under a minute.
@@ -203,6 +205,57 @@ async def main():
         b3 = await page.evaluate(total)
         await stroke(dx=0, dy=-40, steps=5)
         check("Grab (the engine's Move) pulls the surface along", abs(await page.evaluate(total) - b3) > 1e-4)
+
+        # ---- the stroke (ForgeStroke): stabiliser, even dab spacing, pressure; the panel's stroke controls
+        st = await page.evaluate("""() => {
+          const S = window.ForgeStroke, out = {};
+          let s = S.start(100, 100, 1, { lazy: 10 });
+          let n = 0; for (let i = 0; i < 40; i++) n += S.feed(s, 100 + Math.sin(i) * 6, 100 + Math.cos(i * 1.3) * 6, 1, 4).length;
+          out.jitter = n;                                   // shaking inside the string: no dabs at all
+          s = S.start(0, 0, 1, { lazy: 0 }); let d = [];
+          for (let x = 7; x <= 203; x += 7) d = d.concat(S.feed(s, x, 0, 1, 10));
+          const gaps = d.slice(1).map((p, i) => p.x - d[i].x);
+          out.count = d.length; out.even = Math.max(...gaps) - Math.min(...gaps); out.first = d[0].x;
+          s = S.start(0, 0, 1, { lazy: 20 }); d = S.feed(s, 100, 0, 1, 10);
+          out.lazyEnd = s.bx; out.lazyDabs = d.length;
+          s = S.start(0, 0, 0.2, { lazy: 0, pressureSmooth: 0 }); d = S.feed(s, 100, 0, 1, 10);
+          out.p0 = d[0].p; out.p9 = d[d.length - 1].p;
+          const runs = forgeSculptRuns(Int32Array.from([5, 3, 4, 1000, 1001, 7, 1003, 50000]), 8, 64, 256);
+          out.runs = Array.from(runs);
+          out.ui = ['forge-sculpt-lazy', 'forge-sculpt-autosmooth', 'forge-sculpt-falloff', 'forge-sculpt-screendetail'].every((id) => !!document.getElementById(id));
+          return out;
+        }""")
+        check("the stabiliser swallows hand jitter inside its string and the brush trails the cursor by it",
+              st["jitter"] == 0 and abs(st["lazyEnd"] - 80) < 1e-6 and st["lazyDabs"] == 8, st)
+        check("dabs land at an even arc length whatever the pointer's event spacing (7 px events, 10 px dabs)",
+              st["count"] == 20 and st["even"] < 1e-6 and abs(st["first"] - 10) < 1e-6, st)
+        check("pen pressure is interpolated along the dabs", 0.2 < st["p0"] < 0.35 and abs(st["p9"] - 1) < 1e-6, st)
+        check("GPU updates go out as runs of changed vertices, not one lowest..highest span",
+              st["runs"] == [3, 7, 1000, 1003, 50000, 50000], st["runs"])
+        check("the Stroke controls (Stabilize, Auto smooth, Falloff) and Screen detail are in the Sculpting panel", st["ui"], st)
+        await page.evaluate("forgeBrush('draw')")
+        info2 = await page.evaluate("({ sp: ForgeSculpt.spacing, eff: ForgeSculpt.effectivePreset(forge.view), up: ForgeSculpt.stats.uploadBytes, span: ForgeSculpt.stats.spanBytes })")
+        check("Draw is Clay with a little auto-smooth; dabs spaced by the preset's own spacing; uploads never exceed the old span",
+              info2["eff"].get("kernel") == "Clay" and info2["eff"].get("autoSmooth", 0) > 0 and abs(info2["sp"] - 0.1) < 1e-9
+              and 0 < info2["up"] <= info2["span"], info2)
+        dyn = await page.evaluate("(() => { ForgeSculpt.dyn.mode = 'screen'; const a = ForgeSculpt.dynFor(forge.view, null); ForgeSculpt.dyn.mode = 'brush'; const b = ForgeSculpt.dynFor(forge.view, null); return [a, b]; })()")
+        check("screen-relative dynamic detail turns pixels into a fixed edge length (brush mode stays relative)",
+              dyn[0].get("relative") is False and dyn[0].get("constant", 0) > 0 and "relative" not in dyn[1], dyn)
+
+        # ---- Tube and Insert Mesh (ByHand's Tube / Insert Mesh): add geometry, one undo step each
+        v0 = await page.evaluate("forge.view.sm.wn")
+        await page.select_option("#forge-sculpt-lib", label="Tube")
+        await stroke(dx=-70, dy=10, steps=10, start=(30, 0))
+        v1 = await page.evaluate("forge.view.sm.wn")
+        check("the Tube brush sweeps a tube along the stroke on the surface", v1 > v0 + 50, (v0, v1))
+        await page.evaluate("forge.view.undo()")
+        check("a Tube is one undo step", await page.evaluate("forge.view.sm.wn") == v0)
+        await page.select_option("#forge-sculpt-lib", label="Insert Sphere")
+        await stroke(dx=2, dy=0, steps=1)
+        v2 = await page.evaluate("forge.view.sm.wn")
+        check("Insert Sphere adds a sphere where you click", v2 > v0 + 50, (v0, v2))
+        await page.evaluate("forge.view.undo()")
+        check("an Insert is one undo step", await page.evaluate("forge.view.sm.wn") == v0)
 
         await page.evaluate("forgeBrush('draw')")
         await page.click("#forge-sculpt-dyn")

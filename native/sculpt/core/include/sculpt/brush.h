@@ -92,8 +92,18 @@ struct Brush {
     float clothGravity = 0.0f;
 
     // Smoothing
-    float autoSmooth = 0.0f;        // smooth applied after every dab
+    float autoSmooth = 0.0f;        // smooth applied after every dab (weighted by the dab's falloff)
     int smoothIterations = 1;
+    // Volume preservation of the Smooth kernel and of auto-smooth, 0..1:
+    // 0 = the classic umbrella Laplacian (shrinks: thin parts thin out, spheres
+    // get smaller), 1 = the HC step (Vollmer, Mencl & Mueller 1999, alpha = 0,
+    // beta = 0.5), which removes bumps but leaves constant-curvature surfaces
+    // where they are. Between the two blends the steps.
+    float smoothVolume = 0.5f;
+    // The same for auto-smooth. 0 (the classic Laplacian, as before) by
+    // default: under a build-up brush its slight shrink is welcome and it is
+    // the stronger of the two on the per-vertex ripples plane brushes leave.
+    float autoSmoothVolume = 0.0f;
 
     // Noise
     float noiseScale = 4.0f;        // features per radius
@@ -154,6 +164,12 @@ public:
 
     void smoothVerts(const std::vector<int>& verts, float strength, int iterations, bool tangentialOnly);
 
+    // Weighted smoothing of a region: vertex i moves by min(1, strength * w[i])
+    // of its smoothing step; `volume` blends the umbrella Laplacian (0) with the
+    // volume-preserving HC step (1). Used by the Smooth kernel and auto-smooth.
+    void smoothRegion(const std::vector<int>& verts, const std::vector<float>& w, float strength,
+                      int iterations, float volume, bool tangentialOnly);
+
 private:
     struct Instance {          // one per symmetry mirror
         Vec3 mirror{1, 1, 1};
@@ -196,6 +212,13 @@ private:
     void dabInstance(const Brush& b, const Dab& d, Instance& in);
     void applyDisplacements(const std::vector<int>& vs, Instance* fixedSet = nullptr);
     std::vector<Instance*> pendingRefit_;  // grab instances whose cached triangles need a refit
+    // smoothing scratch (region + one ring, compact): slot of a vertex in it, its Laplacian
+    std::vector<int> smSlot_, smRing_;
+    std::vector<Vec3> smLap_;
+    // normals scratch: triangles around the moved ring, each face normal computed once
+    std::vector<int> nrmSlot_, nrmTris_;
+    std::vector<Vec3> nrmFace_;
+    void recomputeRingNormals(const std::vector<int>& ring);
 };
 
 }  // namespace sculpt

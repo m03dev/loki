@@ -208,8 +208,22 @@ void BVH::refitTrisCached(const Mesh& m, const std::vector<int>& tris, std::vect
                 nodes.push_back(nd);
             }
         }
-        // children have larger indices than parents: descending order is bottom-up
-        std::sort(nodes.begin(), nodes.end(), std::greater<int>());
+        // Bottom-up order without a sort (the sort was ~8% of a dab at 262k
+        // verts): count each node's dirty children, emit the nodes with none
+        // (exactly the leaves: every interior node was reached from below),
+        // then a parent as soon as its last dirty child is out. Leaves come
+        // first, interior nodes follow in a valid bottom-up order, and the
+        // counters are all back at zero afterwards.
+        if (nodePending_.size() < nodes_.size()) nodePending_.assign(nodes_.size(), 0);
+        for (int nd : nodes) { int p = parent_[nd]; if (p >= 0) ++nodePending_[p]; }
+        std::vector<int>& q = orderScratch_;
+        q.clear();
+        for (int nd : nodes) if (nodePending_[nd] == 0) q.push_back(nd);
+        for (size_t i = 0; i < q.size(); ++i) {
+            int p = parent_[q[i]];
+            if (p >= 0 && --nodePending_[p] == 0) q.push_back(p);
+        }
+        nodes.swap(q);
     }
     // leaves first (independent, the bulk of the work), then interior nodes in order
     parallelFor((int)nodes.size(), [&](int i) {

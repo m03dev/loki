@@ -3,15 +3,22 @@
  * the worker sends back the vertices that moved (positions + normals, transferred, not copied) or, after a
  * topology change (dynamic detail, remesh, subdivision levels), the whole new mesh.
  *
- * Messages in:  load {pos, idx} | brush {preset, strength, symmetry, dyn} | press {ray, pressure, radius, mods}
- *               drag {rays, pressure, radius, angle} | release | hit {seq, ray} | setPositions {pos} | op {name, arg}
- * Messages out: ready | fail | loaded | dirty {ids, pos, nrm} | topology {pos, nrm, idx, polys, levels, level}
+ * Messages in:  load {pos, idx} | brush {preset, strength, symmetry, dyn {on, detail, relative, constant}}
+ *               press {ray, pressure, radius, mods, mode?, tube?, insert?} (mode "curve": the stroke draws a Tube on
+ *               release; mode "insert": a primitive is added where it lands)
+ *               drag {rays, pressure, pressures?, radius, angle} | release | hit {seq, ray} | setPositions {pos} | op {name, arg}
+ * Messages out: ready | fail | loaded | dirty {ids, pos, nrm, ms} | topology {pos, nrm, idx, polys, levels, level}
  *               hit {seq, point, normal} | released {kind} | done {name, ok, info} */
 /* global SculptEngine, importScripts */
 "use strict";
 importScripts("/ui/vendor/sculpt/sculpt_engine.js");
 
 let E = null, adjStart = null, adj = null, topoSent = 0, lastTopoPost = 0;
+// The engine's dirty list already holds every vertex whose position OR normal changed (the moved set plus its
+// one-ring: brush.cpp applyDisplacements), so padding it with another ring here re-sent only ~4% more vertices
+// for ~2.7 ms of JS per flush at 1M vertices (measured). Kept behind this switch (brush message padRing).
+let padRing = false;
+let curve = null, inserted = false, dragMs = 0;   // Tube stroke in progress / Insert done at press / engine time
 
 SculptEngine.create("/ui/vendor/sculpt/sculpt.wasm")
   .then((e) => { E = e; postMessage({ t: "ready" }); })
@@ -51,21 +58,27 @@ function flush(midStroke) {
   }
   const d = E.takeDirty();
   if (!d.length) return;
-  const n = E.vertexCount;
-  if (!mark || mark.length < n) mark = new Uint8Array(n);
-  list.length = 0;
-  for (const v of d) {
-    if (!mark[v]) { mark[v] = 1; list.push(v); }
-    for (let k = adjStart[v]; k < adjStart[v + 1]; k++) { const u = adj[k]; if (!mark[u]) { mark[u] = 1; list.push(u); } }
+  let ids = d;
+  if (padRing) {
+    const n = E.vertexCount;
+    if (!mark || mark.length < n) mark = new Uint8Array(n);
+    list.length = 0;
+    for (const v of d) {
+      if (!mark[v]) { mark[v] = 1; list.push(v); }
+      for (let k = adjStart[v]; k < adjStart[v + 1]; k++) { const u = adj[k]; if (!mark[u]) { mark[u] = 1; list.push(u); } }
+    }
+    for (const v of list) mark[v] = 0;
+    ids = Int32Array.from(list);
   }
-  const P = E.positions(), N = E.normals(), ids = Int32Array.from(list);
+  const P = E.positions(), N = E.normals();
   const pos = new Float32Array(ids.length * 3), nrm = new Float32Array(ids.length * 3);
   for (let i = 0; i < ids.length; i++) {
-    const v = ids[i] * 3; mark[ids[i]] = 0;
+    const v = ids[i] * 3;
     pos[i * 3] = P[v]; pos[i * 3 + 1] = P[v + 1]; pos[i * 3 + 2] = P[v + 2];
     nrm[i * 3] = N[v]; nrm[i * 3 + 1] = N[v + 1]; nrm[i * 3 + 2] = N[v + 2];
   }
-  postMessage({ t: "dirty", ids, pos, nrm }, [ids.buffer, pos.buffer, nrm.buffer]);
+  postMessage({ t: "dirty", ids, pos, nrm, ms: dragMs }, [ids.buffer, pos.buffer, nrm.buffer]);
+  dragMs = 0;
 }
 
 const OPS = {
@@ -94,19 +107,61 @@ onmessage = (ev) => {
         E.setBrush(m.preset);
         E.setStrength(m.strength);
         E.setSymmetry(m.symmetry);
-        E.setDyntopo(!!(m.dyn && m.dyn.on), (m.dyn && m.dyn.detail) || 0.12);
+        // detail relative to the brush (default), or a fixed edge length (the window turns "N pixels on screen"
+        // into one at the press point: screen-relative detail)
+        E.setDyntopo(!!(m.dyn && m.dyn.on), (m.dyn && m.dyn.detail) || 0.12, !(m.dyn && m.dyn.relative === false),
+          (m.dyn && m.dyn.constant) || 0.02);
+        if (typeof m.padRing === "boolean") padRing = m.padRing;
         break;
       case "press": {
+        curve = null; inserted = false;
+        if (m.mode === "curve" || m.mode === "insert") {   // Tube / Insert Mesh: add geometry, no sculpting
+          const h = E.raycast(m.ray.origin, m.ray.dir);
+          if (h && m.mode === "curve") curve = { pts: [h.point[0], h.point[1], h.point[2]], last: h.point, radius: m.radius, tube: m.tube || {} };
+          if (h && m.mode === "insert") {
+            const ins = m.insert || {};
+            inserted = E.insert(ins.kind || 0, h.point, h.normal, m.radius, ins.depth == null ? 0.3 : ins.depth) > 0;
+            if (inserted) sendTopology({ stroke: true });
+          }
+          postMessage({ t: "pressed", ok: !!h });
+          break;
+        }
         const ok = E.press(m.ray, m.pressure, m.radius, m.mods);
         if (ok) flush(true);
         postMessage({ t: "pressed", ok });
         break;
       }
-      case "drag":
-        for (const r of m.rays) E.drag(r, m.pressure, m.radius, m.angle);
+      case "drag": {
+        if (curve) {   // the Tube follows the surface under the cursor, one point per quarter radius
+          for (const r of m.rays) {
+            const h = E.raycast(r.origin, r.dir);
+            if (!h) continue;
+            const p = h.point, q = curve.last;
+            if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < curve.radius * 0.25) continue;
+            curve.pts.push(p[0], p[1], p[2]); curve.last = p;
+          }
+          break;
+        }
+        if (inserted) break;
+        const t0 = performance.now();
+        for (let i = 0; i < m.rays.length; i++) E.drag(m.rays[i], m.pressures ? m.pressures[i] : m.pressure, m.radius, m.angle);
+        dragMs += performance.now() - t0;
         flush(true);
         break;
+      }
       case "release": {
+        if (curve || inserted) {
+          let kind = inserted ? 2 : 0;
+          if (curve && curve.pts.length >= 6) {
+            const tb = curve.tube;
+            if (E.tube(curve.pts, tb.radius || curve.radius * 0.35, tb.sides || 12, tb.taperStart || 0, tb.taperEnd || 0) > 0) {
+              sendTopology({ stroke: true }); kind = 2;
+            }
+          }
+          curve = null; inserted = false;
+          postMessage({ t: "released", kind });
+          break;
+        }
         const kind = E.release();
         if (kind === 2 || E.topologyVersion !== topoSent) sendTopology({ stroke: true });
         else flush(false);

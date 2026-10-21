@@ -329,9 +329,12 @@ float BrushEngine::vertexWeight(const Brush& b, const Dab& d, const Vec3& center
     // nearly tangential to the view and folds the surface over itself.
     float graze = b.frontFacesOnly ? clamp01(facing / 0.3f) : 1.0f;
     Vec3 q = p - center;
-    float x;
-    Vec3 bt = cross(normal, tangent);
-    float u = dot(q, tangent) / b.radius, w = dot(q, bt) / b.radius;
+    float x, u = 0.0f, w = 0.0f;
+    if (b.squareTip || b.alpha) {   // tip coordinates: only square tips and alphas need them
+        Vec3 bt = cross(normal, tangent);
+        u = dot(q, tangent) / b.radius;
+        w = dot(q, bt) / b.radius;
+    }
     if (b.squareTip) {
         // Blend between a square (Chebyshev) and round (Euclidean) footprint.
         float sq = std::max(std::fabs(u), std::fabs(w));
@@ -339,8 +342,9 @@ float BrushEngine::vertexWeight(const Brush& b, const Dab& d, const Vec3& center
         x = sq + (rd - sq) * b.tipRoundness;
         if (x > 1) return 0.0f;
     } else {
-        x = length(q) / b.radius;
-        if (x > 1) return 0.0f;
+        float d2 = length2(q);
+        if (d2 > b.radius * b.radius) return 0.0f;
+        x = std::sqrt(d2) / b.radius;
     }
     float f = b.falloff.eval(x);
     if (b.alpha) f *= b.alpha->sample(u, w);
@@ -397,12 +401,7 @@ void BrushEngine::applyDisplacements(const std::vector<int>& vs, Instance* fixed
     // per-vertex normals are independent: parallel (through a reference: the
     // scratch is thread_local, workers must use the caller's copy)
     const std::vector<int>& R = ring;
-    parallelFor((int)R.size(), [&](int i) {
-        int v = R[i];
-        Vec3 nn{0, 0, 0};
-        for (int t : mesh_.vertTris[v]) nn += mesh_.triNormal(t);
-        mesh_.normals[v] = normalize(nn);
-    }, 2048);
+    recomputeRingNormals(R);
     // host display + next-stroke resync need every vertex whose position or normal changed
     for (int v : R) {
         if (!hostMark_[v]) { hostMark_[v] = 1; hostDirty_.push_back(v); }
@@ -415,6 +414,40 @@ void BrushEngine::applyDisplacements(const std::vector<int>& vs, Instance* fixed
         for (int v : vs)
             if (!dirtyMark_[v]) { dirtyMark_[v] = 1; dirtyVerts_.push_back(v); }
     }
+}
+
+// Vertex normals of the ring (area-weighted: the sum of the unnormalized face
+// normals around each vertex). Measured (callgrind, 262k verts, r = 0.6): a
+// variant that computed each shared face normal once into a compact scratch
+// cost 5% more than this per-corner sum (the slot lookups outweigh the saved
+// cross products: the neighbours' positions are already in cache), so the
+// per-corner sum stays; nrmSlot_/nrmTris_/nrmFace_ are kept for that variant
+// (build with -DSCULPT_FACE_NORMAL_CACHE) should a SIMD build tip the balance.
+void BrushEngine::recomputeRingNormals(const std::vector<int>& R) {
+#ifdef SCULPT_FACE_NORMAL_CACHE
+    const size_t nt = mesh_.tris.size();
+    if (nrmSlot_.size() < nt) nrmSlot_.resize(nt, -1);
+    nrmTris_.clear();
+    for (int v : R)
+        for (int t : mesh_.vertTris[v])
+            if (nrmSlot_[t] < 0) { nrmSlot_[t] = (int)nrmTris_.size(); nrmTris_.push_back(t); }
+    nrmFace_.resize(nrmTris_.size());
+    parallelFor((int)nrmTris_.size(), [&](int i) { nrmFace_[i] = mesh_.triNormal(nrmTris_[i]); }, 4096);
+    parallelFor((int)R.size(), [&](int i) {
+        int v = R[i];
+        Vec3 nn{0, 0, 0};
+        for (int t : mesh_.vertTris[v]) nn += nrmFace_[nrmSlot_[t]];
+        mesh_.normals[v] = normalize(nn);
+    }, 2048);
+    for (int t : nrmTris_) nrmSlot_[t] = -1;  // keep the scratch all -1: no O(mesh) reset per dab
+#else
+    parallelFor((int)R.size(), [&](int i) {
+        int v = R[i];
+        Vec3 nn{0, 0, 0};
+        for (int t : mesh_.vertTris[v]) nn += mesh_.triNormal(t);
+        mesh_.normals[v] = normalize(nn);
+    }, 2048);
+#endif
 }
 
 void BrushEngine::setPositions(const std::vector<int>& verts, const std::vector<Vec3>& pos) {
@@ -449,6 +482,56 @@ void BrushEngine::smoothVerts(const std::vector<int>& vs, float strength, int it
             if (tangentialOnly) L = projectOnPlane(L, mesh_.normals[v]);
             disp_[v] = L * (strength * (1 - mesh_.mask[v]));
         });
+        applyDisplacements(vs);
+    }
+}
+
+// Smoothing step of each vertex, weighted. The HC part (Vollmer, Mencl &
+// Mueller, "Improved Laplacian Smoothing of Noisy Surface Meshes", 1999) with
+// alpha = 0: b_i = L_i (the umbrella Laplacian), p_i' = q_i + L_i - (beta b_i +
+// (1 - beta) mean_j b_j) = q_i + (1 - beta)(L_i - mean_j L_j). Where the
+// Laplacian is constant (a sphere, a cylinder, a flat plane) the step is zero,
+// so smoothing removes bumps and noise without shrinking the form.
+void BrushEngine::smoothRegion(const std::vector<int>& vs, const std::vector<float>& w, float strength,
+                               int iterations, float volume, bool tangentialOnly) {
+    const size_t n = mesh_.positions.size();
+    if (disp_.size() < n) disp_.resize(n);
+    if (smSlot_.size() < n) smSlot_.resize(n, -1);
+    volume = clamp01(volume);
+    const int nv = (int)std::min(vs.size(), w.size());
+    if (nv == 0) return;
+    const float beta = 0.5f;
+    for (int it = 0; it < std::max(1, iterations); ++it) {
+        if (volume <= 0.0f || tangentialOnly) {
+            parallelFor(nv, [&](int i) {
+                int v = vs[i];
+                Vec3 L = laplacian(mesh_, v);
+                if (tangentialOnly) L = projectOnPlane(L, mesh_.normals[v]);
+                disp_[v] = L * std::min(1.0f, strength * w[i]);
+            });
+        } else {
+            // the region and its one ring (the HC step reads the neighbours' Laplacians)
+            smRing_.clear();
+            for (int i = 0; i < nv; ++i)
+                if (smSlot_[vs[i]] < 0) { smSlot_[vs[i]] = (int)smRing_.size(); smRing_.push_back(vs[i]); }
+            const size_t core = smRing_.size();
+            for (size_t i = 0; i < core; ++i)
+                for (int nb : mesh_.vertNbrs[smRing_[i]])
+                    if (smSlot_[nb] < 0) { smSlot_[nb] = (int)smRing_.size(); smRing_.push_back(nb); }
+            smLap_.resize(smRing_.size());
+            parallelFor((int)smRing_.size(), [&](int i) { smLap_[i] = laplacian(mesh_, smRing_[i]); });
+            parallelFor(nv, [&](int i) {
+                int v = vs[i];
+                const Vec3 L = smLap_[smSlot_[v]];
+                const auto& nb = mesh_.vertNbrs[v];
+                Vec3 mean{0, 0, 0};
+                for (int j : nb) mean += smLap_[smSlot_[j]];
+                if (!nb.empty()) mean = mean / (float)nb.size();
+                Vec3 hc = (L - mean) * (1.0f - beta);
+                disp_[v] = (L * (1.0f - volume) + hc * volume) * std::min(1.0f, strength * w[i]);
+            });
+            for (int v : smRing_) smSlot_[v] = -1;
+        }
         applyDisplacements(vs);
     }
 }
@@ -598,14 +681,15 @@ void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
             default: break;
         }
         applyDisplacements(vs, &in);
-        if (b.autoSmooth > 0) smoothVerts(vs, b.autoSmooth, 1, false);
+        // auto-smooth follows the grab's falloff (a uniform pass flattened the
+        // whole sphere's edge into a visible ring)
+        if (b.autoSmooth > 0) smoothRegion(vs, ws, b.autoSmooth, 1, b.autoSmoothVolume, false);
         return;
     }
 
     // ---------------- per-dab families: query the sphere at the dab
     bvh_.queryVerts(mesh_, d.position, r, verts_);
     if (verts_.empty()) return;
-    markTouched(verts_);
 
     // Area plane from the unweighted neighbourhood, then weights in that frame.
     Vec3 hint = b.alphaFollowStroke ? M(lastStrokeDir_) : Vec3{1, 0, 0};
@@ -614,6 +698,19 @@ void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
     weights_.resize(verts_.size());
     for (size_t i = 0; i < verts_.size(); ++i)
         weights_[i] = vertexWeight(b, d, d.position, d.normal, T, verts_[i], d.pressure);
+    if (b.kernel != Kernel::Mask && b.kernel != Kernel::Paint) {
+        // Vertices with zero weight (facing away, masked, outside a square tip
+        // or an alpha) never move: drop them before the kernel, so neither
+        // the kernel nor the normals / BVH / host upload pay for them. On a
+        // thin part (an ear, a finger) that is half of the sphere's vertices.
+        size_t k = 0;
+        for (size_t i = 0; i < verts_.size(); ++i)
+            if (weights_[i] > 0.0f) { verts_[k] = verts_[i]; weights_[k] = weights_[i]; ++k; }
+        verts_.resize(k);
+        weights_.resize(k);
+        if (verts_.empty()) return;
+    }
+    markTouched(verts_);
 
     Vec3 ac, an;
     areaPlane(verts_, weights_, ac, an);
@@ -811,17 +908,13 @@ void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
         }
         case Kernel::Smooth:
         case Kernel::SmoothRelax: {
+            // Smooth: Laplacian blended with the volume-preserving HC step
+            // (smoothVolume); Smooth Relax: tangential only (slides vertices
+            // along the surface, evens the triangles, keeps the shape).
             bool tangential = b.kernel == Kernel::SmoothRelax;
-            for (int it = 0; it < std::max(1, b.smoothIterations); ++it) {
-                parallelFor(nv, [&](int i) {
-                    int v = verts_[i];
-                    Vec3 L = laplacian(mesh_, v);
-                    if (tangential) L = projectOnPlane(L, mesh_.normals[v]);
-                    disp_[v] = L * std::min(1.0f, s * weights_[i]);
-                });
-                if (it + 1 < b.smoothIterations) applyDisplacements(verts_);
-            }
-            break;
+            smoothRegion(verts_, weights_, s, std::max(1, b.smoothIterations), tangential ? 0.0f : b.smoothVolume, tangential);
+            if (b.autoSmooth > 0) smoothRegion(verts_, weights_, b.autoSmooth, 1, b.autoSmoothVolume, false);
+            return;
         }
         case Kernel::SnakeHook: {
             float pinch = b.pinch;
@@ -880,7 +973,7 @@ void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
     }
 
     applyDisplacements(verts_);
-    if (b.autoSmooth > 0) smoothVerts(verts_, b.autoSmooth, 1, false);
+    if (b.autoSmooth > 0) smoothRegion(verts_, weights_, b.autoSmooth, 1, b.autoSmoothVolume, false);
 }
 
 void BrushEngine::endStroke() {

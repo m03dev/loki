@@ -101,6 +101,14 @@
    "falloff": "Sharp"
   },
   {
+   "name": "Bulge",
+   "kernel": "Inflate",
+   "category": "Basic",
+   "strength": 0.45,
+   "falloff": "Sphere",
+   "autoSmooth": 0.1
+  },
+  {
    "name": "Blob",
    "kernel": "Blob",
    "category": "Basic",
@@ -239,6 +247,42 @@
    "pinch": 1.0,
    "falloff": "Sharp",
    "frontFacesOnly": false
+  },
+  {
+   "name": "Hook",
+   "kernel": "SnakeHook",
+   "category": "Basic",
+   "strength": 1.0,
+   "falloff": "Smooth",
+   "autoSmooth": 0.1,
+   "frontFacesOnly": false
+  },
+  {
+   "name": "Chisel",
+   "kernel": "DamStandard",
+   "category": "Basic",
+   "strength": 0.6,
+   "pinch": 0.8,
+   "falloff": "Sharp",
+   "autoSmooth": 0.05
+  },
+  {
+   "name": "Tube",
+   "kernel": "Standard",
+   "category": "Basic",
+   "mode": "curve",
+   "tube": {
+    "sides": 12,
+    "taperStart": 0.0,
+    "taperEnd": 0.0
+   }
+  },
+  {
+   "name": "Insert Sphere",
+   "kernel": "Standard",
+   "category": "Basic",
+   "mode": "insert",
+   "insertKind": "sphere"
   },
   {
    "name": "Clay",
@@ -966,6 +1010,21 @@
    "smoothIterations": 5
   },
   {
+   "name": "Smooth Classic",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 0.5,
+   "smoothVolume": 0.0
+  },
+  {
+   "name": "Smooth Volume",
+   "kernel": "Smooth",
+   "category": "Smooth",
+   "strength": 0.7,
+   "smoothVolume": 1.0,
+   "smoothIterations": 2
+  },
+  {
    "name": "Smooth Peaks",
    "kernel": "Polish",
    "category": "Smooth",
@@ -1654,6 +1713,13 @@
    "category": "Insert & Curve",
    "mode": "insert",
    "imm": true
+  },
+  {
+   "name": "Insert Cube",
+   "kernel": "Standard",
+   "category": "Insert & Curve",
+   "mode": "insert",
+   "insertKind": "cube"
   },
   {
    "name": "Curve Tube",

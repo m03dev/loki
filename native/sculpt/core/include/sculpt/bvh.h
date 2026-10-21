@@ -55,6 +55,8 @@ private:
     std::vector<int> triLeaf_;       // triangle -> leaf node (built triangles only)
     std::vector<int> dirtyNodes_;    // scratch
     std::vector<uint32_t> nodeStamp_;
+    std::vector<int> nodePending_;   // scratch: dirty children not yet refit (all zero between uses)
+    std::vector<int> orderScratch_;  // scratch: bottom-up refit order
     uint32_t nodeStampId_ = 0;
     // Triangles appended since the last build (dyntopo splits). Scanned
     // linearly; the tree is rebuilt once there are too many of them.

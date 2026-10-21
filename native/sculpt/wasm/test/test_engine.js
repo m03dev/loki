@@ -84,6 +84,74 @@ const ray = (x, y) => ({ origin: [x, y, 5], dir: [0, 0, -1] });
   check(e.colors().some((c, i) => i % 3 === 2 && c > 0.5), "polypaint");
   e.setBrush({ kernel: "Mask", strength: 1 }); e.press(ray(0, 0), 1, 0.3); e.release();
   check(e.mask().some(x => x > 0.5), "mask brush"); e.maskOp("clear"); check(!e.mask().some(x => x > 0), "mask clear");
+
+  // ---- staying smooth: the Smooth brush keeps volume, auto-smooth evens out Clay's ripples
+  const patch = (P) => {   // mean radius, radius spread and roughness (|normal part of the umbrella Laplacian|) on the stroked patch
+    const T = e.tris(), deg = new Int32Array(P.length / 3), acc = new Float64Array(P.length);
+    for (let i = 0; i < T.length; i += 3) for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) if (a !== b && T[i] >= 0) { const u = T[i + a], v = T[i + b]; deg[u]++; for (let c = 0; c < 3; c++) acc[u * 3 + c] += P[v * 3 + c]; }
+    let n = 0, sr = 0, sr2 = 0, rough = 0;
+    for (let v = 0; v < P.length / 3; v++) {
+      const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+      if (z < 0.5 || Math.abs(x) > 0.25 || Math.abs(y) > 0.12 || !deg[v]) continue;
+      const r = Math.hypot(x, y, z); n++; sr += r; sr2 += r * r;
+      rough += Math.abs((acc[v * 3] / deg[v] - x) * x + (acc[v * 3 + 1] / deg[v] - y) * y + (acc[v * 3 + 2] / deg[v] - z) * z) / r;
+    }
+    const mean = sr / n; return { mean, sd: Math.sqrt(Math.max(0, sr2 / n - mean * mean)), rough: rough / n };
+  };
+  const strokes = (radius) => { for (let pass = 0; pass < 4; pass++) { const y = (pass - 1.5) * 0.08; e.press(ray(-0.3, y), 1, radius); for (let i = 1; i <= 30; i++) e.drag(ray(-0.3 + i * 0.02, y), 1, radius); e.release(); } };
+  const noisy = (amp) => {
+    const s = sphere(256, 128); let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < s.p.length; i += 3) { const k = 1 + (rnd() - 0.5) * 2 * amp; s.p[i] *= k; s.p[i + 1] *= k; s.p[i + 2] *= k; }
+    return s;
+  };
+  const smoothRes = {};
+  for (const vol of [0, 1]) {
+    const s = noisy(0.01); e.load(s.p, s.t);
+    const n0 = patch(e.positions());
+    e.setBrush({ kernel: "Smooth", strength: 0.6, smoothVolume: vol }); strokes(0.35);
+    smoothRes[vol] = Object.assign(patch(e.positions()), { rough0: n0.rough });
+  }
+  const L = smoothRes[0], H = smoothRes[1];
+  check(H.rough < H.rough0 / 5 && L.rough < L.rough0 / 5, "Smooth removes noise (roughness " + L.rough0.toExponential(1) + " -> classic " + L.rough.toExponential(1) + ", volume " + H.rough.toExponential(1) + ")");
+  check(Math.abs(1 - H.mean) < 0.25 * Math.abs(1 - L.mean) && Math.abs(1 - H.mean) < 0.002,
+    "Smooth keeps volume with smoothVolume 1 (patch radius " + L.mean.toFixed(4) + " classic -> " + H.mean.toFixed(4) + ")");
+  const clayRes = {};
+  for (const as of [0, 0.15]) {
+    const s = sphere(256, 128); e.load(s.p, s.t);
+    e.setBrush({ kernel: "Clay", strength: 0.5, autoSmooth: as }); strokes(0.35);
+    clayRes[as] = patch(e.positions());
+  }
+  check(clayRes[0.15].rough < clayRes[0].rough * 0.7 && clayRes[0.15].mean > 1.3,
+    "auto-smooth evens Clay out and keeps its build (roughness " + clayRes[0].rough.toExponential(1) + " -> " + clayRes[0.15].rough.toExponential(1) + ", height " + clayRes[0.15].mean.toFixed(2) + ")");
+
+  // zero-weight vertices stay put: a front-faces-only dab with a radius bigger than the sphere leaves its back alone
+  { const s = sphere(128, 64); e.load(s.p, s.t);
+    const back = []; for (let i = 0; i < s.p.length; i += 3) if (s.p[i + 2] < -0.3) back.push(i);
+    e.setBrush({ kernel: "Inflate", strength: 0.8 });
+    const ok = e.press(ray(0.013, 0.007), 1, 2.5) && e.drag(ray(0.063, 0.007), 1, 2.5); e.release();
+    const P = e.positions(); let moved = 0, front = 0; for (let i = 0; i < P.length; i += 3) if (Math.abs(P[i + 2] - s.p[i + 2]) > 1e-6) { if (s.p[i + 2] < -0.3) moved++; else front++; }
+    const d = e.takeDirty();
+    check(ok && front > 1000 && moved === 0 && d.length < s.p.length / 3 * 0.75,
+      "a huge front-faces dab leaves the back faces alone (" + front + " moved, " + d.length + " of " + s.p.length / 3 + " vertices sent)"); }
+
+  // ---- Tube (curve brush) and Insert Mesh add geometry, one undo step each
+  { const s = sphere(128, 64); e.load(s.p, s.t); const v0 = e.vertexCount, t0v = e.topologyVersion;
+    const pts = []; for (let i = 0; i <= 20; i++) { const a = -0.6 + i * 0.06; pts.push(a, 0, Math.sqrt(1 - a * a)); }
+    const added = e.tube(pts, 0.05, 10);
+    check(added > 100 && e.vertexCount === v0 + added && e.topologyVersion !== t0v && e.polygons(), "Tube sweeps a tube along the stroke (+" + added + " vertices, quads kept)");
+    e.undo(); check(e.vertexCount === v0, "Tube undo");
+    const ins = e.insert(0, [0, 0, 1], [0, 0, 1], 0.2);
+    check(ins > 100 && e.vertexCount === v0 + ins && !!e.raycast([0, 0, 5], [0, 0, -1]), "Insert Mesh adds a sphere at the surface point (+" + ins + " vertices)");
+    const cube = e.insert(1, [0.5, 0.5, 0.7], [0.5, 0.5, 0.7], 0.15);
+    check(cube > 20, "Insert Mesh adds a cube (+" + cube + " vertices)");
+    e.undo(); e.undo(); check(e.vertexCount === v0, "Insert undo"); }
+
+  // ---- speed on a denser mesh (printed; a loose bound so a slow CI box still passes)
+  { const s = sphere(1024, 256); e.load(s.p, s.t);
+    e.setBrush({ kernel: "Clay", strength: 0.5, autoSmooth: 0.15 });
+    let t1 = performance.now(); e.press(ray(-0.3, 0), 1, 0.3); for (let i = 1; i <= 20; i++) e.drag(ray(-0.3 + i * 0.015, 0), 1, 0.3); e.release();
+    const ms = (performance.now() - t1) / 21;
+    check(ms < 60, "Clay + auto-smooth dab on " + e.vertexCount + " vertices: " + ms.toFixed(2) + " ms"); }
   console.log(fails ? fails + " FAILED" : "ALL OK");
   process.exit(fails ? 1 : 0);
 })().catch(err => { console.error(err); process.exit(1); });

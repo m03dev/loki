@@ -7,6 +7,7 @@
 // Memory: positions / normals / colors are float[3] per vertex, triangles are
 // int32[3], all read straight out of the module's memory via the *_ptr calls.
 #include "sculpt/brush.h"
+#include "sculpt/curve_tube.h"
 #include "sculpt/dyntopo.h"
 #include "sculpt/multires.h"
 #include "sculpt/preset_io.h"
@@ -311,7 +312,10 @@ KS_EXPORT(ks_press) int ks_press(float ox, float oy, float oz, float dx, float d
     if (!h.hit) return 0;
     S->active = S->brush;
     if (mods == 3) { S->active.kernel = Kernel::Mask; S->active.invert = false; }
-    else if (mods == 2) { S->active.kernel = Kernel::Smooth; S->active.invert = false; S->active.strength = std::max(0.3f, S->brush.strength); }
+    else if (mods == 2) {
+        S->active.kernel = Kernel::Smooth; S->active.invert = false; S->active.strength = std::max(0.3f, S->brush.strength);
+        S->active.autoSmooth = 0.0f;   // the brush's own auto-smooth on top of Smooth only doubled the pass
+    }
     else if (mods == 1) S->active.invert = !S->brush.invert;
     S->active.radius = radius;
     Dab d;
@@ -458,6 +462,77 @@ KS_EXPORT(ks_quad_remesh) int ks_quad_remesh(int targetFaces) {
     S->levels = Multires();
     replaceMesh(std::move(res.mesh));
     return res.quads;
+}
+
+// ---------------------------------------------------------------- tube / insert (add geometry)
+
+// Add a separate shell to the sculpt mesh (one undo step). The current
+// polygons stay as they are (quads kept), the new part brings its own; colour
+// and mask of the existing vertices are kept. Subdivision levels restart (the
+// base changed), as after a remesh.
+static int appendShell(const Mesh& part) {
+    if (!S || !S->engine || part.positions.empty() || part.tris.empty()) return 0;
+    std::vector<int> counts, idx;
+    currentPolys(counts, idx);
+    const int base = (int)S->mesh.positions.size();
+    std::vector<Vec3> pts = S->mesh.positions;
+    pts.insert(pts.end(), part.positions.begin(), part.positions.end());
+    if (!part.polyCounts.empty()) {
+        counts.insert(counts.end(), part.polyCounts.begin(), part.polyCounts.end());
+        for (int i : part.polyIndices) idx.push_back(base + i);
+    } else {
+        for (const Tri& t : part.tris) {
+            if (t[0] < 0) continue;
+            counts.push_back(3);
+            idx.insert(idx.end(), {base + t[0], base + t[1], base + t[2]});
+        }
+    }
+    std::vector<Vec3> color = S->mesh.color;
+    std::vector<float> mask = S->mesh.mask;
+    Mesh m = meshFromPolys(pts, counts, idx);
+    color.resize(pts.size(), Vec3{0.8f, 0.8f, 0.8f});
+    mask.resize(pts.size(), 0.0f);
+    m.color = std::move(color);
+    m.mask = std::move(mask);
+    S->levels = Multires();
+    replaceMesh(std::move(m));
+    return (int)part.positions.size();
+}
+
+// Tube (Curve Tube): sweep a circle of `radius` along the stroke's surface
+// points (xyz, n of them) with twist-free frames (curve_tube.cpp). Returns the
+// vertex count added.
+KS_EXPORT(ks_tube) int ks_tube(const float* pts, int n, float radius, int sides, float taperStart, float taperEnd) {
+    if (!S || !S->engine || n < 2 || radius <= 0) return 0;
+    std::vector<Vec3> p((size_t)n);
+    std::memcpy(p.data(), pts, sizeof(float) * 3 * (size_t)n);
+    TubeSettings ts;
+    ts.radius = radius;
+    ts.sides = std::max(3, std::min(64, sides));
+    ts.taperStart = clamp01(taperStart);
+    ts.taperEnd = clamp01(taperEnd);
+    Mesh tube = sweepTube(p, ts);
+    return appendShell(tube);
+}
+
+// Insert Mesh: a primitive at a surface point, its axis along the normal,
+// sunk by `depth` x radius. kind 0 = sphere, 1 = cube.
+KS_EXPORT(ks_insert) int ks_insert(int kind, float x, float y, float z, float nx, float ny, float nz, float radius, float depth) {
+    if (!S || !S->engine || radius <= 0) return 0;
+    Mesh part = kind == 1 ? Mesh::box(2.0f, 4) : Mesh::icosphere(3, 1.0f);
+    Vec3 n = normalize(Vec3(nx, ny, nz));
+    if (length2(n) < 1e-12f) n = Vec3(0, 1, 0);
+    Vec3 t = normalize(projectOnPlane(std::fabs(n.y) < 0.9f ? Vec3(0, 1, 0) : Vec3(1, 0, 0), n)), b = cross(n, t);
+    Vec3 c = Vec3(x, y, z) - n * (radius * depth);
+    for (Vec3& p : part.positions) {
+        Vec3 q = p * radius;
+        p = c + t * q.x + n * q.y + b * q.z;
+    }
+    if (signedVolume(part) < 0)
+        for (Tri& f : part.tris) std::swap(f[1], f[2]);
+    part.polyCounts.clear();
+    part.polyIndices.clear();
+    return appendShell(part);
 }
 
 // ---------------------------------------------------------------- subdivision levels
