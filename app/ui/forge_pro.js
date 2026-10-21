@@ -367,6 +367,22 @@ function forgeProRadial(v, n, axis) {
   return "Symmetry: " + (v.brush.radial > 1 ? "Radial " + v.brush.radial + " " + ["X", "Y", "Z"][v.brush.radialAxis | 0] : "Off") + ".";
 }
 
+function forgeProInterp(v, how) {
+  const t = v && v.tree;
+  if (!t || !t.api) return "Open Forge first.";
+  if (!t.api.active() || !t.api.active().keys) return "Nothing is keyed here.";
+  t.api.undoChunk("key interpolation", () => t.api.setInterp(null, t.time.frame, null, null, how));
+  return "Key interpolation: " + how + " at frame " + Math.round(t.time.frame) + ".";
+}
+
+function forgeProMirror(v, axis) {
+  const t = v && v.tree;
+  if (!t || !t.api) return "Open Forge first.";
+  if (!t.api.active() || !t.api.active().keys) return "Nothing is keyed here.";
+  t.api.undoChunk("mirror keys", () => t.api.mirrorKeys(null, axis));
+  return "Mirrored the keys across " + ["YZ", "XZ", "XY"][axis] + ".";
+}
+
 function forgeProSym(v, bits) {
   if (!v || !v.brush) return "";
   v.brush.symBits = bits | 0;
@@ -462,6 +478,15 @@ function forgeProCommands() {
     nextKey: ["Next Key", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return t.api.stepKey(null, 1) ? "Frame " + Math.round(t.time.frame) + "." : "No later key."; }],
     rangeStart: ["Set Range Start", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.frame, t.time.end); return "Range " + t.time.start + "-" + t.time.end + "."; }],
     rangeEnd: ["Set Range End", (v) => { const t = v && v.tree; if (!t) return "Open Forge first."; t.api.setRange(t.time.start, t.time.frame); return "Range " + t.time.start + "-" + t.time.end + "."; }],
+    animAutoKey: ["Auto Keyframe", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return "Auto Keyframe " + (t.api.setAutoKey() ? "on" : "off") + "."; }],
+    keyLinear: ["Keys: Linear", (v) => forgeProInterp(v, "linear")],
+    keySmooth: ["Keys: Smooth", (v) => forgeProInterp(v, "bezier")],
+    keyStep: ["Keys: Step", (v) => forgeProInterp(v, "step")],
+    copyAnim: ["Edit > Copy Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.copyAnim(); return n ? "Copied " + n + " keys." : "Nothing is keyed here."; }],
+    pasteAnim: ["Edit > Paste Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; if (!t.clipKeys) return "Copy some animation first."; t.api.undoChunk("paste animation", () => t.api.pasteAnim()); return "Pasted at frame " + Math.round(t.time.frame) + "."; }],
+    mirrorKeysX: ["Mirror Keys across YZ", (v) => forgeProMirror(v, 0)],
+    mirrorKeysY: ["Mirror Keys across XZ", (v) => forgeProMirror(v, 1)],
+    mirrorKeysZ: ["Mirror Keys across XY", (v) => forgeProMirror(v, 2)],
     objComp: ["Object/Component", (v) => forgeProF8(v)],
     vertex: ["Vertex", (v) => forgeProComponents(v, "vert")],
     edge: ["Edge", (v) => forgeProComponents(v, "edge")],
@@ -689,7 +714,7 @@ const FORGE_PRO_ROWS = [
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
   ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
   ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial4", "symRadial6", "symRadial8"]],
-  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd"]],
+  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "animAutoKey", "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]],
 ];
 const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)

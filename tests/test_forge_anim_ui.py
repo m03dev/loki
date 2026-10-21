@@ -86,6 +86,39 @@ async def main():
         check("scrubbing evaluates the keys: 0 at frame 1, 3 at frame 10, 4/3 between (linear)",
               abs(x1) < 1e-6 and abs(x10 - 3) < 1e-6 and abs(x5 - 4.0 / 3.0) < 1e-6, [x1, x10, x5])
 
+        # interpolation: step holds, smooth eases (both differ from linear's 4/3)
+        async def at5():
+            await E("forge.view.tree.api.setFrame(5)")
+            return await E(E_)
+        await E("forge.view.tree.api.setInterp(null, 1, null, null, 'step')")
+        step5 = await at5()
+        await E("forge.view.tree.api.setInterp(null, 1, null, null, 'bezier')")
+        smooth5 = await at5()
+        await E("forge.view.tree.api.setFrame(1)")
+        await E("forgeProRun(forge.view, 'keyLinear')")
+        lin5 = await at5()
+        check("key interpolation: Step holds, Smooth eases, Linear is a straight line",
+              abs(step5) < 1e-6 and abs(smooth5 - 912.0 / 729.0) < 1e-3 and abs(lin5 - 4.0 / 3.0) < 1e-6, [step5, smooth5, lin5])
+
+        # Auto Keyframe: a moved object writes a key at the playhead
+        auto_ui = await E("[!!document.getElementById('forge-time-autokey'), !!document.getElementById('forge-time-interp')]")
+        await E("forge.view.tree.api.setFrame(12)")
+        await E("forge.view.tree.api.setTransform(null, 'translate', 0, 5)")
+        c = await E("forge.view.tree.api.setAutoKey(true) && forge.view.tree.api.autoKeyNow()")
+        keys2 = await E("forge.view.tree.api.keyTimes()")
+        await E("forge.view.tree.api.setFrame(12)")
+        x12 = await E(E_)
+        check("Auto Keyframe: moving an object keys it at the playhead (Auto Key is on the bar)",
+              auto_ui == [True, True] and c == 9 and 12 in keys2 and abs(x12 - 5) < 1e-6, [auto_ui, c, keys2, x12])
+        await E("forge.view.tree.api.setAutoKey(false)")
+
+        # mirror the keys across YZ: translate x flips
+        await E("forgeProRun(forge.view, 'mirrorKeysX')")
+        await E("forge.view.tree.api.setFrame(10)")
+        mx = await E(E_)
+        check("Mirror Keys across YZ flips the keyed translate x", abs(mx + 3) < 1e-6, mx)
+        await E("forgeProRun(forge.view, 'mirrorKeysX')")
+
         # prev / next key
         await E("forge.view.tree.api.setFrame(5)")
         await E("forgeProRun(forge.view, 'prevKey')")
@@ -96,7 +129,10 @@ async def main():
 
         # playback advances and loops
         await E("forge.view.tree.api.setRange(1, 20); forge.view.tree.api.setFrame(1); forgeProRun(forge.view, 'playPause')")
-        await page.wait_for_timeout(400)
+        try:
+            await page.wait_for_function("forge.view.tree.time.frame > 1", timeout=3000)
+        except Exception:  # noqa: BLE001
+            pass
         mid = await E("forge.view.tree.time.frame")
         await E("forgeProRun(forge.view, 'playPause')")
         stopped = await E("forge.view.tree.time.playing")
@@ -121,6 +157,17 @@ async def main():
         await E("forgeProRun(forge.view, 'deleteKey')")
         gone = await E("forge.view.tree.api.keyTimes()")
         check("Delete Key takes the key off the current frame", 15 in before and 15 not in gone, [before, gone])
+
+        # copy / paste animation (the clipboard pastes the clip's first key on the playhead)
+        n0 = await E("forge.view.tree.api.copyAnim()")
+        await E("forge.view.tree.api.clearKeys()")
+        empty = await E("forge.view.tree.api.keyTimes()")
+        await E("forge.view.tree.api.setRange(1, 60); forge.view.tree.api.setFrame(20)")
+        await E("forge.view.tree.api.pasteAnim()")
+        await page.wait_for_timeout(80)
+        pasted = await E("forge.view.tree.api.keyTimes()")
+        check("Copy / Paste Animation puts the clip back, offset onto the playhead",
+              n0 >= 2 and empty == [] and pasted[:2] == [20, 29], [n0, empty, pasted])
 
         check("no script errors", not errors, errors[:5])
         await browser.close()

@@ -40,6 +40,7 @@ function forgeSceneAttach(view, ctx) {
     rootId: 0, panel: null, list: null,
     layers: [], layerNext: 1, curLayer: 0,          // the pro Display Layers (the Layer Editor under the Channel Box); 0 = Default
     time: { frame: 1, start: 1, end: 24, fps: 24, playing: false },   // the pro Time Slider + the playing flag
+    autoKey: false, clipKeys: null,                                   // the pro Auto Keyframe + the animation clipboard
   };
   const node = (id) => tree.byId[id];
   const kidsOf = (id) => tree.nodes.filter((n) => n.parent === id);
@@ -618,12 +619,73 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
     setInterp(id, frame, part, axis, how) {
-      const n = node(id || api.active().id), k = part + axis, arr = n && n.keys && n.keys[k];
-      if (!arr) return false;
+      const n = node(id || api.active().id);
+      if (!n || !n.keys) return false;
       const f = Math.round(frame);
-      const at = part == null ? [] : arr.filter((x) => x.f === f);
-      if (part == null) for (const kk of Object.keys(n.keys)) for (const x of n.keys[kk]) if (x.f === f) x.i = how;
-      else for (const x of at) x.i = how;
+      if (part == null) {                       // every channel's key at this frame
+        for (const kk of Object.keys(n.keys)) for (const x of n.keys[kk]) if (x.f === f) x.i = how;
+      } else {
+        const arr = n.keys[part + axis];
+        if (!arr) return false;
+        for (const x of arr) if (x.f === f) x.i = how;
+      }
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    // ---- the pro Auto Keyframe: an object that moves writes a key at the playhead
+    setAutoKey(on) { tree.autoKey = on == null ? !tree.autoKey : !!on; if (tree.syncKeys) tree.syncKeys(); return tree.autoKey; },
+    autoKeyState() { return tree.autoKey; },
+    autoKeyNow() {
+      if (!tree.autoKey) return 0;
+      const n = api.active();
+      if (!n) return 0;
+      const tr = api.transform();
+      if (!tr) return 0;
+      let c = 0;
+      view.undoChunk("auto key", () => { for (const part of ["translate", "rotate", "scale"]) for (let a = 0; a < 3; a++) if (api.setKey(n.id, tree.time.frame, part, a, tr[part][a])) c++; });
+      return c;
+    },
+    // ---- the pro Edit > Keys: Copy / Paste, and mirror the keys across an axis
+    copyAnim(id) {
+      const n = node(id || api.active().id);
+      if (!n || !n.keys) return 0;
+      tree.clipKeys = JSON.parse(JSON.stringify(n.keys));
+      return api.keyTimes(n.id).length;
+    },
+    pasteAnim(id) {
+      const n = node(id || api.active().id);
+      if (!n || !tree.clipKeys) return false;
+      let first = Infinity;
+      for (const k of Object.keys(tree.clipKeys)) for (const x of tree.clipKeys[k]) first = Math.min(first, x.f);
+      const off = Math.round(tree.time.frame) - (Number.isFinite(first) ? first : 0);
+      const clip = JSON.parse(JSON.stringify(tree.clipKeys));
+      for (const k of Object.keys(clip)) {
+        const arr = clip[k];
+        for (const x of arr) x.f += off;
+        n.keys = n.keys || {};
+        const merged = (n.keys[k] || []).filter((x) => !arr.some((y) => y.f === x.f)).concat(arr);
+        merged.sort((a, b) => a.f - b.f);
+        n.keys[k] = merged;
+      }
+      if (tree.syncChannel) tree.syncChannel();
+      if (tree.syncKeys) tree.syncKeys();
+      return true;
+    },
+    // mirror a node's keys across an axis plane (the pose is reflected, the frames stay)
+    mirrorKeys(id, axis) {
+      const n = node(id || api.active().id);
+      if (!n || !n.keys) return false;
+      const ax = axis | 0;
+      const flip = (k, v) => {
+        const part = k.slice(0, -1), a = Number(k.slice(-1));
+        if (part === "scale") return v;
+        if (part === "translate") return a === ax ? -v : v;
+        if (part === "rotate") return a === ax ? v : -v;   // an axial vector keeps its own component, flips the rest
+        return v;
+      };
+      for (const k of Object.keys(n.keys)) for (const x of n.keys[k]) x.v = flip(k, x.v);
+      for (const nd of tree.nodes) if (nd.keys) api.evalKeys(nd);
+      if (tree.syncChannel) tree.syncChannel();
       if (tree.syncKeys) tree.syncKeys();
       return true;
     },
@@ -908,7 +970,7 @@ function forgeSceneAttach(view, ctx) {
   };
   if (tc && tc.addEventListener) {
     tc.addEventListener("objectChange", () => { if (tree.syncChannel) tree.syncChannel(); });
-    tc.addEventListener("dragging-changed", (ev) => { if (!ev.value) { drawMarks(); if (tree.syncChannel) tree.syncChannel(); } });
+    tc.addEventListener("dragging-changed", (ev) => { if (!ev.value) { drawMarks(); if (tree.syncChannel) tree.syncChannel(); if (tree.autoKey) api.autoKeyNow(); } });
   }
   // the viewer's own Move button attaches the handle to the SELECTED object, never to the bare holder
   if (typeof view.toggleTransform === "function") {
@@ -1279,6 +1341,7 @@ function forgeSceneAttach(view, ctx) {
         inp.addEventListener("input", () => { if (inp.value === "" || inp.value === "-" || locked(key)) return; api.setTransform(null, part, a, inp.value); });
         inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Tab") { e.preventDefault(); focusNext(inp, e.shiftKey); }
           else if (e.key === "Enter" || e.key === "Escape") inp.blur(); });   // Enter / Esc give the keys back to the viewport (h, w, e ... work again)
+        inp.addEventListener("change", () => { if (tree.autoKey) api.autoKeyNow(); });   // Auto Keyframe: a committed value writes a key   // Enter / Esc give the keys back to the viewport (h, w, e ... work again)
         lbl.addEventListener("pointerdown", (e) => {
           if ((e.button !== 0 && e.button !== 1) || locked(key)) return;
           e.preventDefault();

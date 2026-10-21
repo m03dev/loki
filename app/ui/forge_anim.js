@@ -23,6 +23,12 @@ function forgeTimeAttach(view) {
   const prev = mk("\u25c0", "Jump to the previous key.", "forge-time-prev");
   const next = mk("\u25b6", "Jump to the next key.", "forge-time-next");
   const setk = mk("Set Key", "Key the selected object's translate / rotate / scale at this frame (S).", "forge-time-setkey", "forge-time-setkey");
+  const akey = mk("Auto Key", "Auto Keyframe: while it is on, moving or typing a channel writes a key at the playhead.", "forge-time-autokey", "forge-time-autokey");
+  const interp = document.createElement("select");
+  interp.className = "forge-time-interp"; interp.id = "forge-time-interp";
+  interp.title = "Interpolation of the keys at this frame.";
+  for (const [val, label] of [["linear", "Linear"], ["bezier", "Smooth"], ["step", "Step"]]) { const o = document.createElement("option"); o.value = val; o.textContent = label; interp.append(o); }
+  interp.addEventListener("change", () => api.undoChunk("key interpolation", () => api.setInterp(null, T.time.frame, null, null, interp.value)));
   const frame = num("forge-time-frame", "The current frame.", 1);
   frame.min = "1";
   const start = num("forge-time-start", "First frame of the played range.", 1);
@@ -38,6 +44,7 @@ function forgeTimeAttach(view) {
   prev.addEventListener("click", () => api.stepKey(null, -1));
   next.addEventListener("click", () => api.stepKey(null, 1));
   setk.addEventListener("click", () => { if (typeof forgeProRun === "function") { const r = forgeProRun(view, "setKey"); if (r && typeof forgeSay === "function") forgeSay(r); } });
+  akey.addEventListener("click", () => { const on = api.setAutoKey(); if (typeof forgeSay === "function") forgeSay("Auto Keyframe " + (on ? "on" : "off") + "."); });
   slider.addEventListener("input", () => api.setFrame(slider.value));
   frame.addEventListener("input", () => { if (frame.value !== "") api.setFrame(frame.value); });
   frame.addEventListener("keydown", (e) => e.stopPropagation());        // typing a frame is not a hotkey
@@ -51,7 +58,7 @@ function forgeTimeAttach(view) {
     api.setFrame(T.time.start + Math.round((e.clientX - r.left) / Math.max(1, r.width) * (T.time.end - T.time.start)));
   });
 
-  bar.append(play, prev, next, setk, frame, track, start, end);
+  bar.append(play, prev, next, setk, akey, interp, frame, track, start, end);
   stage.append(bar);
 
   function sync() {
@@ -59,6 +66,8 @@ function forgeTimeAttach(view) {
     play.textContent = t.playing ? "Stop" : "Play";
     play.classList.toggle("on", t.playing);
     if (document.activeElement !== frame) frame.value = String(Math.round(t.frame));
+    akey.classList.toggle("on", !!T.autoKey);
+    bar.dataset.autokey = T.autoKey ? "1" : "0";
     if (document.activeElement !== start) start.value = String(t.start);
     if (document.activeElement !== end) end.value = String(t.end);
     slider.min = String(t.start); slider.max = String(t.end); slider.value = String(Math.round(t.frame));
@@ -71,6 +80,11 @@ function forgeTimeAttach(view) {
       ticks.append(s);
     }
     bar.dataset.keys = String(ts.length);
+    if (document.activeElement !== interp) {
+      const key = api.active() && api.active().keys && api.active().keys[`translate0`];
+      const at = (n) => { const ks = n && n.keys ? Object.values(n.keys).flat().filter((x) => x.f === Math.round(t.frame)) : []; return ks.length ? ks[0].i : "linear"; };
+      interp.value = at(api.active());
+    }
     bar.dataset.frame = String(Math.round(t.frame));
   }
   T.syncTime = sync;
