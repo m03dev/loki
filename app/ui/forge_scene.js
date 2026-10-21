@@ -655,7 +655,12 @@ function forgeSceneAttach(view, ctx) {
       if (tree.syncKeys) tree.syncKeys();
       return t.frame;
     },
-    play(on) { tree.time.playing = on == null ? true : !!on; if (tree.syncKeys) tree.syncKeys(); return tree.time.playing; },
+    play(on) {
+      tree.time.playing = on == null ? true : !!on;
+      if (tree.time.playing && view.start) view.start();   // the loop drives the playhead
+      if (tree.syncKeys) tree.syncKeys();
+      return tree.time.playing;
+    },
     stop() { tree.time.playing = false; if (tree.syncKeys) tree.syncKeys(); return false; },
     togglePlay() { return api.play(!tree.time.playing); },
     playState() { return tree.time.playing; },
