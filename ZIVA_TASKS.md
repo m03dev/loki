@@ -33,6 +33,30 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 13:40) - owner's bug batch: Multi-Cut, soft/hard + normals, Animation workspace, clean screen. Pull first.
+Owner 12:46 (after using Forge on the Mac): knife preview + Maya modifiers in Multi-Cut, lingering wires, soften / harden +
+show normals, the floating key bar "hide it in a bar", animation stuff into an Animation workspace, no button top right.
+- **app/ui/forge_multicut.js**: hover dot + % readout + knife line; Shift = Snap Step % (25) with step dots; middle-click =
+  50 %; Ctrl (Cmd) before a point = edge-loop preview, Ctrl+click / Ctrl+Shift+click (snapped) / Ctrl+middle-click (centred)
+  inserts it and the tool stays on; face clicks take the nearest edge point; Backspace / Enter / right-click / Esc.
+- **app/ui/forge_normals.js**: shading follows m.hard (soft edges share normals); Soften Edge / Harden Edge / Soften-Harden
+  (angle, polySoftEdge in INPUTS); new primitives get angle 30 (cube crisp, sphere round); Display > Face / Vertex Normals,
+  size, Soft/Hard Edges display (hard solid, soft dotted).
+- Smooth preview (2 / 3) no longer goes stale: it rebuilds from the live drag and on every new cage (forge.js polyEpoch,
+  forge_chrome.js fmySmoothRefresh). HUD counts only real shapes (not the smooth preview or cut markers).
+- **Workspace: Animation** owns the time slider, range slider, Graph Editor and the old floating key bar (folded behind
+  "Keys" in the range slider row). Modeling shows none of them. The Options cog is gone: Windows > Settings/Preferences >
+  Preferences opens that panel.
+- Marking menus near the bottom of the viewport put their list ABOVE the ring (it slid over the south wedge, so a flick
+  south ran "Draw it") - this was also the cause of the 3 test_forge_pro_ui failures on master; 100/100 now.
+- [ ] [mac] The owner's Mac is still on a build from before 4b1be13 (his screenshot shows the World tab). It is probably
+      stuck like the PC was (local edits in game/loki-world, deleted upstream): copy those files to
+      harness_data/update_kept/, `git checkout -- game/loki-world`, restart LOKI, report the update line in loki_app.log.
+- [ ] [mac] Real window: Multi-Cut with Shift / Ctrl / middle-click (Cmd = Ctrl on the Mac), Soften Edge on a sphere,
+      Workspace: Animation. Screenshot anything off.
+- [ ] [either] test_forge_render_ui and test_forge_creature_ui time out on master in the cloud (before this batch too) -
+      check them on a real machine.
+
 ### From Claude (2026-10-21 10:20) - panels, menus, Materials workspace, C++ Reduce; the PC update unstuck. Pull first.
 Owner 09:49: every panel / subpanel adjustable and closable, all menus movable "even the quick menu and the wheels",
 Material Maker in its own workspace, no right-side scroll bar, everything in %, vertical monitors. Build on it:

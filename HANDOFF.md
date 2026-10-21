@@ -185,6 +185,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   Workspace: Materials, C++ Reduce (ks_decimate), no page scroll bar (glass.css margin collapse). Cloud only
   (test_forge_dock_ui 22, test_forge_menus_ui 16). Research: docs/FORGE_QOL.md "Second pass".
 
+- **2026-10-21 13:40 (Claude): the owner's bug batch** - Multi-Cut the pro way (forge_multicut.js), soft / hard edges +
+  normal display (forge_normals.js), smooth preview never stale, Workspace: Animation (time / range sliders, keys, Graph
+  Editor; Modeling is clean), Preferences in Windows > Settings/Preferences (no cog), marking-menu list above the ring near
+  the bottom (fixed test_forge_pro_ui's 3 failures). Cloud only: test_forge_mcut_ui 22, test_forge_pro_ui 100.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

@@ -184,3 +184,13 @@ function forgeOptionsAttach(view) {
   return panel;
 }
 window.forgeOptionsAttach = forgeOptionsAttach;
+
+// Windows > Settings/Preferences > Preferences (owner 2026-10-21 12:46: no cog on the screen - "spread out in its
+// proper systems"): the same panel, opened from the menus, the hotbox and the command line
+if (typeof FORGE_PRO_CMDS !== "undefined" && !FORGE_PRO_CMDS.preferences) {
+  FORGE_PRO_CMDS.preferences = ["Preferences...", () => {
+    const p = document.getElementById("forge-options"), b = document.getElementById("forge-options-btn");
+    if (b) b.click(); else if (p) p.hidden = !p.hidden;
+    return p && !p.hidden ? "Preferences: interface elements, the tools' limits and presets." : "";
+  }];
+}

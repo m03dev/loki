@@ -672,7 +672,13 @@ function forgeProMarkShow(v, x, y, menu) {
   const ml = host.querySelector(".forge-pro-mlist");
   if (ml) {
     const r = ml.getBoundingClientRect();
-    if (r.bottom > window.innerHeight - 4) ml.style.top = (parseFloat(ml.style.top) - (r.bottom - window.innerHeight + 4)) + "px";
+    if (r.bottom > window.innerHeight - 4) {
+      // near the bottom the list goes ABOVE the ring - sliding it up over the ring put list items under the south wedge,
+      // so a flick south picked "Draw it" instead of Cube
+      const ringed = !!Object.keys(menu.ring || {}).length;
+      const above = ringed ? -(Math.round(FORGE_PRO_R * 0.82 + 22) + r.height) : -(r.height + 6);
+      ml.style.top = (y + above >= 4 ? above : parseFloat(ml.style.top) - (r.bottom - window.innerHeight + 4)) + "px";
+    }
     if (r.right > window.innerWidth - 4) ml.style.left = (-(r.right - window.innerWidth + 4)) + "px";
   }
   host._at = [x, y]; host._menu = menu;
@@ -717,10 +723,10 @@ const FORGE_PRO_ROWS = [
   ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "imagePlane", "draw", "image", "describe", "creature"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
   ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
-  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
+  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "faceNormals", "vertexNormals", "softHardDisplay", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
   ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
   // the modelling menu set (the pro second row)
-  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel"]],
+  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "softEdge", "hardEdge", "softHard", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel"]],
   ["Edit Mesh", ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter",
     "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
   ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],

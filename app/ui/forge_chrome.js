@@ -222,15 +222,16 @@ const FMY_MENUS = () => {
     ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Image Planes", "imagePlane", "#Make with LOKI", "draw", "image", "describe", "creature"]],
     ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]],
     ["Modify", ["#Transform", "move", "rotate", "scale", "showManip", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
-    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
-    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Layouts and Menus", "layouts", "layoutReset", "quickMenu", "-", "#Settings/Preferences", "hotkeyEditor", "menuSettings"])],
+    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Polygons", "faceNormals", "vertexNormals", "softHardDisplay", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
+    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Layouts and Menus", "layouts", "layoutReset", "quickMenu", "-", "#Settings/Preferences", "preferences", "hotkeyEditor", "menuSettings"])],
     ["Mesh", ["#Combine", "combine", "separate", "extractFace", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "triangulate", "quadrangulate", "dynamesh", "-", "fillHole", "cleanup", "meshStats", "-", "sculptModel"]],
     ["Edit Mesh", ["#Components", "extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
       "-", "#Edge", "spinEdge", "spinEdgeBack", "-", "#Face", "poke", "wedge", "duplicateFace", "reverse", "-", "deleteComp", "deleteEdgeVert"]],
-    ["Mesh Tools", ["#Tools", "edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "-", "softSel", "sculpt", "-", "winToolkit", "-", "snapGrid", "snapEdge", "snapPoint"]],
+    ["Mesh Tools", ["#Tools", "edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "multiCutStep", "targetWeld", "slideEdge", "-", "softSel", "sculpt", "-", "winToolkit", "-", "snapGrid", "snapEdge", "snapPoint"]],
     ["UV", ["uvEditor", "-", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "-", "#Cut and Sew", "uvCut", "uvSew", "uvMoveSew",
       "-", "#Unfold", "uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams", "uvUnfold", "uvLayout", "-", "uvShell", "uvChecker"]],
-    ["Mesh Display", ["wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
+    ["Mesh Display", ["#Normals", "softEdge", "hardEdge", "softHard", "softHardAngle", "-", "#Display", "softHardDisplay", "faceNormals", "vertexNormals", "normalsBigger", "normalsSmaller",
+      "-", "wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
     ["Help", [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}], ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
       ["help3", "Alt / Option + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
       ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]]],
@@ -814,7 +815,12 @@ function fmySmoothRefresh(v, force) {
     if (base && !base.visible) { base.visible = true; v.dirty = true; }
     return;
   }
-  const ver = base && base.geometry && base.geometry.attributes.position ? base.geometry.attributes.position.version : 0;
+  // what the preview was built from: the cage on screen (the live drag's copy while dragging), a change counter that
+  // every new cage and live drag moves, and the shown geometry - a cage edited in place, or a new geometry whose
+  // version counter starts again at 0, used to leave the old smooth mesh and wire on screen ("weird wires linger")
+  const src = v.polyWork || v.poly;
+  const gpos = base && base.geometry && base.geometry.attributes.position;
+  const ver = (v.polyEpoch || 0) + ":" + (base && base.geometry ? base.geometry.uuid : "") + ":" + (gpos ? gpos.version : 0);
   // the smoothed mesh + the cage lines, from triangles (the JS's or the C++ engine's - the same result)
   const build = (t, poly, at) => {
     drop();
@@ -832,28 +838,29 @@ function fmySmoothRefresh(v, force) {
     v.holder.add(st.mesh, st.cage);
     st.of = poly; st.ver = at;
   };
-  if (force || st.of !== v.poly || st.ver !== ver) {
+  if (force || st.of !== src || st.ver !== ver) {
     // a big cage goes to the C++ engine, off the window's thread (6x faster, and the viewport never stalls):
     // the last preview stays on screen until the new one is back; one request at a time, the latest wins
     const G = window.ForgeGeom;
     if (G && G.usable() && v.poly.f.length >= FMY_SMOOTH_NATIVE_MIN) {
       if (st.pending) { st.again = true; }
       else {
-        const poly = v.poly, at = ver;
+        const poly = src, at = ver;
         st.pending = G.smooth(poly, 2, FMY_SMOOTH_LIMIT).then((t) => {
           st.pending = null;
           const again = st.again; st.again = false;
           if (v.smoothPrev !== st || !((v.smoothLevel || 1) >= 2 && v.poly && v.mode !== "sculpt")) return;
-          if (t && v.poly === poly) { build(t, poly, at); fmySmoothShow(v, st, base); }
-          if (!t || again || v.poly !== poly) fmySmoothRefresh(v, !t);    // the cage moved on meanwhile: once more
+          const now = v.polyWork || v.poly;
+          if (t && now === poly) { build(t, poly, at); fmySmoothShow(v, st, base); }
+          if (!t || again || now !== poly) fmySmoothRefresh(v, !t);    // the cage moved on meanwhile: once more
         });
         st.native = true;
       }
       if (!st.mesh) { if (base && !base.visible) { base.visible = true; v.dirty = true; } return; }   // the first one is on its way
     } else {
-      let m = v.poly;
+      let m = src;
       for (let k = 0; k < 2 && m.f.length * 4 <= FMY_SMOOTH_LIMIT; k++) m = P.smooth(m);
-      build(P.triangulate(m), v.poly, ver);
+      build(P.triangulate(m), src, ver);
       st.native = false;
     }
   }
@@ -991,7 +998,8 @@ function fmyHudUpdate(v) {
     for (const id of ids) {
       const n = t.node(id); if (!n || !n.visible) continue;
       n.inner.children.forEach((o) => {
-        if (!o.isMesh || !o.geometry || o.name === "forge-sel") return;
+        // only real shapes count - not the smooth preview, the cut-point markers or any other helper drawn in the holder
+        if (!o.isMesh || !o.geometry || (o.name !== "forge" && o.name !== "shape")) return;
         let c;
         if (n.root && v.sm && !v.poly) {              // the edited mesh: Forge already knows its welded vertices
           const tris = v.sm.idx ? v.sm.idx.length / 3 : 0;

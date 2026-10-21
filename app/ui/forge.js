@@ -1858,6 +1858,14 @@ function forgeMakeView(lib, renderer, canvas) {
     poly = poly || view.poly;
     if (!poly || !view.sm || !view.polyCorners) return;
     const nrm = view.sm.nrm;
+    if (poly.hard instanceof Map && typeof forgeCornerNormals === "function") {
+      // soft / hard edges (forge_normals.js, the pro tool's polySoftEdge): a soft edge shares its vertices' normals
+      // with the face across it, a hard edge splits them
+      const cn = forgeCornerNormals(poly);
+      poly.f.forEach((f, fi) => { const at = view.polyCorners[fi]; for (let k = 0; k < f.length; k++) nrm.set(cn[fi][k], (at + k) * 3); });
+      if (mesh) { mesh.geometry.attributes.normal.needsUpdate = true; view.dirty = true; }
+      return;
+    }
     poly.f.forEach((f, fi) => {
       const n = window.ForgePoly.faceNormal(poly, f), at = view.polyCorners[fi];
       for (let k = 0; k < f.length; k++) nrm.set(n, (at + k) * 3);
@@ -1885,6 +1893,7 @@ function forgeMakeView(lib, renderer, canvas) {
       if (kept && kept !== poly) { poly.uv = kept.uv; poly.fuv = kept.fuv; poly.uvNew = kept.uvNew; }
     }
     view.poly = poly; view.tri2face = Int32Array.from(tri2face); view.polyCorners = start;
+    view.polyWork = null; view.polyEpoch = (view.polyEpoch || 0) + 1;   // every new cage: previews rebuild (no stale wires)
     const sm = forgeMeshFrom(pos, null, null, Uint32Array.from(idx), vid);   // corners know their vertex: no weld by position
     const cuv = window.ForgeUV ? ForgeUV.cornerUVs(poly) : null;
     if (cuv) sm.uv = cuv;                                                     // one UV per corner: seams for free
@@ -1898,6 +1907,8 @@ function forgeMakeView(lib, renderer, canvas) {
   // only, nothing rebuilt and nothing put on the undo stack - commit with showPoly once the drag is done
   view.polyLive = (work) => {
     if (!view.poly || !view.sm || !view.polyCorners || work.f.length !== view.poly.f.length) return;
+    view.polyWork = work === view.poly ? null : work;   // the smooth preview and the wire follow the drag (forge_chrome.js)
+    view.polyEpoch = (view.polyEpoch || 0) + 1;
     const { pos, wpos, wid, n } = view.sm;
     work.f.forEach((f, fi) => { const at = view.polyCorners[fi]; for (let k = 0; k < f.length; k++) pos.set(work.v[f[k]], (at + k) * 3); });
     for (let i = 0; i < n; i++) { const w = wid[i] * 3; wpos[w] = pos[i * 3]; wpos[w + 1] = pos[i * 3 + 1]; wpos[w + 2] = pos[i * 3 + 2]; }

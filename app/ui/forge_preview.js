@@ -103,6 +103,7 @@ function forgePreviewAttach() {
   // release - the next move redraws the preview if the tool is still armed
   document.addEventListener("pointerup", () => { reason = "pointerup"; hide(); }, true);
   window.forgePreviewHide = hide;
+  window.forgePreviewLoop = loopSegments;          // Multi-Cut's Ctrl loop preview uses the same walk (forge_multicut.js)
   window.forgePreviewSetActive = (on) => { active = on !== false; if (!active) hide(); };
   return { hide: hide, active: () => active };
 }

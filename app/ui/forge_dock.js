@@ -633,3 +633,38 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("layouts", "Layouts... (save / load / reset, interface size)", () => forgeDockLayoutsPanel());
   add("layoutReset", "Reset the Layout", () => forgeDockReset());
 }
+
+// ------------------------------------------------------------------------------------------ Workspace: Animation
+// (owner 2026-10-21 12:46: "move all the animation stuff to an animation workspace keep things clean" - and the floating
+// key bar over the viewport "hide it in a bar we'll work on it later"). Outside Animation the time slider, the range
+// slider, the key bar and the Graph Editor are gone from the screen (forge.css, #forge.ws-anim). In Animation the key
+// bar lives folded inside the range slider row: the Keys button there unfolds it.
+function forgeDockAnim(on) {
+  const ts = document.getElementById("fmy-time"), kb = document.getElementById("forge-time");
+  if (ts && kb && kb.parentElement !== ts) {
+    kb.classList.add("fdock-keys");
+    kb.style.translate = ""; kb.classList.remove("fdock-moved");
+    ts.append(kb);
+  }
+  const range = ts && ts.querySelector(".fmy-range");
+  if (range && !document.getElementById("fdock-keys-btn")) {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = "fdock-keys-btn"; b.className = "fmy-pbtn fdock-keys-btn"; b.textContent = "Keys";
+    b.title = "Keys: Set Key, Auto Key, the previous / next key, key interpolation and the Graph Editor (a work in progress).";
+    b.addEventListener("click", () => {
+      const open = !forgeDockLoad("loki-forge-keysbar", { open: false }).open;
+      forgeDockSave("loki-forge-keysbar", { open });
+      forgeDockAnimKeys();
+    });
+    range.append(b);
+  }
+  forgeDockAnimKeys();
+  if (!on) { const g = document.getElementById("forge-graph"); if (g) g.hidden = true; }
+  const fv = typeof forge !== "undefined" && forge.view; if (fv && fv.resize) fv.resize();
+}
+function forgeDockAnimKeys() {
+  const kb = document.getElementById("forge-time"), b = document.getElementById("fdock-keys-btn");
+  const open = !!forgeDockLoad("loki-forge-keysbar", { open: false }).open;
+  if (kb) kb.classList.toggle("fdock-keys-open", open);
+  if (b) b.classList.toggle("on", open);
+}

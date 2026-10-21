@@ -59,6 +59,8 @@ async def main():
         await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
         await page.evaluate("forgeAddPrimitive('cube')")
         await page.wait_for_function("forge.view && forge.view.sm && forge.view.tree && forge.view.tree.api", timeout=10000)
+        await page.evaluate("ForgeUVEditor.setWorkspace('anim')")   # the key bar and the Graph Editor live in Workspace: Animation
+        await page.evaluate("document.getElementById('fdock-keys-btn') && !document.getElementById('forge-time').classList.contains('fdock-keys-open') && document.getElementById('fdock-keys-btn').click()")
         E = page.evaluate
 
         bar = await E("[!!document.getElementById('forge-time'), !!document.getElementById('forge-time-slider'), !!document.getElementById('forge-time-setkey'), !!document.getElementById('forge-time-ticks')]")

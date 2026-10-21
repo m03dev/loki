@@ -58,8 +58,10 @@ async def main():
         await page.wait_for_function("forge.view && forge.view.pro && forge.view.brush", timeout=10000)
         E = page.evaluate
 
-        check("the cog button is on the stage", await E("!!document.getElementById('forge-options-btn')"))
-        await page.click("#forge-options-btn")
+        # owner 2026-10-21 12:46: no cog on the screen - the panel is Windows > Settings/Preferences > Preferences
+        check("no cog on the viewport; Preferences is in Windows > Settings/Preferences",
+              await E("getComputedStyle(document.getElementById('forge-options-btn')).display === 'none' && FMY_MENUS().find(m => m[0] === 'Windows')[1].includes('preferences')"))
+        await E("fmyRun('preferences')")
         await page.wait_for_timeout(60)
         check("it opens the Options panel", await E("!document.getElementById('forge-options').hidden"))
 

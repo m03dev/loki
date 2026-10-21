@@ -54,6 +54,7 @@ const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExt
   connect: "polyConnectComponents", detach: "polySplitVert", dissolveEdges: "polyDelEdge", dissolveVerts: "polyDelVertex",
   triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
   averageVerts: "polyAverageVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
+  softenEdges: "polySoftEdge", hardenEdges: "polySoftEdge", softHard: "polySoftEdge",
   slideEdge: "polyTweak", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
 
@@ -229,7 +230,7 @@ function forgeTkTool(kind) {
   if (kind === "targetWeld" && v.setSelMode) v.setSelMode("vert");
   if ((kind === "offsetEdgeLoop" || kind === "insertEdgeLoop") && v.setSelMode) v.setSelMode("edge");
   forgeTk.tool = { kind: kind, pts: [], marks: [] };
-  const help = { multiCut: "Multi-Cut: click on edges or vertices to cut; Enter or right-click finishes, Backspace undoes a point, Esc cancels.",
+  const help = { multiCut: "Multi-Cut: click edges / vertices to cut (Shift: snap " + forgeTkPref("multiCut", "snapStep", 25) + "% steps, middle-click: 50%); Ctrl: edge loop (Ctrl+Shift snapped, Ctrl+middle-click centred); Backspace undoes a point, Enter / right-click finishes, Esc cancels.",
     targetWeld: "Target Weld: click the vertex to move, then the vertex to weld it to.",
     offsetEdgeLoop: "Offset Edge Loop: click an edge - two loops are added either side of its loop.",
     insertEdgeLoop: "Insert Edge Loop Tool: click an edge - a loop goes across its ring (t: its settings)." }[kind];
@@ -243,6 +244,7 @@ function forgeTkToolEnd(apply) {
   if (!t) return;
   forgeTk.tool = null;
   document.body.classList.remove("forge-tk-tool");
+  if (window.forgeMultiCut) window.forgeMultiCut.clear();
   if (v && v.holder) for (const mk of t.marks) { if (mk.parent) mk.parent.remove(mk); mk.geometry.dispose(); mk.material.dispose(); }
   if (v) v.dirty = true;
   if (apply && t.kind === "multiCut" && t.pts.length >= 2) forgeTkApplyOp("multiCut", t.pts.map(({ v: vi, e, t: tt }) => (vi != null ? { v: vi } : { e: e, t: tt })), {}, "Multi-Cut");
@@ -274,6 +276,7 @@ function forgeTkApplyOp(op, items, opts, label) {
 function forgeTkPointer(e) {
   const t = forgeTk.tool, v = forge.view;
   if (!t || !v || v.mode !== "poly" || e.altKey) return;
+  if (t.kind === "multiCut" && window.forgeMultiCut) return window.forgeMultiCut.pointer(e, t);   // forge_multicut.js
   if (e.button === 2) { e.preventDefault(); e.stopImmediatePropagation(); forgeTkToolEnd(true); return; }
   if (e.button !== 0) return;
   e.preventDefault(); e.stopImmediatePropagation();
@@ -299,6 +302,7 @@ function forgeTkPointer(e) {
 function forgeTkKey(e) {
   const t = forgeTk.tool;
   if (!t) return;
+  if (t.kind === "multiCut" && window.forgeMultiCut && window.forgeMultiCut.key(e, t)) return;
   if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); forgeTkToolEnd(false); forgeTkSay("Tool cancelled."); }
   else if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); forgeTkToolEnd(true); }
   else if (e.key === "Backspace" && t.pts.length) { e.preventDefault(); e.stopImmediatePropagation(); t.pts.pop(); const mk = t.marks.pop(); if (mk && mk.parent) mk.parent.remove(mk); if (forge.view) forge.view.dirty = true; }

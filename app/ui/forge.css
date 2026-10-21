@@ -1229,9 +1229,19 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .fdock-dialog .fdock-empty { padding: 2px 10px; color: #999; }
 .fdock-dialog .fdock-scale { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 10px; }
 .fdock-dialog > .mini { margin: 0 10px; }
-/* the Options cog sat over the viewport's View menu (top left): top right, under the view cube; its panel opens below */
-#forge .forge-stage .forge-opt-btn { left: auto; right: 10px; top: 134px; }
-#forge .forge-stage .forge-optpnl { left: auto; right: 10px; top: 170px; max-height: calc(100% - 184px); }
+/* the Options cog is gone from the viewport (owner 12:46: "a weird button top right ... not on my screen"): the panel is
+   Windows > Settings/Preferences > Preferences, opened in the middle of the viewport like the pro tool's Preferences */
+#forge .forge-stage .forge-opt-btn { display: none !important; }
+#forge .forge-stage .forge-optpnl { left: 50%; top: 8%; transform: translateX(-50%); right: auto; max-height: 84%; z-index: 50; }
+/* Workspace: Animation owns the time slider, the range slider, the key bar and the Graph Editor */
+#forge:not(.ws-anim) #fmy-time, #forge:not(.ws-anim) #forge-time, #forge:not(.ws-anim) #forge-graph, #forge:not(.ws-anim) #forge-anim { display: none !important; }
+#fmy-time > #forge-time.fdock-keys { position: static; display: none; translate: none; transform: none; max-width: none; margin: 2px 6px 0;
+  background: rgba(0,0,0,.18); border-radius: 4px; box-shadow: none; flex-wrap: wrap; }
+#forge.ws-anim #fmy-time > #forge-time.fdock-keys.fdock-keys-open { display: flex !important; }
+#fmy-time > #forge-time.fdock-keys > .fdock-bargrip { display: none; }
+#forge .fdock-keys-btn { width: auto; padding: 0 8px; font-size: 11px; }
+#forge .fdock-keys-btn.on { background: #5b8db8; color: #0f1113; }
+
 /* a short row (panels docked below): the Tool Box keeps to its row and scrolls instead of spilling into the panels under it */
 #forge .forge-body.pro.fdock > #fmy-toolbox { overflow-y: auto; overflow-x: hidden; min-height: 0; }
 /* Workspace: Materials - Material Maker's graph and the live preview, nothing else */
@@ -1270,3 +1280,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .fmenu-list { display: flex; flex-direction: column; gap: 2px; }
 .fmenu-item .fmenu-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmenu-item .mini { padding: 0 6px; }
+/* Multi-Cut's readout beside the mouse (forge_multicut.js) */
+.forge-mc-tag { position: fixed; z-index: 90; pointer-events: none; padding: 2px 7px; border-radius: 4px; font: 11px/1.4 var(--sans, sans-serif);
+  color: #111; background: rgba(255, 214, 120, .95); box-shadow: 0 2px 8px rgba(0,0,0,.4); white-space: nowrap; }
+.forge-mc-tag[hidden] { display: none; }
