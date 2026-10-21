@@ -1,5 +1,5 @@
-// Modes (personas) in the message box: a picker next to Ask/Plan/Build that turns LOKI into a Tutor,
-// Writer, Coder... (engine/personas.py). The chosen mode's starter prompts replace the welcome chips.
+// Modes (personas) in the message box: a picker next to Ask/Plan/Build that turns LOKI into a Content creator,
+// Outreach, Writer... (engine/personas.py). "General" (no mode) has a plain chat-bubble icon (owner 2026-10-21). The chosen mode's starter prompts replace the welcome chips.
 // Managing modes (new, edit, import, export) lives in Apps > Modes (apps.js).
 "use strict";
 
@@ -8,14 +8,23 @@ const LokiModes = (() => {
 
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 
+  // General: a plain, neutral icon (a chat bubble) instead of the sparkle
+  const GENERAL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4 3.5V16h0.5A2.5 2.5 0 0 1 4 13.5z"/></svg>';
+  function icon(cls, m) {
+    const n = mk("span", cls);
+    if (m && m.icon) n.textContent = m.icon; else n.innerHTML = GENERAL_SVG;
+    return n;
+  }
+
   function current() { return modes.find((m) => m.id === active) || null; }
 
   function paint() {
     if (!button) return;
     const m = current();
-    button.replaceChildren(mk("span", "mode-pick-icon", m ? (m.icon || "✨") : "✨"), mk("span", "mode-pick-name", m ? m.name : "General"));
+    button.replaceChildren(icon("mode-pick-icon", m), mk("span", "mode-pick-name", m ? m.name : "General"));
     button.dataset.tipName = "Mode: " + (m ? m.name : "General");
-    button.dataset.tipWhat = m ? m.description : "Pick a mode - Tutor, Writer, Coder, Researcher... - to change how LOKI works.";
+    button.dataset.tipWhat = m ? m.description : "Pick a mode - Content creator, Social media, Outreach, Writer... - to change how LOKI works.";
     button.setAttribute("aria-label", "Mode: " + (m ? m.name : "General"));
     button.classList.toggle("on", !!m);
     paintChips(m);
@@ -65,7 +74,7 @@ const LokiModes = (() => {
       b.type = "button";
       b.setAttribute("role", "menuitemradio");
       b.setAttribute("aria-checked", String((m ? m.id : "") === active));
-      b.append(mk("span", "mode-item-icon", m ? (m.icon || "✨") : "✨"), mk("b", "", m ? m.name : "General"), mk("span", "mode-item-what", m ? m.description : "LOKI as it is."));
+      b.append(icon("mode-item-icon", m), mk("b", "", m ? m.name : "General"), mk("span", "mode-item-what", m ? m.description : "LOKI as it is - for anything."));
       b.addEventListener("click", () => choose(m ? m.id : ""));
       return b;
     };

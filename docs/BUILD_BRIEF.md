@@ -222,6 +222,16 @@ docs and pricing. Integrate only through an **official** API or MCP endpoint who
 terms allow it. If there isn't one, write down what you found and move on. LOKI already
 uses Claude Code and Codex subscriptions the same way.
 
+### 5.10 Home and the modes (owner, 2026-10-21)
+
+- Home is calm: one header row, the big preview, ONE row of recent things (All for the rest); running jobs are a
+  "working" chip that shows the job in the preview. Keep it that way - nothing new crowds Home without a reason.
+- **Later (keep it in mind, not built yet): a live view on Home** - the preview spot showing live work as it happens
+  (a render filling in, a farm job, Forge or Godot), built into the existing preview, not a new panel.
+- The modes in the message box are for the digital industry: Content creator, Social media, Outreach (cold emails,
+  follow-ups, sponsor / collab pitches), Writer, Growth & SEO, Researcher, Developer, 3D & games. "General" keeps its
+  name with a plain icon. No Small business / Tutor / Student / Life admin.
+
 ## 6. Add anything else that serves this
 
 You may add features I haven't named if they make LOKI more alive, more capable, cheaper or

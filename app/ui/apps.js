@@ -24,7 +24,7 @@ function buildAppsSheet() {
   const title = appsEl("h2", "apps-title", "Apps");
   nav.append(title);
   for (const [id, label, what] of [["mine", "My apps", "Apps LOKI made or you installed"], ["gallery", "Gallery", "Ready-made apps, one click to install"],
-    ["modes", "Modes", "Tutor, Writer, Coder... and your own"], ["extensions", "Extensions", "Plugins anyone can write"]]) {
+    ["modes", "Modes", "Content creator, Outreach, Writer... and your own"], ["extensions", "Extensions", "Plugins anyone can write"]]) {
     const b = appsBtn(label, () => showAppsTab(id), "apps-tab");
     b.dataset.appsTab = id;
     b.title = what;
@@ -307,7 +307,7 @@ async function renderModesTab() {
   const data = await api("/personas").catch(() => null);
   box.replaceChildren();
   const head = appsEl("header", "apps-head");
-  head.append(appsEl("h3", "", "Modes"), appsEl("p", "note", "A mode turns LOKI into a Tutor, a Writer, a Coder... - its own instructions, tools, skills and starter prompts. Pick one in the message box. Make your own, or share one as a .lokimode file. A mode never changes the safety rules."));
+  head.append(appsEl("h3", "", "Modes"), appsEl("p", "note", "A mode turns LOKI into a Content creator, Outreach, a Writer... - its own instructions, tools, skills and starter prompts. Pick one in the message box. Make your own, or share one as a .lokimode file. A mode never changes the safety rules."));
   const tools = appsEl("div", "apps-row");
   tools.append(appsBtn("New mode", () => editMode(null), "send small"));
   const file = document.createElement("input");

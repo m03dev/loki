@@ -7,7 +7,7 @@ combine studio with home"; "it'll be the home ... where we do preview of render 
    Forge models (workspace models/*.glb), Godot projects (LOKI_PROJECTS_DIR), Studio sessions and jobs, newest first,
    each with {kind, name, path_or_id, updated, thumb, open}; one broken source never breaks the answer.
 2. The window: three title-bar tabs + Render (Home / Forge / Render / Godot, Ctrl+1..4, no Studio or World tab),
-   the hub's cards (thumbnail or kind icon, name, when; icons with tooltips), the big preview, opening a card where
+   the hub's cards (thumbnail or kind icon, name, when; icons with tooltips; one row + All; jobs in a 'working' chip), the big preview, opening a card where
    it lives (Forge + its model, Godot + its project, Studio inside Home, Render), Studio's back / Esc / shortcut, an
    empty state that says how to make each kind, the chat still one click away, and it fits a small window.
 """
@@ -267,7 +267,10 @@ async def window():
         check("the first tab is called Home", names[:1] == ["Home"], names)
         check("no live world behind the home screen", not await E("!!document.querySelector('.world-bg, #world-home, iframe.world-godot')"))
         cards = await E("[...document.querySelectorAll('.home-card')].map((c) => c.dataset.kind)")
-        check("the hub shows a card per item, newest first", cards == ["render", "job", "forge", "godot", "studio"], cards)
+        check("the hub shows a card per thing, newest first - jobs are not cards", cards == ["render", "forge", "godot", "studio"], cards)
+        live = await E("(() => { const l = document.querySelector('.home-live'); return l && !l.hidden ? l.textContent : ''; })()")
+        check("a 'working now' chip counts what runs", live == "1 working", live)
+        check("no refresh or fold buttons (it refreshes itself)", not await E("!!document.querySelector('.home-refresh, .home-fold')"))
         info = await E("""(() => { const c = document.querySelector('.home-card[data-kind=render]'), f = document.querySelector('.home-card[data-kind=forge]');
           return { img: !!c.querySelector('.home-card-thumb img'), icon: !!f.querySelector('.home-card-thumb svg'),
                    name: c.querySelector('.home-card-name').textContent, when: c.querySelector('.home-card-when').textContent,
@@ -342,9 +345,9 @@ async def window():
         await page.keyboard.press("Escape")
 
         # a job card -> its status; the chat stays reachable
-        await page.click(".home-card[data-kind=job]")
+        await page.click(".home-live")
         await page.wait_for_timeout(400)
-        check("a job card shows how it is going", "frame 7 of 24" in await E("document.querySelector('.home-hero').textContent"))
+        check("the working chip shows the job live in the preview", "frame 7 of 24" in await E("document.querySelector('.home-hero').textContent"))
         await page.click("#summon")
         await page.wait_for_timeout(300)
         fold = await E("""(() => { const h = document.getElementById('home-hub'), c = document.getElementById('composer');
@@ -361,9 +364,22 @@ async def window():
         state["items"] = {"ok": True, "errors": {}, "items": []}
         await E("LokiHome.refresh()")
         await page.wait_for_timeout(400)
+        start = await E("[...document.querySelectorAll('.home-start-btn')].map((b) => b.dataset.kind)")
+        check("empty: one calm line and three places to start", start == ["forge", "render", "godot"]
+              and not await E("document.querySelectorAll('.home-empty-row').length"), start)
+        await page.click(".home-kind[data-kind=godot]")
         rows = await E("[...document.querySelectorAll('.home-empty-row')].map((r) => r.textContent)")
-        check("empty: one short line per kind on how to make one", len(rows) == 5 and any("Forge" in r for r in rows)
-              and any("render" in r.lower() for r in rows) and any("LOKI Projects" in r for r in rows), rows)
+        check("one kind picked and none of it: how to make one", len(rows) == 1 and "LOKI Projects" in rows[0], rows)
+        await page.click(".home-kind[data-kind=all]")
+        many = dict(ITEMS, items=[dict(ITEMS["items"][2], name="m%d" % i, path_or_id="models/m%d.glb" % i) for i in range(20)])
+        state["items"] = many
+        await E("LokiHome.refresh()")
+        await page.wait_for_timeout(300)
+        row = await E("(() => { const c = [...document.querySelectorAll('.home-card')]; return { n: c.length, tops: new Set(c.map((x) => Math.round(x.getBoundingClientRect().top))).size, more: document.querySelector('.home-more').textContent }; })()")
+        check("one row of recent things, 'All 20' for the rest", row["tops"] == 1 and 2 <= row["n"] < 20 and row["more"] == "All 20", row)
+        await page.click(".home-more")
+        check("All shows every one", await E("document.querySelectorAll('.home-card').length") == 20)
+        await page.click(".home-more")
         state["items"] = ITEMS
         await E("LokiHome.refresh()")
         await page.set_viewport_size({"width": 760, "height": 540})

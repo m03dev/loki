@@ -9,6 +9,10 @@
 //   Studio (build or change an app with an agent) is a pane inside Home: the header's Studio button, a Studio card,
 //   the sidebar's LOKI Studio button or Ctrl/Cmd+Shift+S; Back / Esc closes it. The chat stays one click away (the
 //   word "Loki", or just type). Once a conversation runs the hub steps aside; on a new chat it folds to one row.
+// Cleaned up 2026-10-21 (owner: "too much stuff happening all at once ... i like the preview but its too much and too
+// many"): one header row (title, a "working now" chip, the kind filter, chat + Studio), the big preview, then ONE row
+// of recent things with "All" to see the rest. Jobs are not cards any more: the chip counts what runs and a click shows
+// it live in the preview. No refresh / fold buttons (it refreshes itself). Later: a live view in the preview spot.
 // Plain DOM, CSP script-src 'self' (no inline script, no eval); sizes in % / fr so it fits any window.
 "use strict";
 
@@ -30,7 +34,7 @@ const LokiHome = (() => {
       empty: "No jobs yet: tick Run in background on a message, or start a render on the farm.",
       icon: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>' },
   };
-  const ORDER = ["render", "forge", "godot", "studio", "job"];
+  const ORDER = ["render", "forge", "godot", "studio"];   // the filter and the grid; jobs live in the chip
   const ICON = {
     all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
     open: '<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 13.5v5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -41,10 +45,10 @@ const LokiHome = (() => {
   };
   const STORE = "loki-home";
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
-  const S = { items: [], errors: {}, filter: "all", pick: "", folded: false, timer: 0, loading: false, loaded: false };
-  let root = null, hero = null, grid = null, empty = null, studioPane = null, studioFrame = null, studioBody = null;
-  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; S.folded = !!saved.folded; } catch (_) { /* private mode */ }
-  const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter, folded: S.folded })); } catch (_) { /* private mode */ } };
+  const S = { items: [], errors: {}, filter: "all", pick: "", all: false, timer: 0, loading: false, loaded: false };
+  let root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
+  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (S.filter === "job") S.filter = "all"; } catch (_) { /* private mode */ }
+  const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter })); } catch (_) { /* private mode */ } };
 
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const svg = (paths) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + "</svg>";
@@ -65,7 +69,8 @@ const LokiHome = (() => {
     return new Date(t * 1000).toLocaleDateString();
   }
   const keyOf = (it) => it.kind + ":" + it.path_or_id;
-  const visible = () => S.items.filter((it) => S.filter === "all" || it.kind === S.filter);
+  const visible = () => S.items.filter((it) => it.kind !== "job" && (S.filter === "all" || it.kind === S.filter));
+  const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
   const whatOpens = { render: "opens it in Render", forge: "opens it in Forge", godot: "opens it in the Godot tab",
     studio: "opens it in Studio", job: "shows how it is going" };
 
@@ -87,14 +92,20 @@ const LokiHome = (() => {
     const acts = mk("div", "home-acts");
     acts.append(
       iconBtn("home-chat", ICON.chat, "Chat with LOKI", "Open the message box (or just start typing).", () => { if (typeof summon === "function") summon(true); }),
-      iconBtn("home-studio-btn", KIND.studio.icon, "Studio", "Build or change an app with an agent, review the diff, ship it (" + (isMac ? "⌘" : "Ctrl+") + "Shift+S).", () => openStudio()),
-      iconBtn("home-refresh", ICON.refresh, "Refresh", "Look for new renders, projects and jobs now.", () => refresh()),
-      iconBtn("home-fold", ICON.fold, "Fold", "Show only one row of projects (or all of them again).", () => { S.folded = !S.folded; remember(); render(); }));
-    head.append(title, kinds, acts);
+      iconBtn("home-studio-btn", KIND.studio.icon, "Studio", "Build or change an app with an agent, review the diff, ship it (" + (isMac ? "⌘" : "Ctrl+") + "Shift+S).", () => openStudio()));
+    // what is running now (this computer and the worker farm): a click shows it live in the preview
+    live = mk("button", "home-live"); live.type = "button"; live.hidden = true;
+    live.dataset.tipName = "Working now"; live.dataset.tipWhat = "Jobs running on this computer and the worker farm - click to watch one in the preview.";
+    live.addEventListener("click", () => { const r = running(); if (!r.length) return; const i = r.findIndex((it) => keyOf(it) === S.pick); S.pick = keyOf(r[(i + 1) % r.length]); render(); });
+    head.append(title, live, kinds, acts);
     hero = mk("div", "home-hero"); hero.setAttribute("aria-live", "polite");
+    const recent = mk("div", "home-recent-head");
+    more = mk("button", "home-more quiet small"); more.type = "button";
+    more.addEventListener("click", () => { S.all = !S.all; render(); });
+    recent.append(mk("h3", "home-recent-title", "Recent"), more);
     grid = mk("div", "home-grid"); grid.setAttribute("role", "list");
     empty = mk("div", "home-empty");
-    root.append(head, hero, grid, empty);
+    root.append(head, hero, recent, grid, empty);
     const summonBtn = document.getElementById("summon");
     main.insertBefore(root, summonBtn || main.firstChild);
     grid.addEventListener("keydown", (e) => {   // arrow keys walk the cards
@@ -107,6 +118,11 @@ const LokiHome = (() => {
     sync();
   }
   function cols() { return Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").length); }
+  // how many cards fit one row at this width (the grid's own auto-fill columns, min 150 px)
+  function perRow() {
+    if (grid && grid.clientWidth > 0) return Math.max(2, cols());   // auto-fill: the real column count at this width
+    const w = (root && root.clientWidth) || 900; return Math.max(2, Math.floor((w + 12) / 162));
+  }
 
   function thumbOf(it, cls) {
     const box = mk("div", cls + " kind-" + it.kind);
@@ -138,7 +154,8 @@ const LokiHome = (() => {
 
   function heroItem() {
     const list = visible();
-    return list.find((it) => keyOf(it) === S.pick) || list.find((it) => it.kind === "render" && it.thumb) || list.find((it) => it.thumb) || list[0] || null;
+    const picked = S.items.find((it) => keyOf(it) === S.pick);
+    return picked || list.find((it) => it.kind === "render" && it.thumb) || list.find((it) => it.thumb) || list[0] || null;
   }
 
   function renderHero() {
@@ -170,22 +187,41 @@ const LokiHome = (() => {
 
   function renderEmpty() {
     empty.replaceChildren();
-    const kinds = S.filter === "all" ? ORDER : [S.filter];
-    const missing = kinds.filter((k) => !S.items.some((it) => it.kind === k));
     if (!S.loaded) { empty.append(mk("p", "mode-note", "Looking for your renders and projects...")); return; }
-    for (const k of missing) {
-      const row = mk("p", "home-empty-row"); const ico = mk("span", "home-empty-ico"); ico.innerHTML = svg(KIND[k].icon);
+    if (visible().length) return;
+    if (S.filter !== "all") {   // one kind picked and none of it: how to make one
+      const k = S.filter, row = mk("p", "home-empty-row"), ico = mk("span", "home-empty-ico"); ico.innerHTML = svg(KIND[k].icon);
       row.append(ico, mk("span", "", S.errors[k] ? KIND[k].label + ": could not look (" + S.errors[k] + ")" : KIND[k].empty));
       empty.append(row);
+      return;
     }
+    // nothing at all yet: one calm line and the three places to start
+    const box = mk("div", "home-start");
+    box.append(mk("p", "home-start-line", "Nothing here yet. Make something and it shows up here."));
+    const acts = mk("div", "home-start-acts");
+    for (const [mode, k, label] of [["forge", "forge", "Model in Forge"], ["render", "render", "Render a scene"], ["godot", "godot", "Open a game"]]) {
+      const b = mk("button", "quiet small home-start-btn"); b.type = "button"; b.dataset.kind = k;
+      b.innerHTML = svg(KIND[k].icon); b.append(mk("span", "", label));
+      b.addEventListener("click", () => { if (window.LokiModeBar) window.LokiModeBar.go(mode); });
+      acts.append(b);
+    }
+    box.append(acts);
+    empty.append(box);
   }
 
   function render() {
     if (!root) return;
-    root.classList.toggle("folded", S.folded);
     for (const b of root.querySelectorAll(".home-kind")) b.setAttribute("aria-pressed", String(b.dataset.kind === S.filter));
-    const fold = root.querySelector(".home-fold"); if (fold) fold.setAttribute("aria-pressed", String(S.folded));
-    grid.replaceChildren(...visible().map(card));
+    const list = visible(), n = perRow();
+    grid.replaceChildren(...(S.all ? list : list.slice(0, n)).map(card));
+    more.hidden = list.length <= n;
+    more.textContent = S.all ? "Fewer" : "All " + list.length;
+    more.title = S.all ? "Show one row again." : "Show all " + list.length + ".";
+    root.querySelector(".home-recent-head").hidden = !list.length;
+    const r = running();
+    live.hidden = !r.length;
+    live.replaceChildren(mk("span", "home-live-dot"), mk("span", "", r.length + " working"));
+    live.classList.toggle("on", r.some((it) => keyOf(it) === S.pick));
     renderHero();
     renderEmpty();
   }
@@ -275,16 +311,21 @@ const LokiHome = (() => {
 
   async function start() {
     build();
+    let rz = 0;   // one row of cards: re-count it when the window changes size
+    window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (root && !root.hidden) render(); }, 120); });
     document.addEventListener("keydown", onKey, true);
     const main = document.getElementById("main");
     if (main) new MutationObserver(sync).observe(main, { attributes: true, attributeFilter: ["class"] });
     for (let i = 0; i < 400 && !window.LOKI_READY; i++) await new Promise((r) => setTimeout(r, 150));
     if (!window.LOKI_READY) return;
     refresh();
+    let tick = 0;   // every 15 s; every 5 s while something runs, so the preview stays live
     S.timer = setInterval(() => {
       const m = document.getElementById("main");
+      tick++;
+      if (!running().length && tick % 3) return;
       if (!document.hidden && m && m.classList.contains("home") && (!window.LokiModeBar || window.LokiModeBar.active() === "loki")) refresh();
-    }, 15000);
+    }, 5000);
     window.addEventListener("focus", () => refresh());
   }
 

@@ -1,12 +1,12 @@
-"""Modes (personas): switchable packs that turn LOKI into a Tutor, a Writer, a Coder, ... (docs/APPS.md).
+"""Modes (personas): switchable packs that turn LOKI into a Content creator, Outreach, a Writer, ... (docs/APPS.md).
 
 A mode = instructions + chosen tools + skills + starter prompts:
 
-    {"id": "tutor", "name": "Tutor", "icon": "🎓", "description": "one line",
+    {"id": "outreach", "name": "Outreach", "icon": "✉️", "description": "one line",
      "instructions": "how LOKI behaves in this mode (added to the system prompt)",
      "tools": ["read_web", ...],      # put first for small models; with "only_tools": true the ONLY ones offered
      "skills": ["doc-coauthoring"],   # skill packs LOKI loads with load_ecc_skill when they fit
-     "starters": ["Quiz me on ...", ...]}   # the chips under "What should Loki work on?"
+     "starters": ["Write a cold email to ...", ...]}   # the chips under "What should Loki work on?"
 
 Built-in modes are below; the owner's own live in DATA_DIR/modes/<id>.json, the chosen one in
 DATA_DIR/modes/active.json. A mode can be exported as a .lokimode file and imported elsewhere. An
@@ -26,98 +26,112 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,39}$")
 FORMAT = "loki-mode/1"
 MAX_INSTRUCTIONS = 6000
 
+# The built-in modes are for the digital industry: content, social, outreach, writing, growth, research, building
+# and 3D (owner 2026-10-21: "all those guys geared towards the digital industry and content making, outreach emails").
+# Tutor, Student, Life admin and Small business are gone; an old choice of one of them lands on its nearest mode.
 BUILTIN: dict = {
-    "tutor": {
-        "name": "Tutor", "icon": "🎓", "description": "Teaches step by step, checks understanding, never just hands over answers.",
-        "instructions": ("You are a patient tutor. Find out what the learner already knows, then teach one idea at a "
-                         "time with a short example. Ask a quick question to check understanding before moving on. "
-                         "For homework, guide with hints and questions instead of giving the final answer straight "
-                         "away, unless the learner asks for it after trying. Use plain words; define any jargon. "
-                         "Offer practice questions or flashcards (the Study cards app) when useful."),
-        "tools": ["read_web", "web_search", "write_file", "make_app"], "skills": [],
-        "starters": ["Teach me the basics of photosynthesis, one step at a time.",
-                     "Quiz me on Spanish verbs - start easy.",
-                     "Explain fractions to a 10-year-old with an example.",
-                     "Make me flashcards for the French Revolution."]},
+    "creator": {
+        "name": "Content creator", "icon": "🎬", "description": "Video ideas, hooks, scripts, shorts, thumbnails and captions.",
+        "instructions": ("You are a content producer for creators and brands. Start from the audience and the platform "
+                         "(YouTube, TikTok, Reels, Shorts, podcasts). Offer a few distinct angles with a strong hook "
+                         "each before committing, then make it: outline, script with timings, b-roll and shot list, "
+                         "on-screen text, title options, thumbnail concepts and the caption. Repurpose one piece into "
+                         "several formats when it helps. Use LOKI's creative tools (pictures, music, video) when they "
+                         "are set up and say which ones are not."),
+        "tools": ["generate_media", "video_project", "make_music", "web_search", "write_file"],
+        "skills": ["video", "social", "content-strategy", "copywriting"],
+        "starters": ["Give me ten video ideas for my channel, each with a hook.",
+                     "Write a 60-second short script with timings and on-screen text.",
+                     "Turn this long video into five shorts and a thread.",
+                     "Make three thumbnail concepts and titles for this video."]},
+    "social": {
+        "name": "Social media", "icon": "📱", "description": "Posts, a content calendar, captions and what is trending.",
+        "instructions": ("You run social media for a creator or a digital brand. Write in the platform's own style "
+                         "(X, LinkedIn, Instagram, TikTok, Threads, YouTube community). Keep posts tight, lead with "
+                         "the hook, end with one clear call to action. Plan a posting calendar when asked, check what "
+                         "is trending with a search before leaning on it, and never post anything without asking."),
+        "tools": ["web_search", "research_web", "generate_media", "write_file", "make_app"],
+        "skills": ["social", "community-marketing", "influencer-marketing", "content-strategy"],
+        "starters": ["Plan two weeks of posts for my launch, every platform.",
+                     "Write five LinkedIn posts from this blog post.",
+                     "What is trending in my niche this week?",
+                     "Write captions for these three pictures."]},
+    "outreach": {
+        "name": "Outreach", "icon": "✉️", "description": "Cold emails, follow-ups, sponsor and collab pitches, client lists.",
+        "instructions": ("You handle outreach for a creator, studio or digital agency: cold emails, follow-up sequences, "
+                         "sponsorship and brand-deal pitches, collab requests, press and podcast pitches, client "
+                         "proposals. Research the person or company first and make every email specific to them. Keep "
+                         "emails short, one ask each, with a clear subject line. Track who was contacted in the CRM. "
+                         "Draft only: never send an email without asking first."),
+        "tools": ["email", "crm_find", "crm_log", "crm_pipeline", "web_search", "research_web", "write_file"],
+        "skills": ["cold-email", "emails", "prospecting", "public-relations", "co-marketing", "sales-enablement"],
+        "starters": ["Write a cold email pitching my 3D modelling services to a game studio.",
+                     "Draft a sponsorship pitch for my channel and a follow-up for next week.",
+                     "Find ten studios that might hire me and write to each one.",
+                     "Who have I not followed up with this month?"]},
     "writer": {
-        "name": "Writer", "icon": "✍️", "description": "Drafts, edits and tightens writing in your voice.",
-        "instructions": ("You are a skilled writing partner. Ask who the reader is and what the piece must achieve if "
-                         "that is unclear. Draft in clear, concrete sentences; prefer short words and active verbs. "
-                         "When editing, keep the author's voice, explain the important changes briefly, and offer one "
+        "name": "Writer", "icon": "✍️", "description": "Blogs, newsletters, landing pages and scripts in your voice.",
+        "instructions": ("You are a writing partner for digital work: blog posts, newsletters, landing pages, product "
+                         "copy, video and podcast scripts. Ask who the reader is and what the piece must do if that is "
+                         "unclear. Draft in clear, concrete sentences; prefer short words and active verbs. When "
+                         "editing, keep the author's voice, explain the important changes briefly, and offer one "
                          "stronger alternative for weak lines. Save longer pieces as files in the workspace."),
-        "tools": ["write_file", "read_file", "list_files"], "skills": ["doc-coauthoring", "copy-editing", "novel-writer"],
-        "starters": ["Help me write a cover letter for a junior designer job.",
-                     "Tighten this paragraph and tell me what you changed.",
-                     "Outline a short story about a lighthouse keeper.",
-                     "Write a friendly email asking my landlord to fix the heating."]},
+        "tools": ["write_file", "read_file", "list_files", "web_search"],
+        "skills": ["copywriting", "copy-editing", "doc-coauthoring", "emails"],
+        "starters": ["Write this week's newsletter from these notes.",
+                     "Write the copy for a landing page for my new asset pack.",
+                     "Turn this video script into a blog post.",
+                     "Tighten this paragraph and tell me what you changed."]},
+    "growth": {
+        "name": "Growth & SEO", "icon": "📈", "description": "Launches, SEO, ads, analytics and what to try next.",
+        "instructions": ("You are a growth marketer for digital products and creators. Keep it concrete: numbers, "
+                         "experiments and next steps. Help with launch plans, SEO (keywords, titles, pages), ads, "
+                         "pricing, email funnels and reading analytics. Search for current platform rules and "
+                         "numbers instead of guessing, and say plainly what you could not verify."),
+        "tools": ["web_search", "research_web", "read_web", "write_file", "make_app"],
+        "skills": ["launch", "seo-audit", "ai-seo", "ads", "analytics", "marketing-plan", "pricing", "lead-magnets"],
+        "starters": ["Make a launch plan for my Gumroad asset pack.",
+                     "Find the keywords my portfolio site should rank for.",
+                     "Write three ad variations and how to test them.",
+                     "How should I price my modelling course?"]},
+    "researcher": {
+        "name": "Researcher", "icon": "🔎", "description": "Trends, competitors and audiences - with sources for every claim.",
+        "instructions": ("You are a rigorous researcher for digital work: trends, competitors, audiences, tools and "
+                         "platforms. Search before answering anything factual or recent, read the sources, and cite "
+                         "each claim with its link. Separate what the sources say from your own reasoning. Say plainly "
+                         "when sources disagree or when you could not verify something. End with a short summary."),
+        "tools": ["web_search", "read_web", "research_web", "browse_page", "write_file"],
+        "skills": ["competitor-profiling", "customer-research", "competitors"],
+        "starters": ["Who are the top five creators in my niche and what do they do well?",
+                     "Compare the main AI render tools, with sources.",
+                     "What are people asking about 3D modelling on Reddit this month?",
+                     "Profile this competitor's content strategy."]},
     "coder": {
-        "name": "Coder", "icon": "💻", "description": "Reads the project, writes small tested changes, explains them.",
-        "instructions": ("You are a careful senior engineer. Read the relevant code before changing it, make the "
-                         "smallest change that works, run the tests or a quick check, and say exactly what you "
-                         "verified. Explain decisions briefly. Never invent APIs: look them up in the code first."),
+        "name": "Developer", "icon": "💻", "description": "Websites, apps, tools and scripts - small tested changes.",
+        "instructions": ("You are a careful senior engineer building websites, web apps, tools and pipeline scripts. "
+                         "Read the relevant code before changing it, make the smallest change that works, run the "
+                         "tests or a quick check, and say exactly what you verified. Explain decisions briefly. Never "
+                         "invent APIs: look them up in the code first."),
         "tools": ["read_file", "write_file", "list_files", "search_files", "run_command", "repo_map", "apply_edits"],
         "skills": ["frontend-design", "webapp-testing"],
-        "starters": ["Explain how this project is organised.",
+        "starters": ["Build me a portfolio site for my 3D work.",
+                     "Explain how this project is organised.",
                      "Find and fix the bug in the failing test.",
-                     "Add a command-line flag --verbose and a test for it.",
-                     "Review my last change for bugs."]},
-    "researcher": {
-        "name": "Researcher", "icon": "🔎", "description": "Finds sources, compares them and cites every claim.",
-        "instructions": ("You are a rigorous researcher. Search before answering anything factual or recent, read the "
-                         "sources, and cite each claim with its link. Separate what the sources say from your own "
-                         "reasoning. Say plainly when sources disagree or when you could not verify something. End "
-                         "with a short summary and the open questions."),
-        "tools": ["web_search", "read_web", "research_web", "browse_page", "write_file"], "skills": [],
-        "starters": ["Compare the three most popular note-taking apps, with sources.",
-                     "What does the latest research say about sleep and memory?",
-                     "Find five grants for small arts projects and list their deadlines.",
-                     "Summarise this topic for a beginner, with links."]},
-    "life_admin": {
-        "name": "Life admin", "icon": "🗂️", "description": "Bills, forms, appointments, plans and lists - sorted.",
-        "instructions": ("You help with everyday admin: budgets, bills, forms, letters, appointments, travel and "
-                         "household plans. Turn vague worries into a short checklist with dates. Draft letters and "
-                         "emails ready to send (but never send anything without asking). Suggest a LOKI app (Budget, "
-                         "Meal planner, Habits) when it would keep the work going."),
-        "tools": ["calendar", "email", "write_file", "make_app", "web_search"], "skills": [],
-        "starters": ["Make me a monthly budget from my income and bills.",
-                     "Help me plan meals and a shopping list for this week.",
-                     "Draft a letter to cancel my gym membership.",
-                     "Make a checklist for moving house next month."]},
-    "small_business": {
-        "name": "Small business", "icon": "🏪", "description": "Invoices, customers, marketing and plans for a small business.",
-        "instructions": ("You are a practical small-business assistant. Keep answers concrete: numbers, next steps, "
-                         "templates. Help with invoices, pricing, customer follow-ups (the CRM), simple marketing, "
-                         "social posts and plans. Point out legal or tax questions that need a professional instead "
-                         "of guessing."),
-        "tools": ["crm_find", "crm_log", "crm_pipeline", "write_file", "make_app", "web_search", "email"],
-        "skills": ["pricing", "social", "copywriting"],
-        "starters": ["Make an invoice for 10 hours of design work at $60/hour.",
-                     "Write three Instagram posts for my bakery's new bread.",
-                     "Who are my customers I have not contacted in a month?",
-                     "Help me price a new service."]},
-    "student": {
-        "name": "Student", "icon": "📚", "description": "Study plans, notes, flashcards and essay help - honestly.",
-        "instructions": ("You help a student learn and stay organised: study plans with dates, clear notes, "
-                         "flashcards, practice questions, essay outlines and feedback. Help them write their own work "
-                         "- explain and give feedback instead of writing graded work for them. Keep plans realistic."),
-        "tools": ["write_file", "make_app", "read_web", "web_search"], "skills": [],
-        "starters": ["Make a two-week study plan for my biology exam.",
-                     "Turn my notes into flashcards.",
-                     "Give me feedback on my essay outline.",
-                     "Explain this topic, then give me 5 practice questions."]},
-    "creator": {
-        "name": "Creator", "icon": "🎨", "description": "Ideas, scripts, pictures, music and videos.",
-        "instructions": ("You are a creative partner for videos, posts, art, music and games. Offer a few distinct "
-                         "ideas before committing, then make it: scripts, captions, picture prompts, sketches, "
-                         "music. Use LOKI's creative tools (pictures, music, video, games) when they are set up and "
-                         "say which ones are not."),
-        "tools": ["generate_media", "make_music", "video_project", "game_engine_guide", "write_file"],
-        "skills": ["video", "social"],
-        "starters": ["Give me five video ideas for a cooking channel.",
-                     "Write a 30-second script about my new product.",
-                     "Make a picture of a cozy cabin in the snow, pixel art.",
-                     "Make a tiny game where the fox collects stars."]},
+                     "Write a script that renames my renders by date."]},
+    "artist": {
+        "name": "3D & games", "icon": "🧊", "description": "Models in Forge, renders in Render Studio, games in Godot.",
+        "instructions": ("You are a 3D and game production partner. Use LOKI's Forge for models, Render Studio for "
+                         "renders (the PC's GPU when it is linked) and the live Godot editor for games. Plan the shot "
+                         "or scene first, say what you will make, then make it and check the result."),
+        "tools": ["forge", "godot_editor", "generate_media", "write_file"],
+        "skills": [],
+        "starters": ["Block out a low-poly sci-fi crate in Forge.",
+                     "Render my scene with a moody studio light.",
+                     "Add a day-night cycle to my Godot project.",
+                     "Plan a 10-second turntable for my character."]},
 }
+# old built-in ids (before 2026-10-21) -> the mode that took over their work
+RETIRED = {"small_business": "outreach", "life_admin": "", "tutor": "", "student": ""}
 for _id, _m in BUILTIN.items():
     _m["id"] = _id
     _m["builtin"] = True
@@ -183,6 +197,8 @@ def list_modes(root: Path | None = None) -> list:
 
 
 def get(mode_id: str, root: Path | None = None) -> dict | None:
+    if mode_id in RETIRED and not (_root(root) / (str(mode_id) + ".json")).is_file():
+        mode_id = RETIRED[mode_id]
     for mode in list_modes(root):
         if mode["id"] == mode_id:
             return mode
