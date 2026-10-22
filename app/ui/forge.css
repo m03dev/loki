@@ -759,7 +759,9 @@ button.forge-out-title:hover { opacity: 1; }
 .fmy-clip { height: 20px; min-width: 120px; }
 .fmy-fps { color: #cfcfcf; font-size: 11.5px; background: #2b2b2b; padding: 2px 8px; }
 /* the Outliner's buttons: one tidy row that scrolls sideways instead of three rows */
-#forge .forge-panel.fmy .forge-outliner .forge-out-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+/* the outliner's buttons wrap onto a second line instead of sliding out of sight under the viewport (owner
+   2026-10-22: buttons that "look weird, can't even click them" - Freeze was hidden past the panel's edge) */
+#forge .forge-panel.fmy .forge-outliner .forge-out-bar { flex-wrap: wrap; overflow: visible; min-width: 0; }
 #forge .forge-panel.fmy .forge-outliner .forge-out-bar::-webkit-scrollbar { display: none; }
 #forge .forge-panel.fmy .forge-out-bar .forge-out-btn { flex: none; }
 /* short windows: the range slider tucks away and the bars get slimmer, so the viewport keeps its room */
@@ -1398,3 +1400,27 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .forge-pro-mlist .forge-pro-litem.on { background: rgba(91, 141, 184, .22); }
 .forge-pro-mlist .forge-pro-litem.forge-sub .forge-pro-tick { color: #cfe0f2; }
 .forge-pro-mlist .forge-pro-litem.forge-back { color: #c3cad6; }
+
+/* nested menus (owner 2026-10-22: "menus within menus within menus"): a submenu row ends in an arrow and opens beside
+   itself; the open row stays lit while you are in its submenu. Every floating list fits the window and scrolls. */
+.fmy-dsub .fmy-arrow, .forge-pro-subitem .forge-pro-key { color: #b9bec6; padding-left: 26px; }
+.fmy-ditem.fmy-dsub.open, .forge-pro-hotbox .forge-pro-item.forge-pro-subitem.open { background: #33475c; color: #fff; }
+.fmy-subdrop { z-index: 91; min-width: 190px; }
+.forge-pro-hotbox .forge-pro-row.has-open { z-index: 6; }
+.forge-pro-hotbox .forge-pro-list { overscroll-behavior: contain; }
+.forge-pro-hotbox .forge-pro-list.forge-pro-fly { position: fixed; top: 0; left: 0; margin: 0; z-index: 9; min-width: 180px; flex-direction: column; display: flex; }
+.forge-pro-hotbox .forge-pro-sep, .forge-pro-sep { height: 1px; margin: 3px 0; background: #3a3c40; flex: none; }
+.forge-wheel-sub { max-width: min(320px, calc(100vw - 16px)); overflow-y: auto; }
+.forge-wheel-body { display: flex; flex-direction: column; gap: 2px; }
+.forge-wheel-subitem, .forge-wheel-item.forge-back { display: flex; gap: 6px; }
+.forge-wheel-item.forge-back { opacity: .8; border-bottom: 1px solid rgba(255,255,255,.12); border-radius: 6px 6px 0 0; }
+.fmy-dnote { padding: 3px 12px 3px 20px; color: #a9aeb6; font-size: 11px; white-space: normal; max-width: 300px; line-height: 1.35; }
+.fmy-panelmenus { overflow: hidden; }
+.fmy-panelmenus .fmy-pmb[hidden] { display: none; }
+.fmy-panelicons { overflow-x: auto; scrollbar-width: none; }
+.fmy-panelicons::-webkit-scrollbar { display: none; }
+/* the Outliner's fold title stops short of the panel's float / close buttons (it ran under them: QA sweep 2026-10-22) */
+#forge .forge-out-head .forge-out-title { max-width: calc(100% - 46px); flex: 0 1 auto; }
+/* the wheel's wedges stay on top of an open menu (a menu nudged onto the ring hid the next wedge: QA sweep) */
+.forge-wheel-wedge { z-index: 2; }
+.forge-wheel-sub { z-index: 1; }

@@ -85,7 +85,9 @@ async def main():
         check("Alt+Q is in the hotkey set", await E("forgeHotkeys && forgeHotkeys.keysFor('quickMenu').includes('alt+q')"), await E("forgeHotkeys.keysFor('quickMenu')"))
         await page.click('#fmy-menubar .fmy-mb[data-menu="Mesh"]')
         await page.wait_for_timeout(60)
-        await page.click('.fmy-drop .fmy-ditem[data-pro-id="triangulate"]', button="right")
+        await page.click('.fmy-drop .fmy-dsub[data-sub="Topology"]')          # menus nest now (owner 2026-10-22)
+        await page.wait_for_timeout(60)
+        await page.click('.fmy-subdrop .fmy-ditem[data-pro-id="triangulate"]', button="right")
         await page.wait_for_timeout(60)
         check("right-click a menu item: it joins the Quick Menu", await E("JSON.stringify(forgeMenusQuick()).includes('triangulate')"))
 

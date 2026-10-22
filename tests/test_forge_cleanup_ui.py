@@ -165,7 +165,7 @@ async def main():
         await E("%s.setAlphaGain(forge.view.tree.sel[0], 0.4)" % T)
         ag = await E("%s.alphaGain(forge.view.tree.sel[0])" % T)
         check("the image plane has Alpha Gain in the Channel Box", row and abs(ag - 0.4) < 1e-6, [row, ag])
-        menu = await E("!!(FORGE_PRO_CMDS.imagePlane) && FMY_MENUS().find((m) => m[0] === 'Create')[1].includes('imagePlane')")
+        menu = await E("!!(FORGE_PRO_CMDS.imagePlane) && forgeMenuFlat(FMY_MENUS().find((m) => m[0] === 'Create')[1]).includes('imagePlane')")
         check("Free Image Plane is a command and in the Create menu", menu, menu)
         await E("forgeProRun(forge.view, 'undo')")
         gone = await E("%s.sceneNodes().filter((n) => n.kind === 'imagePlane').length" % T)

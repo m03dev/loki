@@ -117,34 +117,95 @@ function fmyCloseMenus() {
   document.querySelectorAll(".fmy-mb.open").forEach((b) => b.classList.remove("open"));
   fmyOpenMenu = null;
 }
+// keep a menu box inside the window: shift it back on screen, and let a long one scroll (owner 2026-10-22: menu rows
+// that ran off the window "can't even click them")
+function fmyFit(d) {
+  d.style.maxHeight = Math.max(120, window.innerHeight - 12) + "px";
+  const r = d.getBoundingClientRect();
+  let x = parseFloat(d.style.left) || r.left, y = parseFloat(d.style.top) || r.top;
+  if (r.right > window.innerWidth - 4) x -= r.right - (window.innerWidth - 4);
+  if (x < 4) x = 4;
+  if (r.bottom > window.innerHeight - 4) y -= r.bottom - (window.innerHeight - 4);
+  if (y < 4) y = 4;
+  d.style.left = Math.round(x) + "px"; d.style.top = Math.round(y) + "px";
+}
+// close every submenu deeper than depth
+function fmyCloseDeeper(depth) {
+  for (const d of document.querySelectorAll(".fmy-drop")) if ((+d.dataset.depth || 0) > depth) d.remove();
+}
+// one row of a menu: a command, a window row ([id, label, run, on]) or a submenu (["Label", [entries]])
+function fmyRow(it, depth) {
+  if (typeof forgeMenuIsSub === "function" ? forgeMenuIsSub(it) : (Array.isArray(it) && Array.isArray(it[1]))) {
+    if (typeof forgeMenuSubLive === "function" && !forgeMenuSubLive(it)) return null;
+    const b = fmyEl("button", "fmy-ditem fmy-dsub");
+    b.type = "button"; b.dataset.sub = it[0];
+    b.setAttribute("aria-haspopup", "menu");
+    b.append(fmyEl("span", "fmy-tick", ""), fmyEl("span", "fmy-dlabel", it[0]), fmyEl("span", "fmy-dkey fmy-arrow", "\u25b8"));
+    const open = () => {
+      if (b.classList.contains("open") && document.querySelector('.fmy-drop[data-depth="' + (depth + 1) + '"]')) return;
+      fmyCloseDeeper(depth);
+      for (const x of b.parentElement.querySelectorAll(".fmy-dsub.open")) x.classList.remove("open");
+      b.classList.add("open");
+      fmySubDrop(b, it[1], depth + 1);
+    };
+    b.addEventListener("pointerenter", () => { clearTimeout(fmyRow.t); fmyRow.t = setTimeout(open, 110); });
+    b.addEventListener("pointerleave", () => clearTimeout(fmyRow.t));
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); clearTimeout(fmyRow.t); open(); });
+    return b;
+  }
+  const [id, label, run, on] = Array.isArray(it) ? it : [it];
+  const c = fmyCmd(id);
+  if (!run && !(c && c[1])) return null;                 // not in Forge yet: left out, a menu must not lie
+  const b = fmyEl("button", "fmy-ditem");
+  b.type = "button"; b.dataset.proId = id || "";
+  const ticked = on != null ? on() : fmyOn(id);
+  b.append(fmyEl("span", "fmy-tick", ticked ? "\u2713" : ""), fmyEl("span", "fmy-dlabel", label || (c ? c[0] : id)),
+    fmyEl("span", "fmy-dkey", fmyKeyOf(id)));
+  b.addEventListener("pointerenter", () => { clearTimeout(fmyRow.t); fmyRow.t = setTimeout(() => { fmyCloseDeeper(depth); for (const x of b.parentElement.querySelectorAll(".fmy-dsub.open")) x.classList.remove("open"); }, 160); });
+  b.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    clearTimeout(fmyRow.t);
+    fmyCloseMenus();
+    if (run) run(); else fmyRun(id);
+  });
+  return b;
+}
+// fill a menu box with its rows; separators and headings are dropped where nothing follows them
+function fmyFill(d, items, depth) {
+  let pend = [];
+  for (const it of items) {
+    if (it === "-") { if (d.querySelector(".fmy-ditem")) pend = [fmyEl("div", "fmy-sep")]; continue; }
+    if (typeof it === "string" && it.startsWith("#")) { pend = pend.filter((x) => x.classList.contains("fmy-sep")).concat([fmyEl("div", "fmy-dhead", it.slice(1))]); continue; }
+    if (it && it.note) { d.append(...pend, fmyEl("div", "fmy-dnote", it.note)); pend = []; continue; }
+    const row = fmyRow(it, depth);
+    if (!row) continue;
+    d.append(...pend, row); pend = [];
+  }
+  if (!d.querySelector(".fmy-ditem")) d.append(fmyEl("div", "fmy-dhead", "Nothing here yet"));
+}
+// a submenu: beside its row, on the right (or the left when the right has no room)
+function fmySubDrop(row, items, depth) {
+  const d = fmyEl("div", "fmy-drop fmy-subdrop");
+  d.setAttribute("role", "menu"); d.dataset.depth = String(depth); d.dataset.sub = row.dataset.sub;
+  fmyFill(d, items, depth);
+  document.body.append(d);
+  const r = row.getBoundingClientRect(), w = d.getBoundingClientRect().width;
+  const over = r.right + w + 4 - window.innerWidth;        // flip left only when a nudge would not do
+  d.style.left = Math.round(over <= w / 3 ? Math.min(r.right - 2, window.innerWidth - w - 4) : r.left - w + 2) + "px";
+  d.style.top = Math.round(r.top - 4) + "px";
+  fmyFit(d);
+  return d;
+}
 function fmyDrop(anchor, items) {
   fmyCloseMenus();
   const d = fmyEl("div", "fmy-drop");
-  d.setAttribute("role", "menu");
-  for (const it of items) {
-    if (it === "-") { d.append(fmyEl("div", "fmy-sep")); continue; }
-    if (typeof it === "string" && it.startsWith("#")) { d.append(fmyEl("div", "fmy-dhead", it.slice(1))); continue; }
-    const [id, label, run, on] = Array.isArray(it) ? it : [it];
-    const c = fmyCmd(id);
-    const b = fmyEl("button", "fmy-ditem");
-    b.type = "button"; b.dataset.proId = id || "";
-    const enabled = run ? true : !!(c && c[1]);
-    if (!enabled) { b.classList.add("off"); b.title = (c && c[2]) || "Not in Forge yet"; }
-    const ticked = on != null ? on() : fmyOn(id);
-    b.append(fmyEl("span", "fmy-tick", ticked ? "✓" : ""), fmyEl("span", "fmy-dlabel", label || (c ? c[0] : id)),
-      fmyEl("span", "fmy-dkey", fmyKeyOf(id)));
-    b.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      fmyCloseMenus();
-      if (run) run(); else if (enabled) fmyRun(id);
-      else if (typeof forgeSay === "function") forgeSay((c ? c[0] : id) + ": " + ((c && c[2]) || "not in Forge yet") + ".", true);
-    });
-    d.append(b);
-  }
+  d.setAttribute("role", "menu"); d.dataset.depth = "0";
+  fmyFill(d, items, 0);
   const r = anchor.getBoundingClientRect();
-  d.style.left = Math.round(Math.min(r.left, window.innerWidth - 250)) + "px";
+  d.style.left = Math.round(r.left) + "px";
   d.style.top = Math.round(r.bottom) + "px";
   document.body.append(d);
+  fmyFit(d);
   anchor.classList.add("open");
   fmyOpenMenu = anchor;
   return d;
@@ -176,6 +237,7 @@ function fmyMenuButton(label, items, cls) {
   const b = fmyEl("button", "fmy-mb" + (cls ? " " + cls : ""), label);
   b.type = "button";
   b.dataset.menu = label;
+  b._items = items;
   b.addEventListener("click", (e) => { e.stopPropagation(); if (fmyOpenMenu === b) fmyCloseMenus(); else fmyDrop(b, typeof items === "function" ? items() : items); });
   b.addEventListener("pointerenter", () => { if (fmyOpenMenu && fmyOpenMenu !== b && fmyOpenMenu.parentElement === b.parentElement) fmyDrop(b, typeof items === "function" ? items() : items); });
   return b;
@@ -241,26 +303,24 @@ function fmyBarMenus() {
 }
 const FMY_ADD = {
   File: [["import", "Import (add a picture or a model)", () => fmyRun("image")]],
-  Select: ["-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"],
-  Display: ["-", "#Polygons", "faceNormals", "vertexNormals", "softHardDisplay"],
-  Windows: ["-", "#Workspaces", "panelModel", "panelMaterials", "-", "#Layouts and Menus", "layouts", "layoutReset",
-    "quickMenu", "-", "#Settings/Preferences", "preferences", "menuSettings", "-", "#UI Elements"],
+  Select: ["-", ["Preferences", ["camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]]],
   // UV and Mesh Display come from the catalogue now; only the window's own extra (a toggle, not a command) stays here
   "Mesh Display": [["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]],
-  Help: [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}],
-    ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
-    ["help3", "Option / Alt (or Command) + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}],
-    ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
-    ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]],
+  // tips are text, not rows that look clickable and do nothing
+  Help: ["-", ["Quick Help", [{ note: "Hold Space: the hotbox, at the mouse (Windows > Menus: the wheel)" },
+    { note: "Hold the right button: marking menus (Shift / Ctrl for more)" },
+    { note: "Option / Alt (or Command) + drag: tumble / track / dolly" },
+    { note: "Hold x / c / v while moving: snap to grid / edge / point" },
+    { note: "Type a command in the command line (polyCube, move 0 1 0 ...)" }, "-", "hotkeyEditor"]]],
 };
 const FMY_MENUS = () => {
   const cat = (typeof FORGE_PRO_MENUS !== "undefined") ? FORGE_PRO_MENUS : {};
   const out = [];
   for (const name of fmyBarMenus()) {
     const have = (cat[name] || []).slice();
-    const seen = new Set(have);
+    const seen = new Set(typeof forgeMenuFlat === "function" ? forgeMenuFlat(have) : have);
     const items = have.slice();
-    const add = (name === "Windows") ? FMY_ADD.Windows.concat(["-"], Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]))
+    const add = (name === "Windows") ? [["UI Elements", Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]])]]
       : (FMY_ADD[name] || []);
     for (const it of add) {
       const isId = typeof it === "string" && !it.startsWith("-") && !it.startsWith("#");
@@ -420,8 +480,8 @@ function forgeProChrome() {
   // ---- the tool box down the left: tools, then the quick layouts
   const tb = fmyEl("div", "fmy-toolbox"); tb.id = "fmy-toolbox";
   tb.append(fmyToolBtn("select", "select", "Select Tool", null, "fmy-tool"),
-    fmyToolBtn("lasso", "", "Lasso Tool - drag a box for now", () => { if (typeof forgeSay === "function") forgeSay("Lasso is not in Forge yet - drag a box to select."); }, "fmy-tool off"),
-    fmyToolBtn("paint", "", "Paint Selection Tool - not in Forge yet", () => { if (typeof forgeSay === "function") forgeSay("Paint selection is not in Forge yet."); }, "fmy-tool off"),
+    // (Lasso and Paint Selection were here as dead "off" buttons - left out until Forge has them: a button that does
+    // nothing is a button that lies, owner 2026-10-22)
     fmyToolBtn("move", "move", "Move Tool", null, "fmy-tool"), fmyToolBtn("rotate", "rotate", "Rotate Tool", null, "fmy-tool"),
     fmyToolBtn("scale", "scale", "Scale Tool", null, "fmy-tool"), fmyEl("span", "fmy-hsep"),
     fmyToolBtn("single", "single", "Single Perspective View", null, "fmy-layout"), fmyToolBtn("four", "four", "Four View", null, "fmy-layout"),
@@ -744,7 +804,7 @@ function forgeProViewportAttach(view, ctx) {
     fmyMenuButton("Show", () => [["grid", "Grid", () => fmyRun("grid"), () => !!(view.pro && view.pro.grid && view.pro.grid.visible)],
       ["hudT", "Heads Up Display", () => fmyUiSet("hud"), () => fmyUi().hud], ["cubeT", "View Cube", () => fmyUiSet("viewcube"), () => fmyUi().viewcube],
       ["snapsT", "Snap chips", () => { const s = document.getElementById("forge-snaps"); if (s) s.hidden = !s.hidden; }, () => { const s = document.getElementById("forge-snaps"); return !!(s && !s.hidden); }]], "fmy-pmb"),
-    fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => {}, () => true],
+    fmyMenuButton("Renderer", () => [["vp2", "Viewport 2.0 (WebGL)", () => { if (typeof forgeSay === "function") forgeSay("Viewport 2.0 is the live viewport (WebGL); Path Traced Preview refines it while the view is still."); }, () => true],
       // the path tracer (app/ui/forge_render.js): the viewport refining itself, and the Render window
       ...(window.ForgeRender ? ["-", ["renderPreview", "Path Traced Preview", () => window.ForgeRender.togglePreview(), () => window.ForgeRender.previewOn()],
         ["renderDialog", "Render...", () => window.ForgeRender.openDialog(true)]] : []),
@@ -763,6 +823,20 @@ function forgeProViewportAttach(view, ctx) {
     fmyToolBtn("textured", "textured", "Textured", null, "fmy-pib"), fmyToolBtn("xray", "xray", "X-Ray", null, "fmy-pib"), fmyEl("span", "fmy-vsep"),
     fmyToolBtn("light", "", "Use Default Lighting", () => view.defaultLighting(), "fmy-pib"), fmyToolBtn("isolate", "isolate", "Isolate Select", null, "fmy-pib"),
     fmyToolBtn("hud", "", "Heads Up Display", () => fmyUiSet("hud"), "fmy-pib"));
+  // a narrow viewport (a split, a vertical monitor, the UV workspace): the panel menus fold into one "Menus" button whose
+  // menus open as submenus, instead of being cut off at the edge (owner 2026-10-22: menus that look weird / can't be
+  // clicked). The icon row scrolls sideways with the wheel instead of hiding what does not fit.
+  const fold = fmyMenuButton("Menus", () => [...pm.querySelectorAll(".fmy-pmb:not(.fmy-pfold)")].map((b) => [b.dataset.menu, typeof b._items === "function" ? b._items() : b._items]), "fmy-pmb fmy-pfold");
+  fold.hidden = true;
+  pm.append(fold);
+  const refold = () => {
+    const menus = [...pm.querySelectorAll(".fmy-pmb:not(.fmy-pfold)")];
+    for (const b of menus) b.hidden = false;
+    fold.hidden = true;
+    if (pm.scrollWidth > pm.clientWidth + 1) { for (const b of menus) b.hidden = true; fold.hidden = false; }
+  };
+  if (typeof ResizeObserver === "function") new ResizeObserver(refold).observe(pm);
+  icons.addEventListener("wheel", (e) => { if (icons.scrollWidth > icons.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { icons.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   pb.append(pm, icons);
   stage.append(pb);
 

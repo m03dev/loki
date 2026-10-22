@@ -108,6 +108,12 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   agent actions. **Not verified:** the Godot tab on a project in ~/LOKI Projects on either machine.
 
 ### Forge
+- **Menus are trees + LOKI tests Forge (2026-10-22, docs/FORGE_QA.md)**: FORGE_PRO_MENUS entries may be
+  `["Label", [entries]]` to any depth (menu bar cascades: fmyRow/fmySubDrop; hotbox flyouts: forgeProFillList; wheel and
+  marking lists drill in with Back); dead commands are left out of every menu; every floating list fits the window
+  (fmyFit / forgeProFit). `forgeMenuFlat(list)` = a tree's ids. `tools/forge_qa.py` sweeps every menu row, button,
+  hotbox/wheel entry and command (first run: 70+ unclickable rows, now 0); the autopilot's `qa` duty
+  (engine/forge_qa_duty.py) runs it every 6 h when idle and files new problems as Lab ideas (kind "qa") for evolve.
 - app/ui/forge*.js: draw / picture / describe -> 3D (engine/forge3d.py: TripoSR -> TRELLIS Space -> offline lift),
   SculptGL-ported sculpting, Material Maker nodes, primitives + poly ops + DynaMesh (GoBuild port, GPL-3.0),
   Blender-style component editing (forge_edit.js: vert/edge/face, box select, G/R/S, proportional), Quad view.

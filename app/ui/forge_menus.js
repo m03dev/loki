@@ -185,14 +185,32 @@ if (typeof fmyDrop === "function") {
     const title = anchor && anchor.dataset && anchor.dataset.menu;
     if (d && title) {
       d.prepend(forgeMenusTearLine(title, "bar"));
-      for (const b of d.querySelectorAll(".fmy-ditem[data-pro-id]")) {      // right-click: in / out of the Quick Menu
-        const id = b.dataset.proId;
-        if (!id || !(typeof FORGE_PRO_CMDS !== "undefined" && FORGE_PRO_CMDS[id])) continue;
-        b.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); forgeMenusSay(forgeMenusQuickToggle(id)); if (typeof fmyCloseMenus === "function") fmyCloseMenus(); });
-      }
+      forgeMenusQuickRows(d);
     }
     return d;
   };
+}
+// right-click a menu row: in / out of the Quick Menu (top menus and their submenus alike)
+function forgeMenusQuickRows(d) {
+  for (const b of d.querySelectorAll(".fmy-ditem[data-pro-id]")) {
+    const id = b.dataset.proId;
+    if (!id || !(typeof FORGE_PRO_CMDS !== "undefined" && FORGE_PRO_CMDS[id])) continue;
+    b.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); forgeMenusSay(forgeMenusQuickToggle(id)); if (typeof fmyCloseMenus === "function") fmyCloseMenus(); });
+  }
+}
+if (typeof fmySubDrop === "function") {
+  const origSub = fmySubDrop;
+  window.fmySubDrop = function () { const d = origSub.apply(this, arguments); if (d) forgeMenusQuickRows(d); return d; };
+}
+// a menu tree as flat rows [id, label, run, on] (a torn-off menu lists every command of its submenus too)
+function forgeMenusRows(list, out) {
+  out = out || [];
+  for (const it of list || []) {
+    if (Array.isArray(it) && Array.isArray(it[1])) forgeMenusRows(it[1], out);
+    else if (Array.isArray(it)) out.push(it);
+    else if (typeof it === "string" && it !== "-" && it[0] !== "#") out.push([it]);
+  }
+  return out;
 }
 // the items of a torn-off menu, from where it came from: [id, label, run, on]
 function forgeMenusItems(t) {
@@ -202,10 +220,10 @@ function forgeMenusItems(t) {
   }
   if (t.source === "bar" && typeof FMY_MENUS === "function") {
     const m = FMY_MENUS().find((x) => x[0] === t.title);
-    return m ? m[1].filter((it) => it !== "-" && !(typeof it === "string" && it.startsWith("#"))).map((it) => (Array.isArray(it) ? it : [it])) : [];
+    return m ? forgeMenusRows(m[1]) : [];
   }
   const row = typeof FORGE_PRO_ROWS !== "undefined" && FORGE_PRO_ROWS.find((x) => x[0] === t.title);
-  return row ? row[1].map((id) => [id]) : [];
+  return row ? forgeMenusRows(row[1]) : [];
 }
 function forgeMenusTearOff(t, restoring) {
   const list = forgeMenusLoadTears();
@@ -237,7 +255,7 @@ function forgeMenusTearOff(t, restoring) {
       b.append(Object.assign(document.createElement("span"), { className: "fmy-tick", textContent: ticked ? "✓" : "" }),
         Object.assign(document.createElement("span"), { className: "fmy-dlabel", textContent: label || (c ? c[0] : cid) }),
         Object.assign(document.createElement("span"), { className: "fmy-dkey", textContent: typeof fmyKeyOf === "function" ? fmyKeyOf(cid) : "" }));
-      if (c && !c[1] && !run) b.classList.add("off");
+      if (c && !c[1] && !run) continue;                      // not in Forge yet: left out
       b.addEventListener("click", () => { if (run) run(); else if (typeof fmyRun === "function") fmyRun(cid); setTimeout(fill, 60); });
       body.append(b);
     }
@@ -427,5 +445,6 @@ if (typeof FORGE_KEY_GROUPS !== "undefined") {
 }
 if (typeof FORGE_PRO_ROWS !== "undefined") {             // the hotbox's Windows menu lists them too
   const w = FORGE_PRO_ROWS.find((r) => r[0] === "Windows");
-  if (w) for (const id of ["quickMenu", "menuSettings", "layouts"]) if (!w[1].includes(id)) w[1].push(id);
+  const have = w && (typeof forgeMenuFlat === "function" ? forgeMenuFlat(w[1]) : w[1]);
+  if (w) for (const id of ["quickMenu", "menuSettings", "layouts"]) if (!have.includes(id)) w[1].push(id);
 }

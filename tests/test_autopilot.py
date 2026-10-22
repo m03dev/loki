@@ -75,6 +75,7 @@ def make(tmp, **kw):
 import os  # noqa: E402
 
 os.environ["LOKI_AUTOPILOT"] = "on"
+os.environ["LOKI_FORGE_QA"] = "off"          # the real Forge QA sweep is not run here (tests/test_forge_qa_duty.py fakes it)
 
 # ---------------------------------------------------------------------------- idle gate
 section("acts only when LOKI is idle")

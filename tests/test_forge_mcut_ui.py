@@ -74,7 +74,7 @@ async def main():
         anim = await E("[!!document.getElementById('fmy-time').offsetParent, document.getElementById('forge-time').parentElement.id, !!document.getElementById('fdock-keys-btn')]")
         check("Workspace: Animation shows the time / range sliders, the key bar folded into them (Keys)", anim == [True, "fmy-time", True], anim)
         await E("ForgeUVEditor.setWorkspace('model')")
-        check("Preferences is a command (Windows > Settings/Preferences)", await E("!!FORGE_PRO_CMDS.preferences && FMY_MENUS().find(m => m[0] === 'Windows')[1].includes('preferences')"))
+        check("Preferences is a command (Windows > Settings/Preferences)", await E("!!FORGE_PRO_CMDS.preferences && forgeMenuFlat(FMY_MENUS().find(m => m[0] === 'Windows')[1]).includes('preferences')"))
 
         # ---- soft / hard
         await E("fmyRun('sphere')")

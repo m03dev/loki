@@ -494,8 +494,8 @@ function forgeProCommands() {
     keyLinear: ["Keys: Linear", (v) => forgeProInterp(v, "linear")],
     keySmooth: ["Keys: Smooth", (v) => forgeProInterp(v, "bezier")],
     keyStep: ["Keys: Step", (v) => forgeProInterp(v, "step")],
-    copyAnim: ["Edit > Copy Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.copyAnim(); return n ? "Copied " + n + " keys." : "Nothing is keyed here."; }],
-    pasteAnim: ["Edit > Paste Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; if (!t.clipKeys) return "Copy some animation first."; t.api.undoChunk("paste animation", () => t.api.pasteAnim()); return "Pasted at frame " + Math.round(t.time.frame) + "."; }],
+    copyAnim: ["Copy Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.copyAnim(); return n ? "Copied " + n + " keys." : "Nothing is keyed here."; }],
+    pasteAnim: ["Paste Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; if (!t.clipKeys) return "Copy some animation first."; t.api.undoChunk("paste animation", () => t.api.pasteAnim()); return "Pasted at frame " + Math.round(t.time.frame) + "."; }],
     mirrorKeysX: ["Mirror Keys across YZ", (v) => forgeProMirror(v, 0)],
     mirrorKeysY: ["Mirror Keys across XZ", (v) => forgeProMirror(v, 1)],
     mirrorKeysZ: ["Mirror Keys across XY", (v) => forgeProMirror(v, 2)],
@@ -644,7 +644,7 @@ function forgeProMarkShow(v, x, y, menu) {
   host.textContent = "";
   host.append(proEl("span", "forge-pro-hub" + (menu.title ? "" : " dot"), menu.title || ""));
   for (const [pos, id] of Object.entries(menu.ring)) {
-    const c = FORGE_PRO_CMDS[id]; if (!c) continue;
+    const c = FORGE_PRO_CMDS[id]; if (!c || !c[1]) continue;       // a wedge that does nothing is left out
     const a = FORGE_COMPASS[pos] * Math.PI / 180;
     const b = proEl("button", "forge-pro-wedge pos-" + pos.toLowerCase() + (c[1] ? "" : " off"), c[0]);
     b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id; b.dataset.pos = pos;
@@ -668,8 +668,8 @@ function forgeProMarkShow(v, x, y, menu) {
       return on ? "\u2713" : "";
     };
     const row = (id) => {
-      const c = FORGE_PRO_CMDS[id]; if (!c) return null;
-      const b = proEl("button", "forge-pro-litem" + (c[1] ? "" : " off"));
+      const c = FORGE_PRO_CMDS[id]; if (!c || !c[1]) return null;      // not in Forge yet: left out
+      const b = proEl("button", "forge-pro-litem");
       b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
       const t = tickOf(id);
       if (t) b.classList.add("on");
@@ -677,13 +677,14 @@ function forgeProMarkShow(v, x, y, menu) {
       b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
       return b;
     };
+    const trail = [];
     const fill = (entries, backLabel) => {
       list.textContent = "";
       if (backLabel) {
         const back = proEl("button", "forge-pro-litem forge-back");
         back.type = "button"; back.dataset.proBack = "1";
         back.append(proEl("span", "forge-pro-tick", "\u25c2"), proEl("span", "forge-pro-label", backLabel));
-        back.addEventListener("click", (ev) => { ev.stopPropagation(); fill(menu.list, ""); });
+        back.addEventListener("click", (ev) => { ev.stopPropagation(); const prev = trail.pop() || menu.list; fill(prev, trail.length ? "Back" : ""); });
         list.append(back);
       }
       for (const entry of entries) {
@@ -692,10 +693,11 @@ function forgeProMarkShow(v, x, y, menu) {
           sub.type = "button"; sub.dataset.proSub = entry[0];
           sub.append(proEl("span", "forge-pro-tick", "\u25b8"), proEl("span", "forge-pro-label", entry[0]));
           const kids = entry[1];
-          sub.addEventListener("click", (ev) => { ev.stopPropagation(); fill(kids, "\u25c2 Back"); });
+          sub.addEventListener("click", (ev) => { ev.stopPropagation(); trail.push(entries); fill(kids, "Back"); });
           list.append(sub);
           continue;
         }
+        if (entry === "-" || (typeof entry === "string" && entry[0] === "#")) continue;
         const b = row(Array.isArray(entry) ? entry[0] : entry);
         if (b) list.append(b);
       }
@@ -759,40 +761,86 @@ function forgeProMarkHover(x, y) {
 // Every menu is written down once here and the hotbox, the Space wheel and the window's menu bar all read it, so they
 // cannot drift apart (they had: the hotbox knew no UV or Mesh Display menu). Forge's own commands only - a menu with
 // nothing in it is a menu that lies about what the program can do.
+// A menu is a TREE (owner 2026-10-22: "menus within menus within menus, everything should have a sub category that can
+// get a sub category"). An entry is a command id, "-" (a separator), "#Heading" (a group title), or ["Label", [entries]]
+// - a submenu, which may hold submenus of its own, to any depth. The menu bar cascades them sideways, the hotbox flies
+// them out, the wheel and the marking lists drill in (with a Back row). forgeMenuFlat() walks a tree for its ids.
+// Commands that are not in Forge yet are left out when a menu is drawn (a dead row is a row that lies).
+// every command id in a menu tree, depth first (submenus included); "-" / "#..." skipped
+function forgeMenuFlat(list, out) {
+  out = out || [];
+  for (const e of list || []) {
+    if (Array.isArray(e)) { if (Array.isArray(e[1])) forgeMenuFlat(e[1], out); else if (e[0]) out.push(e[0]); }
+    else if (typeof e === "string" && e && e !== "-" && e[0] !== "#") out.push(e);
+  }
+  return out;
+}
+// is this entry a submenu? (["Label", [...]]; a window row is ["id", "Label", fn])
+const forgeMenuIsSub = (e) => Array.isArray(e) && Array.isArray(e[1]);
+// does a command exist and work? (dead commands are left out of every menu)
+const forgeMenuLive = (id) => { const c = typeof FORGE_PRO_CMDS !== "undefined" && FORGE_PRO_CMDS[id]; return !!(c && c[1]); };
+// a submenu with nothing live inside is left out too
+function forgeMenuSubLive(e) {
+  const own = (l) => l.some((x) => (x && x.note) || (Array.isArray(x) && (Array.isArray(x[1]) ? own(x[1]) : typeof x[2] === "function")));
+  return forgeMenuFlat(e[1]).some(forgeMenuLive) || own(e[1]);
+}
+window.forgeMenuFlat = forgeMenuFlat;
 const FORGE_PRO_MENUS = {
   // the main menu bar - the order and the shape of a 3D program's own bar
-  File: ["save", "saveObj", "export", "close"],
-  Edit: ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"],
-  Create: ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "imagePlane", "draw", "image", "describe", "creature"],
-  Select: ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "marquee", "objComp", "vertex", "edge", "face", "uv", "vertexFace", "uvShell", "multi", "loopSel", "ringSel"],
-  Modify: ["select", "move", "rotate", "scale", "lastTool", "showManip", "worldAxes", "objectAxes", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "makeLive", "snapGrid", "snapEdge", "snapPoint"],
-  Display: ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "layerEditor", "layerAdd", "layerAssign", "smooth1", "smooth2", "smooth3", "quadToggle", "xray", "grid", "softHard", "iveToggle"],
-  Windows: ["#Workspaces", "wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim", "-", "#Panels", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "panelModel", "panelMaterials", "wheel", "hideUI", "hotkeyEditor", "preferences"],
+  File: ["save", ["Export", ["saveObj", "export"]], "-", "close"],
+  Edit: ["undo", "redo", "repeatLast", "-", ["Duplicate", ["duplicate", "duplicateT"]], ["Grouping", ["group", "ungroup"]],
+    ["Parenting", ["parent", "unparent"]], "-", ["Delete", ["delete", ["Delete by Type", ["deleteHistory"]]]]],
+  Create: [["Polygon Primitives", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere"]],
+    ["Image Planes", ["imagePlane", "image"]], "-", ["Make with LOKI", ["draw", "describe", "creature"]]],
+  Select: ["selectAll", "selectNone", "invert", "hierarchy", "marquee", "-",
+    ["Components", ["objComp", "vertex", "edge", "face", "uv", "vertexFace", "uvShell", "multi"]],
+    ["Grow and Shrink", ["grow", "shrink"]], ["Loops and Rings", ["loopSel", "ringSel"]]],
+  Modify: [["Transform Tools", ["select", "move", "rotate", "scale", "lastTool", "showManip"]],
+    ["Axes", ["worldAxes", "objectAxes"]], ["Pivot", ["centerPivot", "resetPivot", "pivotEdit"]],
+    ["Transformations", ["freeze", "resetXf"]], "-", "makeLive", ["Snap", ["snapGrid", "snapEdge", "snapPoint"]]],
+  Display: [["Visibility", ["hideToggle", ["Hide", ["hide", "hideOthers"]], ["Show", ["show", "showLast", "showAll"]], "isolate"]],
+    ["Display Layers", ["layerEditor", "layerAdd", "layerAssign"]], ["Smooth Mesh Preview", ["smooth1", "smooth2", "smooth3"]],
+    ["Viewport", ["quadToggle", "xray", "grid"]], ["Polygons", ["softHard", "iveToggle", ["Normals", ["faceNormals", "vertexNormals", "softHardDisplay"]]]]],
+  Windows: [["Workspaces", ["wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim"]],
+    ["Panels", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "panelModel", "panelMaterials"]],
+    ["Menus", ["wheel", "quickMenu"]], ["Layouts", ["layouts", "layoutReset", "hideUI"]],
+    ["Settings / Preferences", ["preferences", "hotkeyEditor", "menuSettings"]]],
   Help: ["hotkeyEditor", "preferences", "more"],
   // the panel menus (they belong to a view, not to the program - the row above the main menus, as in the reference)
-  View: ["persp", "top", "front", "side", "defaultView", "frameAll", "frameSel", "single", "four"],
-  Shading: ["wire", "shaded", "textured", "smooth1", "smooth2", "smooth3", "xray", "matcapNext", "matcapPrev"],
+  View: [["Cameras", ["persp", "top", "front", "side", "defaultView"]], ["Frame", ["frameAll", "frameSel"]], ["Layout", ["single", "four"]]],
+  Shading: [["Draw Mode", ["wire", "shaded", "textured"]], ["Smooth Preview", ["smooth1", "smooth2", "smooth3"]], "xray", ["Matcap", ["matcapNext", "matcapPrev"]]],
   Lighting: ["lights"],
-  Show: ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "grid", "quadToggle", "softSel", "xray"],
-  Renderer: ["renderDialog", "renderPreview", "renderStudio", "bakeMaps"],
-  Panels: ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "panelModel", "panelMaterials", "single", "four", "hideUI"],
+  Show: [["Visibility", ["hideToggle", ["Hide", ["hide", "hideOthers"]], ["Show", ["show", "showLast", "showAll"]], "isolate"]],
+    ["Viewport", ["grid", "quadToggle", "xray"]], "softSel"],
+  Renderer: ["renderDialog", "renderPreview", "-", "renderStudio", "bakeMaps"],
+  Panels: [["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "panelModel", "panelMaterials"]],
+    ["Layout", ["single", "four", "hideUI"]]],
   // the menu sets' menus
-  Mesh: ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel", "bakeMaps"],
-  "Edit Mesh": ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
-    "spinEdge", "spinEdgeBack", "poke", "wedge", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"],
-  "Mesh Tools": ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "multiCutStep", "targetWeld", "slideEdge", "quadDraw", "retopoFinish", "softSel", "sculpt", "winToolkit"],
+  Mesh: [["Combine", ["combine", "separate"]], ["Mirror", ["mirror", "mirrorY", "mirrorZ"]],
+    ["Topology", ["extractFace", "smooth", "triangulate", "quadrangulate", "fillHole"]], ["Cleanup", ["cleanup", "meshStats"]],
+    ["Remesh", ["dynamesh"]], "-", "sculptModel", "bakeMaps"],
+  "Edit Mesh": [["Components", ["extrude", "bridge", "collapse", "connect", "detach", "relax", "deleteComp"]],
+    ["Vertex", [["Merge", ["merge", "mergeCenter"]], "averageVerts", "chamfer", "deleteEdgeVert"]],
+    ["Edge", ["bevel", ["Spin", ["spinEdge", "spinEdgeBack"]]]],
+    ["Face", ["inset", "poke", "wedge", "duplicateFace", "circularize", "reverse"]]],
+  "Mesh Tools": [["Edge Loops", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "slideEdge"]], ["Cut", ["multiCut", "multiCutStep"]],
+    ["Weld", ["targetWeld"]], ["Retopology", ["quadDraw", "retopoFinish"]], "-", "softSel", "sculpt", "winToolkit"],
   Snap: ["snapGrid", "snapEdge", "snapPoint"],
-  Symmetry: ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial3", "symRadial4", "symRadial6", "symRadial8", "symAxisX", "symAxisY", "symAxisZ"],
-  Animation: ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey",
-    "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"],
-  Sculpt: ["wsSculpt", "sculpt", "sculptModel", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "sculptWheel", "sculptExit", "dynamesh", "smooth"],
-  // A menu may carry "-" (a separator) and "#Heading" (a group title): the window's menu bar draws them, the hotbox
-  // ignores them (its lists are compact), so one definition serves both.
-  UV: ["uvEditor", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "#Cut and Sew",
-    "uvCut", "uvSew", "uvMoveSew", "#Unfold", "uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams", "uvUnfold", "uvLayout",
+  Symmetry: [["Object", ["symX", "symY", "symZ"]],
+    ["Radial", ["symRadial3", "symRadial4", "symRadial6", "symRadial8", "symRadialOff", ["Axis", ["symAxisX", "symAxisY", "symAxisZ"]]]],
+    "-", "symModel", "symOff"],
+  Animation: [["Keys", ["setKey", "deleteKey", "clearKeys", ["Tangents", ["keyLinear", "keySmooth", "keyStep"]]]],
+    ["Playback", ["playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd"]],
+    ["Edit", ["copyAnim", "pasteAnim", ["Mirror Keys", ["mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]]]], "-", "graphEditor", "animAutoKey"],
+  Sculpt: ["wsSculpt", "sculptModel", "sculpt", "-", ["Remesh", ["sculptRemesh", "sculptQuadRemesh", "sculptReduce", "dynamesh"]],
+    ["Subdivision", ["sculptDivide", "sculptDynamic"]], ["Masking", ["maskClear", "maskInvert", "maskFill", "maskHide", "maskShow"]],
+    "sculptWheel", "smooth", "-", "sculptExit"],
+  UV: ["uvEditor", ["Create UVs", ["uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic"]],
+    ["Cut and Sew", ["uvCut", "uvSew", "uvMoveSew"]], ["Unfold", [["Automatic", ["uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams"]], "uvUnfold", "uvLayout"]],
     "-", "uvShell", "uvChecker"],
-  "Mesh Display": ["#Normals", "softEdge", "hardEdge", "softHard", "softHardAngle", "#Display", "softHardDisplay",
-    "faceNormals", "vertexNormals", "normalsBigger", "normalsSmaller", "-", "wire", "shaded", "xray"],
+  "Mesh Display": [["Normals", ["softEdge", "hardEdge", "softHard", "softHardAngle",
+    ["Display", ["faceNormals", "vertexNormals", "softHardDisplay"]], ["Size", ["normalsBigger", "normalsSmaller"]]]],
+    "-", ["Draw Mode", ["wire", "shaded", "xray"]]],
 };
 // the row above the middle: the panel menus, then the main menus (the order the reference uses)
 const FORGE_PRO_BAR = ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"];
@@ -853,6 +901,72 @@ function forgeProItem(id, host) {
   b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
   b.addEventListener("click", (ev) => { ev.stopPropagation(); const v = forge.view; host._used = true; forgeProHotboxHide(); if (v) forgeProRun(v, id); });
   return b;
+}
+
+// a hotbox list: commands, separators and submenus (["Label", [entries]]) that fly out beside their row, to any depth
+function forgeProFillList(list, entries, host, depth) {
+  let sep = false;
+  for (const e of entries || []) {
+    if (e === "-") { sep = !!list.querySelector(".forge-pro-item"); continue; }
+    if (typeof e === "string" && e[0] === "#") continue;
+    let b = null;
+    if (forgeMenuIsSub(e)) {
+      if (!forgeMenuSubLive(e)) continue;
+      b = proEl("button", "forge-pro-item forge-pro-subitem");
+      b.type = "button"; b.dataset.proSub = e[0];
+      b.setAttribute("aria-haspopup", "menu");
+      b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", e[0]), proEl("span", "forge-pro-key", "\u25b8"));
+      const open = () => {
+        forgeProFlyClose(host, depth);
+        for (const x of list.querySelectorAll(".forge-pro-subitem.open")) x.classList.remove("open");
+        b.classList.add("open");
+        const fly = proEl("div", "forge-pro-list forge-pro-fly");
+        fly.dataset.depth = String(depth + 1); fly.dataset.sub = e[0];
+        fly.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+        forgeProFillList(fly, e[1], host, depth + 1);
+        host.append(fly);
+        const r = b.getBoundingClientRect(), w = fly.getBoundingClientRect().width;
+        // to the right; flipped left only when it would lose more than a third of itself (a small nudge keeps the
+        // cascade reading left-to-right instead of folding back over the menus it came from)
+        const over = r.right + w + 4 - window.innerWidth;
+        fly.style.left = Math.round(over <= w / 3 ? Math.min(r.right, window.innerWidth - w - 4) : r.left - w) + "px";
+        fly.style.top = Math.round(r.top - 3) + "px";
+        forgeProFit(fly);
+        forgeProHotboxRefresh(forge.view, fly);
+      };
+      b.addEventListener("pointerenter", () => { clearTimeout(host._flyT); host._flyT = setTimeout(open, 110); });
+      b.addEventListener("pointerleave", () => clearTimeout(host._flyT));
+      b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); clearTimeout(host._flyT); open(); });
+    } else {
+      const id = Array.isArray(e) ? e[0] : e;
+      if (!forgeMenuLive(id)) continue;                  // not in Forge yet: left out
+      b = forgeProItem(id, host);
+      if (!b) continue;
+      b.addEventListener("pointerenter", () => { clearTimeout(host._flyT); host._flyT = setTimeout(() => { forgeProFlyClose(host, depth); for (const x of list.querySelectorAll(".forge-pro-subitem.open")) x.classList.remove("open"); }, 160); });
+    }
+    if (sep) { list.append(proEl("div", "forge-pro-sep")); sep = false; }
+    list.append(b);
+  }
+}
+function forgeProFlyClose(host, depth) {
+  for (const f of (host || document).querySelectorAll(".forge-pro-fly")) if ((+f.dataset.depth || 0) > depth) f.remove();
+}
+// keep a floating list inside the window: nudge it back on screen and let a long one scroll
+function forgeProFit(el, box) {
+  if (!el || el.hidden) return;
+  // the space it may use: the window, or a clipping parent (the wheel lives inside the viewport, which clips it)
+  const b = box || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  el.style.translate = "";
+  el.style.maxHeight = Math.max(120, (b.bottom - b.top) - 12) + "px";
+  el.style.overflowY = "auto";
+  const r = el.getBoundingClientRect();
+  let dx = 0, dy = 0;
+  if (r.right > b.right - 4) dx = (b.right - 4) - r.right;
+  if (r.left + dx < b.left + 4) dx = b.left + 4 - r.left;
+  if (r.bottom > b.bottom - 4) dy = (b.bottom - 4) - r.bottom;
+  if (r.top + dy < b.top + 4) dy = b.top + 4 - r.top;
+  if (dx || dy) el.style.translate = Math.round(dx) + "px " + Math.round(dy) + "px";
 }
 
 // the middle row's menu-set button: Forge / Modeling / Sculpting / Animation / Rendering, remembered per machine
@@ -921,14 +1035,18 @@ function forgeProHotboxHost() {
     h.type = "button";
     const list = proEl("div", "forge-pro-list");
     list.hidden = true;
-    for (const id of ids) { const b = forgeProItem(id, host); if (b) list.append(b); }
+    forgeProFillList(list, ids, host, 0);
     // calm menus (owner 2026-10-21: holding Space the menus "glitch ... jittering"): a menu opens when the mouse
     // RESTS on its name (a short hover intent) or at once on a press - sweeping across the row no longer flips every
     // menu open and shut - and nothing is rewritten when it is already that way.
     const open = () => {
       clearTimeout(host._intent);
-      for (const l of host.querySelectorAll(".forge-pro-list")) { const hide = l !== list; if (l.hidden !== hide) l.hidden = hide; }
+      forgeProFlyClose(host, -1);
+      for (const l of host.querySelectorAll(".forge-pro-list:not(.forge-pro-fly)")) { const hide = l !== list; if (l.hidden !== hide) l.hidden = hide; }
       for (const x of host.querySelectorAll(".forge-pro-head")) { const on = x === h; if (x.classList.contains("open") !== on) x.classList.toggle("open", on); }
+      // the open menu's row goes on top (its list was drawn under the next row's menu names) and the list stays on screen
+      for (const r of host.querySelectorAll(".forge-pro-row")) r.classList.toggle("has-open", r === col.parentElement);
+      forgeProFit(list);
     };
     h.addEventListener("pointerenter", () => {
       clearTimeout(host._intent);
@@ -975,7 +1093,7 @@ function forgeProHotboxHost() {
   forgeProSetApply(host);
   // a press in a zone (not on a menu) opens its marking menu; releasing picks by direction
   host.addEventListener("pointerdown", (ev) => {
-    if (ev.target.closest(".forge-pro-col")) return;
+    if (ev.target.closest(".forge-pro-col, .forge-pro-fly")) return;
     if (host.dataset.pinned) { ev.preventDefault(); forgeProHotboxHide(); return; }   // Space is up: a click away closes
     if (ev.button !== 0) return;
     ev.preventDefault();
@@ -989,7 +1107,7 @@ function forgeProHotboxHost() {
   });
   // once Space is up and a menu stays dropped down, a press anywhere but on the menus closes the hotbox
   document.addEventListener("pointerdown", (ev) => {
-    if (host.hidden || !host.dataset.pinned || (ev.target.closest && ev.target.closest("#forge-pro-hotbox .forge-pro-col"))) return;
+    if (host.hidden || !host.dataset.pinned || (ev.target.closest && ev.target.closest("#forge-pro-hotbox .forge-pro-col, #forge-pro-hotbox .forge-pro-fly"))) return;
     ev.preventDefault(); ev.stopPropagation(); forgeProHotboxHide();
   }, true);
   window.addEventListener("pointermove", (ev) => { if (host._zone) forgeProMarkHover(ev.clientX, ev.clientY); });
@@ -1052,31 +1170,54 @@ function forgeProWheelSub(v, head, ids, angle) {
   sub.dataset.head = head;
   sub.append(proEl("span", "forge-wheel-subtitle", head));
   if (head === "Recent Commands") ids = (v && v.pro && v.pro.recent) || [];
-  if (!ids.length) sub.append(proEl("span", "forge-wheel-subtitle", "Nothing yet"));
-  for (const id of ids) {
-    const c = FORGE_PRO_CMDS[id];
-    if (!c) continue;
-    const b = proEl("button", "forge-wheel-item" + (c[1] ? "" : " off"));
-    b.type = "button"; b.dataset.proId = id;
-    let on = false;
-    try { on = !!(FORGE_PRO_TOGGLES[id] && FORGE_PRO_TOGGLES[id](v)); } catch (_) { on = false; }
-    b.append(proEl("span", "forge-pro-tick", on ? "\u2713" : ""), proEl("span", "", c[0]));
-    b.classList.toggle("on", on);
-    if (!c[1]) b.title = c[2] || "";
-    b.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
-      const view = forge.view;
-      host._used = true;
-      forgeProWheelClose();
-      if (view) forgeProRun(view, id);
-    });
-    sub.append(b);
-  }
-  const b2 = proEl("button", "forge-wheel-item forge-wheel-more", "All menus (the full menu grid)");
-  b2.type = "button";
-  b2.addEventListener("click", (ev) => { ev.stopPropagation(); host._used = true; forgeProWheelClose(); forgeProHotboxOpen(v, host._at); });
-  sub.append(b2);
+  // submenus drill in: the list shows the submenu with a Back row on top (a stack, so it goes as deep as the menu does)
+  const body = proEl("div", "forge-wheel-body");
+  sub.append(body);
+  const stack = [];
+  const fill = (entries, title) => {
+    body.textContent = "";
+    sub.firstChild.textContent = title;
+    if (stack.length) {
+      const back = proEl("button", "forge-wheel-item forge-back");
+      back.type = "button"; back.dataset.proBack = "1";
+      back.append(proEl("span", "forge-pro-tick", "\u25c2"), proEl("span", "", "Back"));
+      back.addEventListener("click", (ev) => { ev.stopPropagation(); const prev = stack.pop(); fill(prev[0], prev[1]); });
+      body.append(back);
+    }
+    let n = 0;
+    for (const e of entries) {
+      if (e === "-" || (typeof e === "string" && e[0] === "#")) continue;
+      if (forgeMenuIsSub(e)) {
+        if (!forgeMenuSubLive(e)) continue;
+        const b = proEl("button", "forge-wheel-item forge-wheel-subitem");
+        b.type = "button"; b.dataset.proSub = e[0];
+        b.append(proEl("span", "forge-pro-tick", "\u25b8"), proEl("span", "", e[0]));
+        b.addEventListener("click", (ev) => { ev.stopPropagation(); stack.push([entries, title]); fill(e[1], e[0]); });
+        body.append(b); n++;
+        continue;
+      }
+      const id = Array.isArray(e) ? e[0] : e;
+      const c = FORGE_PRO_CMDS[id];
+      if (!c || !c[1]) continue;
+      const b = proEl("button", "forge-wheel-item");
+      b.type = "button"; b.dataset.proId = id;
+      let on = false;
+      try { on = !!(FORGE_PRO_TOGGLES[id] && FORGE_PRO_TOGGLES[id](v)); } catch (_) { on = false; }
+      b.append(proEl("span", "forge-pro-tick", on ? "\u2713" : ""), proEl("span", "", c[0]));
+      b.classList.toggle("on", on);
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const view = forge.view;
+        host._used = true;
+        forgeProWheelClose();
+        if (view) forgeProRun(view, id);
+      });
+      body.append(b); n++;
+    }
+    if (!n) body.append(proEl("span", "forge-wheel-subtitle", "Nothing yet"));
+    if (sub.isConnected) forgeProFit(sub, host.parentElement && host.parentElement.getBoundingClientRect());
+  };
+  fill(ids, head);
   // the menu opens OUTWARD from its wedge, its nearest edge just past it, so it never covers the ring
   const cx = Math.cos(angle), cy = Math.sin(angle);
   const ex = Math.cos(angle) * (FORGE_PRO_WHEEL_R + 48), ey = Math.sin(angle) * (FORGE_PRO_WHEEL_R * 0.74 + 22);
@@ -1086,6 +1227,7 @@ function forgeProWheelSub(v, head, ids, angle) {
     ? (cx > 0 ? "translate(0, -50%)" : "translate(-100%, -50%)")
     : (cy > 0 ? "translate(-50%, 0)" : "translate(-50%, -100%)");
   host.append(sub);
+  forgeProFit(sub, host.parentElement && host.parentElement.getBoundingClientRect());
   host.dataset.open = head;
 }
 
@@ -1159,7 +1301,7 @@ function forgeProHotboxOpen(v, at) {
 
 function forgeProHotboxHide() {
   const host = document.getElementById("forge-pro-hotbox");
-  if (host) { clearTimeout(host._intent); host._dragFrom = null; host.hidden = true; delete host.dataset.pinned; }
+  if (host) { clearTimeout(host._intent); clearTimeout(host._flyT); forgeProFlyClose(host, -1); host._dragFrom = null; host.hidden = true; delete host.dataset.pinned; }
 }
 
 // a Space tap: one view <-> four views; a tap over a pane of the four maximises that pane

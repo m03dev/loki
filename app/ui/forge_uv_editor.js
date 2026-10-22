@@ -255,7 +255,9 @@ const ForgeUVEditor = (() => {
   }
 
   // ---------------------------------------------------------------- the 2D view
-  function size() { const r = S.canvas.getBoundingClientRect(); return [r.width, r.height]; }
+  // the canvas size; while a draw runs it is read once (it used to be read for every UV point - a forced layout each
+  // time, which with the per-face fills froze Forge for a minute on a 54k-face remesh: QA sweep 2026-10-22)
+  function size() { if (S.sz) return S.sz; const r = S.canvas.getBoundingClientRect(); return [r.width, r.height]; }
   function toPx(u, v) { const [w, h] = size(); return [w / 2 + (u - S.cam.u) * S.cam.z, h / 2 - (v - S.cam.v) * S.cam.z]; }
   function toUV(x, y) { const [w, h] = size(); return [S.cam.u + (x - w / 2) / S.cam.z, S.cam.v - (y - h / 2) / S.cam.z]; }
   function frame(all) {
@@ -273,6 +275,10 @@ const ForgeUVEditor = (() => {
   }
   function draw() {
     if (!S.canvas || S.panel.hidden) return;
+    S.sz = null;
+    try { S.sz = size(); drawNow(); } finally { S.sz = null; }
+  }
+  function drawNow() {
     const c = S.canvas, g = S.ctx, dpr = window.devicePixelRatio || 1, [w, h] = size();
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     if (!S.cam.z) { S.cam.z = 1; frame(true); return; }
@@ -296,20 +302,39 @@ const ForgeUVEditor = (() => {
     if (!m) { g.fillStyle = "#8b9099"; g.font = "13px sans-serif"; g.textAlign = "center"; g.fillText("Create a primitive (or remesh a sculpt) to edit its UVs.", w / 2, h / 2); updateInfo(); return; }
     if (!U().has(m)) { g.fillStyle = "#8b9099"; g.font = "13px sans-serif"; g.textAlign = "center"; g.fillText("No UVs yet - Create UVs: Camera-based, Planar or Automatic.", w / 2, h / 2); updateInfo(); return; }
     const sel = new Set(selFaces()), dist = st.showDistortion ? U().distortion(m) : null, fresh = new Set(m.uvNew || []);
-    // faces
-    m.fuv.forEach((cix, fi) => {
-      g.beginPath();
-      cix.forEach((i, k) => { const [x, y] = toPx(m.uv[i][0], m.uv[i][1]); if (k) g.lineTo(x, y); else g.moveTo(x, y); });
-      g.closePath();
+    // faces: one path per fill colour (one fill() per face was the slow part on big meshes)
+    // (in chunks: one huge path of overlapping faces is just as slow for the rasteriser)
+    const paths = new Map(), CH = 400;
+    const flush = (style, p) => { g.fillStyle = style; g.fill(p.path); p.path = new Path2D(); p.n = 0; };
+    const add = (style, fi) => {
+      let p = paths.get(style); if (!p) { p = { path: new Path2D(), n: 0 }; paths.set(style, p); }
+      if (++p.n > CH) { flush(style, p); p.n = 1; }
+      const P = p.path;
+      const cix = m.fuv[fi];
+      for (let k = 0; k < cix.length; k++) { const q = m.uv[cix[k]]; const [x, y] = toPx(q[0], q[1]); if (k) P.lineTo(x, y); else P.moveTo(x, y); }
+      P.closePath();
+    };
+    for (let fi = 0; fi < m.fuv.length; fi++) {
       if (dist) {
         const d = dist[fi];
-        if (d.flipped) g.fillStyle = "rgba(230,40,40,.55)";
-        else { const t = Math.max(-1, Math.min(1, Math.log2(d.stretch || 1e-6) / 2)); g.fillStyle = t > 0 ? "rgba(235,90,60," + (0.15 + 0.5 * t) + ")" : "rgba(70,130,240," + (0.15 - 0.5 * t) + ")"; }
-        g.fill();
-      } else if (fresh.has(fi)) { g.fillStyle = "rgba(240,200,60,.22)"; g.fill(); }
-      else { g.fillStyle = "rgba(150,170,200,.07)"; g.fill(); }
-      if (sel.has(fi)) { g.fillStyle = "rgba(255,138,26,.38)"; g.fill(); }
-    });
+        if (d.flipped) add("rgba(230,40,40,.55)", fi);
+        else {
+          const t = Math.round(Math.max(-1, Math.min(1, Math.log2(d.stretch || 1e-6) / 2)) * 8) / 8;   // 17 shades
+          add(t > 0 ? "rgba(235,90,60," + (0.15 + 0.5 * t) + ")" : "rgba(70,130,240," + (0.15 - 0.5 * t) + ")", fi);
+        }
+      } else if (fresh.has(fi)) add("rgba(240,200,60,.22)", fi);
+      else add("rgba(150,170,200,.07)", fi);
+    }
+    for (const [style, p] of paths) if (p.n) flush(style, p);
+    if (sel.size) {
+      const p = new Path2D();
+      for (const fi of sel) {
+        const cix = m.fuv[fi]; if (!cix) continue;
+        for (let k = 0; k < cix.length; k++) { const q = m.uv[cix[k]]; const [x, y] = toPx(q[0], q[1]); if (k) p.lineTo(x, y); else p.moveTo(x, y); }
+        p.closePath();
+      }
+      g.fillStyle = "rgba(255,138,26,.38)"; g.fill(p);
+    }
     // edges: inner edges thin, shell borders (seams + open borders) thicker
     const E = U().edges(m);
     g.lineWidth = 1; g.strokeStyle = "rgba(170,190,215,.55)"; g.beginPath();
@@ -661,7 +686,11 @@ const ForgeUVEditor = (() => {
 // the commands (menus, hotbox, the command line): uvEditor, uvCamera, uvPlanar ... uvLayout
 if (typeof FORGE_PRO_CMDS !== "undefined") {
   const O = ForgeUVEditor.OPS;
-  const add = (id, label, fn) => { if (!FORGE_PRO_CMDS[id]) FORGE_PRO_CMDS[id] = [label, fn]; };
+  // (a placeholder that says "not in Forge yet" is replaced: UV Shell stayed dead in the menus because of it - QA sweep
+  // 2026-10-22)
+  const add = (id, label, fn) => { if (!FORGE_PRO_CMDS[id] || !FORGE_PRO_CMDS[id][1]) FORGE_PRO_CMDS[id] = [label, fn]; };
+  // Select > Components > UV (the marking menu's south wedge): the UV Editing workspace, picking UV points
+  add("uv", "UV", () => { ForgeUVEditor.setWorkspace("uv"); ForgeUVEditor.state.mode = "uv"; ForgeUVEditor.draw(); return "UV points: click or drag in the UV Editor."; });
   add("uvEditor", "UV Editor (UV Editing workspace)", () => ForgeUVEditor.setWorkspace(ForgeUVEditor.workspace() === "uv" ? "model" : "uv"));
   add("uvCamera", "Camera-based UVs", () => O.camera());
   add("uvPlanar", "Planar UVs", () => O.planar());

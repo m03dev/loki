@@ -217,7 +217,7 @@ async def ui():
         await E("ForgeUVEditor.OPS.checker()")
         ck2 = await E("!(forge.view.material.map && forge.view.material.map.isCanvasTexture)")
         check("Checker puts a checker texture on the model, and takes it off again", ck and ck2, [ck, ck2])
-        menu = await E("FMY_MENUS().find((m) => m[0] === 'UV')[1].filter((x) => FORGE_PRO_CMDS[x]).length")
+        menu = await E("forgeMenuFlat(FMY_MENUS().find((m) => m[0] === 'UV')[1]).filter((x) => FORGE_PRO_CMDS[x]).length")
         check("the UV menu in the menu bar has the UV commands", menu >= 12, menu)
         await page.select_option("#forge-workspace", "model")
         await page.wait_for_timeout(150)

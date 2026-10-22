@@ -121,7 +121,7 @@ async def main():
         # ---- the menus: one catalogue, no dead entries, and the hotbox laid out the reference way
         cat = await E("""() => { const dead = [], empty = [];
           for (const [name, ids] of Object.entries(FORGE_PRO_MENUS)) {
-            const cmds = ids.filter((x) => x !== "-" && !x.startsWith("#"));
+            const cmds = forgeMenuFlat(ids);
             if (!cmds.length) empty.push(name);
             for (const id of cmds) if (!FORGE_PRO_CMDS[id]) dead.push(name + " > " + id);
           }
@@ -181,10 +181,13 @@ async def main():
         # ---- the WINDOW's menu bar is built from the same catalogue, so the two can never drift apart
         bar = await E("""() => { const cat = FORGE_PRO_MENUS, out = [];
           for (const [name, items] of FMY_MENUS()) {
-            const ids = items.filter((x) => typeof x === "string" && !x.startsWith("-") && !x.startsWith("#"));
-            const all = ids.concat(items.filter((x) => Array.isArray(x)).map((x) => x[0]));
+            // plain-string ids must be real commands; an ["id", "Label", fn] row (in a submenu too) carries its own handler
+            const own = new Set(); const walk = (l) => { for (const x of l) if (Array.isArray(x)) { if (Array.isArray(x[1])) walk(x[1]); else own.add(x[0]); } };
+            walk(items);
+            const ids = forgeMenuFlat(items).filter((x) => !own.has(x));
+            const all = forgeMenuFlat(items);
             // only plain-string ids must be real commands; an ["id", "Label", fn] row carries its own handler
-            out.push({ name: name, ids: all, want: (cat[name] || []).filter((x) => x !== "-" && !x.startsWith("#")),
+            out.push({ name: name, ids: all, want: forgeMenuFlat(cat[name] || []),
                        dupes: all.filter((x, i) => all.indexOf(x) !== i),
                        dead: ids.filter((x) => !FORGE_PRO_CMDS[x]) });
           }

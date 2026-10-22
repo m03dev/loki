@@ -33,6 +33,28 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-22 08:30) - menus nest, broken menu rows fixed, and LOKI tests Forge (docs/FORGE_QA.md). Pull first.
+Owner 01:02: "clean up the menu buttons, some are not functional and look weird, can't even click them ... everything
+should have a sub category that can get a sub category ... start using loki to test the forge ... send out different agents".
+- Every Forge menu is a tree now (FORGE_PRO_MENUS, `["Label", [entries]]` to any depth): the menu bar cascades, the hotbox
+  flies out, the wheel and marking lists drill in with Back. `forgeMenuFlat(list)` gives a tree's ids (tests use it).
+- `tools/forge_qa.py` clicks every menu row / button / hotbox + wheel entry and runs every command; the autopilot's new
+  `qa` duty runs it every 6 h when idle and turns new problems into "LOKI's idea (Forge QA)" in the Lab (evolve fixes them).
+- [ ] [mac] Run `harness_data/.venv/bin/python tools/forge_qa.py` and again with `--size 1280x720` and `--size 900x1600`
+      on the real Mac; paste each summary under Reports. Then open Forge and try the nested menus by hand (menu bar,
+      Space hotbox flyouts, Space wheel Back, right-click lists): anything that flickers, closes too early or lands
+      under something else is a bug - write it here as a [claude] request with a screenshot.
+- [ ] [windows] The same on the PC (and with the pen); also check that Settings > Lab shows "LOKI's idea (Forge QA)" items
+      after the autopilot's first sweep (harness_data/qa/forge_qa.json, autopilot log line "Forge QA: ...").
+
+### For LOKI's own agents - Forge QA (owner 2026-10-22 01:02: "use loki to test the forge and everything, send out different agents")
+Each team uses Forge the way a person would and writes what got in the way to the workspace's `qa/` folder: steps, what
+broke, how bad (blocks work / annoying / cosmetic), a screenshot. Do not change LOKI's code: the fixes go through the Lab.
+- [ ] [loki] Forge QA sweep: run `python tools/forge_qa.py` from LOKI's folder three times (default size, `--size 1280x720`, `--size 900x1600`), then reproduce every problem in its report by hand in Forge with a screenshot of each. Write qa/sweep.md: one row per problem (where, what, can you reproduce it, how bad). (owner via Claude, 2026-10-22)
+- [ ] [loki] Forge QA modelling scenario: model a simple chair from a cube - Multi-Cut (try Shift snap, middle-click 50%, Ctrl edge loop), Extrude, Bevel, Insert Edge Loop, Soften/Harden Edge, Mirror, Smooth Preview (1/2/3) - using the menu bar, the Space hotbox and the right-click menus; undo and redo through all of it. Write qa/modelling.md: every step, what worked, what broke or confused you, a screenshot of anything wrong. (owner via Claude, 2026-10-22)
+- [ ] [loki] Forge QA sculpting scenario: in the Sculpting workspace sculpt a rough head from a sphere - brushes from the strip and the right-click wheel, hotkeys 1-9, masking (Ctrl+Shift drag, invert, clear, hide masked), subdivision levels, remesh and reduce, then Done back to Modeling. Write qa/sculpting.md the same way. (owner via Claude, 2026-10-22)
+- [ ] [loki] Forge QA UV, bake and render scenario: unwrap the chair from qa/modelling.md (Automatic, Smart Unwrap, Cut/Sew, Unfold, Layout, checker), bake maps, turn on Path Traced Preview and send it to Render Studio. Write qa/uv-render.md the same way. (owner via Claude, 2026-10-22)
+
 ### From Claude (2026-10-22 00:30) - start-up, C++ speed, Sculpting workspace, Content on Home. Pull first.
 Owner 23:53: "why is start up slow and why do i see old ui when its starting up ... should we rebuild in rust or c++".
 - **Old UI at start**: opening LOKI while it ran in the background attached to the engine still running the OLD code (the

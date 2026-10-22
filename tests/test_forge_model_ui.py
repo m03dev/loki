@@ -198,7 +198,7 @@ async def main():
           const fm0 = (t.active().root && v.poly) ? v.poly.f.length : 6;
           const res = await forgeProCommandLine('polyMirrorFace -axis 0');
           return { n0, n1, name: c.name, f1, parts, fm0, fm1: v.poly ? v.poly.f.length : -1, res,
-                   menu: [...(FORGE_PRO_ROWS.find((r) => r[0] === 'Mesh') || [0, []])[1]] }; }""")
+                   menu: forgeMenuFlat((FORGE_PRO_ROWS.find((r) => r[0] === 'Mesh') || [0, []])[1]) }; }""")
         check("Combine: two cubes become one object polySurface1 (12 faces), the edited one", r["n1"] == r["n0"] - 1 and r["name"].startswith("polySurface") and r["f1"] == 12, r)
         check("Separate: the two pieces become two objects again", len(r["parts"]) == 2, r)
         check("Mirror (polyMirrorFace -axis 0) adds the mirrored copy across X", r["fm1"] == r["fm0"] * 2 and "Mirror" in r["res"]

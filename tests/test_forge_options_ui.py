@@ -60,7 +60,7 @@ async def main():
 
         # owner 2026-10-21 12:46: no cog on the screen - the panel is Windows > Settings/Preferences > Preferences
         check("no cog on the viewport; Preferences is in Windows > Settings/Preferences",
-              await E("getComputedStyle(document.getElementById('forge-options-btn')).display === 'none' && FMY_MENUS().find(m => m[0] === 'Windows')[1].includes('preferences')"))
+              await E("getComputedStyle(document.getElementById('forge-options-btn')).display === 'none' && forgeMenuFlat(FMY_MENUS().find(m => m[0] === 'Windows')[1]).includes('preferences')"))
         await E("fmyRun('preferences')")
         await page.wait_for_timeout(60)
         check("it opens the Options panel", await E("!document.getElementById('forge-options').hidden"))

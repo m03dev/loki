@@ -36,6 +36,9 @@ Duties, each on its own interval:
            time), at most every LOKI_TASK_BENCH_S (20h): tools/task_bench.py on the models in
            LOKI_TASK_BENCH_MODELS (default local,smart) - do LOKI's agents finish real tasks? Scores in
            Settings > Lab. auto = on on the Windows PC, off on the Mac. Nothing else starts while it runs.
+  qa       (engine/forge_qa_duty.py, LOKI_FORGE_QA) LOKI tests Forge: every LOKI_FORGE_QA_S (6 h) a sweep over every
+           menu, button and command in a headless browser, in the background; new problems become "LOKI's idea (Forge
+           QA)" in Settings > Lab for evolve to fix (its own worktree, all tests, tools/ship.py).
   report   once a week, write "what LOKI learned": requests and verified work, the best
            provider per team role, routing changes since the last report, tool-call repairs,
            and whether there is enough verified work to train (tools/self_improve.py
@@ -135,7 +138,8 @@ class Autopilot:
                  apply_fix: Callable[[str, dict], dict] | None = None,
                  start_team: Callable[[str], str] | None = None,
                  evolve: Any = None, improve: Callable[[str], str] | None = None,
-                 bench_start: Callable[[str], Any] | None = None) -> None:
+                 bench_start: Callable[[str], Any] | None = None,
+                 qa_start: Callable[[], Any] | None = None) -> None:
         self.state = state
         self.agent = agent
         self.clock = clock
@@ -150,6 +154,8 @@ class Autopilot:
         self.improve = improve or (getattr(agent, "improve_loki", None) if agent is not None else None)
         self.bench_start = bench_start      # models -> a Popen-like (tests inject one)
         self.bench_proc = None
+        self.qa_start = qa_start            # () -> a Popen-like running tools/forge_qa.py (tests inject one)
+        self.qa_proc = None
         self.lock = threading.Lock()
         self.data = self._load()
         self.schedules = None
@@ -196,6 +202,8 @@ class Autopilot:
         state = self.state
         if self.bench_running():
             return False, "the task benchmark is running"
+        if self.qa_running():
+            return False, "the Forge QA sweep is running"
         if state is not None and hasattr(state, "try_busy"):
             held = state.try_busy()
             if held is None:
@@ -416,6 +424,34 @@ class Autopilot:
             line = "Speed watch: %s." % out.get("why", "nothing to add")
         self._log("speed", line)
         return line
+    # ------------------------------------------------------------ Forge QA (owner 2026-10-22: "use loki to test the forge")
+    def qa_running(self) -> bool:
+        return self.qa_proc is not None and self.qa_proc.poll() is None
+
+    def duty_qa(self) -> str:
+        """Start the Forge QA sweep in the background (it is settled on a later pass)."""
+        if self.qa_running():
+            return ""
+        import forge_qa_duty  # pylint: disable=import-outside-toplevel
+        starter = self.qa_start or (lambda: forge_qa_duty.start(self.repo, self._data_dir()))
+        try:
+            self.qa_proc = starter()
+        except Exception as exc:  # noqa: BLE001
+            self._log("qa", "Forge QA could not start: %s" % exc)
+            return ""
+        self._log("qa", "Forge QA sweep started (every menu, button and command, headless).")
+        return "started the Forge QA sweep"
+
+    def qa_settle(self) -> str:
+        """The sweep finished: triage it and propose fixes (every pass, idle or not)."""
+        if self.qa_proc is None or self.qa_proc.poll() is None:
+            return ""
+        self.qa_proc = None
+        import forge_qa_duty  # pylint: disable=import-outside-toplevel
+        line = forge_qa_duty.settle(self.evolve, self._data_dir(), now=self.clock())
+        self._log("qa", line)
+        return line
+
     # ------------------------------------------------------------ task bench (session 28)
     def bench_running(self) -> bool:
         proc = self.bench_proc
@@ -523,6 +559,12 @@ class Autopilot:
                     self._save()
         except Exception as exc:  # noqa: BLE001
             self._log("selftest", "failed: %s: %s" % (type(exc).__name__, exc))
+        try:   # a finished Forge QA sweep is triaged as soon as it is done, idle or not
+            with self.lock:
+                if self.qa_settle():
+                    self._save()
+        except Exception as exc:  # noqa: BLE001
+            self._log("qa", "failed: %s: %s" % (type(exc).__name__, exc))
         ok, _why = self.idle()
         if not ok:
             return []
@@ -533,6 +575,13 @@ class Autopilot:
             import evolve as _evolve  # pylint: disable=import-outside-toplevel
             if _evolve.enabled():
                 duties.append(("evolve", _env_s("LOKI_EVOLVE_S", 14400), self.duty_evolve))
+        try:
+            import forge_qa_duty  # pylint: disable=import-outside-toplevel
+            if self.qa_start is not None or (self.evolve is not None and forge_qa_duty.enabled()
+                                             and (self.repo / "tools" / "forge_qa.py").is_file()):
+                duties.append(("qa", _env_s("LOKI_FORGE_QA_S", 21600), self.duty_qa))
+        except Exception:  # noqa: BLE001
+            pass
         duties.append(("report", _env_s("LOKI_AUTOPILOT_REPORT_S", 604800), self.duty_report))
         if self.evolve is not None and __import__("evolve").enabled():
             # session 28: LOKI reviews itself and its speed every week - where evolve builds the ideas
