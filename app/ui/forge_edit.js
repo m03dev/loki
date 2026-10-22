@@ -15,9 +15,8 @@
 //   - click selects, Shift+click toggles, a click on nothing deselects; a drag draws a box (Shift adds, Ctrl
 //     takes away); Alt+click selects an edge loop (a face loop in face mode); double-click selects linked
 //   - the walkers (edge loop / edge ring / face loop) are bmesh_walkers_impl.cc's rules, in forge_poly.js
-//   - G / R / S: grab, rotate, scale with the mouse; X / Y / Z lock to an axis (again to unlock); type a number
-//     for an exact value; Ctrl snaps; Enter or click confirms, Esc or right-click cancels (transform.cc's modal)
-//   - proportional editing (O), its radius on the mouse wheel while moving, and Blender's falloff curves
+//   - soft selection (proportional editing) with its falloff curves; moving is the pro move / rotate / scale tools
+//     (the Blender-style G / R / S modal was removed 2026-10-22: Forge is Maya-only)
 //   - W shows a move handle on the selection (three.js' TransformControls, MIT) for people who think in pro
 // The orbit view keeps working: middle-drag turns (Shift+middle pans), right-drag pans, Alt+left-drag turns.
 "use strict";
@@ -565,14 +564,6 @@ function forgeEditAttach(view, ctx) {
     if (typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
     if (typeof forgeModelSync === "function") forgeModelSync();
   }
-  function cancel() {
-    if (!edit) return;
-    const base = edit.base;
-    edit = null;
-    view.polyLive(base);
-    moveOverlay(base);
-    placePivot();
-  }
   let shiftExtrude = false;
   gizmo.addEventListener("mouseDown", () => {
     // Shift over the handle with EDGES or VERTICES picked: the pro edge / vertex extrude, then the drag moves them
@@ -618,115 +609,11 @@ function forgeEditAttach(view, ctx) {
     if (shiftExtrude) { shiftExtrude = false; if (view.undoClose) view.undoClose(); }
   });
 
-  // G / R / S, Blender's modal transform
-  let modal = null;
-  const toWorld = (p) => holder.localToWorld(new THREE.Vector3(p[0], p[1], p[2]));
-  const ray = (pt) => {
-    const r = canvas.getBoundingClientRect(), rc = new THREE.Raycaster();
-    rc.setFromCamera(new THREE.Vector2((pt[0] / r.width) * 2 - 1, -(pt[1] / r.height) * 2 + 1), camera);
-    return rc.ray;
-  };
-  const AX = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
-  function axisParam(r, origin, dir) {             // where along the axis line the mouse ray passes closest
-    const w0 = origin.clone().sub(r.origin), a = dir.dot(dir), b = dir.dot(r.direction), c = r.direction.dot(r.direction);
-    const d = dir.dot(w0), e = r.direction.dot(w0), den = a * c - b * b;
-    return Math.abs(den) < 1e-9 ? 0 : (b * e - c * d) / den;
-  }
-  view.modalStart = (type) => {
-    if (modal || view.mode !== "poly" || !begin("modal")) return false;
-    const r = canvas.getBoundingClientRect();
-    const m = ed.mouse || [r.width / 2, r.height / 2];
-    modal = { type, axis: null, typed: "", from: m.slice(), at: m.slice(), snap: false };
-    const s = projector()(edit.pivot);
-    modal.pivotPx = s || [r.width / 2, r.height / 2];
-    if (gizmo.object) gizmo.detach();
-    canvas.style.cursor = type === "G" ? "move" : "crosshair";
-    modalUpdate();
-    return true;
-  };
-  view.modalActive = () => !!modal;
-  function modalMatrix() {
-    const T = new THREE.Matrix4(), pv = new THREE.Vector3().fromArray(edit.pivot);
-    const toLocalDir = (v) => v.clone().transformDirection(holder.matrixWorld.clone().invert());
-    const typed = modal.typed !== "" && modal.typed !== "-" && modal.typed !== "." ? parseFloat(modal.typed) : null;
-    const axis = modal.axis != null ? AX[modal.axis] : null;
-    let label;
-    if (modal.type === "G") {
-      let d = new THREE.Vector3();
-      if (typed != null) d.copy(axis || AX[0]).multiplyScalar(typed);
-      else if (axis) {
-        const o = toWorld(edit.pivot), dir = axis.clone().transformDirection(holder.matrixWorld);
-        const t = axisParam(ray(modal.at), o, dir) - axisParam(ray(modal.from), o, dir);
-        d.copy(axis).multiplyScalar(t / holder.getWorldScale(new THREE.Vector3()).x);
-      } else {
-        const o = toWorld(edit.pivot), plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), o);
-        const a = ray(modal.from).intersectPlane(plane, new THREE.Vector3()), b = ray(modal.at).intersectPlane(plane, new THREE.Vector3());
-        if (a && b) d = holder.worldToLocal(b.clone()).sub(holder.worldToLocal(a.clone()));
-      }
-      if (modal.snap && typed == null) { const st = 0.05 * (view.size || 1); d.set(Math.round(d.x / st) * st, Math.round(d.y / st) * st, Math.round(d.z / st) * st); }
-      T.makeTranslation(d.x, d.y, d.z);
-      label = "Move " + (axis ? "XYZ"[modal.axis] + " " : "") + [d.x, d.y, d.z].map((x) => x.toFixed(3)).join(", ");
-    } else if (modal.type === "R") {
-      let ang;
-      if (typed != null) ang = typed * Math.PI / 180;
-      else {
-        const p = modal.pivotPx, a0 = Math.atan2(-(modal.from[1] - p[1]), modal.from[0] - p[0]), a1 = Math.atan2(-(modal.at[1] - p[1]), modal.at[0] - p[0]);
-        ang = a1 - a0;
-      }
-      const toViewer = toLocalDir(camera.getWorldDirection(new THREE.Vector3()).negate()).normalize();
-      let ax = axis ? axis.clone() : toViewer;
-      if (axis && typed == null && axis.dot(toViewer) < 0) ang = -ang;   // turn the way the mouse turns on screen
-      if (modal.snap && typed == null) ang = Math.round(ang / (Math.PI / 36)) * (Math.PI / 36);   // 5 degrees
-      T.makeTranslation(pv.x, pv.y, pv.z).multiply(new THREE.Matrix4().makeRotationAxis(ax.normalize(), ang))
-        .multiply(new THREE.Matrix4().makeTranslation(-pv.x, -pv.y, -pv.z));
-      label = "Rotate " + (axis ? "XYZ"[modal.axis] + " " : "") + (ang * 180 / Math.PI).toFixed(1) + "°";
-    } else {
-      let k;
-      if (typed != null) k = typed;
-      else {
-        const p = modal.pivotPx, d0 = Math.hypot(modal.from[0] - p[0], modal.from[1] - p[1]) || 1;
-        k = Math.hypot(modal.at[0] - p[0], modal.at[1] - p[1]) / d0;
-      }
-      if (modal.snap && typed == null) k = Math.round(k * 10) / 10;
-      const sv = axis ? [modal.axis === 0 ? k : 1, modal.axis === 1 ? k : 1, modal.axis === 2 ? k : 1] : [k, k, k];
-      T.makeTranslation(pv.x, pv.y, pv.z).multiply(new THREE.Matrix4().makeScale(sv[0], sv[1], sv[2]))
-        .multiply(new THREE.Matrix4().makeTranslation(-pv.x, -pv.y, -pv.z));
-      label = "Scale " + (axis ? "XYZ"[modal.axis] + " " : "") + k.toFixed(3);
-    }
-    return [T, label];
-  }
-  function modalUpdate() {
-    if (!modal || !edit) return;
-    const [M, label] = modalMatrix();
-    applyM(M);
-    say(label + (modal.typed ? "  [" + modal.typed + "]" : "") + (ed.prop ? "  · proportional " + ed.propRadius.toFixed(2) + " (wheel)" : "")
-      + "  - X/Y/Z lock, type a number, Ctrl snaps, Enter/click confirms, Esc/right-click cancels");
-  }
-  function modalEnd(ok) {
-    if (!modal) return;
-    modal = null;
-    canvas.style.cursor = "";
-    if (ok) commit(); else cancel();
-    placePivot();
-    stats();
-  }
-  view.modalConfirm = () => modalEnd(true);
-  view.modalCancel = () => modalEnd(false);
-  view.modalMove = (pt, snap) => { if (!modal) return; modal.at = pt.slice(); modal.snap = !!snap; modalUpdate(); };
-  view.modalAxis = (i) => { if (!modal) return; modal.axis = modal.axis === i ? null : i; modalUpdate(); };
-  view.modalType = (ch) => {
-    if (!modal) return;
-    if (ch === "Backspace") modal.typed = modal.typed.slice(0, -1);
-    else if (ch === "-") modal.typed = modal.typed.startsWith("-") ? modal.typed.slice(1) : "-" + modal.typed;
-    else modal.typed += ch;
-    modalUpdate();
-  };
   view.setProportional = (on, radius, falloff) => {
     if (on != null) ed.prop = !!on;
     if (radius != null) ed.propRadius = Math.max(0.01, Math.min(2, radius));
     if (falloff && P.FALLOFF[falloff]) ed.falloff = falloff;
     reweigh();
-    if (modal) modalUpdate();
     for (const b of document.querySelectorAll("#forge [data-prop]")) b.classList.toggle("on", ed.prop);
     stats();
     return ed;
@@ -746,11 +633,6 @@ function forgeEditAttach(view, ctx) {
   canvas.addEventListener("pointerdown", (e) => {
     if (view.mode !== "poly" || !view.poly || view.quad) return;
     ed.mouse = local(e);
-    if (modal) {                                     // click confirms, right-click cancels
-      e.stopImmediatePropagation(); e.preventDefault();
-      modalEnd(e.button === 0);
-      return;
-    }
     if (e.button !== 0) return;                     // middle turns, right pans: the orbit controls keep those
     if (gizmo.object && gizmo.axis) return;        // the move handle
     if (forgeCamMod(e)) return;                     // Alt / Option or Cmd is the camera, nothing else
@@ -764,7 +646,6 @@ function forgeEditAttach(view, ctx) {
   canvas.addEventListener("pointermove", (e) => {
     if (view.mode !== "poly") return;
     ed.mouse = local(e);
-    if (modal) { e.stopImmediatePropagation(); view.modalMove(ed.mouse, e.ctrlKey || e.metaKey); return; }
     if (!gest || gest.alt) return;
     e.stopImmediatePropagation();
     const p = ed.mouse;
@@ -796,7 +677,7 @@ function forgeEditAttach(view, ctx) {
   function preClear() { if (pre) { if (pre.parent) pre.parent.remove(pre); pre.geometry.dispose(); pre = null; preKey = ""; view.dirty = true; } }
   function preDraw() {
     preQueued = false;
-    if (!preAt || view.mode !== "poly" || !view.poly || gest || modal || edit || !preOn() || (gizmo.object && gizmo.axis)
+    if (!preAt || view.mode !== "poly" || !view.poly || gest || edit || !preOn() || (gizmo.object && gizmo.axis)
       || (typeof window.forgeToolkit !== "undefined" && window.forgeToolkit.sel && window.forgeToolkit.sel())) { preClear(); return; }
     const hit = view.pickElement(preAt);
     const k = hit.kind + ":" + hit.id + ":" + view.poly.v.length;
@@ -825,7 +706,7 @@ function forgeEditAttach(view, ctx) {
   });
   canvas.addEventListener("pointerleave", () => { preAt = null; preClear(); });
   canvas.addEventListener("dblclick", (e) => {
-    if (view.mode !== "poly" || !view.poly || modal) return;
+    if (view.mode !== "poly" || !view.poly) return;
     if (ed.mode === "edge") { view.loopSelect(local(e), e.shiftKey ? "add" : "set"); return; }   // pro: double-click an edge = its loop
     const verts = view.linkedSeed(local(e));
     if (verts) view.selectLinked(verts, e.shiftKey ? "add" : "set");
@@ -840,30 +721,9 @@ function forgeEditAttach(view, ctx) {
     if (hit.id < 0) return null;
     return hit.kind === "vert" ? [hit.id] : hit.kind === "edge" ? [topo().edges[hit.id].a] : view.poly.f[hit.id].slice();
   };
-  canvas.addEventListener("wheel", (e) => {          // proportional radius while moving (Blender: the wheel)
-    if (!modal || !ed.prop) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    view.setProportional(null, ed.propRadius * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
-  }, { capture: true, passive: false });
-  document.addEventListener("keydown", (e) => {     // while G/R/S runs, the keys belong to it
-    if (!modal) return;
-    const k = e.key;
-    e.preventDefault(); e.stopImmediatePropagation();
-    if (k === "Escape") modalEnd(false);
-    else if (k === "Enter" || k === " ") modalEnd(true);
-    else if (/^[xyz]$/i.test(k)) view.modalAxis("xyz".indexOf(k.toLowerCase()));
-    else if (/^[0-9.]$/.test(k) || k === "-" || k === "Backspace") view.modalType(k);
-    else if (k === "o" || k === "O") view.setProportional(!ed.prop);
-    else if ((k === "g" || k === "r" || k === "s") && k.toUpperCase() !== modal.type) {   // switch tool mid-move, like Blender
-      const pt = modal.at;
-      modalEnd(false); view.modalStart(k.toUpperCase()); view.modalMove(pt);
-    }
-  }, true);
-
   // keep everything in step with the viewer
   const setMode = view.setMode;
   view.setMode = (m) => {
-    if (modal) modalEnd(false);
     const was = view.mode;
     // one tool, two manipulators (the pro rule): the object manipulator never stays up in component mode - that
     // was why Shift over a face's handle duplicated the OBJECT instead of extruding the face - and the tool you had
@@ -882,7 +742,7 @@ function forgeEditAttach(view, ctx) {
   // after an undo / redo the handle must start from where the selection is NOW: re-attach it, or the first drag
   // after Ctrl+Z starts from the old place and does nothing (found 2026-10-19)
   const rehandle = () => { if (gizmo.object) { gizmo.object.updateMatrixWorld(true); (gizmo.getHelper ? gizmo.getHelper() : gizmo).updateMatrixWorld(true); } };
-  view.undo = () => { if (modal) { modalEnd(false); return; } undo(); onChange(); placePivot(); rehandle(); };
+  view.undo = () => { undo(); onChange(); placePivot(); rehandle(); };
   view.redo = () => { redo(); onChange(); placePivot(); rehandle(); };
   view.gizmo = gizmo;
   view.project = (p) => projector()(p);            // a mesh point -> canvas pixels (tests, scripts)

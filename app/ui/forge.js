@@ -2120,19 +2120,6 @@ function forgeBrush(id) {
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("open-forge")?.addEventListener("click", forgeOpen);
-  document.addEventListener("keydown", (e) => {
-    const sheet = document.getElementById("forge");
-    if (!sheet || sheet.hidden) return;
-    if (e.key === "Escape") { forgeClose(); return; }
-    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-    const v = forge.view;
-    if (!v) return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) v.redo(); else v.undo(); }
-    else if (e.key === "f" || e.key === "F") v.frame();
-    else if (e.key === "w" || e.key === "e" || e.key === "r") v.toggleTransform({ w: "translate", e: "rotate", r: "scale" }[e.key]);
-    else if (e.key === "[" || e.key === "]") {
-      v.brush.radius = Math.min(0.4, Math.max(0.02, v.brush.radius * (e.key === "]" ? 1.15 : 1 / 1.15)));
-      const r = document.getElementById("forge-radius"); if (r) r.value = String(v.brush.radius);
-    }
-  });
+  // Forge's keys are one table (forge_keys.js, run by forge_pro.js): the old handler here closed Forge on Esc and
+  // gave w / e / r and [ ] second meanings - removed 2026-10-22 (owner: "nothing is used twice")
 });

@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-21 05:40 (Home is the preview hub with Studio inside; tabs Home / Forge / Render / Godot; LOKI World, the MMO and Spaces deleted).
+Last updated: 2026-10-22 12:40 (agents read LOKI's / projects' folders; one Forge hotkey table, Maya sculpt keys, a working mask).
 
 ## The machines
 

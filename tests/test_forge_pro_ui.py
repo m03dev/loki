@@ -442,7 +442,7 @@ async def main():
         await page.keyboard.press("2")
         m1 = await page.evaluate("forge.view.edit.mode")
         await page.keyboard.press("g")
-        modal = await page.evaluate("forge.view.modalActive()")
+        modal = await page.evaluate("!!(forge.view.modalActive && forge.view.modalActive())")
         bb = await page.evaluate("() => { const b = forge.view.pro.controls.mouseButtons; return [b.LEFT, b.MIDDLE, b.RIGHT]; }")
         await page.keyboard.press("3")
         sm3 = await page.evaluate("() => { const v = forge.view, s = v.smoothPrev; return { on: !!(s && s.mesh && s.mesh.parent), baseHidden: !v.meshObj().visible, tris: s && s.mesh ? s.mesh.geometry.index.count / 3 : 0, cage: v.poly.f.length }; }")
@@ -620,7 +620,7 @@ async def main():
         look = await page.evaluate("""() => { const p = document.querySelector('#forge .forge-panel');
           return { bg: getComputedStyle(p).backgroundColor,
                    menus: [...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.dataset.menu),
-                   panelMenus: [...document.querySelectorAll('#fmy-panelbar .fmy-pmb')].map((b) => b.dataset.menu),
+                   panelMenus: [...document.querySelectorAll('#fmy-panelbar .fmy-pmb:not(.fmy-pfold)')].map((b) => b.dataset.menu),
                    shelfTabs: [...document.querySelectorAll('#fmy-shelf .fmy-stab')].map((b) => b.dataset.tab),
                    tools: document.querySelectorAll('#fmy-toolbox .fmy-ib').length,
                    stage: getComputedStyle(document.getElementById('forge-stage')).backgroundImage }; }""")

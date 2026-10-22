@@ -8,11 +8,12 @@
 //   * two slim sliders on the left edge: Size and Strength (drag, or hold b / m and drag on the view as before);
 //   * the brush strip along the bottom: every brush as an icon, slid sideways with the wheel, a drag or the arrows;
 //     category chips above it (Favourites first) and a search; right-click a brush to add / remove it as a favourite;
-//     1-9 pick the first nine favourites.
+//     Ctrl/Cmd+Shift+1-9 pick the first nine favourites.
 //   * right button on the view: the sculpt wheel at the mouse - the favourite brushes around it, and Undo, Remesh,
 //     Divide, Symmetry, Frame, All brushes and Exit Sculpt; press-drag-release picks like a marking menu, a quick
 //     click keeps it open.
-//   * leaving: Done, q (the Select tool, as in the pro tool), F8, Esc, the wheel's Exit Sculpt, or Menu Set: Modeling.
+//   * leaving: Done, Esc, any other tool (q / w / e / r, F8 - as in the pro tool), the wheel's Exit Sculpt, or Menu Set:
+//     Modeling. Every sculpt key is in Forge's one hotkey table (forge_keys.js, the Hotkey Editor's Sculpting group).
 // Brushes are the sculpting engine's presets (vendor/sculpt/brushes.json via ForgeSculpt.library), or Forge's seven
 // basic brushes when the engine is not loaded.
 "use strict";
@@ -152,9 +153,9 @@ function fscBuild() {
   const more = btn("more", "More", "every sculpting setting: falloff, stroke, detail, resolution, matcaps", () => { document.getElementById("forge")?.classList.toggle("fsc-more"); });
   more.id = "fsc-more";
   const done = el("button", "fsc-done", fscSvg(FSC_UI_ICON.done, 16) + "<span>Done</span>"); done.type = "button"; done.id = "fsc-done";
-  done.title = "Done - leave sculpt mode (q, F8 or Esc)";
+  done.title = "Done - leave sculpt mode (Esc, or pick another tool: q, w, e, r)";
   done.addEventListener("click", (e) => { e.stopPropagation(); fscExit(); });
-  const chip = el("span", "fsc-chip-mode", "<i></i>Sculpt"); chip.title = "You are sculpting - Done, q, F8 or Esc leaves";
+  const chip = el("span", "fsc-chip-mode", "<i></i>Sculpt"); chip.title = "You are sculpting - Done, Esc or another tool (q, w, e, r) leaves";
   const undo = btn("undo", "Undo", "Ctrl+Z", () => { const v = fscView(); if (v && v.undo) v.undo(); });
   const redo = btn("undo", "Redo", "Ctrl+Shift+Z", () => { const v = fscView(); if (v && v.redo) v.redo(); }, "fsc-redo");
   head.append(chip, name, sep(), sym, dyn, sep(), lvl, remesh, reduce, sep(), undo, redo, cap, more, done);
@@ -174,12 +175,12 @@ function fscBuild() {
     sticky("smooth", "Smooth", "every stroke smooths - the same as holding Shift", '<path d="M5 14c2.5-3 4.5-3 7 0s4.5 3 7 0"/>'));
   // masking: paint a mask (frozen, drawn dark), invert / clear it, hide what is masked
   const msep = el("span", "fsc-hsep");
-  const mpaint = sticky("mask", "Mask", "paint a mask: masked parts never move (the same as holding Ctrl+Shift)", '<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><circle cx="9.5" cy="11" r="1.2"/><circle cx="14.5" cy="11" r="1.2"/>');
+  const mpaint = sticky("mask", "Mask", "paint a mask: masked parts never move (or hold Ctrl+Shift and drag). With Mask on, Ctrl+drag paints the mask away", '<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><circle cx="9.5" cy="11" r="1.2"/><circle cx="14.5" cy="11" r="1.2"/>');
   const mbtn = (icon, label, what, op) => { const b = btn(icon, label, what, () => fscSay(ForgeMask.op(op)), "fsc-sticky fsc-maskbtn"); b.dataset.op = op; return b; };
   tools.append(mpaint,
-    mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M8 8l8 8"/>', "Invert mask", "masked becomes free and free becomes masked (Ctrl+Shift+I)", "maskInvert"),
+    mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M8 8l8 8"/>', "Invert mask", "masked becomes free and free becomes masked (Ctrl/Cmd+I)", "maskInvert"),
     mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M9 12h6"/>', "Clear mask", "nothing masked (Shift+U)", "maskClear"),
-    mbtn('<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><path d="M4 20L20 4"/>', "Hide masked", "hide the masked parts / show everything again (h)", "maskHideToggle"));
+    mbtn('<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><path d="M4 20L20 4"/>', "Hide masked", "hide the masked parts / show everything again (Alt/Option+Shift+H)", "maskHideToggle"));
   tools.lastChild.dataset.maskState = "hidden";
   side.append(msep, tools);
 
@@ -292,8 +293,13 @@ function fscMoveFav(name, before) {
   fscSave(p); fscFill();
   return fscSay(name + " moved to place " + (p.fav.indexOf(name) + 1) + ".");
 }
-// a brush's own hotkey: a chord like "shift+c", "f5", "alt+2" (keys sculpt mode already uses are refused)
-const FSC_TAKEN = new Set(["q", "b", "m", "d", "shift+d", "x", "l", "h", "w", "e", "r", "f", "a", "z", "escape", "f8", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+// a brush's own hotkey: a chord like "f5", "alt+2" - never one Forge's hotkey table already has (or Space / Esc), so a
+// brush key can't steal a Maya key; keys saved before that rule are ignored when the table has them
+function fscTaken(c) {
+  if (!c || c === "escape" || c === "space" || c === " ") return true;
+  if (/^ctrl\+(s|c|v|x|shift\+s)$/.test(c)) return true;                 // save / copy / paste stay the app's
+  return typeof forgeKeyAction === "function" && !!forgeKeyAction(c);
+}
 function fscChord(e) {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
   if (["shift", "control", "alt", "meta"].includes(k)) return "";
@@ -310,7 +316,7 @@ function fscAssignKey(name) {
     const p = fscPrefs(); p.keys = p.keys || {};
     if (e.key === "Backspace" || e.key === "Delete") { for (const k of Object.keys(p.keys)) if (p.keys[k] === name) delete p.keys[k]; fscSave(p); done(); fscFill(); fscSay(name + " has no key now."); return; }
     const c = fscChord(e); if (!c) return;
-    if (FSC_TAKEN.has(c) || /^ctrl\+(z|y|s|shift\+z|shift\+i)$/.test(c)) { fscSay(fscKeyLabel(c) + " is already used in sculpt mode - try another (Shift+letter, F-keys ...).", true); return; }
+    if (fscTaken(c)) { fscSay(fscKeyLabel(c) + " is already " + (typeof forgeKeyAction === "function" && forgeKeyAction(c) ? forgeKeyActionName(forgeKeyAction(c)) : "taken") + " - try another (an F-key, Alt+letter ...).", true); return; }
     for (const k of Object.keys(p.keys)) if (p.keys[k] === name) delete p.keys[k];
     const was = p.keys[c]; p.keys[c] = name; fscSave(p); done(); fscFill();
     fscSay(fscKeyLabel(c) + " now picks " + name + (was && was !== name ? " (it was " + was + ")" : "") + ".");
@@ -337,7 +343,7 @@ function fscFav(name) {
   const p = fscPrefs();
   p.fav = p.fav.includes(name) ? p.fav.filter((x) => x !== name) : p.fav.concat([name]);
   fscSave(p); fscFill();
-  return fscSay(name + (p.fav.includes(name) ? " is a favourite (the wheel and 1-9)." : " is no longer a favourite."));
+  return fscSay(name + (p.fav.includes(name) ? " is a favourite (the wheel and Ctrl/Cmd+Shift+1-9)." : " is no longer a favourite."));
 }
 
 // the parts that follow state: the brush, the sliders, symmetry, dynamic detail, the level, the matcap
@@ -578,42 +584,38 @@ function fscWheelPick(x, y) {
     if (el) el.click(); else fscWheelClose();
   }, true);
   document.addEventListener("contextmenu", (e) => { const v = fscView(); if (v && v.mode === "sculpt" && e.target && (e.target.id === "forge-view" || e.target.closest("#fsc-wheel"))) e.preventDefault(); }, true);
-  // keys in sculpt mode: q / F8 / Esc leave, 1-9 the favourites
+  // keys in sculpt mode: a brush's own hotkey, and Esc (closes the wheel, else leaves sculpt mode). Everything else -
+  // levels, symmetry, lazy mouse, masking, the favourites - is in Forge's one hotkey table (forge_keys.js), so no key
+  // means one thing here and another in Modeling (owner 2026-10-22: "make sure nothing is used twice")
   window.addEventListener("keydown", (e) => {
     const v = fscView();
     if (!v || v.mode !== "sculpt") return;
     if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-    // a brush's own hotkey (right-click a brush > Set a hotkey)
     const p0 = fscPrefs(), chord = fscChord(e);
-    if (chord && p0.keys && p0.keys[chord]) { e.preventDefault(); e.stopImmediatePropagation(); fscPick(p0.keys[chord]); return; }
-    // masking, the pro tool's keys: Ctrl+Shift+I invert, Shift+U clear, h hide masked / show all
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") { e.preventDefault(); e.stopImmediatePropagation(); fscSay(ForgeMask.op("maskInvert")); return; }
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.shiftKey && e.key.toLowerCase() === "u") { e.preventDefault(); e.stopImmediatePropagation(); fscSay(ForgeMask.op("maskClear")); return; }
-    if (!e.shiftKey && e.key.toLowerCase() === "h") { e.preventDefault(); e.stopImmediatePropagation(); fscSay(ForgeMask.op("maskHideToggle")); fscSync(); return; }
-    if (e.key === "Escape" && document.getElementById("fsc-wheel")) { e.preventDefault(); e.stopImmediatePropagation(); fscWheelClose(); return; }
-    if (e.key === "Escape" && document.querySelector(".fmy-drop, #forge-pro-hotbox:not([hidden]), #forge-pro-marking:not([hidden])")) return;
-    if ((e.key === "q" || e.key === "Q") && !e.shiftKey || e.key === "F8" || e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); fscExit(); return; }
-    const k = e.key.toLowerCase();
-    if (k === "d") { e.preventDefault(); e.stopImmediatePropagation(); fscLevel(e.shiftKey ? -1 : 1); return; }   // ZBrush: D up / Shift+D down
-    if (k === "x" && !e.repeat) {                                         // X: symmetry across X on / off
-      e.preventDefault(); e.stopImmediatePropagation();
-      const bits = (v.brush.symBits | 0) ^ 1;
-      if (typeof forgeProSym === "function") fscSay(forgeProSym(v, bits)); fscSync(); return;
-    }
-    if (k === "l" && window.ForgeSculpt) {                                 // L: lazy mouse on / off
-      e.preventDefault(); e.stopImmediatePropagation();
-      const o = ForgeSculpt.strokeOpts; o.lazyWas = o.lazy || o.lazyWas || 10; o.lazy = o.lazy ? 0 : o.lazyWas;
-      fscSay("Lazy mouse " + (o.lazy ? "on (" + o.lazy + " px)" : "off") + "."); return;
-    }
-    if (/^[1-9]$/.test(e.key) && !e.shiftKey) {
-      const p = fscPrefs(), name = p.fav[+e.key - 1];
-      if (name) { e.preventDefault(); e.stopImmediatePropagation(); fscPick(name); }
-    }
+    if (chord && p0.keys && p0.keys[chord] && !fscTaken(chord)) { e.preventDefault(); e.stopImmediatePropagation(); fscPick(p0.keys[chord]); return; }
+    if (e.key !== "Escape") return;
+    if (document.getElementById("fsc-wheel")) { e.preventDefault(); e.stopImmediatePropagation(); fscWheelClose(); return; }
+    if (document.querySelector(".fmy-drop, #forge-pro-hotbox:not([hidden]), #forge-pro-marking:not([hidden]), #forge-hotkeys:not([hidden])")) return;
+    e.preventDefault(); e.stopImmediatePropagation(); fscExit();
   }, true);
 })();
 
+// the sculpt commands the hotkey table binds (forge_keys.js); outside sculpt mode they say where they work
+function fscOnly(fn) { return (v) => (v && v.mode === "sculpt" ? fn(v) : "That works in sculpt mode (Sculpting workspace)."); }
+function fscSymX(v) { const bits = (v.brush.symBits | 0) ^ 1; const say = typeof forgeProSym === "function" ? forgeProSym(v, bits) : ""; fscSync(); return say; }
+function fscLazy() {
+  if (!window.ForgeSculpt) return "";
+  const o = ForgeSculpt.strokeOpts; o.lazyWas = o.lazy || o.lazyWas || 10; o.lazy = o.lazy ? 0 : o.lazyWas;
+  return "Lazy mouse " + (o.lazy ? "on (" + o.lazy + " px)" : "off") + ".";
+}
+function fscFavKey(i) { const name = fscPrefs().fav[i]; if (!name) return "No favourite brush " + (i + 1) + " yet - right-click a brush > Add to favourites."; fscPick(name); return ""; }
 if (typeof FORGE_PRO_CMDS !== "undefined") {
+  const C = FORGE_PRO_CMDS;
+  C.sculptLevelUp = ["Sculpt Level Up / Divide", fscOnly(() => fscLevel(1))];
+  C.sculptLevelDown = ["Sculpt Level Down", fscOnly(() => fscLevel(-1))];
+  C.sculptSymX = ["Sculpt Symmetry X", fscOnly(fscSymX)];
+  C.sculptLazy = ["Lazy Mouse", fscOnly(fscLazy)];
+  for (let i = 0; i < 9; i++) C["sculptFav" + (i + 1)] = ["Favourite Brush " + (i + 1), fscOnly(() => fscFavKey(i))];
   FORGE_PRO_CMDS.sculptExit = ["Exit Sculpt", () => fscExit()];
   FORGE_PRO_CMDS.sculptWheel = ["Sculpt Brush Wheel", (v) => { const m = (v && v.pro && v.pro.mouse) || [innerWidth / 2, innerHeight / 2]; fscWheelOpen(m[0], m[1]); return ""; }];
 }

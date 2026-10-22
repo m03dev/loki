@@ -1,6 +1,6 @@
 // Forge sculpt masking + hiding (owner 2026-10-21 22:13: "add those sculpting features" - masking, hide / isolate).
 // The C++ engine keeps a mask per vertex (0 free .. 1 frozen; masked vertices never move under a brush). Ctrl+Shift+drag
-// paints it (the engine's mode 3), the Mask buttons / keys clear, invert or fill it. This file draws it: a dark overlay on
+// paints it (the engine's mode 3; with the Mask toggle on a plain drag paints and Ctrl+drag paints it away - mode 4), the Mask buttons / keys clear, invert or fill it. This file draws it: a dark overlay on
 // the sculpt mesh, sharing its vertex buffers (no copy), so it follows every stroke. Hide masked takes the fully masked
 // triangles off the screen (they are frozen too, so nothing can change them unseen); Show all brings them back.
 "use strict";
@@ -37,7 +37,13 @@ const ForgeMask = {
   },
   // some vertices changed (a stroke)
   setSome(view, ids, msk) {
-    if (!msk || !this.w) return;
+    if (!msk) return;
+    if (!this.w) {                                   // the first mask stroke on a mesh: start from nothing masked (it
+      const S = window.ForgeSculpt;                  // was dropped before, so the first stroke never showed)
+      const n = S && S.w2r && S.w2r.start ? S.w2r.start.length - 1 : 0;
+      if (n <= 0) return;
+      this.w = new Float32Array(n);
+    }
     let touched = false;
     for (let i = 0; i < ids.length; i++) { if (this.w[ids[i]] !== msk[i]) { touched = true; this.w[ids[i]] = msk[i]; } }
     if (!touched) return;
@@ -121,7 +127,7 @@ window.ForgeMask = ForgeMask;
     if (m && m.t === "loaded") {                         // a fresh mesh in the engine: nothing masked or hidden yet
       const sm = S.loadedSm;
       ForgeMask.hidden = false; ForgeMask.any = false;
-      ForgeMask.w = sm && sm.wpos ? new Float32Array(sm.wpos.length / 3) : null;
+      ForgeMask.w = sm && sm.wpos ? new Float32Array(sm.wpos.length / 3) : (S.w2r && S.w2r.start ? new Float32Array(S.w2r.start.length - 1) : null);
       ForgeMask.sync();
     }
     return onMessage(m);
@@ -150,4 +156,5 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   C.maskFill = ["Mask All", () => ForgeMask.op("maskFill")];
   C.maskHide = ["Hide Masked", () => ForgeMask.op("maskHide")];
   C.maskShow = ["Show All", () => ForgeMask.op("maskShow")];
+  C.maskHideToggle = ["Hide Masked / Show All", () => { const say = ForgeMask.op("maskHideToggle"); if (window.forgeSculptUI && typeof fscSync === "function") fscSync(); return say; }];
 }

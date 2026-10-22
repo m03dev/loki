@@ -53,8 +53,14 @@ const FORGE_KEY_DEFAULTS = [
   ["s", "setKey"], ["alt+v", "playPause"], ["alt+shift+v", "playPause"],
   // modelling
   ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteEdgeVert"], ["ctrl+delete", "deleteEdgeVert"],
-  // sculpting (held)
+  // sculpting (owner 2026-10-22: "sculpting hotkeys ... should feel like maya", "nothing is used twice") - b / m held
+  // like the pro sculpt tools; the rest on keys the pro default set leaves free, so no key means two things
   ["b", "@brushSize"], ["m", "@brushStrength"],
+  ["pageup", "sculptLevelUp"], ["pagedown", "sculptLevelDown"], ["shift+x", "sculptSymX"], ["l", "sculptLazy"],
+  ["ctrl+i", "maskInvert"], ["shift+u", "maskClear"], ["alt+shift+h", "maskHideToggle"],
+  ["ctrl+shift+1", "sculptFav1"], ["ctrl+shift+2", "sculptFav2"], ["ctrl+shift+3", "sculptFav3"], ["ctrl+shift+4", "sculptFav4"],
+  ["ctrl+shift+5", "sculptFav5"], ["ctrl+shift+6", "sculptFav6"], ["ctrl+shift+7", "sculptFav7"], ["ctrl+shift+8", "sculptFav8"],
+  ["ctrl+shift+9", "sculptFav9"],
 ];
 
 // special actions: a name for the editor (the rest come from FORGE_PRO_CMDS)
@@ -87,7 +93,9 @@ const FORGE_KEY_GROUPS = [
     "detach", "collapse", "merge", "mergeCenter", "fillHole", "reverse", "deleteComp", "deleteEdgeVert", "smooth", "triangulate",
     "quadrangulate", "averageVerts", "relax", "circularize", "spinEdge", "spinEdgeBack", "duplicateFace", "extractFace",
     "dynamesh", "combine", "separate", "mirror", "mirrorY", "mirrorZ", "chamfer", "poke", "wedge", "cleanup", "meshStats", "insertLoopTool", "mergeThreshold"]],
-  ["Sculpting", ["@brushSize", "@brushStrength", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
+  ["Sculpting", ["@brushSize", "@brushStrength", "sculptExit", "sculptLevelUp", "sculptLevelDown", "sculptSymX", "sculptLazy",
+    "maskInvert", "maskClear", "maskFill", "maskHideToggle", "maskHide", "maskShow", "sculptWheel",
+    "sculptFav1", "sculptFav2", "sculptFav3", "sculptFav4", "sculptFav5", "sculptFav6", "sculptFav7", "sculptFav8", "sculptFav9", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
   ["Windows", ["channelBox", "outliner", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "wheel", "hotkeyEditor"]],
 ];
 

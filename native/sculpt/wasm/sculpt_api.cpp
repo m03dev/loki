@@ -409,14 +409,15 @@ KS_EXPORT(ks_hit) float* ks_hit() { return S ? S->hit : nullptr; }
 
 // ---------------------------------------------------------------- strokes
 
-// mods: 1 = invert (Ctrl), 2 = smooth (Shift), 3 = mask (Ctrl+Shift).
+// mods: 1 = invert (Ctrl), 2 = smooth (Shift), 3 = mask (Ctrl+Shift), 4 = unmask (paint the mask away; owner
+// 2026-10-22 "make the mask functional" - before, a mask could only be cleared all at once).
 KS_EXPORT(ks_press) int ks_press(float ox, float oy, float oz, float dx, float dy, float dz, float pressure, float radius, int mods) {
     if (!S || !S->engine || S->stroking) return 0;
     Ray r = mkRay(ox, oy, oz, dx, dy, dz);
     Hit h = S->engine->bvh().raycast(S->mesh, r);
     if (!h.hit) return 0;
     S->active = S->brush;
-    if (mods == 3) { S->active.kernel = Kernel::Mask; S->active.invert = false; }
+    if (mods == 3 || mods == 4) { S->active.kernel = Kernel::Mask; S->active.invert = mods == 4; }
     else if (mods == 2) {
         S->active.kernel = Kernel::Smooth; S->active.invert = false; S->active.strength = std::max(0.3f, S->brush.strength);
         S->active.autoSmooth = 0.0f;   // the brush's own auto-smooth on top of Smooth only doubled the pass

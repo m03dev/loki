@@ -12,7 +12,11 @@ non-decidable ASK. That is enforced in one function, `final()`, which the tests 
 
 Rules (in order):
   1. run_command: refused if the command policy or the no-shell parser rejects it.
-  2. File tools: every path argument must stay inside the workspace.
+  2. File tools: every path argument must stay inside the workspace. The READ-only ones (READ_PATH_ARGS:
+     read_file, list_tree, search_files, run_command's cwd) may also use the folders agents can read
+     (engine/agent_folders.py: LOKI's own folder, its data folder, ~/LOKI Projects, the owner's extra
+     folders) - never a secret file there, never a system or credential folder. Writes never leave the
+     workspace.
   3. Capability-backed actions: the capability must be enabled, the permission granted
      at enable time, and its required env/commands present.
   4. Network: loopback is always fine; other hosts need a granted network permission,
@@ -37,6 +41,10 @@ PATH_ARGS = {
     "search_files": ("subdir",), "review_repository": ("path",),
     "render_video": ("project_dir", "out"), "video_project": ("name",),
 }
+# Path arguments that only READ: these may also point into the agent folders (read_check). Owner 2026-10-22:
+# "my agents should have the tools to check other folders".
+READ_PATH_ARGS = {"read_file": ("filename",), "list_tree": ("subdir",), "search_files": ("subdir",),
+                  "run_command": ("cwd",)}
 # Asks the human, but a confident decision provider may skip the prompt.
 DECIDABLE = {"run_command", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
@@ -93,8 +101,10 @@ def final(verdict: Verdict, recommendation: str | None) -> Verdict:
 class PolicyEngine:
     def __init__(self, path_check: Callable[[str], Any], command_check: Callable[[str], tuple],
                  parse_command: Callable[[str], Any], dangerous: set[str],
-                 registry: Any = None, env: dict | None = None) -> None:
+                 registry: Any = None, env: dict | None = None,
+                 read_check: Callable[[str], Any] | None = None) -> None:
         self.path_check = path_check          # raises on a path that escapes the workspace
+        self.read_check = read_check or path_check   # raises on a path no agent may READ
         self.command_check = command_check    # (allowed, reason)
         self.parse_command = parse_command    # raises on shell syntax
         self.dangerous = set(dangerous)
@@ -113,14 +123,18 @@ class PolicyEngine:
                 self.parse_command(command)
             except ValueError as exc:
                 return Verdict(DENY, "refused: %s" % exc)
-        for key in PATH_ARGS.get(name, ()):
+        reads = READ_PATH_ARGS.get(name, ())
+        for key in tuple(PATH_ARGS.get(name, ())) + tuple(k for k in reads if k not in PATH_ARGS.get(name, ())):
             value = args.get(key)
             if value is None or str(value).strip() == "":
                 continue
             try:
-                self.path_check(str(value))
+                (self.read_check if key in reads else self.path_check)(str(value))
             except Exception as exc:  # noqa: BLE001 - any escape is a denial
-                return Verdict(DENY, "refused: %s is outside the workspace (%s)" % (key, exc))
+                if key in reads and str(exc).startswith("refused:"):
+                    return Verdict(DENY, str(exc))   # a secret file or a system folder: say exactly that
+                where = "the workspace and the readable folders" if key in reads else "the workspace"
+                return Verdict(DENY, "refused: %s is outside %s (%s)" % (key, where, exc))
         capability = CAPABILITY_TOOLS.get(name)
         if capability:
             verdict = self.capability(capability)

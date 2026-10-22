@@ -1995,6 +1995,25 @@ def resolve_in_workspace(name: str) -> Path:
     return path
 
 
+import agent_folders  # noqa: E402  (folders agents may READ besides the workspace - owner 2026-10-22)
+
+
+def agent_roots() -> list:
+    """[(label, folder)] the read tools may use besides WORKSPACE: LOKI's folder, its data folder,
+    ~/LOKI Projects and the owner's extra folders (LOKI_AGENT_FOLDERS / settings "agent_folders")."""
+    return agent_folders.roots(REPO_ROOT, DATA_DIR, settings_file=DATA_DIR / "loki_settings.json")
+
+
+def resolve_readable(name: str) -> Path:
+    """A path to READ: the workspace as before, or an agent folder (never a secret, never a system folder)."""
+    return agent_folders.resolve_readable(name, WORKSPACE, agent_roots(), data_dir=DATA_DIR)
+
+
+def folders_tool() -> str:
+    """The folders an agent may read (and the one it may write)."""
+    return agent_folders.describe(WORKSPACE, agent_roots(), sys.executable)
+
+
 # ---------------------------------------------------------------------------
 # Local tools: read the code, edit it precisely, search it, run it, verify it.
 # ---------------------------------------------------------------------------
@@ -2004,15 +2023,24 @@ def list_files() -> str:
 
 
 def list_tree(subdir: str = ".", max_depth: int = 3) -> str:
-    base = resolve_in_workspace(subdir)
+    base = resolve_readable(subdir)   # the workspace, or a folder agents may read (agent_folders)
+    if not base.is_dir():
+        return "error: no folder %s" % subdir
+    away = agent_folders.outside(base, WORKSPACE)
     lines = []
 
     def walk(d: Path, prefix: str, depth: int) -> None:
         if depth > max_depth:
             return
-        for e in sorted(d.iterdir(), key=lambda p: (p.is_file(), p.name)):
+        try:
+            entries = sorted(d.iterdir(), key=lambda p: (p.is_file(), p.name))
+        except OSError:
+            return
+        for e in entries:
             if e.name in (".git", "__pycache__", ".venv", ".godot", "node_modules"):
                 continue
+            if away and agent_folders.secret_name(Path(e.name)):
+                continue   # outside the workspace secrets are not even listed
             lines.append(prefix + e.name + ("/" if e.is_dir() else ""))
             if e.is_dir():
                 walk(e, prefix + "   ", depth + 1)
@@ -2024,8 +2052,9 @@ def list_tree(subdir: str = ".", max_depth: int = 3) -> str:
 def read_file(filename: str, start_line: int = 0, end_line: int = 0) -> str:
     """The file's text; with start_line/end_line (end -1 = to the end) numbered lines of that
     range (OpenHands' view). A big file read whole shows its first lines numbered, with the
-    line count, so the model can ask for exactly the range it needs."""
-    path = resolve_in_workspace(filename)
+    line count, so the model can ask for exactly the range it needs. Outside the workspace it reads
+    LOKI's folder, its data folder, ~/LOKI Projects and the owner's extra folders (absolute paths)."""
+    path = resolve_readable(filename)
     if not path.is_file():
         return f"error: no {filename}"
     try:
@@ -2137,19 +2166,32 @@ def undo_edit(filename: str) -> str:
 
 
 def search_files(pattern: str, subdir: str = ".", glob: str = "*") -> str:
-    base = resolve_in_workspace(subdir)
+    base = resolve_readable(subdir)   # the workspace, or a folder agents may read (absolute path)
     rx = re.compile(pattern)
     hits = []
-    for path in sorted(base.rglob(glob)):
+    away = agent_folders.outside(base, WORKSPACE)
+    if away:   # another folder: skip venvs/.git/node_modules, big files and every secret
+        paths = []
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in agent_folders.SKIP_DIRS
+                                 and not agent_folders.secret_name(Path(d)))
+            paths += [Path(dirpath, f) for f in sorted(filenames) if Path(f).match(glob)
+                      and not agent_folders.secret_name(Path(f))]
+    else:
+        paths = sorted(base.rglob(glob))
+    for path in paths:
         if not path.is_file():
             continue
         try:
+            if away and (path.stat().st_size > agent_folders.SEARCH_MAX_BYTES
+                         or agent_folders.is_secret(path, base, DATA_DIR)):
+                continue
             text = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
         for i, line in enumerate(text.splitlines(), 1):
             if rx.search(line):
-                rel = path.relative_to(WORKSPACE)
+                rel = agent_folders.show(path, WORKSPACE)
                 hits.append(f"{rel}:{i}: {line.strip()[:200]}")
                 if len(hits) >= 200:
                     hits.append("...[truncated at 200 matches]")
@@ -2644,15 +2686,22 @@ def command_policy(command: str) -> tuple:
     return True, "ok"
 
 
-def run_command(command: str, timeout: int = 120) -> str:
+def run_command(command: str, timeout: int = 120, cwd: str = "") -> str:
     """Run a command WITHOUT a shell (safe_exec): argv only, `a && b` chains allowed,
-    pipes / redirects / substitution refused with a reason."""
+    pipes / redirects / substitution refused with a reason. cwd: the workspace (default) or a folder
+    agents may read (e.g. LOKI's own folder to run tools/forge_qa.py)."""
     allowed, reason = command_policy(command)
     if not allowed:
         print("  [policy] " + reason)
         return "error: " + reason
     try:
-        code, out = safe_exec.run(command, cwd=str(WORKSPACE), timeout=int(timeout))
+        where = resolve_readable(cwd) if str(cwd or "").strip() else WORKSPACE
+    except ValueError as exc:
+        return "error: %s" % exc
+    if not where.is_dir():
+        return "error: no folder %s" % cwd
+    try:
+        code, out = safe_exec.run(command, cwd=str(where), timeout=int(timeout))
     except safe_exec.CommandRejected as e:
         print("  [policy] " + str(e))
         return f"error: {e}"
@@ -3087,6 +3136,7 @@ LOCAL_TOOLS = {
     "list_files": list_files,
     "list_tree": list_tree,
     "read_file": read_file,
+    "folders": folders_tool,
     "write_file": write_file,
     "append_file": append_file,
     "edit_file": edit_file,
@@ -3173,7 +3223,8 @@ if SELF_SHIP == "ask":
 POLICY = policy.PolicyEngine(path_check=lambda name: resolve_in_workspace(name),
                              command_check=lambda command: command_policy(command),
                              parse_command=safe_exec.parse, dangerous=DANGEROUS,
-                             registry=CAPABILITIES)
+                             registry=CAPABILITIES,
+                             read_check=lambda name: resolve_readable(name))
 CONDUCTOR = conductor.Conductor(POLICY, CAPABILITIES)
 
 
@@ -3784,9 +3835,11 @@ def schema(name, description, properties=None, required=None) -> dict:
 
 TOOL_SCHEMAS = [
     schema("list_files", "List the files at the top of the game project."),
-    schema("list_tree", "Show the project as a tree.",
+    schema("list_tree", "Show the project as a tree (or, with an absolute subdir, a folder you may read - see folders).",
            {"subdir": {"type": "string"}, "max_depth": {"type": "integer"}}),
-    schema("read_file", "Read one file. For a big file pass start_line and end_line (1-based, end_line -1 = to the end) to get those lines numbered - read only the part you need.",
+    schema("folders", "List the folders you may read besides your workspace: LOKI's own folder (code, tools/), its "
+           "data folder (logs, jobs, qa results), ~/LOKI Projects and the owner's extra folders - with absolute paths."),
+    schema("read_file", "Read one file (a workspace path, or an absolute path in a folder listed by folders). For a big file pass start_line and end_line (1-based, end_line -1 = to the end) to get those lines numbered - read only the part you need.",
            {"filename": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, ["filename"]),
     schema("write_file", "Write (overwrite) a file.",
            {"filename": {"type": "string"}, "content": {"type": "string"}}, ["filename", "content"]),
@@ -3839,8 +3892,9 @@ TOOL_SCHEMAS = [
     schema("move_file", "Move or rename a file or directory.",
            {"src": {"type": "string"}, "dst": {"type": "string"}}, ["src", "dst"]),
     schema("delete_file", "Delete a file or directory.", {"path": {"type": "string"}}, ["path"]),
-    schema("run_command", "Run a shell command and return its output (tests, git, etc.).",
-           {"command": {"type": "string"}, "timeout": {"type": "integer"}}, ["command"]),
+    schema("run_command", "Run a shell command and return its output (tests, git, etc.). cwd: the folder to run in "
+           "(default the workspace; or an absolute folder from folders, e.g. LOKI's own folder for its tools/).",
+           {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, ["command"]),
     schema("run_godot", "Run the Godot engine with arguments and return its output. Use for headless import ('--headless --quit') and running scenes, then READ the output to catch errors.",
            {"args": {"type": "string"}, "project_path": {"type": "string"}, "timeout": {"type": "integer"}}),
     schema("open_godot", "Open the Godot editor (optionally for a project folder).",
@@ -3960,7 +4014,7 @@ MODEL_TOOL_NAMES = {
     "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
     "godot_api", "godot_search", "read_scene", "add_input_action",
     "set_project_setting", "add_autoload",
-    "list_files", "list_tree", "read_file", "write_file", "append_file",
+    "list_files", "list_tree", "read_file", "folders", "write_file", "append_file",
     "edit_file", "search_files", "make_dir", "move_file", "delete_file",
     "build_3d_scene", "build_scene", "validate_scene", "play_scene", "probe_scene", "open_in_editor",
     "check_script", "capture_scene", "view_image", "project_state", "review_repository",
@@ -3978,7 +4032,7 @@ MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_
 
 # --- tool categories (toggleable from the editor Settings dialog) ------------
 TOOL_CATEGORIES = {
-    "files": ["list_files", "list_tree", "read_file", "write_file", "append_file",
+    "files": ["list_files", "list_tree", "read_file", "folders", "write_file", "append_file",
               "edit_file", "insert_lines", "undo_edit", "search_files", "make_dir", "move_file", "delete_file",
               "code_map", "search_docs"],
     "scenes": ["build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor"],
@@ -6191,7 +6245,7 @@ def _doc_path(name: str) -> Path:
         if cand.is_absolute() and (cand == folder or folder in cand.parents) and cand.exists():
             return cand
     if path is None:
-        raise ValueError("path escapes workspace: %s" % name)
+        return resolve_readable(raw)   # LOKI's folder, its data folder, LOKI Projects, extra folders (or raises)
     return path
 
 
@@ -6718,12 +6772,17 @@ def system_prompt() -> str:   # noqa: F811 - the active mode's instructions on t
         mode = _personas.active(DATA_DIR)
     except Exception:  # noqa: BLE001 - a broken mode file never breaks a request
         mode = None
-    return text + (chr(10) * 2 + _personas.prompt_section(mode) if mode else "")
+    text += (chr(10) * 2 + _personas.prompt_section(mode) if mode else "")
+    try:   # where LOKI's code, logs and the other projects are (owner 2026-10-22: agents could not find them)
+        text += chr(10) * 2 + folders_tool()
+    except Exception:  # noqa: BLE001
+        pass
+    return text
 
 
 _tool_enabled_before_modes = _tool_enabled
 # Always offered, even in a mode with only_tools: answering, planning and finding more tools.
-_MODE_ALWAYS = {"find_tools", "todo_add", "todo_list", "todo_done", "save_memory", "read_file", "list_files",
+_MODE_ALWAYS = {"find_tools", "todo_add", "todo_list", "todo_done", "save_memory", "read_file", "list_files", "folders",
                 "app_builder_guide", "make_app", "load_ecc_skill", "list_ecc_skills"}
 
 

@@ -853,7 +853,6 @@ function forgeSceneAttach(view, ctx) {
     makeWorking(id) {
       const n = node(id), r = root();
       if (!n || n.root || n.kind !== "mesh") return n ? n.root : false;
-      if (view.modalActive && view.modalActive()) return false;
       // 1. the old working object keeps a static copy of what it is now
       const t = triOfShape(r);
       const keep = new THREE.Group();

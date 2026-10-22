@@ -96,6 +96,7 @@ const FORGE_MATCAPS = [
 const ForgeSculpt = {
   worker: null, ok: false, failed: "", loadedSm: null, shadow: null, w2r: null,
   library: [], libraryByName: {}, dyn: { on: false, detail: 0.12, mode: "brush", px: 8 }, busy: false,
+  maskStrength: 1,   // a mask stroke's strength (0..1): full, so one pass masks (Ctrl+Shift+drag / the Mask toggle)
   pressed: false, last: null, pressAt: null, hover: undefined, hoverSeq: 0,
   stats: { loads: 0, dabs: 0, updates: 0, uploadBytes: 0, uploadRanges: 0, engineMs: 0, flushes: 0 },
   // stroke feel: stabiliser string (px), pen-pressure smoothing; per-brush overrides (0 / "" = the brush's own)
@@ -214,16 +215,21 @@ const ForgeSculpt = {
     this.sync(view);
     const preset = this.effectivePreset(view);
     const at = this.hover && this.hover.point;
-    this.worker.postMessage({ t: "brush", preset, strength: view.brush.strength, symmetry: view.brush.symBits | 0,
-      radial: view.brush.radial | 0, radialAxis: view.brush.radialAxis | 0, dyn: this.dynFor(view, at) });
-    // the sticky Invert / Smooth toggles of the sculpt UI (forge_sculpt_ui.js) act as if Ctrl / Shift were held
+    // the sticky Invert / Smooth / Mask toggles of the sculpt UI (forge_sculpt_ui.js) act as if Ctrl / Shift were held.
+    // Masking (owner 2026-10-22: "work on the mask and make that functional"): Ctrl+Shift+drag paints the mask, or a
+    // plain drag with the Mask toggle on; with the toggle on, Ctrl+drag paints it away (mods 4, the engine's unmask).
+    // A mask stroke paints at the mask strength (full by default), not the brush's - it used to need many passes.
     const st = (window.forgeSculptUI && forgeSculptUI.sticky) || {};
-    const sh = e.shiftKey || !!st.smooth, ct = e.ctrlKey || e.metaKey || !!st.invert;
-    const mods = st.mask || (sh && ct) ? 3 : sh ? 2 : ct ? 1 : 0;
+    const ctKey = e.ctrlKey || e.metaKey;
+    const sh = e.shiftKey || !!st.smooth, ct = ctKey || !!st.invert;
+    const mods = st.mask ? (ctKey || st.invert ? 4 : 3) : (sh && ct) ? 3 : sh ? 2 : ct ? 1 : 0;
+    const masking = mods >= 3;
+    this.worker.postMessage({ t: "brush", preset, strength: masking ? this.maskStrength : view.brush.strength, symmetry: view.brush.symBits | 0,
+      radial: view.brush.radial | 0, radialAxis: view.brush.radialAxis | 0, dyn: masking ? { on: false } : this.dynFor(view, at) });
     const pressure = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 1;
     // Tube (curve) and Insert Mesh presets add geometry instead of sculpting (Shift / Ctrl still sculpt)
     this.mode = mods === 0 && (preset.mode === "curve" || preset.mode === "insert") ? preset.mode : "";
-    this.grab = /^(Move|MoveElastic|MoveInfiniteDepth|MoveTopological|SnakeHook|Nudge|Rotate|ElasticTwist|ElasticScale|Pose|Thumb|Cloth)$/.test(preset.kernel || "") && mods !== 2 && !this.mode;
+    this.grab = !masking && /^(Move|MoveElastic|MoveInfiniteDepth|MoveTopological|SnakeHook|Nudge|Rotate|ElasticTwist|ElasticScale|Pose|Thumb|Cloth)$/.test(preset.kernel || "") && mods !== 2 && !this.mode;
     // dabs a fixed fraction of the radius apart: the preset's spacing, the same number the engine scales each dab's
     // height by (brush.cpp), so a stroke builds the same height whatever the spacing (was a fixed 0.12 here)
     this.spacing = preset.spacing > 0 ? Math.min(1, preset.spacing) : 0.1;

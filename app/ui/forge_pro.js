@@ -581,10 +581,17 @@ function forgeProCommands() {
 }
 const FORGE_PRO_CMDS = forgeProCommands();
 
+// picking another tool in sculpt mode leaves it first, like the pro tools (owner 2026-10-22: sculpting "should feel
+// like maya"); F8 (object / component) in sculpt mode just leaves it
+const FORGE_PRO_LEAVE_SCULPT = /^(select|move|rotate|scale|showManip|lastTool|objComp|vertex|edge|face|uv|multiCut|softSel)$/;
 async function forgeProRun(v, id) {
   const c = FORGE_PRO_CMDS[id];
   if (!c || !v) return;
   if (!c[1]) { proSay(c[0] + ": " + (c[2] || "not in Forge yet") + ".", true); return; }
+  if (v.mode === "sculpt" && FORGE_PRO_LEAVE_SCULPT.test(id) && window.forgeSculptUI) {
+    forgeSculptUI.exit();
+    if (id === "objComp") return;
+  }
   let note = "";
   const rec = !/^(undo|redo)$/.test(id) && v.undoOpen;      // every command is one undo step (forge_scene.js)
   if (rec) v.undoOpen(c[0]);
@@ -1700,8 +1707,7 @@ function forgeProKeys() {
     const hk = document.getElementById("forge-hotkeys");
     if (hk && !hk.hidden && (hk.dataset.capturing || hk.contains(e.target))) return;   // the Hotkey Editor has the keys
     const v = forge.view, m = v.pro || {};
-    if (v.modalActive && v.modalActive()) return;            // Blender's G/R/S modal is running: its keys
-    const k = e.key, mod = e.ctrlKey || e.metaKey, sh = e.shiftKey, alt = e.altKey;
+    const k = e.key, mod = e.ctrlKey || e.metaKey;
     const run = (id) => { take(e); forgeProRun(v, id); };
     if ((k === " " || e.code === "Space") && mod) { take(e); if (!e.repeat) forgeProRun(v, "hideUI"); return; }   // Ctrl+Space
     if (k === " " || e.code === "Space") {                   // Space: hold = hotbox, tap = one/four views
@@ -1730,102 +1736,14 @@ function forgeProKeys() {
       return;
     }
     // ---- every other key: the hotkey table (app/ui/forge_keys.js - the pro default set, or the owner's own set
-    // from the Hotkey Editor). The old switch is kept below as the fallback when forge_keys.js is missing.
-    if (typeof forgeKeyChord === "function") {
-      const chord = forgeKeyChord(e), act = forgeKeyAction(chord);
-      if (!act) return;                                        // unbound: Ctrl/Cmd+S, C, V ... stay the app's
-      const hold = forgeHotkeys.hold(act);
-      if (hold && !e.repeat) { m.held.add(hold); (m.holdCodes = m.holdCodes || {})[e.code || k] = hold; }
-      if (act.startsWith("@") && !e.repeat) (m.holdActs = m.holdActs || {})[e.code || k] = act;
-      if (e.repeat && !forgeHotkeys.repeats(act)) { take(e); return; }
-      return forgeProKeyAct(v, act, e, take, run);
-    }
-    if (!e.repeat && /^[qwexcvbm]$/i.test(k) && !mod && !alt) m.held.add(k.toLowerCase());
-    const lower = k.length === 1 ? k.toLowerCase() : k;
-
-    // ---- Ctrl / Cmd
-    if (mod) {
-      if (lower === "z") return run(sh ? "redo" : "undo");
-      if (lower === "y") return run("redo");
-      if (lower === "d") return run("duplicate");
-      if (lower === "g") return run(sh ? "ungroup" : "group");
-      if (lower === "h") return run(sh ? "showLast" : alt ? "showAll" : "hide");
-      if (lower === "a" && sh) return run("selectAll");
-      if (lower === "a") return run("channelBox");
-      if (lower === "i" && sh) return run("invert");
-      if (k === "1") return run("isolate");
-      if (lower === "e") return run("extrude");
-      if (lower === "b") return run("bevel");
-      if (k === "Backspace" || k === "Delete") return run("deleteComp");
-      if (k === " " || e.code === "Space") return run("hideUI");
-      return;                                                  // Ctrl/Cmd+S, C, V ... stay the app's
-    }
-    // ---- Alt / Option
-    if (alt) {
-      if (lower === "d") return run("selectNone");
-      if (lower === "h") return run("hideOthers");
-      if (lower === "x") return run("xray");
-      if (k === "Home") return run("defaultView");
-      if (k.startsWith("Arrow")) { take(e); forgeProNudge(v, k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0, k === "ArrowUp" ? 1 : k === "ArrowDown" ? -1 : 0); return; }
-      return;
-    }
-    // ---- bare keys (Shift for the capitals)
-    if (k.startsWith("Arrow")) {                               // pick-walk the hierarchy
-      const t = forgeProTree(v);
-      if (!t || forgeProComp(v)) return;
-      take(e); t.pickWalk({ ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[k]); return;
-    }
-    if (e.repeat && !/^[\[\]\-=+]$/.test(k)) { if (/^[qwedxjcvbm]$/i.test(k)) take(e); return; }
-    switch (k) {
-      case "q": return run("select");
-      case "w": return run("move");
-      case "e": return run("rotate");
-      case "r": return run("scale");
-      case "y": return run("lastTool");
-      case "t": return run("move");
-      case "g": take(e); if (m.last) forgeProRun(v, m.last); return;
-      case "z": return run("undo");
-      case "Z": return run("redo");
-      case "D": return run("duplicateT");
-      case "p": return run("parent");
-      case "P": return run("unparent");
-      case "h": return run("hideToggle");
-      case "H": return run("show");
-      case "a": return run("frameAll");
-      case "A": return run("frameAll");
-      case "f": return run("frameSel");
-      case "F": return run("frameSel");
-      case "1": return run("smooth1");
-      case "2": return run("smooth2");
-      case "3": return run("smooth3");
-      case "4": return run("wire");
-      case "5": return run("shaded");
-      case "6": return run("textured");
-      case "7": return run("lights");
-      case "d": take(e); proSay(forgeProPivotMode(v, true)); return;
-      case "Insert": take(e); proSay(forgeProPivotMode(v, null)); return;
-      case "Home": return run("pivotEdit");
-      case "x": case "X": take(e); forgeProSnapHud(v); proSay("Snap to grid while x is held."); return;
-      case "c": case "C": take(e); forgeProSnapHud(v); proSay("Snap to edges while c is held."); return;
-      case "v": case "V": take(e); forgeProSnapHud(v); proSay("Snap to vertices while v is held."); return;
-      case "b": take(e); if (forgeProComp(v)) forgeProRun(v, "softSel"); else if (v.mode === "sculpt") proSay("Hold b and drag left / right: brush size."); return;
-      case "m": take(e); if (v.mode === "sculpt") proSay("Hold m and drag left / right: strength."); return;
-      case "j": case "J": take(e); forgeProSnap(v, "step", true); return;
-      case "-": return run("__smaller");
-      case "=": case "+": return run("__bigger");
-      case "Delete": case "Backspace": return run("delete");
-      case ">": return run("grow");
-      case "<": return run("shrink");
-      case "F8": return run("objComp");
-      case "F9": return run("vertex");
-      case "F10": return run("edge");
-      case "F11": return run("face");
-      case "Enter": take(e); forgeProTool(v, null); return;
-      case "[": case "]":
-        if (v.mode === "sculpt") return;                       // the brush size there (forge.js)
-        take(e); if (k === "[") v.viewUndo(); else v.viewRedo(); return;
-      default: return;
-    }
+    // from the Hotkey Editor). One table, so no key can mean two things (the hard-coded fallback switch is gone).
+    const chord = forgeKeyChord(e), act = forgeKeyAction(chord);
+    if (!act) return;                                          // unbound: Ctrl/Cmd+S, C, V ... stay the app's
+    const hold = forgeHotkeys.hold(act);
+    if (hold && !e.repeat) { m.held.add(hold); (m.holdCodes = m.holdCodes || {})[e.code || k] = hold; }
+    if (act.startsWith("@") && !e.repeat) (m.holdActs = m.holdActs || {})[e.code || k] = act;
+    if (e.repeat && !forgeHotkeys.repeats(act)) { take(e); return; }
+    return forgeProKeyAct(v, act, e, take, run);
   }, true);
 
   document.addEventListener("keyup", (e) => {
@@ -1889,8 +1807,8 @@ function forgeProKeyAct(v, act, e, take, run) {
     case "@snapStep": forgeProSnap(v, "step", true); return;
     case "@brushSize": if (forgeProComp(v)) forgeProRun(v, "softSel"); else if (v.mode === "sculpt") proSay("Hold the key and drag left / right: brush size."); return;
     case "@brushStrength": if (v.mode === "sculpt") proSay("Hold the key and drag left / right: strength."); return;
-    case "@viewUndo": if (v.mode === "sculpt") return; v.viewUndo(); return;
-    case "@viewRedo": if (v.mode === "sculpt") return; v.viewRedo(); return;
+    case "@viewUndo": v.viewUndo(); return;
+    case "@viewRedo": v.viewRedo(); return;
     default: return;
   }
 }

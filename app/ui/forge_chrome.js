@@ -311,7 +311,8 @@ const FMY_ADD = {
     { note: "Hold the right button: marking menus (Shift / Ctrl for more)" },
     { note: "Option / Alt (or Command) + drag: tumble / track / dolly" },
     { note: "Hold x / c / v while moving: snap to grid / edge / point" },
-    { note: "Type a command in the command line (polyCube, move 0 1 0 ...)" }, "-", "hotkeyEditor"]]],
+    { note: "Sculpting: Ctrl+Shift+drag masks (Ctrl/Cmd+I inverts, Shift+U clears); Page Up / Down the levels" },
+    { note: "Type a command in the command line (polyCube, move 0 1 0 ...)" }]]],
 };
 const FMY_MENUS = () => {
   const cat = (typeof FORGE_PRO_MENUS !== "undefined") ? FORGE_PRO_MENUS : {};

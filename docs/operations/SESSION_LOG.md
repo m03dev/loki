@@ -4,6 +4,32 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-22 (12:40) - Agents read other folders; one hotkey table (nothing used twice); Maya-style sculpt keys; a working mask (Claude, cloud)
+
+- Owner 12:00: "my agents should have the tools to check other folders ... the hotkeys need work ... make sure nothing is
+  used twice, sculpting hotkeys and functions need work i cant move around normal it should feel like maya ... work on the
+  mask and make that functional. clean up the systems".
+- Agent folders (engine/agent_folders.py new, engine/policy.py READ_PATH_ARGS, engine/loki.py): read_file / list_tree /
+  search_files / read_document and run_command's cwd may use LOKI's folder, its data folder, ~/LOKI Projects and the
+  owner's extra folders (LOKI_AGENT_FOLDERS or settings "agent_folders"); secrets, .git, credential stores and system
+  folders never; writes stay in the workspace. A `folders` tool and a "# Folders you can read" prompt section. Root cause
+  of the faked QA: resolve_in_workspace + the policy refused every path outside the job's folder.
+- Hotkeys: every Forge key is in forge_keys.js's one table. Gone: forge_pro.js's hard-coded fallback switch, forge.js's
+  old handler (Esc closed Forge; w / e / r and [ ] meant other things), sculpt mode's own d / x / l / h / q / F8 / 1-9, and
+  the unreachable Blender G / R / S modal in forge_edit.js. Sculpt keys now: Page Up / Down level, Shift+X symmetry, L lazy,
+  Ctrl/Cmd+I invert mask, Shift+U clear, Alt/Option+Shift+H hide masked, Ctrl/Cmd+Shift+1-9 favourites; any other tool
+  (q w e r, F8-F11) leaves sculpt mode like the pro tools. A brush's own key can't take a table key. Help listed the
+  Hotkey Editor twice.
+- Mask: a mask stroke paints at full mask strength (ForgeSculpt.maskStrength), not the brush's (one stroke reached 46%);
+  with the Mask toggle on Ctrl+drag paints it away (new engine mods 4, sculpt.wasm rebuilt with wasi-sdk 25); the first
+  stroke on a mesh is no longer dropped; Hide Masked / Show All is a command.
+- Checked (cloud, each < 1 min): forge_hotkeys_unique 26 (new), agent_folders 35 (52 with an openai stub), sculpt_ui 30,
+  sculpt_more_ui 20, sculpt_engine 30, forge_pro_ui 100, forge_maya_ui 29, menus 16, undo_keys 20, snap_pivot 6, edit 21,
+  forge_ui 37, ui_spacing 28, dock 22, symmetry 6, team 39. Navigation measured headless: Alt/Cmd + left / middle / right
+  and the wheel move the camera in sculpt mode. Not seen on the Mac or the PC yet.
+
+---
+
 ## 2026-10-21 (05:40) - Home is the preview hub; Studio inside Home; the world, MMO and Spaces deleted (Claude, cloud)
 
 - Owner 04:30 / 05:17: "game engine, render studio, AI farm hive ... we dont need the living world anymore ... preview
