@@ -545,6 +545,17 @@ tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks
 
 <!-- newest first: YYYY-MM-DD machine (who) task: what happened. The last ~15 are kept here; older ones are in
      docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md. -->
+- 2026-10-21 ~19:00, Ziva (Windows): **Laya verdict, Home cleanup, dead-weight removed.** Laya measured on the PC:
+  warm decision **~2-3 ms** (negligible), cold model load **~8 s**, and it held ~2 GB RAM then unloaded after 30 min idle.
+  The real cost was the **stall**: `_triage` waited on the load (up to LOKI_TRIAGE_TIMEOUT 8 s), so the first request after
+  startup/idle hung - recorded experience showed rules-source requests averaging **10.4 s** vs Laya 4.7 s. Quality is mixed:
+  on a 10-message probe Laya and the rules disagreed 9/10 and Laya's `kind` was mostly 'build' with low confidence (it even
+  under-scored 'delete all my files' as risk 0.075 vs the rules' 0.6), but its **route** is closer than the rules' (real logged
+  data: 0.45 exact / 0.975 within-one, vs rules 0.081 / 0.77 - the rules over-pick 'team'). Fix: `_triage` now calls
+  `first_layer.triage(..., wait=False)`, so a cold Laya never blocks a request (the rules answer at once and the model keeps
+  warming) while a warm Laya still answers in ~2 ms. Home: the redundant **'Home' title is gone** and all header icons sit on
+  the left. Removed 1.5 GB of dead LOKI World leftovers at game/ (gitignored; test_loki wanted it gone). Tests: first_layer 54,
+  home_projects 63, loki 541 - green.
 - 2026-10-21 ~18:00, Ziva (Windows): **Render Studio reads like Maya's Hypershade + all 7 models installed.** The Nodes
   view is now an interactive workspace: a **Create** list on the left (the graph's blocks grouped Guide / Sample / Output /
   Load with plain-language names and one-line blurbs, plus a LOKI group folding in Render passes (Forge), Start image from

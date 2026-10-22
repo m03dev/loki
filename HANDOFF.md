@@ -52,6 +52,9 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 ### App window and tabs
 - Four title-bar tabs (app/ui/modebar.js MODES): **Home / Forge / Render / Godot**, Ctrl/Cmd+1..4 (Ctrl works on macOS
   too). Render shows the Render Studio once its script registers (`LokiModeBar.register("render", ...)` or
+- **First layer (2026-10-21, patch 397):** `_triage` calls `first_layer.triage(text, mode, wait=False)` so a cold Laya
+  (it loads in ~8 s and unloads after 30 min idle) never stalls a request; warm decisions are ~2-3 ms. Home's header lost
+  its redundant 'Home' title and its icons sit on the left.
 - **Render Studio Nodes workspace (PC, 2026-10-21, patch 396):** the Nodes button opens an interactive graph like Maya's
   Hypershade - a **Create** list (blocks grouped Guide/Sample/Output/Load with plain names + blurbs; a LOKI group for the
   Forge passes, start image, Test / Preflight / Render), a drag/pan/zoom work area, and an **Attributes** panel whose

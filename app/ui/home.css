@@ -7,8 +7,7 @@
 .home-hub[hidden] { display: none; }
 
 /* one header row: title, what is running, the kind filter, chat + Studio */
-.home-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.home-title { margin: 0; font-size: clamp(18px, 1.9vw, 22px); font-weight: 650; letter-spacing: .2px; margin-inline-end: auto; }
+.home-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
 .home-kinds, .home-acts { display: flex; gap: 2px; align-items: center; }
 .home-acts { padding-inline-start: 8px; border-inline-start: 1px solid var(--line); }
 .home-ico { display: inline-grid; place-items: center; width: 32px; height: 30px; padding: 0; border-radius: 8px;

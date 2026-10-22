@@ -10,7 +10,7 @@
 //   the sidebar's LOKI Studio button or Ctrl/Cmd+Shift+S; Back / Esc closes it. The chat stays one click away (the
 //   word "Loki", or just type). Once a conversation runs the hub steps aside; on a new chat it folds to one row.
 // Cleaned up 2026-10-21 (owner: "too much stuff happening all at once ... i like the preview but its too much and too
-// many"): one header row (title, a "working now" chip, the kind filter, chat + Studio), the big preview, then ONE row
+// many"): one header row with its icons on the left (the kind filter, a "working now" chip, chat + Studio), the big preview, then ONE row
 // of recent things with "All" to see the rest. Jobs are not cards any more: the chip counts what runs and a click shows
 // it live in the preview. No refresh / fold buttons (it refreshes itself). Later: a live view in the preview spot.
 // Plain DOM, CSP script-src 'self' (no inline script, no eval); sizes in % / fr so it fits any window.
@@ -80,7 +80,6 @@ const LokiHome = (() => {
     if (!main || root) return;
     root = mk("section", "home-hub"); root.id = "home-hub"; root.setAttribute("aria-label", "Home: your renders and projects");
     const head = mk("div", "home-head");
-    const title = mk("h2", "home-title", "Home");
     const kinds = mk("div", "home-kinds"); kinds.setAttribute("role", "toolbar"); kinds.setAttribute("aria-label", "Show");
     const kindBtn = (id, icon, name, what) => {
       const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; remember(); render(); });
@@ -97,7 +96,7 @@ const LokiHome = (() => {
     live = mk("button", "home-live"); live.type = "button"; live.hidden = true;
     live.dataset.tipName = "Working now"; live.dataset.tipWhat = "Jobs running on this computer and the worker farm - click to watch one in the preview.";
     live.addEventListener("click", () => { const r = running(); if (!r.length) return; const i = r.findIndex((it) => keyOf(it) === S.pick); S.pick = keyOf(r[(i + 1) % r.length]); render(); });
-    head.append(title, live, kinds, acts);
+    head.append(kinds, live, acts);   // all icons on the left; no title (the Home tab already says Home)
     hero = mk("div", "home-hero"); hero.setAttribute("aria-live", "polite");
     const recent = mk("div", "home-recent-head");
     more = mk("button", "home-more quiet small"); more.type = "button";

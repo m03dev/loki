@@ -4934,7 +4934,9 @@ def _triage(text: str) -> dict:
     global LAST_TRIAGE, TRIAGE_NOTE
     _speed_t0 = time.monotonic()   # speed watch (E6): the triage phase
     try:
-        verdict = first_layer.triage(text, AGENT_MODE)
+        # never block the request on Laya loading (it is ~8 s cold and unloads after idle):
+        # the rules answer at once and Laya keeps warming for the next request
+        verdict = first_layer.triage(text, AGENT_MODE, wait=False)
     except Exception as exc:  # noqa: BLE001 - the first layer must never break a request
         verdict = dict(first_layer.rules(text), source="rules", note="triage failed: %s" % exc)
     LAST_TRIAGE = verdict
