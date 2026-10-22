@@ -63,6 +63,25 @@ def _image_maker(state):
     return lambda prompt, options=None: forge3d.default_image_maker(prompt, workspace(state), options)
 
 
+def _judge(state):
+    """E19: the judge the build hands its model to, or None when judging is off / no vision model.
+    LOKI_FORGE_JUDGE=0 turns it off; off by default only when LOKI_LOCAL_ONLY is set with no local
+    vision model, since the judge is what tells which backend works best on this machine."""
+    import os  # pylint: disable=import-outside-toplevel
+    if str(os.environ.get("LOKI_FORGE_JUDGE", "1")).strip() == "0":
+        return None
+    maker = getattr(state.agent, "forge_judge", None)
+    if callable(maker):
+        return maker
+    try:
+        import forge_judge  # pylint: disable=import-outside-toplevel
+    except Exception:  # noqa: BLE001 - judging is a bonus, never a reason a build fails to start
+        return None
+    if not forge_judge.vision_ready():   # no vision model here: never make a build wait to find out
+        return None
+    return forge_judge.judge_one
+
+
 def _rel(state, path: str) -> str:
     try:
         return Path(path).resolve().relative_to(workspace(state).resolve()).as_posix()
@@ -160,13 +179,21 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             return 400, {"ok": False, "error": "give a drawing, a picture or a description"}
         maker = _image_maker(state)
         out_dir = models_dir(state)
+        judge = _judge(state)
 
         def work(progress):
-            res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress, options=options)
+            # E19: judge the model against the source picture and keep the score; the judge renders
+            # the four angles itself when the model is not a creature (which has its own views).
+            res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress,
+                                  options=options, judge=judge)
             if res.get("ok") and res.get("image"):
                 res["image"] = _rel(state, res["image"])
-            return {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
+            out = {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
                 {"obj": Path(res["obj"]).name if res.get("obj") else ""} if res.get("ok") else {})
+            v = out.get("judge")                       # the paths inside the verdict are local: hide them
+            if isinstance(v, dict):
+                out["judge"] = {k: val for k, val in v.items() if k != "views"}
+            return out
         return 200, forge3d.start_job(work, kind="model", label=prompt or "drawing", thread=thread)
     if route == "/forge/creature":
         import anycreature  # pylint: disable=import-outside-toplevel

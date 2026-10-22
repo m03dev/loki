@@ -48,6 +48,7 @@ SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
 DEFAULT_SPACE = "trellis-community/TRELLIS"
 MAX_IMAGE_BYTES = 25_000_000
+JUDGE_LOW = 0.6          # E19: under this a second backend is worth one try (engine/forge_judge.LOW)
 LIFT_GRID = 112          # cells along the longer side of the lift's silhouette
 
 
@@ -615,9 +616,13 @@ def default_image_maker(prompt: str, workspace: Path, options: dict | None = Non
 
 
 def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto", *, image_maker=None,
-            progress=None, puff: float = 0.85, triposr_runner=None, online_factory=None, options=None) -> dict:
+            progress=None, puff: float = 0.85, triposr_runner=None, online_factory=None, options=None,
+            judge=None) -> dict:
     """Make a 3D model. See the module docstring. `progress(stage, fraction)` reports each step.
-    `options`: the Output panel's values (OPTIONS above); each backend reads the ones it honours."""
+    `options`: the Output panel's values (OPTIONS above); each backend reads the ones it honours.
+    `judge`: E19 - a callable `(glb, source_path, backend) -> verdict` (engine/forge_judge.judge_one).
+    When it returns a low score and another backend is left, the model is made once more with that
+    backend and re-judged; the verdict travels in the result as "judge" and "judged"."""
     opts = clean_options(options) if options else None
     say = progress or (lambda stage, frac: None)
     out = Path(out_dir)
@@ -661,22 +666,59 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             cut.paste(half.transpose(Image.FLIP_LEFT_RIGHT), (cut.width - half.width, 0))
         cut_png = cut_dir / (base.name + "-cutout.png")
         cut.save(cut_png)
+        def _run(name):
+            if name == "triposr":
+                return run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
+            if name == "online":
+                return run_online(cut_png, base, client_factory=online_factory, opts=opts)
+            return run_lift(cut, base, puff=puff, opts=opts)
+
         errors, result, used = [], None, ""
+        tried: list = []                                   # backends already attempted (E19 retry)
         for name in order:
             say("shaping it (%s)" % name, 0.45)
+            tried.append(name)
             try:
-                if name == "triposr":
-                    result = run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
-                elif name == "online":
-                    result = run_online(cut_png, base, client_factory=online_factory, opts=opts)
-                else:
-                    result = run_lift(cut, base, puff=puff, opts=opts)
+                result = _run(name)
                 used = name
                 break
             except Exception as exc:  # noqa: BLE001 - try the next backend
                 errors.append("%s: %s" % (name, str(exc)[:200]))
         if result is None:
             raise ForgeError("; ".join(errors) or "no backend")
+        glb = Path(result["glb"])
+
+        def _drop(model):                            # a model that lost the comparison leaves nothing behind
+            for p in (model.get("glb"), model.get("obj")):
+                try:
+                    if p and Path(p).is_file():
+                        Path(p).unlink()
+                except OSError:
+                    pass
+
+        verdict, retried = None, False
+        if judge is not None:
+            say("checking it against the picture", 0.85)
+            try:
+                verdict = judge(str(glb), str(source), used)
+            except Exception as exc:  # noqa: BLE001 - a judge that cannot look must not undo the build
+                verdict = {"score": None, "error": str(exc)[:200], "backend": used}
+            # E19: one retry with a backend that was not tried yet, kept only if it scores better.
+            rest = [b for b in plan(backend) if b not in tried]
+            if (verdict.get("score") is not None and verdict["score"] < JUDGE_LOW and rest):
+                better = rest[0]
+                say("that did not match well - trying %s" % better, 0.9)
+                try:
+                    alt = _run(better)
+                    alt_verdict = judge(str(alt["glb"]), str(source), better)
+                except Exception as exc:  # noqa: BLE001 - keep the first model
+                    alt, alt_verdict = None, {"score": None, "error": str(exc)[:200], "backend": better}
+                retried = True
+                if alt is not None and (alt_verdict.get("score") or 0) > (verdict.get("score") or 0):
+                    _drop(result)                          # the first model lost: remove it
+                    result, used, verdict = alt, better, alt_verdict
+                elif alt is not None:
+                    _drop(alt)                             # the retry lost: remove it, keep the first
         glb = Path(result["glb"])
         read_glb(glb)
         meta = {"prompt": prompt, "source": "drawing" if isinstance(source, str) and source.startswith("data:")
@@ -686,10 +728,17 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             meta["options"] = opts
         if result.get("note"):
             meta["note"] = result["note"]
+        if verdict is not None:
+            meta["judge"] = {k: v for k, v in verdict.items() if k != "views"}   # the score, not the paths
+            meta["judged"] = retried
         (cut_dir / (glb.name + ".json")).write_text(json.dumps(meta, indent=1), encoding="utf-8")
         say("done", 1.0)
-        return {"ok": True, "glb": str(glb), "obj": str(result.get("obj") or ""), "backend": used, "meta": meta,
-                "name": glb.name, "image": made_image}
+        out = {"ok": True, "glb": str(glb), "obj": str(result.get("obj") or ""), "backend": used, "meta": meta,
+               "name": glb.name, "image": made_image}
+        if verdict is not None:
+            out["judge"] = verdict
+            out["judged"] = retried
+        return out
     except ForgeError as exc:
         return {"ok": False, "error": str(exc)}
 

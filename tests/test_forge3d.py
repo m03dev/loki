@@ -32,6 +32,7 @@ WS = TMP / "ws"
 WS.mkdir()
 os.environ["LOKI_DATA"] = str(TMP / "data")
 os.environ["LOKI_TRIPOSR_DIR"] = str(TMP / "no-triposr")
+os.environ["LOKI_FORGE_JUDGE"] = "0"    # E19 judging is tested on its own in tests/test_forge_judge.py
 PASS: list = []
 FAIL: list = []
 
