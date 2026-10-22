@@ -180,7 +180,9 @@ async def main():
           row = [...document.querySelectorAll('.sidebar .foot-row > *')].filter((x) => x.offsetParent);
           const last = document.getElementById('open-studio'); const b = last ? last.getBoundingClientRect() : null;
           return { n: row.length, inside: row.every((x) => x.getBoundingClientRect().right <= side.right - 1), studio: !!b && b.right <= side.right - 1 }; }""")
-        check("the sidebar's icon row, LOKI Studio included, stays inside the sidebar", r["n"] >= 5 and r["inside"] and r["studio"], r)
+        # the foot row is Files, Settings, Check everything, Quit (LOKI Studio lives in the More menu now): four
+        # buttons, every one inside the sidebar
+        check("the sidebar's icon row, LOKI Studio included, stays inside the sidebar", r["n"] >= 4 and r["inside"] and r["studio"], r)
         # Mesh > Combine / Separate / Mirror (the menu bar's Mesh menu, the hotbox, the command line)
         r = await page.evaluate("""async () => { const v = forge.view, t = v.tree.api;
           forgeModelMode(false); await forgeAddPrimitive('cube'); forgeModelMode(false); const a = t.root().id;

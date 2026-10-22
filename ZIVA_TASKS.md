@@ -667,3 +667,30 @@ tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks
   46 of 60 connections ("Connection reset by peer"; dead panels or a white window) - `request_queue_size = 128`, 0
   resets, guarded in test_systems. Bonsai 2 on the Mac fixed (`/setup/use` keeps the long context,
   model_setup.with_long_context); Kokoro needs `pip install --only-binary=:all: kokoro soundfile` on Python 3.13.
+
+## For Claude - three stale checks in suites your last change did not run (Ziva, macOS, 2026-10-21)
+
+`test_forge_ui`, `test_forge_model_ui` and `test_forge_creature_ui` fail on a CLEAN `origin/master` (b82d99c) - verified
+in a fresh `git worktree`, not in my tree. Two are fixed, one is yours to call.
+
+1. **FIXED - test_forge_ui, "every sculpt tool is on screen and clickable at 900x600".** The check clicked `#forge-mode`
+   TWICE (sculpt on, then straight back off) and then measured `#forge-sculpt button` - the OLD sculpt panel, which
+   `forge_sculpt_ui.js` now replaces and deliberately hides (`test_forge_sculpt_ui` asserts `#forge-sculpt` is not
+   visible), so it could only ever pass by accident. Rewritten to enter sculpt mode the way its own suite does
+   (`fmyRun('sculpt')`, wait for `#fsc-list`) and to measure the NEW bar. That immediately found a real bug: at 900x600
+   the stage is 328x473 and `#fsc-side` was 224 px tall in a 205 px room, so the column ran **7 px off the bottom**.
+   Cause: the slider tracks' 48 px floor plus the sticky grid. Fixed in `fscLayout` - when the room is tight the floor
+   drops to 22 px and the sticky grid takes a third column (`.fsc-side.fsc-tight`). 37/37, three runs.
+   The same stale panel appears at test_forge_ui line ~197 ("Sculpt mode shows the brushes", `#forge-sculpt
+   [data-brush='crease']`) - also rewritten against `#fsc-strip` / `#fsc-list .fsc-tile`.
+2. **FIXED - test_forge_model_ui, "the sidebar's icon row ... stays inside the sidebar".** It wants `n >= 5`
+   visible `.foot-row` children; the row is now Files, Settings, Check everything, Quit = **4** (LOKI Studio moved
+   into the More menu). Expectation updated to 4; the inside-the-sidebar assertions are unchanged.
+3. **YOUR CALL - test_forge_creature_ui** still fails after 30 s: `page.click("#forge-anim [data-clip='move']")` -
+   "element is not visible". Reproduces unchanged on a clean b82d99c, so it predates my work; I did not touch the
+   Creature bar. Either the bar is now hidden until something opens it, or the clip buttons moved (the `#open-forge`
+   lesson: 22 suites click it by script now, and this one may need the same treatment for whatever hides `#forge-anim`).
+
+Also: `test_forge_pro_ui`, `test_forge_undo_keys_ui`, `test_forge_rules_ui`, `test_forge_layers_ui` and
+`test_forge_symmetry_ui` all timed out in ship's parallel run on this Mac and all pass one after another; their single
+`wait_for_selector(..., timeout=5000)` is now 15000, the same allowance you gave `test_forge_ui` for the same reason.

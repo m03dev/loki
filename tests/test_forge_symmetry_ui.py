@@ -56,7 +56,7 @@ async def main():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         await page.evaluate("localStorage.removeItem('loki-forge-hotkeys')")
         await page.evaluate("document.getElementById('open-forge').click()")
-        await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
+        await page.wait_for_selector("#forge:not([hidden])", timeout=15000)
         await page.evaluate("forgeAddPrimitive('cube')")
         await page.wait_for_function("forge.view && forge.view.sm", timeout=10000)
         E = page.evaluate

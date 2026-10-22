@@ -1382,3 +1382,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 
 /* the menu-set rows: only the showing set's rows are up, and each row sits one step further out */
 .forge-pro-hotbox .forge-pro-row[hidden] { display: none; }
+
+/* a short stage: the sticky tools go to three columns so the sculpt column fits inside the view (900x600) */
+.fsc-side.fsc-tight .fsc-tools { grid-template-columns: repeat(3, 30px); gap: 4px; }
+.fsc-side.fsc-tight .fsc-sticky { width: 30px; height: 30px; }

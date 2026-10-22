@@ -194,7 +194,10 @@ async def main():
         await page.evaluate("forge.view.subdivide()")
         check("subdivide makes four times the triangles", await page.evaluate("forge.view.sm.idx.length / 3") == tris * 4)
         await page.click("#forge-mode")
-        check("Sculpt mode shows the brushes", await page.is_visible("#forge-sculpt [data-brush='crease']"))
+        # the new sculpt bar (forge_sculpt_ui.js), not the old #forge-sculpt panel, which sculpt mode now hides
+        await page.wait_for_function("!!document.getElementById('fsc-strip')", timeout=15000)
+        check("Sculpt mode shows the brushes", await page.evaluate("""() => !!document.getElementById('fsc-strip')
+              && document.querySelectorAll('#fsc-list .fsc-tile').length >= 4"""))
 
         # -------- materials: a 3-node Material Maker graph -> a texture, applied to the model
         tex = await page.evaluate("""async (g) => {
@@ -309,14 +312,34 @@ async def main():
         check("the Forge panel fits 900x600: viewer, save and toolbar buttons all on screen and clickable", not fit["bad"]
               and fit["stageH"] > 150, fit)
         check("the left column scrolls inside instead of pushing the viewer off", fit["sideScrolls"] in ("auto", "scroll", "fits"), fit)
-        await page.click("#forge-mode")
-        await page.click("#forge-mode")
-        sculpt_ok = await page.evaluate("""() => { const st = document.getElementById('forge-stage').getBoundingClientRect();
-          return [...document.querySelectorAll('#forge-sculpt button')].filter((b) => { const r = b.getBoundingClientRect();
-            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-            return !(r.bottom <= st.bottom + 0.5 && r.top >= st.top - 0.5 && (hit === b || b.contains(hit))); })
-            .map((b) => b.dataset.tipName); }""")
-        check("every sculpt tool is on screen and clickable at 900x600 (no hidden scroll)", not sculpt_ok, sculpt_ok)
+        # sculpt mode ON, entered the way its own suite does. Clicking #forge-mode TWICE toggled it straight back off,
+        # so this measured hidden buttons; and it measured '#forge-sculpt button' - the old sculpt panel, which the new
+        # UI (forge_sculpt_ui.js) replaced and deliberately hides - so it could only ever pass by accident.
+        if not await page.evaluate("forge.view.mode === 'sculpt'"):
+            await page.evaluate("fmyRun('sculpt')")
+        await page.wait_for_function("forge.view.mode === 'sculpt' && !!document.getElementById('fsc-list')", timeout=8000)
+        await page.wait_for_timeout(400)
+        # The sculpt bar must be on screen at 900x600: header, sliders and strip inside the stage, nothing covering what
+        # is visible, and enough brush tiles reachable. The strip's list scrolls sideways on purpose (a shelf): a tile
+        # scrolled out of it is not "off screen", so only tiles inside the list's own box are measured.
+        sc = await page.evaluate("""() => { const st = document.getElementById('forge-stage').getBoundingClientRect();
+          const inside = (r) => r.left >= st.left - 0.5 && r.right <= st.right + 0.5 && r.top >= st.top - 0.5 && r.bottom <= st.bottom + 0.5;
+          const bars = {}; for (const id of ['fsc-head', 'fsc-side', 'fsc-strip']) { const e = document.getElementById(id); bars[id] = e ? inside(e.getBoundingClientRect()) : null; }
+          const vis = (e) => { const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false;
+            const box = e.closest('.fsc-list, .fsc-chips');
+            if (box) { const pr = box.getBoundingClientRect(); if (r.left < pr.left - 0.5 || r.right > pr.right + 0.5) return false; }
+            return inside(r); };
+          const shown = [...document.querySelectorAll('#fsc-head button, #fsc-list .fsc-tile, #fsc-side .fsc-sticky')].filter(vis);
+          const covered = shown.filter((b) => { const r = b.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(hit === b || b.contains(hit)); })
+            .map((b) => b.dataset.tipName || b.dataset.brush || b.textContent.trim());
+          const R = (id) => { const e = document.getElementById(id); const r = e.getBoundingClientRect();
+            return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+          return { stageR: [Math.round(st.left), Math.round(st.top), Math.round(st.width), Math.round(st.height)],
+                   sideR: document.getElementById('fsc-side') ? R('fsc-side') : null,
+                   bars: bars, tiles: document.querySelectorAll('#fsc-list .fsc-tile').length, shown: shown.length, covered: covered }; }""")
+        check("every sculpt tool is on screen and clickable at 900x600 (no hidden scroll)",
+              all(sc["bars"].values()) and not sc["covered"] and sc["shown"] >= 8 and sc["tiles"] >= 8, sc)
         await page.evaluate("forgeProPanel('materials', true)")   # Windows > Materials (the old tab row is hidden in the pro workspace)
         await page.wait_for_timeout(300)
         mats_fit = await page.evaluate("""() => { const p = document.querySelector('.forge-panel').getBoundingClientRect();

@@ -375,11 +375,20 @@ function fscLayout() {
   const sh = strip.getBoundingClientRect().height;
   // the sliders: between the header and the strip, their tracks as tall as the room allows
   const sideTop = headBottom + G, sideRoomBottom = bottom - sh - G;
+  // A short stage (900x600 leaves the stage 328x473): the sticky-tool grid gets a third column so the column is
+  // shorter and stays inside the stage instead of running off the bottom by a few pixels.
+  const tight = (sideRoomBottom - sideTop) < 230;
+  if (side.classList.contains("fsc-tight") !== tight) side.classList.toggle("fsc-tight", tight);
   const tracks = side.querySelectorAll(".fsc-track");
   const sideBy = !!side.querySelector(".fsc-sliders");
   const fixed = side.getBoundingClientRect().height - (sideBy ? (tracks[0] ? tracks[0].getBoundingClientRect().height : 0) : [...tracks].reduce((a, t) => a + t.getBoundingClientRect().height, 0));
   const rows = sideBy ? 1 : Math.max(1, tracks.length);   // side by side: one row of tracks
-  const each = Math.max(48, Math.min(200, (sideRoomBottom - sideTop - fixed) / rows));
+  // The tracks are as tall as the room allows. On a short stage (900x600 leaves the stage 328x473 once the columns
+  // are up) a 48 px floor made the whole column taller than the room and it ran off the bottom of the stage - so when
+  // the room is tight the floor drops to 22 px, which still leaves a usable track and keeps every tool on screen.
+  const sideAvail = Math.max(24, sideRoomBottom - sideTop - fixed);
+  const per = sideAvail / rows;
+  const each = Math.max(per < 48 ? 22 : 48, Math.min(200, per));
   for (const t of tracks) t.style.height = Math.round(each) + "px";
   side.style.transform = "none";
   const sideH = side.getBoundingClientRect().height;
