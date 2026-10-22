@@ -151,7 +151,7 @@ export class ForgeManip extends TransformControls {
     this.addEventListener("mouseDown", () => { if (this.axis) this.lastAxis = this.axis; });
     if (domElement) {
       domElement.addEventListener("pointerdown", (e) => {
-        if (!this.middleDrag || e.button !== 1 || e.altKey || !this.enabled || !this.object || this.dragging) return;
+        if (!this.middleDrag || e.button !== 1 || forgeCamMod(e) || !this.enabled || !this.object || this.dragging) return;
         const ax = this.lastAxis && (this.mode !== "rotate" ? /^(X|Y|Z|XY|YZ|XZ|XYZ)$/ : /^(X|Y|Z|E|XYZE)$/).test(this.lastAxis)
           ? this.lastAxis : (this.mode === "rotate" ? "E" : "XYZ");
         e.preventDefault(); e.stopImmediatePropagation();

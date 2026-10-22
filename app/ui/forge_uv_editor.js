@@ -377,8 +377,8 @@ const ForgeUVEditor = (() => {
   function onDown(e) {
     const r = S.canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
     S.canvas.setPointerCapture(e.pointerId);
-    if (e.button === 1 || (e.altKey && e.button === 0)) { S.drag = { pan: true, x, y, u: S.cam.u, v: S.cam.v }; e.preventDefault(); return; }
-    if (e.altKey && e.button === 2) { S.drag = { zoom: true, x, y, z: S.cam.z }; e.preventDefault(); return; }
+    if (e.button === 1 || (forgeCamMod(e) && e.button === 0)) { S.drag = { pan: true, x, y, u: S.cam.u, v: S.cam.v }; e.preventDefault(); return; }
+    if (forgeCamMod(e) && e.button === 2) { S.drag = { zoom: true, x, y, z: S.cam.z }; e.preventDefault(); return; }
     if (e.button !== 0) return;
     const m = poly();
     const onSel = (() => {

@@ -727,6 +727,11 @@ window.ForgeRender = ForgeRender;
 // the commands (the Renderer menu, the hotbox, the Hotkey Editor all read FORGE_PRO_CMDS)
 if (typeof FORGE_PRO_CMDS !== "undefined") {
   if (!FORGE_PRO_CMDS.renderPreview) FORGE_PRO_CMDS.renderPreview = ["Path Traced Preview", () => ForgeRender.togglePreview().then((on) => (on ? "Path Traced Preview on." : ""))];
+  if (!FORGE_PRO_CMDS.renderStudio) FORGE_PRO_CMDS.renderStudio = ["Send to Render Studio", () => {
+    if (!window.LokiModeBar) return "Render Studio is not in this window.";
+    window.LokiModeBar.go("render", { fromForge: true });
+    return "Render Studio opened with Forge's camera and Time Slider range.";
+  }];
   if (!FORGE_PRO_CMDS.renderDialog) FORGE_PRO_CMDS.renderDialog = ["Render...", () => { ForgeRender.openDialog(true); return "Render: pick a size and press Render."; }];
 }
 if (typeof FORGE_PRO_TOGGLES !== "undefined" && !FORGE_PRO_TOGGLES.renderPreview) FORGE_PRO_TOGGLES.renderPreview = () => ForgeRender.previewOn();

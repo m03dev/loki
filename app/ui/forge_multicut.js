@@ -120,7 +120,7 @@ window.forgeMultiCut = (() => {
   // the preview under the mouse (pointermove, and when a modifier key goes down / up)
   function preview(e) {
     const tk = typeof forgeTk !== "undefined" ? forgeTk.tool : null, v = view();
-    if (!tk || tk.kind !== "multiCut" || !v || v.mode !== "poly" || !v.poly || !v.canvas || e.altKey) { clear(); return; }
+    if (!tk || tk.kind !== "multiCut" || !v || v.mode !== "poly" || !v.poly || !v.canvas || forgeCamMod(e)) { clear(); return; }
     const r = v.canvas.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) { clear(); return; }
     S.last = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, buttons: e.buttons || 0, button: -1 };

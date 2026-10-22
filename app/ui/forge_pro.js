@@ -716,25 +716,62 @@ function forgeProMarkHover(x, y) {
 // the pro hotbox: rows of menu names centred on the mouse (the common menus above the middle, the modelling menu
 // set below it), each opening its own list; "Recent Commands" first; the centre and the four zones around it
 // open marking menus (press, flick, release). Every command in Forge is in here - the panels are optional.
-const FORGE_PRO_ROWS = [
-  ["Recent Commands", []],                      // filled from what you ran last
-  ["File", ["save", "saveObj", "export", "close"]],
-  ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
-  ["Create", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "imagePlane", "draw", "image", "describe", "creature"]],
-  ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face"]],
-  ["Modify", ["select", "move", "rotate", "scale", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "frameSel", "makeLive"]],
-  ["Display", ["wire", "shaded", "textured", "xray", "grid", "lights", "smooth1", "smooth2", "smooth3", "faceNormals", "vertexNormals", "softHardDisplay", "quadToggle", "hide", "showLast", "hideOthers", "showAll", "isolate", "frameAll", "layerEditor", "layerAdd", "layerAssign"]],
-  ["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "wheel", "hideUI", "winCreature", "hotkeyEditor"]],
-  // the modelling menu set (the pro second row)
-  ["Mesh", ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "softEdge", "hardEdge", "softHard", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel"]],
-  ["Edit Mesh", ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter",
-    "poke", "wedge", "averageVerts", "relax", "spinEdge", "spinEdgeBack", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"]],
-  ["Mesh Tools", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "targetWeld", "slideEdge", "softSel", "sculpt", "winToolkit"]],
-  ["Snap", ["snapGrid", "snapEdge", "snapPoint"]],
-  ["Symmetry", ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial4", "symRadial6", "symRadial8"]],
-  ["Animation", ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey", "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]],
-];
-const FORGE_PRO_ROW_SPLIT = 8;                  // the first 8 menus sit above the middle, the rest below it
+// ================================================================== the menus, in one place
+// Every menu is written down once here and the hotbox, the Space wheel and the window's menu bar all read it, so they
+// cannot drift apart (they had: the hotbox knew no UV or Mesh Display menu). Forge's own commands only - a menu with
+// nothing in it is a menu that lies about what the program can do.
+const FORGE_PRO_MENUS = {
+  // the main menu bar - the order and the shape of a 3D program's own bar
+  File: ["save", "saveObj", "export", "close"],
+  Edit: ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"],
+  Create: ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere", "imagePlane", "draw", "image", "describe", "creature"],
+  Select: ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "marquee", "objComp", "vertex", "edge", "face", "uv", "vertexFace", "uvShell", "multi", "loopSel", "ringSel"],
+  Modify: ["select", "move", "rotate", "scale", "lastTool", "showManip", "worldAxes", "objectAxes", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "makeLive", "snapGrid", "snapEdge", "snapPoint"],
+  Display: ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "layerEditor", "layerAdd", "layerAssign", "smooth1", "smooth2", "smooth3", "quadToggle", "xray", "grid", "softHard", "iveToggle"],
+  Windows: ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "panelModel", "panelMaterials", "wheel", "hideUI", "hotkeyEditor", "preferences"],
+  Help: ["hotkeyEditor", "preferences", "more"],
+  // the panel menus (they belong to a view, not to the program - the row above the main menus, as in the reference)
+  View: ["persp", "top", "front", "side", "defaultView", "frameAll", "frameSel", "single", "four"],
+  Shading: ["wire", "shaded", "textured", "smooth1", "smooth2", "smooth3", "xray", "matcapNext", "matcapPrev"],
+  Lighting: ["lights"],
+  Show: ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "grid", "quadToggle", "softSel", "xray"],
+  Renderer: ["renderDialog", "renderPreview", "renderStudio", "bakeMaps"],
+  Panels: ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "panelModel", "panelMaterials", "single", "four", "hideUI"],
+  // the menu sets' menus
+  Mesh: ["combine", "separate", "mirror", "mirrorY", "mirrorZ", "extractFace", "smooth", "triangulate", "quadrangulate", "fillHole", "cleanup", "meshStats", "dynamesh", "sculptModel", "bakeMaps"],
+  "Edit Mesh": ["extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
+    "spinEdge", "spinEdgeBack", "poke", "wedge", "duplicateFace", "reverse", "deleteComp", "deleteEdgeVert"],
+  "Mesh Tools": ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "multiCutStep", "targetWeld", "slideEdge", "quadDraw", "retopoFinish", "softSel", "sculpt", "winToolkit"],
+  Snap: ["snapGrid", "snapEdge", "snapPoint"],
+  Symmetry: ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial3", "symRadial4", "symRadial6", "symRadial8", "symAxisX", "symAxisY", "symAxisZ"],
+  Animation: ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey",
+    "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"],
+  Sculpt: ["sculpt", "sculptModel", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "sculptWheel", "sculptExit", "dynamesh", "smooth"],
+};
+// the row above the middle: the panel menus, then the main menus (the order the reference uses)
+const FORGE_PRO_BAR = ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"];
+const FORGE_PRO_MAIN = ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Help"];
+// the middle row's right-hand button
+const FORGE_PRO_CONTROLS = ["hideUI", "wheel", "hotkeyEditor", "preferences"];
+// the menu sets: which menus the rows under the middle show. A program's own set is the first one.
+const FORGE_PRO_SETS = {
+  forge: { label: "Forge", rows: [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry", "Sculpt"], ["Animation"]] },
+  modeling: { label: "Modeling", rows: [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry"]] },
+  sculpting: { label: "Sculpting", rows: [["Sculpt", "Mesh Tools"]] },
+  animation: { label: "Animation", rows: [["Animation"]] },
+  rendering: { label: "Rendering", rows: [["Renderer"]] },
+};
+const FORGE_PRO_SET_STORE = "loki-forge-menuset";
+let FORGE_PRO_SET = (() => { try { const k = localStorage.getItem(FORGE_PRO_SET_STORE); return FORGE_PRO_SETS[k] ? k : "forge"; } catch (exc) { return "forge"; } })();
+// every menu, in a stable order - the Space wheel, the tear-off bar and the window's menu bar walk this
+const FORGE_PRO_ROWS = FORGE_PRO_MAIN.concat(FORGE_PRO_BAR,
+  ["Mesh", "Edit Mesh", "Mesh Tools", "Snap", "Symmetry", "Sculpt", "Animation"]).map((n) => [n, FORGE_PRO_MENUS[n]]);
+// the menus of the set that is showing, kept small enough for the wheel's ring
+const FORGE_PRO_WHEEL_MENUS = () => {
+  const rows = (FORGE_PRO_SETS[FORGE_PRO_SET] || FORGE_PRO_SETS.forge).rows;
+  return ["Recent Commands"].concat(rows.flat()).slice(0, 12).map((n) => [n, n === "Recent Commands" ? [] : FORGE_PRO_MENUS[n]]);
+};
+
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)
 const FORGE_PRO_ZONES = {
   center: { title: "Views", ring: { N: "persp", W: "top", S: "front", E: "side" } },
@@ -765,6 +802,54 @@ function forgeProItem(id, host) {
   return b;
 }
 
+// the middle row's menu-set button: Forge / Modeling / Sculpting / Animation / Rendering, remembered per machine
+function forgeProSetCol() {
+  const col = proEl("section", "forge-pro-col forge-pro-setcol"); col.dataset.menu = "Menu Set";
+  const h = proEl("button", "forge-pro-head forge-pro-sethead", (FORGE_PRO_SETS[FORGE_PRO_SET] || {}).label || "Forge");
+  h.type = "button"; h.dataset.proSetBtn = FORGE_PRO_SET;
+  h.title = "The menu set: which menus the rows under the middle show.";
+  const list = proEl("div", "forge-pro-list"); list.hidden = true;
+  for (const key of Object.keys(FORGE_PRO_SETS)) {
+    const b = proEl("button", "forge-pro-item");
+    b.type = "button"; b.dataset.proSet = key;
+    b.append(proEl("span", "forge-pro-tick", key === FORGE_PRO_SET ? "\u2713" : ""), proEl("span", "forge-pro-label", FORGE_PRO_SETS[key].label), proEl("span", "forge-pro-key", ""));
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProSetTo(key); });
+    list.append(b);
+  }
+  h.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); list.hidden = !list.hidden; });
+  h.addEventListener("pointerenter", () => { if (list.hidden) return; list.hidden = false; });
+  col.append(h, list);
+  return col;
+}
+function forgeProSetApply(host) {
+  host = host || document.getElementById("forge-pro-hotbox");
+  if (!host) return;
+  host.dataset.set = FORGE_PRO_SET;
+  for (const r of host.querySelectorAll(".forge-pro-row[data-set]")) {
+    const show = r.dataset.set === FORGE_PRO_SET;
+    if (r.hidden === show) r.hidden = !show;
+  }
+  const head = host.querySelector(".forge-pro-sethead");
+  if (head && head.textContent !== (FORGE_PRO_SETS[FORGE_PRO_SET] || {}).label) { head.textContent = (FORGE_PRO_SETS[FORGE_PRO_SET] || {}).label || "Forge"; head.dataset.proSetBtn = FORGE_PRO_SET; }
+  const btn = host.querySelector("[data-pro-set-btn]");
+  if (btn) btn.dataset.proSetBtn = FORGE_PRO_SET;
+  for (const b of host.querySelectorAll(".forge-pro-item[data-pro-set]")) {
+    const on = b.dataset.proSet === FORGE_PRO_SET;
+    b.classList.toggle("on", on);
+    const t = b.querySelector(".forge-pro-tick");
+    if (t && t.textContent !== (on ? "\u2713" : "")) t.textContent = on ? "\u2713" : "";
+  }
+}
+function forgeProSetTo(key) {
+  if (!FORGE_PRO_SETS[key]) return;
+  FORGE_PRO_SET = key;
+  try { localStorage.setItem(FORGE_PRO_SET_STORE, key); } catch (exc) { /* private mode */ }
+  forgeProSetApply();
+  const v = forge.view;
+  if (v && v.pro) v.pro.recent = (v.pro.recent || []);       // nothing else to rebuild: the rows are all there
+}
+window.forgeMenuSet = (key) => { if (key == null) return FORGE_PRO_SET; forgeProSetTo(key); return FORGE_PRO_SET; };
+
 function forgeProHotboxHost() {
   let host = document.getElementById("forge-pro-hotbox");
   if (host) return host;
@@ -773,8 +858,7 @@ function forgeProHotboxHost() {
   host = proEl("div", "forge-pro-hotbox");
   host.id = "forge-pro-hotbox"; host.hidden = true;
   host.setAttribute("role", "menu");
-  const rows = [proEl("div", "forge-pro-row up"), proEl("div", "forge-pro-row down")];
-  FORGE_PRO_ROWS.forEach(([head, ids], i) => {
+  const mkCol = (head, ids) => {
     const col = proEl("section", "forge-pro-col");
     col.dataset.menu = head;
     const h = proEl("button", "forge-pro-head", head);
@@ -804,15 +888,35 @@ function forgeProHotboxHost() {
     });
     h.addEventListener("pointerdown", () => { host._dragFrom = h; });
     col.append(h, list);
-    rows[i < FORGE_PRO_ROW_SPLIT ? 0 : 1].append(col);
-  });
-  const hub = proEl("div", "forge-pro-zonehub", "Forge");
-  hub.title = "Press in the middle for the views (Perspective / Top / Front / Side); above, below, left and right are the other zones.";
+    return col;
+  };
+  // the rows, top to bottom: the panel menus, the main menus, the middle (Recent Commands | the menu set | Hotbox
+  // Controls) and then the menus of the set that is showing - the shape the reference program's hotbox has.
+  // top to bottom: the panel menus, the main menus, the middle row (Recent Commands | the menu set | Hotbox
+  // Controls), and then the showing set's menus. The rows ladder away from the centre, which stays empty so a press
+  // there still opens the zone marking menus.
+  const mkRow = (side, i) => { const r = proEl("div", "forge-pro-row " + side); r.style.setProperty("--row-i", String(i)); return r; };
+  const panelRow = mkRow("up", 2);
+  for (const name of FORGE_PRO_BAR) if (FORGE_PRO_MENUS[name]) panelRow.append(mkCol(name, FORGE_PRO_MENUS[name]));
+  const mainRow = mkRow("up", 1);
+  for (const name of FORGE_PRO_MAIN) if (FORGE_PRO_MENUS[name]) mainRow.append(mkCol(name, FORGE_PRO_MENUS[name]));
+  const centre = mkRow("up", 0);
+  centre.dataset.mid = "1";
+  centre.append(mkCol("Recent Commands", []), forgeProSetCol(), mkCol("Hotbox Controls", FORGE_PRO_CONTROLS));
+  const setRows = [];
+  for (const key of Object.keys(FORGE_PRO_SETS)) {
+    FORGE_PRO_SETS[key].rows.forEach((names, i) => {
+      const r = mkRow("down", i); r.dataset.set = key; r.dataset.menurow = String(i);
+      for (const name of names) if (FORGE_PRO_MENUS[name]) r.append(mkCol(name, FORGE_PRO_MENUS[name]));
+      setRows.push(r);
+    });
+  }
   const labels = proEl("div", "forge-pro-zones");
   for (const [z, t] of [["north", "Layouts"], ["south", "Panels"], ["east", "UI"], ["west", "Selection"]]) labels.append(proEl("span", "z-" + z, t));
   const box = proEl("div", "forge-pro-hbbox");
-  box.append(rows[0], hub, rows[1], labels);
+  box.append(panelRow, mainRow, centre, ...setRows, labels);
   host.append(box);
+  forgeProSetApply(host);
   // a press in a zone (not on a menu) opens its marking menu; releasing picks by direction
   host.addEventListener("pointerdown", (ev) => {
     if (ev.target.closest(".forge-pro-col")) return;
@@ -846,6 +950,7 @@ function forgeProHotboxHost() {
 
 function forgeProHotboxRefresh(v, host) {        // ticks on the switches, and the Recent Commands list
   for (const b of host.querySelectorAll(".forge-pro-item")) {
+    if (!b.dataset.proId) continue;                       // the menu-set items tick for themselves
     const st = FORGE_PRO_TOGGLES[b.dataset.proId];
     let on = false;
     try { on = !!(st && v && st(v)); } catch (_) { on = false; }
@@ -933,7 +1038,7 @@ function forgeProWheelOpen(v, at) {
   if (!host) return;
   host.textContent = "";
   host._used = false;
-  const menus = FORGE_PRO_ROWS;
+  const menus = (typeof FORGE_PRO_WHEEL_MENUS === "function" ? FORGE_PRO_WHEEL_MENUS() : FORGE_PRO_ROWS);
   const n = menus.length;
   host.append(proEl("span", "forge-wheel-hub", "Space"));
   menus.forEach(([head, ids], i) => {
@@ -987,6 +1092,7 @@ function forgeProHotboxOpen(v, at) {
   host.hidden = false;
   let lo = Infinity, hi = -Infinity, top = Infinity, bot = -Infinity;
   for (const r of host.querySelectorAll(".forge-pro-row")) {
+    if (r.hidden || !r.offsetParent) continue;                 // a hidden set's rows are 0x0: they would skew this
     const b = r.getBoundingClientRect();
     lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); top = Math.min(top, b.top); bot = Math.max(bot, b.bottom);
   }
@@ -1050,6 +1156,10 @@ function forgeProBoxPick(v, x0, y0, x1, y1) {     // nodes whose middle is insid
 const forgeProHow = (e) => ((e.ctrlKey || e.metaKey) && e.shiftKey ? "add" : (e.ctrlKey || e.metaKey) ? "remove" : e.shiftKey ? "toggle" : "set");
 
 // ================================================================== the camera controller (tumble / track / dolly)
+// The camera modifier. Option / Alt is the classic one; the owner (2026-10-21: "maya is hold down command and drag to
+// move in the viewport") also navigates with Command, so both do it. One predicate, used by every tool, so none of
+// them can disagree about whether the camera or the tool has the drag.
+function forgeCamMod(e) { return !!(e && (e.altKey || e.metaKey)); }
 const FORGE_CAM_TUMBLE = 0.0062;   // radians per pixel
 const FORGE_CAM_DOLLY = 0.0058;    // per pixel, exponential (so it feels the same near and far)
 const FORGE_CAM_WHEEL = 0.0014;    // per wheel delta unit
@@ -1116,13 +1226,15 @@ function forgeProCamera(view, ctx) {
   const box = document.createElement("div"); box.className = "forge-marquee forge-boxdolly"; box.hidden = true;
   canvas.parentElement.append(box);
   canvas.addEventListener("pointerdown", (e) => {
-    if (!e.altKey || view.quad) return;
+    if (!forgeCamMod(e) || view.quad) return;
     const both = drag && drag.buttons !== e.buttons;
     e.preventDefault(); e.stopImmediatePropagation();
     if (both) { drag.kind = "dolly"; drag.buttons = e.buttons; return; }   // left + middle = dolly
     let kind = e.button === 0 ? "tumble" : e.button === 1 ? "track" : e.button === 2 ? "dolly" : null;
     if (!kind) return;
-    if (kind === "tumble" && (e.ctrlKey || e.metaKey)) kind = "box";
+    // box zoom is the camera modifier + Ctrl (Maya's Ctrl + Option + left on macOS), so Command alone is free to
+    // tumble - the owner asked for exactly that
+    if (kind === "tumble" && e.ctrlKey) kind = "box";
     if (kind === "tumble" && ortho()) kind = "none";               // orthographic views do not tumble
     drag = { kind, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, lock: null, shift: e.shiftKey, id: e.pointerId, buttons: e.buttons };
     try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
@@ -1223,7 +1335,7 @@ function forgeProAttach(view, ctx) {
   let gest = null;
   canvas.addEventListener("pointerdown", (e) => {
     pro.mouse = [e.clientX, e.clientY];
-    if (e.button !== 0 || e.altKey) return;              // every view, the four-view layout included (Ziva)
+    if (e.button !== 0 || forgeCamMod(e)) return;         // every view, the four-view layout included (Ziva)
     const held = ["q", "w", "e"].find((k) => pro.held.has(k));
     if (held && view.mode !== "sculpt") {               // hold q / w / e + left button: that tool's marking menu
       e.preventDefault(); e.stopImmediatePropagation();
@@ -1277,7 +1389,7 @@ function forgeProAttach(view, ctx) {
   // runs; let go in the middle and the menu just closes. A quick click does nothing - the menu never stays pinned
   // open (owner 17:06: "right click doesnt do that ... fix the systems").
   canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 2 || e.altKey) return;              // every view, the four-view layout included
+    if (e.button !== 2 || forgeCamMod(e)) return;         // every view, the four-view layout included
     e.preventDefault();
     pro.down = true; pro.at = [e.clientX, e.clientY];
     window.clearTimeout(pro.timer);

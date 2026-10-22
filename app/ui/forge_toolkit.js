@@ -275,7 +275,7 @@ function forgeTkApplyOp(op, items, opts, label) {
 // the viewport clicks while an interactive tool is on (capture: before selection)
 function forgeTkPointer(e) {
   const t = forgeTk.tool, v = forge.view;
-  if (!t || !v || v.mode !== "poly" || e.altKey) return;
+  if (!t || !v || v.mode !== "poly" || forgeCamMod(e)) return;
   if (t.kind === "multiCut" && window.forgeMultiCut) return window.forgeMultiCut.pointer(e, t);   // forge_multicut.js
   if (e.button === 2) { e.preventDefault(); e.stopImmediatePropagation(); forgeTkToolEnd(true); return; }
   if (e.button !== 0) return;
@@ -642,7 +642,7 @@ function forgeIveShow(force) {
   document.addEventListener("pointerdown", (e) => {
     const b = document.getElementById("forge-ive"), v = forge.view;
     if (!b || b.hidden || !v || e.target !== v.canvas) return;
-    if ((v.gizmo && v.gizmo.axis) || (v.transform && v.transform.axis) || e.altKey || e.button !== 0) return;   // using a handle or the camera
+    if ((v.gizmo && v.gizmo.axis) || (v.transform && v.transform.axis) || forgeCamMod(e) || e.button !== 0) return;   // using a handle or the camera
     forgeIveHide();
   }, true);
   if (typeof FORGE_PRO_CMDS !== "undefined") {

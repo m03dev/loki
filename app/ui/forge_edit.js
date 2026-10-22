@@ -753,7 +753,7 @@ function forgeEditAttach(view, ctx) {
     }
     if (e.button !== 0) return;                     // middle turns, right pans: the orbit controls keep those
     if (gizmo.object && gizmo.axis) return;        // the move handle
-    if (e.altKey) return;                           // Alt / Option is the pro camera, nothing else
+    if (forgeCamMod(e)) return;                     // Alt / Option or Cmd is the camera, nothing else
     e.stopImmediatePropagation();
     canvas.setPointerCapture(e.pointerId);
     // the pro modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds

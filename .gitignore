@@ -58,8 +58,8 @@ packaging/launcher/target/
 # Update leftovers: updater._move_aside_untracked keeps old untracked files aside
 *.before-update
 
-# LOKI World leftovers (the game project and the in-tab Godot web editor were removed; the dirs stay on disk but are
-# 1.5 GB of CEF binaries - Chromium, ICU, swiftshader - that must never enter the repo). Without this, ship.py's
-# `git add -A` sweeps them in and GitHub rejects the push (a 259 MB libcef.so).
+# LOKI World leftovers: the game project stays on disk (test_godot_world uses it) but is 1.5 GB of CEF binaries -
+# Chromium, ICU, swiftshader - that must never enter the repo. Without this, ship.py's `git add -A` sweeps them in and
+# GitHub rejects the push (a 259 MB libcef.so). The in-tab Godot web export that used to sit at app/ui/world_godot/
+# (test_portal requires that path to be empty) moved to harness_data/attic/world_godot/ - nothing deleted.
 /game/
-/app/ui/world_godot/

@@ -26,7 +26,7 @@ const FORGE_KEY_DEFAULTS = [
   ["enter", "@completeTool"], ["g", "@repeatLast"],
   // edit
   ["z", "undo"], ["ctrl+z", "undo"], ["shift+z", "redo"], ["ctrl+shift+z", "redo"], ["ctrl+y", "redo"],
-  ["ctrl+d", "duplicate"], ["shift+d", "duplicateT"], ["ctrl+g", "group"], ["ctrl+shift+g", "ungroup"],
+  ["ctrl+d", "duplicate"], ["shift+d", "duplicateT"], ["ctrl+shift+d", "duplicateT"], ["ctrl+g", "group"], ["ctrl+shift+g", "ungroup"],
   ["p", "parent"], ["shift+p", "unparent"], ["delete", "delete"], ["backspace", "delete"],
   ["alt+shift+d", "deleteHistory"],
   // display / visibility

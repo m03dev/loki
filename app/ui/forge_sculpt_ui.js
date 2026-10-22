@@ -516,7 +516,7 @@ function fscWheelPick(x, y) {
     const v = fscView();
     const w = document.getElementById("fsc-wheel");
     if (w && !w.contains(e.target)) fscWheelClose();
-    if (!v || v.mode !== "sculpt" || e.button !== 2 || e.altKey || !e.target || e.target.id !== "forge-view") return;
+    if (!v || v.mode !== "sculpt" || e.button !== 2 || forgeCamMod(e) || !e.target || e.target.id !== "forge-view") return;
     e.preventDefault(); e.stopImmediatePropagation();
     fscWheelOpen(e.clientX, e.clientY);
     press = { x: e.clientX, y: e.clientY, t: performance.now() };

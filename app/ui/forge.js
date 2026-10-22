@@ -1811,7 +1811,7 @@ function forgeMakeView(lib, renderer, canvas) {
   // ---- pointer: in Sculpt mode a left-drag on the model sculpts (OrbitControls keeps everything else)
   let drag = null;
   canvas.addEventListener("pointerdown", (e) => {
-    if (view.mode !== "sculpt" || e.button !== 0 || e.altKey || transform.dragging) return;   // Alt/Option is the camera
+    if (view.mode !== "sculpt" || e.button !== 0 || forgeCamMod(e) || transform.dragging) return;   // Alt/Option or Cmd is the camera
     const hit = hitAt(e);
     if (!hit || !view.sm) return;
     e.stopImmediatePropagation();   // OrbitControls does not turn the camera while sculpting

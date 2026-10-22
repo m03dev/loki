@@ -857,8 +857,10 @@ button.forge-out-title:hover { opacity: 1; }
 /* the hotbox (Space): no curtain over the work, the two rows of menu names hugging the pointer */
 .forge-pro-hotbox { background: rgba(8,9,11,.12); }
 .forge-pro-hotbox .forge-pro-row { gap: 1px; padding: 1px; background: #1b1c1e; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.45); }
-.forge-pro-hotbox .forge-pro-row.up { bottom: 12px; }
-.forge-pro-hotbox .forge-pro-row.down { top: 12px; }
+.forge-pro-hotbox .forge-pro-row.up { bottom: calc(12px + var(--row-i, 0) * 30px); }
+.forge-pro-hotbox .forge-pro-row.down { top: calc(12px + var(--row-i, 0) * 30px); }
+/* the middle row: Recent Commands | the menu set | Hotbox Controls, the row closest to the centre */
+.forge-pro-hotbox .forge-pro-sethead { background: #4a4f57; border-color: #5f6672; color: #eef1f6; font-weight: 600; }
 .forge-pro-hotbox .forge-pro-head { padding: 3px 9px; border: 0; border-radius: 3px; background: #2e3033; color: #f0f0f0; font-weight: 500; font-size: 12px; }
 .forge-pro-hotbox .forge-pro-head.open, .forge-pro-hotbox .forge-pro-head:hover { background: #2f7fd0; color: #fff; }
 .forge-pro-hotbox .forge-pro-list { margin-top: 1px; min-width: 200px; }
@@ -1377,3 +1379,6 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .fsc-sliders { display: flex; gap: 10px; justify-content: center; }
 .fsc-tools { display: grid; grid-template-columns: repeat(2, 34px); gap: 6px; justify-content: center; }
 .fsc-side { gap: 10px !important; }
+
+/* the menu-set rows: only the showing set's rows are up, and each row sits one step further out */
+.forge-pro-hotbox .forge-pro-row[hidden] { display: none; }

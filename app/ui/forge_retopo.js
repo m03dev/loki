@@ -277,7 +277,7 @@ const ForgeRetopo = (() => {
 
   // ---------------------------------------------------------------- the mouse in the viewport
   function onDown(e) {
-    if (!R.on || e.button !== 0 || e.altKey) return;          // Alt: the camera
+    if (!R.on || e.button !== 0 || forgeCamMod(e)) return;    // Alt or Cmd: the camera
     e.preventDefault(); e.stopImmediatePropagation();
     const x = e.clientX, y = e.clientY, s = st();
     try { R.view.canvas.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }

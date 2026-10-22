@@ -143,10 +143,14 @@ async def main():
         await page.wait_for_timeout(140)
         hb = await page.evaluate("""([x, y]) => { const h = document.getElementById('forge-pro-hotbox');
           if (!h) return null;
-          const rows = [...h.querySelectorAll('.forge-pro-row')].map((r) => r.getBoundingClientRect());
-          return { vis: !h.hidden, c: h._center, cols: h.querySelectorAll('.forge-pro-col').length,
+          const vis = [...h.querySelectorAll('.forge-pro-row')].filter((r) => !r.hidden);
+          const rows = vis.map((r) => r.getBoundingClientRect());
+          const up = rows.filter((r) => r.bottom <= y + 2).map((r) => y - r.bottom);      // the rows above the middle
+          const dn = rows.filter((r) => r.top >= y - 2).map((r) => r.top - y);            // and below it
+          return { vis: !h.hidden, c: h._center,
+                   cols: vis.reduce((n, r) => n + r.querySelectorAll('.forge-pro-col').length, 0),
                    items: h.querySelectorAll('.forge-pro-item').length,
-                   gapUp: Math.round(y - rows[0].bottom), gapDown: Math.round(rows[1].top - y) }; }""", [cx, cy])
+                   gapUp: Math.round(Math.min.apply(null, up)), gapDown: Math.round(Math.min.apply(null, dn)) }; }""", [cx, cy])
         eb = await (await page.query_selector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-head')).bounding_box()
         await page.mouse.move(eb["x"] + eb["width"] / 2, eb["y"] + eb["height"] / 2)
         await page.wait_for_timeout(120)
@@ -156,8 +160,8 @@ async def main():
           return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
         await page.keyboard.up(" ")
         await page.wait_for_timeout(120)
-        check("Space opens the hotbox centred on the mouse (Recent + 13 menus, 80+ commands), rows within 30 px of it",
-              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] == 14 and hb["items"] >= 80
+        check("Space opens the hotbox centred on the mouse (panel menus, the main menus, the middle and the set's rows), rows within 30 px of it",
+              hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] >= 20 and hb["items"] >= 80
               and 0 <= hb["gapUp"] <= 30 and 0 <= hb["gapDown"] <= 30, hb)
         check("hovering a menu drops it right at its name, with the hotkeys on the right", bool(drop) and drop["n"] >= 9
               and abs(drop["dy"]) <= 4 and drop["keys"] >= 4, drop)
@@ -169,7 +173,9 @@ async def main():
         wh = await page.evaluate("""() => { const h = document.getElementById('forge-pro-wheel');
           return h ? { vis: !h.hidden, n: h.querySelectorAll('.forge-wheel-wedge').length } : null; }""")
         await page.keyboard.press("Escape")
-        check("the wheel is still there: Windows > Radial Menus (Recent + 13)", bool(wh) and wh["vis"] and wh["n"] == 14, wh)
+        # the wheel carries the showing menu set's menus (Recent + 7 for Forge), kept inside its ring
+        check("the wheel is still there: Windows > Radial Menus, the showing set's menus around it",
+              bool(wh) and wh["vis"] and 2 <= wh["n"] <= 12, wh)
         await page.keyboard.down(" ")
         await page.wait_for_timeout(300)
         await page.keyboard.up(" ")
@@ -479,7 +485,7 @@ async def main():
         await page.wait_for_timeout(220)                 # menus open when the mouse rests on them (hover intent, 2026-10-21)
         drop = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-list')].filter((l) => !l.hidden).map((l) => l.parentElement.dataset.menu)""")
         ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item.on')].map((b) => b.dataset.proId)""")
-        await page.click('#forge-pro-hotbox .forge-pro-item[data-pro-id="winCreate"]')
+        await page.click('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item[data-pro-id="winCreate"]')
         cr = await page.evaluate("!document.getElementById('forge-left').hidden")
         check("hovering a hotbox menu opens just that one; Windows ticks what is showing (Outliner, Channel Box)", drop == ["Windows"]
               and "winOutliner" in ticked and "winChannel" in ticked and "winCreate" not in ticked, [drop, ticked])
