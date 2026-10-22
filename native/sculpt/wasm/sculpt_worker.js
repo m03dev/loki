@@ -50,13 +50,13 @@ function buildAdjacency() {  // vertex one-rings: a moved vertex changes its nei
 function sendTopology(extra) {
   const T = E.tris(), live = [];
   for (let i = 0; i < T.length; i += 3) if (T[i] >= 0) live.push(T[i], T[i + 1], T[i + 2]);
-  const pos = E.positions().slice(), nrm = E.normals().slice(), idx = Uint32Array.from(live);
+  const pos = E.positions().slice(), nrm = E.normals().slice(), idx = Uint32Array.from(live), msk = E.mask().slice();
   topoSent = E.topologyVersion;
   lastTopoPost = performance.now();
   buildAdjacency();
   E.takeDirty();
-  postMessage(Object.assign({ t: "topology", pos, nrm, idx, polys: E.polygons(), levels: E.levelCount, level: E.level }, extra || {}),
-    [pos.buffer, nrm.buffer, idx.buffer]);
+  postMessage(Object.assign({ t: "topology", pos, nrm, idx, msk, polys: E.polygons(), levels: E.levelCount, level: E.level }, extra || {}),
+    [pos.buffer, nrm.buffer, idx.buffer, msk.buffer]);
 }
 
 let mark = null, list = [];
@@ -86,7 +86,10 @@ function flush(midStroke) {
     pos[i * 3] = P[v]; pos[i * 3 + 1] = P[v + 1]; pos[i * 3 + 2] = P[v + 2];
     nrm[i * 3] = N[v]; nrm[i * 3 + 1] = N[v + 1]; nrm[i * 3 + 2] = N[v + 2];
   }
-  postMessage({ t: "dirty", ids, pos, nrm, ms: dragMs }, [ids.buffer, pos.buffer, nrm.buffer]);
+  // the mask of the same vertices (0 free .. 1 frozen) - Forge draws it as a dark overlay
+  const M = E.mask(), msk = new Float32Array(ids.length);
+  for (let i = 0; i < ids.length; i++) msk[i] = M[ids[i]];
+  postMessage({ t: "dirty", ids, pos, nrm, msk, ms: dragMs }, [ids.buffer, pos.buffer, nrm.buffer, msk.buffer]);
   dragMs = 0;
 }
 
@@ -195,6 +198,13 @@ onmessage = (ev) => {
       }
       case "op": {
         const t0 = performance.now();
+        if (/^mask(Clear|Invert|Fill)$/.test(m.name)) {   // mask edits: no new mesh, just the mask back
+          E.maskOp({ maskClear: "clear", maskInvert: "invert", maskFill: "fill" }[m.name]);
+          const msk = E.mask().slice();
+          postMessage({ t: "mask", msk }, [msk.buffer]);
+          postMessage({ t: "done", name: m.name, ok: true, ms: performance.now() - t0, verts: E.vertexCount, levels: E.levelCount, level: E.level });
+          break;
+        }
         const ok = !!OPS[m.name](m.arg);
         if (ok) sendTopology({ op: m.name });
         postMessage({ t: "done", name: m.name, ok, ms: performance.now() - t0, verts: E.vertexCount, levels: E.levelCount, level: E.level });

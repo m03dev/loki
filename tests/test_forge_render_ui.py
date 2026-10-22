@@ -97,7 +97,7 @@ async def main():
             await browser.close()
             return
 
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_function("window.forge && forge.view && forge.view.tree", timeout=15000)
         await E("forgeAddPrimitive('cube')")
         await page.wait_for_timeout(150)

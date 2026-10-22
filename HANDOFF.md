@@ -206,6 +206,10 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 - **2026-10-21 14:40 (Claude): sculpt mode redone** (docs/FORGE_SCULPT_UI.md, forge_sculpt_ui.js): header with Done,
   sliders, brush strip, right-button brush wheel, every way out of sculpt mode. Cloud only (test_forge_sculpt_ui 25).
 
+- **2026-10-21 22:40 (Claude): Home tidied + sculpt masking** - ui_tidy.js (one place per button, no logo / "Loki" title,
+  word filters, resizable sidebar and preview), forge_sculpt_mask.js (mask paint / invert / clear / hide, C++ host-dirty fix),
+  brush hotkeys + reorder, a layout pass so nothing overlaps (test_ui_spacing). Cloud only.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

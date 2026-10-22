@@ -63,7 +63,7 @@ async def ui():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
         await E("['loki-forge-bake', 'loki-forge-workspace'].forEach((k) => localStorage.removeItem(k))")
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_function("window.forge && forge.view && forge.view.tree && document.getElementById('forge-workspace')", timeout=15000)
         # the high: a sphere; the low: a cube with automatic UVs, made after it (the edited one)
         await E("forgeProRun(forge.view, 'sphere')")

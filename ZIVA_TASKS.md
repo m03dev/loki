@@ -33,6 +33,22 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-21 22:40) - Home tidied, sculpt masking / hotkeys / reorder, no overlaps. Pull first.
+Owner 22:13 (screenshot of Home on the PC): icons repeated, the LOKI logo and the "Loki" title to go, nothing may overlap.
+- app/ui/ui_tidy.js + ui_tidy.css: sidebar top = New chat + search; foot = Files · Apps · Settings · More (More holds What can
+  LOKI do?, LOKI Studio, Check everything, the folder, the version, Quit); the sidebar's Forge button and the logo are hidden
+  (the Forge tab is the way in; tests now click #open-forge by script); Home's filters are words (All, Renders, Models,
+  Games, Sessions); Home's Chat / Studio buttons hidden; the sidebar resizes by its edge (% of the window, Ctrl/Cmd+B folds);
+  the Home preview takes the room the cards leave, or drag the line under it. Settings has a real cog now (it was a sun,
+  like the Render tab). test_home_projects 63, ui_fit 81, ui_smoke 10, test_ui_spacing 28 (new).
+- Sculpt: masking (forge_sculpt_mask.js + a C++ fix in brush.cpp, sculpt.wasm rebuilt), per-brush hotkeys, drag to reorder
+  favourites - docs/FORGE_SCULPT_UI.md. test_forge_sculpt_ui 34.
+- [ ] [pc] [mac] Real window: Home (sidebar foot, More menu, drag the sidebar edge), sculpt a mask on a dense sphere. Screenshot.
+- [ ] [either] test_usability fails 2 i18n checks on master: 16 new Forge phrases are missing from app/ui/i18n/en.json and the
+      7 translations (`python tools/i18n_tables.py --write-en`, then translate es/fr/de/ar/hi/zh/ja).
+- [ ] [either] This cloud box is slower tonight: test_forge_pro_ui / test_forge_dock_ui run ~55-60 s here (they were ~46 s)
+      - run them on the PC.
+
 ### From Claude (2026-10-21 14:40) - sculpt mode redone; you could not leave sculpt mode. Pull first.
 docs/FORGE_SCULPT_UI.md has it all (app/ui/forge_sculpt_ui.js): header (Done), Size / Strength sliders + sticky Invert /
 Smooth, the sliding brush strip (categories, search, favourites, 1-9), the right-button brush wheel, q / F8 / Esc / Done

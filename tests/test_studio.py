@@ -1026,7 +1026,7 @@ async def look():
         loki_tip = await page2.evaluate("() => { const t = document.querySelector('.icon-tip'); return t && !t.hidden ? t.textContent : ''; }")
         side = Path(shots) / "studio-button.png" if shots else TMP / "studio-button.png"
         await page2.screenshot(path=str(side), clip={"x": 0, "y": 640, "width": 560, "height": 180})
-        await page2.click("#open-studio")
+        await page2.evaluate("document.getElementById('open-studio').click()")
         await page2.wait_for_timeout(400)
         await browser.close()
         return errors, counts, tip, path, loki_tip, posts

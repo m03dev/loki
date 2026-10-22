@@ -68,7 +68,7 @@ async def ui():
         await page.goto("http://127.0.0.1:8894/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_function("window.forge && forge.view && forge.view.tree", timeout=15000)
         await E("forgeAddPrimitive('sphere')")
         await page.wait_for_timeout(200)

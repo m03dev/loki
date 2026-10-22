@@ -141,7 +141,7 @@ async def main():
               and rt["tris"] == rt["want"] and rt["obj"] == rt["want"], rt)
 
         # -------- open Forge, the Output panel
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_selector("#forge:not([hidden])", timeout=12000)
         await page.wait_for_function("document.querySelectorAll('#forge-output-body .forge-opt').length > 0", timeout=8000)
         n_opts = await page.evaluate("document.querySelectorAll('#forge-output-body .forge-opt').length")
@@ -329,7 +329,7 @@ async def main():
         # (the Forge window may already be closed by the earlier 900x600 section; the panel check below needs it)
         was_closed = await page.evaluate("document.getElementById('forge').hidden")
         if was_closed:
-            await page.click("#open-forge")
+            await page.evaluate("document.getElementById('open-forge').click()")
             await page.wait_for_selector("#forge:not([hidden])", timeout=12000)
         await page.evaluate("forgeAddPrimitive('cube')")
         await page.wait_for_function("forge.view && forge.view.poly && forge.view.poly.f.length > 0", timeout=15000)

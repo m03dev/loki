@@ -708,7 +708,7 @@ button.forge-out-title:hover { opacity: 1; }
 .fmy-stage .forge-modelbar { top: 102px; }
 .fmy-stage .forge-sculptbar { top: 54px; max-height: calc(100% - 110px); }
 .fmy-hud { position: absolute; inset: 46px 0 0 0; z-index: 3; pointer-events: none; }
-.fmy-polycount { position: absolute; left: 8px; top: 4px; border-collapse: collapse; color: #e9edf1; font: 600 10.5px/1.35 -apple-system, "Segoe UI", Arial, sans-serif;
+.fmy-polycount { position: absolute; left: 10px; top: 12px; border-collapse: collapse; color: #e9edf1; font: 600 10.5px/1.35 -apple-system, "Segoe UI", Arial, sans-serif;
   text-shadow: 0 0 2px rgba(0,0,0,.35); }
 .fmy-polycount th { text-align: left; font-weight: 600; padding: 0 22px 0 0; }
 .fmy-polycount td { text-align: right; min-width: 52px; padding: 0 0 0 10px; font-weight: 500; }
@@ -1293,7 +1293,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 #forge.fsc-on #fmy-hud { display: none !important; }   /* the poly count sat under the header; the header shows what matters while sculpting */
 .fsc-head, .fsc-side, .fsc-strip { position: absolute; z-index: 26; color: #e8ebef; font: 12px/1.3 var(--sans, system-ui, sans-serif);
   background: rgba(28, 30, 34, .82); border: 1px solid rgba(255, 255, 255, .08); box-shadow: 0 8px 26px rgba(0, 0, 0, .35); backdrop-filter: blur(10px); }
-.fsc-head { top: 54px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; border-radius: 999px;
+.fsc-head { top: 54px; left: 50%; display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; border-radius: 999px;
   max-width: calc(100% - 24px); white-space: nowrap; }
 .fsc-name { font-weight: 600; letter-spacing: .01em; min-width: 6.5em; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
 .fsc-sep { width: 1px; height: 18px; margin: 0 6px; background: rgba(255, 255, 255, .12); }
@@ -1309,7 +1309,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
   background: #e8ebef; color: #121418; font-weight: 600; cursor: pointer; }
 .fsc-done:hover { background: #fff; }
 /* the sliders on the left edge */
-.fsc-side { left: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; padding: 12px 8px; border-radius: 18px; }
+.fsc-side { left: 12px; top: 30%; display: flex; flex-direction: column; gap: 14px; padding: 12px 8px; border-radius: 18px; }
 .fsc-slider { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: ns-resize; user-select: none; }
 .fsc-track { position: relative; width: 8px; height: clamp(90px, 18vh, 170px); border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; }
 .fsc-fill { position: absolute; left: 0; right: 0; bottom: 0; background: #5b8db8; border-radius: 999px; }
@@ -1317,7 +1317,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .fsc-slabel { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; opacity: .6; }
 .fsc-sval { font-size: 11px; font-variant-numeric: tabular-nums; }
 /* the brush strip */
-.fsc-strip { left: 50%; bottom: 12px; transform: translateX(-50%); width: min(920px, calc(100% - 120px)); padding: 6px 6px 4px; border-radius: 16px; }
+.fsc-strip { left: 12px; bottom: 12px; width: min(920px, calc(100% - 24px)); padding: 6px 6px 4px; border-radius: 16px; }
 .fsc-striptop { display: flex; align-items: center; gap: 6px; padding: 0 6px 4px; }
 .fsc-chips { flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .fsc-chips::-webkit-scrollbar { display: none; }
@@ -1363,3 +1363,17 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 .fsc-sticky { width: 34px; height: 34px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
 .fsc-head.fsc-narrow { flex-wrap: wrap; justify-content: center; border-radius: 16px; row-gap: 2px; }
 .fsc-head.fsc-narrow .fsc-name, .fsc-head.fsc-narrow .fsc-chip-mode { display: none; }
+.fsc-hsep { width: 60%; height: 1px; margin: 2px auto; background: rgba(255, 255, 255, .12); }
+.fsc-hk { position: absolute; bottom: 16px; right: 5px; font-size: 8.5px; padding: 0 3px; border-radius: 3px; background: rgba(255,255,255,.14); }
+.fsc-tile.dragging { opacity: .4; }
+.fsc-tile.dropto { box-shadow: inset 3px 0 0 #6fb2ec; }
+.fsc-tmenu { position: fixed; z-index: 130; min-width: 190px; padding: 5px; display: flex; flex-direction: column; gap: 1px; border-radius: 12px;
+  background: rgba(28, 30, 34, .96); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 12px/1.3 var(--sans, system-ui, sans-serif); }
+.fsc-tmenu button { text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: #e8ebef; cursor: pointer; }
+.fsc-tmenu button:hover:not(:disabled) { background: rgba(255,255,255,.09); }
+.fsc-tmenu button:disabled { opacity: .35; cursor: default; }
+.fsc-keywait { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 140; padding: 12px 20px; border-radius: 14px;
+  background: rgba(28, 30, 34, .96); color: #fff; font: 600 14px var(--sans, system-ui, sans-serif); box-shadow: 0 14px 40px rgba(0,0,0,.6); }
+.fsc-sliders { display: flex; gap: 10px; justify-content: center; }
+.fsc-tools { display: grid; grid-template-columns: repeat(2, 34px); gap: 6px; justify-content: center; }
+.fsc-side { gap: 10px !important; }

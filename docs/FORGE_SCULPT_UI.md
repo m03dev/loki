@@ -28,6 +28,19 @@ level at the top), x symmetry X, l lazy mouse, b / m + drag size / strength, Ctr
   https://help.autodesk.com/cloudhelp/2026/ENU/Maya-Modeling/files/GUID-C53434C7-0A0D-4DF8-BB9A-BF60DE751987.htm
 - Look: three neutral greys, one accent, line icons, plain brush names, tooltips with the shortcut.
 
+## Added 2026-10-21 22:30 (owner 22:13: "add those sculpting features ... nothing should ever overlap")
+- **Masking**: the Mask toggle (or Ctrl+Shift+drag) paints the engine's mask; masked parts are drawn dark
+  (app/ui/forge_sculpt_mask.js: an overlay mesh sharing the sculpt mesh's buffers) and never move. Invert mask
+  (Ctrl+Shift+I), Clear mask (Shift+U), Hide masked / Show all (h) - on the left panel and in the right-button wheel.
+  C++ fix: mask dabs now report their vertices to the host (core/src/brush.cpp), the worker sends the mask with every
+  update (`msk`) and after a mask op (`t: "mask"`).
+- **Per-brush hotkeys**: right-click a brush > Set a hotkey (e.g. Shift+P); keys sculpt mode already uses are refused;
+  the key shows on the tile.
+- **Reorder favourites**: drag a tile onto another (Favourites tab), or right-click > Move left / right.
+- **Layout from the free room** (fscLayout): header under the viewport's toolbar and clear of the view cube, sliders
+  side by side between header and strip, strip right of the sliders and above any bottom bar - 12 px apart always.
+  tests/test_ui_spacing.py checks Home and sculpt mode at 1400x860, 1000x700, 1920x1080 and a 900x1500 vertical monitor.
+
 ## Open
-- Masking (the engine has masks; Forge has no mask display yet), hide / isolate parts, a brush-hotkey editor per brush,
-  reordering the strip by drag, a sub-ring in the wheel for whole categories, the More panel as a proper Tool Settings pane.
+- A hotkey editor listing every brush, a sub-ring in the wheel for whole categories, the More panel as a proper Tool
+  Settings pane, mask by cavity / by colour, isolate one part (needs separate parts in the engine).

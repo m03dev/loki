@@ -77,7 +77,7 @@ async def main():
         check("Spaces is out of the title bar",
               "spaces" not in tabs and "forge" in tabs and not await E("!!window.LokiSpaces"), tabs)
 
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_function("window.forge && forge.view && forge.view.tree", timeout=15000)
         await page.wait_for_timeout(300)
 

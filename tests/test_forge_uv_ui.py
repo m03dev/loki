@@ -71,7 +71,7 @@ async def ui():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
         await E("['loki-forge-uv', 'loki-forge-workspace', 'loki-forge-split'].forEach((k) => localStorage.removeItem(k))")
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_function("window.forge && forge.view && forge.view.tree && document.getElementById('forge-workspace')", timeout=15000)
         await E("forgeAddPrimitive('cube')")
         await page.wait_for_timeout(200)

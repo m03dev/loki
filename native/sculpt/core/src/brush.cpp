@@ -971,6 +971,10 @@ void BrushEngine::dabInstance(const Brush& b, const Dab& dIn, Instance& in) {
                 float w = b.falloff.eval(x) * s * (b.usePressure ? d.pressure : 1.f);
                 mesh_.mask[v] = clamp01(mesh_.mask[v] + (b.invert ? -w : w));
             }
+            // the host draws the mask: these vertices go back to it like moved ones (no position changed, so the
+            // normal / BVH path below - which records them otherwise - is skipped)
+            if (hostMark_.size() < mesh_.positions.size()) hostMark_.resize(mesh_.positions.size(), 0);
+            for (int i = 0; i < nv; ++i) { int v = verts_[i]; if (!hostMark_[v]) { hostMark_[v] = 1; hostDirty_.push_back(v); } }
             return;
         case Kernel::Paint:
             for (int i = 0; i < nv; ++i) {

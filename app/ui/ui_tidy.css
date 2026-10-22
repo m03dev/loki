@@ -1,0 +1,38 @@
+/* Home tidied up (ui_tidy.js, owner 2026-10-21 22:13) - one place per button, everything with room around it */
+.tidy-hidden { display: none !important; }
+/* the sidebar: its width is a % of the window, it folds away (Ctrl/Cmd+B) */
+.shell { grid-template-columns: clamp(170px, var(--tidy-side, 19vw), 46vw) minmax(0, 1fr) !important; }
+.shell.tidy-folded { grid-template-columns: 0 minmax(0, 1fr) !important; }
+.shell.tidy-folded > .sidebar { overflow: hidden; padding: 0 !important; border: 0 !important; }
+.sidebar.tidy { position: relative; gap: 12px; padding-top: 14px; }
+.tidy-side-edge { position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+.tidy-side-edge:hover, body.tidy-dragging .tidy-side-edge { background: rgba(120, 175, 220, .35); }
+body.tidy-dragging, body.tidy-dragging * { user-select: none !important; }
+.tidy-top { display: flex; align-items: stretch; gap: 8px; }
+.tidy-top > #new-chat { flex: 1 1 auto; min-width: 0; }
+.tidy-top > #qol-search-btn { flex: 0 0 auto; }
+/* the foot: four icons with even room between them, then the More menu */
+.sidebar.tidy .sidebar-foot { gap: 0; }
+.sidebar.tidy .sidebar-foot .foot-row { justify-content: space-around; gap: 8px; padding-top: 4px; }
+.tidy-menu { position: fixed; z-index: 120; min-width: 200px; max-width: 320px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--panel, #1d1f24); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
+.tidy-menu[hidden] { display: none; }
+.tidy-menu .tidy-item { display: flex !important; align-items: center; gap: 10px; width: 100%; padding: 7px 10px !important; border-radius: 8px;
+  background: transparent; border: 0; color: var(--text); text-align: left; font-size: 13px; cursor: pointer; text-decoration: none; }
+.tidy-menu .tidy-item:hover { background: rgba(255, 255, 255, .07); }
+.tidy-menu .tidy-item svg { width: 16px; height: 16px; flex: none; }
+.tidy-menu #quit-loki { margin-top: 4px; border-top: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 0 0 8px 8px; }
+.tidy-info { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.tidy-info .workspace { font-size: 11px; color: var(--muted); white-space: normal; word-break: break-all; }
+/* Home: word chips for the filters, room between every row */
+.home-kinds { gap: 6px !important; flex-wrap: wrap; }
+.home-kind.tidy-chip { width: auto !important; min-width: 0; height: 28px; padding: 0 12px !important; border-radius: 999px; font-size: 12.5px; }
+.home-kind.tidy-chip svg { display: none; }
+.home-hero-pic { max-height: var(--tidy-hero, 46vh) !important; }
+.tidy-hero-edge { height: 10px; margin: 2px 0 6px; cursor: row-resize; border-radius: 6px; position: relative; }
+.tidy-hero-edge::after { content: ""; position: absolute; left: 50%; top: 4px; width: 46px; height: 2px; margin-left: -23px; border-radius: 2px; background: rgba(255,255,255,.14); }
+.tidy-hero-edge:hover::after, body.tidy-dragging .tidy-hero-edge::after { background: rgba(120, 175, 220, .7); }
+@media (max-width: 760px) { .shell.tidy-folded, .shell { grid-template-columns: minmax(0, 1fr) !important; } }
+.tidy-menu .tidy-item { justify-content: flex-start !important; }
+.tidy-menu .tidy-item .tidy-lbl { flex: 1 1 auto; }
+.main.has-hub .home-hub { padding-bottom: 16px !important; }

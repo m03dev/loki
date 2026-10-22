@@ -78,7 +78,7 @@ async def main():
         await page.route("http://127.0.0.1:8893/**", route)
         await page.goto("http://127.0.0.1:8893/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
-        await page.click("#open-forge")
+        await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
         await page.evaluate("forgeAddPrimitive('cube'); forgeModelMode(false)")
         await page.wait_for_function("forge.view && forge.view.sm && forge.view.tree && forge.view.tree.api", timeout=10000)

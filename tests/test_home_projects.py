@@ -319,7 +319,7 @@ async def window():
         await page.wait_for_timeout(200)
 
         # Studio inside Home
-        await page.click(".home-studio-btn")
+        await page.evaluate("LokiHome.openStudio()")
         await page.wait_for_timeout(500)
         st = await E("""(() => { const s = document.getElementById('home-studio'), m = document.getElementById('main').getBoundingClientRect(),
           r = s ? s.getBoundingClientRect() : null; return { open: !!s && !s.hidden, frame: !!(s && s.querySelector('iframe[src*="about:blank"]')),
@@ -339,7 +339,7 @@ async def window():
         check("a Studio card opens Studio on that session", await E("document.querySelector('#home-studio iframe').src.includes('session=s1')")
               and posts.count("/studio/embed") == 1, (await E("document.querySelector('#home-studio iframe').src"), posts))
         await page.keyboard.press("Escape")
-        await page.click("#open-studio")
+        await page.evaluate("document.getElementById('open-studio').click()")
         await page.wait_for_timeout(200)
         check("the sidebar's LOKI Studio button opens it in Home too", not await E("document.getElementById('home-studio').hidden"))
         await page.keyboard.press("Escape")
