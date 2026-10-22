@@ -346,6 +346,10 @@ const LokiRenderStudio = (() => {
   async function showPreview() {
     if (S.node) return;   // the Nodes view owns the stage
     const img = $("rs-img"), cv = $("rs-canvas"), vid = $("rs-video"), slider = $("rs-frame"), empty = $("rs-empty");
+    // Small: show engine connection status
+    let engStatus = " idle";
+    try { const r = await call("/render/test", { url: $("rs-url").value.trim() }); engStatus = r.ok ? " online" : " offline"; } catch(e) { engStatus = " error"; }
+    $("rs-info").textContent += "  |  Engine" + engStatus;
     img.hidden = cv.hidden = vid.hidden = true; empty.hidden = true;
     const k = S.previewKind;
     if (S.passes && S.passes.frames.length && (k !== "start" || S.startImage)) {   // fresh passes in memory
