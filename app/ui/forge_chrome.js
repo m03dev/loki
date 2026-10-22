@@ -298,7 +298,7 @@ const FMY_MAIN_BAR = ["File", "Edit", "Create", "Select", "Modify", "Display", "
 // hotbox's rows show, from one list (FORGE_PRO_SETS)
 function fmyBarMenus() {
   const names = (typeof FORGE_PRO_SETS !== "undefined" && typeof forgeMenuSet === "function")
-    ? ((FORGE_PRO_SETS[forgeMenuSet()] || FORGE_PRO_SETS.forge).menus || []) : [];
+    ? ((FORGE_PRO_SETS[forgeMenuSet()] || FORGE_PRO_SETS.modeling).menus || []) : [];
   return FMY_MAIN_BAR.concat(names, ["Help"]);
 }
 const FMY_ADD = {
@@ -311,7 +311,7 @@ const FMY_ADD = {
     { note: "Hold the right button: marking menus (Shift / Ctrl for more)" },
     { note: "Option / Alt (or Command) + drag: tumble / track / dolly" },
     { note: "Hold x / c / v while moving: snap to grid / edge / point" },
-    { note: "Sculpting: Ctrl+Shift+drag masks (Ctrl/Cmd+I inverts, Shift+U clears); Page Up / Down the levels" },
+    { note: "Sculpting: Ctrl+Shift+drag masks (Ctrl/Cmd+Shift+I inverts, Shift+U clears); Page Up / Down the levels" },
     { note: "Type a command in the command line (polyCube, move 0 1 0 ...)" }]]],
 };
 const FMY_MENUS = () => {

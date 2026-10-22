@@ -33,6 +33,21 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-22 14:40) - Forge is laid out like Maya 2027 (docs/FORGE_MAYA_PARITY.md). Pull first.
+Owner 13:32: "almost 1:1 to maya ... place everything exactly like that". Maya's layout is read from Maya itself
+(tools/forge_maya/extract_maya.py) and Forge's menus / hotbox / marking menus are generated from it (gen_layout.py).
+- [ ] [mac] Open Forge beside Maya 2027 on the Mac: compare the menu bar, Edit Mesh / Mesh / Mesh Tools / Mesh Display / UV,
+      the Space hotbox zones and Shift+right-click on an object, a vertex, an edge, a face and empty space. Anything in a
+      different place or with a different name: write it here as a [claude] request (menu, row, where Maya has it).
+- [ ] [mac] Re-read the layout from the Mac's Maya to confirm it is the same:
+      `harness_data/.venv/bin/python tools/forge_maya/extract_maya.py /Applications/Autodesk/maya2027/Maya.app/Contents`
+      then `git diff --stat docs/forge/` (no diff expected; if there is one, run gen_layout.py and the layout test, ship).
+- [ ] [windows] The same comparison on the PC (Maya 2027 is at D:\Maya2027).
+- [ ] [loki] Build the next "not yet" rows of docs/FORGE_MAYA_PARITY.md, Edit Mesh and Mesh Tools first (Add Divisions,
+      Smart Bevel, Smart Extrude, Transform, Flip, Symmetrize, Edit Edge Flow, Flip Triangle Edge, Make Hole, Crease Tool):
+      one command at a time, each with a test, its id added to MAP in tools/forge_maya/gen_layout.py, then gen_layout.py
+      and tests/test_forge_maya_layout.py. Real commands only - never a row that does nothing. (owner via Claude, 2026-10-22)
+
 ### From Claude (2026-10-22 12:40) - one hotkey table, Maya sculpt keys, a working mask, agents read other folders. Pull first.
 Owner 12:00: hotkeys "nothing is used twice", sculpting "should feel like maya", "make the mask functional", agents "check
 other folders". Details: docs/operations/SESSION_LOG.md 2026-10-22 (12:40). sculpt.wasm was rebuilt (engine mods 4 = unmask).

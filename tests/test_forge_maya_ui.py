@@ -150,10 +150,10 @@ async def main():
                   and up[2]["menus"] == ["Recent Commands", "Menu Set", "Hotbox Controls"] and up[2]["mid"]
                   and up[0]["top"] < up[1]["top"] < up[2]["top"], up)
             check("the menu-set button names the set that is showing",
-                  await E("document.querySelector('.forge-pro-sethead').textContent") in ("Forge", "Modeling", "Sculpting", "Animation", "Rendering"))
-            check("the rows under the middle are the showing set's menus",
-                  [r["menus"] for r in down] == [["Mesh", "Edit Mesh", "Mesh Tools", "UV"], ["Mesh Display", "Snap", "Symmetry", "Sculpt"], ["Animation"]], down)
-            check("only one set's rows are up at a time", len(down) == 3 and all(not r["hidden"] for r in down))
+                  await E("document.querySelector('.forge-pro-sethead').textContent") in ("Modeling", "Sculpting", "Animation", "Rendering"))
+            check("the rows under the middle are the showing set's menus - Maya's Modeling set, in Maya's order",
+                  [r["menus"] for r in down] == [["Mesh", "Edit Mesh", "Mesh Tools", "Mesh Display"], ["UV"]], down)
+            check("only one set's rows are up at a time", len(down) == 2 and all(not r["hidden"] for r in down))
 
         # the ladder is tidy: no two rows overlap, and the lot fits the viewport
         geom = await E("""() => { const h = document.getElementById('forge-pro-hotbox');
@@ -164,7 +164,7 @@ async def main():
           const box = h.querySelector('.forge-pro-hbbox').getBoundingClientRect();
           return { n: rs.length, overlap, inside: (rs[0].top >= 0 && rs[rs.length - 1].bottom <= innerHeight) }; }""")
         check("the hotbox's rows stack without overlapping and stay on screen",
-              geom["n"] >= 6 and geom["overlap"] == 0 and geom["inside"], geom)
+              geom["n"] >= 5 and geom["overlap"] == 0 and geom["inside"], geom)
 
         # switching the menu set
         await E("window.forgeMenuSet('modeling')")
@@ -173,10 +173,10 @@ async def main():
           .filter((r) => !r.hidden).map((r) => [...r.querySelectorAll('.forge-pro-col')].map((c) => c.dataset.menu))""")
         head2 = await E("document.querySelector('.forge-pro-sethead').textContent")
         check("switching the menu set shows that set's menus only",
-              head2 == "Modeling" and down2 == [["Mesh", "Edit Mesh", "Mesh Tools", "UV"], ["Mesh Display", "Snap", "Symmetry"]], [head2, down2])
+              head2 == "Modeling" and down2 == [["Mesh", "Edit Mesh", "Mesh Tools", "Mesh Display"], ["UV"]], [head2, down2])
         check("the panel and main menus stay where they are when the set changes",
               await E("document.querySelectorAll('#forge-pro-hotbox .forge-pro-row.up').length") == 3)
-        await E("window.forgeMenuSet('forge')")
+        await E("window.forgeMenuSet('modeling')")
 
         # ---- the WINDOW's menu bar is built from the same catalogue, so the two can never drift apart
         bar = await E("""() => { const cat = FORGE_PRO_MENUS, out = [];
@@ -193,9 +193,8 @@ async def main():
           }
           return out; }""")
         names = [m["name"] for m in bar]
-        check("the window menu bar carries the main menus and the modelling ones",
-              names[:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
-              and all(n in names for n in ("Edit Mesh", "Mesh Tools", "Snap", "Symmetry", "Sculpt", "Animation", "Help")), names)
+        check("the window menu bar is Maya 2027's Modeling bar: File .. Windows, Mesh, Edit Mesh, Mesh Tools, Mesh Display, UV, Help",
+              names == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh", "Edit Mesh", "Mesh Tools", "Mesh Display", "UV", "Help"], names)
         shared = [m for m in bar if m["want"]]
         check("every command the catalogue lists is in the matching window menu, in the same order (no drift)",
               shared and all(m["ids"][:len(m["want"])] == m["want"] for m in shared),
@@ -205,17 +204,17 @@ async def main():
 
         # ---- the status line's menu set drives the window's menu bar (one list behind both)
         opts = await E("[...document.getElementById('fmy-menuset').options].map((o) => o.value)")
-        check("the status line offers the menu sets", opts == ["forge", "modeling", "sculpting", "animation", "rendering"], opts)
+        check("the status line offers the menu sets (Maya's Modeling / Animation / Rendering, and Sculpting)", opts == ["modeling", "sculpting", "animation", "rendering"], opts)
         await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'animation'; s.dispatchEvent(new Event('change')); }")
         await page.wait_for_timeout(250)
         anim = await E("[...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.textContent)")
-        check("choosing Animation puts that set's menu in the bar (and takes Modeling's away)",
-              "Animation" in anim and "Edit Mesh" not in anim and "File" in anim and "Help" in anim, anim)
+        check("choosing Animation puts Maya's Key and Playback menus in the bar (and takes Modeling's away)",
+              "Key" in anim and "Playback" in anim and "Edit Mesh" not in anim and "File" in anim and "Help" in anim, anim)
         await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'modeling'; s.dispatchEvent(new Event('change')); }")
         await page.wait_for_timeout(250)
         mod = await E("[...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.textContent)")
         check("...and choosing Modeling brings them back", "Edit Mesh" in mod and "UV" in mod and "Animation" not in mod, mod)
-        await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'forge'; s.dispatchEvent(new Event('change')); }")
+        await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'modeling'; s.dispatchEvent(new Event('change')); }")
         await page.wait_for_timeout(200)
 
         # ---- the heads-up poly count reads like a modeler's: two columns (the scene, the selection)
@@ -244,43 +243,35 @@ async def main():
         menu = await E("""() => { const v = forge.view, api = v.tree.api; api.select(1);
           const read = () => { const h = document.getElementById('forge-pro-marking');
             const rows = [...h.querySelectorAll('.forge-pro-litem')];
-            return { hub: h.querySelector('.forge-pro-hub').textContent,
-                     wedges: [...h.querySelectorAll('.forge-pro-wedge')].map((b) => b.dataset.proId),
-                     rows: rows.map((b) => ({ id: b.dataset.proId || null, sub: b.dataset.proSub || null, back: !!b.dataset.proBack,
-                                              tick: (b.querySelector('.forge-pro-tick') || {}).textContent || '' })) }; };
+            const ring = {};
+            for (const b of h.querySelectorAll('.forge-pro-wedge')) ring[b.dataset.pos] = b.dataset.proId || ('>' + b.dataset.proSub);
+            return { hub: h.querySelector('.forge-pro-hub').textContent, ring,
+                     labels: Object.fromEntries([...h.querySelectorAll('.forge-pro-wedge')].map((b) => [b.dataset.pos, b.textContent])),
+                     rows: rows.map((b) => b.dataset.proId || null) }; };
           const out = {};
-          // the model: the mesh tools, with two switches in the list
           forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, node: api.node(1), key: '', ctrl: false }));
           out.tools = read();
-          if (v.edit) v.edit.prop = true;                       // soft selection on: its row must tick
-          forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, node: api.node(1), key: '', ctrl: false }));
-          out.toolsOn = read();
-          if (v.edit) v.edit.prop = false;
-          // nothing under it: the Create ring, whose list carries submenus
+          const sub = document.querySelector('#forge-pro-marking .forge-pro-wsub[data-pos="SE"]');
+          if (sub) sub.click();
+          out.sub = read();
           forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, key: '', ctrl: false }));
           out.create = read();
-          const sub = [...document.querySelectorAll('#forge-pro-marking .forge-pro-litem')].find((b) => b.dataset.proSub);
-          if (sub) sub.click();
-          out.deep = read();
-          const back = [...document.querySelectorAll('#forge-pro-marking .forge-pro-litem')].find((b) => b.dataset.proBack);
-          if (back) back.click();
-          out.back = read();
           forgeProMarkHide();
           return out; }""")
         tools = menu["tools"]
-        check("Shift + right button on the model is that context's own menu (the mesh tools, with its ring)",
-              tools["hub"] == "Mesh tools" and "extrude" in tools["wedges"] and "softSel" in [r["id"] for r in tools["rows"]], tools)
-        check("...and a switch in its list reads as a switch: no tick when off, a tick when on",
-              all(r["tick"] == "" for r in tools["rows"] if r["id"] in ("softSel", "snapGrid"))
-              and any(r["tick"] == "\u2713" for r in menu["toolsOn"]["rows"] if r["id"] == "softSel"), [tools["rows"], menu["toolsOn"]["rows"]])
+        check("Shift + right button on an object is Maya's object marking menu, every wedge at Maya's place",
+              tools["hub"] == "Mesh tools" and tools["ring"] == {"S": "extrude", "SW": "insertLoopTool", "NE": "fillHole", "N": "targetWeld",
+                                                                  "W": "multiCut", "NW": "sculpt", "SE": ">Soften/Harden Edges"}, tools)
+        check("...with Maya's labels (Insert Edge Loop Tool, Target Weld Tool ...)",
+              tools["labels"].get("SW") == "Insert Edge Loop Tool" and tools["labels"].get("N") == "Target Weld Tool", tools["labels"])
+        check("...and its list in Maya's order (Offset Edge Loop, Smooth ... Combine)",
+              tools["rows"][:2] == ["offsetEdgeLoop", "smooth"] and "combine" in tools["rows"] and "separate" in tools["rows"], tools["rows"])
+        check("a sub-menu wedge (Soften/Harden Edges) opens its own marking menu at Maya's places",
+              menu["sub"]["ring"] == {"S": "softHardDisplay", "SE": "hardEdge", "E": "softHard", "NE": "softEdge"}, menu["sub"])
         cr = menu["create"]
-        check("Shift + right button on nothing is the Create ring, and its list carries submenus",
-              cr["hub"] == "Create" and "cube" in cr["wedges"] and sum(1 for r in cr["rows"] if r["sub"]) >= 2, cr)
-        check("a submenu row opens the next level, and a Back row brings the first list back",
-              any(r["back"] for r in menu["deep"]["rows"])
-              and any(r["id"] in ("sphere", "cube", "cylinder") for r in menu["deep"]["rows"])
-              and not any(r["back"] for r in menu["back"]["rows"])
-              and sum(1 for r in menu["back"]["rows"] if r["sub"]) >= 2, menu["deep"]["rows"])
+        check("Shift + right button on nothing is Maya's Create ring (Sphere E, Torus SE, Cube S, Cone SW, Cylinder W, Plane NW)",
+              cr["hub"] == "Create" and cr["ring"] == {"E": "sphere", "SE": "torus", "S": "cube", "SW": "cone", "W": "cylinder", "NW": "plane"}
+              and "quadDraw" in cr["rows"], cr)
 
         check("no script errors", not errors, errors[:5])
         await browser.close()

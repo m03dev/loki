@@ -178,7 +178,7 @@ function fscBuild() {
   const mpaint = sticky("mask", "Mask", "paint a mask: masked parts never move (or hold Ctrl+Shift and drag). With Mask on, Ctrl+drag paints the mask away", '<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><circle cx="9.5" cy="11" r="1.2"/><circle cx="14.5" cy="11" r="1.2"/>');
   const mbtn = (icon, label, what, op) => { const b = btn(icon, label, what, () => fscSay(ForgeMask.op(op)), "fsc-sticky fsc-maskbtn"); b.dataset.op = op; return b; };
   tools.append(mpaint,
-    mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M8 8l8 8"/>', "Invert mask", "masked becomes free and free becomes masked (Ctrl/Cmd+I)", "maskInvert"),
+    mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M8 8l8 8"/>', "Invert mask", "masked becomes free and free becomes masked (Ctrl/Cmd+Shift+I while sculpting, as in the pro tool)", "maskInvert"),
     mbtn('<path d="M5 9c2-3 12-3 14 0v3c0 4-3.5 7-7 7s-7-3-7-7z"/><path d="M9 12h6"/>', "Clear mask", "nothing masked (Shift+U)", "maskClear"),
     mbtn('<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><path d="M4 20L20 4"/>', "Hide masked", "hide the masked parts / show everything again (Alt/Option+Shift+H)", "maskHideToggle"));
   tools.lastChild.dataset.maskState = "hidden";
@@ -498,8 +498,19 @@ function fscShow() {
   if (on) { fscBuild(); fscFill(); fscSync(); }
   else fscWheelClose();
 }
-// the mode can change from anywhere (menu set, the command, a tool): follow it
-setInterval(() => { const v = fscView(), on = !!(v && v.mode === "sculpt"), f = document.getElementById("forge"); if (f && f.classList.contains("fsc-on") !== on) fscShow(); else if (on) fscSync(); }, 300);
+// the mode can change from anywhere (menu set, the command, a tool): follow it at once - the view's setMode is hooked
+// (a layout saved straight after leaving sculpt mode used to land on the Sculpting workspace); the poll is the fallback
+function fscHookMode(v) {
+  if (!v || v._fscHooked || typeof v.setMode !== "function") return;
+  const orig = v.setMode;
+  v.setMode = function () { const r = orig.apply(this, arguments); fscShow(); return r; };
+  v._fscHooked = true;
+}
+setInterval(() => {
+  const v = fscView(), on = !!(v && v.mode === "sculpt"), f = document.getElementById("forge");
+  fscHookMode(v);
+  if (f && f.classList.contains("fsc-on") !== on) fscShow(); else if (on) fscSync();
+}, 300);
 
 // ------------------------------------------------------------------------------------------ the sculpt wheel (right button)
 function fscWheelOpen(x, y) {

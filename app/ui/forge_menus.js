@@ -216,7 +216,7 @@ function forgeMenusRows(list, out) {
 function forgeMenusItems(t) {
   if (t.source === "quick") {
     const q = forgeMenusQuick();
-    return FORGE_COMPASS_ORDER.map((k) => q.ring[k]).filter(Boolean).concat(q.list || []).map((id) => [id]);
+    return FORGE_COMPASS_ORDER.map((k) => q.ring[k]).filter((x) => typeof x === "string").concat(q.list || []).map((id) => [id]);
   }
   if (t.source === "bar" && typeof FMY_MENUS === "function") {
     const m = FMY_MENUS().find((x) => x[0] === t.title);
@@ -398,7 +398,7 @@ function forgeMenusSettings() {
     ring.textContent = ""; list.textContent = "";
     for (const k of FORGE_COMPASS_ORDER) {
       const cell = document.createElement("label"); cell.className = "fmenu-slot fmenu-" + k.toLowerCase();
-      const s = cmdSelect(m.ring[k]); s.dataset.slot = k;
+      const s = cmdSelect(typeof m.ring[k] === "string" ? m.ring[k] : ""); s.dataset.slot = k;   // a sub-menu wedge reads as empty here
       s.addEventListener("change", () => { const mm = forgeMenusGet(pick.value); if (s.value) mm.ring[k] = s.value; else delete mm.ring[k]; forgeMenusPut(pick.value, mm); });
       cell.append(Object.assign(document.createElement("span"), { textContent: k }), s);
       ring.append(cell);

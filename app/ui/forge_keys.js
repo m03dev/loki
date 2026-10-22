@@ -36,6 +36,7 @@ const FORGE_KEY_DEFAULTS = [
   ["ctrl+space", "hideUI"],
   // select
   ["ctrl+shift+a", "selectAll"], ["alt+d", "selectNone"], ["ctrl+shift+i", "invert"], [">", "grow"], ["<", "shrink"],
+  ["alt+f12", "uvShell"],
   ["f8", "objComp"], ["f9", "vertex"], ["f10", "edge"], ["f11", "face"],
   ["ctrl+f9", "vertex"], ["ctrl+f10", "edge"], ["ctrl+f11", "face"], ["f12", "uv"],
   ["arrowup", "@pickUp"], ["arrowdown", "@pickDown"], ["arrowleft", "@pickLeft"], ["arrowright", "@pickRight"],
@@ -45,6 +46,7 @@ const FORGE_KEY_DEFAULTS = [
   // pivots and snapping (held)
   ["d", "@pivotHold"], ["insert", "@pivotToggle"], ["home", "pivotEdit"],
   ["x", "@snapGrid"], ["c", "@snapEdge"], ["v", "@snapPoint"], ["j", "@snapStep"],
+  ["shift+x", "@snapGrid"], ["shift+c", "@snapEdge"], ["shift+v", "@snapPoint"],
   ["-", "__smaller"], ["=", "__bigger"], ["+", "__bigger"],
   ["alt+arrowup", "@nudgeUp"], ["alt+arrowdown", "@nudgeDown"], ["alt+arrowleft", "@nudgeLeft"], ["alt+arrowright", "@nudgeRight"],
   // windows
@@ -53,15 +55,23 @@ const FORGE_KEY_DEFAULTS = [
   ["s", "setKey"], ["alt+v", "playPause"], ["alt+shift+v", "playPause"],
   // modelling
   ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteEdgeVert"], ["ctrl+delete", "deleteEdgeVert"],
+  ["ctrl+shift+x", "multiCut"], ["ctrl+shift+q", "quadDraw"], ["ctrl+alt+arrowleft", "spinEdgeBack"], ["ctrl+alt+arrowright", "spinEdge"],
+  // file and the menu sets (F2 Modeling, F4 Animation, F6 Rendering - Maya's keys)
+  ["ctrl+s", "save"], ["f2", "menuSetModeling"], ["f4", "menuSetAnimation"], ["f6", "menuSetRendering"],
   // sculpting (owner 2026-10-22: "sculpting hotkeys ... should feel like maya", "nothing is used twice") - b / m held
   // like the pro sculpt tools; the rest on keys the pro default set leaves free, so no key means two things
   ["b", "@brushSize"], ["m", "@brushStrength"],
-  ["pageup", "sculptLevelUp"], ["pagedown", "sculptLevelDown"], ["shift+x", "sculptSymX"], ["l", "sculptLazy"],
-  ["ctrl+i", "maskInvert"], ["shift+u", "maskClear"], ["alt+shift+h", "maskHideToggle"],
+  ["pageup", "sculptLevelUp"], ["pagedown", "sculptLevelDown"], ["l", "sculptLazy"],
+  ["shift+u", "maskClear"], ["alt+shift+h", "maskHideToggle"],
   ["ctrl+shift+1", "sculptFav1"], ["ctrl+shift+2", "sculptFav2"], ["ctrl+shift+3", "sculptFav3"], ["ctrl+shift+4", "sculptFav4"],
   ["ctrl+shift+5", "sculptFav5"], ["ctrl+shift+6", "sculptFav6"], ["ctrl+shift+7", "sculptFav7"], ["ctrl+shift+8", "sculptFav8"],
   ["ctrl+shift+9", "sculptFav9"],
 ];
+
+// Maya's sculpt-tool context (hotkeySetup.mel's sculptMeshCache* keys): while sculpting these chords mean the sculpt
+// command instead - the same "invert" idea (Invert Selection -> Invert Mask), as Maya does it. Only keys that have no
+// use while sculpting are taken over; tests/test_forge_hotkeys_unique.py checks that.
+const FORGE_KEY_SCULPT = { "ctrl+shift+i": "maskInvert" };
 
 // special actions: a name for the editor (the rest come from FORGE_PRO_CMDS)
 const FORGE_KEY_SPECIAL = {
@@ -96,6 +106,7 @@ const FORGE_KEY_GROUPS = [
   ["Sculpting", ["@brushSize", "@brushStrength", "sculptExit", "sculptLevelUp", "sculptLevelDown", "sculptSymX", "sculptLazy",
     "maskInvert", "maskClear", "maskFill", "maskHideToggle", "maskHide", "maskShow", "sculptWheel",
     "sculptFav1", "sculptFav2", "sculptFav3", "sculptFav4", "sculptFav5", "sculptFav6", "sculptFav7", "sculptFav8", "sculptFav9", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "matcapNext", "matcapPrev"]],
+  ["Menu Sets", ["menuSetModeling", "menuSetAnimation", "menuSetRendering", "menuSetSculpting"]],
   ["Windows", ["channelBox", "outliner", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "wheel", "hotkeyEditor"]],
 ];
 
@@ -162,7 +173,12 @@ function forgeKeyMap() {
   forgeKeysCache = st.active === FORGE_KEYS_DEFAULT_SET ? forgeKeysDefaultMap() : Object.assign({}, st.sets[st.active]);
   return forgeKeysCache;
 }
-function forgeKeyAction(chord) { return chord ? forgeKeyMap()[chord] || null : null; }
+function forgeKeyAction(chord) {
+  if (!chord) return null;
+  const v = typeof forge !== "undefined" && forge.view;
+  if (v && v.mode === "sculpt" && FORGE_KEY_SCULPT[chord]) return FORGE_KEY_SCULPT[chord];
+  return forgeKeyMap()[chord] || null;
+}
 /** Every chord bound to an action in the active set. */
 function forgeKeysFor(action) {
   const map = forgeKeyMap();

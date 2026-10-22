@@ -487,7 +487,8 @@ async def main():
         # Windows > Panels flies out beside its row (menus nest, owner 2026-10-22)
         await page.click('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-subitem[data-pro-sub="Panels"]')
         await page.wait_for_timeout(80)
-        ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-fly[data-sub="Panels"] .forge-pro-item.on')].map((b) => b.dataset.proId)""")
+        # Maya's Windows menu: the Outliner and the Channel Box are its own rows (General Editors), ticked when showing
+        ticked = await page.evaluate("""() => [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item.on, #forge-pro-hotbox .forge-pro-fly .forge-pro-item.on')].map((b) => b.dataset.proId)""")
         await page.click('#forge-pro-hotbox .forge-pro-fly[data-sub="Panels"] .forge-pro-item[data-pro-id="winCreate"]')
         cr = await page.evaluate("!document.getElementById('forge-left').hidden")
         check("hovering a hotbox menu opens just that one; Windows ticks what is showing (Outliner, Channel Box)", drop == ["Windows"]

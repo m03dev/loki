@@ -4,6 +4,25 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-22 (14:40) - Forge laid out like Maya 2027, from Maya's own files (Claude, cloud + the owner's PC)
+
+- Owner 13:32 / 13:51: "D:\bk_maya-main ... i want this exactly in loki forge ... almost 1:1 to maya ... plan it out and
+  record it right, clean up git"; "go inside this code and figure it out ... look at maya". bk_maya is BlendKit's
+  asset-library plug-in for Maya (GPL-3.0: an asset bar + drag-and-drop placement); it has no Maya layout in it. The layout
+  came from Maya 2027 itself (D:\Maya2027 on the PC): its startup/others scripts and MayaStrings, read as reference.
+- New: tools/forge_maya/extract_maya.py (Maya install -> docs/forge/maya2027_layout.json: 18 menus, hotbox zones, marking
+  menus with compass positions, 510 hotkeys), tools/forge_maya/gen_layout.py (Maya->Forge MAP -> app/ui/forge_maya_layout.js
+  + docs/FORGE_MAYA_PARITY.md), tests/test_forge_maya_layout.py (18). forge_pro.js / forge_chrome.js / forge_menus.js read
+  FORGE_MAYA; marking menus draw Maya's labels and sub-menu wedges; forge_keys.js has Maya's keys + a sculpt context.
+  Leaving sculpt mode switches the workspace at once (setMode hooked; a saved layout landed on Sculpting before).
+- Cleanup: 14 unreferenced screenshots of retired UI (LOKI World, the old chat) out of docs/operations/screens; .claude/
+  ignored. Git: one branch (master), no stale worktrees or stashes.
+- Checked (cloud, each < 1 min): forge_maya_layout 18, hotkeys_unique 42, forge_maya_ui 30, forge_pro_ui 100, menus 16,
+  sculpt_ui 30, sculpt_more 20, uv 25, mcut 22, anim 15, dock 22, ui_spacing 28, forge_ui 37, undo_keys 20, edit 21,
+  cleanup 23, snap_pivot 6, channel 6, layers 11, options 17, retopo 13, symmetry 6. Not seen on the Mac or the PC yet.
+
+---
+
 ## 2026-10-22 (12:40) - Agents read other folders; one hotkey table (nothing used twice); Maya-style sculpt keys; a working mask (Claude, cloud)
 
 - Owner 12:00: "my agents should have the tools to check other folders ... the hotkeys need work ... make sure nothing is

@@ -1,0 +1,10829 @@
+{
+ "menubar": [
+  "File",
+  "Edit",
+  "Create",
+  "Select",
+  "Modify",
+  "Display",
+  "Windows",
+  "Mesh",
+  "Edit Mesh",
+  "Mesh Tools",
+  "Mesh Display",
+  "Curves",
+  "Surfaces",
+  "Deform",
+  "UV",
+  "Generate"
+ ],
+ "menus": {
+  "File": [
+   {
+    "label": "New Scene",
+    "rtc": "NewScene",
+    "opt": true
+   },
+   {
+    "label": "Open Scene...",
+    "rtc": "OpenScene",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Save Scene",
+    "rtc": "SaveScene",
+    "opt": true
+   },
+   {
+    "label": "Save Scene As...",
+    "rtc": "SaveSceneAs",
+    "opt": true
+   },
+   {
+    "label": "IncrementAndSave",
+    "rtc": "IncrementAndSave"
+   },
+   {
+    "label": "Archive Scene",
+    "rtc": "ArchiveScene",
+    "opt": true
+   },
+   {
+    "label": "Save Preferences",
+    "rtc": "SavePreferences"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Optimize Scene Size",
+    "rtc": "OptimizeScene",
+    "opt": true
+   },
+   {
+    "div": "Import/Export"
+   },
+   {
+    "label": "Import...",
+    "rtc": "Import",
+    "opt": true
+   },
+   {
+    "label": "Export All...",
+    "rtc": "Export",
+    "opt": true
+   },
+   {
+    "label": "Export Selection...",
+    "rtc": "ExportSelection",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Adobe(R) After Effects(R) Live Link",
+    "rtc": "OpenAELiveLink"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Export to Offline File...",
+    "rtc": "ExportOfflineFile",
+    "opt": true
+   },
+   {
+    "label": "Assign Offline File...",
+    "rtc": "AssignOfflineFile",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "ATOM",
+    "sub": [
+     {
+      "label": "Export Animation...",
+      "rtc": "ExportAnim"
+     },
+     {
+      "label": "Import Animation...",
+      "rtc": "ImportAnim"
+     },
+     {
+      "label": "Create ATOM Template...",
+      "rtc": "ATOMTemplate"
+     }
+    ]
+   },
+   {
+    "div": "References"
+   },
+   {
+    "label": "Create Reference...",
+    "rtc": "CreateReference",
+    "opt": true
+   },
+   {
+    "label": "Reference Editor",
+    "rtc": "ReferenceEditor"
+   },
+   {
+    "div": "View"
+   },
+   {
+    "label": "View Image...",
+    "rtc": "ViewImage"
+   },
+   {
+    "label": "View Sequence...",
+    "rtc": "ViewSequence"
+   },
+   {
+    "div": "Project"
+   },
+   {
+    "label": "Project Window",
+    "rtc": "ProjectWindow"
+   },
+   {
+    "label": "Set Project...",
+    "rtc": "SetProject"
+   },
+   {
+    "div": "Recent"
+   },
+   {
+    "label": "Recent Files",
+    "sub": []
+   },
+   {
+    "label": "Recent Increments",
+    "sub": []
+   },
+   {
+    "label": "Recent Projects",
+    "sub": []
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Quit",
+    "rtc": "Quit"
+   }
+  ],
+  "Edit": [
+   {
+    "label": "Undo",
+    "rtc": "Undo"
+   },
+   {
+    "label": "Redo",
+    "rtc": "Redo"
+   },
+   {
+    "label": "Repeat",
+    "rtc": "RepeatLast"
+   },
+   {
+    "label": "Recent Commands List",
+    "rtc": "RecentCommandsWindow"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Cut",
+    "rtc": "CutSelected"
+   },
+   {
+    "label": "Copy",
+    "rtc": "CopySelected"
+   },
+   {
+    "label": "Paste",
+    "rtc": "PasteSelected"
+   },
+   {
+    "label": "Keys",
+    "sub": [
+     {
+      "label": "Cut Keys",
+      "rtc": "CutKeys",
+      "opt": true
+     },
+     {
+      "label": "Copy Keys",
+      "rtc": "CopyKeys",
+      "opt": true
+     },
+     {
+      "label": "Paste Keys",
+      "rtc": "PasteKeys",
+      "opt": true
+     },
+     {
+      "label": "Delete Keys",
+      "rtc": "DeleteKeys",
+      "opt": true
+     },
+     {
+      "label": "Scale Keys",
+      "rtc": "ScaleKeys",
+      "opt": true
+     },
+     {
+      "label": "Snap Keys",
+      "rtc": "SnapKeys",
+      "opt": true
+     },
+     {
+      "label": "$cmd",
+      "rtc": "$cmd",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": "Delete"
+   },
+   {
+    "label": "Delete",
+    "rtc": "Delete"
+   },
+   {
+    "label": "Delete All by Type",
+    "sub": [
+     {
+      "label": "History",
+      "rtc": "DeleteAllHistory"
+     },
+     {
+      "label": "Non-Deformer History",
+      "rtc": "BakeAllNonDefHistory"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Channels",
+      "rtc": "DeleteAllChannels"
+     },
+     {
+      "label": "Static Channels",
+      "rtc": "DeleteAllStaticChannels"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Clips",
+      "rtc": "DeleteAllClips"
+     },
+     {
+      "label": "Constraints",
+      "rtc": "DeleteAllConstraints"
+     },
+     {
+      "label": "Motion Paths",
+      "rtc": "DeleteAllMotionPaths"
+     },
+     {
+      "label": "Non-particle Expressions",
+      "rtc": "DeleteAllExpressions"
+     },
+     {
+      "label": "Sounds",
+      "rtc": "DeleteAllSounds"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "IK Handles",
+      "rtc": "DeleteAllIKHandles"
+     },
+     {
+      "label": "Joints",
+      "rtc": "DeleteAllJoints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Clusters",
+      "rtc": "DeleteAllClusters"
+     },
+     {
+      "label": "Lattices",
+      "rtc": "DeleteAllLattices"
+     },
+     {
+      "label": "Nonlinears",
+      "rtc": "DeleteAllNonLinearDeformers"
+     },
+     {
+      "label": "Sculpt Objects",
+      "rtc": "DeleteAllSculptObjects"
+     },
+     {
+      "label": "Wires",
+      "rtc": "DeleteAllWires"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Cameras",
+      "rtc": "DeleteAllCameras"
+     },
+     {
+      "label": "Image Planes",
+      "rtc": "DeleteAllImagePlanes"
+     },
+     {
+      "label": "Lights",
+      "rtc": "DeleteAllLights"
+     },
+     {
+      "label": "Shading Groups and Materials",
+      "rtc": "DeleteAllShadingGroupsAndMaterials"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Controllers",
+      "rtc": "DeleteAllControllers"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Assets",
+      "rtc": "DeleteAllContainers"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Fluids",
+      "rtc": "DeleteAllFluids"
+     },
+     {
+      "label": "Particles",
+      "rtc": "DeleteAllParticles"
+     },
+     {
+      "label": "Rigid Bodies",
+      "rtc": "DeleteAllRigidBodies"
+     },
+     {
+      "label": "Rigid Constraints",
+      "rtc": "DeleteAllRigidConstraints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Strokes",
+      "rtc": "DeleteAllStrokes"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Dynamic Constraints",
+      "rtc": "DeleteAllDynamicConstraints"
+     },
+     {
+      "label": "nCloths",
+      "rtc": "DeleteAllNCloths"
+     },
+     {
+      "label": "nParticles",
+      "rtc": "DeleteAllNParticles"
+     },
+     {
+      "label": "nRigids",
+      "rtc": "DeleteAllNRigids"
+     }
+    ]
+   },
+   {
+    "div": "Duplicate"
+   },
+   {
+    "label": "Duplicate",
+    "rtc": "Duplicate"
+   },
+   {
+    "label": "Duplicate Special",
+    "rtc": "DuplicateSpecial",
+    "opt": true
+   },
+   {
+    "label": "Duplicate with Transform",
+    "rtc": "DuplicateWithTransform"
+   },
+   {
+    "label": "Transfer Attribute Values",
+    "rtc": "TransferAttributeValues",
+    "opt": true
+   },
+   {
+    "div": "Hierarchy"
+   },
+   {
+    "label": "Group",
+    "rtc": "Group",
+    "opt": true
+   },
+   {
+    "label": "Ungroup",
+    "rtc": "Ungroup",
+    "opt": true
+   },
+   {
+    "label": "LOD (Level of Detail)",
+    "sub": [
+     {
+      "label": "Create LOD Group",
+      "rtc": "LevelOfDetailGroup",
+      "opt": true
+     },
+     {
+      "label": "Generate LOD Meshes",
+      "rtc": "LODGenerateMeshes",
+      "opt": true
+     },
+     {
+      "label": "Ungroup LOD Group",
+      "rtc": "LevelOfDetailUngroup"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Parent",
+    "rtc": "Parent",
+    "opt": true
+   },
+   {
+    "label": "Unparent",
+    "rtc": "Unparent",
+    "opt": true
+   }
+  ],
+  "Create": [
+   {
+    "label": "Scene Assembly",
+    "sub": []
+   },
+   {
+    "div": "Objects"
+   },
+   {
+    "label": "NURBS Primitives",
+    "sub": [
+     {
+      "label": "Sphere",
+      "rtc": "CreateNURBSSphere",
+      "opt": true
+     },
+     {
+      "label": "Cube",
+      "rtc": "CreateNURBSCube",
+      "opt": true
+     },
+     {
+      "label": "Cylinder",
+      "rtc": "CreateNURBSCylinder",
+      "opt": true
+     },
+     {
+      "label": "Cone",
+      "rtc": "CreateNURBSCone",
+      "opt": true
+     },
+     {
+      "label": "Plane",
+      "rtc": "CreateNURBSPlane",
+      "opt": true
+     },
+     {
+      "label": "Torus",
+      "rtc": "CreateNURBSTorus",
+      "opt": true
+     },
+     {
+      "label": "Circle",
+      "rtc": "CreateNURBSCircle",
+      "opt": true
+     },
+     {
+      "label": "Square",
+      "rtc": "CreateNURBSSquare",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Interactive Creation",
+      "rtc": "ToggleCreateNurbsPrimitivesAsTool",
+      "check": true
+     },
+     {
+      "label": "Exit On Completion",
+      "rtc": "ToggleNurbsPrimitivesAsToolExitOnComplete",
+      "check": true
+     }
+    ]
+   },
+   {
+    "label": "Polygon Primitives",
+    "sub": [
+     {
+      "label": "Sphere",
+      "rtc": "CreatePolygonSphere",
+      "opt": true
+     },
+     {
+      "label": "Cube",
+      "rtc": "CreatePolygonCube",
+      "opt": true
+     },
+     {
+      "label": "Cylinder",
+      "rtc": "CreatePolygonCylinder",
+      "opt": true
+     },
+     {
+      "label": "Cone",
+      "rtc": "CreatePolygonCone",
+      "opt": true
+     },
+     {
+      "label": "Torus",
+      "rtc": "CreatePolygonTorus",
+      "opt": true
+     },
+     {
+      "label": "Plane",
+      "rtc": "CreatePolygonPlane",
+      "opt": true
+     },
+     {
+      "label": "Polygon Disc",
+      "rtc": "CreatePolygonDisc",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Platonic Solid",
+      "rtc": "CreatePolygonPlatonic",
+      "opt": true
+     },
+     {
+      "label": "Pyramid",
+      "rtc": "CreatePolygonPyramid",
+      "opt": true
+     },
+     {
+      "label": "Prism",
+      "rtc": "CreatePolygonPrism",
+      "opt": true
+     },
+     {
+      "label": "Pipe",
+      "rtc": "CreatePolygonPipe",
+      "opt": true
+     },
+     {
+      "label": "Helix",
+      "rtc": "CreatePolygonHelix",
+      "opt": true
+     },
+     {
+      "label": "Gear",
+      "rtc": "CreatePolygonGear",
+      "opt": true
+     },
+     {
+      "label": "Soccer Ball",
+      "rtc": "CreatePolygonSoccerBall",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Super Ellipse",
+      "rtc": "CreatePolygonSuperEllipse",
+      "opt": true
+     },
+     {
+      "label": "Spherical Harmonics",
+      "rtc": "CreatePolygonSphericalHarmonics",
+      "opt": true
+     },
+     {
+      "label": "Ultra Shape",
+      "rtc": "CreatePolygonUltraShape",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Interactive Creation",
+      "rtc": "ToggleCreatePolyPrimitivesAsTool",
+      "check": true
+     },
+     {
+      "label": "Exit On Completion",
+      "rtc": "TogglePolyPrimitivesAsToolExitOnComplete",
+      "check": true
+     }
+    ]
+   },
+   {
+    "label": "Subdiv Primitives",
+    "sub": [
+     {
+      "label": "Sphere",
+      "rtc": "CreateSubdivSphere"
+     },
+     {
+      "label": "Cube",
+      "rtc": "CreateSubdivCube"
+     },
+     {
+      "label": "Cylinder",
+      "rtc": "CreateSubdivCylinder"
+     },
+     {
+      "label": "Cone",
+      "rtc": "CreateSubdivCone"
+     },
+     {
+      "label": "Plane",
+      "rtc": "CreateSubdivPlane"
+     },
+     {
+      "label": "Torus",
+      "rtc": "CreateSubdivTorus"
+     }
+    ]
+   },
+   {
+    "label": "Volume Primitives",
+    "sub": [
+     {
+      "label": "Sphere",
+      "rtc": "CreateVolumeSphere"
+     },
+     {
+      "label": "Cube",
+      "rtc": "CreateVolumeCube"
+     },
+     {
+      "label": "Cone",
+      "rtc": "CreateVolumeCone"
+     }
+    ]
+   },
+   {
+    "label": "Lights",
+    "sub": [
+     {
+      "label": "Ambient Light",
+      "rtc": "CreateAmbientLight",
+      "opt": true
+     },
+     {
+      "label": "Directional Light",
+      "rtc": "CreateDirectionalLight",
+      "opt": true
+     },
+     {
+      "label": "Point Light",
+      "rtc": "CreatePointLight",
+      "opt": true
+     },
+     {
+      "label": "Spot Light",
+      "rtc": "CreateSpotLight",
+      "opt": true
+     },
+     {
+      "label": "Area Light",
+      "rtc": "CreateAreaLight",
+      "opt": true
+     },
+     {
+      "label": "Volume Light",
+      "rtc": "CreateVolumeLight",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Cameras",
+    "sub": []
+   },
+   {
+    "label": "Curve Tools",
+    "sub": [
+     {
+      "label": "CV Curve Tool",
+      "rtc": "CVCurveTool",
+      "opt": true
+     },
+     {
+      "label": "EP Curve Tool",
+      "rtc": "EPCurveTool",
+      "opt": true
+     },
+     {
+      "label": "Bezier Curve Tool",
+      "rtc": "CreateBezierCurveTool",
+      "opt": true
+     },
+     {
+      "label": "Pencil Curve Tool",
+      "rtc": "PencilCurveTool",
+      "opt": true
+     },
+     {
+      "label": "Three Point Circular Arc",
+      "rtc": "ThreePointArcTool",
+      "opt": true
+     },
+     {
+      "label": "Two Point Circular Arc",
+      "rtc": "TwoPointArcTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Type",
+    "rtc": "CreatePolygonType"
+   },
+   {
+    "label": "SVG",
+    "rtc": "CreatePolygonSVG"
+   },
+   {
+    "label": "Adobe(R) Illustrator(R) Object...",
+    "rtc": "CreateIllustratorCurves",
+    "opt": true
+   },
+   {
+    "div": "Construction Aids"
+   },
+   {
+    "label": "Construction Plane",
+    "rtc": "CreateConstructionPlane",
+    "opt": true
+   },
+   {
+    "label": "Free Image Plane",
+    "rtc": "CreateImagePlane",
+    "opt": true
+   },
+   {
+    "label": "Locator",
+    "rtc": "CreateLocator"
+   },
+   {
+    "label": "Annotation...",
+    "rtc": "CreateAnnotateNode"
+   },
+   {
+    "label": "Measure Tools",
+    "sub": [
+     {
+      "label": "Distance Tool",
+      "rtc": "DistanceTool"
+     },
+     {
+      "label": "Parameter Tool",
+      "rtc": "ParameterTool"
+     },
+     {
+      "label": "Arc Length Tool",
+      "rtc": "ArcLengthTool"
+     }
+    ]
+   },
+   {
+    "div": "Scene Management"
+   },
+   {
+    "label": "Scene Assembly",
+    "sub": []
+   },
+   {
+    "label": "Empty Group",
+    "rtc": "CreateEmptyGroup"
+   },
+   {
+    "label": "Sets",
+    "sub": [
+     {
+      "label": "Set",
+      "rtc": "CreateSet",
+      "opt": true
+     },
+     {
+      "label": "Partition",
+      "rtc": "CreatePartition",
+      "opt": true
+     },
+     {
+      "label": "Quick Select Set...",
+      "rtc": "CreateQuickSelectSet"
+     }
+    ]
+   },
+   {
+    "label": "Asset",
+    "sub": [
+     {
+      "label": "Create Asset",
+      "rtc": "CreateContainer",
+      "opt": true
+     },
+     {
+      "label": "Create Asset with Transform",
+      "rtc": "CreateDagContainer",
+      "opt": true
+     }
+    ]
+   }
+  ],
+  "Select": [
+   {
+    "label": "All",
+    "rtc": "SelectAll"
+   },
+   {
+    "label": "All by Type",
+    "sub": [
+     {
+      "label": "IK Handles",
+      "rtc": "SelectAllIKHandles"
+     },
+     {
+      "label": "Joints",
+      "rtc": "SelectAllJoints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Clusters",
+      "rtc": "SelectAllClusters"
+     },
+     {
+      "label": "Lattices",
+      "rtc": "SelectAllLattices"
+     },
+     {
+      "label": "Sculpt Objects",
+      "rtc": "SelectAllSculptObjects"
+     },
+     {
+      "label": "Wires",
+      "rtc": "SelectAllWires"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Transforms",
+      "rtc": "SelectAllTransforms"
+     },
+     {
+      "label": "Geometry",
+      "rtc": "SelectAllGeometry"
+     },
+     {
+      "label": "NURBS Curves",
+      "rtc": "SelectAllNURBSCurves"
+     },
+     {
+      "label": "NURBS Surfaces",
+      "rtc": "SelectAllNURBSSurfaces"
+     },
+     {
+      "label": "Polygon Geometry",
+      "rtc": "SelectAllPolygonGeometry"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Cameras",
+      "rtc": "SelectAllCameras"
+     },
+     {
+      "label": "Lights",
+      "rtc": "SelectAllLights"
+     },
+     {
+      "label": "Image Planes",
+      "rtc": "SelectAllImagePlanes"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Assets",
+      "rtc": "SelectAllAssets"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Fluids",
+      "rtc": "SelectAllFluids"
+     },
+     {
+      "label": "Particles",
+      "rtc": "SelectAllParticles"
+     },
+     {
+      "label": "Rigid Bodies",
+      "rtc": "SelectAllRigidBodies"
+     },
+     {
+      "label": "Rigid Constraints",
+      "rtc": "SelectAllRigidConstraints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Brushes",
+      "rtc": "SelectAllBrushes"
+     },
+     {
+      "label": "Strokes",
+      "rtc": "SelectAllStrokes"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Dynamic Constraints",
+      "rtc": "SelectAllDynamicConstraints"
+     },
+     {
+      "label": "Follicles",
+      "rtc": "SelectAllFollicles"
+     },
+     {
+      "label": "nCloths",
+      "rtc": "SelectAllNCloths"
+     },
+     {
+      "label": "nParticles",
+      "rtc": "SelectAllNParticles"
+     },
+     {
+      "label": "nRigids",
+      "rtc": "SelectAllNRigids"
+     }
+    ]
+   },
+   {
+    "label": "Deselect All",
+    "rtc": "SelectNone"
+   },
+   {
+    "label": "Hierarchy",
+    "rtc": "SelectHierarchy"
+   },
+   {
+    "label": "Inverse",
+    "rtc": "InvertSelection"
+   },
+   {
+    "label": "Similar",
+    "rtc": "SelectSimilar",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Grow",
+    "rtc": "GrowPolygonSelectionRegion"
+   },
+   {
+    "label": "Grow Along Loop",
+    "rtc": "GrowLoopPolygonSelectionRegion"
+   },
+   {
+    "label": "Shrink",
+    "rtc": "ShrinkPolygonSelectionRegion"
+   },
+   {
+    "label": "Shrink Along Loop",
+    "rtc": "ShrinkLoopPolygonSelectionRegion"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Quick Select Sets",
+    "sub": []
+   },
+   {
+    "div": "Type"
+   },
+   {
+    "label": "Object/Component",
+    "rtc": "SelectToggleMode"
+   },
+   {
+    "div": "Polygons"
+   },
+   {
+    "label": "Components",
+    "sub": [
+     {
+      "label": "Multi-Component",
+      "rtc": "SelectMultiComponentMask"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Vertex",
+      "rtc": "SelectVertexMask"
+     },
+     {
+      "label": "Edge",
+      "rtc": "SelectEdgeMask"
+     },
+     {
+      "label": "Face",
+      "rtc": "SelectFacetMask"
+     },
+     {
+      "label": "Vertex Face",
+      "rtc": "SelectVertexFaceMask"
+     },
+     {
+      "label": "UV",
+      "rtc": "SelectUVMask"
+     },
+     {
+      "label": "UV Shell",
+      "rtc": "SelectMeshUVShell"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Contiguous Edges",
+    "rtc": "SelectContiguousEdges",
+    "opt": true
+   },
+   {
+    "label": "Shortest Edge Path Tool",
+    "rtc": "SelectShortestEdgePathTool"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Convert Selection",
+    "sub": [
+     {
+      "label": "To Vertices",
+      "rtc": "ConvertSelectionToVertices"
+     },
+     {
+      "label": "To Vertex Faces",
+      "rtc": "ConvertSelectionToVertexFaces"
+     },
+     {
+      "label": "To Vertex Perimeter",
+      "rtc": "ConvertSelectionToVertexPerimeter"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "To Edges",
+      "rtc": "ConvertSelectionToEdges"
+     },
+     {
+      "label": "To Edge Loop",
+      "rtc": "SelectEdgeLoopSp"
+     },
+     {
+      "label": "To Edge Ring",
+      "rtc": "SelectEdgeRingSp"
+     },
+     {
+      "label": "To Contained Edges",
+      "rtc": "ConvertSelectionToContainedEdges"
+     },
+     {
+      "label": "To Edge Perimeter",
+      "rtc": "ConvertSelectionToEdgePerimeter"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "To Faces",
+      "rtc": "ConvertSelectionToFaces"
+     },
+     {
+      "label": "To Face Path",
+      "rtc": "SelectFacePath"
+     },
+     {
+      "label": "To Contained Faces",
+      "rtc": "ConvertSelectionToContainedFaces"
+     },
+     {
+      "label": "To Face Perimeter",
+      "rtc": "ConvertSelectionToFacePerimeter"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "To UVs",
+      "rtc": "ConvertSelectionToUVs"
+     },
+     {
+      "label": "To UV Shell",
+      "rtc": "ConvertSelectionToUVShell"
+     },
+     {
+      "label": "To UV Shell Border",
+      "rtc": "ConvertSelectionToUVShellBorder"
+     },
+     {
+      "label": "To UV Perimeter",
+      "rtc": "ConvertSelectionToUVPerimeter"
+     },
+     {
+      "label": "To UV Edge Loop",
+      "rtc": "ConvertSelectionToUVEdgeLoop"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "To Shell",
+      "rtc": "ConvertSelectionToShell"
+     },
+     {
+      "label": "To Shell Border",
+      "rtc": "ConvertSelectionToShellBorder"
+     }
+    ]
+   },
+   {
+    "label": "Use Constraints...",
+    "rtc": "PolygonSelectionConstraints"
+   },
+   {
+    "div": "NURBS Curves"
+   },
+   {
+    "label": "Components",
+    "sub": [
+     {
+      "label": "Control Vertex",
+      "rtc": "SelectCVsMask"
+     },
+     {
+      "label": "Curve Point",
+      "rtc": "SelectCurvePointsMask"
+     },
+     {
+      "label": "Edit Point",
+      "rtc": "SelectPointsMask"
+     },
+     {
+      "label": "Hull",
+      "rtc": "SelectHullsMask"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "All CVs",
+    "rtc": "SelectCurveCVsAll"
+   },
+   {
+    "label": "First CV",
+    "rtc": "SelectCurveCVsFirst"
+   },
+   {
+    "label": "Last CV",
+    "rtc": "SelectCurveCVsLast"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Cluster Curve",
+    "rtc": "ClusterCurve"
+   },
+   {
+    "div": "NURBS Surfaces"
+   },
+   {
+    "label": "Components",
+    "sub": [
+     {
+      "label": "Control Vertex",
+      "rtc": "SelectCVsMask"
+     },
+     {
+      "label": "Hull",
+      "rtc": "SelectHullsMask"
+     },
+     {
+      "label": "Isoparm",
+      "rtc": "SelectLinesMask"
+     },
+     {
+      "label": "Surface Point",
+      "rtc": "SelectSurfacePointsMask"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "CV Selection Boundary",
+    "rtc": "SelectCVSelectionBoundary"
+   },
+   {
+    "label": "Surface Border",
+    "rtc": "SelectSurfaceBorder",
+    "opt": true
+   }
+  ],
+  "Modify": [
+   {
+    "div": "Transform"
+   },
+   {
+    "label": "Transformation Tools",
+    "sub": [
+     {
+      "label": "Move Tool",
+      "rtc": "MoveTool",
+      "opt": true
+     },
+     {
+      "label": "Rotate Tool",
+      "rtc": "RotateTool",
+      "opt": true
+     },
+     {
+      "label": "Scale Tool",
+      "rtc": "ScaleTool",
+      "opt": true
+     },
+     {
+      "label": "Type Manipulator",
+      "rtc": "EditPolygonType"
+     },
+     {
+      "label": "Universal Manipulator",
+      "rtc": "UniversalManip",
+      "opt": true
+     },
+     {
+      "label": "Move Normal Tool",
+      "rtc": "MoveNormalTool",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Move/Rotate/Scale Tool",
+      "rtc": "MoveRotateScaleTool"
+     },
+     {
+      "label": "Show Manipulator Tool",
+      "rtc": "ShowManipulatorTool"
+     },
+     {
+      "label": "Default Object Manipulator",
+      "sub": [
+       {
+        "label": "None",
+        "rtc": "SetDefaultManipNone"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Move",
+        "rtc": "SetDefaultManipMove"
+       },
+       {
+        "label": "Rotate",
+        "rtc": "SetDefaultManipRotate"
+       },
+       {
+        "label": "Scale",
+        "rtc": "SetDefaultManipScale"
+       },
+       {
+        "label": "Transform",
+        "rtc": "SetDefaultManipTransform"
+       }
+      ]
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Proportional Modification Tool",
+      "rtc": "ProportionalModificationTool",
+      "opt": true
+     },
+     {
+      "label": "Soft Modification Tool",
+      "rtc": "SoftModTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Reset Transformations",
+    "rtc": "ResetTransformations",
+    "opt": true
+   },
+   {
+    "label": "Freeze Transformations",
+    "rtc": "FreezeTransformations",
+    "opt": true
+   },
+   {
+    "label": "Match Transformations",
+    "sub": [
+     {
+      "label": "Match All Transforms",
+      "c": "MatchTransform",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Match Translation",
+      "c": "MatchTranslation",
+      "opt": true
+     },
+     {
+      "label": "Match Rotation",
+      "c": "MatchRotation",
+      "opt": true
+     },
+     {
+      "label": "Match Scaling",
+      "c": "MatchScaling",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Match Pivots",
+      "c": "MatchPivots",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": "Pivot"
+   },
+   {
+    "label": "Center Pivot",
+    "rtc": "CenterPivot"
+   },
+   {
+    "label": "Zero Pivot",
+    "rtc": "ZeroPivot"
+   },
+   {
+    "label": "Bake Pivot",
+    "rtc": "BakeCustomPivot",
+    "opt": true
+   },
+   {
+    "div": "Align"
+   },
+   {
+    "label": "Snap Align Objects",
+    "sub": [
+     {
+      "label": "Point to Point",
+      "c": "SnapPointToPoint",
+      "opt": true
+     },
+     {
+      "label": "2 Points to 2 Points",
+      "c": "Snap2PointsTo2Points",
+      "opt": true
+     },
+     {
+      "label": "3 Points to 3 Points",
+      "c": "Snap3PointsTo3Points",
+      "opt": true
+     },
+     {
+      "label": "Align Objects",
+      "c": "AlignObjects",
+      "opt": true
+     },
+     {
+      "label": "Position Along Curve",
+      "rtc": "PositionAlongCurve"
+     }
+    ]
+   },
+   {
+    "label": "Align Tool",
+    "rtc": "SetAlignTool"
+   },
+   {
+    "label": "Snap Together Tool",
+    "rtc": "SetSnapTogetherTool",
+    "opt": true
+   },
+   {
+    "div": "Rotate Order"
+   },
+   {
+    "label": "Reorder Rotation...",
+    "rtc": "ReorderRotationDialog"
+   },
+   {
+    "div": "Nodes"
+   },
+   {
+    "label": "Evaluate Nodes",
+    "sub": [
+     {
+      "label": "Evaluate All",
+      "rtc": "EnableAll"
+     },
+     {
+      "label": "Ignore All",
+      "rtc": "DisableAll"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "IK Solvers",
+      "rtc": "EnableIKSolvers",
+      "check": true
+     },
+     {
+      "label": "Constraints",
+      "rtc": "EnableConstraints",
+      "check": true
+     },
+     {
+      "label": "Expressions",
+      "rtc": "EnableExpressions",
+      "check": true
+     },
+     {
+      "label": "Fluids",
+      "rtc": "EnableFluids",
+      "check": true
+     },
+     {
+      "label": "Global Stitch",
+      "rtc": "EnableGlobalStitch",
+      "check": true
+     },
+     {
+      "label": "nCloths",
+      "rtc": "EnableNCloths",
+      "check": true
+     },
+     {
+      "label": "nParticles",
+      "rtc": "EnableNParticles",
+      "check": true
+     },
+     {
+      "label": "nRigids",
+      "rtc": "EnableNRigids",
+      "check": true
+     },
+     {
+      "label": "Dynamic Constraints",
+      "rtc": "EnableDynamicConstraints",
+      "check": true
+     },
+     {
+      "label": "nucleuses",
+      "rtc": "EnableNucleuses",
+      "check": true
+     },
+     {
+      "label": "Particles",
+      "rtc": "EnableParticles",
+      "check": true
+     },
+     {
+      "label": "Rigid Bodies",
+      "rtc": "EnableRigidBodies",
+      "check": true
+     },
+     {
+      "label": "Snapshots",
+      "rtc": "EnableSnapshots",
+      "check": true
+     }
+    ]
+   },
+   {
+    "div": "Naming"
+   },
+   {
+    "label": "Prefix Hierarchy Names...",
+    "c": "PrefixHierarchyNames"
+   },
+   {
+    "label": "Search and Replace Names...",
+    "c": "SearchAndReplaceNames"
+   },
+   {
+    "div": "Attributes"
+   },
+   {
+    "label": "Add Attribute...",
+    "c": "AddAttribute"
+   },
+   {
+    "label": "Edit Attribute...",
+    "c": "RenameAttribute"
+   },
+   {
+    "label": "Delete Attribute...",
+    "c": "DeleteAttribute"
+   },
+   {
+    "div": "Objects"
+   },
+   {
+    "label": "Make Live",
+    "rtc": "MakeLive"
+   },
+   {
+    "label": "Replace Objects",
+    "rtc": "ReplaceObjects",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Convert",
+    "sub": [
+     {
+      "label": "NURBS to Polygons",
+      "rtc": "NURBSToPolygons",
+      "opt": true
+     },
+     {
+      "label": "NURBS to Subdiv",
+      "rtc": "CreateSubdivSurface",
+      "opt": true
+     },
+     {
+      "label": "Polygons to Subdiv",
+      "rtc": "CreateSubdivSurfacePoly",
+      "opt": true
+     },
+     {
+      "label": "Smooth Mesh Preview to Polygons",
+      "rtc": "CreatePolyFromPreview"
+     },
+     {
+      "label": "Polygon Edges to Curve",
+      "rtc": "CreateCurveFromPoly",
+      "opt": true
+     },
+     {
+      "label": "Type to Curves",
+      "rtc": "ConvertTypeCapsToCurves"
+     },
+     {
+      "label": "Subdiv to Polygons",
+      "rtc": "TesselateSubdivSurface",
+      "opt": true
+     },
+     {
+      "label": "Subdiv to NURBS",
+      "rtc": "SubdivToNURBS",
+      "opt": true
+     },
+     {
+      "label": "NURBS Curve to Bezier",
+      "rtc": "NurbsCurveToBezier"
+     },
+     {
+      "label": "Bezier Curve to NURBS",
+      "rtc": "BezierCurveToNurbs"
+     },
+     {
+      "label": "Paint Effects to Polygons",
+      "rtc": "PaintEffectsToPoly",
+      "opt": true
+     },
+     {
+      "label": "Paint Effects to NURBS",
+      "rtc": "PaintEffectsToNurbs",
+      "opt": true
+     },
+     {
+      "label": "Paint Effects to Curves",
+      "rtc": "PaintEffectsToCurve",
+      "opt": true
+     },
+     {
+      "label": "Texture to Geometry",
+      "rtc": "TextureToGeometry",
+      "opt": true
+     },
+     {
+      "label": "Displacement to Polygons",
+      "rtc": "DisplacementToPolygon"
+     },
+     {
+      "label": "Displacement to Polygons with History",
+      "rtc": "SetupAnimatedDisplacement"
+     },
+     {
+      "label": "Fluid to Polygons",
+      "rtc": "FluidsToPolygons"
+     },
+     {
+      "label": "nParticle to Polygons",
+      "rtc": "NParticleToPolygons"
+     },
+     {
+      "label": "Instance to Object",
+      "rtc": "ConvertInstanceToObject"
+     },
+     {
+      "label": "Geometry to Bounding Box",
+      "rtc": "GeometryToBoundingBox",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": "Paint Tool"
+   },
+   {
+    "label": "Paint Scripts Tool",
+    "rtc": "ScriptPaintTool",
+    "opt": true
+   },
+   {
+    "label": "Paint Attributes Tool",
+    "rtc": "ArtPaintAttrTool",
+    "opt": true
+   },
+   {
+    "div": "Assets"
+   },
+   {
+    "label": "Asset",
+    "sub": [
+     {
+      "label": "Add to Asset",
+      "rtc": "AddToContainer",
+      "opt": true
+     },
+     {
+      "label": "Remove from Asset",
+      "rtc": "RemoveFromContainer",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Export Proxy Asset...",
+      "rtc": "ExportProxyContainer",
+      "opt": true
+     },
+     {
+      "label": "Publish Attributes",
+      "rtc": "PublishAttributes",
+      "opt": true
+     },
+     {
+      "label": "Unpublish Attributes",
+      "rtc": "UnpublishAttributes"
+     },
+     {
+      "label": "Publish Connections",
+      "rtc": "PublishConnections",
+      "opt": true
+     },
+     {
+      "label": "Lock Unpublished Attributes",
+      "rtc": "LockContainer"
+     },
+     {
+      "label": "Unlock Unpublished Attributes",
+      "rtc": "UnlockContainer"
+     },
+     {
+      "label": "Publish Node",
+      "rtc": "PublishNode"
+     },
+     {
+      "label": "Unpublish Node",
+      "rtc": "UnpublishNode"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Assign Template...",
+      "rtc": "AssignTemplate",
+      "opt": true
+     },
+     {
+      "label": "Select Asset Contents",
+      "rtc": "SelectContainerContents"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Advanced Assets",
+      "sub": [
+       {
+        "label": "Node Publishing",
+        "sub": [
+         {
+          "label": "Publish as Selection Transform",
+          "rtc": "PublishRootTransform",
+          "opt": true
+         },
+         {
+          "label": "Publish Parent Anchor",
+          "rtc": "PublishParentAnchor",
+          "opt": true
+         },
+         {
+          "label": "Publish Child Anchor",
+          "rtc": "PublishChildAnchor",
+          "opt": true
+         }
+        ]
+       },
+       {
+        "label": "Node Unpublishing",
+        "sub": [
+         {
+          "label": "Unpublish Selection Transform",
+          "rtc": "UnpublishRootTransform"
+         },
+         {
+          "label": "Unpublish Parent Anchor",
+          "rtc": "UnpublishParentAnchor"
+         },
+         {
+          "label": "Unpublish Child Anchor",
+          "rtc": "UnpublishChildAnchor"
+         }
+        ]
+       },
+       {
+        "label": "Set Current Asset",
+        "sub": []
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "Display": [
+   {
+    "div": "Viewport"
+   },
+   {
+    "label": "Grid",
+    "rtc": "ToggleGrid",
+    "check": true,
+    "opt": true
+   },
+   {
+    "label": "Heads Up Display",
+    "sub": [
+     {
+      "label": "Animation Details",
+      "rtc": "ToggleAnimationDetails",
+      "check": true
+     },
+     {
+      "label": "Camera Names",
+      "rtc": "ToggleCameraNames",
+      "check": true
+     },
+     {
+      "label": "Caps Lock",
+      "rtc": "ToggleCapsLockDisplay",
+      "check": true
+     },
+     {
+      "label": "Current Asset",
+      "rtc": "ToggleCurrentContainerHud",
+      "check": true
+     },
+     {
+      "label": "Current Frame",
+      "rtc": "ToggleCurrentFrame",
+      "check": true
+     },
+     {
+      "label": "Evaluation",
+      "rtc": "ToggleEvaluationManagerVisibility",
+      "check": true
+     },
+     {
+      "label": "Focal Length",
+      "rtc": "ToggleFocalLength",
+      "check": true
+     },
+     {
+      "label": "Frame Rate",
+      "rtc": "ToggleFrameRate",
+      "check": true
+     },
+     {
+      "label": "HIK Details",
+      "rtc": "ToggleHikDetails",
+      "check": true
+     },
+     {
+      "label": "Material Loading Details",
+      "rtc": "ToggleMaterialLoadingDetailsVisibility",
+      "check": true
+     },
+     {
+      "label": "Object Details",
+      "rtc": "ToggleObjectDetails",
+      "check": true
+     },
+     {
+      "label": "Origin Axis",
+      "rtc": "ToggleOriginAxis",
+      "check": true
+     },
+     {
+      "label": "Particle Count",
+      "rtc": "ToggleParticleCount",
+      "check": true
+     },
+     {
+      "label": "Poly Count",
+      "rtc": "TogglePolyCount",
+      "check": true,
+      "opt": true
+     },
+     {
+      "label": "Scene Timecode",
+      "rtc": "ToggleSceneTimecode",
+      "check": true
+     },
+     {
+      "label": "Select Details",
+      "rtc": "ToggleSelectDetails",
+      "check": true
+     },
+     {
+      "label": "Subdiv Details",
+      "rtc": "ToggleSubdDetails",
+      "check": true
+     },
+     {
+      "label": "Symmetry",
+      "rtc": "ToggleSymmetryDisplay",
+      "check": true
+     },
+     {
+      "label": "View Axis",
+      "rtc": "ToggleViewAxis",
+      "check": true
+     },
+     {
+      "label": "ViewCube",
+      "rtc": "ToggleViewCube",
+      "check": true
+     },
+     {
+      "label": "Viewport Renderer",
+      "rtc": "ToggleViewportRenderer",
+      "check": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "In-view Messages",
+      "rtc": "ToggleInViewMessage",
+      "check": true
+     },
+     {
+      "label": "In-View Editors",
+      "rtc": "ToggleInViewEditor",
+      "check": true
+     }
+    ]
+   },
+   {
+    "div": "Object"
+   },
+   {
+    "label": "Hide",
+    "sub": [
+     {
+      "label": "Hide Selection",
+      "rtc": "HideSelectedObjects"
+     },
+     {
+      "label": "Hide Unselected Objects",
+      "rtc": "HideUnselectedObjects"
+     },
+     {
+      "label": "Hide Unselected CVs",
+      "rtc": "HideUnselectedCVs"
+     },
+     {
+      "label": "All",
+      "rtc": "HideAll"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Hide Controllers",
+      "rtc": "HideControllers"
+     },
+     {
+      "label": "Hide Geometry",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "HideGeometry"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "NURBS Surfaces",
+        "rtc": "HideNURBSSurfaces"
+       },
+       {
+        "label": "NURBS Curves",
+        "rtc": "HideNURBSCurves"
+       },
+       {
+        "label": "Polygon Surfaces",
+        "rtc": "HidePolygonSurfaces"
+       },
+       {
+        "label": "Deforming Geometry",
+        "rtc": "HideDeformingGeometry"
+       },
+       {
+        "label": "Subdiv Surfaces",
+        "rtc": "HideSubdivSurfaces"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Strokes",
+        "rtc": "HideStrokes"
+       },
+       {
+        "label": "Stroke Path Curves",
+        "rtc": "HideStrokePathCurves"
+       },
+       {
+        "label": "Stroke Control Curves",
+        "rtc": "HideStrokeControlCurves"
+       }
+      ]
+     },
+     {
+      "label": "Hide Kinematics",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "HideKinematics"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Joints",
+        "rtc": "HideJoints"
+       },
+       {
+        "label": "IK Handles",
+        "rtc": "HideIKHandles"
+       }
+      ]
+     },
+     {
+      "label": "Hide Deformers",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "HideDeformers"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Lattices",
+        "rtc": "HideLattices"
+       },
+       {
+        "label": "Sculpt Objects",
+        "rtc": "HideSculptObjects"
+       },
+       {
+        "label": "Clusters",
+        "rtc": "HideClusters"
+       },
+       {
+        "label": "Nonlinears",
+        "rtc": "HideNonlinears"
+       },
+       {
+        "label": "Wrap Influences",
+        "rtc": "HideWrapInfluences"
+       },
+       {
+        "label": "Smooth Skin Influences",
+        "rtc": "HideSmoothSkinInfluences"
+       }
+      ]
+     },
+     {
+      "label": "Lights",
+      "rtc": "HideLights"
+     },
+     {
+      "label": "Cameras",
+      "rtc": "HideCameras"
+     },
+     {
+      "label": "Texture Placements",
+      "rtc": "HideTexturePlacements"
+     },
+     {
+      "label": "Construction Planes",
+      "rtc": "HidePlanes"
+     },
+     {
+      "label": "Fluids",
+      "rtc": "HideFluids"
+     },
+     {
+      "label": "Hair Systems",
+      "rtc": "HideHairSystems"
+     },
+     {
+      "label": "Follicles",
+      "rtc": "HideFollicles"
+     },
+     {
+      "label": "Fur",
+      "rtc": "HideFur"
+     },
+     {
+      "label": "nCloths",
+      "rtc": "HideNCloths"
+     },
+     {
+      "label": "nParticles",
+      "rtc": "HideNParticles"
+     },
+     {
+      "label": "nRigids",
+      "rtc": "HideNRigids"
+     },
+     {
+      "label": "Dynamic Constraints",
+      "rtc": "HideDynamicConstraints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Animation Markers",
+      "rtc": "HideMarkers"
+     },
+     {
+      "label": "Light Manipulators",
+      "rtc": "HideLightManipulators"
+     },
+     {
+      "label": "Camera Manipulators",
+      "rtc": "HideCameraManipulators"
+     }
+    ]
+   },
+   {
+    "label": "Show",
+    "sub": [
+     {
+      "label": "Show Selection",
+      "rtc": "ShowSelectedObjects"
+     },
+     {
+      "label": "Show Last Hidden",
+      "rtc": "ShowLastHidden"
+     },
+     {
+      "label": "All Surface CVs",
+      "rtc": "ShowSurfaceCVs"
+     },
+     {
+      "label": "All Components",
+      "rtc": "ShowAllPolyComponents"
+     },
+     {
+      "label": "All",
+      "rtc": "ShowAll"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Show Controllers",
+      "rtc": "ShowControllers"
+     },
+     {
+      "label": "Show Geometry",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "ShowGeometry"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "NURBS Surfaces",
+        "rtc": "ShowNURBSSurfaces"
+       },
+       {
+        "label": "NURBS Curves",
+        "rtc": "ShowNURBSCurves"
+       },
+       {
+        "label": "Polygon Surfaces",
+        "rtc": "ShowPolygonSurfaces"
+       },
+       {
+        "label": "Deforming Geometry",
+        "rtc": "ShowDeformingGeometry"
+       },
+       {
+        "label": "Subdiv Surfaces",
+        "rtc": "ShowSubdivSurfaces"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Strokes",
+        "rtc": "ShowStrokes"
+       },
+       {
+        "label": "Stroke Path Curves",
+        "rtc": "ShowStrokePathCurves"
+       },
+       {
+        "label": "Stroke Control Curves",
+        "rtc": "ShowStrokeControlCurves"
+       }
+      ]
+     },
+     {
+      "label": "Show Kinematics",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "ShowKinematics"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Joints",
+        "rtc": "ShowJoints"
+       },
+       {
+        "label": "IK Handles",
+        "rtc": "ShowIKHandles"
+       }
+      ]
+     },
+     {
+      "label": "Show Deformers",
+      "sub": [
+       {
+        "label": "All",
+        "rtc": "ShowDeformers"
+       },
+       {
+        "div": ""
+       },
+       {
+        "label": "Lattices",
+        "rtc": "ShowLattices"
+       },
+       {
+        "label": "Sculpt Objects",
+        "rtc": "ShowSculptObjects"
+       },
+       {
+        "label": "Clusters",
+        "rtc": "ShowClusters"
+       },
+       {
+        "label": "Nonlinears",
+        "rtc": "ShowNonlinears"
+       },
+       {
+        "label": "Wrap Influences",
+        "rtc": "ShowWrapInfluences"
+       },
+       {
+        "label": "Smooth Skin Influences",
+        "rtc": "ShowSmoothSkinInfluences"
+       }
+      ]
+     },
+     {
+      "label": "Lights",
+      "rtc": "ShowLights"
+     },
+     {
+      "label": "Cameras",
+      "rtc": "ShowCameras"
+     },
+     {
+      "label": "Texture Placements",
+      "rtc": "ShowTexturePlacements"
+     },
+     {
+      "label": "Construction Planes",
+      "rtc": "ShowPlanes"
+     },
+     {
+      "label": "Fluids",
+      "rtc": "ShowFluids"
+     },
+     {
+      "label": "Hair Systems",
+      "rtc": "ShowHairSystems"
+     },
+     {
+      "label": "Follicles",
+      "rtc": "ShowFollicles"
+     },
+     {
+      "label": "Fur",
+      "rtc": "ShowFur"
+     },
+     {
+      "label": "nCloths",
+      "rtc": "ShowNCloths"
+     },
+     {
+      "label": "nParticles",
+      "rtc": "ShowNParticles"
+     },
+     {
+      "label": "nRigids",
+      "rtc": "ShowNRigids"
+     },
+     {
+      "label": "Dynamic Constraints",
+      "rtc": "ShowDynamicConstraints"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Animation Markers",
+      "rtc": "ShowMarkers"
+     },
+     {
+      "label": "Light Manipulators",
+      "rtc": "ShowLightManipulators"
+     },
+     {
+      "label": "Camera Manipulators",
+      "rtc": "ShowCameraManipulators"
+     }
+    ]
+   },
+   {
+    "label": "Toggle Show/Hide",
+    "rtc": "ToggleVisibilityAndKeepSelection",
+    "opt": true
+   },
+   {
+    "label": "Per Camera Visibility",
+    "sub": []
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Wireframe Color...",
+    "rtc": "SetWireframeColor"
+   },
+   {
+    "label": "Object Display",
+    "sub": [
+     {
+      "label": "Template",
+      "rtc": "TemplateObject"
+     },
+     {
+      "label": "Untemplate",
+      "rtc": "UntemplateObject"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Bounding Box",
+      "rtc": "ShowBoundingBox"
+     },
+     {
+      "label": "No Bounding Box",
+      "rtc": "HideBoundingBox"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Geometry",
+      "rtc": "ShowObjectGeometry"
+     },
+     {
+      "label": "No Geometry",
+      "rtc": "HideObjectGeometry"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Ignore Hardware Shader",
+      "rtc": "IgnoreHardwareShader"
+     },
+     {
+      "label": "Use Hardware Shader",
+      "rtc": "UseHardwareShader"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Fast Interaction",
+      "rtc": "ToggleFastInteraction",
+      "check": true
+     }
+    ]
+   },
+   {
+    "label": "Transform Display",
+    "sub": [
+     {
+      "label": "Local Rotation Axes",
+      "rtc": "ToggleLocalRotationAxes"
+     },
+     {
+      "label": "Rotate Pivots",
+      "rtc": "ToggleRotationPivots"
+     },
+     {
+      "label": "Scale Pivots",
+      "rtc": "ToggleScalePivots"
+     },
+     {
+      "label": "Selection Handles",
+      "rtc": "ToggleSelectionHandles"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygons",
+    "sub": []
+   },
+   {
+    "label": "NURBS",
+    "sub": []
+   },
+   {
+    "label": "Subdiv Surfaces",
+    "sub": []
+   },
+   {
+    "label": "Animation",
+    "sub": []
+   },
+   {
+    "label": "Rendering",
+    "sub": []
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Frame All in All Views",
+    "rtc": "FrameAllInAllViews"
+   },
+   {
+    "label": "Frame Selection in All Views",
+    "rtc": "FrameSelectedWithoutChildrenInAllViews"
+   },
+   {
+    "label": "Frame Selection with Children in All Views",
+    "rtc": "FrameSelectedInAllViews"
+   }
+  ],
+  "Windows": [
+   {
+    "label": "AttributeEditor",
+    "rtc": "AttributeEditor"
+   },
+   {
+    "label": "OpenChannelsLayers",
+    "rtc": "OpenChannelsLayers"
+   },
+   {
+    "label": "OpenChannelBox",
+    "rtc": "OpenChannelBox"
+   },
+   {
+    "label": "OpenLayerEditor",
+    "rtc": "OpenLayerEditor"
+   },
+   {
+    "label": "Tool Settings",
+    "rtc": "ToolSettingsWindow"
+   },
+   {
+    "label": "Hypergraph: Hierarchy",
+    "rtc": "HypergraphHierarchyWindow",
+    "opt": true
+   },
+   {
+    "label": "Hypergraph: Connections",
+    "rtc": "HypergraphDGWindow",
+    "opt": true
+   },
+   {
+    "label": "Viewport",
+    "rtc": "DisplayViewport"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Adobe(R) After Effects(R) Live Link",
+    "rtc": "OpenAELiveLink"
+   },
+   {
+    "label": "Asset Editor",
+    "rtc": "AssetEditor"
+   },
+   {
+    "label": "Attribute Spread Sheet",
+    "rtc": "SpreadSheetEditor"
+   },
+   {
+    "label": "Component Editor",
+    "rtc": "ComponentEditor"
+   },
+   {
+    "label": "Connection Editor",
+    "rtc": "ConnectionEditor"
+   },
+   {
+    "label": "Channel Control",
+    "rtc": "ChannelControlEditor"
+   },
+   {
+    "label": "Display Layer Editor",
+    "rtc": "DisplayLayerEditorWindow"
+   },
+   {
+    "label": "File Path Editor",
+    "rtc": "FilePathEditor"
+   },
+   {
+    "label": "Namespace Editor",
+    "rtc": "NamespaceEditor"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Script Editor",
+    "rtc": "ScriptEditor"
+   },
+   {
+    "label": "Command Shell",
+    "rtc": "CommandShell"
+   },
+   {
+    "label": "DG Profiler",
+    "rtc": "OpenDGProfiler"
+   },
+   {
+    "label": "Profiler",
+    "rtc": "ProfilerTool"
+   },
+   {
+    "label": "Evaluation Toolkit",
+    "rtc": "EvaluationToolkit"
+   },
+   {
+    "label": "Modeling Toolkit",
+    "rtc": "OpenModelingToolkit"
+   },
+   {
+    "label": "Paint Effects",
+    "rtc": "PaintEffectsWindow"
+   },
+   {
+    "label": "UV Editor",
+    "rtc": "TextureViewWindow"
+   },
+   {
+    "label": "XGen Editor",
+    "rtc": "OpenXGenEditor"
+   },
+   {
+    "label": "Crease Sets",
+    "rtc": "OpenCreaseEditor"
+   },
+   {
+    "call": "popupMenu"
+   },
+   {
+    "label": "RenderViewWindow",
+    "rtc": "RenderViewWindow"
+   },
+   {
+    "label": "RenderGlobalsWindow",
+    "rtc": "RenderGlobalsWindow"
+   },
+   {
+    "label": "Hypershade",
+    "rtc": "HypershadeWindow"
+   },
+   {
+    "label": "$rendererUIName",
+    "sub": []
+   },
+   {
+    "label": "Render Layer Editor",
+    "rtc": "RenderLayerEditorWindow"
+   },
+   {
+    "label": "Render Setup",
+    "rtc": "RenderSetupWindow"
+   },
+   {
+    "label": "Light Editor",
+    "rtc": "OpenLightEditor"
+   },
+   {
+    "label": "Custom Stereo Rig Editor",
+    "rtc": "OpenStereoRigManager"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Rendering Flags",
+    "rtc": "RenderFlagsWindow"
+   },
+   {
+    "label": "Shading Group Attributes",
+    "rtc": "ShadingGroupAttributeEditor"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Hardware Render Buffer",
+    "rtc": "HardwareRenderBuffer"
+   },
+   {
+    "label": "Graph Editor",
+    "rtc": "GraphEditor"
+   },
+   {
+    "label": "Dope Sheet",
+    "rtc": "DopeSheetEditor"
+   },
+   {
+    "label": "Time Editor",
+    "rtc": "TimeEditorWindow"
+   },
+   {
+    "label": "MotionMaker Editor",
+    "rtc": "OpenMotionMaker"
+   },
+   {
+    "label": "Sequencer",
+    "rtc": "SequenceEditor"
+   },
+   {
+    "label": "Trax Editor",
+    "rtc": "CharacterAnimationEditor"
+   },
+   {
+    "label": "Motion Trail Editor",
+    "rtc": "OpenMotionTrailEditor"
+   },
+   {
+    "label": "Quick Rig",
+    "rtc": "QuickRigEditor"
+   },
+   {
+    "label": "HumanIK",
+    "rtc": "HIKCharacterControlsTool"
+   },
+   {
+    "label": "ShapeEditor",
+    "rtc": "ShapeEditor"
+   },
+   {
+    "label": "PoseEditor",
+    "rtc": "PoseEditor"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Expression Editor",
+    "rtc": "ExpressionEditor"
+   },
+   {
+    "label": "Light-Centric",
+    "rtc": "LightCentricLightLinkingEditor"
+   },
+   {
+    "label": "Object-Centric",
+    "rtc": "ObjectCentricLightLinkingEditor"
+   },
+   {
+    "label": "Texture-Centric",
+    "rtc": "TextureCentricUVLinkingEditor"
+   },
+   {
+    "label": "UV-Centric",
+    "rtc": "UVCentricUVLinkingEditor"
+   },
+   {
+    "label": "Paint Effects/UV",
+    "rtc": "PFXUVSetLinkingEditor"
+   },
+   {
+    "label": "Hair/UV",
+    "rtc": "HairUVSetLinkingEditor"
+   },
+   {
+    "label": "FurUVSetLinkingEditor",
+    "rtc": "FurUVSetLinkingEditor"
+   },
+   {
+    "label": "Animation Layers",
+    "rtc": "AnimLayerRelationshipEditor"
+   },
+   {
+    "label": "Camera Sets",
+    "rtc": "CameraSetEditor"
+   },
+   {
+    "label": "Character Sets",
+    "rtc": "CharacterSetEditor"
+   },
+   {
+    "label": "Deformer Sets",
+    "rtc": "DeformerSetEditor"
+   },
+   {
+    "label": "Display Layers",
+    "rtc": "LayerRelationshipEditor"
+   },
+   {
+    "label": "Dynamic Relationships",
+    "rtc": "DynamicRelationshipEditor"
+   },
+   {
+    "label": "HairFurRelationshipEditor",
+    "rtc": "HairFurRelationshipEditor"
+   },
+   {
+    "label": "Light Linking",
+    "sub": []
+   },
+   {
+    "label": "Partitions",
+    "rtc": "PartitionEditor"
+   },
+   {
+    "label": "Render Layers",
+    "rtc": "RenderLayerRelationshipEditor"
+   },
+   {
+    "label": "Render Pass Sets",
+    "rtc": "RenderPassSetEditor"
+   },
+   {
+    "label": "Sets",
+    "rtc": "SetEditor"
+   },
+   {
+    "label": "UV Linking",
+    "sub": []
+   },
+   {
+    "label": "Preferences",
+    "rtc": "PreferencesWindow"
+   },
+   {
+    "label": "Performance Settings",
+    "rtc": "PerformanceSettingsWindow"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Hotkey Editor",
+    "rtc": "HotkeyPreferencesWindow"
+   },
+   {
+    "label": "Color Settings",
+    "rtc": "ColorPreferencesWindow"
+   },
+   {
+    "label": "Marking Menu Editor",
+    "rtc": "MarkingMenuPreferencesWindow"
+   },
+   {
+    "label": "Shelf Editor",
+    "rtc": "ShelfPreferencesWindow"
+   },
+   {
+    "label": "Panel Editor",
+    "rtc": "PanelPreferencesWindow"
+   },
+   {
+    "label": "ML Toolkit",
+    "rtc": "MLTKWindow"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Plug-in Manager",
+    "rtc": "PluginManager"
+   },
+   {
+    "div": "Editors"
+   },
+   {
+    "label": "General Editors",
+    "sub": []
+   },
+   {
+    "label": "Modeling Editors",
+    "sub": []
+   },
+   {
+    "label": "Animation Editors",
+    "sub": []
+   },
+   {
+    "label": "Rendering Editors",
+    "sub": []
+   },
+   {
+    "label": "Relationship Editors",
+    "sub": []
+   },
+   {
+    "label": "UI Elements",
+    "sub": []
+   },
+   {
+    "label": "Settings/Preferences",
+    "sub": []
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Outliner",
+    "rtc": "OutlinerWindow"
+   },
+   {
+    "label": "Node Editor",
+    "rtc": "NodeEditorWindow"
+   },
+   {
+    "label": "Content Browser",
+    "rtc": "OpenContentBrowser"
+   },
+   {
+    "label": "Playblast",
+    "rtc": "PlayblastWindow",
+    "opt": true
+   }
+  ],
+  "Mesh": [
+   {
+    "div": "Combine"
+   },
+   {
+    "label": "Booleans",
+    "sub": [
+     {
+      "label": "Union",
+      "rtc": "PolygonBooleanUnion",
+      "opt": true
+     },
+     {
+      "label": "Difference (A - B)",
+      "rtc": "PolygonBooleanDifference",
+      "opt": true
+     },
+     {
+      "label": "Difference (B - A)",
+      "rtc": "PolygonBooleanDifferenceBA",
+      "opt": true
+     },
+     {
+      "label": "Intersection",
+      "rtc": "PolygonBooleanIntersection",
+      "opt": true
+     },
+     {
+      "label": "Slice",
+      "rtc": "PolygonBooleanSlice",
+      "opt": true
+     },
+     {
+      "label": "Hole Punch",
+      "rtc": "PolygonBooleanHolePunch",
+      "opt": true
+     },
+     {
+      "label": "Cut Out",
+      "rtc": "PolygonBooleanCutOut",
+      "opt": true
+     },
+     {
+      "label": "Split Edges",
+      "rtc": "PolygonBooleanSplitEdges",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Combine",
+    "rtc": "CombinePolygons",
+    "opt": true
+   },
+   {
+    "label": "Separate",
+    "rtc": "SeparatePolygon"
+   },
+   {
+    "div": "Remesh"
+   },
+   {
+    "label": "Conform",
+    "rtc": "ConformPolygon",
+    "opt": true
+   },
+   {
+    "label": "Fill Hole",
+    "rtc": "FillHole"
+   },
+   {
+    "label": "Reduce",
+    "rtc": "ReducePolygon",
+    "opt": true
+   },
+   {
+    "label": "Remesh",
+    "rtc": "PolyRemesh",
+    "opt": true
+   },
+   {
+    "label": "Retopologize",
+    "rtc": "PolyRetopo",
+    "opt": true
+   },
+   {
+    "label": "Smooth",
+    "rtc": "SmoothPolygon",
+    "opt": true
+   },
+   {
+    "label": "Unsmooth",
+    "rtc": "UnsmoothPolygon",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Triangulate",
+    "rtc": "Triangulate"
+   },
+   {
+    "label": "Quadrangulate",
+    "rtc": "Quadrangulate",
+    "opt": true
+   },
+   {
+    "div": "Mirror"
+   },
+   {
+    "label": "Mirror",
+    "rtc": "MirrorPolygonGeometry",
+    "opt": true
+   },
+   {
+    "div": "Transfer"
+   },
+   {
+    "label": "Clipboard Actions",
+    "sub": [
+     {
+      "label": "Copy Attributes",
+      "rtc": "PolygonCopy",
+      "opt": true
+     },
+     {
+      "label": "Paste Attributes",
+      "rtc": "PolygonPaste",
+      "opt": true
+     },
+     {
+      "label": "Clear Clipboard",
+      "rtc": "PolygonClearClipboard",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Transfer Attributes",
+    "rtc": "TransferAttributes",
+    "opt": true
+   },
+   {
+    "label": "Transfer Shading Sets",
+    "rtc": "TransferShadingSets",
+    "opt": true
+   },
+   {
+    "label": "Transfer Vertex Order",
+    "rtc": "TransferVertexOrder"
+   },
+   {
+    "div": "Optimize"
+   },
+   {
+    "label": "Cleanup...",
+    "rtc": "CleanupPolygon",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Smooth Proxy",
+    "sub": [
+     {
+      "label": "Subdiv Proxy",
+      "rtc": "SmoothProxy",
+      "opt": true
+     },
+     {
+      "label": "Remove Subdiv Proxy Mirror",
+      "rtc": "UnmirrorSmoothProxy",
+      "opt": true
+     },
+     {
+      "label": "Crease Tool",
+      "rtc": "PolyCreaseTool",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Proxy Display",
+      "rtc": "SmoothingDisplayToggle"
+     },
+     {
+      "label": "Both Proxy and Subdiv Display",
+      "rtc": "SmoothingDisplayShowBoth"
+     }
+    ]
+   }
+  ],
+  "Edit Mesh": [
+   {
+    "div": "Components"
+   },
+   {
+    "label": "Add Divisions",
+    "rtc": "SubdividePolygon",
+    "opt": true
+   },
+   {
+    "label": "Bevel",
+    "rtc": "BevelPolygon",
+    "opt": true
+   },
+   {
+    "label": "Smart Bevel",
+    "rtc": "PolySmartBevel",
+    "opt": true
+   },
+   {
+    "label": "Bridge",
+    "rtc": "BridgeOrFill",
+    "opt": true
+   },
+   {
+    "label": "Circularize",
+    "rtc": "PolyCircularize",
+    "opt": true
+   },
+   {
+    "label": "Collapse",
+    "rtc": "PolygonCollapse"
+   },
+   {
+    "label": "Connect",
+    "rtc": "ConnectComponents",
+    "opt": true
+   },
+   {
+    "label": "Detach",
+    "rtc": "DetachComponent"
+   },
+   {
+    "label": "Extrude",
+    "rtc": "PolyExtrude",
+    "opt": true
+   },
+   {
+    "label": "Smart Extrude",
+    "rtc": "SmartExtrude"
+   },
+   {
+    "label": "Merge",
+    "rtc": "PolyMerge",
+    "opt": true
+   },
+   {
+    "label": "Merge to Center",
+    "rtc": "MergeToCenter"
+   },
+   {
+    "label": "Transform",
+    "rtc": "MovePolygonComponent",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Flip",
+    "rtc": "FlipMesh"
+   },
+   {
+    "label": "Symmetrize",
+    "rtc": "Symmetrize"
+   },
+   {
+    "div": "Vertex"
+   },
+   {
+    "label": "Average Vertices",
+    "rtc": "AverageVertex",
+    "opt": true
+   },
+   {
+    "label": "Chamfer Vertices",
+    "rtc": "ChamferVertex",
+    "opt": true
+   },
+   {
+    "label": "Reorder Vertices",
+    "rtc": "ReorderVertex"
+   },
+   {
+    "div": "Edge"
+   },
+   {
+    "label": "Delete Edge/Vertex",
+    "rtc": "DeletePolyElements"
+   },
+   {
+    "label": "Edit Edge Flow",
+    "rtc": "PolyEditEdgeFlow",
+    "opt": true
+   },
+   {
+    "label": "Flip Triangle Edge",
+    "rtc": "FlipTriangleEdge"
+   },
+   {
+    "label": "Spin Edge Backward",
+    "rtc": "PolySpinEdgeBackward"
+   },
+   {
+    "label": "Spin Edge Forward",
+    "rtc": "PolySpinEdgeForward"
+   },
+   {
+    "div": "Face"
+   },
+   {
+    "label": "Assign Invisible Faces",
+    "rtc": "PolyAssignSubdivHole",
+    "opt": true
+   },
+   {
+    "label": "Duplicate",
+    "rtc": "DuplicateFace",
+    "opt": true
+   },
+   {
+    "label": "Extract",
+    "rtc": "ExtractFace",
+    "opt": true
+   },
+   {
+    "label": "Poke",
+    "rtc": "PokePolygon",
+    "opt": true
+   },
+   {
+    "label": "Wedge",
+    "rtc": "WedgePolygon",
+    "opt": true
+   },
+   {
+    "div": "Curve"
+   },
+   {
+    "label": "Project Curve on Mesh",
+    "rtc": "ProjectCurveOnMesh",
+    "opt": true
+   },
+   {
+    "label": "Split Mesh with Projected Curve",
+    "rtc": "SplitMeshWithProjectedCurve",
+    "opt": true
+   }
+  ],
+  "Mesh Tools": [
+   {
+    "label": "Show/Hide Modeling Toolkit",
+    "rtc": "ToggleModelingToolkit"
+   },
+   {
+    "div": "Tools",
+    "opt": true
+   },
+   {
+    "label": "Connect",
+    "rtc": "EnterConnectTool",
+    "opt": true
+   },
+   {
+    "label": "Crease Tool",
+    "rtc": "PolyCreaseTool",
+    "opt": true
+   },
+   {
+    "label": "Insert Edge Loop",
+    "rtc": "SplitEdgeRingTool",
+    "opt": true
+   },
+   {
+    "label": "Make Hole",
+    "rtc": "MakeHoleTool",
+    "opt": true
+   },
+   {
+    "label": "Multi-Cut",
+    "rtc": "MultiCutTool",
+    "opt": true
+   },
+   {
+    "label": "Offset Edge Loop",
+    "rtc": "DuplicateEdges",
+    "opt": true
+   },
+   {
+    "label": "Paint Reduce Weights",
+    "rtc": "PaintReduceWeightsTool",
+    "opt": true
+   },
+   {
+    "label": "Paint Transfer Attributes",
+    "rtc": "PaintTransferAttributes",
+    "opt": true
+   },
+   {
+    "label": "Quad Draw",
+    "rtc": "QuadDrawTool",
+    "opt": true
+   },
+   {
+    "label": "Sculpting Tools",
+    "sub": [
+     {
+      "label": "Sculpt Tool",
+      "rtc": "SetMeshSculptTool",
+      "opt": true
+     },
+     {
+      "label": "Smooth Tool",
+      "rtc": "SetMeshSmoothTool",
+      "opt": true
+     },
+     {
+      "label": "Relax Tool",
+      "rtc": "SetMeshRelaxTool",
+      "opt": true
+     },
+     {
+      "label": "Grab Tool",
+      "rtc": "SetMeshGrabTool",
+      "opt": true
+     },
+     {
+      "label": "Pinch Tool",
+      "rtc": "SetMeshPinchTool",
+      "opt": true
+     },
+     {
+      "label": "Flatten Tool",
+      "rtc": "SetMeshFlattenTool",
+      "opt": true
+     },
+     {
+      "label": "Foamy Tool",
+      "rtc": "SetMeshFoamyTool",
+      "opt": true
+     },
+     {
+      "label": "Spray Tool",
+      "rtc": "SetMeshSprayTool",
+      "opt": true
+     },
+     {
+      "label": "Repeat Tool",
+      "rtc": "SetMeshRepeatTool",
+      "opt": true
+     },
+     {
+      "label": "Imprint Tool",
+      "rtc": "SetMeshImprintTool",
+      "opt": true
+     },
+     {
+      "label": "Wax Tool",
+      "rtc": "SetMeshWaxTool",
+      "opt": true
+     },
+     {
+      "label": "Scrape Tool",
+      "rtc": "SetMeshScrapeTool",
+      "opt": true
+     },
+     {
+      "label": "Fill Tool",
+      "rtc": "SetMeshFillTool",
+      "opt": true
+     },
+     {
+      "label": "Knife Tool",
+      "rtc": "SetMeshKnifeTool",
+      "opt": true
+     },
+     {
+      "label": "Smear Tool",
+      "rtc": "SetMeshSmearTool",
+      "opt": true
+     },
+     {
+      "label": "Bulge Tool",
+      "rtc": "SetMeshBulgeTool",
+      "opt": true
+     },
+     {
+      "label": "Amplify Tool",
+      "rtc": "SetMeshAmplifyTool",
+      "opt": true
+     },
+     {
+      "label": "Freeze Tool",
+      "rtc": "SetMeshFreezeTool",
+      "opt": true
+     },
+     {
+      "div": "Shape Authoring"
+     },
+     {
+      "label": "Smooth Target Tool",
+      "rtc": "SetMeshSmoothTargetTool",
+      "opt": true
+     },
+     {
+      "label": "Clone Target Tool",
+      "rtc": "SetMeshCloneTargetTool",
+      "opt": true
+     },
+     {
+      "label": "Mask Target Tool",
+      "rtc": "SetMeshMaskTool",
+      "opt": true
+     },
+     {
+      "label": "Erase Target Tool",
+      "rtc": "SetMeshEraseTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Slide Edge",
+    "rtc": "SlideEdgeTool",
+    "opt": true
+   },
+   {
+    "label": "Target Weld",
+    "rtc": "MergeVertexTool",
+    "opt": true
+   }
+  ],
+  "Mesh Display": [
+   {
+    "div": "Normals"
+   },
+   {
+    "label": "Average",
+    "rtc": "AveragePolygonNormals",
+    "opt": true
+   },
+   {
+    "label": "Conform",
+    "rtc": "ConformPolygonNormals"
+   },
+   {
+    "label": "Reverse",
+    "rtc": "ReversePolygonNormals",
+    "opt": true
+   },
+   {
+    "label": "Set to Face",
+    "rtc": "SetToFaceNormals",
+    "opt": true
+   },
+   {
+    "label": "Set Vertex Normal",
+    "rtc": "SetVertexNormal",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Harden Edge",
+    "rtc": "PolygonHardenEdge"
+   },
+   {
+    "label": "Soften Edge",
+    "rtc": "PolygonSoftenEdge"
+   },
+   {
+    "label": "Soften/Harden Edges",
+    "rtc": "PolygonSoftenHarden",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Lock Normals",
+    "rtc": "LockNormals"
+   },
+   {
+    "label": "Unlock Normals",
+    "rtc": "UnlockNormals"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Vertex Normal Edit Tool",
+    "rtc": "PolygonNormalEditTool",
+    "opt": true
+   },
+   {
+    "div": "Vertex Colors"
+   },
+   {
+    "label": "Apply Color",
+    "rtc": "PolygonApplyColor",
+    "opt": true
+   },
+   {
+    "label": "Paint Vertex Color Tool",
+    "rtc": "PaintVertexColorTool",
+    "opt": true
+   },
+   {
+    "div": "Vertex Color Sets"
+   },
+   {
+    "label": "Create Empty Set",
+    "rtc": "CreateEmptySet",
+    "opt": true
+   },
+   {
+    "label": "Delete Current Set",
+    "rtc": "DeleteCurrentSet"
+   },
+   {
+    "label": "Rename Current Set...",
+    "rtc": "RenameCurrentSet"
+   },
+   {
+    "label": "Modify Current Set",
+    "rtc": "ModifyCurrentSet"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Set Keyframe for Vertex Color",
+    "rtc": "SetKeyframeForVertexColor"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Color Set Editor",
+    "rtc": "OpenColorSetEditor"
+   },
+   {
+    "div": "Vertex Bake Sets"
+   },
+   {
+    "label": "Prelight (Maya)",
+    "rtc": "PreflightPolygon",
+    "opt": true
+   },
+   {
+    "label": "Assign New Set",
+    "rtc": "AssignNewSet"
+   },
+   {
+    "label": "Assign Existing Set",
+    "sub": []
+   },
+   {
+    "label": "Edit Assigned Set",
+    "rtc": "EditAssignedSet"
+   },
+   {
+    "div": "Display Attributes"
+   },
+   {
+    "label": "Toggle Display Colors Attribute",
+    "rtc": "ToggleDisplayColorsAttr"
+   },
+   {
+    "label": "Color Material Channel",
+    "sub": [
+     {
+      "label": "None",
+      "rtc": "SetCMCNone"
+     },
+     {
+      "label": "Ambient",
+      "rtc": "SetCMCAmbient"
+     },
+     {
+      "label": "Ambient+Diffuse",
+      "rtc": "SetCMCAmbientDiffuse"
+     },
+     {
+      "label": "Diffuse",
+      "rtc": "SetCMCDiffuse"
+     },
+     {
+      "label": "Specular",
+      "rtc": "SetCMCSpecular"
+     },
+     {
+      "label": "Emission",
+      "rtc": "SetCMCEmission"
+     }
+    ]
+   },
+   {
+    "label": "Material Blend Setting",
+    "sub": [
+     {
+      "label": "Overwrite",
+      "rtc": "SetMBSOverwrite"
+     },
+     {
+      "label": "Add",
+      "rtc": "SetMBSAdd"
+     },
+     {
+      "label": "Subtract",
+      "rtc": "SetMBSSubtract"
+     },
+     {
+      "label": "Multiply",
+      "rtc": "SetMBSMultiply"
+     },
+     {
+      "label": "Divide",
+      "rtc": "SetMBSDivide"
+     },
+     {
+      "label": "Average",
+      "rtc": "SetMBSAverage"
+     },
+     {
+      "label": "Modulate 2x",
+      "rtc": "SetMBSModulate2"
+     }
+    ]
+   },
+   {
+    "label": "Per Instance Sharing",
+    "sub": [
+     {
+      "label": "Select Shared Instances",
+      "rtc": "SelectSharedColorInstances"
+     },
+     {
+      "label": "Share Instances",
+      "rtc": "ShareColorInstances"
+     }
+    ]
+   },
+   {
+    "call": "refreshPolygonsColorMenu"
+   }
+  ],
+  "Curves": [
+   {
+    "div": "Modify"
+   },
+   {
+    "label": "Lock Length",
+    "rtc": "LockCurveLength"
+   },
+   {
+    "label": "Unlock Length",
+    "rtc": "UnlockCurveLength"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Bend",
+    "rtc": "BendCurves",
+    "opt": true
+   },
+   {
+    "label": "Curl",
+    "rtc": "CurlCurves",
+    "opt": true
+   },
+   {
+    "label": "Scale Curvature",
+    "rtc": "ScaleCurvature",
+    "opt": true
+   },
+   {
+    "label": "Smooth",
+    "rtc": "SmoothHairCurves",
+    "opt": true
+   },
+   {
+    "label": "Straighten",
+    "rtc": "StraightenCurves",
+    "opt": true
+   },
+   {
+    "div": "Edit"
+   },
+   {
+    "label": "Duplicate Surface Curves",
+    "rtc": "DuplicateCurve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Align",
+    "rtc": "AlignCurve",
+    "opt": true
+   },
+   {
+    "label": "Add Points Tool",
+    "rtc": "AddPointsTool"
+   },
+   {
+    "label": "Attach",
+    "rtc": "AttachCurve",
+    "opt": true
+   },
+   {
+    "label": "Detach",
+    "rtc": "DetachCurve",
+    "opt": true
+   },
+   {
+    "label": "Edit Curve Tool",
+    "rtc": "CurveEditTool"
+   },
+   {
+    "label": "Move Seam",
+    "rtc": "MoveCurveSeam"
+   },
+   {
+    "label": "Open/Close",
+    "rtc": "OpenCloseCurve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Fillet",
+    "rtc": "CurveFillet",
+    "opt": true
+   },
+   {
+    "label": "Cut",
+    "rtc": "CutCurve",
+    "opt": true
+   },
+   {
+    "label": "Intersect",
+    "rtc": "IntersectCurve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Extend",
+    "sub": [
+     {
+      "label": "Extend Curve",
+      "rtc": "ExtendCurve",
+      "opt": true
+     },
+     {
+      "label": "Extend Curve On Surface",
+      "rtc": "ExtendCurveOnSurface",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Insert Knot",
+    "rtc": "InsertKnot",
+    "opt": true
+   },
+   {
+    "label": "Offset",
+    "sub": [
+     {
+      "label": "Offset Curve",
+      "rtc": "OffsetCurve",
+      "opt": true
+     },
+     {
+      "label": "Offset Curve On Surface",
+      "rtc": "OffsetCurveOnSurface",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "CV Hardness",
+    "rtc": "CVHardness",
+    "opt": true
+   },
+   {
+    "label": "Fit B-spline",
+    "rtc": "FitBSpline",
+    "opt": true
+   },
+   {
+    "label": "Project Tangent",
+    "rtc": "ProjectTangent",
+    "opt": true
+   },
+   {
+    "label": "Smooth",
+    "rtc": "SmoothCurve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Bezier Curves",
+    "sub": [
+     {
+      "label": "Anchor Presets",
+      "sub": [
+       {
+        "label": "Bezier",
+        "rtc": "BezierPresetBezier"
+       },
+       {
+        "label": "Bezier Corner",
+        "rtc": "BezierPresetBezierCorner"
+       },
+       {
+        "label": "Corner",
+        "rtc": "BezierPresetCorner"
+       }
+      ]
+     },
+     {
+      "label": "Tangent Options",
+      "sub": [
+       {
+        "label": "Smooth Anchor Tangents",
+        "rtc": "BezierSetAnchorSmooth"
+       },
+       {
+        "label": "Break Anchor Tangents",
+        "rtc": "BezierSetAnchorBroken"
+       },
+       {
+        "label": "Even Anchor Tangents",
+        "rtc": "BezierSetAnchorEven"
+       },
+       {
+        "label": "Uneven Anchor Tangents",
+        "rtc": "BezierSetAnchorUneven"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Rebuild",
+    "rtc": "RebuildCurve",
+    "opt": true
+   },
+   {
+    "label": "Reverse Direction",
+    "rtc": "ReverseCurve",
+    "opt": true
+   }
+  ],
+  "Surfaces": [
+   {
+    "div": "Create"
+   },
+   {
+    "label": "Loft",
+    "rtc": "Loft",
+    "opt": true
+   },
+   {
+    "label": "Planar",
+    "rtc": "Planar",
+    "opt": true
+   },
+   {
+    "label": "Revolve",
+    "rtc": "Revolve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Birail",
+    "sub": [
+     {
+      "label": "Birail 1 Tool",
+      "rtc": "Birail1",
+      "opt": true
+     },
+     {
+      "label": "Birail 2 Tool",
+      "rtc": "Birail2",
+      "opt": true
+     },
+     {
+      "label": "Birail 3+ Tool",
+      "rtc": "Birail3",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Extrude",
+    "rtc": "Extrude",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Boundary",
+    "rtc": "Boundary",
+    "opt": true
+   },
+   {
+    "label": "Square",
+    "rtc": "SquareSurface",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Bevel",
+    "rtc": "Bevel",
+    "opt": true
+   },
+   {
+    "label": "Bevel Plus",
+    "rtc": "BevelPlus",
+    "opt": true
+   },
+   {
+    "div": "Edit NURBS Surfaces"
+   },
+   {
+    "label": "Duplicate NURBS Patch",
+    "rtc": "DuplicateNURBSPatches",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Align",
+    "rtc": "AlignSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Attach",
+    "rtc": "AttachSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Attach Without Moving",
+    "rtc": "AttachSurfaceWithoutMoving"
+   },
+   {
+    "label": "Detach",
+    "rtc": "DetachSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Move Seam",
+    "rtc": "MoveSurfaceSeam"
+   },
+   {
+    "label": "Open/Close",
+    "rtc": "OpenCloseSurfaces",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Intersect",
+    "rtc": "IntersectSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Project Curve on Surface",
+    "rtc": "ProjectCurveOnSurface",
+    "opt": true
+   },
+   {
+    "label": "Trim Tool",
+    "rtc": "TrimTool",
+    "opt": true
+   },
+   {
+    "label": "Untrim",
+    "rtc": "UntrimSurfaces",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Extend",
+    "rtc": "ExtendSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Insert Isoparms",
+    "rtc": "InsertIsoparms",
+    "opt": true
+   },
+   {
+    "label": "Offset",
+    "rtc": "OffsetSurfaces",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Round Tool",
+    "rtc": "RoundTool",
+    "opt": true
+   },
+   {
+    "label": "Stitch",
+    "sub": [
+     {
+      "label": "Stitch Surface Points",
+      "rtc": "StitchSurfacePoints",
+      "opt": true
+     },
+     {
+      "label": "Stitch Edges Tool",
+      "rtc": "StitchEdgesTool",
+      "opt": true
+     },
+     {
+      "label": "Global Stitch",
+      "rtc": "GlobalStitch",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Surface Fillet",
+    "sub": [
+     {
+      "label": "Circular Fillet",
+      "rtc": "CircularFillet",
+      "opt": true
+     },
+     {
+      "label": "Freeform Fillet",
+      "rtc": "FreeformFillet",
+      "opt": true
+     },
+     {
+      "label": "Fillet Blend Tool",
+      "rtc": "FilletBlendTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Sculpt Geometry Tool",
+    "rtc": "SculptGeometryTool",
+    "opt": true
+   },
+   {
+    "label": "Surface Editing",
+    "sub": [
+     {
+      "label": "Surface Editing Tool",
+      "rtc": "SurfaceEditingTool",
+      "opt": true
+     },
+     {
+      "label": "Break Tangent",
+      "rtc": "BreakTangent"
+     },
+     {
+      "label": "Smooth Tangent",
+      "rtc": "SmoothTangent"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Booleans",
+    "sub": [
+     {
+      "label": "Union Tool",
+      "rtc": "SurfaceBooleanUnionTool",
+      "opt": true
+     },
+     {
+      "label": "Difference Tool",
+      "rtc": "SurfaceBooleanSubtractTool",
+      "opt": true
+     },
+     {
+      "label": "Intersection Tool",
+      "rtc": "SurfaceBooleanIntersectTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Rebuild",
+    "rtc": "RebuildSurfaces",
+    "opt": true
+   },
+   {
+    "label": "Reverse Direction",
+    "rtc": "ReverseSurfaceDirection",
+    "opt": true
+   }
+  ],
+  "Deform": [
+   {
+    "label": "Curve Warp",
+    "rtc": "CurveWarp"
+   },
+   {
+    "div": "Create"
+   },
+   {
+    "label": "Blend Shape",
+    "rtc": "CreateBlendShape",
+    "opt": true
+   },
+   {
+    "label": "Cluster",
+    "rtc": "CreateCluster",
+    "opt": true
+   },
+   {
+    "label": "Curve Warp",
+    "rtc": "CurveWarp"
+   },
+   {
+    "label": "Delta Mush",
+    "rtc": "DeltaMush",
+    "opt": true
+   },
+   {
+    "label": "ML Deformer",
+    "rtc": "MLDeformer",
+    "opt": true
+   },
+   {
+    "label": "Tension",
+    "rtc": "Tension",
+    "opt": true
+   },
+   {
+    "label": "Solidify",
+    "rtc": "Solidify",
+    "opt": true
+   },
+   {
+    "label": "Lattice",
+    "rtc": "CreateLattice",
+    "opt": true
+   },
+   {
+    "label": "Proximity Wrap",
+    "rtc": "ProximityWrap",
+    "opt": true
+   },
+   {
+    "label": "Wrap",
+    "rtc": "CreateWrap",
+    "opt": true
+   },
+   {
+    "label": "ShrinkWrap",
+    "rtc": "CreateShrinkWrap",
+    "opt": true
+   },
+   {
+    "label": "Morph",
+    "rtc": "Morph",
+    "opt": true
+   },
+   {
+    "label": "Wire",
+    "rtc": "WireTool",
+    "opt": true
+   },
+   {
+    "label": "Wrinkle",
+    "rtc": "WrinkleTool",
+    "opt": true
+   },
+   {
+    "label": "Pose Space Deformation",
+    "sub": [
+     {
+      "label": "Create Pose Interpolator",
+      "rtc": "CreatePoseInterpolator",
+      "opt": true
+     },
+     {
+      "label": "PoseEditor",
+      "rtc": "PoseEditor"
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Nonlinear",
+    "sub": [
+     {
+      "label": "Bend",
+      "rtc": "Bend",
+      "opt": true
+     },
+     {
+      "label": "Flare",
+      "rtc": "Flare",
+      "opt": true
+     },
+     {
+      "label": "Sine",
+      "rtc": "Sine",
+      "opt": true
+     },
+     {
+      "label": "Squash",
+      "rtc": "Squash",
+      "opt": true
+     },
+     {
+      "label": "Twist",
+      "rtc": "Twist",
+      "opt": true
+     },
+     {
+      "label": "Wave",
+      "rtc": "Wave",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Soft Modification Tool",
+    "rtc": "SoftModTool",
+    "opt": true
+   },
+   {
+    "label": "Sculpt",
+    "rtc": "CreateSculptDeformer",
+    "opt": true
+   },
+   {
+    "label": "Texture",
+    "rtc": "CreateTextureDeformer",
+    "opt": true
+   },
+   {
+    "label": "Jiggle",
+    "sub": [
+     {
+      "label": "Jiggle Deformer",
+      "rtc": "CreateJiggleDeformer",
+      "opt": true
+     },
+     {
+      "label": "Jiggle Disk Cache",
+      "rtc": "CreateDiskCache",
+      "opt": true
+     },
+     {
+      "label": "Jiggle Disk Cache Attributes",
+      "rtc": "GlobalDiskCacheControl"
+     }
+    ]
+   },
+   {
+    "label": "Point On Curve",
+    "rtc": "PointOnCurve",
+    "opt": true
+   },
+   {
+    "label": "Add Tweak",
+    "rtc": "AddTweak"
+   },
+   {
+    "div": "Edit"
+   },
+   {
+    "label": "Blend Shape",
+    "sub": [
+     {
+      "label": "Add",
+      "rtc": "AddBlendShape",
+      "opt": true
+     },
+     {
+      "label": "Remove",
+      "rtc": "RemoveBlendShape",
+      "opt": true
+     },
+     {
+      "label": "Swap",
+      "rtc": "SwapBlendShape",
+      "opt": true
+     },
+     {
+      "label": "Bake Topology To Targets",
+      "rtc": "BakeTopologyToTargets"
+     },
+     {
+      "label": "Edit Normalization Groups",
+      "rtc": "EditNormalizationGroups"
+     }
+    ]
+   },
+   {
+    "label": "Lattice",
+    "sub": [
+     {
+      "label": "Remove Lattice Tweaks",
+      "rtc": "RemoveLatticeTweaks"
+     },
+     {
+      "label": "Reset Lattice",
+      "rtc": "ResetLattice"
+     }
+    ]
+   },
+   {
+    "label": "Wrap",
+    "sub": [
+     {
+      "label": "Add Influence",
+      "rtc": "AddWrapInfluence"
+     },
+     {
+      "label": "Remove Influence",
+      "rtc": "RemoveWrapInfluence"
+     }
+    ]
+   },
+   {
+    "label": "ShrinkWrap",
+    "sub": [
+     {
+      "label": "Add surfaces",
+      "rtc": "AddShrinkWrapSurfaces"
+     },
+     {
+      "label": "Remove Inner Object",
+      "rtc": "RemoveShrinkWrapInnerObject"
+     },
+     {
+      "label": "Remove surfaces",
+      "rtc": "RemoveShrinkWrapSurfaces"
+     },
+     {
+      "label": "Remove Target",
+      "rtc": "RemoveShrinkWrapTarget"
+     },
+     {
+      "label": "Set Inner Object",
+      "rtc": "SetShrinkWrapInnerObject"
+     },
+     {
+      "label": "Set Target",
+      "rtc": "SetShrinkWrapTarget"
+     }
+    ]
+   },
+   {
+    "label": "Wire",
+    "sub": [
+     {
+      "label": "Add",
+      "rtc": "AddWire",
+      "opt": true
+     },
+     {
+      "label": "Add Holder",
+      "rtc": "AddHolder",
+      "opt": true
+     },
+     {
+      "label": "Parent Base Wire",
+      "rtc": "ParentBaseWire",
+      "opt": true
+     },
+     {
+      "label": "Remove",
+      "rtc": "RemoveWire",
+      "opt": true
+     },
+     {
+      "label": "Reset",
+      "rtc": "ResetWire",
+      "opt": true
+     },
+     {
+      "label": "Show Base Wire",
+      "rtc": "ShowBaseWire"
+     },
+     {
+      "label": "Wire Dropoff Locator",
+      "rtc": "WireDropoffLocator",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": "Intermediate Objects"
+   },
+   {
+    "label": "Display Intermediate Objects",
+    "rtc": "DisplayIntermediateObjects"
+   },
+   {
+    "label": "Hide Intermediate Objects",
+    "rtc": "HideIntermediateObjects"
+   },
+   {
+    "div": "Weights"
+   },
+   {
+    "label": "Paint Weights",
+    "sub": [
+     {
+      "label": "Blend Shape",
+      "rtc": "ArtPaintBlendShapeWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Cluster",
+      "rtc": "PaintClusterWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Delta Mush",
+      "rtc": "PaintDeltaMushWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Tension",
+      "rtc": "PaintTensionWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Proximity Wrap",
+      "rtc": "PaintProximityWrapWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Lattice",
+      "rtc": "PaintLatticeWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "ShrinkWrap",
+      "rtc": "PaintShrinkWrapWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Wire",
+      "rtc": "PaintWireWeightsTool",
+      "opt": true
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Nonlinear",
+      "rtc": "PaintNonlinearWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Jiggle",
+      "rtc": "PaintJiggleWeightsTool",
+      "opt": true
+     },
+     {
+      "label": "Texture Deformer",
+      "rtc": "PaintTextureDeformerWeightsTool",
+      "opt": true
+     },
+     {
+      "div": ""
+     }
+    ]
+   },
+   {
+    "label": "Mirror Deformer Weights",
+    "rtc": "MirrorDeformerWeights",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Export Weights...",
+    "rtc": "ExportDeformerWeights"
+   },
+   {
+    "label": "Import Weights...",
+    "rtc": "ImportDeformerWeights"
+   },
+   {
+    "div": "Deformer Sets (legacy)"
+   },
+   {
+    "label": "Edit Membership Tool",
+    "rtc": "EditMembershipTool"
+   },
+   {
+    "label": "Prune Membership",
+    "sub": [
+     {
+      "label": "Cluster",
+      "rtc": "PruneCluster"
+     },
+     {
+      "label": "Lattice",
+      "rtc": "PruneLattice"
+     },
+     {
+      "label": "Sculpt",
+      "rtc": "PruneSculpt"
+     },
+     {
+      "label": "Wire",
+      "rtc": "PruneWire"
+     }
+    ]
+   },
+   {
+    "label": "Paint Membership",
+    "rtc": "PaintSetMembershipTool",
+    "opt": true
+   }
+  ],
+  "UV": [
+   {
+    "label": "UV Editor",
+    "rtc": "TextureViewWindow"
+   },
+   {
+    "label": "UV Set Editor",
+    "rtc": "UVSetEditor"
+   },
+   {
+    "div": "Create"
+   },
+   {
+    "label": "Assign Checker Shader",
+    "rtc": "TogglePolyUVsCreateShader",
+    "check": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Automatic",
+    "rtc": "UVAutomaticProjection",
+    "opt": true
+   },
+   {
+    "label": "Best Plane",
+    "rtc": "BestPlaneTexturingTool"
+   },
+   {
+    "label": "Camera-based",
+    "rtc": "UVCameraBasedProjection",
+    "opt": true
+   },
+   {
+    "label": "Contour Stretch",
+    "rtc": "UVContourStretchProjection",
+    "opt": true
+   },
+   {
+    "label": "Normal-Based",
+    "rtc": "UVNormalBasedProjection",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Cylindrical",
+    "rtc": "UVCylindricProjection",
+    "opt": true
+   },
+   {
+    "label": "Planar",
+    "rtc": "UVPlanarProjection",
+    "opt": true
+   },
+   {
+    "label": "Spherical",
+    "rtc": "UVSphericalProjection",
+    "opt": true
+   },
+   {
+    "div": "Cut/Sew"
+   },
+   {
+    "label": "Auto Seams",
+    "rtc": "AutoSeamUVs",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Cut UV Edges",
+    "rtc": "CutUVsWithoutHotkey"
+   },
+   {
+    "label": "Sew UV Edges",
+    "rtc": "SewUVsWithoutHotkey"
+   },
+   {
+    "label": "Split UVs",
+    "rtc": "SplitUV"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Delete UVs",
+    "rtc": "DeleteUVsWithoutHotkey"
+   },
+   {
+    "label": "Merge UVs",
+    "rtc": "MergeUV",
+    "opt": true
+   },
+   {
+    "div": "Tools"
+   },
+   {
+    "label": "3D Cut and Sew UV Tool",
+    "rtc": "SetCutSewUVTool",
+    "opt": true
+   },
+   {
+    "label": "3D Grab UV Tool",
+    "rtc": "SetMeshGrabUVTool",
+    "opt": true
+   }
+  ],
+  "Generate": [
+   {
+    "div": ""
+   }
+  ],
+  "Key": [
+   {
+    "div": "Set"
+   },
+   {
+    "label": "Set Key",
+    "rtc": "SetKey",
+    "opt": true
+   },
+   {
+    "label": "Set Key on Animated",
+    "rtc": "SetKeyAnimated"
+   },
+   {
+    "label": "Set Key on Translate",
+    "rtc": "SetKeyTranslate"
+   },
+   {
+    "label": "Set Key on Rotate",
+    "rtc": "SetKeyRotate"
+   },
+   {
+    "label": "Set Key on Scale",
+    "rtc": "SetKeyScale"
+   },
+   {
+    "label": "Set Breakdown Key",
+    "rtc": "SetBreakdownKey",
+    "opt": true
+   },
+   {
+    "label": "Set Driven Key",
+    "sub": [
+     {
+      "label": "Set...",
+      "rtc": "SetDrivenKey"
+     },
+     {
+      "label": "Go to Previous",
+      "rtc": "GoToPreviousDrivenKey"
+     },
+     {
+      "label": "Go to Next",
+      "rtc": "GoToNextDrivenKey"
+     }
+    ]
+   },
+   {
+    "label": "Set Blend Shape Target Weight Keys",
+    "rtc": "KeyBlendShapeTargetsWeight"
+   },
+   {
+    "div": "Insert"
+   },
+   {
+    "label": "Insert Key",
+    "rtc": "InsertKey"
+   },
+   {
+    "label": "Insert Key on Translate",
+    "rtc": "InsertKeyTranslate"
+   },
+   {
+    "label": "Insert Key on Rotate",
+    "rtc": "InsertKeyRotate"
+   },
+   {
+    "label": "Insert Key on Scale",
+    "rtc": "InsertKeyScale"
+   },
+   {
+    "div": "Edit"
+   },
+   {
+    "label": "Cut Keys",
+    "rtc": "CutKeys",
+    "opt": true
+   },
+   {
+    "label": "Copy Keys",
+    "rtc": "CopyKeys",
+    "opt": true
+   },
+   {
+    "label": "Paste Keys",
+    "rtc": "PasteKeys",
+    "opt": true
+   },
+   {
+    "label": "Delete Keys",
+    "rtc": "DeleteKeys",
+    "opt": true
+   },
+   {
+    "label": "$cmd",
+    "rtc": "$cmd",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Hold Current Keys",
+    "rtc": "HoldCurrentKeys"
+   },
+   {
+    "label": "IK/FK Keys",
+    "sub": [
+     {
+      "label": "Set IK/FK Key",
+      "rtc": "SetIKFKKeyframe"
+     },
+     {
+      "label": "Enable IK Solver",
+      "rtc": "ToggleFkIk",
+      "check": true
+     },
+     {
+      "label": "Connect to IK/FK",
+      "rtc": "ConnectNodeToIKFK"
+     },
+     {
+      "label": "Move IK to FK",
+      "rtc": "MoveIKtoFK"
+     }
+    ]
+   },
+   {
+    "div": "Character Set"
+   },
+   {
+    "label": "Create Character Set",
+    "rtc": "CreateCharacter",
+    "opt": true
+   },
+   {
+    "label": "Create Subcharacter Set",
+    "rtc": "CreateSubCharacter",
+    "opt": true
+   },
+   {
+    "label": "Character Mapper",
+    "rtc": "CharacterMapper"
+   },
+   {
+    "label": "EditCharacterAttributes",
+    "rtc": "EditCharacterAttributes"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Add to Character Set",
+    "rtc": "AddToCharacterSet"
+   },
+   {
+    "label": "Remove from Character Set",
+    "rtc": "RemoveFromCharacterSet"
+   },
+   {
+    "label": "Merge Character Sets",
+    "rtc": "MergeCharacterSet"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Select Character Set Node",
+    "sub": []
+   },
+   {
+    "label": "Select Character Set Members",
+    "sub": []
+   },
+   {
+    "label": "Set Current Character Set",
+    "sub": []
+   },
+   {
+    "label": "Redirect",
+    "rtc": "AddAnimationOffset",
+    "opt": true
+   },
+   {
+    "div": "Time"
+   },
+   {
+    "label": "Scene Time Warp",
+    "sub": [
+     {
+      "label": "Add Scene Time Warp",
+      "rtc": "AddTimeWarp"
+     },
+     {
+      "label": "Select Scene Time Warp",
+      "rtc": "SelectTimeWarp"
+     },
+     {
+      "label": "Delete Scene Time Warp",
+      "rtc": "DeleteTimeWarp"
+     },
+     {
+      "label": "Enable Scene Time Warp",
+      "rtc": "EnableTimeWarp",
+      "check": true
+     }
+    ]
+   }
+  ],
+  "Playback": [
+   {
+    "div": ""
+   },
+   {
+    "label": "Playblast",
+    "rtc": "PlayblastWindow",
+    "opt": true
+   },
+   {
+    "div": "Controls"
+   },
+   {
+    "label": "Play",
+    "rtc": "PlaybackForward"
+   },
+   {
+    "label": "Backward",
+    "rtc": "PlaybackBackward"
+   },
+   {
+    "label": "Stop",
+    "rtc": "PlaybackStop"
+   },
+   {
+    "label": "Next Key",
+    "rtc": "NextKey"
+   },
+   {
+    "label": "Prev Key",
+    "rtc": "PreviousKey"
+   },
+   {
+    "label": "Select Next Key",
+    "rtc": "SelectNextKey"
+   },
+   {
+    "label": "Select Previous Key",
+    "rtc": "SelectPreviousKey"
+   },
+   {
+    "label": "Next Frame",
+    "rtc": "NextFrame"
+   },
+   {
+    "label": "Prev Frame",
+    "rtc": "PreviousFrame"
+   },
+   {
+    "label": "Play Range Start",
+    "rtc": "GoToMinFrame"
+   },
+   {
+    "label": "Play Range End",
+    "rtc": "GoToMaxFrame"
+   },
+   {
+    "div": "Settings"
+   },
+   {
+    "label": "Set Range to",
+    "sub": [
+     {
+      "label": "Enabled Clips",
+      "rtc": "PlaybackRangeEnabledClips"
+     },
+     {
+      "label": "Min/Max",
+      "rtc": "PlaybackRangeMinMax"
+     },
+     {
+      "label": "Preferences",
+      "rtc": "PlaybackRangePrefs"
+     },
+     {
+      "label": "Selected",
+      "rtc": "PlaybackRangeHighlight"
+     },
+     {
+      "label": "Sound Length",
+      "rtc": "PlaybackRangeSound"
+     },
+     {
+      "label": "Start/End",
+      "rtc": "PlaybackRangeStartEnd"
+     }
+    ]
+   },
+   {
+    "label": "Playback Speed",
+    "sub": [
+     {
+      "label": "Play Every Frame, Free",
+      "rtc": "PlaybackFree",
+      "radio": true
+     },
+     {
+      "label": "Play Every Frame, Max Real-time",
+      "rtc": "PlaybackPefRealtime",
+      "radio": true
+     },
+     {
+      "label": "Real-time",
+      "rtc": "PlaybackRealtime",
+      "radio": true
+     }
+    ]
+   },
+   {
+    "label": "Playback Looping",
+    "sub": [
+     {
+      "label": "Continuous",
+      "rtc": "PlaybackLoopContinuous",
+      "radio": true
+     },
+     {
+      "label": "Once",
+      "rtc": "PlaybackLoopOnce",
+      "radio": true
+     },
+     {
+      "label": "Oscillate",
+      "rtc": "PlaybackLoopOscillate",
+      "radio": true
+     }
+    ]
+   },
+   {
+    "label": "Enable Stepped Preview",
+    "rtc": "PlaybackSteppedPreview",
+    "check": true
+   },
+   {
+    "div": "Render"
+   },
+   {
+    "label": "Render Current Frame",
+    "rtc": "RenderIntoNewWindow"
+   },
+   {
+    "label": "RenderGlobalsWindow",
+    "rtc": "RenderGlobalsWindow"
+   }
+  ]
+ },
+ "marking": {
+  "Hotbox North": [
+   {
+    "label": "Single Perspective",
+    "rp": "N"
+   },
+   {
+    "label": "Hypershade/Render/Persp",
+    "rp": "NE"
+   },
+   {
+    "label": "Hypershade/Outliner/Persp",
+    "rp": "SE"
+   },
+   {
+    "label": "Hypershade/Persp",
+    "rp": "E"
+   },
+   {
+    "label": "Toggle Outliner",
+    "rp": "S",
+    "c": "ToggleOutliner"
+   },
+   {
+    "label": "Persp/Graph/Outliner",
+    "rp": "SW"
+   },
+   {
+    "label": "Persp/Graph",
+    "rp": "W"
+   },
+   {
+    "label": "Persp/Relationship Editor",
+    "rp": "NW"
+   }
+  ],
+  "Hotbox South": [
+   {
+    "label": "Outliner",
+    "rp": "N"
+   },
+   {
+    "label": "Graph Editor",
+    "rp": "E"
+   },
+   {
+    "label": "Dope Sheet",
+    "rp": "SE"
+   },
+   {
+    "label": "Hypergraph",
+    "rp": "S"
+   },
+   {
+    "label": "Node Editor",
+    "rp": "SW"
+   },
+   {
+    "label": "Hypershade",
+    "rp": "W"
+   },
+   {
+    "label": "Render View",
+    "rp": "NW"
+   },
+   {
+    "label": "Set Editor",
+    "rp": "NE"
+   }
+  ],
+  "Hotbox East": [
+   {
+    "label": "Help Line",
+    "rp": "N"
+   },
+   {
+    "label": "Status Line",
+    "rp": "NE"
+   },
+   {
+    "label": "Attributes",
+    "rp": "E",
+    "sub": [
+     {
+      "label": "Channel Box",
+      "rp": "E"
+     },
+     {
+      "label": "Layer Editor",
+      "rp": "S"
+     },
+     {
+      "label": "Attribute Editor",
+      "rp": "W"
+     },
+     {
+      "label": "Tool Settings",
+      "rp": "N"
+     }
+    ]
+   },
+   {
+    "label": "Tool Box",
+    "rp": "SE"
+   },
+   {
+    "label": "Time Slider",
+    "rp": "S"
+   },
+   {
+    "label": "Range Slider",
+    "rp": "SW"
+   },
+   {
+    "label": "Shelf",
+    "rp": "W"
+   },
+   {
+    "label": "Command Line",
+    "rp": "NW"
+   }
+  ],
+  "Hotbox West": [
+   {
+    "label": "NURBS Mask",
+    "rp": "N"
+   },
+   {
+    "label": "Hierarchy",
+    "rp": "NE"
+   },
+   {
+    "label": "Animation Mask",
+    "rp": "E"
+   },
+   {
+    "label": "Deformations Mask",
+    "rp": "SE"
+   },
+   {
+    "label": "Dynamics Mask",
+    "rp": "S"
+   },
+   {
+    "label": "Polygons Mask",
+    "rp": "SW"
+   },
+   {
+    "label": "Rendering Mask",
+    "rp": "W"
+   },
+   {
+    "label": "Object/Components",
+    "rp": "NW"
+   }
+  ],
+  "Hotbox Center": [
+   {
+    "label": "Perspective View",
+    "rp": "N"
+   },
+   {
+    "label": "Side View",
+    "rp": "E"
+   },
+   {
+    "label": "Front View",
+    "rp": "S"
+   },
+   {
+    "label": "Top View",
+    "rp": "W"
+   },
+   {
+    "label": "Left View",
+    "rp": "NW"
+   },
+   {
+    "label": "Back View",
+    "rp": "SW"
+   },
+   {
+    "label": "Bottom View",
+    "rp": "SE"
+   },
+   {
+    "label": "Hotbox Style",
+    "sub": [
+     {
+      "label": "Zones and Menu Rows"
+     },
+     {
+      "label": "Zones Only"
+     },
+     {
+      "label": "Center Zone Only"
+     }
+    ]
+   }
+  ],
+  "Object RMB (dagMenuProc)": [
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Show Display Handle",
+    "rp": "W"
+   },
+   {
+    "label": "Display Local Axis",
+    "rp": "SW"
+   },
+   {
+    "label": "Lock Influence",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Affected Vertices",
+    "rp": "NE"
+   },
+   {
+    "label": "Add Affected Vertices",
+    "rp": "E"
+   },
+   {
+    "label": "Deselect Affected Vertices",
+    "rp": "SE"
+   },
+   {
+    "label": "Select Influence",
+    "rp": "N"
+   },
+   {
+    "label": "Paint Mode",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Mode",
+    "rp": "E"
+   },
+   {
+    "label": "Paint Select Mode",
+    "rp": "SE"
+   },
+   {
+    "label": "Paint Skin Weights Tool",
+    "rp": "NW"
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Show Display Handle",
+    "rp": "W"
+   },
+   {
+    "label": "Display Local Axis",
+    "rp": "SW"
+   },
+   {
+    "label": "Lock Influence",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Affected Vertices",
+    "rp": "NE"
+   },
+   {
+    "label": "Add Affected Vertices",
+    "rp": "E"
+   },
+   {
+    "label": "Deselect Affected Vertices",
+    "rp": "SE"
+   },
+   {
+    "label": "Select Influence",
+    "rp": "N"
+   },
+   {
+    "label": "Paint Mode",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Mode",
+    "rp": "E"
+   },
+   {
+    "label": "Paint Select Mode",
+    "rp": "SE"
+   },
+   {
+    "label": "Paint Skin Weights Tool",
+    "rp": "NW"
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition",
+    "sub": [
+     {
+      "label": "$uiName",
+      "rp": "$radialPosition"
+     },
+     {
+      "label": "UV Shell",
+      "rp": "$altRP"
+     }
+    ]
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Show Display Handle",
+    "rp": "W"
+   },
+   {
+    "label": "Display Local Axis",
+    "rp": "SW"
+   },
+   {
+    "label": "Lock Influence",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Affected Vertices",
+    "rp": "NE"
+   },
+   {
+    "label": "Add Affected Vertices",
+    "rp": "E"
+   },
+   {
+    "label": "Deselect Affected Vertices",
+    "rp": "SE"
+   },
+   {
+    "label": "Select Influence",
+    "rp": "N"
+   },
+   {
+    "label": "Paint Mode",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Mode",
+    "rp": "E"
+   },
+   {
+    "label": "Paint Select Mode",
+    "rp": "SE"
+   },
+   {
+    "label": "Reach Mode:",
+    "rp": "N",
+    "sub": [
+     {
+      "label": "IK (Reach = 1)",
+      "rp": "S",
+      "c": "FBIKReachKeyingOptionIK"
+     },
+     {
+      "label": "FK (Reach = 0)",
+      "rp": "N",
+      "c": "FBIKReachKeyingOptionFK"
+     },
+     {
+      "label": "Simple (No Reach)",
+      "rp": "E",
+      "c": "FBIKReachKeyingOptionSimple"
+     },
+     {
+      "label": "Stance Pose",
+      "rp": "N"
+     },
+     {
+      "label": "HIK Mode: Full Body *",
+      "rp": "NE",
+      "c": "HIKFullBodyMode"
+     },
+     {
+      "label": "HIK Mode: Body Part *",
+      "rp": "E",
+      "c": "HIKBodyPartMode"
+     },
+     {
+      "label": "HIK Mode: Selection *",
+      "rp": "SE",
+      "c": "HIKSelectedMode"
+     }
+    ]
+   },
+   {
+    "label": "Set Preferred Angle",
+    "rp": "$setPreferredQuad"
+   },
+   {
+    "label": "Assume Preferred Angle",
+    "rp": "$assumePreferredQuad"
+   },
+   {
+    "label": "Break Symmetry",
+    "rp": "S"
+   },
+   {
+    "label": "Edit Joints",
+    "rp": "N",
+    "sub": [
+     {
+      "label": "Add",
+      "rp": "N",
+      "c": "JointTool"
+     },
+     {
+      "label": "Insert",
+      "rp": "W",
+      "c": "InsertJointTool"
+     },
+     {
+      "label": "Remove",
+      "rp": "E",
+      "c": "RemoveJoint"
+     }
+    ]
+   },
+   {
+    "label": "Pin Both",
+    "rp": "SW"
+   },
+   {
+    "label": "Pin Translate *",
+    "rp": "NW"
+   },
+   {
+    "label": "Pin Rotate *",
+    "rp": "W"
+   },
+   {
+    "label": "Unpin Both",
+    "rp": "S"
+   },
+   {
+    "label": "Reach Mode:",
+    "rp": "N",
+    "sub": [
+     {
+      "label": "IK (Reach = 1)",
+      "rp": "S",
+      "c": "FBIKReachKeyingOptionIK"
+     },
+     {
+      "label": "FK (Reach = 0)",
+      "rp": "N",
+      "c": "FBIKReachKeyingOptionFK"
+     },
+     {
+      "label": "Simple (No Reach)",
+      "rp": "E",
+      "c": "FBIKReachKeyingOptionSimple"
+     },
+     {
+      "label": "Stance Pose",
+      "rp": "N"
+     },
+     {
+      "label": "HIK Mode: Full Body *",
+      "rp": "NE",
+      "c": "HIKFullBodyMode"
+     },
+     {
+      "label": "HIK Mode: Body Part *",
+      "rp": "E",
+      "c": "HIKBodyPartMode"
+     },
+     {
+      "label": "HIK Mode: Selection *",
+      "rp": "SE",
+      "c": "HIKSelectedMode"
+     }
+    ]
+   },
+   {
+    "label": "Show Display Handle",
+    "rp": "W"
+   },
+   {
+    "label": "Display Local Axis",
+    "rp": "SW"
+   },
+   {
+    "label": "Lock Influence",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Affected Vertices",
+    "rp": "NE"
+   },
+   {
+    "label": "Add Affected Vertices",
+    "rp": "E"
+   },
+   {
+    "label": "Deselect Affected Vertices",
+    "rp": "SE"
+   },
+   {
+    "label": "Select Influence",
+    "rp": "N"
+   },
+   {
+    "label": "Paint Mode",
+    "rp": "NW"
+   },
+   {
+    "label": "Select Mode",
+    "rp": "E"
+   },
+   {
+    "label": "Paint Select Mode",
+    "rp": "SE"
+   },
+   {
+    "label": "Set Preferred Angle",
+    "rp": "W"
+   },
+   {
+    "label": "Assume Preferred Angle",
+    "rp": "E"
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Always Draw",
+    "rp": "N",
+    "check": true
+   },
+   {
+    "label": "Show Key Numbers",
+    "rp": "E",
+    "check": true
+   },
+   {
+    "label": "Add/Remove Keys",
+    "rp": "W",
+    "check": true
+   },
+   {
+    "label": "($breakdown ? $toKeyLabel : $toBreakdownLabel)",
+    "rp": "S"
+   },
+   {
+    "label": "Break Tangents",
+    "rp": "SW",
+    "check": true
+   },
+   {
+    "label": "Timing Beads In",
+    "rp": "NW",
+    "check": true
+   },
+   {
+    "label": "Timing Beads Out",
+    "rp": "NE",
+    "check": true
+   },
+   {
+    "label": "Show Tangents",
+    "rp": "SE",
+    "check": true
+   },
+   {
+    "label": "$label",
+    "rtc": "OpenMotionTrailEditor"
+   },
+   {
+    "label": "$uiName",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Object Mode",
+    "rp": "NE"
+   },
+   {
+    "label": "Navigate Graph",
+    "rp": "NW",
+    "sub": []
+   },
+   {
+    "label": "Set IK/FK Key",
+    "rp": "$radialPosition"
+   },
+   {
+    "label": "Move IK to FK",
+    "rp": "$radialPosition"
+   }
+  ],
+  "Shift+RMB poly tools": [
+   {
+    "call": "popupMenu"
+   }
+  ],
+  "Shift+RMB object": [
+   {
+    "label": "Extrude",
+    "rp": "S"
+   },
+   {
+    "label": "Insert Edge Loop Tool",
+    "rp": "SW",
+    "c": "SplitEdgeRingTool",
+    "opt": true
+   },
+   {
+    "label": "Fill Holes",
+    "rp": "NE",
+    "c": "FillHole"
+   },
+   {
+    "label": "Target Weld Tool",
+    "rp": "N",
+    "c": "MergeVertexTool",
+    "opt": true
+   },
+   {
+    "label": "Multi-Cut",
+    "rp": "W",
+    "c": "dR_multiCutTool",
+    "opt": true
+   },
+   {
+    "label": "Sculpt Tool",
+    "rp": "NW",
+    "c": "SetMeshSculptTool",
+    "opt": true
+   },
+   {
+    "label": "Soften/Harden Edges",
+    "rp": "SE",
+    "sub": [
+     {
+      "label": "Toggle Soft Edge Display",
+      "rp": "S"
+     },
+     {
+      "label": "Harden Edge",
+      "rp": "SE"
+     },
+     {
+      "label": "Soften/Harden",
+      "rp": "E",
+      "c": "PolygonSoftenHarden",
+      "opt": true
+     },
+     {
+      "label": "Soften Edge",
+      "rp": "NE"
+     }
+    ]
+   },
+   {
+    "label": "Smart Bevel",
+    "rtc": "PolySmartBevel",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Offset Edge Loop",
+    "c": "DuplicateEdges",
+    "opt": true
+   },
+   {
+    "label": "Smooth",
+    "c": "SmoothPolygon",
+    "opt": true
+   },
+   {
+    "label": "Unsmooth",
+    "c": "UnsmoothPolygon",
+    "opt": true
+   },
+   {
+    "label": "Subdiv Proxy",
+    "c": "SmoothProxy",
+    "opt": true
+   },
+   {
+    "label": "Crease Tool",
+    "c": "PolyCreaseTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Project Curve on mesh",
+    "c": "ProjectCurveOnMesh",
+    "opt": true
+   },
+   {
+    "label": "Split mesh with projected curve",
+    "c": "SplitMeshWithProjectedCurve",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Mirror",
+    "c": "MirrorPolygonGeometry",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Triangulate",
+    "c": "Triangulate"
+   },
+   {
+    "label": "Quadrangulate",
+    "c": "Quadrangulate",
+    "opt": true
+   },
+   {
+    "label": "Reduce",
+    "c": "ReducePolygon",
+    "opt": true
+   },
+   {
+    "label": "Remesh",
+    "rtc": "PolyRemesh",
+    "opt": true
+   },
+   {
+    "label": "Retopologize",
+    "rtc": "PolyRetopo",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Transfer Vertex Order",
+    "c": "TransferVertexOrder"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Separate",
+    "c": "SeparatePolygon"
+   },
+   {
+    "label": "Combine",
+    "c": "CombinePolygons",
+    "opt": true
+   },
+   {
+    "label": "Booleans",
+    "sub": [
+     {
+      "label": "Union",
+      "c": "PolygonBooleanUnion",
+      "opt": true
+     },
+     {
+      "label": "Difference (A - B)",
+      "c": "PolygonBooleanDifference",
+      "opt": true
+     },
+     {
+      "label": "Difference (B - A)",
+      "rtc": "PolygonBooleanDifferenceBA",
+      "opt": true
+     },
+     {
+      "label": "Intersection",
+      "c": "PolygonBooleanIntersection",
+      "opt": true
+     },
+     {
+      "label": "Slice",
+      "rtc": "PolygonBooleanSlice",
+      "opt": true
+     },
+     {
+      "label": "Hole Punch",
+      "rtc": "PolygonBooleanHolePunch",
+      "opt": true
+     },
+     {
+      "label": "Cut Out",
+      "rtc": "PolygonBooleanCutOut",
+      "opt": true
+     },
+     {
+      "label": "Split Edges",
+      "rtc": "PolygonBooleanSplitEdges",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Cleanup...",
+    "c": "CleanupPolygonOptions"
+   },
+   {
+    "label": "Connect Tool",
+    "c": "dR_connectTool",
+    "opt": true
+   },
+   {
+    "label": "Quad Draw Tool",
+    "c": "dR_quadDrawTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Display",
+    "sub": [
+     {
+      "label": "Toggle Backface Culling"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Border Edges"
+     },
+     {
+      "label": "Toggle Texture Border Edges"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Face Normals"
+     },
+     {
+      "label": "Toggle Vertex Normals"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Face Centers",
+      "c": "TogglePolygonFaceCenters"
+     },
+     {
+      "label": "Toggle Hidden Triangles"
+     },
+     {
+      "label": "Toggle Vertices"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Reset Polygon Display"
+     }
+    ]
+   }
+  ],
+  "Shift+RMB vertex": [
+   {
+    "label": "Extrude Vertex",
+    "rp": "S",
+    "opt": true
+   },
+   {
+    "label": "Chamfer Vertex",
+    "rp": "E",
+    "c": "ChamferVertex",
+    "opt": true
+   },
+   {
+    "label": "Delete Vertex",
+    "rp": "SW",
+    "c": "DeleteVertex"
+   },
+   {
+    "label": "Vertex Normals",
+    "rp": "SE",
+    "sub": [
+     {
+      "label": "Toggle Vertex Normal Display",
+      "rp": "S"
+     },
+     {
+      "label": "Average Normals",
+      "rp": "NE",
+      "c": "AveragePolygonNormals",
+      "opt": true
+     },
+     {
+      "label": "Vertex Normal Edit Tool",
+      "rp": "E",
+      "c": "PolygonNormalEditTool"
+     },
+     {
+      "label": "Set Normals to Face",
+      "rp": "SE",
+      "c": "SetToFaceNormals",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Merge Vertices",
+    "rp": "N",
+    "sub": [
+     {
+      "label": "Merge Vertices",
+      "rp": "NE",
+      "opt": true
+     },
+     {
+      "label": "Merge Vertices To Center",
+      "rp": "N",
+      "c": "MergeToCenter"
+     },
+     {
+      "label": "Target Weld Tool",
+      "rp": "S",
+      "c": "MergeVertexTool",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Average Vertices",
+    "rp": "NE",
+    "c": "AverageVertex"
+   },
+   {
+    "label": "Multi-Cut",
+    "rp": "W",
+    "c": "dR_multiCutTool",
+    "opt": true
+   },
+   {
+    "label": "Paint Select Vertices",
+    "rp": "NW",
+    "c": "ArtPaintSelectTool"
+   },
+   {
+    "label": "Crease Tool",
+    "c": "PolyCreaseTool",
+    "opt": true
+   },
+   {
+    "label": "Connect Components",
+    "c": "ConnectComponents",
+    "opt": true
+   },
+   {
+    "label": "Detach Components",
+    "c": "DetachComponent"
+   },
+   {
+    "label": "Transform Component",
+    "opt": true
+   },
+   {
+    "label": "Connect Tool",
+    "c": "dR_connectTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Circularize Vertices",
+    "c": "PolyCircularize",
+    "opt": true
+   },
+   {
+    "label": "Reorder Vertices",
+    "c": "ReorderVertex"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Apply Color",
+    "c": "PolygonApplyColor",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Display",
+    "sub": [
+     {
+      "label": "Toggle Backface Culling"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Vertices"
+     },
+     {
+      "label": "Toggle Vertex Normals"
+     },
+     {
+      "label": "Toggle Vertex Numbers"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Reset Polygon Display"
+     }
+    ]
+   }
+  ],
+  "Shift+RMB edge": [
+   {
+    "label": "Extrude Edge",
+    "rp": "S",
+    "opt": true
+   },
+   {
+    "label": "Delete Edge",
+    "rp": "SW",
+    "c": "DeleteEdge"
+   },
+   {
+    "label": "Bevel Edge",
+    "rp": "E",
+    "c": "BevelPolygon",
+    "opt": true
+   },
+   {
+    "label": "Soften/Harden Edges",
+    "rp": "SE",
+    "sub": [
+     {
+      "label": "Toggle Soft Edge Display",
+      "rp": "S"
+     },
+     {
+      "label": "Harden Edge",
+      "rp": "SE"
+     },
+     {
+      "label": "Soften/Harden",
+      "rp": "E",
+      "c": "PolygonSoftenHarden",
+      "opt": true
+     },
+     {
+      "label": "Soften Edge",
+      "rp": "NE"
+     }
+    ]
+   },
+   {
+    "label": "Merge/Collapse Edges",
+    "rp": "N",
+    "sub": [
+     {
+      "label": "Merge Border Edges",
+      "rp": "NE",
+      "opt": true
+     },
+     {
+      "label": "Target Weld Tool",
+      "rp": "S",
+      "c": "MergeVertexTool",
+      "opt": true
+     },
+     {
+      "label": "Merge Edge Tool",
+      "rp": "NW",
+      "c": "MergeEdgeTool",
+      "opt": true
+     },
+     {
+      "label": "Collapse Edge",
+      "rp": "E",
+      "c": "polyCollapseEdge"
+     },
+     {
+      "label": "Merge Edges To Center",
+      "rp": "N"
+     }
+    ]
+   },
+   {
+    "label": "Flip/Spin Edge",
+    "rp": "NE",
+    "sub": [
+     {
+      "label": "Flip Triangle Edge",
+      "rp": "N",
+      "c": "FlipTriangleEdge"
+     },
+     {
+      "label": "Spin Forward",
+      "rp": "E",
+      "c": "PolySpinEdgeForward"
+     },
+     {
+      "label": "Spin Backward",
+      "rp": "W",
+      "c": "PolySpinEdgeBackward"
+     }
+    ]
+   },
+   {
+    "label": "Multi-Cut",
+    "rp": "W",
+    "c": "dR_multiCutTool",
+    "opt": true
+   },
+   {
+    "label": "Paint Select Edges",
+    "rp": "NW",
+    "c": "ArtPaintSelectTool"
+   },
+   {
+    "label": "Smart Bevel",
+    "rtc": "PolySmartBevel",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Crease Tool",
+    "c": "PolyCreaseTool",
+    "opt": true
+   },
+   {
+    "label": "Offset Edge Loop",
+    "c": "DuplicateEdges",
+    "opt": true
+   },
+   {
+    "label": "Insert Edge Loop Tool",
+    "c": "SplitEdgeRingTool",
+    "opt": true
+   },
+   {
+    "label": "Slide Edge Tool",
+    "c": "SlideEdgeTool",
+    "opt": true
+   },
+   {
+    "label": "Circularize Components",
+    "c": "PolyCircularize",
+    "opt": true
+   },
+   {
+    "label": "Edit Edge Flow",
+    "c": "PolyEditEdgeFlow",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Add Divisions To Edge",
+    "opt": true
+   },
+   {
+    "label": "Bridge",
+    "c": "performBridgeOrFill",
+    "opt": true
+   },
+   {
+    "label": "Fill Hole",
+    "c": "FillHole"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Connect Components",
+    "c": "ConnectComponents",
+    "opt": true
+   },
+   {
+    "label": "Detach Components",
+    "c": "DetachComponent"
+   },
+   {
+    "label": "Transform Component",
+    "opt": true
+   },
+   {
+    "label": "Connect Tool",
+    "c": "dR_connectTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Display",
+    "sub": [
+     {
+      "label": "Toggle Backface Culling"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Border Edges"
+     },
+     {
+      "label": "Toggle Texture Border Edges"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Hidden Triangle Edges"
+     },
+     {
+      "label": "Toggle Soft Edge Display",
+      "rp": "S"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Reset Polygon Display"
+     }
+    ]
+   }
+  ],
+  "Shift+RMB face": [
+   {
+    "label": "Merge Faces To Center",
+    "rp": "N"
+   },
+   {
+    "label": "Extrude Face",
+    "rp": "S",
+    "opt": true
+   },
+   {
+    "label": "Wedge Face",
+    "rp": "SW",
+    "c": "WedgePolygon",
+    "opt": true
+   },
+   {
+    "label": "Poke Face",
+    "rp": "NE",
+    "c": "PokePolygon",
+    "opt": true
+   },
+   {
+    "label": "Bevel Face",
+    "rp": "E",
+    "opt": true
+   },
+   {
+    "label": "Face Normals",
+    "rp": "SE",
+    "sub": [
+     {
+      "label": "Toggle Face Normal Display",
+      "rp": "S"
+     },
+     {
+      "label": "Reverse Propagate",
+      "rp": "NE"
+     },
+     {
+      "label": "Conform Normals",
+      "rp": "SE",
+      "c": "ConformPolygonNormals"
+     },
+     {
+      "label": "Reverse Normals",
+      "rp": "E",
+      "c": "ReversePolygonNormals",
+      "opt": true
+     }
+    ]
+   },
+   {
+    "label": "Multi-Cut",
+    "rp": "W",
+    "c": "dR_multiCutTool",
+    "opt": true
+   },
+   {
+    "label": "Paint Select Faces",
+    "rp": "NW",
+    "c": "ArtPaintSelectTool"
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Smart Extrude",
+    "rtc": "SmartExtrude"
+   },
+   {
+    "label": "Smart Bevel",
+    "rtc": "PolySmartBevel",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Smooth Faces",
+    "opt": true
+   },
+   {
+    "label": "Assign Invisible Faces",
+    "c": "PolyAssignSubdivHole",
+    "opt": true
+   },
+   {
+    "label": "Add Divisions To Faces",
+    "c": "SubdividePolygon",
+    "opt": true
+   },
+   {
+    "label": "Circularize Components",
+    "c": "PolyCircularize",
+    "opt": true
+   },
+   {
+    "label": "Connect Components",
+    "c": "ConnectComponents",
+    "opt": true
+   },
+   {
+    "label": "Detach Components",
+    "c": "DetachComponent"
+   },
+   {
+    "label": "Triangulate Faces",
+    "c": "Triangulate"
+   },
+   {
+    "label": "Quadrangulate Faces",
+    "c": "Quadrangulate",
+    "opt": true
+   },
+   {
+    "label": "Reduce Faces",
+    "c": "ReducePolygon",
+    "opt": true
+   },
+   {
+    "label": "Remesh",
+    "rtc": "PolyRemesh",
+    "opt": true
+   },
+   {
+    "label": "Bridge Faces",
+    "c": "BridgeEdge",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Mirror",
+    "c": "MirrorPolygonGeometry",
+    "opt": true
+   },
+   {
+    "label": "Extract Faces",
+    "c": "ExtractFace",
+    "opt": true
+   },
+   {
+    "label": "Duplicate Face",
+    "c": "DuplicateFace",
+    "opt": true
+   },
+   {
+    "label": "Transform Component",
+    "opt": true
+   },
+   {
+    "label": "Connect Tool",
+    "c": "dR_connectTool",
+    "opt": true
+   },
+   {
+    "label": "Target Weld Tool",
+    "c": "dR_targetWeldTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Display",
+    "sub": [
+     {
+      "label": "Toggle Backface Culling"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle Face Centers",
+      "c": "TogglePolygonFaceCenters"
+     },
+     {
+      "label": "Toggle Face Normals"
+     },
+     {
+      "label": "Toggle Face Numbers"
+     },
+     {
+      "label": "Toggle Hidden Triangles"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Reset Polygon Display"
+     }
+    ]
+   }
+  ],
+  "Shift+RMB default": [
+   {
+    "label": "Disc",
+    "rp": "NE",
+    "c": "CreatePolygonDisc",
+    "opt": true
+   },
+   {
+    "label": "Sphere",
+    "rp": "E",
+    "c": "CreatePolygonSphere",
+    "opt": true
+   },
+   {
+    "label": "Torus",
+    "rp": "SE",
+    "c": "CreatePolygonTorus",
+    "opt": true
+   },
+   {
+    "label": "Cube",
+    "rp": "S",
+    "c": "CreatePolygonCube",
+    "opt": true
+   },
+   {
+    "label": "Cone",
+    "rp": "SW",
+    "c": "CreatePolygonCone",
+    "opt": true
+   },
+   {
+    "label": "Cylinder",
+    "rp": "W",
+    "c": "CreatePolygonCylinder",
+    "opt": true
+   },
+   {
+    "label": "Plane",
+    "rp": "NW",
+    "c": "CreatePolygonPlane",
+    "opt": true
+   },
+   {
+    "label": "Platonic Solid",
+    "c": "CreatePolygonPlatonic",
+    "opt": true
+   },
+   {
+    "label": "Pyramid",
+    "c": "CreatePolygonPyramid",
+    "opt": true
+   },
+   {
+    "label": "Prism",
+    "c": "CreatePolygonPrism",
+    "opt": true
+   },
+   {
+    "label": "Pipe",
+    "c": "CreatePolygonPipe",
+    "opt": true
+   },
+   {
+    "label": "Helix",
+    "c": "CreatePolygonHelix",
+    "opt": true
+   },
+   {
+    "label": "Gear",
+    "c": "CreatePolygonGear",
+    "opt": true
+   },
+   {
+    "label": "Soccer Ball",
+    "c": "CreatePolygonSoccerBall",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Super Ellipse",
+    "c": "CreatePolygonSuperEllipse",
+    "opt": true
+   },
+   {
+    "label": "Spherical Harmonics",
+    "c": "CreatePolygonSphericalHarmonics",
+    "opt": true
+   },
+   {
+    "label": "Ultra Shape",
+    "c": "CreatePolygonUltraShape",
+    "opt": true
+   },
+   {
+    "label": "Type",
+    "c": "CreatePolygonType"
+   },
+   {
+    "label": "SVG",
+    "c": "CreatePolygonSVG"
+   },
+   {
+    "label": "Quad Draw Tool",
+    "c": "dR_quadDrawTool",
+    "opt": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Interactive Creation",
+    "c": "toggleCreatePolyPrimitiveAsTool",
+    "check": true
+   },
+   {
+    "label": "Exit On Completion",
+    "c": "togglePolyPrimitiveAsToolExitOnComplete",
+    "check": true
+   },
+   {
+    "div": ""
+   },
+   {
+    "label": "Polygon Display All",
+    "sub": [
+     {
+      "label": "Backface Culling on for All Polys"
+     },
+     {
+      "label": "Backface Culling off for All Polys"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle All Geometry Border Edges"
+     },
+     {
+      "label": "Toggle All Texture Border Edges"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle All Face Normals"
+     },
+     {
+      "label": "Toggle All Vertex Normals"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Toggle All Face Centers"
+     },
+     {
+      "label": "Toggle All Hidden Triangles"
+     },
+     {
+      "label": "Toggle All Vertices"
+     },
+     {
+      "div": ""
+     },
+     {
+      "label": "Reset Display for All Polys"
+     }
+    ]
+   }
+  ],
+  "Ctrl+RMB select comp": [
+   {
+    "call": "popupMenu"
+   }
+  ],
+  "Ctrl+RMB select object": [
+   {
+    "call": "popupMenu"
+   }
+  ],
+  "w marking": [],
+  "e marking": [],
+  "r marking": [],
+  "q marking": []
+ },
+ "hotkeys": [
+  {
+   "key": "A",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSelect_All",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "C",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComCreate_Camera_From_View",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComSelectNone",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComDuplicate_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "D",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComDuplicate_Special",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "z",
+   "mods": [],
+   "press": "NameComUndo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "z",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComUndo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Z",
+   "mods": [],
+   "press": "NameComRedo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComQuit",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "o",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComOpen_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "n",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComNew_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSave_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "S",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSave_File_As",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "NameIncSave_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComCreate_Reference",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComGroup_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComInvert_Selection",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "ctl"
+   ],
+   "press": "CutSliderExpandShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "ctl"
+   ],
+   "press": "CutSliderShrinkShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "ctl"
+   ],
+   "press": "CutSliderPrevShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "ctl"
+   ],
+   "press": "CutSliderNextShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "cmd"
+   ],
+   "press": "CutSliderExpandShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "cmd"
+   ],
+   "press": "CutSliderShrinkShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "cmd"
+   ],
+   "press": "CutSliderPrevShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "cmd"
+   ],
+   "press": "CutSliderNextShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "w",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "n",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "n",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "G",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "i",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "o",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "u",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "G",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "H",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "L",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Delete",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "j",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "j",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "ctl"
+   ],
+   "press": "RetimeMoveFrameBackward",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "ctl"
+   ],
+   "press": "RetimeMoveFrameForward",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "SequencerFrameAllNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "SequencerFrameSelectedNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "SequencerFramePlaybackRangeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "SequencerCenterCurrentTimeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [],
+   "press": "SequencerToggleTimeScaleModeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerCopyShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerPasteShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [
+    "sht"
+   ],
+   "press": "SequencerSplitShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerTrimShotBeforeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [
+    "alt"
+   ],
+   "press": "SequencerTrimShotAfterNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [
+    "ctl",
+    "sht"
+   ],
+   "press": "SequencerRemoveSelectedGapsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [
+    "alt",
+    "sht"
+   ],
+   "press": "SequencerRemoveSelectedOverlapsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerIncreaseTrackHeightNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerDecreaseTrackHeightNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "alt"
+   ],
+   "press": "SequencerPlayForwardNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "alt",
+    "sht"
+   ],
+   "press": "SequencerStartFrameNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "alt"
+   ],
+   "press": "SequencerPrevFrameNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "alt"
+   ],
+   "press": "SequencerNextFrameNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [],
+   "press": "SequencerPrevShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [],
+   "press": "SequencerNextShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerPrevShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SequencerNextShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerCopyShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerPasteShotsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerIncreaseTrackHeightNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerDecreaseTrackHeightNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerPrevShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SequencerNextShotNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "A",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComSelect_All",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "C",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComCreate_Camera_From_View",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComDuplicate_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "D",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComDuplicate_Special",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "z",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComUndo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Z",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComRedo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComQuit",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "w",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComClose_Front_Window",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "i",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComImport_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Home",
+   "mods": [],
+   "press": "NameComEnter_Tool_Edit_Mode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "o",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComOpen_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "n",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComNew_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComSave_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "S",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComSave_File_As",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "alt",
+    "cmd"
+   ],
+   "press": "NameIncSave_File",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComCreate_Reference",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComGroup_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComRepeat_Last_Menu_Action",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComInvert_Selection",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "?",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComHelp",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "G",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComRedo",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Insert",
+   "mods": [],
+   "press": "NameComEnter_Tool_Edit_Mode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "NameComFit_All_in_Active_Panel_MMenu",
+   "release": "NameComFit_All_in_Active_Panel_MMenu_release",
+   "ctx": ""
+  },
+  {
+   "key": "A",
+   "mods": [],
+   "press": "NameComFit_All_in_All_Panels",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [
+    "ctl"
+   ],
+   "press": "OpenOrSwapAEWindow",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "NameComFit_Selected_without_Children_in_Active_Panel",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F",
+   "mods": [],
+   "press": "NameComFit_Select_without_Children_in_All_Panels",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComFit_Select_with_Children_in_All_Panels",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "[",
+   "mods": [],
+   "press": "NameComUndo_View_Change",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "]",
+   "mods": [],
+   "press": "NameComRedo_View_Change",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "z",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComUndo_View_Change",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComRedo_View_Change",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Home",
+   "mods": [],
+   "press": "NameComGo_To_Default_View",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "{",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "}",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameCameraModeToggle",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Home",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComAppHome",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "D",
+   "mods": [],
+   "press": "NameComDuplicate_Selected_with_Transforms",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "D",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [],
+   "press": "NameComParent_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "P",
+   "mods": [],
+   "press": "NameComUnparent_Selected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F8",
+   "mods": [],
+   "press": "NameComToggle_ObjectComponent_Editing",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F9",
+   "mods": [],
+   "press": "NameComSet_Vertex_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F10",
+   "mods": [],
+   "press": "NameComSet_Edge_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F11",
+   "mods": [],
+   "press": "NameComSet_Facet_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F12",
+   "mods": [],
+   "press": "NameComSet_UVs_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F9",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComSet_VertexFace_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F12",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComSet_MeshUVShell_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F7",
+   "mods": [],
+   "press": "NameComSet_Multi_Component_Mask",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F9",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F10",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F11",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F12",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ">",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ">",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "<",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "<",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [],
+   "press": "NameComToggleVisibilityAndKeepSelection",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [],
+   "press": "NameComSnap_to_Grid_modifierON",
+   "release": "NameComSnap_to_Grid_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "X",
+   "mods": [],
+   "press": "NameComSnap_to_Grid_modifierON",
+   "release": "NameComSnap_to_Grid_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComHide_Selected_Objects",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "H",
+   "mods": [],
+   "press": "NameComShow_Selected_Objects",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "H",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComShow_Last_Hidden",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComHide_Unselected_Objects",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "h",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "NameComShow_All_Components",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [],
+   "press": "NameComSnap_to_Curve_modifierON",
+   "release": "NameComSnap_to_Curve_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "C",
+   "mods": [],
+   "press": "NameComSnap_to_Curve_modifierON",
+   "release": "NameComSnap_to_Curve_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [],
+   "press": "NameComSnap_to_Point_modifierON",
+   "release": "NameComSnap_to_Point_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "V",
+   "mods": [],
+   "press": "NameComSnap_to_Point_modifierON",
+   "release": "NameComSnap_to_Point_modifierOFF",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [],
+   "press": "SelectToolOptionsNameCommand",
+   "release": "SelectToolOptionsNameCommand_release",
+   "ctx": ""
+  },
+  {
+   "key": "Q",
+   "mods": [],
+   "press": "NameComSelectTool_ComponentMMenu",
+   "release": "NameComSelectTool_ComponentMMenu_release",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComSelectTool_PolyMMenu",
+   "release": "NameComSelectTool_PolyMMenu_release",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComHotbox_DisplayRows",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComToggle_Main_Menubar_Visibility",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "M",
+   "mods": [],
+   "press": "NameComToggle_Panel_Menubar_Visibility",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "M",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComToggle_ModelEditor_Bar_Visibility",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "J",
+   "mods": [],
+   "press": "NameComMoveRotateScale_Tool_ToggleSnapRelative",
+   "release": "NameComMoveRotateScale_Tool_ToggleSnapRelative",
+   "ctx": ""
+  },
+  {
+   "key": "j",
+   "mods": [],
+   "press": "NameComMoveRotateScale_Tool_ToggleSnap",
+   "release": "NameComMoveRotateScale_Tool_ToggleSnap",
+   "ctx": ""
+  },
+  {
+   "key": "F9",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F10",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F11",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F12",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "H",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComShow_Last_Hidden",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComUniversalManip",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [],
+   "press": "NameComShowManip_Tool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "y",
+   "mods": [],
+   "press": "NameComNonSacred_Tool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Q",
+   "mods": [
+    "ctl"
+   ],
+   "press": "QuadDrawToolNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "X",
+   "mods": [
+    "ctl"
+   ],
+   "press": "MultiCutToolNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F2",
+   "mods": [],
+   "press": "NameComModeling_UI",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F3",
+   "mods": [],
+   "press": "NameComRigging_UI",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F4",
+   "mods": [],
+   "press": "NameComAnimation_UI",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F5",
+   "mods": [],
+   "press": "NameComDynamics_UI",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F6",
+   "mods": [],
+   "press": "NameComRendering_UI",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [],
+   "press": "NameComSet_Keyframe",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameCom_HIKPinRotate",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "w",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameCom_HIKPinTranslate",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameCom_HIKSetFullBodyKey",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComToggle_Playback_OnOff",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "V",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComGo_to_min_frame",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "k",
+   "mods": [],
+   "press": "NameComVirtual_timeslider_modifier",
+   "release": "NameComVirtual_timeslider_modifier_release",
+   "ctx": ""
+  },
+  {
+   "key": "i",
+   "mods": [],
+   "press": "NameComInsert_Key_Modifier",
+   "release": "NameComInsert_Key_Modifier_release",
+   "ctx": ""
+  },
+  {
+   "key": "0",
+   "mods": [],
+   "press": "NameComDefault_Quality_Display_Setting",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [],
+   "press": "NameComLow_Quality_Display_Setting",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [],
+   "press": "NameComMedium_Quality_Display_Setting",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [],
+   "press": "NameComHigh_Quality_Display_Setting",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComToggle_Displacement_Setting",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [],
+   "press": "NameComWireframe_Display",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [],
+   "press": "NameComShaded_Display",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "6",
+   "mods": [],
+   "press": "NameComShaded_and_Textured_Display",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "7",
+   "mods": [],
+   "press": "NameComTurn_on_Light_Display",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "%",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComToggle_Use_Default_Material",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComToggle_Isolate_Select",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameCom_CycleDisplayMode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [],
+   "press": "NameComIsolateSelect",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": " ",
+   "mods": [],
+   "press": "NameComPop_hotBox",
+   "release": "NameComUnpop_hotBox",
+   "ctx": ""
+  },
+  {
+   "key": "Return",
+   "mods": [],
+   "press": "NameComComplete_current_Tool1",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Esc",
+   "mods": [],
+   "press": "NameComAbort_Context",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [],
+   "press": "NameComEnter_Tool_Edit_Mode_Press",
+   "release": "NameComEnter_Tool_Edit_Mode_Release",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [],
+   "press": "NameComGo_to_previous_keyframe",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "alt"
+   ],
+   "press": "Name_Frame_Backward",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [],
+   "press": "NameComGo_to_next_keyframe",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "alt"
+   ],
+   "press": "Name_Frame_Forward",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [],
+   "press": "NameComRepeat_Last_Menu_Action",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "G",
+   "mods": [],
+   "press": "NameComRepeat_Last_Action_At_Mouse_Position",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [],
+   "press": "NameComWalk_up_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [],
+   "press": "NameComWalk_down_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [],
+   "press": "NameComWalk_left_in_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [],
+   "press": "NameComWalk_right_in_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Page_Up",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComWalk_in_in_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Page_Down",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComWalk_out_in_the_current_hierarchy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComMove_up",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComMove_down",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComMove_left",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComMove_right",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Backspace",
+   "mods": [
+    "ctl"
+   ],
+   "press": "DeletePolyElementsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Delete",
+   "mods": [
+    "ctl"
+   ],
+   "press": "DeletePolyElementsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "PolySpinEdgeBackwardNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "PolySpinEdgeForwardNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [
+    "ctl"
+   ],
+   "press": "PolyExtrudeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [
+    "ctl"
+   ],
+   "press": "PolyBevelNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "-",
+   "mods": [],
+   "press": "NameComDecrease_Manipulator_Size",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "=",
+   "mods": [],
+   "press": "NameComIncrease_Manipulator_Size",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "+",
+   "mods": [],
+   "press": "NameComIncrease_Manipulator_Size",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Y",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Y",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Y",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "W",
+   "mods": [],
+   "press": "NameComSave_Keyframe_for_Translate",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "E",
+   "mods": [],
+   "press": "NameComSave_Keyframe_for_Rotate",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "R",
+   "mods": [],
+   "press": "NameComSave_Keyframe_for_Scale",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "i",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSelect_Next_Intermediate_Object",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "F1",
+   "mods": [],
+   "press": "NameComHelp",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "X",
+   "mods": [
+    "cmd"
+   ],
+   "press": "MultiCutToolNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NameComToggle_Isolate_Select",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Backspace",
+   "mods": [
+    "cmd"
+   ],
+   "press": "DeletePolyElementsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Delete",
+   "mods": [
+    "cmd"
+   ],
+   "press": "DeletePolyElementsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "alt",
+    "cmd"
+   ],
+   "press": "PolySpinEdgeBackwardNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "alt",
+    "cmd"
+   ],
+   "press": "PolySpinEdgeForwardNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [
+    "cmd"
+   ],
+   "press": "PolyExtrudeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "BluePencilActivateBrushSizeNameCommand",
+   "release": "BluePencilDeactivateBrushSizeNameCommand",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "BluePencilActivateOpacityNameCommand",
+   "release": "BluePencilDeactivateOpacityNameCommand",
+   "ctx": ""
+  },
+  {
+   "key": "<",
+   "mods": [
+    "alt"
+   ],
+   "press": "PreviousBluePencilFrameNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ">",
+   "mods": [
+    "alt"
+   ],
+   "press": "NextBluePencilFrameNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [
+    "alt"
+   ],
+   "press": "artisanToggleFlood_press",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "alt"
+   ],
+   "press": "artisanColorFeedback_press",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "j",
+   "mods": [
+    "alt"
+   ],
+   "press": "artisanMultiColorFeedback_press",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "artisanCopyVertexSkinWeights",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "artisanPasteVertexSkinWeights",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "ctl"
+   ],
+   "press": "artisanNextSkinPaintMode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "ctl"
+   ],
+   "press": "artisanPrevSkinPaintMode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Return",
+   "mods": [],
+   "press": "Outliner_RenameSelectedItem",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "Outliner_RevealSelected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComRenderView_PrevImage",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComRenderView_NextImage",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [],
+   "press": "NodeEditor_HideAttributes",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [],
+   "press": "NodeEditor_ShowConnectedAttributes",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [],
+   "press": "NodeEditor_ShowAllAttributes",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [],
+   "press": "NodeEditor_ShowCustomAttrs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [],
+   "press": "NodeEditor_ToggleNodeTitleMode",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [],
+   "press": "NodeEditor_ToggleNodeSelectedPins",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [],
+   "press": "NodeEditor_ToggleNodeSwatchSize",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "=",
+   "mods": [],
+   "press": "NodeEditor_ToggleZoomIn",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "-",
+   "mods": [],
+   "press": "NodeEditor_ToggleZoomOut",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "C",
+   "mods": [],
+   "press": "NodeEditor_ToggleSyncedSelection",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [],
+   "press": "NodeEditor_ToggleAttrFilter",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [],
+   "press": "NodeEditor_GridToggleSnap",
+   "release": "NodeEditor_GridToggleSnap",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [],
+   "press": "NodeEditor_Layout",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "/",
+   "mods": [],
+   "press": "NodeEditor_SelectConnected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [],
+   "press": "NodeEditor_SelectUpStream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "w",
+   "mods": [],
+   "press": "NodeEditor_ConnectNodeOnCreation",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [],
+   "press": "NodeEditor_ConnectSelectedNodes",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [],
+   "press": "NodeEditor_SelectDownStream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "?",
+   "mods": [],
+   "press": "NodeEditor_GraphUpDownstream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "<",
+   "mods": [],
+   "press": "NodeEditor_GraphUpstream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ">",
+   "mods": [],
+   "press": "NodeEditor_GraphDownstream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_GraphRemoveSelected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "/",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_GraphRemoveUnselected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_GraphRemoveUpstream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_GraphRemoveDownstream",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [],
+   "press": "NodeEditor_PickWalkUp",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [],
+   "press": "NodeEditor_PickWalkDown",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [],
+   "press": "NodeEditor_PickWalkRight",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [],
+   "press": "NodeEditor_PickWalkLeft",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_Copy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_Cut",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NodeEditor_Paste",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NodeEditor_Copy",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NodeEditor_Cut",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "cmd"
+   ],
+   "press": "NodeEditor_Paste",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Delete",
+   "mods": [],
+   "press": "UVEditor_DeleteUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "ctl"
+   ],
+   "press": "UVEditor_CopyUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "ctl"
+   ],
+   "press": "UVEditor_PasteUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [
+    "ctl"
+   ],
+   "press": "UVEditor_LayoutUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "u",
+   "mods": [
+    "ctl"
+   ],
+   "press": "UVEditor_UnfoldUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "sht"
+   ],
+   "press": "UVEditor_CutUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [
+    "sht"
+   ],
+   "press": "UVEditor_SewUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "ctl",
+    "sht"
+   ],
+   "press": "UVEditor_CreateUVShell",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [],
+   "press": "UVEditor_DisplayUVWireframe",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [],
+   "press": "UVEditor_DisplayUVShaded",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "7",
+   "mods": [],
+   "press": "UVEditor_ToggleUVDistortion",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "8",
+   "mods": [],
+   "press": "UVEditor_ToggleUVShellBorder",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "9",
+   "mods": [],
+   "press": "UVEditor_ToggleTextureBorder",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "6",
+   "mods": [],
+   "press": "UVEditor_ToggleUVTextureImage",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "ctl"
+   ],
+   "press": "UVEditor_ToggleUVIsolateViewSelected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "UVEditor_FrameSelected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "a",
+   "mods": [],
+   "press": "UVEditor_FrameAll",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "q",
+   "mods": [],
+   "press": "UVEditor_SelectUVTool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "w",
+   "mods": [],
+   "press": "UVEditor_MoveUVTool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "e",
+   "mods": [],
+   "press": "UVEditor_RotateUVTool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [],
+   "press": "UVEditor_ScaleUVTool",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "ctl"
+   ],
+   "press": "IncreaseCheckerDensityNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "ctl"
+   ],
+   "press": "DecreaseCheckerDensityNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [],
+   "press": "PolyUVCutCtx_Cut",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "s",
+   "mods": [],
+   "press": "PolyUVCutCtx_Sew",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [],
+   "press": "PolyUVCutCtx_UnfoldPackInCurrentTile",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "sht"
+   ],
+   "press": "PolyUVCutCtx_UnfoldPackInEmptyTile",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "c",
+   "mods": [
+    "cmd"
+   ],
+   "press": "UVEditor_CopyUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "v",
+   "mods": [
+    "cmd"
+   ],
+   "press": "UVEditor_PasteUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [
+    "cmd"
+   ],
+   "press": "UVEditor_LayoutUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "u",
+   "mods": [
+    "cmd"
+   ],
+   "press": "UVEditor_UnfoldUVs",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "cmd",
+    "sht"
+   ],
+   "press": "UVEditor_CreateUVShell",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "cmd"
+   ],
+   "press": "UVEditor_ToggleUVIsolateViewSelected",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "cmd"
+   ],
+   "press": "IncreaseCheckerDensityNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "cmd"
+   ],
+   "press": "DecreaseCheckerDensityNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "ctl"
+   ],
+   "press": "ShapeEditor_NewGroup",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "ctl"
+   ],
+   "press": "ShapeEditor_DuplicateTarget",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "alt"
+   ],
+   "press": "ShapeEditor_SelectNone",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "ctl"
+   ],
+   "press": "PoseInterpolator_NewGroup",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [],
+   "press": "HypershadeHideAttributesNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [],
+   "press": "HypershadeShowConnectedAttrsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [],
+   "press": "HypershadeShowAllAttrsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [],
+   "press": "HypershadeShowCustomAttrsNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [],
+   "press": "HypershadeToggleNodeTitleModeNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [],
+   "press": "HypershadePinSelectedNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "=",
+   "mods": [],
+   "press": "HypershadeToggleZoomInNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "-",
+   "mods": [],
+   "press": "HypershadeToggleZoomOutNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "/",
+   "mods": [],
+   "press": "HypershadeSelectConnectedNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [],
+   "press": "HypershadeSelectUpStreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [],
+   "press": "HypershadeSelectDownStreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "?",
+   "mods": [],
+   "press": "HypershadeGraphUpDownstreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "<",
+   "mods": [],
+   "press": "HypershadeGraphUpstreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ">",
+   "mods": [],
+   "press": "HypershadeGraphDownstreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [
+    "ctl"
+   ],
+   "press": "HypershadeGraphRemoveSelectedNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "/",
+   "mods": [
+    "ctl"
+   ],
+   "press": "HypershadeGraphRemoveUnselectedNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ",",
+   "mods": [
+    "ctl"
+   ],
+   "press": "HypershadeGraphRemoveUpstreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ".",
+   "mods": [
+    "ctl"
+   ],
+   "press": "HypershadeGraphRemoveDownstreamNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [],
+   "press": "HypershadePickWalkUpNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [],
+   "press": "HypershadePickWalkDownNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Right",
+   "mods": [],
+   "press": "HypershadePickWalkRightNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Left",
+   "mods": [],
+   "press": "HypershadePickWalkLeftNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "!",
+   "mods": [],
+   "press": "SoloLastOutputNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "@",
+   "mods": [],
+   "press": "SoloMaterialNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "#",
+   "mods": [],
+   "press": "RemoveMaterialSoloingNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "0",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "6",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "7",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "8",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "9",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [
+    "alt"
+   ],
+   "press": "artisanToggleReflection_press",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "U",
+   "mods": [],
+   "press": "sculptMeshCacheUnfreezeAll",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [
+    "ctl"
+   ],
+   "press": "sculptMeshCacheInvertFreeze",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "0",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "6",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "7",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "8",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "9",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "m",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "cmd"
+   ],
+   "press": "ShapeEditor_NewGroup",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "d",
+   "mods": [
+    "cmd"
+   ],
+   "press": "ShapeEditor_DuplicateTarget",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "cmd"
+   ],
+   "press": "PoseInterpolator_NewGroup",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "I",
+   "mods": [
+    "cmd"
+   ],
+   "press": "sculptMeshCacheInvertFreeze",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "0",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "6",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "7",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "8",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "9",
+   "mods": [
+    "cmd"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Up",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSubdiv_Surfaces_Coarser_Refinement",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Down",
+   "mods": [
+    "ctl"
+   ],
+   "press": "NameComSubdiv_Create_Region",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "A",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComFluids_DecrementFluidCenter",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "S",
+   "mods": [
+    "alt"
+   ],
+   "press": "NameComFluids_IncrementFluidCenter",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Space",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Space",
+   "mods": [
+    "sht"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "b",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "`",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "~",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "~",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "`",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "~",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Page_Up",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "Page_Down",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "`",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "l",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "g",
+   "mods": [
+    "alt"
+   ],
+   "press": "HyperGraph_IncreaseDepth",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [
+    "alt"
+   ],
+   "press": "HyperGraph_DecreaseDepth",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "W",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "\\\\",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "\\\\",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "x",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "T",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "=",
+   "mods": [
+    "ctl"
+   ],
+   "press": "IncreaseExposureFineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "-",
+   "mods": [
+    "ctl"
+   ],
+   "press": "DecreaseExposureFineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "'",
+   "mods": [
+    "ctl"
+   ],
+   "press": "IncreaseGammaFineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ";",
+   "mods": [
+    "ctl"
+   ],
+   "press": "DecreaseGammaFineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "=",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "IncreaseExposureCoarseNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "-",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "DecreaseExposureCoarseNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "'",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "IncreaseGammaCoarseNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ";",
+   "mods": [
+    "ctl",
+    "alt"
+   ],
+   "press": "DecreaseGammaCoarseNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "p",
+   "mods": [
+    "ctl"
+   ],
+   "press": "ColorPickerNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "r",
+   "mods": [
+    "ctl"
+   ],
+   "press": "ProfilerToolToggleRecordingNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [],
+   "press": "ProfilerToolCategoryViewNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [],
+   "press": "ProfilerToolCpuViewNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "3",
+   "mods": [],
+   "press": "ProfilerToolThreadViewNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [
+    "ctl"
+   ],
+   "press": "SearchEngineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "f",
+   "mods": [
+    "cmd"
+   ],
+   "press": "SearchEngineNameCommand",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "E",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "W",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "R",
+   "mods": [
+    "ctl"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "i",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "/",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "1",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "2",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "4",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "5",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ")",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "(",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "t",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "T",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "|",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "\\",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ":",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "\\\\",
+   "mods": [
+    "alt"
+   ],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": "\\'",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  },
+  {
+   "key": ";",
+   "mods": [],
+   "press": "",
+   "release": "",
+   "ctx": ""
+  }
+ ],
+ "source": "Maya 2027 (Maya2027): scripts/startup + scripts/others + resources/MayaStrings, read by tools/forge_maya/extract_maya.py"
+}

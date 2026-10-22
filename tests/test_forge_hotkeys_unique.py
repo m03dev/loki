@@ -56,7 +56,8 @@ for _, act in pairs:
         continue
     defined = re.search(r'(^|[\s{,])%s:\s*\[' % re.escape(act), ui_src, re.M) or \
         re.search(r'(FORGE_PRO_CMDS|\bC)\.%s\s*=' % re.escape(act), ui_src) or \
-        re.search(r'C\["sculptFav" \+ \(i \+ 1\)\]', ui_src) and act.startswith("sculptFav")
+        re.search(r'C\["sculptFav" \+ \(i \+ 1\)\]', ui_src) and act.startswith("sculptFav") or \
+        re.search(r'FORGE_PRO_CMDS\["menuSet" \+ k\]', ui_src) and act.startswith("menuSet")
     if not defined:
         missing.append(act)
 check("every action in the table is a real command", not missing, sorted(set(missing)))
@@ -66,11 +67,23 @@ mode_keys = {"alt+%d" % i for i in range(1, 5)} | {"ctrl+f%d" % i for i in range
 check("the table keeps clear of the mode bar's keys (Option+1..4, Ctrl+F1..F4)", not (mode_keys & set(seen)), mode_keys & set(seen))
 
 # sculpt keys are in the table (one meaning in every workspace)
-for chord, act in (("pageup", "sculptLevelUp"), ("pagedown", "sculptLevelDown"), ("shift+x", "sculptSymX"), ("l", "sculptLazy"),
-                   ("ctrl+i", "maskInvert"), ("shift+u", "maskClear"), ("alt+shift+h", "maskHideToggle"), ("ctrl+shift+1", "sculptFav1")):
+for chord, act in (("pageup", "sculptLevelUp"), ("pagedown", "sculptLevelDown"), ("l", "sculptLazy"),
+                   ("shift+u", "maskClear"), ("alt+shift+h", "maskHideToggle"), ("ctrl+shift+1", "sculptFav1")):
     check("sculpt: %s = %s" % (chord, act), seen.get(chord) == act, seen.get(chord))
 for chord, act in (("d", "@pivotHold"), ("x", "@snapGrid"), ("h", "hideToggle"), ("1", "smooth1"), ("q", "select"), ("f8", "objComp")):
     check("the Maya key %s keeps one meaning (%s), in sculpt mode too" % (chord, act), seen.get(chord) == act, seen.get(chord))
+
+# Maya 2027's own default keys (docs/forge/maya2027_layout.json, read from hotkeySetup.mel): where Forge has the command,
+# Forge's key is Maya's key (owner 2026-10-22: "almost 1:1 to maya")
+for chord, act in (("ctrl+s", "save"), ("ctrl+shift+x", "multiCut"), ("ctrl+shift+q", "quadDraw"), ("shift+x", "@snapGrid"),
+                   ("shift+c", "@snapEdge"), ("shift+v", "@snapPoint"), ("ctrl+alt+arrowleft", "spinEdgeBack"),
+                   ("ctrl+alt+arrowright", "spinEdge"), ("alt+f12", "uvShell"), ("f2", "menuSetModeling"), ("f4", "menuSetAnimation"),
+                   ("f6", "menuSetRendering"), ("ctrl+1", "isolate"), ("alt+shift+d", "deleteHistory"), ("ctrl+e", "extrude"), ("ctrl+b", "bevel")):
+    check("Maya's key %s = %s" % (chord, act), seen.get(chord) == act, seen.get(chord))
+check("Maya's Ctrl+I is Import, so Forge doesn't use it for anything else", "ctrl+i" not in seen, seen.get("ctrl+i"))
+sculpt_ctx = dict(re.findall(r'"([^"]+)":\s*"(\w+)"', keys_src.split("const FORGE_KEY_SCULPT = {", 1)[1].split("};", 1)[0]))
+check("while sculpting Ctrl/Cmd+Shift+I inverts the mask (Maya's sculpt-tool key), and only that key changes meaning",
+      sculpt_ctx == {"ctrl+shift+i": "maskInvert"} and seen.get("ctrl+shift+i") == "invert", sculpt_ctx)
 
 # no file grabs bare keys of its own any more
 sc = (UI / "forge_sculpt_ui.js").read_text(encoding="utf-8")

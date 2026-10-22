@@ -63,3 +63,6 @@ packaging/launcher/target/
 # GitHub rejects the push (a 259 MB libcef.so). The in-tab Godot web export that used to sit at app/ui/world_godot/
 # (test_portal requires that path to be empty) moved to harness_data/attic/world_godot/ - nothing deleted.
 /game/
+
+# Agent worktrees (Claude Code helpers) - never committed
+.claude/

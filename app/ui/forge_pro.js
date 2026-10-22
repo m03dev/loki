@@ -613,16 +613,9 @@ function forgeProMenu(v, ctx) {
   if (ctx.ctrl) {                                   // convert the selection (polyConvertMM)
     return { title: "Convert", ring: { W: "vertex", N: "edge", S: "face", E: "toUV", NE: "grow", NW: "shrink", SE: "loopSel", SW: "ringSel" }, list: [] };
   }
-  if (ctx.shift) {
-    if (comp && mode === "vert") return { title: "Vertex tools", ring: { S: "extrude", E: "chamfer", SW: "deleteEdgeVert", N: "merge", NE: "averageVerts", W: "multiCut", NW: "connect", SE: "targetWeld" }, list: ["mergeCenter", "detach", "relax", "circularize", "grow", "shrink"] };
-    if (comp && mode === "edge") return { title: "Edge tools", ring: { S: "extrude", E: "bevel", SW: "deleteEdgeVert", N: "bridge", NE: "edgeLoop", W: "multiCut", NW: "connect", SE: "offsetEdgeLoop" }, list: ["merge", "collapse", "slideEdge", "spinEdge", "detach", "fillHole", "loopSel", "ringSel", "grow", "shrink"] };
-    if (comp) return { title: "Face tools", ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset", N: "duplicateFace" }, list: ["extractFace", "collapse", "triangulate", "quadrangulate", "circularize", "deleteComp", "smooth", "grow", "shrink"] };
-    if (ctx.node) return { title: "Mesh tools", ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" },
-      // the two switches read as switches (a tick) rather than as commands, the way a tool's options do
-      list: ["smooth", "dynamesh", "makeLive", "softSel", "snapGrid"] };
-    return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" },
-      list: [["Polygon Primitives", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere"]],
-        ["Image Planes", ["imagePlane", "image"]], ["Draw with LOKI", ["draw", "describe"]], "creature"] };
+  if (ctx.shift && typeof FORGE_MAYA !== "undefined") {   // Maya's contextPolyTools*MM, at Maya's compass places
+    const mk = FORGE_MAYA.marking[comp ? (mode === "vert" ? "vertex" : mode === "edge" ? "edge" : "face") : ctx.node ? "object" : "empty"];
+    return JSON.parse(JSON.stringify(mk));
   }
   if (ctx.node || comp) {                           // dagMenuProc: N Edge, W Vertex, S UV, E Face, SW VF, SE Shell, NW Multi, NE Object
     return { title: ctx.node ? ctx.node.name : "Components",
@@ -650,12 +643,22 @@ function forgeProMarkShow(v, x, y, menu) {
   const host = forgeProMarkHost();
   host.textContent = "";
   host.append(proEl("span", "forge-pro-hub" + (menu.title ? "" : " dot"), menu.title || ""));
+  const labels = menu.labels || {};
   for (const [pos, id] of Object.entries(menu.ring)) {
-    const c = FORGE_PRO_CMDS[id]; if (!c || !c[1]) continue;       // a wedge that does nothing is left out
     const a = FORGE_COMPASS[pos] * Math.PI / 180;
-    const b = proEl("button", "forge-pro-wedge pos-" + pos.toLowerCase() + (c[1] ? "" : " off"), c[0]);
-    b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id; b.dataset.pos = pos;
-    if (!c[1]) b.title = c[2] || "Not in Forge yet";
+    if (id && typeof id === "object") {                // a wedge that opens a marking menu of its own (Maya's Face Normals ...)
+      const b = proEl("button", "forge-pro-wedge forge-pro-wsub pos-" + pos.toLowerCase(), (labels[pos] || id.title || "") + " \u25b8");
+      b.type = "button"; b.dataset.proSub = labels[pos] || id.title || ""; b.dataset.pos = pos;
+      b.style.left = Math.round(Math.cos(a) * FORGE_PRO_R) + "px";
+      b.style.top = Math.round(Math.sin(a) * FORGE_PRO_R * 0.82) + "px";
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkRun(v, id, x + Math.cos(a) * FORGE_PRO_R, y + Math.sin(a) * FORGE_PRO_R * 0.82); });
+      host.append(b);
+      continue;
+    }
+    const c = FORGE_PRO_CMDS[id]; if (!c || !c[1]) continue;       // a wedge that does nothing is left out
+    const text = labels[pos] || c[0];
+    const b = proEl("button", "forge-pro-wedge pos-" + pos.toLowerCase(), text);
+    b.type = "button"; b.dataset.proCmd = text; b.dataset.proId = id; b.dataset.pos = pos;
     b.style.left = Math.round(Math.cos(a) * FORGE_PRO_R) + "px";
     b.style.top = Math.round(Math.sin(a) * FORGE_PRO_R * 0.82) + "px";
     b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
@@ -674,13 +677,13 @@ function forgeProMarkShow(v, x, y, menu) {
       try { on = !!(st && v && st(v)); } catch (_) { on = false; }
       return on ? "\u2713" : "";
     };
-    const row = (id) => {
+    const row = (id, label) => {
       const c = FORGE_PRO_CMDS[id]; if (!c || !c[1]) return null;      // not in Forge yet: left out
       const b = proEl("button", "forge-pro-litem");
-      b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
+      b.type = "button"; b.dataset.proCmd = label || c[0]; b.dataset.proId = id;
       const t = tickOf(id);
       if (t) b.classList.add("on");
-      b.append(proEl("span", "forge-pro-tick", t), proEl("span", "forge-pro-label", c[0]));
+      b.append(proEl("span", "forge-pro-tick", t), proEl("span", "forge-pro-label", label || c[0]));
       b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
       return b;
     };
@@ -705,7 +708,7 @@ function forgeProMarkShow(v, x, y, menu) {
           continue;
         }
         if (entry === "-" || (typeof entry === "string" && entry[0] === "#")) continue;
-        const b = row(Array.isArray(entry) ? entry[0] : entry);
+        const b = Array.isArray(entry) ? row(entry[0], entry[1]) : row(entry);
         if (b) list.append(b);
       }
     };
@@ -737,12 +740,21 @@ function forgeProMarkHide() {
   if (host) { host.hidden = true; host.textContent = ""; host._menu = null; }
 }
 
+// run what a marking menu pick means: a command, or - a sub-menu wedge - that wedge's own marking menu, opened where it
+// is (it stays up for a click, like the pro tool's sub-menus after the button is let go)
+function forgeProMarkRun(v, picked, x, y) {
+  if (!picked) return;
+  if (typeof picked === "object") { forgeProMarkShow(v, x, y, picked); return; }
+  forgeProMarkHide();
+  forgeProRun(v, picked);
+}
 // which wedge does a release at (x, y) mean? pro picks by DIRECTION once past the dead zone
 function forgeProMarkPick(x, y) {
   const host = document.getElementById("forge-pro-marking");
   if (!host || host.hidden || !host._at) return null;
   const hit = document.elementFromPoint(x, y);
   if (hit && hit.dataset && hit.dataset.proId && host.contains(hit)) return hit.dataset.proId;
+  if (hit && hit.dataset && hit.dataset.proSub && hit.dataset.pos && host.contains(hit)) return host._menu.ring[hit.dataset.pos];
   const dx = x - host._at[0], dy = y - host._at[1];
   if (Math.hypot(dx, dy) < FORGE_PRO_DEAD) return null;
   const ang = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -758,6 +770,7 @@ function forgeProMarkHover(x, y) {
   if (!host || host.hidden) return;
   const id = forgeProMarkPick(x, y);
   for (const b of host.querySelectorAll("[data-pro-id]")) b.classList.toggle("hot", b.dataset.proId === id);
+  for (const b of host.querySelectorAll(".forge-pro-wsub")) b.classList.toggle("hot", !!id && typeof id === "object" && host._menu.ring[b.dataset.pos] === id);
 }
 
 // ================================================================== the hotbox (hold Space) - the pro layout
@@ -822,72 +835,43 @@ const FORGE_PRO_MENUS = {
   Renderer: ["renderDialog", "renderPreview", "-", "renderStudio", "bakeMaps"],
   Panels: [["Windows", ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "panelModel", "panelMaterials"]],
     ["Layout", ["single", "four", "hideUI"]]],
-  // the menu sets' menus
-  Mesh: [["Combine", ["combine", "separate"]], ["Mirror", ["mirror", "mirrorY", "mirrorZ"]],
-    ["Topology", ["extractFace", "smooth", "triangulate", "quadrangulate", "fillHole"]], ["Cleanup", ["cleanup", "meshStats"]],
-    ["Remesh", ["dynamesh"]], "-", "sculptModel", "bakeMaps"],
-  "Edit Mesh": [["Components", ["extrude", "bridge", "collapse", "connect", "detach", "relax", "deleteComp"]],
-    ["Vertex", [["Merge", ["merge", "mergeCenter"]], "averageVerts", "chamfer", "deleteEdgeVert"]],
-    ["Edge", ["bevel", ["Spin", ["spinEdge", "spinEdgeBack"]]]],
-    ["Face", ["inset", "poke", "wedge", "duplicateFace", "circularize", "reverse"]]],
-  "Mesh Tools": [["Edge Loops", ["edgeLoop", "insertLoopTool", "offsetEdgeLoop", "slideEdge"]], ["Cut", ["multiCut", "multiCutStep"]],
-    ["Weld", ["targetWeld"]], ["Retopology", ["quadDraw", "retopoFinish"]], "-", "softSel", "sculpt", "winToolkit"],
-  Snap: ["snapGrid", "snapEdge", "snapPoint"],
-  Symmetry: [["Object", ["symX", "symY", "symZ"]],
-    ["Radial", ["symRadial3", "symRadial4", "symRadial6", "symRadial8", "symRadialOff", ["Axis", ["symAxisX", "symAxisY", "symAxisZ"]]]],
-    "-", "symModel", "symOff"],
-  Animation: [["Keys", ["setKey", "deleteKey", "clearKeys", ["Tangents", ["keyLinear", "keySmooth", "keyStep"]]]],
-    ["Playback", ["playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd"]],
-    ["Edit", ["copyAnim", "pasteAnim", ["Mirror Keys", ["mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"]]]], "-", "graphEditor", "animAutoKey"],
-  Sculpt: ["wsSculpt", "sculptModel", "sculpt", "-", ["Remesh", ["sculptRemesh", "sculptQuadRemesh", "sculptReduce", "dynamesh"]],
-    ["Subdivision", ["sculptDivide", "sculptDynamic"]], ["Masking", ["maskClear", "maskInvert", "maskFill", "maskHide", "maskShow"]],
-    "sculptWheel", "smooth", "-", "sculptExit"],
-  UV: ["uvEditor", ["Create UVs", ["uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic"]],
-    ["Cut and Sew", ["uvCut", "uvSew", "uvMoveSew"]], ["Unfold", [["Automatic", ["uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams"]], "uvUnfold", "uvLayout"]],
-    "-", "uvShell", "uvChecker"],
-  "Mesh Display": [["Normals", ["softEdge", "hardEdge", "softHard", "softHardAngle",
-    ["Display", ["faceNormals", "vertexNormals", "softHardDisplay"]], ["Size", ["normalsBigger", "normalsSmaller"]]]],
-    "-", ["Draw Mode", ["wire", "shaded", "xray"]]],
+  // the menu sets' menus (Mesh, Edit Mesh, Mesh Tools, Mesh Display, UV, Key, Playback, Sculpt, Render) and Maya's
+  // main menus come from FORGE_MAYA below - Maya 2027's order and labels (app/ui/forge_maya_layout.js, generated)
 };
+// Forge laid out like Maya 2027 (owner 2026-10-22: "almost 1:1 to maya"): every main and menu-set menu as Maya has it,
+// built by tools/forge_maya/gen_layout.py from Maya's own layout (docs/forge/maya2027_layout.json)
+if (typeof FORGE_MAYA !== "undefined") for (const [name, items] of Object.entries(FORGE_MAYA.menus)) FORGE_PRO_MENUS[name] = items;
 // the row above the middle: the panel menus, then the main menus (the order the reference uses)
 const FORGE_PRO_BAR = ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"];
 const FORGE_PRO_MAIN = ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Help"];
 // the middle row's right-hand button
 const FORGE_PRO_CONTROLS = ["hideUI", "wheel", "hotkeyEditor", "preferences"];
 // the menu sets: which menus the rows under the middle show. A program's own set is the first one.
-const FORGE_PRO_SETS = {
-  forge: { label: "Forge", menus: ["Mesh", "Edit Mesh", "Mesh Tools", "UV", "Mesh Display", "Snap", "Symmetry", "Sculpt", "Animation"] },
-  modeling: { label: "Modeling", menus: ["Mesh", "Edit Mesh", "Mesh Tools", "UV", "Mesh Display", "Snap", "Symmetry"] },
-  sculpting: { label: "Sculpting", menus: ["Sculpt", "Mesh Tools"] },
-  animation: { label: "Animation", menus: ["Animation"] },
-  rendering: { label: "Rendering", menus: ["Renderer"] },
-};
+const FORGE_PRO_SETS = (typeof FORGE_MAYA !== "undefined") ? FORGE_MAYA.sets : {
+  modeling: { label: "Modeling", menus: ["Mesh", "Edit Mesh", "Mesh Tools", "Mesh Display", "UV"] } };
 // the hotbox's rows are the same menus, four to a row (the window's menu bar shows them in one line)
 const FORGE_PRO_SET_ROWS = (key) => {
-  const m = ((FORGE_PRO_SETS[key] || FORGE_PRO_SETS.forge).menus) || [];
+  const m = ((FORGE_PRO_SETS[key] || FORGE_PRO_SETS.modeling).menus) || [];
   const rows = [];
   for (let i = 0; i < m.length; i += 4) rows.push(m.slice(i, i + 4));
   return rows.length ? rows : [[]];
 };
 const FORGE_PRO_SET_STORE = "loki-forge-menuset";
-let FORGE_PRO_SET = (() => { try { const k = localStorage.getItem(FORGE_PRO_SET_STORE); return FORGE_PRO_SETS[k] ? k : "forge"; } catch (exc) { return "forge"; } })();
+// Maya starts in Modeling (F2); the old all-in-one "Forge" set is gone - a stored "forge" comes back as Modeling
+let FORGE_PRO_SET = (() => { try { const k = localStorage.getItem(FORGE_PRO_SET_STORE); return FORGE_PRO_SETS[k] ? k : "modeling"; } catch (exc) { return "modeling"; } })();
 // every menu, in a stable order - the Space wheel, the tear-off bar and the window's menu bar walk this
 const FORGE_PRO_ROWS = FORGE_PRO_MAIN.concat(FORGE_PRO_BAR,
-  ["Mesh", "Edit Mesh", "Mesh Tools", "Snap", "Symmetry", "Sculpt", "Animation"]).map((n) => [n, FORGE_PRO_MENUS[n]]);
+  [...new Set(Object.values(FORGE_PRO_SETS).flatMap((st) => st.menus))]).filter((n) => FORGE_PRO_MENUS[n]).map((n) => [n, FORGE_PRO_MENUS[n]]);
 // the menus of the set that is showing, kept small enough for the wheel's ring
 const FORGE_PRO_WHEEL_MENUS = () => {
-  const menus = (FORGE_PRO_SETS[FORGE_PRO_SET] || FORGE_PRO_SETS.forge).menus || [];
+  const menus = (FORGE_PRO_SETS[FORGE_PRO_SET] || FORGE_PRO_SETS.modeling).menus || [];
   return ["Recent Commands"].concat(menus).slice(0, 12).map((n) => [n, n === "Recent Commands" ? [] : FORGE_PRO_MENUS[n]]);
 };
 
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)
-const FORGE_PRO_ZONES = {
-  center: { title: "Views", ring: { N: "persp", W: "top", S: "front", E: "side" } },
-  north: { title: "Layouts", ring: { N: "single", E: "four", S: "winOutliner", W: "hideUI" } },
-  south: { title: "Panels", ring: { N: "winOutliner", E: "winMaterials", W: "winCreate", S: "winChannel" } },
-  east: { title: "UI", ring: { N: "winOutliner", E: "winChannel", S: "winShelf", W: "winToolkit" } },
-  west: { title: "Selection mode", ring: { NW: "objComp", NE: "hierarchy", SW: "face", N: "vertex", W: "edge" } },
-};
+// the five zones, as Maya's HotboxCenter/North/South/East/WestMenu lay them out (forge_maya_layout.js)
+const FORGE_PRO_ZONES = (typeof FORGE_MAYA !== "undefined") ? FORGE_MAYA.zones : {
+  center: { title: "Views", ring: { N: "persp", W: "top", S: "front", E: "side" } } };
 // commands that are switches: the hotbox shows a tick when they are on
 const FORGE_PRO_TOGGLES = {
   snapGrid: (v) => !!v.pro.snap.grid, snapEdge: (v) => !!v.pro.snap.edge, snapPoint: (v) => !!v.pro.snap.point,
@@ -897,13 +881,13 @@ const FORGE_PRO_TOGGLES = {
   winMaterials: () => { try { return localStorage.getItem("loki-forge-workspace") === "mat"; } catch (_) { return false; } }, winShelf: () => forgeProPanels().shelf, winToolkit: () => forgeProPanels().toolkit,
 };
 
-function forgeProItem(id, host) {
+function forgeProItem(id, host, label) {
   const c = FORGE_PRO_CMDS[id];
   if (!c) return null;
   const b = proEl("button", "forge-pro-item" + (c[1] ? "" : " off"));
   b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
   const key = typeof fmyKeyOf === "function" ? fmyKeyOf(id) : (typeof FMY_KEYS !== "undefined" && FMY_KEYS[id]) || "";
-  b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", c[0]), proEl("span", "forge-pro-key", key));
+  b.append(proEl("span", "forge-pro-tick", ""), proEl("span", "forge-pro-label", label || c[0]), proEl("span", "forge-pro-key", key));
   if (!c[1]) b.title = c[2] || "";
   b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
   b.addEventListener("click", (ev) => { ev.stopPropagation(); const v = forge.view; host._used = true; forgeProHotboxHide(); if (v) forgeProRun(v, id); });
@@ -948,7 +932,7 @@ function forgeProFillList(list, entries, host, depth) {
     } else {
       const id = Array.isArray(e) ? e[0] : e;
       if (!forgeMenuLive(id)) continue;                  // not in Forge yet: left out
-      b = forgeProItem(id, host);
+      b = forgeProItem(id, host, Array.isArray(e) && typeof e[1] === "string" ? e[1] : "");
       if (!b) continue;
       b.addEventListener("pointerenter", () => { clearTimeout(host._flyT); host._flyT = setTimeout(() => { forgeProFlyClose(host, depth); for (const x of list.querySelectorAll(".forge-pro-subitem.open")) x.classList.remove("open"); }, 160); });
     }
@@ -1024,6 +1008,10 @@ function forgeProSetTo(key) {
   if (sel && sel.value !== key) sel.value = key;
   const v = forge.view;
   if (v && v.pro) v.pro.recent = (v.pro.recent || []);       // nothing else to rebuild: the rows are all there
+}
+// the menu sets as commands (F2 / F4 / F6, as in Maya; Sculpting is Forge's own)
+for (const [k, label] of [["Modeling", "modeling"], ["Animation", "animation"], ["Rendering", "rendering"], ["Sculpting", "sculpting"]]) {
+  FORGE_PRO_CMDS["menuSet" + k] = [k + " Menu Set", () => { forgeProSetTo(label); return k + " menus."; }];
 }
 window.forgeMenuSet = (key) => { if (key == null) return FORGE_PRO_SET; forgeProSetTo(key); return FORGE_PRO_SET; };
 
@@ -1122,7 +1110,9 @@ function forgeProHotboxHost() {
     if (!host._zone) return;
     host._zone = null;
     const id = forgeProMarkPick(ev.clientX, ev.clientY);
-    forgeProMarkHide(); forgeProHotboxHide();
+    forgeProHotboxHide();
+    if (id && typeof id === "object") { forgeProMarkRun(forge.view, id, ev.clientX, ev.clientY); return; }
+    forgeProMarkHide();
     if (id) forgeProRun(forge.view, id);
   });
   document.body.append(host);                     // not inside the sheet: its transform would shift fixed positions
@@ -1573,6 +1563,7 @@ function forgeProAttach(view, ctx) {
     if (pro.open === "key") {
       pro.open = false;
       const id = forgeProMarkPick(e.clientX, e.clientY);
+      if (id && typeof id === "object") { forgeProMarkRun(view, id, e.clientX, e.clientY); return; }
       forgeProMarkHide();
       if (id) forgeProRun(view, id);
       return;
@@ -1610,6 +1601,7 @@ function forgeProAttach(view, ctx) {
     if (pro.open !== "right") return;
     pro.open = false;
     const id = forgeProMarkPick(e.clientX, e.clientY);
+    if (id && typeof id === "object") { forgeProMarkRun(view, id, e.clientX, e.clientY); return; }
     forgeProMarkHide();
     if (id) {
       // the menu was opened over an object that is not selected: what you pick acts on THAT object
@@ -1821,7 +1813,7 @@ FORGE_PRO_CMDS.__bigger = ["Bigger manipulator", (v) => forgeProManipSize(v, tru
 
 // older callers (forge.js's buttons, tests) - the marking menu's 8 wedges and the hotbox, by name
 function forgeProSets(v) {
-  const toPairs = (menu) => Object.values(menu.ring).map((id) => [FORGE_PRO_CMDS[id][0], () => forgeProRun(v, id)]);
+  const toPairs = (menu) => Object.values(menu.ring).filter((id) => typeof id === "string" && FORGE_PRO_CMDS[id]).map((id) => [FORGE_PRO_CMDS[id][0], () => forgeProRun(v, id)]);
   return { object: toPairs(forgeProMenu(v, { node: v && forgeProTree(v) ? forgeProTree(v).active() : null })),
            shift: toPairs(forgeProMenu(v, { shift: true })), ctrl: toPairs(forgeProMenu(v, { ctrl: true })) };
 }

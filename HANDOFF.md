@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-22 12:40 (agents read LOKI's / projects' folders; one Forge hotkey table, Maya sculpt keys, a working mask).
+Last updated: 2026-10-22 14:40 (Forge laid out like Maya 2027 from Maya's own files: menus, sets, hotbox, marking menus, hotkeys; docs/FORGE_MAYA_PARITY.md).
 
 ## The machines
 
@@ -108,6 +108,18 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   agent actions. **Not verified:** the Godot tab on a project in ~/LOKI Projects on either machine.
 
 ### Forge
+- **Forge = Maya 2027 (2026-10-22, docs/FORGE_MAYA_PARITY.md - the plan and the record)**: Maya's own layout is read
+  from a Maya install by `tools/forge_maya/extract_maya.py` into `docs/forge/maya2027_layout.json` (names, order,
+  compass positions, 510 default hotkeys - no Autodesk code); `tools/forge_maya/gen_layout.py` (the Maya->Forge MAP)
+  writes `app/ui/forge_maya_layout.js` (FORGE_MAYA) and the parity doc. forge_pro.js builds the menu bar (File .. Windows,
+  then the set: Modeling = Mesh, Edit Mesh, Mesh Tools, Mesh Display, UV; Animation = Key, Playback; Rendering = Render;
+  Sculpting = Forge's own), every menu in Maya's order with Maya's labels and section headings (Forge's extras under
+  "LOKI" at the end), the hotbox zones and the Shift+right-click marking menus (object / vertex / edge / face / empty, sub-
+  menu wedges open their own ring) from it. Snap and Symmetry left the bar (status line, as in Maya). Hotkeys = Maya's
+  where Forge has the command (F2/F4/F6 sets, Ctrl+S, Ctrl+Shift+X Multi-Cut, Ctrl+Shift+Q Quad Draw, Shift+X/C/V snaps,
+  Ctrl+Alt+Left/Right spin edge, Alt+F12 UV shell); Ctrl+Shift+I = Invert Mask while sculpting (Maya's sculpt context).
+  234 of 1113 Maya rows are in Forge (20%): the "-" rows of the parity doc are the build list. To change the layout:
+  edit MAP / EXTRAS in gen_layout.py and run it (tests/test_forge_maya_layout.py checks it's up to date).
 - **Menus are trees + LOKI tests Forge (2026-10-22, docs/FORGE_QA.md)**: FORGE_PRO_MENUS entries may be
   `["Label", [entries]]` to any depth (menu bar cascades: fmyRow/fmySubDrop; hotbox flyouts: forgeProFillList; wheel and
   marking lists drill in with Back); dead commands are left out of every menu; every floating list fits the window
