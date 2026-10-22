@@ -169,7 +169,26 @@ button:disabled { opacity: .45; cursor: default; }
   .turn, .event, .notice { padding-left: 16px; padding-right: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { tr
+@media (pointer: coarse) {
+  * {
+    touch-action: auto;
+  }
+  button, input, select, textarea {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px;
+  }
+  a {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 16px;
+  }
+  .rs-gnode, .home-ico {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}ansition: none !important; }
 }
 
 /* background jobs */
