@@ -696,7 +696,116 @@ const LokiRenderStudio = (() => {
     return { pos, w: maxX + M, h: maxY + M, NW, NH };
   }
 
-  function buildEditor(wrap, g) {
+  
+  
+  // ------------------------------------------------------------------ export image
+  function showExportModal() {
+    const canvas = $("rs-canvas");
+    const img = $("rs-img");
+    const modal = $("rs-export-modal"); if (!modal) return;
+    modal.hidden = false;
+    // Set the image source
+    if (img && img.src) {
+      const exportImg = $("rs-export-img");
+      if (exportImg) exportImg.src = img.src;
+    } else if (canvas && canvas.width > 0) {
+      const exportCanvas = $("rs-export-canvas");
+      if (exportCanvas) {
+        exportCanvas.width = canvas.width;
+        exportCanvas.height = canvas.height;
+        exportCanvas.getContext("2d").drawImage(canvas, 0, 0);
+      }
+    }
+    // Set resolution selector
+    const resSelect = $("rs-export-res");
+    if (resSelect) {
+      resSelect.value = Math.min(canvas.width, canvas.height) + "x" + Math.max(canvas.width, canvas.height);
+    }
+  }
+
+  function hideExportModal() {
+    const modal = $("rs-export-modal");
+    if (modal) modal.hidden = true;
+  }
+
+  function exportCurrentImage() {
+    const canvas = $("rs-canvas");
+    const img = $("rs-img");
+    let dataUrl;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      canvas.toBlob(function(blob) {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "loki_render_" + new Date().toISOString().slice(0,10) + ".png";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, "image/png");
+    } else if (img && img.src) {
+      const link = document.createElement("a");
+      link.href = img.src;
+      link.download = "loki_render_" + new Date().toISOString().slice(0,10) + ".png";
+      link.click();
+    }
+    hideExportModal();
+  }
+
+  // Add the export modal UI
+  function addExportModal() {
+    const modal = $("rs-export-modal");
+    if (modal) return; // already added
+    
+    modal = mk("div", "rs-export-modal"); modal.id = "rs-export-modal"; modal.hidden = true;
+    modal.append(mk("div", "rs-export-modal-header", "Export Image"));
+    modal.append(mk("span", "rs-export-close", "×"));
+    const modalBody = mk("div", "rs-export-modal-body");
+    modalBody.append(mk("canvas", "rs-export-canvas"));
+    modalBody.append(mk("p", "rs-export-instruction", "Right-click the image to save, or drag to download."));
+    const resRow = mk("div", "rs-export-resrow");
+    resRow.append(mk("label", "", "Resolution: "));
+    const resSelect = mk("select", "rs-export-res");
+    ["original", "1024x1024", "512x512", "256x256", "128x128"].forEach(opt => {
+      resRow.append(mk("option", "", opt));
+    });
+    modalBody.append(resRow);
+    modalBody.append(mk("div", "rs-export-actions"));
+    const exportBtn = mk("button", "rs-export-btn", "Export");
+    exportBtn.addEventListener("click", exportCurrentImage);
+    modalBody.append(exportBtn);
+    const cancelBtn = mk("button", "rs-export-cancel", "Cancel");
+    cancelBtn.addEventListener("click", hideExportModal);
+    modalBody.append(cancelBtn);
+    modal.append(resRow);
+    modal.append(modalBody);
+    // Add close button functionality
+    modal.querySelector(".rs-export-close").addEventListener("click", hideExportModal);
+    // Close on outside click
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) hideExportModal();
+    });
+    document.body.append(modal);
+  }
+
+  // Add the export button to the info area or toolbar
+  function addExportButton() {
+    // Check if already added
+    if ($("rs-export-btn-toolbar")) return;
+    const toolbar = $("rs-info"); // use info area
+    if (!toolbar) return;
+    const exportBtn = mk("button", "rs-export-btn-toolbar", "Export");
+    exportBtn.title = "Export current preview image";
+    exportBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      showExportModal();
+    });
+    toolbar.append(exportBtn);
+  }
+
+  // Initialize when the editor starts
+  if (window.LokiRenderStudio && LokiRenderStudio.state) {
+    setTimeout(addExportModal, 500);
+    setTimeout(addExportButton, 600);
+  }
+function buildEditor(wrap, g) {
     if (!S.layout || S.layout.wf !== g.workflow) { S.layout = autoLayout(g.nodes); S.layout.wf = g.workflow; S.selNode = null; }
     if (!S.zoom) S.zoom = 1; if (!S.pan) S.pan = { x: 0, y: 0 };
     const NW = S.layout.NW, NH = S.layout.NH;
