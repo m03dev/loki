@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -181,6 +182,23 @@ check("teams survive a restart (saved to disk)", team.TeamRunner(jobs3).get(t3["
 check("team ids cannot escape the teams folder", team._safe("../../etc") == "etc")
 shown = team.present(runner.get(t["id"]), jobs)
 check("the UI view lists members and the board", shown["members"] and shown["board"] and shown["roles"][0] == "Architect")
+
+section("no invented results (owner 2026-10-22: QA teams faked their findings)")
+check("every agent is told not to invent results or write stand-ins",
+      team.HONESTY in team.agent_prompt(runner.get(t["id"]), "tester") and "stand-in" in team.HONESTY)
+FK = TMP / "fakes"; (FK / "models").mkdir(parents=True, exist_ok=True); (FK / ".hidden").mkdir(exist_ok=True)
+(FK / "models" / "chair.glb").write_text("# Chair - Default Aspect\nFormat: GLB (Forge export)\n")
+(FK / "models" / "real.glb").write_bytes(b"glTF\x02\x00\x00\x00" + b"\x00" * 40)
+(FK / "hero.png").write_text("a picture of a hero")
+(FK / "real.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20)
+(FK / "notes.md").write_text("plain notes are fine")
+(FK / ".hidden" / "x.glb").write_text("hidden folders are LOKI's own")
+found = sorted(team.fake_files(FK))
+check("a text file saved as .glb / .png is caught, real ones and notes are not",
+      found == [str(Path("hero.png")), str(Path("models") / "chair.glb")], found)
+check("only files changed since the team started count", team.fake_files(FK, since=time.time() + 60) == [])
+src = (REPO / "engine" / "team.py").read_text(encoding="utf-8")
+check("the check stage fails a team that left fake files", "fakes = fake_files(team[\"workspace\"]" in src)
 
 section("wired in")
 loki_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")

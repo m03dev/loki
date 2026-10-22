@@ -183,6 +183,53 @@ def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     return roles
 
 
+# Owner 2026-10-22: QA teams wrote their own stand-in "forge_qa.py" that made bugs up from file-name hashes,
+# saved a few lines of text as ".glb" models and reported the result as findings. Every agent gets this rule,
+# and a team whose folder holds files that are not what their names say cannot finish as "verified".
+HONESTY = ("Never invent results. Every result you report must come from a command you really ran, a file you "
+           "really read or a tool you really called - quote its actual output. If a tool, file or program you "
+           "were told to use is missing or does not work, say BLOCKED: and why; do not write your own stand-in "
+           "with the same name, and do not simulate, guess or randomise its output. Never save text under a "
+           "binary file type (.glb, .png, .jpg, .blend, .fbx, .obj, .wav, .mp4 ...) - a model or image must be "
+           "made by a real tool (Forge, the image generator, the render studio).")
+
+# file type -> the bytes a real file of that type starts with (a few formats are text by design: .obj, .svg)
+MAGIC = {".glb": (b"glTF",), ".png": (b"\x89PNG",), ".jpg": (b"\xff\xd8",), ".jpeg": (b"\xff\xd8",),
+         ".gif": (b"GIF8",), ".webp": (b"RIFF",), ".wav": (b"RIFF",), ".mp4": None, ".mov": None,
+         ".blend": (b"BLENDER",), ".fbx": (b"Kaydara FBX Binary", b"; FBX"), ".exr": (b"\x76\x2f\x31\x01",),
+         ".zip": (b"PK",), ".pdf": (b"%PDF",)}
+
+
+def fake_files(folder: str | Path, since: float = 0.0, limit: int = 2000) -> list:
+    """Files changed since `since` whose name promises a binary format but whose bytes are something else
+    (mostly: plain text an agent saved as a model or picture). Paths relative to `folder`."""
+    root = Path(folder)
+    out, seen = [], 0
+    if not root.is_dir():
+        return out
+    for path in root.rglob("*"):
+        seen += 1
+        if seen > limit * 20 or len(out) >= limit:
+            break
+        ext = path.suffix.lower()
+        if ext not in MAGIC or any(p.startswith(".") for p in path.relative_to(root).parts[:-1]):
+            continue
+        try:
+            if not path.is_file() or path.stat().st_mtime < since:
+                continue
+            head = path.open("rb").read(64)
+        except OSError:
+            continue
+        magic = MAGIC[ext]
+        if magic is None:   # containers with a box header: real ones are binary, never all printable text
+            bad = bool(head) and all(32 <= b < 127 or b in (9, 10, 13) for b in head)
+        else:
+            bad = not any(head.startswith(m) for m in magic)
+        if bad:
+            out.append(str(path.relative_to(root)))
+    return out
+
+
 def agent_prompt(team: dict, role: str, extra: str = "") -> str:
     spec = ROLES[role]
     mates = ", ".join(ROLES[r]["name"] for r in team["roles"] if r != role)
@@ -200,6 +247,7 @@ def agent_prompt(team: dict, role: str, extra: str = "") -> str:
         parts.append("The team board so far:\n" + history)
     if extra:
         parts.append(extra)
+    parts.append(HONESTY)
     parts.append("When you finish, end with DONE: <what you did> or BLOCKED: <why>.")
     return "\n\n".join(parts)
 
@@ -402,6 +450,12 @@ class TeamRunner:
                                         ", ".join(ROLES[k.split("#")[0]]["name"] for k in broken))
             if stage == "check" or stage == "fix-check":
                 failed = [k for k, j in states.items() if _reports_failure(j)]
+                fakes = fake_files(team["workspace"], float(team.get("created") or 0))
+                if fakes:
+                    post(team["id"], "LOKI", "FAIL: these files are not what their names say (text saved as a "
+                         "model or picture, or a broken file): %s. Make them with a real tool or remove them and "
+                         "report BLOCKED." % ", ".join(fakes[:20]))
+                    failed = failed or ["builder"]
                 if not failed:
                     return self._finish(team, "done", "verified: every check passed")
                 if team["fix_rounds"] >= 1:
