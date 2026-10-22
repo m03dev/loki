@@ -55,21 +55,21 @@ async def main():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
-        await page.wait_for_function("forge.view && forge.view.pro && forge.view.brush", timeout=10000)
+        await page.wait_for_function("forge.view && forge.view.pro && forge.view.brush", timeout=25000)
         E = page.evaluate
 
         await page.wait_for_timeout(300)
         vis = """(sel) => { const e = document.querySelector(sel); return !!(e && e.offsetParent && getComputedStyle(e).display !== 'none'); }"""
         async def enter():
             await E("fmyRun('sculpt')")
-            await page.wait_for_function("forge.view.mode === 'sculpt' && !!document.getElementById('fsc-list')", timeout=8000)
+            await page.wait_for_function("forge.view.mode === 'sculpt' && !!document.getElementById('fsc-list')", timeout=25000)
             await page.wait_for_timeout(200)
         await E("fmyRun('sphere')")
         await page.wait_for_timeout(300)
         await E("fmyRun('sphere')")
         await page.wait_for_timeout(300)
         await enter()
-        await page.wait_for_function("(ForgeSculpt.library || []).length > 50", timeout=10000)
+        await page.wait_for_function("(ForgeSculpt.library || []).length > 50", timeout=25000)
         await E("forgeSculptUI.show()")
         vb = await page.locator("#forge-view").bounding_box()
         cx, cy = vb["x"] + vb["width"] * 0.55, vb["y"] + vb["height"] * 0.45
@@ -110,6 +110,18 @@ async def main():
         await page.keyboard.press("Shift+KeyU")
         await page.wait_for_timeout(400)
         check("Shift+U clears the mask", await E("Array.from(ForgeMask.w).filter(x => x > 0.01).length") == 0)
+        # Windows > Workspaces lists every workspace (owner 00:35: "sculpting still isnt in the menu")
+        await page.click('#fmy-menubar .fmy-mb[data-menu="Windows"]')
+        await page.wait_for_timeout(100)
+        names = await E("[...document.querySelectorAll('.fmy-drop .fmy-ditem')].map(b => b.dataset.proId).filter(x => /^ws[A-Z]/.test(x))")
+        check("Windows > Workspaces: Modeling, Sculpting, UV Editing, Retopology, Baking, Materials, Animation", names == ["wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim"], names)
+        await page.click('.fmy-drop .fmy-ditem[data-pro-id="wsSculpt"]')
+        await page.wait_for_timeout(300)
+        check("...Sculpting Workspace from that menu enters sculpt mode", await E("[forge.view.mode, ForgeUVEditor.workspace()]") == ["sculpt", "sculpt"])
+        check("the menu set box is never blank (it shows the Sculpting set)", await E("document.getElementById('fmy-menuset').value") == "sculpting")
+        await page.click("#fsc-done")
+        await page.wait_for_timeout(300)
+        check("...and back on Done: Modeling set, not blank", await E("document.getElementById('fmy-menuset').value") == "modeling")
         # Workspace: Sculpting (owner 23:53: "sculpting should be in its own workspace just like animation")
         await E("ForgeUVEditor.setWorkspace('sculpt')")
         await page.wait_for_timeout(300)
@@ -129,7 +141,7 @@ async def main():
         await browser.close()
 
 
-asyncio.run(asyncio.wait_for(main(), timeout=55))
+asyncio.run(asyncio.wait_for(main(), timeout=110))   # alone ~40 s; under ship.py's parallel load it may not finish in its budget (not waited for)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

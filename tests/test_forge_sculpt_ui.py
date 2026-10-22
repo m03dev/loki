@@ -59,14 +59,14 @@ async def main():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         await page.evaluate("document.getElementById('open-forge').click()")
         await page.wait_for_selector("#forge:not([hidden])", timeout=5000)
-        await page.wait_for_function("forge.view && forge.view.pro && forge.view.brush", timeout=10000)
+        await page.wait_for_function("forge.view && forge.view.pro && forge.view.brush", timeout=25000)
         E = page.evaluate
 
         await page.wait_for_timeout(300)
         vis = """(sel) => { const e = document.querySelector(sel); return !!(e && e.offsetParent && getComputedStyle(e).display !== 'none'); }"""
         async def enter():
             await E("fmyRun('sculpt')")
-            await page.wait_for_function("forge.view.mode === 'sculpt' && !!document.getElementById('fsc-list')", timeout=8000)
+            await page.wait_for_function("forge.view.mode === 'sculpt' && !!document.getElementById('fsc-list')", timeout=25000)
             await page.wait_for_timeout(200)
         await E("fmyRun('sphere')")
         await page.wait_for_timeout(300)
@@ -74,7 +74,7 @@ async def main():
         await enter()
         shown = [await page.evaluate(vis, s) for s in ("#fsc-head", "#fsc-side", "#fsc-strip", "#forge-sculpt", "#forge-sculpt-engine")]
         check("sculpt mode: the header, the sliders and the brush strip; the old panels are gone", shown == [True, True, True, False, False], shown)
-        await page.wait_for_function("(ForgeSculpt.library || []).length > 50", timeout=10000)
+        await page.wait_for_function("(ForgeSculpt.library || []).length > 50", timeout=25000)
         await E("forgeSculptUI.show()")
         chips = await E("[...document.querySelectorAll('#fsc-chips .fsc-chip')].map(c => c.textContent)")
         check("category chips: Favourites first, then the engine's categories and All", chips[:2] == ["Favourites", "Recent"] and "All" in chips and "Clay" in chips, chips)
@@ -133,7 +133,7 @@ async def main():
         # every way out
         await page.click("#fsc-done")
         await page.wait_for_timeout(150)
-        check("Done leaves sculpt mode (and the menu set says Modeling)", await E("[forge.view.mode, document.getElementById('fmy-menuset').value]") == ["view", "Modeling"])
+        check("Done leaves sculpt mode (and the menu set says Modeling)", await E("[forge.view.mode, document.getElementById('fmy-menuset').value]") == ["view", "modeling"])
         check("...and the sculpt UI is gone", not await page.evaluate(vis, "#fsc-strip"))
         await enter(); await page.mouse.move(cx, cy); await page.keyboard.press("q"); await page.wait_for_timeout(120)
         check("q leaves sculpt mode", await E("forge.view.mode") == "view")
@@ -147,14 +147,14 @@ async def main():
         await page.wait_for_timeout(120)
         check("the wheel's Exit Sculpt leaves sculpt mode", await E("forge.view.mode") == "view")
         await enter()
-        await E("(() => { const s = document.getElementById('fmy-menuset'); s.value = 'Modeling'; s.dispatchEvent(new Event('change')); })()")
+        await E("(() => { const s = document.getElementById('fmy-menuset'); s.value = 'modeling'; s.dispatchEvent(new Event('change')); })()")
         await page.wait_for_timeout(200)
         check("Menu Set: Modeling leaves sculpt mode", await E("forge.view.mode") == "view")
         check("no script errors", not errors, errors[:5])
         await browser.close()
 
 
-asyncio.run(asyncio.wait_for(main(), timeout=55))
+asyncio.run(asyncio.wait_for(main(), timeout=110))   # alone ~40 s; under ship.py's parallel load it may not finish in its budget (not waited for)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

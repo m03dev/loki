@@ -680,3 +680,14 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("uvOptCuts", "OptCuts Unwrap", () => O.optcuts());
   add("uvChecker", "UV Checker on the Model", () => O.checker());
 }
+
+// Windows > Workspaces (owner 2026-10-22 00:35: "sculpting still isnt in the menu") - every workspace as a command, ticked
+// when it is the one showing; the same list as the Workspace picker at the top right
+const FORGE_WORKSPACES = [["wsModel", "model", "Modeling"], ["wsSculpt", "sculpt", "Sculpting"], ["wsUv", "uv", "UV Editing"],
+  ["wsRetopo", "retopo", "Retopology"], ["wsBake", "bake", "Baking"], ["wsMat", "mat", "Materials"], ["wsAnim", "anim", "Animation"]];
+if (typeof FORGE_PRO_CMDS !== "undefined") {
+  for (const [id, ws, label] of FORGE_WORKSPACES) {
+    FORGE_PRO_CMDS[id] = [label + " Workspace", () => ForgeUVEditor.setWorkspace(ws)];
+    if (typeof FORGE_PRO_TOGGLES !== "undefined") FORGE_PRO_TOGGLES[id] = () => ForgeUVEditor.workspace() === ws;
+  }
+}

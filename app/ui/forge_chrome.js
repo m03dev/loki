@@ -522,7 +522,12 @@ function fmySync() {
     if (sym) sym.textContent = "Symmetry: " + fmySymText(v.brush && v.brush.symBits, v.brush && v.brush.radial, v.brush && v.brush.radialAxis);
     set("#fmy-symm", !!(v.brush && (v.brush.symBits || (v.brush.radial | 0) > 1)));
     const ms = document.getElementById("fmy-menuset");
-    if (ms && document.activeElement !== ms) ms.value = v.mode === "sculpt" ? "Sculpting" : "Modeling";
+    if (ms && document.activeElement !== ms) {
+      // the menu set's values are keys ("sculpting", "modeling" ...): sculpt mode shows the Sculpting set, otherwise
+      // the set the owner picked stays (writing a label here left the box blank)
+      if (v.mode === "sculpt" && typeof forgeMenuSet === "function" && forgeMenuSet() !== "sculpting") forgeMenuSet("sculpting");
+      else if (typeof forgeMenuSet === "function" && ms.value !== forgeMenuSet()) ms.value = forgeMenuSet();
+    }
     const camName = document.getElementById("fmy-camname");
     if (camName) camName.textContent = v.quad ? "" : (v.cam || "persp");
     set("#fmy-panelbar [data-pro-id='wire']", !!v.wire);

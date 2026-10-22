@@ -456,12 +456,12 @@ function forgeSculptWorkspace(on) {
         if (p.channel) forgeProPanel("channel", false);
       }
       if (v.mode !== "sculpt") { if (typeof forgeProSculpt === "function") forgeProSculpt(v); else if (typeof forgeMode === "function") forgeMode(); }
-      const set = document.getElementById("fmy-menuset"); if (set) set.value = "Sculpting";
+      if (typeof forgeMenuSet === "function" && forgeMenuSet() !== "sculpting") forgeMenuSet("sculpting");
     } else {
       if (v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
       const before = window.__fscPanelsBefore; window.__fscPanelsBefore = null;
       if (before && typeof forgeProPanel === "function") { forgeProPanel("outliner", !!before.outliner); forgeProPanel("channel", !!before.channel); }
-      const set = document.getElementById("fmy-menuset"); if (set) set.value = "Modeling";
+      if (typeof forgeMenuSet === "function" && forgeMenuSet() === "sculpting") forgeMenuSet("modeling");
     }
   } finally { fscWsGuard = false; }
   fscShow();
@@ -476,7 +476,7 @@ function fscExit() {
   FSC_STICKY.invert = false; FSC_STICKY.smooth = false; FSC_STICKY.mask = false;
   if (fscWorkspace() === "sculpt") fscSetWorkspace("model");
   if (v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
-  const set = document.getElementById("fmy-menuset"); if (set) set.value = "Modeling";
+  if (typeof forgeMenuSet === "function" && forgeMenuSet() === "sculpting") forgeMenuSet("modeling");
   if (typeof fmySync === "function") fmySync();
   fscShow();
   return fscSay("Left sculpt mode.");

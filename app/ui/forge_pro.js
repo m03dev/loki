@@ -767,7 +767,7 @@ const FORGE_PRO_MENUS = {
   Select: ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "marquee", "objComp", "vertex", "edge", "face", "uv", "vertexFace", "uvShell", "multi", "loopSel", "ringSel"],
   Modify: ["select", "move", "rotate", "scale", "lastTool", "showManip", "worldAxes", "objectAxes", "centerPivot", "resetPivot", "pivotEdit", "freeze", "resetXf", "makeLive", "snapGrid", "snapEdge", "snapPoint"],
   Display: ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "layerEditor", "layerAdd", "layerAssign", "smooth1", "smooth2", "smooth3", "quadToggle", "xray", "grid", "softHard", "iveToggle"],
-  Windows: ["winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "panelModel", "panelMaterials", "wheel", "hideUI", "hotkeyEditor", "preferences"],
+  Windows: ["#Workspaces", "wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim", "-", "#Panels", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "panelModel", "panelMaterials", "wheel", "hideUI", "hotkeyEditor", "preferences"],
   Help: ["hotkeyEditor", "preferences", "more"],
   // the panel menus (they belong to a view, not to the program - the row above the main menus, as in the reference)
   View: ["persp", "top", "front", "side", "defaultView", "frameAll", "frameSel", "single", "four"],
@@ -785,7 +785,7 @@ const FORGE_PRO_MENUS = {
   Symmetry: ["symX", "symY", "symZ", "symOff", "symModel", "symRadialOff", "symRadial3", "symRadial4", "symRadial6", "symRadial8", "symAxisX", "symAxisY", "symAxisZ"],
   Animation: ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey",
     "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"],
-  Sculpt: ["sculpt", "sculptModel", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "sculptWheel", "sculptExit", "dynamesh", "smooth"],
+  Sculpt: ["wsSculpt", "sculpt", "sculptModel", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "sculptWheel", "sculptExit", "dynamesh", "smooth"],
   // A menu may carry "-" (a separator) and "#Heading" (a group title): the window's menu bar draws them, the hotbox
   // ignores them (its lists are compact), so one definition serves both.
   UV: ["uvEditor", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "#Cut and Sew",
