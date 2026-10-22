@@ -1386,3 +1386,15 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 /* a short stage: the sticky tools go to three columns so the sculpt column fits inside the view (900x600) */
 .fsc-side.fsc-tight .fsc-tools { grid-template-columns: repeat(3, 30px); gap: 4px; }
 .fsc-side.fsc-tight .fsc-sticky { width: 30px; height: 30px; }
+
+/* the poly count: two columns (the scene, the selection), as a modeler's HUD reads; the component column appears only
+   while a component selection exists */
+.fmy-polycount td:last-child, .fmy-polycount th:last-child { display: none; }
+.fmy-polycount.fmy-comp td:last-child, .fmy-polycount.fmy-comp th:last-child { display: table-cell; }
+
+/* the marking menu's list: a tick for a switch, "▸" for a row that opens a submenu of its own */
+.forge-pro-mlist .forge-pro-litem { display: flex; align-items: center; gap: 6px; }
+.forge-pro-mlist .forge-pro-tick { width: 11px; text-align: center; color: #9fb6d8; }
+.forge-pro-mlist .forge-pro-litem.on { background: rgba(91, 141, 184, .22); }
+.forge-pro-mlist .forge-pro-litem.forge-sub .forge-pro-tick { color: #cfe0f2; }
+.forge-pro-mlist .forge-pro-litem.forge-back { color: #c3cad6; }

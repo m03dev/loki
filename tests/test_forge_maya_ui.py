@@ -121,8 +121,9 @@ async def main():
         # ---- the menus: one catalogue, no dead entries, and the hotbox laid out the reference way
         cat = await E("""() => { const dead = [], empty = [];
           for (const [name, ids] of Object.entries(FORGE_PRO_MENUS)) {
-            if (!ids.length) empty.push(name);
-            for (const id of ids) if (!FORGE_PRO_CMDS[id]) dead.push(name + " > " + id);
+            const cmds = ids.filter((x) => x !== "-" && !x.startsWith("#"));
+            if (!cmds.length) empty.push(name);
+            for (const id of cmds) if (!FORGE_PRO_CMDS[id]) dead.push(name + " > " + id);
           }
           return { dead, empty, count: Object.keys(FORGE_PRO_MENUS).length }; }""")
         check("every menu in the catalogue has items, and every item is a real command",
@@ -151,7 +152,7 @@ async def main():
             check("the menu-set button names the set that is showing",
                   await E("document.querySelector('.forge-pro-sethead').textContent") in ("Forge", "Modeling", "Sculpting", "Animation", "Rendering"))
             check("the rows under the middle are the showing set's menus",
-                  [r["menus"] for r in down] == [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry", "Sculpt"], ["Animation"]], down)
+                  [r["menus"] for r in down] == [["Mesh", "Edit Mesh", "Mesh Tools", "UV"], ["Mesh Display", "Snap", "Symmetry", "Sculpt"], ["Animation"]], down)
             check("only one set's rows are up at a time", len(down) == 3 and all(not r["hidden"] for r in down))
 
         # the ladder is tidy: no two rows overlap, and the lot fits the viewport
@@ -172,10 +173,111 @@ async def main():
           .filter((r) => !r.hidden).map((r) => [...r.querySelectorAll('.forge-pro-col')].map((c) => c.dataset.menu))""")
         head2 = await E("document.querySelector('.forge-pro-sethead').textContent")
         check("switching the menu set shows that set's menus only",
-              head2 == "Modeling" and down2 == [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry"]], [head2, down2])
+              head2 == "Modeling" and down2 == [["Mesh", "Edit Mesh", "Mesh Tools", "UV"], ["Mesh Display", "Snap", "Symmetry"]], [head2, down2])
         check("the panel and main menus stay where they are when the set changes",
               await E("document.querySelectorAll('#forge-pro-hotbox .forge-pro-row.up').length") == 3)
         await E("window.forgeMenuSet('forge')")
+
+        # ---- the WINDOW's menu bar is built from the same catalogue, so the two can never drift apart
+        bar = await E("""() => { const cat = FORGE_PRO_MENUS, out = [];
+          for (const [name, items] of FMY_MENUS()) {
+            const ids = items.filter((x) => typeof x === "string" && !x.startsWith("-") && !x.startsWith("#"));
+            const all = ids.concat(items.filter((x) => Array.isArray(x)).map((x) => x[0]));
+            // only plain-string ids must be real commands; an ["id", "Label", fn] row carries its own handler
+            out.push({ name: name, ids: all, want: (cat[name] || []).filter((x) => x !== "-" && !x.startsWith("#")),
+                       dupes: all.filter((x, i) => all.indexOf(x) !== i),
+                       dead: ids.filter((x) => !FORGE_PRO_CMDS[x]) });
+          }
+          return out; }""")
+        names = [m["name"] for m in bar]
+        check("the window menu bar carries the main menus and the modelling ones",
+              names[:8] == ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows", "Mesh"]
+              and all(n in names for n in ("Edit Mesh", "Mesh Tools", "Snap", "Symmetry", "Sculpt", "Animation", "Help")), names)
+        shared = [m for m in bar if m["want"]]
+        check("every command the catalogue lists is in the matching window menu, in the same order (no drift)",
+              shared and all(m["ids"][:len(m["want"])] == m["want"] for m in shared),
+              [(m["name"], m["want"], m["ids"][:len(m["want"])]) for m in shared if m["ids"][:len(m["want"])] != m["want"]][:2])
+        check("no window menu lists a command twice", all(not m["dupes"] for m in bar), [m["dupes"] for m in bar if m["dupes"]][:2])
+        check("every item in every window menu is a real command", all(not m["dead"] for m in bar), [m["dead"] for m in bar if m["dead"]][:2])
+
+        # ---- the status line's menu set drives the window's menu bar (one list behind both)
+        opts = await E("[...document.getElementById('fmy-menuset').options].map((o) => o.value)")
+        check("the status line offers the menu sets", opts == ["forge", "modeling", "sculpting", "animation", "rendering"], opts)
+        await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'animation'; s.dispatchEvent(new Event('change')); }")
+        await page.wait_for_timeout(250)
+        anim = await E("[...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.textContent)")
+        check("choosing Animation puts that set's menu in the bar (and takes Modeling's away)",
+              "Animation" in anim and "Edit Mesh" not in anim and "File" in anim and "Help" in anim, anim)
+        await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'modeling'; s.dispatchEvent(new Event('change')); }")
+        await page.wait_for_timeout(250)
+        mod = await E("[...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.textContent)")
+        check("...and choosing Modeling brings them back", "Edit Mesh" in mod and "UV" in mod and "Animation" not in mod, mod)
+        await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'forge'; s.dispatchEvent(new Event('change')); }")
+        await page.wait_for_timeout(200)
+
+        # ---- the heads-up poly count reads like a modeler's: two columns (the scene, the selection)
+        await page.keyboard.press("F8")                       # object mode, through the app's own key path
+        await page.wait_for_function("forge.view.mode !== 'poly'", timeout=8000)
+        await page.wait_for_function("!document.getElementById('fmy-polycount').classList.contains('fmy-comp')", timeout=4000)
+        hud = await E("""() => { const t = document.getElementById('fmy-polycount');
+          const cells = [...t.rows[0].cells];
+          return { n: cells.length, shown: cells.filter((c) => c.offsetParent !== null).length, comp: t.classList.contains('fmy-comp') }; }""")
+        check("the poly count reads like a modeler's HUD - two columns now, the component one only when it counts",
+              hud["n"] == 4 and hud["shown"] == 3 and not hud["comp"], hud)
+        await page.keyboard.press("F9")                       # vertex mode: now the components are what counts
+        await page.wait_for_function("forge.view.mode === 'poly' && forge.view.edit && forge.view.edit.mode === 'vert'", timeout=8000)
+        await page.wait_for_function("document.getElementById('fmy-polycount').classList.contains('fmy-comp')", timeout=4000)
+        hud2 = await E("""() => { const t = document.getElementById('fmy-polycount');
+          const cells = [...t.rows[0].cells];
+          return { shown: cells.filter((c) => c.offsetParent !== null).length, comp: t.classList.contains('fmy-comp'),
+                   all: +t.rows[0].cells[1].textContent }; }""")
+        check("...and the component column comes back in component mode",
+              hud2["shown"] == 4 and hud2["comp"] and hud2["all"] >= 8, hud2)
+        # ---- the marking menus: the reference's per-context sets, switches that show a tick, and a nested list.
+        # Opened through the app's own forgeProMenu/forgeProMarkShow (the input path is covered by test_forge_pro_ui),
+        # so these are about what the menus contain.
+        await E("forgeModelMode(false)")
+        await page.wait_for_function("forge.view.mode !== 'poly'", timeout=8000)
+        menu = await E("""() => { const v = forge.view, api = v.tree.api; api.select(1);
+          const read = () => { const h = document.getElementById('forge-pro-marking');
+            const rows = [...h.querySelectorAll('.forge-pro-litem')];
+            return { hub: h.querySelector('.forge-pro-hub').textContent,
+                     wedges: [...h.querySelectorAll('.forge-pro-wedge')].map((b) => b.dataset.proId),
+                     rows: rows.map((b) => ({ id: b.dataset.proId || null, sub: b.dataset.proSub || null, back: !!b.dataset.proBack,
+                                              tick: (b.querySelector('.forge-pro-tick') || {}).textContent || '' })) }; };
+          const out = {};
+          // the model: the mesh tools, with two switches in the list
+          forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, node: api.node(1), key: '', ctrl: false }));
+          out.tools = read();
+          if (v.edit) v.edit.prop = true;                       // soft selection on: its row must tick
+          forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, node: api.node(1), key: '', ctrl: false }));
+          out.toolsOn = read();
+          if (v.edit) v.edit.prop = false;
+          // nothing under it: the Create ring, whose list carries submenus
+          forgeProMarkShow(v, 420, 300, forgeProMenu(v, { shift: true, key: '', ctrl: false }));
+          out.create = read();
+          const sub = [...document.querySelectorAll('#forge-pro-marking .forge-pro-litem')].find((b) => b.dataset.proSub);
+          if (sub) sub.click();
+          out.deep = read();
+          const back = [...document.querySelectorAll('#forge-pro-marking .forge-pro-litem')].find((b) => b.dataset.proBack);
+          if (back) back.click();
+          out.back = read();
+          forgeProMarkHide();
+          return out; }""")
+        tools = menu["tools"]
+        check("Shift + right button on the model is that context's own menu (the mesh tools, with its ring)",
+              tools["hub"] == "Mesh tools" and "extrude" in tools["wedges"] and "softSel" in [r["id"] for r in tools["rows"]], tools)
+        check("...and a switch in its list reads as a switch: no tick when off, a tick when on",
+              all(r["tick"] == "" for r in tools["rows"] if r["id"] in ("softSel", "snapGrid"))
+              and any(r["tick"] == "\u2713" for r in menu["toolsOn"]["rows"] if r["id"] == "softSel"), [tools["rows"], menu["toolsOn"]["rows"]])
+        cr = menu["create"]
+        check("Shift + right button on nothing is the Create ring, and its list carries submenus",
+              cr["hub"] == "Create" and "cube" in cr["wedges"] and sum(1 for r in cr["rows"] if r["sub"]) >= 2, cr)
+        check("a submenu row opens the next level, and a Back row brings the first list back",
+              any(r["back"] for r in menu["deep"]["rows"])
+              and any(r["id"] in ("sphere", "cube", "cylinder") for r in menu["deep"]["rows"])
+              and not any(r["back"] for r in menu["back"]["rows"])
+              and sum(1 for r in menu["back"]["rows"] if r["sub"]) >= 2, menu["deep"]["rows"])
 
         check("no script errors", not errors, errors[:5])
         await browser.close()

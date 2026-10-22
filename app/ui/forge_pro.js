@@ -610,8 +610,12 @@ function forgeProMenu(v, ctx) {
     if (comp && mode === "vert") return { title: "Vertex tools", ring: { S: "extrude", E: "chamfer", SW: "deleteEdgeVert", N: "merge", NE: "averageVerts", W: "multiCut", NW: "connect", SE: "targetWeld" }, list: ["mergeCenter", "detach", "relax", "circularize", "grow", "shrink"] };
     if (comp && mode === "edge") return { title: "Edge tools", ring: { S: "extrude", E: "bevel", SW: "deleteEdgeVert", N: "bridge", NE: "edgeLoop", W: "multiCut", NW: "connect", SE: "offsetEdgeLoop" }, list: ["merge", "collapse", "slideEdge", "spinEdge", "detach", "fillHole", "loopSel", "ringSel", "grow", "shrink"] };
     if (comp) return { title: "Face tools", ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset", N: "duplicateFace" }, list: ["extractFace", "collapse", "triangulate", "quadrangulate", "circularize", "deleteComp", "smooth", "grow", "shrink"] };
-    if (ctx.node) return { title: "Mesh tools", ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" }, list: ["smooth", "dynamesh", "makeLive"] };
-    return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" }, list: ["imagePlane", "draw", "image", "describe", "creature"] };
+    if (ctx.node) return { title: "Mesh tools", ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" },
+      // the two switches read as switches (a tick) rather than as commands, the way a tool's options do
+      list: ["smooth", "dynamesh", "makeLive", "softSel", "snapGrid"] };
+    return { title: "Create", ring: { NE: "quadsphere", E: "sphere", SE: "torus", S: "cube", SW: "cone", W: "cylinder", NW: "plane" },
+      list: [["Polygon Primitives", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere"]],
+        ["Image Planes", ["imagePlane", "image"]], ["Draw with LOKI", ["draw", "describe"]], "creature"] };
   }
   if (ctx.node || comp) {                           // dagMenuProc: N Edge, W Vertex, S UV, E Face, SW VF, SE Shell, NW Multi, NE Object
     return { title: ctx.node ? ctx.node.name : "Components",
@@ -655,13 +659,48 @@ function forgeProMarkShow(v, x, y, menu) {
     const ringed = Object.keys(menu.ring || {}).length > 0;
     list.classList.toggle("bare", !ringed);           // no ring (empty space): the list starts right at the pointer
     list.style.top = (ringed ? Math.round(FORGE_PRO_R * 0.82 + 22) : 6) + "px";
-    for (const id of menu.list) {
-      const c = FORGE_PRO_CMDS[id]; if (!c) continue;
-      const b = proEl("button", "forge-pro-litem" + (c[1] ? "" : " off"), c[0]);
+    // A list entry is an id, or ["Label", [ids]] for a submenu (the nested list the reference program's rings have:
+    // one level deeper, with a Back row). A switch shows its tick, so it reads as a switch and not a command.
+    const tickOf = (id) => {
+      const st = FORGE_PRO_TOGGLES[id];
+      let on = false;
+      try { on = !!(st && v && st(v)); } catch (_) { on = false; }
+      return on ? "\u2713" : "";
+    };
+    const row = (id) => {
+      const c = FORGE_PRO_CMDS[id]; if (!c) return null;
+      const b = proEl("button", "forge-pro-litem" + (c[1] ? "" : " off"));
       b.type = "button"; b.dataset.proCmd = c[0]; b.dataset.proId = id;
+      const t = tickOf(id);
+      if (t) b.classList.add("on");
+      b.append(proEl("span", "forge-pro-tick", t), proEl("span", "forge-pro-label", c[0]));
       b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
-      list.append(b);
-    }
+      return b;
+    };
+    const fill = (entries, backLabel) => {
+      list.textContent = "";
+      if (backLabel) {
+        const back = proEl("button", "forge-pro-litem forge-back");
+        back.type = "button"; back.dataset.proBack = "1";
+        back.append(proEl("span", "forge-pro-tick", "\u25c2"), proEl("span", "forge-pro-label", backLabel));
+        back.addEventListener("click", (ev) => { ev.stopPropagation(); fill(menu.list, ""); });
+        list.append(back);
+      }
+      for (const entry of entries) {
+        if (Array.isArray(entry) && Array.isArray(entry[1])) {
+          const sub = proEl("button", "forge-pro-litem forge-sub");
+          sub.type = "button"; sub.dataset.proSub = entry[0];
+          sub.append(proEl("span", "forge-pro-tick", "\u25b8"), proEl("span", "forge-pro-label", entry[0]));
+          const kids = entry[1];
+          sub.addEventListener("click", (ev) => { ev.stopPropagation(); fill(kids, "\u25c2 Back"); });
+          list.append(sub);
+          continue;
+        }
+        const b = row(Array.isArray(entry) ? entry[0] : entry);
+        if (b) list.append(b);
+      }
+    };
+    fill(menu.list, "");
     host.append(list);
   }
   host.style.left = Math.round(x) + "px";
@@ -747,6 +786,13 @@ const FORGE_PRO_MENUS = {
   Animation: ["setKey", "deleteKey", "clearKeys", "playPause", "prevKey", "nextKey", "rangeStart", "rangeEnd", "graphEditor", "animAutoKey",
     "keyLinear", "keySmooth", "keyStep", "copyAnim", "pasteAnim", "mirrorKeysX", "mirrorKeysY", "mirrorKeysZ"],
   Sculpt: ["sculpt", "sculptModel", "sculptRemesh", "sculptQuadRemesh", "sculptReduce", "sculptDivide", "sculptDynamic", "sculptWheel", "sculptExit", "dynamesh", "smooth"],
+  // A menu may carry "-" (a separator) and "#Heading" (a group title): the window's menu bar draws them, the hotbox
+  // ignores them (its lists are compact), so one definition serves both.
+  UV: ["uvEditor", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "#Cut and Sew",
+    "uvCut", "uvSew", "uvMoveSew", "#Unfold", "uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams", "uvUnfold", "uvLayout",
+    "-", "uvShell", "uvChecker"],
+  "Mesh Display": ["#Normals", "softEdge", "hardEdge", "softHard", "softHardAngle", "#Display", "softHardDisplay",
+    "faceNormals", "vertexNormals", "normalsBigger", "normalsSmaller", "-", "wire", "shaded", "xray"],
 };
 // the row above the middle: the panel menus, then the main menus (the order the reference uses)
 const FORGE_PRO_BAR = ["View", "Shading", "Lighting", "Show", "Renderer", "Panels"];
@@ -755,11 +801,18 @@ const FORGE_PRO_MAIN = ["File", "Edit", "Create", "Select", "Modify", "Display",
 const FORGE_PRO_CONTROLS = ["hideUI", "wheel", "hotkeyEditor", "preferences"];
 // the menu sets: which menus the rows under the middle show. A program's own set is the first one.
 const FORGE_PRO_SETS = {
-  forge: { label: "Forge", rows: [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry", "Sculpt"], ["Animation"]] },
-  modeling: { label: "Modeling", rows: [["Mesh", "Edit Mesh", "Mesh Tools"], ["Snap", "Symmetry"]] },
-  sculpting: { label: "Sculpting", rows: [["Sculpt", "Mesh Tools"]] },
-  animation: { label: "Animation", rows: [["Animation"]] },
-  rendering: { label: "Rendering", rows: [["Renderer"]] },
+  forge: { label: "Forge", menus: ["Mesh", "Edit Mesh", "Mesh Tools", "UV", "Mesh Display", "Snap", "Symmetry", "Sculpt", "Animation"] },
+  modeling: { label: "Modeling", menus: ["Mesh", "Edit Mesh", "Mesh Tools", "UV", "Mesh Display", "Snap", "Symmetry"] },
+  sculpting: { label: "Sculpting", menus: ["Sculpt", "Mesh Tools"] },
+  animation: { label: "Animation", menus: ["Animation"] },
+  rendering: { label: "Rendering", menus: ["Renderer"] },
+};
+// the hotbox's rows are the same menus, four to a row (the window's menu bar shows them in one line)
+const FORGE_PRO_SET_ROWS = (key) => {
+  const m = ((FORGE_PRO_SETS[key] || FORGE_PRO_SETS.forge).menus) || [];
+  const rows = [];
+  for (let i = 0; i < m.length; i += 4) rows.push(m.slice(i, i + 4));
+  return rows.length ? rows : [[]];
 };
 const FORGE_PRO_SET_STORE = "loki-forge-menuset";
 let FORGE_PRO_SET = (() => { try { const k = localStorage.getItem(FORGE_PRO_SET_STORE); return FORGE_PRO_SETS[k] ? k : "forge"; } catch (exc) { return "forge"; } })();
@@ -768,8 +821,8 @@ const FORGE_PRO_ROWS = FORGE_PRO_MAIN.concat(FORGE_PRO_BAR,
   ["Mesh", "Edit Mesh", "Mesh Tools", "Snap", "Symmetry", "Sculpt", "Animation"]).map((n) => [n, FORGE_PRO_MENUS[n]]);
 // the menus of the set that is showing, kept small enough for the wheel's ring
 const FORGE_PRO_WHEEL_MENUS = () => {
-  const rows = (FORGE_PRO_SETS[FORGE_PRO_SET] || FORGE_PRO_SETS.forge).rows;
-  return ["Recent Commands"].concat(rows.flat()).slice(0, 12).map((n) => [n, n === "Recent Commands" ? [] : FORGE_PRO_MENUS[n]]);
+  const menus = (FORGE_PRO_SETS[FORGE_PRO_SET] || FORGE_PRO_SETS.forge).menus || [];
+  return ["Recent Commands"].concat(menus).slice(0, 12).map((n) => [n, n === "Recent Commands" ? [] : FORGE_PRO_MENUS[n]]);
 };
 
 // the five zones (HotboxCenter/North/South/East/WestMenu.mel)
@@ -845,6 +898,9 @@ function forgeProSetTo(key) {
   FORGE_PRO_SET = key;
   try { localStorage.setItem(FORGE_PRO_SET_STORE, key); } catch (exc) { /* private mode */ }
   forgeProSetApply();
+  if (typeof fmyBuildMenubar === "function") fmyBuildMenubar();       // the window's menu bar shows the same set
+  const sel = document.getElementById("fmy-menuset");
+  if (sel && sel.value !== key) sel.value = key;
   const v = forge.view;
   if (v && v.pro) v.pro.recent = (v.pro.recent || []);       // nothing else to rebuild: the rows are all there
 }
@@ -905,7 +961,7 @@ function forgeProHotboxHost() {
   centre.append(mkCol("Recent Commands", []), forgeProSetCol(), mkCol("Hotbox Controls", FORGE_PRO_CONTROLS));
   const setRows = [];
   for (const key of Object.keys(FORGE_PRO_SETS)) {
-    FORGE_PRO_SETS[key].rows.forEach((names, i) => {
+    FORGE_PRO_SET_ROWS(key).forEach((names, i) => {
       const r = mkRow("down", i); r.dataset.set = key; r.dataset.menurow = String(i);
       for (const name of names) if (FORGE_PRO_MENUS[name]) r.append(mkCol(name, FORGE_PRO_MENUS[name]));
       setRows.push(r);

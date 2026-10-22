@@ -157,6 +157,21 @@ document.addEventListener("pointerdown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && fmyOpenMenu) { e.preventDefault(); e.stopImmediatePropagation(); fmyCloseMenus(); }
 }, true);
+// the menu bar's menus: built from the catalogue, and rebuilt in place when the menu set changes
+function fmyBuildMenubar(mb) {
+  mb = mb || document.getElementById("fmy-menubar");
+  if (!mb) return;
+  for (const b of [...mb.querySelectorAll(".fmy-mb")]) b.remove();
+  const tail = [...mb.children].find((c) => c.classList.contains("fmy-grow"));
+  for (const [label, items] of FMY_MENUS()) {
+    const b = fmyMenuButton(label, () => {
+      const found = FMY_MENUS().find((m) => m[0] === label);
+      return found ? found[1] : [];
+    });
+    mb.insertBefore(b, tail || null);
+  }
+}
+window.fmyBuildMenubar = fmyBuildMenubar;
 function fmyMenuButton(label, items, cls) {
   const b = fmyEl("button", "fmy-mb" + (cls ? " " + cls : ""), label);
   b.type = "button";
@@ -213,29 +228,54 @@ function fmyApply() {
 })();
 
 // ================================================================== the window: menu bar, status line, shelf, tool box, help line
+// The window's menu bar is built from the SAME catalogue the hotbox uses (FORGE_PRO_MENUS, forge_pro.js), so the two
+// cannot drift apart: the catalogue gives every menu's commands, in its own order, and FMY_ADD holds only what belongs
+// to the window - the groups, separators and the few rows that are not commands (UI toggles, the Help text).
+const FMY_MAIN_BAR = ["File", "Edit", "Create", "Select", "Modify", "Display", "Windows"];
+// the menus the window's bar shows: the main ones, then the showing menu set's menus, then Help - exactly what the
+// hotbox's rows show, from one list (FORGE_PRO_SETS)
+function fmyBarMenus() {
+  const names = (typeof FORGE_PRO_SETS !== "undefined" && typeof forgeMenuSet === "function")
+    ? ((FORGE_PRO_SETS[forgeMenuSet()] || FORGE_PRO_SETS.forge).menus || []) : [];
+  return FMY_MAIN_BAR.concat(names, ["Help"]);
+}
+const FMY_ADD = {
+  File: [["import", "Import (add a picture or a model)", () => fmyRun("image")]],
+  Select: ["-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"],
+  Display: ["-", "#Polygons", "faceNormals", "vertexNormals", "softHardDisplay"],
+  Windows: ["-", "#Workspaces", "panelModel", "panelMaterials", "-", "#Layouts and Menus", "layouts", "layoutReset",
+    "quickMenu", "-", "#Settings/Preferences", "preferences", "menuSettings", "-", "#UI Elements"],
+  // UV and Mesh Display come from the catalogue now; only the window's own extra (a toggle, not a command) stays here
+  "Mesh Display": [["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]],
+  Help: [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}],
+    ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
+    ["help3", "Option / Alt (or Command) + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}],
+    ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
+    ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]],
+};
 const FMY_MENUS = () => {
-  const rows = typeof FORGE_PRO_ROWS !== "undefined" ? Object.fromEntries(FORGE_PRO_ROWS) : {};
-  const uiItems = Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]);
-  return [
-    ["File", ["save", "saveObj", "-", ["import", "Import (add a picture or a model)", () => fmyRun("image")], "imagePlane", "-", "close"]],
-    ["Edit", ["undo", "redo", "-", "duplicate", "duplicateT", "delete", "deleteHistory", "-", "group", "ungroup", "parent", "unparent", "-", "sculptModel"]],
-    ["Create", ["#Polygon Primitives", "sphere", "cube", "cylinder", "cone", "torus", "plane", "quadsphere", "#Image Planes", "imagePlane", "#Make with LOKI", "draw", "image", "describe", "creature"]],
-    ["Select", ["selectAll", "selectNone", "hierarchy", "invert", "-", "grow", "shrink", "loopSel", "ringSel", "-", "objComp", "vertex", "edge", "face", "-", "#Preferences", "camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]],
-    ["Modify", ["#Transform", "move", "rotate", "scale", "showManip", "-", "#Pivot", "centerPivot", "resetPivot", "pivotEdit", "-", "freeze", "resetXf", "-", "makeLive"]],
-    ["Display", ["wire", "shaded", "textured", "xray", "-", "grid", "lights", "quadToggle", "-", "#Polygons", "faceNormals", "vertexNormals", "softHardDisplay", "-", "#Heads Up Display", "iveToggle", "-", "hide", "showLast", "hideOthers", "showAll", "isolate", "-", "frameSel", "frameAll"]],
-    ["Windows", ["#Workspaces", "winOutliner", "winChannel", "winToolkit", "winCreate", "winCreature", "winMaterials", "winShelf", "-", "#UI Elements"].concat(uiItems, ["-", "hideUI", "-", "#Layouts and Menus", "layouts", "layoutReset", "quickMenu", "-", "#Settings/Preferences", "preferences", "hotkeyEditor", "menuSettings"])],
-    ["Mesh", ["#Combine", "combine", "separate", "extractFace", "-", "#Mirror", "mirror", "mirrorY", "mirrorZ", "-", "#Remesh", "smooth", "triangulate", "quadrangulate", "dynamesh", "-", "fillHole", "cleanup", "meshStats", "-", "sculptModel"]],
-    ["Edit Mesh", ["#Components", "extrude", "bridge", "bevel", "inset", "chamfer", "circularize", "collapse", "connect", "detach", "merge", "mergeCenter", "averageVerts", "relax",
-      "-", "#Edge", "spinEdge", "spinEdgeBack", "-", "#Face", "poke", "wedge", "duplicateFace", "reverse", "-", "deleteComp", "deleteEdgeVert"]],
-    ["Mesh Tools", ["#Tools", "edgeLoop", "insertLoopTool", "offsetEdgeLoop", "multiCut", "multiCutStep", "targetWeld", "slideEdge", "-", "softSel", "sculpt", "-", "winToolkit", "-", "snapGrid", "snapEdge", "snapPoint"]],
-    ["UV", ["uvEditor", "-", "#Create UVs", "uvCamera", "uvPlanar", "uvCylindrical", "uvSpherical", "uvAutomatic", "-", "#Cut and Sew", "uvCut", "uvSew", "uvMoveSew",
-      "-", "#Unfold", "uvSmart", "uvAtlas", "uvOptCuts", "uvAutoSeams", "uvUnfold", "uvLayout", "-", "uvShell", "uvChecker"]],
-    ["Mesh Display", ["#Normals", "softEdge", "hardEdge", "softHard", "softHardAngle", "-", "#Display", "softHardDisplay", "faceNormals", "vertexNormals", "normalsBigger", "normalsSmaller",
-      "-", "wire", "shaded", "xray", ["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]]],
-    ["Help", [["help1", "Hold Space: the hotbox, at the mouse (Windows > Radial Menus: the wheel)", () => {}], ["help2", "Hold the right button: marking menus (Shift / Ctrl for more); let go on an item", () => {}],
-      ["help3", "Alt / Option + left / middle / right: tumble / track / dolly (+ Shift: one axis, + Ctrl: box dolly)", () => {}], ["help4", "Hold x / c / v while moving: snap to grid / edge / point", () => {}],
-      ["help5", "Type a command in the command line (polyCube, move 0 1 0, select -cl ...)", () => {}]]],
-  ];
+  const cat = (typeof FORGE_PRO_MENUS !== "undefined") ? FORGE_PRO_MENUS : {};
+  const out = [];
+  for (const name of fmyBarMenus()) {
+    const have = (cat[name] || []).slice();
+    const seen = new Set(have);
+    const items = have.slice();
+    const add = (name === "Windows") ? FMY_ADD.Windows.concat(["-"], Object.entries(FMY_UI).map(([k, label]) => ["ui_" + k, label, () => fmyUiSet(k), () => fmyUi()[k]]))
+      : (FMY_ADD[name] || []);
+    for (const it of add) {
+      const isId = typeof it === "string" && !it.startsWith("-") && !it.startsWith("#");
+      const id = Array.isArray(it) ? it[0] : (isId ? it : null);
+      if (id && seen.has(id)) continue;                       // the catalogue already lists that command
+      const prev = items.length ? items[items.length - 1] : "";
+      if (it === "-" && (!items.length || prev === "-" || (typeof prev === "string" && prev.startsWith("#")))) continue;
+      if (typeof it === "string" && it.startsWith("#")) { if (typeof prev === "string" && prev.startsWith("#")) items[items.length - 1] = it; else items.push(it); continue; }
+      items.push(it);
+      if (id) seen.add(id);
+    }
+    while (items.length && (items[items.length - 1] === "-" || (typeof items[items.length - 1] === "string" && items[items.length - 1].startsWith("#")))) items.pop();
+    out.push([name, items]);
+  }
+  return out;
 };
 
 function fmyToolBtn(icon, id, title, run, extra) {
@@ -303,18 +343,24 @@ function forgeProChrome() {
 
   // ---- the menu bar
   const mb = fmyEl("div", "fmy-menubar"); mb.id = "fmy-menubar"; mb.setAttribute("role", "menubar");
-  for (const [label, items] of FMY_MENUS()) mb.append(fmyMenuButton(label, () => FMY_MENUS().find((m) => m[0] === label)[1]));
+  fmyBuildMenubar(mb);
   mb.append(fmyEl("span", "fmy-grow"), fmyEl("span", "fmy-ws", "Workspace:"), fmyEl("span", "fmy-wsname", "Forge"));
 
   // ---- the status line: menu set, history, selection mode, snapping, symmetry ... panel toggles
   const st = fmyEl("div", "fmy-status"); st.id = "fmy-status";
+  // The menu set: which menus the menu bar and the hotbox's rows show (Maya's own idea, and the same list drives both).
+  // Sculpting also switches to the sculpt tools and Modeling comes back out, as before.
   const set = fmyEl("select", "fmy-menuset"); set.id = "fmy-menuset";
-  for (const m of ["Modeling", "Sculpting"]) { const o = fmyEl("option", "", m); o.value = m; set.append(o); }
-  set.title = "Menu set: Modeling or Sculpting (Sculpting switches to the sculpt tools).";
+  const setNames = (typeof FORGE_PRO_SETS !== "undefined") ? FORGE_PRO_SETS : { forge: { label: "Forge" } };
+  for (const k of Object.keys(setNames)) { const o = fmyEl("option", "", setNames[k].label || k); o.value = k; set.append(o); }
+  if (typeof forgeMenuSet === "function") set.value = forgeMenuSet();
+  set.title = "Menu set: Forge, Modeling, Sculpting, Animation or Rendering - it decides which menus the bar shows.";
   set.addEventListener("change", async () => {
     const v = fmyView(); if (!v) return;
-    if (set.value === "Sculpting" && v.mode !== "sculpt") await fmyRun("sculpt");
-    if (set.value === "Modeling" && v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
+    if (typeof forgeMenuSet === "function") forgeMenuSet(set.value);
+    if (set.value === "sculpting" && v.mode !== "sculpt") await fmyRun("sculpt");
+    if (set.value === "modeling" && v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
+    fmyBuildMenubar();
     fmySync();
   });
   const sep = () => fmyEl("span", "fmy-vsep");
@@ -1023,7 +1069,11 @@ function fmyHudUpdate(v) {
     return r;
   };
   const all = sum(t.allIds()), sel = sum(t.selected());
-  const comp = v.mode === "poly" && v.edit ? { verts: v.edit.sel.v.size, edges: v.edit.sel.e.size, faces: v.edit.sel.f.size, tris: 0, uvs: 0 } : { verts: 0, edges: 0, faces: 0, tris: 0, uvs: 0 };
+  const inComp = v.mode === "poly" && !!v.edit;
+  const comp = inComp ? { verts: v.edit.sel.v.size, edges: v.edit.sel.e.size, faces: v.edit.sel.f.size, tris: 0, uvs: 0 } : { verts: 0, edges: 0, faces: 0, tris: 0, uvs: 0 };
+  // Maya's poly count is two columns - the whole scene and the selection. Forge's component counts are a third one,
+  // shown only while there is a component selection to count.
+  if (table.classList.contains("fmy-comp") !== inComp) table.classList.toggle("fmy-comp", inComp);
   for (const tr of table.rows) {
     const k = tr.dataset.k;
     tr.cells[1].textContent = String(all[k]); tr.cells[2].textContent = String(sel[k]); tr.cells[3].textContent = String(comp[k]);
