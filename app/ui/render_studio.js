@@ -624,22 +624,45 @@ const LokiRenderStudio = (() => {
     const i = $("rs-img"); if (i) i.hidden = true;
     const v = $("rs-video"); if (v) v.hidden = true;
   }
-  // ------------------------------------------------------------------ the Nodes view: the workflow drawn as a node
-  // graph (like a ComfyUI canvas), so the render reads as a pipeline, not a form. Node colours come from the last
-  // Preflight report: red = a missing node class or model file, green = ready, grey = not checked yet.
+  // ------------------------------------------------------------------ the Nodes workspace: the workflow as an
+  // editable graph, the way Maya's Hypershade works - a Create list on the left, a work area in the middle (drag the
+  // blocks, drag the background to pan, scroll to zoom, click a block to see and change its attributes) and every
+  // block wired to LOKI's own settings, so editing the graph and the form are the same thing. The LOKI group in the
+  // Create list folds the other parts in (Forge's passes, the start image, the connection, Preflight, Render).
+  const NODE_INFO = {
+    UnetLoaderGGUF: { label: "Video model", group: "Load", blurb: "The Wan VACE / SkyReels GGUF that draws the frames." },
+    UNETLoader: { label: "Image model", group: "Load", blurb: "The Z-Image Turbo model, for a reference / start frame." },
+    CLIPLoader: { label: "Text encoder", group: "Load", blurb: "Turns your prompt words into the model's language." },
+    VAELoader: { label: "VAE", group: "Load", blurb: "Encodes and decodes between pictures and the model's latent space." },
+    ModelPatchLoader: { label: "ControlNet file", group: "Load", blurb: "Alibaba's Z-Image Fun ControlNet weights." },
+    CLIPTextEncode: { label: "Prompt text", group: "Guide", blurb: "The words that describe the shot (positive or negative)." },
+    LoadImage: { label: "Pass image", group: "Guide", blurb: "A Forge pass (depth or line art) fed in as the control video." },
+    ImageBlend: { label: "Guide mix", group: "Guide", blurb: "Blends line art with a share of depth into one guide." },
+    Canny: { label: "Line art", group: "Guide", blurb: "Edge-detects a beauty render into line art." },
+    WanVaceToVideo: { label: "VACE guide", group: "Sample", blurb: "Wires the guide + start image into the video latent." },
+    ModelSamplingSD3: { label: "Sampling shift", group: "Sample", blurb: "How much the sampler leans on the guide (shift)." },
+    KSampler: { label: "Sampler", group: "Sample", blurb: "The heart: steps, CFG and seed turn noise into frames." },
+    TrimVideoLatent: { label: "Trim", group: "Sample", blurb: "Drops the guide's lead-in frames from the result." },
+    EmptySD3LatentImage: { label: "Empty canvas", group: "Sample", blurb: "A blank latent that the image model fills." },
+    ZImageFunControlnet: { label: "Image control", group: "Sample", blurb: "Steers the image model with a depth image." },
+    VAEDecode: { label: "Decode", group: "Output", blurb: "Turns the sampler's latent back into pictures." },
+    SaveWEBM: { label: "Video out", group: "Output", blurb: "Writes the result video (WEBM)." },
+    ImageFromBatch: { label: "Pick first frame", group: "Output", blurb: "Takes frame 0 for the thumbnail." },
+    SaveImage: { label: "Thumbnail out", group: "Output", blurb: "Writes the still thumbnail for the Home screen." },
+  };
+  const NODE_GROUPS = ["Guide", "Sample", "Output", "Load", "Other"];
+  const PARAM_FIELD = { prompt: "rs-prompt", negative: "rs-negative", width: "rs-width", height: "rs-height", frames: "rs-frames",
+    strength: "rs-strength", depth_share: "rs-depthshare", seed: "rs-seed", steps: "rs-steps", cfg: "rs-cfg", sampler: "rs-sampler",
+    scheduler: "rs-scheduler", shift: "rs-shift", fps: "rs-fps", model: "rs-model" };
+  const nodeInfo = (cls) => NODE_INFO[cls] || { label: cls, group: "Other", blurb: "" };
+  const shortTitle = (t) => { t = String(t || "?"); return t.length > 26 ? t.slice(0, 25) + "..." : t; };
+
   function toggleNodes() {
     S.node = !S.node;
     const b = $("rs-nodes"); if (b) b.classList.toggle("on", S.node);
     if (S.node) { showNodes(); } else { const w = $("rs-graphwrap"); if (w) w.hidden = true; showPreview(); }
   }
-  function shortTitle(t) { t = String(t || "?"); return t.length > 22 ? t.slice(0, 21) + "…" : t; }
-  function showNodeInfo(n) {
-    const lines = [n.class + "  (" + n.title + ")"];
-    const ins = Object.entries(n.inputs || {});
-    if (ins.length) lines.push("inputs: " + ins.map(([k, v]) => k + "=" + String(v).slice(0, 24)).join(", "));
-    for (const m of n.models || []) lines.push("model: " + m.file + "  -> ComfyUI/" + m.folder);
-    say(lines.join("\n"));
-  }
+
   async function showNodes() {
     const wrap = $("rs-graphwrap"); if (!wrap) return;
     $("rs-img").hidden = true; $("rs-canvas").hidden = true; $("rs-video").hidden = true; $("rs-empty").hidden = true;
@@ -648,67 +671,159 @@ const LokiRenderStudio = (() => {
     if (!S.graph || S.graph.workflow !== wf) {
       const r = await call("/render/graph?workflow=" + encodeURIComponent(wf));
       if (!r || !r.ok) { wrap.replaceChildren(mk("p", "rs-note", (r && r.error) || "Could not read the graph.")); return; }
-      S.graph = r;
+      S.graph = r; S.layout = null; S.selNode = null;
     }
-    drawGraph(wrap, S.graph);
-    say("Nodes: " + S.graph.nodes.length + " blocks (" + wf + "). Click a block for its inputs. " +
-        (S.report ? "Green = ready, red = missing." : "Press Preflight to colour it."));
-  }
-  function drawGraph(wrap, g) {
-    const NS = "http://www.w3.org/2000/svg";
-    const nodes = g.nodes || [], byId = new Map(nodes.map((n) => [n.id, n]));
-    const rank = {}; for (const n of nodes) rank[n.id] = 0;
-    for (let it = 0; it < nodes.length + 2; it++) {
-      let moved = false;
-      for (const n of nodes) for (const l of n.links) if (byId.has(l.from) && rank[l.from] + 1 > rank[n.id]) { rank[n.id] = rank[l.from] + 1; moved = true; }
-      if (!moved) break;
-    }
-    const cols = {};
-    for (const n of nodes) { const r = rank[n.id]; if (!cols[r]) cols[r] = []; cols[r].push(n); }
-    const NW = 172, NH = 62, GX = 74, GY = 24, M = 22;
-    const pos = {}; let maxX = 0, maxY = 0;
-    for (const r of Object.keys(cols).map(Number).sort((a, b) => a - b)) {
-      let y = M;
-      for (const n of cols[r]) { const x = M + r * (NW + GX); pos[n.id] = { x, y }; y += NH + GY; maxY = Math.max(maxY, y); }
-      maxX = Math.max(maxX, M + r * (NW + GX) + NW);
-    }
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", String(maxX + M)); svg.setAttribute("height", String(maxY + M));
-    svg.setAttribute("class", "rs-graph");
-    const badClasses = new Set(((S.report && S.report.missing_nodes) || []).map((m) => m.class));
-    const badModels = new Set(((S.report && S.report.missing_models) || []).map((m) => m.file));
-    const hasReport = !!S.report;
-    for (const n of nodes) for (const l of n.links) {
-      if (!byId.has(l.from)) continue;
-      const a = pos[l.from], b = pos[n.id], x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
-      const path = document.createElementNS(NS, "path");
-      path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
-      path.setAttribute("class", "rs-graph-edge"); svg.append(path);
-    }
-    for (const n of nodes) {
-      const q = pos[n.id];
-      const bad = badClasses.has(n.class) || (n.models || []).some((m) => badModels.has(m.file));
-      const grp = document.createElementNS(NS, "g");
-      grp.setAttribute("class", "rs-graph-node " + (hasReport ? (bad ? "bad" : "ok") : ""));
-      grp.dataset.id = n.id;
-      const rect = document.createElementNS(NS, "rect");
-      rect.setAttribute("x", q.x); rect.setAttribute("y", q.y); rect.setAttribute("rx", 9);
-      rect.setAttribute("width", NW); rect.setAttribute("height", NH);
-      const t1 = document.createElementNS(NS, "text");
-      t1.setAttribute("x", q.x + 11); t1.setAttribute("y", q.y + 22); t1.textContent = shortTitle(n.title);
-      const t2 = document.createElementNS(NS, "text");
-      t2.setAttribute("x", q.x + 11); t2.setAttribute("y", q.y + 39); t2.setAttribute("class", "rs-graph-sub"); t2.textContent = n.class;
-      const t3 = document.createElementNS(NS, "text");
-      t3.setAttribute("x", q.x + 11); t3.setAttribute("y", q.y + 54); t3.setAttribute("class", "rs-graph-sub");
-      t3.textContent = (n.models || []).length ? "model: " + shortTitle((n.models[0].file || "").replace(/\.(gguf|safetensors)$/, "")) : Object.keys(n.inputs || {}).length + " inputs";
-      grp.append(rect, t1, t2, t3);
-      grp.addEventListener("click", () => showNodeInfo(n));
-      svg.append(grp);
-    }
-    const inner = mk("div", "rs-graph-inner"); inner.append(svg);
-    wrap.replaceChildren(inner);
+    buildEditor(wrap, S.graph);
+    say(S.graph.nodes.length + " blocks. Drag a block to move it, drag the background to pan, scroll to zoom. Click a block to change it.");
   }
 
+  function autoLayout(nodes) {
+    const byId = {}; for (const n of nodes) byId[n.id] = n;
+    const rank = {}; for (const n of nodes) rank[n.id] = 0;
+    for (let it = 0; it < nodes.length + 2; it++) { let moved = false;
+      for (const n of nodes) for (const l of n.links) if (byId[l.from] && rank[l.from] + 1 > rank[n.id]) { rank[n.id] = rank[l.from] + 1; moved = true; }
+      if (!moved) break; }
+    const cols = {}; for (const n of nodes) { (cols[rank[n.id]] = cols[rank[n.id]] || []).push(n); }
+    const NW = 188, NH = 64, GX = 72, GY = 16, M = 24;
+    const pos = {}; let maxX = 0, maxY = 0;
+    for (const r of Object.keys(cols).map(Number).sort((a, b) => a - b)) { let y = M;
+      for (const n of cols[r]) { pos[n.id] = { x: M + r * (NW + GX), y }; y += NH + GY; maxY = Math.max(maxY, y); }
+      maxX = Math.max(maxX, M + r * (NW + GX) + NW); }
+    return { pos, w: maxX + M, h: maxY + M, NW, NH };
+  }
+
+  function buildEditor(wrap, g) {
+    if (!S.layout || S.layout.wf !== g.workflow) { S.layout = autoLayout(g.nodes); S.layout.wf = g.workflow; S.selNode = null; }
+    if (!S.zoom) S.zoom = 1; if (!S.pan) S.pan = { x: 0, y: 0 };
+    const NW = S.layout.NW, NH = S.layout.NH;
+    const canvas = mk("div", "rs-gcanvas");
+    const world = mk("div", "rs-gworld");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "rs-gedges");
+    const lib = mk("aside", "rs-glib");
+    const attr = mk("aside", "rs-gattr"); attr.hidden = true;
+    canvas.append(world, lib, attr); world.append(svg); wrap.replaceChildren(canvas);
+    const byId = {}; for (const n of g.nodes) byId[n.id] = n;
+    world.style.width = S.layout.w + "px"; world.style.height = S.layout.h + "px";
+    svg.setAttribute("width", S.layout.w); svg.setAttribute("height", S.layout.h);
+    S._ed = { world, svg, attr, byId, NW, NH };
+    const applyTransform = () => { world.style.transform = "translate(" + S.pan.x + "px," + S.pan.y + "px) scale(" + S.zoom + ")"; };
+    S._ed.applyTransform = applyTransform;
+    for (const n of g.nodes) {
+      const p = S.layout.pos[n.id], info = nodeInfo(n.class);
+      const el = mk("div", "rs-gnode"); el.dataset.id = n.id;
+      el.style.left = p.x + "px"; el.style.top = p.y + "px"; el.style.width = NW + "px"; el.style.height = NH + "px";
+      el.append(mk("div", "rs-gnode-head", info.label || n.class), mk("div", "rs-gnode-sub", n.class),
+        mk("div", "rs-gnode-mod", (n.models || [])[0] ? shortTitle((n.models[0].file || "")) : (Object.keys(n.inputs || {}).length + " inputs")));
+      el.title = (info.blurb || n.class) + "  [" + n.class + "]";
+      el.addEventListener("mousedown", (e) => startDrag(e, n.id));
+      el.addEventListener("click", (e) => { e.stopPropagation(); selectNode(n.id); });
+      if (S.selNode === n.id) el.classList.add("on");
+      world.append(el);
+    }
+    drawEdges();
+    applyTransform();
+    buildLib(lib, g);
+    if (S.selNode && byId[S.selNode]) buildAttr(byId[S.selNode]);
+    let dragId = null, panning = false, sx = 0, sy = 0, orig = null;
+    function selectNode(id) {
+      S.selNode = id;
+      for (const el of world.querySelectorAll(".rs-gnode")) el.classList.toggle("on", el.dataset.id === id);
+      if (byId[id]) buildAttr(byId[id]);
+    }
+    function startDrag(e, id) { e.preventDefault(); e.stopPropagation(); dragId = id; sx = e.clientX; sy = e.clientY; orig = { x: S.layout.pos[id].x, y: S.layout.pos[id].y };
+      window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp); }
+    function startPan(e) { e.preventDefault(); panning = true; sx = e.clientX; sy = e.clientY; orig = { x: S.pan.x, y: S.pan.y }; canvas.classList.add("grab");
+      window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp); }
+    function onMove(e) { const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (dragId) { S.layout.pos[dragId] = { x: orig.x + dx / S.zoom, y: orig.y + dy / S.zoom };
+        const el = world.querySelector('.rs-gnode[data-id="' + dragId + '"]');
+        if (el) { el.style.left = S.layout.pos[dragId].x + "px"; el.style.top = S.layout.pos[dragId].y + "px"; } drawEdges(); }
+      else if (panning) { S.pan = { x: orig.x + dx, y: orig.y + dy }; applyTransform(); } }
+    function onUp() { dragId = null; panning = false; canvas.classList.remove("grab");
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }
+    function drawEdges() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      for (const n of g.nodes) for (const l of n.links) {
+        if (!byId[l.from]) continue;
+        const a = S.layout.pos[l.from], b = S.layout.pos[n.id];
+        const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
+        path.setAttribute("class", "rs-gedge"); svg.append(path);
+      }
+    }
+    canvas.addEventListener("mousedown", (e) => { if (e.target === canvas || e.target === world || e.target === svg) startPan(e); });
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); S.zoom = Math.max(0.35, Math.min(2.2, S.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1))); applyTransform(); }, { passive: false });
+    S._ed.focus = (id) => { const p = S.layout.pos[id]; if (!p) return;
+      const W = canvas.clientWidth || 900, H = canvas.clientHeight || 600;
+      S.pan = { x: W / 2 - (p.x + 90) * S.zoom, y: H / 2 - p.y * S.zoom }; applyTransform(); };
+  }
+
+  function buildAttr(n) {
+    const attr = S._ed && S._ed.attr; if (!attr) return;
+    attr.hidden = false; attr.replaceChildren();
+    const info = nodeInfo(n.class);
+    const head = mk("div", "rs-gattr-head"); head.append(mk("b", "", info.label || n.class), mk("span", "rs-gattr-cls", n.class));
+    attr.append(head);
+    if (info.blurb) attr.append(mk("p", "rs-note", info.blurb));
+    const params = (S.wf && S.wf.params) || {};
+    const bound = Object.entries(params).filter(([k, spec]) => spec && String(spec.node) === String(n.id));
+    const boundNames = new Set(bound.map(([k]) => k));
+    if (bound.length) {
+      const box = mk("fieldset", "rs-group"); box.append(mk("legend", "", "Settings (shared with the form)"));
+      for (const [k, spec] of bound) {
+        const fid = PARAM_FIELD[k], src = fid && $(fid);
+        if (src) { const clone = src.cloneNode(true); clone.id = "rs-attr-" + n.id + "-" + k;
+          clone.addEventListener("change", () => { src.value = clone.value; src.dispatchEvent(new Event("change", { bubbles: true })); saveLocal(); });
+          box.append(field(k.replace(/_/g, " "), clone)); }
+        else box.append(mk("p", "rs-note", k + " = " + String(n.inputs[k])));
+      }
+      attr.append(box);
+    }
+    const other = Object.entries(n.inputs || {}).filter(([k]) => !boundNames.has(k));
+    if (other.length) {
+      const box = mk("fieldset", "rs-group"); box.append(mk("legend", "", "Fixed inputs"));
+      for (const [k, v] of other) box.append(mk("p", "rs-note", k + ": " + shortTitle(String(v))));
+      attr.append(box);
+    }
+    if ((n.models || []).length) {
+      const box = mk("fieldset", "rs-group"); box.append(mk("legend", "", "Model file"));
+      for (const m of n.models) box.append(mk("p", "rs-note", m.file + "  -> ComfyUI/" + m.folder));
+      attr.append(box);
+    }
+    attr.append(btn("close", "Close", "Close the attributes.", () => { attr.hidden = true; }));
+  }
+
+  function buildLib(lib, g) {
+    lib.replaceChildren();
+    lib.append(mk("div", "rs-glib-head", "Create"));
+    const byGroup = {}; for (const n of g.nodes) { const gr = nodeInfo(n.class).group; (byGroup[gr] = byGroup[gr] || []).push(n); }
+    for (const gr of NODE_GROUPS) {
+      if (!byGroup[gr]) continue;
+      const sec = mk("div", "rs-glib-sec"); sec.append(mk("h5", "", gr));
+      for (const n of byGroup[gr]) {
+        const item = mk("button", "rs-glib-item"); item.type = "button";
+        item.append(mk("span", "rs-glib-name", nodeInfo(n.class).label || n.class), mk("span", "rs-glib-cls", n.class));
+        item.title = nodeInfo(n.class).blurb || "";
+        item.addEventListener("click", () => { if (S._ed && S._ed.focus) S._ed.focus(n.id);
+          if (S._ed) for (const el of S._ed.world.querySelectorAll(".rs-gnode")) el.classList.toggle("on", el.dataset.id === n.id);
+          S.selNode = n.id; buildAttr(n); });
+        sec.append(item);
+      }
+      lib.append(sec);
+    }
+    const acts = mk("div", "rs-glib-sec"); acts.append(mk("h5", "", "LOKI"));
+    for (const [name, blurb, fn] of [
+      ["Render passes (Forge)", "Render Forge's depth + line art over the range.", () => renderPasses(false)],
+      ["Start image from Forge", "Use what Forge's camera sees as the look of the shot.", startFromForge],
+      ["Test ComfyUI", "Ask the PC's ComfyUI for its version and GPU.", testConn],
+      ["Preflight", "Check everything before a render.", runPreflight],
+      ["Render", "Start the job.", () => startJob()]]) {
+      const b = mk("button", "rs-glib-item act"); b.type = "button";
+      b.append(mk("span", "rs-glib-name", name)); b.title = blurb; b.addEventListener("click", fn); acts.append(b);
+    }
+    lib.append(acts);
+  }
   function buildViewBar(bar) {
     const held = mk("img", "rs-held"); held.id = "rs-held"; held.alt = "kept image"; held.hidden = true;
     bar.append(

@@ -101,3 +101,32 @@
 .rs-graph-node:hover rect { fill: #2f3641; }
 .rs-graph-node text { fill: #e6e9ee; font-size: 12px; }
 .rs-graph-node .rs-graph-sub { fill: #9aa0aa; font-size: 10px; }
+
+/* The Nodes workspace: an interactive graph, Hypershade-style (Create list, work area, attributes).
+   Supersedes the earlier static .rs-graph rules. */
+.rs-gcanvas { position:absolute; inset:0; overflow:hidden; background:#191b1f; z-index:5; }
+.rs-gcanvas.grab { cursor:grabbing; }
+.rs-gworld { position:absolute; left:0; top:0; transform-origin:0 0; }
+.rs-gedges { position:absolute; left:0; top:0; pointer-events:none; overflow:visible; }
+.rs-gedge { fill:none; stroke:#5a6472; stroke-width:2; }
+.rs-gnode { position:absolute; box-sizing:border-box; background:#262b33; border:1px solid #3c4450; border-radius:9px; color:#e6e9ee;
+  font-size:12px; padding:7px 9px; cursor:grab; user-select:none; overflow:hidden; }
+.rs-gnode:hover { border-color:#5a6472; background:#2c323b; }
+.rs-gnode.on { border-color:#8fb3d9; box-shadow:0 0 0 2px rgba(143,179,217,.35); }
+.rs-gnode-head { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rs-gnode-sub { color:#9aa0aa; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rs-gnode-mod { color:#8f98a4; font-size:10px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rs-glib, .rs-gattr { position:absolute; top:8px; width:214px; max-height:calc(100% - 16px); overflow:auto; padding:8px; z-index:7;
+  background:rgba(28,31,36,.96); border:1px solid #3c4046; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+.rs-glib { left:8px; }
+.rs-gattr { right:8px; }
+.rs-glib-head { font-weight:600; margin:0 0 6px; }
+.rs-glib-sec { margin-bottom:8px; }
+.rs-glib-sec h5 { margin:4px 0; color:#9aa0aa; font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+.rs-glib-item { display:block; width:100%; text-align:left; font:inherit; font-size:12px; padding:6px 8px; margin:2px 0; border:0;
+  border-radius:7px; background:rgba(255,255,255,.03); color:#e6e9ee; cursor:pointer; }
+.rs-glib-item:hover { background:rgba(143,179,217,.18); }
+.rs-glib-item.act { background:rgba(63,143,95,.16); }
+.rs-glib-cls { display:block; color:#8f98a4; font-size:10px; }
+.rs-gattr-head { display:flex; align-items:baseline; gap:8px; margin-bottom:2px; }
+.rs-gattr-cls { color:#8f98a4; font-size:10px; }

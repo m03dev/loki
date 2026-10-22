@@ -119,7 +119,7 @@ async def main():
         tips = await E("[...document.querySelectorAll('#render-studio button.rs-btn')].map((b) => [b.dataset.tipName, b.dataset.tipWhat, !!b.querySelector('svg')])")
         check("every Render Studio button is an icon with a tooltip (name + what it does)", tips and all(n and w and s for n, w, s in tips), [t for t in tips if not all(t)][:4])
         await page.hover("#rs-preflight")
-        await page.wait_for_timeout(500)
+        await page.wait_for_function("(() => { const t = document.querySelector('.icon-tip'); return !!t && !t.hidden; })()", timeout=5000)
         tip = await E("(() => { const t = document.querySelector('.icon-tip'); return t && !t.hidden ? t.textContent : ''; })()")
         check("hovering an icon shows its tooltip", "Preflight" in tip, tip)
         url = await E("document.getElementById('rs-url').value")
@@ -136,6 +136,7 @@ async def main():
         T = "forge.view.tree.api"
         await E("""(() => { const a = %s, id = a.sceneNodes()[0].id; a.setKey(id, 1, 'translate', 0, -0.6); a.setKey(id, 3, 'translate', 0, 0.6);
                 a.setRange(1, 3); a.setFrame(2); })()""" % T)
+        await page.wait_for_timeout(400)   # let Forge settle one animation frame before the baseline
         before = await E("""(() => { const v = forge.view, n = %s.sceneNodes()[0], t = v.tree.time;
           return { cam: v.camera.position.toArray().map((x) => +x.toFixed(6)), q: v.camera.quaternion.toArray().map((x) => +x.toFixed(6)),
             fov: v.camera.fov, camName: v.cam, frame: t.frame, start: t.start, end: t.end, pos: n.grp.position.toArray().map((x) => +x.toFixed(6)),
@@ -194,11 +195,21 @@ async def main():
               len(ups) == 6 and kinds == ["depth", "lineart"] and all(u[2][:4] == b"\x89PNG" for u in ups), [u[1] for u in ups])
 
         await page.click("#rs-nodes")
-        await page.wait_for_selector(".rs-graph-node", timeout=5000)
-        gnodes = await E("document.querySelectorAll('.rs-graph-node').length")
-        gedges = await E("document.querySelectorAll('.rs-graph-edge').length")
-        check("the Nodes view draws the workflow as a node graph (17 blocks with wiring between them)",
+        await page.wait_for_selector(".rs-gnode", timeout=5000)
+        gnodes = await E("document.querySelectorAll('.rs-gnode').length")
+        gedges = await E("document.querySelectorAll('.rs-gedge').length")
+        libt = await E("document.querySelector('.rs-glib').innerText")
+        libn = await E("document.querySelectorAll('.rs-glib-item').length")
+        check("the Nodes workspace draws the workflow as a graph (17 blocks wired together)",
               gnodes == 17 and gedges >= 10, [gnodes, gedges])
+        check("the Create list groups the blocks and folds LOKI's own actions in (Forge passes, Preflight, Render)",
+              libn >= 20 and "Render passes (Forge)" in libt and "Preflight" in libt, libn)
+        await E("document.querySelector('.rs-gnode[data-id=\"11\"]').click()")
+        await page.wait_for_selector(".rs-gattr:not([hidden]) .rs-field input", timeout=4000)
+        await E("(() => { const f = document.querySelector('.rs-gattr .rs-field input'); f.value = '640'; f.dispatchEvent(new Event('change', { bubbles: true })); })()")
+        wid = await E("document.getElementById('rs-width').value")
+        check("clicking a block opens its attributes and editing one writes through to the real settings",
+              wid == "640", wid)
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

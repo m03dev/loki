@@ -55,7 +55,7 @@ def venv_python(root: Path, platform: str | None = None) -> Path:
 def model_plan(quant: str = "Q4_K_M", zimage: bool = False) -> list:
     """The files to download, from the workflow graphs' own model lists (engine/ai_renderer_workflows)."""
     import ai_renderer  # pylint: disable=import-outside-toplevel
-    want = ["vace_render"] + (["zimage_reference"] if zimage else [])
+    want = ["vace_render"] + (["zimage_reference", "zimage_reference_depth"] if zimage else [])
     out, seen = [], set()
     for name in want:
         for m in ai_renderer.workflow(name)["models"]:

@@ -52,6 +52,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 ### App window and tabs
 - Four title-bar tabs (app/ui/modebar.js MODES): **Home / Forge / Render / Godot**, Ctrl/Cmd+1..4 (Ctrl works on macOS
   too). Render shows the Render Studio once its script registers (`LokiModeBar.register("render", ...)` or
+- **Render Studio Nodes workspace (PC, 2026-10-21, patch 396):** the Nodes button opens an interactive graph like Maya's
+  Hypershade - a **Create** list (blocks grouped Guide/Sample/Output/Load with plain names + blurbs; a LOKI group for the
+  Forge passes, start image, Test / Preflight / Render), a drag/pan/zoom work area, and an **Attributes** panel whose
+  fields are the same settings as the form. **All 7 named model files** are installed on the PC now (the --zimage list
+  gained the depth graph's ControlNet).
 - **Render Studio Nodes view (PC, 2026-10-21):** the Render View bar has a **Nodes** button that draws the workflow as a
   node canvas (`/render/graph` derives nodes/links/models from the graph's own JSON; nodes colour green/red from the last
   Preflight). **ComfyUI runs on the PC** at D:\loki\harness_data\comfyui (0.42.0, PyTorch 2.14.1+cu130,

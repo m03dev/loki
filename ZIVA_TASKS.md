@@ -545,6 +545,13 @@ tests/test_forge_pro_ui.py (keep it under a minute, add to it, never take checks
 
 <!-- newest first: YYYY-MM-DD machine (who) task: what happened. The last ~15 are kept here; older ones are in
      docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md. -->
+- 2026-10-21 ~18:00, Ziva (Windows): **Render Studio reads like Maya's Hypershade + all 7 models installed.** The Nodes
+  view is now an interactive workspace: a **Create** list on the left (the graph's blocks grouped Guide / Sample / Output /
+  Load with plain-language names and one-line blurbs, plus a LOKI group folding in Render passes (Forge), Start image from
+  Forge, Test ComfyUI, Preflight and Render), a work area in the middle you drag / pan / zoom, and an **Attributes** panel on
+  the right when you click a block - its settings are the SAME fields as the form (edit in either place). Also completed the
+  model set: the helper's --zimage list now includes the depth graph, so **7 of 7** named model files are installed
+  (test_comfyui_live 10/10). Tests: render_studio_ui 21, render_studio_maya_ui 15, ai_renderer 73, ui_smoke 10 - all green.
 - 2026-10-21 ~16:30, Ziva (Windows): **ComfyUI + models on the PC, the project moved to D:, a Nodes view for Render Studio.**
   ComfyUI installed at the pinned commits (0.42.0, PyTorch 2.14.1+cu130, CUDA on the RTX 3070 Ti) and the default 3 model
   files fetched (18.6 GB). C: was **100% full (0 bytes free)** so the first download died with "No space left on device";
