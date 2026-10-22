@@ -18,6 +18,9 @@
 
 const LokiHome = (() => {
   const KIND = {
+    content: { label: "Content", tip: "What LOKI's agents make for the brand and marketing: names, logos, posts, ad drafts (the workspace's brand/ folder).",
+      empty: "No content yet: LOKI's agents put names, logos, posts and ad drafts here (brand/ in the workspace).",
+      icon: '<path d="M4 5h16v11H8l-4 3.5z"/><path d="M8 9h8M8 12h5"/>' },
     render: { label: "Render", tip: "Renders: path-traced and AI renders, from this computer or the worker farm.",
       empty: "No renders yet: open Render (or Forge > Render) and render a scene.",
       icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
@@ -34,7 +37,7 @@ const LokiHome = (() => {
       empty: "No jobs yet: tick Run in background on a message, or start a render on the farm.",
       icon: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>' },
   };
-  const ORDER = ["render", "forge", "godot", "studio"];   // the filter and the grid; jobs live in the chip
+  const ORDER = ["render", "forge", "godot", "studio", "content"];   // the filter and the grid; jobs live in the chip
   const ICON = {
     all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
     open: '<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 13.5v5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -72,7 +75,7 @@ const LokiHome = (() => {
   const visible = () => S.items.filter((it) => it.kind !== "job" && (S.filter === "all" || it.kind === S.filter));
   const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
   const whatOpens = { render: "opens it in Render", forge: "opens it in Forge", godot: "opens it in the Godot tab",
-    studio: "opens it in Studio", job: "shows how it is going" };
+    studio: "opens it in Studio", content: "opens it in Files", job: "shows how it is going" };
 
   // ---------------------------------------------------------------- building the hub (once)
   function build() {
@@ -250,6 +253,7 @@ const LokiHome = (() => {
       if (typeof refreshJobs === "function") refreshJobs();
       return;
     }
+    if (o.mode === "files" && typeof openFiles === "function") return openFiles(o.path || "");
     if (bar && bar.modes().includes(o.mode)) bar.go(o.mode, o);
   }
 

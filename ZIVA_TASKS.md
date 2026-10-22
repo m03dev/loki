@@ -33,6 +33,39 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-22 00:30) - start-up, C++ speed, Sculpting workspace, Content on Home. Pull first.
+Owner 23:53: "why is start up slow and why do i see old ui when its starting up ... should we rebuild in rust or c++".
+- **Old UI at start**: opening LOKI while it ran in the background attached to the engine still running the OLD code (the
+  app had just updated the folder), which then restarted the whole app in front of the owner. app/loki_app.py now
+  compares the running engine's commit (`/health` update.running, engine/updater.py status) with the disk and restarts
+  it first (`stale_engine`, `stop_running_engine`). **Slow start**: the update pre-flight (~9 s on the PC) is now cached
+  per commit (.git/loki_preflight.json) and done ahead by the background check, so a start usually skips it.
+- **C++**: `ks_corner_normals` (soft / hard edge normals, sort-based union-find) in native/sculpt, run in the worker for
+  cages of 4000+ faces (ForgeGeom.cornerNormals); test_normals.js ALL OK, 197k triangles in 168 ms. P.topology is cached
+  per face list (checksum-guarded) and the weld's one-ring uses typed arrays: an edit on 70k faces 800 -> ~400 ms here.
+- Workspace: **Sculpting** (Modeling / Sculpting / UV Editing / ... / Animation) = sculpt mode with the viewport to itself.
+- Home: **Content** - the workspace's brand/ folder (what the agents make: names, logos, posts, ads), opens in Files.
+- [ ] [pc] Close LOKI to the background, wait for an update on GitHub, open LOKI: the window must open straight on the new
+      version (loki_app.log: "the background engine runs an older version: restarting it on the new code first").
+      Report "window shown after" / "engine ready after" from loki_app.log for 3 starts.
+- [ ] [pc] The PC checkout has `.godot/`, `scenes/` and `scripts/` folders (AGENTS.md: no Godot project files in the repo):
+      if they are untracked LOKI World leftovers, move them to harness_data/attic/; report what they were.
+- [ ] [pc] Watch the 4 [loki] brand / marketing teams below run (Home > Content fills up); report what they made and where
+      they got stuck (image generator, web search, files).
+- [ ] [either] test_forge_uv_ui's second run is flaky on a slow machine (double-click shell / drag UVs); test_forge_ui and
+      test_forge_pro_ui run right at 60 s on the cloud box - check them on the PC.
+
+### For LOKI's own agents (owner 2026-10-22 00:00: "give them a task to make a logo and come up with a new name for the app and start doing ads and making social media content for the app")
+The autopilot starts these on the PC when LOKI is idle, one team at a time, oldest first. Everything goes in the
+workspace's `brand/` folder, which Home shows as **Content**. Nothing is posted, published, bought or renamed: drafts
+for the owner. Context for every one: LOKI is being renamed; it is a desktop 3D studio - Forge (Maya-style modelling,
+sculpting, UVs, retopo, baking), a Render Studio with an AI renderer (ComfyUI on the PC's RTX 3070 Ti), a Mac + PC worker
+farm and AI agents that build things; made for 3D artists, indie game developers and AI-curious creators.
+- [ ] [loki] Brand name: research 20 candidate names for this app (a desktop 3D studio: Maya-style modelling + sculpting, a render studio with an AI renderer, a Mac+PC worker farm and AI agents), check each with web search for existing apps, trademarks, a free .com / .app and free @handles on X, Instagram and TikTok, then pick the best 3 with the reasons and the checks. Write brand/name.md (a table of all 20, the top 3 first). Do not rename anything in the code: the owner picks. (owner via Claude, 2026-10-22)
+- [ ] [loki] Logo: for each of the top 3 names in brand/name.md, 3 logo directions (a mark + a wordmark) as clean SVG files - one-colour and full-colour, readable at 16 px, on dark and on light - plus a picture of each as an app icon and on a social banner made with the image generator on the PC's GPU. Save to brand/logo/<name>/ and compare them in brand/logo/index.md with your favourite and why. (owner via Claude, 2026-10-22)
+- [ ] [loki] Social content kit: a positioning line, 3 audience personas (3D artists, indie game devs, AI-curious creators), a 2-week posting calendar for X, Instagram, TikTok/Shorts, LinkedIn and Reddit (r/3Dmodeling, r/blender, r/IndieDev - follow each subreddit's self-promotion rules), 14 ready captions with hashtags, 5 short-video scripts (15-45 s: Forge sculpting, Multi-Cut, the AI renderer, the agent farm) and 6 post images made from real Forge renders and screenshots. Save to brand/content/ with brand/content/calendar.md. Draft only: post nothing. (owner via Claude, 2026-10-22)
+- [ ] [loki] Ad drafts: 3 ad concepts, one per persona in brand/content/, each with a headline, body, call to action and visual, made for 1080x1920 (Instagram / TikTok), 1200x675 (X / LinkedIn) and a 15 s YouTube pre-roll script; make the visuals with the image generator and Forge renders. Save to brand/ads/ with brand/ads/index.md. No ad accounts, no spend: drafts for the owner. (owner via Claude, 2026-10-22)
+
 ### From Claude (2026-10-21 22:40) - Home tidied, sculpt masking / hotkeys / reorder, no overlaps. Pull first.
 Owner 22:13 (screenshot of Home on the PC): icons repeated, the LOKI logo and the "Loki" title to go, nothing may overlap.
 - app/ui/ui_tidy.js + ui_tidy.css: sidebar top = New chat + search; foot = Files · Apps · Settings · More (More holds What can

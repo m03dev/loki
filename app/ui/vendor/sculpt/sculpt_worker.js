@@ -27,7 +27,7 @@ let E = null, adjStart = null, adj = null, topoSent = 0, lastTopoPost = 0;
 // for ~2.7 ms of JS per flush at 1M vertices (measured). Kept behind this switch (brush message padRing).
 let padRing = false;
 let curve = null, inserted = false, dragMs = 0;
-const WORKER_OPS = ["load", "brush", "press", "drag", "release", "hit", "setPositions", "cage", "op", "uvUnfold", "uvLayout", "uvAuto"];   // Tube stroke in progress / Insert done at press / engine time
+const WORKER_OPS = ["load", "brush", "press", "drag", "release", "hit", "setPositions", "cage", "op", "uvUnfold", "uvLayout", "uvAuto", "cornerNormals"];   // Tube stroke in progress / Insert done at press / engine time
 
 SculptEngine.create("/ui/vendor/sculpt/sculpt.wasm")
   .then((e) => { E = e; postMessage({ t: "ready", ops: WORKER_OPS }); })
@@ -190,6 +190,12 @@ onmessage = (ev) => {
       case "setPositions":
         E.setPositions(m.pos);
         break;
+      case "cornerNormals": {   // soft / hard edge normals of a cage: {seq, v, sizes, idx, hard}
+        const t0 = performance.now();
+        const nrm = E.cornerNormals(m.v, m.sizes, m.idx, m.hard);
+        postMessage({ t: "cornerNormals", seq: m.seq, nrm, ms: performance.now() - t0 }, [nrm.buffer]);
+        break;
+      }
       case "cage": {   // the modelling cage's smooth preview (no sculpt mesh needed): {seq, v, sizes, idx, levels, max}
         const t0 = performance.now();
         const r = E.cageSubdivide(m.v, m.sizes, m.idx, m.levels || 2, m.max || 60000);

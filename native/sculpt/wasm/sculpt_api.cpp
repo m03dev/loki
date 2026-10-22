@@ -18,6 +18,9 @@
 
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
+#include <unordered_set>
+#include <unordered_map>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -223,6 +226,78 @@ KS_EXPORT(ks_cage_subdiv) int ks_cage_subdiv(const float* v, int nv, const int* 
     gCageFaces = (int)out.sizes.size();
     return done;
 }
+
+// ---------------------------------------------------------------- soft / hard edges: one normal per face corner
+// (Forge's polySoftEdge display; owner 2026-10-22 "should we rebuild in c++ to make it faster"). Corners of the same
+// vertex on two faces that meet over a SOFT edge are joined (union-find) and share the area-weighted sum of their
+// faces' normals; a HARD edge (hard: vertex pairs, 2 ints each) keeps them apart. Out: 3 floats per corner, in the
+// faces' corner order, read with ks_corner_nrm. The JS version took ~860 ms on 98k faces.
+namespace { std::vector<float> gCornerNrm; }
+KS_EXPORT(ks_corner_normals) int ks_corner_normals(const float* v, int nv, const int* sizes, int nf, const int* idx, int nIdx,
+                                                   const int* hard, int nHard) {
+    if (nv <= 0 || nf <= 0 || nIdx <= 0) return 0;
+    std::vector<int> base((size_t)nf + 1, 0);
+    for (int f = 0; f < nf; ++f) base[f + 1] = base[f] + sizes[f];
+    if (base[nf] != nIdx) return -1;
+    // face normals (Newell) and areas
+    std::vector<float> fn((size_t)nf * 3);
+    for (int f = 0; f < nf; ++f) {
+        double x = 0, y = 0, z = 0;
+        const int b = base[f], n = sizes[f];
+        for (int k = 0; k < n; ++k) {
+            const float* a = v + (size_t)idx[b + k] * 3;
+            const float* c = v + (size_t)idx[b + (k + 1) % n] * 3;
+            x += ((double)a[1] - c[1]) * ((double)a[2] + c[2]);
+            y += ((double)a[2] - c[2]) * ((double)a[0] + c[0]);
+            z += ((double)a[0] - c[0]) * ((double)a[1] + c[1]);
+        }
+        // Newell's vector = 2 x area x unit normal: its length weights by area for free
+        fn[(size_t)f * 3] = (float)x; fn[(size_t)f * 3 + 1] = (float)y; fn[(size_t)f * 3 + 2] = (float)z;
+    }
+    auto key = [](int a, int b) -> uint64_t { if (a > b) std::swap(a, b); return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; };
+    std::unordered_set<uint64_t> hardSet;
+    hardSet.reserve((size_t)nHard * 2 + 1);
+    for (int i = 0; i < nHard; ++i) hardSet.insert(key(hard[i * 2], hard[i * 2 + 1]));
+    // union-find over corners
+    std::vector<int> parent((size_t)nIdx);
+    for (int i = 0; i < nIdx; ++i) parent[i] = i;
+    auto find = [&](int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    auto join = [&](int a, int b) { a = find(a); b = find(b); if (a != b) parent[b] = a; };
+    // every face side as (edge key, corner of the smaller vertex, corner of the larger), sorted by key: the sides of one
+    // edge end up next to each other (a sort beats hash maps here: ~5x on 600k corners)
+    struct Side { uint64_t k; int lo, hi; };
+    std::vector<Side> sides((size_t)nIdx);
+    for (int f = 0; f < nf; ++f) {
+        const int b = base[f], n = sizes[f];
+        for (int k = 0; k < n; ++k) {
+            const int ca = b + k, cb = b + (k + 1) % n, a = idx[ca], c = idx[cb];
+            sides[ca] = { key(a, c), a < c ? ca : cb, a < c ? cb : ca };
+        }
+    }
+    std::sort(sides.begin(), sides.end(), [](const Side& x, const Side& y) { return x.k < y.k; });
+    for (size_t i = 0; i + 1 < sides.size(); ) {
+        size_t j = i + 1;
+        while (j < sides.size() && sides[j].k == sides[i].k) ++j;
+        if (j - i >= 2 && !hardSet.count(sides[i].k)) { join(sides[i].lo, sides[i + 1].lo); join(sides[i].hi, sides[i + 1].hi); }
+        i = j;
+    }
+    // an edge with 3+ faces was joined by its first two: keep that (rare, non-manifold)
+    std::vector<double> sum((size_t)nIdx * 3, 0.0);
+    for (int f = 0; f < nf; ++f)
+        for (int c = base[f]; c < base[f + 1]; ++c) {
+            const int r = find(c);
+            sum[(size_t)r * 3] += fn[(size_t)f * 3]; sum[(size_t)r * 3 + 1] += fn[(size_t)f * 3 + 1]; sum[(size_t)r * 3 + 2] += fn[(size_t)f * 3 + 2];
+        }
+    gCornerNrm.assign((size_t)nIdx * 3, 0.f);
+    for (int c = 0; c < nIdx; ++c) {
+        const int r = find(c);
+        const double x = sum[(size_t)r * 3], y = sum[(size_t)r * 3 + 1], z = sum[(size_t)r * 3 + 2];
+        const double l = std::sqrt(x * x + y * y + z * z);
+        if (l > 0) { gCornerNrm[(size_t)c * 3] = (float)(x / l); gCornerNrm[(size_t)c * 3 + 1] = (float)(y / l); gCornerNrm[(size_t)c * 3 + 2] = (float)(z / l); }
+    }
+    return nIdx;
+}
+KS_EXPORT(ks_corner_nrm) const float* ks_corner_nrm() { return gCornerNrm.data(); }
 KS_EXPORT(ks_cage_pos) const float* ks_cage_pos() { return gCagePos.data(); }
 KS_EXPORT(ks_cage_nverts) int ks_cage_nverts() { return (int)(gCagePos.size() / 3); }
 KS_EXPORT(ks_cage_tris) const int* ks_cage_tris() { return gCageTris.data(); }

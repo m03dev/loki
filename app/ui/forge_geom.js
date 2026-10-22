@@ -22,6 +22,8 @@ window.ForgeGeom = (() => {
       if (m.t === "ready") { state = "on"; ops = Array.isArray(m.ops) ? new Set(m.ops) : null; ready.splice(0).forEach((f) => f(true)); return; }
       if (m.t === "fail" && state === "starting") { off(); return; }
       if (m.t === "cage") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w({ pos: m.pos, idx: m.idx, ms: m.ms, faces: m.faces, steps: m.steps }); } return; }
+      if (m.t === "cornerNormals") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w({ nrm: m.nrm, ms: m.ms }); } return; }
+      if (m.t === "fail" && m.during === "cornerNormals" && waiting.has(m.seq)) { const w = waiting.get(m.seq); waiting.delete(m.seq); w(null); return; }
       if (m.t === "uvUnfold" || m.t === "uvLayout" || m.t === "uvAuto") { const w = waiting.get(m.seq); if (w) { waiting.delete(m.seq); w(m); } return; }
       if (m.t === "fail" && (m.during === "uvUnfold" || m.during === "uvLayout" || m.during === "uvAuto") && waiting.has(m.seq)) {
         const w = waiting.get(m.seq); waiting.delete(m.seq); lastError = m.error || "engine error"; w(null); return; }
@@ -92,6 +94,20 @@ window.ForgeGeom = (() => {
     // true while the engine can take work (starting counts: the first request waits for it)
     usable() { if (state === "idle") start(); return state === "on" || state === "starting"; },
     get state() { return state; },
+    // soft / hard edges: one normal per face corner (C++, core of forge_normals.js), {nrm: Float32Array, ms} or null
+    cornerNormals(poly) {
+      return whenReady().then((ok) => {
+        if (!ok || !worker || (ops && !ops.has("cornerNormals"))) return null;
+        const F = flat(poly), id = ++seq;
+        const hard = [];
+        if (poly.hard instanceof Map) for (const k of poly.hard.keys()) { const [a, b] = k.split(","); hard.push(+a, +b); }
+        const H = Int32Array.from(hard);
+        return new Promise((res) => {
+          waiting.set(id, res);
+          worker.postMessage({ t: "cornerNormals", seq: id, v: F.v, sizes: F.sizes, idx: F.idx, hard: H }, [F.v.buffer, F.sizes.buffer, F.idx.buffer, H.buffer]);
+        });
+      });
+    },
     // the smooth preview: {pos: Float32Array, idx: Uint32Array, ms} or null (engine unavailable / bad cage)
     smooth(poly, levels, maxFaces) {
       return whenReady().then((ok) => {

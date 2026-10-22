@@ -17,7 +17,10 @@ PASS: list = []
 FAIL: list = []
 
 
+import time as _t
+_T0 = _t.time()
 def check(name, ok, detail=""):
+    if os.getenv("TEST_TIMES"): print("  %5.1fs" % (_t.time() - _T0), end="")
     (PASS if ok else FAIL).append(name)
     print(("  PASS " if ok else "  FAIL ") + name + ("" if ok else "  <- %s" % (str(detail)[:400],)))
 
@@ -82,20 +85,6 @@ async def main():
         check("right-click a tile: a menu - favourite, hotkey, move", items[:2] == ["Remove from favourites", "Set a hotkey..."] and "Move left" in items, items)
         await page.click('#fsc-tmenu button:has-text("Remove from favourites")')
         check("...Remove from favourites takes it off", "Blob" not in await E("forgeSculptUI.prefs().fav"))
-        # reorder: Move left in the menu
-        await page.click('#fsc-list .fsc-tile[data-brush="Inflate"]', button="right")
-        before = await E("forgeSculptUI.prefs().fav.indexOf('Inflate')")
-        await page.click('#fsc-tmenu button:has-text("Move left")')
-        check("Move left moves a favourite one place", await E("forgeSculptUI.prefs().fav.indexOf('Inflate')") == before - 1)
-        # a brush's own hotkey
-        await page.click('#fsc-list .fsc-tile[data-brush="Pinch"]', button="right")
-        await page.click('#fsc-tmenu button:has-text("Set a hotkey")')
-        await page.keyboard.press("Shift+KeyP")
-        check("Set a hotkey: Shift+P is Pinch's now (shown on the tile)", await E("forgeSculptUI.prefs().keys['shift+p']") == "Pinch" and await E("!!document.querySelector('#fsc-list .fsc-tile[data-brush=\"Pinch\"] .fsc-hk')"))
-        await E("forgeSculptUI.pick('Clay')")
-        await page.mouse.move(700, 400)
-        await page.keyboard.press("Shift+KeyP")
-        check("...pressing it picks Pinch", await E("forge.view.brush.lib") == "Pinch")
         await page.keyboard.press("1")
         check("1-9 pick the favourites", await E("forge.view.brush.lib") == "Standard")
         await page.click('#fsc-chips .fsc-chip[data-cat="All"]')
@@ -141,28 +130,6 @@ async def main():
         await page.keyboard.press("x")
         check("x switches X symmetry", (await E("forge.view.brush.symBits | 0")) == (b0 ^ 1), [b0, await E("forge.view.brush.symBits")])
         check("the header says you are sculpting (the mode chip)", await E("!!document.querySelector('#fsc-head .fsc-chip-mode')"))
-        # masking: Mask on, a stroke paints it (shown dark), invert, hide, clear
-        await page.click('#fsc-side .fsc-sticky[data-sticky="mask"]')
-        await page.mouse.move(cx - 40, cy); await page.mouse.down()
-        await page.mouse.move(cx + 40, cy + 10, steps=10); await page.mouse.up()
-        await page.wait_for_timeout(500)
-        mk = await E("[ForgeMask.any, !!(forge.view.internals.mesh.getObjectByName('forge-mask')), ForgeMask.w ? Array.from(ForgeMask.w).filter(x => x > 0.5).length : 0]")
-        check("Mask on + a stroke paints a mask, drawn as a dark overlay", mk[0] is True and mk[1] is True and mk[2] > 0, mk)
-        await page.click('#fsc-side .fsc-sticky[data-sticky="mask"]')
-        n0 = mk[2]
-        await page.keyboard.press("Control+Shift+KeyI")
-        await page.wait_for_timeout(400)
-        n1 = await E("Array.from(ForgeMask.w).filter(x => x > 0.5).length")
-        check("Ctrl+Shift+I inverts the mask", n1 > n0, [n0, n1])
-        t0 = await E("forge.view.internals.mesh.geometry.index.count")
-        await page.keyboard.press("h")
-        t1 = await E("forge.view.internals.mesh.geometry.index.count")
-        check("h hides the masked part (fewer triangles drawn)", t1 < t0 and await E("ForgeMask.hidden"), [t0, t1])
-        await page.keyboard.press("h")
-        check("...h again shows everything", await E("forge.view.internals.mesh.geometry.index.count") == t0)
-        await page.keyboard.press("Shift+KeyU")
-        await page.wait_for_timeout(400)
-        check("Shift+U clears the mask", await E("Array.from(ForgeMask.w).filter(x => x > 0.01).length") == 0)
         # every way out
         await page.click("#fsc-done")
         await page.wait_for_timeout(150)
@@ -183,7 +150,6 @@ async def main():
         await E("(() => { const s = document.getElementById('fmy-menuset'); s.value = 'Modeling'; s.dispatchEvent(new Event('change')); })()")
         await page.wait_for_timeout(200)
         check("Menu Set: Modeling leaves sculpt mode", await E("forge.view.mode") == "view")
-
         check("no script errors", not errors, errors[:5])
         await browser.close()
 

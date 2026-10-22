@@ -905,10 +905,54 @@ def self_test() -> int:
     return 0 if not problems else 1
 
 
+def health_json(token: str, timeout: float = 2.0) -> dict:
+    request = urllib.request.Request(BASE + "/health", headers={"Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8", "replace") or "{}")
+    except (urllib.error.URLError, OSError, ValueError):
+        return {}
+
+
+def stale_engine(token: str) -> bool:
+    """True when the engine that answers started on another commit than the one on disk now."""
+    if FROZEN:
+        return False
+    try:
+        sys.path.insert(0, str(HARNESS))
+        import updater  # pylint: disable=import-outside-toplevel
+        disk = (updater.version(REPO).get("commit") or "")[:12]
+    except Exception:  # noqa: BLE001 - never block the window on this
+        return False
+    running = str((health_json(token).get("update") or {}).get("running") or "")[:12]
+    return bool(disk and running and disk != running)
+
+
+def stop_running_engine(token: str, wait_s: float = 12.0) -> None:
+    """Ask a running engine to quit (POST /quit) and wait until nothing answers on the port."""
+    request = urllib.request.Request(BASE + "/quit", data=b"{}", method="POST",
+                                     headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(request, timeout=3).read()
+    except (urllib.error.URLError, OSError):
+        pass
+    end = time.monotonic() + wait_s
+    while time.monotonic() < end and probe(token, timeout=0.5) != 0:
+        time.sleep(0.25)
+
+
 def bring_up_engine(workspace: Path, holder: dict, stopping) -> tuple:
     """Attach to a running engine or start one. (token, "", "") or ("", title, what to do)."""
     token = read_token()
     status = probe(token) if token else probe("")
+    if token and status == 200 and stale_engine(token):
+        # LOKI kept working in the background on an older version, and this start just updated the folder:
+        # attaching would show the old LOKI and then restart in front of the owner ("why do i see old ui when
+        # its starting up", 2026-10-21). Stop it and start the new one before the window shows anything.
+        log("the background engine runs an older version: restarting it on the new code first")
+        splash_status("Updating LOKI…")
+        stop_running_engine(token)
+        status = probe(token)
     if token and status == 200:
         log("attaching to the running engine")
         return token, "", ""

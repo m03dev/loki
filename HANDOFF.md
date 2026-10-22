@@ -210,6 +210,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   word filters, resizable sidebar and preview), forge_sculpt_mask.js (mask paint / invert / clear / hide, C++ host-dirty fix),
   brush hotkeys + reorder, a layout pass so nothing overlaps (test_ui_spacing). Cloud only.
 
+- **2026-10-22 00:30 (Claude)**: start-up (stale background engine restarted before attaching; pre-flight cached + done
+  ahead), C++ soft/hard normals in the worker, topology cache + typed one-ring (edits ~2x faster on big cages), Workspace:
+  Sculpting, Home > Content (brand/), 4 [loki] brand / marketing jobs queued, BUILD_BRIEF 5.11 (LOKI markets what it
+  makes). Cloud only.
+
 ### Phone
 - The pairing QR is a link `http://<computer>:<phone port>/#loki-phone:...`; the phone link serves LOKI's own chat
   page (app/ui/phone_web.html/.js, pure-JS HMAC) plus an internet link through the relay (LOKI_PHONE_RELAY=off).

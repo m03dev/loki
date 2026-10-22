@@ -62,6 +62,7 @@ const FORGE_LIGHTS = [
   ["Soft", 0xffffff, 0x60646e, 1.8, 0xffffff, 0.8],
 ];
 const FORGE_STORE = "loki-forge-output";
+const FORGE_NATIVE_NORMALS_MIN = 4000;   // faces: from here the soft / hard normals come from the C++ engine (forge_geom.js)
 const FORGE_PRO_GREY = 0x9a9a9a;   // lambert1 under the pro default light reads #626262-#717171 on screen (measured)
 
 function forgeBtn(icon, name, what, onClick, cls) {
@@ -1102,16 +1103,28 @@ function forgeWeld(sm, given) {
   const wn = first.length, wpos = new Float32Array(wn * 3);
   for (let w = 0; w < wn; w++) if (first[w] !== undefined) for (let k = 0; k < 3; k++) wpos[w * 3 + k] = pos[first[w] * 3 + k];
   sm.wid = wid; sm.wn = wn; sm.wpos = wpos; sm.wnrm = new Float32Array(wn * 3);
-  const sets = Array.from({ length: wn }, () => []);
-  const idx = sm.idx;
-  for (let t = 0; t < idx.length; t += 3) {
+  // the one-ring of every welded vertex, as flat typed arrays (count, fill, then drop repeats with a stamp per
+  // vertex) - the old array + Set per vertex was most of a commit on a big cage (~90 ms of 400 on 70k faces)
+  const idx = sm.idx, nt = idx.length;
+  const deg = new Int32Array(wn + 1);
+  for (let t = 0; t < nt; t += 3) { deg[wid[idx[t]]] += 2; deg[wid[idx[t + 1]]] += 2; deg[wid[idx[t + 2]]] += 2; }
+  const at = new Int32Array(wn + 1);
+  for (let w = 0; w < wn; w++) at[w + 1] = at[w] + deg[w];
+  const raw = new Int32Array(at[wn]), fill = at.slice(0, wn);
+  for (let t = 0; t < nt; t += 3) {
     const a = wid[idx[t]], b = wid[idx[t + 1]], c = wid[idx[t + 2]];
-    sets[a].push(b, c); sets[b].push(a, c); sets[c].push(a, b);
+    raw[fill[a]++] = b; raw[fill[a]++] = c; raw[fill[b]++] = a; raw[fill[b]++] = c; raw[fill[c]++] = a; raw[fill[c]++] = b;
   }
-  const start = new Int32Array(wn + 1), flat = [];
-  for (let w = 0; w < wn; w++) { start[w] = flat.length; for (const x of new Set(sets[w])) if (x !== w) flat.push(x); }
-  start[wn] = flat.length;
-  sm.adjStart = start; sm.adj = Int32Array.from(flat);
+  const stamp = new Int32Array(wn), start = new Int32Array(wn + 1), adj = new Int32Array(at[wn]);
+  let o = 0;
+  for (let w = 0; w < wn; w++) {
+    start[w] = o;
+    const mark = w + 1;
+    stamp[w] = mark;                                  // never itself
+    for (let q = at[w]; q < at[w + 1]; q++) { const x = raw[q]; if (stamp[x] !== mark) { stamp[x] = mark; adj[o++] = x; } }
+  }
+  start[wn] = o;
+  sm.adjStart = start; sm.adj = adj.slice(0, o);
 }
 
 function forgeSync(sm) {   // welded positions -> raw positions
@@ -1854,10 +1867,26 @@ function forgeMakeView(lib, renderer, canvas) {
   // edges (every face its own corners, so the sculpt weld still joins them), faces picked by click, selection drawn
   // over the model, and every change undoable like a stroke.
   view.poly = null; view.tri2face = null;
+  flatNormals.seq = 0;
   function flatNormals(poly) {
     poly = poly || view.poly;
     if (!poly || !view.sm || !view.polyCorners) return;
     const nrm = view.sm.nrm;
+    if (poly.hard instanceof Map && poly.f.length >= FORGE_NATIVE_NORMALS_MIN && window.ForgeGeom && ForgeGeom.usable()) {
+      // a big cage: flat now (instant), the soft / hard normals from the C++ engine a moment later, off this thread
+      // (the JS took ~0.9 s on 98k faces and froze every edit; C++ ~0.17 s in a worker)
+      poly.f.forEach((f, fi) => { const n = window.ForgePoly.faceNormal(poly, f), at = view.polyCorners[fi]; for (let k = 0; k < f.length; k++) nrm.set(n, (at + k) * 3); });
+      const corners = view.polyCorners, sm = view.sm, want = ++flatNormals.seq;
+      ForgeGeom.cornerNormals(poly).then((r) => {
+        if (!r || want !== flatNormals.seq || view.sm !== sm || view.polyCorners !== corners) return;
+        const out = view.sm.nrm;
+        let c = 0;
+        poly.f.forEach((f, fi) => { const at = corners[fi]; for (let k = 0; k < f.length; k++, c++) { out[(at + k) * 3] = r.nrm[c * 3]; out[(at + k) * 3 + 1] = r.nrm[c * 3 + 1]; out[(at + k) * 3 + 2] = r.nrm[c * 3 + 2]; } });
+        if (mesh) { mesh.geometry.attributes.normal.needsUpdate = true; view.dirty = true; }
+      });
+      if (mesh) { mesh.geometry.attributes.normal.needsUpdate = true; view.dirty = true; }
+      return;
+    }
     if (poly.hard instanceof Map && typeof forgeCornerNormals === "function") {
       // soft / hard edges (forge_normals.js, the pro tool's polySoftEdge): a soft edge shares its vertices' normals
       // with the face across it, a hard edge splits them

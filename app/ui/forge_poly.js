@@ -405,7 +405,23 @@
   // both its ends are. The walkers follow bmesh_walkers_impl.cc: an edge LOOP crosses a valence-4 vertex to the
   // edge that shares no face with the one it came from (and follows the border along an open edge); an edge RING
   // and a FACE loop step across a quad to its opposite edge. All pure, so tests/test_forge_poly.py runs them in node.
+  // topology depends only on the faces and the vertex count: a move / tweak keeps both, so the last answer for the same
+  // face list is reused (it took ~0.2 s of every edit on 70k faces). A checksum over every face's vertex ids guards
+  // against a face list changed in place; callers treat the answer as read-only.
+  const topoCache = new WeakMap();
+  const faceSig = (m) => { let h = m.v.length | 0; for (const f of m.f) { h = (h * 31 + f.length) | 0; for (let k = 0; k < f.length; k++) h = (h * 31 + f[k]) | 0; } return h; };
   P.topology = (m) => {
+    const hit = m && m.f && topoCache.get(m.f);
+    if (hit && hit.nv === m.v.length && hit.nf === m.f.length) {
+      const sig = faceSig(m);
+      if (sig === hit.sig) return hit.T;
+      topoCache.delete(m.f);
+    }
+    const T = P.topologyBuild(m);
+    if (m && m.f) topoCache.set(m.f, { T, nv: m.v.length, nf: m.f.length, sig: faceSig(m) });
+    return T;
+  };
+  P.topologyBuild = (m) => {
     const edges = [], index = new Map(), vertEdges = m.v.map(() => []), vertFaces = m.v.map(() => []), faceEdges = [];
     m.f.forEach((face, fi) => {
       const fe = [];

@@ -107,6 +107,18 @@
       return { steps, pos, idx: tri, faces: this.x.ks_cage_nfaces() };
     }
 
+    /** Soft / hard edges: one unit normal per face corner (3 floats each, the faces' corner order). Corners meeting
+     *  over a soft edge share their faces' area-weighted normal; `hard` is a flat list of vertex pairs. */
+    cornerNormals(verts, sizes, idx, hard) {
+      const vp = this._put(verts, Float32Array), sp = this._put(sizes, Int32Array), ip = this._put(idx, Int32Array);
+      const h = hard && hard.length ? hard : new Int32Array(2);
+      const hp = this._put(h, Int32Array);
+      const n = this.x.ks_corner_normals(vp, verts.length / 3, sp, sizes.length, ip, idx.length, hp, hard && hard.length ? hard.length / 2 : 0);
+      this.x.ks_free(vp); this.x.ks_free(sp); this.x.ks_free(ip); this.x.ks_free(hp);
+      if (n < 0) throw new Error("sculpt engine: bad cage");
+      return this._f32(this.x.ks_corner_nrm(), n * 3).slice();
+    }
+
     // ---- UV unwrapping of a polygon cage with map UVs (independent of the sculpt mesh; core/src/uv_unwrap.cpp).
     // pos: xyz floats; sizes: corners per face; fv: a vertex id per corner; fuv: a UV index per corner; uv: u,v
     // floats per UV index. A shell = faces sharing UV indices.

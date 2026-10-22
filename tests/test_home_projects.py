@@ -120,13 +120,23 @@ class State:
     jobs = Jobs()
 
 
+# the agents' brand / marketing work (owner 2026-10-22)
+(ws / "brand" / "logo").mkdir(parents=True, exist_ok=True)
+(ws / "brand" / "name.md").write_text("# Names\n", encoding="utf-8")
+(ws / "brand" / "logo" / "mark.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>', encoding="utf-8")
+(ws / "brand" / ".hidden.md").write_text("x", encoding="utf-8")
+
 import home_projects  # noqa: E402
 
 print("== 1. GET /home/projects")
 out = home_projects.collect(State())
 items = out["items"]
 kinds = [i["kind"] for i in items]
-check("every kind is listed: render, forge, godot, studio, job", set(kinds) == {"render", "forge", "godot", "studio", "job"}, kinds)
+check("every kind is listed: render, forge, godot, studio, content, job", set(kinds) == {"render", "forge", "godot", "studio", "content", "job"}, kinds)
+cont = sorted((i for i in items if i["kind"] == "content"), key=lambda i: i["path_or_id"])
+check("Content: the brand/ files (not hidden ones), a picture with a thumbnail, opened in Files",
+      [i["path_or_id"] for i in cont] == ["brand/logo/mark.svg", "brand/name.md"] and cont[0]["thumb"].startswith("data:image/svg")
+      and cont[0]["open"] == {"mode": "files", "path": "brand/logo/mark.svg"} and cont[0]["detail"] == "logo · svg", cont)
 check("newest first", [i["updated"] for i in items] == sorted((i["updated"] for i in items), reverse=True), [(i["kind"], i["updated"]) for i in items])
 check("every item has the shape the window reads", all(set(i) >= {"kind", "name", "path_or_id", "updated", "thumb", "open"}
                                                        and isinstance(i["open"], dict) and i["open"].get("mode") for i in items), items[:2])
@@ -160,7 +170,7 @@ def boom(_state):
 bad = home_projects.collect(State(), dict(home_projects.SOURCES, godot=boom))
 check("one source failing never fails the whole answer (the others are there, the error is named)",
       bad["ok"] and "godot" in bad["errors"] and "disk gone" in bad["errors"]["godot"]
-      and {i["kind"] for i in bad["items"]} == {"render", "forge", "studio", "job"}, bad["errors"])
+      and {i["kind"] for i in bad["items"]} == {"render", "forge", "studio", "content", "job"}, bad["errors"])
 none = home_projects.collect(type("S", (), {"agent": type("A", (), {"DATA_DIR": str(TMP / "nothing"), "WORKSPACE": str(TMP / "nothing")})(), "jobs": None})())
 check("nothing made yet: ok, empty", none["ok"] and [i for i in none["items"] if i["kind"] != "godot"] == [], none)
 check("a big picture is not inlined (thumb stays small)", home_projects.data_url(TMP / "missing.png") is None)

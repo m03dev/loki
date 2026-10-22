@@ -440,11 +440,41 @@ function fscLevel(dir) {
 function fscOp(id) { const v = fscView(); if (v && typeof forgeProRun === "function") forgeProRun(v, id); return ""; }
 
 // ------------------------------------------------------------------------------------------ in and out of sculpt mode
+// Workspace: Sculpting (forge_uv_editor.js setWorkspace calls this) - in and out of sculpt mode with the workspace
+let fscWsGuard = false;
+function forgeSculptWorkspace(on) {
+  if (fscWsGuard) return;
+  const v = fscView();
+  if (!v) return;
+  fscWsGuard = true;
+  try {
+    if (on) {
+      if (typeof forgeProPanels === "function" && typeof forgeProPanel === "function") {
+        const p = forgeProPanels();
+        if (!window.__fscPanelsBefore) window.__fscPanelsBefore = { outliner: p.outliner, channel: p.channel };
+        if (p.outliner) forgeProPanel("outliner", false);
+        if (p.channel) forgeProPanel("channel", false);
+      }
+      if (v.mode !== "sculpt") { if (typeof forgeProSculpt === "function") forgeProSculpt(v); else if (typeof forgeMode === "function") forgeMode(); }
+      const set = document.getElementById("fmy-menuset"); if (set) set.value = "Sculpting";
+    } else {
+      if (v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
+      const before = window.__fscPanelsBefore; window.__fscPanelsBefore = null;
+      if (before && typeof forgeProPanel === "function") { forgeProPanel("outliner", !!before.outliner); forgeProPanel("channel", !!before.channel); }
+      const set = document.getElementById("fmy-menuset"); if (set) set.value = "Modeling";
+    }
+  } finally { fscWsGuard = false; }
+  fscShow();
+}
+window.forgeSculptWorkspace = forgeSculptWorkspace;
+function fscWorkspace() { return typeof ForgeUVEditor !== "undefined" ? ForgeUVEditor.workspace() : ""; }
+function fscSetWorkspace(ws) { if (typeof ForgeUVEditor !== "undefined" && ForgeUVEditor.workspace() !== ws) ForgeUVEditor.setWorkspace(ws); }
 function fscExit() {
   const v = fscView();
   if (!v) return "";
   fscWheelClose();
   FSC_STICKY.invert = false; FSC_STICKY.smooth = false; FSC_STICKY.mask = false;
+  if (fscWorkspace() === "sculpt") fscSetWorkspace("model");
   if (v.mode === "sculpt" && typeof forgeMode === "function") forgeMode();
   const set = document.getElementById("fmy-menuset"); if (set) set.value = "Modeling";
   if (typeof fmySync === "function") fmySync();
@@ -453,6 +483,10 @@ function fscExit() {
 }
 function fscShow() {
   const v = fscView(), on = !!(v && v.mode === "sculpt");
+  if (!fscWsGuard && v) {
+    if (on && fscWorkspace() !== "sculpt") fscSetWorkspace("sculpt");
+    else if (!on && fscWorkspace() === "sculpt") fscSetWorkspace("model");
+  }
   const f = document.getElementById("forge");
   if (f) { f.classList.toggle("fsc-on", on); if (!on) f.classList.remove("fsc-more"); }
   if (on) { fscBuild(); fscFill(); fscSync(); }
@@ -537,9 +571,9 @@ function fscWheelPick(x, y) {
   }, true);
   document.addEventListener("pointerup", (e) => {
     if (!press || e.button !== 2) return;
-    const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y) > 12, quick = performance.now() - press.t < 260;
+    const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y) > 12;
     press = null;
-    if (!moved && quick) return;                          // a click: the wheel stays open for clicking
+    if (!moved) return;                                   // no flick: the wheel stays open for clicking
     const el = fscWheelPick(e.clientX, e.clientY);
     if (el) el.click(); else fscWheelClose();
   }, true);

@@ -96,7 +96,7 @@
   }
 
   // Home: words for the filters, and no second Chat / Studio button
-  const KIND_WORDS = { all: "All", render: "Renders", forge: "Models", godot: "Games", studio: "Sessions" };
+  const KIND_WORDS = { all: "All", render: "Renders", forge: "Models", godot: "Games", studio: "Sessions", content: "Content" };
   function home() {
     for (const b of document.querySelectorAll(".home-kinds .home-kind")) {
       const k = b.dataset.kind;

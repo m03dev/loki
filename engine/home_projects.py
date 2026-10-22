@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 REPO = Path(__file__).resolve().parent.parent
-KINDS = ("render", "forge", "godot", "studio", "job")
+KINDS = ("render", "forge", "godot", "studio", "content", "job")
 THUMB_MAX = 400_000
 PER_KIND = 24
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml"}
@@ -172,7 +172,38 @@ def jobs(state: Any) -> list:
     return out
 
 
-SOURCES: dict = {"render": renders, "forge": forge, "godot": godot, "studio": studio, "job": jobs}
+CONTENT_DIR = "brand"            # what LOKI's agents make for the app's brand and marketing (name, logo, posts, ads)
+CONTENT_TYPES = {".md", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".gif", ".html", ".json"}
+
+
+def content(state: Any) -> list:
+    """Brand and marketing work in <workspace>/brand/ (owner 2026-10-22: "give them a task to make a logo and come up
+    with a new name ... start doing ads and making social media content for the app") - every file, newest first,
+    pictures with a thumbnail; a card opens the file in Files."""
+    ws = _workspace(state)
+    root = ws / CONTENT_DIR
+    out: list = []
+    if not root.is_dir():
+        return out
+    for p in root.rglob("*"):
+        try:
+            if not p.is_file() or p.suffix.lower() not in CONTENT_TYPES or any(x.startswith(".") for x in p.relative_to(root).parts):
+                continue
+            rel = p.relative_to(ws).as_posix()
+            updated = p.stat().st_mtime
+        except (OSError, ValueError):
+            continue
+        sub = p.relative_to(root).parts[0] if len(p.relative_to(root).parts) > 1 else ""
+        out.append({"kind": "content", "name": p.stem.replace("_", " ").replace("-", " ")[:120], "path_or_id": rel,
+                    "updated": updated, "thumb": data_url(p), "status": "",
+                    "detail": (sub + " · " if sub else "") + p.suffix.lower().lstrip("."),
+                    "open": {"mode": "files", "path": rel}})
+        if len(out) > 400:
+            break
+    return out
+
+
+SOURCES: dict = {"render": renders, "forge": forge, "godot": godot, "studio": studio, "content": content, "job": jobs}
 
 
 def collect(state: Any, sources: dict | None = None, clock: Callable[[], float] = time.time) -> dict:

@@ -232,6 +232,16 @@ uses Claude Code and Codex subscriptions the same way.
   follow-ups, sponsor / collab pitches), Writer, Growth & SEO, Researcher, Developer, 3D & games. "General" keeps its
   name with a plain icon. No Small business / Tutor / Student / Life admin.
 
+### 5.11 LOKI markets what it makes (owner, 2026-10-22)
+
+- "Start doing ads and making social media content for the app - that's what the app has to do, gear it towards that."
+  LOKI's agents make the brand and the marketing: names, logos, posting calendars, captions, short-video scripts, post
+  images and ad drafts - for LOKI itself first (it is being renamed), then for whatever the owner makes with it (a
+  model, a render, a game). Work lands in the workspace's `brand/` and shows on Home as **Content**.
+- Drafts only until the owner approves: nothing is posted, published, bought or renamed by an agent on its own
+  (section 7 still holds). Connecting real accounts (X, Instagram, TikTok, YouTube) is a later, owner-approved step.
+- The modes in the message box already lean this way (Content creator, Social media, Outreach, Growth & SEO).
+
 ## 6. Add anything else that serves this
 
 You may add features I haven't named if they make LOKI more alive, more capable, cheaper or

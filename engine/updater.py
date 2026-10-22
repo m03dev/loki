@@ -23,6 +23,7 @@ linked machines to update. Set LOKI_AUTO_UPDATE=0 to turn automatic updates off.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -709,6 +710,23 @@ def _install_requirements(repo: Path) -> str:
     return "dependencies updated" if not any(code_all) else "some dependencies did not install"
 
 
+def _preflight_cache(repo: Path, save: dict | None = None) -> dict:
+    """{commit: "passed"} for versions whose pre-flight passed on this machine (.git/loki_preflight.json, last 20)."""
+    path = Path(repo) / ".git" / "loki_preflight.json"
+    if save is not None:
+        try:
+            keep = dict(list(save.items())[-20:])
+            path.write_text(json.dumps(keep), encoding="utf-8")
+        except OSError:
+            pass
+        return save
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def preflight(repo: Path, target: str, timeout: float = 240.0) -> tuple:
     """(ok, why) - try the NEW version before this machine switches to it.
 
@@ -720,6 +738,13 @@ def preflight(repo: Path, target: str, timeout: float = 240.0) -> tuple:
     LOKI_UPDATE_PREFLIGHT=0 turns this off."""
     if str(os.getenv("LOKI_UPDATE_PREFLIGHT", "1")).strip().lower() in ("0", "off", "false", "no"):
         return True, "pre-flight off"
+    # a version that already passed here is not tried again (the background check pre-flights it while LOKI runs,
+    # so a start only pays for it when nothing was ready - it took ~9 s on the PC, owner 2026-10-21 "why is start up slow")
+    code, sha = git(repo, "rev-parse", target)
+    sha = sha.strip() if code == 0 else ""
+    cache = _preflight_cache(repo)
+    if sha and cache.get(sha) == "passed":
+        return True, "pre-flight passed earlier"
     python = os.getenv("LOKI_ENGINE_PYTHON") or sys.executable   # the engine's own venv, not the app's
     tmp = Path(tempfile.mkdtemp(prefix="loki-preflight-"))
     tree = tmp / "tree"
@@ -754,6 +779,9 @@ def preflight(repo: Path, target: str, timeout: float = 240.0) -> tuple:
         missing = ui_missing(tree)
         if missing:
             return False, "the new version's window would not load: missing " + ", ".join(missing[:5])
+        if sha:
+            cache[sha] = "passed"
+            _preflight_cache(repo, cache)
         return True, "pre-flight passed"
     finally:
         git(repo, "worktree", "remove", "--force", str(tree))
@@ -1049,6 +1077,7 @@ def status() -> dict:
     if _release():   # an installed LOKI (no git): release zips, engine/release_update.py
         return _release_mod().status()
     state = {k: v for k, v in STATE.items()}
+    state["running"] = RUNNING_COMMIT   # the commit this engine process started on (the app compares it with the disk)
     last = last_result(REPO)
     if last and float(last.get("at") or 0) > float(state.get("checked") or 0):
         state.update({"checked": float(last.get("at") or 0), "note": last.get("note", ""),
@@ -1112,6 +1141,14 @@ def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
         if enabled() and (is_checkout(REPO) or _release()):
             try:
                 check_now()
+                if STATE.get("update_available") and is_checkout(REPO):
+                    # try the new version now, in the background: the next start (or the restart below) finds it
+                    # already pre-flighted and does not wait for it
+                    try:
+                        git(REPO, "fetch", "--quiet", "origin", BRANCH, timeout=60)
+                        preflight(REPO, "origin/" + BRANCH)
+                    except Exception:  # noqa: BLE001 - only a head start
+                        pass
                 if STATE.get("update_available") and force_enabled() and idle and apply and idle():
                     STATE["note"] = "applying the update and restarting LOKI"
                     apply()
