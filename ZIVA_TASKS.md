@@ -33,6 +33,48 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-23 04:20) - fast local models on the Mac mini (2 TB SSD): colibri + TurboFieldfare. [mac]
+
+Owner: "the mac has a 2tb ssd - get colibri and/or turbofieldfare, install whatever you need". Research done; what to
+expect before you start:
+- **TurboFieldfare** (github drumih/turbo-fieldfare, Apache-2.0, Swift + Metal): runs ONLY Gemma 4 26B-A4B, keeps
+  ~1.4 GB in RAM and streams experts from the SSD. Reported decode: M4 Max 64 GB ~48 tok/s, M4/M5 MacBook Pro
+  25-35, M1 Max 12, **Mac mini M4 16 GB / M2 8 GB only 4-5 tok/s**. Needs macOS 26 + Xcode 26 (Swift 6.2, Metal 4).
+  Has an OpenAI-compatible server on 127.0.0.1:8080/v1 (marked experimental).
+- **colibri on a Mac**: only the GLM / Inkling / Kimi K3 engines have Metal; Qwen3.6 runs on the CPU there (~6 tok/s
+  class). Its real point on this Mac is the 2 TB SSD: models far bigger than RAM, e.g. **DeepSeek V4.1 Flash**
+  (the owner's chosen main driver, 510 GB on disk) - but expect it SLOW (measured 0.2 tok/s on a 16-thread CPU box).
+  Treat it as the "big brain, background jobs" model, never the chat model.
+- Rule of thumb from the thread: MLX beats both when the model fits in RAM (75 tok/s Gemma 4 26B on a big M5).
+
+- [ ] [mac] **1. Facts first (seconds).** `sysctl -n machdep.cpu.brand_string hw.memsize`, `sw_vers -productVersion`,
+      `xcodebuild -version`, `df -h /` and the SSD's read speed (`dd if=<a 2 GB file> of=/dev/null bs=8m` after
+      `sudo purge` is not allowed - just copy a cold model shard and time it). Write them under Reports. They decide
+      everything below: RAM and memory bandwidth set the speed, not the 2 TB.
+- [ ] [mac] **2. TurboFieldfare.** Ask Mohamed under Needs Mohamed before installing Xcode 26 / updating macOS if
+      either is missing (big, and macOS updates can't be undone). Then into `~/Loki/harness_data/vendor/` (never
+      commit it): `git clone https://github.com/drumih/turbo-fieldfare.git && cd turbo-fieldfare &&
+      swift build -c release && swift build -c release --product TurboFieldfareServer`. First run of
+      `.build/release/TurboFieldfareMac` -> Install downloads ~15 GB and repacks it once. Run the server with
+      `--model <the .gturbo file> --max-context 8192` (hidden, no Terminal window). Measure: 200-token answer, warm
+      second run, under 1 minute. On macOS 15 only: the thread says edit Package.swift to `.v15` and drop the
+      `opts.languageVersion = .version4_0` lines - loses the faster prefill; note it if you had to.
+- [ ] [mac] **3. colibri.** `xcode-select --install; brew install libomp git python`, clone JustVugg/colibri into
+      `~/Loki/harness_data/vendor/colibri`, `./start-here.sh --list` and paste its table here. Install the model it
+      recommends for chat with `./start-here.sh --model <id> --dir ~/colibri-models --yes`. For the big one, ask
+      Mohamed before pulling 510 GB: `--model deepseek-v41-flash` is a by-hand model (see docs/deepseek-v41.md, the
+      one-off preparation step). Build Metal where it exists: `cd c && make colibri METAL=1`, run with `COLI_METAL=1`
+      and `DIRECT=1` (test both - DIRECT helps on fast NVMe, hurts on some). `./coli tune --model <dir>` saves the
+      fastest safe settings for this Mac. Measure the same way as step 2.
+- [ ] [mac] **4. Wire the winner into LOKI.** Both speak OpenAI: add them as local providers (TurboFieldfare
+      `http://127.0.0.1:8080/v1`, colibri `http://127.0.0.1:8000/v1`), give each a speed/quality line in LOKI's model
+      picker from YOUR measured numbers, route chat to the fastest one that answers well, and send long background
+      jobs (agents, self-review) to the biggest model the SSD holds. Both must start hidden on login and stop when
+      LOKI quits; nothing on the owner's screen. Windows: colibri there is the [windows] task above (TurboFieldfare
+      is Mac-only - say so in the picker, don't offer it on Windows).
+- Report all numbers here (machine, model, warm/cold, decode tok/s, RAM used). If a model is under 5 tok/s on this
+  Mac, keep it out of chat and say so instead of tuning in circles.
+
 ### From Claude (2026-10-23 04:10) - colibri stuck at ~10 tok/s on the PC: why, and the fix. [windows]
 
 Looked at the PC (C:\Users\macul\colibri-models\qwen36-35b) and colibri's own docs (docs/qwen36-cuda-tier.md,
