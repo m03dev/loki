@@ -33,6 +33,41 @@ the W/M numbers below refer to it when a request says "steps: W35".
 
 ## Requests
 
+### From Claude (2026-10-23 04:10) - colibri stuck at ~10 tok/s on the PC: why, and the fix. [windows]
+
+Looked at the PC (C:\Users\macul\colibri-models\qwen36-35b) and colibri's own docs (docs/qwen36-cuda-tier.md,
+docs/windows.md). Two problems, then the settings that take an 8 GB RTX 30-series card from ~11 to 25-30 tok/s.
+
+- [ ] [windows] **1. The model is only half downloaded.** `.colibri-download.json` says `"complete": false`: 22 of
+      the 41 shards are there, `model-00009.safetensors.part` is cut off, model-00010, 12-14, 16-18, 20-22, 24-26,
+      28-30, 32-34, 36-38 are missing, and so is **model-globals.safetensors (2 GB - the dense weights every token
+      reads)**. Whatever is giving 10 tok/s is not this model running whole. Resume it (it continues from the bytes
+      on disk): `START-HERE.bat --model qwen36-35b --yes` from the colibri checkout. Done when the json says
+      `"complete": true` and the folder holds 41 `model-*.safetensors` (~22 GB). Check C: has 15 GB free first.
+- [ ] [windows] **2. Use the CUDA engine, not Vulkan/CPU.** On Windows the setup never builds CUDA (`CUDA=1` is
+      rejected there by design), so it falls back to Vulkan or the CPU - that is the ~6-11 tok/s ceiling. Either
+      unpack the release's `colibri-<version>-windows-x86_64-cuda.zip` over the main archive (ships
+      `coli_cuda.dll`, cc 8.0+, the 3070 Ti is 8.6), or build it: x64 Native Tools prompt + MSYS2 on PATH,
+      `cd c && make cuda-dll CUDA_ARCH=sm_86 && make qwen36.exe CUDA_DLL=1 ARCH=native` (sm_86, NOT the sm_89 in
+      their example - that is Ada). Keep coli_cuda.dll next to qwen36.exe and CUDA's bin on PATH. Proof it works:
+      the startup line `[gpu] MoE experts -> CUDA VRAM tier`. No line = CPU only.
+- [ ] [windows] **3. Run it with the trunk and the DeltaNet layers on the card.** Their measured RTX 3070 8 GB
+      numbers: experts-only tier ~11 tok/s (that is exactly where you are stuck), + dense trunk in VRAM 16.5-25,
+      + `Q36_DN_GPU=1` **30 tok/s**. Environment for `coli serve` / qwen36.exe:
+      `COLI_CUDA=1  COLI_GPUS=0  CUDA_EXPERT_GB=auto  Q36_DN_GPU=1  HEAT_FILE=<model dir>\heat.bin`
+      `OMP_NUM_THREADS=<physical cores, not threads>  OMP_WAIT_POLICY=ACTIVE  OMP_PROC_BIND=close`
+      Leave `COLI_PLACE` unset (auto puts lm_head + DeltaNet projections in VRAM); if it is set to `off` anywhere,
+      remove it. Don't set `Q36_OFFER_SHEXP` (shared expert is faster on the CPU). `cap` (first arg) = 256.
+      Before the run free the card: `ollama stop <model>` / close ComfyUI - 8 GB is tight and anything else in
+      VRAM shrinks the tier. Check the `[place]` lines: the trunk must NOT say `trunk stays on the CPU`.
+- [ ] [windows] **4. Measure it right (under 1 minute).** First run fills heat.bin; measure the SECOND run.
+      `N_NEW=200`, `COLI_TIMERS=1`; report the decode tok/s, not the engine's headline number (that one includes
+      time-to-first-token and reads ~20 % lower). Report hit rate and the `[place]` lines here under Reports.
+      Target: 25+ tok/s. If it's still ~11, paste the full startup log here and stop - don't keep retrying.
+- Note: the container is the gs64 one (Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64); upstream main reads
+  `expert_gs` from qwen36_meta.json, so no special branch is needed any more. Wire LOKI to it as an OpenAI
+  provider at `http://127.0.0.1:8000/v1` only after step 4 passes.
+
 ### From Claude (2026-10-22 14:40) - Forge is laid out like Maya 2027 (docs/FORGE_MAYA_PARITY.md). Pull first.
 Owner 13:32: "almost 1:1 to maya ... place everything exactly like that". Maya's layout is read from Maya itself
 (tools/forge_maya/extract_maya.py) and Forge's menus / hotbox / marking menus are generated from it (gen_layout.py).
