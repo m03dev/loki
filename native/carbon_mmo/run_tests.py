@@ -25,6 +25,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--build-dir", default=os.path.join(ROOT, "build"))
     ap.add_argument("--skip-host", action="store_true")
+    ap.add_argument("--no-editor", action="store_true", help="skip the editor self-test (machines without a display, CI)")
     args = ap.parse_args()
     env = dict(os.environ, CMMO_BUILD_DIR=os.path.abspath(args.build_dir))
     py = sys.executable
@@ -42,7 +43,7 @@ def main():
         suite.append(("phase 1  C++ <-> Python render hook", [host_exe(args.build_dir)]))
         suite.append(("world    terrain, levels, Play (C++)", [host_exe(args.build_dir).replace("cmmo_host", "test_world")]))
         editor = host_exe(args.build_dir).replace("cmmo_host", "cmmo_editor")
-        if os.path.isfile(editor):
+        if os.path.isfile(editor) and not args.no_editor:
             shots = os.path.join(args.build_dir, "selftest")
             os.makedirs(shots, exist_ok=True)
             suite.append(("editor   self-test (real UI, screenshots in build/selftest)",
