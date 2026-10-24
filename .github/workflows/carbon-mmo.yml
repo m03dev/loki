@@ -27,6 +27,15 @@ jobs:
       - name: Configure
         run: cmake -S native/carbon_mmo -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build --config Release -j 4 -- ${{ runner.os == 'Windows' && '/v:minimal' || '' }}
+        shell: bash
+        run: |
+          # errors become annotations (readable through the API without downloading the log)
+          if ! cmake --build build --config Release -j 4 > build.log 2>&1; then
+            grep -iE "error|undefined|unresolved" build.log | grep -v "^ *--" | head -25 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+            tail -40 build.log
+            exit 1
+          fi
+          tail -5 build.log
       - name: Tests (no window)
+        shell: bash
         run: python native/carbon_mmo/run_tests.py --build-dir build --no-editor
