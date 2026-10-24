@@ -630,10 +630,12 @@ const ForgeUVEditor = (() => {
       else if (ws !== "retopo" && ForgeRetopo.state.on) ForgeRetopo.stop();
     }
     if (typeof ForgeBake !== "undefined") ForgeBake.show(ws === "bake");
+    if (typeof ForgeLevelUI !== "undefined") ForgeLevelUI.show(ws === "level");   // the Level editor (forge_level.js)
     const fb = document.querySelector("#forge .forge-body");
     fb?.classList.toggle("ws-uv", ws === "uv");
     fb?.classList.toggle("ws-mat", ws === "mat");                 // Material Maker's own workspace
     fb?.classList.toggle("ws-anim", ws === "anim");               // Animation: the time / range sliders, keys, Graph Editor
+    fb?.classList.toggle("ws-level", ws === "level");             // Level: Place Actors, Content Browser, Details, Play
     // Sculpting (owner 2026-10-21 23:53: "sculpting should be in its own workspace just like animation"): the workspace
     // IS sculpt mode - picking it enters sculpt mode with the viewport to itself (Outliner / Channel Box away, back on
     // leaving); leaving sculpt mode any way (Done, q, Esc ...) goes back to Modeling
@@ -653,14 +655,15 @@ const ForgeUVEditor = (() => {
       : ws === "bake" ? "Baking workspace: the edited object (with UVs) is the low; pick the high, then Bake."
       : ws === "sculpt" ? "Sculpting workspace: brushes along the bottom, right-click for the brush wheel, Done (or q / Esc) goes back to Modeling."
       : ws === "anim" ? "Animation workspace: the time and range sliders under the viewport; Keys on the range slider opens the key tools."
+      : ws === "level" ? "Level workspace: place actors, give them scripts, then Play (W A S D, Esc stops) - Stop puts everything back."
       : ws === "mat" ? "Materials workspace: Material Maker's node graph beside the viewport - the selected model shows the material live." : "Modeling workspace.";
   }
   function workspacePicker() {
     const name = document.querySelector("#forge .fmy-wsname");
     if (!name || document.getElementById("forge-workspace")) return;
     const sel = el("select", "fmy-menuset fmy-wspick"); sel.id = "forge-workspace";
-    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport), Retopology (Quad Draw on a live surface), Baking (high to low maps), Materials (Material Maker's node graph beside a live preview) or Animation (the time and range sliders, keys and the Graph Editor).";
-    for (const [v, t] of [["model", "Modeling"], ["sculpt", "Sculpting"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"], ["mat", "Materials"], ["anim", "Animation"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
+    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport), Retopology (Quad Draw on a live surface), Baking (high to low maps), Materials (Material Maker's node graph beside a live preview), Animation (the time and range sliders, keys and the Graph Editor) or Level (place actors, scripts, Play in Editor).";
+    for (const [v, t] of [["model", "Modeling"], ["sculpt", "Sculpting"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"], ["mat", "Materials"], ["anim", "Animation"], ["level", "Level"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
     sel.value = workspace();
     sel.addEventListener("change", () => say(setWorkspace(sel.value)));
     name.replaceWith(sel);
@@ -713,7 +716,7 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
 // Windows > Workspaces (owner 2026-10-22 00:35: "sculpting still isnt in the menu") - every workspace as a command, ticked
 // when it is the one showing; the same list as the Workspace picker at the top right
 const FORGE_WORKSPACES = [["wsModel", "model", "Modeling"], ["wsSculpt", "sculpt", "Sculpting"], ["wsUv", "uv", "UV Editing"],
-  ["wsRetopo", "retopo", "Retopology"], ["wsBake", "bake", "Baking"], ["wsMat", "mat", "Materials"], ["wsAnim", "anim", "Animation"]];
+  ["wsRetopo", "retopo", "Retopology"], ["wsBake", "bake", "Baking"], ["wsMat", "mat", "Materials"], ["wsAnim", "anim", "Animation"], ["wsLevel", "level", "Level"]];
 if (typeof FORGE_PRO_CMDS !== "undefined") {
   for (const [id, ws, label] of FORGE_WORKSPACES) {
     FORGE_PRO_CMDS[id] = [label + " Workspace", () => ForgeUVEditor.setWorkspace(ws)];

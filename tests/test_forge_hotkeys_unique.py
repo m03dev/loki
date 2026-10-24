@@ -56,6 +56,7 @@ for _, act in pairs:
         continue
     defined = re.search(r'(^|[\s{,])%s:\s*\[' % re.escape(act), ui_src, re.M) or \
         re.search(r'(FORGE_PRO_CMDS|\bC)\.%s\s*=' % re.escape(act), ui_src) or \
+        re.search(r'\badd\(\s*"%s"\s*,\s*"' % re.escape(act), ui_src) or \
         re.search(r'C\["sculptFav" \+ \(i \+ 1\)\]', ui_src) and act.startswith("sculptFav") or \
         re.search(r'FORGE_PRO_CMDS\["menuSet" \+ k\]', ui_src) and act.startswith("menuSet")
     if not defined:

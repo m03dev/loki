@@ -1424,3 +1424,22 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 /* the wheel's wedges stay on top of an open menu (a menu nudged onto the ring hid the next wedge: QA sweep) */
 .forge-wheel-wedge { z-index: 2; }
 .forge-wheel-sub { z-index: 1; }
+
+/* the Level workspace (forge_level.js): Place Actors, Content Browser, Details, Output */
+#forge .forge-levelpanel .flv-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 6px 8px; display: flex; flex-direction: column; gap: 10px; }
+#forge .forge-levelpanel .flv-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+#forge .forge-levelpanel .flv-assets, #forge .forge-levelpanel .flv-levels { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+#forge .forge-levelpanel .flv-asset { text-align: left; font-size: 11px; padding: 3px 6px; color: #d8dbe0; background: #2b2c2f; border: 1px solid #3a3c40; border-radius: 3px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#forge .forge-levelpanel .flv-asset:hover { background: #35373b; }
+#forge .forge-levelpanel .flv-level { color: #8fb3d9; }
+#forge .forge-levelpanel .flv-name { font-size: 12px; font-weight: 600; color: #e2e5e9; margin-bottom: 4px; }
+#forge .forge-levelpanel .flv-vec { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+#forge .forge-levelpanel .flv-vec input { min-width: 0; height: 19px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; }
+#forge .forge-levelpanel .fuv-set-row input:not([type]) { height: 19px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; min-width: 0; }
+#forge .forge-levelpanel .flv-script { margin: 6px 0; border: 1px solid #3a3c40; border-radius: 3px; background: #1f2023; }
+#forge .forge-levelpanel .flv-script-top { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-bottom: 1px solid #3a3c40; }
+#forge .forge-levelpanel .flv-script-name { flex: 1 1 auto; min-width: 0; height: 19px; font-size: 11px; background: #1d1e21; color: #e6e8eb; border: 1px solid #44474d; border-radius: 2px; }
+#forge .forge-levelpanel .flv-code { display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 120px; padding: 6px; border: 0; background: #17181a; color: #d7dde4; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
+#forge .forge-levelpanel .flv-log { max-height: 140px; overflow: auto; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #b9c0c8; }
+#forge .forge-levelpanel .flv-logline.bad, #forge .forge-levelpanel .flv-status.bad { color: #ff8a7a; }
+#forge canvas.flv-playcanvas { outline: 2px solid #3ddc84; outline-offset: -2px; }

@@ -46,6 +46,12 @@ const FORGE_MAYA = {
    "menus": [
     "Render"
    ]
+  },
+  "level": {
+   "label": "Level",
+   "menus": [
+    "Level"
+   ]
   }
  },
  "menus": {
@@ -470,7 +476,8 @@ const FORGE_MAYA = {
      "wsRetopo",
      "wsBake",
      "wsMat",
-     "wsAnim"
+     "wsAnim",
+     "wsLevel"
     ]
    ],
    [
@@ -889,6 +896,30 @@ const FORGE_MAYA = {
    "-",
    "renderStudio",
    "bakeMaps"
+  ],
+  "Level": [
+   "levelWorkspace",
+   "-",
+   "levelPlay",
+   "levelSimulate",
+   "levelStop",
+   "-",
+   [
+    "Place Actors",
+    [
+     "placeEmpty",
+     "placePlayerStart",
+     "placeTriggerBox",
+     "placeCamera",
+     "-",
+     "placePointLight",
+     "placeDirLight",
+     "placeSpotLight"
+    ]
+   ],
+   "-",
+   "levelCheckScripts",
+   "levelSave"
   ]
  },
  "marking": {

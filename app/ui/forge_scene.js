@@ -929,6 +929,26 @@ function forgeSceneAttach(view, ctx) {
       view.dirty = true;
       return n;
     },
+    // the Level workspace's actors (forge_level.js): a node whose group IS the actor (its transform, scripts, props:
+    // grp.userData.loki) and whose shape is the light / camera / gizmo (forge_level_core.js adoptActor). `asset` (a
+    // placed Content Browser model) goes in as the node's content instead.
+    addActor(name, type, opts, asset) {
+      if (typeof ForgeLevel === "undefined") return null;
+      const n = makeNode(nextName(name || type), "actor", 0, null);
+      if (asset) { asset.name = "asset"; n.inner.add(asset); ForgeLevel.makeActor(n.grp, type); if (opts && opts.asset) n.grp.userData.loki.asset = opts.asset; }
+      else ForgeLevel.adoptActor(THREE, type, n.grp, n.inner, opts);
+      n.actor = type;
+      const cur = tree.layers.find((l) => l.id === tree.curLayer); if (cur) cur.nodes.add(n.id);
+      api.applyLayers(); tree.sel = [n.id]; tree.anchor = n.id;
+      tree.build(); if (api.onSelect) api.onSelect();
+      view.dirty = true;
+      return n;
+    },
+    // which node an object belongs to (Play / Stop restore objects, the Details panel wants the node)
+    nodeOf(obj) {
+      for (let o = obj; o; o = o.parent) if (o.userData && o.userData.forgeNode != null) return node(o.userData.forgeNode);
+      return null;
+    },
     // an image plane's Alpha Gain (0 = invisible, 1 = solid), the pro image plane attribute
     setAlphaGain(id, a) {
       const n = node(id); const sh = n && n.kind === "imagePlane" && shapeOf(n);

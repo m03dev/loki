@@ -204,7 +204,7 @@ async def main():
 
         # ---- the status line's menu set drives the window's menu bar (one list behind both)
         opts = await E("[...document.getElementById('fmy-menuset').options].map((o) => o.value)")
-        check("the status line offers the menu sets (Maya's Modeling / Animation / Rendering, and Sculpting)", opts == ["modeling", "sculpting", "animation", "rendering"], opts)
+        check("the status line offers the menu sets (Maya's Modeling / Animation / Rendering, and Sculpting + Level)", opts == ["modeling", "sculpting", "animation", "rendering", "level"], opts)
         await E("() => { const s = document.getElementById('fmy-menuset'); s.value = 'animation'; s.dispatchEvent(new Event('change')); }")
         await page.wait_for_timeout(250)
         anim = await E("[...document.querySelectorAll('#fmy-menubar .fmy-mb')].map((b) => b.textContent)")

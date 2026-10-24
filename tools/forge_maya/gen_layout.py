@@ -110,7 +110,7 @@ EXTRAS = {
     "Modify": ["lastTool", ["Axes", ["worldAxes", "objectAxes"]], "pivotEdit"],
     "Display": ["isolate", "xray", "quadToggle", ["Smooth Mesh Preview", ["smooth1", "smooth2", "smooth3"]],
                 ["Display Layers", ["layerAdd", "layerAssign"]]],
-    "Windows": [["Workspaces", ["wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim"]],
+    "Windows": [["Workspaces", ["wsModel", "wsSculpt", "wsUv", "wsRetopo", "wsBake", "wsMat", "wsAnim", "wsLevel"]],
                 ["Panels", ["winOutliner", "winCreate", "winShelf", "winCreature", "panelModel", "panelMaterials"]],
                 ["Menus", ["wheel", "quickMenu"]], ["Layouts", ["layouts", "layoutReset", "hideUI"]],
                 ["Settings / Preferences", ["preferences", "hotkeyEditor", "menuSettings"]]],
@@ -129,6 +129,11 @@ OWN_MENUS = {
                ["Subdivision", ["sculptDivide", "sculptDynamic", "sculptLevelUp", "sculptLevelDown"]],
                ["Masking", ["maskClear", "maskInvert", "maskFill", "maskHideToggle"]], "sculptWheel", "smooth", "-", "sculptExit"],
     "Render": ["renderDialog", "renderPreview", "-", "renderStudio", "bakeMaps"],
+    # the Level workspace (forge_level.js) - Unreal-style level editing, Forge's own menu set
+    "Level": ["levelWorkspace", "-", "levelPlay", "levelSimulate", "levelStop", "-",
+              ["Place Actors", ["placeEmpty", "placePlayerStart", "placeTriggerBox", "placeCamera", "-",
+                                "placePointLight", "placeDirLight", "placeSpotLight"]],
+              "-", "levelCheckScripts", "levelSave"],
 }
 # the menu sets: Maya's F2 Modeling, F4 Animation, F6 Rendering; Sculpting is Forge's own (Maya sculpts with tools)
 SETS = {
@@ -136,6 +141,7 @@ SETS = {
     "sculpting": {"label": "Sculpting", "menus": ["Sculpt", "Mesh Tools", "Mesh Display"]},
     "animation": {"label": "Animation", "menus": ["Key", "Playback"]},
     "rendering": {"label": "Rendering", "menus": ["Render"]},
+    "level": {"label": "Level", "menus": ["Level"]},
 }
 MARKING = {"object": "Shift+RMB object", "vertex": "Shift+RMB vertex", "edge": "Shift+RMB edge", "face": "Shift+RMB face",
            "empty": "Shift+RMB default"}
