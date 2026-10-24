@@ -28,10 +28,17 @@ checkout on Xero, then do the LOKI merge as a separate step. A problem in one st
 **A. Build and open the editor (no LOKI repo involved)** - Xero must be mounted (`ls /Volumes/Xero`), else stop and say so.
 - [ ] Get the code (a fresh clone, so the LOKI checkout and its uncommitted work are untouched):
   `D=/Volumes/Xero/carbon_mmo; mkdir -p $D; if [ -d $D/src/.git ]; then git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD; else git clone --depth 1 --branch agent/carbon-editor https://github.com/m03dev/loki.git $D/src; fi`
-- [ ] Pick a real Python (Apple's /usr/bin/python3 is 3.9 - too old): `PY=$(command -v python3.13 || command -v python3.12 || command -v python3.14)`; `$PY --version` must say 3.10-3.14.
+- [ ] Pick a real **arm64** Python (Apple's /usr/bin/python3 is 3.9 - too old; an Intel/Rosetta Python in /usr/local
+  gives "symbols not found for architecture arm64" at link time - your 22:30 failure):
+  `PY=$(ls /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.14 2>/dev/null | head -1)`;
+  `$PY -c "import platform,sys;print(platform.machine(),sys.version)"` must print `arm64 3.1x`. If there's no
+  /opt/homebrew Python: `brew install python@3.13` (arm64 Homebrew). `file "$($PY -c 'import sys;print(sys.executable)')"` must not say x86_64 only.
 - [ ] Build (fresh build dir; the editor overhaul added cgltf + fonts, an old cache can confuse CMake):
-  `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=$PY && cmake --build $D/build -j`
-  Fails? Report the FIRST line containing `error` (`cmake --build $D/build 2>&1 | grep -m1 -B2 -A6 error`) and stop A. Don't edit C++.
+  `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DPython3_EXECUTABLE=$PY && cmake --build $D/build -j 2>&1 | tee $D/build.log | tail -3`
+  Fails? Report the 15 lines before the first error - they name the missing symbols and the library they were
+  expected in: `grep -m1 -B15 -A3 "error" $D/build.log`, plus `grep -m1 "Found Python3" $D/build.log`. Don't edit C++.
+  (Checked: the same code configures, builds, links and passes its tests on GitHub's macOS arm64 runner - a link
+  error on the Mac means the Mac's toolchain/Python, not the code.)
 - [ ] Test (about 10 s): `$PY $D/src/native/carbon_mmo/run_tests.py --build-dir $D/build` -> 7 PASS lines, ALL OK.
   The screenshots are in $D/build/selftest/ (editor_editor.png, editor_terrain.png, editor_play.png).
 - [ ] Open it for the owner (hidden launcher, no Terminal window): `rm -f $D/cmmo_editor_layout.ini; mkdir -p $D/content; cd $D && nohup ./build/bin/cmmo_editor --content $D/content >$D/editor.log 2>&1 &`
