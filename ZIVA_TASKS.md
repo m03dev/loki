@@ -19,27 +19,32 @@ numbers refer to it).
 
 ## Requests
 
-### DO FIRST - From Claude (2026-10-24 15:00) - the engine editor (Forge Level workspace, WoW-style world). [mac]
+### DO FIRST - From Claude (2026-10-24 15:30) - the Carbon MMO engine EDITOR (native C++) on the Mac. [mac]
 
-Owner: "i just want a engine editor going first ... its gonna be an rpg like world of warcraft". **The LOKI repo on the
-Mac is `~/Documents/loki`** (-> /Volumes/LokiSSD/loki; open the sparse image if LokiSSD isn't mounted). `~/Loki` is NOT
-the repo - never `git init` there; `~/Loki/native/carbon_mmo` is the Carbon MMO build that already works (leave it).
+Owner: "i just want a engine editor going first ... its gonna be an rpg like world of warcraft", then chose a **new
+native C++ editor** on the Carbon engine. It is in `native/carbon_mmo/` (read its README "The engine editor").
 
-- [ ] `cd ~/Documents/loki && git remote -v` shows github.com/m03dev/loki. `git stash -u` if there are local changes.
-- [ ] `git fetch origin && git merge --no-ff origin/agent/forge-level` (it has the editor, the WoW world AND the
-  rewritten AGENTS.md - read AGENTS.md after merging).
-- [ ] `harness_data/.venv/bin/python tools/ship.py -m "merge agent/forge-level: Forge Level editor + WoW world + new rules"`.
-  If a suite fails: paste its FAIL lines under this request, don't change tests. If it pushed:
-  `git push origin --delete agent/forge-level agent/rules-2026-10-24 agent/forge-rpg`.
-- [ ] Restart LOKI the normal way (no Terminal window), Forge > Workspace > Level. Then by hand (the owner will try it
-  too - report what feels wrong):
-  1. Terrain > Raise, drag on the ground (Alt-drag still orbits). Paint with dirt / rock.
-  2. Place Actors: Player Start, Creature Spawn (move it a bit away).
-  3. Alt+P: third person. W/S, A/D turn, Q/E strafe, right-drag turns, left-drag looks, wheel zooms, Space jumps.
-     Walk to the creatures: they attack, run away: they go home. Esc stops - everything goes back.
-  4. Save Level, open it again from the Content Browser.
-  Cloud checks (Claude): tests/test_forge_level_ui.py 25/25, node tests/js/test_forge_level.js 44/44, the other Forge
-  suites unchanged. Never verified on a real Mac: mouse feel, frame rate on a big terrain.
+**The LOKI repo on the Mac is `~/Documents/loki`** (-> /Volumes/LokiSSD/loki; open the sparse image if LokiSSD isn't
+mounted). `~/Loki` is NOT the repo - never `git init` there. Builds go on **/Volumes/Xero** (the Mac's drive is full).
+
+- [ ] `cd ~/Documents/loki && git remote -v` (github.com/m03dev/loki), `git stash -u` if needed,
+  `git fetch origin && git merge --no-ff origin/agent/carbon-editor` - ONE merge: it contains agent/forge-level
+  (Forge Level workspace), agent/rules-2026-10-24 (new AGENTS.md - read it) and the engine editor.
+- [ ] `harness_data/.venv/bin/python tools/ship.py -m "merge agent/carbon-editor: Carbon engine editor + Forge Level + new rules"`.
+  If a suite fails, paste its FAIL lines here; don't change tests. If it pushed:
+  `git push origin --delete agent/carbon-editor agent/forge-level agent/forge-rpg agent/rules-2026-10-24`.
+- [ ] Build the engine + editor on Xero (no C++ edits; pybind11 3.1.0 is already pinned):
+  `PY=$(command -v python3.13 || command -v python3.14 || command -v python3.12)`
+  `rm -rf /Volumes/Xero/carbon_mmo/build && cmake -S ~/Documents/loki/native/carbon_mmo -B /Volumes/Xero/carbon_mmo/build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=$PY && cmake --build /Volumes/Xero/carbon_mmo/build -j`
+  If it fails: the FIRST compiler error only, here.
+- [ ] Tests (under a minute): `$PY ~/Documents/loki/native/carbon_mmo/run_tests.py --build-dir /Volumes/Xero/carbon_mmo/build`
+  -> 7 PASS lines, ALL OK. The editor self-test saves screenshots in /Volumes/Xero/carbon_mmo/build/selftest/ - attach
+  editor.png and editor_play.png to your report.
+- [ ] Launch it for the owner (leave it open, no Terminal window visible):
+  `mkdir -p /Volumes/Xero/carbon_mmo/levels && cd /Volumes/Xero/carbon_mmo && nohup ./build/bin/cmmo_editor --levels /Volumes/Xero/carbon_mmo/levels >/dev/null 2>&1 &`
+  The old `~/Loki/native/carbon_mmo` copy is superseded by `~/Documents/loki/native/carbon_mmo` - leave it, don't delete.
+  Cloud checks (Claude, Linux headless): editor self-test 18/18, world 26/26, all 7 suites ALL OK. Never run on a Mac yet:
+  the real window, Retina scaling, Cmd shortcuts.
 
 ### From Claude (2026-10-23 04:20) - fast local models on the Mac mini (2 TB SSD): colibri + TurboFieldfare. [mac]
 
