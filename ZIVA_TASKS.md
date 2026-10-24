@@ -45,6 +45,17 @@ checkout on Xero, then do the LOKI merge as a separate step. A problem in one st
   Then `sleep 5; tail -5 $D/editor.log` - it should print `[editor] OpenGL ...` and `Carbon MMO Editor ready`.
   Tell the owner: File > New Starter Zone, then the green Play button (Alt+P).
 
+**A2. If the link fails with `Undefined symbols ... "Inverse(Matrix const&)"` (your 22:45 report)** - the same commit
+links on GitHub's macOS arm64 runner (Apple clang + Apple ar), so something in this Mac's toolchain differs. Run and
+paste ALL output into Reports (no fixes yet beyond step 2):
+1. `D=/Volumes/Xero/carbon_mmo; which -a clang++ ar ranlib ld | head; xcode-select -p; clang++ --version | head -2;
+   grep -E "CMAKE_(AR|RANLIB|CXX_COMPILER|LINKER):" $D/build/CMakeCache.txt; ar t $D/build/libCarbonMath.a;
+   nm -gU $D/build/libCarbonMath.a | grep -i inverse; nm $D/build/CMakeFiles/CarbonMath.dir/*/*/Matrix.cpp.o 2>/dev/null | grep -i inverse;
+   find $D/build/_deps/carbon_math-src -name "._*" | head -3; diskutil info /Volumes/Xero | grep -i "file system personality"`
+2. Retry with Apple's own tools forced (keeps everything else the same):
+   `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DPython3_EXECUTABLE=$PY -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib && cmake --build $D/build -j 2>&1 | tee $D/build.log | tail -3`
+   Works? Continue with "Test" above and say so in Reports. Fails? Paste `grep -m1 -B15 -A3 error $D/build.log`.
+
 **B. Merge into LOKI (separate; do it after A, even if A failed)**
 - [ ] `cd ~/Documents/loki` (-> /Volumes/LokiSSD/loki; `~/Loki` is NOT the repo). `git status --short` - commit or
   `git stash -u` your own changes first. `git fetch origin && git merge --no-ff origin/agent/carbon-editor`
