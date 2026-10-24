@@ -38,4 +38,10 @@ jobs:
           tail -5 build.log
       - name: Tests (no window)
         shell: bash
-        run: python native/carbon_mmo/run_tests.py --build-dir build --no-editor
+        run: |
+          if ! python native/carbon_mmo/run_tests.py --build-dir build --no-editor > tests.log 2>&1; then
+            grep -E "FAIL|Error|error|Traceback|not found|No such" tests.log | head -25 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+            cat tests.log
+            exit 1
+          fi
+          cat tests.log
