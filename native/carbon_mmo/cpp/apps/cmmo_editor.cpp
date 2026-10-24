@@ -329,12 +329,12 @@ struct SelfTest
 			s.talkingTo = -1;
 			// go to the wolves, face them, Tab, 1
 			const auto& wolves = s.World().WorldPosition( s.World().FindByName( "Wolf Den" )->id );
-			int near = -1;
+			int closest = -1;
 			for( int i = 0; i < int( s.Creatures().size() ); ++i )
-				if( s.Creatures()[size_t( i )].kind == "Wolf" && ( near < 0 || Length( s.Creatures()[size_t( i )].position - wolves ) < Length( s.Creatures()[size_t( near )].position - wolves ) ) ) near = i;
-			if( near >= 0 )
+				if( s.Creatures()[size_t( i )].kind == "Wolf" && ( closest < 0 || Length( s.Creatures()[size_t( i )].position - wolves ) < Length( s.Creatures()[size_t( closest )].position - wolves ) ) ) closest = i;
+			if( closest >= 0 )
 			{
-				const Vector3 w = s.Creatures()[size_t( near )].position;
+				const Vector3 w = s.Creatures()[size_t( closest )].position;
 				s.SetPlayerPosition( Vector3( w.x, s.World().GroundAt( w.x, w.z + 3 ), w.z + 3 ) );
 			}
 			Key( ImGuiKey_Tab, true );
