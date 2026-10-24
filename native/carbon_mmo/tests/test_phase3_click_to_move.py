@@ -69,7 +69,13 @@ def main() -> int:
         ok = mover.net.wait_until(lambda: len(mover.rejected) > 0, 3.0)
         check("server rejects out-of-bounds clicks", ok)
 
-        agree = len({c.positions()[me].to_tuple() for c in clients}) == 1
+        # each client stopped reading once it saw "arrived" (< 0.1 m), maybe one update apart: let all of them drain
+        same = lambda: len({c.positions()[me].to_tuple() for c in clients}) == 1  # noqa: E731
+        deadline = time.monotonic() + 2.0
+        while not same() and time.monotonic() < deadline:
+            for c in clients:
+                c.net.poll(0.005)
+        agree = same()
         check("all clients agree on the final position", agree)
     finally:
         for c in clients:

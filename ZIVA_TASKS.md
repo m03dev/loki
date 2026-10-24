@@ -19,10 +19,14 @@ numbers refer to it).
 
 ## Requests
 
-### DO FIRST - From Claude (2026-10-24 15:30) - the Carbon MMO engine EDITOR (native C++) on the Mac. [mac]
+### DO FIRST - From Claude (2026-10-24, updated 22:10) - the Carbon MMO engine EDITOR (native C++) on the Mac. [mac]
 
 Owner: "i just want a engine editor going first ... its gonna be an rpg like world of warcraft", then chose a **new
-native C++ editor** on the Carbon engine. It is in `native/carbon_mmo/` (read its README "The engine editor").
+native C++ editor** on the Carbon engine, then: "more like a game engine ... UI huge overhaul ... modern, bevelled,
+high pixel density". It is in `native/carbon_mmo/` (read its README "The engine editor"). The 22:10 update is the
+overhaul: new theme (IBM Plex + Font Awesome icons at Retina density), Unreal toolbar with Play/Simulate/Pause/Stop,
+Godot scene tree (parenting, prefabs), Terrain3D-style terrain tools, Content Browser (levels, glTF models, prefabs),
+World Settings, and the MMO layer in Play (Tab target, abilities 1-4, quests with F, zones, XP, HUD + minimap).
 
 **The LOKI repo on the Mac is `~/Documents/loki`** (-> /Volumes/LokiSSD/loki; open the sparse image if LokiSSD isn't
 mounted). `~/Loki` is NOT the repo - never `git init` there. Builds go on **/Volumes/Xero** (the Mac's drive is full).
@@ -39,12 +43,15 @@ mounted). `~/Loki` is NOT the repo - never `git init` there. Builds go on **/Vol
   If it fails: the FIRST compiler error only, here.
 - [ ] Tests (under a minute): `$PY ~/Documents/loki/native/carbon_mmo/run_tests.py --build-dir /Volumes/Xero/carbon_mmo/build`
   -> 7 PASS lines, ALL OK. The editor self-test saves screenshots in /Volumes/Xero/carbon_mmo/build/selftest/ - attach
-  editor.png and editor_play.png to your report.
+  editor_editor.png, editor_terrain.png and editor_play.png to your report.
 - [ ] Launch it for the owner (leave it open, no Terminal window visible):
-  `mkdir -p /Volumes/Xero/carbon_mmo/levels && cd /Volumes/Xero/carbon_mmo && nohup ./build/bin/cmmo_editor --levels /Volumes/Xero/carbon_mmo/levels >/dev/null 2>&1 &`
+  `mkdir -p /Volumes/Xero/carbon_mmo/content && cd /Volumes/Xero/carbon_mmo && nohup ./build/bin/cmmo_editor --content /Volumes/Xero/carbon_mmo/content >/dev/null 2>&1 &`
+  Tell the owner: File > New Starter Zone, then the green Play button (or Alt+P). If an old `cmmo_editor_layout.ini`
+  exists in /Volumes/Xero/carbon_mmo, delete it first so the new panel layout appears.
   The old `~/Loki/native/carbon_mmo` copy is superseded by `~/Documents/loki/native/carbon_mmo` - leave it, don't delete.
-  Cloud checks (Claude, Linux headless): editor self-test 18/18, world 26/26, all 7 suites ALL OK. Never run on a Mac yet:
-  the real window, Retina scaling, Cmd shortcuts.
+  Cloud checks (Claude, Linux headless, Mesa GL): editor self-test 32/32, world 43/43, all 7 suites ALL OK in ~9 s.
+  Never run on a Mac yet: the real window, Retina font sharpness, Cmd shortcuts, the glTF loader on real Forge exports.
+  Report anything that looks blurry, overlaps, or is cut off (with a screenshot of the editor window only).
 
 ### From Claude (2026-10-23 04:20) - fast local models on the Mac mini (2 TB SSD): colibri + TurboFieldfare. [mac]
 

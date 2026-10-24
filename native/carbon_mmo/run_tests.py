@@ -46,7 +46,7 @@ def main():
             shots = os.path.join(args.build_dir, "selftest")
             os.makedirs(shots, exist_ok=True)
             suite.append(("editor   self-test (real UI, screenshots in build/selftest)",
-                          [editor, "--selftest", "--screenshot", os.path.join(shots, "editor.png"), "--levels", shots]))
+                          [editor, "--selftest", "--screenshot", os.path.join(shots, "editor.png"), "--content", os.path.join(shots, "content")]))
     suite += [
         ("phase 2  networking (binary codec)", [py, os.path.join(t, "test_phase2_net.py")]),
         ("phase 2  networking (json codec)", [py, os.path.join(t, "test_phase2_net.py"), "--codec", "json"]),

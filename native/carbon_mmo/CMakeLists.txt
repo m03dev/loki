@@ -128,8 +128,9 @@ if(CMMO_BUILD_EDITOR AND (CMMO_WITH_GLFW OR CMMO_EDITOR_EGL))
         target_link_libraries(cmmo_imgui PUBLIC ${CMAKE_DL_LIBS})
     endif()
 
-    add_library(cmmo_editor_lib STATIC cpp/editor/GL.cpp cpp/editor/Renderer.cpp cpp/editor/Editor.cpp)
-    target_include_directories(cmmo_editor_lib PUBLIC cpp ${CMAKE_SOURCE_DIR}/third_party/khronos)
+    add_library(cmmo_editor_lib STATIC cpp/editor/GL.cpp cpp/editor/Renderer.cpp cpp/editor/Theme.cpp cpp/editor/Editor.cpp)
+    target_include_directories(cmmo_editor_lib PUBLIC cpp ${CMAKE_SOURCE_DIR}/third_party/khronos ${CMAKE_SOURCE_DIR}/third_party/fonts ${cgltf_SOURCE_DIR})
+    target_compile_definitions(cmmo_editor_lib PRIVATE CMMO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     target_link_libraries(cmmo_editor_lib PUBLIC cmmo_world cmmo_imgui)
 
     add_executable(cmmo_editor cpp/apps/cmmo_editor.cpp cpp/script_host/ScriptHost.cpp cpp/script_host/EngineModule.cpp)
