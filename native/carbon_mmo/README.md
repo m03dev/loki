@@ -68,6 +68,10 @@ graphics; `test_world`), `cpp/editor/` (MODULE: editor, editor.render, editor.th
 Levels: nlohmann/json 3.11.3 (MIT). Models: cgltf 1.15 (MIT). Fonts in `third_party/fonts/`: IBM Plex Sans (OFL-1.1),
 Font Awesome 6 Free solid (OFL-1.1), IconFontCppHeaders (zlib).
 
+**Easiest build (Mac and Windows):** `python3 tools/build.py --open` picks an arm64 Python 3.10+, Apple's own
+compiler tools (or Visual Studio), builds on /Volumes/Xero when it is mounted, runs the tests and opens the editor.
+On failure it prints the first error and a toolchain diagnosis (`--doctor` prints only the diagnosis).
+
 ## Status
 
 | Phase | What | Verified |

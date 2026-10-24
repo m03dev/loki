@@ -1,5 +1,6 @@
 // MODULE: tests (world core)
 // The engine's world model without any graphics: terrain, scene, level files, Play.  Prints WORLD OK.
+#include <filesystem>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -124,7 +125,7 @@ int main()
 	s.Remove( s.FindByName( "Shape2" )->id );
 	Check( "Pick finds the shape the ray goes through", s.Pick( Vector3( 30, 1, 50 ), Vector3( 0, 0, -1 ) ) == boxId );
 	Check( "Pick finds the terrain under the cursor", s.Pick( Vector3( 0, 50, 0 ), Vector3( 0, -1, 0 ) ) == tid );
-	const std::string path = "/tmp/cmmo_test_level.json";
+	const std::string path = ( std::filesystem::temp_directory_path() / "cmmo_test_level.json" ).string();   // Windows has no /tmp
 	std::string err;
 	Check( "SaveLevel writes the level", SaveLevel( s, path, &err ), err );
 	Scene back;

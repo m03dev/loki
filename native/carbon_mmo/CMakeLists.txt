@@ -35,6 +35,13 @@ include(cmake/CarbonDeps.cmake)
 # MODULE: math - Carbon math (vendored by fetch, compiled as-is, no patches)
 # ---------------------------------------------------------------------------
 file(GLOB CARBON_MATH_SOURCES CONFIGURE_DEPENDS "${carbon_math_SOURCE_DIR}/src/*.cpp")
+# macOS writes "._Name.cpp" metadata files next to every file on exFAT / FAT drives (e.g. an external build drive).
+# They are not C++: never compile them.
+list(FILTER CARBON_MATH_SOURCES EXCLUDE REGEX "/\\._[^/]*$")
+list(LENGTH CARBON_MATH_SOURCES _n_math)
+if(NOT _n_math EQUAL 10)
+    message(WARNING "Carbon math: expected 10 source files, found ${_n_math}: ${CARBON_MATH_SOURCES}")
+endif()
 add_library(CarbonMath STATIC ${CARBON_MATH_SOURCES})
 target_include_directories(CarbonMath PUBLIC "${carbon_math_SOURCE_DIR}/include")
 target_link_libraries(CarbonMath PUBLIC cmmo_directxmath)
