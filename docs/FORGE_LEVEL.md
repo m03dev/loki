@@ -10,7 +10,9 @@ the Level workspace adds Unreal-style level editing on top of the same scene and
 | Content Browser | the workspace's `models/` (.glb) placed as mesh actors; saved `.level` files to open |
 | Details | the selected node's settings, tags and scripts; any Forge object gets a script with Add Script |
 | Blueprints (code side) | scripts per actor: `start`, `update(dt)`, `stop`, `keydown`, `keyup`, `pointerdown`, `beginOverlap(other)`, `endOverlap(other)`; `this` is the actor; `level.find / findTagged / spawn / destroy / log / viewFrom / stop`, `input.down(key)`, `THREE`, `scene` |
-| Play in Editor (Alt+P) | possesses the Player Start: W A S D, mouse look (click the view), Shift runs, fly mode adds Q / E; Esc stops |
+| Landscape mode | **Terrain** actor + the Terrain brush: Raise, Lower, Smooth, Flatten, Paint (grass, dirt, rock, snow, sand), radius and strength; heights and paint are saved in the level |
+| Spawners | **Creature Spawn**: creatures wander inside its ring; hostile ones attack when you come close and leash back home when you run (WoW evade) |
+| Play in Editor (Alt+P) | possesses the Player Start. Third person by default with WoW controls: W / S move, A / D turn, Q / E strafe, right-drag turns you, left-drag orbits the camera, wheel zooms, Space jumps, Shift runs, feet stay on the terrain. Player Start's `mode` can also be `walk` (first person, click to look) or `fly`. Esc stops |
 | Simulate | scripts run, the editor camera stays |
 | Stop | every object back exactly as it was: transforms, visibility, settings, spawned and destroyed actors |
 | Save Current Level | `models/<name>.level` (JSON "loki-level" v1, never overwrites) |
@@ -36,5 +38,6 @@ engine as Forge - written fresh, no code copied.
 
 - A modeled Forge object with a script but no model file is skipped when a level is opened: export it to
   `models/` first (Save Level says so).
-- Physics and collision (the player walks through walls), prefabs, a node graph for logic (Forge's node graph
+- Collision with placed meshes (the player walks through walls; terrain is solid), combat, health and loot, nameplates,
+  terrain undo (Forge's Ctrl+Z doesn't undo brush strokes yet), prefabs, a node graph for logic (Forge's node graph
   could drive it), and export of a level to Godot or the Carbon MMO server (`native/carbon_mmo`).
