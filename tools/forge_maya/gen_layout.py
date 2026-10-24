@@ -131,7 +131,7 @@ OWN_MENUS = {
     "Render": ["renderDialog", "renderPreview", "-", "renderStudio", "bakeMaps"],
     # the Level workspace (forge_level.js) - Unreal-style level editing, Forge's own menu set
     "Level": ["levelWorkspace", "-", "levelPlay", "levelSimulate", "levelStop", "-",
-              ["Place Actors", ["placeEmpty", "placePlayerStart", "placeTriggerBox", "placeCamera", "-",
+              ["Place Actors", ["placeTerrain", "placeNpcSpawn", "-", "placeEmpty", "placePlayerStart", "placeTriggerBox", "placeCamera", "-",
                                 "placePointLight", "placeDirLight", "placeSpotLight"]],
               "-", "levelCheckScripts", "levelSave"],
 }

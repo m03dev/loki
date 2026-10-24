@@ -907,6 +907,9 @@ const FORGE_MAYA = {
    [
     "Place Actors",
     [
+     "placeTerrain",
+     "placeNpcSpawn",
+     "-",
      "placeEmpty",
      "placePlayerStart",
      "placeTriggerBox",

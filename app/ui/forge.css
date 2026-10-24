@@ -1443,3 +1443,6 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 #forge .forge-levelpanel .flv-log { max-height: 140px; overflow: auto; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #b9c0c8; }
 #forge .forge-levelpanel .flv-logline.bad, #forge .forge-levelpanel .flv-status.bad { color: #ff8a7a; }
 #forge canvas.flv-playcanvas { outline: 2px solid #3ddc84; outline-offset: -2px; }
+#forge .forge-levelpanel .flv-paint { font-size: 11px; padding: 2px 6px; color: #d8dbe0; background: #2b2c2f; border: 1px solid #3a3c40; border-radius: 3px; cursor: pointer; }
+#forge .forge-levelpanel .fuv-set-row input[type="range"] { min-width: 0; }
+#forge .forge-levelpanel .forge-btn.on { background: #2f7fd0; }

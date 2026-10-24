@@ -8,7 +8,11 @@
 //   scripts     the three.js editor's model (MIT, mrdoob/three.js editor/js/libs/app.js): each script defines
 //               start / update(dt) / stop / keydown / keyup / pointerdown / beginOverlap / endOverlap with
 //               `this` = the actor. A script that throws is switched off and reported - Play never crashes the editor.
+//   world       (owner 2026-10-24: "its gonna be an rpg like world of warcraft") Terrain you sculpt and paint
+//               (heights + colours stored in the level), Creature Spawns that wander and, when hostile, chase.
 //   play        Play in Editor (possess the Player Start) and Simulate (scripts run, editor camera stays).
+//               Third person by default, WoW controls: right-drag turns, left-drag orbits the camera, wheel
+//               zooms, W/S move, A/D turn (strafe while right-dragging), Q/E strafe, Space jumps, feet on the ground.
 //               Stop puts every object back exactly as it was: transforms, visibility, props, spawned and
 //               destroyed actors.
 "use strict";
@@ -57,8 +61,8 @@
     },
     playerStart: {
       label: "Player Start", icon: "person", group: "Basic",
-      what: "Where Play puts you. Walk with W A S D, look with the mouse, fly mode adds Q / E.",
-      props: { speed: 5, eyeHeight: 1.7, mode: "walk" },
+      what: "Where Play puts you. Third person (WoW controls), first-person walk, or fly.",
+      props: { speed: 5, eyeHeight: 1.7, mode: "third", jump: 6, camDist: 7 },
       make: (T) => {
         const g = new T.Group();
         g.userData.lokiEditorOnly = true; // the whole marker is a gizmo
@@ -87,7 +91,178 @@
       },
       apply: (o, p) => o.children[0] && o.children[0].scale.set(p.size[0], p.size[1], p.size[2]),
     },
+    terrain: {
+      label: "Terrain", icon: "level", group: "World",
+      what: "Ground you sculpt (raise, lower, smooth, flatten) and paint (grass, dirt, rock, snow). Play walks on it.",
+      props: { size: 128, res: 64, heights: "", colors: "" },
+      make: (T, p) => {
+        const g = new T.Group();
+        const m = new T.Mesh(new T.BufferGeometry(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+        m.name = "terrain"; m.receiveShadow = true;
+        g.add(m);
+        buildTerrain(T, g, p);
+        return g;
+      },
+      apply: (o, p) => { const T = o.userData.__T; if (T) buildTerrain(T, o, p); },
+    },
+    npcSpawn: {
+      label: "Creature Spawn", icon: "person", group: "World",
+      what: "Creatures appear here in Play and wander inside the ring; hostile ones chase you when you come close.",
+      props: { creature: "Wolf", level: 1, hostile: true, count: 3, wander: 6, speed: 2.5, aggro: 9, color: "#b5452f" },
+      make: (T, p) => {
+        const g = new T.Group();
+        g.userData.lokiEditorOnly = true;
+        const ring = new T.Mesh(new T.RingGeometry(0.97, 1, 48), new T.MeshBasicMaterial({ color: p.color, side: T.DoubleSide, transparent: true, opacity: 0.8 }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; ring.scale.setScalar(p.wander);
+        const pin = new T.Mesh(new T.ConeGeometry(0.3, 0.8, 10), new T.MeshBasicMaterial({ color: p.color }));
+        pin.rotation.x = Math.PI; pin.position.y = 1.2;
+        g.add(ring, pin);
+        return g;
+      },
+      apply: (o, p) => { const [ring, pin] = o.children; if (ring) { ring.scale.setScalar(p.wander); ring.material.color.set(p.color); } if (pin) pin.material.color.set(p.color); },
+    },
   };
+
+  // ---------------------------------------------------------------------- terrain
+  // A height grid of (res+1)^2 vertices over size x size metres, centred on the actor. Heights (float32) and colours
+  // (rgb bytes) live in props as base64 so the level file carries them; the decoded arrays sit on the visual.
+  const PAINT = { grass: "#4f7a32", dirt: "#7a5a3a", rock: "#7d7d7a", snow: "#eef2f5", sand: "#c9b27c" };
+  const b64 = {
+    enc(bytes) {
+      if (typeof Buffer !== "undefined") return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
+      let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return btoa(s);
+    },
+    dec(str) {
+      if (typeof Buffer !== "undefined") { const b = Buffer.from(str, "base64"); return new Uint8Array(b.buffer, b.byteOffset, b.byteLength); }
+      const s = atob(str), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out;
+    },
+  };
+
+  function terrainArrays(p) {
+    const n = (p.res + 1) * (p.res + 1);
+    let h = null, c = null;
+    try { if (p.heights) { const raw = b64.dec(p.heights); if (raw.length === n * 4) h = new Float32Array(raw.slice().buffer); } } catch (_) { h = null; }
+    try { if (p.colors) { const raw = b64.dec(p.colors); if (raw.length === n * 3) c = raw.slice(); } } catch (_) { c = null; }
+    if (!h) h = new Float32Array(n);
+    if (!c) { c = new Uint8Array(n * 3); const g = hexRgb(PAINT.grass); for (let i = 0; i < n; i++) c.set(g, i * 3); }
+    return { h, c };
+  }
+  function hexRgb(hex) { const v = parseInt(String(hex).replace("#", ""), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+
+  function buildTerrain(T, vis, p) {
+    vis.userData.__T = T;
+    const res = Math.max(4, Math.min(256, p.res | 0)), size = +p.size || 128;
+    p.res = res;
+    const { h, c } = vis.userData.__terrain && vis.userData.__terrain.res === res && !p.__reload ? vis.userData.__terrain : terrainArrays(p);
+    delete p.__reload;
+    const mesh = vis.getObjectByName("terrain");
+    const geo = new T.PlaneGeometry(size, size, res, res);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, h[i]);
+    const col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < col.length; i++) col[i] = c[i] / 255;
+    geo.setAttribute("color", new T.BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    if (mesh.geometry) mesh.geometry.dispose();
+    mesh.geometry = geo;
+    vis.userData.__terrain = { res, size, h, c };
+  }
+
+  // the terrain actors' data: [{ obj, vis, t }]
+  function terrains(scene) {
+    const out = [];
+    for (const o of actors(scene)) {
+      if (actorOf(o).actor !== "terrain") continue;
+      const vis = visualOf(o);
+      if (vis && vis.userData.__terrain && o.parent) out.push({ obj: o, vis, t: vis.userData.__terrain });
+    }
+    return out;
+  }
+
+  // world point -> terrain grid coordinates (fractional), or null when outside
+  function gridOf(T, item, x, z) {
+    item.vis.updateWorldMatrix(true, false);
+    const local = new T.Vector3(x, 0, z).applyMatrix4(new T.Matrix4().copy(item.vis.matrixWorld).invert());
+    const { res, size } = item.t;
+    const gx = (local.x / size + 0.5) * res, gz = (local.z / size + 0.5) * res;
+    if (gx < 0 || gz < 0 || gx > res || gz > res) return null;
+    return { gx, gz, local };
+  }
+
+  // The ground height under (x, z): the highest terrain there, or null when no terrain covers it.
+  function heightAt(T, scene, x, z, list) {
+    let best = null;
+    for (const item of list || terrains(scene)) {
+      const g = gridOf(T, item, x, z); if (!g) continue;
+      const { res, h } = item.t, n = res + 1;
+      const x0 = Math.min(res - 1, Math.floor(g.gx)), z0 = Math.min(res - 1, Math.floor(g.gz));
+      const fx = g.gx - x0, fz = g.gz - z0;
+      const at = (i, j) => h[j * n + i];
+      const hy = (at(x0, z0) * (1 - fx) + at(x0 + 1, z0) * fx) * (1 - fz) + (at(x0, z0 + 1) * (1 - fx) + at(x0 + 1, z0 + 1) * fx) * fz;
+      const wy = new T.Vector3(g.local.x, hy, g.local.z).applyMatrix4(item.vis.matrixWorld).y;
+      if (best === null || wy > best) best = wy;
+    }
+    return best;
+  }
+
+  // One brush dab at a world point. mode: raise | lower | smooth | flatten | paint. Returns vertices changed.
+  function sculpt(T, terrainObj, point, brush) {
+    const vis = visualOf(terrainObj); if (!vis || !vis.userData.__terrain) return 0;
+    const item = { obj: terrainObj, vis, t: vis.userData.__terrain };
+    const g = gridOf(T, item, point.x, point.z);
+    const { res, size, h, c } = item.t, n = res + 1, cell = size / res;
+    const lx = g ? g.local.x : new T.Vector3(point.x, 0, point.z).applyMatrix4(new T.Matrix4().copy(vis.matrixWorld).invert()).x;
+    const lz = g ? g.local.z : new T.Vector3(point.x, 0, point.z).applyMatrix4(new T.Matrix4().copy(vis.matrixWorld).invert()).z;
+    const r = Math.max(cell * 0.5, +brush.radius || 4), str = +brush.strength || 0.5;
+    const i0 = Math.max(0, Math.floor(((lx - r) / size + 0.5) * res)), i1 = Math.min(res, Math.ceil(((lx + r) / size + 0.5) * res));
+    const j0 = Math.max(0, Math.floor(((lz - r) / size + 0.5) * res)), j1 = Math.min(res, Math.ceil(((lz + r) / size + 0.5) * res));
+    const rgb = brush.mode === "paint" ? hexRgb(PAINT[brush.color] || brush.color || PAINT.grass) : null;
+    const target = brush.mode === "flatten" ? (brush.height != null ? brush.height : heightAt(T, null, point.x, point.z, [item]) || 0) : 0;
+    const old = brush.mode === "smooth" ? h.slice() : null;
+    let changed = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const vx = (i / res - 0.5) * size, vz = (j / res - 0.5) * size;
+      const d = Math.hypot(vx - lx, vz - lz); if (d > r) continue;
+      const f = 0.5 + 0.5 * Math.cos(Math.PI * d / r);           // smooth falloff 1 -> 0
+      const k = j * n + i;
+      if (brush.mode === "raise") h[k] += str * f;
+      else if (brush.mode === "lower") h[k] -= str * f;
+      else if (brush.mode === "flatten") h[k] += (target - h[k]) * Math.min(1, str * f);
+      else if (brush.mode === "smooth") {
+        let s = 0, m = 0;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii > res || jj > res) continue;
+          s += old[jj * n + ii]; m++;
+        }
+        h[k] += (s / m - h[k]) * Math.min(1, str * f);
+      } else if (rgb) {
+        const w = Math.min(1, str * f);
+        for (let q = 0; q < 3; q++) c[k * 3 + q] = Math.round(c[k * 3 + q] + (rgb[q] - c[k * 3 + q]) * w);
+      } else continue;
+      changed++;
+    }
+    if (changed) {
+      const mesh = vis.getObjectByName("terrain"), pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color;
+      for (let k = 0; k < pos.count; k++) { pos.setY(k, h[k]); col.setXYZ(k, c[k * 3] / 255, c[k * 3 + 1] / 255, c[k * 3 + 2] / 255); }
+      pos.needsUpdate = true; col.needsUpdate = true;
+      if (brush.mode !== "paint") { mesh.geometry.computeVertexNormals(); mesh.geometry.computeBoundingSphere(); mesh.geometry.computeBoundingBox(); }
+    }
+    return changed;
+  }
+
+  // Write a terrain's live arrays back into its props (before saving the level).
+  function commitTerrain(terrainObj) {
+    const a = actorOf(terrainObj), vis = visualOf(terrainObj);
+    if (!a || !vis || !vis.userData.__terrain) return;
+    const { h, c } = vis.userData.__terrain;
+    a.props.heights = b64.enc(new Uint8Array(h.buffer, h.byteOffset, h.byteLength));
+    a.props.colors = b64.enc(c);
+  }
+
+  // A seeded random (creature wandering is the same every Play with the same seed - tests rely on it)
+  function rng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
 
   const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
@@ -156,6 +331,7 @@
   // ---------------------------------------------------------------------- level files
   function serialize(scene, meta) {
     const list = actors(scene);
+    for (const o of list) if (actorOf(o).actor === "terrain") commitTerrain(o);
     const ids = new Map(list.map((o, i) => [o, i + 1]));
     const parentId = (o) => {
       for (let p = o.parent; p && p !== scene; p = p.parent) if (ids.has(p)) return ids.get(p);
@@ -184,7 +360,7 @@
     const byId = new Map(), made = [];
     for (const rec of doc.actors) {
       let obj;
-      if (ACTORS[rec.type]) obj = createActor(T, rec.type, { props: rec.props });
+      if (ACTORS[rec.type]) obj = createActor(T, rec.type, { props: clone(rec.props) });
       else {
         obj = new T.Group();
         const vis = rec.asset && opts.loadAsset ? await opts.loadAsset(rec.asset) : null;
@@ -350,36 +526,148 @@
       }
     }
 
+    // ---- the player: third person (WoW) by default, or first-person walk / fly
+    let mode = "third", camYaw = 0, camPitch = -0.35, camDist = 7, vy = 0, onGround = true, rmb = false;
+    let world = [];             // the terrains, looked up once per Play
+    const camTarget = new T.Vector3(), camPos = new T.Vector3();
+    function groundAt(x, z, fallback) { const h = heightAt(T, scene, x, z, world); return h === null ? fallback : h; }
+
     function makePlayer() {
       const start = actors(scene).find((o) => actorOf(o).actor === "playerStart");
-      const props = start ? actorOf(start).props : clone(ACTORS.playerStart.props);
+      const props = Object.assign(clone(ACTORS.playerStart.props), start ? actorOf(start).props : {});
       player = new T.Group(); player.name = "Player";
       player.userData.loki = { actor: "player", props, scripts: [], tags: ["overlap"] };
       const sp = new T.Vector3(), sq = new T.Quaternion();
       if (start) { start.getWorldPosition(sp); start.getWorldQuaternion(sq); }
+      player.userData.baseY = sp.y;
+      const g = groundAt(sp.x, sp.z, null); if (g !== null && g > sp.y) sp.y = g;
       player.position.copy(sp);
       yaw = new T.Euler().setFromQuaternion(sq, "YXZ").y; pitch = 0;
-      playerCam = new T.PerspectiveCamera(70, opts.aspect || 16 / 9, 0.05, 2000);
-      playerCam.position.y = props.eyeHeight;
-      player.add(playerCam);
+      mode = props.mode === "walk" || props.mode === "fly" ? props.mode : "third";
+      camYaw = yaw; camPitch = -0.35; camDist = +props.camDist || 7; vy = 0; onGround = true;
+      playerCam = new T.PerspectiveCamera(70, opts.aspect || 16 / 9, 0.05, 4000);
+      if (mode === "third") {
+        const body = new T.Mesh(new T.CapsuleGeometry(0.35, 1.1, 6, 14), new T.MeshStandardMaterial({ color: 0x3b6fd6, roughness: 0.6 }));
+        body.position.y = 0.9; body.name = "body";
+        const nose = new T.Mesh(new T.ConeGeometry(0.12, 0.35, 10), new T.MeshStandardMaterial({ color: 0xf2c14e }));
+        nose.rotation.x = -Math.PI / 2; nose.position.set(0, 1.45, -0.38);
+        player.add(body, nose);
+        scene.add(playerCam); spawned.push(playerCam);
+      } else {
+        playerCam.position.y = props.eyeHeight;
+        player.add(playerCam);
+      }
       scene.add(player); spawned.push(player);
+      placeCamera();
+    }
+
+    function placeCamera() {
+      if (!player || mode !== "third") return;
+      const p = actorOf(player).props;
+      camTarget.copy(player.position); camTarget.y += 1.6;
+      const cp = Math.cos(camPitch);
+      camPos.set(Math.sin(camYaw) * cp, -Math.sin(camPitch), Math.cos(camYaw) * cp).multiplyScalar(camDist).add(camTarget);
+      const gy = groundAt(camPos.x, camPos.z, -Infinity);
+      if (camPos.y < gy + 0.4) camPos.y = gy + 0.4;            // never under the ground
+      playerCam.position.copy(camPos);
+      playerCam.lookAt(camTarget);
+      void p;
     }
 
     function movePlayer(dt) {
       if (!player) return;
       const p = actorOf(player).props;
-      player.rotation.set(0, yaw, 0); playerCam.rotation.set(pitch, 0, 0, "YXZ");
-      fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw));
-      const step = p.speed * dt * (input.down("shift") ? 2 : 1);
-      if (input.down("w")) player.position.addScaledVector(fwd, step);
-      if (input.down("s")) player.position.addScaledVector(fwd, -step);
-      if (input.down("d")) player.position.addScaledVector(right, step);
-      if (input.down("a")) player.position.addScaledVector(right, -step);
-      if (p.mode === "fly") {
-        if (input.down("e")) player.position.y += step;
-        if (input.down("q")) player.position.y -= step;
+      const run = p.speed * (input.down("shift") ? 2 : 1);
+      if (mode === "third") {
+        // WoW: A / D turn (strafe while the right button is held), Q / E strafe, W / S forward / back (back is slower)
+        if (!rmb) { if (input.down("a")) { yaw += 2.6 * dt; camYaw += 2.6 * dt; } if (input.down("d")) { yaw -= 2.6 * dt; camYaw -= 2.6 * dt; } }
+        fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+        const mv = new T.Vector3();
+        if (input.down("w") || (rmb && input.down("lmb"))) mv.add(fwd);
+        if (input.down("s")) mv.addScaledVector(fwd, -0.65);
+        if (input.down("e") || (rmb && input.down("d"))) mv.add(right);
+        if (input.down("q") || (rmb && input.down("a"))) mv.sub(right);
+        if (mv.lengthSq() > 1) mv.normalize();
+        player.position.addScaledVector(mv, run * dt);
+        player.rotation.set(0, yaw, 0);
+      } else {
+        player.rotation.set(0, yaw, 0); playerCam.rotation.set(pitch, 0, 0, "YXZ");
+        fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+        const step = run * dt;
+        if (input.down("w")) player.position.addScaledVector(fwd, step);
+        if (input.down("s")) player.position.addScaledVector(fwd, -step);
+        if (input.down("d")) player.position.addScaledVector(right, step);
+        if (input.down("a")) player.position.addScaledVector(right, -step);
+        if (mode === "fly") {
+          if (input.down("e")) player.position.y += step;
+          if (input.down("q")) player.position.y -= step;
+          return;
+        }
+      }
+      // gravity, jumping, feet on the terrain (or on the Player Start's height where there is no terrain)
+      const ground = groundAt(player.position.x, player.position.z, player.userData.baseY);
+      if (input.down(" ") && onGround) { vy = +p.jump || 6; onGround = false; }
+      vy -= 20 * dt;
+      player.position.y += vy * dt;
+      if (player.position.y <= ground) { player.position.y = ground; vy = 0; onGround = true; }
+      placeCamera();
+    }
+
+    // ---- creatures (Creature Spawn actors)
+    const creatures = [];
+    const random = rng(opts.seed || 1234567);
+    function spawnCreatures() {
+      for (const sp of actors(scene).filter((o) => actorOf(o).actor === "npcSpawn" && o.parent)) {
+        const p = Object.assign(clone(ACTORS.npcSpawn.props), actorOf(sp).props);
+        const home = sp.getWorldPosition(new T.Vector3());
+        for (let i = 0; i < Math.max(0, Math.min(50, p.count | 0)); i++) {
+          const c = new T.Group(); c.name = p.creature + (p.count > 1 ? " " + (i + 1) : "");
+          const body = new T.Mesh(new T.CapsuleGeometry(0.35, 0.7, 5, 10), new T.MeshStandardMaterial({ color: p.color, roughness: 0.7 }));
+          body.rotation.z = Math.PI / 2; body.position.y = 0.55;
+          const head = new T.Mesh(new T.SphereGeometry(0.28, 10, 8), new T.MeshStandardMaterial({ color: p.color, roughness: 0.7 }));
+          head.position.set(0, 0.8, -0.65);
+          c.add(body, head);
+          const a = random() * Math.PI * 2, r = Math.sqrt(random()) * p.wander;
+          c.position.set(home.x + Math.cos(a) * r, 0, home.z + Math.sin(a) * r);
+          c.position.y = groundAt(c.position.x, c.position.z, home.y);
+          c.userData.loki = { actor: "creature", props: { creature: p.creature, level: p.level, hostile: !!p.hostile }, scripts: [], tags: ["overlap", "creature"] };
+          scene.add(c); spawned.push(c);
+          creatures.push({ obj: c, p, home, target: null, wait: random() * 2, state: "idle" });
+        }
       }
     }
+    function moveCreatures(dt) {
+      for (const cr of creatures) {
+        const o = cr.obj; if (!o.parent) continue;
+        const toPlayer = player ? player.position.distanceTo(o.position) : Infinity;
+        const fromHome = o.position.distanceTo(cr.home);
+        if (cr.p.hostile && player && (cr.state === "chase" ? toPlayer < cr.p.aggro * 2.5 && fromHome < cr.p.wander + 30 : toPlayer < cr.p.aggro)) {
+          if (cr.state !== "chase") { cr.state = "chase"; log(o.name + " attacks!"); }
+          cr.target = toPlayer > 1.6 ? player.position.clone() : null;
+        } else if (cr.state === "chase") {
+          cr.state = "return"; cr.target = cr.home.clone();                   // leashed: back home (WoW evade)
+        } else if (!cr.target) {
+          cr.wait -= dt;
+          if (cr.wait <= 0) {
+            const a = random() * Math.PI * 2, r = Math.sqrt(random()) * cr.p.wander;
+            cr.target = new T.Vector3(cr.home.x + Math.cos(a) * r, 0, cr.home.z + Math.sin(a) * r);
+            cr.wait = 2 + random() * 3; cr.state = "wander";
+          }
+        }
+        if (cr.target) {
+          const d = new T.Vector3(cr.target.x - o.position.x, 0, cr.target.z - o.position.z);
+          const len = d.length(), speed = cr.p.speed * (cr.state === "chase" ? 2.2 : cr.state === "return" ? 3 : 1);
+          if (len < 0.15) { cr.target = null; if (cr.state === "return") cr.state = "idle"; }
+          else {
+            d.multiplyScalar(Math.min(len, speed * dt) / len);
+            o.position.add(d);
+            o.rotation.y = Math.atan2(-d.x, -d.z);
+          }
+        }
+        o.position.y = groundAt(o.position.x, o.position.z, cr.home.y);
+      }
+    }
+    self.creatures = creatures;
 
     function overlapTests() {
       const triggers = actors(scene).filter((o) => actorOf(o).actor === "triggerBox" && o.parent);
@@ -407,7 +695,9 @@
       snapshot = takeSnapshot();
       time = 0; self.errors = []; self.logs = [];
       scene.traverse((o) => { if (o.userData && o.userData.lokiEditorOnly) o.visible = false; });
+      world = terrains(scene);
       if (self.possess) makePlayer();
+      spawnCreatures();
       for (const o of actors(scene)) bindScripts(o);
       running = true;
       dispatch("start");
@@ -418,6 +708,7 @@
       dt = Math.min(Math.max(dt, 0), 0.1); // a stall (breakpoint, tab hidden) must not teleport anything
       time += dt;
       movePlayer(dt);
+      moveCreatures(dt);
       dispatch("update", [dt]);
       if (running) overlapTests();
     };
@@ -429,21 +720,33 @@
       for (const ev of EVENTS) handlers[ev].length = 0;
       restore(snapshot);
       snapshot = null; player = null; playerCam = null; viewCam = null;
-      spawned.length = 0; overlaps.clear(); keys.clear();
+      spawned.length = 0; overlaps.clear(); keys.clear(); creatures.length = 0; world = []; rmb = false;
     };
 
     // input from the viewport (the UI forwards DOM events here while playing)
     self.keydown = function (e) { keys.add(String(e.key).toLowerCase()); dispatch("keydown", [e]); };
     self.keyup = function (e) { keys.delete(String(e.key).toLowerCase()); dispatch("keyup", [e]); };
     self.pointerdown = function (e) { dispatch("pointerdown", [e]); };
-    self.look = function (dx, dy) {
+    // mouse: first person looks; third person (WoW) - "turn" (right button) turns you and the camera, "orbit" (left
+    // button) swings only the camera round you
+    self.look = function (dx, dy, how) {
+      if (mode === "third") {
+        camYaw -= dx * 0.005;
+        camPitch = Math.max(-1.35, Math.min(0.6, camPitch - dy * 0.005));
+        if (how !== "orbit") yaw = camYaw;
+        placeCamera();
+        return;
+      }
       yaw -= dx * 0.0025;
       pitch = Math.max(-1.45, Math.min(1.45, pitch - dy * 0.0025));
     };
+    self.zoom = function (d) { camDist = Math.max(1.5, Math.min(40, camDist * (d > 0 ? 1.12 : 1 / 1.12))); placeCamera(); };
+    self.setTurning = function (on) { rmb = !!on; if (on && mode === "third") { yaw = camYaw; } };
+    Object.defineProperty(self, "mode", { get: () => mode });
   }
 
-  const api = { FORMAT, VERSION, EVENTS, ACTORS, TEMPLATE, actorOf, isActor, makeActor, createActor, adoptActor, visualOf, applyProps,
-    actors, serialize, load, compileScript, checkScripts, Session };
+  const api = { FORMAT, VERSION, EVENTS, ACTORS, TEMPLATE, PAINT, actorOf, isActor, makeActor, createActor, adoptActor, visualOf, applyProps,
+    actors, serialize, load, compileScript, checkScripts, Session, terrains, heightAt, sculpt, commitTerrain };
   root.ForgeLevel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

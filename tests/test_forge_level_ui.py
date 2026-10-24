@@ -124,7 +124,7 @@ async def ui():
         await page.wait_for_timeout(300)
         shown = await E("[!document.getElementById('forge-levelpanel').hidden, document.querySelectorAll('#forge-levelpanel [data-lv^=place-]').length,"
                         " document.querySelector('#forge .forge-body').classList.contains('ws-level')]")
-        check("Workspace > Level shows the Level panel with all 7 actor types", shown == [True, 7, True], shown)
+        check("Workspace > Level shows the Level panel with all 9 actor types", shown == [True, 9, True], shown)
         menus = await E("FORGE_PRO_SETS.level && FORGE_PRO_SETS.level.menus.includes('Level') && FORGE_PRO_MENUS.Level.length > 5")
         check("the Level menu set has a Level menu (Play, Simulate, Stop, Place Actors, Save)", menus)
 
@@ -214,6 +214,35 @@ async def ui():
         trig = await E("(() => { const t = forge.view.tree.api.sceneNodes().filter((n) => n.actor === 'triggerBox').pop(); return t.grp.position.z; })()")
         check("Open Level brings its actors back (the modeled cube without a file is skipped), transforms included",
               k1 == k0 + 5 and abs(trig + 3) < 1e-6, [k0, k1, trig])
+
+        # WoW world: a terrain sculpted with the brush (real mouse drags), a creature spawn, third-person Play on it
+        await E("document.querySelector('#forge-levelpanel [data-lv=tb-raise]').click()")
+        await page.wait_for_timeout(150)
+        await E("(() => { const v = forge.view; v.camera.position.set(0, 60, 60); v.camera.lookAt(0, 0, 0); if (v.controls) { v.controls.target.set(0, 0, 0); v.controls.update(); } v.dirty = true; })()")
+        await page.wait_for_timeout(150)
+        box = await E("(() => { const r = forge.view.canvas.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+        h0 = await E("ForgeLevel.heightAt(forge.view.THREE, forge.view.scene, 0, 0)")
+        await page.mouse.move(box[0], box[1]); await page.mouse.down()
+        for i in range(12):
+            await page.mouse.move(box[0] + (i % 3), box[1] + (i % 2))
+            await page.wait_for_timeout(20)
+        await page.mouse.up()
+        h1 = await E("ForgeLevel.heightAt(forge.view.THREE, forge.view.scene, 0, 0)")
+        check("Terrain > Raise: dragging on the ground raises it (a terrain is placed when there is none)", h0 is not None and h1 > h0 + 0.5, [h0, h1])
+        await E("document.querySelector('#forge-levelpanel [data-lv=tb-raise]').click()")
+        await E("document.querySelector('#forge-levelpanel [data-lv=place-npcSpawn]').click()")
+        await E("(() => { const t = forge.view.tree.api.sceneNodes().find((n) => n.actor === 'triggerBox'); forge.view.tree.api.remove(t.id); })()")
+        await E("ForgeLevelUI.play(true)")
+        await page.wait_for_timeout(300)
+        tp = await E("(() => { const s = ForgeLevelUI.state.session; return [s.mode, s.creatures.length, !!s.player.getObjectByName('body')]; })()")
+        check("Play is third person with the spawn's creatures", tp == ["third", 3, True], tp)
+        y_before = await E("ForgeLevelUI.state.session.player.rotation.y")
+        await page.mouse.move(box[0], box[1]); await page.mouse.down(button="right"); await page.mouse.move(box[0] + 150, box[1], steps=5); await page.mouse.up(button="right")
+        y_after = await E("ForgeLevelUI.state.session.player.rotation.y")
+        check("right-drag turns the character (WoW mouse)", abs(y_after - y_before) > 0.3, [y_before, y_after])
+        await page.keyboard.press("Escape")
+        await page.wait_for_timeout(150)
+        check("Stop removes the creatures and the player", await E("!forge.view.playing && !forge.view.scene.getObjectByName('Player')"))
 
         await page.select_option("#forge-workspace", "model")
         hid = await E("document.getElementById('forge-levelpanel').hidden")
