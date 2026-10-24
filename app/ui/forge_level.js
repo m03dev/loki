@@ -22,7 +22,8 @@ if (typeof ICON_PATHS !== "undefined") {
 }
 
 const ForgeLevelUI = (() => {
-  const S = { view: null, panel: null, session: null, selId: null, keyCap: null, saved: null, levelName: "level1" };
+  const S = { view: null, panel: null, session: null, selId: null, keyCap: null, saved: null, levelName: "level1",
+    brush: { mode: null, radius: 6, strength: 0.4, color: "dirt" }, brushCap: null, cursor: null };
   const L = () => (typeof ForgeLevel !== "undefined" ? ForgeLevel : null);
   const api = () => S.view && S.view.tree && S.view.tree.api;
   const q = (sel) => S.panel && S.panel.querySelector(sel);
@@ -56,7 +57,7 @@ const ForgeLevelUI = (() => {
     const head = el("div", "fuv-head"); head.append(el("span", "fuv-title", "Level"));
     const tb = el("div", "fuv-toolbar");
     tb.append(
-      btn("play", "Play", "Play in Editor: walk the level from the Player Start - W A S D to move, the mouse to look, Shift to run, Esc to stop.", () => play(true), "play"),
+      btn("play", "Play", "Play in Editor from the Player Start (third person, WoW controls): W / S move, A / D turn, Q / E strafe, Space jumps, right-drag turns, left-drag looks, wheel zooms, Shift runs, Esc stops.", () => play(true), "play"),
       btn("simulate", "Simulate", "Run the level's scripts with the editor camera - nobody is possessed.", () => play(false), "simulate"),
       btn("stop", "Stop", "Stop playing: every object goes back exactly as it was.", () => stop(), "stop"),
       btn("save", "Save Level", "Save the level's actors, settings and scripts to models/ as a .level file.", () => save(), "save"),
@@ -67,12 +68,27 @@ const ForgeLevelUI = (() => {
     const grid = el("div", "flv-grid");
     for (const [type, def] of Object.entries(L().ACTORS)) grid.append(btn(def.icon, def.label, def.what, () => placeActor(type), "place-" + type));
     place.append(grid);
+    const terr = sec("Terrain", "flv-terrain");
+    const tools = el("div", "flv-grid");
+    for (const [m, icon, label, what] of [["raise", "grow", "Raise", "Drag on the terrain to raise hills."], ["lower", "shrink", "Lower", "Drag to dig valleys."],
+      ["smooth", "smooth", "Smooth", "Drag to soften bumps and edges."], ["flatten", "flatten", "Flatten", "Drag to level the ground to where you started."],
+      ["paint", "brush", "Paint", "Drag to paint the ground with the colour below."]]) tools.append(btn(icon, label, what, () => brushMode(m), "tb-" + m));
+    const trow = (label, key, min, max, step) => {
+      const r = el("label", "fuv-set-row"), i = el("input"); i.type = "range"; i.min = min; i.max = max; i.step = step; i.value = S.brush[key];
+      i.addEventListener("input", () => { S.brush[key] = +i.value; }); r.append(el("span", "", label), i); return r;
+    };
+    const paints = el("div", "flv-grid");
+    for (const name of Object.keys(L().PAINT)) {
+      const b = el("button", "flv-paint", name); b.type = "button"; b.dataset.paint = name; b.style.borderLeft = "10px solid " + L().PAINT[name];
+      b.title = "Paint with " + name; b.addEventListener("click", () => { S.brush.color = name; brushMode("paint"); }); paints.append(b);
+    }
+    terr.append(tools, trow("Radius", "radius", 1, 30, 0.5), trow("Strength", "strength", 0.05, 1.5, 0.05), paints);
     const content = sec("Content Browser", "flv-content");
     content.append(btn("update", "Refresh", "List the models and levels in the workspace's models/ folder again.", () => refresh(), "refresh"),
       el("div", "flv-assets"), el("div", "flv-levels"));
     const details = sec("Details", "flv-detailsec"); details.append(el("div", "flv-details"));
     const out = sec("Output", "flv-out"); out.append(el("div", "flv-log"));
-    scroll.append(place, content, details, out);
+    scroll.append(place, terr, content, details, out);
     p.append(head, scroll, el("div", "fuv-status flv-status", "Level workspace."));
     p.addEventListener("keydown", (e) => { if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) stopKeys(e); });
     const chan = document.getElementById("forge-chancol");
@@ -86,6 +102,7 @@ const ForgeLevelUI = (() => {
     const p = build(); if (!p) return;
     p.hidden = !on;
     if (!on && S.session) stop();
+    if (!on) brushMode(null);
     if (on) { refresh(); details(); }
     if (typeof forgeSplitAttach === "function") forgeSplitAttach();
   }
@@ -95,7 +112,57 @@ const ForgeLevelUI = (() => {
     const a = api();
     return a && typeof a.undoChunk === "function" ? a.undoChunk(label, fn) : fn();
   }
-  const SPAWN = { pointLight: [0, 3, 0], dirLight: [4, 8, 4], spotLight: [0, 4, 2], camera: [0, 1.7, 6] };
+  const SPAWN = { pointLight: [0, 3, 0], dirLight: [4, 8, 4], spotLight: [0, 4, 2], camera: [0, 1.7, 6], npcSpawn: [8, 0, -8] };
+
+  // ---------------------------------------------------------------- terrain brush
+  function terrainHit(e) {
+    const v = S.view, T = v.THREE, r = v.canvas.getBoundingClientRect();
+    const ray = new T.Raycaster();
+    ray.setFromCamera(new T.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), v.camera);
+    const meshes = L().terrains(v.scene).map((t) => t.vis.getObjectByName("terrain"));
+    const hit = ray.intersectObjects(meshes, false)[0];
+    if (!hit) return null;
+    const item = L().terrains(v.scene).find((t) => t.vis.getObjectByName("terrain") === hit.object);
+    return { point: hit.point, obj: item.obj };
+  }
+  function brushMode(mode) {
+    const v = S.view; if (!v) return "";
+    S.brush.mode = S.brush.mode === mode ? null : mode;
+    S.panel && S.panel.querySelectorAll("[data-lv^=tb-]").forEach((b) => b.classList.toggle("on", b.dataset.lv === "tb-" + S.brush.mode));
+    if (S.brushCap) { v.canvas.removeEventListener("pointerdown", S.brushCap.down, true); window.removeEventListener("pointermove", S.brushCap.move, true); window.removeEventListener("pointerup", S.brushCap.up, true); S.brushCap = null; }
+    if (S.cursor) { S.cursor.parent && S.cursor.parent.remove(S.cursor); S.cursor = null; v.dirty = true; }
+    if (!S.brush.mode) return say("Terrain brush off.");
+    if (!L().terrains(v.scene).length) placeActor("terrain");
+    const T = v.THREE;
+    S.cursor = new T.Mesh(new T.RingGeometry(0.95, 1, 40), new T.MeshBasicMaterial({ color: 0xffd34d, side: T.DoubleSide, depthTest: false, transparent: true }));
+    S.cursor.rotation.x = -Math.PI / 2; S.cursor.renderOrder = 999; S.cursor.visible = false; S.cursor.raycast = () => {};
+    v.scene.add(S.cursor);
+    let drag = null;
+    const dab = (hit) => { if (L().sculpt(T, hit.obj, hit.point, S.brush)) v.dirty = true; };
+    S.brushCap = {
+      down: (e) => {
+        if (e.button !== 0 || e.altKey || S.session) return;
+        const hit = terrainHit(e); if (!hit) return;
+        e.preventDefault(); e.stopPropagation();
+        if (v.controls) v.controls.enabled = false;
+        drag = { obj: hit.obj };
+        if (S.brush.mode === "flatten") S.brush.height = hit.point.y;
+        dab(hit);
+      },
+      move: (e) => {
+        if (S.session) return;
+        const hit = terrainHit(e);
+        if (S.cursor) { S.cursor.visible = !!hit; if (hit) { S.cursor.position.copy(hit.point); S.cursor.position.y += 0.08; S.cursor.scale.setScalar(S.brush.radius); } v.dirty = true; }
+        if (drag && hit && hit.obj === drag.obj) dab(hit);
+      },
+      up: () => { if (!drag) return; drag = null; S.brush.height = null; if (v.controls) v.controls.enabled = true; },
+    };
+    v.canvas.addEventListener("pointerdown", S.brushCap.down, true);
+    window.addEventListener("pointermove", S.brushCap.move, true);
+    window.addEventListener("pointerup", S.brushCap.up, true);
+    return say({ raise: "Raise: drag on the terrain. Alt-drag still orbits the camera.", lower: "Lower: drag to dig.", smooth: "Smooth: drag over bumps.",
+      flatten: "Flatten: drag - the ground levels to where you started.", paint: "Paint (" + S.brush.color + "): drag on the terrain." }[S.brush.mode]);
+  }
   function placeActor(type, opts) {
     const a = api(), def = L() && L().ACTORS[type];
     if (!a || !def || typeof a.addActor !== "function") return say("Open Forge first.", true);
@@ -268,12 +335,28 @@ const ForgeLevelUI = (() => {
         return cam;
       },
     };
+    brushMode(null);
+    let dragBtn = -1, lastX = 0, lastY = 0;
+    const third = () => s.mode === "third";
     S.keyCap = {
-      down: (e) => { if (e.key === "Escape") { e.preventDefault(); stop(); } else s.keydown(e); e.stopPropagation(); },
+      down: (e) => { if (e.key === "Escape") { e.preventDefault(); stop(); } else s.keydown(e); e.stopPropagation(); if (e.key === " ") e.preventDefault(); },
       up: (e) => { s.keyup(e); e.stopPropagation(); },
-      move: (e) => { if (document.pointerLockElement === v.canvas) s.look(e.movementX || 0, e.movementY || 0); },
-      press: (e) => { s.pointerdown(e); if (possess && v.canvas.requestPointerLock && document.pointerLockElement !== v.canvas) { try { v.canvas.requestPointerLock(); } catch (_) { /* not allowed here */ } } },
+      move: (e) => {
+        if (third()) { if (dragBtn >= 0) { s.look(e.clientX - lastX, e.clientY - lastY, dragBtn === 2 ? "turn" : "orbit"); lastX = e.clientX; lastY = e.clientY; } }
+        else if (document.pointerLockElement === v.canvas) s.look(e.movementX || 0, e.movementY || 0);
+      },
+      press: (e) => {
+        s.pointerdown(e);
+        if (third()) { e.preventDefault(); e.stopPropagation(); dragBtn = e.button; lastX = e.clientX; lastY = e.clientY; if (e.button === 2) s.setTurning(true); }
+        else if (possess && v.canvas.requestPointerLock && document.pointerLockElement !== v.canvas) { try { v.canvas.requestPointerLock(); } catch (_) { /* not allowed here */ } }
+      },
+      release: (e) => { if (e.button === 2) s.setTurning(false); if (e.button === dragBtn) dragBtn = -1; },
+      wheel: (e) => { if (third()) { e.preventDefault(); e.stopPropagation(); s.zoom(e.deltaY); } },
+      menu: (e) => { e.preventDefault(); e.stopPropagation(); },
     };
+    window.addEventListener("pointerup", S.keyCap.release, true);
+    v.canvas.addEventListener("wheel", S.keyCap.wheel, { capture: true, passive: false });
+    v.canvas.addEventListener("contextmenu", S.keyCap.menu, true);
     window.addEventListener("keydown", S.keyCap.down, true);
     window.addEventListener("keyup", S.keyCap.up, true);
     window.addEventListener("pointermove", S.keyCap.move, true);
@@ -281,7 +364,7 @@ const ForgeLevelUI = (() => {
     document.getElementById("forge")?.classList.add("flv-playing");
     v.canvas.classList.add("flv-playcanvas");                       // a green frame while playing
     v.dirty = true;
-    return say(possess ? "Playing - click the view to look around, W A S D to move, Esc to stop." : "Simulating - scripts are running. Esc or Stop to end.");
+    return say(possess ? (s.mode === "third" ? "Playing - W / S move, A / D turn, Q / E strafe, Space jumps, right-drag turns, left-drag looks, wheel zooms, Esc stops." : "Playing - click the view to look around, W A S D to move, Esc to stop.") : "Simulating - scripts are running. Esc or Stop to end.");
   }
 
   function stop() {
@@ -294,7 +377,8 @@ const ForgeLevelUI = (() => {
       window.removeEventListener("keydown", S.keyCap.down, true);
       window.removeEventListener("keyup", S.keyCap.up, true);
       window.removeEventListener("pointermove", S.keyCap.move, true);
-      if (v) v.canvas.removeEventListener("pointerdown", S.keyCap.press, true);
+      window.removeEventListener("pointerup", S.keyCap.release, true);
+      if (v) { v.canvas.removeEventListener("pointerdown", S.keyCap.press, true); v.canvas.removeEventListener("wheel", S.keyCap.wheel, { capture: true }); v.canvas.removeEventListener("contextmenu", S.keyCap.menu, true); }
       S.keyCap = null;
     }
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
@@ -387,7 +471,7 @@ const ForgeLevelUI = (() => {
     }
   }, 400);
 
-  return { show, play, stop, save, openLevel, placeActor, placeAsset, check, refresh, details, state: S };
+  return { show, play, stop, save, openLevel, placeActor, placeAsset, check, refresh, details, brushMode, state: S };
 })();
 
 // the commands (menus, the hotbox, the command line): wsLevel lives with the other workspaces in forge_uv_editor.js
@@ -406,4 +490,6 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("placeCamera", "Camera Actor", () => ForgeLevelUI.placeActor("camera"));
   add("placePlayerStart", "Player Start", () => ForgeLevelUI.placeActor("playerStart"));
   add("placeTriggerBox", "Trigger Box", () => ForgeLevelUI.placeActor("triggerBox"));
+  add("placeTerrain", "Terrain", () => ForgeLevelUI.placeActor("terrain"));
+  add("placeNpcSpawn", "Creature Spawn", () => ForgeLevelUI.placeActor("npcSpawn"));
 }
