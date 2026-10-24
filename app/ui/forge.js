@@ -1382,7 +1382,11 @@ function forgeMakeView(lib, renderer, canvas) {
     if (view.dirty) hooks();
     if (anim.mixer) { const dt = Math.min(0.1, anim.clock.getDelta()); if (!anim.paused) { anim.mixer.update(dt); view.dirty = true; } }
     if (view.tickTime) view.tickTime();   // the Time Slider's clock (keyframe playback)
-    if (view.quad) {
+    if (view.playing) {                   // the Level workspace's Play / Simulate (forge_level.js): its clock, its camera
+      const cam = view.playing.frame() || camera;
+      if (cam === camera) controls.update();
+      hooks(); renderer.render(scene, cam); view.dirty = false;
+    } else if (view.quad) {
       if (view.dirty) { frameQuad(); renderQuad(); view.dirty = false; }
     } else {
       controls.update();
@@ -2035,6 +2039,7 @@ function forgeMakeView(lib, renderer, canvas) {
   view.viewRedo = () => goView(views.future, views.past);
   view.rememberView = () => { views.past.push(camState()); views.future = []; };
   view.camera = camera;
+  view.controls = controls;                          // the Level workspace's Play turns editor navigation off (forge_level.js)
   view.canvas = canvas;
   view.renderer = renderer;                          // the path-traced preview draws with it (app/ui/forge_render.js)
   view.scene = scene;

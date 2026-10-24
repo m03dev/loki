@@ -66,6 +66,8 @@ const FORGE_KEY_DEFAULTS = [
   ["ctrl+shift+1", "sculptFav1"], ["ctrl+shift+2", "sculptFav2"], ["ctrl+shift+3", "sculptFav3"], ["ctrl+shift+4", "sculptFav4"],
   ["ctrl+shift+5", "sculptFav5"], ["ctrl+shift+6", "sculptFav6"], ["ctrl+shift+7", "sculptFav7"], ["ctrl+shift+8", "sculptFav8"],
   ["ctrl+shift+9", "sculptFav9"],
+  // the Level workspace (owner 2026-10-24: "close to unreal engine"): Unreal's Play in Editor key; Esc stops Play
+  ["alt+p", "levelPlay"],
 ];
 
 // Maya's sculpt-tool context (hotkeySetup.mel's sculptMeshCache* keys): while sculpting these chords mean the sculpt

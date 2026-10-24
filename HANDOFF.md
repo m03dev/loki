@@ -26,6 +26,17 @@ Last updated: 2026-10-22 14:40 (Forge laid out like Maya 2027 from Maya's own fi
 The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
 ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs again since the repo went public.
 
+## Now (2026-10-24)
+
+- **Rules rewritten** (owner: "delete all loki rules ... rewrite them better"): AGENTS.md is the one rulebook,
+  ZIVA.md is gone, docs/BUILD_BRIEF.md is the new direction (3D creation engine). Cloud sessions hand work over on
+  `agent/*` branches; machine agents merge them at session start (AGENTS.md > Git and shipping).
+- **Forge Level workspace** (owner: "forge as an editor ... close to unreal engine"): docs/FORGE_LEVEL.md. Place
+  Actors, Content Browser, Details + scripts, Play in Editor (Alt+P) / Simulate / Stop, Save / Open Level. Cloud:
+  tests/test_forge_level_ui.py 21/21 + its node suite 24/24 in headless Chromium. **Not verified on the Mac/PC yet**
+  (pointer-lock mouse look and the feel of walking need a real window).
+- **Carbon MMO Foundation** lives in `native/carbon_mmo/` once Ziva adds it from the Mac (docs in its README).
+
 ## Current state
 
 ### Engine, agents, models

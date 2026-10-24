@@ -43,7 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNNERS = Path(__file__).resolve().parent / "runners"
 BACKENDS = ("auto", "triposr", "online", "lift")
-MODEL_EXTS = (".glb", ".obj", ".png", ".ptex")     # what the file route serves from models/
+MODEL_EXTS = (".glb", ".obj", ".png", ".ptex", ".level")   # what the file route serves from models/ (.level: Forge's Level workspace)
 SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
 DEFAULT_SPACE = "trellis-community/TRELLIS"

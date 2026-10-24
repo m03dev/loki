@@ -3,7 +3,8 @@ Every route needs the bridge's bearer token (the window fetches models with it, 
 
   GET  /forge/status?id=          a job: {stage, progress, done, result}; without id: backends + jobs
   GET  /forge/list                the models in <workspace>/models/, newest first (+ sidecar: prompt, backend...)
-  GET  /forge/file/<name>         one .glb/.obj from models/ (nothing else, no folders, no '..')
+  GET  /forge/file/<name>         one .glb/.obj/.png/.ptex/.level from models/ (nothing else, no folders, no '..')
+  GET  /forge/levels              the Level workspace's saved levels (models/*.level), newest first
   POST /forge/image  {prompt, options?}  text -> picture (the image specialist); a job, result {image: "images/x.png"}
   POST /forge/make   {image | drawing | prompt, backend?, options?}   picture -> 3D; a job, result {name, backend, ...}
                      options = the Output panel's values (forge3d.OPTIONS: resolution, keep, thickness, smooth,
@@ -103,6 +104,8 @@ def handle_get(state, path: str) -> tuple:
         return 200, {"ok": True, **forge_mm.status()}
     if route == "/forge/list":
         return 200, {"ok": True, "items": forge3d.list_models(models_dir(state)), "folder": "models"}
+    if route == "/forge/levels":
+        return 200, {"ok": True, "items": list_levels(models_dir(state)), "folder": "models"}
     if route == "/forge/creature":
         import anycreature  # pylint: disable=import-outside-toplevel
         return 200, {"ok": True, **anycreature.available(), **anycreature.schema()}
@@ -121,7 +124,8 @@ def handle_get(state, path: str) -> tuple:
         found = forge3d.model_file(models_dir(state), name)
         if found is None:
             return 404, {"ok": False, "error": "Not found."}
-        kind = {".glb": "model/gltf-binary", ".png": "image/png", ".ptex": "application/json"}.get(
+        kind = {".glb": "model/gltf-binary", ".png": "image/png", ".ptex": "application/json",
+                ".level": "application/json"}.get(
             found.suffix.lower(), "text/plain; charset=utf-8")
         return 200, found.read_bytes(), kind
     return 404, {"ok": False, "error": "Unknown endpoint."}
@@ -223,12 +227,27 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
     return 404, {"ok": False, "error": "Unknown endpoint."}
 
 
+def list_levels(models: Path, limit: int = 120) -> list:
+    """Saved levels (models/*.level), newest first: [{name, actors, modified}]."""
+    folder = Path(models)
+    if not folder.is_dir():
+        return []
+    items = []
+    for p in sorted(folder.glob("*.level"), key=lambda f: f.stat().st_mtime, reverse=True)[:limit]:
+        try:
+            actors = len(json.loads(p.read_text(encoding="utf-8")).get("actors", []))
+        except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+            continue
+        items.append({"name": p.name, "actors": actors, "modified": int(p.stat().st_mtime)})
+    return items
+
+
 def save(state, name: str, body: bytes) -> tuple:
     """A file the window exported (sculpted mesh, material map, .ptex) -> models/<name>, never overwriting."""
     name = re.sub(r"[^A-Za-z0-9._ -]+", "-", Path(str(name or "")).name).strip(" .")[:80]
     suffix = Path(name).suffix.lower()
     if suffix not in forge3d.SAVE_EXTS or not Path(name).stem:
-        return 400, {"ok": False, "error": "only .glb, .obj, .png or .ptex"}
+        return 400, {"ok": False, "error": "only .glb, .obj, .png, .ptex or .level"}
     if not body:
         return 400, {"ok": False, "error": "empty file"}
     if suffix == ".glb" and body[:4] != b"glTF":
@@ -241,6 +260,13 @@ def save(state, name: str, body: bytes) -> tuple:
                 raise ValueError
         except (UnicodeDecodeError, ValueError):
             return 400, {"ok": False, "error": "not a .ptex project"}
+    if suffix == ".level":   # Forge's Level workspace (app/ui/forge_level_core.js serialize)
+        try:
+            doc = json.loads(body.decode("utf-8"))
+            if not isinstance(doc, dict) or doc.get("format") != "loki-level" or not isinstance(doc.get("actors"), list):
+                raise ValueError
+        except (UnicodeDecodeError, ValueError):
+            return 400, {"ok": False, "error": "not a LOKI level"}
     folder = models_dir(state)
     folder.mkdir(parents=True, exist_ok=True)
     target, n = folder / name, 2

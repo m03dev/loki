@@ -60,8 +60,8 @@ data = json.loads(js.split("const FORGE_MAYA = ", 1)[1].rstrip().rstrip(";"))
 check("Forge's bar: Maya's main menus in Maya's order", data["bar"] == lay["menubar"][:7], data["bar"])
 check("Forge's Modeling set: Maya's menus in Maya's order (those Forge has rows for)",
       data["sets"]["modeling"]["menus"] == [m for m in lay["menubar"][7:] if m in data["menus"]], data["sets"]["modeling"])
-check("Animation / Rendering sets are there (Maya's F4 / F6) and Sculpting (Forge's own)",
-      set(data["sets"]) == {"modeling", "animation", "rendering", "sculpting"} and data["sets"]["animation"]["menus"] == ["Key", "Playback"], data["sets"])
+check("Animation / Rendering sets are there (Maya's F4 / F6) and Sculpting + Level (Forge's own)",
+      set(data["sets"]) == {"modeling", "animation", "rendering", "sculpting", "level"} and data["sets"]["animation"]["menus"] == ["Key", "Playback"], data["sets"])
 
 have = gen_layout.forge_ids()
 
