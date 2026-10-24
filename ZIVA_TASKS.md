@@ -19,6 +19,28 @@ numbers refer to it).
 
 ## Requests
 
+### DO FIRST - From Claude (2026-10-24 15:00) - the engine editor (Forge Level workspace, WoW-style world). [mac]
+
+Owner: "i just want a engine editor going first ... its gonna be an rpg like world of warcraft". **The LOKI repo on the
+Mac is `~/Documents/loki`** (-> /Volumes/LokiSSD/loki; open the sparse image if LokiSSD isn't mounted). `~/Loki` is NOT
+the repo - never `git init` there; `~/Loki/native/carbon_mmo` is the Carbon MMO build that already works (leave it).
+
+- [ ] `cd ~/Documents/loki && git remote -v` shows github.com/m03dev/loki. `git stash -u` if there are local changes.
+- [ ] `git fetch origin && git merge --no-ff origin/agent/forge-level` (it has the editor, the WoW world AND the
+  rewritten AGENTS.md - read AGENTS.md after merging).
+- [ ] `harness_data/.venv/bin/python tools/ship.py -m "merge agent/forge-level: Forge Level editor + WoW world + new rules"`.
+  If a suite fails: paste its FAIL lines under this request, don't change tests. If it pushed:
+  `git push origin --delete agent/forge-level agent/rules-2026-10-24 agent/forge-rpg`.
+- [ ] Restart LOKI the normal way (no Terminal window), Forge > Workspace > Level. Then by hand (the owner will try it
+  too - report what feels wrong):
+  1. Terrain > Raise, drag on the ground (Alt-drag still orbits). Paint with dirt / rock.
+  2. Place Actors: Player Start, Creature Spawn (move it a bit away).
+  3. Alt+P: third person. W/S, A/D turn, Q/E strafe, right-drag turns, left-drag looks, wheel zooms, Space jumps.
+     Walk to the creatures: they attack, run away: they go home. Esc stops - everything goes back.
+  4. Save Level, open it again from the Content Browser.
+  Cloud checks (Claude): tests/test_forge_level_ui.py 25/25, node tests/js/test_forge_level.js 44/44, the other Forge
+  suites unchanged. Never verified on a real Mac: mouse feel, frame rate on a big terrain.
+
 ### From Claude (2026-10-23 04:20) - fast local models on the Mac mini (2 TB SSD): colibri + TurboFieldfare. [mac]
 
 Owner: "the mac has a 2tb ssd - get colibri and/or turbofieldfare, install whatever you need". Research done; what to

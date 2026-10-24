@@ -129,7 +129,7 @@ const ForgeLevelUI = (() => {
     const v = S.view; if (!v) return "";
     S.brush.mode = S.brush.mode === mode ? null : mode;
     S.panel && S.panel.querySelectorAll("[data-lv^=tb-]").forEach((b) => b.classList.toggle("on", b.dataset.lv === "tb-" + S.brush.mode));
-    if (S.brushCap) { v.canvas.removeEventListener("pointerdown", S.brushCap.down, true); window.removeEventListener("pointermove", S.brushCap.move, true); window.removeEventListener("pointerup", S.brushCap.up, true); S.brushCap = null; }
+    if (S.brushCap) { window.removeEventListener("pointerdown", S.brushCap.down, true); window.removeEventListener("pointermove", S.brushCap.move, true); window.removeEventListener("pointerup", S.brushCap.up, true); S.brushCap = null; }
     if (S.cursor) { S.cursor.parent && S.cursor.parent.remove(S.cursor); S.cursor = null; v.dirty = true; }
     if (!S.brush.mode) return say("Terrain brush off.");
     if (!L().terrains(v.scene).length) placeActor("terrain");
@@ -141,9 +141,9 @@ const ForgeLevelUI = (() => {
     const dab = (hit) => { if (L().sculpt(T, hit.obj, hit.point, S.brush)) v.dirty = true; };
     S.brushCap = {
       down: (e) => {
-        if (e.button !== 0 || e.altKey || S.session) return;
+        if (e.target !== v.canvas || e.button !== 0 || e.altKey || S.session) return;
         const hit = terrainHit(e); if (!hit) return;
-        e.preventDefault(); e.stopPropagation();
+        e.preventDefault(); e.stopImmediatePropagation();    // the brush owns this drag, not Forge's selection
         if (v.controls) v.controls.enabled = false;
         drag = { obj: hit.obj };
         if (S.brush.mode === "flatten") S.brush.height = hit.point.y;
@@ -157,7 +157,7 @@ const ForgeLevelUI = (() => {
       },
       up: () => { if (!drag) return; drag = null; S.brush.height = null; if (v.controls) v.controls.enabled = true; },
     };
-    v.canvas.addEventListener("pointerdown", S.brushCap.down, true);
+    window.addEventListener("pointerdown", S.brushCap.down, true);   // window capture: before Forge's own canvas handlers
     window.addEventListener("pointermove", S.brushCap.move, true);
     window.addEventListener("pointerup", S.brushCap.up, true);
     return say({ raise: "Raise: drag on the terrain. Alt-drag still orbits the camera.", lower: "Lower: drag to dig.", smooth: "Smooth: drag over bumps.",
@@ -346,8 +346,9 @@ const ForgeLevelUI = (() => {
         else if (document.pointerLockElement === v.canvas) s.look(e.movementX || 0, e.movementY || 0);
       },
       press: (e) => {
+        if (e.target !== v.canvas) return;
         s.pointerdown(e);
-        if (third()) { e.preventDefault(); e.stopPropagation(); dragBtn = e.button; lastX = e.clientX; lastY = e.clientY; if (e.button === 2) s.setTurning(true); }
+        if (third()) { e.preventDefault(); e.stopImmediatePropagation(); dragBtn = e.button; lastX = e.clientX; lastY = e.clientY; if (e.button === 2) s.setTurning(true); }
         else if (possess && v.canvas.requestPointerLock && document.pointerLockElement !== v.canvas) { try { v.canvas.requestPointerLock(); } catch (_) { /* not allowed here */ } }
       },
       release: (e) => { if (e.button === 2) s.setTurning(false); if (e.button === dragBtn) dragBtn = -1; },
@@ -360,7 +361,7 @@ const ForgeLevelUI = (() => {
     window.addEventListener("keydown", S.keyCap.down, true);
     window.addEventListener("keyup", S.keyCap.up, true);
     window.addEventListener("pointermove", S.keyCap.move, true);
-    v.canvas.addEventListener("pointerdown", S.keyCap.press, true);
+    window.addEventListener("pointerdown", S.keyCap.press, true);     // before Forge's own canvas handlers
     document.getElementById("forge")?.classList.add("flv-playing");
     v.canvas.classList.add("flv-playcanvas");                       // a green frame while playing
     v.dirty = true;
@@ -378,7 +379,8 @@ const ForgeLevelUI = (() => {
       window.removeEventListener("keyup", S.keyCap.up, true);
       window.removeEventListener("pointermove", S.keyCap.move, true);
       window.removeEventListener("pointerup", S.keyCap.release, true);
-      if (v) { v.canvas.removeEventListener("pointerdown", S.keyCap.press, true); v.canvas.removeEventListener("wheel", S.keyCap.wheel, { capture: true }); v.canvas.removeEventListener("contextmenu", S.keyCap.menu, true); }
+      window.removeEventListener("pointerdown", S.keyCap.press, true);
+      if (v) { v.canvas.removeEventListener("wheel", S.keyCap.wheel, { capture: true }); v.canvas.removeEventListener("contextmenu", S.keyCap.menu, true); }
       S.keyCap = null;
     }
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();

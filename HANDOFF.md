@@ -35,7 +35,11 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   Actors, Content Browser, Details + scripts, Play in Editor (Alt+P) / Simulate / Stop, Save / Open Level. Cloud:
   tests/test_forge_level_ui.py 21/21 + its node suite 24/24 in headless Chromium. **Not verified on the Mac/PC yet**
   (pointer-lock mouse look and the feel of walking need a real window).
-- **Carbon MMO Foundation** lives in `native/carbon_mmo/` once Ziva adds it from the Mac (docs in its README).
+- **WoW-style world in the Level editor** (owner: "its gonna be an rpg like world of warcraft"): Terrain (sculpt + paint,
+  saved in the level), Creature Spawns (wander / aggro / leash), third-person Play with WoW controls. Cloud verified.
+- **Carbon MMO Foundation** builds and runs on the Mac (verified 2026-10-24: window + all 5 tests) from
+  `~/Loki/native/carbon_mmo`, build in `/Volumes/Xero/carbon_mmo/build`; needs pybind11 3.1.0 (2.13.6 fails on the
+  macOS 27 SDK). Not in git yet. NOTE: the LOKI repo on the Mac is `~/Documents/loki`, not `~/Loki`.
 
 ## Current state
 
