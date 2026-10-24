@@ -25,38 +25,20 @@ Owner: wants the new native C++ game-engine editor (`native/carbon_mmo`, README 
 The editor does NOT need LOKI merged or shipped: it is a standalone C++ program. So build it from its own clean
 checkout on Xero, then do the LOKI merge as a separate step. A problem in one step never blocks the other.
 
-**A. Build and open the editor (no LOKI repo involved)** - Xero must be mounted (`ls /Volumes/Xero`), else stop and say so.
-- [ ] Get the code (a fresh clone, so the LOKI checkout and its uncommitted work are untouched):
-  `D=/Volumes/Xero/carbon_mmo; mkdir -p $D; if [ -d $D/src/.git ]; then git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD; else git clone --depth 1 --branch agent/carbon-editor https://github.com/m03dev/loki.git $D/src; fi`
-- [ ] Pick a real **arm64** Python (Apple's /usr/bin/python3 is 3.9 - too old; an Intel/Rosetta Python in /usr/local
-  gives "symbols not found for architecture arm64" at link time - your 22:30 failure):
-  `PY=$(ls /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.14 2>/dev/null | head -1)`;
-  `$PY -c "import platform,sys;print(platform.machine(),sys.version)"` must print `arm64 3.1x`. If there's no
-  /opt/homebrew Python: `brew install python@3.13` (arm64 Homebrew). `file "$($PY -c 'import sys;print(sys.executable)')"` must not say x86_64 only.
-- [ ] Build (fresh build dir; the editor overhaul added cgltf + fonts, an old cache can confuse CMake):
-  `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DPython3_EXECUTABLE=$PY && cmake --build $D/build -j 2>&1 | tee $D/build.log | tail -3`
-  Fails? Report the 15 lines before the first error - they name the missing symbols and the library they were
-  expected in: `grep -m1 -B15 -A3 "error" $D/build.log`, plus `grep -m1 "Found Python3" $D/build.log`. Don't edit C++.
-  (Checked: the same code configures, builds, links and passes its tests on GitHub's macOS arm64 runner - a link
-  error on the Mac means the Mac's toolchain/Python, not the code.)
-- [ ] Test (about 10 s): `$PY $D/src/native/carbon_mmo/run_tests.py --build-dir $D/build` -> 7 PASS lines, ALL OK.
-  The screenshots are in $D/build/selftest/ (editor_editor.png, editor_terrain.png, editor_play.png).
-- [ ] Open it for the owner (hidden launcher, no Terminal window): `rm -f $D/cmmo_editor_layout.ini; mkdir -p $D/content; cd $D && nohup ./build/bin/cmmo_editor --content $D/content >$D/editor.log 2>&1 &`
-  Then `sleep 5; tail -5 $D/editor.log` - it should print `[editor] OpenGL ...` and `Carbon MMO Editor ready`.
-  Tell the owner: File > New Starter Zone, then the green Play button (Alt+P).
+**A. Build, test and open the editor - ONE command (2026-10-24 23:59; replaces the old step-by-step A and A2)**
+Your 22:45 / 23:00 failures came from hand-picked tools (the 23:00 run used `CXX=clang`, which is the C compiler -
+that alone causes the `std::...` undefined symbols) and from macOS `._*` metadata files that exFAT drives like Xero
+get next to every file. `tools/build.py` now chooses the arm64 Python, Apple's clang++/ar/ranlib via xcrun, cleans
+`._*` files, builds on /Volumes/Xero, runs the tests and opens the editor. It is checked on GitHub's macOS arm64 and
+Windows machines on every push (workflow "Carbon MMO engine").
+- [ ] Xero mounted (`ls /Volumes/Xero`), then exactly:
+  `D=/Volumes/Xero/carbon_mmo; git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD && /usr/bin/python3 $D/src/native/carbon_mmo/tools/build.py --open`
+  (no other flags, no CC/CXX variables). It ends with `DONE` and the editor window open. Tell the owner:
+  File > New Starter Zone, then the green Play button (Alt+P).
+- [ ] If it stops with BUILD FAILED / TESTS FAILED: paste everything it printed from `---- first error ----` down into
+  Reports and push. Don't edit code.
 
-**A2. If the link fails with `Undefined symbols ... "Inverse(Matrix const&)"` (your 22:45 report)** - the same commit
-links on GitHub's macOS arm64 runner (Apple clang + Apple ar), so something in this Mac's toolchain differs. Run and
-paste ALL output into Reports (no fixes yet beyond step 2):
-1. `D=/Volumes/Xero/carbon_mmo; which -a clang++ ar ranlib ld | head; xcode-select -p; clang++ --version | head -2;
-   grep -E "CMAKE_(AR|RANLIB|CXX_COMPILER|LINKER):" $D/build/CMakeCache.txt; ar t $D/build/libCarbonMath.a;
-   nm -gU $D/build/libCarbonMath.a | grep -i inverse; nm $D/build/CMakeFiles/CarbonMath.dir/*/*/Matrix.cpp.o 2>/dev/null | grep -i inverse;
-   find $D/build/_deps/carbon_math-src -name "._*" | head -3; diskutil info /Volumes/Xero | grep -i "file system personality"`
-2. Retry with Apple's own tools forced (keeps everything else the same):
-   `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DPython3_EXECUTABLE=$PY -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib && cmake --build $D/build -j 2>&1 | tee $D/build.log | tail -3`
-   Works? Continue with "Test" above and say so in Reports. Fails? Paste `grep -m1 -B15 -A3 error $D/build.log`.
-
-**B. Merge into LOKI (separate; do it after A, even if A failed)**
+**B. Merge into LOKI (separate; do it after A, even if A failed)** - first `git -C ~/Documents/loki checkout -- ZIVA_TASKS.md` is NOT needed: keep your Reports edits, commit them with the merge.
 - [ ] `cd ~/Documents/loki` (-> /Volumes/LokiSSD/loki; `~/Loki` is NOT the repo). `git status --short` - commit or
   `git stash -u` your own changes first. `git fetch origin && git merge --no-ff origin/agent/carbon-editor`
   (checked from the cloud: merges into master db77543 with no conflicts; it also brings agent/forge-level and the new rules).
