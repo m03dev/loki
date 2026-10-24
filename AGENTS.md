@@ -1,82 +1,116 @@
-# AGENTS.md - rules for every agent working on LOKI
+# AGENTS.md - how to work on LOKI
 
-You may be Ziva, Claude Code, Codex, or one of LOKI's own agents (`improve_loki`). The
-owner works on LOKI with several of you, on two machines. These rules keep it one project.
+For every agent: Claude, Codex, Ziva, LOKI's own agents. Short on purpose: it is read at the start of every
+session. The owner's direction is `docs/BUILD_BRIEF.md`; where the work stands is `HANDOFF.md`; requests that
+need a real machine are in `ZIVA_TASKS.md`. Rewritten 2026-10-24 for the current scope (owner: "rewrite them
+better for us ... modular and lightweight, maybe rust or c++, everything's on the table").
 
-## The one rule: one version, both machines
+## What LOKI is now
 
-LOKI runs on the owner's **Mac** (`~/Documents/loki`) and **Windows PC**
-(`C:\Users\macul\Documents\loki`) from the **same code**, branch **`master`** on GitHub
-(`m03dev/loki`). They must never drift apart.
+A lightweight, modular **3D creation engine** for one artist's Mac + PC: **Forge** (Maya-style modeling, sculpt,
+UV, bake, materials, animation, and a Level editor in the spirit of Unreal), **Render Studio** (AI renders via
+ComfyUI on the PC), a **worker farm** (Mac + PC), **local AI** (models + chat), the **Godot tab**, and content
+making (ads, social posts) from what is built. Not any more: the "AI company" app, LOKI World / the MMO, Spaces.
+The separate MMO engine base lives in `native/carbon_mmo/` (its own README and rules).
 
-- Publish every change with **`python tools/ship.py -m "what changed"`**. Nothing else.
-  It runs all test suites, commits, rebases onto GitHub, re-tests, pushes `master`, and
-  tells the other machine. It pushes nothing if a test fails or a rebase conflicts.
-  (On Windows: `harness_data\.venv\Scripts\python.exe tools\ship.py -m "..."`.)
-- Never `push --force`, `reset --hard` a shared branch, or push to a branch other than
-  `master`. Old `macos-app` is only a mirror that ship.py keeps in step.
-- Every machine updates itself from GitHub when LOKI starts (`engine/updater.py`), so a
-  shipped change reaches the other machine on its next start; while running it shows that
-  an update is waiting.
-- Every push is tested on **macOS and Windows** in CI (`.github/workflows/tests.yml`).
+## Commands
 
-## Both platforms, always
+| Do | Command (Windows: `harness_data\.venv\Scripts\python.exe` instead of `python`) |
+| --- | --- |
+| set up | `./setup.sh` (macOS) / `setup.bat` (Windows) |
+| run | `python app/loki_app.py` |
+| quick health | `python app/loki_app.py --self-test` |
+| check before work | `python tools/ship.py --check` (60 s budget) - one suite: `--only test_forge_bake_ui` |
+| JS logic tests | `node tests/js/test_<name>.js` |
+| publish | `python tools/ship.py -m "what changed, how it was checked"` |
+| native code | `cmake -S native/<x> -B <build dir>` / `cargo build --manifest-path native/<x>/Cargo.toml` |
 
-- No code for one OS without the other. Use `pathlib`, `sys.platform` branches with both
-  sides, and no shell strings (`engine/safe_exec.py`).
-- `.bat`/`.cmd`/`.ps1` are CRLF (`.gitattributes`); `.sh` is LF and must parse with `bash -n`.
-- Setup is `setup.sh` (macOS/Linux) and `setup.bat` (Windows); change both together.
-- If you add a dependency, add it to `engine/requirements.txt` (the updater installs it on
-  every machine after an update).
+## Architecture rules (modular, lightweight)
 
-## Before you change anything
+1. **One capability, one module.** Its own file or folder (`engine/<name>.py`, `app/ui/forge_<name>.js`,
+   `native/<name>/`), one entry point, its own test, a docs section. It **registers itself** - commands in
+   `FORGE_PRO_CMDS`, routes in its `*_api.py`, workspaces in `FORGE_WORKSPACES` - instead of core files
+   hard-coding it. Deleting the module must leave LOKI starting and every other suite green.
+2. **Talk through seams.** Cross-module calls are guarded (`typeof X === "function"` in the UI, lazy `import`
+   inside the function in Python). No module reaches into another's private state.
+3. **Lightweight by default.** No new runtime dependency without a reason in the commit and a row in
+   `docs/THIRD_PARTY.md`; vendor small MIT/BSD code instead of pulling frameworks; optional dependencies are
+   imported where they are used, so the app starts without them. No polling faster than the UI needs.
+4. **Pick the language by the job.** Python = engine and orchestration; plain JS + vendored three.js = the
+   window (classic `defer` scripts, no build step). Go **native** only for measured hot paths or standalone
+   tools: **C++17 + CMake** when the ecosystem is C++ (geometry, sculpt, bake, Carbon, DCC SDKs), **Rust +
+   cargo** for new standalone services and CLIs (workers, file watchers, relays). A native module must have
+   a narrow boundary (C ABI, wasm, pybind11, or a subprocess speaking JSON), a fallback or a clear "not
+   available here", build on macOS arm64 and Windows x64, and a README with its exact build commands. Never
+   rewrite working code just to change its language - profile first, keep the old path until the new one
+   wins in a test.
+5. **Generated files are generated.** Edit the source and re-run the tool (e.g. `app/ui/forge_maya_layout.js`
+   comes from `python tools/forge_maya/gen_layout.py`).
 
-1. Read `README.md`, `docs/ARCHITECTURE.md`, the top of `docs/operations/SESSION_LOG.md`,
-   and `HANDOFF.md` (where the work stands right now). Ziva: also `ZIVA_TASKS.md`, your inbox
-   and task list (anyone who needs something from the Mac or the PC adds it there).
-2. `git status` and `git log --oneline -5`. If GitHub is ahead, update first.
-3. Run `python tools/ship.py --check` so you know the suites pass before you start.
+## Product rules (the owner's, standing)
 
-## While you work
+- **Forge works like Maya** (menus, marking menus, hotbox, hotkeys, Outliner, Channel Box). Every hotkey lives
+  once in `FORGE_KEY_DEFAULTS` (`app/ui/forge_keys.js`); no key is used twice.
+- **UI:** icons with hover tooltips (name + what it does) instead of words; sizes in %; nothing ever overlaps,
+  always padding; every panel adjustable and closable; no floating widgets on the Modeling screen.
+- **Keep what is useful, remove bloat** (2026-10-21). Never delete a check or feature just to make a test pass.
+- Both machines, one version: nothing for one OS without the other (`pathlib`, `sys.platform` branches with
+  both sides, no shell strings - `engine/safe_exec.py`). `.bat/.cmd/.ps1` CRLF, `.sh` LF and `bash -n` clean.
 
-- **Keep anything that could be useful; bloat can go** (owner, 2026-10-21 - replaces "don't remove anything" of
-  2026-10-19). Never delete something just to make a test pass. Retired features (LOKI World, the MMO, Spaces) are
-  removed outright; when unsure whether something is still useful, move it behind a setting or archive it under
-  `docs/operations/archive/`.
-- Small steps. Add or update a test in `tests/` for what you change.
-- LOKI is its own app (a game engine, render studio and AI farm hive - owner, 2026-10-21), not a Godot addon.
-  Godot belongs in exactly three places (owner's decisions, 2026-10-17: "you can use godot we love godot"): the
-  game capability (`engine/godot_tools.py`, `engine/godot_assets.py`); the **live Godot link** (the Godot tab
-  opens the owner's projects in the real Godot editor, every agent has `godot_editor`, Asset Library plugins are
-  recorded in the project's `plugins.json` - docs/LIVE_GODOT.md); and **the LOKI Studio editor plugin** in
-  `studio/godot_plugin/addons/loki_studio/` (copied into any Godot project - docs/STUDIO.md; no `project.godot`
-  there). Never put `project.godot`, `.gd`, `.tscn`, `.uid` or an `addons/` folder anywhere in the repo besides
-  that plugin. The owner's own game projects live in `~/LOKI Projects/<name>`.
-- The repository is PUBLIC and LOKI is AGPL-3.0 (owner, 2026-10-17). Never commit a key, token, password,
-  personal file or anything from `harness_data/`. Take code only under licences compatible with AGPL-3.0
-  (MIT, BSD, Apache-2.0, ISC, MPL-2.0, LGPL, GPL-3.0, AGPL-3.0); never proprietary code (e.g. Ziva's) or
-  non-commercial/research-only code. Keep each licence next to the code and a row in docs/THIRD_PARTY.md.
-- Never commit anything from `harness_data/` (keys, memory, logs, venvs, models).
-- Updates are health-gated (HANDOFF session 28): a machine only takes a version that passes
-  `python app/loki_app.py --self-test` and whose window files all exist, and keeps it only once
-  its window reports ready. So: every script index.html loads must be committed, `--self-test`
-  must stay green, and app.js must keep posting `/ui/ready`. Never bypass this to "just ship".
-- Safety stays: `engine/policy.py`, approvals for risky actions, the signed peer link.
+## Tests
 
-## When you are done
+- **A test run takes at most 1 minute** (owner's rule). ship.py enforces the budget; `--full` only overnight.
+- Every change adds or updates a test. UI logic: a node test in `tests/js/`; UI wiring: the Playwright suite of
+  that area (it skips cleanly without a browser). Register new suites in `SUITES` in `tools/ship.py`.
+- Say exactly what you verified and where: "Mac", "PC", or "cloud" (Linux, headless) - never "should work".
 
-1. `python tools/ship.py -m "<what changed and how it was checked>"`.
-2. Update `HANDOFF.md` (what is done, what is next) and add a short entry to
-   `docs/operations/SESSION_LOG.md` when the change is significant. Ship those too.
-3. Say plainly what you verified and what you did not.
+## Git and shipping
+
+- `master` is what both machines run: they update from GitHub at start, and an update is kept only if
+  `--self-test` passes and the window reports ready. **Only `tools/ship.py` writes `master`** (test, commit,
+  rebase, re-test, push, tell the other machine). Never bypass it; never `push --force` or `reset --hard`.
+- **Can't run ship.py** (e.g. a cloud session without LOKI's venv)? Push a branch `agent/<topic>` - the branch
+  IS the request. Its last commit says what it does, what was verified, and what the machine must check; a
+  `ZIVA_TASKS.md` edit inside it carries any longer steps. Machine agents run `git fetch origin` and
+  `git branch -r --no-merged origin/master --list "origin/agent/*"` at session start, then for each:
+  `git merge --no-ff origin/agent/<topic>`, do its checks, ship.py, `git push origin --delete agent/<topic>`.
+  Branches never auto-update anyone.
+- Commit messages say what changed and how it was checked. Update `HANDOFF.md` (its "Now" section, in place).
+
+## Boundaries
+
+- The repo is **public, AGPL-3.0**. Never commit keys, tokens, personal files or anything in `harness_data/`.
+  Only AGPL-compatible code (MIT, BSD, Apache-2.0, ISC, MPL-2.0, LGPL, GPL-3.0, AGPL-3.0), licence kept next to
+  it and a row in `docs/THIRD_PARTY.md`. Never proprietary or non-commercial code.
+- `contrib/` is vendored upstream code: update it, don't hand-edit it.
+- Godot lives in exactly three places: the game capability (`engine/godot_tools.py`, `engine/godot_assets.py`),
+  the live Godot link (the Godot tab, docs/LIVE_GODOT.md), and the LOKI Studio plugin in
+  `studio/godot_plugin/addons/loki_studio/`. No `project.godot`, `.gd`, `.tscn`, `.uid` or `addons/` anywhere
+  else. The owner's games live in `~/LOKI Projects/<name>`.
+- Safety stays: `engine/policy.py`, approvals for risky actions, the signed peer link. Ask the owner before
+  anything irreversible or that costs money (`ZIVA_TASKS.md` > Needs Mohamed).
+
+## Machine agents (Ziva on the Mac and the PC, LOKI's own agents)
+
+- Start every session: pull, read this file, the top of `HANDOFF.md`, merge waiting `agent/*` branches (Git and
+  shipping above), then your open requests in `ZIVA_TASKS.md` (oldest first unless marked DO FIRST). Answer
+  under the request, report at the top of Reports, tick it, ship.
+- **Mac mini:** checkout `~/Loki`. Its drive is nearly full: builds, downloads, caches and models go on the
+  external drive **`/Volumes/Xero`** (stop and ask if it isn't mounted).
+- **PC:** `C:\Users\macul\Documents\loki`, RTX 3070 Ti, on 24/7 - the farm's GPU worker (ComfyUI, training).
+- **No visible terminal windows** on the owner's screen: run hidden (Windows `Start-Process -WindowStyle
+  Hidden`, Mac never `open -a Terminal`), close what you opened.
+- Never open the owner's Godot projects in Godot_v4.8-beta1_mono / Godot_mono 4.8 (it rewrites them).
+- Don't write LOKI's own self-improvement tasks (docs/EVOLVE.md) yourself unless the owner says so; unblock them.
 
 ## Where things are
 
 | Folder | What |
 | --- | --- |
-| `engine/` | the Python core (agent loop `loki.py`, API `loki_bridge.py`, first layer, workers, peers, updater) |
-| `app/` | the desktop window and its UI |
-| `studio/` | LOKI Studio, the separate app LOKI is developed with (docs/STUDIO.md; the LOKI MCP API is docs/LOKI_MCP.md) |
-| `tools/` | `ship.py`, `peer_link.py`, `setup_laya.py`, `self_improve.py`, training, packaging |
-| `tests/` | offline suites; `tools/ship.py --check` runs all of them |
-| `docs/` | architecture, operations, decisions, security, session log, `BUILD_BRIEF.md` (the owner's direction) |
+| `engine/` | Python core: agent loop `loki.py`, HTTP API `loki_bridge.py` + `*_api.py`, workers, peers, updater |
+| `app/` | the window (`loki_app.py`, pywebview) and its UI `app/ui/` (Forge = `forge*.js`, three.js in `vendor/`) |
+| `native/` | C++ / Rust modules (`sculpt`, `optcuts`, `carbon_mmo`), each with its own README |
+| `studio/` | LOKI Studio and its Godot plugin |
+| `tools/` | `ship.py`, generators, setup, packaging |
+| `tests/` | Python suites (`tools/ship.py --check`) and `tests/js/` node tests |
+| `docs/` | `BUILD_BRIEF.md` (direction), `ARCHITECTURE.md`, `FORGE_*.md`, `operations/` (logs, archive) |
