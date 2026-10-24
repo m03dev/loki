@@ -943,11 +943,22 @@ function forgeProFillList(list, entries, host, depth) {
 function forgeProFlyClose(host, depth) {
   for (const f of (host || document).querySelectorAll(".forge-pro-fly")) if ((+f.dataset.depth || 0) > depth) f.remove();
 }
+// how much of the window's top the fixed title strip (LOKI's mode tabs, app/ui/modebar.js, z-index 50) covers. It is
+// drawn OVER the hotbox (z-index 45), so a floating list that is nudged to the very top would sit under it and could
+// not be clicked (owner idea I5: "hotbox > Windows > OpenChannelsLayers can't be clicked: covered by titlestrip-side").
+// Menus keep clear of it. 0 when there is no strip (LOKI_TITLEBAR=native, tests about Forge alone).
+function forgeTopInset() {
+  if (typeof document === "undefined" || !document.documentElement.classList.contains("has-titlestrip")) return 0;
+  const h = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--titlebar-h"));
+  return h > 0 ? h : 0;
+}
+
 // keep a floating list inside the window: nudge it back on screen and let a long one scroll
 function forgeProFit(el, box) {
   if (!el || el.hidden) return;
-  // the space it may use: the window, or a clipping parent (the wheel lives inside the viewport, which clips it)
-  const b = box || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  // the space it may use: the window (under the title strip), or a clipping parent (the wheel lives inside the
+  // viewport, which clips it)
+  const b = box || { left: 0, top: forgeTopInset(), right: window.innerWidth, bottom: window.innerHeight };
   el.style.translate = "";
   el.style.maxHeight = Math.max(120, (b.bottom - b.top) - 12) + "px";
   el.style.overflowY = "auto";

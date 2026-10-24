@@ -4,6 +4,26 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
+## 2026-10-24 (14:05) - Forge hotbox: menus stay clear of the title strip (owner idea I5) (LOKI agent, PC)
+
+- owner idea I5: the Forge QA sweep (tools/forge_qa.py --only hotbox) reported
+  `hotbox > Windows > OpenChannelsLayers: cannot be clicked: covered by titlestrip-side`.
+- Cause: the fixed title strip (app/ui/modebar.js, z-index 50) is drawn OVER the hotbox (z-index 45). forgeProFit
+  nudged a floating menu back to the very top of the window (top 0), so a menu that opens upward near the top - the
+  Maya "Windows" menu's first row is "OpenChannelsLayers" (winChannel) - landed under the strip and could not be clicked.
+- Fix: app/ui/forge_pro.js - new forgeTopInset() reads the strip's height (--titlebar-h, 0 when there is none, e.g.
+  LOKI_TITLEBAR=native or a bare Forge test); forgeProFit now uses it as the top of the room a floating menu may use
+  (and as its max height), so menus open above the strip instead of under it. Both platforms (the strip exists on macOS
+  and Windows; the helper reads the CSS variable, so it is the same code).
+- Test: tests/test_forge_pro_ui.py - opens the hotbox at the QA's own spot, opens Windows and checks the
+  "OpenChannelsLayers" row is topmost at its middle and its top is below the strip. It fails before the fix
+  (top 22, strip bottom 38, "covered by titlestrip-side") and passes after.
+- Checked: forge_qa --only hotbox 6 -> 5 problems (the I5 line gone; the 5 left are other, older QA finds);
+  check_loki test_forge_pro_ui 101, ui_fit 83, forge_menus_ui 16, forge_maya_ui 30, hotkeys_unique 42, maya_layout 18,
+  ui_smoke 10 - all pass.
+
+---
+
 ## 2026-10-22 (14:40) - Forge laid out like Maya 2027, from Maya's own files (Claude, cloud + the owner's PC)
 
 - Owner 13:32 / 13:51: "D:\bk_maya-main ... i want this exactly in loki forge ... almost 1:1 to maya ... plan it out and

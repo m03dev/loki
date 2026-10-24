@@ -495,6 +495,30 @@ async def main():
               and "winOutliner" in ticked and "winChannel" in ticked and "winCreate" not in ticked, [drop, ticked])
         check("...and Windows > Create panel brings the left panel back", cr)
         await page.evaluate("forgeProPanel('create', false)")
+        # a hotbox row near the top of the window must stay CLEAR of the fixed title strip (app/ui/modebar.js, z-index
+        # 50, drawn OVER the hotbox at z-index 45): owner idea I5 - "hotbox > Windows > OpenChannelsLayers can't be
+        # clicked: covered by titlestrip-side". The strip tops the window; the Windows menu opens UPWARD, so its first
+        # row used to be nudged under the strip. forgeProFit now keeps floating menus below it (forgeTopInset()).
+        await page.evaluate("typeof forgeProHotboxHide === 'function' && forgeProHotboxHide()")
+        await page.evaluate("[...document.querySelectorAll('#forge-pro-hotbox .forge-pro-fly')].forEach((f) => f.remove())")
+        await page.mouse.move(650, 430)
+        await page.evaluate("forgeProHotboxOpen(forge.view, [650, 430])")
+        await page.wait_for_timeout(100)
+        await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-head')
+        await page.wait_for_timeout(220)                 # the hover intent opens the Windows list
+        strip = await page.evaluate("""() => {
+          const item = [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item')]
+            .find((b) => b.dataset.proId === 'winChannel');          // Maya's "OpenChannelsLayers" row
+          if (!item) return { found: false, ids: [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item')].map((b) => b.dataset.proId) };
+          const r = item.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          const ts = document.getElementById('titlestrip').getBoundingClientRect();
+          return { found: true, top: r.top, stripBottom: ts.bottom, covered: !!top && top !== item && !item.contains(top),
+                   who: top ? (top.id ? '#' + top.id : String(top.className).split(' ')[0]) : '' };
+        }""")
+        check("the hotbox's Windows > OpenChannelsLayers row opens clear of the title strip and is clickable (owner idea I5)",
+              strip.get("found") and not strip.get("covered") and strip.get("top", 0) >= strip.get("stripBottom", 0) - 1, strip)
+        await page.evaluate("typeof forgeProHotboxHide === 'function' && forgeProHotboxHide()")
         await page.keyboard.down(" ")
         await page.wait_for_timeout(120)
         await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Recent Commands"] .forge-pro-head')

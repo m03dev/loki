@@ -11,7 +11,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-22 14:40 (Forge laid out like Maya 2027 from Maya's own files: menus, sets, hotbox, marking menus, hotkeys; docs/FORGE_MAYA_PARITY.md).
+Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
 
 ## The machines
 
