@@ -1,0 +1,32 @@
+name: Carbon MMO engine (macOS arm64 + Windows)
+
+# Builds native/carbon_mmo (engine, editor, tests) on real macOS arm64 and Windows runners, so a cloud agent can see
+# Mac / Windows compiler and linker errors without a machine. The editor self-test needs a display, so it is skipped
+# here (run_tests.py --no-editor); the Mac runs it.
+on:
+  push:
+    paths: ["native/carbon_mmo/**", ".github/workflows/carbon-mmo.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Configure
+        run: cmake -S native/carbon_mmo -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release -j 4 -- ${{ runner.os == 'Windows' && '/v:minimal' || '' }}
+      - name: Tests (no window)
+        run: python native/carbon_mmo/run_tests.py --build-dir build --no-editor
