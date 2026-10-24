@@ -1,3 +1,5 @@
-Read AGENTS.md first and follow it (Ziva: also ZIVA.md): it is the rulebook for every agent working on LOKI
-(one version on the Mac and the PC, publish only with `tools/ship.py`, both platforms, tests).
-The owner's direction is docs/BUILD_BRIEF.md; where the work stands is HANDOFF.md.
+@AGENTS.md
+
+Claude-specific: a cloud session usually has no LOKI venv, so `tools/ship.py` can't run its suites there.
+Verify what you can (`node tests/js/...`, the suites that do run), then push an `agent/<topic>` branch whose
+last commit message is the hand-over - see AGENTS.md > Git and shipping.

@@ -1,6 +1,7 @@
 # HANDOFF - where LOKI stands right now
 
-Read this, AGENTS.md and docs/BUILD_BRIEF.md before working (Ziva: ZIVA.md and ZIVA_TASKS.md too).
+Read this, AGENTS.md and docs/BUILD_BRIEF.md before working (machine agents: ZIVA_TASKS.md too). The rules and the
+brief were rewritten on 2026-10-24 for the current scope (3D creation engine: Forge, Render Studio, farm, local AI).
 
 **How to use this file.** It is the CURRENT picture, not a diary. When you ship something significant
 (tools/ship.py), edit the area it changed under "Current state", tick or remove what you fixed under "Open

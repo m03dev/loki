@@ -1,5 +1,7 @@
 # LOKI - the owner's vision (five layers)
 
+> Superseded on 2026-10-24 by docs/BUILD_BRIEF.md (LOKI is now a 3D creation engine). Kept for history.
+
 The owner's own description of what LOKI is becoming, kept as written (diagram text
 recovered as plain text). docs/BUILD_BRIEF.md is the build order; HANDOFF.md says where the
 work stands. Where this document and the code disagree, the code is the truth and this is

@@ -1,11 +1,12 @@
 # LOKI
 
-A living AI company on your own machines. Describe what you want; LOKI plans the work,
-picks the right agents and models, runs them (in the background, on the best machine),
-verifies the result, and learns from every verified success.
+A lightweight, modular 3D creation engine for your own machines: **Forge** (Maya-style modeling,
+sculpting, UV, baking, materials, animation and a Level editor), **Render Studio** (including AI renders
+on your GPU), a **worker farm** across your Mac and PC, **local AI** models and chat, and a live link to
+the **Godot** editor. Its agents can also turn what you build into ads and social posts.
 
-It is a standalone desktop app for macOS and Windows. It is **not** a Godot project; game
-work is one optional capability among many.
+It is a standalone desktop app for macOS and Windows. It is **not** a Godot project. Working on it:
+[AGENTS.md](AGENTS.md) (rules) and [docs/BUILD_BRIEF.md](docs/BUILD_BRIEF.md) (direction).
 
 Just want to **use** LOKI (no git, no Python)? See [docs/INSTALL.md](docs/INSTALL.md) - the Windows
 installer and the macOS .dmg, and how they build and update. The rest of this page is for working on LOKI.

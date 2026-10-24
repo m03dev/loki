@@ -1,35 +1,21 @@
 # ZIVA_TASKS.md - work for Ziva (Mac) and Ziva (Windows)
 
-Ziva: read this file at the start of every session, after AGENTS.md, ZIVA.md and HANDOFF.md. It is how Claude,
-LOKI's own agents and the owner (Mohamed) ask you for things that need a real machine: a GPU, a signed-in
-browser, a phone on the Wi-Fi, a Godot editor, a Mac. Everything up to 2026-10-19 (every W/M task with its full
-steps, every answer and report) is kept verbatim in **docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md** -
-the W/M numbers below refer to it when a request says "steps: W35".
+The inbox for work that needs a real machine (the Mac mini or the PC): a GPU, a signed-in browser, a phone, a
+Godot editor, a Mac. How to work - commands, shipping, merging `agent/*` branches, the Mac's `/Volumes/Xero`
+drive, no visible terminals - is in **AGENTS.md** (rewritten 2026-10-24; ZIVA.md is gone). Everything up to
+2026-10-19 is kept verbatim in **docs/operations/archive/ZIVA_TASKS_until_2026-10-19.md** (the "steps: W35"
+numbers refer to it).
 
 ## How this file works
 
-- **Requests** is the inbox for all of us. Add a line:
-  `- [ ] [mac|windows|either|claude|loki] what is needed - why - who asked (date)`.
-  `[mac]`/`[windows]`/`[either]` = Ziva on that machine. `[claude]` = Claude in the cloud (a scheduled Claude
-  session reads this file every few hours, does the code/research items that need no machine, ships them and
-  answers here). `[loki]` = a job for LOKI's own agents (on the PC, paste it into LOKI; the idle autopilot also
-  picks these up).
-- Answer on the line under the request (`  -> who, date: answer`), so the thread stays in one place.
-- Take the oldest open request for your machine first (the "Do first" block overrides that).
-- When you finish one: tick it (`- [x]`), add a short entry at the TOP of **Reports** (date, machine, task,
-  what you did, what you saw, what failed - paste exact errors), and ship.
-- **Publish only with tools/ship.py**, never anything else, never `push --force`:
-  Windows `harness_data\.venv\Scripts\python.exe tools\ship.py -m "ziva(windows): <task> <result>"`,
-  Mac `harness_data/.venv/bin/python tools/ship.py -m "ziva(mac): <task> <result>"`.
-- **Never commit anything from `harness_data/`** (keys, tokens, memory, logs, models). Never paste a key here.
-- If a task needs Mohamed (an account, a password, a phone, a purchase, a decision, anything irreversible), do not
-  guess: put the exact question under **Needs Mohamed** and go on with the next task.
-- **Tests: at most 1 minute per run** (the owner's rule; ship.py's default budget is 60 s, `--full` only overnight).
-  If tests fail after your change, fix it or revert it before shipping.
-- **No visible terminal windows on the owner's screen.** Run commands in your own tool or hidden (Windows
-  `Start-Process -WindowStyle Hidden ...`, never `start "TITLE" cmd`; Mac never `open -a Terminal`); close any you opened.
-- Never open the owner's projects in Godot_v4.8-beta1_mono / Godot_mono 4.8 (it rewrites project.godot); LOKI's
-  Godot tab picks the computer's own Godot or LOKI's 4.7.2.
+- Add a request: `- [ ] [mac|windows|either|claude|loki] what is needed - why - who asked (date)`, or a
+  `### From <who> (<date>) - <title>. [machine]` block with steps. `[claude]` = a cloud Claude session (code and
+  research that need no machine); `[loki]` = LOKI's own agents.
+- Answer on the line under it (`  -> who, date: answer`); oldest first unless marked DO FIRST.
+- Done: tick it (`- [x]`), add a short entry at the TOP of **Reports** (date, machine, task, what you did, what
+  you saw, exact errors), ship with tools/ship.py.
+- Needs the owner (an account, a password, a purchase, anything irreversible): put the exact question under
+  **Needs Mohamed** and go on with the next task.
 
 ## Requests
 
