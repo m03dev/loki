@@ -37,10 +37,15 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
   (pointer-lock mouse look and the feel of walking need a real window).
 - **WoW-style world in the Level editor** (owner: "its gonna be an rpg like world of warcraft"): Terrain (sculpt + paint,
   saved in the level), Creature Spawns (wander / aggro / leash), third-person Play with WoW controls. Cloud verified.
-- **Carbon MMO engine editor** (owner chose a native C++ editor, 2026-10-24): `native/carbon_mmo` `cmmo_editor` - Dear
-  ImGui docking + ImGuizmo + its own GL 3.3 renderer over the engine's C++ world module (terrain sculpt/paint, actors,
-  undo, levels, third-person Play with creatures), all on Carbon math. Cloud verified headless (self-test 18/18 with
-  screenshots); never run on the Mac yet. Forge's Level workspace stays (LOKI's editor); the game engine editor is this.
+- **Carbon MMO engine editor** (owner chose a native C++ editor, 2026-10-24; overhauled the same day: "more like a
+  game engine ... modern, bevelled, high pixel density"): `native/carbon_mmo` `cmmo_editor` - Dear ImGui docking +
+  ImGuizmo + its own GL 3.3 renderer over the engine's C++ world module, all on Carbon math. Theme: IBM Plex + Font
+  Awesome at the screen's density, bevelled icon buttons with tooltips. Unreal toolbar (Play/Simulate/Pause/Stop),
+  Godot scene tree (parenting, prefabs), Terrain3D-style terrain tools (create/generate, 9 brushes, layers +
+  auto-shader, foliage), Content Browser (levels, glTF models, prefabs), World Settings, and the MMO layer in Play
+  (Tab target, abilities, quests, zones, XP, HUD + minimap). File > New Starter Zone is a playable example. Cloud
+  verified headless (self-test 32/32 with screenshots, world 43/43); never run on the Mac yet. Forge's Level
+  workspace stays (LOKI's editor); the game engine editor is this.
 - **Carbon MMO Foundation** builds and runs on the Mac (verified 2026-10-24: window + all 5 tests) from
   `~/Loki/native/carbon_mmo`, build in `/Volumes/Xero/carbon_mmo/build`; needs pybind11 3.1.0 (2.13.6 fails on the
   macOS 27 SDK). Not in git yet. NOTE: the LOKI repo on the Mac is `~/Documents/loki`, not `~/Loki`.

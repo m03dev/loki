@@ -26,33 +26,47 @@ custom ones one at a time.
 
 ## The engine editor (`cmmo_editor`)
 
-A native C++ level editor for a World of Warcraft-style world, in the spirit of Unreal's editor. Everything it edits
-and plays runs on the engine's own C++ world module and Carbon math (`Vector3`, `Matrix`).
+A native C++ **game engine editor** for a World of Warcraft-style online world: Unreal's toolbar and Play-in-Editor,
+Godot's scene tree and inspector, Terrain3D-style terrain tools, and an MMO gameplay layer (targeting, abilities,
+quests, zones, XP) you test with one key. Everything it edits and plays runs on the engine's own C++ world module and
+Carbon math (`Vector3`, `Matrix`). The look: IBM Plex Sans + Font Awesome icons rasterised at the screen's real
+pixel density, a dark bevelled theme, every icon with a hover tooltip (name + what it does).
 
 ```bash
-./build/bin/cmmo_editor                 # macOS / Windows: opens the editor (levels are saved in ./levels)
-./build/bin/cmmo_editor --levels /Volumes/Xero/carbon_mmo/levels
+./build/bin/cmmo_editor                                       # content in ./content (levels/, models/, prefabs/)
+./build/bin/cmmo_editor --content /Volumes/Xero/carbon_mmo/content
 ```
+
+Start with **File > New Starter Zone** (a generated valley with foliage, a camp, a quest giver, wolves and boars, a
+zone) and press **Play**.
 
 | Panel | What it does |
 |---|---|
-| Viewport | Maya navigation: Alt+LMB orbit, Alt+MMB pan, Alt+RMB / wheel zoom, F frame. Click selects. Q / W / E / R: select, move, rotate, scale handles (ImGuizmo), Snap |
-| Place Actors | World: Player Start, Creature Spawn, Terrain. Basic: Empty, Shape (cube, sphere, cylinder, cone, plane), Trigger Box. Lights: Point Light, Sun |
-| Terrain | sculpt with the mouse: Raise, Lower, Smooth, Flatten, Paint (grass, dirt, rock, snow, sand, any colour); radius, strength |
-| Outliner / Details | every actor; name, visibility, transform, the actor's settings (colours, counts, ranges...) |
-| Levels / Output | save / open `*.level.json`; the log |
-| Play (Alt+P) / Simulate / Stop (Esc) | third person, WoW controls: W/S move, A/D turn, Q/E strafe, Space jumps, Shift runs, right-drag turns you, left-drag looks around, wheel zooms. Creatures wander, attack when you come close, leash home. Play runs on a copy of the level, so Stop always restores it |
+| Toolbar | Save, Undo, Redo - Select / Move / Rotate / Scale (Q W E R), Local / World, Snap - **Play / Simulate / Pause / Stop** - Lit / Unlit / Wireframe, grid, stats, frame |
+| Viewport | Maya navigation (Alt+LMB orbit, MMB / Alt+MMB pan, Alt+RMB / wheel zoom, F frame), click selects, ImGuizmo handles, a view cube, stats (fps, draw calls, triangles, actors, foliage). Drop actors, models and prefabs onto it |
+| Scene | the hierarchy, Godot-style: icons per type, eye toggles, filter, drag onto another actor to parent (keeps it in place), right-click: rename, duplicate, add child, unparent, save as prefab, delete |
+| Inspector | name, visibility, transform (X / Y / Z fields), the actor's settings (creature level, health, damage, quest text, zone levels, colours...) |
+| Place Actors | Gameplay: Player Start, Creature Spawn, Trigger Box, Quest Giver. World: Terrain, Zone. Basic: Empty, Shape, Model. Lighting: Point Light, Sun |
+| Terrain | **tools, not a fixed map** (in the spirit of Terrain3D for Godot): create flat or from noise (size, resolution); Raise, Lower, Smooth, Flatten, Ramp, Noise, Paint, Foliage, Erase Foliage; brush size, strength, falloff; 4 texture layers + an auto-shader (rock on slopes, snow up high); foliage kinds (tree, pine, bush, rock, grass) and density - never on cliffs; Generate (seed, height, feature size, detail; replace or add) |
+| Content Browser | levels, glTF / glb models (e.g. Forge exports) and prefabs as tiles; double-click or drag into the viewport |
+| World Settings | world name, sky, horizon, ambient, fog, gravity |
+| Output | the log |
+| Play (Alt+P) / Simulate / Stop (Esc) | third person, WoW controls: W/S move, A/D turn, Q/E strafe, Space jump, Shift run, right-drag turns, left-drag looks, wheel zooms; Tab targets, 1-4 abilities (Strike, Heroic Blow, Fireball, Mend), F talks. HUD: player and target frames, action bar with cooldowns, XP, minimap, quest tracker, nameplates, combat text, zone banner. Play runs on a copy of the level, so Stop always restores it |
 
-Undo / redo (Ctrl+Z / Ctrl+Shift+Z, Cmd on the Mac) covers placing, deleting, duplicating (Ctrl+D), transforms,
-settings and whole brush strokes. Ctrl+S saves. The window layout is remembered in `cmmo_editor_layout.ini`.
+Undo / redo (Ctrl+Z / Ctrl+Shift+Z, Cmd on the Mac) covers everything, including whole brush strokes. Ctrl+S saves,
+Ctrl+D duplicates, F2 renames. The window layout is remembered in `cmmo_editor_layout.ini`.
 
-`cmmo_editor --selftest --screenshot out.png` drives the real editor (a mouse drag sculpts, placing, undo / redo,
-click-to-select, save / open, Play with W and right-drag, Esc) and saves `out.png` + `out_play.png`; on Linux it
-runs headless through EGL (Mesa), on macOS / Windows in a hidden window. `run_tests.py` includes it.
+`cmmo_editor --selftest --screenshot out.png` drives the real editor (32 checks: create terrain, a mouse drag sculpts,
+paint, foliage, undo / redo, place, parent, prefab, glTF model, click-to-select, save / open, the starter zone, Play:
+walk, F talks to the quest giver, Tab targets, 1 casts, Esc) and saves `out.png`, `out_editor.png`, `out_terrain.png`
+and `out_play.png`; on Linux headless through EGL (Mesa), on macOS / Windows in a hidden window. `run_tests.py`
+includes it.
 
-Modules: `cpp/world/` (MODULE: world - scene, terrain, Play, level files; no graphics; `test_world`),
-`cpp/editor/` (MODULE: editor, editor.render, editor.gl), `cpp/apps/cmmo_editor.cpp` (window + ImGui backends).
-UI: Dear ImGui 1.92.8 (docking, MIT), ImGuizmo (MIT). Levels: nlohmann/json 3.11.3 (MIT).
+Modules: `cpp/world/` (MODULE: world - scene, hierarchy, terrain, foliage, Play and the MMO layer, level files; no
+graphics; `test_world`), `cpp/editor/` (MODULE: editor, editor.render, editor.theme, editor.gl),
+`cpp/apps/cmmo_editor.cpp` (window + ImGui backends). UI: Dear ImGui 1.92.8 (docking, MIT), ImGuizmo (MIT).
+Levels: nlohmann/json 3.11.3 (MIT). Models: cgltf 1.15 (MIT). Fonts in `third_party/fonts/`: IBM Plex Sans (OFL-1.1),
+Font Awesome 6 Free solid (OFL-1.1), IconFontCppHeaders (zlib).
 
 ## Status
 
@@ -110,7 +124,7 @@ local carbonengine/math checkout), `-DPython3_EXECUTABLE=<path>` (pick a Python)
 | `cmmo_render` (static) | `cpp/render/` (+ GLFW, OpenGL when enabled) | Phase 1 |
 | `cmmo_host` (exe) | `cpp/script_host/`, `cpp/apps/` + pybind11 embed | Phase 1 |
 | `cmmo_world` (static) + `test_world` | `cpp/world/` + nlohmann/json | the editor and Play |
-| `cmmo_editor` (exe) | `cpp/editor/`, `cpp/apps/cmmo_editor.cpp` + Dear ImGui (docking) + ImGuizmo + GLFW (Mac / Windows) or EGL (Linux, headless) | the engine editor |
+| `cmmo_editor` (exe) | `cpp/editor/`, `cpp/apps/cmmo_editor.cpp` + Dear ImGui (docking) + ImGuizmo + cgltf + fonts + GLFW (Mac / Windows) or EGL (Linux, headless) | the engine editor |
 
 Non-Windows builds use `third_party/sal/sal.h`, an empty-macro stub for the SAL annotations
 DirectXMath expects (MSVC provides the real one).

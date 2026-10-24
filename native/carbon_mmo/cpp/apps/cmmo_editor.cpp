@@ -5,7 +5,7 @@
 //   cmmo_editor --selftest --screenshot out.png   drives the real editor (sculpt with the mouse, place, undo,
 //                                                 save / open, Play / Stop), saves screenshots, prints
 //                                                 EDITOR SELFTEST OK. Linux: headless (EGL); Mac / Windows: hidden window.
-//   --levels <dir>  where levels are saved (default ./levels)   --script <py>  the Python init hook
+//   --content <dir>  the Content Browser folder: levels/, models/, prefabs/ (default ./content)   --script <py>  the Python init hook
 //
 // The Python hook (scripts/init_render.py, the Phase 1 pipeline) sets the window title, size and sky colour.
 #include <chrono>
@@ -20,6 +20,7 @@
 
 #include "editor/Editor.h"
 #include "editor/GL.h"
+#include "editor/Theme.h"
 #include "imgui.h"
 #include "ImGuizmo.h"   // after imgui.h
 #include "imgui_impl_opengl3.h"
@@ -101,17 +102,28 @@ int DistinctColors( const std::vector<uint8_t>& px )
 }
 
 // ------------------------------------------------------------------------------------------ self-test
+// A minimal glTF (one coloured triangle, buffer as a base64 data URI) so the Model path is tested without files.
+const char* kTriangleGltf = R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0,"scale":[2,2,2]}],
+"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],
+"materials":[{"pbrMetallicRoughness":{"baseColorFactor":[0.8,0.3,0.9,1]}}],
+"buffers":[{"byteLength":42,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIA"}],
+"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":6}],
+"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
+{"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}]})";
+
 struct SelfTest
 {
 	editor::Editor& ed;
-	std::string shotPath, levelsDir;
+	std::string contentDir;
 	int frame = 0, pass = 0, fail = 0, step = 0, wait = 0;
 	float h0 = 0;
 	size_t count0 = 0;
 	uint32_t cube = 0;
-	Vector3 startPos;
+	Vector3 startPos, hit;
+	std::string shotName;   // set: the main loop saves a full-window screenshot of this frame
 	std::vector<uint8_t> playShot;
 	int playW = 0, playH = 0;
+	float wolfHp = 0;
 
 	void Check( const char* name, bool ok, const std::string& detail = "" )
 	{
@@ -119,6 +131,13 @@ struct SelfTest
 		std::printf( "  [%s] %s%s%s\n", ok ? "PASS" : "FAIL", name, ok || detail.empty() ? "" : " <- ", ok ? "" : detail.c_str() );
 		std::fflush( stdout );
 	}
+	bool CentreHit( Vector3& out )
+	{
+		Vector3 o, d;
+		ed.Camera().Ray( ed.ViewW() * 0.5f, ed.ViewH() * 0.5f, ed.ViewW(), ed.ViewH(), o, d );
+		return ed.Scene().RaycastTerrain( o, d, out );
+	}
+	void Key( ImGuiKey k, bool down ) { ImGui::GetIO().AddKeyEvent( k, down ); }
 	// returns true when finished. Called before ImGui::NewFrame() each frame (so injected input lands in that frame).
 	bool Before()
 	{
@@ -134,21 +153,19 @@ struct SelfTest
 			break;
 		case 1:
 		{
-			Check( "a new level has ground, a sun, a Player Start and a Creature Spawn", ed.Scene().Entities().size() == 4 );
-			// the gizmo and the engine compose transforms the same way
+			Check( "a new level is a sun and a Player Start - no terrain until you make one", ed.Scene().Entities().size() == 2 && !ed.Scene().FirstTerrain() );
 			world::Transform t;
 			t.position = Vector3( 1, 2, 3 );
 			t.rotation = Vector3( 20, 35, -15 );
 			t.scale = Vector3( 1.5f, 0.5f, 2 );
 			float m[16];
 			ImGuizmo::RecomposeMatrixFromComponents( &t.position.x, &t.rotation.x, &t.scale.x, m );
-			const Matrix w = t.World();
+			const Matrix w = t.Local();
 			float err = 0;
 			for( int i = 0; i < 16; ++i ) err = std::max( err, std::fabs( m[i] - ( &w._11 )[i] ) );
 			Check( "ImGuizmo's handles and the engine's Carbon transforms agree", err < 1e-4f, std::to_string( err ) );
-			h0 = ed.Scene().GroundAt( 0, 0 );
-			ed.BrushOn() = true;
-			ed.Brush().mode = world::Brush::Raise;
+			Check( "Create Terrain (Terrain panel) adds a flat ground", ed.CreateTerrain( 256, 128, false ) && ed.Scene().FirstTerrain() );
+			ed.Tool() = world::Brush::Raise;
 			ed.Brush().strength = 0.6f;
 			io.AddMousePosEvent( cx, cy );
 			++step;
@@ -156,6 +173,8 @@ struct SelfTest
 			break;
 		}
 		case 2:   // a real mouse drag in the viewport sculpts
+			Check( "the viewport ray hits the terrain", CentreHit( hit ) );
+			h0 = ed.Scene().GroundAt( hit.x, hit.z );
 			io.AddMouseButtonEvent( 0, true );
 			++step;
 			wait = 12;
@@ -167,13 +186,32 @@ struct SelfTest
 			break;
 		case 4:
 		{
-			const float h1 = ed.Scene().GroundAt( 0, 0 );
-			Check( "Terrain brush: a mouse drag in the viewport raises the ground", h1 > h0 + 1.0f, std::to_string( h0 ) + " -> " + std::to_string( h1 ) );
-			ed.BrushOn() = false;
+			const float h1 = ed.Scene().GroundAt( hit.x, hit.z );
+			Check( "Raise tool: a mouse drag in the viewport raises the ground", h1 > h0 + 1.0f, std::to_string( h0 ) + " -> " + std::to_string( h1 ) );
 			ed.Undo();
-			Check( "Undo takes the whole stroke back", std::fabs( ed.Scene().GroundAt( 0, 0 ) - h0 ) < 1e-4f );
+			Check( "Undo takes the whole stroke back", std::fabs( ed.Scene().GroundAt( hit.x, hit.z ) - h0 ) < 1e-4f );
 			ed.Redo();
-			Check( "Redo brings it back", ed.Scene().GroundAt( 0, 0 ) > h0 + 1.0f );
+			Check( "Redo brings it back", ed.Scene().GroundAt( hit.x, hit.z ) > h0 + 1.0f );
+			world::Terrain& t = *ed.Scene().FirstTerrain();
+			const auto w0 = t.Weights();
+			ed.Tool() = world::Brush::Paint;
+			ed.Brush().layer = 1;
+			ed.Brush().strength = 1;
+			ed.BeginStroke( hit );
+			ed.EndStroke();
+			Check( "Paint tool paints a texture layer", t.Weights() != w0 );
+			ed.Tool() = world::Brush::Foliage;
+			ed.Brush().foliage = world::FoliageKind::Tree;
+			ed.Brush().radius = 15;
+			ed.Brush().density = 1;
+			ed.BeginStroke( hit );
+			ed.EndStroke();
+			const size_t trees = t.Foliage().size();
+			Check( "Foliage tool scatters trees", trees > 3, std::to_string( trees ) );
+			ed.Undo();
+			Check( "Undo removes them", ed.Scene().FirstTerrain()->Foliage().size() < trees );
+			ed.Redo();
+			ed.Tool() = -1;
 			count0 = ed.Scene().Entities().size();
 			cube = ed.Place( ActorType::Mesh, Vector3( 6, ed.Scene().GroundAt( 6, 4 ), 4 ) );
 			Check( "Place Actors adds a shape and selects it", ed.Scene().Entities().size() == count0 + 1 && ed.Selected() == cube );
@@ -182,8 +220,23 @@ struct SelfTest
 			ed.Redo();
 			ed.Select( cube );
 			Check( "Redo puts it back", ed.Scene().Find( cube ) != nullptr );
-			ed.DuplicateSelected();
-			Check( "Duplicate (Ctrl+D) copies it", ed.Scene().Entities().size() == count0 + 2 );
+			Check( "Duplicate (Ctrl+D) copies it", ed.DuplicateSelected() && ed.Scene().Entities().size() == count0 + 2 );
+			const uint32_t camp = ed.Place( ActorType::Empty, Vector3( 10, 0, 10 ) );
+			const Vector3 before = ed.Scene().WorldPosition( cube );
+			Check( "Scene tree: parenting keeps the actor where it is", ed.Reparent( cube, camp ) && ed.Scene().Find( cube )->parent == camp &&
+																			Length( ed.Scene().WorldPosition( cube ) - before ) < 1e-3f );
+			ed.Place( ActorType::QuestGiver, Vector3( 10, 0, 12 ), camp );
+			Check( "a Quest Giver and a Zone can be placed", ed.Place( ActorType::Zone, Vector3( 0, 0, 0 ) ) != 0 );
+			const size_t n = ed.Scene().Entities().size();
+			Check( "Save as Prefab", ed.SavePrefab( camp, "selftest_camp" ) );
+			const uint32_t copy = ed.PlacePrefab( "prefabs/selftest_camp.prefab.json", Vector3( -20, 0, -20 ) );
+			Check( "a prefab places its whole hierarchy", copy && ed.Scene().Entities().size() == n + 3 && ed.Scene().Children( copy ).size() == 2,
+				   std::to_string( ed.Scene().Entities().size() - n ) );
+			{
+				std::ofstream g( contentDir + "/models/selftest_triangle.gltf" );
+				g << kTriangleGltf;
+			}
+			Check( "a glTF model from the Content Browser places as a Model actor", ed.PlaceModel( "models/selftest_triangle.gltf", Vector3( -6, 0, 6 ) ) != 0 );
 			io.AddMousePosEvent( cx + 40, cy + 30 );   // hover away from the gizmo, then click the terrain: select by picking
 			++step;
 			wait = 2;
@@ -203,48 +256,139 @@ struct SelfTest
 		case 7:
 		{
 			const world::Entity* picked = ed.Scene().Find( ed.Selected() );
-			Check( "clicking in the viewport selects what is under the mouse", picked && picked->type == ActorType::Terrain, picked ? picked->name : "nothing" );
-			const std::string path = levelsDir + "/selftest.level.json";
+			Check( "clicking in the viewport selects what is under the mouse", picked != nullptr, "nothing" );
+			const std::string path = contentDir + "/levels/selftest.level.json";
 			const size_t n = ed.Scene().Entities().size();
-			const float h = ed.Scene().GroundAt( 0, 0 );
+			const size_t trees = ed.Scene().FirstTerrain()->Foliage().size();
 			Check( "Save Level", ed.SaveLevel( path ) );
 			ed.NewLevel();
-			Check( "Open Level brings every actor and the sculpted ground back", ed.OpenLevel( path ) && ed.Scene().Entities().size() == n &&
-																				  std::fabs( ed.Scene().GroundAt( 0, 0 ) - h ) < 1e-3f );
-			count0 = n;
-			Check( "Play starts", ed.Play( true ) && ed.Session() && ed.Session()->Creatures().size() == 3 );
-			startPos = ed.Session()->PlayerPosition();
-			ed.InjectedInput().forward = true;
+			Check( "Open Level brings every actor, the sculpted ground and the foliage back",
+				   ed.OpenLevel( path ) && ed.Scene().Entities().size() == n && ed.Scene().FirstTerrain() && ed.Scene().FirstTerrain()->Foliage().size() == trees &&
+					   std::fabs( ed.Scene().GroundAt( hit.x, hit.z ) - h0 ) > 1.0f );
+			ed.NewStarterZone();
+			Check( "New Starter Zone builds a playable example", ed.Scene().FirstTerrain() && ed.Scene().FindByName( "Marshal Grey" ) && ed.Scene().FindByName( "Wolf Den" ) );
+			ed.Select( ed.Scene().FindByName( "Marshal Grey" )->id );
 			++step;
-			wait = 60;
+			wait = 4;
 			break;
 		}
 		case 8:
+			shotName = "editor";
+			io.AddMousePosEvent( cx - 60, cy + 40 );
+			++step;
+			wait = 1;
+			break;
+		case 9:
+			ed.Tool() = world::Brush::Raise;   // the Terrain tools + brush circle, for the second picture
+			++step;
+			wait = 3;
+			break;
+		case 10:
+			shotName = "terrain";
+			++step;
+			wait = 1;
+			break;
+		case 11:
+		{
+			ed.Tool() = -1;
+			count0 = ed.Scene().Entities().size();
+			Check( "Play starts with the starter zone's creatures", ed.Play( true ) && ed.Session() && ed.Session()->Creatures().size() >= 4 );
+			world::PlaySession& s = *ed.Session();
+			startPos = s.PlayerPosition();
+			ed.InjectedInput().forward = true;
+			io.AddMousePosEvent( cx, cy );
+			++step;
+			wait = 40;
+			(void)s;
+			break;
+		}
+		case 12:
 		{
 			ed.InjectedInput().forward = false;
-			const Vector3 p = ed.Session()->PlayerPosition();
-			Check( "W walks the player forward and keeps the feet on the ground", startPos.z - p.z > 4.0f &&
-																				  std::fabs( p.y - ed.Session()->World().GroundAt( p.x, p.z ) ) < 0.05f,
-				   std::to_string( startPos.z ) + " -> " + std::to_string( p.z ) );
-			ed.InjectedInput().turning = true;
-			ed.InjectedInput().mouseDX = 120;
+			world::PlaySession& s = *ed.Session();
+			const Vector3 p = s.PlayerPosition();
+			Check( "W walks the player and keeps the feet on the ground", Length( p - startPos ) > 3.0f && std::fabs( p.y - s.World().GroundAt( p.x, p.z ) ) < 0.05f );
+			// walk up to the quest giver and press F
+			const Vector3 giver = s.World().WorldPosition( s.World().FindByName( "Marshal Grey" )->id );
+			s.SetPlayerPosition( giver + Vector3( 0, 0, 2.5f ) );
+			Key( ImGuiKey_F, true );
+			++step;
+			wait = 1;
+			break;
+		}
+		case 13:
+			Key( ImGuiKey_F, false );
 			++step;
 			wait = 2;
 			break;
+		case 14:
+		{
+			world::PlaySession& s = *ed.Session();
+			Check( "F talks to the quest giver (the quest dialog opens)", s.talkingTo >= 0 );
+			Check( "accepting the quest tracks it", s.talkingTo >= 0 && s.AcceptQuest( s.talkingTo ) && s.quests[0].state == world::Quest::Active );
+			s.talkingTo = -1;
+			// go to the wolves, face them, Tab, 1
+			const auto& wolves = s.World().WorldPosition( s.World().FindByName( "Wolf Den" )->id );
+			int near = -1;
+			for( int i = 0; i < int( s.Creatures().size() ); ++i )
+				if( s.Creatures()[size_t( i )].kind == "Wolf" && ( near < 0 || Length( s.Creatures()[size_t( i )].position - wolves ) < Length( s.Creatures()[size_t( near )].position - wolves ) ) ) near = i;
+			if( near >= 0 )
+			{
+				const Vector3 w = s.Creatures()[size_t( near )].position;
+				s.SetPlayerPosition( Vector3( w.x, s.World().GroundAt( w.x, w.z + 3 ), w.z + 3 ) );
+			}
+			Key( ImGuiKey_Tab, true );
+			++step;
+			wait = 1;
+			break;
 		}
-		case 9:
+		case 15:
+			Key( ImGuiKey_Tab, false );
+			++step;
+			wait = 1;
+			break;
+		case 16:
+		{
+			world::PlaySession& s = *ed.Session();
+			Check( "Tab targets a creature", s.target >= 0 );
+			wolfHp = s.target >= 0 ? s.Creatures()[size_t( s.target )].hp : 0;
+			Key( ImGuiKey_1, true );
+			++step;
+			wait = 1;
+			break;
+		}
+		case 17:
+			Key( ImGuiKey_1, false );
+			++step;
+			wait = 20;
+			break;
+		case 18:
+		{
+			world::PlaySession& s = *ed.Session();
+			Check( "1 casts Strike on the target", s.target >= 0 && s.Creatures()[size_t( s.target )].hp < wolfHp );
+			ed.InjectedInput().turning = true;
+			ed.InjectedInput().mouseDX = 40;
+			++step;
+			wait = 30;
+			break;
+		}
+		case 19:
 			ed.InjectedInput().turning = false;
-			Check( "right-drag turns the character", std::fabs( ed.Session()->PlayerYaw() ) > 0.3f );
 			playShot = ed.Render().ReadPixels();
 			playW = ed.Render().Width();
 			playH = ed.Render().Height();
 			Check( "the Play view renders the world (not a blank frame)", DistinctColors( playShot ) > 40, std::to_string( DistinctColors( playShot ) ) );
-			io.AddKeyEvent( ImGuiKey_Escape, true );
+			shotName = "play";
 			++step;
 			wait = 1;
 			break;
-		case 10:
-			io.AddKeyEvent( ImGuiKey_Escape, false );
+		case 20:
+			Key( ImGuiKey_Escape, true );
+			++step;
+			wait = 1;
+			break;
+		case 21:
+			Key( ImGuiKey_Escape, false );
 			Check( "Esc stops and the level is exactly as it was", !ed.Playing() && ed.Scene().Entities().size() == count0 );
 			++step;
 			wait = 3;
@@ -256,47 +400,30 @@ struct SelfTest
 	}
 };
 
-void ApplyStyle()
-{
-	ImGuiStyle& s = ImGui::GetStyle();
-	ImGui::StyleColorsDark();
-	s.WindowRounding = 3;
-	s.FrameRounding = 3;
-	s.TabRounding = 3;
-	s.WindowPadding = ImVec2( 8, 8 );
-	s.ItemSpacing = ImVec2( 6, 5 );
-	ImVec4* c = s.Colors;
-	c[ImGuiCol_WindowBg] = ImVec4( 0.12f, 0.12f, 0.13f, 1 );
-	c[ImGuiCol_TitleBgActive] = ImVec4( 0.16f, 0.17f, 0.19f, 1 );
-	c[ImGuiCol_Tab] = ImVec4( 0.15f, 0.16f, 0.17f, 1 );
-	c[ImGuiCol_TabSelected] = ImVec4( 0.22f, 0.36f, 0.56f, 1 );
-	c[ImGuiCol_Button] = ImVec4( 0.22f, 0.24f, 0.27f, 1 );
-	c[ImGuiCol_ButtonHovered] = ImVec4( 0.28f, 0.42f, 0.62f, 1 );
-	c[ImGuiCol_Header] = ImVec4( 0.22f, 0.36f, 0.56f, 0.7f );
-}
 }
 
 int main( int argc, char** argv )
 {
 	bool selftest = false;
-	std::string shot, levels = "levels", script = std::string( CMMO_SOURCE_DIR ) + "/scripts/init_render.py";
+	std::string shot, content = "content", script = std::string( CMMO_SOURCE_DIR ) + "/scripts/init_render.py";
 	for( int i = 1; i < argc; ++i )
 	{
 		const std::string a = argv[i];
 		if( a == "--selftest" ) selftest = true;
 		else if( a == "--screenshot" && i + 1 < argc ) shot = argv[++i];
-		else if( a == "--levels" && i + 1 < argc ) levels = argv[++i];
+		else if( ( a == "--content" || a == "--levels" ) && i + 1 < argc ) content = argv[++i];   // --levels: the old name
 		else if( a == "--script" && i + 1 < argc ) script = argv[++i];
 		else
 		{
-			std::printf( "usage: %s [--selftest] [--screenshot out.png] [--levels dir] [--script init.py]\n", argv[0] );
+			std::printf( "usage: %s [--selftest] [--screenshot out.png] [--content dir] [--script init.py]\n", argv[0] );
 			return 2;
 		}
 	}
 
 	// ---- the Python init hook (same pipeline as Phase 1): title, size, sky colour
 	editor::EditorSettings settings;
-	settings.levelsDir = levels;
+	settings.contentDir = content;
+	settings.exePath = argv[0];
 	int width = 1600, height = 900;
 	{
 		cmmo::RenderConfig cfg;
@@ -310,7 +437,6 @@ int main( int argc, char** argv )
 			settings.title = cfg.title;
 			width = std::max( 1600, cfg.width );   // an editor needs room: at least 1600 x 900
 			height = std::max( 900, cfg.height );
-			settings.clear = Vector3( cfg.clear_color.r * 0.6f + 0.25f, cfg.clear_color.g * 0.6f + 0.35f, cfg.clear_color.b * 0.5f + 0.5f );
 		}
 		else
 			std::printf( "[editor] init hook skipped: %s\n", err.c_str() );
@@ -382,7 +508,8 @@ int main( int argc, char** argv )
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
 	io.IniFilename = selftest ? nullptr : "cmmo_editor_layout.ini";
-	ApplyStyle();
+	const std::string fonts = editor::ui::Setup( argv[0] );
+	std::printf( "[editor] fonts: %s\n", fonts.empty() ? "built-in (fonts folder not found)" : fonts.c_str() );
 #if defined( CMMO_WITH_GLFW )
 	ImGui_ImplGlfw_InitForOpenGL( window, true );
 #else
@@ -399,7 +526,7 @@ int main( int argc, char** argv )
 		return 1;
 	}
 
-	SelfTest test{ ed, shot, levels };
+	SelfTest test{ ed, content };
 	if( selftest ) std::printf( "[editor] self-test\n" );
 	auto last = std::chrono::steady_clock::now();
 	bool done = false;
@@ -434,22 +561,23 @@ int main( int argc, char** argv )
 		gl::glClearColor( 0.08f, 0.08f, 0.09f, 1 );
 		gl::glClear( GL_COLOR_BUFFER_BIT );
 		ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
-		if( done && !shot.empty() )
+		if( ( done || !test.shotName.empty() ) && !shot.empty() )
 		{
 			std::vector<uint8_t> px( size_t( fw * fh * 4 ) ), flip( px.size() );
 			gl::glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 			gl::glReadPixels( 0, 0, fw, fh, GL_RGBA, GL_UNSIGNED_BYTE, px.data() );
 			for( int y = 0; y < fh; ++y ) std::memcpy( &flip[size_t( y * fw * 4 )], &px[size_t( ( fh - 1 - y ) * fw * 4 )], size_t( fw * 4 ) );
-			const bool okShot = WritePng( shot, fw, fh, flip );
-			test.Check( "the editor window renders (screenshot saved)", okShot && DistinctColors( flip ) > 60, shot );
-			std::string playPath = shot.substr( 0, shot.size() - 4 ) + "_play.png";
-			if( !test.playShot.empty() ) WritePng( playPath, test.playW, test.playH, test.playShot );
+			const std::string path = test.shotName.empty() ? shot : shot.substr( 0, shot.size() - 4 ) + "_" + test.shotName + ".png";
+			const bool okShot = WritePng( path, fw, fh, flip );
+			if( test.shotName.empty() ) test.Check( "the editor window renders (screenshot saved)", okShot && DistinctColors( flip ) > 60, shot );
+			else std::printf( "  [shot] %s\n", path.c_str() );
+			test.shotName.clear();
 		}
 #if defined( CMMO_WITH_GLFW )
 		glfwSwapBuffers( window );
 #endif
 		if( ed.WantsQuit() ) break;
-		if( selftest && ++frames > 600 ) { test.Check( "self-test finished in time", false ); break; }
+		if( selftest && ++frames > 1200 ) { test.Check( "self-test finished in time", false ); break; }
 	}
 
 	ed.Shutdown();

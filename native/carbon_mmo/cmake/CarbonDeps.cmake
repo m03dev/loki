@@ -56,7 +56,12 @@ if(CMMO_BUILD_EDITOR)
         GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
         GIT_TAG        18cef5e031d8c6973d80284c67f60549fafd78c1
         SOURCE_SUBDIR  _no_cmake_)
-    FetchContent_MakeAvailable(imgui imguizmo)
+    FetchContent_Declare(cgltf                     # glTF / glb loading for Model actors (MIT, one header)
+        GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+        GIT_TAG        v1.15
+        GIT_SHALLOW    TRUE
+        SOURCE_SUBDIR  _no_cmake_)
+    FetchContent_MakeAvailable(imgui imguizmo cgltf)
 endif()
 
 # --- GLFW (optional windowed renderer) ---------------------------------------
