@@ -19,39 +19,38 @@ numbers refer to it).
 
 ## Requests
 
-### DO FIRST - From Claude (2026-10-24, updated 22:10) - the Carbon MMO engine EDITOR (native C++) on the Mac. [mac]
+### DO FIRST - From Claude (2026-10-24 23:30, replaces the 22:10 version) - get the Carbon engine EDITOR running on the Mac. [mac]
 
-Owner: "i just want a engine editor going first ... its gonna be an rpg like world of warcraft", then chose a **new
-native C++ editor** on the Carbon engine, then: "more like a game engine ... UI huge overhaul ... modern, bevelled,
-high pixel density". It is in `native/carbon_mmo/` (read its README "The engine editor"). The 22:10 update is the
-overhaul: new theme (IBM Plex + Font Awesome icons at Retina density), Unreal toolbar with Play/Simulate/Pause/Stop,
-Godot scene tree (parenting, prefabs), Terrain3D-style terrain tools, Content Browser (levels, glTF models, prefabs),
-World Settings, and the MMO layer in Play (Tab target, abilities 1-4, quests with F, zones, XP, HUD + minimap).
+Owner: wants the new native C++ game-engine editor (`native/carbon_mmo`, README "The engine editor") open on the Mac.
+The editor does NOT need LOKI merged or shipped: it is a standalone C++ program. So build it from its own clean
+checkout on Xero, then do the LOKI merge as a separate step. A problem in one step never blocks the other.
 
-**The LOKI repo on the Mac is `~/Documents/loki`** (-> /Volumes/LokiSSD/loki; open the sparse image if LokiSSD isn't
-mounted). `~/Loki` is NOT the repo - never `git init` there. Builds go on **/Volumes/Xero** (the Mac's drive is full).
+**A. Build and open the editor (no LOKI repo involved)** - Xero must be mounted (`ls /Volumes/Xero`), else stop and say so.
+- [ ] Get the code (a fresh clone, so the LOKI checkout and its uncommitted work are untouched):
+  `D=/Volumes/Xero/carbon_mmo; mkdir -p $D; if [ -d $D/src/.git ]; then git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD; else git clone --depth 1 --branch agent/carbon-editor https://github.com/m03dev/loki.git $D/src; fi`
+- [ ] Pick a real Python (Apple's /usr/bin/python3 is 3.9 - too old): `PY=$(command -v python3.13 || command -v python3.12 || command -v python3.14)`; `$PY --version` must say 3.10-3.14.
+- [ ] Build (fresh build dir; the editor overhaul added cgltf + fonts, an old cache can confuse CMake):
+  `rm -rf $D/build && cmake -S $D/src/native/carbon_mmo -B $D/build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=$PY && cmake --build $D/build -j`
+  Fails? Report the FIRST line containing `error` (`cmake --build $D/build 2>&1 | grep -m1 -B2 -A6 error`) and stop A. Don't edit C++.
+- [ ] Test (about 10 s): `$PY $D/src/native/carbon_mmo/run_tests.py --build-dir $D/build` -> 7 PASS lines, ALL OK.
+  The screenshots are in $D/build/selftest/ (editor_editor.png, editor_terrain.png, editor_play.png).
+- [ ] Open it for the owner (hidden launcher, no Terminal window): `rm -f $D/cmmo_editor_layout.ini; mkdir -p $D/content; cd $D && nohup ./build/bin/cmmo_editor --content $D/content >$D/editor.log 2>&1 &`
+  Then `sleep 5; tail -5 $D/editor.log` - it should print `[editor] OpenGL ...` and `Carbon MMO Editor ready`.
+  Tell the owner: File > New Starter Zone, then the green Play button (Alt+P).
 
-- [ ] `cd ~/Documents/loki && git remote -v` (github.com/m03dev/loki), `git stash -u` if needed,
-  `git fetch origin && git merge --no-ff origin/agent/carbon-editor` - ONE merge: it contains agent/forge-level
-  (Forge Level workspace), agent/rules-2026-10-24 (new AGENTS.md - read it) and the engine editor.
+**B. Merge into LOKI (separate; do it after A, even if A failed)**
+- [ ] `cd ~/Documents/loki` (-> /Volumes/LokiSSD/loki; `~/Loki` is NOT the repo). `git status --short` - commit or
+  `git stash -u` your own changes first. `git fetch origin && git merge --no-ff origin/agent/carbon-editor`
+  (checked from the cloud: merges into master db77543 with no conflicts; it also brings agent/forge-level and the new rules).
 - [ ] `harness_data/.venv/bin/python tools/ship.py -m "merge agent/carbon-editor: Carbon engine editor + Forge Level + new rules"`.
-  If a suite fails, paste its FAIL lines here; don't change tests. If it pushed:
-  `git push origin --delete agent/carbon-editor agent/forge-level agent/forge-rpg agent/rules-2026-10-24`.
-- [ ] Build the engine + editor on Xero (no C++ edits; pybind11 3.1.0 is already pinned):
-  `PY=$(command -v python3.13 || command -v python3.14 || command -v python3.12)`
-  `rm -rf /Volumes/Xero/carbon_mmo/build && cmake -S ~/Documents/loki/native/carbon_mmo -B /Volumes/Xero/carbon_mmo/build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=$PY && cmake --build /Volumes/Xero/carbon_mmo/build -j`
-  If it fails: the FIRST compiler error only, here.
-- [ ] Tests (under a minute): `$PY ~/Documents/loki/native/carbon_mmo/run_tests.py --build-dir /Volumes/Xero/carbon_mmo/build`
-  -> 7 PASS lines, ALL OK. The editor self-test saves screenshots in /Volumes/Xero/carbon_mmo/build/selftest/ - attach
-  editor_editor.png, editor_terrain.png and editor_play.png to your report.
-- [ ] Launch it for the owner (leave it open, no Terminal window visible):
-  `mkdir -p /Volumes/Xero/carbon_mmo/content && cd /Volumes/Xero/carbon_mmo && nohup ./build/bin/cmmo_editor --content /Volumes/Xero/carbon_mmo/content >/dev/null 2>&1 &`
-  Tell the owner: File > New Starter Zone, then the green Play button (or Alt+P). If an old `cmmo_editor_layout.ini`
-  exists in /Volumes/Xero/carbon_mmo, delete it first so the new panel layout appears.
-  The old `~/Loki/native/carbon_mmo` copy is superseded by `~/Documents/loki/native/carbon_mmo` - leave it, don't delete.
-  Cloud checks (Claude, Linux headless, Mesa GL): editor self-test 32/32, world 43/43, all 7 suites ALL OK in ~9 s.
-  Never run on a Mac yet: the real window, Retina font sharpness, Cmd shortcuts, the glTF loader on real Forge exports.
-  Report anything that looks blurry, overlaps, or is cut off (with a screenshot of the editor window only).
+  If a suite fails: run it alone (`--only <suite>`), and if it ALSO fails on plain origin/master it is old, not from
+  this branch - write that here and ship with `--no-tests` (allowed only for that case). If it fails only after the
+  merge, paste its FAIL lines here and stop. Never change a test to make it pass.
+- [ ] After a successful push: `git push origin --delete agent/carbon-editor agent/forge-level agent/forge-rpg agent/rules-2026-10-24`.
+
+Report at the top of Reports: which steps passed, the exact first error of any that didn't. Cloud checks (Claude, Linux
+headless): editor self-test 32/32, world 43/43, run_tests ALL OK; the merge itself is conflict-free. Never checked on a
+Mac yet: the real window, Retina sharpness, Cmd shortcuts.
 
 ### From Claude (2026-10-23 04:20) - fast local models on the Mac mini (2 TB SSD): colibri + TurboFieldfare. [mac]
 
