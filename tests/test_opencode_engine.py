@@ -177,9 +177,16 @@ if loki:
     jcalls = [json.loads(x) for x in LOG.read_text().splitlines() if x.strip()]
     check("a background job runs on OpenCode: the work is on disk, the result ends DONE, exit 0",
           code == 0 and "DONE:" in res and (loki.WORKSPACE / "loki-test-repo" / "src" / "main.py").is_file(), (code, res[:200]))
-    check("...with its own config (a job not allowed commands gets no shell) and the agent's profile in the prompt",
-          jc["permission"]["bash"] == "deny" and jcalls and "Builder" in jcalls[0]["argv"][-1] and "--session" not in jcalls[0]["argv"])
-    os.environ["FAKE_OC_MODE"] = "liar"
+    check("...with its own config - the shell ON (owner: \"it needs to be able to bash\"), destructive commands still "
+          "denied - and the agent's profile in the prompt",
+          isinstance(jc["permission"]["bash"], dict) and jc["permission"]["bash"].get("*") == "allow"
+          and jcalls and "Builder" in jcalls[0]["argv"][-1] and "--session" not in jcalls[0]["argv"], jc["permission"]["bash"])
+    job["no_shell"] = True; (jd / "job.json").write_text(json.dumps(job)); LOG.write_text("")
+    asyncio.run(asyncio.wait_for(loki.run_job(str(jd / "job.json")), 50))
+    jc = json.loads((Path(loki.DATA_DIR) / "opencode" / "opencode-job42.json").read_text())
+    check("a job made with no_shell gets no shell", jc["permission"]["bash"] == "deny", jc["permission"]["bash"])
+    job.pop("no_shell")
+    os.environ["FAKE_OC_MODE"] = "liar"; (jd / "job.json").write_text(json.dumps(job))
     code = asyncio.run(asyncio.wait_for(loki.run_job(str(jd / "job.json")), 50))
     check("a job whose model only says done ends BLOCKED (exit 2)", code == 2 and (jd / "result.txt").read_text().startswith("BLOCKED"),
           (code, (jd / "result.txt").read_text()[:200]))

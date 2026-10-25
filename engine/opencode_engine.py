@@ -145,6 +145,26 @@ def deny_rules(snippets: Iterable[str]) -> dict:
     return rules
 
 
+# DeepSeek's own tool-call markup (<｜DSML｜function_calls> ... - full-width bars, sometimes ASCII ones): a provider that
+# does not parse it hands it back as TEXT, so the tool never runs (owner 2026-10-25: "<｜DSML｜ calls>" x10 in a reply)
+_DSML = re.compile(r"<\s*/?\s*[｜|]\s*DSML\s*[｜|][^>]*>", re.I)
+
+
+def leaked_tool_markup(text: str) -> bool:
+    return bool(_DSML.search(str(text or "")))
+
+
+def strip_tool_markup(text: str) -> str:
+    """The reply without DeepSeek's raw tool-call tags (and the lines that held only them)."""
+    out = [ln for ln in _DSML.sub("", str(text or "")).splitlines()]
+    cleaned, blank = [], 0
+    for ln in out:
+        blank = blank + 1 if not ln.strip() else 0
+        if blank <= 1:
+            cleaned.append(ln)
+    return "\n".join(cleaned).strip()
+
+
 def make_tools_command(python: str = "") -> list:
     """LOKI's making tools (engine/make_mcp.py: pictures, 3D models, video) as an MCP server for OpenCode."""
     return [python or sys.executable, str(Path(__file__).resolve().parent / "make_mcp.py")]

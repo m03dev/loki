@@ -1029,6 +1029,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
+        if route == "/chat/media":   # a picture or PDF named in a reply, shown in the chat (engine/chat_media.py)
+            import chat_media  # pylint: disable=import-outside-toplevel
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            self._send_json(*chat_media.route(self.server.state, "GET", route, q, {}))
+            return
         if route == "/studio/agents":   # Studio > Agents: every agent on every machine (engine/studio_agents.py)
             import studio_agents  # pylint: disable=import-outside-toplevel
             try:
@@ -1489,6 +1494,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             self._send_json(*godot_live.route("POST", route, data, {}))
+            return
+        if route in ("/chat/media/open", "/chat/media/convert"):   # engine/chat_media.py
+            import chat_media  # pylint: disable=import-outside-toplevel
+            self._send_json(*chat_media.route(state, "POST", route, {}, data))
             return
         if route in ("/studio/make", "/studio/agents/stop", "/studio/agents/again"):   # engine/studio_agents.py
             import studio_agents  # pylint: disable=import-outside-toplevel

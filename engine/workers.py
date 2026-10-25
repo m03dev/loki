@@ -345,7 +345,7 @@ class LocalBackend(Backend):
             job_file.parent.mkdir(parents=True, exist_ok=True)
             job_file.write_text(json.dumps({
                 "id": job["id"], "prompt": job["prompt"], "profile": job.get("profile") or {},
-                "allow_commands": bool(job.get("allow_commands")), "model": job.get("model", ""),
+                "allow_commands": bool(job.get("allow_commands")), "no_shell": bool(job.get("no_shell")), "model": job.get("model", ""),
                 "selfcheck": bool(job.get("selfcheck")),
                 # stop a minute before the supervisor's kill, saying BLOCKED and keeping partial work
                 "deadline_s": max(60, int(job.get("timeout_s") or DEFAULT_TIMEOUT_S) - 60),
@@ -774,6 +774,7 @@ class Supervisor:
             "exit_code": None, "run_dir": "",
             "profile": spec.get("profile") if isinstance(spec.get("profile"), dict) else {},
             "allow_commands": bool(spec.get("allow_commands")),
+            "no_shell": bool(spec.get("no_shell")),   # the shell is on for OpenCode jobs unless this is set
             "model": str(spec.get("model") or ""),
             "fallback": str(spec.get("fallback") or "")[:80],
             "team": str(spec.get("team") or "")[:40],

@@ -211,3 +211,20 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 @container (max-width: 760px) {
   .home-head > .home-livewall.idle { display: none; }
 }
+
+/* ---------------------------------------------------------------- pictures and PDFs in the chat (chat_media.js) */
+.cm-strip { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px; }
+.cm-tile { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, .2);
+  max-width: min(100%, 30rem); display: flex; flex-direction: column; }
+.cm-pic { display: block; max-width: 100%; max-height: 22rem; object-fit: contain; background: #000; cursor: zoom-in; }
+.cm-pdf .cm-pic { background: #fff; }
+.cm-note { font-size: 12px; color: var(--muted); padding: 8px 10px; }
+.cm-cap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12px; }
+.cm-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 8rem; }
+.cm-acts { display: flex; gap: 4px; flex-wrap: wrap; }
+.cm-say { font-size: 12px; color: var(--muted); flex-basis: 100%; }
+.cm-say:empty { display: none; }
+.cm-say.bad { color: #e39a9a; }
+.cm-big { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, .86); display: flex; align-items: center; justify-content: center; padding: 3%; }
+.cm-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.cm-close { position: absolute; top: 14px; right: 18px; font-size: 26px; line-height: 1; background: transparent; color: #fff; border: 0; }

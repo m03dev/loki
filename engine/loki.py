@@ -9034,12 +9034,29 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         if result.get("session"):
             session = result["session"]
             OC_SESSIONS.set(conv, session)
+        if result.get("text") and opencode_engine.leaked_tool_markup(result["text"]) and not _cancel_event.is_set():
+            # the model wrote (some of) its tool calls as DeepSeek markup the provider did not turn into calls: those
+            # never ran. DeepSeek Harness runs them properly - install it for next time - and redo the turn with the
+            # next provider (the work so far stays in the folder)
+            _start_dsh_install()
+            if model != models[:3][-1]:
+                _progress("error", "%s sent tool calls back as text (DeepSeek markup), so they never ran - redoing "
+                                   "the turn with the next provider." % (model or "the model"))
+                if not result.get("tools"):
+                    session = None                    # nothing ran: a fresh session, the broken turn not carried on
+                continue
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))
     ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
     _task_ok_calls, _task_failed_calls = ok, failed
     reply = result.get("text") or ""
+    if opencode_engine.leaked_tool_markup(reply):
+        reply = opencode_engine.strip_tool_markup(reply)
+        if not result.get("tools") or not reply:
+            reply = ("NOT DONE - the model wrote its tool calls as text (DeepSeek's markup) and the provider did not "
+                     "run them, so nothing happened. Pick another model, or install DeepSeek Harness (Settings > Agent "
+                     "> Install) - it runs DeepSeek's tool calls itself.\n\n" + reply).strip()
     if result.get("error") and not reply:
         reply = "NOT DONE - OpenCode stopped: %s" % result["error"]
     elif not plan and _claims_unbacked(text, reply):
@@ -9063,6 +9080,28 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     messages.append({"role": "assistant", "content": reply})
     save_history()
     return reply
+
+
+_DSH_INSTALL = {"started": False}
+
+
+def _start_dsh_install() -> None:
+    """DeepSeek's tool calls came back as text: install DeepSeek Harness once, in the background (owner: "use deepseek
+    harness"). npm i -g @deepseek-ai/dsh; the next DeepSeek turn uses it."""
+    import dsh_engine  # pylint: disable=import-outside-toplevel
+    if _DSH_INSTALL["started"] or dsh_engine.find_dsh() or os.getenv("LOKI_DSH_AUTOINSTALL", "1") == "0":
+        return
+    _DSH_INSTALL["started"] = True
+
+    def go() -> None:
+        try:
+            out = opencode_engine.install(("dsh",))
+            print("[loki] DeepSeek Harness install: %s" % out.get("dsh"), flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print("[loki] DeepSeek Harness install failed: %s" % exc, flush=True)
+    threading.Thread(target=go, daemon=True, name="loki-dsh-install").start()
+    _progress("thinking", "Installing DeepSeek Harness in the background (%s) - DeepSeek runs through it next time."
+              % dsh_engine.INSTALL)
 
 
 async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = "") -> str:
@@ -9290,8 +9329,12 @@ async def run_job(job_path: str) -> int:
                    if profile.get("instructions") else "") + (
                 "You run unattended as a background job; nobody can answer questions, so make reasonable choices "
                 "and say what you chose.")
+            # the shell is ON for every job (owner 2026-10-25: "i told you it needs to be able to bash" - Studio and
+            # team jobs without allow_commands got no bash at all, and the agent said "No shell/Bash tool is
+            # available"). OpenCode still blocks the destructive commands and anything outside the job's folder; a
+            # job opts out with no_shell.
             result = _job_outcome(await run_opencode(str(job.get("prompt", "")), task=True,
-                                                     allow_bash=allow_commands, preamble=pre))
+                                                     allow_bash=not job.get("no_shell"), preamble=pre))
         else:
             result = await pursue_goal(str(job.get("prompt", "")))
     except (ModelUnavailable, BudgetExhausted) as exc:
