@@ -98,7 +98,9 @@ def limits(local: bool = False, env: dict | None = None) -> tuple:
     """(max_messages, max_chars) - smaller for a local model with a small window."""
     env = env if env is not None else os.environ
     msgs = int(env.get("LOKI_CONDENSE_MESSAGES", "160") or 160)
-    chars = int(env.get("LOKI_CONDENSE_CHARS", "") or (60000 if local else 280000))
+    # cloud: 160k characters (~40k tokens) - old tool output is masked first (context_budget.py), so what is left is
+    # the dialogue itself; 280k made every call of a long task ~75k tokens (owner 2026-10-25: "millions of tokens")
+    chars = int(env.get("LOKI_CONDENSE_CHARS", "") or (60000 if local else 160000))
     if local and LOCAL_WINDOW_TOKENS and not env.get("LOKI_CONDENSE_CHARS"):
         # ~3.5 characters per token, minus room for the reply
         chars = min(chars, max(8000, int((LOCAL_WINDOW_TOKENS - 2048) * 3.5)))

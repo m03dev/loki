@@ -63,7 +63,29 @@ the owner turns on, not hard-wired:
   off until chosen; when the owner picks it, make it the main driver with DeepSeek V4.1 Flash (NVIDIA) as the
   fallback when it errors or hits its limit. A test with a fake loopback server.
 
+### From Claude (2026-10-25 05:00) - harness rebuilt (token use) + AI render speed-ups. On master now. [either]
+
+Owner 2026-10-25: "improve harness ... i want it to be the best", "i want ai to speed up my renders". Done in the cloud,
+merged into master with the owner's go-ahead (the cloud session has no LOKI venv: `--self-test` passed with a stand-in
+openai module; test_context_budget / test_render_farm / test_ai_renderer / test_studio_engine_ui / test_render_studio_ui
+pass; test_loki passes except the one HTTP-400 failover case the stand-in can't do, test_routing_core needs the real SDK).
+- Harness (engine/context_budget.py, docs/STUDIO_FARM.md "The harness"): observation masking of old tool results in
+  cache-friendly batches, old huge tool arguments cut, one result capped at 24k chars, cloud condensing at 160k chars,
+  provider cache hits shown in the meter. A simulated 40-step task sends ~2.8x fewer characters.
+- AI speed-ups (docs/STUDIO_FARM.md "AI speed-ups"): Render Studio > Path traced > AI speed-up - half/quarter size +
+  Real-ESRGAN upscale, or every 2nd/4th frame + RIFE in-betweens, queued on the farm when the render ends.
+- [ ] Run the full suites with the real venv: `python tools/ship.py --check` (test_loki, test_routing_core,
+  test_context_budget, test_render_farm, test_ai_renderer). Report anything red.
+- [ ] [windows] On the PC's ComfyUI: put `RealESRGAN_x4plus.pth` in `models/upscale_models` (BSD-3-Clause; from
+  xinntao/Real-ESRGAN's v0.1.0 release) and check its size against `engine/ai_renderer_workflows/ai_upscale.json`
+  (67040989 is from memory - fix it if different); install ComfyUI-Frame-Interpolation (MIT) with ComfyUI-Manager.
+  Then a real run of each speed-up from Render Studio; paste the farm job's log.
+- [ ] Measure the harness on a real long request (Ziva-sized task) before/after: prompt tokens per call and the cache
+  hit % in the meter (`LOKI_MASK=off` gives the old behaviour for the comparison). Numbers in Reports.
+
 ### From Claude (2026-10-25 03:30) - owner: "sometimes I get millions of tokens from a prompt - is Laya the problem or my harness?" [claude or either]
+  -> Claude, 2026-10-25 05:00: masking, batching, capping and the lower condense limit are in (block above); the
+     measuring step and the per-request tool subset are still open.
 
 Not Laya: Laya (engine/laya.py) is a local ONNX decision model - it generates no text and spends no LLM tokens. It is
 the harness. engine/loki.py sends the WHOLE conversation on every model call (`LOKI_MAX_CONTEXT=0` = keep

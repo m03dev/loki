@@ -371,7 +371,7 @@ def workflow(name: str) -> dict:
 def describe(wf: dict) -> dict:
     """What the window needs to build its controls: the verified parameters, uploads, models, constraints."""
     return {k: wf.get(k) for k in ("name", "label", "about", "version", "license", "params", "uploads", "constraints",
-                                   "custom_nodes", "sources", "control_switch")} | {
+                                   "custom_nodes", "sources", "control_switch", "post")} | {
         "models": [{**m, "url": HF % (m["repo"], m["revision"], m["path"])} for m in wf.get("models", [])]}
 
 
@@ -447,6 +447,27 @@ def check_graph(prompt: dict, info: dict | None = None) -> list:
             if k not in req and k not in opt:
                 problems.append("node %s (%s) has an input %s the node does not take" % (nid, cls, k))
     return problems
+
+
+def adapt(prompt: dict, wf: dict, info: dict | None) -> dict:
+    """A node pack whose inputs change between versions (RIFE VFI gained dtype / torch_compile / batch_size): for the
+    nodes the workflow marks "adaptive", drop the listed inputs this server's node does not take, and give any
+    required input it wants but the graph lacks the server's own default. Other nodes are never touched."""
+    if not info:
+        return prompt
+    for nid, names in (wf.get("adaptive") or {}).items():
+        node = prompt.get(nid)
+        spec = (info.get(node["class_type"]) or {}).get("input") if node else None
+        if not spec:
+            continue
+        req, opt = spec.get("required") or {}, spec.get("optional") or {}
+        for k in list(node["inputs"]):
+            if k in names and k not in req and k not in opt:
+                del node["inputs"][k]
+        for k, sp in req.items():
+            if k not in node["inputs"] and isinstance(sp, (list, tuple)) and len(sp) > 1 and isinstance(sp[1], dict) and "default" in sp[1]:
+                node["inputs"][k] = sp[1]["default"]
+    return prompt
 
 
 def _num(v, kind):
@@ -756,6 +777,7 @@ def preflight(state: Any, wf_name: str, params: dict, job: str | None = None, cl
         rep["blockers"].append(str(exc))
         return rep
     prompt, _ = build_prompt(wf, merged, {k: "x" for k in (wf.get("uploads") or {})}, control)
+    prompt = adapt(prompt, wf, info)
     for nid, node in prompt.items():
         cls = node["class_type"]
         if cls not in info and cls not in [x["class"] for x in rep["missing_nodes"]]:
@@ -901,6 +923,11 @@ def _run_inner(state, job, stop, factory, env, poll_s):
     prompt, problems = build_prompt(wf, params, uploaded, m.get("control") or "both")
     if problems:
         raise RenderError("; ".join(problems))
+    if wf.get("adaptive"):
+        try:
+            prompt = adapt(prompt, wf, cl.object_info())
+        except Exception:  # noqa: BLE001 - the graph as written is still valid for the version it was written from
+            pass
     _write_json(job_dir(state, job) / "prompt.json", prompt)
     pid = str(uuid.uuid4())
     client_id = "loki-" + job
@@ -921,7 +948,7 @@ def _run_inner(state, job, stop, factory, env, poll_s):
         elif msg.get("type") == "executing":
             prog["node"] = d.get("node")
     ws_stop = threading.Event()
-    threading.Thread(target=watch_progress, args=(s["url"], client_id, on_msg, ws_stop), daemon=True).start()
+    threading.Thread(target=watch_progress, args=(cl.url, client_id, on_msg, ws_stop), daemon=True).start()
 
     deadline = time.time() + s["timeout_s"]
     last = None
@@ -1068,6 +1095,63 @@ def finish(state: Any, job: str, data: dict) -> dict:
     return update(state, job, fn)
 
 
+# ------------------------------------------------------------------ AI speed-ups of a finished path-traced render
+# Owner 2026-10-25: "i want ai to speed up my renders". Render less with the path tracer, let AI do the rest on the
+# farm's GPU: upscale = path-trace at half width and height (4x fewer pixels), Real-ESRGAN brings it back;
+# interpolate = path-trace every 2nd / 4th frame, RIFE makes the in-betweens.
+POST_OPS = {"upscale": "ai_upscale", "interpolate": "ai_interpolate"}
+
+
+def post_job(state: Any, source: str, op: str, factor: int = 2) -> dict:
+    """A new AI job that takes `source`'s path-traced frames (its beauty pass) through an AI speed-up graph."""
+    m = manifest(state, source)
+    if m is None:
+        raise RenderError("no such job")
+    if m.get("kind") != "path" or m.get("status") != "succeeded":
+        raise RenderError("AI speed-ups work on a finished path-traced render")
+    frames = sorted((job_dir(state, source) / "passes" / "beauty").glob("*.png"))
+    if not frames:
+        raise RenderError("that render has no frames")
+    if op not in POST_OPS:
+        raise RenderError("unknown speed-up %r (upscale or interpolate)" % op)
+    factor = int(factor)
+    fps = float(m.get("fps") or 24)
+    if op == "upscale":
+        if factor not in (2, 4):
+            raise RenderError("upscale is 2x or 4x")
+        params = {"scale_by": 0.5 if factor == 2 else 1.0, "fps": fps}
+        size = [int(x) * factor for x in (m.get("size") or [0, 0])]
+        n, label = len(frames), "AI upscale %dx" % factor
+    else:
+        if factor not in (2, 3, 4):
+            raise RenderError("in-betweens are x2, x3 or x4")
+        if len(frames) < 2:
+            raise RenderError("in-betweens need at least two frames")
+        params = {"multiplier": factor, "fps": fps * factor}
+        size = list(m.get("size") or [0, 0])
+        n, label = (len(frames) - 1) * factor + 1, "AI in-betweens x%d" % factor
+    made = new_job(state, {"kind": "ai", "workflow": POST_OPS[op], "name": "%s - %s" % (m.get("name") or source, label),
+                           "frames": n, "fps": params["fps"], "size": size, "camera": m.get("camera"), "params": params,
+                           "project": m.get("project")})
+    job = made["job"]
+    dst = job_dir(state, job) / "passes" / "beauty"
+    shutil.copytree(job_dir(state, source) / "passes" / "beauty", dst)
+    info = png_info(frames[0].read_bytes())
+
+    def fn(mm):
+        mm["passes"] = {"beauty": {"frames": len(frames), "width": info["width"], "height": info["height"], "folder": "passes/beauty"}}
+        mm["source"] = source
+        mm["post"] = {"op": op, "factor": factor}
+        if (job_dir(state, source) / "thumb.png").is_file():
+            shutil.copy2(job_dir(state, source) / "thumb.png", job_dir(state, job) / "thumb.png")
+            mm["thumb"] = "thumb.png"
+        elif frames:
+            shutil.copy2(frames[0], job_dir(state, job) / "thumb.png")
+            mm["thumb"] = "thumb.png"
+        _log(mm, "%s of %s (%d frames in)" % (label, source, len(frames)))
+    return {"job": job, "manifest": update(state, job, fn)}
+
+
 # ------------------------------------------------------------------ presets per project
 def _preset_file(state: Any, project: str) -> Path:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(project or "default"))[:60].strip("._") or "default"
@@ -1173,6 +1257,8 @@ def handle_post(state: Any, path: str, body: bytes, client_factory: Callable | N
             return 200, {"ok": True, "manifest": cancel(state, str(data.get("job") or ""))}
         if route == "/render/retry":
             return 200, {"ok": True, **retry(state, str(data.get("job") or ""))}
+        if route == "/render/post":
+            return 200, {"ok": True, **post_job(state, str(data.get("job") or ""), str(data.get("op") or ""), int(data.get("factor") or 2))}
         if route == "/render/finish":
             return 200, {"ok": True, "manifest": finish(state, str(data.get("job") or ""), data)}
         if route == "/render/presets":

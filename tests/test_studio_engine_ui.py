@@ -100,6 +100,13 @@ async def main():
         await page.click(".sf-view[data-view='render']")
         await page.wait_for_selector("#render-studio", timeout=5000)
         check("the Render view is the Render Studio", await E("!!document.querySelector('.sf-render #render-studio') && document.getElementById('studio-farm').hidden"))
+        plan = await E("""[LokiRenderStudio.speedPlan({ width: 1280, height: 720, step: 1, fps: 24, speed: 'upscale:2' }),
+          LokiRenderStudio.speedPlan({ width: 1280, height: 720, step: 1, fps: 24, speed: 'interpolate:4' }),
+          LokiRenderStudio.speedPlan({ width: 1280, height: 720, step: 1, fps: 24, speed: '' })]""")
+        check("AI speed-up: half size for the 2x upscale, every 4th frame for x4 in-betweens, untouched without one",
+              plan[0]["width"] == 640 and plan[0]["height"] == 360 and plan[0]["post"] == {"op": "upscale", "factor": 2}
+              and plan[1]["step"] == 4 and plan[1]["fps"] == 6 and plan[1]["post"]["op"] == "interpolate" and "post" not in plan[2], plan)
+        check("the AI speed-up choice is in the path tracer's settings", await E("[...document.querySelectorAll('#rs-speed option')].length") == 5)
         await page.click(".sf-view[data-view='farm']")
 
         await E("localStorage.removeItem('loki-engine-pick'); LokiModeBar.go('godot')")

@@ -163,6 +163,8 @@ def line(entry: dict) -> str:
         cost = "price unknown"
     parts = [entry.get("model", ""), "%s in / %s out%s" % (k(entry.get("in", 0)), k(entry.get("out", 0)),
                                                            " (est.)" if entry.get("est") else "")]
+    if entry.get("cached") and entry.get("in"):
+        parts.append("%d%% cached" % round(100 * entry["cached"] / entry["in"]))
     if entry.get("tps"):
         parts.append("%s tok/s" % entry["tps"])
     parts.append(cost)

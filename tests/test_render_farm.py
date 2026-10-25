@@ -134,6 +134,60 @@ check("the doctor knows a missing node and an offline worker",
 code, body = RF.route(None, "POST", "/farm/worker", {"url": "ftp://x"})
 check("a bad worker address is refused", code == 400 and not body["ok"])
 
+# ---- AI speed-ups of a path-traced render (render less, AI does the rest)
+import json as _json  # noqa: E402
+import struct as _struct  # noqa: E402
+import zlib as _zlib  # noqa: E402
+
+
+def _png(w, h, rgb=(200, 10, 10)):
+    raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+    def ch(k, d):
+        return _struct.pack(">I", len(d)) + k + d + _struct.pack(">I", _zlib.crc32(k + d) & 0xFFFFFFFF)
+    return b"\x89PNG\r\n\x1a\n" + ch(b"IHDR", _struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ch(b"IDAT", _zlib.compress(raw)) + ch(b"IEND", b"")
+
+
+src = AR.new_job(None, {"kind": "path", "name": "Turntable", "frames": 3, "fps": 12, "size": [64, 36]})["job"]
+for i in range(3):
+    AR.save_pass(None, src, "beauty", i, _png(64, 36, (i * 60, 0, 0)))
+try:
+    AR.post_job(None, src, "upscale", 2); ok = False
+except AR.RenderError:
+    ok = True
+check("a speed-up waits for the render to finish", ok)
+AR.finish(None, src, {"status": "succeeded"})
+up = AR.post_job(None, src, "upscale", 2)
+um = up["manifest"]
+check("Upscale 2x: an AI job on ai_upscale with the render's frames as its beauty pass, 2x the size",
+      um["workflow"] == "ai_upscale" and um["passes"]["beauty"]["frames"] == 3 and um["size"] == [128, 72] and um["params"]["scale_by"] == 0.5, um)
+it = AR.post_job(None, src, "interpolate", 4)["manifest"]
+check("In-betweens x4: RIFE multiplier 4, 4x the frame rate, (n-1)*4+1 frames",
+      it["workflow"] == "ai_interpolate" and it["params"]["multiplier"] == 4 and it["fps"] == 48 and it["frames"] == 9, it)
+for bad in (("upscale", 3), ("blur", 2)):
+    try:
+        AR.post_job(None, src, *bad); ok = False
+    except AR.RenderError:
+        ok = True
+    check("refused: %s %s" % bad, ok)
+FIX = _json.loads((REPO / "tests" / "fixtures" / "comfyui_object_info.json").read_text())["object_info"]
+for name, params in (("ai_upscale", um["params"]), ("ai_interpolate", it["params"])):
+    wf = AR.workflow(name)
+    pr, probs = AR.build_prompt(wf, params, {"beauty": "loki/beauty.png"})
+    check("%s: the graph with the job's values is valid against the node sources" % name, not probs and not AR.check_graph(pr, FIX), (probs, AR.check_graph(pr, FIX)))
+old_rife = {k: v for k, v in FIX.items()}
+old_rife["RIFE VFI"] = _json.loads(_json.dumps(FIX["RIFE VFI"]))
+for k in ("dtype", "torch_compile", "batch_size"):
+    old_rife["RIFE VFI"]["input"]["required"].pop(k)
+pr, _ = AR.build_prompt(AR.workflow("ai_interpolate"), {}, {"beauty": "x"})
+pr = AR.adapt(pr, AR.workflow("ai_interpolate"), old_rife)
+check("an older RIFE pack (no dtype / torch_compile / batch_size): those inputs are dropped, the graph stays valid",
+      "dtype" not in pr["2"]["inputs"] and not AR.check_graph(pr, old_rife))
+check("Render Studio's own workflow list can tell the speed-ups apart (post)", AR.describe(AR.workflow("ai_upscale")).get("post") is True)
+fs = RF.Farm(None, probe=probe, starter=starter)
+RF._FARMS[str(AR.data_dir(None))] = fs
+code, body = RF.route(None, "POST", "/farm/post", {"job": src, "op": "interpolate", "factor": 2})
+check("/farm/post makes the speed-up job and queues it on the farm", code == 200 and body["job"]["status"] == "queued" and body["job"]["workflow"] == "ai_interpolate", body)
+
 # ---- Carbon
 os.environ["LOKI_CARBON_BUILD"] = str(TMP / "carbon" / "build")
 s = CE.status()

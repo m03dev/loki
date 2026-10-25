@@ -25,6 +25,7 @@ a Monitor with Jobs / Workers / Tasks. This module is that, for LOKI:
     POST /farm/job      {id, action: suspend|resume|requeue|cancel|delete|priority, value?}
     POST /farm/worker   {url?, name?, enabled?, pools?, remove?}
     POST /farm/diagnose {id}                the farm doctor's reading of a job's failures
+    POST /farm/post     {job, op: upscale|interpolate, factor}   an AI speed-up of a finished path-traced render
 
 Standard library only. State in <data>/farm/farm.json.
 """
@@ -457,6 +458,10 @@ def route(state: Any, method: str, path: str, body: dict | None = None) -> tuple
             return 200, {"ok": True, "job": f.submit(body)}
         if method == "POST" and route_ == "/farm/job":
             return 200, {"ok": True, "job": f.action(str(body.get("id") or ""), str(body.get("action") or ""), body.get("value"))}
+        if method == "POST" and route_ == "/farm/post":   # an AI speed-up of a finished path-traced render, queued
+            made = ai_renderer.post_job(state, str(body.get("job") or ""), str(body.get("op") or ""), int(body.get("factor") or 2))
+            job = f.submit({"render_job": made["job"], "priority": body.get("priority", 60), "pool": body.get("pool") or "gpu"})
+            return 200, {"ok": True, "job": job, "render_job": made["job"]}
         if method == "POST" and route_ == "/farm/worker":
             return 200, {"ok": True, **f.set_worker(body)}
         if method == "POST" and route_ == "/farm/diagnose":

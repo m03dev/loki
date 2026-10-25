@@ -190,7 +190,12 @@ const LokiRenderStudio = (() => {
 
     const pt = mk("div", "rs-pt"); pt.id = "rs-pt";
     const ptg = mk("fieldset", "rs-group"); ptg.append(mk("legend", "", "Path tracer"));
+    // AI speed-ups (owner 2026-10-25: "i want ai to speed up my renders"): path-trace less, the farm's GPU does the rest
+    const speed = sel("rs-speed", [["", "None - path-trace everything"], ["upscale:2", "Half size, AI upscale 2x (~4x faster)"],
+      ["upscale:4", "Quarter size, AI upscale 4x (~16x faster)"], ["interpolate:2", "Every 2nd frame, AI in-betweens (~2x faster)"],
+      ["interpolate:4", "Every 4th frame, AI in-betweens (~4x faster)"]], "");
     ptg.append(row(field("Samples", num("rs-samples", 64, 1, 4096, 1)), field("Bounces", num("rs-bounces", 4, 1, 16, 1))),
+      field("AI speed-up", speed, "Render fewer pixels or frames here; when it is done the farm's GPU brings it back up with AI (Real-ESRGAN upscale, or RIFE in-betweens) - Studio > Farm shows it."),
       mk("p", "rs-note", window.ForgeRender ? "Forge's path tracer renders each frame here; keep the window open." : "Forge's path tracer is not in this window."));
     pt.append(ptg);
 
@@ -227,7 +232,7 @@ const LokiRenderStudio = (() => {
       lineWidth: +g("rs-linew"), crease: +g("rs-crease"), workflow: g("rs-wf"), model: g("rs-model"), control: g("rs-control"),
       depth_share: +g("rs-depthshare"), strength: +g("rs-strength"), prompt: g("rs-prompt"), negative: g("rs-negative"), seed: g("rs-seed"),
       frames: +g("rs-frames"), steps: +g("rs-steps"), cfg: +g("rs-cfg"), shift: +g("rs-shift"), sampler: g("rs-sampler"), scheduler: g("rs-scheduler"),
-      samples: +g("rs-samples"), bounces: +g("rs-bounces") };
+      samples: +g("rs-samples"), bounces: +g("rs-bounces"), speed: g("rs-speed") || "" };
   }
   function apply(s) {
     if (!s) return;
@@ -236,7 +241,7 @@ const LokiRenderStudio = (() => {
     for (const [id, k] of [["rs-camera", "camera"], ["rs-step", "step"], ["rs-width", "width"], ["rs-height", "height"], ["rs-fps", "fps"],
       ["rs-linew", "lineWidth"], ["rs-crease", "crease"], ["rs-model", "model"], ["rs-control", "control"], ["rs-depthshare", "depth_share"],
       ["rs-strength", "strength"], ["rs-prompt", "prompt"], ["rs-negative", "negative"], ["rs-seed", "seed"], ["rs-frames", "frames"], ["rs-steps", "steps"],
-      ["rs-cfg", "cfg"], ["rs-shift", "shift"], ["rs-sampler", "sampler"], ["rs-scheduler", "scheduler"], ["rs-samples", "samples"], ["rs-bounces", "bounces"]]) set(id, s[k]);
+      ["rs-cfg", "cfg"], ["rs-shift", "shift"], ["rs-sampler", "sampler"], ["rs-scheduler", "scheduler"], ["rs-samples", "samples"], ["rs-bounces", "bounces"], ["rs-speed", "speed"]]) set(id, s[k]);
     if (Array.isArray(s.passes)) for (const k of ["depth", "lineart", "normal", "beauty"]) if ($("rs-pass-" + k)) $("rs-pass-" + k).checked = s.passes.includes(k);
     syncEngine();
   }
@@ -273,7 +278,7 @@ const LokiRenderStudio = (() => {
       $("rs-where").textContent = "ComfyUI at " + (st.url_shown || st.url || "?") + ": " + (w.note || "?") + (w.own ? "." : " - uploads need your OK.");
     }
     const wsel = $("rs-wf"), keep = wsel.value;
-    const usable = S.wfs.filter((w) => w && w.name && ((w.uploads && Object.keys(w.uploads).length) || w.name.startsWith("zimage")));
+    const usable = S.wfs.filter((w) => w && w.name && !w.post && ((w.uploads && Object.keys(w.uploads).length) || w.name.startsWith("zimage")));
     if (usable.length) wsel.replaceChildren(...usable.map((w) => new Option(w.label || w.name, w.name)));
     if ([...wsel.options].some((o) => o.value === keep)) wsel.value = keep;
     const msel = $("rs-model"), mkeep = msel.value;
@@ -516,9 +521,17 @@ const LokiRenderStudio = (() => {
     S.sel = job; refresh();
   }
 
-  async function startPathJob(s) {
+  // what the path tracer really renders with an AI speed-up: fewer pixels (upscale) or fewer frames (interpolate)
+  function speedPlan(s) {
+    const [op, f] = String(s.speed || "").split(":"), k = +f || 0;
+    if (op === "upscale" && k > 1) return Object.assign({}, s, { width: Math.max(16, Math.round(s.width / k / 2) * 2), height: Math.max(16, Math.round(s.height / k / 2) * 2), post: { op, factor: k } });
+    if (op === "interpolate" && k > 1) return Object.assign({}, s, { step: Math.max(1, s.step) * k, fps: s.fps / k, post: { op, factor: k } });
+    return s;
+  }
+  async function startPathJob(s0) {
     if (!window.ForgeRender || !window.ForgeRender.isAvailable || !window.ForgeRender.isAvailable()) { say("Forge's path tracer is not available in this window (it needs WebGL2 with float targets).", true); return; }
     if (!(await ensureForge())) { say("Open Forge first.", true); return; }
+    const s = speedPlan(s0);
     const made = await call("/render/new", { kind: "path", name: s.name || "", fps: s.fps, size: [s.width, s.height], camera: s.camera,
       frames: Math.floor((s.end - s.start) / Math.max(1, s.step)) + 1, range: { start: s.start, end: s.end, step: s.step }, project: $("rs-project").value });
     if (!made.ok) { say(made.error, true); return; }
@@ -536,6 +549,12 @@ const LokiRenderStudio = (() => {
     await new Promise((r) => setTimeout(r, 200));
     await call("/render/finish", { job, status, log });
     S.running = null; refresh(); select(job);
+    if (s.post && status === "succeeded") {
+      const r = await call("/farm/post", { job, op: s.post.op, factor: s.post.factor });
+      say(r.ok ? "Rendered. The AI " + (s.post.op === "upscale" ? "upscale " + s.post.factor + "x" : "in-betweens x" + s.post.factor) +
+        " is queued on the farm (Studio > Farm)." : "Rendered, but the AI speed-up could not be queued: " + r.error, !r.ok);
+      refresh();
+    }
   }
 
   async function cancelJob(job) {
@@ -955,7 +974,7 @@ function buildEditor(wrap, g) {
       held);
   }
 
-  return { open, show, leave, enter: open, refresh, renderPasses, collect, apply, aiParams, state: S, select, startJob, runPreflight };
+  return { open, show, leave, enter: open, refresh, renderPasses, collect, apply, aiParams, speedPlan, state: S, select, startJob, runPreflight };
 })();
 window.LokiRenderStudio = LokiRenderStudio;
 if (window.LokiModeBar && typeof window.LokiModeBar.register === "function") {
