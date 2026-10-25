@@ -8940,9 +8940,14 @@ async def run_agent(user_message: str) -> str:
 import opencode_engine  # noqa: E402
 
 OC_SESSIONS = opencode_engine.Sessions(DATA_DIR / "opencode" / "sessions.json")
-try:   # Settings > Agents remembers the choice (opencode, or the old loop)
-    _saved_engine = (DATA_DIR / "opencode" / "engine.txt").read_text(encoding="utf-8").strip()
-    if _saved_engine in ("opencode", "loki"):
+try:   # the harness picked in Settings > Agent / the Harness menu (harness.txt); the older engine.txt: loki or auto
+    _hfile = DATA_DIR / "opencode" / "harness.txt"
+    if _hfile.is_file():
+        _saved_engine = _hfile.read_text(encoding="utf-8").strip()
+    else:
+        _saved_engine = (DATA_DIR / "opencode" / "engine.txt").read_text(encoding="utf-8").strip()
+        _saved_engine = "loki" if _saved_engine == "loki" else "auto"
+    if _saved_engine in opencode_engine.HARNESSES:
         os.environ.setdefault("LOKI_AGENT_ENGINE", _saved_engine)
 except OSError:
     pass
@@ -8970,7 +8975,9 @@ def _oc_providers(first: str) -> dict:
 def engine_status() -> dict:
     import dsh_engine  # pylint: disable=import-outside-toplevel
     oc, cg = opencode_engine.find_opencode(), opencode_engine.find_codegraph()
-    return {"engine": opencode_engine.engine_choice(), "opencode": oc, "codegraph": cg,
+    return {"engine": opencode_engine.engine_choice(), "harnesses": [{"id": k, "name": v[0], "what": v[1]}
+                                                                     for k, v in opencode_engine.HARNESSES.items()],
+            "opencode": oc, "codegraph": cg,
             "dsh": dsh_engine.find_dsh(), "deepseek_harness": dsh_engine.mode(),
             "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),
             "indexed": (WORKSPACE / ".codegraph").is_dir()}
@@ -8984,10 +8991,26 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     # model cannot carry OpenCode's 12k-token prompt and 20 tools (owner 2026-10-25: "make me a git repo with my
     # offline local model ... get it done")
     first_name = active_model_name()
-    if AGENT_MODE not in ("ask", "plan") and _local_agent_for(first_name):
-        return await run_local(text, first_name, task=task, preamble=preamble)
+    harness = opencode_engine.engine_choice()
+    acting = AGENT_MODE not in ("ask", "plan")
+    if harness == "shell" or (harness == "auto" and acting and _local_agent_for(first_name)):
+        pick = first_name if _local_agent_for(first_name) else next(iter(_oc_providers(first_name)), "")
+        if pick:
+            return await run_local(text, pick, task=task, preamble=preamble)
+    if harness == "dsh":                           # picked by hand: DeepSeek Harness runs whatever model is picked
+        import dsh_engine  # pylint: disable=import-outside-toplevel
+        prov = _oc_providers(first_name)
+        dexe = dsh_engine.find_dsh()
+        if prov and dexe:
+            name0 = next(iter(prov))
+            out = await run_dsh(text, (name0, prov[name0]), dexe, task=task, preamble=preamble)
+            if out is not None:
+                return out
+            messages.pop()
+        else:
+            _progress("error", "DeepSeek Harness is not installed (%s) - OpenCode runs this one." % dsh_engine.INSTALL)
     # owner 2026-10-25: "when we're using deepseek4.1 use deepseek harness" - DeepSeek's own agent (engine/dsh_engine.py)
-    if AGENT_MODE not in ("ask", "plan") and not os.getenv("LOKI_OPENCODE_MODEL", "").strip():
+    if harness == "auto" and acting and not os.getenv("LOKI_OPENCODE_MODEL", "").strip():
         import dsh_engine  # pylint: disable=import-outside-toplevel
         chosen = dsh_engine.pick(_oc_providers(first_name)) if dsh_engine.mode() != "off" else None
         if chosen and chosen[0] in _DSH_BROKEN:
@@ -9001,7 +9024,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         elif chosen and not dexe:
             _progress("thinking", "DeepSeek Harness is not installed (%s) - OpenCode runs this one." % dsh_engine.INSTALL)
     exe = opencode_engine.find_opencode()
-    if not exe and AGENT_MODE not in ("ask", "plan") and os.getenv("LOKI_LOCAL_AGENT", "on").lower() not in ("off", "0", "no"):
+    if not exe and acting and os.getenv("LOKI_LOCAL_AGENT", "on").lower() not in ("off", "0", "no"):
         # no OpenCode on this machine: LOKI's own shell agent does the work with whatever model is there - the one
         # picked (Smart's pick included), else a model on this computer - never "install something first"
         # (owner 2026-10-25: "smart windows made me pictures and opened up my windows folder" instead of a git repo)
@@ -9387,7 +9410,7 @@ async def run_job(job_path: str) -> int:
     try:
         if job.get("mcp"):
             await connect_mcp(stack)
-        if opencode_engine.engine_choice() == "opencode" and job.get("engine", "") != "loki" and (
+        if opencode_engine.engine_choice() != "loki" and job.get("engine", "") != "loki" and (
                 opencode_engine.find_opencode() or _local_agent_for(active_model_name())):
             # background jobs and team agents run on OpenCode too (docs/AGENT_ENGINE.md); LOKI's own loop stays the
             # fallback where OpenCode is not installed (and for LOKI_AGENT_ENGINE=loki)

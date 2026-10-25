@@ -335,7 +335,9 @@
   "Only this computer is linked - Studio > Agents links the other one. ": "Seul cet ordinateur est relié - Studio > Agents relie l'autre. ",
   "Open it in Studio > Agents (Stop, Again, its output).": "Ouvrez-le dans Studio > Agents (Arrêter, Recommencer, son résultat).",
   "Remove": "Supprimer",
-  "Delete this model from this computer and get the space back.": "Supprime ce modèle de cet ordinateur et libère l'espace."
+  "Delete this model from this computer and get the space back.": "Supprime ce modèle de cet ordinateur et libère l'espace.",
+  "Harness": "Harnais",
+  "How the work gets done: OpenCode, DeepSeek Harness, the Shell agent or LOKI classic. Auto picks for the model.": "Comment le travail est fait : OpenCode, DeepSeek Harness, l'agent shell ou LOKI classique. Auto choisit selon le modèle."
  },
  "fb.email": "Écrire un e-mail",
  "fb.email_done": "{file} enregistré. Un brouillon d'e-mail s'est ouvert : joignez le fichier et envoyez-le.",

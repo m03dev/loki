@@ -175,8 +175,9 @@ if loki:
     check("not installed: NOT DONE with how to install it (never the old loop pretending)",
           out.startswith("NOT DONE") and "npm i -g opencode-ai" in out and not calls, out[:200])
     os.environ["LOKI_OPENCODE_EXE"] = str(FAKE)
-    check("the engine is OpenCode unless LOKI_AGENT_ENGINE=loki", oe.engine_choice({}) == "opencode"
-          and oe.engine_choice({"LOKI_AGENT_ENGINE": "loki"}) == "loki")
+    check("the harness is Auto unless one is picked (opencode / dsh / shell / loki; nonsense -> auto)",
+          oe.engine_choice({}) == "auto" and oe.engine_choice({"LOKI_AGENT_ENGINE": "loki"}) == "loki"
+          and oe.engine_choice({"LOKI_AGENT_ENGINE": "opencode"}) == "opencode" and oe.engine_choice({"LOKI_AGENT_ENGINE": "x"}) == "auto")
     # a background job (workers.py -> loki.run_job) runs on OpenCode too, ends DONE / BLOCKED, own session + config
     jd = Path(tempfile.mkdtemp(prefix="loki-oc-job-"))
     loki.WORKSPACE = jd / "ws"; loki.WORKSPACE.mkdir()
@@ -209,7 +210,7 @@ if loki:
     os.environ.pop("LOKI_JOB_ID", None)
     st = loki.engine_status()
     check("Settings > Agent status: the engine, where OpenCode is, the install commands", st["opencode"] == str(FAKE)
-          and st["engine"] == "opencode" and "opencode" in st["install"])
+          and st["engine"] in oe.HARNESSES and "opencode" in st["install"] and len(st["harnesses"]) == 5, st)
 
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))

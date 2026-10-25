@@ -17,7 +17,7 @@ const AgentEngine = (() => {
     last = st;
     if (card) {
       card.replaceChildren();
-      card.append(mk("h4", "ae-title", "The agent: OpenCode + CodeGraph"),
+      card.append(mk("h4", "ae-title", "The harness: how the work gets done"),
         mk("p", "note", "Your chat and Build tasks are done by OpenCode (an open-source coding agent: files, edits, bash, git) "
           + "using your connected providers, with CodeGraph as its map of the code. LOKI shows every tool it runs and says NOT DONE when nothing ran."),
         row("OpenCode", st.opencode || "not installed", !!st.opencode),
@@ -32,14 +32,14 @@ const AgentEngine = (() => {
         acts.append(b);
       }
       const sel = mk("select", "ae-engine"); sel.id = "ae-engine";
-      for (const [v, t] of [["opencode", "Agent: OpenCode (recommended)"], ["loki", "Agent: LOKI's old built-in loop"]]) {
-        const o = mk("option", "", t); o.value = v; o.selected = st.engine === v; sel.append(o);
+      for (const h of st.harnesses || [{ id: "auto", name: "Auto" }, { id: "opencode", name: "OpenCode" }, { id: "loki", name: "LOKI classic" }]) {
+        const o = mk("option", "", "Harness: " + h.name); o.value = h.id; o.selected = st.engine === h.id; o.title = h.what || ""; sel.append(o);
       }
-      sel.addEventListener("change", async () => paint(await api("/agent/engine/set", { engine: sel.value })));
+      sel.addEventListener("change", async () => { const r = await api("/agent/engine/set", { engine: sel.value }); paint(r); if (window.LokiHarness) LokiHarness.paint(r); });
       acts.append(sel);
       card.append(acts);
     }
-    const missing = st.engine === "opencode" && !st.opencode;
+    const missing = st.engine === "opencode" && !st.opencode;   // auto / shell / classic work without OpenCode
     if (notice) notice.hidden = !missing;
   }
 

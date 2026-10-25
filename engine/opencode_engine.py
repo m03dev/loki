@@ -120,10 +120,23 @@ def install(which: Iterable[str] = ("opencode", "codegraph", "dsh"), runner=subp
     return out
 
 
+# The harness that runs a message - swappable (owner 2026-10-25: "i should be able to swap out different harnesses,
+# everything should be modular"). Settings > Agent and the Harness menu next to the model menu set it.
+HARNESSES = {
+    "auto": ("Auto", "The best one for the model picked: a model on this computer -> Shell agent; DeepSeek -> DeepSeek "
+                     "Harness when installed; anything else -> OpenCode (Shell agent when OpenCode is not installed)."),
+    "opencode": ("OpenCode", "OpenCode + CodeGraph: files, edits, bash, git and a code map. Best with strong cloud models."),
+    "dsh": ("DeepSeek Harness", "DeepSeek's own open-source agent (dsh). Made for DeepSeek, runs any OpenAI-compatible model."),
+    "shell": ("Shell agent", "mini-swe-agent's recipe: one shell command per step, the real output back. Small prompt - "
+                             "the one for local models, works with any model."),
+    "loki": ("LOKI classic", "LOKI's own built-in loop with all of LOKI's tools (pictures, apps, browser, memory ...)."),
+}
+
+
 def engine_choice(env: dict | None = None) -> str:
-    """LOKI_AGENT_ENGINE: opencode (default) | loki (the old built-in loop, only if you ask for it)."""
-    value = str((env if env is not None else os.environ).get("LOKI_AGENT_ENGINE", "opencode")).strip().lower()
-    return "loki" if value == "loki" else "opencode"
+    """LOKI_AGENT_ENGINE: auto (default) | opencode | dsh | shell | loki."""
+    value = str((env if env is not None else os.environ).get("LOKI_AGENT_ENGINE", "auto")).strip().lower()
+    return value if value in HARNESSES else "auto"
 
 
 # ------------------------------------------------------------------ the config OpenCode runs with

@@ -540,7 +540,7 @@ class BridgeState:
                 spent.clear()
             try:
                 # the agent is OpenCode + CodeGraph (engine/opencode_engine.py); LOKI_AGENT_ENGINE=loki = the old loop
-                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() == "opencode":
+                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() != "loki":
                     answer = await self.agent.run_opencode(prompt)
                 else:
                     answer = await self.agent.run_agent(prompt)
@@ -590,7 +590,7 @@ class BridgeState:
             self.agent.clear_cancel()
             stop_heartbeat = self._start_heartbeat(task_id)
             try:
-                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() == "opencode":
+                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() != "loki":
                     summary = await self.agent.run_opencode(task, task=True)
                 else:
                     summary = await self.agent.pursue_goal(task)
@@ -1420,12 +1420,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             agent = self.server.state.agent
             if route.endswith("/set"):
-                choice = "loki" if str(body.get("engine", "")).lower() == "loki" else "opencode"
+                choice = str(body.get("engine", "")).lower()
+                choice = choice if choice in agent.opencode_engine.HARNESSES else "auto"
                 os.environ["LOKI_AGENT_ENGINE"] = choice
                 try:
                     where = Path(agent.DATA_DIR) / "opencode"
                     where.mkdir(parents=True, exist_ok=True)
-                    (where / "engine.txt").write_text(choice, encoding="utf-8")
+                    (where / "harness.txt").write_text(choice, encoding="utf-8")
                 except OSError:
                     pass
                 self._send_json(200, {"ok": True, **agent.engine_status()})
