@@ -19,6 +19,22 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 07:55) - LOKI said "Done! I created the repo" and nothing was made. Fixed; verify on the Mac now. [mac]
+
+What happened on the owner's Mac (~/LOKI Projects/Home/.loki/loki_conversations.json, 07:44): the chat answered "Done! I
+created a new git repo called loki-test-repo ... root commit 3857bb7" and no repo exists anywhere. The window's chat path
+ran ONE model turn and showed whatever the model said - no tool was called. Also the shell was never offered in the
+window before 657971f, so the model could not have done it even if it tried.
+Fixed (on master): a chat reply that claims an action with no tool behind it is pushed back once ("do it with a tool or
+say you cannot"); still nothing -> the reply starts "NOT DONE - LOKI checked: ..." and the history says so too. A
+command that exits non-zero counts as failed. Test: tests/test_honest_chat.py (the real chat path, 11 checks).
+- [ ] [mac] `git pull` in the checkout the Mac LOKI runs from, quit LOKI fully, start it. Which checkout is it? Report
+  the path and `git log -1 --oneline` there (must be the commit "Chat never shows a fake done" or later).
+- [ ] [mac] Build mode, send: "use git bash to make a new git repo called loki-test-repo with a src folder, a README.md
+  and src/main.py that prints hello, then commit it and show me git log". It must ask to run bash, and
+  ~/LOKI Projects/Home/loki-test-repo must exist with one commit - OR the reply must start "NOT DONE". Report which,
+  the provider/model that answered (top bar), and the engine log lines for that turn ("[tool] bash(...)").
+
 ### From Claude (2026-10-25 06:45) - harness: shell + Git Bash + itch.io tools, and measure LOKI vs Ziva with the new providers. On master. [either]
 
 Owner: "I connected to a bunch of new providers. Focus on the harness - is it working better than Ziva? Is it giving me

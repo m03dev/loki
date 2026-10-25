@@ -8212,8 +8212,13 @@ async def _run_agent(user_message: str) -> str:
     REQUEST_USAGE.clear()
     _task_files.clear()
     messages.append({"role": "user", "content": user_message})
+    global _task_ok_calls, _task_failed_calls
+    _task_ok_calls = _task_failed_calls = 0
     try:
         answer = await agent_turn()
+        # "It says it did it but it doesn't actually do it" (owner 2026-10-25): a reply that CLAIMS an action
+        # with no tool behind it is never shown as done (_honest_reply).
+        answer = await _honest_reply(user_message, answer)
         # A chat turn that changed files gets ONE bounded repair round on real errors -
         # cheap insurance against "I fixed it" when the script does not even compile.
         answer = await _finish_with_verification(answer, rounds=min(1, VERIFY_FIX_ROUNDS))
@@ -8266,11 +8271,74 @@ def _outcome_text(reply: str) -> str:
     return ""
 
 
+# ---- the honesty check for a chat turn (owner 2026-10-25: "it said it did it but I checked my repo and nothing
+# was done. This has been the main issue with LOKI: it says but it doesn't actually do"). The window's chat path ran
+# ONE model turn and showed whatever it said: a model that answered "Done! I created the repo ..." without calling a
+# single tool was believed. Now: the request asks for an action + the reply claims it + no tool did anything ->
+# pushed back once (do it with a tool, or say you cannot); still nothing -> the reply says plainly it was NOT done.
+_ASKS_ACTION = re.compile(r"\b(make|create|write|build|commit|push|run|use|init|initiali[sz]e|install|delete|remove|move|"
+                          r"rename|add|fix|upload|publish|set up|setup|generate|save|edit|change|update|clone|deploy|"
+                          r"mkdir|copy|download|render|export)\b", re.I)
+_CLAIMS_DONE = re.compile(r"(\b(i|i've|i have|i just|we|loki)\b[^.\n]{0,40}\b(created|made|wrote|written|committed|"
+                          r"initiali[sz]ed|ran|executed|installed|saved|pushed|deleted|removed|moved|renamed|added|"
+                          r"updated|built|generated|fixed|set up|uploaded|published|cloned|copied|downloaded|exported)\b"
+                          r"|^\W*(done|all done|finished|success)\b|\bsuccessfully\b|\b(has|have) been (created|"
+                          r"committed|made|written|saved|added|pushed|installed|initiali[sz]ed|generated)\b)", re.I | re.M)
+
+
+def _claims_unbacked(request: str, reply: str) -> bool:
+    """The request asks for an action, the reply says it was done, and no tool call this turn did anything."""
+    text = str(reply or "")
+    if not text.strip() or _task_ok_calls > 0 or is_conversational(request):
+        return False
+    return bool(_ASKS_ACTION.search(request or "") and _CLAIMS_DONE.search(text))
+
+
+def _not_done_note(reply: str) -> str:
+    why = ("every tool call failed or was refused" if _task_failed_calls
+           else "the model answered in text without calling a single tool")
+    mode = {"ask": "Ask", "plan": "Plan"}.get(AGENT_MODE)
+    fix = ("LOKI is in %s mode, which cannot change anything - switch to Build and send it again." % mode if mode
+           else "Nothing was changed on your computer. Send it again, or pick a model that calls tools "
+                "(Settings > Connections shows which ones do).")
+    return ("NOT DONE - LOKI checked: %s, so what the model said below did not happen. %s\n\n(What the model "
+            "claimed: %s)" % (why, fix, " ".join(str(reply).split())[:400]))
+
+
+async def _honest_reply(request: str, answer: str) -> str:
+    if not _claims_unbacked(request, answer):
+        return answer
+    if AGENT_MODE == "build":
+        _progress("thinking", "Checked: the reply says it was done, but no tool ran - asking it to really do it.")
+        messages.append({"role": "user", "content": (
+            "Self-check: your reply says it is done, but NO tool was called (or every call failed), so nothing "
+            "actually happened on this computer. Do it now with your tools (bash / run_command for git and shell "
+            "commands, write_file / edit_file for files), then report exactly what the tools returned. If you "
+            "cannot, say plainly that it was not done and why.")})
+        answer = await agent_turn(force_tool=True)
+        if not _claims_unbacked(request, answer):
+            return answer
+    note = _not_done_note(answer)
+    # the model must not remember a fake success either: every claim since this request is rewritten
+    start = next((i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], dict)
+                  and messages[i].get("role") == "user" and messages[i].get("content") == request), 0)
+    for i in range(start + 1, len(messages)):
+        m = messages[i]
+        if isinstance(m, dict) and m.get("role") == "assistant" and not m.get("tool_calls") \
+                and _CLAIMS_DONE.search(str(m.get("content") or "")):
+            messages[i] = {**m, "content": "(I claimed this was done, but no tool ran - it was NOT done.)"}
+    if messages and isinstance(messages[-1], dict) and messages[-1].get("role") == "assistant":
+        messages[-1] = {**messages[-1], "content": note}
+    _progress("thinking", "Checked: still no tool behind the claim - told the owner it was NOT done.")
+    return note
+
+
 def _note_result(result) -> None:
     """Count one tool result as done-something or failed (a refusal, an error, a rejected call)."""
     global _task_ok_calls, _task_failed_calls
     head = str(result or "").lstrip()[:80].lower()
-    if head.startswith(("error", "denied", "refused")) or "denied by loki" in head:
+    failed_exit = bool(re.match(r"exit (-?[1-9]\d*)\b", head))     # run_command / bash: a non-zero exit failed
+    if head.startswith(("error", "denied", "refused")) or "denied by loki" in head or failed_exit:
         _task_failed_calls += 1
     else:
         _task_ok_calls += 1
