@@ -506,6 +506,27 @@ const FORGE_MAYA = {
   "Mesh": [
    "#Combine",
    [
+    "Booleans",
+    [
+     [
+      "boolUnion",
+      "Union"
+     ],
+     [
+      "boolDifference",
+      "Difference (A - B)"
+     ],
+     [
+      "boolDifferenceBA",
+      "Difference (B - A)"
+     ],
+     [
+      "boolIntersection",
+      "Intersection"
+     ]
+    ]
+   ],
+   [
     "combine",
     "Combine"
    ],
@@ -1004,6 +1025,27 @@ const FORGE_MAYA = {
     [
      "combine",
      "Combine"
+    ],
+    [
+     "Booleans",
+     [
+      [
+       "boolUnion",
+       "Union"
+      ],
+      [
+       "boolDifference",
+       "Difference (A - B)"
+      ],
+      [
+       "boolDifferenceBA",
+       "Difference (B - A)"
+      ],
+      [
+       "boolIntersection",
+       "Intersection"
+      ]
+     ]
     ],
     "-",
     [

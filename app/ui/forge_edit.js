@@ -44,7 +44,7 @@ function forgeEditAttach(view, ctx) {
   const P = window.ForgePoly;
   const KEY = { vert: "v", edge: "e", face: "f" };
   const ed = view.edit = {
-    mode: "face", xray: false, prop: false, propRadius: 0.25, falloff: "smooth",
+    mode: "face", xray: false, prop: false, propRadius: 0.25, falloff: "smooth", falloffMode: "volume",
     sel: { v: new Set(), e: new Set(), f: new Set() }, topo: null, topoOf: null, mouse: null,
   };
   const topo = () => {
@@ -479,18 +479,20 @@ function forgeEditAttach(view, ctx) {
     return ed.tool;
   };
   view.tool = () => ed.tool;
+  // Maya's soft selection Falloff Mode: Volume (straight-line distance) or Surface (along the mesh's edges)
+  const softWeights = (m, verts, radius) => (ed.falloffMode === "surface" && P.weightsSurface ? P.weightsSurface : P.weights)(m, verts, radius, ed.falloff);
   function begin(kind) {
     const verts = view.selectedVerts();
     if (!view.poly || !verts.length) return false;
     const radius = ed.prop ? ed.propRadius * (view.size || 1) : 0;
-    edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: P.weights(view.poly, verts, radius, ed.falloff),
+    edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: softWeights(view.poly, verts, radius),
       pivot: P.median(view.poly, verts), start: pivot.matrix.clone(), keep: ed.sel };
     edit.sym = planSymmetry();
     return true;
   }
   function reweigh() {
     if (!edit) return;
-    edit.weights = P.weights(edit.base, edit.verts, ed.prop ? ed.propRadius * (view.size || 1) : 0, ed.falloff);
+    edit.weights = softWeights(edit.base, edit.verts, ed.prop ? ed.propRadius * (view.size || 1) : 0);
     edit.sym = planSymmetry();
   }
 
@@ -621,10 +623,11 @@ function forgeEditAttach(view, ctx) {
     if (shiftExtrude) { shiftExtrude = false; if (view.undoClose) view.undoClose(); }
   });
 
-  view.setProportional = (on, radius, falloff) => {
+  view.setProportional = (on, radius, falloff, mode) => {
     if (on != null) ed.prop = !!on;
     if (radius != null) ed.propRadius = Math.max(0.01, Math.min(2, radius));
     if (falloff && P.FALLOFF[falloff]) ed.falloff = falloff;
+    if (mode === "volume" || mode === "surface") ed.falloffMode = mode;
     reweigh();
     for (const b of document.querySelectorAll("#forge [data-prop]")) b.classList.toggle("on", ed.prop);
     stats();

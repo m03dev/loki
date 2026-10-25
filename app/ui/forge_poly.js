@@ -791,6 +791,37 @@
     });
     return w;
   };
+  // Maya's soft selection Falloff Mode "Surface" (Blockbench proportional edit "connected", Wings' magnet over the
+  // mesh): the distance is measured ALONG the mesh's edges from the picked vertices (multi-source Dijkstra), so the
+  // lower lip moves without the upper one, a finger without the next finger. Same falloff curves as P.weights.
+  P.weightsSurface = (m, verts, radius, falloff) => {
+    const w = new Map(), sel = [...new Set(verts)].filter((i) => m.v[i]);
+    for (const i of sel) w.set(i, 1);
+    if (!(radius > 0) || !sel.length) return w;
+    const fn = P.FALLOFF[falloff] || P.FALLOFF.smooth;
+    const nb = m.v.map(() => []);
+    for (const f of m.f) for (let k = 0; k < f.length; k++) {
+      const a = f[k], b = f[(k + 1) % f.length];
+      if (!nb[a].includes(b)) { nb[a].push(b); nb[b].push(a); }
+    }
+    const dist = new Float64Array(m.v.length).fill(Infinity);
+    // a binary heap of [distance, vertex]
+    const heap = [];
+    const push = (d, i) => { heap.push([d, i]); let c = heap.length - 1; while (c) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let s = c; if (l < heap.length && heap[l][0] < heap[s][0]) s = l; if (r < heap.length && heap[r][0] < heap[s][0]) s = r; if (s === c) break; [heap[s], heap[c]] = [heap[c], heap[s]]; c = s; } } return top; };
+    for (const i of sel) { dist[i] = 0; push(0, i); }
+    while (heap.length) {
+      const [d, i] = pop();
+      if (d > dist[i] || d > radius) continue;
+      const p = m.v[i];
+      for (const j of nb[i]) {
+        const q = m.v[j], nd = d + Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+        if (nd < dist[j] && nd < radius) { dist[j] = nd; push(nd, j); }
+      }
+    }
+    dist.forEach((d, i) => { if (!w.has(i) && d < radius) { const f = fn((radius - d) / radius); if (f > 0) w.set(i, f); } });
+    return w;
+  };
   // p' = p + w (M p - p): M is a 4x4 column-major matrix (three.js' Matrix4.elements); weights from P.weights
   P.applyMatrix = (m0, weights, M, into) => {
     const m = into || clone(m0);

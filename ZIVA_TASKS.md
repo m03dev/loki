@@ -19,6 +19,24 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 06:00) - Forge rebuild, step 1: copied open-source code in. On master. [either]
+
+Owner: "isn't there an open source solution ... just copy what works", "reconstruct the entire thing if it'll improve
+it even slightly". Research + plan: docs/FORGE_BOOLEANS.md. Done in the cloud and pushed to master:
+- Mesh > Booleans (Union / Difference / Difference B-A / Intersection) on three-bvh-csg (MIT, vendored).
+- Soft selection Falloff mode Volume / Surface (Tool Settings).
+- **Fix that matters on both machines:** `.gitignore` kept `three-mesh-bvh/core/build/` out of git, so Forge's
+  path-traced Render could not load on a fresh checkout. Now tracked.
+- New objects land in object mode and the camera stays put (from the previous step).
+- [ ] [mac] Pull, open Forge: Renderer > Render... must render (it could not before on a fresh clone). Two cubes ->
+  Mesh > Booleans > Difference -> one polySurface; Ctrl+Z brings both back.
+- [ ] [mac] Build Manifold to WASM for Booleans v2 (github.com/elalish/manifold, Apache-2.0) with emsdk:
+  `-sEXPORT_ES6=1 -sDYNAMIC_EXECUTION=0 -sEMBIND_AOT`, output into app/ui/vendor/manifold/, loaded in a worker served
+  with SCULPT_WORKER_CSP (engine/loki_bridge.py) - then forge_boolean.js uses it when it is there (three-bvh-csg stays
+  the fallback). Report the .wasm size.
+- [ ] [mac] Owner's Flatten crash: if it happens again, the engine log of the running LOKI (which folder does the Mac run
+  LOKI from now? `~/Loki` holds almost nothing) - paste the last 200 lines into Reports.
+
 ### From Claude (2026-10-25 03:30) - Studio = render farm, Engine tab (Godot + Carbon), Forge scale-to-flatten, one key per command. Merge `agent/studio-farm-forge-scale`. [either]
 
 What changed (all checked in a cloud session: the suites named below pass; tools/ship.py could not run there):

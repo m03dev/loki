@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-232 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (21%).
+240 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (22%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -38,7 +38,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Modify | 9 | 95 |
 | Display | 10 | 121 |
 | Windows | 12 | 80 |
-| Mesh | 11 | 32 |
+| Mesh | 15 | 32 |
 | Edit Mesh | 18 | 30 |
 | Mesh Tools | 8 | 34 |
 | Mesh Display | 4 | 38 |
@@ -48,7 +48,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | UV | 10 | 19 |
 | Key | 4 | 36 |
 | Playback | 5 | 27 |
-| Shift+RMB object | 22 | 47 |
+| Shift+RMB object | 26 | 47 |
 | Shift+RMB vertex | 13 | 26 |
 | Shift+RMB edge | 24 | 37 |
 | Shift+RMB face | 22 | 36 |
@@ -604,10 +604,10 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ### Mesh
 
-- - Booleans > Union (Maya: PolygonBooleanUnion)
-- - Booleans > Difference (A - B) (Maya: PolygonBooleanDifference)
-- - Booleans > Difference (B - A) (Maya: PolygonBooleanDifferenceBA)
-- - Booleans > Intersection (Maya: PolygonBooleanIntersection)
+- ✓ `boolUnion` Booleans > Union (Maya: PolygonBooleanUnion)
+- ✓ `boolDifference` Booleans > Difference (A - B) (Maya: PolygonBooleanDifference)
+- ✓ `boolDifferenceBA` Booleans > Difference (B - A) (Maya: PolygonBooleanDifferenceBA)
+- ✓ `boolIntersection` Booleans > Intersection (Maya: PolygonBooleanIntersection)
 - - Booleans > Slice (Maya: PolygonBooleanSlice)
 - - Booleans > Hole Punch (Maya: PolygonBooleanHolePunch)
 - - Booleans > Cut Out (Maya: PolygonBooleanCutOut)
@@ -1029,10 +1029,10 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Transfer Vertex Order (Maya: TransferVertexOrder)
 - ✓ `separate` Separate (Maya: SeparatePolygon)
 - ✓ `combine` Combine (Maya: CombinePolygons)
-- - Booleans > Union (Maya: PolygonBooleanUnion)
-- - Booleans > Difference (A - B) (Maya: PolygonBooleanDifference)
-- - Booleans > Difference (B - A) (Maya: PolygonBooleanDifferenceBA)
-- - Booleans > Intersection (Maya: PolygonBooleanIntersection)
+- ✓ `boolUnion` Booleans > Union (Maya: PolygonBooleanUnion)
+- ✓ `boolDifference` Booleans > Difference (A - B) (Maya: PolygonBooleanDifference)
+- ✓ `boolDifferenceBA` Booleans > Difference (B - A) (Maya: PolygonBooleanDifferenceBA)
+- ✓ `boolIntersection` Booleans > Intersection (Maya: PolygonBooleanIntersection)
 - - Booleans > Slice (Maya: PolygonBooleanSlice)
 - - Booleans > Hole Punch (Maya: PolygonBooleanHolePunch)
 - - Booleans > Cut Out (Maya: PolygonBooleanCutOut)

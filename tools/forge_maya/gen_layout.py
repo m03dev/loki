@@ -60,6 +60,8 @@ MAP = {
     "OutlinerWindow": "winOutliner", "GraphEditor": "graphEditor", "HypershadeWindow": "winMaterials",
     "RenderViewWindow": "renderDialog", "HotkeyPreferencesWindow": "hotkeyEditor", "PreferencesWindow": "preferences",
     # Mesh
+    "PolygonBooleanUnion": "boolUnion", "PolygonBooleanDifference": "boolDifference",
+    "PolygonBooleanDifferenceBA": "boolDifferenceBA", "PolygonBooleanIntersection": "boolIntersection",
     "CombinePolygons": "combine", "SeparatePolygon": "separate", "FillHole": "fillHole", "ReducePolygon": "sculptReduce",
     "PolyRemesh": "sculptRemesh", "PolyRetopo": "sculptQuadRemesh", "SmoothPolygon": "smooth", "Triangulate": "triangulate",
     "Quadrangulate": "quadrangulate", "MirrorPolygonGeometry": "mirror", "CleanupPolygon": "cleanup",

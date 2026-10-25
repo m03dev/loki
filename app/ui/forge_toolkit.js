@@ -474,6 +474,15 @@ function forgeTkBuild(box) {
   soft.append(softBox, mk("span", "", "Soft Selection (b)"));
   const rad = forgeTkSlider("Falloff radius", 0.02, 2, 0.01, () => (forge.view && forge.view.edit ? forge.view.edit.propRadius : 0.25),
     (x) => { const v = forge.view; if (v && v.edit) { v.edit.propRadius = x; if (v.reweigh) v.reweigh(); } });
+  // Maya's Falloff mode: Volume (straight-line distance) / Surface (along the mesh - a lip moves without the other)
+  const fmode = mk("label", "forge-tk-row");
+  const fmSel = document.createElement("select"); fmSel.id = "forge-tk-fmode"; fmSel.className = "forge-tk-select";
+  for (const [k, t] of [["volume", "Falloff mode: Volume"], ["surface", "Falloff mode: Surface"]]) {
+    const o = document.createElement("option"); o.value = k; o.textContent = t; fmSel.append(o);
+  }
+  fmSel.title = "Volume: everything within the radius follows. Surface: only what is connected along the mesh within the radius.";
+  fmSel.addEventListener("change", () => { const v = forge.view; if (v && v.setProportional) v.setProportional(null, null, null, fmSel.value); });
+  fmode.append(fmSel);
   const cam = mk("label", "forge-tk-row");
   const camSel = document.createElement("select"); camSel.id = "forge-tk-camsel"; camSel.className = "forge-tk-select";
   for (const [k, t] of [["auto", "Camera based: Automatic"], ["on", "Camera based: On (only what you see)"], ["off", "Off - select through"]]) {
@@ -488,7 +497,7 @@ function forgeTkBuild(box) {
   bf.append(bfBox, mk("span", "", "Backface culling (hide faces pointing away)"));
   const loops = mk("div", "forge-tk-grid");
   for (const id of ["loopSel", "ringSel", "grow", "shrink", "invert", "selectAll"]) loops.append(forgeTkBtn(id));
-  selSec.append(modes, cam, bf, soft, rad, loops);
+  selSec.append(modes, cam, bf, soft, rad, fmode, loops);
   box.append(selSec);
   for (const [g, ids] of FORGE_TK_GROUPS) {
     const sec = mk("details", "forge-tk-sec"); sec.open = true; sec.append(mk("summary", "", g));

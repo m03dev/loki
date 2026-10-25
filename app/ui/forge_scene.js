@@ -897,6 +897,26 @@ function forgeSceneAttach(view, ctx) {
       tree.build();
       return out;
     },
+    // Mesh > Booleans (forge_boolean.js) needs the picked meshes in world space, in pick order (Maya: the first
+    // picked is the one the others are cut from), and a way to put the result in their place - both like combine
+    worldPolys(ids) {
+      const P = window.ForgePoly;
+      const list = (ids || tree.sel).map(node).filter((n) => n && n.kind === "mesh" && hasGeometry(n));
+      scene.updateMatrixWorld(true);
+      return list.map((n) => { const m = polyOfNode(n); return m ? { id: n.id, name: n.name, poly: P.transform(m, n.inner.matrixWorld.elements) } : null; }).filter(Boolean);
+    },
+    replaceWith(ids, poly, base) {
+      const list = ids.map(node).filter(Boolean);
+      if (!list.length || !poly || !poly.f.length) return null;
+      const wasWorking = list.some((n) => n.root);
+      const out = polyNode(base || "polySurface", poly, 0);
+      for (const n of list) for (const k of kidsOf(n.id)) api.reparent(k.id, 0);
+      if (wasWorking) api.makeWorking(out.id);
+      for (const n of list) api.remove(n.id);
+      tree.sel = [out.id]; api.centerPivot(out.id);
+      tree.build();
+      return out;
+    },
     // Mesh > Separate: each piece of the selected mesh that shares no vertex with the rest becomes its own object,
     // grouped under the original's name (polySurface1, polySurface2 ...).
     separate(id) {
@@ -1829,7 +1849,7 @@ function forgeSceneAttach(view, ctx) {
     "showLastHidden", "hideUnselected", "showAll", "remove", "removeSelected", "reparent", "parentSelected", "unparentSelected",
     "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
     "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
-    "combine", "separate", "newObject", "dropOn",
+    "combine", "separate", "replaceWith", "newObject", "dropOn",
     "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane",
     "setKey", "deleteKey", "clearKeys"];
   for (const name of RECORDED) {

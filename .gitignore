@@ -34,6 +34,8 @@ project.godot
 
 # Packaged builds and models
 build/
+# vendored libraries keep their own build/ source folders (three-mesh-bvh/core/build was silently left out)
+!app/ui/vendor/**/build/
 dist/
 *.gguf
 *.safetensors
