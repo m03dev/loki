@@ -780,6 +780,8 @@ class Supervisor:
             # The agent this job runs as (agent builder) and its colour in the agents list.
             "agent_id": str(spec.get("agent_id") or "")[:40],
             "color": str(spec.get("color") or "")[:7],
+            # Studio > Make (engine/studio_agents.py): art / 3d / comic / novel / website ... for the Agents view
+            "make_kind": str(spec.get("make_kind") or "")[:20],
             # LOKI's System check: the built-in agent proves the job path (spawn, log, poll,
             # events, world) and exits at once - no model, no tools (loki.run_job).
             "selfcheck": bool(spec.get("selfcheck")) and backend == "local" and agent == "loki",

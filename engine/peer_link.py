@@ -294,7 +294,11 @@ def callbacks(state: Any, agent: Any) -> dict:
         restart = getattr(state, "restart_engine", None) or (lambda: None)
         return update_all.apply_here(updater, restart)
 
-    return {"hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
+    def world() -> dict:   # Studio > Agents on a linked machine shows our agents (engine/studio_agents.py)
+        import studio_agents  # pylint: disable=import-outside-toplevel
+        return studio_agents.world_for_peer(state)
+
+    return {"world": world, "hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
             "restart": lambda: _restart_soon(state),
@@ -446,6 +450,16 @@ def ask_peers_to_check_update() -> list:
 _MACHINES_LIVE: dict = {"t": 0.0, "list": [], "busy": False}
 
 
+def _peer_agents(st: dict) -> list:
+    """A linked machine's agents at work (its GET /peer/world; an older LOKI there answers 404: none shown)."""
+    try:
+        got = peers.call({k: v for k, v in st.items() if k not in ("ok", "ms", "hello", "error")}, "GET", "/peer/world",
+                         timeout=4.0)
+        return list(got.get("agents") or [])[:30]
+    except Exception:  # noqa: BLE001 - the view never fails over one machine
+        return []
+
+
 def machines_live(max_age_s: float = 30.0) -> list:
     """Your other machines (the worker farm): name, online, latency, live jobs, version. Cached;
     refreshed in the background, so a poll (GET /world, the home screen) never waits on the
@@ -468,7 +482,8 @@ def machines_live(max_age_s: float = 30.0) -> list:
                                 "version": (hello.get("version") or {}).get("label", ""),
                                 "working": int(jobs.get("working", 0) or 0) + int(jobs.get("starting", 0) or 0),
                                 "queued": int(jobs.get("queued", 0) or 0), "blocked": int(jobs.get("blocked", 0) or 0),
-                                "models": len(hello.get("ollama_models") or [])})
+                                "models": len(hello.get("ollama_models") or []),
+                                "agents": _peer_agents(st) if st.get("ok") else []})
                 state["list"] = out
             except Exception:  # noqa: BLE001 - the view must never break on the network
                 pass

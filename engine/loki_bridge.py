@@ -1029,6 +1029,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
+        if route == "/studio/agents":   # Studio > Agents: every agent on every machine (engine/studio_agents.py)
+            import studio_agents  # pylint: disable=import-outside-toplevel
+            try:
+                self._send_json(200, studio_agents.view(self.server.state))
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
         if route == "/studio":   # session 29: LOKI Studio (engine/studio_api.py)
             import studio_api  # pylint: disable=import-outside-toplevel
             self._send_json(*studio_api.route(self.server.state, "GET", route))
@@ -1482,6 +1489,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             self._send_json(*godot_live.route("POST", route, data, {}))
+            return
+        if route in ("/studio/make", "/studio/agents/stop", "/studio/agents/again"):   # engine/studio_agents.py
+            import studio_agents  # pylint: disable=import-outside-toplevel
+            try:
+                if route == "/studio/make":
+                    out = studio_agents.make(state, data.get("kind"), data.get("brief"), str(data.get("name") or ""),
+                                             str(data.get("machine") or ""))
+                elif route == "/studio/agents/stop":
+                    out = studio_agents.stop(state, str(data.get("machine") or ""), str(data.get("job") or ""))
+                else:
+                    out = studio_agents.again(state, str(data.get("machine") or ""), str(data.get("job") or ""))
+                self._send_json(200, out)
+            except ValueError as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            except Exception as exc:  # noqa: BLE001 - a linked machine away is an answer, not a crash
+                self._send_json(502, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
         import studio_api  # pylint: disable=import-outside-toplevel - session 29: LOKI Studio + engine restart
         if studio_api.handles("POST", route):

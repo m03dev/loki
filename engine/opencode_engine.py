@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import re
 import shutil
 import subprocess
@@ -138,7 +139,13 @@ def deny_rules(snippets: Iterable[str]) -> dict:
     return rules
 
 
-def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny: Iterable[str] = ()) -> dict:
+def make_tools_command(python: str = "") -> list:
+    """LOKI's making tools (engine/make_mcp.py: pictures, 3D models, video) as an MCP server for OpenCode."""
+    return [python or sys.executable, str(Path(__file__).resolve().parent / "make_mcp.py")]
+
+
+def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny: Iterable[str] = (),
+                 make_tools: bool = True) -> dict:
     """providers: name -> {"base_url", "model", "key"}; returns OpenCode's config (keys referenced by env, not inlined)."""
     prov = {}
     for name, p in providers.items():
@@ -157,8 +164,15 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
                                 "bash": "deny" if plan else deny_rules(deny),
                                 "external_directory": "deny"},
                  "autoupdate": False, "share": "disabled"}
+    mcp: dict = {}
     if codegraph:
-        cfg["mcp"] = {"codegraph": {"type": "local", "command": [codegraph, "serve", "--mcp"], "enabled": True}}
+        mcp["codegraph"] = {"type": "local", "command": [codegraph, "serve", "--mcp"], "enabled": True}
+    # owner 2026-10-25: "make real things like art 3d models or paintings comic books" - OpenCode writes and runs
+    # code by itself; pictures, models and clips come from LOKI's own makers (not in Plan mode: they make files)
+    if make_tools and not plan:
+        mcp["loki-make"] = {"type": "local", "command": make_tools_command(), "enabled": True}
+    if mcp:
+        cfg["mcp"] = mcp
     return cfg
 
 
