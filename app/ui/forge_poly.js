@@ -873,6 +873,69 @@
     }
     return { v, f };
   };
+  // ------------------------------------------------------------------ several objects' components at once (Maya)
+  // Owner 2026-10-25: "I can't select a mesh's verts, Shift select another mesh and see its verts and select them as
+  // well - that should be a thing, just like Maya." The editor works on ONE cage, so the picked objects are joined
+  // into one (multiJoin, every part already in the edited object's space) and split back when you leave component
+  // mode (multiSplit). Nothing is welded: a part's faces only use its own vertices.
+  //   multiJoin(parts) -> { m, info }      info: ranges per part, a signature of the joined faces, each part's
+  //                                        vertex positions (to recognise its pieces) and middle
+  //   multiSplit(m, info) -> [part mesh]   one per part, in order. Faces unchanged (only moves): exactly the parts
+  //                                        back, vertex order kept. Topology changed (extrude, delete, bevel ...):
+  //                                        every connected piece goes to the part most of its untouched vertices
+  //                                        came from, else the part whose middle is nearest.
+  const posKey = (p) => Math.round(p[0] * 1e5) + "," + Math.round(p[1] * 1e5) + "," + Math.round(p[2] * 1e5);
+  function multiSig(f) {
+    let h = 2166136261 >>> 0, n = 0;
+    for (const face of f) { h = Math.imul(h ^ (face.length + 7919), 16777619) >>> 0; for (const i of face) { h = Math.imul(h ^ i, 16777619) >>> 0; n++; } }
+    return f.length + ":" + n + ":" + h;
+  }
+  P.multiJoin = (parts) => {
+    const ranges = [], keys = [], mids = [];
+    let v0 = 0, f0 = 0;
+    for (const m of parts) {
+      ranges.push([v0, v0 + m.v.length, f0, f0 + m.f.length]);
+      v0 += m.v.length; f0 += m.f.length;
+      const k = new Set(), c = [0, 0, 0];
+      for (const p of m.v) { k.add(posKey(p)); c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; }
+      const n = m.v.length || 1;
+      keys.push(k); mids.push([c[0] / n, c[1] / n, c[2] / n]);
+    }
+    const m = P.combine(parts);
+    return { m, info: { ranges, keys, mids, nv: m.v.length, sig: multiSig(m.f) } };
+  };
+  P.multiSplit = (m, info) => {
+    const k = info.ranges.length, out = [];
+    if (m.v.length === info.nv && multiSig(m.f) === info.sig) {          // only moved: the exact parts back
+      for (const [a, b, fa, fb] of info.ranges) out.push({ v: m.v.slice(a, b).map((p) => p.slice()), f: m.f.slice(fa, fb).map((f) => f.map((i) => i - a)) });
+      return out;
+    }
+    const parent = m.v.map((_, i) => i);
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    for (const face of m.f) for (let j = 1; j < face.length; j++) { const a = find(face[0]), b = find(face[j]); if (a !== b) parent[a] = b; }
+    const groups = new Map();
+    m.f.forEach((face, fi) => { if (!face.length) return; const r = find(face[0]); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(fi); });
+    const faces = Array.from({ length: k }, () => []);
+    for (const fs of groups.values()) {
+      const seen = new Set(), votes = new Array(k).fill(0), c = [0, 0, 0];
+      for (const fi of fs) for (const i of m.f[fi]) if (!seen.has(i)) {
+        seen.add(i);
+        const p = m.v[i], key = posKey(p);
+        c[0] += p[0]; c[1] += p[1]; c[2] += p[2];
+        for (let o = 0; o < k; o++) if (info.keys[o].has(key)) votes[o]++;
+      }
+      let best = -1, most = 0;
+      for (let o = 0; o < k; o++) if (votes[o] > most) { most = votes[o]; best = o; }
+      if (best < 0) {                                                    // every vertex moved: the nearest middle
+        const n = seen.size || 1, q = [c[0] / n, c[1] / n, c[2] / n];
+        let d = Infinity;
+        for (let o = 0; o < k; o++) { const md = info.mids[o], e = (md[0] - q[0]) ** 2 + (md[1] - q[1]) ** 2 + (md[2] - q[2]) ** 2; if (e < d) { d = e; best = o; } }
+      }
+      for (const fi of fs) faces[best].push(fi);
+    }
+    for (let o = 0; o < k; o++) out.push(faces[o].length ? P.compact({ v: m.v, f: faces[o].sort((a, b) => a - b).map((fi) => m.f[fi]) }) : { v: [], f: [] });
+    return out;
+  };
   // Separate: the pieces that share no vertex, each its own compact mesh (largest first)
   P.shells = (m) => {
     const parent = m.v.map((_, i) => i);

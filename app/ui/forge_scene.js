@@ -318,6 +318,23 @@ function forgeSceneAttach(view, ctx) {
   }
 
   // ---------------------------------------------------------------- the API (menus, hotkeys, Outliner, tests)
+  // a component selection kept by where its vertices are (a session join / split renumbers them)
+  function multiSelKeep() {
+    const vs = view.selectedVerts ? view.selectedVerts() : [];
+    if (!vs.length || !view.poly) return null;
+    scene.updateMatrixWorld(true);
+    const M = root().inner.matrixWorld, p = new THREE.Vector3();
+    return { mode: view.selModeNow ? view.selModeNow() : null, at: vs.map((i) => p.fromArray(view.poly.v[i] || [0, 0, 0]).applyMatrix4(M).toArray().map((x) => Math.round(x * 1e4))) };
+  }
+  function multiSelRestore(k) {
+    if (!k || !view.poly || !view.selectItems) return;
+    scene.updateMatrixWorld(true);
+    const want = new Set(k.at.map((a) => a.join(","))), M = root().inner.matrixWorld, p = new THREE.Vector3(), ids = [];
+    view.poly.v.forEach((q, i) => { const w = p.fromArray(q).applyMatrix4(M).toArray().map((x) => Math.round(x * 1e4)).join(","); if (want.has(w)) ids.push(i); });
+    view.selectItems("vert", ids, "set");
+    if (k.mode && k.mode !== "vert" && view.setSelMode) view.setSelMode(k.mode);
+  }
+
   const api = {
     node: node,
     kids: kidsOf,
@@ -851,6 +868,7 @@ function forgeSceneAttach(view, ctx) {
 
     // ---- every object is editable: the holder (the tools' mesh) moves into the node you edit
     makeWorking(id) {
+      if (root().multiSession && node(id) && !node(id).root) api.multiEnd();   // a multi-edit session splits back first
       const n = node(id), r = root();
       if (!n || n.root || n.kind !== "mesh") return n ? n.root : false;
       // 1. the old working object keeps a static copy of what it is now
@@ -979,6 +997,81 @@ function forgeSceneAttach(view, ctx) {
       view.dirty = true; return true;
     },
     alphaGain(id) { const n = node(id); const sh = n && n.kind === "imagePlane" && shapeOf(n); return sh ? sh.material.opacity : null; },
+
+    // ---- several objects' components at once (owner 2026-10-25: "I can't select a mesh's verts, Shift select
+    // another mesh and see its verts and select them as well - that should be a thing, just like Maya").
+    // The tools edit ONE cage (view.poly, the working object's), so a multi-edit session joins the other picked meshes
+    // into it, each carried into the working object's space (ForgePoly.multiJoin); their own shapes step aside while
+    // it runs. Leaving component mode (or editing another object, sculpting ...) splits the cage back (multiSplit):
+    // every object gets its pieces in its own space again, its transform untouched. The session lives on the working
+    // node (multiSession) and the shapes on their nodes, so undo / redo inside or across it restores it too.
+    multiIds() { const s = root().multiSession; return s ? s.owners.map((o) => o.id) : []; },
+    multiBegin(ids) {
+      const P = window.ForgePoly;
+      if (!P || !P.multiJoin || !view.showPoly) return false;
+      let want = [...new Set((ids || []).map(Number))].map(node).filter((n) => n && n.kind === "mesh" && (n.root ? !!(view.poly && view.poly.f.length) : hasGeometry(n)));
+      if (!want.length) return false;
+      let r = root();
+      const keepSel = view.mode === "poly" && view.poly ? multiSelKeep() : null;
+      if (r.multiSession) {                                              // add to the running session: split, then join all
+        const now = r.multiSession.owners.map((o) => o.id);
+        if (want.every((n) => now.includes(n.id))) return false;
+        want = now.map(node).filter(Boolean).concat(want.filter((n) => !now.includes(n.id)));
+        api.multiEnd(true);
+        r = root();
+      }
+      if (!want.some((n) => n.root)) { api.makeWorking(want[0].id); r = root(); }
+      if (!view.poly || !view.poly.f.length) return false;
+      want = [r].concat(want.filter((n) => n !== r));
+      if (want.length < 2) return false;
+      scene.updateMatrixWorld(true);
+      const inv = new THREE.Matrix4().copy(r.inner.matrixWorld).invert();
+      const owners = [], parts = [];
+      for (const n of want) {
+        if (n.root) { owners.push({ id: n.id, M: null }); parts.push(P.clone(view.poly)); continue; }
+        const m = polyOfNode(n);
+        if (!m || !m.f.length) continue;
+        const M = new THREE.Matrix4().multiplyMatrices(inv, n.inner.matrixWorld);
+        owners.push({ id: n.id, M: M.elements.slice() });
+        parts.push(P.transform(m, M.elements));
+      }
+      if (owners.length < 2) return false;
+      const j = P.multiJoin(parts);
+      for (const o of owners.slice(1)) { const n = node(o.id), sh = shapeOf(n); if (sh) n.inner.remove(sh); }
+      r.multiSession = { owners, info: j.info };
+      if (typeof forgeModel !== "undefined") { forgeModel.prim = null; forgeModel.last = null; }
+      view.showPoly(j.m, true, true);
+      if (typeof forgeHistReset === "function") forgeHistReset();
+      tree.sel = owners.map((o) => o.id); tree.anchor = r.id;
+      if (keepSel) multiSelRestore(keepSel);
+      tree.build(); view.dirty = true;
+      return owners.length;
+    },
+    multiEnd(quietSel) {
+      const P = window.ForgePoly, r = root(), sess = r.multiSession;
+      if (!sess || !P) return false;
+      const keepSel = !quietSel && view.mode === "poly" && view.poly ? multiSelKeep() : null;
+      const parts = view.poly ? P.multiSplit(view.poly, sess.info) : sess.owners.map(() => ({ v: [], f: [] }));
+      r.multiSession = null;
+      sess.owners.forEach((o, i) => {
+        const n = node(o.id), part = parts[i] || { v: [], f: [] };
+        if (!n) return;
+        if (n.root) return;
+        const back = part.f.length ? P.transform(part, new THREE.Matrix4().fromArray(o.M).invert().elements) : part;
+        const old = shapeOf(n); if (old) n.inner.remove(old);
+        if (back.f.length) { const t = P.triangulate(back); n.inner.add(staticShape({ pos: t.pos, idx: t.idx }, null)); n.poly = back; }
+        else n.poly = null;
+        n.hist = null;
+      });
+      const mine = parts[sess.owners.findIndex((o) => node(o.id) && node(o.id).root)] || { v: [], f: [] };
+      view.showPoly(mine, true, true);
+      if (typeof forgeHistReset === "function") forgeHistReset();
+      for (const o of sess.owners) { const n = node(o.id); if (n && !n.root && !hasGeometry(n) && !kidsOf(n.id).length) api.remove(n.id); }
+      tree.sel = sess.owners.map((o) => o.id).filter((id) => node(id)); tree.anchor = r.id;
+      if (keepSel) multiSelRestore(keepSel);
+      tree.build(); view.dirty = true;
+      return true;
+    },
 
     // a new, empty working object (pro: every Create command makes a new node) - the old one stays as it is
     newObject(name) {
@@ -1745,7 +1838,7 @@ function forgeSceneAttach(view, ctx) {
   // scrubs, the Outliner's drag-and-drop. Nested calls (Group calls reparent ...) collapse into the outermost chunk.
   let undoDepth = 0, undoBefore = null, undoLabel = "", restoring = false;
   function sceneSig() {
-    const a = [tree.rootId, tree.sel.join(",")];
+    const a = [tree.rootId, tree.sel.join(","), root().multiSession ? "M" + root().multiSession.owners.map((o) => o.id).join(".") : ""];
     for (const l of tree.layers) a.push("L" + l.id, l.name, l.visible ? 1 : 0, l.template ? 1 : 0, l.ref ? 1 : 0, [...l.nodes].sort().join("."));
     a.push("cur" + tree.curLayer, "d" + [tree.defLayer.visible ? 1 : 0, tree.defLayer.template ? 1 : 0, tree.defLayer.ref ? 1 : 0].join(""));
     for (const n of tree.nodes) {
@@ -1764,7 +1857,7 @@ function forgeSceneAttach(view, ctx) {
       rotOrder: n.rotOrder || "XYZ", attrs: (n.attrs || []).map((a) => ({ name: a.name, value: a.value })),
       keys: n.keys ? JSON.parse(JSON.stringify(n.keys)) : null,
       pos: n.grp.position.clone(), quat: n.grp.quaternion.clone(), scale: n.grp.scale.clone(),
-      shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri })),
+      shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri, multi: n.multiSession || null })),
     sel: tree.sel.slice(), anchor: tree.anchor, next: tree.next, rootId: tree.rootId,
     hiddenLast: (tree.hiddenLast || []).slice(), lastDup: tree.lastDup ? tree.lastDup.slice() : null,
     layers: tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, nodes: [...l.nodes] })),
@@ -1787,7 +1880,7 @@ function forgeSceneAttach(view, ctx) {
         }
         if (x.shape && x.shape.parent !== x.inner) x.inner.add(x.shape);
         Object.assign(n, { name: x.name, kind: x.kind, parent: x.parent, visible: x.visible, open: x.open, root: x.root,
-          auto: x.auto, inner: x.inner, poly: x.poly, hist: histCopy(x.hist), tri: x.tri });
+          auto: x.auto, inner: x.inner, poly: x.poly, hist: histCopy(x.hist), tri: x.tri, multiSession: x.multi || null });
         n.piv.copy(x.piv); n.pc.copy(x.pc);
         n.rotOrder = x.rotOrder || "XYZ"; n.grp.rotation.order = n.rotOrder;   // before the quaternion, so the Euler re-derives in the right order
         n.attrs = (x.attrs || []).map((a) => ({ name: a.name, value: a.value }));
@@ -1812,6 +1905,9 @@ function forgeSceneAttach(view, ctx) {
     } finally { restoring = false; }
   };
   view.sceneRestored = () => {
+    // an undo / redo that lands on a multi-edit state while you are in object mode: split it back at once (quietly),
+    // so a whole object is never moved or exported with other objects' pieces inside it
+    if (view.mode !== "poly" && root().multiSession) view.undoQuiet(() => api.multiEnd(true));
     for (const tcx of [tc]) if (tcx && tcx.object) {
       const n = api.active();
       let inScene = false; tcx.object.traverseAncestors((o) => { if (o === scene) inScene = true; });
@@ -1849,7 +1945,7 @@ function forgeSceneAttach(view, ctx) {
     "showLastHidden", "hideUnselected", "showAll", "remove", "removeSelected", "reparent", "parentSelected", "unparentSelected",
     "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
     "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
-    "combine", "separate", "replaceWith", "newObject", "dropOn",
+    "combine", "separate", "replaceWith", "newObject", "dropOn", "multiBegin", "multiEnd",
     "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane",
     "setKey", "deleteKey", "clearKeys"];
   for (const name of RECORDED) {
@@ -1890,6 +1986,24 @@ function forgeSceneAttach(view, ctx) {
     window.forgePanels.apply();
   }
   view.treeRefresh = () => { tree.build(); if (window.forgePanels) window.forgePanels.apply(); };
+  // component mode: Shift + click on ANOTHER mesh adds it to what you edit - its vertices / edges / faces show and
+  // are selectable with the first one's (Maya's hilite). The click only adds; a second Shift + click picks components.
+  window.addEventListener("pointerdown", (e) => {
+    if (e.target !== canvas || view.mode !== "poly" || e.button !== 0 || !e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if ((view.gizmo && view.gizmo.axis) || (typeof forgeCamMod === "function" && forgeCamMod(e)) || typeof forgeProPickAt !== "function") return;
+    const n = forgeProPickAt(view, e.clientX, e.clientY);
+    if (!n || n.root || n.kind !== "mesh" || !hasGeometry(n)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const now = api.multiIds(), all = (now.length ? now : [root().id]).concat([n.id]);
+    const k = api.multiBegin(all);
+    if (k) api.say(n.name + " added: " + k + " objects' components together (Shift + click another to add it; F8 splits them back).");
+  }, true);
+  // leaving component mode (object mode, sculpt ...) splits a multi-edit session back into its objects
+  const setModeOwn = view.setMode;
+  if (typeof setModeOwn === "function") view.setMode = (m) => {
+    if (m !== "poly" && view.mode === "poly" && root().multiSession) api.multiEnd();
+    return setModeOwn(m);
+  };
   return api;
 }
 

@@ -196,6 +196,7 @@ function forgeEditAttach(view, ctx) {
   };
   // the vertices a move / rotate / scale works on (every mode moves vertices underneath)
   view.selectedVerts = () => [...ed.sel.v];
+  view.selModeNow = () => ed.mode;                   // "vert" | "edge" | "face" (forge_scene.js multi-edit keeps it)
   function stats() {
     const T = topo();
     if (!T || view.mode !== "poly") return;

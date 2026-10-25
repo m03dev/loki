@@ -19,6 +19,25 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 06:10) - Home split, Forge Baseline + multi-object components, the modeling plan. On master. [either]
+
+Owner: "focus on loki home ... the chat is buggy, the display is sometimes hidden, the icons below the chat get cut off,
+no scroll bar", "when I press t I should be able to adjust baseline ... 0-1", "Shift select another mesh and see its
+verts ... just like Maya", "everything needs to be redesigned properly ... break it up in parts". Done and pushed:
+- Home: hub and chat side by side, always both (home_layout.css, chat_view.js); "Latest" button; the hub panel
+  button in the top bar; /home/projects caches thumbnails (it re-encoded every picture every 5-15 s).
+- Forge: Baseline on every primitive (new objects sit on the grid; t / INPUTS -1..1; Settings > Create > Baseline).
+- Forge: several objects' components at once (Shift + click another mesh in component mode; F9 with several picked).
+- The staged plan: docs/FORGE_MODELING_FOUNDATION.md. Stages 3-5 Claude does next; stages 6-10 are yours, same bar.
+- [ ] [mac] [win] Pull, open LOKI: Home shows the hub left and the chat right; scroll a long chat up - "Latest"
+  appears; a narrow window stacks them. Report anything that differs between the two machines (screenshot to Reports).
+- [ ] [mac] Forge: two cubes, pick both, F9 - both show vertices; move one of each; F8 - each cube keeps its own;
+  Ctrl+Z. Then component mode on one, Shift + click the other. Report anything odd.
+- [ ] [either] tests/test_forge_pro_ui.py runs past its 58 s limit (in the cloud too, before these changes): split it in
+  two suites under a minute each (keep every check).
+- [ ] [either] tests/test_forge_options_ui.py fails at "it opens the Options panel" (before these changes too): fix the
+  test or the panel.
+
 ### From Claude (2026-10-25 06:00) - Forge rebuild, step 1: copied open-source code in. On master. [either]
 
 Owner: "isn't there an open source solution ... just copy what works", "reconstruct the entire thing if it'll improve

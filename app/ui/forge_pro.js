@@ -58,6 +58,14 @@ function forgeProTool(v, mode) {                 // q / w / e / r
 async function forgeProComponents(v, sel) {      // F9 / F10 / F11, or a component wedge on an object
   const t = forgeProTree(v);
   const n = t && t.active();
+  // several meshes picked: all their components at once (Maya) - one multi-edit session (forge_scene.js multiBegin)
+  const meshes = t && t.selected ? t.selected().filter((id) => { const x = t.node(id); return x && x.kind === "mesh"; }) : [];
+  if (meshes.length >= 2 && t.multiBegin && !forgeProComp(v)) {
+    const k = t.multiBegin(meshes);
+    if (typeof forgeModelMode === "function") await forgeModelMode(true);
+    if (sel && v.setSelMode) v.setSelMode(sel);
+    return k ? k + " objects: their components together - leave component mode (F8) to split them back." : "";
+  }
   if (n && !n.root && n.kind === "mesh") t.makeWorking(n.id);
   if (!forgeProComp(v) && typeof forgeModelMode === "function") await forgeModelMode(true);
   if (sel && v.setSelMode) v.setSelMode(sel);
