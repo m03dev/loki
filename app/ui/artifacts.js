@@ -20,8 +20,11 @@ const Artifacts = (function () {
     t = t.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
     t = t.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]{1,2000})\)/g, (_, txt, url) =>
       '<a href="' + url + '" class="ext-link" data-url="' + url + '">' + txt + "</a>");
-    t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]{4,2000})/g, (_, pre, url) =>
-      pre + '<a href="' + url + '" class="ext-link" data-url="' + url + '">' + url.replace(/^https?:\/\//, "").slice(0, 60) + "</a>");
+    t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]{4,2000})/g, (_, pre, url) => {
+      const tail = (/[.,;:!?]+$/.exec(url) || [""])[0];           // "…/loki-test." - the dot is not part of the link
+      url = url.slice(0, url.length - tail.length);
+      return pre + '<a href="' + url + '" class="ext-link" data-url="' + url + '">' + url.replace(/^https?:\/\//, "").slice(0, 60) + "</a>" + tail;
+    });
     t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>");
     t = t.replace(/\[(\d{1,2})\](?!\()/g, '<sup class="cite" data-cite="$1">$1</sup>');
     return t.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + codes[+i] + "</code>");
@@ -303,7 +306,12 @@ const Artifacts = (function () {
     }
   }
 
-  function openUrl(url) { if (/^https?:\/\//.test(url)) api("/open", { url }).catch(() => {}); }
+  // a link clicked in the chat opens in the owner's browser (2026-10-25: "links dont work" - /open only took known pages)
+  function openUrl(url) {
+    if (!/^https?:\/\//.test(url)) return;
+    api("/open/link", { url }).then((r) => { if (!r || !r.ok) window.open(url, "_blank", "noopener"); })
+      .catch(() => window.open(url, "_blank", "noopener"));
+  }
 
   document.addEventListener("click", (e) => {
     const a = e.target.closest && e.target.closest("a.ext-link");

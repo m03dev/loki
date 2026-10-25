@@ -365,7 +365,7 @@ def verify(task: str, ws: Path, chs: list, thought: str, exit_reason: str, ran: 
             here = parts[1] if len(parts) > 1 else ""
             pushed_ok = bool(code == 0 and here and here in parts[2:])
             lines.append("Checked by LOKI - on GitHub: %s" % (
-                "%s has commit %s - pushed." % (parts[0], here[:7]) if pushed_ok else
+                "%s has commit %s - pushed." % (re.sub(r"\.git$", "", parts[0]), here[:7]) if pushed_ok else
                 "NOT pushed (%s)." % (out.strip().splitlines()[-1][:300] if out.strip() else "no remote")))
     wants_change = bool(re.search(r"\b(make|create|build|write|add|commit|init|set ?up|generate|fix|change|edit|"
                                   r"rename|move|delete|install)\b", task, re.I))

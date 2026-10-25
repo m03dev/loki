@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -59,10 +60,13 @@ async def main():
             if bare == "/progress":
                 st["n"] = min(len(EVENTS), st["n"] + 1)
                 return await r.fulfill(json={"ok": True, "chat_id": "c1", "progress": EVENTS[st["n"] - 1:st["n"]]})
+            if bare == "/open/link":
+                st.setdefault("opened", []).append(json.loads(r.request.post_data)["url"])
+                return await r.fulfill(json={"ok": True})
             if bare == "/chat":
                 while not st["release"]:
                     await asyncio.sleep(0.1)
-                return await r.fulfill(json={"ok": True, "response": "Done - made loki-test."})
+                return await r.fulfill(json={"ok": True, "response": "Pushed loki-test.\n\nChecked by LOKI - on GitHub: https://github.com/m03dev/loki-test has commit 19120ef - pushed."})
             return await r.fulfill(json={"ok": True})
 
         await page.route("http://127.0.0.1:8903/**", route)
@@ -72,19 +76,30 @@ async def main():
         task = asyncio.ensure_future(page.evaluate("send('make a git repo', {direct: true})"))
         await page.wait_for_function("document.querySelector('.live-meter') && document.querySelector('.live-meter').textContent.includes('qwen3.5')", timeout=10000)
         txt = await page.inner_text(".live-meter")
-        check("one quiet line under the steps: model, where, step, tokens in/out, tok/s, time",
-              "huihui_ai-qwen3.5-abliterated-9b · this computer" in txt and "step 2" in txt and "2.4k in" in txt
-              and "310 out" in txt and "16.9 tok/s" in txt and " s" in txt, txt)
+        title = await page.get_attribute(".live-meter", "title")
+        check("one small row under the steps: the model (short name), step, tokens, tok/s, time - details on hover",
+              txt.startswith("qwen3.5-abliterated-9b") and "step 2" in txt and "2.7k tok" in txt and "17 tok/s" in txt
+              and "9s" in txt.replace(" ", "") and "this computer" in title and "2,400 tokens in" in title, (txt, title))
         check("... it is the last line of the transcript (under the newest step)",
               await page.evaluate("document.getElementById('transcript').lastElementChild.classList.contains('live-meter')"))
         await page.wait_for_function("document.querySelector('.live-meter').textContent.includes('deepseek')", timeout=10000)
         sw = await page.evaluate("[...document.querySelectorAll('.live-switch')].map((n) => n.textContent)")
-        check("a model switch leaves a one-line note (which model, where)", sw and "deepseek-v4.1-flash" in sw[-1] and "nvidia" in sw[-1], sw)
+        check("a model switch leaves a small note (→ the new model)", sw and sw[-1].startswith("→ deepseek-v4.1-flash"), sw)
         st["release"] = True
         await task
         await page.wait_for_timeout(300)
         done = await page.evaluate("(() => { const m = document.querySelector('.live-meter'); return m && [m.classList.contains('done'), m.textContent]; })()")
-        check("when the reply lands the line stays, marked done", done and done[0] and "5.2k in" in done[1], done)
+        check("when the reply lands the row stays under it, compact (no step count), marked done", done and done[0]
+              and "6.1k tok" in done[1] and "step" not in done[1], done)
+        under = await page.evaluate("(() => { const m = document.querySelector('.live-meter'); const p = m.previousElementSibling; return p && p.className; })()")
+        check("... right under the result", "loki" in (under or ""), under)
+        if os.getenv("LOKI_SHOT"):
+            box = await page.evaluate("(() => { const m = document.querySelector('.live-meter'), r = m.parentElement.getBoundingClientRect(), q = m.getBoundingClientRect(); return [r.x, q.y - 160, r.width, 200]; })()")
+            await page.screenshot(path=os.getenv("LOKI_SHOT"), clip={"x": box[0], "y": max(0, box[1]), "width": box[2], "height": box[3]})
+        await page.click("#transcript a.ext-link")
+        await page.wait_for_timeout(300)
+        check("a link in the reply opens in the browser (/open/link), clean URL without the trailing dot",
+              st.get("opened") == ["https://github.com/m03dev/loki-test"], st.get("opened"))
         check("no page errors", not errors, errors)
         await b.close()
 

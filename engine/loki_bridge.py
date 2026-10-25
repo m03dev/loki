@@ -1507,6 +1507,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import godot_live  # pylint: disable=import-outside-toplevel
             self._send_json(*godot_live.route("POST", route, data, {}))
             return
+        if route == "/open/link":   # a link the owner clicked in the chat: their browser (http/https only)
+            url = str(data.get("url") or "").strip()
+            if not re.match(r"^https?://[^\s]+$", url):
+                self._send_json(400, {"ok": False, "error": "only web links (http / https) open from the chat"})
+                return
+            threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
+            self._send_json(200, {"ok": True})
+            return
         if route == "/local/models/remove":   # uninstall a downloaded model (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(state, "POST", route, {}, data))

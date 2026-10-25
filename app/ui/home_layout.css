@@ -253,12 +253,17 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
   overflow: auto; background: var(--side, #1b1d22); border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 14px;
   padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
 .approval.floating pre { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; }
-/* the live meter under the steps (live_meter.js): one quiet line */
-.live-meter { margin: 4px 0 2px 2px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .01em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
-.live-meter:not(.done)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%;
-  background: #6fd08c; vertical-align: 1px; animation: lm-pulse 1.4s ease-in-out infinite; }
-.live-meter.done { opacity: .6; }
-.live-switch { margin: 2px 0 0 2px; font-size: 11px; color: var(--muted); opacity: .7; }
-@keyframes lm-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .live-meter::before { animation: none !important; } }
+/* the live meter under the steps / the reply (live_meter.js): one small, quiet row */
+.live-meter { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; margin: 6px 0 2px 14px; font-size: 11px; line-height: 18px;
+  color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; opacity: .8; }
+.live-meter .lm-model { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, .05); color: var(--text); opacity: .85; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.live-meter .lm-model::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #7fb2ff; flex: none; }
+.live-meter .lm-model.local::before { background: #6fd08c; }
+.live-meter:not(.done) .lm-model::before { animation: lm-pulse 1.4s ease-in-out infinite; }
+.live-meter .lm-bit::before { content: "·"; margin: 0 7px; opacity: .5; }
+.live-meter.done { opacity: .55; }
+.live-meter.done:hover { opacity: .9; }
+.live-switch { margin: 2px 0 0 4px; font-size: 10.5px; color: var(--muted); opacity: .6; }
+@keyframes lm-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .live-meter .lm-model::before { animation: none !important; } }
