@@ -24,7 +24,10 @@
 #include "imgui.h"
 #include "ImGuizmo.h"   // after imgui.h
 #include "imgui_impl_opengl3.h"
+#if CMMO_EDITOR_PYTHON
 #include "script_host/ScriptHost.h"
+#endif
+#include <filesystem>
 
 #if defined( CMMO_WITH_GLFW )
 #include "imgui_impl_glfw.h"
@@ -124,6 +127,8 @@ struct SelfTest
 	std::vector<uint8_t> playShot;
 	int playW = 0, playH = 0;
 	float wolfHp = 0;
+	Vector3 eye0, fwd0;
+	int speed0 = 0;
 
 	void Check( const char* name, bool ok, const std::string& detail = "" )
 	{
@@ -285,7 +290,85 @@ struct SelfTest
 			break;
 		case 10:
 			shotName = "terrain";
-			++step;
+			step = 100;
+			wait = 1;
+			break;
+		// ---- Unreal-style camera: hold RMB + W flies forward; W / Q are not tool keys while flying; wheel = speed
+		case 100:
+			ed.Tool() = -1;
+			ed.Select( 0 );
+			eye0 = ed.Camera().eye;
+			fwd0 = Normalize( ed.Camera().target - ed.Camera().eye );
+			speed0 = ed.CameraSpeed();
+			io.AddMousePosEvent( cx, cy );
+			step = 101;
+			wait = 1;
+			break;
+		case 101:
+			io.AddMouseButtonEvent( 1, true );
+			step = 102;
+			wait = 1;
+			break;
+		case 102:
+			Key( ImGuiKey_W, true );
+			Key( ImGuiKey_Q, true );
+			step = 103;
+			wait = 30;
+			break;
+		case 103:
+		{
+			Key( ImGuiKey_W, false );
+			Key( ImGuiKey_Q, false );
+			io.AddMouseWheelEvent( 0, 1 );
+			const Vector3 moved = ed.Camera().eye - eye0;
+			Check( "hold RMB + W flies the camera forward (Unreal)", Dot( moved, fwd0 ) > 1.0f, std::to_string( Dot( moved, fwd0 ) ) );
+			Check( "hold RMB + Q flies down", moved.y < -0.3f, std::to_string( moved.y ) );
+			Check( "W / Q while flying don't switch the move / select tool", ed.GizmoOp() == 1 && ed.Flying() );
+			shotName = "flying";
+			step = 104;
+			wait = 1;
+			break;
+		}
+		case 104:
+			Check( "the wheel while flying changes the camera speed", ed.CameraSpeed() == speed0 + 1 );
+			io.AddMouseButtonEvent( 1, false );
+			step = 105;
+			wait = 2;
+			break;
+		case 105:
+		{
+			Check( "releasing RMB stops flying", !ed.Flying() );
+			Check( "a flight is not a click: no viewport menu", !ImGui::IsPopupOpen( "##viewctx", ImGuiPopupFlags_AnyPopupId ) );
+			auto* grey = ed.Scene().FindByName( "Marshal Grey" );
+			ed.Select( grey->id );
+			const size_t n = ed.Scene().Entities().size();
+			Check( "Copy + Paste (Ctrl+C / Ctrl+V)", ed.CopySelected() && ed.Paste() && ed.Scene().Entities().size() == n + 1 );
+			ed.Scene().Find( ed.Selected() )->transform.position.y += 5;
+			const Vector3 w = ed.Scene().WorldPosition( ed.Selected() );
+			Check( "Snap to Ground (End)", ed.SnapSelectedToGround() &&
+											   std::fabs( ed.Scene().WorldPosition( ed.Selected() ).y - ed.Scene().GroundAt( w.x, w.z ) ) < 1e-3f );
+			const uint32_t pasted = ed.Selected();
+			const uint32_t g = ed.GroupSelected();
+			Check( "Group (Ctrl+G) wraps it in an Empty and keeps it in place", g && ed.Scene().Find( pasted )->parent == g &&
+																					 Length( ed.Scene().WorldPosition( pasted ) - Vector3( w.x, ed.Scene().GroundAt( w.x, w.z ), w.z ) ) < 1e-3f );
+			ed.Undo();
+			ed.Undo();
+			ed.Undo();
+			ed.Undo();
+			Check( "Undo takes paste, snap and group back", ed.Scene().Entities().size() == n );
+			ed.PanelOpen( editor::Editor::PControls ) = true;
+			step = 106;
+			wait = 2;
+			break;
+		}
+		case 106:
+			shotName = "controls";
+			step = 107;
+			wait = 1;
+			break;
+		case 107:
+			ed.PanelOpen( editor::Editor::PControls ) = false;
+			step = 11;
 			wait = 1;
 			break;
 		case 11:
@@ -404,14 +487,14 @@ struct SelfTest
 
 int main( int argc, char** argv )
 {
-	bool selftest = false;
+	bool selftest = false, contentGiven = false;
 	std::string shot, content = "content", script = std::string( CMMO_SOURCE_DIR ) + "/scripts/init_render.py";
 	for( int i = 1; i < argc; ++i )
 	{
 		const std::string a = argv[i];
 		if( a == "--selftest" ) selftest = true;
 		else if( a == "--screenshot" && i + 1 < argc ) shot = argv[++i];
-		else if( ( a == "--content" || a == "--levels" ) && i + 1 < argc ) content = argv[++i];   // --levels: the old name
+		else if( ( a == "--content" || a == "--levels" ) && i + 1 < argc ) { content = argv[++i]; contentGiven = true; }   // --levels: the old name
 		else if( a == "--script" && i + 1 < argc ) script = argv[++i];
 		else
 		{
@@ -420,11 +503,28 @@ int main( int argc, char** argv )
 		}
 	}
 
+	// Opened from Finder / Explorer (an app bundle, or the working directory is "/"): keep levels in Documents.
+	{
+		namespace fs = std::filesystem;
+		std::error_code ec;
+		const std::string exe = argv[0];
+		const bool bundle = exe.find( ".app/Contents/MacOS" ) != std::string::npos;
+		if( !contentGiven && !selftest && ( bundle || fs::current_path( ec ) == fs::path( "/" ) ) )
+		{
+			const char* home = std::getenv( "HOME" );
+			if( !home ) home = std::getenv( "USERPROFILE" );
+			if( home ) content = ( fs::path( home ) / "Documents" / "Carbon MMO" / "content" ).string();
+		}
+	}
+	static std::string iniPath;
+	iniPath = ( std::filesystem::path( content ).parent_path() / "cmmo_editor_layout.ini" ).string();
+
 	// ---- the Python init hook (same pipeline as Phase 1): title, size, sky colour
 	editor::EditorSettings settings;
 	settings.contentDir = content;
 	settings.exePath = argv[0];
 	int width = 1600, height = 900;
+#if CMMO_EDITOR_PYTHON
 	{
 		cmmo::RenderConfig cfg;
 		cfg.title = settings.title;
@@ -441,6 +541,9 @@ int main( int argc, char** argv )
 		else
 			std::printf( "[editor] init hook skipped: %s\n", err.c_str() );
 	}
+#else
+	(void)script;   // a build without the embedded Python (the portable app): defaults only
+#endif
 
 	// ---- window / context
 #if defined( CMMO_WITH_GLFW )
@@ -507,7 +610,7 @@ int main( int argc, char** argv )
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
-	io.IniFilename = selftest ? nullptr : "cmmo_editor_layout.ini";
+	io.IniFilename = selftest ? nullptr : iniPath.c_str();
 	const std::string fonts = editor::ui::Setup( argv[0] );
 	std::printf( "[editor] fonts: %s\n", fonts.empty() ? "built-in (fonts folder not found)" : fonts.c_str() );
 #if defined( CMMO_WITH_GLFW )

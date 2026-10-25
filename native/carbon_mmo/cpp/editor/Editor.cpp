@@ -311,10 +311,11 @@ uint32_t Editor::PlaceModel( const std::string& rel, const Vector3& at )
 	return id;
 }
 
-bool Editor::SavePrefab( uint32_t root, const std::string& name )
+world::json Editor::SubtreeJson( uint32_t root ) const
 {
-	if( !m_scene.Find( root ) ) return false;
-	world::json all = m_scene.ToJson()["actors"], keep = world::json::array();
+	world::json keep = world::json::array();
+	if( !m_scene.Find( root ) ) return keep;
+	const world::json all = m_scene.ToJson()["actors"];
 	std::set<uint32_t> ids = { root };
 	for( bool grew = true; grew; )
 	{
@@ -328,6 +329,13 @@ bool Editor::SavePrefab( uint32_t root, const std::string& name )
 			if( a["id"].get<uint32_t>() == root ) { a["parent"] = 0; a["position"] = { 0, 0, 0 }; }
 			keep.push_back( a );
 		}
+	return keep;
+}
+
+bool Editor::SavePrefab( uint32_t root, const std::string& name )
+{
+	if( !m_scene.Find( root ) ) return false;
+	const world::json keep = SubtreeJson( root );
 	const fs::path path = fs::path( m_settings.contentDir ) / "prefabs" / ( name + ".prefab.json" );
 	std::error_code ec;
 	fs::create_directories( path.parent_path(), ec );
@@ -337,20 +345,13 @@ bool Editor::SavePrefab( uint32_t root, const std::string& name )
 	return bool( f );
 }
 
-uint32_t Editor::PlacePrefab( const std::string& rel, const Vector3& at )
+uint32_t Editor::PlaceActorsJson( const world::json& actors, const Vector3& at, const char* what )
 {
-	if( Playing() ) return 0;
-	const world::json doc = world::json::parse( ReadFile( fs::path( m_settings.contentDir ) / rel ), nullptr, false );
-	if( doc.is_discarded() || doc.value( "format", "" ) != "cmmo-prefab" )
-	{
-		Print( "Not a prefab: " + rel );
-		return 0;
-	}
 	// rebuild through a temporary level so props / terrain load exactly like a level
-	world::json level = { { "format", "cmmo-level" }, { "version", 2 }, { "actors", doc["actors"] } };
+	world::json level = { { "format", "cmmo-level" }, { "version", 2 }, { "actors", actors } };
 	world::Scene tmp;
 	std::string err;
-	if( !tmp.FromJson( level, &err ) ) { Print( "Prefab failed: " + err ); return 0; }
+	if( !tmp.FromJson( level, &err ) ) { Print( std::string( what ) + " failed: " + err ); return 0; }
 	std::map<uint32_t, uint32_t> remap;
 	uint32_t root = 0;
 	for( const auto& e : tmp.Entities() )
@@ -366,9 +367,66 @@ uint32_t Editor::PlacePrefab( const std::string& rel, const Vector3& at )
 	for( const auto& e : tmp.Entities() )
 		if( e.parent ) m_scene.Find( remap[e.id] )->parent = remap.count( e.parent ) ? remap[e.parent] : 0;
 	m_selected = root;
-	Commit( "Place prefab" );
-	Print( "Placed prefab " + rel );
+	Commit( what );
 	return root;
+}
+
+uint32_t Editor::PlacePrefab( const std::string& rel, const Vector3& at )
+{
+	if( Playing() ) return 0;
+	const world::json doc = world::json::parse( ReadFile( fs::path( m_settings.contentDir ) / rel ), nullptr, false );
+	if( doc.is_discarded() || doc.value( "format", "" ) != "cmmo-prefab" )
+	{
+		Print( "Not a prefab: " + rel );
+		return 0;
+	}
+	const uint32_t root = PlaceActorsJson( doc["actors"], at, "Place prefab" );
+	if( root ) Print( "Placed prefab " + rel );
+	return root;
+}
+
+bool Editor::CopySelected()
+{
+	if( !m_scene.Find( m_selected ) ) return false;
+	m_clipboard = SubtreeJson( m_selected );
+	m_clipboardAt = m_scene.WorldPosition( m_selected );
+	Print( "Copied " + m_scene.Find( m_selected )->name + ( m_clipboard.size() > 1 ? " (+" + std::to_string( m_clipboard.size() - 1 ) + " children)" : "" ) );
+	return true;
+}
+
+uint32_t Editor::Paste()
+{
+	if( Playing() || m_clipboard.empty() ) return 0;
+	m_clipboardAt += Vector3( 2, 0, 2 );   // each paste lands a little further on
+	return PlaceActorsJson( m_clipboard, m_clipboardAt, "Paste" );
+}
+
+bool Editor::SnapSelectedToGround()
+{
+	world::Entity* e = m_scene.Find( m_selected );
+	if( Playing() || !e || e->type == ActorType::Terrain ) return false;
+	const Vector3 w = m_scene.WorldPosition( e->id );
+	bool found = false;
+	const float g = m_scene.GroundAt( w.x, w.z, &found );
+	if( !found ) return false;
+	e->transform.position.y += g - w.y;
+	Commit( "Snap to ground" );
+	return true;
+}
+
+uint32_t Editor::GroupSelected()
+{
+	world::Entity* e = m_scene.Find( m_selected );
+	if( Playing() || !e ) return 0;
+	const uint32_t child = e->id, oldParent = e->parent;
+	const Vector3 at = m_scene.WorldPosition( child );
+	world::Entity& g = m_scene.Create( ActorType::Empty, "Group", oldParent );
+	g.transform.position = oldParent ? at - m_scene.WorldPosition( oldParent ) : at;
+	const uint32_t gid = g.id;
+	m_scene.SetParent( child, gid );
+	m_selected = gid;
+	Commit( "Group" );
+	return gid;
 }
 
 bool Editor::DeleteSelected()
@@ -588,12 +646,16 @@ void Editor::Frame( float dt )
 	ImGui::PopStyleVar( 3 );
 	const ImGuiID dock = ImGui::GetID( "MainDock" );
 	static bool laidOut = false;
-	if( !laidOut )
+	if( !laidOut || m_resetLayout )
 	{
 		laidOut = true;
 		ImGuiDockNode* node = ImGui::DockBuilderGetNode( dock );
-		if( !node || node->IsLeafNode() )   // first run: an Unreal / Godot style arrangement
+		if( m_resetLayout )
+			for( bool& o : m_open ) o = true;
+		if( m_resetLayout ) m_open[PControls] = m_open[PPrefs] = false;
+		if( !node || node->IsLeafNode() || m_resetLayout )   // first run (or Window > Reset Layout): Unreal / Godot style
 		{
+			m_resetLayout = false;
 			ImGui::DockBuilderRemoveNode( dock );
 			ImGui::DockBuilderAddNode( dock, ImGuiDockNodeFlags_DockSpace );
 			ImGui::DockBuilderSetNodeSize( dock, ImGui::GetContentRegionAvail() );
@@ -627,57 +689,162 @@ void Editor::Frame( float dt )
 	TerrainPanel();
 	OutputPanel();
 	ContentPanel();
+	ControlsPanel();
+	PrefsPanel();
 	if( m_showDemo ) ImGui::ShowDemoWindow( &m_showDemo );
 	if( m_play )
 		for( auto& line : m_play->TakeLog() ) Print( line );
 }
 
+void Editor::PlaceMenuItems( const Vector3& at )
+{
+	for( const char* group : { "Gameplay", "World", "Basic", "Lighting" } )
+	{
+		ImGui::SeparatorText( group );
+		for( const auto& a : world::Actors() )
+			if( std::string( a.group ) == group && ImGui::MenuItem( ( std::string( IconOf( a.type ) ) + "  " + a.label ).c_str() ) ) Place( a.type, at );
+	}
+}
+
 void Editor::MenuBar()
 {
 	if( !ImGui::BeginMainMenuBar() ) return;
+	const bool edit = !Playing(), sel = edit && m_scene.Find( m_selected );
+	const std::string saveTo = levelPath.empty() ? ( fs::path( m_settings.contentDir ) / "levels" / ( std::string( m_saveName ) + ".level.json" ) ).string() : levelPath;
 	ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32( 120, 175, 240, 255 ) );
 	ImGui::TextUnformatted( ICON_FA_GEM );
 	ImGui::PopStyleColor();
 	if( ImGui::BeginMenu( "File" ) )
 	{
-		if( ImGui::MenuItem( ICON_FA_FILE "  New Level" ) ) NewLevel();
-		if( ImGui::MenuItem( ICON_FA_MOUNTAIN_SUN "  New Starter Zone" ) ) NewStarterZone();
+		ImGui::SeparatorText( "Level" );
+		if( ImGui::MenuItem( ICON_FA_FILE "  New Level", nullptr, false, edit ) ) NewLevel();
+		if( ImGui::MenuItem( ICON_FA_MOUNTAIN_SUN "  New Starter Zone", nullptr, false, edit ) ) NewStarterZone();
+		if( ImGui::BeginMenu( ICON_FA_FOLDER_OPEN "  Open Level", edit ) )
+		{
+			std::error_code ec;
+			int n = 0;
+			for( const auto& f : fs::directory_iterator( fs::path( m_settings.contentDir ) / "levels", ec ) )
+				if( EndsWith( f.path().filename().string(), ".level.json" ) && ImGui::MenuItem( f.path().filename().string().c_str() ) ) { OpenLevel( f.path().string() ); ++n; }
+				else if( EndsWith( f.path().filename().string(), ".level.json" ) ) ++n;
+			if( !n ) ImGui::TextDisabled( "No levels saved yet" );
+			ImGui::EndMenu();
+		}
 		ImGui::Separator();
-		if( ImGui::MenuItem( ICON_FA_FLOPPY_DISK "  Save Level", "Ctrl+S" ) )
-			SaveLevel( levelPath.empty() ? ( fs::path( m_settings.contentDir ) / "levels" / ( std::string( m_saveName ) + ".level.json" ) ).string() : levelPath );
+		if( ImGui::MenuItem( ICON_FA_FLOPPY_DISK "  Save Level", "Ctrl+S" ) ) SaveLevel( saveTo );
+		if( ImGui::MenuItem( ICON_FA_PEN_TO_SQUARE "  Save Level As..." ) ) { m_open[PContent] = true; m_contentTab = 0; ImGui::SetWindowFocus( ICON_FA_FOLDER_OPEN " Content Browser" ); }
 		ImGui::Separator();
-		if( ImGui::MenuItem( "Quit" ) ) m_quit = true;
+		if( ImGui::MenuItem( ICON_FA_RIGHT_FROM_BRACKET "  Quit" ) ) m_quit = true;
 		ImGui::EndMenu();
 	}
 	if( ImGui::BeginMenu( "Edit" ) )
 	{
-		if( ImGui::MenuItem( ICON_FA_ROTATE_LEFT "  Undo", "Ctrl+Z", false, !m_undo.empty() && !Playing() ) ) Undo();
-		if( ImGui::MenuItem( ICON_FA_ROTATE_RIGHT "  Redo", "Ctrl+Shift+Z", false, !m_redo.empty() && !Playing() ) ) Redo();
+		if( ImGui::MenuItem( ICON_FA_ROTATE_LEFT "  Undo", "Ctrl+Z", false, edit && !m_undo.empty() ) ) Undo();
+		if( ImGui::MenuItem( ICON_FA_ROTATE_RIGHT "  Redo", "Ctrl+Shift+Z", false, edit && !m_redo.empty() ) ) Redo();
 		ImGui::Separator();
-		if( ImGui::MenuItem( ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, m_selected != 0 ) ) DuplicateSelected();
-		if( ImGui::MenuItem( ICON_FA_TRASH "  Delete", "Del", false, m_selected != 0 ) ) DeleteSelected();
-		if( ImGui::MenuItem( ICON_FA_EXPAND "  Frame Selected", "F", false, m_selected != 0 ) ) FrameSelected();
+		if( ImGui::MenuItem( ICON_FA_SCISSORS "  Cut", "Ctrl+X", false, sel ) && CopySelected() ) DeleteSelected();
+		if( ImGui::MenuItem( ICON_FA_COPY "  Copy", "Ctrl+C", false, sel ) ) CopySelected();
+		if( ImGui::MenuItem( ICON_FA_PASTE "  Paste", "Ctrl+V", false, edit && !m_clipboard.empty() ) ) Paste();
+		if( ImGui::MenuItem( ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, sel ) ) DuplicateSelected();
+		if( ImGui::MenuItem( ICON_FA_TRASH "  Delete", "Del", false, sel ) ) DeleteSelected();
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_XMARK "  Select None", nullptr, false, m_selected != 0 ) ) m_selected = 0;
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_GEAR "  Editor Preferences..." ) ) m_open[PPrefs] = true;
+		ImGui::EndMenu();
+	}
+	if( ImGui::BeginMenu( "Actor" ) )
+	{
+		if( ImGui::BeginMenu( ICON_FA_PLUS "  Place Actor", edit ) )
+		{
+			PlaceMenuItems( PlacementPoint() );
+			ImGui::EndMenu();
+		}
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G", false, sel ) ) GroupSelected();
+		if( ImGui::MenuItem( ICON_FA_ARROW_UP "  Unparent", nullptr, false, sel && m_scene.Find( m_selected )->parent ) ) Reparent( m_selected, 0 );
+		if( ImGui::MenuItem( ICON_FA_ARROW_DOWN "  Snap to Ground", "End", false, sel ) ) SnapSelectedToGround();
+		if( ImGui::MenuItem( ICON_FA_EYE_SLASH "  Hide / Show", "H", false, sel ) ) { m_scene.Find( m_selected )->visible = !m_scene.Find( m_selected )->visible; Commit( "Visibility" ); }
+		if( ImGui::MenuItem( ICON_FA_PEN "  Rename", "F2", false, sel ) ) { m_renaming = m_selected; std::snprintf( m_renameBuf, sizeof( m_renameBuf ), "%s", m_scene.Find( m_selected )->name.c_str() ); m_open[PScene] = true; }
+		if( ImGui::MenuItem( ICON_FA_BOX "  Save as Prefab", nullptr, false, sel ) ) SavePrefab( m_selected, m_scene.Find( m_selected )->name );
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_CROSSHAIRS "  Focus", "F", false, m_selected != 0 ) ) FrameSelected();
+		ImGui::EndMenu();
+	}
+	if( ImGui::BeginMenu( "Terrain" ) )
+	{
+		world::Terrain* t = m_scene.FirstTerrain();
+		if( !t )
+		{
+			if( ImGui::MenuItem( ICON_FA_SQUARE "  Create Flat Terrain", nullptr, false, edit ) ) CreateTerrain( 256, 128, false );
+			if( ImGui::MenuItem( ICON_FA_DICE "  Create from Noise", nullptr, false, edit ) ) CreateTerrain( 256, 128, true );
+		}
+		else
+		{
+			ImGui::SeparatorText( "Sculpt & Paint" );
+			for( const auto& tool : kTools )
+				if( ImGui::MenuItem( ( std::string( tool.icon ) + "  " + tool.name ).c_str(), nullptr, m_tool == int( tool.mode ), edit ) )
+				{
+					m_tool = m_tool == int( tool.mode ) ? -1 : int( tool.mode );
+					m_open[PTerrain] = true;
+				}
+			if( ImGui::MenuItem( ICON_FA_ARROW_POINTER "  Stop Terrain Tool", "Esc", false, m_tool >= 0 ) ) m_tool = -1;
+			ImGui::Separator();
+			if( ImGui::MenuItem( ICON_FA_ARROWS_ROTATE "  Regenerate Heights", nullptr, false, edit ) ) { t->Generate( uint32_t( m_genSeed ), m_genHeight, m_genFeature, m_genOctaves, false ); Commit( "Generate" ); }
+			if( ImGui::MenuItem( ICON_FA_BROOM "  Clear Foliage", nullptr, false, edit ) ) { t->ClearFoliage(); Commit( "Clear foliage" ); }
+		}
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_SLIDERS "  Terrain Panel" ) ) { m_open[PTerrain] = true; ImGui::SetWindowFocus( ICON_FA_MOUNTAIN_SUN " Terrain" ); }
 		ImGui::EndMenu();
 	}
 	if( ImGui::BeginMenu( "Play" ) )
 	{
 		if( ImGui::MenuItem( ICON_FA_PLAY "  Play in Editor", "Alt+P", false, !Playing() ) ) Play( true );
 		if( ImGui::MenuItem( ICON_FA_FILM "  Simulate", nullptr, false, !Playing() ) ) Play( false );
+		if( ImGui::MenuItem( ICON_FA_PAUSE "  Pause", nullptr, m_paused, Playing() ) ) m_paused = !m_paused;
 		if( ImGui::MenuItem( ICON_FA_STOP "  Stop", "Esc", false, Playing() ) ) Stop();
 		ImGui::EndMenu();
 	}
 	if( ImGui::BeginMenu( "View" ) )
 	{
-		ImGui::MenuItem( "Grid", nullptr, &m_grid );
-		ImGui::MenuItem( "Stats", nullptr, &m_stats );
+		ImGui::SeparatorText( "Viewport" );
+		if( ImGui::MenuItem( ICON_FA_SUN "  Lit", nullptr, m_viewMode == ViewMode::Lit ) ) m_viewMode = ViewMode::Lit;
+		if( ImGui::MenuItem( ICON_FA_CIRCLE_HALF_STROKE "  Unlit", nullptr, m_viewMode == ViewMode::Unlit ) ) m_viewMode = ViewMode::Unlit;
+		if( ImGui::MenuItem( ICON_FA_DRAW_POLYGON "  Wireframe", nullptr, m_viewMode == ViewMode::Wireframe ) ) m_viewMode = ViewMode::Wireframe;
+		ImGui::Separator();
+		ImGui::MenuItem( ICON_FA_TABLE_CELLS "  Grid", nullptr, &m_grid );
+		ImGui::MenuItem( ICON_FA_CHART_LINE "  Stats", nullptr, &m_stats );
+		if( ImGui::BeginMenu( ICON_FA_GAUGE_HIGH "  Camera Speed" ) )
+		{
+			for( int k = 1; k <= 8; ++k )
+			{
+				char b[32];
+				std::snprintf( b, sizeof( b ), "Speed %d", k );
+				if( ImGui::MenuItem( b, nullptr, m_camSpeed == k ) ) m_camSpeed = k;
+			}
+			ImGui::EndMenu();
+		}
+		if( ImGui::MenuItem( ICON_FA_CROSSHAIRS "  Frame Selected", "F", false, m_selected != 0 ) ) FrameSelected();
+		ImGui::EndMenu();
+	}
+	if( ImGui::BeginMenu( "Window" ) )
+	{
+		ImGui::MenuItem( ICON_FA_SITEMAP "  Scene", nullptr, &m_open[PScene] );
+		ImGui::MenuItem( ICON_FA_SLIDERS "  Inspector", nullptr, &m_open[PInspector] );
+		ImGui::MenuItem( ICON_FA_PLUS "  Place Actors", nullptr, &m_open[PPlace] );
+		ImGui::MenuItem( ICON_FA_MOUNTAIN_SUN "  Terrain", nullptr, &m_open[PTerrain] );
+		ImGui::MenuItem( ICON_FA_GLOBE "  World Settings", nullptr, &m_open[PWorld] );
+		ImGui::MenuItem( ICON_FA_FOLDER_OPEN "  Content Browser", nullptr, &m_open[PContent] );
+		ImGui::MenuItem( ICON_FA_TERMINAL "  Output", nullptr, &m_open[POutput] );
+		ImGui::Separator();
+		if( ImGui::MenuItem( ICON_FA_TABLE_COLUMNS "  Reset Layout" ) ) m_resetLayout = true;
 		ImGui::MenuItem( "ImGui widget demo", nullptr, &m_showDemo );
 		ImGui::EndMenu();
 	}
 	if( ImGui::BeginMenu( "Help" ) )
 	{
-		ImGui::TextDisabled( "Viewport: Alt+LMB orbit  Alt+MMB pan  Alt+RMB / wheel zoom  F frame" );
-		ImGui::TextDisabled( "Q select  W move  E rotate  R scale  Alt+P play  Esc stop" );
-		ImGui::TextDisabled( "Play: W/S A/D Q/E  Space  Tab target  1-4 abilities  F talk" );
+		if( ImGui::MenuItem( ICON_FA_KEYBOARD "  Controls", "F1" ) ) m_open[PControls] = true;
+		ImGui::Separator();
+		ImGui::TextDisabled( "Carbon MMO Editor - Carbon math, Dear ImGui, AGPL LOKI" );
 		ImGui::EndMenu();
 	}
 	const std::string world = m_scene.settings.value( "name", std::string( "New World" ) ) + ( levelPath.empty() ? "  (unsaved)" : "  -  " + fs::path( levelPath ).filename().string() );
@@ -713,6 +880,13 @@ void Editor::Toolbar( float height )
 	}
 	ImGui::SameLine( 0, 4 );
 	if( ui::ToolButton( m_local ? ICON_FA_CUBE : ICON_FA_GLOBE, m_local ? "Local space" : "World space", "Which axes the handles use." ) ) m_local = !m_local;
+	ImGui::SameLine( 0, 4 );
+	if( ui::ToolButton( ICON_FA_SQUARE_PLUS, "Quick Add", "Add an actor where the viewport looks (like Unreal's Quick Add).", false, 0, ui::col::Gold ) ) ImGui::OpenPopup( "##quickadd" );
+	if( ImGui::BeginPopup( "##quickadd" ) )
+	{
+		PlaceMenuItems( PlacementPoint() );
+		ImGui::EndPopup();
+	}
 	ImGui::SameLine( 0, 4 );
 	if( ui::ToolButton( ICON_FA_MAGNET, "Snap", "Snap moves to the grid, rotations to 15 degrees, scales to 0.25.", m_snap ) ) m_snap = !m_snap;
 	if( m_snap )
@@ -781,11 +955,21 @@ void Editor::Hotkeys()
 	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal ) )
 		SaveLevel( levelPath.empty() ? ( fs::path( m_settings.contentDir ) / "levels" / ( std::string( m_saveName ) + ".level.json" ) ).string() : levelPath );
 	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_D, ImGuiInputFlags_RouteGlobal ) ) DuplicateSelected();
+	if( ImGui::IsKeyPressed( ImGuiKey_F1, false ) ) m_open[PControls] = !m_open[PControls];
 	if( io.WantTextInput ) return;
-	if( ImGui::IsKeyPressed( ImGuiKey_Delete, false ) ) DeleteSelected();
+	// these would also copy text in a field, so only outside text fields
+	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal ) ) CopySelected();
+	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_X, ImGuiInputFlags_RouteGlobal ) && CopySelected() ) DeleteSelected();
+	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal ) ) Paste();
+	if( ImGui::Shortcut( ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal ) ) GroupSelected();
+	if( ImGui::IsKeyPressed( ImGuiKey_Delete, false ) || ( ImGui::IsKeyPressed( ImGuiKey_Backspace, false ) && io.KeySuper ) ) DeleteSelected();
 	if( ImGui::IsKeyPressed( ImGuiKey_Escape, false ) ) m_tool = -1;
+	// while the right mouse button flies the camera, W A S D Q E move it - they are not tool keys then (Unreal)
+	if( m_flying ) return;
 	if( !io.KeyCtrl && !io.KeyAlt && !io.KeySuper )
 	{
+		if( ImGui::IsKeyPressed( ImGuiKey_End, false ) ) SnapSelectedToGround();
+		if( ImGui::IsKeyPressed( ImGuiKey_H, false ) && m_scene.Find( m_selected ) ) { m_scene.Find( m_selected )->visible = !m_scene.Find( m_selected )->visible; Commit( "Visibility" ); }
 		if( ImGui::IsKeyPressed( ImGuiKey_Q, false ) ) { m_gizmoOp = 0; m_tool = -1; }
 		if( ImGui::IsKeyPressed( ImGuiKey_W, false ) ) { m_gizmoOp = 1; m_tool = -1; }
 		if( ImGui::IsKeyPressed( ImGuiKey_E, false ) ) { m_gizmoOp = 2; m_tool = -1; }
@@ -883,7 +1067,11 @@ void Editor::ViewportPanel( float dt )
 		wasUsing = false;
 
 	if( Playing() ) Hud( origin.x, origin.y );
-	else ViewportOverlay( origin.x, origin.y );
+	else
+	{
+		ViewportOverlay( origin.x, origin.y );
+		ViewportContextMenu();
+	}
 	if( Playing() ) dl->AddRect( origin, ImVec2( origin.x + m_viewW, origin.y + m_viewH ), m_paused ? IM_COL32( 240, 196, 70, 255 ) : IM_COL32( 61, 200, 120, 255 ), 0.0f, 0, 2.0f );
 	(void)dt;
 	ImGui::End();
@@ -906,6 +1094,34 @@ void Editor::ViewportOverlay( float ox, float oy )
 		m_pitch = -std::asin( std::max( -1.0f, std::min( 1.0f, z.y ) ) );
 		OrbitFromAngles();
 	}
+	// camera speed (top right, left of the view cube) - like Unreal's viewport camera-speed button
+	{
+		char label[48];
+		std::snprintf( label, sizeof( label ), ICON_FA_VIDEO "  %d", m_camSpeed );
+		const ImVec2 ls = ImGui::CalcTextSize( label );
+		ImGui::SetCursorScreenPos( ImVec2( ox + m_viewW - cube - 30 - ls.x - 16, oy + 12 ) );
+		ImGui::PushStyleColor( ImGuiCol_Button, IM_COL32( 14, 15, 17, 170 ) );
+		if( ImGui::Button( label ) ) ImGui::OpenPopup( "##camspeed" );
+		ImGui::PopStyleColor();
+		ui::Tip( "Camera speed", "How fast W A S D fly while you hold the right mouse button. The mouse wheel changes it while flying." );
+		if( ImGui::BeginPopup( "##camspeed" ) )
+		{
+			ImGui::SetNextItemWidth( 160 );
+			ImGui::SliderInt( "Speed", &m_camSpeed, 1, 8 );
+			ImGui::TextDisabled( "%.1f m/s (Shift: x3)", CameraSpeedMps() );
+			ImGui::SetNextItemWidth( 160 );
+			ImGui::SliderFloat( "Mouse look", &m_lookSens, 0.25f, 3.0f, "%.2f" );
+			ImGui::EndPopup();
+		}
+	}
+	if( m_flying )
+	{
+		const char* fly = ICON_FA_PLANE "  Flying - W A S D move, Q / E down / up, wheel = speed, Shift = fast";
+		const ImVec2 fs = ImGui::CalcTextSize( fly );
+		const ImVec2 a( ox + ( m_viewW - fs.x ) * 0.5f, oy + m_viewH - fs.y - 26 );
+		dl->AddRectFilled( ImVec2( a.x - 12, a.y - 6 ), ImVec2( a.x + fs.x + 12, a.y + fs.y + 6 ), IM_COL32( 14, 15, 17, 190 ), 6 );
+		dl->AddText( a, IM_COL32( 220, 225, 232, 255 ), fly );
+	}
 	// stats (bottom left)
 	if( m_stats )
 	{
@@ -926,7 +1142,7 @@ void Editor::ViewportOverlay( float ox, float oy )
 	dl->AddText( ImVec2( ox + 18, oy + 14 ), IM_COL32( 215, 222, 230, 255 ), chip.c_str() );
 	if( m_scene.Entities().size() <= 2 && !m_scene.FirstTerrain() )
 	{
-		const char* hint = "Empty level - add a Terrain (Terrain panel), drag actors in from Place Actors,\nor File > New Starter Zone for a ready-to-play example.";
+		const char* hint = "Empty level - add a Terrain (Terrain menu), drag actors in from Place Actors,\nor File > New Starter Zone for a ready-to-play example.\nHold the right mouse button + W A S D to fly around.";
 		const ImVec2 hs = ImGui::CalcTextSize( hint );
 		const ImVec2 a( ox + ( m_viewW - hs.x ) * 0.5f, oy + m_viewH * 0.5f - hs.y );
 		dl->AddRectFilled( ImVec2( a.x - 14, a.y - 10 ), ImVec2( a.x + hs.x + 14, a.y + hs.y + 10 ), IM_COL32( 14, 15, 17, 190 ), 8 );
@@ -934,40 +1150,126 @@ void Editor::ViewportOverlay( float ox, float oy )
 	}
 }
 
+float Editor::CameraSpeedMps() const
+{
+	static const float speeds[] = { 1.5f, 3, 6, 12, 24, 48, 96, 192 };
+	return speeds[std::max( 1, std::min( 8, m_camSpeed ) ) - 1];
+}
+
+// Unreal-style: RMB held = fly (mouse looks, W A S D move, Q / E down / up, wheel changes speed), LMB drag = move
+// forward / back and turn, MMB drag = pan, Alt+LMB orbit, Alt+RMB dolly, Alt+MMB pan, wheel = dolly, F frames.
+// A click (no drag) with LMB selects; with RMB it opens the viewport menu.
 void Editor::Navigation( bool hovered, float ox, float oy )
 {
 	ImGuiIO& io = ImGui::GetIO();
 	const float mx = io.MousePos.x - ox, my = io.MousePos.y - oy;
-	static int nav = -1;
-	if( hovered && io.KeyAlt )
+	const float dt = std::min( 0.1f, io.DeltaTime );
+	static bool navAlt = false;
+	auto fwdOf = [&]() {
+		const float cp = std::cos( m_pitch );
+		return Vector3( -std::sin( m_yaw ) * cp, std::sin( m_pitch ), -std::cos( m_yaw ) * cp );
+	};
+	const bool overGizmo = m_gizmoHover && m_scene.Find( m_selected ) && m_gizmoOp > 0;
+
+	// which button drives the camera
+	if( hovered && m_navButton < 0 )
+	{
 		for( int b = 0; b < 3; ++b )
-			if( ImGui::IsMouseClicked( b ) ) nav = b;
-	if( hovered && !io.KeyAlt && ImGui::IsMouseClicked( 2 ) ) nav = 2;   // middle drag pans without Alt too
-	if( nav >= 0 && !ImGui::IsMouseDown( nav ) ) nav = -1;
-	if( nav >= 0 )
+		{
+			if( !ImGui::IsMouseClicked( b ) ) continue;
+			if( b == 0 && !io.KeyAlt && ( m_tool >= 0 || overGizmo ) ) break;   // a brush stroke or a gizmo drag
+			m_navButton = b;
+			navAlt = io.KeyAlt;
+			m_navMoved = 0;
+			m_navUsedKeys = false;
+			break;
+		}
+	}
+	m_flying = false;
+	if( m_navButton >= 0 )
 	{
 		const ImVec2 d = io.MouseDelta;
-		if( nav == 0 )
+		m_navMoved += std::fabs( d.x ) + std::fabs( d.y );
+		const bool dragging = m_navMoved >= 4;
+		Vector3 eye = m_pivot - fwdOf() * m_dist;
+		const float look = 0.0045f * m_lookSens;
+		if( navAlt )
 		{
-			m_yaw -= d.x * 0.006f;
-			m_pitch = std::max( -1.52f, std::min( 1.52f, m_pitch - d.y * 0.006f ) );
+			if( m_navButton == 0 )   // orbit round the pivot
+			{
+				m_yaw -= d.x * 0.006f * m_lookSens;
+				m_pitch = std::max( -1.52f, std::min( 1.52f, m_pitch - d.y * 0.006f * m_lookSens ) );
+			}
+			else if( m_navButton == 1 )
+				m_dist = std::max( 1.0f, m_dist * ( 1.0f - ( d.x - d.y ) * 0.005f ) );
 		}
-		else if( nav == 2 )
+		else if( m_navButton == 1 )   // fly
 		{
-			const Vector3 fwd = Normalize( m_cam.target - m_cam.eye ), right = Normalize( Cross( fwd, Vector3( 0, 1, 0 ) ) ), up = Cross( right, fwd );
-			const float k = m_dist * 0.0016f;
+			m_flying = true;
+			m_yaw -= d.x * look;
+			m_pitch = std::max( -1.52f, std::min( 1.52f, m_pitch - d.y * look ) );
+			const Vector3 f = fwdOf(), right = Normalize( Cross( f, Vector3( 0, 1, 0 ) ) );
+			Vector3 move( 0, 0, 0 );
+			if( ImGui::IsKeyDown( ImGuiKey_W ) || ImGui::IsKeyDown( ImGuiKey_UpArrow ) ) move += f;
+			if( ImGui::IsKeyDown( ImGuiKey_S ) || ImGui::IsKeyDown( ImGuiKey_DownArrow ) ) move = move - f;
+			if( ImGui::IsKeyDown( ImGuiKey_D ) || ImGui::IsKeyDown( ImGuiKey_RightArrow ) ) move += right;
+			if( ImGui::IsKeyDown( ImGuiKey_A ) || ImGui::IsKeyDown( ImGuiKey_LeftArrow ) ) move = move - right;
+			if( ImGui::IsKeyDown( ImGuiKey_E ) || ImGui::IsKeyDown( ImGuiKey_PageUp ) ) move += Vector3( 0, 1, 0 );
+			if( ImGui::IsKeyDown( ImGuiKey_Q ) || ImGui::IsKeyDown( ImGuiKey_PageDown ) ) move = move - Vector3( 0, 1, 0 );
+			if( LengthSq( move ) > 0 )
+			{
+				m_navUsedKeys = true;
+				eye += Normalize( move ) * ( CameraSpeedMps() * ( io.KeyShift ? 3.0f : 1.0f ) * dt );
+			}
+			if( io.MouseWheel != 0.0f )
+			{
+				m_camSpeed = std::max( 1, std::min( 8, m_camSpeed + ( io.MouseWheel > 0 ? 1 : -1 ) ) );
+				m_navUsedKeys = true;
+			}
+			m_pivot = eye + fwdOf() * m_dist;
+		}
+		else if( m_navButton == 0 && dragging )   // LMB drag: forward / back + turn
+		{
+			m_yaw -= d.x * look;
+			const Vector3 f = fwdOf(), flat = Normalize( Vector3( f.x, 0, f.z ) );
+			eye = eye - flat * ( d.y * CameraSpeedMps() * 0.02f );
+			m_pivot = eye + f * m_dist;
+		}
+		if( m_navButton == 2 )   // pan
+		{
+			const Vector3 f = fwdOf(), right = Normalize( Cross( f, Vector3( 0, 1, 0 ) ) ), up = Cross( right, f );
+			const float k = std::max( 0.02f, m_dist * 0.0016f );
 			m_pivot = m_pivot - right * ( d.x * k ) + up * ( d.y * k );
 		}
-		else
-			m_dist = std::max( 1.0f, m_dist * ( 1.0f - ( d.x + d.y ) * 0.005f ) );
+		if( !ImGui::IsMouseDown( m_navButton ) )   // released
+		{
+			if( !navAlt && !dragging && !m_navUsedKeys )
+			{
+				Vector3 o, dir;
+				m_cam.Ray( mx, my, m_viewW, m_viewH, o, dir );
+				if( m_navButton == 0 && hovered ) m_selected = m_scene.Pick( o, dir );
+				if( m_navButton == 1 && hovered )
+				{
+					m_contextAt = DropPoint( mx, my );
+					if( const uint32_t hit = m_scene.Pick( o, dir ) ) m_selected = hit;
+					ImGui::OpenPopup( "##viewctx" );
+				}
+			}
+			m_navButton = -1;
+		}
 	}
-	if( hovered && io.MouseWheel != 0.0f ) m_dist = std::max( 1.0f, m_dist * ( io.MouseWheel > 0 ? 0.88f : 1.0f / 0.88f ) );
+	if( hovered && m_navButton != 1 && io.MouseWheel != 0.0f )   // wheel: dolly toward what you look at
+	{
+		const float step = std::max( 0.5f, m_dist * 0.12f ) * ( io.MouseWheel > 0 ? 1.0f : -1.0f );
+		if( m_dist - step >= 2.0f ) m_dist -= step;
+		else m_pivot += fwdOf() * step;   // too close to the pivot: carry it along
+	}
 	OrbitFromAngles();
 
 	Vector3 o, d;
 	m_cam.Ray( mx, my, m_viewW, m_viewH, o, d );
 	m_brushHover = false;
-	if( m_tool >= 0 && hovered && nav < 0 )
+	if( m_tool >= 0 && hovered && m_navButton < 0 )
 	{
 		Vector3 hit;
 		if( m_scene.RaycastTerrain( o, d, hit ) )
@@ -979,8 +1281,35 @@ void Editor::Navigation( bool hovered, float ox, float oy )
 		}
 	}
 	if( m_stroke && !ImGui::IsMouseDown( 0 ) ) EndStroke();
-	const bool overGizmo = m_gizmoHover && m_scene.Find( m_selected ) && m_gizmoOp > 0;
-	if( m_tool < 0 && hovered && !io.KeyAlt && ImGui::IsMouseClicked( 0 ) && !overGizmo ) m_selected = m_scene.Pick( o, d );
+}
+
+void Editor::ViewportContextMenu()
+{
+	if( !ImGui::BeginPopup( "##viewctx" ) ) return;
+	world::Entity* e = m_scene.Find( m_selected );
+	if( e )
+	{
+		ImGui::TextDisabled( "%s  %s", IconOf( e->type ), e->name.c_str() );
+		if( ImGui::MenuItem( ICON_FA_CROSSHAIRS "  Focus", "F" ) ) FrameSelected();
+		if( ImGui::MenuItem( ICON_FA_COPY "  Copy", "Ctrl+C" ) ) CopySelected();
+		if( ImGui::MenuItem( ICON_FA_CLONE "  Duplicate", "Ctrl+D" ) ) DuplicateSelected();
+		if( ImGui::MenuItem( ICON_FA_ARROW_DOWN "  Snap to Ground", "End" ) ) SnapSelectedToGround();
+		if( ImGui::MenuItem( ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G" ) ) GroupSelected();
+		if( ImGui::MenuItem( ICON_FA_BOX "  Save as Prefab" ) ) SavePrefab( e->id, e->name );
+		if( ImGui::MenuItem( ICON_FA_TRASH "  Delete", "Del" ) ) DeleteSelected();
+		ImGui::Separator();
+	}
+	if( ImGui::MenuItem( ICON_FA_PASTE "  Paste Here", "Ctrl+V", false, !m_clipboard.empty() ) )
+	{
+		m_clipboardAt = m_contextAt - Vector3( 2, 0, 2 );
+		Paste();
+	}
+	if( ImGui::BeginMenu( ICON_FA_PLUS "  Place Actor Here" ) )
+	{
+		PlaceMenuItems( m_contextAt );
+		ImGui::EndMenu();
+	}
+	ImGui::EndPopup();
 }
 
 void Editor::GatherPlayInput( bool hovered, float ox, float oy )
@@ -1340,7 +1669,8 @@ void Editor::SceneNode( uint32_t id, const std::string& filter )
 
 void Editor::ScenePanel()
 {
-	ImGui::Begin( ICON_FA_SITEMAP " Scene" );
+	if( !m_open[PScene] ) return;
+	if( !ImGui::Begin( ICON_FA_SITEMAP " Scene", &m_open[PScene] ) ) { ImGui::End(); return; }
 	ImGui::SetNextItemWidth( ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - 12 );
 	ImGui::InputTextWithHint( "##filter", ICON_FA_MAGNIFYING_GLASS "  Filter actors", m_filter, sizeof( m_filter ) );
 	ImGui::SameLine( 0, 6 );
@@ -1376,7 +1706,8 @@ void Editor::ScenePanel()
 // ------------------------------------------------------------------------------------------------ inspector
 void Editor::InspectorPanel()
 {
-	ImGui::Begin( ICON_FA_SLIDERS " Inspector" );
+	if( !m_open[PInspector] ) return;
+	if( !ImGui::Begin( ICON_FA_SLIDERS " Inspector", &m_open[PInspector] ) ) { ImGui::End(); return; }
 	world::Entity* e = Playing() ? nullptr : m_scene.Find( m_selected );
 	if( Playing() ) ImGui::TextDisabled( "Stop playing to edit." );
 	else if( !e ) ImGui::TextDisabled( "Select an actor in the viewport or the Scene." );
@@ -1499,7 +1830,8 @@ void Editor::InspectorPanel()
 // ------------------------------------------------------------------------------------------------ place actors
 void Editor::PlacePanel()
 {
-	ImGui::Begin( ICON_FA_PLUS " Place Actors" );
+	if( !m_open[PPlace] ) return;
+	if( !ImGui::Begin( ICON_FA_PLUS " Place Actors", &m_open[PPlace] ) ) { ImGui::End(); return; }
 	ImGui::TextDisabled( "Drag into the viewport, or click to place in view." );
 	ImGui::BeginDisabled( Playing() );
 	for( const char* group : { "Gameplay", "World", "Basic", "Lighting" } )
@@ -1526,9 +1858,14 @@ void Editor::PlacePanel()
 void Editor::TerrainPanel()
 {
 	static int lastTool = -1;
-	if( m_tool >= 0 && lastTool < 0 ) ImGui::SetNextWindowFocus();   // a terrain tool turned on: show its settings
+	if( m_tool >= 0 && lastTool < 0 )   // a terrain tool turned on: show its settings
+	{
+		m_open[PTerrain] = true;
+		ImGui::SetNextWindowFocus();
+	}
 	lastTool = m_tool;
-	ImGui::Begin( ICON_FA_MOUNTAIN_SUN " Terrain" );
+	if( !m_open[PTerrain] ) return;
+	if( !ImGui::Begin( ICON_FA_MOUNTAIN_SUN " Terrain", &m_open[PTerrain] ) ) { ImGui::End(); return; }
 	ImGui::BeginDisabled( Playing() );
 	uint32_t tid = 0;
 	world::Terrain* t = m_scene.FirstTerrain( &tid );
@@ -1640,7 +1977,8 @@ void Editor::TerrainPanel()
 // ------------------------------------------------------------------------------------------------ content browser
 void Editor::ContentPanel()
 {
-	ImGui::Begin( ICON_FA_FOLDER_OPEN " Content Browser" );
+	if( !m_open[PContent] ) return;
+	if( !ImGui::Begin( ICON_FA_FOLDER_OPEN " Content Browser", &m_open[PContent] ) ) { ImGui::End(); return; }
 	const char* tabs[] = { ICON_FA_MAP "  Levels", ICON_FA_CHESS_ROOK "  Models", ICON_FA_BOX "  Prefabs" };
 	const char* subs[] = { "levels", "models", "prefabs" };
 	ImGui::BeginChild( "##folders", ImVec2( 150, 0 ), ImGuiChildFlags_Borders );
@@ -1726,7 +2064,8 @@ void Editor::ContentPanel()
 
 void Editor::WorldPanel()
 {
-	ImGui::Begin( ICON_FA_GLOBE " World Settings" );
+	if( !m_open[PWorld] ) return;
+	if( !ImGui::Begin( ICON_FA_GLOBE " World Settings", &m_open[PWorld] ) ) { ImGui::End(); return; }
 	ImGui::BeginDisabled( Playing() );
 	auto& ws = m_scene.settings;
 	bool done = false;
@@ -1760,7 +2099,8 @@ void Editor::WorldPanel()
 
 void Editor::OutputPanel()
 {
-	ImGui::Begin( ICON_FA_TERMINAL " Output" );
+	if( !m_open[POutput] ) return;
+	if( !ImGui::Begin( ICON_FA_TERMINAL " Output", &m_open[POutput] ) ) { ImGui::End(); return; }
 	if( ImGui::SmallButton( ICON_FA_BROOM " Clear" ) ) m_log.clear();
 	ImGui::Separator();
 	ImGui::BeginChild( "##log" );
@@ -1772,6 +2112,86 @@ void Editor::OutputPanel()
 	}
 	if( ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4 ) ImGui::SetScrollHereY( 1.0f );
 	ImGui::EndChild();
+	ImGui::End();
+}
+}
+
+namespace cmmo::editor
+{
+void Editor::ControlsPanel()
+{
+	if( !m_open[PControls] ) return;
+	ImGui::SetNextWindowSize( ImVec2( 560, 520 ), ImGuiCond_FirstUseEver );
+	if( !ImGui::Begin( ICON_FA_KEYBOARD " Controls", &m_open[PControls] ) ) { ImGui::End(); return; }
+	auto table = [&]( const char* icon, const char* title, std::initializer_list<std::pair<const char*, const char*>> rows ) {
+		ui::Section( icon, title );
+		if( ImGui::BeginTable( title, 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp ) )
+		{
+			for( const auto& r : rows )
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextColored( ImVec4( 0.55f, 0.75f, 1, 1 ), "%s", r.first );
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted( r.second );
+			}
+			ImGui::EndTable();
+		}
+	};
+	table( ICON_FA_VIDEO, "Viewport camera (like Unreal)",
+		   { { "Hold RMB + W A S D", "fly forward / left / back / right" },
+			 { "Hold RMB + Q / E", "fly down / up" },
+			 { "Hold RMB + mouse", "look around" },
+			 { "Hold RMB + wheel", "camera speed slower / faster" },
+			 { "Shift (while flying)", "3x faster" },
+			 { "LMB drag", "move forward / back and turn" },
+			 { "MMB drag", "pan" },
+			 { "Wheel", "move toward what you look at" },
+			 { "Alt + LMB / RMB / MMB", "orbit / dolly / pan" },
+			 { "F", "focus the selection" } } );
+	table( ICON_FA_ARROW_POINTER, "Editing",
+		   { { "LMB click", "select   (RMB click: viewport menu)" },
+			 { "Q  W  E  R", "select / move / rotate / scale" },
+			 { "Ctrl+C / X / V / D", "copy / cut / paste / duplicate" },
+			 { "Ctrl+G", "group into an Empty" },
+			 { "Del", "delete" },
+			 { "End", "snap to the ground" },
+			 { "H", "hide / show" },
+			 { "F2", "rename" },
+			 { "Ctrl+Z / Ctrl+Shift+Z", "undo / redo" },
+			 { "Ctrl+S", "save the level" },
+			 { "Esc", "stop the terrain tool" } } );
+	table( ICON_FA_GAMEPAD, "Play (Alt+P)",
+		   { { "W / S, A / D, Q / E", "move, turn, strafe" },
+			 { "Space / Shift", "jump / run" },
+			 { "RMB drag / LMB drag", "turn the character / look around" },
+			 { "Tab, LMB on a creature", "target" },
+			 { "1  2  3  4", "Strike, Heroic Blow, Fireball, Mend" },
+			 { "F", "talk to a quest giver" },
+			 { "Esc", "close the dialog, then stop" } } );
+	ImGui::TextDisabled( "On a Mac, Ctrl is Cmd." );
+	ImGui::End();
+}
+
+void Editor::PrefsPanel()
+{
+	if( !m_open[PPrefs] ) return;
+	ImGui::SetNextWindowSize( ImVec2( 420, 260 ), ImGuiCond_FirstUseEver );
+	if( !ImGui::Begin( ICON_FA_GEAR " Editor Preferences", &m_open[PPrefs] ) ) { ImGui::End(); return; }
+	ui::Section( ICON_FA_VIDEO, "Camera" );
+	ui::Label( "Speed" );
+	ImGui::SliderInt( "##speed", &m_camSpeed, 1, 8 );
+	ImGui::TextDisabled( "%.1f m/s while flying (hold RMB + W A S D)", CameraSpeedMps() );
+	ui::Label( "Mouse look" );
+	ImGui::SliderFloat( "##look", &m_lookSens, 0.25f, 3.0f, "%.2f" );
+	ui::Section( ICON_FA_MAGNET, "Snapping" );
+	ImGui::Checkbox( "Snap moves to the grid", &m_snap );
+	ui::Label( "Grid step" );
+	ImGui::DragFloat( "##snapmove", &m_snapMove, 0.05f, 0.1f, 50.0f, "%.2f m" );
+	ui::Section( ICON_FA_DISPLAY, "Viewport" );
+	ImGui::Checkbox( "Grid", &m_grid );
+	ImGui::SameLine();
+	ImGui::Checkbox( "Stats", &m_stats );
 	ImGui::End();
 }
 }

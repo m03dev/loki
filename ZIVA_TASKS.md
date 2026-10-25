@@ -32,7 +32,8 @@ get next to every file. `tools/build.py` now chooses the arm64 Python, Apple's c
 `._*` files, builds on /Volumes/Xero, runs the tests and opens the editor. It is checked on GitHub's macOS arm64 and
 Windows machines on every push (workflow "Carbon MMO engine").
 - [ ] Xero mounted (`ls /Volumes/Xero`), then exactly:
-  `D=/Volumes/Xero/carbon_mmo; git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD && /usr/bin/python3 $D/src/native/carbon_mmo/tools/build.py --open`
+  `pkill -x cmmo_editor; D=/Volumes/Xero/carbon_mmo; git -C $D/src fetch origin agent/carbon-editor && git -C $D/src checkout -f FETCH_HEAD && /usr/bin/python3 $D/src/native/carbon_mmo/tools/build.py --open`
+  (Same command after every update from Claude: it closes the open editor, rebuilds and reopens it.)
   (no other flags, no CC/CXX variables). It ends with `DONE` and the editor window open. Tell the owner:
   File > New Starter Zone, then the green Play button (Alt+P).
 - [ ] If it stops with BUILD FAILED / TESTS FAILED: paste everything it printed from `---- first error ----` down into
