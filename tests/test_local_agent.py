@@ -248,6 +248,11 @@ else:
     check("chat with the local model picked: the offline agent made the repo (OpenCode never called)",
           "First commit: hello" in log.stdout and "Checked by LOKI" in out, out[:400])
 
+src_l = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
+src_s = (REPO / "studio" / "studio_core.py").read_text(encoding="utf-8")
+check("Home LOKI is told its focus is the owner's work OUTSIDE the app, LOKI Studio that it is the INSIDE agent",
+      "Your job (Home): the owner's work OUTSIDE this app" in src_l and "you are the INSIDE agent" in src_s
+      and "outside the LOKI app" in local_agent.SYSTEM)
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)
