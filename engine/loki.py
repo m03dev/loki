@@ -6191,6 +6191,33 @@ _FORGE_SCHEMA = schema(
 TOOL_SCHEMAS.append(_FORGE_SCHEMA)
 MODEL_TOOL_SCHEMAS.append(_FORGE_SCHEMA)
 MODEL_TOOL_NAMES.add("make_3d")
+
+
+# --- Voices (engine/voice_studio.py): VoiceStudio's local backend - speak, clone, design, transcribe to .srt ----------
+async def voice_tool(action: str = "speak", text: str = "", voice: str = "", instruct: str = "", language: str = "",
+                     speed: float = 1.0, out: str = "", name: str = "", audio: str = "", ref_text: str = "",
+                     description: str = "", srt: bool = True) -> str:
+    import voice_studio  # pylint: disable=import-outside-toplevel
+    args = {k: v for k, v in dict(action=action, text=text, voice=voice, instruct=instruct, language=language,
+                                  speed=speed, out=out, name=name, audio=audio, ref_text=ref_text,
+                                  description=description, srt=srt).items() if v not in ("", None)}
+    if action == "install":
+        if os.getenv("LOKI_JOB_ID"):
+            return "DENIED: installing an app needs the owner - ask them."
+        if not await approve("voice_install", "Install VoiceStudio (AGPL-3.0, github.com/debpalash/VoiceStudio) with "
+                             "its official installer:\n$ " + " ".join(voice_studio.install_command()), False):
+            return "DENIED: the owner did not approve installing VoiceStudio."
+        args["_approved"] = True
+    res = await asyncio.to_thread(voice_studio.tool, args, WORKSPACE, (lambda *_a: True) if args.get("_approved") else None)
+    return json.dumps(res)
+
+
+LOCAL_TOOLS["voice"] = voice_tool
+_VOICE_SCHEMA = schema("voice", __import__("voice_studio").TOOL["description"],
+                       __import__("voice_studio").TOOL["inputSchema"]["properties"], ["action"])
+TOOL_SCHEMAS.append(_VOICE_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_VOICE_SCHEMA)
+MODEL_TOOL_NAMES.add("voice")
 TOOL_CATEGORIES["creative"] += ["make_3d"]
 MODIFYING |= {"make_3d"}
 

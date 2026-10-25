@@ -214,6 +214,15 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
     # code by itself; pictures, models and clips come from LOKI's own makers (not in Plan mode: they make files)
     if make_tools and not plan:
         mcp["loki-make"] = {"type": "local", "command": make_tools_command(), "enabled": True}
+    # VoiceStudio's own MCP server (engine/voice_studio.py) when its backend answers: speech, voices, transcription
+    if not plan:
+        try:
+            import voice_studio  # pylint: disable=import-outside-toplevel
+            vs = voice_studio.mcp_entry()
+            if vs:
+                mcp["voicestudio"] = vs
+        except Exception:  # noqa: BLE001 - never blocks the agent
+            pass
     if mcp:
         cfg["mcp"] = mcp
     return cfg

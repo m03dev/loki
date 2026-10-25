@@ -59,6 +59,7 @@ TOOLS = [
          "outline": {"type": "integer"}, "mode": {"type": "string",
                                                    "enum": ["contrast", "center", "median", "k-centroid", "nearest"]}},
          "required": ["image"]}},
+    __import__("voice_studio").TOOL,
     {"name": "upscale_image",
      "description": "Enlarge a picture in this folder 2x or 4x with Real-ESRGAN (sharp detail, not blur); "
                     "anime=true for drawn / comic / anime art. Saves <name>-4x.png beside it.",
@@ -155,6 +156,14 @@ def pixelize(args: dict, cwd: Path) -> dict:
     return res
 
 
+def voice(args: dict, cwd: Path) -> dict:
+    import voice_studio  # pylint: disable=import-outside-toplevel
+    ask = None
+    if str(args.get("action") or "") == "install":
+        ask = lambda tool, details: ask_owner(tool, details)[0]  # noqa: E731 - the owner allows it in LOKI first
+    return voice_studio.tool(args, cwd, ask)
+
+
 def upscale_image(args: dict, cwd: Path) -> dict:
     import art_direction  # pylint: disable=import-outside-toplevel
     p = (cwd / str(args.get("image") or "")).resolve()
@@ -219,7 +228,7 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 
 def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
-          "pixelize": pixelize,
+          "pixelize": pixelize, "voice": voice,
           "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:
@@ -351,6 +360,7 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
+       "voice": "voice",
        "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
