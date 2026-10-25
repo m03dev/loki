@@ -34,9 +34,16 @@ keeps the index in sync itself.
 `LOKI_OPENCODE_MODEL=provider/model` pins one of OpenCode's own models, for example a free OpenCode Zen model.
 `LOKI_AGENT_ENGINE=loki` switches back to the old loop; Settings > Agents has the same switch.
 
-## Still on the old loop (next stage)
+## Background jobs and teams (moved 2026-10-25)
 
-Background jobs (`workers.py` / `run_job`), teams, and LOKI's own self-improvement jobs still use the old loop. They
-move next: a job becomes `opencode run` in the job's workspace.
+`loki.run_job` (workers.py and team agents) runs the job on OpenCode as well:
+- Each job gets its own session and its own config file (`opencode-<job id>.json`).
+- A job without `allow_commands` gets no shell.
+- The agent's profile goes into the prompt.
+- The result always ends in `DONE:` / `BLOCKED:`. A job whose model only claimed it was done ends BLOCKED.
 
-Tests: `tests/test_opencode_engine.py` (a fake `opencode` binary that really runs git) and `tests/test_honest_chat.py`.
+Where OpenCode is not installed, or with `LOKI_AGENT_ENGINE=loki`, or for a job whose `engine` is `loki`, the old
+loop still runs. The cloud test benches use that path.
+
+Tests: `tests/test_opencode_engine.py` uses a fake `opencode` binary that really runs git. `tests/test_honest_chat.py`
+covers the NOT DONE check.

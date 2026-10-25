@@ -8959,8 +8959,9 @@ def engine_status() -> dict:
             "indexed": (WORKSPACE / ".codegraph").is_dir()}
 
 
-async def run_opencode(text: str, task: bool = False) -> str:
-    """One chat message (or a Build task) done by OpenCode in the workspace, with CodeGraph; LOKI reports every tool."""
+async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, preamble: str = "") -> str:
+    """One chat message (or a Build task / background job) done by OpenCode in the workspace, with CodeGraph; LOKI
+    reports every tool. allow_bash=False: no shell (a job not allowed to run commands); preamble: a job's agent profile."""
     global _task_ok_calls, _task_failed_calls
     exe = opencode_engine.find_opencode()
     messages.append({"role": "user", "content": text})
@@ -8985,10 +8986,14 @@ async def run_opencode(text: str, task: bool = False) -> str:
     cfg_dir = DATA_DIR / "opencode"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "opencode.json"
-    cfg_path.write_text(json.dumps(opencode_engine.build_config(providers, cg if cg else "", plan, _DESTRUCTIVE_SNIPPETS),
-                                   indent=1), encoding="utf-8")
+    oc_cfg = opencode_engine.build_config(providers, cg if cg else "", plan, _DESTRUCTIVE_SNIPPETS)
+    if not allow_bash:
+        oc_cfg["permission"]["bash"] = "deny"
+    if os.getenv("LOKI_JOB_ID"):                                   # a background job: its own config file
+        cfg_path = cfg_dir / ("opencode-%s.json" % re.sub(r"[^\w-]", "", os.getenv("LOKI_JOB_ID", ""))[:40])
+    cfg_path.write_text(json.dumps(oc_cfg, indent=1), encoding="utf-8")
     env = opencode_engine.env_for(providers)
-    conv = active_conversation_id() or "default"
+    conv = ("job-" + os.getenv("LOKI_JOB_ID", "")) if os.getenv("LOKI_JOB_ID") else (active_conversation_id() or "default")
     session = OC_SESSIONS.get(conv)
     models = ([pinned] if pinned else ["%s/%s" % (opencode_engine.provider_id(n), p["model"]) for n, p in providers.items()]) or [""]
 
@@ -9003,8 +9008,9 @@ async def run_opencode(text: str, task: bool = False) -> str:
         elif kind == "step_start":
             _progress("thinking", "OpenCode is working...")
 
-    prompt = text if not task else ("GOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
-                                    "before you say it is done." % text)
+    prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
+                                    "before you say it is done. End with one line: 'DONE: <what you made>' or "
+                                    "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
     result: dict = {}
     used = ""
     for model in models[:3]:
@@ -9222,7 +9228,17 @@ async def run_job(job_path: str) -> int:
     try:
         if job.get("mcp"):
             await connect_mcp(stack)
-        result = await pursue_goal(str(job.get("prompt", "")))
+        if opencode_engine.engine_choice() == "opencode" and opencode_engine.find_opencode() and job.get("engine", "") != "loki":
+            # background jobs and team agents run on OpenCode too (docs/AGENT_ENGINE.md); LOKI's own loop stays the
+            # fallback where OpenCode is not installed (and for LOKI_AGENT_ENGINE=loki)
+            pre = ("You are the agent \"%s\". %s\n" % (profile.get("name", "agent"), profile["instructions"])
+                   if profile.get("instructions") else "") + (
+                "You run unattended as a background job; nobody can answer questions, so make reasonable choices "
+                "and say what you chose.")
+            result = _job_outcome(await run_opencode(str(job.get("prompt", "")), task=True,
+                                                     allow_bash=allow_commands, preamble=pre))
+        else:
+            result = await pursue_goal(str(job.get("prompt", "")))
     except (ModelUnavailable, BudgetExhausted) as exc:
         # Stopped from outside the loop (no model, a budget, the job's time limit): say BLOCKED with
         # the reason AND what was saved, in the result file too (it used to be left empty).
@@ -9236,6 +9252,18 @@ async def run_job(job_path: str) -> int:
     print("\n" + (result or "").strip(), flush=True)
     _write_result(job, result)
     return 2 if reply_outcome(result) == "blocked" else 0
+
+
+def _job_outcome(reply: str) -> str:
+    """A job's result must end DONE / BLOCKED (teams and the job list read it): OpenCode's reply, made so."""
+    text = str(reply or "").strip()
+    if text.startswith("NOT DONE"):
+        return "BLOCKED: " + text
+    if reply_outcome(text):
+        return text
+    if _task_ok_calls > 0:
+        return text + "\n\nDONE: " + (text.splitlines()[0][:200] if text else "finished")
+    return "BLOCKED: no tool ran, so nothing was done. " + text
 
 
 def _write_result(job: dict, text: str) -> None:

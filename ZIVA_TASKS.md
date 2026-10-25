@@ -33,8 +33,8 @@ CodeGraph as MCP. LOKI's own loop no longer answers the window.
 - [ ] [mac] [win] If OpenCode errors with a provider (look at <data>/opencode/opencode.json, never paste keys), report
   which provider and the error line. `opencode run --format json --dir <ws> --model loki-<p>/<m> "say hi"` with
   OPENCODE_CONFIG=<data>/opencode/opencode.json reproduces it outside LOKI.
-- [ ] [either] Next stage: move background jobs / teams (workers.py run_job) to `opencode run` the same way, then
-  delete the old loop's chat path. Keep `tests/test_opencode_engine.py` green.
+- [x] [either] Next stage: move background jobs / teams (workers.py run_job) to `opencode run` the same way - done
+  by Claude 2026-10-25 (run_job uses OpenCode when it is installed; docs/AGENT_ENGINE.md).
 
 ### From Claude (2026-10-25 07:55) - LOKI said "Done! I created the repo" and nothing was made. Fixed; verify on the Mac now. [mac]
 
@@ -96,10 +96,9 @@ verts ... just like Maya", "everything needs to be redesigned properly ... break
   appears; a narrow window stacks them. Report anything that differs between the two machines (screenshot to Reports).
 - [ ] [mac] Forge: two cubes, pick both, F9 - both show vertices; move one of each; F8 - each cube keeps its own;
   Ctrl+Z. Then component mode on one, Shift + click the other. Report anything odd.
-- [ ] [either] tests/test_forge_pro_ui.py runs past its 58 s limit (in the cloud too, before these changes): split it in
-  two suites under a minute each (keep every check).
-- [ ] [either] tests/test_forge_options_ui.py fails at "it opens the Options panel" (before these changes too): fix the
-  test or the panel.
+- [x] [either] tests/test_forge_pro_ui.py runs past its 58 s limit - done by Claude: split in three (pro / pro2 / pro3).
+- [x] [either] tests/test_forge_options_ui.py "it opens the Options panel" - done by Claude: the panel is Settings >
+  Grid & presets now (it was unreachable after the Settings rework).
 
 ### From Claude (2026-10-25 06:00) - Forge rebuild, step 1: copied open-source code in. On master. [either]
 

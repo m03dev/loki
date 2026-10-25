@@ -164,6 +164,26 @@ if loki:
     os.environ["LOKI_OPENCODE_EXE"] = str(FAKE)
     check("the engine is OpenCode unless LOKI_AGENT_ENGINE=loki", oe.engine_choice({}) == "opencode"
           and oe.engine_choice({"LOKI_AGENT_ENGINE": "loki"}) == "loki")
+    # a background job (workers.py -> loki.run_job) runs on OpenCode too, ends DONE / BLOCKED, own session + config
+    jd = Path(tempfile.mkdtemp(prefix="loki-oc-job-"))
+    loki.WORKSPACE = jd / "ws"; loki.WORKSPACE.mkdir()
+    os.environ["FAKE_OC_MODE"] = "work"; os.environ["LOKI_JOB_ID"] = "job42"; LOG.write_text("")
+    job = {"id": "job42", "prompt": REQ, "result_path": str(jd / "result.txt"), "allow_commands": False,
+           "profile": {"name": "Builder", "instructions": "Build things."}}
+    (jd / "job.json").write_text(json.dumps(job))
+    code = asyncio.run(asyncio.wait_for(loki.run_job(str(jd / "job.json")), 50))
+    res = (jd / "result.txt").read_text()
+    jc = json.loads((Path(loki.DATA_DIR) / "opencode" / "opencode-job42.json").read_text())
+    jcalls = [json.loads(x) for x in LOG.read_text().splitlines() if x.strip()]
+    check("a background job runs on OpenCode: the work is on disk, the result ends DONE, exit 0",
+          code == 0 and "DONE:" in res and (loki.WORKSPACE / "loki-test-repo" / "src" / "main.py").is_file(), (code, res[:200]))
+    check("...with its own config (a job not allowed commands gets no shell) and the agent's profile in the prompt",
+          jc["permission"]["bash"] == "deny" and jcalls and "Builder" in jcalls[0]["argv"][-1] and "--session" not in jcalls[0]["argv"])
+    os.environ["FAKE_OC_MODE"] = "liar"
+    code = asyncio.run(asyncio.wait_for(loki.run_job(str(jd / "job.json")), 50))
+    check("a job whose model only says done ends BLOCKED (exit 2)", code == 2 and (jd / "result.txt").read_text().startswith("BLOCKED"),
+          (code, (jd / "result.txt").read_text()[:200]))
+    os.environ.pop("LOKI_JOB_ID", None)
     st = loki.engine_status()
     check("Settings > Agent status: the engine, where OpenCode is, the install commands", st["opencode"] == str(FAKE)
           and st["engine"] == "opencode" and "opencode" in st["install"])
