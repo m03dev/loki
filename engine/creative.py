@@ -26,7 +26,7 @@ harness_data/models (never into the repo), runs in a background thread, progress
 harness_data/app/creative.json (shown in Settings > Creations).
 
 Settings (environment / LOKI's .env):
-    LOKI_IMAGE_BACKEND       auto | sdcpp | mflux | zimage | qwen | pollinations
+    LOKI_IMAGE_BACKEND       auto | sdcpp | mflux | zimage | qwen | nvidia | huggingface | pollinations
     LOKI_SDCPP_MODEL         zimage-q3 | zimage-q4 | zimage-q6 (default: by VRAM)
     LOKI_SDCPP_TAG           a stable-diffusion.cpp release tag to install (default: latest)
     LOKI_MFLUX_MODEL         an mflux model id (default filipstrand/Z-Image-Turbo-mflux-4bit)

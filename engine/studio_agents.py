@@ -29,14 +29,17 @@ KINDS: dict = {
     "art": ("Art", "Art", 3 * 3600,
             "Make finished artwork: {brief}\n"
             "1. Decide the look (medium, style, palette, light, composition) and write it in ART_NOTES.md.\n"
-            "2. Draw it with the make_image tool (count 4 for variations) - describe each picture fully.\n"
+            "2. Draw it with the make_image tool (count 4 for variations, style= the closest preset, e.g. "
+            "concept-art) - write each prompt like an art director: subject, composition, light, palette, mood.\n"
             "3. Look at what came out (read the files), pick the best, make 2-3 more rounds that improve it.\n"
-            "4. Keep the best in final/ and write a short caption for each in README.md."),
+            "4. Upscale the keepers (make_image upscale=4, or upscale_image), keep them in final/ and write a short "
+            "caption for each in README.md."),
     "painting": ("Paintings", "Painting", 3 * 3600,
                  "Paint this (as a painter would - a real painting, not a photo): {brief}\n"
                  "Choose the medium (oil, acrylic, watercolour, gouache, ink) and the painter's approach, write it in "
                  "NOTES.md, then make_image with prompts that name the medium, brushwork, canvas texture, palette and "
-                 "light. Make a few versions, keep the best in final/, describe each in README.md."),
+                 "light (style=oil-painting or watercolor). Make a few versions, upscale the best 4x (upscale_image), "
+                 "keep them in final/, describe each in README.md."),
     "3d": ("3D Models", "3D model", 3 * 3600,
            "Make a 3D model: {brief}\n"
            "1. Draw clean reference pictures first with make_image (front view, plain background, the whole object).\n"
@@ -48,7 +51,8 @@ KINDS: dict = {
               "1. Write SCRIPT.md: title, characters (with a fixed visual description each), and the pages - every "
               "panel with what we see, the dialogue and captions.\n"
               "2. Draw every panel with make_image, repeating each character's exact description so they stay the "
-              "same; one style for the whole book (say it in every prompt). Save as pages/page01/panel1.png ...\n"
+              "same; one style for the whole book (style=comic or manga, and say it in every prompt). Save as "
+              "pages/page01/panel1.png ...\n"
               "3. Put each page together as an HTML page (pages/page01.html: the panels in a grid, speech bubbles "
               "and captions as text over them) and make index.html - the cover and the pages in order.\n"
               "4. Open index.html in the browser tool (or check every image path exists) before you say it is done."),
@@ -58,7 +62,7 @@ KINDS: dict = {
               "plan with the turning points.\n"
               "2. Write the chapters in chapters/01.md, 02.md ... - real prose, scenes and dialogue, each chapter "
               "1,500-3,000 words, the voice kept the same throughout. Re-read the outline before each chapter.\n"
-              "3. Make a cover with make_image (cover.png) and put the whole book together as book.md with a title "
+              "3. Make a cover with make_image (style=book-cover, upscale=4 -> cover.png) and put the whole book together as book.md with a title "
               "page and contents.\n"
               "4. At the end, report how many chapters and words there are (count them with the shell)."),
     "website": ("Websites", "Website", 3 * 3600,

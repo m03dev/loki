@@ -1,7 +1,7 @@
 """Make one image. stdin/stdout JSON, like every runner.
 
     {"prompt": "...", "width": 1024, "height": 1024, "out_dir": "<workspace>/images",
-     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "pollinations", "seed": 0,
+     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "nvidia" | "huggingface" | "pollinations", "seed": 0,
      "count": 1-4, "negative": "..."}
     -> {"ok", "file", "files", "seed", "seeds", "backend", ...}   (seed 0 = a random one, reported)
 
@@ -17,7 +17,10 @@ Backends, in "auto" order:
   qwen          Qwen-Image 2.1 through ModelScope's free API-Inference (about 250 images a day
                 once the ModelScope account is bound to a verified Alibaba Cloud account). Used
                 when MODELSCOPE_API_KEY is set. Asynchronous: submit, then poll the task.
-  pollinations  image.pollinations.ai: free, no account. The prompt goes to a third party.
+  nvidia        FLUX.2 [klein] / FLUX.1 [dev] / [schnell] on NVIDIA's hosted API (build.nvidia.com), with the
+                NVIDIA_API_KEY the chat already uses.
+  huggingface   FLUX.1 [dev] / [schnell] through Hugging Face Inference (HF_TOKEN, free monthly credits).
+  pollinations  image.pollinations.ai: free, no account, the weakest - only when nothing else is there.
 """
 import json
 import os
@@ -25,6 +28,7 @@ import random
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -149,8 +153,15 @@ def plan_order(backend=None):
         skipped["zimage"] = why
     if not os.environ.get("MODELSCOPE_API_KEY"):
         skipped["qwen"] = "MODELSCOPE_API_KEY is not set"
+    if not os.environ.get("NVIDIA_API_KEY"):
+        skipped["nvidia"] = "NVIDIA_API_KEY is not set"
+    hf = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
+    if not hf:
+        skipped["huggingface"] = "HF_TOKEN is not set"
+    # this machine's own model first (free, private), then the strongest hosted ones, Pollinations only last
     order = ([local] if local_ready else []) + (["zimage"] if ready else []) + \
-        (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + ["pollinations"]
+        (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + \
+        (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["huggingface"] if hf else []) + ["pollinations"]
     return {"order": order, "skipped": skipped, "forced": False}
 
 
@@ -292,7 +303,7 @@ def zimage(prompt, width, height, out_dir, seed, run=None):
     raise RuntimeError("Z-Image did not run here: " + " | ".join(failures))
 
 
-def _json_request(url, key, body=None, headers=None, timeout=60):
+def _json_request(url, key, body=None, headers=None, timeout=60):  # noqa: D401
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method="POST" if body is not None else "GET",
                                  headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
@@ -331,6 +342,101 @@ def qwen(prompt, width, height, out_dir, seed, sleep=time.sleep, request=None):
         if status in ("FAILED", "CANCELED", "CANCELLED"):
             raise RuntimeError("ModelScope task %s: %s" % (status.lower(), json.dumps(state)[:200]))
     raise RuntimeError("ModelScope took longer than 5 minutes")
+
+
+# NVIDIA's hosted FLUX (build.nvidia.com; the same NVIDIA_API_KEY LOKI's chat already uses, free credits): newest first,
+# the next one when a model is not offered on the key (404/422). Owner 2026-10-25: "this poli img gen is bad... it
+# should be professional" - Pollinations is now only the last resort.
+NVIDIA_IMAGE_BASE = os.environ.get("LOKI_NVIDIA_IMAGE_BASE", "https://ai.api.nvidia.com/v1/genai").rstrip("/")
+NVIDIA_IMAGE_MODELS = [m.strip() for m in os.environ.get(
+    "LOKI_NVIDIA_IMAGE_MODELS",
+    "black-forest-labs/flux.2-klein-4b,black-forest-labs/flux.1-dev,black-forest-labs/flux.1-schnell").split(",") if m.strip()]
+# FLUX.1 on NVIDIA takes only these sizes; the nearest aspect is used (FLUX.2 takes the size asked)
+FLUX1_SIZES = [(1024, 1024), (768, 1344), (1344, 768), (832, 1216), (1216, 832), (896, 1152), (1152, 896)]
+
+
+def nearest_size(width, height, sizes=FLUX1_SIZES):
+    want = width / float(height)
+    return min(sizes, key=lambda s: abs((s[0] / float(s[1])) - want))
+
+
+def _b64_image(data):
+    """The picture in an NVIDIA genai answer: artifacts[0].base64 (or b64_json / image)."""
+    import base64
+    arts = data.get("artifacts") or []
+    if arts:
+        reason = str(arts[0].get("finishReason") or arts[0].get("finish_reason") or "").upper()
+        if "FILTER" in reason:
+            raise RuntimeError("NVIDIA's content filter refused this picture")
+        raw = arts[0].get("base64") or ""
+    else:
+        raw = data.get("b64_json") or data.get("image") or ""
+        if not raw and data.get("data"):
+            raw = (data["data"][0] or {}).get("b64_json") or ""
+    if not raw:
+        raise RuntimeError("no picture in the answer: %s" % json.dumps(data)[:160])
+    return base64.b64decode(raw.split(",", 1)[-1])
+
+
+def nvidia(prompt, width, height, out_dir, seed, request=None):
+    key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("NVIDIA_API_KEY is not set")
+    call = request or _json_request
+    errors = []
+    for model in NVIDIA_IMAGE_MODELS:
+        flux1 = "flux.1" in model
+        w, h = nearest_size(width, height) if flux1 else (width, height)
+        body = {"prompt": prompt[:2000], "width": w, "height": h, "seed": int(seed) % 2**32,
+                "steps": 4 if "schnell" in model or "klein" in model else 30}
+        if "dev" in model:
+            body.update(cfg_scale=3.5, mode="base")
+        try:
+            data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, body, {"Accept": "application/json"}, 180)
+        except urllib.error.HTTPError as exc:
+            errors.append("%s: HTTP %s" % (model, exc.code))
+            if exc.code in (401, 403, 429):
+                break            # the key or the quota, not the model: the next model would fail the same way
+            continue
+        path = _out_path(out_dir, prompt)
+        path.write_bytes(_b64_image(data))
+        return {"file": str(path), "backend": "nvidia", "model": model, "width": w, "height": h}
+    raise RuntimeError("NVIDIA image models: " + "; ".join(errors))
+
+
+HF_IMAGE_MODELS = [m.strip() for m in os.environ.get(
+    "LOKI_HF_IMAGE_MODELS", "black-forest-labs/FLUX.1-dev,black-forest-labs/FLUX.1-schnell").split(",") if m.strip()]
+
+
+def huggingface(prompt, width, height, out_dir, seed, opener=None):
+    """Hugging Face Inference (HF_TOKEN; its free monthly credits): the picture comes back as image bytes."""
+    key = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("HF_TOKEN is not set")
+    opener = opener or urllib.request.urlopen
+    errors = []
+    for model in HF_IMAGE_MODELS:
+        body = {"inputs": prompt[:2000], "parameters": {"width": width, "height": height, "seed": int(seed) % 2**32,
+                                                        "num_inference_steps": 4 if "schnell" in model.lower() else 28}}
+        req = urllib.request.Request("https://router.huggingface.co/hf-inference/models/" + model,
+                                     data=json.dumps(body).encode(), method="POST",
+                                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                                              "Accept": "image/png", "User-Agent": "Loki/1.0"})
+        try:
+            with opener(req, timeout=180) as resp:
+                data, kind = resp.read(), resp.headers.get("Content-Type", "")
+        except urllib.error.HTTPError as exc:
+            errors.append("%s: HTTP %s" % (model, exc.code))
+            if exc.code in (401, 402, 403, 429):
+                break
+            continue
+        if not kind.startswith("image/"):
+            errors.append("%s: no picture" % model)
+            continue
+        path = _out_path(out_dir, prompt, "jpg" if "jpeg" in kind else "png")
+        path.write_bytes(data)
+        return {"file": str(path), "backend": "huggingface", "model": model}
+    raise RuntimeError("Hugging Face image models: " + "; ".join(errors))
 
 
 POLLINATIONS_IMAGE = "https://image.pollinations.ai/prompt/"
@@ -410,9 +516,11 @@ def main():
                     result = local(prompt, width, height, out_dir, seed, count, negative)
                     print(json.dumps({"ok": True, **result}))
                     return
-                fn = {"zimage": zimage, "qwen": qwen, "pollinations": pollinations}.get(name)
+                fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "huggingface": huggingface,
+                      "pollinations": pollinations}.get(name)
                 if fn is None:
-                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, pollinations)" % name)
+                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, huggingface, "
+                                     "pollinations)" % name)
                 result = one_by_one(fn, prompt, width, height, out_dir, seed, count)
                 print(json.dumps({"ok": True, **result}))
                 return

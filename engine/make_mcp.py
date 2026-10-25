@@ -31,14 +31,24 @@ VERSION = "1.0"
 
 TOOLS = [
     {"name": "make_image",
-     "description": "Draw a picture (art, a painting, a comic panel, a book cover, a concept, a texture) with LOKI's "
-                    "image model and save it as a PNG in this folder (folder=, default images). Describe the picture "
-                    "fully: subject, style (oil painting, ink comic, watercolour, pixel art ...), light, colours, "
-                    "framing. count 1-4 makes variations. Returns the saved files.",
+     "description": "Draw a picture (art, a painting, a comic panel, a book cover, concept art, a texture) with the "
+                    "best image model this machine can reach (its own local model, Qwen-Image, FLUX on NVIDIA / "
+                    "Hugging Face) and save it as a PNG in this folder (folder=, default images). Write the prompt "
+                    "like an art director: subject and action, setting, composition and camera, light, palette, "
+                    "mood, medium. style= adds a professional finish: " + ", ".join(sorted(__import__("art_direction").STYLES)) +
+                    ". count 1-4 makes variations to choose from; upscale 2 or 4 enlarges the result with Real-ESRGAN "
+                    "(print and cover quality). Look at what you made before you call it done.",
      "inputSchema": {"type": "object", "properties": {
-         "prompt": {"type": "string"}, "count": {"type": "integer", "minimum": 1, "maximum": 4},
+         "prompt": {"type": "string"}, "style": {"type": "string"},
+         "count": {"type": "integer", "minimum": 1, "maximum": 4},
          "width": {"type": "integer"}, "height": {"type": "integer"}, "folder": {"type": "string"},
-         "negative": {"type": "string"}}, "required": ["prompt"]}},
+         "negative": {"type": "string"}, "upscale": {"type": "integer", "enum": [2, 4]}}, "required": ["prompt"]}},
+    {"name": "upscale_image",
+     "description": "Enlarge a picture in this folder 2x or 4x with Real-ESRGAN (sharp detail, not blur); "
+                    "anime=true for drawn / comic / anime art. Saves <name>-4x.png beside it.",
+     "inputSchema": {"type": "object", "properties": {
+         "image": {"type": "string"}, "scale": {"type": "integer", "enum": [2, 4]}, "anime": {"type": "boolean"}},
+         "required": ["image"]}},
     {"name": "make_3d",
      "description": "Make a 3D model (.glb and .obj) from a description (prompt=; LOKI draws it first) or from a "
                     "picture in this folder (image=). Saved in folder= (default models). It opens in LOKI's Forge to "
@@ -76,15 +86,40 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     if not prompt:
         return {"ok": False, "error": "describe the picture (prompt)"}
     out = inside(cwd, args.get("folder", ""), "images")
-    job = {"prompt": prompt[:1500], "out_dir": str(out), "count": max(1, min(int(args.get("count") or 1), 4)),
+    import art_direction  # pylint: disable=import-outside-toplevel
+    style = str(args.get("style") or "")
+    prompt, style_neg = art_direction.direct(prompt, style)
+    negative = ", ".join(x for x in (str(args.get("negative") or "").strip(), style_neg) if x)
+    job = {"prompt": prompt[:1800], "out_dir": str(out), "count": max(1, min(int(args.get("count") or 1), 4)),
            "width": int(args.get("width") or 1024), "height": int(args.get("height") or 1024),
-           "negative": str(args.get("negative") or "")[:600], "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
+           "negative": negative[:600], "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
     res = run_imagegen(job, runner)
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error", "the picture was not made")}
     files = [str(Path(f).resolve()) for f in (res.get("files") or [res.get("file")]) if f]
-    return {"ok": True, "files": [os.path.relpath(f, cwd) for f in files], "backend": res.get("backend", ""),
-            "seed": res.get("seed")}
+    answer = {"ok": True, "files": [os.path.relpath(f, cwd) for f in files], "backend": res.get("backend", ""),
+              "model": res.get("model", ""), "seed": res.get("seed")}
+    if res.get("backend") == "pollinations":
+        answer["note"] = ("made by Pollinations, the weakest fallback - no better model was reachable (set an NVIDIA "
+                          "key or HF_TOKEN in Settings, or install the local image model)")
+    if args.get("upscale"):
+        anime = style.lower() in ("comic", "manga", "pixel-art")
+        big = [art_direction.upscale(f, int(args["upscale"]), anime) for f in files]
+        answer["upscaled"] = [os.path.relpath(b["file"], cwd) for b in big if b.get("ok")]
+        if not answer["upscaled"]:
+            answer["upscale_error"] = big[0].get("error", "") if big else ""
+    return answer
+
+
+def upscale_image(args: dict, cwd: Path) -> dict:
+    import art_direction  # pylint: disable=import-outside-toplevel
+    p = (cwd / str(args.get("image") or "")).resolve()
+    if cwd.resolve() not in p.parents or not p.is_file():
+        return {"ok": False, "error": "no such picture in this folder: %s" % args.get("image")}
+    res = art_direction.upscale(str(p), int(args.get("scale") or 4), bool(args.get("anime")))
+    if res.get("ok"):
+        res["file"] = os.path.relpath(res["file"], cwd)
+    return res
 
 
 def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
@@ -137,7 +172,7 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 
 
 def call(name: str, args: dict, cwd: Path) -> dict:
-    fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video}.get(name)
+    fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:
             return _machines.FUNCS[name](args or {})
