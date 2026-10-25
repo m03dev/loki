@@ -27,17 +27,17 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-279 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
+281 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 6 | 24 |
 | Edit | 14 | 57 |
-| Create | 7 | 66 |
+| Create | 8 | 66 |
 | Select | 30 | 79 |
 | Modify | 9 | 95 |
 | Display | 10 | 121 |
-| Windows | 12 | 80 |
+| Windows | 13 | 80 |
 | Mesh | 15 | 32 |
 | Edit Mesh | 22 | 30 |
 | Mesh Tools | 22 | 34 |
@@ -211,7 +211,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Empty Group (Maya: CreateEmptyGroup)
 - - Sets > Set (Maya: CreateSet)
 - - Sets > Partition (Maya: CreatePartition)
-- - Sets > Quick Select Set... (Maya: CreateQuickSelectSet)
+- ✓ `quickSet` Sets > Quick Select Set... (Maya: CreateQuickSelectSet)
 - - Asset > Create Asset (Maya: CreateContainer)
 - - Asset > Create Asset with Transform (Maya: CreateDagContainer)
 
@@ -587,7 +587,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Partitions (Maya: PartitionEditor)
 - - Render Layers (Maya: RenderLayerRelationshipEditor)
 - - Render Pass Sets (Maya: RenderPassSetEditor)
-- - Sets (Maya: SetEditor)
+- ✓ `setEditor` Sets (Maya: SetEditor)
 - ✓ `preferences` Preferences (Maya: PreferencesWindow)
 - - Performance Settings (Maya: PerformanceSettingsWindow)
 - ✓ `hotkeyEditor` Hotkey Editor (Maya: HotkeyPreferencesWindow)

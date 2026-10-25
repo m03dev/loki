@@ -143,6 +143,19 @@ html.u-hc .forge-timebar { background: #000; border-color: #fff; }
 .forge-exportdlg .fx-foot { display: flex; justify-content: flex-end; gap: 6px; }
 .forge-exportdlg .fx-foot .forge-btn { padding: 5px 12px; border-radius: 7px; background: #23262a; }
 .forge-exportdlg .fx-foot .fx-go { background: #5b8db8; color: #0f1113; }
+/* Windows > Sets (forge_sets.js) */
+.forge-setsdlg { right: 8px; top: 52px; flex-direction: column; align-items: stretch; gap: 6px; width: clamp(260px, 32%, 340px);
+  max-height: calc(100% - 110px); padding: 10px 12px; background: #2b2d30; border: 1px solid #3c4046; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); z-index: 12; }
+.forge-setsdlg .fx-head { display: flex; align-items: center; justify-content: space-between; }
+.forge-setsdlg .fx-head b { color: #e6eaf2; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.forge-setsdlg .fsets-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; }
+.forge-setsdlg .fsets-row { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #c3cad6; }
+.forge-setsdlg .fsets-name { flex: 1; min-width: 0; background: #1e2024; color: #e6eaf2; border: 1px solid #3c4046; border-radius: 6px; padding: 4px 6px; font: inherit; }
+.forge-setsdlg .fsets-info { flex: 0 0 auto; color: #8b93a0; font-size: 11px; white-space: nowrap; }
+.forge-setsdlg .fsets-row .forge-btn { padding: 4px 7px; border-radius: 7px; background: #23262a; }
+.forge-setsdlg .fsets-empty { color: #8b93a0; font-size: 12px; line-height: 1.4; }
+.forge-setsdlg .fx-foot { display: flex; justify-content: flex-end; }
+.forge-setsdlg .fx-foot .forge-btn { padding: 5px 12px; border-radius: 7px; background: #5b8db8; color: #0f1113; }
 html.u-hc .forge-exportdlg .fx-fmts .forge-btn.on, html.u-hc .forge-exportdlg .fx-foot .fx-go { background: #fff !important; color: #000 !important; }
 .forge-float .forge-btn { background: transparent; color: #dfe4ec; border-radius: 8px; }
 .forge-float .forge-btn:hover { background: rgba(185, 200, 222, .14); }

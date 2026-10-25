@@ -90,6 +90,9 @@ Found and fixed in the cloud:
   docs/FORGE_MODELING_FOUNDATION.md). test_forge_loopsel_ui, js/test_forge_loopsel.
 - [ ] [mac] Forge: File > Import... an .obj and an .stl from disk - each lands as a new object in the Outliner.
   File > New Scene, then Ctrl+Z - everything is back. Report anything odd.
+- Sets: Create > Sets > Quick Select Set and Windows > Sets (stage 4d). test_forge_sets_ui.
+- [ ] [mac] Forge: pick some faces, Create > Sets > Quick Select Set; F8, pick another object; Windows > Sets >
+  Select - the same faces come back in face mode. Report anything odd.
 - [ ] [mac] Forge: a plane, F10, pick one inside edge, Select > Grow Along Loop twice, Shrink Along Loop once;
   then the whole row and Select > LOKI > Every Nth > Every 2nd. Report anything odd.
 

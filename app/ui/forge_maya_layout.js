@@ -196,6 +196,16 @@ const FORGE_MAYA = {
     "imagePlane",
     "Free Image Plane"
    ],
+   "#Scene Management",
+   [
+    "Sets",
+    [
+     [
+      "quickSet",
+      "Quick Select Set..."
+     ]
+    ]
+   ],
    "#LOKI",
    [
     "Polygon Primitives",
@@ -540,6 +550,10 @@ const FORGE_MAYA = {
     "Graph Editor"
    ],
    "-",
+   [
+    "setEditor",
+    "Sets"
+   ],
    [
     "preferences",
     "Preferences"

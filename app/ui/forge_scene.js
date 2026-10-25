@@ -38,6 +38,7 @@ function forgeSceneAttach(view, ctx) {
   const tree = view.tree = {
     nodes: [], byId: {}, next: 1, sel: [], anchor: 0, hiddenLast: [],
     rootId: 0, panel: null, list: null,
+    sets: [], setNext: 1,                           // Create > Sets: saved selections (objects or one mesh's components)
     layers: [], layerNext: 1, curLayer: 0,          // the pro Display Layers (the Layer Editor under the Channel Box); 0 = Default
     time: { frame: 1, start: 1, end: 24, fps: 24, playing: false },   // the pro Time Slider + the playing flag
     autoKey: false, clipKeys: null,                                   // the pro Auto Keyframe + the animation clipboard
@@ -1101,6 +1102,25 @@ function forgeSceneAttach(view, ctx) {
     },
 
     // a new, empty working object (pro: every Create command makes a new node) - the old one stays as it is
+    // ---- Create > Sets (Maya's sets / quick select sets): a saved selection - objects, or one mesh's components
+    // { id, name, kind: "objects" | "vert" | "edge" | "face", node, items, nv } (nv: the mesh's vertex count then)
+    setList: () => (tree.sets || []).map((x) => ({ ...x, items: x.items.slice(), count: x.items.length })),
+    setAdd(set) {
+      const id = tree.setNext++;
+      let name = String(set.name || "").trim().replace(/[^\w-]+/g, "_");
+      if (!name || tree.sets.some((x) => x.name === name)) { let k = id; while (tree.sets.some((x) => x.name === "set" + k)) k++; name = name ? name + id : "set" + k; }
+      tree.sets.push({ id, name, kind: set.kind, node: set.node || 0, items: set.items.slice(), nv: set.nv || 0 });
+      return id;
+    },
+    setGet: (id) => { const x = (tree.sets || []).find((y) => y.id === id || y.name === id); return x ? { ...x, items: x.items.slice() } : null; },
+    setUpdate(id, items) { const x = tree.sets.find((y) => y.id === id); if (x) x.items = items.slice(); return !!x; },
+    setRename(id, name) {
+      const x = tree.sets.find((y) => y.id === id), clean = String(name || "").trim().replace(/[^\w-]+/g, "_");
+      if (!x || !clean || tree.sets.some((y) => y !== x && y.name === clean)) return false;
+      x.name = clean; return true;
+    },
+    setRemove(id) { const k = tree.sets.findIndex((y) => y.id === id); if (k >= 0) tree.sets.splice(k, 1); return k >= 0; },
+
     newObject(name) {
       const r = root();
       if (!hasGeometry(r)) { if (name) { r.name = "\u0000"; api.rename(r.id, nextName(name)); r.auto = false; } return r; }
@@ -1874,6 +1894,7 @@ function forgeSceneAttach(view, ctx) {
       a.push.apply(a, n.grp.position.toArray()); a.push.apply(a, n.grp.quaternion.toArray()); a.push.apply(a, n.grp.scale.toArray());
       a.push.apply(a, n.piv.toArray()); a.push.apply(a, n.pc.toArray());
     }
+    a.push("sets:" + JSON.stringify(tree.sets || []));
     return a.join("|");
   }
   const histCopy = (h) => (h && typeof forgeHistCopy === "function" ? forgeHistCopy(h) : h ? JSON.parse(JSON.stringify(h)) : null);
@@ -1889,6 +1910,7 @@ function forgeSceneAttach(view, ctx) {
     hiddenLast: (tree.hiddenLast || []).slice(), lastDup: tree.lastDup ? tree.lastDup.slice() : null,
     layers: tree.layers.map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, nodes: [...l.nodes] })),
     layerNext: tree.layerNext, curLayer: tree.curLayer, defLayer: { ...tree.defLayer },
+    sets: JSON.parse(JSON.stringify(tree.sets || [])), setNext: tree.setNext,
   });
   view.sceneRestore = (st) => {
     if (!st || !st.nodes) return;
@@ -1927,6 +1949,7 @@ function forgeSceneAttach(view, ctx) {
       tree.layers = (st.layers || []).map((l) => ({ id: l.id, name: l.name, color: l.color, visible: l.visible, template: l.template, ref: !!l.ref, nodes: new Set(l.nodes) }));
       tree.layerNext = st.layerNext || tree.layerNext; tree.curLayer = st.curLayer || 0;
       tree.defLayer = Object.assign({ visible: true, template: false, ref: false }, st.defLayer || {}); api.applyLayers();
+      tree.sets = JSON.parse(JSON.stringify(st.sets || [])); tree.setNext = st.setNext || tree.setNext || 1;
       if (rootChanged && typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
       scene.updateMatrixWorld(true);
     } finally { restoring = false; }
