@@ -112,6 +112,12 @@ res, ws, seen = go(DANGER)
 check("a dangerous command (rm -rf ~) is refused, never run", any(k == "error" and "Refused" in t for k, t in seen)
       and "REFUSED by LOKI" in STATE["bodies"][1][1]["messages"][-1]["content"], seen)
 
+code, out = local_agent.run_command("loki-make machines", TMP)
+check("the shell agent has LOKI's makers as a command: `loki-make machines` answers", code == 0 and '"machines"' in out, out[:300])
+code, out = local_agent.run_command("loki-make nonsense", TMP)
+check("... `loki-make` with a wrong word prints how to use it", code == 2 and "usage: loki-make image" in out, out[:200])
+check("... and the prompt tells the model to draw with loki-make, not with text", "loki-make image" in local_agent.SYSTEM)
+
 # ---- through the chat: a local model picked -> this agent, not OpenCode
 try:
     import loki  # noqa: E402

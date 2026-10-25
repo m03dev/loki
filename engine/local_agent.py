@@ -44,6 +44,11 @@ Rules:
 - One code block per reply. Never invent output - wait for the real output.
 - Each command runs in a fresh shell in the working folder; `cd x && ...` only lasts for that command.
 - Create files with a heredoc:  cat > path/file.py <<'EOF' ... EOF
+- Pictures, 3D and video: never draw with text - run LOKI's makers:
+  loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art oil-painting
+  watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
+  loki-make 3d "<object>"   loki-make video "<clip>"   loki-make upscale pic.png
+- The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:
 ```bash
 echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT
@@ -68,10 +73,31 @@ def find_shell() -> tuple:
     return [shutil.which("bash") or "/bin/bash", "-c"], "bash"
 
 
+def make_wrapper() -> str:
+    """A `loki-make` command on the agent's PATH: LOKI's makers (pictures, 3D, video, upscale, the other machine) for a
+    shell-only agent (engine/make_mcp.py's CLI). Returns the folder it is in ("" if it could not be written)."""
+    try:
+        import creative  # pylint: disable=import-outside-toplevel
+        d = Path(creative.data_dir()) / "bin"
+        d.mkdir(parents=True, exist_ok=True)
+        mcp = Path(__file__).resolve().parent / "make_mcp.py"
+        py = sys.executable.replace("\\", "/")
+        sh = d / "loki-make"
+        sh.write_text('#!/bin/sh\nexec "%s" "%s" "$@"\n' % (py, str(mcp).replace("\\", "/")), encoding="utf-8")
+        sh.chmod(0o755)
+        if sys.platform == "win32":
+            (d / "loki-make.cmd").write_text('@"%s" "%s" %%*\r\n' % (sys.executable, mcp), encoding="utf-8")
+        return str(d)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def shell_env() -> dict:
     env = dict(os.environ)
     extra = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] if sys.platform != "win32" else []
-    env["PATH"] = os.pathsep.join([env.get("PATH", "")] + [d for d in extra if d not in env.get("PATH", "")])
+    wrap = make_wrapper()
+    env["PATH"] = os.pathsep.join(([wrap] if wrap else []) + [env.get("PATH", "")] +
+                                  [d for d in extra if d not in env.get("PATH", "")])
     env.update(PAGER="cat", GIT_PAGER="cat", MANPAGER="cat", GIT_TERMINAL_PROMPT="0", TERM="dumb")
     env.setdefault("GIT_AUTHOR_NAME", "LOKI")
     env.setdefault("GIT_AUTHOR_EMAIL", "loki@localhost")

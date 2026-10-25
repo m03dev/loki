@@ -223,5 +223,36 @@ def serve(stdin=sys.stdin, stdout=sys.stdout, cwd: Path | None = None) -> None:
             stdout.flush()
 
 
+CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image",
+       "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+
+
+def cli(argv: list, cwd: Path | None = None) -> int:
+    """`loki-make <what> "<prompt>" [--key value ...]` - the same tools for an agent that only has a shell
+    (engine/local_agent.py): image, 3d, video, upscale, machines, run-on, job. Prints the JSON answer."""
+    if not argv or argv[0] not in CLI:
+        print("usage: loki-make image|3d|video|upscale|machines|run-on|job \"<prompt or file>\" [--style comic] "
+              "[--count 4] [--upscale 4] [--image pic.png] [--machine mac] [--job id]")
+        return 2
+    what, rest = argv[0], argv[1:]
+    args: dict = {}
+    while rest:
+        a = rest.pop(0)
+        if a.startswith("--") and rest:
+            v = rest.pop(0)
+            args[a[2:].replace("-", "_")] = int(v) if v.isdigit() else v
+        elif what == "upscale":
+            args.setdefault("image", a)
+        elif what == "run-on":
+            args.setdefault("task", a)
+        else:
+            args.setdefault("prompt", a)
+    out = call(CLI[what], args, Path(cwd or os.getcwd()))
+    print(json.dumps(out, indent=1))
+    return 0 if out.get("ok") else 1
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        sys.exit(cli(sys.argv[1:]))
     serve()
