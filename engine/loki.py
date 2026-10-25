@@ -323,6 +323,7 @@ import sessions  # noqa: E402  (agent-session registry - blueprint 9 / herdr.dev
 import api_vault  # noqa: E402  (the API Vault - blueprint 3.3)
 import capabilities  # noqa: E402  (the capability registry / API Vault seed)
 import safe_exec  # noqa: E402  (structured command execution - no shell)
+import shell_tools  # noqa: E402  (bash / Git Bash and itch.io's butler)
 import policy  # noqa: E402  (the hardcoded policy engine: allow / ask / deny)
 import manifests  # noqa: E402  (capability manifests: discovered, never executed)
 import federation  # noqa: E402  (Ollama on other machines - LOKI_WORKERS)
@@ -2716,6 +2717,37 @@ def run_command(command: str, timeout: int = 120, cwd: str = "") -> str:
     return f"exit {code}\n{_shorten(out)}" if out else f"exit {code}"
 
 
+def bash(command: str, timeout: int = 120, cwd: str = "") -> str:
+    """A real shell (engine/shell_tools.py): Git Bash on Windows, bash on the Mac - pipes, redirects, globs.
+    The same command policy as run_command; the risk analyzer and approval run in the tool gate."""
+    allowed, reason = command_policy(command)
+    if not allowed:
+        print("  [policy] " + reason)
+        return "error: " + reason
+    try:
+        where = resolve_readable(cwd) if str(cwd or "").strip() else WORKSPACE
+    except ValueError as exc:
+        return "error: %s" % exc
+    if not where.is_dir():
+        return "error: no folder %s" % cwd
+    try:
+        code, out = shell_tools.run_bash(command, str(where), timeout=int(timeout or 120))
+    except FileNotFoundError as exc:
+        return "error: %s" % exc
+    except subprocess.TimeoutExpired:
+        return "error: the command timed out after %ss" % timeout
+    except Exception as exc:  # noqa: BLE001
+        return "error: %s" % exc
+    return f"exit {code}\n{_shorten(out)}" if out else f"exit {code}"
+
+
+def itch(action: str, target: str = "", path: str = "", userversion: str = "") -> str:
+    """itch.io through butler (engine/shell_tools.py): version, login, status, push, install."""
+    def inside(p: str) -> Path:   # a build in the workspace, or in a folder agents may read
+        return resolve_readable(p) if Path(p).is_absolute() else (WORKSPACE / p)
+    return shell_tools.itch(action, target, path, userversion, data_dir=str(DATA_DIR), resolve_path=inside, shorten=_shorten)
+
+
 def run_godot(args: str = "", project_path: str = "", timeout: int = 180) -> str:
     cmd = [GODOT_EXE]
     proj = project_path or GAME_PROJECT
@@ -3151,6 +3183,8 @@ LOCAL_TOOLS = {
     "move_file": move_file,
     "delete_file": delete_file,
     "run_command": run_command,
+    "bash": bash,
+    "itch": itch,
     "run_godot": run_godot,
     "open_godot": open_godot,
     "build_3d_scene": build_3d_scene,
@@ -3198,7 +3232,7 @@ LOCAL_TOOLS = {
 }
 
 # Tools that change files on disk (used to verify a task really did work).
-MODIFYING = {"write_file", "append_file", "edit_file", "insert_lines", "undo_edit", "build_3d_scene", "build_scene",
+MODIFYING = {"bash", "write_file", "append_file", "edit_file", "insert_lines", "undo_edit", "build_3d_scene", "build_scene",
              "move_file", "delete_file", "make_dir",
              # these three rewrite project.godot
              "add_input_action", "set_project_setting", "add_autoload",
@@ -3221,7 +3255,7 @@ DELEGATING |= {"run_subagent"}
 SELF_SHIP = str(os.getenv("LOKI_SELF_SHIP", "auto")).strip().lower()
 
 # Tools that touch the system ask for a yes/no first, unless AUTO_APPROVE is on.
-DANGEROUS = {"run_command", "open_godot", "move_file", "delete_file", "delegate", "start_team"}
+DANGEROUS = {"run_command", "bash", "open_godot", "move_file", "delete_file", "delegate", "start_team"}
 # video_project/render_video run npx and the video project's own code (Remotion).
 DANGEROUS |= {"video_project", "render_video"}
 if SELF_SHIP == "ask":
@@ -3901,6 +3935,14 @@ TOOL_SCHEMAS = [
     schema("run_command", "Run a shell command and return its output (tests, git, etc.). cwd: the folder to run in "
            "(default the workspace; or an absolute folder from folders, e.g. LOKI's own folder for its tools/).",
            {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, ["command"]),
+    schema("bash", "Run a command in a real shell - bash on the Mac, Git Bash on Windows - with pipes, redirects, globs, "
+           "&& and $(...): git (status, log, diff, commit, push), grep, find, sed, npm, python, butler ... Use it when "
+           "run_command refuses a pipe or a redirect. cwd: the folder (default the workspace).",
+           {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, ["command"]),
+    schema("itch", "itch.io (butler): action=version | login (is there a key) | status target=user/game | "
+           "push path=<build folder or .zip> target=user/game:channel [userversion] | install (gets butler).",
+           {"action": {"type": "string", "enum": ["version", "login", "status", "push", "install"]},
+            "target": {"type": "string"}, "path": {"type": "string"}, "userversion": {"type": "string"}}, ["action"]),
     schema("run_godot", "Run the Godot engine with arguments and return its output. Use for headless import ('--headless --quit') and running scenes, then READ the output to catch errors.",
            {"args": {"type": "string"}, "project_path": {"type": "string"}, "timeout": {"type": "integer"}}),
     schema("open_godot", "Open the Godot editor (optionally for a project folder).",
@@ -4031,6 +4073,9 @@ MODEL_TOOL_NAMES = {
     "insert_lines", "undo_edit", "memory", "read_web", "run_subagent", "task_tracker", "sketch_reply",
     # session 27 harvest
     "web_search", "research_web", "browse_page", "map_site", "reach", "code_map", "search_docs", "schedule_task",
+    # 2026-10-25 (owner: "is it calling out tools? ... use gitbash and itch.io"): the shell was NEVER offered in the
+    # window - run_command only reached background jobs. Offered now; every call still asks first (DANGEROUS).
+    "run_command", "bash", "itch",
 }
 MODEL_TOOL_SCHEMAS = [t for t in TOOL_SCHEMAS if t["function"]["name"] in MODEL_TOOL_NAMES]
 
@@ -4055,7 +4100,7 @@ TOOL_CATEGORIES = {
     "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
     "web": ["scrape", "read_web", "web_search", "research_web", "browse_page", "map_site", "reach"],
     "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
-    "system": ["run_command", "run_godot", "open_godot"],
+    "system": ["run_command", "bash", "itch", "run_godot", "open_godot"],
 }
 # Tools that only make sense inside a Godot project (the optional game adapter).
 GODOT_ONLY_TOOLS = {"build_3d_scene", "build_scene", "validate_scene", "read_scene", "open_in_editor",
@@ -4081,12 +4126,16 @@ CATEGORY_LABELS = {
 SETTINGS_FILE = DATA_DIR / "loki_settings.json"
 
 
+SETTINGS_VERSION = 2   # 2: the "system" tools (run_command, bash, itch) are on by default - they always ask first
+
+
 def _load_settings() -> dict:
-    defaults = {name: (name != "system") for name in TOOL_CATEGORIES}
+    defaults = {name: True for name in TOOL_CATEGORIES}
     try:
         data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        old = int(data.get("v", 1) or 1) < SETTINGS_VERSION
         for name, value in (data.get("categories") or {}).items():
-            if name in defaults:
+            if name in defaults and not (old and name == "system"):   # an old file saved "system: off" as the default
                 defaults[name] = bool(value)
     except (OSError, json.JSONDecodeError):
         pass
@@ -4098,7 +4147,7 @@ CATEGORIES = _load_settings()
 
 def save_settings() -> None:
     try:
-        SETTINGS_FILE.write_text(json.dumps({"categories": CATEGORIES}, indent=2), encoding="utf-8")
+        SETTINGS_FILE.write_text(json.dumps({"v": SETTINGS_VERSION, "categories": CATEGORIES}, indent=2), encoding="utf-8")
     except OSError:
         pass
 
@@ -4129,7 +4178,7 @@ TRIMMED_TOOLS_NOTE = ""
 LOCAL_MAX_TOOLS = int(os.getenv("LOKI_LOCAL_MAX_TOOLS", "22"))
 LOCAL_TOOL_PRIORITY = ["list_tree", "read_file", "edit_file", "write_file", "search_files",
                        "research_web", "web_search", "read_web", "code_map",   # session 27 harvest
-                       "run_command", "make_dir", "move_file", "delete_file", "conductor", "delegate",
+                       "conductor", "delegate", "run_command", "bash", "make_dir", "move_file", "delete_file",
                        "knowledge", "save_memory", "todo_add", "todo_list", "todo_done",
                        "project_state", "append_file", "validate_scene", "play_scene",
                        "check_script", "build_scene", "read_scene", "godot_search"]
@@ -4537,9 +4586,22 @@ def _godot_live_wanted() -> bool:
         return False
 
 
+# A local model gets a short tool list; a tool the request NAMES must be on it (owner 2026-10-25: "use gitbash
+# and itch.io"). _REQUEST_HINT is the newest user message, set before each model call.
+_REQUEST_HINT = ""
+HINT_TOOLS = {"itch": ("itch.io", "itch ", "butler"), "bash": ("git bash", "gitbash", "bash", "pipe", "pipeline", "grep ")}
+
+
+def _hinted(name: str) -> bool:
+    keys = HINT_TOOLS.get(name)
+    return bool(keys and _REQUEST_HINT and any(k in _REQUEST_HINT for k in keys))
+
+
 def _local_rank(name: str) -> int:
     if name == "godot_editor" and _godot_live_wanted():
         return -90
+    if _hinted(name):
+        return -70
     if name in ("team_read", "team_post") and os.getenv("LOKI_TEAM_ID"):
         return -100   # an agent on a team must reach its board (they fell off the local model's short list)
     if name in SELF_IMPROVE_PRIORITY and _in_loki_worktree():
@@ -5676,7 +5738,7 @@ async def call_tool(name: str, args: dict) -> str:
             return ("DENIED by Loki's policy: %s. Do NOT retry the same call; change the approach "
                     "or reply 'BLOCKED: <reason>'." % verdict.reason)
         decidable = verdict.decidable
-        if name == "run_command":
+        if name in ("run_command", "bash"):
             # OpenHands' security analyzer (command_risk.py): a HIGH-risk command is refused in an
             # unattended job and always asks a human in the window - no provider may wave it through.
             risk = command_risk.assess(str(args.get("command", "")))
@@ -7876,6 +7938,10 @@ async def agent_turn(force_tool: bool = False) -> str:
         _trim_context()
         view = await _model_view()
         _progress("thinking", "Turn %d: asking the model..." % turns)
+        globals()["_REQUEST_HINT"] = next((str(m.get("content") or "")[:2000].lower() for m in reversed(view)
+                                            if isinstance(m, dict) and m.get("role") == "user"
+                                            and isinstance(m.get("content"), str)
+                                            and not str(m.get("content")).lstrip().startswith("<tool_response>")), "")
         # Thinking models (Gemini 3.x) spend tokens reasoning before answering, so
         # give them headroom or the tool call gets truncated away.
         kwargs = {"model": cfg.model, "messages": view, "tools": model_tool_schemas(),
@@ -8922,7 +8988,7 @@ async def run_job(job_path: str) -> int:
             model_name = fallback
 
     async def job_approve(kind: str, detail: str, decidable: bool = True) -> bool:
-        if allow_commands and kind in ("run_command", "move_file", "open_godot", "make_tool", "user_tool"):
+        if allow_commands and kind in ("run_command", "bash", "move_file", "open_godot", "make_tool", "user_tool"):
             print("  [job] allowed %s: %s" % (kind, detail[:200]), flush=True)
             return True
         print("  [job] not allowed in a background job: %s %s" % (kind, detail[:200]), flush=True)
@@ -8934,7 +9000,7 @@ async def run_job(job_path: str) -> int:
         # is off by default, so a job allowed to run its tests never saw the tool. This process only;
         # the owner's setting is not saved. The command policy and the risk check still apply.
         CATEGORIES["system"] = True
-        MODEL_TOOL_NAMES.add("run_command")   # it was never offered to a model at all
+        MODEL_TOOL_NAMES.update({"run_command", "bash"})   # it was never offered to a model at all
     deadline = float(job.get("deadline_s") or os.getenv("LOKI_JOB_DEADLINE", "0") or 0)
     if deadline > 0:
         # Stop in time to say so and keep the partial work, instead of being killed with nothing saved.

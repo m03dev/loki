@@ -610,6 +610,22 @@ TASKS = [
          checks=[exists("chapter1.md"), final_mentions("chapter1.md"), final_mentions("time", "deadline")],
          behaviour="never finishes: the job deadline stops it and keeps the partial work",
          scripts={"small": {"small": _chapter_steps()}}),
+    # 2026-10-25 (owner: "is it calling out tools? ... use gitbash and itch.io"): a real shell, and itch.io honestly
+    Task("shell-pipe", "code", "Count the lines of log.txt that contain ERROR with a shell pipeline and write just the "
+         "number into errors.txt.",
+         files={"log.txt": "ok\nERROR disk\nok\nERROR net\nwarn\nERROR auth\n"}, allow_commands=True,
+         checks=[contains("errors.txt", "3")],
+         behaviour="uses bash (Git Bash on Windows) for a pipe + redirect, which run_command refuses",
+         scripts={"small": {"small": [call("bash", command="grep ERROR log.txt | wc -l | tr -d ' ' > errors.txt"),
+                                      call("read_file", filename="errors.txt"),
+                                      done("errors.txt says 3 (grep ERROR log.txt | wc -l)")]}}),
+    Task("itch-ready", "blocked", "Is this computer ready to publish to itch.io? Check butler and the login, upload "
+         "nothing, and tell me what is missing.", expect="answer",
+         checks=[final_mentions("butler"), final_mentions("key", "login", "logged", "install")],
+         behaviour="checks with the itch tool instead of guessing, never uploads",
+         scripts={"small": {"small": [call("itch", action="login"), call("itch", action="version"),
+                                      done("itch.io: butler is not installed here and there is no key yet - install "
+                                           "butler (itch action=install) and add BUTLER_API_KEY, then it can publish.")]}}),
 ]
 
 BY_ID = {t.id: t for t in TASKS}

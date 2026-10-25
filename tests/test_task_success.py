@@ -159,7 +159,7 @@ check("halted jobs end BLOCKED (they exited 0 and looked finished - a team count
       '"BLOCKED: the model returned empty replies repeatedly' in src
       and '"BLOCKED: the model stopped calling tools after several nudges' in src)
 check("a job allowed to run commands is OFFERED run_command (it was never offered to any model)",
-      'MODEL_TOOL_NAMES.add("run_command")' in src and 'CATEGORIES["system"] = True' in src)
+      'MODEL_TOOL_NAMES.update({"run_command", "bash"})' in src and 'CATEGORIES["system"] = True' in src)
 check("team agents on a local model reach their board", 'name in ("team_read", "team_post") and os.getenv("LOKI_TEAM_ID")' in src)
 check("workers hand every job its deadline", '"deadline_s": max(60,' in (REPO / "engine" / "workers.py").read_text(encoding="utf-8"))
 

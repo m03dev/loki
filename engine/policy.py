@@ -11,7 +11,8 @@ No model is consulted here. A recommendation can only turn an ASK that the polic
 non-decidable ASK. That is enforced in one function, `final()`, which the tests pin.
 
 Rules (in order):
-  1. run_command: refused if the command policy or the no-shell parser rejects it.
+  1. run_command: refused if the command policy or the no-shell parser rejects it. bash (a real shell, Git Bash
+     on Windows): refused if the command policy rejects it; it always ASKs (dangerous), HIGH risk never decidable.
   2. File tools: every path argument must stay inside the workspace. The READ-only ones (READ_PATH_ARGS:
      read_file, list_tree, search_files, run_command's cwd) may also use the folders agents can read
      (engine/agent_folders.py: LOKI's own folder, its data folder, ~/LOKI Projects, the owner's extra
@@ -44,9 +45,9 @@ PATH_ARGS = {
 # Path arguments that only READ: these may also point into the agent folders (read_check). Owner 2026-10-22:
 # "my agents should have the tools to check other folders".
 READ_PATH_ARGS = {"read_file": ("filename",), "list_tree": ("subdir",), "search_files": ("subdir",),
-                  "run_command": ("cwd",)}
+                  "run_command": ("cwd",), "bash": ("cwd",), "itch": ("path",)}
 # Asks the human, but a confident decision provider may skip the prompt.
-DECIDABLE = {"run_command", "move_file", "open_godot"}
+DECIDABLE = {"run_command", "bash", "move_file", "open_godot"}
 # Always asks the human, whatever any provider says.
 ALWAYS_ASK = {"delete_file", "delegate", "make_godot_game"}   # make_godot_game starts a coding agent
 # Tools that need an enabled capability (tool -> capability name).
@@ -60,6 +61,7 @@ CAPABILITY_TOOLS: dict[str, str] = {"render_video": "remotion", "video_project":
 # accounts or machines and always ask the owner - no decision provider may skip it, and in a background job
 # (nobody to ask) they are refused. Read actions of the same tools are allowed.
 ACTION_ALWAYS_ASK: dict[str, set] = {
+    "itch": {"push", "install"},          # publishing a build / downloading butler (engine/shell_tools.py)
     "email": {"send"},
     "calendar": {"create"},
     "github": {"create_issue", "comment", "close_issue", "create_pr"},
@@ -114,15 +116,16 @@ class PolicyEngine:
     # ------------------------------------------------------------- tools
     def tool_call(self, name: str, args: dict) -> Verdict:
         args = args if isinstance(args, dict) else {}
-        if name == "run_command":
+        if name in ("run_command", "bash"):
             command = str(args.get("command", ""))
             ok, reason = self.command_check(command)
             if not ok:
                 return Verdict(DENY, reason)
-            try:
-                self.parse_command(command)
-            except ValueError as exc:
-                return Verdict(DENY, "refused: %s" % exc)
+            if name == "run_command":                 # bash is a real shell on purpose: no argv-only parse
+                try:
+                    self.parse_command(command)
+                except ValueError as exc:
+                    return Verdict(DENY, "refused: %s" % exc)
         reads = READ_PATH_ARGS.get(name, ())
         for key in tuple(PATH_ARGS.get(name, ())) + tuple(k for k in reads if k not in PATH_ARGS.get(name, ())):
             value = args.get(key)

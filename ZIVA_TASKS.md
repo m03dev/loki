@@ -19,6 +19,32 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 06:45) - harness: shell + Git Bash + itch.io tools, and measure LOKI vs Ziva with the new providers. On master. [either]
+
+Owner: "I connected to a bunch of new providers. Focus on the harness - is it working better than Ziva? Is it giving me
+options and calling out tools to read and write files and use gitbash and itch.io?"
+Found and fixed in the cloud:
+- **The window never offered a shell to the model.** run_command was only in background jobs ("system" was off by
+  default and not in MODEL_TOOL_NAMES). Now run_command, `bash` and `itch` are offered in the window. Every call still
+  asks first; HIGH risk always asks a human.
+- New `bash` tool (engine/shell_tools.py): a real shell with pipes and redirects. On Windows that is Git Bash, found
+  next to git and never WSL's System32 bash; set LOKI_BASH to override.
+- New `itch` tool (butler): version / login / status / push / install. push and install always ask.
+  BUTLER_API_KEY is the key.
+- A local model's short tool list now always includes a tool the request names (itch, bash).
+- Bench: tasks shell-pipe and itch-ready (33 tasks, scripted run 96/96).
+- [ ] [mac] [win] Pull, restart LOKI. Run the real-model bench on EVERY provider the owner just connected:
+  `python tools/task_bench.py --model <provider>` for each one (`--list` shows the names), plus `--model smart`.
+  Put each table (harness_data/bench/<date>.md) in Reports, then sort the providers by score and by tool calls per
+  task.
+- [ ] [mac] [win] The same 33 prompts (tests/tasks/catalog.py) given to Ziva itself (DeepSeek), one by one. Score
+  them with the same checks by hand, or by pointing task_bench at Ziva's endpoint if it is OpenAI-compatible. Report:
+  LOKI vs Ziva per task.
+- [ ] [win] In the LOKI window, ask: "use git bash to show the last 5 commits of this repo". It must call `bash`
+  (Git Bash) and ask first. Then "is this PC ready to publish to itch.io?" must call `itch` login/version. Paste the
+  answers.
+- [ ] [either] Ask an open request ("make me a game"): 3-4 options must appear (LOKI_OPTIONS=auto). Report if not.
+
 ### From Claude (2026-10-25 06:10) - Home split, Forge Baseline + multi-object components, the modeling plan. On master. [either]
 
 Owner: "focus on loki home ... the chat is buggy, the display is sometimes hidden, the icons below the chat get cut off,
