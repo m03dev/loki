@@ -370,6 +370,7 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
         if code == QUIT_EXIT_CODE:
             log("LOKI was asked to quit")
             stop.set()
+            leave_soon(0, 5.0)           # the window normally closes first; this makes sure the app is gone
             close_window()
             return
         if code != RESTART_EXIT_CODE:
@@ -399,19 +400,15 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             # an installed LOKI: the launcher (packaging/installer/loki_launch.py) starts the version
             # that is current now - the new one, or the last good one after a rollback
             stop.set()
+            leave_soon(RELAUNCH_EXIT_CODE)
             close_window()
-            if os.environ.get("LOKI_APP_TEST", "") != "1":
-                threading.Timer(2.0, os._exit, [RELAUNCH_EXIT_CODE]).start()
             return
         if relaunch_app():
             # Update everything restarts the WHOLE client, not only the engine: the window and
             # this app process run the new code too. The new app waits for this one to exit.
             stop.set()
+            leave_soon(0)
             close_window()
-            # Closing a window from this thread can hang on macOS (Cocoa wants the main thread),
-            # which would leave this old copy as a blank window next to the new one: leave for sure.
-            if os.environ.get("LOKI_APP_TEST", "") != "1":
-                threading.Timer(2.0, os._exit, [0]).start()
             return
         new_process, token = start_and_wait(python, workspace, godot)
         holder["process"] = new_process
@@ -612,6 +609,18 @@ def pid_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def leave_soon(code: int, after: float = 2.0) -> None:
+    """Exit this copy of the app for sure, `after` seconds from now. Started BEFORE the window is closed:
+    closing it from a worker thread can hang on macOS (Cocoa wants the main thread) - when the exit timer was
+    started after it, it sometimes never ran and the old window stayed open next to the new one
+    (owner 2026-10-25: "update ... sometimes it closes, sometimes it doesn't")."""
+    if os.environ.get("LOKI_APP_TEST", "") == "1":
+        return
+    t = threading.Timer(after, os._exit, [code])
+    t.daemon = True
+    t.start()
 
 
 def close_window() -> None:
@@ -1029,9 +1038,8 @@ def run_with_splash(workspace: Path, holder: dict, stopping) -> int:
             log("a new release is installed; the launcher starts it")
             result["code"] = RELAUNCH_EXIT_CODE
             stopping.set()
+            leave_soon(RELAUNCH_EXIT_CODE)
             close_window()
-            if os.environ.get("LOKI_APP_TEST", "") != "1":
-                threading.Timer(2.0, os._exit, [RELAUNCH_EXIT_CODE]).start()
             return
         splash_status("Starting LOKI's engine…")
         token, title, detail = bring_up_engine(workspace, holder, stopping)

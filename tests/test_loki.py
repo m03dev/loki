@@ -1164,9 +1164,10 @@ section("go-to model: DeepSeek 4.1 via OpenRouter")
 check("the deepseek-4.1 alias exists", "deepseek-4.1" in loki.MODELS)
 check("it points at deepseek v4.1 flash",
       "v4.1" in loki.MODELS["deepseek-4.1"].model, loki.MODELS["deepseek-4.1"].model)
-# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; OpenRouter is the first fallback
-check("the main driver leads smart mode, OpenRouter right after",
-      loki.SMART_ORDER[:2] == ("nvidia", "openrouter"), loki.SMART_ORDER[:3])
+# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; 2026-10-25: then free Nemotron (Ziva Baby's
+# model), then OpenRouter
+check("the main driver leads smart mode, free Nemotron then OpenRouter right after",
+      loki.SMART_ORDER[:3] == ("nvidia", "nemotron-free", "openrouter"), loki.SMART_ORDER[:3])
 
 
 
