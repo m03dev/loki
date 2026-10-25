@@ -107,10 +107,10 @@ const ForgeFile = (() => {
     FORGE_PRO_CMDS.importFile = ["Import...", async () => { const f = await pick(".glb,.gltf,.obj,.stl"); return f ? importFile(f) : ""; }];
     FORGE_PRO_CMDS.saveAs = ["Save Scene As...", () => {
       if (typeof forgeExportDialog !== "function") return say("Open Forge first.");
+      if (typeof forgeExport !== "undefined") forgeExport.fmt = "glb";   // the scene file is glTF
       forgeExportDialog();
-      const fmt = document.querySelector("#forge-export-dialog select, .forge-export select");
-      if (fmt) { fmt.value = "glb"; fmt.dispatchEvent(new Event("change")); }
-      return say("Save Scene As: give it a name and Save (glTF).");
+      const dlg = document.getElementById("forge-exportdlg");
+      return dlg && !dlg.hidden ? say("Save Scene As: give it a name, then Export (glTF).") : "";
     }];
   }
   return { newScene, importFile, openScene, parseObj, parseStl };
