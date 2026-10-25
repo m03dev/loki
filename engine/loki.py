@@ -130,6 +130,8 @@ MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context wi
 
 PROVIDER_ENV_VARS = {
     "openrouter": "OPENROUTER_API_KEY",
+    "nemotron-free": "OPENROUTER_API_KEY",
+    "gpt6-luna": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "groq": "GROQ_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
@@ -422,6 +424,17 @@ MODELS = {
         base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         api_key=os.getenv("OPENROUTER_API_KEY", ""),
         model=os.getenv("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash")),
+    # Ziva Baby's models (owner 2026-10-25: "ziva baby uses gpt 6 and its unlimited"): Baby is a router that "usually
+    # selects Nemotron 3.5 Lightning Free" (OpenRouter :free, 1M context, costs nothing) and sometimes GPT-6 Luna (OpenAI,
+    # $0.10 / $0.50 per million tokens - Ziva pays for it). The same two here: free Nemotron in Smart's order, Luna
+    # through your OpenAI key (or OpenRouter) when you pick it.
+    "nemotron-free": ModelConfig(base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+                                 api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                                 model=os.getenv("NEMOTRON_FREE_MODEL", "nvidia/nemotron-3.5-lightning:free")),
+    "gpt6-luna": ModelConfig(
+        base_url="https://api.openai.com/v1" if os.getenv("OPENAI_API_KEY") else "https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY", ""),
+        model=os.getenv("GPT6_LUNA_MODEL", "gpt-6-luna" if os.getenv("OPENAI_API_KEY") else "openai/gpt-6-luna")),
     # NOTE: not really free - Cerebras requires a verified payment method to activate.
     "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
                             api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")),
@@ -637,7 +650,7 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # on Loki's ~8k-token request, so it sits lower.
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("openrouter", "9router", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
+SMART_ORDER = ("openrouter", "nemotron-free", "9router", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
                "cloudflare", "together", "nous", "unorouter", "opencode-zen", "codestral",
                "vercel", "deepseek", "cerebras",
                "vireonix", "claude-code", "codex", "local", "local-hermes")
@@ -1542,7 +1555,7 @@ def redact_secrets(text: str) -> str:
 # (LOKI_MAX_TURNS still applies to everything). A provider billed per token cannot run
 # away: after LOKI_PAID_MAX_CALLS model calls in one request, the request stops and says
 # why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
-_METERED_DEFAULT = {"gpt", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
+_METERED_DEFAULT = {"gpt", "gpt6-luna", "claude", "deepseek", "deepseek-4.1", "cerebras", "aion",
                     "ollama-cloud", "nebius", "scaleway", "hyperbolic", "novita", "fireworks",
                     "dashscope", "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"}
 PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
