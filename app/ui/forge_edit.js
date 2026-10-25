@@ -540,6 +540,7 @@ function forgeEditAttach(view, ctx) {
   }
 
   function applyM(M) {
+    if (!M.elements.every(Number.isFinite)) return;                // a broken handle matrix never reaches the mesh
     P.applyMatrix(edit.base, edit.weights, M.elements, edit.work);   // writes only the weighted vertices
     if (edit.sym) for (const s of edit.sym) P.applyMatrix(edit.base, s.map, mirrorMatrix(M.elements, s.S), edit.work);
     view.polyLive(edit.work);
@@ -549,6 +550,11 @@ function forgeEditAttach(view, ctx) {
     if (!edit) return;
     const { work, base, keep } = edit;
     edit = null;
+    if (work.v.some((p) => !p || !Number.isFinite(p[0]) || !Number.isFinite(p[1]) || !Number.isFinite(p[2]))) {
+      view.polyLive(base);                            // never keep a broken mesh: put it back as it was
+      if (typeof forgeSay === "function") forgeSay("That move gave invalid positions; the mesh is back as it was.", true);
+      return;
+    }
     view.polyLive(base);                              // put the shown mesh back so undo has the true "before"
     view.showPoly(work, true);
     // the move lands in the construction history (polyTweak), so changing an earlier step's amount keeps it
@@ -602,7 +608,11 @@ function forgeEditAttach(view, ctx) {
     if (!edit || edit.kind !== "handle") return;
     if (view.snapPivot) view.snapPivot(pivot);        // the pro x / c / v snapping (forge_pro.js) moves the handle first
     // scale the handle back through its centre and the axis sticks at 0: the components lie flat (Maya / Unreal)
-    if (gizmo.mode === "scale" && typeof forgeScaleZeroSnap === "function") forgeScaleZeroSnap(pivot.scale, gizmo.axis, 0.06, 0);
+    // never EXACTLY 0: three.js decomposes the handle's matrix every frame, and a 0 scale divides by zero there - the
+    // handle's rotation turned NaN, the next drag wrote NaN into every vertex and the window crashed (owner
+    // 2026-10-25: "loki crashed when i was trying that flatten tool"). 1e-5 of the size is flat to the eye; exact
+    // flattening is the Flatten command (forge_polyops.js flatten)
+    if (gizmo.mode === "scale" && typeof forgeScaleZeroSnap === "function") forgeScaleZeroSnap(pivot.scale, gizmo.axis, 0.06, 1e-5);
     pivot.updateMatrix();
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });

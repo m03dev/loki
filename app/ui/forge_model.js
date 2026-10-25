@@ -181,12 +181,19 @@ async function forgeAddPrimitive(kind) {
   const opts = {}, poly = window.ForgePoly.primitive(kind, opts);
   forgeModel.prim = { kind, opts, poly };
   forgeModel.last = null;
+  v.keepCameraOnce = true;                       // the view stays where it is (view.frame, forge.js)
   v.showPoly(poly, false);
+  v.keepCameraOnce = false;
   forgeHistReset();
   forge.model = null;
   document.getElementById("forge-empty").hidden = true;
   v.start();
-  forgeSay(window.ForgePoly.PRIMITIVES[kind].name + ": " + poly.f.length + " faces. Shape it with the sliders, or click faces.");
+  // a new object lands in OBJECT mode, selected (Maya / Unreal) - F9 / F10 / F11 for its components. Preference
+  // (localStorage "loki-forge-create-mode" = "component"): stay in component mode, the old way
+  let stay = false;
+  try { stay = localStorage.getItem("loki-forge-create-mode") === "component"; } catch (_) { /* private window */ }
+  if (!stay) await forgeModelMode(false);
+  forgeSay(window.ForgePoly.PRIMITIVES[kind].name + ": " + poly.f.length + " faces - w / e / r to place it, F9 / F10 / F11 for its components, f to frame it.");
 }
 
 // --------------------------------------------------------------------------------- construction history

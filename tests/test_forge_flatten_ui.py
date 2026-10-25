@@ -68,6 +68,17 @@ async def main():
         async def cube():
             await E("forgeProRun(forge.view, 'cube')"); await wait(120)
 
+        # ---- Create: a new object lands in object mode, selected, and the camera stays where it is (Maya / Unreal /
+        # the three.js editor's AddObjectCommand: select it, never move the view)
+        cam0 = await E("forge.view.camera.position.toArray().concat(forge.view.controls ? forge.view.controls.target.toArray() : [])")
+        await cube()
+        cam1 = await E("forge.view.camera.position.toArray().concat(forge.view.controls ? forge.view.controls.target.toArray() : [])")
+        st = await E("[forge.view.mode, forge.view.tree.api.selected().length]")
+        check("Create: the new cube is in OBJECT mode and selected", st == ["view", 1], st)
+        check("Create: the camera does not move", all(abs(a - b) < 1e-6 for a, b in zip(cam0, cam1)), [cam0, cam1])
+        await E("forgeProRun(forge.view, 'sphere')"); await wait(150)
+        cam2 = await E("forge.view.camera.position.toArray().concat(forge.view.controls ? forge.view.controls.target.toArray() : [])")
+        check("...not for the second object either", all(abs(a - b) < 1e-6 for a, b in zip(cam1, cam2)), [cam1, cam2])
         # ---- flatten components
         await cube()
         await E("forgeProRun(forge.view, 'face')"); await wait(60)

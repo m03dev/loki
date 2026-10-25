@@ -1402,6 +1402,9 @@ function forgeMakeView(lib, renderer, canvas) {
     mesh.geometry.computeBoundingSphere();
     const bs = mesh.geometry.boundingSphere;
     view.size = bs.radius * 2 || 1;
+    // Create never moves the camera (owner 2026-10-25: "the camera focus and moves when i make a new object ...
+    // that's a bug"): Maya / Unreal leave the view where it is; f / a frame when you ask
+    if (view.keepCameraOnce) { view.keepCameraOnce = false; view.dirty = true; return; }
     controls.target.copy(bs.center).applyMatrix4(holder.matrixWorld);
     const dist = bs.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
     const dir = camera.position.clone().sub(controls.target).normalize();

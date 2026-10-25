@@ -75,6 +75,7 @@ async def main():
             return await r.fulfill(json={"ok": True})
 
         await page.route("http://127.0.0.1:8896/**", route)
+        await page.add_init_script("try { localStorage.setItem('loki-forge-create-mode', 'component') } catch (e) {}")   # these checks start in component mode after Create
         await page.goto("http://127.0.0.1:8896/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         await page.evaluate("localStorage.removeItem('loki-forge-hotkeys'); localStorage.removeItem('loki-forge-genui')")
