@@ -49,7 +49,7 @@ check("initialize: the server says it is loki-make and has tools", init["result"
       and "tools" in init["result"]["capabilities"], init)
 proc.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"); proc.stdin.flush()
 names = [t["name"] for t in rpc(2, "tools/list")["result"]["tools"]]
-check("tools/list: make_image, make_3d, make_video", names == ["make_image", "make_3d", "make_video"], names)
+check("tools/list: make_image, make_3d, make_video (then the machine tools)", names[:3] == ["make_image", "make_3d", "make_video"], names)
 r = rpc(3, "tools/call", {"name": "make_image", "arguments": {"prompt": ""}})
 check("a call with no prompt is an error answer, not a dead server", r["result"]["isError"] and "describe" in r["result"]["content"][0]["text"], r)
 r = rpc(4, "tools/call", {"name": "make_image", "arguments": {"prompt": "a fox", "folder": "../outside"}})

@@ -864,7 +864,7 @@ new = ("email", "calendar", "github", "notes", "peer_files", "computer")
 check("the new tools are registered with schemas and an action enum", all(n in loki.LOCAL_TOOLS and n in loki.MODEL_TOOL_NAMES for n in new)
       and all("enum" in loki._tool_params()[n]["properties"]["action"] for n in new))
 check("tool groups 'connectors' and 'computer' exist and can be switched", "connectors" in loki.CATEGORIES and "computer" in loki.CATEGORIES
-      and loki.TOOL_CATEGORIES["connectors"] == ["email", "calendar", "github", "notes", "peer_files"])
+      and loki.TOOL_CATEGORIES["connectors"] == ["email", "calendar", "github", "notes", "peer_files", "machines"])
 check("browse_page gained engine=auto|text|chromium", loki._tool_params()["browse_page"]["properties"]["engine"]["enum"] == ["auto", "text", "chromium"])
 check("the connectors are near the top of a local model's list (hidden until set up)",
       loki.LOCAL_TOOL_PRIORITY.index("email") < loki.LOCAL_MAX_TOOLS)

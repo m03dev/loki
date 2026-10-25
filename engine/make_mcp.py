@@ -129,8 +129,20 @@ def make_video(args: dict, cwd: Path, make=None) -> dict:
     return res if isinstance(res, dict) else {"ok": False, "error": "no answer"}
 
 
+try:   # the owner's other machines (engine/machines.py): list them, hand one a task, check on it
+    import machines as _machines  # noqa: E402
+    TOOLS += _machines.TOOLS
+except Exception:  # noqa: BLE001 - the making tools work without it
+    _machines = None
+
+
 def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video}.get(name)
+    if fn is None and _machines is not None and name in _machines.FUNCS:
+        try:
+            return _machines.FUNCS[name](args or {})
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": "%s: %s" % (type(exc).__name__, str(exc)[:400])}
     if fn is None:
         return {"ok": False, "error": "no tool %s" % name}
     try:

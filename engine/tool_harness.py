@@ -265,6 +265,11 @@ def attach(response: Any, known: list) -> Any:
     if getattr(message, "tool_calls", None):
         return response
     calls, rest = parse(message.content or "", known)
+    if not calls and "DSML" in str(message.content or "").upper():
+        # DeepSeek V4 / V4.1's own tool-call markup a host left as text (engine/dsml_proxy.py)
+        import dsml_proxy  # pylint: disable=import-outside-toplevel
+        rest, found = dsml_proxy.parse(message.content or "")
+        calls = [(c["name"], c["arguments"]) for c in found]
     if not calls:
         return response
     try:

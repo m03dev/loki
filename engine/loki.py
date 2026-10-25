@@ -5911,6 +5911,7 @@ async def browse_page_any(action: str = "view", url: str = "", index: int = 0, t
 LOCAL_TOOLS.update({"email": _threaded(conn_email.tool), "calendar": _threaded(conn_calendar.tool),
                     "github": _threaded(conn_github.tool), "notes": _threaded(conn_notes.tool),
                     "peer_files": _threaded(conn_peer_files.tool), "computer": computer_tool,
+                    "machines": _threaded(__import__("machines").tool),
                     "browse_page": browse_page_any})
 _S28_SCHEMAS = [
     schema("email", tool_teach.DESCRIPTIONS["email"],
@@ -5934,6 +5935,12 @@ _S28_SCHEMAS = [
     schema("peer_files", tool_teach.DESCRIPTIONS["peer_files"],
            {"action": {"type": "string", "enum": ["machines", "list", "read", "write"]}, "machine": {"type": "string"},
             "path": {"type": "string"}, "text": {"type": "string"}}, ["action"]),
+    schema("machines", "The owner's OTHER LOKI machines (Mac <-> Windows PC): action list (which are linked, online, "
+           "busy) | run (machine, task - their own LOKI agent does it there as a job; write the task fully) | status "
+           "(machine, job, wait - the result when done) | stop (machine, job). Use it when the owner asks you to help, "
+           "check or use the other machine.",
+           {"action": {"type": "string", "enum": ["list", "run", "status", "stop"]}, "machine": {"type": "string"},
+            "task": {"type": "string"}, "job": {"type": "string"}, "wait": {"type": "number"}}, ["action"]),
     schema("computer", tool_teach.DESCRIPTIONS["computer"],
            {"action": {"type": "string", "enum": ["elements", "find", "click", "double_click", "right_click", "type", "key",
                                                   "scroll", "open_app", "apps", "screenshot", "look", "wait"]},
@@ -5951,7 +5958,7 @@ for _entry in TOOL_SCHEMAS:     # browse_page gains engine= (auto | text | chrom
                                               "Chromium automatically (engine='chromium' forces it; there also 'key' "
                                               "text='Escape' and 'screenshot'); sending a form or a password asks the owner.")
         _entry["function"]["parameters"]["properties"]["engine"] = {"type": "string", "enum": ["auto", "text", "chromium"]}
-TOOL_CATEGORIES["connectors"] = ["email", "calendar", "github", "notes", "peer_files"]
+TOOL_CATEGORIES["connectors"] = ["email", "calendar", "github", "notes", "peer_files", "machines"]
 TOOL_CATEGORIES["computer"] = ["computer"]
 CATEGORY_LABELS["connectors"] = "Connectors (your email, calendar, GitHub, notes, files on your other machine - writes ask)"
 CATEGORY_LABELS["computer"] = "Computer use (drive this desktop; needs the computer-use add-on; asks per app)"
@@ -7678,7 +7685,7 @@ def _salvage_reply(response, kwargs: dict):
             message.content = content
         except Exception:  # noqa: BLE001
             pass
-    if kwargs.get("tools") and not getattr(message, "tool_calls", None) and content and "{" in content:
+    if kwargs.get("tools") and not getattr(message, "tool_calls", None) and content and ("{" in content or "DSML" in content.upper()):
         names = [((t.get("function") or t).get("name")) for t in kwargs["tools"] if isinstance(t, dict)]
         names += [r for r in conductor.ROLES if "conductor" in names]   # "image" -> conductor(role=image)
         response = tool_harness.attach(response, names)
@@ -8994,6 +9001,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     first = active_model_name()
     pinned = os.getenv("LOKI_OPENCODE_MODEL", "").strip()          # provider/model of OpenCode's own (e.g. Zen)
     providers = _oc_providers(first) if not pinned else {}
+    try:   # DeepSeek 4.1 on NVIDIA / OpenRouter: its tool calls come back as text there - fixed in a local proxy
+        import dsml_proxy  # pylint: disable=import-outside-toplevel
+        providers = dsml_proxy.wrap(providers)
+    except Exception as exc:  # noqa: BLE001
+        print("[loki] DeepSeek tool-call fix not started: %s" % exc, flush=True)
     cfg_dir = DATA_DIR / "opencode"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "opencode.json"
@@ -9022,6 +9034,13 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
                                     "before you say it is done. End with one line: 'DONE: <what you made>' or "
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
+    if not plan and re.search(r"\b(mac|macbook|imac|windows|pc|other (machine|computer)|machines?)\b", text, re.I):
+        # the owner talks about another machine: say plainly which ones are linked and the tools that reach them
+        try:
+            import machines  # pylint: disable=import-outside-toplevel
+            prompt = "(%s Tools: list_machines, run_on_machine, machine_job.)\n\n%s" % (machines.describe(), prompt)
+        except Exception:  # noqa: BLE001
+            pass
     result: dict = {}
     used = ""
     for model in models[:3]:
@@ -9034,17 +9053,6 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         if result.get("session"):
             session = result["session"]
             OC_SESSIONS.set(conv, session)
-        if result.get("text") and opencode_engine.leaked_tool_markup(result["text"]) and not _cancel_event.is_set():
-            # the model wrote (some of) its tool calls as DeepSeek markup the provider did not turn into calls: those
-            # never ran. DeepSeek Harness runs them properly - install it for next time - and redo the turn with the
-            # next provider (the work so far stays in the folder)
-            _start_dsh_install()
-            if model != models[:3][-1]:
-                _progress("error", "%s sent tool calls back as text (DeepSeek markup), so they never ran - redoing "
-                                   "the turn with the next provider." % (model or "the model"))
-                if not result.get("tools"):
-                    session = None                    # nothing ran: a fresh session, the broken turn not carried on
-                continue
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))
@@ -9052,11 +9060,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     _task_ok_calls, _task_failed_calls = ok, failed
     reply = result.get("text") or ""
     if opencode_engine.leaked_tool_markup(reply):
+        # should not happen any more (dsml_proxy turns them into real calls) - never show the raw tags, never pretend
         reply = opencode_engine.strip_tool_markup(reply)
         if not result.get("tools") or not reply:
-            reply = ("NOT DONE - the model wrote its tool calls as text (DeepSeek's markup) and the provider did not "
-                     "run them, so nothing happened. Pick another model, or install DeepSeek Harness (Settings > Agent "
-                     "> Install) - it runs DeepSeek's tool calls itself.\n\n" + reply).strip()
+            reply = ("NOT DONE - the model wrote its tool calls as text (DeepSeek's markup) and they did not run, so "
+                     "nothing happened.\n\n" + reply).strip()
     if result.get("error") and not reply:
         reply = "NOT DONE - OpenCode stopped: %s" % result["error"]
     elif not plan and _claims_unbacked(text, reply):
@@ -9080,28 +9088,6 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     messages.append({"role": "assistant", "content": reply})
     save_history()
     return reply
-
-
-_DSH_INSTALL = {"started": False}
-
-
-def _start_dsh_install() -> None:
-    """DeepSeek's tool calls came back as text: install DeepSeek Harness once, in the background (owner: "use deepseek
-    harness"). npm i -g @deepseek-ai/dsh; the next DeepSeek turn uses it."""
-    import dsh_engine  # pylint: disable=import-outside-toplevel
-    if _DSH_INSTALL["started"] or dsh_engine.find_dsh() or os.getenv("LOKI_DSH_AUTOINSTALL", "1") == "0":
-        return
-    _DSH_INSTALL["started"] = True
-
-    def go() -> None:
-        try:
-            out = opencode_engine.install(("dsh",))
-            print("[loki] DeepSeek Harness install: %s" % out.get("dsh"), flush=True)
-        except Exception as exc:  # noqa: BLE001
-            print("[loki] DeepSeek Harness install failed: %s" % exc, flush=True)
-    threading.Thread(target=go, daemon=True, name="loki-dsh-install").start()
-    _progress("thinking", "Installing DeepSeek Harness in the background (%s) - DeepSeek runs through it next time."
-              % dsh_engine.INSTALL)
 
 
 async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = "") -> str:
