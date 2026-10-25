@@ -461,11 +461,23 @@ function forgeEditAttach(view, ctx) {
   gizmo.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
   gizmo.addEventListener("change", () => { view.dirty = true; });
   let edit = null;
+  // where the component handle sits (Settings > Manipulators > Component pivot): the bounding box's centre (Maya),
+  // the average of the picked points, or the last picked vertex
+  function forgePivotPoint(m, verts) {
+    const how = window.ForgeSettings ? ForgeSettings.get("pivotPlacement") : "bbox";
+    if (!verts.length) return [0, 0, 0];
+    if (how === "median") return P.median(m, verts);
+    if (how === "last") { const last = view.edit && view.edit.lastVert; return m.v[last] && verts.includes(last) ? m.v[last].slice() : m.v[verts[verts.length - 1]].slice(); }
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const i of verts) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], m.v[i][d]); hi[d] = Math.max(hi[d], m.v[i][d]); }
+    return [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+  }
+  view.pivotPoint = (verts) => forgePivotPoint(view.poly, verts || view.selectedVerts());
   function placePivot() {
     if (edit) return;
     const verts = view.selectedVerts();
     if (!view.poly || !verts.length || view.mode !== "poly") { if (gizmo.object) gizmo.detach(); return; }
-    pivot.position.fromArray(P.median(view.poly, verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
+    pivot.position.fromArray(forgePivotPoint(view.poly, verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
     pivot.updateMatrix();
     if (ed.tool && !gizmo.object) { gizmo.attach(pivot); gizmo.setMode(ed.tool); }
     view.dirty = true;
@@ -486,7 +498,7 @@ function forgeEditAttach(view, ctx) {
     if (!view.poly || !verts.length) return false;
     const radius = ed.prop ? ed.propRadius * (view.size || 1) : 0;
     edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: softWeights(view.poly, verts, radius),
-      pivot: P.median(view.poly, verts), start: pivot.matrix.clone(), keep: ed.sel };
+      pivot: forgePivotPoint(view.poly, verts), start: pivot.matrix.clone(), keep: ed.sel };
     edit.sym = planSymmetry();
     return true;
   }

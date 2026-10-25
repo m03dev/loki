@@ -1421,14 +1421,21 @@
   // modeling mode does the same with its Transform gizmo. The pivot is the manipulator's (the selection's median,
   // forge_edit.js placePivot), so the flattened points land on the plane through the handle. axis "normal" scales
   // along the selection's average face normal (Maya's Scale tool in Normal axis orientation).
-  //   flatten(m, verts, { axis: "x" | "y" | "z" | "normal", amount = 1 })  -> the same vertices
+  //   flatten(m, verts, { axis: "x" | "y" | "z" | "normal", amount = 1, pivot: "bbox" | "median" })  -> the same vertices
   // amount 1 = all the way to 0, 0.5 = halfway (a partial scale), so the last-tool tweak can dial it.
   P.flatten = (m0, verts, o) => {
     o = o || {};
     const vs = vertIds(m0, verts);
     if (vs.length < 2) return fail(m0, "Flatten: select two or more vertices, edges or faces.");
     const axis = String(o.axis || "y").toLowerCase(), t = clamp(num(o.amount, 1), 0, 1);
-    const piv = typeof P.median === "function" ? P.median(m0, vs) : mul(vs.reduce((s, i) => add(s, m0.v[i]), [0, 0, 0]), 1 / vs.length);
+    // the plane goes through the handle: the bounding box's centre (Maya, the default) or the average point
+    let piv;
+    if (o.pivot === "median") piv = mul(vs.reduce((s, i) => add(s, m0.v[i]), [0, 0, 0]), 1 / vs.length);
+    else {
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (const i of vs) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], m0.v[i][d]); hi[d] = Math.max(hi[d], m0.v[i][d]); }
+      piv = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+    }
     let n;
     if (axis === "normal") {
       const inSel = new Set(vs);

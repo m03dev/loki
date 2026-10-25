@@ -357,7 +357,7 @@ function forgeTkCommands() {
   // every selected object, about its own pivot - Maya's default (forge_scene.js keeps it a hair above 0 so it stays
   // pickable; the Channel Box reads 0).
   const flat = (axis) => (v) => {
-    if (comp(v)) { forgeTkRun("flatten", { axis: axis, amount: 1 }); return ""; }
+    if (comp(v)) { forgeTkRun("flatten", { axis: axis, amount: 1, pivot: window.ForgeSettings && ForgeSettings.get("pivotPlacement") === "median" ? "median" : "bbox" }); return ""; }
     const t = v && v.tree && v.tree.api;
     const picked = t ? (typeof t.selected === "function" ? t.selected() : t.sel || []) : [];
     const ids = picked.slice();

@@ -97,6 +97,9 @@ async def main():
         await page.wait_for_timeout(60)
         check("the size applies to the wheel", await E("document.getElementById('forge-pro-wheel').style.scale") == "1.5")
         hub = await page.locator("#forge-pro-wheel .forge-wheel-hub").bounding_box()
+        over = await E("(() => { const h = document.querySelector('#forge-pro-wheel .forge-wheel-hub').getBoundingClientRect(); const a = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return a && a.closest('.fmenu-torn') ? 'torn' : 'ok'; })()")
+        if over == "torn":   # the torn-off File menu (dragged here above) sits on the wheel's middle: move it out of the way
+            await E("document.querySelector('.fmenu-torn').style.left = '20px'")
         await page.mouse.move(hub["x"] + hub["width"] / 2, hub["y"] + hub["height"] / 2); await page.mouse.down()
         await page.mouse.move(hub["x"] + 140, hub["y"] - 60, steps=6); await page.mouse.up()
         await page.wait_for_timeout(60)

@@ -13,6 +13,9 @@
 "use strict";
 
 const FORGE_PRO_R = 88;           // marking-menu ring radius, px (tight: owner 17:06 'too far apart')
+// the ring's height per wedge: north / south sit a little further out than the diagonals, so the chips never touch
+// (owner 2026-10-25: menus overlapped) while the ring stays as tight sideways as the owner asked
+const forgeProRingY = (a) => Math.sin(a) * FORGE_PRO_R * (Math.abs(Math.sin(a)) > 0.9 ? 1.15 : 0.82);
 const FORGE_PRO_DEAD = 22;        // px from the centre before a direction counts (the pro dead zone)
 const FORGE_PRO_HOLD = 0;         // the right-button menu opens the moment the button goes down (kept for scripts)
 const FORGE_PRO_TAP = 230;        // a Space press shorter than this, with nothing chosen, is a tap
@@ -287,7 +290,10 @@ function forgeProSnapHud(v) {                       // the three snap chips in t
 function forgeProSnap(v, kind, on) {              // j: the pro step snap for the move / rotate / scale handles
   const tcs = [v.transform, v.gizmo].filter((x) => x && x.setTranslationSnap);
   const step = forgeProGridStep(v);
-  for (const tc of tcs) if (kind === "step") { tc.setTranslationSnap(on ? step : null); tc.setRotationSnap(on ? Math.PI / 12 : null); tc.setScaleSnap(on ? 0.1 : null); }
+  // the steps are Settings > Manipulators (move 0 = the grid step)
+  const S = window.ForgeSettings, mv = S && +S.get("snapMove") > 0 ? +S.get("snapMove") : step;
+  const rot = (S ? +S.get("snapRotate") || 15 : 15) * Math.PI / 180, sc = S ? +S.get("snapScale") || 0.1 : 0.1;
+  for (const tc of tcs) if (kind === "step") { tc.setTranslationSnap(on ? mv : null); tc.setRotationSnap(on ? rot : null); tc.setScaleSnap(on ? sc : null); }
   return "";
 }
 
@@ -651,8 +657,8 @@ function forgeProMarkShow(v, x, y, menu) {
       const b = proEl("button", "forge-pro-wedge forge-pro-wsub pos-" + pos.toLowerCase(), (labels[pos] || id.title || "") + " \u25b8");
       b.type = "button"; b.dataset.proSub = labels[pos] || id.title || ""; b.dataset.pos = pos;
       b.style.left = Math.round(Math.cos(a) * FORGE_PRO_R) + "px";
-      b.style.top = Math.round(Math.sin(a) * FORGE_PRO_R * 0.82) + "px";
-      b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkRun(v, id, x + Math.cos(a) * FORGE_PRO_R, y + Math.sin(a) * FORGE_PRO_R * 0.82); });
+      b.style.top = Math.round(forgeProRingY(a)) + "px";
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkRun(v, id, x + Math.cos(a) * FORGE_PRO_R, y + forgeProRingY(a)); });
       host.append(b);
       continue;
     }
@@ -661,7 +667,7 @@ function forgeProMarkShow(v, x, y, menu) {
     const b = proEl("button", "forge-pro-wedge pos-" + pos.toLowerCase(), text);
     b.type = "button"; b.dataset.proCmd = text; b.dataset.proId = id; b.dataset.pos = pos;
     b.style.left = Math.round(Math.cos(a) * FORGE_PRO_R) + "px";
-    b.style.top = Math.round(Math.sin(a) * FORGE_PRO_R * 0.82) + "px";
+    b.style.top = Math.round(forgeProRingY(a)) + "px";
     b.addEventListener("click", (ev) => { ev.stopPropagation(); forgeProMarkHide(); forgeProRun(v, id); });
     host.append(b);
   }
@@ -669,7 +675,7 @@ function forgeProMarkShow(v, x, y, menu) {
     const list = proEl("div", "forge-pro-mlist");
     const ringed = Object.keys(menu.ring || {}).length > 0;
     list.classList.toggle("bare", !ringed);           // no ring (empty space): the list starts right at the pointer
-    list.style.top = (ringed ? Math.round(FORGE_PRO_R * 0.82 + 22) : 6) + "px";
+    list.style.top = (ringed ? Math.round(FORGE_PRO_R * 1.15 + 24) : 6) + "px";
     // A list entry is an id, or ["Label", [ids]] for a submenu (the nested list the reference program's rings have:
     // one level deeper, with a Back row). A switch shows its tick, so it reads as a switch and not a command.
     const tickOf = (id) => {
@@ -726,12 +732,20 @@ function forgeProMarkShow(v, x, y, menu) {
     const r = ml.getBoundingClientRect();
     if (r.bottom > window.innerHeight - 4) {
       // near the bottom the list goes ABOVE the ring - sliding it up over the ring put list items under the south wedge,
-      // so a flick south picked "Draw it" instead of Cube
+      // so a flick south picked "Draw it" instead of Cube. When it fits neither below nor above, it goes BESIDE the
+      // ring (never over a wedge, owner 2026-10-25: the list covered the south chips)
       const ringed = !!Object.keys(menu.ring || {}).length;
-      const above = ringed ? -(Math.round(FORGE_PRO_R * 0.82 + 22) + r.height) : -(r.height + 6);
-      ml.style.top = (y + above >= 4 ? above : parseFloat(ml.style.top) - (r.bottom - window.innerHeight + 4)) + "px";
+      const above = ringed ? -(Math.round(FORGE_PRO_R * 1.15 + 24) + r.height) : -(r.height + 6);
+      if (y + above >= 4) ml.style.top = above + "px";
+      else if (ringed) {
+        const side = Math.round(FORGE_PRO_R + 90);
+        const right = x + side + r.width < window.innerWidth - 4;
+        ml.style.left = (right ? side : -(side + r.width)) + "px";
+        ml.style.top = Math.max(4 - y, Math.min(-r.height / 2, window.innerHeight - 4 - y - r.height)) + "px";
+        ml.classList.add("beside");
+      } else ml.style.top = (parseFloat(ml.style.top) - (r.bottom - window.innerHeight + 4)) + "px";
     }
-    if (r.right > window.innerWidth - 4) ml.style.left = (-(r.right - window.innerWidth + 4)) + "px";
+    if (!ml.classList.contains("beside") && r.right > window.innerWidth - 4) ml.style.left = (-(r.right - window.innerWidth + 4)) + "px";
   }
   host._at = [x, y]; host._menu = menu;
 }
@@ -1366,7 +1380,15 @@ const forgeProHow = (e) => ((e.ctrlKey || e.metaKey) && e.shiftKey ? "add" : (e.
 // The camera modifier. Option / Alt is the classic one; the owner (2026-10-21: "maya is hold down command and drag to
 // move in the viewport") also navigates with Command, so both do it. One predicate, used by every tool, so none of
 // them can disagree about whether the camera or the tool has the drag.
-function forgeCamMod(e) { return !!(e && (e.altKey || e.metaKey)); }
+// the camera gesture: Maya / Unreal = Alt (Option) or Cmd + a button; "mmb" (Settings > Navigation) = the middle
+// button alone (Shift / Ctrl change what it does), the Blender-style way
+const forgeNavStyle = () => (window.ForgeSettings ? ForgeSettings.get("navStyle") : "maya");
+const forgeNav = (k) => { const v = window.ForgeSettings ? +ForgeSettings.get(k) : 1; return Number.isFinite(v) && v > 0 ? v : 1; };
+function forgeCamMod(e) {
+  if (!e) return false;
+  if (forgeNavStyle() === "mmb") return e.button === 1 || (e.type !== "pointerdown" && e.type !== "mousedown" && !!(e.buttons & 4));
+  return !!(e.altKey || e.metaKey);
+}
 const FORGE_CAM_TUMBLE = 0.0062;   // radians per pixel
 const FORGE_CAM_DOLLY = 0.0058;    // per pixel, exponential (so it feels the same near and far)
 const FORGE_CAM_WHEEL = 0.0014;    // per wheel delta unit
@@ -1438,6 +1460,7 @@ function forgeProCamera(view, ctx) {
     e.preventDefault(); e.stopImmediatePropagation();
     if (both) { drag.kind = "dolly"; drag.buttons = e.buttons; return; }   // left + middle = dolly
     let kind = e.button === 0 ? "tumble" : e.button === 1 ? "track" : e.button === 2 ? "dolly" : null;
+    if (forgeNavStyle() === "mmb") kind = e.button !== 1 ? null : e.shiftKey ? "track" : (e.ctrlKey || e.metaKey) ? "dolly" : "tumble";
     if (!kind) return;
     // box zoom is the camera modifier + Ctrl (Maya's Ctrl + Option + left on macOS), so Command alone is free to
     // tumble - the owner asked for exactly that
@@ -1457,9 +1480,9 @@ function forgeProCamera(view, ctx) {
       if (!drag.lock) { const tx = e.clientX - drag.x0, ty = e.clientY - drag.y0; if (Math.hypot(tx, ty) > 3) drag.lock = Math.abs(tx) >= Math.abs(ty) ? "x" : "y"; }
       if (drag.lock === "x") dy = 0; else if (drag.lock === "y") dx = 0; else return;
     }
-    if (drag.kind === "tumble") cam.tumble(dx, dy);
-    else if (drag.kind === "track") cam.track(dx, dy);
-    else if (drag.kind === "dolly") cam.dolly((dx + dy) * FORGE_CAM_DOLLY);
+    if (drag.kind === "tumble") cam.tumble(dx * forgeNav("tumbleSpeed"), dy * forgeNav("tumbleSpeed"));
+    else if (drag.kind === "track") cam.track(dx * forgeNav("trackSpeed"), dy * forgeNav("trackSpeed"));
+    else if (drag.kind === "dolly") cam.dolly((dx + dy) * FORGE_CAM_DOLLY * forgeNav("dollySpeed"));
     else if (drag.kind === "box") {
       const r = canvas.getBoundingClientRect();
       box.hidden = false;
@@ -1487,7 +1510,8 @@ function forgeProCamera(view, ctx) {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     controls.dispatchEvent({ type: "start" });
-    cam.dolly(-e.deltaY * unit * FORGE_CAM_WHEEL);
+    const inv = window.ForgeSettings && ForgeSettings.get("invertWheel") ? -1 : 1;
+    cam.dolly(-e.deltaY * unit * FORGE_CAM_WHEEL * forgeNav("wheelSpeed") * inv);
     clearTimeout(cam.wheelEnd); cam.wheelEnd = setTimeout(() => controls.dispatchEvent({ type: "end" }), 220);
   }, { passive: false });
 }
