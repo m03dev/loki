@@ -6251,6 +6251,26 @@ async def toolshelf_tool(action: str = "list", area: str = "", id: str = "", run
 
 
 LOCAL_TOOLS["toolshelf"] = toolshelf_tool
+
+
+async def make_music_tool(tags: str = "", lyrics: str = "", seconds: float = 60, bpm: int = 0, key: str = "",
+                          language: str = "", seed: int | None = None) -> str:
+    """Music with ACE-Step 1.5 on the owner's ComfyUI (engine/comfy_jobs.py) -> an MP3 in audio/."""
+    import comfy_jobs  # pylint: disable=import-outside-toplevel
+    res = await asyncio.to_thread(comfy_jobs.make_music, {"tags": tags, "lyrics": lyrics, "seconds": seconds,
+                                                          "bpm": bpm or None, "key": key, "language": language,
+                                                          "seed": seed}, WORKSPACE / "audio")
+    if res.get("ok"):
+        res["files"] = [Path(f).resolve().relative_to(WORKSPACE.resolve()).as_posix() for f in res["files"]]
+    return json.dumps(res)
+
+
+LOCAL_TOOLS["make_music"] = make_music_tool
+_MUSIC_SCHEMA = schema("make_music", __import__("comfy_jobs").MUSIC_TOOL["description"],
+                       __import__("comfy_jobs").MUSIC_TOOL["inputSchema"]["properties"], ["tags"])
+TOOL_SCHEMAS.append(_MUSIC_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_MUSIC_SCHEMA)
+MODEL_TOOL_NAMES.add("make_music")
 _SHELF_SCHEMA = schema("toolshelf", __import__("toolshelf").TOOL["description"],
                        __import__("toolshelf").TOOL["inputSchema"]["properties"], ["action"])
 TOOL_SCHEMAS.append(_SHELF_SCHEMA)

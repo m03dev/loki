@@ -36,6 +36,7 @@ LOADERS = {
     "UpscaleModelLoader": ("model_name", "upscale_models"),
     "LoadMoGeModel": ("model_name", "geometry_estimation"),
     "LoadBackgroundRemovalModel": ("bg_removal_name", "background_removal"),
+    "DualCLIPLoader": (("clip_name1", "clip_name2"), "text_encoders"),
 }
 
 
@@ -105,6 +106,7 @@ def ui_to_api(ui: dict, info: dict, drop=(), replace: dict | None = None) -> dic
         else:
             links[ln[0]] = (str(ln[1]), int(ln[2]))
     api = {}
+    types = {str(n["id"]): n.get("type") for n in ui.get("nodes") or []}
     for node in ui.get("nodes") or []:
         nid, cls = str(node["id"]), node.get("type")
         if cls in drop or node.get("mode") in (2, 4):      # 2 = muted, 4 = bypassed: not run
@@ -124,6 +126,8 @@ def ui_to_api(ui: dict, info: dict, drop=(), replace: dict | None = None) -> dic
         for i in ins:
             if i.get("link") is not None and i["link"] in links:
                 src, slot = links[i["link"]]
+                if types.get(src) in drop and i["name"] in inputs:
+                    continue          # a UI-only PrimitiveNode feeds this widget: its value is already in the widget
                 inputs[i["name"]] = [src, slot]
         api[nid] = {"class_type": cls, "inputs": inputs, "_meta": {"title": node.get("title") or cls}}
     for nid, (cls, new_inputs) in (replace or {}).items():
@@ -190,8 +194,11 @@ def loaders(api: dict) -> list:
     out = []
     for nid, node in api.items():
         spec = LOADERS.get(node["class_type"])
-        if spec and isinstance(node["inputs"].get(spec[0]), str):
-            out.append((nid, node["class_type"], spec[0], node["inputs"][spec[0]], spec[1]))
+        if not spec:
+            continue
+        for inp in (spec[0] if isinstance(spec[0], tuple) else (spec[0],)):
+            if isinstance(node["inputs"].get(inp), str):
+                out.append((nid, node["class_type"], inp, node["inputs"][inp], spec[1]))
     return out
 
 
