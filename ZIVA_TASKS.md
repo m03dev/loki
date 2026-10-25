@@ -82,6 +82,17 @@ Found and fixed in the cloud:
   answers.
 - [ ] [either] Ask an open request ("make me a game"): 3-4 options must appear (LOKI_OPTIONS=auto). Report if not.
 
+### From Claude (2026-10-25 08:40) - Forge File menu and along-loop selection. On master. [either]
+
+- File: New Scene (one Ctrl+Z brings the old scene back), Open Scene..., Import... (.glb / .gltf / .obj / .stl as NEW
+  objects), Save Scene As... (the Export dialog). The old chrome "Import" is now "Import Image...". test_forge_file_ui.
+- Select: Grow / Shrink Along Loop, Contiguous Edges, Every 2nd / 3rd / 4th in Loop / Ring (stage 4c in
+  docs/FORGE_MODELING_FOUNDATION.md). test_forge_loopsel_ui, js/test_forge_loopsel.
+- [ ] [mac] Forge: File > Import... an .obj and an .stl from disk - each lands as a new object in the Outliner.
+  File > New Scene, then Ctrl+Z - everything is back. Report anything odd.
+- [ ] [mac] Forge: a plane, F10, pick one inside edge, Select > Grow Along Loop twice, Shrink Along Loop once;
+  then the whole row and Select > LOKI > Every Nth > Every 2nd. Report anything odd.
+
 ### From Claude (2026-10-25 06:10) - Home split, Forge Baseline + multi-object components, the modeling plan. On master. [either]
 
 Owner: "focus on loki home ... the chat is buggy, the display is sometimes hidden, the icons below the chat get cut off,

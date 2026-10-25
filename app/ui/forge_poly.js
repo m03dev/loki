@@ -499,6 +499,7 @@
     const nxt = around.filter((x) => x !== ei && !T.edges[x].faces.some((f) => mine.has(f)));
     return nxt.length === 1 ? nxt[0] : -1;
   }
+  P.loopStep = (m, T, ei, at) => loopStep(m, T || P.topology(m), ei, at);
   P.edgeLoop = (m, T, ei) => {
     T = T || P.topology(m);
     if (!T.edges[ei]) return [];

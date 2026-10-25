@@ -79,6 +79,8 @@ MAP = {
     "ConvertSelectionToVertexPerimeter": "convertToVertexPerimeter", "ConvertSelectionToFacePerimeter": "convertToFacePerimeter",
     "ConvertSelectionToShell": "convertToShell", "ConvertSelectionToShellBorder": "convertToShellBorder",
     "SelectSimilar": "selectSimilar", "SelectShortestEdgePathTool": "shortestPath",
+    "GrowLoopPolygonSelectionRegion": "growLoop", "ShrinkLoopPolygonSelectionRegion": "shrinkLoop",
+    "SelectContiguousEdges": "contiguousEdges",
     "NewScene": "newScene", "OpenScene": "openScene", "SaveSceneAs": "saveAs", "Import": "importFile",
     "SubdividePolygon": "addDivisions", "FlipTriangleEdge": "flipTriangleEdge", "Symmetrize": "symmetrize", "FlipMesh": "flipMesh",
     # Mesh Tools
@@ -121,7 +123,7 @@ LABELS = {
 EXTRAS = {
     "File": ["saveObj", "-", "close"],
     "Create": [["Polygon Primitives", ["quadsphere"]], ["Make with LOKI", ["draw", "image", "describe", "creature"]]],
-    "Select": ["marquee"],                             # Select > Preferences (camera-based selection ...) is forge_chrome.js's
+    "Select": ["marquee", ["Every Nth in Loop / Ring", ["everyNth2", "everyNth3", "everyNth4"]]],                             # Select > Preferences (camera-based selection ...) is forge_chrome.js's
     "Modify": ["lastTool", ["Axes", ["worldAxes", "objectAxes"]], "pivotEdit",
                ["Pivot", ["pivotBottom", "pivotOrigin", "pivotToSelection"]]],
     "Display": ["isolate", "xray", "quadToggle", ["Smooth Mesh Preview", ["smooth1", "smooth2", "smooth3"]],

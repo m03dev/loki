@@ -2274,6 +2274,115 @@
   };
   const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
 
+  // ------------------------------------------------------------------ Select > Grow / Shrink Along Loop, Contiguous
+  // Edges, every Nth (FORGE_MODELING_FOUNDATION stage 4). sel = { v, e: [[a, b]], f } -> the same shape back.
+  const selEdgeIds = (T, pairs) => (pairs || []).map(([a, b]) => T.edge(a, b)).filter((i) => i !== undefined);
+  const pairOf = (T, ei) => [T.edges[ei].a, T.edges[ei].b];
+  // across quad fi from edge ei: the opposite edge, or -1
+  const across = (m, T, fi, ei) => { const fe = T.faceEdges[fi]; if (!fe || fe.length !== 4) return -1; const k = fe.indexOf(ei); return k < 0 ? -1 : fe[(k + 2) % 4]; };
+  // the vertices picked in a row: the edges joining them, so verts grow / shrink like their edges do
+  const vertRowEdges = (T, vs) => { const s = new Set(vs); return T.edges.map((e, i) => i).filter((i) => s.has(T.edges[i].a) && s.has(T.edges[i].b)); };
+
+  /** Grow Along Loop (Maya: GrowLoopPolygonSelectionRegion): every open end of a picked loop takes one more step. */
+  P.growAlongLoop = (m, sel) => P.alongLoop(m, sel, +1);
+  /** Shrink Along Loop: every open end of a picked loop gives one back (a closed loop stays). */
+  P.shrinkAlongLoop = (m, sel) => P.alongLoop(m, sel, -1);
+  P.alongLoop = (m, sel, dir) => {
+    const T = P.topology(m), s = { v: sel.v || [], e: sel.e || [], f: sel.f || [] };
+    if (s.f.length) {                                   // faces: a strip of quads; its direction comes from a picked neighbour
+      const fs = new Set(s.f), add = new Set(), drop = new Set();
+      for (const fi of fs) {
+        const fe = T.faceEdges[fi] || [];
+        if (fe.length !== 4) continue;
+        for (let k = 0; k < 4; k++) {
+          const nb = T.edges[fe[k]].faces.find((x) => x !== fi);
+          if (nb === undefined || !fs.has(nb)) continue;   // the strip runs from nb through fi ...
+          const opp = fe[(k + 2) % 4], nxt = T.edges[opp].faces.find((x) => x !== fi);
+          if (nxt !== undefined && fs.has(nxt)) continue;  // ... not an end
+          if (dir > 0) { if (nxt !== undefined) add.add(nxt); } else drop.add(fi);
+        }
+      }
+      const out = dir > 0 ? [...fs, ...add] : [...fs].filter((x) => !drop.has(x));
+      return { v: [], e: [], f: uniq(out) };
+    }
+    const fromVerts = !s.e.length && s.v.length;
+    const es = new Set(fromVerts ? vertRowEdges(T, s.v) : selEdgeIds(T, s.e)), add = new Set(), drop = new Set();
+    for (const ei of es) {
+      for (const at of [T.edges[ei].a, T.edges[ei].b]) {
+        const nxt = P.loopStep(m, T, ei, at);
+        if (nxt >= 0 && es.has(nxt)) continue;            // the loop goes on through a picked edge: not an end
+        if (dir > 0) { if (nxt >= 0) add.add(nxt); } else drop.add(ei);
+      }
+    }
+    const out = dir > 0 ? [...es, ...add] : [...es].filter((x) => !drop.has(x));
+    if (fromVerts) return { v: uniq(out.flatMap((ei) => pairOf(T, ei))), e: [], f: [] };
+    return { v: [], e: out.map((ei) => pairOf(T, ei)), f: [] };
+  };
+
+  /** Contiguous Edges (Maya: SelectContiguousEdges): the loop from each picked edge, carried on through poles and
+   *  corners by the straightest edge ahead (an ordinary loop stops there). Stops at a turn sharper than `maxTurn`°. */
+  P.contiguousEdges = (m, sel, maxTurn) => {
+    const T = P.topology(m), limit = Math.cos((num(maxTurn, 60) * Math.PI) / 180), out = new Set();
+    const dir = (a, b) => { const d = sub(m.v[b], m.v[a]), l = len(d) || 1; return [d[0] / l, d[1] / l, d[2] / l]; };
+    for (const e0 of selEdgeIds(T, sel.e)) {
+      out.add(e0);
+      for (const start of [T.edges[e0].a, T.edges[e0].b]) {
+        let cur = e0, at = start;
+        for (let guard = 0; guard < T.edges.length; guard++) {
+          const from = T.edges[cur].a === at ? T.edges[cur].b : T.edges[cur].a, d = dir(from, at);
+          let nxt = P.loopStep(m, T, cur, at);
+          if (nxt < 0) {                                  // a pole or a corner: the straightest edge on, within the limit
+            let best = -1, bestDot = limit;
+            for (const x of T.vertEdges[at]) {
+              if (x === cur) continue;
+              const o = T.edges[x].a === at ? T.edges[x].b : T.edges[x].a, dd = dot(d, dir(at, o));
+              if (dd > bestDot) { bestDot = dd; best = x; }
+            }
+            nxt = best;
+          }
+          if (nxt < 0 || out.has(nxt)) break;
+          out.add(nxt);
+          at = T.edges[nxt].a === at ? T.edges[nxt].b : T.edges[nxt].a;
+          cur = nxt;
+        }
+      }
+    }
+    return { v: [], e: [...out].map((ei) => pairOf(T, ei)), f: [] };
+  };
+
+  /** Every Nth (Maya's Select Edge Loop / Ring with a step): of each picked loop, ring or face strip, keep the first
+   *  and then every `n`th along it. */
+  P.everyNth = (m, sel, n) => {
+    const T = P.topology(m), step = Math.max(2, Math.round(num(n, 2)));
+    const order = (items, nbrs) => {                    // the items in chain order, one chain at a time
+      const left = new Set(items), out = [];
+      while (left.size) {
+        let start = [...left].find((x) => nbrs(x).filter((y) => left.has(y)).length <= 1);
+        if (start === undefined) start = left.values().next().value;   // closed: anywhere
+        let cur = start, chain = [];
+        while (cur !== undefined) {
+          chain.push(cur); left.delete(cur);
+          cur = nbrs(cur).find((y) => left.has(y));
+        }
+        out.push(chain);
+      }
+      return out;
+    };
+    const keep = (chains) => chains.flatMap((c) => c.filter((_, i) => i % step === 0));
+    if ((sel.f || []).length) {
+      const fs = new Set(sel.f);
+      const nb = (fi) => (T.faceEdges[fi] || []).map((ei) => T.edges[ei].faces.find((x) => x !== fi)).filter((x) => x !== undefined && fs.has(x));
+      return { v: [], e: [], f: keep(order([...fs], nb)) };
+    }
+    const es = selEdgeIds(T, sel.e), set = new Set(es);
+    if (!es.length) return { v: [], e: [], f: [] };
+    // a ring if picked edges sit across quads from each other, else a loop (they share vertices)
+    const ringNb = (ei) => T.edges[ei].faces.map((fi) => across(m, T, fi, ei)).filter((x) => x >= 0 && set.has(x));
+    const loopNb = (ei) => [T.edges[ei].a, T.edges[ei].b].flatMap((at) => T.vertEdges[at]).filter((x) => x !== ei && set.has(x));
+    const isRing = es.some((ei) => ringNb(ei).length) && !es.some((ei) => loopNb(ei).length);
+    return { v: [], e: keep(order(es, isRing ? ringNb : loopNb)).map((ei) => pairOf(T, ei)), f: [] };
+  };
+
   // the heads-up display: what the mesh is made of
   P.meshStats = (m) => {
     const T = P.topology(m), { r } = analyse(m, {});

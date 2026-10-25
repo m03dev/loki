@@ -240,8 +240,16 @@ const FORGE_MAYA = {
     "Grow"
    ],
    [
+    "growLoop",
+    "Grow Along Loop"
+   ],
+   [
     "shrink",
     "Shrink"
+   ],
+   [
+    "shrinkLoop",
+    "Shrink Along Loop"
    ],
    "#Type",
    [
@@ -275,6 +283,10 @@ const FORGE_MAYA = {
     ]
    ],
    "-",
+   [
+    "contiguousEdges",
+    "Contiguous Edges"
+   ],
    [
     "shortestPath",
     "Shortest Edge Path Tool"
@@ -342,7 +354,15 @@ const FORGE_MAYA = {
     ]
    ],
    "#LOKI",
-   "marquee"
+   "marquee",
+   [
+    "Every Nth in Loop / Ring",
+    [
+     "everyNth2",
+     "everyNth3",
+     "everyNth4"
+    ]
+   ]
   ],
   "Modify": [
    "#Transform",

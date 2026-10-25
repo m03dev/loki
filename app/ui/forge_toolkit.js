@@ -128,6 +128,23 @@ function forgeTkConvert(v, to) {
   return n ? "" : "Nothing of that kind in the selection.";
 }
 
+/** Select > Grow / Shrink Along Loop, Contiguous Edges, Every Nth: the picked loop / ring / strip, changed along itself. */
+function forgeTkLoopSel(v, op, n) {
+  const P = window.ForgePoly;
+  if (!v || !v.poly || !v.edit) return "Open a mesh in component mode first.";
+  const sel = forgeTkSel(v), mode = v.edit.mode;
+  const pick = { v: mode === "vert" ? sel.v : [], e: mode === "edge" ? sel.e : [], f: mode === "face" ? sel.f : [] };
+  if (!pick.v.length && !pick.e.length && !pick.f.length) return "Pick a loop of edges, a row of vertices or a strip of faces first.";
+  if (op === "contiguousEdges" && !pick.e.length) return "Contiguous Edges: pick edges first (F10).";
+  const before = pick.v.length + pick.e.length + pick.f.length;
+  const out = P[op](v.poly, pick, n);
+  const after = out.v.length + out.e.length + out.f.length;
+  if (!after) { v.selectItems(v.edit.mode, [], "set"); return "Nothing left: the loop was all ends."; }
+  forgeTkSelect(v, out);
+  if (op === "growAlongLoop" && after === before) return pick.f.length === 1 ? "Pick two faces in a row: they say which way the strip runs." : "The loop is closed or meets a pole: nothing to grow into.";
+  return "";
+}
+
 /** Call a polyops function, whatever argument shape it takes: (m, items, opts) */
 function forgeTkCall(op, m, items, opts) {
   const P = window.ForgePoly, fn = P && P[op];
@@ -420,6 +437,13 @@ function forgeTkCommands() {
       if (!path.length) return "No path between those two vertices (different pieces?).";
       forgeTkSelect(v, { e: path }); return "Shortest edge path: " + path.length + " edges.";
     }],
+    // Select > Grow / Shrink Along Loop, Contiguous Edges, every Nth (forge_polyops.js; FORGE_MODELING_FOUNDATION stage 4)
+    growLoop: ["Grow Along Loop", (v) => forgeTkLoopSel(v, "growAlongLoop")],
+    shrinkLoop: ["Shrink Along Loop", (v) => forgeTkLoopSel(v, "shrinkAlongLoop")],
+    contiguousEdges: ["Contiguous Edges", (v) => forgeTkLoopSel(v, "contiguousEdges")],
+    everyNth2: ["Every 2nd", (v) => forgeTkLoopSel(v, "everyNth", 2)],
+    everyNth3: ["Every 3rd", (v) => forgeTkLoopSel(v, "everyNth", 3)],
+    everyNth4: ["Every 4th", (v) => forgeTkLoopSel(v, "everyNth", 4)],
     poke: ["Poke Face", run("poke")],
     addDivisions: ["Add Divisions", run("addDivisions")],
     flipTriangleEdge: ["Flip Triangle Edge", run("flipTriangleEdge")],

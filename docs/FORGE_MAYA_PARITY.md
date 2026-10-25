@@ -27,14 +27,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-276 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
+279 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 6 | 24 |
 | Edit | 14 | 57 |
 | Create | 7 | 66 |
-| Select | 27 | 79 |
+| Select | 30 | 79 |
 | Modify | 9 | 95 |
 | Display | 10 | 121 |
 | Windows | 12 | 80 |
@@ -249,9 +249,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `invert` Inverse (Maya: InvertSelection)
 - ✓ `selectSimilar` Similar (Maya: SelectSimilar)
 - ✓ `grow` Grow (Maya: GrowPolygonSelectionRegion)
-- - Grow Along Loop (Maya: GrowLoopPolygonSelectionRegion)
+- ✓ `growLoop` Grow Along Loop (Maya: GrowLoopPolygonSelectionRegion)
 - ✓ `shrink` Shrink (Maya: ShrinkPolygonSelectionRegion)
-- - Shrink Along Loop (Maya: ShrinkLoopPolygonSelectionRegion)
+- ✓ `shrinkLoop` Shrink Along Loop (Maya: ShrinkLoopPolygonSelectionRegion)
 - ✓ `objComp` Object/Component (Maya: SelectToggleMode)
 - - Components > Multi-Component (Maya: SelectMultiComponentMask)
 - ✓ `vertex` Components > Vertex (Maya: SelectVertexMask)
@@ -260,7 +260,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Components > Vertex Face (Maya: SelectVertexFaceMask)
 - ✓ `uv` Components > UV (Maya: SelectUVMask)
 - ✓ `uvShell` Components > UV Shell (Maya: SelectMeshUVShell)
-- - Contiguous Edges (Maya: SelectContiguousEdges)
+- ✓ `contiguousEdges` Contiguous Edges (Maya: SelectContiguousEdges)
 - ✓ `shortestPath` Shortest Edge Path Tool (Maya: SelectShortestEdgePathTool)
 - ✓ `convertToVerts` Convert Selection > To Vertices (Maya: ConvertSelectionToVertices)
 - - Convert Selection > To Vertex Faces (Maya: ConvertSelectionToVertexFaces)
