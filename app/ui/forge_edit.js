@@ -535,12 +535,44 @@ function forgeEditAttach(view, ctx) {
     for (const i of verts) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], m.v[i][d]); hi[d] = Math.max(hi[d], m.v[i][d]); }
     return [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
   }
-  view.pivotPoint = (verts) => forgePivotPoint(view.poly, verts || view.selectedVerts());
+  // the custom component pivot (Maya: D in component mode): kept while the selection stays the same, then dropped
+  const selKey = (verts) => verts.length + ":" + verts.slice().sort((a, b) => a - b).join(",") + ":" + (view.poly ? view.poly.v.length : 0);
+  function handlePoint(verts) {
+    const c = ed.customPivot;
+    if (c && c.key === selKey(verts)) return c.pos.slice();
+    if (c && !ed.pivotEdit) ed.customPivot = null;
+    return forgePivotPoint(view.poly, verts);
+  }
+  view.pivotPoint = (verts) => handlePoint(verts || view.selectedVerts());
+  view.customPivot = () => (ed.customPivot ? ed.customPivot.pos.slice() : null);
+  view.resetComponentPivot = () => { const had = !!ed.customPivot; ed.customPivot = null; placePivot(); return had; };
+  // D / Insert in component mode: the handle moves the pivot only (the components stay); every later move, rotate
+  // and scale of this selection turns about it. Snapping (x / c / v) works on it.
+  view.compPivotEdit = (on) => {
+    on = on == null ? !ed.pivotEdit : !!on;
+    if (on === !!ed.pivotEdit) return ed.pivotEdit;
+    if (on && (!view.poly || !view.selectedVerts().length)) return false;
+    ed.pivotEdit = on;
+    if (on) {
+      ed.toolBeforePivot = ed.tool;
+      if (gizmo.object) gizmo.detach();
+      placePivot(true);
+      gizmo.attach(pivot); gizmo.setMode("translate");
+    } else {
+      if (gizmo.object) gizmo.detach();
+      const back = ed.toolBeforePivot; ed.toolBeforePivot = null;
+      if (back) { gizmo.attach(pivot); gizmo.setMode(back); }
+      placePivot();
+    }
+    document.getElementById("forge-stage")?.classList.toggle("pivot-edit", on);
+    view.dirty = true;
+    return on;
+  };
   function placePivot() {
     if (edit) return;
     const verts = view.selectedVerts();
-    if (!view.poly || !verts.length || view.mode !== "poly") { if (gizmo.object) gizmo.detach(); return; }
-    pivot.position.fromArray(forgePivotPoint(view.poly, verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
+    if (!view.poly || !verts.length || view.mode !== "poly") { if (gizmo.object) gizmo.detach(); if (ed.pivotEdit) view.compPivotEdit(false); return; }
+    pivot.position.fromArray(handlePoint(verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
     pivot.updateMatrix();
     if (ed.tool && !gizmo.object) { gizmo.attach(pivot); gizmo.setMode(ed.tool); }
     view.dirty = true;
@@ -561,7 +593,7 @@ function forgeEditAttach(view, ctx) {
     if (!view.poly || !verts.length) return false;
     const radius = ed.prop ? ed.propRadius * (view.size || 1) : 0;
     edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: softWeights(view.poly, verts, radius),
-      pivot: forgePivotPoint(view.poly, verts), start: pivot.matrix.clone(), keep: ed.sel };
+      pivot: handlePoint(verts), start: pivot.matrix.clone(), keep: ed.sel };
     edit.sym = planSymmetry();
     return true;
   }
@@ -649,6 +681,7 @@ function forgeEditAttach(view, ctx) {
   }
   let shiftExtrude = false;
   gizmo.addEventListener("mouseDown", () => {
+    if (ed.pivotEdit) { edit = { kind: "pivot", verts: view.selectedVerts() }; return; }
     // Shift over the handle with EDGES or VERTICES picked: the pro edge / vertex extrude, then the drag moves them
     const P2 = window.ForgePoly;
     if (shiftHeld && view.poly && ed.mode !== "face" && P2 && (ed.mode === "edge" ? ed.sel.e.size && P2.extrudeEdges : ed.sel.v.size && P2.extrudeVerts)) {
@@ -682,6 +715,13 @@ function forgeEditAttach(view, ctx) {
     if (!begin("handle")) gizmo.detach();
   });
   gizmo.addEventListener("objectChange", () => {
+    if (edit && edit.kind === "pivot") {               // the pivot alone moves; the components stay
+      if (view.snapPivot) view.snapPivot(pivot);
+      pivot.updateMatrix();
+      ed.customPivot = { pos: pivot.position.toArray(), key: selKey(edit.verts) };
+      view.dirty = true;
+      return;
+    }
     if (!edit || edit.kind !== "handle") return;
     if (view.snapPivot) view.snapPivot(pivot);        // the pro x / c / v snapping (forge_pro.js) moves the handle first
     // scale the handle back through its centre and the axis sticks at 0: the components lie flat (Maya / Unreal)
@@ -694,6 +734,7 @@ function forgeEditAttach(view, ctx) {
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });
   gizmo.addEventListener("mouseUp", () => {
+    if (edit && edit.kind === "pivot") { edit = null; return; }
     if (edit && edit.kind === "handle") { commit(); stats(); }
     if (shiftExtrude) { shiftExtrude = false; if (view.undoClose) view.undoClose(); }
   });
@@ -831,6 +872,7 @@ function forgeEditAttach(view, ctx) {
   view.setMode = (m) => {
     const was = view.mode;
     if (m !== "poly" && ed.paint) view.paintSelect(false);
+    if (m !== "poly" && ed.pivotEdit) view.compPivotEdit(false);
     // one tool, two manipulators (the pro rule): the object manipulator never stays up in component mode - that
     // was why Shift over a face's handle duplicated the OBJECT instead of extruding the face - and the tool you had
     // carries across (move in object mode = move on the components, and back)

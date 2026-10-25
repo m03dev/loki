@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-284 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (26%).
+285 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (26%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -35,7 +35,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Edit | 14 | 57 |
 | Create | 8 | 66 |
 | Select | 30 | 79 |
-| Modify | 9 | 95 |
+| Modify | 10 | 95 |
 | Display | 10 | 121 |
 | Windows | 13 | 80 |
 | Mesh | 15 | 32 |
@@ -323,7 +323,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Match Transformations > Match Pivots (Maya: MatchPivots)
 - ✓ `centerPivot` Center Pivot (Maya: CenterPivot)
 - ✓ `resetPivot` Zero Pivot (Maya: ZeroPivot)
-- - Bake Pivot (Maya: BakeCustomPivot)
+- ✓ `bakePivot` Bake Pivot (Maya: BakeCustomPivot)
 - - Snap Align Objects > Point to Point (Maya: SnapPointToPoint)
 - - Snap Align Objects > 2 Points to 2 Points (Maya: Snap2PointsTo2Points)
 - - Snap Align Objects > 3 Points to 3 Points (Maya: Snap3PointsTo3Points)

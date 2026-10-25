@@ -246,6 +246,11 @@ function forgeHistApplyOp(base, op) {
         : op.op === "cleanup" ? fn(base, o) : fn(base, it, o);
       return out && out.m ? (out.warn ? base : out.m) : (out && out.v ? out : base);
     }
+    case "xform": {                                    // Freeze / Bake Pivot moved the whole mesh (a matrix)
+      const m = P.transform(base, op.m);
+      if (op.flip) m.f = m.f.map((f) => f.slice().reverse());
+      return m;
+    }
     case "tweak": {                                    // moved vertices (polyTweak): their new places
       const m = P.clone(base), t = op.verts || [];
       for (let k = 0; k + 3 < t.length; k += 4) if (m.v[t[k]]) m.v[t[k]] = [t[k + 1], t[k + 2], t[k + 3]];

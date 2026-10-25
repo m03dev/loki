@@ -92,6 +92,10 @@ Found and fixed in the cloud:
   File > New Scene, then Ctrl+Z - everything is back. Report anything odd.
 - Sets: Create > Sets > Quick Select Set and Windows > Sets (stage 4d). test_forge_sets_ui.
 - Paint Selection Tool (Select menu; stage 4e). test_forge_paintsel_ui.
+- Pivot: D / Insert in component mode places the components' own pivot; Modify > Bake Pivot; Freeze keeps quads
+  (stage 3b). test_forge_pivot2_ui.
+- [ ] [mac] Forge: a cube, F11, pick a face, E (rotate), hold D and drag the handle off to one side, let go, rotate -
+  the face swings round that point. Then F8, Modify > Pivot > Center Pivot, Modify > Bake Pivot: nothing moves.
 - [ ] [mac] Forge: a plane, F11, Select > Paint Selection Tool, drag over it; Ctrl + drag; [ and ]; W puts it down.
   Report how the brush feels (size, speed).
 - [ ] [mac] Forge: pick some faces, Create > Sets > Quick Select Set; F8, pick another object; Windows > Sets >

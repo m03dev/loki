@@ -170,7 +170,17 @@ function forgeProNudge(v, dx, dy) {               // Alt + arrows: a small step 
 // pivot edit mode (hold d, or Insert to toggle): the manipulator moves the pivot, not the object
 function forgeProPivotMode(v, on) {
   const t = forgeProTree(v), m = v.pro, tc = v.transform;
-  if (!t || !tc || forgeProComp(v)) return "";
+  if (forgeProComp(v)) {                           // component mode: the components' own pivot (Maya: D on components)
+    if (!v.compPivotEdit) return "";
+    const want = on == null ? !v.edit.pivotEdit : !!on;
+    if (want === !!v.edit.pivotEdit) return "";
+    const got = v.compPivotEdit(want);
+    if (want && !got) return "Pick components first, then D to place their pivot.";
+    if (t) t.pivotMode = got;
+    return got ? "Pivot edit: drag the handle to place the components' pivot (snap with x / c / v). Release D / Insert to use it."
+      : v.customPivot() ? "Custom pivot set: move, rotate and scale turn about it (Reset Pivot drops it)." : "";
+  }
+  if (!t || !tc) return "";
   if (on == null) on = !t.pivotMode;
   if (on === !!t.pivotMode) return "";
   const THREE = v.THREE;
@@ -470,7 +480,9 @@ function forgeProCommands() {
     textured: ["Textured", (v) => { v.setLook("clay", !v.clay); return v.clay ? "Clay (6 again for colours)." : "Colours and textures."; }],
     lights: ["Next Light", (v) => "Light: " + v.nextLight()],
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
-    resetPivot: ["Reset Pivot", (v) => (T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    resetPivot: ["Reset Pivot", (v) => (forgeProComp(v) && v.resetComponentPivot ? (v.resetComponentPivot() ? "The components' pivot is back in their middle." : "No custom pivot on these components.")
+      : T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    bakePivot: ["Bake Pivot", (v) => { if (forgeProComp(v)) return "Bake Pivot works on objects: F8 first."; const t = T(v); return t.bakePivot && t.bakePivot() ? "Pivot baked: it is the object's origin now, and the translate took its place. Nothing moved." : ""; }],
     pivotBottom: ["Pivot to Bottom", (v) => (T(v).pivotBottom() ? "Pivot on the bottom middle - the object stands on it." : "")],
     pivotOrigin: ["Pivot to World Origin", (v) => (T(v).pivotOrigin() ? "Pivot on the world origin." : "")],
     pivotToSelection: ["Pivot to Selection", (v) => (T(v).pivotToSelection() ? "Pivot on the middle of the picked components."

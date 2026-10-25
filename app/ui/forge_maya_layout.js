@@ -416,6 +416,10 @@ const FORGE_MAYA = {
     "resetPivot",
     "Zero Pivot"
    ],
+   [
+    "bakePivot",
+    "Bake Pivot"
+   ],
    "#Objects",
    [
     "makeLive",

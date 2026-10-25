@@ -20,7 +20,7 @@
 // the pro construction-history node for each Forge step
 const FORGE_HIST_NODE = { extrude: "polyExtrudeFace", inset: "polyExtrudeFace", flip: "polyNormal", delete: "deleteComponent",
   smooth: "polySmoothFace", deleteVerts: "deleteComponent", deleteEdges: "polyDelEdge", dynamesh: "polyRemesh",
-  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", merge: "polyMergeVert", fillHole: "polyCloseBorder", bevel: "polyBevel", tweak: "polyTweak" };
+  sculpt: "sculpt", loopCut: "polySplitRing", loopcut: "polySplitRing", mirror: "polyMirror", merge: "polyMergeVert", fillHole: "polyCloseBorder", bevel: "polyBevel", tweak: "polyTweak", xform: "transformGeometry" };
 
 function scnEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -219,6 +219,28 @@ function forgeSceneAttach(view, ctx) {
     if (typeof forgeNormals === "function") forgeNormals(sm);
     if (view.refreshMesh) view.refreshMesh();
     if (view.poly) { view.poly = null; view.tri2face = null; }         // the poly cage no longer matches
+    return true;
+  }
+
+  // a matrix into an object's geometry (content space). The working object keeps its poly cage (quads, the edge
+  // flow) when it has one - bakeRoot drops it - and a mirroring matrix flips the faces, so they still face out
+  function bakeContent(n, M) {
+    const P = window.ForgePoly, flip = M.determinant() < 0;
+    const move = (poly) => { const out = P.transform(poly, M.elements); if (flip) out.f = out.f.map((f) => f.slice().reverse()); return out; };
+    if (n.kind !== "mesh") return true;
+    if (n.root) {
+      if (view.poly && P && P.transform && view.showPoly) {
+        view.showPoly(move(view.poly), true, true);
+        // in the construction history too, so changing an earlier step (a cube's width ...) keeps the bake
+        if (typeof forgeHistPush === "function" && typeof forgeModel !== "undefined" && forgeModel.hist) forgeHistPush({ kind: "xform", m: M.elements.slice(), flip });
+        if (typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
+        return true;
+      }
+      return bakeRoot(M);
+    }
+    const sh = shapeOf(n);
+    if (sh) { sh.geometry.applyMatrix4(M); sh.geometry.computeBoundingBox(); sh.geometry.computeBoundingSphere(); }
+    if (n.poly && P && P.transform) n.poly = move(n.poly);
     return true;
   }
 
@@ -828,14 +850,27 @@ function forgeSceneAttach(view, ctx) {
       n.grp.updateMatrix(); n.inner.updateMatrix();
       const F = n.grp.matrix.clone().multiply(n.inner.matrix);          // content space -> parent space
       const W = n.grp.position.clone();                                 // the pivot, in the parent's space
-      if (n.kind === "mesh") {
-        if (n.root) { if (!bakeRoot(F)) return false; }
-        else { const s = shapeOf(n); if (s) { s.geometry.applyMatrix4(F); s.geometry.computeBoundingBox(); } }
-      }
+      if (!bakeContent(n, F)) return false;
       for (const k of kidsOf(n.id)) { k.grp.applyMatrix4(F); k.grp.updateMatrixWorld(true); }
       n.grp.quaternion.identity(); n.grp.scale.set(1, 1, 1);
       n.pc.set(0, 0, 0); n.piv.copy(W);
       place(n, new THREE.Vector3());
+      if (tree.selMarks) drawMarks();
+      return true;
+    },
+
+    // Modify > Bake Pivot (Maya: BakeCustomPivot): the pivot becomes the object's origin - the geometry and the
+    // children move under it, the translate takes the pivot's place. Nothing moves in the world.
+    bakePivot(id) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      if (n.piv.lengthSq() < 1e-18 && n.pc.lengthSq() < 1e-18) return true;
+      const T = n.grp.position.clone();                                  // = translate + pc + piv: stays put
+      const M = new THREE.Matrix4().makeTranslation(-n.piv.x, -n.piv.y, -n.piv.z);
+      if (!bakeContent(n, M)) return false;
+      for (const k of kidsOf(n.id)) { k.grp.applyMatrix4(M); k.grp.updateMatrixWorld(true); }
+      n.piv.set(0, 0, 0); n.pc.set(0, 0, 0);
+      place(n, T);
       if (tree.selMarks) drawMarks();
       return true;
     },
