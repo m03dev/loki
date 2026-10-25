@@ -77,8 +77,8 @@ async def main():
         await page.wait_for_function("document.querySelector('.live-meter') && document.querySelector('.live-meter').textContent.includes('qwen3.5')", timeout=10000)
         txt = await page.inner_text(".live-meter")
         title = await page.get_attribute(".live-meter", "title")
-        check("one small row under the steps: the model (short name), step, tokens, tok/s, time - details on hover",
-              txt.startswith("qwen3.5-abliterated-9b") and "step 2" in txt and "2.7k tok" in txt and "17 tok/s" in txt
+        check("one small row under the steps: the model (short name), tokens, tok/s, time (no step count) - details on hover",
+              txt.startswith("qwen3.5-abliterated-9b") and "step" not in txt and "2.7k tok" in txt and "17 tok/s" in txt
               and "9s" in txt.replace(" ", "") and "this computer" in title and "2,400 tokens in" in title, (txt, title))
         check("... it is the last line of the transcript (under the newest step)",
               await page.evaluate("document.getElementById('transcript').lastElementChild.classList.contains('live-meter')"))

@@ -164,6 +164,34 @@ res = local_agent.run(PUBREQ, wsn, BASE, "m", deny=())
 check("... a 'pushed!' that never reached the remote: NOT DONE", res["reply"].startswith("NOT DONE - the push did not reach")
       and "NOT pushed" in res["reply"], res["reply"][:300])
 
+# removing anything asks the owner first (the Mac 16:05: "remove chats" -> rm -rf .loki with no prompt)
+RM = ["THOUGHT: The old notes are not needed - I will delete junk/.\n```bash\nrm -rf junk\n```",
+      "OK.\n```bash\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"]
+asked = []
+for allow in (False, True):
+    STATE.update(script=RM, i=0, bodies=[])
+    wsr = Path(tempfile.mkdtemp(prefix="ws-rm-", dir=TMP)); (wsr / "junk").mkdir(); (wsr / "junk" / "a.txt").write_text("x")
+    local_agent.run("delete the junk folder", wsr, BASE, "m", deny=(), approve=lambda c, w, a=allow: (asked.append((c, w)), a)[1])
+    if not allow:
+        check("rm asks the owner first, with the command and why; Deny -> nothing removed", (wsr / "junk" / "a.txt").exists()
+              and asked and asked[0][0] == "rm -rf junk" and "old notes" in asked[0][1], asked)
+    else:
+        check("... Allow -> removed", not (wsr / "junk").exists())
+STATE.update(script=RM, i=0, bodies=[])
+wsr = Path(tempfile.mkdtemp(prefix="ws-rm-", dir=TMP)); (wsr / "junk").mkdir()
+local_agent.run("delete the junk folder", wsr, BASE, "m", deny=())
+check("... nobody there to ask (no approve) -> not removed", (wsr / "junk").is_dir())
+check("what counts as removing / overwriting", all(local_agent.needs_ok(c) for c in (
+    "rm -f a", "cd x && rm -r y", "git reset --hard HEAD~1", "git push --force origin main", "git clean -fd", "find . -name '*.tmp' -delete",
+    "loki chats delete --all", "sudo rm x")) and not any(local_agent.needs_ok(c) for c in (
+    "ls -la", "git status", "git push origin main", "echo firm > notes.txt", "python3 -m pip install form", "grep -r alarm .")))
+DOTLOKI = ["THOUGHT: remove chats.\n```bash\nrm -rf .loki\n```", "```bash\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"]
+STATE.update(script=DOTLOKI, i=0, bodies=[])
+wsd = Path(tempfile.mkdtemp(prefix="ws-dl-", dir=TMP)); (wsd / ".loki").mkdir(); (wsd / ".loki" / "loki_conversations.json").write_text("{}")
+local_agent.run("remove all the other chats", wsd, BASE, "m", deny=(), approve=lambda c, w: True)
+check("the .loki folder (the chats) is never touched, even when allowed - 'loki chats' is offered instead",
+      (wsd / ".loki" / "loki_conversations.json").exists() and "loki chats" in STATE["bodies"][1][1]["messages"][-1]["content"])
+
 code, out = local_agent.run_command("loki-make machines", TMP)
 check("the shell agent has LOKI's makers as a command: `loki-make machines` answers", code == 0 and '"machines"' in out, out[:300])
 code, out = local_agent.run_command("loki-make nonsense", TMP)
@@ -198,6 +226,15 @@ else:
     st = json.loads((Path(os.environ["LOKI_DATA"]) / "app" / "startup.json").read_text())
     check("startup timing: each step timed and saved to startup.json (Windows slow start)", [x[0] for x in st["steps"]] == ["a", "b"]
           and st["steps"][1][1] >= 0.04, st)
+    # `loki chats` - the real chat list
+    keep = loki.active_conversation_id()
+    others = [loki.new_conversation("old %d" % i) for i in range(2)]
+    loki.switch_conversation(keep)
+    code, out = loki._chats_command("loki chats list")
+    check("`loki chats list` lists LOKI's chats, marks the one in use", code == 0 and "(this chat)" in out and "old 1" in out, out)
+    code, out = loki._chats_command("loki chats delete --all")
+    check("`loki chats delete --all` deletes the others, keeps the chat in use", "deleted" in out
+          and [c["id"] for c in loki.list_conversations()] == [keep], (out, loki.list_conversations()))
     loki.MODELS["local"].base_url = BASE
     loki.MODELS["local"].model = "loki-qwen3.5-9b"
     loki.model_name = "local"

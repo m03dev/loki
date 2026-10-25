@@ -9223,6 +9223,23 @@ async def run_cli_harness(text: str, name: str, task: bool = False, preamble: st
     return reply
 
 
+def _chats_command(cmd: str):
+    """`loki chats list` / `loki chats delete <id>|--all` for the shell agent - LOKI's real chat list, never its files."""
+    parts = cmd.split()
+    if parts[:3] == ["loki", "chats", "list"] or parts[:2] == ["loki", "chats"] and len(parts) == 2:
+        rows = list_conversations()
+        return 0, "\n".join("%s  %s%s" % (c.get("id"), c.get("title") or "New chat",
+                                           "  (this chat)" if c.get("id") == active_conversation_id() else "")
+                             for c in rows) or "(no chats)"
+    if parts[:3] == ["loki", "chats", "delete"]:
+        current = active_conversation_id()
+        ids = [c.get("id") for c in list_conversations() if c.get("id") != current] if "--all" in parts[3:] else parts[3:]
+        gone = [i for i in ids if i != current and delete_conversation(i)]
+        return 0, "deleted %d chat%s%s" % (len(gone), "" if len(gone) == 1 else "s",
+                                           " (the chat you are in is kept)" if current in ids or "--all" in parts else "")
+    return 2, "usage: loki chats list | loki chats delete <id> ... | loki chats delete --all"
+
+
 _DSH_BROKEN: set = set()
 
 
@@ -9254,10 +9271,20 @@ async def run_local(text: str, name: str, task: bool = False, preamble: str = ""
     __import__("local_agent").protect(WORKSPACE)          # .loki/ (the chats) never ends up in a git commit
     goal = ("%s\n\n%s" % (preamble, text)) if preamble else text
     _progress("thinking", "Working with %s %s - shell commands, one by one..." % (model, where))
+    loop = asyncio.get_running_loop()
+
+    def ask_owner(cmd: str, why: str) -> bool:      # the same Allow / Deny card as LOKI's other risky actions
+        detail = "%s\n\n$ %s\n\nin %s" % (why or "The agent wants to remove or overwrite something.", cmd[:3000], WORKSPACE)
+        try:
+            return bool(asyncio.run_coroutine_threadsafe(approve("Remove / overwrite", detail, False), loop).result(900))
+        except Exception:  # noqa: BLE001 - no answer = no
+            return False
+
     res = await asyncio.to_thread(local_agent.run, goal, WORKSPACE, str(cfg.base_url), model,
                                   key=str(cfg.api_key or ""), deny=_DESTRUCTIVE_SNIPPETS, progress=_progress,
                                   cancelled=_cancel_event.is_set, history=history,
-                                  max_steps=int(os.getenv("LOKI_LOCAL_AGENT_STEPS", "30")))
+                                  max_steps=int(os.getenv("LOKI_LOCAL_AGENT_STEPS", "30")),
+                                  approve=ask_owner, builtins=_chats_command)
     _task_ok_calls, _task_failed_calls = int(res.get("commands") or 0), (0 if res.get("ok") else 1)
     reply = res.get("reply") or ""
     messages.append({"role": "assistant", "content": reply})

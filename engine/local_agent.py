@@ -52,6 +52,10 @@ Rules:
   Push refused (403 / 401 / "Permission denied" / "Authentication failed"): run `gh auth setup-git` once (git then uses
   gh's login) and push again. Still refused: STOP and tell the owner exactly what to run (e.g. `gh auth login`).
   The remote is always called origin.
+- LOKI's chats are not files: never touch the .loki folder. List them with `loki chats list`, delete with
+  `loki chats delete <id>` or `loki chats delete --all` (keeps the chat you are in). The owner is asked first.
+- Deleting or overwriting anything (rm, mv over a file, git reset --hard, git clean, force push ...) is fine when
+  asked - LOKI shows the owner your THOUGHT and the command and waits for Allow. Say in your THOUGHT exactly what goes.
 - Never repeat what already failed. Two failures of the same kind = change approach or stop and explain.
 - QUESTION: when you need the owner's decision (overwrite? which one? a login?), reply with one line
   QUESTION: <your question>   and no code block. You stop there; the owner's answer comes as the next message.
@@ -207,7 +211,7 @@ LAST_USAGE: dict = {}       # the last reply's tokens, for the live meter (chat(
 def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str = "", max_steps: int = 30,
         wall_s: float = 1800, deny: tuple = (), progress: Callable[[str, str], None] | None = None,
         cancelled: Callable[[], bool] | None = None, ask: Callable = None, execute: Callable = None,
-        history: list | None = None) -> dict:
+        history: list | None = None, approve: Callable | None = None, builtins: Callable | None = None) -> dict:
     """Run the task to the end with the local model. ask(messages) -> reply text and execute(cmd) -> (code, output)
     can be swapped (tests); history: earlier [user, assistant] turns of the chat, for context."""
     ws = Path(workspace)
@@ -290,8 +294,22 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
             msgs.append({"role": "user", "content": observation(126, "REFUSED by LOKI: '%s' is a dangerous command "
                                                                      "and never runs. Do it another way." % hit.strip())})
             continue
+        if ".loki" in cmd and not re.match(r"^\s*loki\s+chats\b", cmd):
+            msgs.append({"role": "user", "content": observation(126, "REFUSED by LOKI: .loki is LOKI's own private data "
+                                                                     "(the chats). Use `loki chats list` / `loki chats "
+                                                                     "delete` instead.")})
+            continue
+        if needs_ok(cmd):
+            # removes or overwrites something: the owner sees what and why, and says yes first (owner 2026-10-25:
+            # "i asked it to remove chats ... it didn't prompt me anything and just said it deleted stuff")
+            ok = approve(cmd, (thought or "")[:600]) if approve else False
+            if not ok:
+                say("error", "Not allowed: " + cmd[:200])
+                msgs.append({"role": "user", "content": observation(126, "NOT RUN - the owner did not allow it%s." % (
+                    "" if approve else " (nobody is there to ask)"))})
+                continue
         say("tool", "$ " + cmd[:400])
-        code, out = execute(cmd)
+        code, out = (builtins(cmd) if builtins and re.match(r"^\s*loki\s+chats\b", cmd) else None) or execute(cmd)
         ran.append((cmd, code))
         fails.append(_failure_key(code, out))
         if len(fails) >= 3 and fails[-1] and fails[-1] == fails[-2] == fails[-3]:
@@ -328,6 +346,17 @@ def _git_repos(ws: Path, chs: list) -> list:
                 repos.add(Path(*parts[:i]) if i else Path("."))
                 break
     return sorted(repos)
+
+
+_RISKY = re.compile(r"(^|[;&|(]\s*|\b(sudo|xargs|exec)\s+)(rm|rmdir|unlink|shred|srm|trash|del|erase|rd|Remove-Item)\b"
+                    r"|\bgit\s+(reset\s+--hard|clean\b|push\b[^\n]*(--force|\s-f\b)|branch\s+-D|checkout\s+--|stash\s+(drop|clear))"
+                    r"|\bfind\b[^\n]*\s-delete\b|\bmv\b[^\n]*\s-f\b|\bloki\s+chats\s+delete\b|\btruncate\b"
+                    r"|\bdropdb\b|\bDROP\s+(TABLE|DATABASE)\b", re.I)
+
+
+def needs_ok(cmd: str) -> bool:
+    """Does this command remove or overwrite something (so the owner is asked first)?"""
+    return bool(_RISKY.search(cmd or ""))
 
 
 def _failure_key(code: int, out: str) -> str:
