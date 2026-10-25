@@ -115,6 +115,7 @@ const FORGE_KEY_GROUPS = [
   ["Windows", ["channelBox", "outliner", "winOutliner", "winChannel", "winCreate", "winMaterials", "winShelf", "winToolkit", "winCreature", "wheel", "hotkeyEditor"]],
 ];
 
+const FORGE_MAC_SYSTEM_KEYS = new Set(["h", "q", "w", "m"]);   // Cmd+H / Q / W / M: macOS's, never Forge's
 const forgeIsMac = () => /Mac|iPhone|iPad/.test((typeof navigator !== "undefined" && (navigator.platform || navigator.userAgent)) || "");
 
 /** The chord a key event is: "ctrl+shift+z", "alt+d", ">", "f8", "arrowup" ... or "" for a lone modifier. */
@@ -134,6 +135,10 @@ function forgeKeyChord(e) {
   } else k = k.toLowerCase();
   if (k === "backspace") k = "delete";   // one key: the Mac's delete key sends Backspace, the PC's Delete key Delete
   if (k === "+" && !e.shiftKey) shiftCounts = false;
+  // macOS owns Cmd+H (Hide Loki - the whole window vanished while modelling: owner 2026-10-25 "it crashed ... a hot key"),
+  // Cmd+Q (Quit), Cmd+W (Close) and Cmd+M (Minimize): Forge never takes those. On a Mac their Forge commands are on
+  // the real Control key instead (Control+H = Hide, as in the pro tool on a Mac).
+  if (forgeIsMac() && e.metaKey && !e.ctrlKey && !e.altKey && FORGE_MAC_SYSTEM_KEYS.has(k)) return "";
   const parts = [];
   if (e.ctrlKey || e.metaKey) parts.push("ctrl");
   if (e.altKey) parts.push("alt");
@@ -146,7 +151,9 @@ function forgeKeyChord(e) {
 function forgeKeyLabel(chord) {
   if (!chord) return "";
   const mac = forgeIsMac();
-  const names = { ctrl: mac ? "Cmd" : "Ctrl", alt: mac ? "Option" : "Alt", shift: "Shift", space: "Space", enter: "Enter",
+  // a Cmd+H / Q / W / M chord is pressed with the real Control key on a Mac (see forgeKeyChord)
+  if (mac && /^ctrl\+(shift\+)?[hqwm]$/.test(chord) && !/alt/.test(chord)) return forgeKeyLabel(chord.replace(/^ctrl/, "__control"));
+  const names = { __control: "Control", ctrl: mac ? "Cmd" : "Ctrl", alt: mac ? "Option" : "Alt", shift: "Shift", space: "Space", enter: "Enter",
     delete: "Delete", backspace: "Backspace", insert: "Insert", home: "Home", end: "End", arrowup: "Up", arrowdown: "Down",
     arrowleft: "Left", arrowright: "Right", escape: "Esc", tab: "Tab", pageup: "PageUp", pagedown: "PageDown" };
   return chord.split("+").filter((x, i, a) => x || i === a.length - 1).map((p) => names[p] || (p.length === 1 ? p.toUpperCase() : p.replace(/^f(\d+)$/, "F$1")))
