@@ -19,6 +19,23 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 08:30) - LOKI's agent is now OpenCode + CodeGraph. Verify on the Mac and the PC. [either]
+
+Owner: "replace it ... just make my agent actually work" (picked: a proven agent + CodeGraph). docs/AGENT_ENGINE.md.
+The window's chat and Build tasks now run `opencode run --format json` in the workspace with LOKI's providers and
+CodeGraph as MCP. LOKI's own loop no longer answers the window.
+- [ ] [mac] [win] Pull, quit LOKI fully, start it. Settings > Agents: the card must show OpenCode's path (the Mac has
+  ~/.opencode/bin/opencode) and CodeGraph. If either says "not installed", press Install and report the result line.
+- [ ] [mac] [win] Build mode: "use git bash to make a new git repo called loki-test-repo with a src folder, a README.md
+  and src/main.py that prints hello, then commit it and show me git log". Then check
+  `git -C "<workspace>/loki-test-repo" log` yourself. Report: the reply, the tools shown in the work strip, the
+  provider/model, and whether the repo is real.
+- [ ] [mac] [win] If OpenCode errors with a provider (look at <data>/opencode/opencode.json, never paste keys), report
+  which provider and the error line. `opencode run --format json --dir <ws> --model loki-<p>/<m> "say hi"` with
+  OPENCODE_CONFIG=<data>/opencode/opencode.json reproduces it outside LOKI.
+- [ ] [either] Next stage: move background jobs / teams (workers.py run_job) to `opencode run` the same way, then
+  delete the old loop's chat path. Keep `tests/test_opencode_engine.py` green.
+
 ### From Claude (2026-10-25 07:55) - LOKI said "Done! I created the repo" and nothing was made. Fixed; verify on the Mac now. [mac]
 
 What happened on the owner's Mac (~/LOKI Projects/Home/.loki/loki_conversations.json, 07:44): the chat answered "Done! I

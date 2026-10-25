@@ -539,7 +539,11 @@ class BridgeState:
             if isinstance(spent, list):
                 spent.clear()
             try:
-                answer = await self.agent.run_agent(prompt)
+                # the agent is OpenCode + CodeGraph (engine/opencode_engine.py); LOKI_AGENT_ENGINE=loki = the old loop
+                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() == "opencode":
+                    answer = await self.agent.run_opencode(prompt)
+                else:
+                    answer = await self.agent.run_agent(prompt)
                 self.push_progress(chat_id, "done", "Response ready.")
                 return {"ok": True, "response": answer, "chat_id": chat_id, "usage": usage_total(spent),
                         **memory_metadata(self.agent)}
@@ -586,7 +590,10 @@ class BridgeState:
             self.agent.clear_cancel()
             stop_heartbeat = self._start_heartbeat(task_id)
             try:
-                summary = await self.agent.pursue_goal(task)
+                if hasattr(self.agent, "run_opencode") and self.agent.opencode_engine.engine_choice() == "opencode":
+                    summary = await self.agent.run_opencode(task, task=True)
+                else:
+                    summary = await self.agent.pursue_goal(task)
                 text = (summary or "").strip() or "Task finished."
                 self.push_progress(task_id, "done", text)
                 return {"ok": True, "response": text, "chat_id": task_id}
@@ -1042,6 +1049,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import carbon_editor  # pylint: disable=import-outside-toplevel
             self._send_json(*carbon_editor.route("GET", route))
             return
+        if route == "/agent/engine":   # the agent: OpenCode + CodeGraph (engine/opencode_engine.py)
+            self._send_json(200, {"ok": True, **self.server.state.agent.engine_status()})
+            return
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             q = {k: (v[0] if v else "") for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1387,6 +1397,26 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(413, {"ok": False, "error": "Request body is too large."})
                 return
             self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
+            return
+        if route in ("/agent/engine/install", "/agent/engine/set"):   # Settings > Agent
+            body = self._read_json() if int(self.headers.get("Content-Length", "0") or 0) > 0 else {}
+            if body is None:
+                return
+            agent = self.server.state.agent
+            if route.endswith("/set"):
+                choice = "loki" if str(body.get("engine", "")).lower() == "loki" else "opencode"
+                os.environ["LOKI_AGENT_ENGINE"] = choice
+                try:
+                    where = Path(agent.DATA_DIR) / "opencode"
+                    where.mkdir(parents=True, exist_ok=True)
+                    (where / "engine.txt").write_text(choice, encoding="utf-8")
+                except OSError:
+                    pass
+                self._send_json(200, {"ok": True, **agent.engine_status()})
+            else:
+                done = agent.opencode_engine.install(body.get("which") or ("opencode", "codegraph"))
+                self._send_json(200, {"ok": all(v in ("ok", "already") for v in done.values()), "result": done,
+                                      **agent.engine_status()})
             return
         if route.startswith("/farm/") or route.startswith("/carbon/"):   # Studio's farm / the Engine tab's Carbon Editor
             body = self._read_json() if int(self.headers.get("Content-Length", "0") or 0) > 0 else {}

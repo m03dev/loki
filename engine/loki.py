@@ -8917,6 +8917,137 @@ async def run_agent(user_message: str) -> str:
         _record_experience("chat", user_message, status, started, start_index)
 
 
+# ---------------------------------------------------------------------------
+# The agent is OpenCode + CodeGraph (engine/opencode_engine.py; owner 2026-10-25: "replace it ... just make my agent
+# actually work"). The window's chat and tasks call run_opencode; LOKI's own loop below stays only for background jobs
+# and teams until they move too (docs/AGENT_ENGINE.md), and for LOKI_AGENT_ENGINE=loki.
+# ---------------------------------------------------------------------------
+import opencode_engine  # noqa: E402
+
+OC_SESSIONS = opencode_engine.Sessions(DATA_DIR / "opencode" / "sessions.json")
+try:   # Settings > Agents remembers the choice (opencode, or the old loop)
+    _saved_engine = (DATA_DIR / "opencode" / "engine.txt").read_text(encoding="utf-8").strip()
+    if _saved_engine in ("opencode", "loki"):
+        os.environ.setdefault("LOKI_AGENT_ENGINE", _saved_engine)
+except OSError:
+    pass
+
+
+def _oc_providers(first: str) -> dict:
+    """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider."""
+    order, seen = [first] + [p for p in SMART_ORDER if p != first] + [n for n in MODELS if n not in SMART_ORDER], set()
+    out = {}
+    for name in order:
+        if name in seen or name not in MODELS:
+            continue
+        seen.add(name)
+        cfg = MODELS[name]
+        base = str(cfg.base_url or "")
+        if not base.startswith("http") or not provider_configured(name):
+            continue
+        model = resolve_local_model(name) if "11434" in base else cfg.model
+        out[name] = {"base_url": base, "model": model, "key": str(cfg.api_key or "")}
+        if len(out) >= 6:
+            break
+    return out
+
+
+def engine_status() -> dict:
+    oc, cg = opencode_engine.find_opencode(), opencode_engine.find_codegraph()
+    return {"engine": opencode_engine.engine_choice(), "opencode": oc, "codegraph": cg,
+            "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),
+            "indexed": (WORKSPACE / ".codegraph").is_dir()}
+
+
+async def run_opencode(text: str, task: bool = False) -> str:
+    """One chat message (or a Build task) done by OpenCode in the workspace, with CodeGraph; LOKI reports every tool."""
+    global _task_ok_calls, _task_failed_calls
+    exe = opencode_engine.find_opencode()
+    messages.append({"role": "user", "content": text})
+    if not exe:
+        reply = ("NOT DONE - LOKI's agent is OpenCode now and it is not installed on this computer. Install it once: "
+                 "Settings > Agent > Install (or run `%s`, and `%s` for the code map), then send this again."
+                 % (opencode_engine.INSTALL["opencode"], opencode_engine.INSTALL["codegraph"]))
+        messages.append({"role": "assistant", "content": reply})
+        save_history()
+        return reply
+    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    cg = opencode_engine.find_codegraph()
+    if cg and not (WORKSPACE / ".codegraph").is_dir():
+        _progress("thinking", "CodeGraph: indexing the workspace once (it keeps itself up to date after)...")
+        note = await asyncio.to_thread(opencode_engine.ensure_index, str(WORKSPACE), cg)
+        if note:
+            _progress("thinking", note)
+    plan = AGENT_MODE in ("ask", "plan")
+    first = active_model_name()
+    pinned = os.getenv("LOKI_OPENCODE_MODEL", "").strip()          # provider/model of OpenCode's own (e.g. Zen)
+    providers = _oc_providers(first) if not pinned else {}
+    cfg_dir = DATA_DIR / "opencode"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = cfg_dir / "opencode.json"
+    cfg_path.write_text(json.dumps(opencode_engine.build_config(providers, cg if cg else "", plan, _DESTRUCTIVE_SNIPPETS),
+                                   indent=1), encoding="utf-8")
+    env = opencode_engine.env_for(providers)
+    conv = active_conversation_id() or "default"
+    session = OC_SESSIONS.get(conv)
+    models = ([pinned] if pinned else ["%s/%s" % (opencode_engine.provider_id(n), p["model"]) for n, p in providers.items()]) or [""]
+
+    def on_event(ev: dict) -> None:
+        kind, part = ev.get("type"), ev.get("part") or {}
+        if kind == "tool_use":
+            name, status, shown, out = opencode_engine.tool_summary(part)
+            _progress("tool", "%s %s" % (name, shown))
+            _progress("tool_result" if status == "completed" else "error", ("%s: %s" % (name, out or status))[:400])
+        elif kind == "text" and part.get("text"):
+            _progress("assistant", str(part["text"])[:300])
+        elif kind == "step_start":
+            _progress("thinking", "OpenCode is working...")
+
+    prompt = text if not task else ("GOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
+                                    "before you say it is done." % text)
+    result: dict = {}
+    used = ""
+    for model in models[:3]:
+        _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
+        result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
+                                         config_path=str(cfg_path), env=env, session=session, model=model,
+                                         agent="plan" if plan else "", on_event=on_event,
+                                         cancelled=_cancel_event.is_set)
+        used = model
+        if result.get("session"):
+            session = result["session"]
+            OC_SESSIONS.set(conv, session)
+        if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
+            break
+        _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))
+    ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
+    _task_ok_calls, _task_failed_calls = ok, failed
+    reply = result.get("text") or ""
+    if result.get("error") and not reply:
+        reply = "NOT DONE - OpenCode stopped: %s" % result["error"]
+    elif not plan and _claims_unbacked(text, reply):
+        # OpenCode is a real agent, but the MODEL behind it can still just say "done": once, make it really do it
+        _progress("thinking", "Checked: it says done, but no tool ran - asking it to really do it.")
+        again = await asyncio.to_thread(
+            opencode_engine.run_turn, "You said it is done, but no tool ran, so nothing happened on this computer. "
+            "Do it now with your tools (bash, write, edit) and check the result. If you cannot, say it was NOT done.",
+            str(WORKSPACE), exe=exe, config_path=str(cfg_path), env=env, session=session, model=used, agent="",
+            on_event=on_event, cancelled=_cancel_event.is_set)
+        ok2, failed2 = opencode_engine.tool_counts(again.get("tools") or [])
+        _task_ok_calls, _task_failed_calls = ok + ok2, failed + failed2
+        reply = again.get("text") or reply
+        if _claims_unbacked(text, reply):
+            reply = _not_done_note(reply)
+    if not reply:
+        reply = "(OpenCode finished without a reply.)"
+    tools = result.get("tools") or []
+    if tools and not plan:
+        reply += "\n\n" + "Tools run: %d ok%s." % (_task_ok_calls, (", %d failed" % _task_failed_calls) if _task_failed_calls else "")
+    messages.append({"role": "assistant", "content": reply})
+    save_history()
+    return reply
+
+
 async def pursue_goal(goal: str) -> str:
     started, start_index = _start_request()
     status = "error"

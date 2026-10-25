@@ -171,3 +171,16 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
   .loki-split.chat-first > .chat-col { grid-row: 2; border-inline-end: 0; }
   .chat-edge { display: none; }
 }
+
+/* the agent card (agent_engine.js): Settings > Agents, and the notice over the chat when OpenCode is missing */
+.ae-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; background: rgba(255, 255, 255, .03); }
+.ae-title { margin: 0 0 4px; font-size: 14px; }
+.ae-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 4px 0; font-size: 12.5px; }
+.ae-label { color: var(--muted); }
+.ae-val { overflow-wrap: anywhere; }
+.ae-val.bad { color: var(--warn, #e3c07d); }
+.ae-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.ae-card .note.bad { color: var(--err, #ff8a8a); }
+.ae-notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px clamp(10px, 3%, 18px) 0; padding: 8px 12px;
+  border-radius: 10px; border: 1px solid rgba(227, 192, 125, .4); background: rgba(227, 192, 125, .1); font-size: 12.5px; }
+.ae-notice[hidden] { display: none; }
