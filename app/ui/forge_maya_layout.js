@@ -977,8 +977,20 @@ const FORGE_MAYA = {
   "Mesh Display": [
    "#Normals",
    [
+    "averageNormals",
+    "Average"
+   ],
+   [
+    "conformNormals",
+    "Conform"
+   ],
+   [
     "reverse",
     "Reverse"
+   ],
+   [
+    "setToFace",
+    "Set to Face"
    ],
    "-",
    [
@@ -1344,10 +1356,14 @@ const FORGE_MAYA = {
     "SE": {
      "title": "Vertex Normals",
      "ring": {
-      "S": "vertexNormals"
+      "S": "vertexNormals",
+      "NE": "averageNormals",
+      "SE": "setToFace"
      },
      "labels": {
-      "S": "Toggle Vertex Normal Display"
+      "S": "Toggle Vertex Normal Display",
+      "NE": "Average Normals",
+      "SE": "Set Normals to Face"
      },
      "list": []
     },
@@ -1538,10 +1554,12 @@ const FORGE_MAYA = {
      "title": "Face Normals",
      "ring": {
       "S": "faceNormals",
+      "SE": "conformNormals",
       "E": "reverse"
      },
      "labels": {
       "S": "Toggle Face Normal Display",
+      "SE": "Conform Normals",
       "E": "Reverse Normals"
      },
      "list": []

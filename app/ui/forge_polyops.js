@@ -2150,6 +2150,51 @@
     if (!done.length) return fail(m0, "Flip Triangle Edge: pick edges between two triangles.");
     return finish(m, edgeSel(done));
   };
+  // Conform (Maya: Mesh Display > Conform, polyNormal -normalMode 2): every connected piece's faces turn the same way
+  // as their neighbours (two faces sharing an edge must run it in opposite directions). Each piece keeps the way most
+  // of its faces already faced; a tie on a closed piece goes outward. Only the picked faces may flip (none: all).
+  P.conformNormals = (m0, faces) => {
+    const T = P.topology(m0), m = cp(m0), nF = m0.f.length;
+    const may = faces && faces.length ? new Set(faceIds(m0, faces)) : null;
+    const flip = new Int8Array(nF), seen = new Uint8Array(nF);
+    // does face g run edge (a, b) the same way as face f? then one of them must flip
+    const dirIn = (f, a, b) => { for (let k = 0; k < f.length; k++) { if (f[k] === a && f[(k + 1) % f.length] === b) return 1; if (f[k] === b && f[(k + 1) % f.length] === a) return -1; } return 0; };
+    let flipped = 0;
+    for (let s0 = 0; s0 < nF; s0++) {
+      if (seen[s0]) continue;
+      const shell = [s0];
+      seen[s0] = 1; flip[s0] = 0;
+      for (let q = 0; q < shell.length; q++) {
+        const fi = shell[q], f = m0.f[fi];
+        for (const ei of T.faceEdges[fi]) {
+          const e = T.edges[ei];
+          if (e.faces.length !== 2) continue;              // a border, or non-manifold: no rule there
+          const g = e.faces[0] === fi ? e.faces[1] : e.faces[0];
+          if (seen[g]) continue;
+          const same = dirIn(f, e.a, e.b) === dirIn(m0.f[g], e.a, e.b);
+          flip[g] = same ? 1 - flip[fi] : flip[fi];
+          seen[g] = 1; shell.push(g);
+        }
+      }
+      // keep the majority; with some faces picked, the ones NOT picked cannot turn, so they decide. A tie on a
+      // closed piece: outward
+      const fixed = may ? shell.filter((fi) => !may.has(fi)) : [];
+      const vote = fixed.length ? fixed : shell;
+      let nFlip = 0, n = vote.length;
+      for (const fi of vote) nFlip += flip[fi];
+      let invert = nFlip * 2 > n;
+      if (nFlip * 2 === n && n) {
+        const piece = { v: m0.v, f: shell.map((fi) => (flip[fi] ? m0.f[fi].slice().reverse() : m0.f[fi])) };
+        if (P.volume && P.volume(piece) < 0) invert = true;
+      }
+      for (const fi of shell) {
+        const want = invert ? 1 - flip[fi] : flip[fi];
+        if (want && (!may || may.has(fi))) { m.f[fi] = m0.f[fi].slice().reverse(); flipped++; }
+      }
+    }
+    if (!flipped) return { m: cp(m0), sel: { v: [], e: [], f: faces ? faceIds(m0, faces) : [] }, warn: "" };
+    return finish(m, { v: [], e: [], f: faces ? faceIds(m0, faces) : [] });
+  };
   // Edit Edge Flow (Maya polyEditEdgeFlow): each vertex of the picked edges moves onto the curve its neighbours
   // ACROSS the loop make - a cubic through the two vertices on either side (spaced by their edge lengths) - so a loop
   // sits in the surface's curvature instead of cutting a flat line through it. opts.adjust 0..1 (1 = onto the curve).

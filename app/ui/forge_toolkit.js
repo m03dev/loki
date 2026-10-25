@@ -49,6 +49,7 @@ const FORGE_TK_TOOLS = {
   insertEdgeLoop: ["Insert Edge Loop", "insertEdgeLoop", "e1", [["t", "Position", 0.01, 0.99, 0.01, 0.5], ["count", "Number of loops", 1, 64, 1, 1], ["equalDistance", "Equal distance", 0, 1, 1, 0]], "A loop across the ring of quads the edge crosses."],
   addDivisions: ["Add Divisions", "addDivisions", "f*", [["divisions", "Divisions", 1, 4, 1, 1]], "Split each picked face into quads round its middle (neighbours keep the new edge points, so nothing opens)."],
   flipTriangleEdge: ["Flip Triangle Edge", "flipTriangleEdge", "e", [], "Turn the edge between two triangles to join their other two corners."],
+  conformNormals: ["Conform", "conformNormals", "f", [], "Turn every face the same way as its neighbours (most of each piece wins; a tie faces out)."],
   editEdgeFlow: ["Edit Edge Flow", "editEdgeFlow", "e", [["adjust", "Adjust", 0, 1, 0.01, 1]], "Fit the picked loops to the surface's curve (their neighbours across): a flat cut through a round shape comes round."],
   symmetrize: ["Symmetrize", "symmetrize", "f*", [["axis", "Axis", 0, 0, 0, "x", ["x", "y", "z"]], ["direction", "Keep side", 0, 0, 0, "+", ["+", "-"]]], "Copy one side of the mesh onto the other (cut on the plane, mirrored, welded)."],
   flipMesh: ["Flip", "flipMesh", "f*", [["axis", "Axis", 0, 0, 0, "x", ["x", "y", "z"]]], "Mirror the mesh in place across the plane through its origin."],
@@ -61,7 +62,7 @@ const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExt
   triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
   averageVerts: "polyAverageVertex", flatten: "polyMoveVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
   softenEdges: "polySoftEdge", hardenEdges: "polySoftEdge", softHard: "polySoftEdge",
-  slideEdge: "polyTweak", addDivisions: "polySubdFacet", flipTriangleEdge: "polyFlipEdge", editEdgeFlow: "polyEditEdgeFlow", symmetrize: "polySymmetrize", flipMesh: "polyFlip", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
+  slideEdge: "polyTweak", addDivisions: "polySubdFacet", flipTriangleEdge: "polyFlipEdge", editEdgeFlow: "polyEditEdgeFlow", conformNormals: "polyNormal", symmetrize: "polySymmetrize", flipMesh: "polyFlip", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
 
 const forgeTk = { last: null, tool: null };          // last: the op whose settings are live; tool: an interactive tool
@@ -163,7 +164,7 @@ function forgeTkCall(op, m, items, opts) {
 }
 
 // tools that work on the whole mesh when the object is picked with no components (Maya's behaviour per object)
-const FORGE_TK_WHOLE = { bevel: { e: 1 }, poke: "f", extrudeFaces: "f", flatten: "v", addDivisions: "f", symmetrize: "f", flipMesh: "f", softenEdges: { e: 1 }, hardenEdges: { e: 1 }, softHard: { e: 1 } };
+const FORGE_TK_WHOLE = { conformNormals: "f", bevel: { e: 1 }, poke: "f", extrudeFaces: "f", flatten: "v", addDivisions: "f", symmetrize: "f", flipMesh: "f", softenEdges: { e: 1 }, hardenEdges: { e: 1 }, softHard: { e: 1 } };
 /** Every face / edge / vertex of the mesh, in the form a tool takes ("f", "v", or { e } for the fe / edge tools). */
 function forgeTkWhole(v, kind) {
   const m = v.poly;
@@ -456,6 +457,7 @@ function forgeTkCommands() {
     addDivisions: ["Add Divisions", run("addDivisions")],
     flipTriangleEdge: ["Flip Triangle Edge", run("flipTriangleEdge")],
     editEdgeFlow: ["Edit Edge Flow", run("editEdgeFlow")],
+    conformNormals: ["Conform", run("conformNormals")],
     // Edit Mesh > Transform (Maya: MovePolygonComponent): the move handle on the components, along their normal
     transformComp: ["Transform", async (v) => { if (!comp(v)) await toComp(v, "face"); await forgeProRun(v, "move"); return forgeProSpace(v, "normal"); }],
     symmetrize: ["Symmetrize", run("symmetrize")],

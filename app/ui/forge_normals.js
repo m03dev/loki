@@ -187,6 +187,10 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   const C = FORGE_PRO_CMDS;
   C.softEdge = ["Soften Edge", () => forgeNrmApply("softenEdges", {}, "Soften Edge")];
   C.hardEdge = ["Harden Edge", () => forgeNrmApply("hardenEdges", {}, "Harden Edge")];
+  // Mesh Display > Set to Face / Average (Maya's vertex-normal rows): the picked faces' (or the object's) edges
+  // hard - faceted - or soft - smooth
+  C.setToFace = ["Set to Face", () => forgeNrmApply("hardenEdges", {}, "Set to Face")];
+  C.averageNormals = ["Average", () => forgeNrmApply("softenEdges", {}, "Average")];
   C.softHard = ["Soften/Harden Edges (30°)", () => forgeNrmApply("softHard", { angle: forgeNrmPrefs().angle }, "Soften/Harden Edges")];
   C.softHardAngle = ["Soften/Harden Angle...", () => {
     const p = forgeNrmPrefs(), opts = [10, 20, 30, 45, 60, 90, 120, 180];

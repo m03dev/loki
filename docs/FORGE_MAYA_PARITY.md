@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-302 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (27%).
+308 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (28%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -41,7 +41,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Mesh | 19 | 32 |
 | Edit Mesh | 24 | 30 |
 | Mesh Tools | 23 | 34 |
-| Mesh Display | 4 | 38 |
+| Mesh Display | 7 | 38 |
 | Curves | 0 | 36 |
 | Surfaces | 0 | 41 |
 | Deform | 0 | 75 |
@@ -49,9 +49,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Key | 4 | 36 |
 | Playback | 5 | 27 |
 | Shift+RMB object | 30 | 47 |
-| Shift+RMB vertex | 14 | 26 |
+| Shift+RMB vertex | 16 | 26 |
 | Shift+RMB edge | 27 | 37 |
-| Shift+RMB face | 24 | 36 |
+| Shift+RMB face | 25 | 36 |
 | Shift+RMB default | 7 | 32 |
 | zones | 15 | 45 |
 
@@ -709,10 +709,10 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ### Mesh Display
 
-- - Average (Maya: AveragePolygonNormals)
-- - Conform (Maya: ConformPolygonNormals)
+- ✓ `averageNormals` Average (Maya: AveragePolygonNormals)
+- ✓ `conformNormals` Conform (Maya: ConformPolygonNormals)
 - ✓ `reverse` Reverse (Maya: ReversePolygonNormals)
-- - Set to Face (Maya: SetToFaceNormals)
+- ✓ `setToFace` Set to Face (Maya: SetToFaceNormals)
 - - Set Vertex Normal (Maya: SetVertexNormal)
 - ✓ `hardEdge` Harden Edge (Maya: PolygonHardenEdge)
 - ✓ `softEdge` Soften Edge (Maya: PolygonSoftenEdge)
@@ -1056,9 +1056,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `chamfer` (E) Vertex tools > Chamfer Vertex
 - ✓ `deleteEdgeVert` (SW) Vertex tools > Delete Vertex
 - ✓ `vertexNormals` (S) Vertex Normals > Toggle Vertex Normal Display
-- - (NE) Vertex Normals > Average Normals
+- ✓ `averageNormals` (NE) Vertex Normals > Average Normals
 - - (E) Vertex Normals > Vertex Normal Edit Tool
-- - (SE) Vertex Normals > Set Normals to Face
+- ✓ `setToFace` (SE) Vertex Normals > Set Normals to Face
 - ✓ `merge` (NE) Merge Vertices > Merge Vertices
 - ✓ `mergeCenter` (N) Merge Vertices > Merge Vertices To Center
 - ✓ `targetWeld` (S) Merge Vertices > Target Weld Tool
@@ -1128,7 +1128,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `bevel` (E) Face tools > Bevel Face
 - ✓ `faceNormals` (S) Face Normals > Toggle Face Normal Display
 - - (NE) Face Normals > Reverse Propagate
-- - (SE) Face Normals > Conform Normals
+- ✓ `conformNormals` (SE) Face Normals > Conform Normals
 - ✓ `reverse` (E) Face Normals > Reverse Normals
 - ✓ `multiCut` (W) Face tools > Multi-Cut
 - ✓ `paintSelect` (NW) Face tools > Paint Select Faces
