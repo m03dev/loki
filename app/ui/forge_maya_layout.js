@@ -102,6 +102,18 @@ const FORGE_MAYA = {
    ],
    "-",
    [
+    "cutSel",
+    "Cut"
+   ],
+   [
+    "copySel",
+    "Copy"
+   ],
+   [
+    "pasteSel",
+    "Paste"
+   ],
+   [
     "Keys",
     [
      [

@@ -859,6 +859,33 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
+    // Edit > Cut / Copy / Paste (Maya: CutSelected / CopySelected / PasteSelected): the clipboard keeps the picked
+    // objects. Paste makes copies in place (their transforms, children and history) while the originals still
+    // exist, or - after a Cut or a Delete - new objects from the meshes as they were (in world space).
+    copySelected() {
+      const ids = tree.sel.filter((id) => node(id) && !ghost(node(id)))
+        .filter((id, _, all) => !all.some((o) => o !== id && isAncestor(o, id)));
+      if (!ids.length) return 0;
+      const meshIds = [];
+      for (const id of ids) { meshIds.push(id); for (const n of tree.nodes) if (isAncestor(id, n.id)) meshIds.push(n.id); }
+      tree.clip = { ids, items: api.worldPolys(meshIds).map((x) => ({ name: x.name, poly: x.poly })) };
+      return ids.length;
+    },
+    clipboard: () => (tree.clip ? { count: tree.clip.ids.length, meshes: tree.clip.items.length } : null),
+    pasteClip() {
+      const c = tree.clip;
+      if (!c) return [];
+      if (c.ids.every((id) => node(id))) {
+        api.duplicate(null, c.ids);
+        return tree.sel.slice();
+      }
+      const made = [];
+      for (const it of c.items) { const n = polyNode(it.name, it.poly, 0); api.centerPivot(n.id); made.push(n.id); }
+      tree.sel = made; tree.build();
+      if (api.onSelect) api.onSelect();
+      return made;
+    },
+
     // Modify > Match Transformations (Maya: MatchTransform / MatchTranslation / MatchRotation / MatchScaling /
     // MatchPivots): every picked object takes the LAST picked one's world translation (its pivot onto the target's),
     // rotation, scale or pivot place. what: "all" | "translate" | "rotate" | "scale" | "pivot". Returns how many moved.

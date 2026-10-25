@@ -102,6 +102,12 @@ Found and fixed in the cloud:
 - [ ] [mac] Forge: a cube, F11, pick a side face, W, Modify > Axes > Component - the handle leans with the face; drag
   its green arrow. Pick two opposite faces, R, Modify > Each Piece, scale - each shrinks in place. Modify > Tweak Mode,
   F9, drag a vertex you have not picked. Report how they feel.
+- Also done (all on master, each with its suite): Match Transformations, open booleans (Slice / Hole Punch / Cut Out /
+  Split Edges), Edit Edge Flow, Mesh Display Conform / Set to Face / Average, Edit > Cut / Copy / Paste (Ctrl+X/C/V),
+  a 10x faster component click on big meshes. tests/test_forge_ui.py ran past 60 s: now three parts (ui / ui2 / ui3,
+  ~30 s each, same 39 checks).
+- [ ] [mac] Forge: pick an object, Ctrl+C, Ctrl+V - a copy in place; Ctrl+X then Ctrl+V - it comes back. Space
+  (hotbox) > Edit: the whole menu shows, right at its name.
 - [ ] [mac] Forge: a plane, F11, Select > Paint Selection Tool, drag over it; Ctrl + drag; [ and ]; W puts it down.
   Report how the brush feels (size, speed).
 - [ ] [mac] Forge: pick some faces, Create > Sets > Quick Select Set; F8, pick another object; Windows > Sets >

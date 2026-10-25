@@ -160,14 +160,14 @@ async def main():
             drop = await page.evaluate("""() => { const l = document.querySelector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-list');
               const h = document.querySelector('#forge-pro-hotbox .forge-pro-col[data-menu="Edit"] .forge-pro-head').getBoundingClientRect();
               if (!l || l.hidden) return null; const r = l.getBoundingClientRect();
-              return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
+              return { n: l.querySelectorAll('.forge-pro-item').length, dy: Math.round(h.top - r.bottom), dyDown: Math.round(r.top - h.bottom), keys: [...l.querySelectorAll('.forge-pro-key')].map((k) => k.textContent).filter(Boolean).length }; }""")
             await page.keyboard.up(" ")
             await page.wait_for_timeout(120)
             check("Space opens the hotbox centred on the mouse (panel menus, the main menus, the middle and the set's rows), rows within 30 px of it",
                   hb and hb["vis"] and abs(hb["c"][0] - cx) < 2 and abs(hb["c"][1] - cy) < 2 and hb["cols"] >= 20 and hb["items"] >= 80
                   and 0 <= hb["gapUp"] <= 30 and 0 <= hb["gapDown"] <= 30, hb)
             check("hovering a menu drops it right at its name, with the hotkeys on the right", bool(drop) and drop["n"] >= 6
-                  and abs(drop["dy"]) <= 4 and drop["keys"] >= 4, drop)
+                  and (abs(drop["dy"]) <= 4 or abs(drop["dyDown"]) <= 4) and drop["keys"] >= 4, drop)   # right above its name, or right below when there is no room above
             check("the dropped menu stays after releasing Space, so an item can be clicked",
                   not await page.evaluate("document.getElementById('forge-pro-hotbox').hidden"))
             await page.mouse.click(5, 5)

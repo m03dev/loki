@@ -510,6 +510,9 @@ function forgeProCommands() {
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
     resetPivot: ["Reset Pivot", (v) => (forgeProComp(v) && v.resetComponentPivot ? (v.resetComponentPivot() ? "The components' pivot is back in their middle." : "No custom pivot on these components.")
       : T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    copySel: ["Copy", (v) => { const t = T(v); if (forgeProComp(v)) return "Copy works on objects (F8 first)."; const n = t.copySelected(); return n ? "Copied " + n + " object" + (n === 1 ? "" : "s") + "." : "Pick objects to copy."; }],
+    cutSel: ["Cut", (v) => { const t = T(v); if (forgeProComp(v)) return "Cut works on objects (F8 first)."; const n = t.copySelected(); if (!n) return "Pick objects to cut."; t.removeSelected(); return "Cut " + n + " object" + (n === 1 ? "" : "s") + ": Paste brings them back."; }],
+    pasteSel: ["Paste", (v) => { const t = T(v); if (!t.clipboard()) return "Nothing copied yet."; if (forgeProComp(v)) return "Paste works in object mode (F8 first)."; const ids = t.pasteClip(); return ids.length ? "Pasted " + ids.length + " object" + (ids.length === 1 ? "" : "s") + "." : ""; }],
     matchAll: ["Match All Transforms", (v) => forgeProMatch(v, "all")],
     matchTranslate: ["Match Translation", (v) => forgeProMatch(v, "translate")],
     matchRotate: ["Match Rotation", (v) => forgeProMatch(v, "rotate")],
@@ -1130,7 +1133,24 @@ function forgeProHotboxHost() {
       for (const x of host.querySelectorAll(".forge-pro-head")) { const on = x === h; if (x.classList.contains("open") !== on) x.classList.toggle("open", on); }
       // the open menu's row goes on top (its list was drawn under the next row's menu names) and the list stays on screen
       for (const r of host.querySelectorAll(".forge-pro-row")) r.classList.toggle("has-open", r === col.parentElement);
+      // a long menu that has no room on its own side (above for the upper rows) opens on the side that has more,
+      // still right at its name - pushing it over its own name hid the name and the first rows (Edit at 15 rows)
+      list.classList.remove("flip-down", "flip-up");
+      list.style.maxHeight = "";
+      const hr = h.getBoundingClientRect(), lh = list.scrollHeight;
+      const above = hr.top - forgeTopInset() - 8, below = window.innerHeight - hr.bottom - 8;
+      const upRow = col.parentElement && col.parentElement.classList.contains("up");
+      let down = !upRow;
+      if (upRow && lh > above && below > above) { list.classList.add("flip-down"); down = true; }
+      else if (!upRow && lh > below && above > below) { list.classList.add("flip-up"); down = false; }
       forgeProFit(list);
+      // taller than its side's room: it scrolls there, right at its name, rather than sliding over the name
+      const room = Math.floor(down ? below : above);
+      if (lh > room) {
+        list.style.maxHeight = Math.max(120, room) + "px";
+        const t = (list.style.translate || "").split(" ");
+        list.style.translate = (t[0] || "0px") + " 0px";
+      }
     };
     h.addEventListener("pointerenter", () => {
       clearTimeout(host._intent);

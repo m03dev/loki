@@ -72,7 +72,7 @@ MAP = {
     "PolyCircularize": "circularize", "PolygonCollapse": "collapse", "polyCollapseEdge": "collapse",
     "ConnectComponents": "connect", "EnterConnectTool": "connect", "PolyEditEdgeFlow": "editEdgeFlow",
     "MovePolygonComponent": "transformComp", "ConformPolygonNormals": "conformNormals",
-    "SetToFaceNormals": "setToFace", "AveragePolygonNormals": "averageNormals", "DetachComponent": "detach", "PolyExtrude": "extrude", "PolyMerge": "merge",
+    "SetToFaceNormals": "setToFace", "CutSelected": "cutSel", "CopySelected": "copySel", "PasteSelected": "pasteSel", "AveragePolygonNormals": "averageNormals", "DetachComponent": "detach", "PolyExtrude": "extrude", "PolyMerge": "merge",
     "MergeToCenter": "mergeCenter", "AverageVertex": "averageVerts", "ChamferVertex": "chamfer",
     "DeletePolyElements": "deleteEdgeVert", "DeleteEdge": "deleteEdgeVert", "DeleteVertex": "deleteEdgeVert",
     "PolySpinEdgeBackward": "spinEdgeBack", "PolySpinEdgeForward": "spinEdge", "DuplicateFace": "duplicateFace",

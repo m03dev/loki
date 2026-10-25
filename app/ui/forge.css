@@ -882,6 +882,8 @@ button.forge-out-title:hover { opacity: 1; }
 .forge-pro-hotbox .forge-pro-head.open, .forge-pro-hotbox .forge-pro-head:hover { background: #2f7fd0; color: #fff; }
 .forge-pro-hotbox .forge-pro-list { margin-top: 1px; min-width: 200px; }
 .forge-pro-hotbox .forge-pro-row.up .forge-pro-list { margin: 0 0 1px; }
+.forge-pro-hotbox .forge-pro-row .forge-pro-list.flip-down { top: 100%; bottom: auto; margin: 1px 0 0; }
+.forge-pro-hotbox .forge-pro-row .forge-pro-list.flip-up { top: auto; bottom: 100%; margin: 0 0 1px; }
 .forge-pro-hotbox .forge-pro-zonehub { padding: 1px 8px; border-radius: 3px; font-size: 10px; letter-spacing: .08em;
   background: #2e3033; border: 1px solid #0f1012; color: #c9ccd1; }
 .forge-pro-hotbox .forge-pro-zones .z-north { top: -84px; }

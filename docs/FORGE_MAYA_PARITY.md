@@ -27,12 +27,12 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-308 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (28%).
+311 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (28%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 6 | 24 |
-| Edit | 14 | 57 |
+| Edit | 17 | 57 |
 | Create | 8 | 66 |
 | Select | 30 | 79 |
 | Modify | 15 | 95 |
@@ -92,9 +92,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `redo` Redo (Maya: Redo)
 - ✓ `repeatLast` Repeat (Maya: RepeatLast)
 - - Recent Commands List (Maya: RecentCommandsWindow)
-- - Cut (Maya: CutSelected)
-- - Copy (Maya: CopySelected)
-- - Paste (Maya: PasteSelected)
+- ✓ `cutSel` Cut (Maya: CutSelected)
+- ✓ `copySel` Copy (Maya: CopySelected)
+- ✓ `pasteSel` Paste (Maya: PasteSelected)
 - - Keys > Cut Keys (Maya: CutKeys)
 - ✓ `copyAnim` Keys > Copy Keys (Maya: CopyKeys)
 - ✓ `pasteAnim` Keys > Paste Keys (Maya: PasteKeys)

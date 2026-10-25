@@ -53,6 +53,7 @@ const FORGE_KEY_DEFAULTS = [
   ["alt+arrowup", "@nudgeUp"], ["alt+arrowdown", "@nudgeDown"], ["alt+arrowleft", "@nudgeLeft"], ["alt+arrowright", "@nudgeRight"],
   // windows
   ["ctrl+a", "channelBox"],
+  ["ctrl+c", "copySel"], ["ctrl+x", "cutSel"], ["ctrl+v", "pasteSel"],   // Maya's Edit > Copy / Cut / Paste
   // animation (the Time Slider)
   ["s", "setKey"], ["alt+v", "playPause"],
   // modelling
@@ -95,7 +96,7 @@ const FORGE_KEY_REPEATS = new Set(["__smaller", "__bigger", "@viewUndo", "@viewR
 // the editor's groups (by command id; anything not listed goes under "Other")
 const FORGE_KEY_GROUPS = [
   ["Tools", ["select", "move", "rotate", "scale", "flattenX", "flattenY", "flattenZ", "flattenNormal", "showManip", "lastTool", "@completeTool", "@repeatLast", "softSel", "multiCut", "sculpt"]],
-  ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
+  ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory", "cutSel", "copySel", "pasteSel"]],
   ["Display", ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "xray", "smooth1", "smooth2", "smooth3",
     "wire", "shaded", "textured", "lights", "grid", "hideUI", "quadToggle"]],
   ["Select", ["selectAll", "selectNone", "invert", "hierarchy", "grow", "shrink", "objComp", "vertex", "edge", "face", "uv",
