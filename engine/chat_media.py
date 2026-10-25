@@ -116,10 +116,17 @@ def convert(state: Any, raw: str, to: str) -> dict:
     to = str(to or "").lower().lstrip(".")
     if to == "jpeg":
         to = "jpg"
-    if to not in ("jpg", "pdf"):
-        raise MediaError("save as jpg or pdf")
+    if to not in ("jpg", "pdf", "pixel"):
+        raise MediaError("save as jpg, pdf or pixel")
     if path.suffix.lower() not in IMAGES:
         raise MediaError("only a picture can be saved as %s" % to.upper())
+    if to == "pixel":                       # a game sprite of it (engine/pixel_art.py)
+        import pixel_art  # pylint: disable=import-outside-toplevel
+        try:
+            res = pixel_art.pixelize(path, size=64)
+        except pixel_art.PixelError as exc:
+            raise MediaError(str(exc)) from None
+        return {"ok": True, "path": res["file"], "name": Path(res["file"]).name, "preview": res["preview"]}
     try:
         from PIL import Image  # pylint: disable=import-outside-toplevel
     except ImportError as exc:

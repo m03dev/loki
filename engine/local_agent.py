@@ -63,7 +63,8 @@ Rules:
 - Pictures, 3D and video: never draw with text - run LOKI's makers:
   loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art oil-painting
   watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
-  loki-make 3d "<object>"   loki-make video "<clip>"   loki-make upscale pic.png
+  loki-make 3d "<object>" [--backend pixal3d]   loki-make video "<clip>"   loki-make upscale pic.png
+  loki-make pixel pic.png --size 64 --palette pico-8   (real game pixel art from any picture)
 - The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:
 ```bash

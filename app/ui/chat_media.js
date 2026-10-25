@@ -45,6 +45,7 @@ const LokiChatMedia = (() => {
     acts.append(btn("Open", "Open it in this computer's own viewer.", () => call("/chat/media/open", { path: m.path })));
     if (!/\.jpe?g$/i.test(m.name)) acts.append(btn("Save as JPG", "Save a JPG copy beside it.", () => convert(tile, m.path, "jpg")));
     acts.append(btn("Save as PDF", "Save a PDF of the picture beside it.", () => convert(tile, m.path, "pdf")));
+    acts.append(btn("Pixel art", "Make a 64-pixel game sprite of it (real pixel art: outlines kept, clean colours), saved beside it.", () => convert(tile, m.path, "pixel")));
     cap.append(acts, mk("span", "cm-say"));
     tile.append(img, cap);
     return tile;
@@ -74,6 +75,10 @@ const LokiChatMedia = (() => {
     say(tile, "Saving...");
     const r = await call("/chat/media/convert", { path, to }).catch((e) => ({ ok: false, error: e.message }));
     say(tile, r && r.ok ? "Saved " + r.name : "Not saved: " + ((r && r.error) || "no answer"), !(r && r.ok));
+    if (r && r.ok && r.preview) {             // the pixel sprite: show it big right away
+      const d = await call("/chat/media?path=" + encodeURIComponent(r.preview)).catch(() => null);
+      if (d && d.ok) bigView(d.data_url, r.name);
+    }
   }
   function bigView(src, name) {
     const old = document.getElementById("cm-big"); if (old) old.remove();

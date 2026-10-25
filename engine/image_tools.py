@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 
 ACTIONS = ("info", "resize", "crop", "rotate", "flip", "convert", "compress", "grayscale", "thumbnail",
-           "upscale", "remove_background")
+           "upscale", "remove_background", "pixelize")
 FORMATS = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP", "gif": "GIF", "bmp": "BMP"}
 MAX_PIXELS = 80_000_000
 IMPORT = importlib.import_module       # tests swap these
@@ -80,8 +80,20 @@ def upscaler() -> str:
 
 
 def edit(path: Path, action: str, width: int = 0, height: int = 0, box: str = "", degrees: float = 90,
-         direction: str = "horizontal", to: str = "", quality: int = 82, scale: int = 2, model: str = "") -> dict:
+         direction: str = "horizontal", to: str = "", quality: int = 82, scale: int = 2, model: str = "",
+         palette: str = "", colors: int = 0, dither: str = "none") -> dict:
     action = str(action or "info").strip().lower().replace("-", "_").replace(" ", "_")
+    if action in ("pixel", "pixel_art", "pixelate", "pixelise"):
+        action = "pixelize"
+    if action == "pixelize":                  # engine/pixel_art.py: PixelOE's method, palettes, dithering
+        import pixel_art  # pylint: disable=import-outside-toplevel
+        try:
+            res = pixel_art.pixelize(path, size=int(width or 64), palette=palette, colors=int(colors or 0),
+                                     dither=dither or "none")
+        except pixel_art.PixelError as exc:
+            raise ImageError(str(exc)) from None
+        return {"ok": True, "path": Path(res["file"]), "detail": "pixel art %dx%d, %d colours: %s (preview %s)" % (
+            res["width"], res["height"], res["colors"], Path(res["file"]).name, Path(res["preview"]).name)}
     if action in ("remove_bg", "background", "cutout", "rembg"):
         action = "remove_background"
     if action not in ACTIONS:

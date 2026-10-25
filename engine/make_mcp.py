@@ -38,12 +38,27 @@ TOOLS = [
                     "like an art director: subject and action, setting, composition and camera, light, palette, "
                     "mood, medium. style= adds a professional finish: " + ", ".join(sorted(__import__("art_direction").STYLES)) +
                     ". count 1-4 makes variations to choose from; upscale 2 or 4 enlarges the result with Real-ESRGAN "
-                    "(print and cover quality). Look at what you made before you call it done.",
+                    "(print and cover quality). style pixel-art also makes the real pixel sprite (pixel_size=, default "
+                    "64; palette= optional). Look at what you made before you call it done.",
      "inputSchema": {"type": "object", "properties": {
          "prompt": {"type": "string"}, "style": {"type": "string"},
          "count": {"type": "integer", "minimum": 1, "maximum": 4},
          "width": {"type": "integer"}, "height": {"type": "integer"}, "folder": {"type": "string"},
-         "negative": {"type": "string"}, "upscale": {"type": "integer", "enum": [2, 4]}}, "required": ["prompt"]}},
+         "negative": {"type": "string"}, "upscale": {"type": "integer", "enum": [2, 4]},
+         "pixel_size": {"type": "integer"}, "palette": {"type": "string"}}, "required": ["prompt"]}},
+    {"name": "pixelize",
+     "description": "Turn a picture in this folder into real game pixel art (PixelOE's contrast-aware outlines + "
+                    "per-patch downscale): size= the sprite's longer side in pixels (16-512, default 64), palette= "
+                    "pico-8 | sweetie-16 | endesga-32 | gameboy | grayscale-4 | '#hex #hex ...', or colors= 2-256; "
+                    "dither= none | floyd | bayer; outline= 0-4 (thickness of kept outlines); mode= contrast | center | "
+                    "median | k-centroid | nearest. Transparent sprites stay transparent (hard edges). Saves "
+                    "<name>-pixel<size>.png and an enlarged preview beside it.",
+     "inputSchema": {"type": "object", "properties": {
+         "image": {"type": "string"}, "size": {"type": "integer"}, "palette": {"type": "string"},
+         "colors": {"type": "integer"}, "dither": {"type": "string", "enum": ["none", "floyd", "bayer"]},
+         "outline": {"type": "integer"}, "mode": {"type": "string",
+                                                   "enum": ["contrast", "center", "median", "k-centroid", "nearest"]}},
+         "required": ["image"]}},
     {"name": "upscale_image",
      "description": "Enlarge a picture in this folder 2x or 4x with Real-ESRGAN (sharp detail, not blur); "
                     "anime=true for drawn / comic / anime art. Saves <name>-4x.png beside it.",
@@ -105,6 +120,16 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     if res.get("backend") == "pollinations":
         answer["note"] = ("made by Pollinations, the weakest fallback - no better model was reachable (set an NVIDIA "
                           "key or HF_TOKEN in Settings, or install the local image model)")
+    if style.lower() == "pixel-art" or args.get("pixel_size"):
+        import pixel_art  # pylint: disable=import-outside-toplevel
+        sprites = []
+        for f in files:
+            try:
+                px = pixel_art.pixelize(f, size=int(args.get("pixel_size") or 64), palette=args.get("palette") or "")
+                sprites.append(os.path.relpath(px["file"], cwd))
+            except Exception as exc:  # noqa: BLE001 - the picture itself is still made
+                answer["pixel_error"] = str(exc)[:200]
+        answer["pixel_sprites"] = sprites
     if args.get("upscale"):
         anime = style.lower() in ("comic", "manga", "pixel-art")
         big = [art_direction.upscale(f, int(args["upscale"]), anime) for f in files]
@@ -112,6 +137,22 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
         if not answer["upscaled"]:
             answer["upscale_error"] = big[0].get("error", "") if big else ""
     return answer
+
+
+def pixelize(args: dict, cwd: Path) -> dict:
+    import pixel_art  # pylint: disable=import-outside-toplevel
+    p = (cwd / str(args.get("image") or "")).resolve()
+    if cwd.resolve() not in p.parents or not p.is_file():
+        return {"ok": False, "error": "no such picture in this folder: %s" % args.get("image")}
+    try:
+        res = pixel_art.pixelize(p, size=int(args.get("size") or 64), outline=int(args.get("outline", 2) or 0),
+                                 mode=str(args.get("mode") or "contrast"), colors=int(args.get("colors") or 0),
+                                 palette=str(args.get("palette") or ""), dither=str(args.get("dither") or "none"))
+    except pixel_art.PixelError as exc:
+        return {"ok": False, "error": str(exc)}
+    res["file"] = os.path.relpath(res["file"], cwd)
+    res["preview"] = os.path.relpath(res["preview"], cwd)
+    return res
 
 
 def upscale_image(args: dict, cwd: Path) -> dict:
@@ -178,6 +219,7 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 
 def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
+          "pixelize": pixelize,
           "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:
@@ -308,15 +350,15 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
     return {"ok": code == 0, "exit": code, "folder": str(where), "output": out[-12000:]}
 
 
-CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image",
+CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 def cli(argv: list, cwd: Path | None = None) -> int:
     """`loki-make <what> "<prompt>" [--key value ...]` - the same tools for an agent that only has a shell
-    (engine/local_agent.py): image, 3d, video, upscale, machines, run-on, job. Prints the JSON answer."""
+    (engine/local_agent.py): image, 3d, video, upscale, pixel, machines, run-on, job. Prints the JSON answer."""
     if not argv or argv[0] not in CLI:
-        print("usage: loki-make image|3d|video|upscale|machines|run-on|job \"<prompt or file>\" [--style comic] "
+        print("usage: loki-make image|3d|video|upscale|pixel|machines|run-on|job \"<prompt or file>\" [--style comic] "
               "[--count 4] [--upscale 4] [--image pic.png] [--machine mac] [--job id]")
         return 2
     what, rest = argv[0], argv[1:]
@@ -326,7 +368,7 @@ def cli(argv: list, cwd: Path | None = None) -> int:
         if a.startswith("--") and rest:
             v = rest.pop(0)
             args[a[2:].replace("-", "_")] = int(v) if v.isdigit() else v
-        elif what == "upscale":
+        elif what in ("upscale", "pixel"):
             args.setdefault("image", a)
         elif what == "run-on":
             args.setdefault("task", a)

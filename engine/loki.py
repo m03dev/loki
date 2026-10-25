@@ -6090,12 +6090,12 @@ async def translate_tool(text: str, to: str, source_lang: str = "") -> str:
 
 async def edit_image_tool(path: str, action: str = "info", width: int = 0, height: int = 0, box: str = "",
                           degrees: float = 90, direction: str = "horizontal", to: str = "", quality: int = 82,
-                          scale: int = 2) -> str:
+                          scale: int = 2, palette: str = "", colors: int = 0, dither: str = "none") -> str:
     """Edit a picture in the workspace; the result is a new file next to it."""
     try:
         src = resolve_in_workspace(path)
         out = await asyncio.to_thread(image_tools.edit, src, action, width, height, box, degrees, direction, to,
-                                      quality, scale)
+                                      quality, scale, "", palette, colors, dither)
     except image_tools.ImageError as exc:
         return "error: %s" % exc
     except ValueError as exc:
@@ -6129,11 +6129,15 @@ _R3_SCHEMAS = [
     schema("edit_image", "Edit a picture in the workspace on this computer; the result is a NEW file next to it. "
            "action: info | resize (width/height) | crop (box='left,top,right,bottom') | rotate (degrees) | flip "
            "(direction) | convert (to=png|jpg|webp) | compress (quality, width) | grayscale | thumbnail (width) | "
-           "upscale (scale=2-4) | remove_background (transparent PNG; needs the rembg add-on).",
+           "upscale (scale=2-4) | remove_background (transparent PNG; needs the rembg add-on) | pixelize (real game pixel "
+           "art: width= the sprite's size in pixels, default 64; palette= pico-8 | sweetie-16 | endesga-32 | gameboy | "
+           "'#hex ...' or colors=; dither= none | floyd | bayer).",
            {"path": {"type": "string"}, "action": {"type": "string", "enum": list(image_tools.ACTIONS)},
             "width": {"type": "integer"}, "height": {"type": "integer"}, "box": {"type": "string"},
             "degrees": {"type": "number"}, "direction": {"type": "string", "enum": ["horizontal", "vertical"]},
-            "to": {"type": "string"}, "quality": {"type": "integer"}, "scale": {"type": "integer"}}, ["path", "action"]),
+            "to": {"type": "string"}, "quality": {"type": "integer"}, "scale": {"type": "integer"},
+            "palette": {"type": "string"}, "colors": {"type": "integer"},
+            "dither": {"type": "string", "enum": ["none", "floyd", "bayer"]}}, ["path", "action"]),
 ]
 TOOL_SCHEMAS.extend(_R3_SCHEMAS)
 MODEL_TOOL_SCHEMAS.extend(_R3_SCHEMAS)
