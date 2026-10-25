@@ -224,7 +224,7 @@ def run(pw, size, mac):
         page.evaluate("document.body.click(); typeof summon === 'function' && summon(true)")
         page.wait_for_timeout(150)
 
-    page.click("#summon")
+    page.click("#prompt")
     page.wait_for_timeout(200)
     page.click("#model-button")
     page.wait_for_timeout(300)

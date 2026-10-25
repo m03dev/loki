@@ -97,16 +97,22 @@ function renderMarkdown(source) {
   return html;
 }
 
-function scrollDown() {
+// The chat follows new output only while you are at the bottom: scroll up to read and it stays put (a "Latest"
+// button brings you back - chat_view.js). Your own message and a permission card always bring it down.
+const chatScroll = { pinned: true, hold: false };
+function scrollDown(force) {
+  if (chatScroll.hold) return;
   const t = $("#transcript");
-  t.scrollTop = t.scrollHeight;
+  if (!t) return;
+  if (force === true || chatScroll.pinned) { t.scrollTop = t.scrollHeight; chatScroll.pinned = true; }
+  if (window.LokiChatView) window.LokiChatView.update();
 }
 
 function addUser(text) {
   const turn = el("div", "turn user");
   turn.append(el("div", "bubble", text));
   $("#transcript").append(turn);
-  scrollDown();
+  scrollDown(true);
 }
 
 function addLoki(text) {
@@ -169,12 +175,16 @@ function showChat() { setView("chat"); }
 function renderMessages(messages) {
   $("#transcript").replaceChildren();
   if (!messages || messages.length === 0) { showEmpty(); return; }
-  for (const message of messages) {
-    const content = String(message.content || "").trim();
-    if (!content) continue;
-    if (message.role === "user") addUser(content);
-    else if (message.role === "assistant") addLoki(content);
-  }
+  chatScroll.hold = true;   // one layout pass for the whole history, not one per message (long chats opened slowly)
+  try {
+    for (const message of messages) {
+      const content = String(message.content || "").trim();
+      if (!content) continue;
+      if (message.role === "user") addUser(content);
+      else if (message.role === "assistant") addLoki(content);
+    }
+  } finally { chatScroll.hold = false; }
+  scrollDown(true);
 }
 
 function setStatus(text, ok) {
@@ -371,7 +381,7 @@ async function pollApproval() {
   actions.append(allow, deny);
   card.append(actions);
   $("#transcript").append(card);
-  scrollDown();
+  scrollDown(true);
   allow.focus();
 }
 
@@ -413,7 +423,7 @@ function paintModelButton() {
   const auto = data.current === "smart" || data.current === "online";
   const text = auto ? modelLabel(data.current) + (data.resolved_label ? " · " + data.resolved_label : "")
     : modelLabel(data.current);
-  $("#model-button-text").textContent = text;
+  $("#model-button-text").textContent = text || "Smart";   // never an empty button (it showed only "▾")
   $("#model-button").title = auto ? "LOKI picks the model. Right now: " + (data.resolved_label || "—") : "Pinned to " + text;
 }
 

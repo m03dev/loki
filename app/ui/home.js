@@ -108,8 +108,10 @@ const LokiHome = (() => {
     grid = mk("div", "home-grid"); grid.setAttribute("role", "list");
     empty = mk("div", "home-empty");
     root.append(head, hero, recent, grid, empty);
-    const summonBtn = document.getElementById("summon");
-    main.insertBefore(root, summonBtn || main.firstChild);
+    // left of the chat column (index.html #loki-split); older pages without the split: before the summon word
+    const split = document.getElementById("loki-split"), summonBtn = document.getElementById("summon");
+    if (split) split.prepend(root);
+    else main.insertBefore(root, (summonBtn && summonBtn.parentNode === main) ? summonBtn : main.firstChild);
     grid.addEventListener("keydown", (e) => {   // arrow keys walk the cards
       const cards = [...grid.querySelectorAll(".home-card")]; const i = cards.indexOf(document.activeElement);
       if (i < 0) return;
@@ -122,7 +124,9 @@ const LokiHome = (() => {
   function cols() { return Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").length); }
   // how many cards fit one row at this width (the grid's own auto-fill columns, min 150 px)
   function perRow() {
-    if (grid && grid.clientWidth > 0) return Math.max(2, cols());   // auto-fill: the real column count at this width
+    // auto-fill: the real column count at this width; beside the chat (the split layout) the pane is narrower, so two rows
+    const rows = document.getElementById("loki-split") ? 2 : 1;
+    if (grid && grid.clientWidth > 0) return Math.max(2, cols()) * rows;
     const w = (root && root.clientWidth) || 900; return Math.max(2, Math.floor((w + 12) / 162));
   }
 
@@ -237,6 +241,12 @@ const LokiHome = (() => {
       if (r && r.ok) { S.items = r.items || []; S.errors = r.errors || {}; }
     } catch (_) { /* engine restarting: keep what is shown */ }
     S.loading = false; S.loaded = true;
+    // nothing changed: keep the cards as they are (re-building them every 5-15 s made Home flicker and feel slow);
+    // still redraw once a minute so "3 min ago" stays true
+    const sig = S.items.map((it) => keyOf(it) + "|" + (it.updated || 0) + "|" + (it.status || "") + "|" + ((it.thumb || "").length)).join("\n")
+      + "#" + Object.keys(S.errors).join(",");
+    if (sig === S.sig && Date.now() - (S.drawn || 0) < 60000) return;
+    S.sig = sig; S.drawn = Date.now();
     render();
   }
 
@@ -290,14 +300,18 @@ const LokiHome = (() => {
   }
   const studioOpen = () => !!(studioPane && !studioPane.hidden);
 
-  // the home view changed (app.js setView): show the hub on home, fold it to one row while a new chat is open
+  // the view changed (app.js setView) or the hub was folded away (chat_view.js "hub-off"). With the split layout the
+  // hub stays beside the chat in BOTH views - it is never hidden just because a chat is open (that hid the display).
   function sync() {
     const main = document.getElementById("main");
     if (!main || !root) return;
     const home = main.classList.contains("home");
-    root.hidden = !home;
-    root.classList.toggle("chatting", home && main.classList.contains("summoned"));
-    main.classList.toggle("has-hub", true);
+    const split = !!document.getElementById("loki-split");
+    const hidden = split ? main.classList.contains("hub-off") : !home;
+    if (root.hidden !== hidden) root.hidden = hidden;
+    const chatting = !split && home && main.classList.contains("summoned");
+    if (root.classList.contains("chatting") !== chatting) root.classList.toggle("chatting", chatting);
+    if (!main.classList.contains("has-hub")) main.classList.add("has-hub");
   }
 
   function onKey(e) {
@@ -327,7 +341,7 @@ const LokiHome = (() => {
       const m = document.getElementById("main");
       tick++;
       if (!running().length && tick % 3) return;
-      if (!document.hidden && m && m.classList.contains("home") && (!window.LokiModeBar || window.LokiModeBar.active() === "loki")) refresh();
+      if (!document.hidden && m && root && !root.hidden && (!window.LokiModeBar || window.LokiModeBar.active() === "loki")) refresh();
     }, 5000);
     window.addEventListener("focus", () => refresh());
   }

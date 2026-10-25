@@ -45,14 +45,30 @@ def _workspace(state: Any) -> Path:
     return Path(getattr(getattr(state, "agent", None), "WORKSPACE", "") or ".")
 
 
+_THUMBS: dict = {}   # path -> ((mtime, size), url): Home asks every 5-15 s, a picture is read and encoded once
+_THUMBS_MAX = 512
+
+
 def data_url(path: Path) -> str | None:
-    """A small picture as a data: URL (the window's CSP allows img-src data:), else None."""
+    """A small picture as a data: URL (the window's CSP allows img-src data:), else None. Cached by path, mtime and
+    size (owner 2026-10-25: "home is slow" - every refresh used to re-read and base64 every picture)."""
     try:
         p = Path(path)
         kind = IMAGE_TYPES.get(p.suffix.lower())
-        if not kind or not p.is_file() or p.stat().st_size > THUMB_MAX:
+        if not kind:
             return None
-        return "data:%s;base64,%s" % (kind, base64.b64encode(p.read_bytes()).decode("ascii"))
+        st = p.stat()
+        if not p.is_file() or st.st_size > THUMB_MAX:
+            return None
+        key, sig = str(p), (st.st_mtime_ns, st.st_size)
+        hit = _THUMBS.get(key)
+        if hit and hit[0] == sig:
+            return hit[1]
+        url = "data:%s;base64,%s" % (kind, base64.b64encode(p.read_bytes()).decode("ascii"))
+        if len(_THUMBS) >= _THUMBS_MAX:
+            _THUMBS.clear()
+        _THUMBS[key] = (sig, url)
+        return url
     except OSError:
         return None
 
@@ -185,21 +201,25 @@ def content(state: Any) -> list:
     out: list = []
     if not root.is_dir():
         return out
+    found: list = []   # (mtime, path): stat first, encode a thumbnail only for the newest PER_KIND
     for p in root.rglob("*"):
         try:
             if not p.is_file() or p.suffix.lower() not in CONTENT_TYPES or any(x.startswith(".") for x in p.relative_to(root).parts):
                 continue
-            rel = p.relative_to(ws).as_posix()
-            updated = p.stat().st_mtime
+            found.append((p.stat().st_mtime, p))
         except (OSError, ValueError):
             continue
-        sub = p.relative_to(root).parts[0] if len(p.relative_to(root).parts) > 1 else ""
+        if len(found) > 2000:
+            break
+    found.sort(key=lambda t: -t[0])
+    for updated, p in found[:PER_KIND]:
+        rel = p.relative_to(ws).as_posix()
+        parts = p.relative_to(root).parts
+        sub = parts[0] if len(parts) > 1 else ""
         out.append({"kind": "content", "name": p.stem.replace("_", " ").replace("-", " ")[:120], "path_or_id": rel,
                     "updated": updated, "thumb": data_url(p), "status": "",
                     "detail": (sub + " · " if sub else "") + p.suffix.lower().lstrip("."),
                     "open": {"mode": "files", "path": rel}})
-        if len(out) > 400:
-            break
     return out
 
 

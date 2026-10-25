@@ -578,7 +578,7 @@ async def window_steps(page, errors, missing) -> None:
         await page.click('[data-apps-tab="extensions"]')
         await page.wait_for_selector(".ext-card")
         await page.click(".apps-close")
-        await page.click("#summon")
+        await page.click("#prompt")
         await page.wait_for_timeout(300)
         await page.click("#mode-pick")
         await page.wait_for_selector(".mode-menu .mode-item")

@@ -33,6 +33,14 @@ or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on
 is picked, one key per command, sculpt right button = wheel only. Branch `agent/studio-farm-forge-scale`; next steps
 in ZIVA_TASKS.md (incl. the ChatGPT-web provider and the token blow-up diagnosis).
 
+**Home, reimagined (later 2026-10-25):** one split, two panes, both always there - the hub left (home.js), the chat
+column right (#chat-col in index.html, home_layout.css, chat_view.js). The chat is never hidden behind a "Loki" click
+any more; the conversation has a visible scroll bar, follows new output only while you are at the bottom, and shows a
+"Latest" button when you scroll up; the message-box buttons wrap instead of being cut off; the top-bar panel button
+folds the hub away (remembered, `loki-hub-off`); under 900 px the panes stack. Speed: /home/projects caches every
+thumbnail by path+mtime+size and only encodes the newest content files; the hub skips redraws when nothing changed;
+opening a long chat lays out once. Tests: tests/test_home_projects.py.
+
 ## Earlier (2026-10-24)
 
 - **Rules rewritten** (owner: "delete all loki rules ... rewrite them better"): AGENTS.md is the one rulebook,

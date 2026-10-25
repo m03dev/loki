@@ -54,7 +54,7 @@ async def main():
           return bad;
         }"""
         SCULPT = ["#fsc-head", "#fsc-side", "#fsc-strip", "#fmy-cube", "#fmy-panelbar"]
-        HOME = [".home-head", ".home-hero", ".home-recent-head", ".home-grid", "#summon"]
+        HOME = [".home-head", ".home-hero", ".home-recent-head", ".home-grid", "#composer"]
         SIDE = ["#tidy-top", "#conversations", ".sidebar-foot .foot-row"]
         for (w, h) in [(1400, 860), (1000, 700), (1920, 1080), (900, 1500)]:
             page = await browser.new_page(viewport={"width": w, "height": h})

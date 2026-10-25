@@ -616,7 +616,7 @@ async def browser_part():
         check("copy chat as Markdown", "**You:**" in md and "**LOKI:**" in md, md[:200])
 
         # ---- draft kept over a reload
-        await page.click("#summon") if await page.is_visible("#summon") else None
+        await page.click("#prompt")
         await page.fill("#prompt", "an unsent draft")
         await page.dispatch_event("#prompt", "input")
         await page.wait_for_timeout(500)

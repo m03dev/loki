@@ -760,7 +760,7 @@ else:
             check("window: chat menu and prompt library buttons are icons with tooltips",
                   await page.get_attribute("#chat-menu-btn", "data-tip-name") == "Chat menu"
                   and await page.eval_on_selector("#prompt-lib-btn", "n => !!n.querySelector('svg.icon')"))
-            await page.click("#summon")
+            await page.click("#prompt")
             await page.fill("#prompt", "Plan a weekend in Paris")
             await page.keyboard.press("Enter")
             await page.wait_for_selector(".turn.loki .md-table", timeout=10000)

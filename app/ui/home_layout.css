@@ -1,0 +1,101 @@
+/* LOKI's main window, reimagined (owner 2026-10-25: "focus on loki home, it's slow and ineffective ... the chat is
+   buggy, the display is sometimes hidden, the icons below the chat sometimes get cut off, there's no scroll bar when
+   the chat gets too long ... reimagine the entire thing").
+   One split, two panes, both always there:
+     left   the Home hub (home.js): the latest render / model / game big, the recent ones under it;
+     right  the chat column (#chat-col): the conversation with a real scroll bar and a "Latest" button, the work
+            strip, and the message box - its buttons wrap onto a second line instead of being cut off.
+   The hub folds away with the top-bar panel button (chat_view.js, remembered); a narrow window stacks the panes.
+   Loaded last (index.html), so it wins over the older home rules in app.css / home.css / glass.css. */
+
+.loki-split { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr); }
+.main.hub-off .loki-split, .loki-split:not(:has(> .home-hub:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------------------------------------------------------------- the hub pane */
+.loki-split > .home-hub { grid-column: 1; min-width: 0; max-width: none; margin: 0; height: 100%; container-type: inline-size; }
+.loki-split > .home-hub[hidden] { display: none; }
+/* the hub pane beside the chat is narrower than the old full-width Home: the preview stacks and stays short, so the
+   recent cards are still on screen under it */
+@container (max-width: 640px) {
+  .home-hero { grid-template-columns: 1fr; gap: 6px; }
+  .home-hero-pic { max-height: 27vh; }
+  .home-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; }
+  .home-hero-side { padding: 0; gap: 2px; flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+  .home-hero-name { font-size: 16px; }
+  .home-hero-out { display: none; }
+  .home-hero-open { margin-top: 0; margin-inline-start: auto; }
+}
+
+/* ---------------------------------------------------------------- the chat column */
+.chat-col { position: relative; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column;
+  border-inline-start: 1px solid var(--line); background: rgba(0, 0, 0, .12); }
+.main.hub-off .chat-col, .loki-split:not(:has(> .home-hub:not([hidden]))) > .chat-col { border-inline-start: 0; background: transparent; }
+
+/* the conversation: always shown in a chat, with a scroll bar you can see and grab */
+.chat-col .transcript { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 0 12px;
+  scrollbar-width: auto; scrollbar-color: rgba(255, 255, 255, .34) rgba(255, 255, 255, .04); scrollbar-gutter: stable; }
+.chat-col .transcript::-webkit-scrollbar { width: 12px; }
+.chat-col .transcript::-webkit-scrollbar-track { background: rgba(255, 255, 255, .04); border-radius: 999px; }
+.chat-col .transcript::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .32); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; min-height: 40px; }
+.chat-col .transcript::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .5); background-clip: padding-box; }
+.chat-col .turn, .chat-col .event, .chat-col .notice { padding-inline: clamp(12px, 4%, 28px); }
+.chat-col .turn.user .bubble { max-width: 86%; }
+.chat-col .approval { max-width: calc(100% - 28px); }
+
+/* "Latest": floats over the bottom of the conversation while you are scrolled up */
+.jump-latest { position: relative; z-index: 4; align-self: center; flex: none; height: 30px; margin: -42px 0 12px; padding: 0 14px;
+  border-radius: 999px; border: 1px solid var(--glass-edge, var(--line)); background: rgba(30, 33, 40, .94); color: var(--text);
+  font-size: 12.5px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); cursor: pointer; }
+.jump-latest:hover { background: rgba(48, 54, 64, .98); }
+.jump-latest[hidden] { display: none; }
+
+/* Home view: a new chat - the short welcome in the middle of the column, the message box at its foot.
+   The summon word is gone: the box is always there (typing anywhere on Home still goes into it). */
+.loki-split .summon, .main.home:not(.summoned) .loki-split .summon { display: none; }
+.main.home .chat-col .transcript { display: none; }
+.main.home .chat-col .welcome, .main.home:not(.summoned) .chat-col .welcome { display: flex; flex: 1 1 auto; align-items: flex-start; margin: 0;
+  padding: 18px clamp(12px, 4%, 24px); min-height: 0; overflow-y: auto; }
+.main.home .chat-col .welcome[hidden] { display: none; }
+/* margin:auto centres it and, unlike align-items:center, never cuts its top off when the window is short */
+.main.home .chat-col .welcome-inner { padding: clamp(14px, 2.4vh, 24px); max-width: 520px; margin: auto; }
+@media (max-height: 760px) {
+  .main.home .chat-col .welcome-sub, .main.home .chat-col .welcome-mark { display: none; }
+  .main.home .chat-col .welcome-title { font-size: 20px; margin-bottom: 10px; }
+}
+.main.home .chat-col .welcome-mark { display: block; }
+.main:not(.home) .chat-col .welcome { display: none; }
+.main.has-hub.home:not(.summoned) .chat-col #work:not([hidden]) { display: block; }
+
+/* the message box: always at the foot of the column, never hidden, nothing in its row is ever cut off */
+.chat-col .composer, .main.home:not(.summoned) .chat-col .composer { display: block; flex: none; margin: 0; padding: 8px clamp(10px, 3%, 18px) 14px; animation: none; }
+.chat-col .composer-box { max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto; }
+.main.home .chat-col .composer-box { max-width: 820px; }
+.chat-col .composer-row { flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+.chat-col .composer-row > * { flex-shrink: 0; min-width: 0; }
+.chat-col .composer-row .hint { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-col .composer-row .send, .chat-col .composer-row .stop { margin-inline-start: auto; }
+.chat-col .composer-row .stop:not([hidden]) + .send { margin-inline-start: 0; }
+.chat-col .composer-row .bg-toggle { white-space: nowrap; }
+.chat-col .work { width: calc(100% - 24px); max-width: 820px; box-sizing: border-box; }
+
+/* the top bar: the panel button, and the model button never empty or squeezed */
+.hub-toggle { display: inline-grid; place-items: center; width: 32px; height: 30px; padding: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.hub-toggle:hover { background: var(--surface); color: var(--text); }
+.hub-toggle[aria-pressed="true"] { color: var(--text); }
+.topbar { min-width: 0; }
+.topbar .chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .topbar-right { min-width: 0; flex-shrink: 1; }
+.topbar .model-button { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------------------------------------------- narrow windows: the panes stack */
+@media (max-width: 900px) {
+  .loki-split, .main.hub-off .loki-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, auto) minmax(0, 1fr); }
+  .loki-split > .home-hub { height: auto; max-height: 48vh; border-bottom: 1px solid var(--line); }
+  .main:not(.home) .loki-split > .home-hub { display: none; }   /* in a chat the conversation gets the window */
+  .main:not(.home) .loki-split { grid-template-rows: minmax(0, 1fr); }
+  .chat-col { border-inline-start: 0; }
+  .main.home .chat-col .welcome-sub { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .jump-latest { transition: none; } }
+html.u-hc .chat-col .transcript::-webkit-scrollbar-thumb { background: #fff; }

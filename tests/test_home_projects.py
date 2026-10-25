@@ -358,15 +358,41 @@ async def window():
         await page.click(".home-live")
         await page.wait_for_timeout(400)
         check("the working chip shows the job live in the preview", "frame 7 of 24" in await E("document.querySelector('.home-hero').textContent"))
-        await page.click("#summon")
+        # the split (home_layout.css / chat_view.js): the chat column is always beside the hub, in both views
+        await page.click("#prompt")
         await page.wait_for_timeout(300)
-        fold = await E("""(() => { const h = document.getElementById('home-hub'), c = document.getElementById('composer');
-          return { chatting: h.classList.contains('chatting'), hero: getComputedStyle(h.querySelector('.home-hero')).display,
-                   composer: c.getBoundingClientRect().height > 0 && getComputedStyle(c).display !== 'none' }; })()""")
-        check("the chat is one click away and the hub folds to one row while it is open", fold["chatting"] and fold["hero"] == "none" and fold["composer"], fold)
-        await E("showChat()")
+        fold = await E("""(() => { const h = document.getElementById('home-hub'), c = document.getElementById('composer'), s = document.getElementById('loki-split');
+          const hr = h.getBoundingClientRect(), cr = c.getBoundingClientRect();
+          return { split: !!s && h.parentNode === s, hub: !h.hidden, hero: getComputedStyle(h.querySelector('.home-hero')).display,
+                   composer: cr.height > 0 && getComputedStyle(c).display !== 'none', beside: cr.left >= hr.right - 1 }; })()""")
+        check("the chat box is always there, beside the hub (no hidden display, no summon click)", fold["split"] and fold["hub"]
+              and fold["hero"] != "none" and fold["composer"] and fold["beside"], fold)
+        await E("showChat(); renderMessages(Array.from({length: 40}, (_, i) => ({role: i % 2 ? 'assistant' : 'user', content: 'line ' + i + ' ' + 'word '.repeat(40)})))")
+        await page.wait_for_timeout(300)
+        chat = await E("""(() => { const t = document.getElementById('transcript'), h = document.getElementById('home-hub');
+          return { hub: !h.hidden, shown: getComputedStyle(t).display !== 'none' && t.clientHeight > 80, scroll: getComputedStyle(t).overflowY,
+                   long: t.scrollHeight > t.clientHeight, bottom: t.scrollHeight - t.scrollTop - t.clientHeight < 4 }; })()""")
+        check("a running conversation shows beside the hub, scrolls, and opens at the latest message", chat["hub"] and chat["shown"]
+              and chat["scroll"] == "auto" and chat["long"] and chat["bottom"], chat)
+        await E("document.getElementById('transcript').scrollTop = 0")
+        await page.wait_for_timeout(250)
+        check("scrolled up: a 'Latest' button appears", await E("!document.getElementById('jump-latest').hidden"))
+        await E("addLoki('a new answer while you read')")
+        await page.wait_for_timeout(150)
+        check("new output does not yank you down while you read", await E("document.getElementById('transcript').scrollTop < 50"))
+        await page.click("#jump-latest")
+        await page.wait_for_timeout(700)
+        check("'Latest' brings you back to the newest message", await E("(() => { const t = document.getElementById('transcript'); return t.scrollHeight - t.scrollTop - t.clientHeight < 4 && document.getElementById('jump-latest').hidden; })()"))
+        await page.click("#hub-toggle")
         await page.wait_for_timeout(200)
-        check("a running conversation hides the hub (it never crowds the chat)", await E("document.getElementById('home-hub').hidden"))
+        off = await E("({ hub: document.getElementById('home-hub').hidden, w: document.getElementById('chat-col').getBoundingClientRect().width, W: document.getElementById('loki-split').getBoundingClientRect().width, saved: localStorage.getItem('loki-hub-off') })")
+        check("the panel button folds the hub away and the chat takes the window (remembered)", off["hub"] and off["w"] > off["W"] - 2 and off["saved"] == "1", off)
+        await page.click("#hub-toggle")
+        await page.wait_for_timeout(200)
+        check("... and brings it back", await E("!document.getElementById('home-hub').hidden"))
+        row = await E("""(() => { const r = document.querySelector('.composer-row'), b = r.getBoundingClientRect();
+          return [...r.children].filter((c) => c.offsetParent).every((c) => { const x = c.getBoundingClientRect(); return x.left >= b.left - 1 && x.right <= b.right + 1; }); })()""")
+        check("every button under the message box is inside it (they wrap, never cut off)", row)
         await E("showHome()")
         await page.wait_for_timeout(200)
 
@@ -386,7 +412,7 @@ async def window():
         await E("LokiHome.refresh()")
         await page.wait_for_timeout(300)
         row = await E("(() => { const c = [...document.querySelectorAll('.home-card')]; return { n: c.length, tops: new Set(c.map((x) => Math.round(x.getBoundingClientRect().top))).size, more: document.querySelector('.home-more').textContent }; })()")
-        check("one row of recent things, 'All 20' for the rest", row["tops"] == 1 and 2 <= row["n"] < 20 and row["more"] == "All 20", row)
+        check("two rows of recent things beside the chat, 'All 20' for the rest", row["tops"] == 2 and 2 <= row["n"] < 20 and row["more"] == "All 20", row)
         await page.click(".home-more")
         check("All shows every one", await E("document.querySelectorAll('.home-card').length") == 20)
         await page.click(".home-more")
