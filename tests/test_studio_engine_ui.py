@@ -82,9 +82,11 @@ async def main():
         check("the tabs read Home, Forge, Studio, Engine", names == ["Home", "Forge", "Studio", "Engine"], names)
 
         await E("localStorage.removeItem('loki-studio-view'); LokiModeBar.go('render')")
-        await page.wait_for_selector("#studio-farm .sf-jobrow", timeout=8000)
+        await page.wait_for_selector(".sf-view[data-view='farm']", timeout=8000)
         views = await E("[...document.querySelectorAll('.sf-view')].map(b => [b.textContent, b.getAttribute('aria-selected')])")
-        check("Studio opens on the Farm view, Render beside it", views == [["Farm", "true"], ["Render", "false"]], views)
+        check("Studio opens on the Agents view (owner 2026-10-25), Farm and Render beside it", views == [["Agents", "true"], ["Farm", "false"], ["Render", "false"]], views)
+        await page.click(".sf-view[data-view='farm']")
+        await page.wait_for_selector("#studio-farm .sf-jobrow", timeout=8000)
         stats = await E("[...document.querySelectorAll('#sf-stats .sf-stat')].map(s => s.textContent)")
         check("the stats strip: workers online, rendering, queued, failed, free VRAM", len(stats) == 5 and stats[0].startswith("1 / 2") and "7.0 GB" in stats[4], stats)
         rows = await E("[...document.querySelectorAll('.sf-jobrow')].map(r => r.textContent)")

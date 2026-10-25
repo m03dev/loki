@@ -8,7 +8,7 @@
 "use strict";
 
 const LokiStudioFarm = (() => {
-  const S = { root: null, farm: null, render: null, view: "farm", timer: 0, data: null, sel: null, rjobs: [] };
+  const S = { root: null, agents: null, farm: null, render: null, view: "agents", timer: 0, data: null, sel: null, rjobs: [] };
   const STORE = "loki-studio-view";
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const call = (path, body) => (typeof api === "function" ? api(path, body) : Promise.reject(new Error("not ready")));
@@ -29,30 +29,39 @@ const LokiStudioFarm = (() => {
     let v = S.view;
     try { v = localStorage.getItem(STORE) || v; } catch (_) { /* private window */ }
     if (opts && (opts.job || opts.fromForge)) v = "render";      // a project card / Forge asked for the Render view
+    if (opts && opts.view) v = opts.view;                          // Home's live view asks for Agents
     show(v, opts);
   }
   function build(p) {
     p.classList.add("sf-pane");
     const bar = mk("div", "sf-views"); bar.setAttribute("role", "tablist"); bar.setAttribute("aria-label", "Studio view");
-    for (const [id, label, tip] of [["farm", "Farm", "The render farm: every job and GPU worker, priorities, failures and their fixes, the history."],
+    for (const [id, label, tip] of [["agents", "Agents", "Every agent at work on every machine, with Stop and Again - and Make: art, paintings, 3D models, comics, novels, websites, games."],
+      ["farm", "Farm", "The render farm: every job and GPU worker, priorities, failures and their fixes, the history."],
       ["render", "Render", "Render Studio: render the passes from a Forge camera, the AI Renderer settings, the preview."]]) {
       const b = mk("button", "sf-view", label); b.type = "button"; b.dataset.view = id; b.setAttribute("role", "tab");
       b.title = tip; b.dataset.tipName = label; b.dataset.tipWhat = tip;
       b.addEventListener("click", () => show(id));
       bar.append(b);
     }
+    S.agents = mk("div", "sf-agents"); S.agents.id = "studio-agents"; S.agents.hidden = true;
     S.farm = mk("div", "sf-farm"); S.farm.id = "studio-farm";
     S.render = mk("div", "sf-render"); S.render.hidden = true;
-    p.append(bar, S.farm, S.render);
+    p.append(bar, S.agents, S.farm, S.render);
     S.root = p;
     buildFarm(S.farm);
   }
   function show(v, opts) {
-    S.view = v === "render" ? "render" : "farm";
+    S.view = v === "render" || v === "farm" ? v : "agents";       // Agents first (owner 2026-10-25: "see my agents working")
     try { localStorage.setItem(STORE, S.view); } catch (_) { /* private window */ }
     for (const b of S.root.querySelectorAll(".sf-view")) b.setAttribute("aria-selected", String(b.dataset.view === S.view));
-    S.farm.hidden = S.view !== "farm"; S.render.hidden = S.view !== "render";
-    if (S.view === "render") {
+    S.agents.hidden = S.view !== "agents"; S.farm.hidden = S.view !== "farm"; S.render.hidden = S.view !== "render";
+    if (S.view !== "agents" && window.LokiStudioAgents) window.LokiStudioAgents.leave();
+    if (S.view === "agents") {
+      clearInterval(S.timer); S.timer = 0;
+      if (window.LokiRenderStudio) window.LokiRenderStudio.leave();
+      if (window.LokiStudioAgents) window.LokiStudioAgents.open(S.agents);
+      else S.agents.textContent = "The Agents view is not in this window.";
+    } else if (S.view === "render") {
       clearInterval(S.timer); S.timer = 0;
       if (window.LokiRenderStudio) window.LokiRenderStudio.open(S.render, opts || {});
       else S.render.textContent = "Render Studio is not in this window.";
@@ -63,7 +72,7 @@ const LokiStudioFarm = (() => {
       S.timer = setInterval(() => { if (S.root && !S.root.hidden && !S.farm.hidden && !document.hidden) refresh(); }, 2000);
     }
   }
-  function leave() { clearInterval(S.timer); S.timer = 0; if (window.LokiRenderStudio) window.LokiRenderStudio.leave(); }
+  function leave() { clearInterval(S.timer); S.timer = 0; if (window.LokiRenderStudio) window.LokiRenderStudio.leave(); if (window.LokiStudioAgents) window.LokiStudioAgents.leave(); }
 
   // ------------------------------------------------------------------ the Farm Monitor
   function buildFarm(f) {
