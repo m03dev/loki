@@ -105,8 +105,8 @@ check("ok, and LOKI's reply has the git log LOKI ran itself and what changed", r
 path, body = STATE["bodies"][0]
 check("lean request: Ollama /api/chat, think=false, num_ctx 16384, no tool schemas", path == "/api/chat" and body["think"] is False
       and body["options"]["num_ctx"] == 16384 and "tools" not in body and body["stream"] is False, body)
-check("... a short prompt (system + task under 2,500 characters, vs OpenCode's ~12,000 tokens)",
-      sum(len(m["content"]) for m in body["messages"]) < 2500, sum(len(m["content"]) for m in body["messages"]))
+check("... a short prompt (system + task under 3,500 characters, vs OpenCode's ~12,000 tokens)",
+      sum(len(m["content"]) for m in body["messages"]) < 3500, sum(len(m["content"]) for m in body["messages"]))
 check("... each command's real output goes back to the model", "<returncode>0</returncode>" in STATE["bodies"][1][1]["messages"][-1]["content"])
 check("progress shows the commands as they run", any(k == "tool" and "git init" in t for k, t in seen), seen[:5])
 meters = [json.loads(t) for k, t in seen if k == "usage"]
@@ -134,6 +134,35 @@ res, ws, seen = go(["__500__"] + GOOD)
 check("Ollama answers 500 on a step (its parser choked): asked again, and the work still gets done",
       res["ok"] and (ws / "loki-test-repo" / "src" / "main.py").is_file() and any("asking again" in t for k, t in seen)
       and "could not be read" in STATE["bodies"][1][1]["messages"][-1]["content"], res["reply"][:300])
+
+# stuck: the same failure three times -> stop and say it (the Mac: 30 steps of 'git push ... 403')
+STUCK = ["THOUGHT: push.\n```bash\ngit push origin main\n```"] * 10
+res, ws, _ = go(STUCK)
+check("the same error three times: stops after 3 commands with BLOCKED and the error (no 30 steps)",
+      res["exit"] == "stuck" and res["commands"] == 3 and res["reply"].startswith("BLOCKED") and "fatal" in res["reply"], res["reply"][:300])
+# a question for the owner: stops and asks
+ASK = ["THOUGHT: look.\n```bash\nls\n```", "QUESTION: The repo m03dev/loki-test already exists on GitHub - push into it?"]
+res, ws, _ = go(ASK)
+check("QUESTION: the agent stops and asks the owner (not 'NOT DONE')", res["exit"] == "question"
+      and res["reply"].startswith("QUESTION: The repo m03dev/loki-test already exists"), res["reply"][:200])
+assert "GitHub: `gh auth status` first" in local_agent.SYSTEM and "gh auth setup-git" in local_agent.SYSTEM
+# publish: LOKI asks the remote itself whether the commit is there
+PUBREQ = "push loki-test to github"
+wsp = Path(tempfile.mkdtemp(prefix="ws-pub-", dir=TMP))
+bare = TMP / ("remote-%d.git" % int(time.time() * 1000)); subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+PUB = ["THOUGHT: repo.\n```bash\nmkdir loki-test && cd loki-test && git init -q -b main && echo hi > README.md && git add -A && "
+       "git -c user.name=t -c user.email=t@t commit -qm first && git remote add origin %s && git push -q origin main\n```" % bare,
+       "Pushed.\n```bash\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"]
+STATE.update(script=PUB, i=0, bodies=[])
+res = local_agent.run(PUBREQ, wsp, BASE, "m", deny=())
+check("after a push LOKI checks the remote itself: 'pushed' with the commit", res["ok"] and "pushed." in res["reply"], res["reply"][-300:])
+wsn = Path(tempfile.mkdtemp(prefix="ws-nopub-", dir=TMP))
+bare2 = TMP / ("remote2-%d.git" % int(time.time() * 1000)); subprocess.run(["git", "init", "-q", "--bare", str(bare2)], check=True)
+NOPUB = [PUB[0].replace(" && git push -q origin main", "").replace(str(bare), str(bare2)), PUB[1]]
+STATE.update(script=NOPUB, i=0, bodies=[])
+res = local_agent.run(PUBREQ, wsn, BASE, "m", deny=())
+check("... a 'pushed!' that never reached the remote: NOT DONE", res["reply"].startswith("NOT DONE - the push did not reach")
+      and "NOT pushed" in res["reply"], res["reply"][:300])
 
 code, out = local_agent.run_command("loki-make machines", TMP)
 check("the shell agent has LOKI's makers as a command: `loki-make machines` answers", code == 0 and '"machines"' in out, out[:300])

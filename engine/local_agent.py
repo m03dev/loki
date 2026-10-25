@@ -46,8 +46,15 @@ Rules:
 - Create files with a heredoc:  cat > path/file.py <<'EOF' ... EOF
 - A new project (a repo, an app, a site) goes in its OWN new folder inside the working folder: mkdir name && cd name
   && git init -b main. Never run git init in the working folder itself, and never commit .loki/ (private chats).
-- GitHub: `gh auth status` first. Publish a folder with: cd name && gh repo create name --private --source=. --remote=origin --push
-  The remote is always called origin. If a push fails, read the error, run `git remote -v` and `git status`, fix it.
+- GitHub: `gh auth status` first, then `gh repo view OWNER/name` to see if the repo already exists.
+  New repo: cd name && gh repo create name --private --source=. --remote=origin --push
+  It already exists: do NOT make another one - ASK the owner whether to push into it (see QUESTION below).
+  Push refused (403 / 401 / "Permission denied" / "Authentication failed"): run `gh auth setup-git` once (git then uses
+  gh's login) and push again. Still refused: STOP and tell the owner exactly what to run (e.g. `gh auth login`).
+  The remote is always called origin.
+- Never repeat what already failed. Two failures of the same kind = change approach or stop and explain.
+- QUESTION: when you need the owner's decision (overwrite? which one? a login?), reply with one line
+  QUESTION: <your question>   and no code block. You stop there; the owner's answer comes as the next message.
 - Pictures, 3D and video: never draw with text - run LOKI's makers:
   loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art oil-painting
   watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
@@ -222,6 +229,7 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
                                                          shell=shell_name, mac=mac)})
     started, steps, bad, last_thought, ran, exit_reason = time.time(), 0, 0, "", [], "steps"
     tot_in = tot_out = 0
+    fails: list = []
     while steps < max_steps:
         if cancelled and cancelled():
             exit_reason = "cancelled"
@@ -253,6 +261,11 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
                                      "input": tot_in, "output": tot_out, "tps": LAST_USAGE.get("tps", 0),
                                      "seconds": round(time.time() - started, 1)}))
         msgs.append({"role": "assistant", "content": reply})
+        q = re.search(r"^\s*QUESTION:\s*(.+)$", re.sub(r"<think>.*?</think>", "", reply, flags=re.S), re.M)
+        if q and not _BLOCK.search(reply):
+            last_thought = "QUESTION: " + q.group(1).strip()
+            exit_reason = "question"
+            break
         cmd, err = parse_action(reply)
         thought = _BLOCK.sub("", re.sub(r"<think>.*?</think>", "", reply, flags=re.S)).strip()
         if thought:
@@ -280,6 +293,13 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
         say("tool", "$ " + cmd[:400])
         code, out = execute(cmd)
         ran.append((cmd, code))
+        fails.append(_failure_key(code, out))
+        if len(fails) >= 3 and fails[-1] and fails[-1] == fails[-2] == fails[-3]:
+            # the same failure three times in a row: stop and say what is wrong instead of burning steps (owner's Mac
+            # 2026-10-25: 30 steps of 'git push ... 403')
+            last_thought = "BLOCKED - the same error three times:\n```\n%s\n```" % out.strip()[-1200:]
+            exit_reason = "stuck"
+            break
         say("tool_result" if code == 0 else "error", ("exit %d: %s" % (code, out))[:400])
         extra = ""
         if len([b for b in _BLOCK.findall(re.sub(r"<think>.*?</think>", "", reply, flags=re.S)) if b.strip()]) > 1:
@@ -310,6 +330,17 @@ def _git_repos(ws: Path, chs: list) -> list:
     return sorted(repos)
 
 
+def _failure_key(code: int, out: str) -> str:
+    """The kind of failure ('' for a success): the error line with numbers and paths blurred, so 'push ... 403' twice
+    with different wording still matches."""
+    if code == 0:
+        return ""
+    lines = [ln for ln in (out or "").splitlines() if re.search(r"error|fatal|denied|refused|not found|403|401|failed", ln, re.I)]
+    key = (lines[-1] if lines else (out or "").strip().splitlines()[-1:] or [""])
+    key = key if isinstance(key, str) else key[0]
+    return re.sub(r"[0-9a-f]{7,}|\d+|/[^\s'\"]+", "#", key.lower()).strip()[:200]
+
+
 def verify(task: str, ws: Path, chs: list, thought: str, exit_reason: str, ran: list, shell: list) -> str:
     """LOKI's own check of the result: what changed in the folder, and the git log of any repo made or changed."""
     lines = []
@@ -322,11 +353,29 @@ def verify(task: str, ws: Path, chs: list, thought: str, exit_reason: str, ran: 
     if chs:
         import dsh_engine  # pylint: disable=import-outside-toplevel
         lines.append("In the folder: %s." % dsh_engine.describe(chs))
+    pushed_ok = None
+    if re.search(r"\b(push|publish|upload|github)\b", task, re.I):
+        # pushing changes no file: LOKI asks GitHub itself whether the repo's commit is really there
+        named = [d for d in sorted(ws.iterdir()) if (d / ".git").is_dir() and re.search(r"\b%s\b" % re.escape(d.name), task, re.I)] \
+            if ws.is_dir() else []
+        for d in named[:2]:
+            code, out = run_command("git remote get-url origin && git rev-parse HEAD && git ls-remote origin", d,
+                                    timeout=40, shell=shell)
+            parts = out.split()
+            here = parts[1] if len(parts) > 1 else ""
+            pushed_ok = bool(code == 0 and here and here in parts[2:])
+            lines.append("Checked by LOKI - on GitHub: %s" % (
+                "%s has commit %s - pushed." % (parts[0], here[:7]) if pushed_ok else
+                "NOT pushed (%s)." % (out.strip().splitlines()[-1][:300] if out.strip() else "no remote")))
     wants_change = bool(re.search(r"\b(make|create|build|write|add|commit|init|set ?up|generate|fix|change|edit|"
                                   r"rename|move|delete|install)\b", task, re.I))
-    if exit_reason != "done" or (wants_change and not chs):
+    if exit_reason == "done" and pushed_ok is False:
+        lines.insert(0, "NOT DONE - the push did not reach GitHub.")
+    if exit_reason != "done" or (wants_change and not chs and not pushed_ok):
         why = {"steps": "it ran out of steps", "time": "it ran out of time", "format": "the model stopped giving "
                "commands", "cancelled": "you stopped it", "done": "it said done but nothing changed in the folder"}
+        if exit_reason in ("question", "stuck"):     # a question for the owner / a clear blocker: said as it is
+            return "\n\n".join(lines).strip()
         lines.insert(0, "NOT DONE - %s (%d commands run)." % (why.get(exit_reason, exit_reason), len(ran)))
     if wants_change and re.search(r"\bgit\b", task, re.I) and re.search(r"\b(repo|repository|init|commit)\b", task, re.I) \
             and not repos and exit_reason == "done":
