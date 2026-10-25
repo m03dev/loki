@@ -35,3 +35,20 @@ No mature open-source polygon-modeling kernel runs in the browser. The plan the 
 `.gitignore`'s `build/` had kept `app/ui/vendor/three-mesh-bvh/core/build/` out of git, so on a fresh checkout every
 three-mesh-bvh import failed - Forge's path-traced Render could not load. The vendor folders are excluded from that rule
 now, and every relative import under `app/ui` resolves to a tracked file.
+
+
+## The open booleans (2026-10-25)
+
+Mesh > Booleans > Slice, Hole Punch, Cut Out and Split Edges, as in Maya. Only the FIRST picked mesh's surface is
+kept, cut where the others cross it. The others are joined into one cutter first, and none of their faces are kept.
+
+| Command | Result | three-bvh-csg |
+|---|---|---|
+| Hole Punch | The first mesh minus the others; the hole stays open | `HOLLOW_SUBTRACTION` |
+| Cut Out | Only the part of the first mesh inside the others (open) | `HOLLOW_INTERSECTION` |
+| Slice | Both parts, as separate pieces of one object (pull them apart) | both, combined |
+| Split Edges | The same closed surface, with new edges where the others crossed it | both, welded, T-junctions fixed |
+
+The two sides of the cut come out of the CSG with their seam vertices in different places. `ForgePoly.fixTJunctions`
+(forge_poly.js) puts each one into the other side's edge, so the surface closes again. Tests: test_forge_boolean2_ui
+(area 5 / 1 / 6 / 6 on two off-axis unit cubes) and js/test_forge_tjunction.

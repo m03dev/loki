@@ -62,6 +62,8 @@ MAP = {
     # Mesh
     "PolygonBooleanUnion": "boolUnion", "PolygonBooleanDifference": "boolDifference",
     "PolygonBooleanDifferenceBA": "boolDifferenceBA", "PolygonBooleanIntersection": "boolIntersection",
+    "PolygonBooleanSlice": "boolSlice", "PolygonBooleanHolePunch": "boolHolePunch", "PolygonBooleanCutOut": "boolCutOut",
+    "PolygonBooleanSplitEdges": "boolSplitEdges",
     "CombinePolygons": "combine", "SeparatePolygon": "separate", "FillHole": "fillHole", "ReducePolygon": "sculptReduce",
     "PolyRemesh": "sculptRemesh", "PolyRetopo": "sculptQuadRemesh", "SmoothPolygon": "smooth", "Triangulate": "triangulate",
     "Quadrangulate": "quadrangulate", "MirrorPolygonGeometry": "mirror", "CleanupPolygon": "cleanup",

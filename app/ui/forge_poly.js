@@ -157,7 +157,60 @@
     return { v, f };
   };
 
-  // ------------------------------------------------------------------ operations (GoBuild mesh/operations)
+  // T-junctions: a vertex lying INSIDE another face's border edge (two meshes cut apart at different points, the CSG's
+  // seams) leaves both edges open. Each such edge takes the vertices on it, in order, so the two sides share edges and
+  // close. Repeats until nothing changes (a few passes at most). eps is relative to the mesh's size.
+  P.fixTJunctions = (m0, eps) => {
+    const m = { v: m0.v.map((p) => p.slice()), f: m0.f.map((f) => f.slice()) };
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const p of m.v) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], p[d]); hi[d] = Math.max(hi[d], p[d]); }
+    const tol = (eps || 1e-6) * Math.max(1e-9, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]));
+    for (let pass = 0; pass < 6; pass++) {
+      const T = P.topology(m), border = T.edges.map((e, i) => i).filter((i) => T.edges[i].faces.length === 1);
+      if (!border.length) break;
+      const bverts = [...new Set(border.flatMap((i) => [T.edges[i].a, T.edges[i].b]))];
+      // a grid over the border vertices, so each edge looks only near itself
+      const cell = Math.max(tol * 4, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 64), grid = new Map();
+      const gk = (x, y, z) => x + "," + y + "," + z;
+      for (const i of bverts) { const p = m.v[i], k = gk(Math.floor(p[0] / cell), Math.floor(p[1] / cell), Math.floor(p[2] / cell)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+      let changed = false;
+      const insert = new Map();                          // "fi:a" -> the vertices to put between a and the next one
+      for (const ei of border) {
+        const e = T.edges[ei], A = m.v[e.a], B = m.v[e.b], d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        if (L2 < tol * tol) continue;
+        const on = [];
+        const c0 = [0, 1, 2].map((k) => Math.floor((Math.min(A[k], B[k]) - tol) / cell)), c1 = [0, 1, 2].map((k) => Math.floor((Math.max(A[k], B[k]) + tol) / cell));
+        if ((c1[0] - c0[0] + 1) * (c1[1] - c0[1] + 1) * (c1[2] - c0[2] + 1) > 4096) continue;
+        for (let x = c0[0]; x <= c1[0]; x++) for (let y = c0[1]; y <= c1[1]; y++) for (let z = c0[2]; z <= c1[2]; z++) {
+          for (const i of grid.get(gk(x, y, z)) || []) {
+            if (i === e.a || i === e.b) continue;
+            const p = m.v[i], t = ((p[0] - A[0]) * d[0] + (p[1] - A[1]) * d[1] + (p[2] - A[2]) * d[2]) / L2;
+            if (t <= 1e-9 || t >= 1 - 1e-9) continue;
+            const q = [A[0] + d[0] * t - p[0], A[1] + d[1] * t - p[1], A[2] + d[2] * t - p[2]];
+            if (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] <= tol * tol) on.push([t, i]);
+          }
+        }
+        if (!on.length) continue;
+        on.sort((x, y) => x[0] - y[0]);
+        const fi = e.faces[0], f = m.f[fi], k = f.findIndex((x, j) => (x === e.a && f[(j + 1) % f.length] === e.b) || (x === e.b && f[(j + 1) % f.length] === e.a));
+        if (k < 0) continue;
+        const forward = f[k] === e.a, ids = [...new Set(on.map((x) => x[1]))];
+        insert.set(fi + ":" + k, forward ? ids : ids.reverse());
+        changed = true;
+      }
+      if (!changed) break;
+      const byFace = new Map();
+      for (const [key, ids] of insert) { const [fi, k] = key.split(":").map(Number); if (!byFace.has(fi)) byFace.set(fi, new Map()); byFace.get(fi).set(k, ids); }
+      for (const [fi, ks] of byFace) {
+        const f = m.f[fi], g = [];
+        for (let j = 0; j < f.length; j++) { g.push(f[j]); if (ks.has(j)) g.push(...ks.get(j)); }
+        m.f[fi] = g;
+      }
+    }
+    return m;
+  };
+
+  // ------------------------------------------------------------------ operations (GoBuild mesh/operations)  // ------------------------------------------------------------------ operations (GoBuild mesh/operations)
   // Extrude: the selected faces move as one region along their averaged normals; each boundary edge a->b of the
   // region gets a side quad [a, b, b', a'] (GoBuild extrude_operation's winding).
   P.extrude = (m0, faces, dist) => {

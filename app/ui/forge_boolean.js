@@ -12,7 +12,12 @@ const ForgeBoolean = (() => {
   let lib = null;
   const load = async () => (lib = lib || await import("/ui/vendor/three-bvh-csg/index.js"));
   const OPS = { union: ["ADDITION", "Union"], difference: ["SUBTRACTION", "Difference"],
-    differenceBA: ["REVERSE_SUBTRACTION", "Difference (B - A)"], intersection: ["INTERSECTION", "Intersection"] };
+    differenceBA: ["REVERSE_SUBTRACTION", "Difference (B - A)"], intersection: ["INTERSECTION", "Intersection"],
+    // Maya's open booleans: only the FIRST mesh's surface is kept, cut where the others cross it - nothing of theirs
+    holePunch: ["HOLLOW_SUBTRACTION", "Hole Punch"],      // the first mesh minus the others, the hole left open
+    cutOut: ["HOLLOW_INTERSECTION", "Cut Out"],           // only the part of the first mesh inside the others
+    slice: ["SLICE", "Slice"],                            // both parts, as separate pieces of one object
+    splitEdges: ["SPLIT", "Split Edges"] };               // the same surface, with new edges where the others cross it
 
   /** A Forge polygon mesh {v, f} -> an indexed triangle BufferGeometry (faces fan-triangulated). */
   function toGeometry(THREE, m) {
@@ -51,14 +56,33 @@ const ForgeBoolean = (() => {
     const ev = new L.Evaluator();
     ev.attributes = ["position", "normal"];
     ev.useGroups = false;
-    let acc = new L.Brush(toGeometry(THREE, parts[0].poly));
-    acc.updateMatrixWorld();
-    for (const p of parts.slice(1)) {
-      const b = new L.Brush(toGeometry(THREE, p.poly));
-      b.updateMatrixWorld();
-      acc = ev.evaluate(acc, b, L[spec[0]]);
+    const brush = (poly) => { const b = new L.Brush(toGeometry(THREE, poly)); b.updateMatrixWorld(); return b; };
+    let out;
+    if (spec[0] === "SLICE" || spec[0] === "SPLIT" || spec[0].startsWith("HOLLOW")) {
+      // the cutters first become one (their union), then they cut the first mesh's surface
+      let cut = brush(parts[1].poly);
+      for (const p of parts.slice(2)) cut = ev.evaluate(cut, brush(p.poly), L.ADDITION);
+      const a = brush(parts[0].poly);
+      const piece = (k) => fromGeometry(ev.evaluate(a, cut, L[k]).geometry);
+      if (spec[0].startsWith("HOLLOW")) out = piece(spec[0]);
+      else {
+        const outside = piece("HOLLOW_SUBTRACTION"), inside = piece("HOLLOW_INTERSECTION"), P = window.ForgePoly;
+        if (!inside.f.length) return spec[1] + ": the others do not cross " + parts[0].name + ".";
+        if (spec[0] === "SLICE") out = P.combine([outside, inside]);      // two pieces, not welded: pull them apart
+        else {                                                           // one surface again, welded along the cut
+          const both = P.combine([outside, inside]), pos = [], idx = [];
+          both.v.forEach((q) => pos.push(q[0], q[1], q[2]));
+          for (const f of both.f) for (let k = 1; k + 1 < f.length; k++) idx.push(f[0], f[k], f[k + 1]);
+          out = P.fromTriangles(Float32Array.from(pos), idx);
+          if (P.fixTJunctions) out = P.fixTJunctions(P.weld(out, 1e-6), 1e-6);   // the two sides' seams meet: one closed surface
+          if (P.quadrangulate) { const q = P.quadrangulate(out, out.f.map((_, i) => i), { angle: 1, keepHardEdges: false }); if (q && q.m && q.m.f.length) out = q.m; }
+        }
+      }
+    } else {
+      let acc = brush(parts[0].poly);
+      for (const p of parts.slice(1)) acc = ev.evaluate(acc, brush(p.poly), L[spec[0]]);
+      out = fromGeometry(acc.geometry);
     }
-    const out = fromGeometry(acc.geometry);
     if (!out.f.length) return spec[1] + ": nothing is left (the meshes do not overlap that way).";
     const n = t.replaceWith(parts.map((p) => p.id), out, "polySurface");
     if (!n) return spec[1] + " did not work.";
@@ -71,6 +95,10 @@ const ForgeBoolean = (() => {
     FORGE_PRO_CMDS.boolDifference = ["Difference", () => run("difference")];
     FORGE_PRO_CMDS.boolDifferenceBA = ["Difference (B - A)", () => run("differenceBA")];
     FORGE_PRO_CMDS.boolIntersection = ["Intersection", () => run("intersection")];
+    FORGE_PRO_CMDS.boolSlice = ["Slice", () => run("slice")];
+    FORGE_PRO_CMDS.boolHolePunch = ["Hole Punch", () => run("holePunch")];
+    FORGE_PRO_CMDS.boolCutOut = ["Cut Out", () => run("cutOut")];
+    FORGE_PRO_CMDS.boolSplitEdges = ["Split Edges", () => run("splitEdges")];
   }
   return { run, toGeometry, fromGeometry, OPS };
 })();

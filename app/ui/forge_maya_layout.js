@@ -677,6 +677,22 @@ const FORGE_MAYA = {
      [
       "boolIntersection",
       "Intersection"
+     ],
+     [
+      "boolSlice",
+      "Slice"
+     ],
+     [
+      "boolHolePunch",
+      "Hole Punch"
+     ],
+     [
+      "boolCutOut",
+      "Cut Out"
+     ],
+     [
+      "boolSplitEdges",
+      "Split Edges"
      ]
     ]
    ],
@@ -1271,6 +1287,22 @@ const FORGE_MAYA = {
       [
        "boolIntersection",
        "Intersection"
+      ],
+      [
+       "boolSlice",
+       "Slice"
+      ],
+      [
+       "boolHolePunch",
+       "Hole Punch"
+      ],
+      [
+       "boolCutOut",
+       "Cut Out"
+      ],
+      [
+       "boolSplitEdges",
+       "Split Edges"
       ]
      ]
     ],
