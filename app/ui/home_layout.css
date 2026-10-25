@@ -243,12 +243,7 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .lm-ask { font-size: 12.5px; color: var(--muted); }
 .lm-ask.bad, .lm-box .bad { color: #f0a0a0; }
 .lm-acts .danger { background: rgba(220,80,80,.85); color: #fff; border: 0; }
-/* Settings > Agent: Ziva's MCP address */
-.ae-ziva { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.ae-ziva .ae-label { flex: none; }
-.ae-ziva-in { flex: 1 1 260px; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,.12));
-  background: rgba(0,0,0,.2); color: var(--text); font-size: 12.5px; }
-/* an approval when the chat is not on screen (or asked from outside, e.g. Ziva through LOKI's tools) */
+/* an approval when the chat is not on screen (or asked from outside, by an agent using LOKI's tools) */
 .approval.floating { position: fixed; right: 18px; bottom: 18px; z-index: 300; width: min(460px, calc(100vw - 36px)); max-height: 70vh;
   overflow: auto; background: var(--side, #1b1d22); border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 14px;
   padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.55); }

@@ -655,7 +655,7 @@ import imagegen  # noqa: E402
 
 check("the image runner's own plan matches what auto really tries", imagegen.plan_order("pollinations")["order"] == ["pollinations"]
       and imagegen.plan_order("auto")["order"][-1] == "pollinations")
-# Ziva (Mac): a 16 GB M4 filled its swap and crashed every Z-Image plan. Gate it on memory.
+# Mac: a 16 GB M4 filled its swap and crashed every Z-Image plan. Gate it on memory.
 ok16, why16 = imagegen.memory_gate(ram_gb=16, nvidia=False)
 check("a 16 GB Mac without an NVIDIA GPU skips local Z-Image, saying why",
       not ok16 and "16 GB" in why16 and "LOKI_IMAGE_BACKEND=zimage" in why16)

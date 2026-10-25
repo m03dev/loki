@@ -69,7 +69,7 @@
    "revision": "main",
    "path": "RealESRGAN_x4plus.pth",
    "size": 67040989,
-   "license": "BSD-3-Clause (xinntao/Real-ESRGAN; size from its v0.1.0 release asset - re-check on the PC: ZIVA_TASKS 2026-10-25)",
+   "license": "BSD-3-Clause (xinntao/Real-ESRGAN; size from its v0.1.0 release asset)",
    "alternatives": []
   }
  ],

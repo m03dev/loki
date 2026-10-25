@@ -383,7 +383,7 @@ async def main():
             await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[2])
             await page.keyboard.up("Shift")
             rng = await page.evaluate(T + ".selected()")
-            # macOS turns Ctrl+click into a SECONDARY click, so the toggle is Cmd there (Ziva) - the handler takes either
+            # macOS turns Ctrl+click into a SECONDARY click, so the toggle is Cmd there - the handler takes either
             toggle_mod = "Meta" if sys.platform == "darwin" else "Control"
             await page.keyboard.down(toggle_mod)
             await page.click('#forge-outliner .forge-out-row[data-id="%d"] .forge-out-name' % rows[1])
@@ -475,7 +475,7 @@ async def main():
             ui_off = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden, document.getElementById('forge').classList.contains('forge-bare')]")
             await page.click("#forge-ui-btn")
             ui_on = await page.evaluate("[document.getElementById('forge-outcol').hidden, document.getElementById('forge-chancol').hidden, document.getElementById('forge').classList.contains('forge-bare')]")
-            check("the UI button in Forge's title hides every panel and the bars, and brings them back (Ziva's, same store)",
+            check("the UI button in Forge's title hides every panel and the bars, and brings them back (same store)",
                   ui_off == [True, True, True] and ui_on == [False, False, False], [ui_off, ui_on])
             await page.click("#forge-out-fold")
             fold = await page.evaluate("[document.getElementById('forge-outliner').classList.contains('collapsed'), document.getElementById('forge-outcol').hidden]")

@@ -1,4 +1,4 @@
-"""Workbench - the Claude Code / Ziva habits, for LOKI's own window.
+"""Workbench - the Claude Code habits, for LOKI's own window.
 
   * Checkpoints: before every request that may change files, the workspace is snapshotted
     into a PRIVATE shadow git store (<state>/checkpoints.git, --work-tree=<workspace>). It

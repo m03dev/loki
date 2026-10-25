@@ -185,7 +185,7 @@ check("a model that says DONE without writing anything is stopped, not looped fo
 check("tasks (the goal loop) are decided first too", len(seen.get("decisions", [])) == 1, seen)
 
 
-async def dir_only_turn(*_a, **_k):   # Ziva's S2 case: only make_dir, then a false DONE
+async def dir_only_turn(*_a, **_k):   # the S2 case: only make_dir, then a false DONE
     await loki.call_tool("make_dir", {"path": "notes"})
     return "DONE: Created notes/hello.txt with 'hi'"
 

@@ -1,6 +1,6 @@
-"""LOKI Studio as an MCP server: Claude Code, Codex, Cursor (or Ziva) get Studio's Godot hands.
+"""LOKI Studio as an MCP server: Claude Code, Codex and Cursor get Studio's Godot hands.
 
-Like Ziva's "acting as an MCP server", but the tools are Studio's: the LIVE Godot editor through the
+The tools are Studio's: the LIVE Godot editor through the
 LOKI Studio plugin (scene tree, nodes, properties, signals, scripts, run / stop, playtest turn by
 turn, find lag, screenshots, the editor's and the game's errors), the offline Godot class reference,
 the project index - and Studio's own sessions (start one, send to it, read what it did).

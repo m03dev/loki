@@ -97,7 +97,7 @@ Concise dated records of meaningful work. Newest at the top.
 - Forge: forge_scene.js ghost working object, R layers + template look + pick-through, Alpha Gain, image
   plane nodes; new forge_split.js, forge_imageplane.js, forge_geom.js; C++ native/sculpt/core/src/cage_subdiv.cpp +
   ks_cage_subdiv + worker "cage" message, sculpt.wasm rebuilt (WASI SDK 25). Research: docs/FORGE_QOL.md.
-- Merged Ziva's 24d3b7a (Channel Box Rotate Order / Lock / custom attributes) - her channel fields also hand the keys
+- Merged 24d3b7a (Channel Box Rotate Order / Lock / custom attributes) - its channel fields also hand the keys
   back on Enter now; rebased on her b83d324 (modelling symmetry) and kept her test_forge_pro_ui expectations, adding only
   visible-row counting and a really empty spot for the right-button check (the 3/4 camera put a cube under the old one).
 - Checked (cloud, each < 1 min): test_forge_cleanup_ui 23 (new), test_forge_native_geom 13 (new; node test_cage 9),
@@ -106,14 +106,14 @@ Concise dated records of meaningful work. Newest at the top.
   studio_destination 81, --self-test OK (with tests/cloud_stubs). Not checked: the real Mac / PC windows.
 - Shipped with `ship.py --no-tests`: the fast run picked suites that fail identically on a clean origin/master
   (test_loki 1 from 17ff945's tracked Godot addon, test_usability i18n, test_qol, test_research3,
-  test_studio's cloud-stub noise) - ZIVA_TASKS "DO FIRST (Claude, 04:40)".
+  test_studio's cloud-stub noise) - LOKI_TASKS "DO FIRST (Claude, 04:40)".
 
 ## 2026-10-21 (night) - Forge: In-View Editor, tool options, Cleanup, wireframe, selection preferences (Claude, cloud)
 
 - forge_toolkit.js (In-View Editor, choice settings, Cleanup window, Mesh Report, selection prefs), forge_polyops.js
   options + P.cleanup / P.meshStats (subagent, test_forge_polyops 135, docs/FORGE_PRO_TOOL_OPTIONS.md), forge_chrome.js
   wireframe, forge_edit.js camera based selection + preselection + pick-buffer reuse, forge_scene.js polygon-edge
-  selection wires. Mac: Ziva's colliding local forge_polyops.js resolved (her loop fallback + bevel check merged).
+  selection wires. Mac: a colliding local forge_polyops.js resolved (its loop fallback + bevel check merged).
   Checked: test_forge_rules_ui 23 and every Forge suite. Not run: --self-test (no openai / PyPI here).
 
 ## 2026-10-21 (later) - Forge: the pro polygon tools, Modeling Toolkit, modelling rules (Claude, cloud)
@@ -148,7 +148,7 @@ Concise dated records of meaningful work. Newest at the top.
   forge_pro.js commands, forge.css panel, `engine/loki_bridge.py` worker CSP. Test: tests/test_forge_sculpt_engine.py
   (19, in ship.py's list). test_godot_world's 3 failures (Gator addon files) were already failing on master.
 
-## 2026-10-18 - more local models: uncensored builds and your own (Ziva, the PC)
+## 2026-10-18 - more local models: uncensored builds and your own (the PC)
 
 - `engine/model_setup.py`: opt-in `UNCENSORED` catalog (abliterated Qwen3.5/Qwen3, Dolphin 3,
   abliterated Llama 3.2), never the automatic pick; `extra_catalog()`/`full_catalog()` merge the
@@ -183,7 +183,7 @@ Concise dated records of meaningful work. Newest at the top.
   LOKI memory, skills, subagents, offline Godot docs, project index + mermaid, playtest_step, find_lag, fork, Studio
   as an MCP server, Claude Code/Codex/LM Studio drivers. docs/STUDIO.md, docs/STUDIO_VS_ZIVA.md (15-task benchmark).
 - tests/test_studio_godot.py (135, ~20 s, in SUITES) incl. a REAL headless Godot 4.7.2 editor + game. Real machines:
-  ZIVA W37 (PC: install, dock, the benchmark vs Ziva), M28 (Mac).
+  W37 (PC: install, dock, the benchmark), M28 (Mac).
 ## 2026-10-17 - Session 29 (Claude, worktree): chat quality of life from Ziva's public patch notes
 
 - Read Ziva's changelog + docs; docs/integrations/ZIVA_QOL.md lists every chat QoL item with its source, LOKI's status
@@ -397,7 +397,7 @@ Concise dated records of meaningful work. Newest at the top.
 - app/ui/engine/pixel_engine.js, play.html/play.js, games/fox_berries, Settings > Play (sandboxed),
   /games/<name>/<file>, /games/list, tool game_engine_guide. tests/test_play.py (20).
 - app/ui/brain.js, Settings > Brain: map + search + read + edit/forget memory facts.
-- Ziva on the PC: "Use Main Screen Tab" off (the tab was off-screen on the portrait monitor).
+- On the PC: "Use Main Screen Tab" off (the tab was off-screen on the portrait monitor).
 
 ---
 
@@ -431,7 +431,7 @@ Concise dated records of meaningful work. Newest at the top.
 
 ---
 
-## 2026-10-15 - Session 18 (Ziva Mac): off-network link, S2/S3, a real-model team, one crashed ship
+## 2026-10-15 - Session 18 (the Mac): off-network link, S2/S3, a real-model team, one crashed ship
 
 - M3 off-network link: the peer link only dials private addresses, so a public relay is used
   behind a loopback forwarder - new `tools/peer_forward.py` and `docs/operations/OFF_NETWORK.md`,
@@ -450,8 +450,8 @@ Concise dated records of meaningful work. Newest at the top.
   SAME numbers as the real run, and a new `tests/test_stubs.py` runs one contract against both
   the stubs and the real `openai`/`pydantic`/`mcp`, failing on drift (contract testing is how you
   keep test doubles honest). Added to `tools/ship.py`.
-- **CRASH:** the ship of the team report was interrupted by a Ziva / sidecar restart mid-run. It
-  left a modified ZIVA_TASKS.md and several suites' temp dirs (`loki-auto-*`, `loki-role-*`,
+- **CRASH:** the ship of the team report was interrupted by a sidecar restart mid-run. It
+  left a modified LOKI_TASKS.md and several suites' temp dirs (`loki-auto-*`, `loki-role-*`,
   `loki-systems-*`, `tmp*`) in the repo root. The temp dirs were removed (they were never
   committed) and the work was re-shipped. No code was lost and no partial commit was made - the
   run died before it reached the commit step.
@@ -471,7 +471,7 @@ Concise dated records of meaningful work. Newest at the top.
   providers, the check itself), added to tools/ship.py.
 - Fixed: ReasoningBank called every finished chat a failure; no specialist reason in the prompt
   when none was ready; /fleet double response; check job blocked by the local-model slot.
-- Not run on a real machine yet (ZIVA_TASKS S1).
+- Not run on a real machine yet (LOKI_TASKS S1).
 
 ## 2026-10-15 - Phone app (iOS + Android) and the phone link
 
@@ -498,7 +498,7 @@ Concise dated records of meaningful work. Newest at the top.
   and `.env` OPENROUTER_MODEL = deepseek/deepseek-v4.1-flash, a paid model, which makes
   `openrouter` metered and changes smart routing); made hermetic. All 11 suites green.
 - `docs/LOKI_BLUEPRINT.pdf` added: improved prompt, research (free hosts, Hermes tool
-  harness, Qwen image, OBLITERATUS excluded), plan, and the Ziva Windows/Mac task lists.
+  harness, Qwen image, OBLITERATUS excluded), plan, and the the PC/Mac task lists.
 
 ## 2026-10-14 (session 14) - Portal, sign-in, Update everything, agent builder, 3D world
 
@@ -514,10 +514,10 @@ Concise dated records of meaningful work. Newest at the top.
 - Agent builder (agents.py): skills, tools, harness, fallback, home machine, memory, colour,
   draft from a sentence, templates; /agents/launch places agents on a peer.
 - Specialists media (yt-dlp), image (Z-Image Turbo / Pollinations), reach (Agent Reach).
-- ZIVA_TASKS.md: tasks for Ziva Mac / Ziva Windows and an inbox for requests.
+- LOKI_TASKS.md: tasks for the Mac / the PC and an inbox for requests.
 - Verified (cloud): tests/test_portal.py 122 checks without the engine packages; QR codes
   decoded by jsQR; UI rendered in headless Chromium with a stub engine, no console errors.
-  Not verified here: the other suites (no PyPI access in the workspace) - CI and Ziva W1/M1.
+  Not verified here: the other suites (no PyPI access in the workspace) - CI and W1/M1.
 
 ---
 
@@ -984,14 +984,14 @@ dock before it was better. Reverted.
 2. DecisionProvider contract + Laya mock.
 3. Capability registry prototype over existing tool/MCP schemas.
 
-## 2026-10-17 - Ziva (Windows): PC checks, and a duplicate fix dropped
+## 2026-10-17 - the PC: PC checks, and a duplicate fix dropped
 
 Ran the [windows] inbox item and W21/W20/W19/W18/W10/W23 on the PC (28 suites green). Verified
 Session 27's job fix on the PC: POST /creations/make made a real ~1 MB picture with zimage in
 ~7 min; /peers/diagnose works over the relay and is redacted. Dropped a duplicate weak-model
-"Make it" fix after finding a5deaad already fixed it better; no code shipped. See ZIVA_TASKS.md.
+"Make it" fix after finding a5deaad already fixed it better; no code shipped. See LOKI_TASKS.md.
 
-## 2026-10-17 (later) - Ziva (Windows): everything installed, two bugs fixed
+## 2026-10-17 (later) - the PC: everything installed, two bugs fixed
 
 Ollama 0.40.5->0.40.6 + Bonsai 2 (correct -Q2_0 tag) loads; kokoro 0.2.2 + soundfile installed and
 fixed (ASCII-safe config - Kokoro opened its UTF-8 config with the Windows cp1252 locale and fell
@@ -999,7 +999,7 @@ back); TimesFM 3.0.2 installed; ACE-Step 1.5 cloned, uv synced and running with
 ACESTEP_OFFLOAD_TO_CPU=true, a fox song made a real 30 s mp3, and engine/music.py fixed (a ready
 /v1/audio?path= file was wrapped again -> 403). 32 suites green; tests/test_research_ports 146.
 
-## 2026-10-17 (later) - Ziva (Windows): the new PC-only duties left six suites red on Windows
+## 2026-10-17 (later) - the PC: the new PC-only duties left six suites red on Windows
 
 The new autopilot duties (selftest, task_bench; auto = on for the PC) broke six suites on Windows
 while they stayed green on the Mac: test_autopilot, test_core_upgrade, test_self_systems and
@@ -1008,7 +1008,7 @@ test_task_success (its scripted team task takes about 83 s on this PC, over the 
 tests/tasks/base.py pycmd() passed a Windows path as a regex replacement (a C:/Users path has an
 invalid backslash escape). Fixed all six - Windows can ship again.
 
-## 2026-10-18 (later) - Ziva (Windows): W50 verified, one fix (the Godot tab said "not installed")
+## 2026-10-18 (later) - the PC: W50 verified, one fix (the Godot tab said "not installed")
 
 Checked the owner's W50 on the PC after pulling master. The frameless title bar is real (no system frame, tabs
 centred, LOKI's own min / max / close, maximise keeps the taskbar); engine.out shows the two Godot 4.7.2 download
@@ -1023,7 +1023,7 @@ Also a Windows-only bug the ship run surfaced: an installed git extension kept i
 files are read-only and rmtree(ignore_errors=True) gave up silently. engine/extensions.py now chmods them writable
 and retries; tests/test_apps.py 114 passed, 0 failed.
 
-## 2026-10-18 (later) - Ziva (Windows): cleaned the repo and PC, fixed Studio's pin
+## 2026-10-18 (later) - the PC: cleaned the repo and PC, fixed Studio's pin
 
 The owner: the bug started in LOKI Studio, clean everything old, make git completely clean. Found the Studio bug:
 Studio runs a pinned copy and only moves the pin when its own check is green, and pin.json showed 9e1f7eb had "failed

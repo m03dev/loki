@@ -1,7 +1,7 @@
 """The LOKI MCP API: LOKI's engine and its own code, as an MCP server an agent can drive.
 
 LOKI Studio's development agent uses it (that is how it inspects and controls the running LOKI
-while it works on LOKI's code), and so can Claude Code, Codex or Ziva (docs/LOKI_MCP.md has the
+while it works on LOKI's code), and so can Claude Code or Codex (docs/LOKI_MCP.md has the
 config snippet). Two halves:
 
   the running LOKI   status / version / update state, models doctor, General settings (never a
@@ -488,13 +488,13 @@ class LokiAPI:
         return self._git("log", "--oneline", "-n", str(max(1, min(50, int(count or 10)))))
 
     def read_doc(self, name: str = "HANDOFF.md", section: str = "", lines: int = 200) -> str:
-        """Read HANDOFF.md, ZIVA_TASKS.md, AGENTS.md or docs/BUILD_BRIEF.md (section= a heading to jump to)."""
-        allowed = {"handoff": "HANDOFF.md", "ziva": "ZIVA_TASKS.md", "ziva_tasks": "ZIVA_TASKS.md",
+        """Read HANDOFF.md, LOKI_TASKS.md, AGENTS.md or docs/BUILD_BRIEF.md (section= a heading to jump to)."""
+        allowed = {"handoff": "HANDOFF.md", "tasks": "LOKI_TASKS.md", "loki_tasks": "LOKI_TASKS.md",
                    "agents": "AGENTS.md", "brief": "docs/BUILD_BRIEF.md", "build_brief": "docs/BUILD_BRIEF.md"}
         key = str(name or "handoff").lower().replace(".md", "").replace("docs/", "")
         rel = allowed.get(key) or next((v for v in allowed.values() if v.lower() == str(name).lower()), "")
         if not rel:
-            return "name= one of: HANDOFF.md, ZIVA_TASKS.md, AGENTS.md, docs/BUILD_BRIEF.md"
+            return "name= one of: HANDOFF.md, LOKI_TASKS.md, AGENTS.md, docs/BUILD_BRIEF.md"
         try:
             text = (self.worktree / rel).read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError as exc:

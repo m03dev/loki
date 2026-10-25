@@ -1,4 +1,4 @@
-// Workbench - Claude Code / Ziva habits in LOKI's window (engine/workbench.py on the engine side).
+// Workbench - Claude Code habits in LOKI's window (engine/workbench.py on the engine side).
 //
 //   /commands   type "/" in the message box: a palette of commands (modes, review, rewind,
 //               background agents, teams, model switch, the home screen, the system check...)

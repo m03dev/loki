@@ -2,7 +2,7 @@
 
 `engine/loki_mcp.py` is a real MCP server (the `mcp` package, already a LOKI dependency) that
 exposes LOKI's engine and LOKI's own code to an agent. LOKI Studio's development agent drives LOKI
-through it (docs/STUDIO.md); Claude Code, Codex and Ziva can connect to it the same way.
+through it (docs/STUDIO.md); Claude Code and Codex can connect to it the same way.
 
 ## Drive LOKI from Claude (2026-10-25)
 
@@ -60,7 +60,7 @@ owner's checkout, never `harness_data/`, `.env` files, `*.token`, keys or `.git`
 | `read_file` (start_line/end_line), `list_files`, `search_files` (regex, glob) | read |
 | `edit_file` (old_text must appear exactly once), `write_file` | change |
 | `git_status`, `git_diff` (new files included), `git_log` | git of the dev worktree |
-| `read_doc` | HANDOFF.md / ZIVA_TASKS.md / AGENTS.md / docs/BUILD_BRIEF.md, optionally from a heading |
+| `read_doc` | HANDOFF.md / LOKI_TASKS.md / AGENTS.md / docs/BUILD_BRIEF.md, optionally from a heading |
 | `run_tests` | `tools/ship.py --check [--only suite]` in the worktree, hermetic like CI and `check_loki` (no LOKI_* settings, no keys) |
 | `ship` | `tools/ship.py -m ...` from the worktree - every suite must pass; each machine takes it only through the health-gated updater - **always asks** |
 
@@ -104,7 +104,7 @@ command = "/Users/you/Documents/loki/harness_data/.venv/bin/python"
 args = ["/Users/you/Documents/loki/engine/loki_mcp.py", "--worktree", "/Users/you/Documents/loki/harness_data/studio/worktrees/dev"]
 ```
 
-Ziva / any client that takes the generic `mcp_servers` shape (the same shape as LOKI's own
+Any client that takes the generic `mcp_servers` shape (the same shape as LOKI's own
 `engine/mcp_servers.json`):
 
 ```json

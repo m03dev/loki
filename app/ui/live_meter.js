@@ -1,5 +1,5 @@
 // The live meter (owner 2026-10-25: "real time token tracking underneath the thinking or its steps as its working just
-// like ziva ... i want to know what model is being used and when - keep the ui clean and minimal").
+// ... i want to know what model is being used and when - keep the ui clean and minimal").
 // One quiet line under the steps while LOKI works: the model and where it runs, the step, tokens in / out so far, the
 // speed, the time. It stays under the reply when done. A model switch (a provider ran out) leaves a one-line note.
 // Fed by "usage" progress events (engine/local_agent.py, loki.run_opencode).

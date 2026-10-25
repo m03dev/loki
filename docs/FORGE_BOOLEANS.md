@@ -10,7 +10,7 @@ the pivot at its middle; one undo brings the originals back.
 - LOKI's part (`app/ui/forge_boolean.js`): Forge mesh -> triangles -> CSG -> welded mesh, coplanar triangle pairs
   joined back into quads (`quadrangulate`, 1 degree). Scene side: `worldPolys` / `replaceWith` in `forge_scene.js`.
 - Not yet: Slice, Hole Punch, Cut Out (Maya's other three). Upgrade path: **Manifold** (elalish/manifold, Apache-2.0,
-  WASM) in a worker with `'wasm-unsafe-eval'` like the sculpt worker - more robust on hard cases (ZIVA_TASKS.md).
+  WASM) in a worker with `'wasm-unsafe-eval'` like the sculpt worker - more robust on hard cases (LOKI_TASKS.md).
 - Tests: `tests/test_forge_boolean_ui.py` (volumes 1.75 / 0.75 / 0.75 / 0.25 for two half-overlapping unit cubes).
 
 ## Soft selection Falloff mode

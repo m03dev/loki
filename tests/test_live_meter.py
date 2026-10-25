@@ -1,5 +1,5 @@
 """The live meter (app/ui/live_meter.js; owner 2026-10-25: "real time token tracking underneath the thinking or its
-steps as its working just like ziva ... i want to know what model is being used and when - keep the ui clean").
+steps as its working ... i want to know what model is being used and when - keep the ui clean").
 
 The window sends a message; the fake engine's progress has steps and "usage" events. One quiet line sits under the
 newest step with the model, where it runs, the step, tokens in / out, tok/s and the time; a model switch leaves a

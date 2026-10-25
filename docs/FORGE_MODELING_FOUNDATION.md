@@ -54,8 +54,8 @@ The selection survives a join or split because it is kept by world position.
 | 6 | **Primitive creation** | Interactive creation (click-drag on the grid for the base, drag up for the height, like Maya's interactive creation / Unreal's box tool). Every primitive's attributes are in its INPUTS node, including subdivisions on all axes, caps, radius and axis. Undoable as one step. |
 | 7 | **Construction history across objects** | INPUTS show every node of every picked object. Delete history by type, a non-deformer history, and history kept through combine and separate. |
 | 8 | **Modeling tools pass** | Go through each tool (Extrude, Bevel, Bridge, Bridge Edge Loops, Multi-Cut, Insert Edge Loop, Offset Edge Loop, Merge / Target Weld, Collapse, Fill Hole, Append to Polygon, Poke, Wedge, Chamfer Vertex, Duplicate Face, Extract, Mirror, Booleans, Smooth, Reduce, Retopologize, Quad Draw). For each: Maya's options box, the In-View Editor, it working on the multi-object session, keeping UVs, one undo step, and a user-driven test. |
-| 9 | **Booleans to Manifold** | WASM build, already in ZIVA_TASKS. Exact and watertight; the three-bvh-csg fallback stays. |
+| 9 | **Booleans to Manifold** | WASM build, already in LOKI_TASKS. Exact and watertight; the three-bvh-csg fallback stays. |
 | 10 | **Quality-of-life sweep** | Repeat last (`g`), the tool settings remembered per tool, hotkey conflicts zero, and every message says what happened and what to do next. |
 
-Stages 3 to 5 are the next in-session work. Stages 6 to 10 are handed off in ZIVA_TASKS.md with the same "complete"
+Stages 3 to 5 are the next in-session work. Stages 6 to 10 are handed off in LOKI_TASKS.md with the same "complete"
 bar.

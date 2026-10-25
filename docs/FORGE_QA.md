@@ -7,7 +7,7 @@ different agents ... plan this out right, reimagine."
 The idea: LOKI is its own QA department. Four kinds of tester, from cheapest to most human, each feeding the next.
 
 ```
-  sweeper (every 6 h, idle)        explorers ([loki] teams)        Ziva (real Mac / PC)        owner
+  sweeper (every 6 h, idle)        explorers ([loki] teams)        LOKI (real Mac / PC)        owner
   tools/forge_qa.py           ->   scenarios a person would do ->  GPU, real screens, input -> decides
         |                                 |                               |
         +------ problems ------> triage (engine/forge_qa_duty.py) <-------+
@@ -52,7 +52,7 @@ The report is `harness_data/qa/forge_qa.json` (never committed) plus a summary o
 
 The sweeper cannot tell that a bevel looks wrong or that a workflow is confusing. The explorers are LOKI's own agent
 teams doing what a person does, start to finish, and writing down what got in the way. They are queued in
-ZIVA_TASKS.md under "For LOKI's own agents" and the autopilot starts them one at a time:
+LOKI_TASKS.md under "For LOKI's own agents" and the autopilot starts them one at a time:
 
 1. **Sweep + reproduce** - run the sweeper at three window sizes, reproduce each problem by hand, screenshot it.
 2. **Modelling scenario** - a chair from a cube: Multi-Cut (with the modifiers), Extrude, Bevel, Soften/Harden, Mirror,
@@ -63,9 +63,9 @@ ZIVA_TASKS.md under "For LOKI's own agents" and the autopilot starts them one at
 
 Each writes `qa/<name>.md` in the workspace (steps, what broke, how bad, a screenshot), which Home shows as Content.
 
-## 4. Ziva and the owner
+## 4. The real machines and the owner
 
-Ziva runs the sweeper on the real Mac and PC (GPU, real screen sizes, a pen) and turns what only a real machine shows
+LOKI runs the sweeper on the real Mac and PC (GPU, real screen sizes, a pen) and turns what only a real machine shows
 into `[claude]` requests. The owner sees the Lab ideas and the Content reports, and can stop any of it
 (`LOKI_FORGE_QA=off`, "No" on an idea).
 

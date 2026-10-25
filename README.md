@@ -55,7 +55,7 @@ The Mac and the PC always run the same LOKI: GitHub's `master`.
 - **Updating is automatic.** Every LOKI updates itself from GitHub when it starts
   (fast-forward only; your own edits and unpushed commits are never overwritten). While it
   runs, the sidebar shows when an update is waiting.
-- **Publishing is one command**, for you and for every agent (Ziva, Claude Code, LOKI's own):
+- **Publishing is one command**, for you and for every agent (Claude Code, LOKI's own):
   `python tools/ship.py -m "what changed"`. It runs every test suite, commits, catches up
   with GitHub, pushes, and tells your other machines. It pushes nothing if a test fails.
 - **Both platforms are tested** on every push (GitHub Actions, macOS and Windows).
@@ -64,7 +64,7 @@ The Mac and the PC always run the same LOKI: GitHub's `master`.
   `LOKI_SELF_SHIP=ask` makes it ask you first; `off` turns it off.
 
 Agents: read [AGENTS.md](AGENTS.md) and [HANDOFF.md](HANDOFF.md) before changing anything.
-Ziva: your task list and inbox is [ZIVA_TASKS.md](ZIVA_TASKS.md).
+LOKI's own task list and inbox is [LOKI_TASKS.md](LOKI_TASKS.md).
 
 ## Settings: connections, agents, world, updates
 

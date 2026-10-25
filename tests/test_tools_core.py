@@ -633,7 +633,7 @@ check("POST /computer/stop stops it", not st["armed"])
 comp.arm()
 check("an unknown action lists the real ones", "elements, find, click" in run(comp.act("dance")))
 
-# Ziva (Mac) 2026-10-18: "open TextEdit and type hello" - TextEdit opened with no window, LOKI's own window stayed
+# Mac 2026-10-18: "open TextEdit and type hello" - TextEdit opened with no window, LOKI's own window stayed
 # in front, and the next action wanted to type into python (LOKI itself).
 computer_use.FRONT_WAIT_S = 0.6
 desk.app, desk.title, desk.pid = "python", "Loki", os.getpid()

@@ -517,7 +517,7 @@ check("enabling through the engine still imports nothing", not evil_marker.exist
 check("toggling an unknown capability is a 400", loki_bridge.capability_toggle(state, {"name": "zz", "enabled": True})[0] == 400)
 ui = (REPO / "app" / "ui" / "app.js").read_text(encoding="utf-8")
 check("the app shows capability toggles", "/capabilities/enable" in ui and "loadManifests" in ui)
-# Ziva (W, 2026-10-14): a changed add-on was switched off silently. The app now says so up
+# PC (2026-10-14): a changed add-on was switched off silently. The app now says so up
 # front and the owner re-approves with one click - the same user-only endpoint, after a confirm.
 write_manifest(user_dir, "evil-cap", entrypoint="evil_cap", permissions=["network"])
 check("a user add-on that gains a permission is listed as changed",

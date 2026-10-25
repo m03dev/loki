@@ -12,7 +12,7 @@ What it does, in a real (headless) browser on the real UI:
                records page errors, "could not run" messages and commands that hang
 
 The report is JSON (default: harness_data/qa/forge_qa.json, never committed) plus a short text summary. LOKI's QA
-agents run it (engine/qa_team.py hands them the report) and file what it finds in ZIVA_TASKS.md.
+agents run it (engine/qa_team.py hands them the report) and file what it finds in LOKI_TASKS.md.
 
     python tools/forge_qa.py                 # everything (about a minute and a half on a slow box)
     python tools/forge_qa.py --only menus    # one part: menus, buttons, hotbox, commands

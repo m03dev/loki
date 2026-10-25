@@ -4,7 +4,7 @@ three-bvh-csg (github.com/gkjohnson/three-bvh-csg, MIT, Garrett Johnson) does CS
 already vendors - so booleans come from a maintained library instead of LOKI's own code (owner 2026-10-25: "isn't there
 an open source solution for this ... just copy what works"). It is plain JavaScript, so it runs under LOKI's page CSP
 (script-src 'self', no WASM in the window). The upgrade path is Manifold (Apache-2.0, WASM, more robust; needs a
-worker with 'wasm-unsafe-eval' like the sculpt worker) - ZIVA_TASKS.md has the build task.
+worker with 'wasm-unsafe-eval' like the sculpt worker) - LOKI_TASKS.md has the build task.
 
 The sources are copied as they are; bare imports are rewritten like tools/vendor_pathtracer.py does ('three' ->
 vendor/three/three.module.js, 'three-mesh-bvh' -> vendor/three-mesh-bvh/index.js). Left out: src/workers/,

@@ -8,7 +8,7 @@ private, copy anything" - each project's licence sits in `engine/licenses/` (or 
 copied files) and docs/THIRD_PARTY.md has a row per port.
 
 How the list was made: every `github.com/<owner>/<repo>` in `docs/`, `engine/`, `contrib/`,
-`capabilities/`, `tools/`, `app/ui/*.js`, HANDOFF.md and ZIVA_TASKS.md (102 strings; 12 are
+`capabilities/`, `tools/`, `app/ui/*.js`, HANDOFF.md and LOKI_TASKS.md (102 strings; 12 are
 placeholders such as `my-org/backend`, `user/repo`, `en/actions` and are left out), plus the
 documented projects whose page is not on GitHub (Hermes Agent, Headroom, OpenCode). Each
 project that looked worth porting was cloned and read (`git clone --depth 1`).
@@ -143,4 +143,4 @@ in INTEGRATION_REGISTRY.md).
   to the agent researching new repos. SWE-agent's filemap (#3) covers the outline part.
 - **Live checks**: every port is tested offline with fakes. Web search, research, site maps,
   the text browser, GitHub/feeds/Jina and scheduled jobs have not run against the real internet
-  or a real model yet - ZIVA_TASKS.md W22 (PC) and M14 (Mac) ask for that.
+  or a real model yet - LOKI_TASKS.md W22 (PC) and M14 (Mac) ask for that.

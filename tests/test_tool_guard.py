@@ -187,7 +187,7 @@ else:
         fake.stop()
 
 # --------------------------------------------------------------------------- long text calls
-# From a real PC run (2026-10-15, harness_data/_engine_ziva6.log): a local model wrote a whole
+# From a real PC run (2026-10-15, harness_data/_engine.log): a local model wrote a whole
 # web page as a TEXT write_file call. The CSS/JS braces inside the content and one missing
 # final "}" made LOKI drop the call, and a reply cut off mid-call was lost too; the task
 # looped to the step limit with no file.

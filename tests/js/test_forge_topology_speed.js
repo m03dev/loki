@@ -1,4 +1,4 @@
-// P.topology speed (Ziva task "speed up commit after a move on 50k+ face meshes"): a number edge key instead of the
+// P.topology speed (task "speed up commit after a move on 50k+ face meshes"): a number edge key instead of the
 // "a,b" string, and a moved copy of a cage (same faces) reuses the topology instead of rebuilding it.
 //   node tests/js/test_forge_topology_speed.js
 "use strict";

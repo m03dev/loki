@@ -1,6 +1,6 @@
 """The Godot class reference, offline: built once from Godot's own doc XML, then searched locally.
 
-Ziva searches the Godot docs online. Studio keeps the whole class reference (every class, method,
+In-editor agents search the Godot docs online. Studio keeps the whole class reference (every class, method,
 property, signal and constant WITH its description) in one cached file, so the agent can look up
 the real API with no network and for the exact Godot version the owner runs.
 

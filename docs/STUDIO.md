@@ -131,7 +131,7 @@ engine/studio_api.py      LOKI's side: GET /studio, POST /studio/open, POST /eng
    under NVIDIA's ~40/min (shared with LOKI's own jobs), a short 429 is waited out, anything else fails
    over; DeepSeek's reasoning shows as "thinking" and is never re-sent.
 3. Its only tools are the LOKI MCP API, started as a stdio server bound to this worktree: read /
-   search / edit LOKI's code there, run the test suites, read HANDOFF and ZIVA_TASKS, and look at and
+   search / edit LOKI's code there, run the test suites, read HANDOFF and LOKI_TASKS, and look at and
    control the running LOKI (status, logs, models doctor, settings, jobs, memory, tools health,
    restart). Everything streams into the thread: steps, thinking, tool calls, results, diffs.
 4. **Risky calls wait for you** (settings_set, job_start, job_stop, restart_engine): an Approve / Deny
@@ -216,7 +216,7 @@ studio/godot_plugin/addons/loki_studio/
 AGENTS.md: this folder is the third allowed place for Godot files (owner decision 2026-10-17); it has no
 `project.godot`. `tests/test_loki.py` and `tests/test_studio_godot.py` allow its `.gd` files.
 
-## The Ziva-style workflow (in the window AND the dock)
+## The agent workflow (in the window AND the dock)
 
 A session works on **LOKI's code** (a git worktree, as above) or on **a Godot project** (live in its editor; no
 worktree - every change is checkpointed instead). Everything below works in both front ends.
@@ -242,7 +242,7 @@ worktree - every change is checkpointed instead). Everything below works in both
 
 ### Studio as an MCP server
 
-`studio/studio_mcp.py` gives Claude Code, Codex, Cursor (or Ziva) Studio's Godot hands through the running Studio:
+`studio/studio_mcp.py` gives Claude Code, Codex, Cursor Studio's Godot hands through the running Studio:
 `godot(action, args)` on the live editor, `godot_errors`, `godot_screenshot`, `godot_playtest_step`, `godot_find_lag`,
 `godot_docs` and `project_index` (these two work without Studio), and Studio's sessions (`studio_sessions`,
 `studio_new_session`, `studio_send`, `studio_events`).

@@ -754,7 +754,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     def log_message(self, _format: str, *_args: Any) -> None:
         return
 
-    # Cross-origin isolation (the Godot web editor inside LOKI's window needs it, Ziva 04def98) means the window is
+    # Cross-origin isolation (the Godot web editor inside LOKI's window needs it) means the window is
     # COEP require-corp, so EVERY document it frames must send COEP too and every file one of its sandboxed frames
     # loads (opaque origin: the chat's diagrams load /ui/vendor/mermaid, Apps, Play) must allow a cross-origin read.
     # Without this the diagrams, previews, Apps and Play went blank. A response that sets its own policy keeps it.
@@ -1114,7 +1114,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if assist_api.handles(route):
             self._send_json(*assist_api.route(self.server.state, "GET", self.path, {}))
             return
-        if route.startswith("/qol/"):   # session 29: chat quality of life (engine/qol.py, docs/integrations/ZIVA_QOL.md)
+        if route.startswith("/qol/"):   # session 29: chat quality of life (engine/qol.py)
             import qol  # pylint: disable=import-outside-toplevel
             self._send_json(*qol.route(self.server.state, "GET", self.path))
             return
@@ -1417,13 +1417,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(413, {"ok": False, "error": "Request body is too large."})
                 return
             self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
-            return
-        if route == "/agent/ziva":   # Ziva's MCP server (its Godot tools) for LOKI's agent - Settings > Agent
-            body = self._read_json() or {}
-            value = str(body.get("value") or "").strip()[:1000]
-            import peer_link  # pylint: disable=import-outside-toplevel - write_env: the .env, live in os.environ too
-            peer_link.write_env(self.server.state.agent.env_file_path(), {"LOKI_ZIVA_MCP": value or None})
-            self._send_json(200, {"ok": True, **self.server.state.agent.engine_status()})
             return
         if route in ("/agent/engine/install", "/agent/engine/set"):   # Settings > Agent
             body = self._read_json() if int(self.headers.get("Content-Length", "0") or 0) > 0 else {}
@@ -1930,7 +1923,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, **self.server.state.agent.categories_state()})
             return
         if route == "/approval/ask":
-            # an outside agent (Ziva, through LOKI's tools - engine/make_mcp.py --shell) asks the owner first: the same
+            # an outside agent (Claude Code, Codex ... through LOKI's tools - engine/make_mcp.py --shell) asks the owner first: the same
             # Allow / Deny card as LOKI's own risky actions, with what it is going to do. Blocks until answered.
             tool = str(data.get("tool") or "a command")[:120]
             details = str(data.get("details") or "")[:10_000]
@@ -2653,13 +2646,6 @@ def start_bridge_server(state: BridgeState, secret_path: Path, secret: str) -> t
     server_thread = threading.Thread(target=server.serve_forever, name="loki-loopback-http", daemon=True)
     server_thread.start()
 
-    def ziva() -> None:   # Ziva (in the owner's Godot projects) gets LOKI's tools: engine/ziva_link.py
-        try:
-            import ziva_link  # pylint: disable=import-outside-toplevel
-            print("[loki] Ziva link: %s" % ziva_link.link().get("projects"), flush=True)
-        except Exception as exc:  # noqa: BLE001
-            print("[loki] Ziva link skipped: %s" % exc, flush=True)
-    threading.Thread(target=ziva, name="loki-ziva-link", daemon=True).start()
     return server, server_thread
 
 

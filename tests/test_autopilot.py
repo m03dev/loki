@@ -124,7 +124,7 @@ section("inbox: starts the oldest [loki] request once")
 started: list = []
 TASKS = TMP / "repo"
 (TASKS).mkdir(parents=True, exist_ok=True)
-(TASKS / "ZIVA_TASKS.md").write_text(
+(TASKS / "LOKI_TASKS.md").write_text(
     "## Requests\n\n"
     "- [ ] [loki] build a landing page and test it - owner (2026-10-15)\n"
     "- [x] [loki] done already - owner\n"
@@ -138,7 +138,7 @@ def start_team(text):
     return "started team T%d (Researcher, Builder) on /ws" % len(started)
 
 
-reqs = autopilot.inbox_requests(TASKS / "ZIVA_TASKS.md")
+reqs = autopilot.inbox_requests(TASKS / "LOKI_TASKS.md")
 check("only open [loki] requests are read, in order", [r["text"][:10] for r in reqs]
       == ["build a la", "second job"], reqs)
 

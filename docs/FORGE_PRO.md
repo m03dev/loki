@@ -155,7 +155,7 @@ affected-vertices + deltas, never as a list of dabs.
 The honesty note at the bottom is answered: the reference package is installed on the Mac mini, so its **own scripts** were read
 (the default hotkey set, every marking menu, the hotbox zones, the Outliner menus). The facts are in
 **docs/FORGE_PRO_SPEC.md** - read it before changing anything here. Nothing of the vendor's is copied: facts only,
-our own code. Everything Ziva built above is kept; this extends it.
+our own code. Everything built above is kept; this extends it.
 
 ### DONE (Claude, tests/test_forge_pro_ui.py, 55 checks, ~23 s)
 - **Real pivots** (forge_scene.js): every node is outer (T+C+P, R, S) > inner (-P) > shape + children, i.e. pro's
@@ -194,8 +194,8 @@ our own code. Everything Ziva built above is kept; this extends it.
 - **Workspace**: Forge fills the window - the Outliner column on the left, the viewport, the Channel Box column
   (with History) on the right. The Create panel, Materials, the shelf (the old floating bars) and the Modeling
   Toolkit are hidden and come back from Space > Windows (ticked when showing), remembered per machine
-  (`loki-forge-panels` - ONE store: Ziva's `window.forgePanels`, the UI button and the Outliner fold now sit on it); Ctrl+Space hides everything but the viewport and brings it back; Esc never closes Forge.
-- **Space = Ziva's wheel at the mouse** (owner to Ziva: "float where my mouse is ... like a wheel and when you hover over
+  (`loki-forge-panels` - ONE store: `window.forgePanels`, the UI button and the Outliner fold now sit on it); Ctrl+Space hides everything but the viewport and brings it back; Esc never closes Forge.
+- **Space = the wheel at the mouse** (owner: "float where my mouse is ... like a wheel and when you hover over
   it brings down a new menu"): twelve wedges - Recent + the eleven menus below - each dropping its menu OUTWARD (never
   over the ring), ticks on switches, and every menu ends with "All menus", the full hotbox:
 - **Hotbox like the standard one**: Recent Commands + File Edit Create Select Modify Display Windows above the mouse, Mesh / Edit
@@ -205,7 +205,7 @@ our own code. Everything Ziva built above is kept; this extends it.
   (d) and components (onto other objects and the grid). Grid / Edge / Point chips bottom-left of the viewport and the
   Snap menu keep them on. A ground grid like the pro (Display > Grid).
 - Fixed: the first handle drag after Ctrl+Z did nothing (the handle's matrices were stale).
-- Open for Ziva: components snapping onto the SAME mesh's other vertices (needs the moving vertices left out of the
+- Open: components snapping onto the SAME mesh's other vertices (needs the moving vertices left out of the
   pick), and showing a new primitive's inputs (subdivisions) in the Channel Box like the pro INPUTS section.
 
 ### DONE (Claude, 2026-10-19 afternoon) - Forge LOOKS like the pro tools (app/ui/forge_chrome.js; measured, FORGE_PRO_SPEC.md "The look")
@@ -223,7 +223,7 @@ our own code. Everything Ziva built above is kept; this extends it.
 - Open: the manipulator is still three.js' (the pro is thinner: thin lines, small cones, a hollow yellow centre); the
   marking menus and hotbox are not yet re-skinned to the pro exact look; the Attribute Editor (Ctrl+A) is not built.
 
-### OPEN - next, in this order (Ziva: these are yours, see ZIVA_TASKS.md "Ziva's long run")
+### OPEN - next, in this order 
 - **T7 Real-machine pass**: use Forge for 20 minutes the way the owner uses pro (WebView2 on the PC, WKWebView on
   the Mac): every hotkey in FORGE_PRO_SPEC.md, Option-camera on the Mac trackpad and mouse, the hotbox zones, the
   Outliner drag. Fix what feels wrong; write down what pro does differently.
@@ -234,7 +234,7 @@ our own code. Everything Ziva built above is kept; this extends it.
   kept editable; 1 back to the cage.
 - **T10 Export the whole scene**: Save .glb writes every visible node with its hierarchy and transforms (today it
   writes the working mesh only) - GLTFExporter on the outer groups, without the selection boxes / overlays.
-- **T11 Sculpt strokes in the history (T6c)** - DONE by Ziva in fa19bc1 (a stroke = the vertices it moved, before and
+- **T11 Sculpt strokes in the history (T6c)** - DONE in fa19bc1 (a stroke = the vertices it moved, before and
   after); merged into the new forge_scene.js, recorded only when a stroke really happened. Still outside the history:
   Freeze Transformations on the edited mesh - make it a step too.
 - **T12 Attribute Editor lite + UV editing**: per-node attributes (name, visibility, pivot numbers) and a first UV
@@ -270,7 +270,7 @@ a panel you can hide. Checked in tests/test_forge_undo_keys_ui.py (20 checks, ~1
   over the viewport and drag it, dock back, close), foldable sections (Starter, Shape with Build / Body / Head / Tail,
   Coat, Export; remembered), the starter's name in the bar, its own Make creature + Live at the bottom.
   Windows > Creature Editor brings it back.
-- Not verified on the Mac's WKWebView or the PC's WebView2 yet (ZIVA_TASKS).
+- Not verified on the Mac's WKWebView or the PC's WebView2 yet (LOKI_TASKS).
 
 ### DONE (Claude, 2026-10-21 later) - the pro polygon tools, the Modeling Toolkit, the rules
 Owner 01:50: tools and rules like the pro modeller's, every tool, the UI organised, the Space jitter, 1-7, no viewport
@@ -325,7 +325,7 @@ add r for ref cant click through", "free image plane ... png or jpeg", "all the 
   The default persp camera is the pro 3/4 view (direction 28, 21, 28), not edge-on from the front.
 - **Hide / show**: h / Ctrl+H / Shift+H / Ctrl+Shift+H / Alt+H were already bound and work with real keys in
   Chromium; a Channel Box field now hands the keys back on Enter / Esc (h right after typing a value works). Hidden
-  objects are grey in the Outliner. If h still fails on the Mac window, it is WKWebView-specific: ZIVA_TASKS.
+  objects are grey in the Outliner. If h still fails on the Mac window, it is WKWebView-specific: LOKI_TASKS.
 - **Display Layers V / T / R**: R (reference) is new - drawn as it is, a viewport click or box goes THROUGH it to
   what is behind, snapping still sees it, the Outliner can still pick it (the pro rule); T (template) is now drawn
   as a grey wire and is not snapped to; T and R are one choice; both undo. V-off layers can no longer be picked.
@@ -343,6 +343,6 @@ add r for ref cant click through", "free image plane ... png or jpeg", "all the 
  (answered 2026-10-19 - see the section above and docs/FORGE_PRO_SPEC.md)
 
 its own API (`cmds.markingMenu`, the `spaceLocator`-style node commands, `cmds.group`) was **not** read for
-this: this session had no web access (Ziva showed an upgrade card), so the interaction model above is from
+this: this session had no web access , so the interaction model above is from
 knowledge of pro, not from re-reading the vendor's documentation. Before T2/T3/T6 are called finished, check the
 current pro docs for the exact behaviours - especially the group pivot rule and Freeze Transformations.

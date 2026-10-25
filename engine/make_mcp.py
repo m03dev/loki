@@ -271,7 +271,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout, cwd: Path | None = None) -> None:
             stdout.flush()
 
 
-# --shell (how Ziva gets it, engine/ziva_link.py): run_command, so an agent that only has Godot tools (Ziva) can do
+# --shell: run_command, so an outside agent that reaches LOKI over MCP (Claude Code, Codex ...) can do
 # real work for the owner - anything, anywhere (owner 2026-10-25: "it needs to be allowed to do everything just ask
 # before and detail what its going to [do]"). EVERY command first shows the owner an Allow / Deny card in LOKI with
 # the plan, the exact command and the folder (POST /approval/ask on the running engine); nothing runs unless Allowed.
@@ -339,7 +339,7 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
     danger = next((d for d in DANGER if d in cmd.lower()), "")
     details = "%s%s\n\nPlan: %s\n\nCommand:\n$ %s\n\nIn: %s%s" % (
         "DANGEROUS - '%s' can destroy data or the system. " % danger.strip() if danger else "",
-        "Ziva (through LOKI's tools) wants to run a command.", plan[:2000], cmd[:4000], where,
+        "An outside agent (through LOKI's tools) wants to run a command.", plan[:2000], cmd[:4000], where,
         "" if where.exists() else " (this folder does not exist yet - it will be made)")
     ok, why = (ask or ask_owner)("run_command", details)
     if not ok:

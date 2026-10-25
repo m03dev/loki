@@ -502,7 +502,7 @@ const LokiQol = (function () {
       lines.push("model: " + d.model + " / " + d.using, ...(d.errors || []), ...(d.steps || []).map((s) => s.event + ": " + s.text));
     }
     if (conn.log.length) { dlg.body.append(node("h3", "", say("Connection"))); dlg.body.append(node("pre", "qol-why-pre", conn.log.map((l) => l.t + "  " + l.what).join("\n"))); lines.push(...conn.log.map((l) => l.t + " " + l.what)); }
-    dlg.body.append(textBtn("quiet small", say("Copy this report"), "Copy this report", "Copy it to paste into a bug report or a chat with Ziva/Claude.", () => copy(lines.join("\n"))));
+    dlg.body.append(textBtn("quiet small", say("Copy this report"), "Copy this report", "Copy it to paste into a bug report or a chat with Claude.", () => copy(lines.join("\n"))));
   }
 
   // ------------------------------------------------------------------ after a turn: notify, context
@@ -1018,7 +1018,7 @@ const LokiQol = (function () {
     }
   }
 
-  // a switch of model is noted in the chat (Ziva: "Chats note model changes")
+  // a switch of model is noted in the chat 
   const _choose = chooseModel;
   chooseModel = async function (name) {   // eslint-disable-line no-global-assign
     const before = modelMenu.data && modelMenu.data.current;

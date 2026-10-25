@@ -1901,7 +1901,7 @@ function forgeSceneAttach(view, ctx) {
     if (tree.selMarks) drawMarks();
     return out;
   };
-  // ---------------------------------------------------------------- T6c (Ziva): a sculpt stroke in the history
+  // ---------------------------------------------------------------- T6c: a sculpt stroke in the history
   // A stroke moves WELDED vertices, not polygons, so it is recorded as the vertices it changed with their
   // positions before and after - never as a list of dabs. forge.js snapshot()s at the START of a stroke, so the
   // undo stack's top is the state before it. Only a real stroke is recorded (view.stroked, set when one starts) -
@@ -1950,7 +1950,7 @@ function forgeSceneAttach(view, ctx) {
   // Outliner folds its own body, the left column slides away, and "floats" clears every bar off the viewport
   // (the pro clean view). What is hidden is remembered, so Forge comes back the way it was left.
   // One store for Forge's panels: the pro workspace in forge_pro.js (forgeProPanels, key "loki-forge-panels") owns
-  // what shows; this keeps Ziva's API (forgePanels.*, the UI button, the Outliner's fold) on top of it, so the two
+  // what shows; this keeps the panels API (forgePanels.*, the UI button, the Outliner's fold) on top of it, so the two
   // never disagree (merged 2026-10-19 - both had picked the same storage key with different meanings).
   window.forgePanels = (function () {
     const has = () => typeof forgeProPanels === "function";

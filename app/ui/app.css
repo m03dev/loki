@@ -1,6 +1,6 @@
 @font-face { font-family: "LOKI Inter"; src: url("/ui/fonts/inter/InterVariable.woff2") format("woff2");
   font-weight: 100 900; font-style: normal; font-display: swap; }
-/* Loki - standalone app. Ziva-style charcoal (not pure black), rounded user bubbles,
+/* Loki - standalone app. charcoal (not pure black), rounded user bubbles,
    plain Loki text. Event colours match the Godot dock so the two read alike. */
 :root {
   --bg: #1f1f24;

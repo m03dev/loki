@@ -1,4 +1,4 @@
-"""Session 29: LOKI Studio inside Godot (the plugin) and the Ziva-parity workflow - offline, under a minute.
+"""Session 29: LOKI Studio inside Godot (the plugin) and the full agent workflow - offline, under a minute.
 
   1. the plugin's files: present, plugin.cfg right, GDScript sane (tabs, @tool, preloads exist), it lives only
      in studio/godot_plugin (AGENTS.md's third Godot place) and the installer puts it into ANY project

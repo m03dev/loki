@@ -14,7 +14,7 @@ A session is one conversation with Studio's agent about ONE thing it works on:
                 the project's files, edits the open scene through the editor's UndoRedo, runs the
                 game, playtests it turn by turn, finds lag, reads the editor's and the game's errors.
 
-What every session has (the Ziva workflow, studio_tools.py / studio_commands.py / studio_checkpoints.py):
+What every session has (the full agent workflow, studio_tools.py / studio_commands.py / studio_checkpoints.py):
   modes         default (may change things) / plan (reads, plans with todos, changes nothing) / ask
   checkpoints   every turn (one owner message and all the agent did for it) can be undone:
                 git snapshots for code, file snapshots + the editor's UndoRedo for Godot
@@ -92,7 +92,7 @@ Rules (AGENTS.md is the rulebook - read it with read_doc("AGENTS.md") when in do
 - Risky tools (settings_set, job_start, job_stop, restart_engine, pc_worker) wait for the owner's approval.
 - The running LOKI: loki_status, engine_logs, models_doctor, jobs_list, job_logs, tools_health,
   settings_get, memory_search... use them to see what is wrong before you change code.
-- Where the work stands: read_doc("HANDOFF.md"); what the Mac/PC agents do: read_doc("ZIVA_TASKS.md").
+- Where the work stands: read_doc("HANDOFF.md"); what LOKI's own agents are asked to do: read_doc("LOKI_TASKS.md").
 {common}
 Right now: {loki_line}
 Reply in plain words. End your turn with no tool call when you are done or need the owner."""

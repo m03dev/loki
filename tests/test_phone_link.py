@@ -323,12 +323,12 @@ check("pairing needs the link on", phone_link.ui_route(state, agent, "POST", "/p
 code, data = phone_link.ui_route(state, agent, "POST", "/phones/enable", {"on": True})
 check("turning it on starts the server and writes LOKI_PHONE_LINK=1",
       code == 200 and state.phone_server is not None and "LOKI_PHONE_LINK=1" in agent.env.read_text(), data)
-code, data = phone_link.ui_route(state, agent, "POST", "/phones/pair", {"name": "Ziva's Pixel"})
+code, data = phone_link.ui_route(state, agent, "POST", "/phones/pair", {"name": "Mo's Pixel"})
 check("pair returns a code and a QR svg", code == 200 and data["code"].startswith("loki-phone:") and data["svg"].startswith("<svg"), data.get("error"))
 parsed = phone_link.parse_pairing_code(data["code"])
 check("the code points at the running server", parsed["port"] == state.phone_server.address[1] and parsed["id"] == data["id"])
 phones = phone_link.ui_route(state, agent, "GET", "/phones", {})[1]["phones"]
-check("the new phone is listed, waiting", [(x["name"], x["state"]) for x in phones] == [("Ziva's Pixel", "waiting")], phones)
+check("the new phone is listed, waiting", [(x["name"], x["state"]) for x in phones] == [("Mo's Pixel", "waiting")], phones)
 check("revoke from Settings", phone_link.ui_route(state, agent, "POST", "/phones/revoke", {"id": data["id"]})[0] == 200)
 check("revoking an unknown phone is 404", phone_link.ui_route(state, agent, "POST", "/phones/revoke", {"id": "nope"})[0] == 404)
 code, data = phone_link.ui_route(state, agent, "POST", "/phones/enable", {"on": False})

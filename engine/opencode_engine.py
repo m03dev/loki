@@ -130,8 +130,7 @@ HARNESSES = {
     "shell": ("Shell agent", "mini-swe-agent's recipe: one shell command per step, the real output back. Small prompt - "
                              "the one for local models, works with any model."),
     "codex": ("Codex (your ChatGPT plan)", "OpenAI's Codex CLI signed in with YOUR ChatGPT account - the latest GPT "
-                                           "(GPT-6 on Plus and up) on your plan's allowance, like Ziva's 'Use Existing "
-                                           "Subscriptions'. Needs `codex login` once."),
+                                           "(GPT-6 on Plus and up) on your plan's allowance. Needs `codex login` once."),
     "claude-code": ("Claude Code (your Claude plan)", "Anthropic's Claude Code CLI on YOUR Claude subscription. Needs "
                                                       "`claude` + /login once."),
     "loki": ("LOKI classic", "LOKI's own built-in loop with all of LOKI's tools (pictures, apps, browser, memory ...)."),
@@ -215,29 +214,9 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
     # code by itself; pictures, models and clips come from LOKI's own makers (not in Plan mode: they make files)
     if make_tools and not plan:
         mcp["loki-make"] = {"type": "local", "command": make_tools_command(), "enabled": True}
-    # Ziva's Godot tools (owner 2026-10-25: "use my ziva ... in loki"): Ziva's own MCP server - its URL or command
-    # from Ziva Settings > Models & Providers > Ziva as an MCP server, pasted into LOKI_ZIVA_MCP
-    ziva = ziva_mcp()
-    if ziva:
-        mcp["ziva-godot"] = ziva
     if mcp:
         cfg["mcp"] = mcp
     return cfg
-
-
-def ziva_mcp(env: dict | None = None) -> dict:
-    """OpenCode's entry for Ziva's MCP server: an http(s) URL -> remote, anything else -> a local command."""
-    raw = str((env if env is not None else os.environ).get("LOKI_ZIVA_MCP", "") or "").strip()
-    if not raw:
-        return {}
-    if raw.startswith(("http://", "https://")):
-        return {"type": "remote", "url": raw, "enabled": True}
-    try:
-        import shlex  # pylint: disable=import-outside-toplevel
-        cmd = shlex.split(raw, posix=os.name != "nt")
-    except ValueError:
-        cmd = raw.split()
-    return {"type": "local", "command": cmd, "enabled": True} if cmd else {}
 
 
 def env_for(providers: dict, base: dict | None = None) -> dict:

@@ -541,7 +541,7 @@ SEED = {
     "look": "The owner likes the pixel cel-shaded look of the Play games.",
     "costs": "The owner hates surprise costs: free and local models first, paid providers behind a budget.",
     "ship": "LOKI ships changes only with tools/ship.py, which runs every test suite first.",
-    "ziva": "Instructions for Ziva go in ZIVA_TASKS.md in git, not in the chat reply.",
+    "tasks": "Tasks for LOKI go in LOKI_TASKS.md in git, not in the chat reply.",
     "port": "The relay runs on bore.pub port 41234.",
     "lang": "The owner speaks English and Arabic.",
     "city": "The owner lives in Dubai.",
@@ -587,7 +587,7 @@ QUERIES = [("what's my name", "name"), ("how long should your answers be", "shor
            ("what is Waypoint", "waypoint"), ("which engine is the racing game built in", "godot"),
            ("how are the Mac and PC linked", "relay"), ("which editor does the owner use", "editor"),
            ("what look do the Play games have", "look"), ("can I use paid models", "costs"),
-           ("how do I publish a change", "ship"), ("where should tasks for Ziva go", "ziva"),
+           ("how do I publish a change", "ship"), ("where should tasks for LOKI go", "tasks"),
            ("what port is the relay on", "port"), ("what languages do I speak", "lang"),
            ("which city do I live in", "city"), ("when is my birthday", "bday"), ("what is my job", "job"),
            ("who tests LOKI builds", "sam"), ("what's my github username", "github"),
@@ -656,7 +656,7 @@ else:
 
     UI = REPO / "app" / "ui"
     WIN = root("window")
-    (WIN / "memory.md").write_text("- Ziva tasks go in ZIVA_TASKS.md, never in the chat reply\n", encoding="utf-8")
+    (WIN / "memory.md").write_text("- LOKI tasks go in LOKI_TASKS.md, never in the chat reply\n", encoding="utf-8")
     for text in ("The owner's editor is VS Code", "The owner's editor is Zed", "Dana is the owner's manager at the studio",
                  "The owner decided to build his racing game in Godot 4 for Steam"):
         memory_core.learn(text, root=WIN)

@@ -130,7 +130,7 @@ button.primary[data-icon], button.ship[data-icon] { display: inline-flex; align-
 .dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 16px 0 0; }
 @media (max-width: 900px) { .studio { grid-template-columns: 210px minmax(0, 1fr); } .side { position: fixed; inset: 0 0 0 auto; width: 92vw; } }
 
-/* the Ziva-parity bar: modes, target, model, ask first; todos; questions; suggestions; diagrams */
+/* the agent bar: modes, target, model, ask first; todos; questions; suggestions; diagrams */
 .modebar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 18px 0; }
 .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
 .seg button { background: transparent; padding: 4px 12px; border-radius: 8px; }

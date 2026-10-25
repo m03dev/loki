@@ -918,7 +918,7 @@ def check_autopilot(ctx: Context) -> dict:
                       items=[])
     log = status.get("log") or []
     recent = "; ".join("%s: %s" % (e.get("duty"), e.get("text", "")) for e in log[-3:]) or "nothing yet"
-    detail = ("On. It runs the health check, picks up [loki] requests in ZIVA_TASKS.md, and writes a "
+    detail = ("On. It runs the health check, picks up [loki] requests in LOKI_TASKS.md, and writes a "
               "weekly 'what LOKI learned' report when LOKI is idle. %s. Recently: %s" % (
                   ("Idle now" if status.get("idle") else "Waiting: %s" % status.get("waiting_for", "")), recent))
     return result("autopilot", "Autopilot (works when idle)", OK, detail,

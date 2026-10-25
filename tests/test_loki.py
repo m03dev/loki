@@ -1168,7 +1168,7 @@ section("go-to model: DeepSeek 4.1 via OpenRouter")
 check("the deepseek-4.1 alias exists", "deepseek-4.1" in loki.MODELS)
 check("it points at deepseek v4.1 flash",
       "v4.1" in loki.MODELS["deepseek-4.1"].model, loki.MODELS["deepseek-4.1"].model)
-# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; 2026-10-25: then free Nemotron (Ziva Baby's
+# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; 2026-10-25: then free Nemotron (
 # model), then OpenRouter
 check("the main driver leads smart mode, free Nemotron then OpenRouter right after",
       loki.SMART_ORDER[:3] == ("nvidia", "nemotron-free", "openrouter"), loki.SMART_ORDER[:3])
@@ -3073,7 +3073,7 @@ check("Windows scripts are checked out with CRLF",
       "*.bat text eol=crlf" in (REPO / ".gitattributes").read_text(encoding="utf-8"))
 check("app error page escapes its text", "&lt;b&gt;" in _page and "a &amp; b" in _page)
 
-section("MLX (Ziva Mac's request)")
+section("MLX (the Mac)")
 check("MLX asks mlx_lm.server for the model it was started with, never 'auto'",
       loki.MODELS["mlx"].model == "default_model" or bool(os.getenv("MLX_MODEL", "").strip() not in ("", "auto")))
 import usage as _usage_mod  # noqa: E402

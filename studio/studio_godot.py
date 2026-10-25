@@ -1,7 +1,7 @@
 """The Godot editor link: LOKI Studio <-> the LOKI Studio plugin inside a running Godot editor.
 
 The plugin (studio/godot_plugin/addons/loki_studio) is a second front end for Studio that lives in
-the Godot editor, like Ziva does, in ANY Godot project. It finds Studio through the connect file
+the Godot editor, like an in-editor agent, in ANY Godot project. It finds Studio through the connect file
 (~/.loki/studio_connect.json: url + token, written by Studio at start, owner-only permissions;
 LOKI_STUDIO_CONNECT overrides the path) and talks to Studio's loopback HTTP API with that token.
 

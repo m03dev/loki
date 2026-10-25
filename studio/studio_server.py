@@ -23,7 +23,7 @@ check against DNS rebinding, and a strict CSP (script-src 'self': no inline scri
   GET  /api/loki/settings                 LOKI's providers, General settings, capabilities, evolve list (via its bridge)
   POST /api/loki/settings {what, args, confirm: true}  one change (studio_control.settings_change)
 
-The Ziva-parity API (the window AND the Godot plugin's dock use it; docs/STUDIO.md):
+The agent API (the window AND the Godot plugin's dock use it; docs/STUDIO.md):
   POST /api/session/new  {text, mode?, model?, project? | editor?, approve_edits?}  project = a Godot project
   POST /api/session/mode {id, mode}   default | plan | ask          POST /api/session/model {id, model}
   POST /api/session/answer {id, question, answer}                  the agent's ask_owner question

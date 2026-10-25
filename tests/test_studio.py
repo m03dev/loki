@@ -371,7 +371,7 @@ FAKE = TMP / "fake-loki"
 (FAKE / "README.md").write_text("LOKI\nThe clear button.\n", encoding="utf-8")
 (FAKE / "HANDOFF.md").write_text("# HANDOFF\n\n## Session 28\nold\n\n## Session 29 now\nthe newest work\n", encoding="utf-8")
 (FAKE / "AGENTS.md").write_text("# AGENTS\nboth platforms\n", encoding="utf-8")
-(FAKE / "ZIVA_TASKS.md").write_text("# ZIVA\nW1 do a thing\n", encoding="utf-8")
+(FAKE / "LOKI_TASKS.md").write_text("# LOKI\nW1 do a thing\n", encoding="utf-8")
 (FAKE / "app" / "loki_app.py").write_text("print('fake app')\n", encoding="utf-8")
 (FAKE / "studio" / "studio_app.py").write_text("print('fake studio')\n", encoding="utf-8")
 (FAKE / "engine" / "loki_mcp.py").write_text("# fake\n", encoding="utf-8")
@@ -440,7 +440,7 @@ res = asyncio.run(mcp_calls(api, [
     ("diff", "git_diff", {}),
     ("log", "git_log", {"count": 3}),
     ("handoff", "read_doc", {"name": "HANDOFF.md", "section": "Session 29"}),
-    ("ziva", "read_doc", {"name": "ZIVA_TASKS.md"}),
+    ("tasks", "read_doc", {"name": "LOKI_TASKS.md"}),
     ("tests", "run_tests", {"suite": "test_fake"}),
     ("joblog", "job_logs", {"id": "job42"}),
     ("englog", "engine_logs", {"which": "engine"}),
@@ -478,7 +478,7 @@ check("git_status shows the branch and the changes", "studio/mcp" in res["status
 check("git_diff shows the edit and the new file", "+The clear button (tooltip)." in res["diff"] and "docs/new.md" in res["diff"], res["diff"][:500])
 check("git_log", "c1" in res["log"], res["log"])
 check("read_doc jumps to a HANDOFF section", res["handoff"].startswith("## Session 29") and "newest" in res["handoff"], res["handoff"])
-check("read_doc reads ZIVA_TASKS", "W1 do a thing" in res["ziva"])
+check("read_doc reads LOKI_TASKS", "W1 do a thing" in res["tasks"])
 check("run_tests runs tools/ship.py --check --only <suite> in the worktree", res["tests"].startswith("ALL PASSED") and "test_fake" in res["tests"], res["tests"])
 check("job_logs reads a job's log from disk, keys redacted", "step 2" in res["joblog"] and "SECRETSECRET" not in res["joblog"], res["joblog"])
 check("engine_logs reads LOKI's log from disk (LOKI down)", "boom in app.js" in res["englog"], res["englog"])
@@ -601,7 +601,7 @@ code_, out = studio_api.route(fake_state, "GET", "/studio", None)
 check("GET /studio: not running here, and how to start it by hand", code_ == 200 and out["running"] is False and "studio" in out["how"].lower(), out)
 check("the bridge routes them", "studio_api.handles(\"POST\", route)" in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8"))
 
-# stdio: the real server process (what Studio, Claude Code, Codex and Ziva start)
+# stdio: the real server process (what Studio, Claude Code and Codex start)
 async def stdio_list():
     from mcp import StdioServerParameters  # pylint: disable=import-outside-toplevel
     env = dict(os.environ, LOKI_DATA=str(DATA))

@@ -56,7 +56,7 @@ look (vision describes the screen), wait. When the tree is empty (games, canvas 
    its parent the app window, or `LOKI_APP_PID`) is refused before any approval. `open_app` waits for the app
    to come to the front; if it does not, it activates it once (macOS: `reopen` + `activate`, which also gives
    TextEdit/Notes a window; Windows: restore + SetForegroundWindow; Linux: xdotool windowactivate) and, if it
-   is still behind, tells the model it is NOT in front and not to type (Ziva, Mac, 2026-10-18).
+   is still behind, tells the model it is NOT in front and not to type (Mac, 2026-10-18).
 7. Every action logged to `harness_data/computer_log.jsonl` (typed text only as its length and first characters).
 
 BUILD_BRIEF section 7 says "browsers and computer-use only inside VMs". The owner has now asked for computer

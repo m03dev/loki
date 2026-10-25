@@ -1,4 +1,4 @@
-"""Studio's own tools, next to the LOKI MCP API: the Ziva-parity layer.
+"""Studio's own tools, next to the LOKI MCP API: the full agent layer.
 
 Which tools a session gets depends on what it works on (`kind`) and its mode:
 

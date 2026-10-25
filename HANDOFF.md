@@ -1,6 +1,6 @@
 # HANDOFF - where LOKI stands right now
 
-Read this, AGENTS.md and docs/BUILD_BRIEF.md before working (machine agents: ZIVA_TASKS.md too). The rules and the
+Read this, AGENTS.md and docs/BUILD_BRIEF.md before working (machine agents: LOKI_TASKS.md too). The rules and the
 brief were rewritten on 2026-10-24 for the current scope (3D creation engine: Forge, Render Studio, farm, local AI).
 
 **How to use this file.** It is the CURRENT picture, not a diary. When you ship something significant
@@ -20,8 +20,7 @@ Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of 
 | --- | --- | --- |
 | Checkout | `~/Documents/loki` -> `/Volumes/LokiSSD/loki` (APFS sparse image on the 2 TB SSD; login item `sh.loki.attach-image` reattaches it) | `C:\Users\macul\Documents\loki` |
 | Python | `harness_data/.venv/bin/python` | `harness_data\.venv\Scripts\python.exe` |
-| Ziva | works on Forge (pro roadmap) since 2026-10-19 | did W50-W52 on 2026-10-18 |
-| Godot | LOKI's own 4.7.2 when no other Godot; Godot_mono 4.8 dev is Ziva's - never open the owner's projects in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
+| Godot | LOKI's own 4.7.2 when no other Godot; Godot_mono 4.8 dev is not LOKI's - never open the owner's projects in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
 
 The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
 ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs again since the repo went public.
@@ -31,7 +30,7 @@ ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs 
 Tabs are Home / Forge / **Studio** (the render farm manager + Render Studio, docs/STUDIO_FARM.md) / **Engine** (Godot
 or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on the whole mesh when only the object
 is picked, one key per command, sculpt right button = wheel only. Branch `agent/studio-farm-forge-scale`; next steps
-in ZIVA_TASKS.md (incl. the ChatGPT-web provider and the token blow-up diagnosis).
+in LOKI_TASKS.md (incl. the ChatGPT-web provider and the token blow-up diagnosis).
 
 **Home, reimagined (later 2026-10-25):** one split, two panes, both always there - the hub left (home.js), the chat
 column right (#chat-col in index.html, home_layout.css, chat_view.js). The chat is never hidden behind a "Loki" click
@@ -104,7 +103,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
   node canvas (`/render/graph` derives nodes/links/models from the graph's own JSON; nodes colour green/red from the last
   Preflight). **ComfyUI runs on the PC** at D:\loki\harness_data\comfyui (0.42.0, PyTorch 2.14.1+cu130,
   RTX 3070 Ti) with the 3 VACE model files (18.6 GB) installed. **The PC's LOKI now lives at D:\loki** (junction at the
-  old path) - the C: drive was full. See ZIVA_TASKS 2026-10-21 for the numbers.
+  old path) - the C: drive was full. See LOKI_TASKS 2026-10-21 for the numbers.
   `window.LokiRenderStudio`); until then it offers Forge's Render window.
 - **Home = the preview hub** (app/ui/home.js, home.css; owner 2026-10-21): the latest render big, then cards for renders
   (`harness_data/renders/<job>/manifest.json`), Forge models, Godot projects (~/LOKI Projects), Studio sessions and jobs
@@ -134,7 +133,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
   10 min); the pacing check is fixed (tests/test_studio.py window 3 s, a3e1b64). Local driver uses an installed model.
 - LOKI Studio Godot plugin 1.2 (studio/godot_plugin/addons/loki_studio/) links to both Studio and the engine; dock
   shows "LOKI: linked / not linked". **Verified on the PC** (W51: "LOKI Studio plugin 1.2 ready").
-- Not verified: a real model driving a Studio session on NVIDIA; the 15-task parity benchmark vs Ziva
+- Not verified: a real model driving a Studio session on NVIDIA; the 15-task parity benchmark
   (docs/STUDIO_VS_ZIVA.md); `gh repo fork/create` destinations.
 
 ### Godot (the owner's game projects)
@@ -171,7 +170,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
   Blender-style component editing (forge_edit.js: vert/edge/face, box select, G/R/S, proportional), Quad view.
 - **pro layer** (forge_pro.js, forge_scene.js; docs/FORGE_PRO.md): marking menus, hotbox, hotkeys, Alt camera;
   T1 scene, T2 Outliner, T3 Group/Ungroup, T4 Channel Box, T4b Freeze/Center Pivot, T5 Shift+drag duplicate,
-  T6 construction history for poly ops + DynaMesh (c132c1f, test_forge_ui 62/62). Ziva (Mac) owns this.
+  T6 construction history for poly ops + DynaMesh (c132c1f, test_forge_ui 62/62). 
 - **Creature creator** (engine/anycreature.py): 6 starters, 9 body-plan sliders, coats, Walk/Idle preview
   (test_anycreature 33, test_forge_creature_ui 8).
 - Not verified: TripoSR on the PC's CUDA / the Mac's MPS (`tools/setup_forge3d.py`), poly editing with a real GPU.
@@ -186,18 +185,18 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 - **2026-10-19 afternoon (Claude): Forge LOOKS like the pro tools** - the reference package screenshotted on the Mac, colours sampled
   (docs/FORGE_PRO_SPEC.md "The look"); new app/ui/forge_chrome.js: menu bar, status line, shelf, tool box, time
   slider, help + MEL command line, the viewport's menus, HUD, view cube, grid, lambert grey, teal selection wire.
-  Not verified on a real machine yet (ZIVA_TASKS M-F1 / W-2). Next: FORGE_PRO.md T7-T12.
+  Not verified on a real machine yet (LOKI_TASKS M-F1 / W-2). Next: FORGE_PRO.md T7-T12.
 - **2026-10-19 evening (Claude), owner 17:06:** no product/vendor names anywhere (files renamed: forge_pro.js,
   forge_chrome.js, test_forge_pro_ui.py, docs/FORGE_PRO*.md; identifiers forgePro*/view.pro). Forge's own camera
   controller (`forgeProCamera`: Alt tumble / track / dolly, Shift lock, Ctrl box dolly, wheel; OrbitControls keeps
   only the target). Right button = hold-only marking menu, opens on press, quick click does nothing; empty space =
-  Complete Tool / Select All / Undo ... list. Space = hotbox centred on the mouse (Ziva's wheel: Windows > Radial
+  Complete Tool / Select All / Undo ... list. Space = hotbox centred on the mouse (the wheel: Windows > Radial
   Menus). Modern high-contrast theme + one 20 px menu style (end of forge.css), picture at 1.5-3x pixel ratio, shelf
   hidden by default. Component display light-blue / orange / purple; the object wire follows edits via
   `view.frameHooks` (the "weird wireframes after moving an edge" were the stale wire of the old shape). Insert Edge
-  Loop restored (Ziva's 8086bf2 had removed it). Checked: test_forge_pro_ui 99 (44 s), test_forge_ui 37,
+  Loop restored (8086bf2 had removed it). Checked: test_forge_pro_ui 99 (44 s), test_forge_ui 37,
   test_forge_edit_ui 21, test_forge_model_ui 14, creature 8, poly 32, ui_fit 81, ui_smoke 10, studio_destination 81.
-  Next: ZIVA_TASKS "From Claude (2026-10-19 evening)" - real-screen check, then Combine/Separate/Mirror/Merge.
+  Next: LOKI_TASKS "From Claude (2026-10-19 evening)" - real-screen check, then Combine/Separate/Mirror/Merge.
 
 - **2026-10-20 (Claude): the native sculpting engine** - LOKI's own C++ sculpting core (`native/sculpt/`, AGPL-3.0;
   from the owner's sculpting plug-in, brought in on his decision) built to WebAssembly (`app/ui/vendor/sculpt/`,
@@ -223,7 +222,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
   (app/ui/forge_manip.js); Shift over a handle = duplicate (objects) / extrude (faces); middle-drag from anywhere.
   Creature Editor: fold / float / dock / close. Sculpt engine: HC smooth that keeps volume, falloff-aware auto-smooth,
   stabiliser + spacing + pressure, changed-range uploads, screen detail, Tube / Insert Mesh (native/sculpt/README.md).
-  Cloud-checked (see SESSION_LOG); **not verified** in WKWebView / WebView2 - ZIVA_TASKS "From Claude (2026-10-21)".
+  Cloud-checked (see SESSION_LOG); **not verified** in WKWebView / WebView2 - LOKI_TASKS "From Claude (2026-10-21)".
   The owner's Maya sculpting plug-in source was not reachable from this session (not in ~/Documents, ~/Downloads or
   GitHub); ByHand is Windows-only and was not on the Mac.
 
@@ -239,7 +238,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
   Enter; hidden objects grey in the Outliner. C++: native/sculpt/core/src/cage_subdiv.cpp (Catmull-Clark, the JS
   result exactly, ~6x faster) runs the 2 / 3 smooth preview of 400+ face cages in a worker (forge_geom.js);
   sculpt.wasm rebuilt (WASI SDK 25, test_engine ALL OK). docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 early morning)",
-  research: docs/FORGE_QOL.md. Cloud only - Mac check in ZIVA_TASKS.
+  research: docs/FORGE_QOL.md. Cloud only - Mac check in LOKI_TASKS.
 - **2026-10-21 night (Claude)**: In-View Editor + t, the full tool options, Mesh > Cleanup, the pro wireframe, camera based
   selection / backface culling / preselection highlight - docs/FORGE_PRO.md "DONE (Claude, 2026-10-21 night)". Cloud only.
 
@@ -305,7 +304,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 ## Open problems (still open as of c132c1f)
 
 1. **The PC's engine was not answering** at 2026-10-19 04:04 ("LOKI's engine is not answering", attempt 6, v0.16
-   patch 324, "update waiting", Godot tab "No Godot editor is linked"). Not looked at on the PC yet (ZIVA_TASKS).
+   patch 324, "update waiting", Godot tab "No Godot editor is linked"). Not looked at on the PC yet (LOKI_TASKS).
 2. **No release signing key** - Needs Mohamed (docs/INSTALL.md "Signing"); blocks the first v* release.
 3. **COEP in the real webviews**: whether Mermaid/Preview/Apps/Play/Studio frames show in WebView2 and
    WKWebView (Safari's COEP is stricter) after ecf9b40 is unknown.
@@ -322,7 +321,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 9. Not real failures but noise: test_studio / test_studio_godot fail ONLY on the cloud stubs (no mcp>=2
     MCPServer/Client there); the Mac has a stale legacy `harness_data/app/update_health.json`, a re-saved
     and a few `*.before-update` files (gitignored) - harmless.
-10. Accounts not connected (Needs Mohamed in ZIVA_TASKS.md): Telegram, email/calendar, Mistral/Together/Cerebras
+10. Accounts not connected (Needs Mohamed in LOKI_TASKS.md): Telegram, email/calendar, Mistral/Together/Cerebras
     keys rejected, DeepSeek out of credit, ModelScope, Higgsfield, Home Assistant.
 
 ## Next, in order
@@ -330,7 +329,7 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 1. PC: restart LOKI so it takes the waiting update (it was blocked by 4 edited game/loki-world files - set aside
    2026-10-21 10:10, the updater now handles that case); if the engine still does not answer, read the last 40 lines of
    harness_data/app/loki_bridge.log. Then Godot tab > a project in LOKI Projects > Open in Godot (agents linked again).
-2. Both machines: the new Home in the real window (cards, open from a card, Studio inside Home) - ZIVA_TASKS.
+2. Both machines: the new Home in the real window (cards, open from a card, Studio inside Home) - LOKI_TASKS.
 3. Check the COEP frames in the real windows on both machines.
 4. Mohamed: the release signing key; then run the Installers workflow and install on a clean account per OS.
 5. Real models through the task bench on the PC (`tools/task_bench.py --model local|bonsai|smart`) - the owner's

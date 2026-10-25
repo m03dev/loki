@@ -12,7 +12,7 @@ Duties, each on its own interval:
   health   run the System check; apply only the fixes that are always safe (bring
            providers back, warm Laya, start Ollama, restart the job runner). Never switches
            a provider off, approves anything, updates or spends - those stay with the owner.
-  inbox    take the oldest open `[loki]` request in ZIVA_TASKS.md (the owner's channel for
+  inbox    take the oldest open `[loki]` request in LOKI_TASKS.md (the owner's channel for
            "a job for LOKI's own agents") and start it as a team. One at a time; each
            request is started once. The repo file is never edited (that would block the
            updater); what was started is recorded in autopilot.json and as an event.
@@ -59,6 +59,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -109,8 +110,12 @@ def in_hours(window: str, now: float) -> bool:
     return start <= hour <= end if start <= end else (hour >= start or hour <= end)
 
 
+def _this_os() -> str:
+    return "windows" if sys.platform == "win32" else ("mac" if sys.platform == "darwin" else "linux")
+
+
 def inbox_requests(path: Path) -> list:
-    """Open `[loki]` requests in ZIVA_TASKS.md, oldest first: [{"id", "text"}]."""
+    """Open `[loki]` requests in LOKI_TASKS.md, oldest first: [{"id", "text"}]."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -126,6 +131,9 @@ def inbox_requests(path: Path) -> list:
         match = _INBOX_RE.match(line)
         if match:
             text = match.group(1).strip()
+            want = re.match(r"^\[(windows|mac|linux)\]\s*", text, re.I)   # a request for one machine only
+            if want and want.group(1).lower() != _this_os():
+                continue
             out.append({"id": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12], "text": text})
     return out
 
@@ -253,7 +261,7 @@ class Autopilot:
         for team_id in [v.get("team") for v in self.data["started"].values() if v.get("open")]:
             if team_id and self._team_running(team_id):
                 return ""            # one autopilot team at a time
-        for item in inbox_requests(self.repo / "ZIVA_TASKS.md"):
+        for item in inbox_requests(self.repo / "LOKI_TASKS.md"):
             if item["id"] in self.data["started"]:
                 continue
             reply = str(self.start_team(item["text"]) or "")

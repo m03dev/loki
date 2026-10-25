@@ -427,7 +427,7 @@ function forgeEditAttach(view, ctx) {
       if (kind === "ring") got = P.edgeRing(view.poly, T, ei).edges;
       else {
         got = P.edgeLoop(view.poly, T, ei);
-        // (Ziva, Mac, 2026-10-21) a loop needs valence-4 vertices; where none exists (a cube corner is a 3-pole) the
+        // (Mac, 2026-10-21) a loop needs valence-4 vertices; where none exists (a cube corner is a 3-pole) the
         // standard tools fall back to the edge ring - the belt of edges around the pick; if a nearby edit stopped the
         // ring walk early, the edges parallel to the pick
         if (got.length < 3) {

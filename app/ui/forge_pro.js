@@ -1288,8 +1288,8 @@ function forgeProHotboxRefresh(v, host) {        // ticks on the switches, and t
   }
 }
 
-// ================================================================== the Space wheel (floats at the mouse) - Ziva, 644e291
-// Owner, 2026-10-19 (to Ziva): "i want the space bar menue to float where my mouse is just like pro not a newhud its
+// ================================================================== the Space wheel (floats at the mouse), 644e291
+// Owner, 2026-10-19: "i want the space bar menue to float where my mouse is just like pro not a newhud its
 // like a wheel and when you hover over it brings down a new menue". So Space opens a wheel AT THE POINTER, and
 // hovering a wedge brings that menu down beside it. The wedges are the hotbox's own menus (FORGE_PRO_ROWS, Recent
 // Commands first) and the commands come from FORGE_PRO_CMDS, so the two can never drift apart; every list ends
@@ -1691,7 +1691,7 @@ function forgeProAttach(view, ctx) {
   let gest = null;
   canvas.addEventListener("pointerdown", (e) => {
     pro.mouse = [e.clientX, e.clientY];
-    if (e.button !== 0 || forgeCamMod(e)) return;         // every view, the four-view layout included (Ziva)
+    if (e.button !== 0 || forgeCamMod(e)) return;         // every view, the four-view layout included
     const held = ["q", "w", "e", "r"].find((k) => pro.held.has(k));
     if (held && view.mode !== "sculpt") {               // hold q / w / e / r + left button: that tool's marking menu
       e.preventDefault(); e.stopImmediatePropagation();
@@ -1872,7 +1872,7 @@ function forgeProKeys() {
       if (forgeProWheelOpenNow()) { forgeProWheelClose(); return; }   // Space again puts the wheel away
       m.spaceAt = performance.now();
       // Space: the hotbox, centred on the mouse - the menu rows tight around the pointer, each menu dropping
-      // down where you hover (owner 17:06: "neat and tidy", "open up on the cursor"). The wheel (Ziva) is kept:
+      // down where you hover (owner 17:06: "neat and tidy", "open up on the cursor"). The wheel is kept:
       // Windows > Radial Menus.
       forgeProHotboxOpen(v, m.mouse);
       return;

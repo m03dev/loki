@@ -178,7 +178,7 @@ the rest, or run Render Studio's jobs as peer jobs on the PC.
 2. **The creator's guide page could not be fetched**; the advanced post is gated. The Patreon workflow files were not seen
    (the owner does not have them). LOKI's graph is an independent one in the same spirit, not a copy.
 3. **No live ComfyUI run** when this was written (the cloud box could not reach PyPI or Hugging Face). **Now done on
-   macOS (Ziva, 2026-10-21)**: `tools/setup_comfyui.py --install` builds ComfyUI + ComfyUI-GGUF at the pinned commits
+   macOS (2026-10-21)**: `tools/setup_comfyui.py --install` builds ComfyUI + ComfyUI-GGUF at the pinned commits
    in their own venv (it came up as **0.42.0** on PyTorch 2.14.1, device **mps**), `--start` runs it on 127.0.0.1:8188,
    and `tests/test_comfyui_live.py` then checks what a fake server cannot (10 checks, all passing):
    - every node class, every input LOKI sets and every input the live server requires **match** the graphs;
@@ -203,9 +203,9 @@ the rest, or run Render Studio's jobs as peer jobs on the PC.
 5. Only one reference image (VACE's `reference_image` takes the first of a batch); several references (Phantom-style)
    would need `WanPhantomSubjectToVideo` and are not wired.
 
-## 8. Other resources worth using (Ziva, macOS, 2026-10-21) - CANDIDATES, NOT YET VERIFIED
+## 8. Other resources worth using (Mac, 2026-10-21) - CANDIDATES, NOT YET VERIFIED
 
-`mickmumpitz.ai/posts/ai-renderer-2-0-153434545` could **not be fetched from this machine** (this Ziva plan has no web
+`mickmumpitz.ai/posts/ai-renderer-2-0-153434545` could **not be fetched from this machine** (this session had no web
 access), so nothing below is quoted from it: this is the standing option list for this kind of pipeline, each entry
 something to try and then verify. Every one is a ComfyUI custom-node pack or a model, so all of them drop into
 `harness_data/comfyui/ComfyUI/custom_nodes/` and none of them changes LOKI's own graphs unless we choose to.

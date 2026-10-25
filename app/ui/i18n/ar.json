@@ -337,9 +337,7 @@
   "Remove": "إزالة",
   "Delete this model from this computer and get the space back.": "احذف هذا النموذج من هذا الكمبيوتر واستعد المساحة.",
   "Harness": "أداة التشغيل",
-  "How the work gets done: OpenCode, DeepSeek Harness, the Shell agent or LOKI classic. Auto picks for the model.": "كيف يُنجز العمل: OpenCode أو DeepSeek Harness أو وكيل الطرفية أو LOKI الكلاسيكي. التلقائي يختار حسب النموذج.",
-  "Connect Ziva": "ربط Ziva",
-  "LOKI's agent gets Ziva's Godot tools (scenes, nodes, scripts, run the game). Godot with Ziva must be open.": "يحصل وكيل LOKI على أدوات Godot من Ziva (المشاهد، العُقد، السكربتات، تشغيل اللعبة). يجب أن يكون Godot مع Ziva مفتوحًا."
+  "How the work gets done: OpenCode, DeepSeek Harness, the Shell agent or LOKI classic. Auto picks for the model.": "كيف يُنجز العمل: OpenCode أو DeepSeek Harness أو وكيل الطرفية أو LOKI الكلاسيكي. التلقائي يختار حسب النموذج."
  },
  "fb.email": "كتابة بريد إلكتروني",
  "fb.email_done": "تم حفظ {file}. فُتحت مسودة بريد إلكتروني - أرفق الملف وأرسله.",

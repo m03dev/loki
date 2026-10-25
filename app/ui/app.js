@@ -371,7 +371,7 @@ async function pollApproval() {
   const allow = el("button", "allow", "Allow");
   const deny = el("button", "", "Deny");
   allow.type = deny.type = "button";
-  // the chat is not on screen (Home, Forge, Studio...) or the ask comes from outside (Ziva): the card floats on top
+  // the chat is not on screen (Home, Forge, Studio...) or the ask comes from an outside agent: the card floats on top
   const floating = !$("#transcript") || $("#transcript").offsetParent === null;
   const decide = async (approved) => {
     allow.disabled = deny.disabled = true;

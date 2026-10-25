@@ -38,18 +38,6 @@ const AgentEngine = (() => {
       sel.addEventListener("change", async () => { const r = await api("/agent/engine/set", { engine: sel.value }); paint(r); if (window.LokiHarness) LokiHarness.paint(r); });
       acts.append(sel);
       card.append(acts);
-      // Ziva's Godot tools for LOKI's agent: paste what Ziva Settings > Models & Providers > Ziva as an MCP server gives
-      const z = mk("div", "ae-ziva");
-      z.append(mk("span", "ae-label", "Ziva (Godot tools)"));
-      const inp = mk("input", "ae-ziva-in"); inp.id = "ae-ziva"; inp.type = "text"; inp.spellcheck = false;
-      inp.placeholder = "Ziva > Settings > Models & Providers > Ziva as an MCP server > Other / Raw URL";
-      inp.value = st.ziva_mcp || ""; inp.setAttribute("aria-label", "Ziva MCP server address");
-      const save = mk("button", "quiet small", st.ziva_mcp ? "Saved" : "Connect"); save.type = "button";
-      save.dataset.tipName = "Connect Ziva"; save.dataset.tipWhat = "LOKI's agent gets Ziva's Godot tools (scenes, nodes, scripts, run the game). Godot with Ziva must be open.";
-      inp.addEventListener("input", () => { save.textContent = "Connect"; });
-      save.addEventListener("click", async () => { const r = await api("/agent/ziva", { value: inp.value.trim() }); paint(r); });
-      z.append(inp, save);
-      card.append(z);
     }
     const missing = st.engine === "opencode" && !st.opencode;   // auto / shell / classic work without OpenCode
     if (notice) notice.hidden = !missing;

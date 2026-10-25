@@ -424,10 +424,8 @@ MODELS = {
         base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         api_key=os.getenv("OPENROUTER_API_KEY", ""),
         model=os.getenv("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash")),
-    # Ziva Baby's models (owner 2026-10-25: "ziva baby uses gpt 6 and its unlimited"): Baby is a router that "usually
-    # selects Nemotron 3.5 Lightning Free" (OpenRouter :free, 1M context, costs nothing) and sometimes GPT-6 Luna (OpenAI,
-    # $0.10 / $0.50 per million tokens - Ziva pays for it). The same two here: free Nemotron in Smart's order, Luna
-    # through your OpenAI key (or OpenRouter) when you pick it.
+    # Nemotron 3.5 Lightning Free (OpenRouter :free, 1M context, costs nothing) in Smart's order, and GPT-6 Luna (OpenAI,
+    # $0.10 / $0.50 per million tokens) through your OpenAI key (or OpenRouter) when you pick it.
     "nemotron-free": ModelConfig(base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
                                  api_key=os.getenv("OPENROUTER_API_KEY", ""),
                                  model=os.getenv("NEMOTRON_FREE_MODEL", "nvidia/nemotron-3.5-lightning:free")),
@@ -570,7 +568,7 @@ MODELS = {
     "dashscope": ModelConfig(base_url=os.getenv("DASHSCOPE_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
                              api_key=os.getenv("DASHSCOPE_API_KEY", ""),
                              model=os.getenv("DASHSCOPE_MODEL", "qwen-plus")),
-    # Requested by Ziva (ZIVA_TASKS.md, 2026-10-14): more hosts with starter credits.
+    # More hosts with starter credits (2026-10-14).
     "deepinfra": ModelConfig(base_url=os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai"),
                              api_key=os.getenv("DEEPINFRA_API_KEY", ""),
                              model=os.getenv("DEEPINFRA_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
@@ -9004,7 +9002,7 @@ def engine_status() -> dict:
     oc, cg = opencode_engine.find_opencode(), opencode_engine.find_codegraph()
     return {"engine": opencode_engine.engine_choice(), "harnesses": [{"id": k, "name": v[0], "what": v[1]}
                                                                      for k, v in opencode_engine.HARNESSES.items()],
-            "opencode": oc, "codegraph": cg, "ziva_mcp": os.getenv("LOKI_ZIVA_MCP", ""),
+            "opencode": oc, "codegraph": cg,
             "codex": __import__("cli_agents").find_cli("codex"), "claude_code": __import__("cli_agents").find_cli("claude-code"),
             "dsh": dsh_engine.find_dsh(), "deepseek_harness": dsh_engine.mode(),
             "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),

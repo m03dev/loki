@@ -8,7 +8,7 @@ ships as compiled GDExtension binaries and a few .gd files). LOKI Studio copies,
 Everything here is clean-room: built from Ziva's PUBLIC feature list (ziva.sh/docs) and its observable behaviour,
 on Godot's own public APIs (EditorPlugin, EditorInterface, EditorUndoRedoManager, EditorDebuggerPlugin, Logger) and
 LOKI's own code. This file describes what Ziva does only from its public docs; the numbers in the benchmark below
-must come from real runs (ZIVA_TASKS W37/M28), not from this file.
+must come from real runs (LOKI_TASKS W37/M28), not from this file.
 
 ## Feature by feature
 
@@ -89,7 +89,7 @@ Ziva works on it as a plain folder of files).
 How to score: **time** from pressing Enter to the agent's last word (minutes); **ok** = the result really works (run
 it; for 7 the files and the scene are exactly as before; for 13 the answer is "10"); **quality** 1-5 (right approach,
 clean GDScript 2, no needless changes, says what it did). Note the model each tool used. Paste the filled table
-under ZIVA_TASKS Reports; anything Studio lost or could not do becomes a `[claude]` request.
+under LOKI_TASKS Reports; anything Studio lost or could not do becomes a `[claude]` request.
 
 ## Known gaps (honest)
 
