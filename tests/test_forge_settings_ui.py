@@ -66,8 +66,8 @@ async def main():
         await E("forgeProRun(forge.view, 'cube')"); await wait(200)
         await E("forgeProRun(forge.view, 'preferences')"); await wait(200)
         tabs = await E("[...document.querySelectorAll('#forge-settings .fset-tab')].map((b) => b.dataset.tab)")
-        check("Settings has Interface, Navigation, Manipulators, Selection, Create, Hotkeys and Menus",
-              tabs == ["interface", "navigation", "manipulators", "selection", "create", "hotkeys", "menus"], tabs)
+        check("Settings has Interface, Navigation, Manipulators, Selection, Create, Grid & presets, Hotkeys and Menus",
+              tabs == ["interface", "navigation", "manipulators", "selection", "create", "tools", "hotkeys", "menus"], tabs)
         await page.click('.fset-tab[data-tab="hotkeys"]'); await wait(150)
         check("the Hotkeys tab holds the Hotkey Editor (sets, search, a key box per command)",
               await E("!!document.querySelector('#forge-settings .fset-pane #forge-hotkeys .forge-hk-list') && document.querySelectorAll('#forge-settings .forge-hk-list button').length > 50"))

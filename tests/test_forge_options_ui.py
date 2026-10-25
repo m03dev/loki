@@ -63,8 +63,11 @@ async def main():
         check("no cog on the viewport; Preferences is in Windows > Settings/Preferences",
               await E("getComputedStyle(document.getElementById('forge-options-btn')).display === 'none' && forgeMenuFlat(FMY_MENUS().find(m => m[0] === 'Windows')[1]).includes('preferences')"))
         await E("fmyRun('preferences')")
-        await page.wait_for_timeout(60)
-        check("it opens the Options panel", await E("!document.getElementById('forge-options').hidden"))
+        await page.wait_for_timeout(80)
+        await page.click('.fset-tab[data-tab="tools"]')     # Preferences is the Settings window now; the panel is its tab
+        await page.wait_for_timeout(80)
+        check("it opens the Options panel (Settings > Grid & presets)",
+              await E("!document.getElementById('forge-options').hidden && !!document.getElementById('forge-options').closest('.fset')"))
 
         # interface visibility: the chrome's own UI-element list, driven from the panel
         rowsel = "#forge-opt-ui-toolbox"

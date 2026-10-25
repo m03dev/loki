@@ -154,6 +154,12 @@ const ForgeSettings = (() => {
         row("Frame the new object", "Off: the camera stays where it is (Maya / Unreal).", toggle("createFrames")),
         row("Baseline", "Where a new object's base is: 0 sits on the grid, -0.5 is centred on it (the old way), up to -1 / 1. t on a new object changes it.", slider("createBaseline", -1, 1, 0.05)));
     }],
+    // the older Options panel (forge_options.js): grid step and the tools' limits, UI elements, saved presets
+    ["tools", "Grid & presets", (p) => {
+      host(p, "forge-options", null);
+      const v = typeof forge !== "undefined" && forge.view;
+      if (v && v.forgeOptions) v.forgeOptions.open(true);       // fills its rows (it renders when it opens)
+    }],
     ["hotkeys", "Hotkeys", (p) => { host(p, "forge-hotkeys", () => { if (typeof forgeHotkeyEditor === "function") forgeHotkeyEditor(true); }); }],
     ["menus", "Menus", (p) => { host(p, "fmenu-settings", () => { if (typeof forgeMenusSettings === "function") forgeMenusSettings(); }); }],
   ];
