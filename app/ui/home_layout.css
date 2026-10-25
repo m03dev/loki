@@ -184,3 +184,30 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .ae-notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px clamp(10px, 3%, 18px) 0; padding: 8px 12px;
   border-radius: 10px; border: 1px solid rgba(227, 192, 125, .4); background: rgba(227, 192, 125, .1); font-size: 12.5px; }
 .ae-notice[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- Home's live view (home_live.js) */
+.home-livewall { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; flex: none; min-width: 0; }
+.home-livewall.idle { padding: 6px 10px; }
+.hl-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.hl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted, #888); flex: none; }
+.hl-dot.on { background: #5fbf8f; box-shadow: 0 0 0 3px rgba(95, 191, 143, .25); }
+.hl-title { font-size: 13px; }
+.hl-machines { font-size: 12px; color: var(--muted); white-space: pre-wrap; flex: 1 1 auto; min-width: 0; }
+.hl-open { margin-inline-start: auto; }
+.hl-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.hl-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 8px; }
+.hl-agent { text-align: start; display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .03); color: inherit; min-width: 0; cursor: pointer; }
+.hl-agent:hover { border-color: var(--accent, #8fb3d9); }
+.hl-shot { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 7px; background: #000; }
+.hl-task { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hl-meta { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hl-line { font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.home-head > .home-livewall.idle { border: 0; padding: 0; flex: 0 1 auto; flex-direction: row; align-items: center; gap: 8px; margin-inline-start: auto; }
+.home-head > .home-livewall.idle .hl-top { flex-wrap: nowrap; }
+.home-head > .home-livewall.idle .hl-machines { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16rem; }
+.home-head > .home-livewall.idle .hl-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18rem; }
+/* a narrow Home pane (beside the chat): the idle line steps away - it comes back as a panel when an agent works */
+@container (max-width: 760px) {
+  .home-head > .home-livewall.idle { display: none; }
+}
