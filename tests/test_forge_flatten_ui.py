@@ -89,6 +89,32 @@ async def main():
         await E("forgeProRun(forge.view, 'undo')"); await wait(80)
         ys = await E("[...new Set(forge.view.poly.v.map(p => p[1].toFixed(6)))]")
         check("...one undo step brings the cube back", len(ys) == 2, ys)
+        # ---- the Scale handle dragged PAST its centre stops flat - never negative (inverted, inside-out geometry)
+        await cube()
+        await E("forgeProRun(forge.view, 'face')"); await wait(80)
+        await E("forge.view.selectItems('face', forge.view.poly.f.map((_, i) => i), 'set')")
+        await E("forgeProRun(forge.view, 'scale')"); await wait(250)
+        piv = await E("""(() => { const v = forge.view, o = v.gizmo.object, r = v.canvas.getBoundingClientRect();
+            const sp = (w) => { const p = w.project(v.camera); return [r.left + (p.x + 1) / 2 * r.width, r.top + (1 - p.y) / 2 * r.height]; };
+            const c = o.getWorldPosition(new v.THREE.Vector3()); return sp(c.clone()).concat(sp(c.clone().add(new v.THREE.Vector3(1, 0, 0)))); })()""")
+        px, py, qx, qy = piv
+        hit = None
+        for i in range(4, 60):
+            t = i / 40
+            await page.mouse.move(px + (qx - px) * t, py + (qy - py) * t); await wait(10)
+            if await E("forge.view.gizmo.axis") == "X":
+                hit = (px + (qx - px) * t, py + (qy - py) * t); break
+        check("found the Scale handle's X box on screen", hit is not None)
+        if hit:
+            await page.mouse.down()
+            for t in (0.6, 0.2, 0.0, -0.6, -1.4):
+                await page.mouse.move(px + (hit[0] - px) * t, py + (hit[1] - py) * t, steps=4); await wait(25)
+            held = await E("forge.view.gizmo.object.scale.x")
+            await page.mouse.up(); await wait(250)
+            vol = await E("window.ForgePoly.volume(forge.view.poly)")
+            check("dragged far past the centre, the scale stays a hair above 0 (flat), never negative", 0 < held < 1e-3, held)
+            check("...so the cube is flat, not turned inside out (volume ~0, not negative)", -1e-6 < vol < 1e-3, vol)
+        await E("forgeProRun(forge.view, 'objectMode')"); await wait(80)
         # ---- the R marking menu
         mm = await E("forgeProMenu(forge.view, { key: 'r' }).ring")
         check("hold R + left button: Scale's marking menu has Flatten X / Y / Z / Normal",

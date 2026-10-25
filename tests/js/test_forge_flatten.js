@@ -45,6 +45,11 @@ check("handle: X near 0 snaps to 0 when dragging X", snap(s1, "X", 0.06, 0) && s
 const s2 = { x: 0.03, y: 0.02, z: 0.04 };
 snap(s2, "XYZ", 0.06, 1e-4);
 check("handle: uniform scale near 0 on an object = the floor on every axis", s2.x === 1e-4 && s2.y === 1e-4 && s2.z === 1e-4, s2);
+const s4 = { x: -0.7, y: 1, z: 1 };
+check("handle: dragged PAST 0 (negative = inverted, inside-out faces) it stays flat instead", snap(s4, "X", 0.06, 1e-5) && s4.x === 1e-5, s4);
+const s5 = { x: -2, y: -2, z: -2 };
+snap(s5, "XYZ", 0.06, 1e-4);
+check("handle: uniform scale through the centre stops flat on every axis", s5.x === 1e-4 && s5.y === 1e-4 && s5.z === 1e-4, s5);
 const s3 = { x: 0.5, y: 1, z: 1 };
 check("handle: far from 0 nothing snaps", !snap(s3, "X", 0.06, 0) && s3.x === 0.5);
 

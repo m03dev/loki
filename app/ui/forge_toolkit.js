@@ -139,15 +139,19 @@ function forgeTkWhole(v, kind) {
 }
 
 /** Run a tool on the selection: one undo step, one history step, the pro selection afterwards. */
-/** Scale handle -> 0 (Maya / Unreal "scale to flatten"): while the Scale handle drags, an axis within `eps` of 0 snaps
- *  to exactly 0 (floor for objects, which must stay invertible to be picked), so dragging the handle back to its
- *  centre flattens. `s` is a THREE.Vector3-like {x, y, z}; `axis` is TransformControls' "X", "YZ", "XYZ" ... Pure. */
+/** Scale handle -> flat, never past it (owner 2026-10-25: "it should be flat but it just goes past it making
+ *  non-manifold geometry"). Scaling through 0 MIRRORS the selection: faces turn inside out and, with soft selection or
+ *  a partial pick, fold through their neighbours - inverted, overlapping, non-manifold. Maya and Blender allow it (a
+ *  negative scale); Forge stops at flat instead: while the Scale handle drags, an axis within `eps` of 0 OR below it
+ *  is held at `floor` (a hair above 0 - three.js decomposes the handle's matrix every frame and must not divide by 0).
+ *  Flip on purpose with Mesh > Mirror or Normals > Reverse. `s` is a THREE.Vector3-like {x, y, z}; `axis` is
+ *  TransformControls' "X", "YZ", "XYZ" ... Pure. */
 function forgeScaleZeroSnap(s, axis, eps, floor) {
   if (!s || !axis) return false;
   let hit = false;
+  const z = floor || 0;
   for (const a of "xyz") {
-    if (axis.indexOf(a.toUpperCase()) < 0 || !(Math.abs(s[a]) < (eps || 0.06))) continue;
-    const z = floor || 0;
+    if (axis.indexOf(a.toUpperCase()) < 0 || !(s[a] < (eps || 0.06))) continue;   // near 0, or past it (negative)
     if (s[a] !== z) { s[a] = z; hit = true; }
   }
   return hit;
