@@ -794,6 +794,10 @@ const FORGE_MAYA = {
     "mergeCenter",
     "Merge to Center"
    ],
+   [
+    "transformComp",
+    "Transform"
+   ],
    "-",
    [
     "flipMesh",
@@ -816,6 +820,10 @@ const FORGE_MAYA = {
    [
     "deleteEdgeVert",
     "Delete Edge/Vertex"
+   ],
+   [
+    "editEdgeFlow",
+    "Edit Edge Flow"
    ],
    [
     "flipTriangleEdge",
@@ -867,6 +875,10 @@ const FORGE_MAYA = {
     "Show/Hide Modeling Toolkit"
    ],
    "#Tools",
+   [
+    "connect",
+    "Connect"
+   ],
    [
     "insertLoopTool",
     "Insert Edge Loop"
@@ -1474,6 +1486,10 @@ const FORGE_MAYA = {
     [
      "circularize",
      "Circularize Components"
+    ],
+    [
+     "editEdgeFlow",
+     "Edit Edge Flow"
     ],
     "-",
     [

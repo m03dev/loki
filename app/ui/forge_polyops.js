@@ -2150,6 +2150,54 @@
     if (!done.length) return fail(m0, "Flip Triangle Edge: pick edges between two triangles.");
     return finish(m, edgeSel(done));
   };
+  // Edit Edge Flow (Maya polyEditEdgeFlow): each vertex of the picked edges moves onto the curve its neighbours
+  // ACROSS the loop make - a cubic through the two vertices on either side (spaced by their edge lengths) - so a loop
+  // sits in the surface's curvature instead of cutting a flat line through it. opts.adjust 0..1 (1 = onto the curve).
+  P.editEdgeFlow = (m0, edges, opts) => {
+    const T = P.topology(m0), m = cp(m0), adjust = Math.max(0, Math.min(2, num(opts && opts.adjust, 1)));
+    const picked = new Set(edgeIds(m0, T, edges)), moved = [];
+    const verts = uniq([...picked].flatMap((ei) => [T.edges[ei].a, T.edges[ei].b]));
+    const other = (ei, x) => (T.edges[ei].a === x ? T.edges[ei].b : T.edges[ei].a);
+    const lagrange = (ts, ps, t) => {
+      const out = [0, 0, 0];
+      for (let i = 0; i < ts.length; i++) {
+        let w = 1;
+        for (let j = 0; j < ts.length; j++) if (j !== i) w *= (t - ts[j]) / (ts[i] - ts[j]);
+        for (let k = 0; k < 3; k++) out[k] += w * ps[i][k];
+      }
+      return out;
+    };
+    for (const v of verts) {
+      const around = T.vertEdges[v] || [];
+      if (around.length !== 4) continue;                  // a pole or a border corner: it stays
+      // the loop's edges at v: the picked ones, or the picked one and the loop's next edge
+      const mine = around.filter((ei) => picked.has(ei));
+      const loop = new Set(mine);
+      if (mine.length === 1) { const nx = P.loopStep(m0, T, mine[0], v); if (nx >= 0) loop.add(nx); }
+      const cross = around.filter((ei) => !loop.has(ei));
+      if (loop.size !== 2 || cross.length !== 2) continue;
+      const a = other(cross[0], v), b = other(cross[1], v);
+      const ea2 = P.loopStep(m0, T, cross[0], a), eb2 = P.loopStep(m0, T, cross[1], b);
+      if (ea2 < 0 || eb2 < 0) continue;                   // no second neighbour on a side: nothing to fit
+      const a2 = other(ea2, a), b2 = other(eb2, b);
+      const A = m0.v[a], B = m0.v[b], A2 = m0.v[a2], B2 = m0.v[b2], V = m0.v[v];
+      // the spacing: measured along the line a2 -> b2 (the curve's own direction), so an evenly drawn curve is
+      // fitted exactly; if that is not in order (a sharp fold), even spacing
+      const axis = sub(B2, A2), L = len(axis);
+      if (L < 1e-12) continue;
+      const u = mul(axis, 1 / L), along = (p) => dot(sub(p, A2), u);
+      let ts = [along(A2), along(A), along(B), along(B2)], t = along(V);
+      if (!(ts[0] < ts[1] && ts[1] < ts[2] && ts[2] < ts[3]) || !(t > ts[1] && t < ts[2])) {
+        const av = dist(A, V), vb = dist(V, B);
+        ts = [-1, 0, 1, 2]; t = av / Math.max(1e-12, av + vb);
+      }
+      const fit = lagrange(ts, [A2, A, B, B2], t);
+      m.v[v] = [0, 1, 2].map((k) => V[k] + (fit[k] - V[k]) * adjust);
+      moved.push(v);
+    }
+    if (!moved.length) return fail(m0, "Edit Edge Flow: pick edges in loops with two rows of faces on each side (it fits them to those).");
+    return finish(m, edgeSel([...picked].map((ei) => [T.edges[ei].a, T.edges[ei].b])));
+  };
   // Symmetrize (Maya polySymmetrize): one side of the plane through the origin is copied onto the other - the mesh is
   // cut along the plane, the other side removed, the kept side mirrored and welded on the seam
   P.symmetrize = (m0, a, b) => {   // (m, opts) or (m, faces, opts) - the history replays the second form

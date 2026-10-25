@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-298 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (27%).
+302 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (27%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -39,8 +39,8 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Display | 10 | 121 |
 | Windows | 13 | 80 |
 | Mesh | 19 | 32 |
-| Edit Mesh | 22 | 30 |
-| Mesh Tools | 22 | 34 |
+| Edit Mesh | 24 | 30 |
+| Mesh Tools | 23 | 34 |
 | Mesh Display | 4 | 38 |
 | Curves | 0 | 36 |
 | Surfaces | 0 | 41 |
@@ -50,7 +50,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Playback | 5 | 27 |
 | Shift+RMB object | 30 | 47 |
 | Shift+RMB vertex | 14 | 26 |
-| Shift+RMB edge | 26 | 37 |
+| Shift+RMB edge | 27 | 37 |
 | Shift+RMB face | 24 | 36 |
 | Shift+RMB default | 7 | 32 |
 | zones | 15 | 45 |
@@ -651,14 +651,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Smart Extrude (Maya: SmartExtrude)
 - ✓ `merge` Merge (Maya: PolyMerge)
 - ✓ `mergeCenter` Merge to Center (Maya: MergeToCenter)
-- - Transform (Maya: MovePolygonComponent)
+- ✓ `transformComp` Transform (Maya: MovePolygonComponent)
 - ✓ `flipMesh` Flip (Maya: FlipMesh)
 - ✓ `symmetrize` Symmetrize (Maya: Symmetrize)
 - ✓ `averageVerts` Average Vertices (Maya: AverageVertex)
 - ✓ `chamfer` Chamfer Vertices (Maya: ChamferVertex)
 - - Reorder Vertices (Maya: ReorderVertex)
 - ✓ `deleteEdgeVert` Delete Edge/Vertex (Maya: DeletePolyElements)
-- - Edit Edge Flow (Maya: PolyEditEdgeFlow)
+- ✓ `editEdgeFlow` Edit Edge Flow (Maya: PolyEditEdgeFlow)
 - ✓ `flipTriangleEdge` Flip Triangle Edge (Maya: FlipTriangleEdge)
 - ✓ `spinEdgeBack` Spin Edge Backward (Maya: PolySpinEdgeBackward)
 - ✓ `spinEdge` Spin Edge Forward (Maya: PolySpinEdgeForward)
@@ -673,7 +673,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 ### Mesh Tools
 
 - ✓ `winToolkit` Show/Hide Modeling Toolkit (Maya: ToggleModelingToolkit)
-- - Connect (Maya: EnterConnectTool)
+- ✓ `connect` Connect (Maya: EnterConnectTool)
 - - Crease Tool (Maya: PolyCreaseTool)
 - ✓ `insertLoopTool` Insert Edge Loop (Maya: SplitEdgeRingTool)
 - - Make Hole (Maya: MakeHoleTool)
@@ -1104,7 +1104,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `insertLoopTool` Insert Edge Loop Tool (Maya: SplitEdgeRingTool)
 - ✓ `slideEdge` Slide Edge Tool (Maya: SlideEdgeTool)
 - ✓ `circularize` Circularize Components (Maya: PolyCircularize)
-- - Edit Edge Flow (Maya: PolyEditEdgeFlow)
+- ✓ `editEdgeFlow` Edit Edge Flow (Maya: PolyEditEdgeFlow)
 - - Add Divisions To Edge
 - ✓ `bridge` Bridge (Maya: performBridgeOrFill)
 - ✓ `fillHole` Fill Hole (Maya: FillHole)

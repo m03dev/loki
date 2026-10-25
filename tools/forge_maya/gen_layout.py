@@ -70,7 +70,8 @@ MAP = {
     # Edit Mesh
     "BevelPolygon": "bevel", "BridgeOrFill": "bridge", "BridgeEdge": "bridge", "performBridgeOrFill": "bridge",
     "PolyCircularize": "circularize", "PolygonCollapse": "collapse", "polyCollapseEdge": "collapse",
-    "ConnectComponents": "connect", "DetachComponent": "detach", "PolyExtrude": "extrude", "PolyMerge": "merge",
+    "ConnectComponents": "connect", "EnterConnectTool": "connect", "PolyEditEdgeFlow": "editEdgeFlow",
+    "MovePolygonComponent": "transformComp", "DetachComponent": "detach", "PolyExtrude": "extrude", "PolyMerge": "merge",
     "MergeToCenter": "mergeCenter", "AverageVertex": "averageVerts", "ChamferVertex": "chamfer",
     "DeletePolyElements": "deleteEdgeVert", "DeleteEdge": "deleteEdgeVert", "DeleteVertex": "deleteEdgeVert",
     "PolySpinEdgeBackward": "spinEdgeBack", "PolySpinEdgeForward": "spinEdge", "DuplicateFace": "duplicateFace",
