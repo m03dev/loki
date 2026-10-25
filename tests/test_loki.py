@@ -83,6 +83,10 @@ if _env.is_file():
 
 
 
+# hermetic provider health: earlier runs (and other suites) leave quota marks in harness_data/provider_health.json
+# that reorder Smart (gemini "used up until ..." made the failover check pick groq) - this run keeps its own
+import tempfile as _tf  # noqa: E402
+os.environ["LOKI_HEALTH_FILE"] = str(Path(_tf.mkdtemp(prefix="loki-health-")) / "provider_health.json")
 import loki  # noqa: E402
 # Tests drive real turns with fake models: they must never write into the user's real
 # experience log or let it reorder providers. The self-improvement tests opt back in,
