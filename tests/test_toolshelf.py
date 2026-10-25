@@ -35,9 +35,11 @@ problems = [p for r in shipped.values() for p in ts.validate(r)]
 check("every shipped recipe is valid (%d tools)" % len(shipped), shipped and not problems, problems[:12])
 ws = TMP / "ws"
 ws.mkdir()
-for ext in (".glb", ".gltf", ".obj", ".fbx", ".png", ".jpg", ".wav", ".mp3", ".mp4", ".mov", ".txt", ".srt", ".json",
-            ".svg", ".gd", ".bvh", ".zip"):
-    (ws / ("sample" + ext)).write_bytes(b"x")
+for r in shipped.values():                 # a sample file of every kind a recipe takes
+    for act in (r.get("actions") or {}).values():
+        for spec in (act.get("args") or {}).values():
+            for ext in spec.get("exts") or [".png"]:
+                (ws / ("sample" + ext)).write_bytes(b"x")
 (ws / "frames").mkdir()
 (ws / "project").mkdir()
 (ws / "project" / "project.godot").write_text("")
@@ -101,6 +103,18 @@ out = _sp.run([sys.executable, str(REPO / "engine" / "runners" / "godot_addon.py
               capture_output=True, text=True)
 check("never over an existing copy, never enabled twice", '"copied": false' in out.stdout
       and (gp / "project.godot").read_text().count("godot_ai/plugin.cfg") == 1, out.stdout)
+
+here = "%d.%d" % sys.version_info[:2]
+check("a tool's venv uses this Python when it is the version asked for",
+      ts.venv_command(here, TMP / "v", which=lambda n: None)[:3] == [sys.executable, "-m", "venv"])
+check("another version: pythonX.Y from the PATH", ts.venv_command("3.8", TMP / "v", which=lambda n: "/opt/py38" if n == "python3.8" else None)[0] == "/opt/py38")
+check("none here: uv fetches it (with pip seeded)", ts.venv_command("3.8", TMP / "v", which=lambda n: "/bin/uv" if n == "uv" else None)
+      == ["/bin/uv", "venv", "--seed", "--python", "3.8", str(TMP / "v")])
+try:
+    ts.venv_command("3.8", TMP / "v", which=lambda n: None)
+    check("no such Python and no uv: says how to get it", False)
+except ts.ShelfError as exc:
+    check("no such Python and no uv: says how to get it", "astral.sh/uv" in str(exc))
 
 # ------------------------------------------------------------------ install + run with fake recipes
 fake_dir = TMP / "recipes"

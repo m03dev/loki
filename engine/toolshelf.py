@@ -124,6 +124,36 @@ def shelf() -> list:
 
 
 # ----------------------------------------------------------------------------- installing
+def find_python(version: str | None, which: Callable = shutil.which, run: Callable = subprocess.run) -> str:
+    """A Python of that version on this computer ('' when there is none): this one, pythonX.Y, or py -X.Y."""
+    if not version or "%d.%d" % sys.version_info[:2] == str(version):
+        return sys.executable
+    found = which("python%s" % version)
+    if found:
+        return found
+    if sys.platform == "win32" and which("py"):
+        try:
+            proc = run(["py", "-%s" % version, "-c", "import sys; print(sys.executable)"], capture_output=True,
+                       text=True, timeout=30)
+            if proc.returncode == 0 and proc.stdout.strip():
+                return proc.stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return ""
+
+
+def venv_command(version: str | None, target: Path, which: Callable = shutil.which,
+                 run: Callable = subprocess.run) -> list:
+    """How to make the tool's venv: with the Python it asks for; uv fetches that Python when the computer lacks it."""
+    py = find_python(version, which, run)
+    if py:
+        return [py, "-m", "venv", str(target)]
+    uv = which("uv")
+    if uv:
+        return [uv, "venv", "--seed", "--python", str(version), str(target)]
+    raise ShelfError("this tool needs Python %s - install it (python.org), or install uv (astral.sh/uv) and LOKI "
+                     "fetches it" % version)
+
 def _fill(parts: list, ph: dict) -> list:
     out = []
     for p in parts:
@@ -214,7 +244,7 @@ def install(tool_id: str, progress: Callable | None = None, run: Callable = subp
         py = venv_python(d)
         if not py.exists():
             say("making its own Python environment", 0.2)
-            log.append(_run([sys.executable, "-m", "venv", str(d / "venv")], run))
+            log.append(_run(venv_command(inst.get("python"), d / "venv"), run))
         pip = [str(py), "-m", "pip", "install", "--disable-pip-version-check"]
         index = (inst.get("pip_index") or {}).get(plat)
         extra = ["--extra-index-url", index] if index else []
@@ -311,6 +341,9 @@ def build_command(r: dict, action: str, args: dict, ws: Path, d: Path) -> tuple:
             if kind == "out":
                 stem = Path(str(vals.get("input") or "out")).stem
                 raw = raw.replace("{input_stem}", stem)
+                for k, v in vals.items():                   # e.g. "{preset}.wav"
+                    if isinstance(v, str) and "{%s}" % k in raw:
+                        raw = raw.replace("{%s}" % k, Path(v).stem if os.sep in v or "/" in v else v)
             p = (ws / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
             if ws != p and ws not in p.parents and not spec.get("anywhere"):
                 raise ShelfError("%s must be inside the workspace: %s" % (name, raw))
@@ -411,7 +444,7 @@ def validate(r: dict) -> list:
         rel = inst.get("release") or {}
         if not (rel.get("repo") and rel.get("tag") and rel.get("assets") and rel.get("exe")):
             p.append("%s: release needs repo, tag, assets, exe" % rid)
-    if kind == "pip" and not inst.get("pip"):
+    if kind == "pip" and not inst.get("pip") and not inst.get("pip_platform"):
         p.append("%s: pip kind with no packages" % rid)
     if kind == "manual" and not inst.get("manual"):
         p.append("%s: manual kind says nothing" % rid)

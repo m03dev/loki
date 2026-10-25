@@ -1,0 +1,1487 @@
+[
+ {
+  "id": "moss-soundeffect-v2",
+  "name": "MOSS-SoundEffect v2.0 (OpenMOSS MOSS-TTS)",
+  "area": "audio",
+  "what": "Generates 48 kHz sound effects or ambiences of up to 30 seconds from an English or Chinese text prompt.",
+  "repo": "https://github.com/OpenMOSS/MOSS-TTS",
+  "license": "Apache-2.0",
+  "weights": {
+   "name": "OpenMOSS-Team/MOSS-SoundEffect-v2.0 (1.3B DiT + DAC VAE + Qwen3 text encoder)",
+   "license": "Apache-2.0 (as stated by the repo; HF model card not reachable from the sandbox)",
+   "commercial": true,
+   "url": "https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect-v2.0"
+  },
+  "hardware": "gpu",
+  "platforms": [
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.12",
+   "git": "https://github.com/OpenMOSS/MOSS-TTS",
+   "ref": "934d6826b084c46a0d033402174d5f8ac4ed2519",
+   "pip": [],
+   "pip_platform": {
+    "win32": [
+     "{src}/moss_soundeffect_v2[torch-cu128]"
+    ],
+    "linux": [
+     "{src}/moss_soundeffect_v2[torch-cu128]"
+    ]
+   },
+   "pip_index": {
+    "win32": "https://download.pytorch.org/whl/cu128",
+    "linux": "https://download.pytorch.org/whl/cu128"
+   },
+   "after": [
+    [
+     "{python}",
+     "-c",
+     "from huggingface_hub import snapshot_download; snapshot_download('OpenMOSS-Team/MOSS-SoundEffect-v2.0')"
+    ]
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import moss_soundeffect_v2"
+  ],
+  "actions": {
+   "sfx": {
+    "what": "Make a sound effect WAV from a text description.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import os,sys,runpy;os.environ.setdefault('TORCHDYNAMO_DISABLE','1');sys.argv=sys.argv[1:];runpy.run_path(sys.argv[0],run_name='__main__')",
+     "{src}/moss_soundeffect_v2/infer_from_pipeline.py",
+     "--model_dir",
+     "OpenMOSS-Team/MOSS-SoundEffect-v2.0",
+     "--prompt",
+     "{prompt}",
+     "--seconds",
+     "{seconds}",
+     "--steps",
+     "{steps}",
+     "--cfg_scale",
+     "{cfg_scale}",
+     "--seed",
+     "{seed}",
+     "--output",
+     "{output}"
+    ],
+    "args": {
+     "prompt": {
+      "type": "text",
+      "what": "what the sound is, e.g. 'heavy wooden door creaks open slowly'"
+     },
+     "seconds": {
+      "type": "number",
+      "default": 3.0,
+      "min": 0.1,
+      "max": 30,
+      "what": "length in seconds"
+     },
+     "steps": {
+      "type": "int",
+      "default": 100,
+      "min": 10,
+      "max": 200,
+      "what": "diffusion steps (fewer = faster)"
+     },
+     "cfg_scale": {
+      "type": "number",
+      "default": 4.0,
+      "min": 1,
+      "max": 10,
+      "what": "how strongly to follow the prompt"
+     },
+     "seed": {
+      "type": "int",
+      "default": 0,
+      "what": "random seed"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".wav",
+      "default": "sfx.wav"
+     }
+    },
+    "timeout": 1800
+   }
+  },
+  "notes": "Uses the v2 sub-project only (moss_soundeffect_v2/), which has its own pinned env (Python>=3.12, torch 2.9.0+cu128, numpy 1.26.4, transformers 4.57.1) and is NOT compatible with the top-level MOSS-TTS env. The pip entry installs the sub-package from the clone with the [torch-cu128] extra; the README uses the cu128 index as --extra-index-url, not as the only index. The wrapper sets TORCHDYNAMO_DISABLE=1 before torch loads, as the repo's infer_from_pipeline.sh does, so the torch.compile/Triton path is skipped (needed on Windows, where there is no Triton). Weights (~several GB, size not confirmed) go to the Hugging Face cache via snapshot_download. macOS left out: the pipeline hard-codes torch.autocast('cuda') in diffsynth/pipelines/wan_audio.py and offers only cuda/cpu; on CPU it would run but very slowly. VRAM need on an 8 GB 3070 Ti is not documented. Do not confuse with MOSS-SoundEffect v1 (8B MossTTSDelay model).",
+  "verified_from": "moss_soundeffect_v2/README.md 'Environment Setup' + 'Inference'; moss_soundeffect_v2/infer_from_pipeline.py argparse; infer_from_pipeline.sh (TORCHDYNAMO_DISABLE); pyproject.toml extras; pipeline_moss_soundeffect.py from_pretrained/_normalize_device at 934d682"
+ },
+ {
+  "id": "dia",
+  "name": "Dia 1.6B (Nari Labs)",
+  "area": "audio",
+  "what": "Turns a two-speaker script tagged [S1]/[S2] into realistic dialogue audio, with nonverbals like (laughs) and optional voice cloning from a clip.",
+  "repo": "https://github.com/nari-labs/dia",
+  "license": "Apache-2.0",
+  "weights": {
+   "name": "nari-labs/Dia-1.6B-0626",
+   "license": "Apache-2.0 (per repo README; HF card not reachable from the sandbox)",
+   "commercial": true,
+   "url": "https://huggingface.co/nari-labs/Dia-1.6B-0626"
+  },
+  "hardware": "gpu-or-mps",
+  "vram_gb": 4.4,
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/nari-labs/dia",
+   "ref": "876125e461a03b157ec905b0fe8b57a0f8b9e7a0",
+   "pip": [
+    "{src}"
+   ],
+   "pip_index": {
+    "win32": "https://download.pytorch.org/whl/cu126",
+    "linux": "https://download.pytorch.org/whl/cu126"
+   }
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import dia"
+  ],
+  "actions": {
+   "dialogue": {
+    "what": "Speak a [S1]/[S2] script to an audio file.",
+    "cmd": [
+     "{python}",
+     "{src}/cli.py",
+     "{text}",
+     "--output",
+     "{output}",
+     "--device",
+     "{device}"
+    ],
+    "args": {
+     "text": {
+      "type": "text",
+      "default": "[S1] We need to move, now. [S2] (gasps) They found us? [S1]",
+      "what": "script; start with [S1] and alternate [S1]/[S2]"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".wav",
+      "default": "dialogue.wav"
+     },
+     "device": {
+      "type": "choice",
+      "choices": [
+       "cuda",
+       "mps",
+       "cpu"
+      ],
+      "default": "cuda",
+      "what": "cuda on the PC, mps on the Mac"
+     },
+     "audio_prompt": {
+      "type": "file",
+      "exts": [
+       ".wav"
+      ],
+      "optional": true,
+      "flag": "--audio-prompt",
+      "what": "5-10 s voice clip to clone; put its transcript before your script"
+     },
+     "seed": {
+      "type": "int",
+      "optional": true,
+      "flag": "--seed",
+      "what": "fix the seed to keep the same voices"
+     }
+    },
+    "timeout": 1800
+   }
+  },
+  "notes": "English only. pyproject pins torch==2.6.0/torchaudio==2.6.0 and, on Windows, triton-windows==3.2.0.post18; the uv config takes torch from the cu126 index on Linux/Windows (pip_index here is that same index - use it as an extra index). The CLI default device is cuda-or-cpu, so on the Mac pass --device mps (dia/model.py and dia/layers.py have MPS code paths; README says it was only tested on CUDA GPUs). Weights and the Descript Audio Codec download from Hugging Face on first run. ~4.4 GB VRAM in bf16/fp16, ~7.9 GB in fp32 (README table). README notes: keep scripts to ~5-20 s of speech; the model card disclaims impersonation/deceptive use. Dia2 is a separate repo (nari-labs/dia2), not covered here.",
+  "verified_from": "README.md 'Install via pip' + 'Run with CLI' + 'Hardware and Inference Speed' + License; cli.py argparse; pyproject.toml deps and [tool.uv.sources] at 876125e"
+ },
+ {
+  "id": "kittentts",
+  "name": "KittenTTS (kittenml)",
+  "area": "audio",
+  "what": "Fast text-to-speech that runs on a CPU: the tiny ONNX 0.8 models (15-80M) or the 1.7B KittenTTS 2 with 47 voices.",
+  "repo": "https://github.com/KittenML/KittenTTS",
+  "license": "Apache-2.0",
+  "weights": {
+   "name": "KittenML/kitten-tts-mini-0.8 (default here) or KittenML/kitten-tts-2",
+   "license": "per model repo; KittenTTS 2 = Stellon Labs Community License (terms not checked); 0.8 ONNX models not checked",
+   "commercial": null,
+   "url": "https://huggingface.co/KittenML/kitten-tts-mini-0.8"
+  },
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/KittenML/KittenTTS",
+   "ref": "afd9dfda7ffdca35dd0151b149c221140c80ec3f",
+   "pip": [
+    "{src}"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "from kittenml import KittenTTS"
+  ],
+  "actions": {
+   "speak": {
+    "what": "Read a line of text aloud to a 24 kHz WAV with a built-in voice.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys;from kittenml import KittenTTS;m=KittenTTS(sys.argv[1]);m.generate_to_file(sys.argv[2],sys.argv[3],voice=sys.argv[4])",
+     "{model}",
+     "{text}",
+     "{output}",
+     "{voice}"
+    ],
+    "args": {
+     "model": {
+      "type": "choice",
+      "choices": [
+       "KittenML/kitten-tts-mini-0.8",
+       "KittenML/kitten-tts-micro-0.8",
+       "KittenML/kitten-tts-nano-0.8-int8",
+       "KittenML/kitten-tts-2"
+      ],
+      "default": "KittenML/kitten-tts-mini-0.8",
+      "what": "model repo"
+     },
+     "text": {
+      "type": "text",
+      "what": "what to say"
+     },
+     "voice": {
+      "type": "choice",
+      "choices": [
+       "Bella",
+       "Jasper",
+       "Luna",
+       "Bruno",
+       "Rosie",
+       "Hugo",
+       "Kiki",
+       "Leo"
+      ],
+      "default": "Jasper",
+      "what": "voice (these 8 exist in both 0.8 and KittenTTS 2)"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".wav",
+      "default": "line.wav"
+     }
+    },
+    "timeout": 900
+   }
+  },
+  "notes": "The repo was rebuilt around KittenTTS 2 (1.7B); the package name is now 'kittenml' (version 0.9.6 in pyproject at this commit; PyPI version not confirmed from the sandbox, so it installs from the pinned clone). The default install pulls torch even for the ONNX models (docs/onnx-models.md). LICENCE CHECK NEEDED: README says model weights are licensed separately; KittenTTS 2 uses the 'Stellon Labs Community License' and the 0.8 model licences were not readable here (HF blocked) - confirm before shipping game audio. KittenTTS 2 wants ~8 GB VRAM or ~6 GB RAM on CPU; on Apple silicon 'kittenml[mlx]' with backend='mlx' is faster (not wired up here). Voice cloning (reference=...) and expression tags exist in the Python API but are left out to keep the action simple. Weights download from Hugging Face on first use.",
+  "verified_from": "README.md 'Installation' + 'Basic usage' + 'License'; docs/onnx-models.md (KittenTTS(model), generate_to_file(text, path, voice=...), voice list); kittenml/get_model.py class KittenTTS; pyproject.toml at afd9dfd"
+ },
+ {
+  "id": "rfxgen",
+  "name": "rFXGen",
+  "area": "audio",
+  "what": "Makes retro sfxr-style game sounds (coin, laser, explosion, jump...) from presets or saved .rfx files, from the command line.",
+  "repo": "https://github.com/raysan5/rfxgen",
+  "license": "Zlib",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "release",
+   "release": {
+    "repo": "raysan5/rfxgen",
+    "tag": "5.0",
+    "assets": {
+     "darwin": "rfxgen_v5.0_macos.zip",
+     "win32": "rfxgen_v5.0_win_x64.zip",
+     "linux": "rfxgen_v5.0_linux_x64.zip"
+    },
+    "exe": "rfxgen"
+   }
+  },
+  "check": [
+   "{exe}",
+   "--help"
+  ],
+  "actions": {
+   "preset": {
+    "what": "Generate a random sound from a preset family.",
+    "cmd": [
+     "{exe}",
+     "--generate",
+     "{preset}",
+     "--output",
+     "{output}",
+     "--format",
+     "{format}"
+    ],
+    "args": {
+     "preset": {
+      "type": "choice",
+      "choices": [
+       "coin",
+       "laser",
+       "explosion",
+       "powerup",
+       "hit",
+       "jump",
+       "blip"
+      ],
+      "default": "coin",
+      "what": "sound family"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".wav",
+      "default": "{preset}.wav"
+     },
+     "format": {
+      "type": "choice",
+      "choices": [
+       "44100,16,1",
+       "44100,16,2",
+       "22050,16,1",
+       "44100,8,1",
+       "44100,32,1"
+      ],
+      "default": "44100,16,1",
+      "what": "sample rate, bits, channels"
+     }
+    },
+    "timeout": 60
+   },
+   "render_rfx": {
+    "what": "Render a saved .rfx sound file to WAV.",
+    "cmd": [
+     "{exe}",
+     "--input",
+     "{input}",
+     "--output",
+     "{output}",
+     "--format",
+     "{format}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".rfx"
+      ],
+      "what": "rFXGen sound parameters"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".wav",
+      "default": "{input_stem}.wav"
+     },
+     "format": {
+      "type": "choice",
+      "choices": [
+       "44100,16,1",
+       "44100,16,2",
+       "22050,16,1",
+       "44100,8,1",
+       "44100,32,1"
+      ],
+      "default": "44100,16,1",
+      "what": "sample rate, bits, channels"
+     }
+    },
+    "timeout": 60
+   }
+  },
+  "notes": "CLI flags are verified in both the README and ProcessCommandLine() in src/rfxgen.c at tag 5.0 (-i/--input, -o/--output .wav/.qoa/.raw/.h, -f/--format rate,bits,channels, -g/--generate preset, -p/--play). The CLI runs only when there is more than one argument (one .rfx argument alone opens the GUI). ASSET NAMES NOT CONFIRMED: the sandbox could not list the GitHub release assets (the releases page shows '6 assets' but no names). The names above follow the repo's CI workflows (<repo>_v<tag>_win_x64.zip / _linux_x64.zip / _macos.zip), but those workflows were added after tag 5.0, so check the 5.0 assets before relying on them. Inside each zip the exe sits in a folder: rfxgen_v5.0_win_x64/rfxgen.exe, rfxgen_v5.0_linux_x64/rfxgen, and on macOS rfxgen_v5.0_macos/rfxgen.app/Contents/MacOS/rfxgen (universal x64+arm64). The macOS build is unsigned, so the quarantine flag must be removed. Each preset run is random, so run it several times for variations.",
+  "verified_from": "README.md 'Command-line'; src/rfxgen.c ShowCommandLineInfo() + ProcessCommandLine() at tag 5.0 (6e939f0) and HEAD 88333cd; .github/workflows/build_{windows,linux,macos}.yml for asset naming; git ls-remote tags; itch.io page lists v5.0 Windows x64 / Linux x64 / macOS x64+arm64 builds"
+ },
+ {
+  "id": "practical-rife",
+  "name": "Practical-RIFE",
+  "area": "2d",
+  "what": "Adds in-between frames to a video or a numbered PNG frame sequence (2x/4x smoother animation or slow motion).",
+  "repo": "https://github.com/hzwer/Practical-RIFE",
+  "license": "MIT",
+  "weights": {
+   "name": "RIFE v4.25 (flownet.pkl + model .py files, put in train_log/)",
+   "license": "MIT (README: 'under the same MIT license as this project')",
+   "commercial": true,
+   "url": "https://drive.google.com/file/d/1ZKjcbmt1hypiFprJPIKW0Tt0lr_2i7bg/view?usp=sharing"
+  },
+  "hardware": "gpu-or-mps",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/hzwer/Practical-RIFE",
+   "ref": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
+   "requirements_file": "requirements.txt",
+   "pip_platform": {
+    "win32": [
+     "torch==2.4.1",
+     "torchvision==0.19.1"
+    ]
+   },
+   "pip_index": {
+    "win32": "https://download.pytorch.org/whl/cu124"
+   }
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import os,sys;sys.exit(0 if os.path.isfile(os.path.join(sys.argv[1],'train_log','flownet.pkl')) else 1)",
+   "{src}"
+  ],
+  "actions": {
+   "interpolate_video": {
+    "what": "Multiply the frame rate of a video (audio is copied back when ffmpeg is available).",
+    "cmd": [
+     "{python}",
+     "{src}/inference_video.py",
+     "--video",
+     "{input}",
+     "--output",
+     "{output}",
+     "--model",
+     "{src}/train_log",
+     "--multi",
+     "{multi}",
+     "--scale",
+     "{scale}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".mp4",
+       ".mov",
+       ".avi",
+       ".mkv",
+       ".webm"
+      ],
+      "what": "source video"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".mp4",
+      "default": "{input_stem}-smooth.mp4"
+     },
+     "multi": {
+      "type": "int",
+      "default": 2,
+      "min": 2,
+      "max": 16,
+      "what": "frame-rate multiplier"
+     },
+     "scale": {
+      "type": "choice",
+      "choices": [
+       "1.0",
+       "0.5",
+       "0.25",
+       "2.0",
+       "4.0"
+      ],
+      "default": "1.0",
+      "what": "flow scale; 0.5 for 4K"
+     }
+    },
+    "timeout": 3600
+   },
+   "interpolate_frames": {
+    "what": "Interpolate a folder of PNG frames named 0.png, 1.png, ...; writes PNGs to <output>/vid_out/.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import os,sys,runpy;o=sys.argv[1];os.makedirs(o,exist_ok=True);os.chdir(o);sys.path.insert(0,sys.argv[2]);sys.argv=sys.argv[3:];runpy.run_path(sys.argv[0],run_name='__main__')",
+     "{output}",
+     "{src}",
+     "{src}/inference_video.py",
+     "--img",
+     "{input}",
+     "--model",
+     "{src}/train_log",
+     "--multi",
+     "{multi}"
+    ],
+    "args": {
+     "input": {
+      "type": "dir",
+      "what": "FOLDER of PNG frames with purely numeric names (0.png ... N.png)"
+     },
+     "output": {
+      "type": "out",
+      "default": "{input_stem}-interp",
+      "what": "folder; frames land in <folder>/vid_out/0000000.png..."
+     },
+     "multi": {
+      "type": "int",
+      "default": 2,
+      "min": 2,
+      "max": 16,
+      "what": "frames multiplier"
+     }
+    },
+    "timeout": 3600
+   }
+  },
+  "notes": "WEIGHTS ARE A MANUAL STEP: the models are only on Google Drive/Baidu (no direct URL), so the owner downloads a model zip (README recommends 4.25) and puts its *.py files plus flownet.pkl into {src}/train_log/. The check command fails until flownet.pkl is there. Both scripts do 'from train_log.RIFE_HDv3 import Model', so train_log must hold that file. Needs ffmpeg on PATH: sk-video reads the video through ffmpeg, and the audio merge shells out to ffmpeg. requirements pin numpy<=1.23.5 (sk-video), so the venv uses Python 3.11 or older (README says python<=3.11). Device is cuda or cpu only (inference_video.py line 84); on the Mac it runs on CPU, slowly. The --img path in interpolate_frames is a folder, but the schema has no dir type, so the arg is marked 'file'. LOKI must pass a folder there. In --img mode the script always writes to ./vid_out, so the wrapper changes into the output folder first and puts {src} on sys.path for the train_log import. scale must be one of 0.25/0.5/1/2/4 (asserted in the script).",
+  "verified_from": "README.md 'Trained Model' + 'Installation' + 'Run' + parameter list; inference_video.py argparse, device selection, train_log import, vid_out/ffmpeg logic at bbfd2ea"
+ },
+ {
+  "id": "animated-drawings",
+  "name": "Animated Drawings (Meta FAIR)",
+  "area": "2d",
+  "what": "Rigs a drawn humanoid character and animates it with motion-capture BVH clips, rendering a GIF.",
+  "repo": "https://github.com/facebookresearch/AnimatedDrawings",
+  "license": "MIT",
+  "weights": {
+   "name": "drawn_humanoid_detector + drawn_humanoid_pose_estimator (TorchServe .mar models fetched by torchserve/Dockerfile or setup_macos.sh)",
+   "license": "MIT (repo licence; no separate model licence file found)",
+   "commercial": true,
+   "url": "https://github.com/facebookresearch/AnimatedDrawings/tree/main/torchserve"
+  },
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.8",
+   "git": "https://github.com/facebookresearch/AnimatedDrawings",
+   "ref": "b859684857519c7424da51a0b0862fbd1fd258f4",
+   "pip": [
+    "setuptools<81",
+    "-e",
+    "{src}"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import animated_drawings.render"
+  ],
+  "actions": {
+   "animate_annotated": {
+    "what": "Animate a character folder that already has char_cfg.yaml, mask.png and texture.png; writes <folder>/video.gif.",
+    "cmd": [
+     "{python}",
+     "{src}/examples/annotations_to_animation.py",
+     "{char_dir}",
+     "{src}/examples/config/motion/{motion}.yaml",
+     "{src}/examples/config/retarget/fair1_ppf.yaml"
+    ],
+    "args": {
+     "char_dir": {
+      "type": "dir",
+      "what": "FOLDER with char_cfg.yaml / mask.png / texture.png (e.g. made by image_to_animation or {src}/examples/characters/char1)"
+     },
+     "motion": {
+      "type": "choice",
+      "choices": [
+       "dab",
+       "jumping",
+       "wave_hello",
+       "zombie"
+      ],
+      "default": "dab",
+      "what": "motion clip (fair1 skeleton)"
+     }
+    },
+    "timeout": 900
+   },
+   "image_to_animation": {
+    "what": "Detect, segment, rig and animate a drawing in one go; writes video.gif plus editable annotations to the output folder (needs the TorchServe server running).",
+    "cmd": [
+     "{python}",
+     "{src}/examples/image_to_animation.py",
+     "{input}",
+     "{output}",
+     "{src}/examples/config/motion/{motion}.yaml",
+     "{src}/examples/config/retarget/fair1_ppf.yaml"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "photo or scan of a drawn humanoid character"
+     },
+     "output": {
+      "type": "out",
+      "default": "{input_stem}-anim",
+      "what": "folder for video.gif, mask.png, texture.png, char_cfg.yaml"
+     },
+     "motion": {
+      "type": "choice",
+      "choices": [
+       "dab",
+       "jumping",
+       "wave_hello",
+       "zombie"
+      ],
+      "default": "dab",
+      "what": "motion clip (fair1 skeleton)"
+     }
+    },
+    "timeout": 1200
+   }
+  },
+  "notes": "ARCHIVED repo (author note 09-03-25, no longer maintained). image_to_animation is not self-contained: image_to_annotations.py POSTs to a TorchServe server at http://localhost:8080 (drawn_humanoid_detector / drawn_humanoid_pose_estimator). The owner must start that server first, either 'docker build -t docker_torchserve .' then 'docker run -d --name docker_torchserve -p 8080:8080 -p 8081:8081 docker_torchserve' in {src}/torchserve (needs about 16 GB of Docker RAM), or on macOS '{src}/torchserve/setup_macos.sh' then 'torchserve --start --ts-config config.local.properties --foreground'. animate_annotated needs no server. The char_dir arg is a folder, but the schema has no dir type, so it is marked 'file'. Editable install (-e) is required so relative BVH paths (examples/bvh/...) resolve against the repo root (utils.resolve_ad_filepath). setuptools<81 is pinned because the scripts import pkg_resources. Rendering uses glfw/OpenGL and opens a window; for a headless box set view: USE_MESA: True in the config (README). Tested by the authors only on macOS 13 and Ubuntu 18.04, with Python 3.8.13. Windows is left out because it is untested. The four motions offered use the fair1 BVH skeleton, which matches retarget/fair1_ppf.yaml (the scripts' default pair). jumping_jacks (cmu1) and jesse_dance (rokoko) need other retarget configs. To fix bad joints there is 'python examples/fix_annotations.py <folder>', a local web UI on :5050.",
+  "verified_from": "README.md 'Installation', 'Export MP4/GIF', 'Headless Rendering', 'Animating Your Own Drawing' (Docker + macOS options), 'Fixing bad predictions'; setup.py install_requires; examples/image_to_animation.py + annotations_to_animation.py sys.argv handling; examples/image_to_annotations.py localhost:8080; examples/config/motion/*.yaml at b859684"
+ },
+ {
+  "id": "proper-pixel-art",
+  "name": "Proper Pixel Art",
+  "area": "2d",
+  "what": "Cleans up AI-generated or blurry 'pixel-art style' images (and GIFs/videos) into true-resolution pixel art on a clean grid.",
+  "repo": "https://github.com/KennethJAllen/proper-pixel-art",
+  "license": "MIT",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "pip",
+   "python": "3.11",
+   "pip": [
+    "proper-pixel-art==2.0.0"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-m",
+   "proper_pixel_art.cli",
+   "--version"
+  ],
+  "actions": {
+   "clean": {
+    "what": "Recover true-resolution pixel art from a noisy upscaled image, GIF or video.",
+    "cmd": [
+     "{python}",
+     "-m",
+     "proper_pixel_art.cli",
+     "{input}",
+     "-o",
+     "{output}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".webp",
+       ".gif",
+       ".mp4",
+       ".webm",
+       ".mov"
+      ],
+      "what": "pixel-art-style image or animation"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-pixel.png",
+      "what": "result (.png for images, .gif/.mp4 for animations)"
+     },
+     "colors": {
+      "type": "int",
+      "optional": true,
+      "flag": "--colors",
+      "min": 1,
+      "max": 256,
+      "what": "palette size; switches to palette colour mode (try a few values)"
+     },
+     "scale": {
+      "type": "int",
+      "optional": true,
+      "flag": "--scale-result",
+      "min": 1,
+      "max": 64,
+      "what": "upscale result so each pixel is an NxN block"
+     },
+     "transparent": {
+      "type": "bool",
+      "flag": "--transparent",
+      "default": false,
+      "what": "transparent background"
+     },
+     "pixel_width": {
+      "type": "int",
+      "optional": true,
+      "flag": "--pixel-width",
+      "what": "source pixel size if auto-detect fails"
+     }
+    },
+    "timeout": 600
+   }
+  },
+  "notes": "Version 2.0.0 matches the v2.0.0 git tag (proper_pixel_art/ is unchanged between v2.0.0 and HEAD 4de0dda). The PyPI page itself could not be read from the sandbox. Output: a path with an extension is used as-is; a folder gets <stem>_<w>x<h>.png. For animated input, set output to .gif or .mp4. MP4 uses PyAV, whose wheels bundle a GPL FFmpeg build (README note); that only matters when redistributing the tool. 'ppa web' (Gradio UI) needs the [web] extra and is not wired up here.",
+  "verified_from": "README.md 'Install From PyPI', 'CLI' options table, 'Videos and GIFs'; proper_pixel_art/cli.py argparse + main(); proper_pixel_art/utils.py build_output_path; pyproject.toml [project.scripts] ppa; tag v2.0.0 (38139a7)"
+ },
+ {
+  "id": "pyxelate",
+  "name": "Super Pyxelate",
+  "area": "2d",
+  "what": "Converts images (or image sequences) into 8-bit-style pixel art with learned or retro hardware palettes and dithering.",
+  "repo": "https://github.com/sedthh/pyxelate",
+  "license": "MIT",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/sedthh/pyxelate",
+   "ref": "f4a046b8b148370a20ab7681fce160551e5fc49b",
+   "pip": [
+    "{src}"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-m",
+   "pyxelate.main",
+   "--help"
+  ],
+  "actions": {
+   "pixelate": {
+    "what": "Downsample an image into pixel art with N colours or a named retro palette.",
+    "cmd": [
+     "{python}",
+     "-m",
+     "pyxelate.main",
+     "{input}",
+     "{output}",
+     "--factor",
+     "{factor}",
+     "--palette",
+     "{palette}",
+     "--dither",
+     "{dither}",
+     "--upscale",
+     "{upscale}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "source image (alpha supported)"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-pyx.png"
+     },
+     "factor": {
+      "type": "int",
+      "default": 8,
+      "min": 2,
+      "max": 64,
+      "what": "output is 1/factor of the input size"
+     },
+     "palette": {
+      "type": "text",
+      "default": "8",
+      "what": "number of colours, or a Pal name such as PICO_8 or APPLE_II_HI ('--help' lists all)"
+     },
+     "dither": {
+      "type": "choice",
+      "choices": [
+       "none",
+       "naive",
+       "bayer",
+       "floyd",
+       "atkinson"
+      ],
+      "default": "none",
+      "what": "dithering (naive suits sprites with alpha)"
+     },
+     "upscale": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 32,
+      "what": "scale output pixels up for preview"
+     }
+    },
+    "timeout": 900
+   }
+  },
+  "notes": "Installs from the pinned commit (setup.py version 2.1.1). The PyPI listing was not checked from the sandbox, and the README itself says to install from git. setup.py deps are scikit-learn>=0.24.1, scikit-image>=0.19.1, numba>=0.53.1, but requirements.txt wants scikit-learn>=1.8.0 and scikit-image>=0.26.0, so pin newer if the resolver picks old ones. The console script 'pyxelate' exists; the cmd uses 'python -m pyxelate.main' (main.py has a __main__ guard) so the venv's Scripts/bin path is not needed. Dithering is slow on big images (atkinson/floyd are plain-Python loops). The --sequence mode (folder/img_%d.png) only supports none/naive dither.",
+  "verified_from": "README.md 'Usage', hyperparameter table, 'Installation'; pyxelate/main.py argparse (INFILE OUTFILE --width --height --factor --upscale --depth --palette --dither --sobel --alpha --nosvd --sequence ...); setup.py at f4a046b"
+ },
+ {
+  "id": "hitherdither",
+  "name": "hitherdither",
+  "area": "2d",
+  "what": "Applies retro ordered dithering (Bayer, Yliluoma) to an image with a reduced palette, for a limited-colour look.",
+  "repo": "https://github.com/hbldh/hitherdither",
+  "license": "MIT",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/hbldh/hitherdither",
+   "ref": "0f3bbc44595aea2a20c4b96d8f536b05ac34e2a1",
+   "pip": [
+    "Pillow",
+    "numpy",
+    "{src}"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import hitherdither"
+  ],
+  "actions": {
+   "bayer": {
+    "what": "Bayer ordered dithering onto a median-cut palette of N colours (output is a palettized PNG).",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys,hitherdither;from PIL import Image;img=Image.open(sys.argv[1]).convert('RGB');p=hitherdither.palette.Palette.create_by_median_cut(img,n=int(sys.argv[3]));hitherdither.ordered.bayer.bayer_dithering(img,p,[256/4,256/4,256/4],order=int(sys.argv[4])).save(sys.argv[2])",
+     "{input}",
+     "{output}",
+     "{colors}",
+     "{order}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".bmp"
+      ],
+      "what": "source image"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-dither.png"
+     },
+     "colors": {
+      "type": "int",
+      "default": 16,
+      "min": 2,
+      "max": 256,
+      "what": "palette size (median cut)"
+     },
+     "order": {
+      "type": "choice",
+      "choices": [
+       "2",
+       "4",
+       "8"
+      ],
+      "default": "8",
+      "what": "Bayer matrix size"
+     }
+    },
+    "timeout": 600
+   },
+   "yliluoma": {
+    "what": "Yliluoma algorithm 1 positional dithering onto a median-cut palette (higher quality, slow).",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys,hitherdither;from PIL import Image;img=Image.open(sys.argv[1]).convert('RGB');p=hitherdither.palette.Palette.create_by_median_cut(img,n=int(sys.argv[3]));hitherdither.ordered.yliluoma.yliluomas_1_ordered_dithering(img,p,order=8).save(sys.argv[2])",
+     "{input}",
+     "{output}",
+     "{colors}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".bmp"
+      ],
+      "what": "source image (keep it small - this is slow)"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-yliluoma.png"
+     },
+     "colors": {
+      "type": "int",
+      "default": 16,
+      "min": 2,
+      "max": 64,
+      "what": "palette size (median cut)"
+     }
+    },
+    "timeout": 1800
+   }
+  },
+  "notes": "Library only, with no CLI, so these are one-line wrappers around the README calls (Palette.create_by_median_cut, ordered.bayer.bayer_dithering with thresholds [256/4]*3, ordered.yliluoma.yliluomas_1_ordered_dithering). The n= keyword and the order values are from the source. Old project (version 0.1.7, last real activity years ago): setup.py's REQUIRED list has a stray trailing comma (it is a tuple holding a list), which modern setuptools may or may not accept. If 'pip install {src}' fails, install Pillow+numpy and put {src} on PYTHONPATH instead. The code uses PIL's private Image._new() to build P-mode images, which could break on a future Pillow. Error-diffusion (diffusion.error_diffusion_dithering) is documented in the source as 'totally unoptimized' and is left out. Input is converted to RGB, so alpha is dropped.",
+  "verified_from": "README.rst 'Installation' + 'Usage'; hitherdither/__init__.py + ordered/__init__.py imports; palette.py create_by_median_cut(cls, image, n=16, dim=None); ordered/bayer.py bayer_dithering(image, palette, thresholds, order=8); ordered/yliluoma/_algorithm_one.py yliluomas_1_ordered_dithering(image, palette, order=8); setup.py at 0f3bbc4"
+ },
+ {
+  "id": "libimagequant",
+  "name": "libimagequant (via imagequant Python bindings)",
+  "area": "2d",
+  "what": "Quantizes RGBA images to high-quality 8-bit palette PNGs with alpha (pngquant's engine), for small textures and sprites.",
+  "repo": "https://github.com/ImageOptim/libimagequant",
+  "license": "GPL-3.0-or-later",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "pip",
+   "python": "3.11",
+   "pip": [
+    "imagequant==1.1.5",
+    "pillow"
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import imagequant"
+  ],
+  "actions": {
+   "quantize": {
+    "what": "Reduce a PNG to at most N colours (with alpha) and save it as a palette PNG.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys,imagequant;from PIL import Image;imagequant.quantize_pil_image(Image.open(sys.argv[1]),dithering_level=float(sys.argv[3]),max_colors=int(sys.argv[4]),min_quality=int(sys.argv[5]),max_quality=100).save(sys.argv[2],format='PNG')",
+     "{input}",
+     "{output}",
+     "{dither}",
+     "{colors}",
+     "{min_quality}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".webp",
+       ".tga",
+       ".bmp"
+      ],
+      "what": "source image"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-q.png"
+     },
+     "dither": {
+      "type": "number",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "what": "dithering level"
+     },
+     "colors": {
+      "type": "int",
+      "default": 256,
+      "min": 2,
+      "max": 256,
+      "what": "max palette colours"
+     },
+     "min_quality": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "what": "minimum quality (0-100)"
+     }
+    },
+    "timeout": 300
+   }
+  },
+  "notes": "GPL-3.0: libimagequant is GPL v3+ (or a paid commercial licence from pngquant.org). The Python bindings (wanadev/imagequant-python, BSD-3) bundle and compile libimagequant (the C 2.x code as a git submodule), so the installed module is effectively GPL-3.0. Running it as a separate tool on your own assets is fine, and the output images are not covered by the GPL. Do not link or ship it inside a closed-source game or tool without a commercial licence. LOKI is AGPL-3.0, which is compatible. The pngquant CLI route was not used because it has no GitHub release binaries to pin. imagequant 1.1.5 matches the v1.1.5 git tag and the setup.py version (PyPI not confirmed from the sandbox); prebuilt wheels exist for macOS arm64/universal2, Windows x64 and Linux, otherwise a C compiler is needed. Pillow is listed explicitly because the bindings depend only on cffi. quantize_pil_image converts input to RGBA itself.",
+  "verified_from": "libimagequant README 'License' + COPYRIGHT + Cargo.toml license at 9388d26; github.com/wanadev/imagequant-python README 'Install' + 'With PIL / Pillow' (quantize_pil_image args), imagequant/__init__.py quantize_pil_image (RGBA convert), setup.py version 1.1.5 + install_requires cffi, git tag v1.1.5"
+ },
+ {
+  "id": "rembg",
+  "name": "rembg",
+  "area": "2d",
+  "what": "Removes the background from an image to give a transparent PNG cut-out (sprites, product shots, references).",
+  "repo": "https://github.com/danielgatis/rembg",
+  "license": "MIT",
+  "weights": {
+   "name": "u2net (default here) / birefnet-general",
+   "license": "U-2-Net: Apache-2.0; BiRefNet: MIT (upstream repos; not re-checked here)",
+   "commercial": true,
+   "url": "https://github.com/danielgatis/rembg/releases/tag/v0.0.0"
+  },
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "pip",
+   "python": "3.11",
+   "pip": [],
+   "pip_platform": {
+    "darwin": [
+     "rembg[cpu,cli]==2.0.86"
+    ],
+    "win32": [
+     "rembg[gpu,cli]==2.0.86"
+    ],
+    "linux": [
+     "rembg[cpu,cli]==2.0.86"
+    ]
+   },
+   "after": [
+    [
+     "{python}",
+     "-c",
+     "from rembg.cli import main; main()",
+     "d",
+     "u2net",
+     "birefnet-general"
+    ]
+   ]
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "from rembg.cli import main; main()",
+   "--help"
+  ],
+  "actions": {
+   "remove_bg": {
+    "what": "Cut out the subject and save a transparent PNG.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "from rembg.cli import main; main()",
+     "i",
+     "-m",
+     "{model}",
+     "{input}",
+     "{output}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".webp"
+      ],
+      "what": "source image"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}-cut.png"
+     },
+     "model": {
+      "type": "choice",
+      "choices": [
+       "u2net",
+       "birefnet-general",
+       "birefnet-general-lite",
+       "isnet-anime",
+       "u2netp"
+      ],
+      "default": "u2net",
+      "what": "segmentation model (never bria-rmbg: non-commercial licence)"
+     },
+     "decontaminate": {
+      "type": "bool",
+      "flag": "-dc",
+      "default": false,
+      "what": "clean colour fringes at the edges"
+     },
+     "only_mask": {
+      "type": "bool",
+      "flag": "-om",
+      "default": false,
+      "what": "output only the mask"
+     },
+     "alpha_matting": {
+      "type": "bool",
+      "flag": "-a",
+      "default": false,
+      "what": "alpha matting for soft edges"
+     }
+    },
+    "timeout": 600
+   }
+  },
+  "notes": "LICENCE TRAP: rembg 2.0.86's DEFAULT model is bria-rmbg (RMBG-2.0, BRIA licence, paid agreement for commercial use, ~1 GB). The cmd therefore always passes -m, and bria-rmbg is not offered. Version 2.0.86 confirmed on PyPI (released 2026-10-21) and matches git tag v2.0.86. Extras: [cpu,cli] on macOS (onnxruntime-gpu is not available on darwin per pyproject), [gpu,cli] on Windows (onnxruntime-gpu, which needs matching CUDA/cuDNN or it falls back to CPU). All offered model names were checked against the name() strings in rembg/sessions/*.py (isnet-anime comes from dis_anime.py; its weights licence was not checked). The cmd calls rembg.cli:main (the console-script target) through python -c because there is no rembg/__main__.py. LOKI should pass stdin=DEVNULL: the i command defaults input to '-' when stdin is not a TTY (positional paths override that). Models download to ~/.rembg/models/<name>/ (the 'after' step pre-fetches u2net and birefnet-general from the rembg v0.0.0 GitHub release).",
+  "verified_from": "README.md install (cpu/gpu/cli extras), subcommand list, 'rembg i' examples, model list + bria licence note, model storage path; rembg/commands/i_command.py click options (-m default bria-rmbg, -a, -om, -ppm, -dc, -x); rembg/commands/d_command.py; pyproject.toml extras + scripts at v2.0.86 (c5b48b0); pypi.org/project/rembg (latest 2.0.86)"
+ },
+ {
+  "id": "deepbump",
+  "name": "DeepBump",
+  "area": "2d",
+  "what": "Makes a tangent-space normal map from a single colour/albedo texture (and height or curvature from normals) with a small ONNX net.",
+  "repo": "https://github.com/HugoTini/DeepBump",
+  "license": "GPL-3.0",
+  "weights": {
+   "name": "deepbump256.onnx + upscale256.onnx (shipped in the repo)",
+   "license": "GPL-3.0 (repo licence; no separate weights licence)",
+   "commercial": true,
+   "url": "https://github.com/HugoTini/DeepBump"
+  },
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/HugoTini/DeepBump",
+   "ref": "v8",
+   "pip": [
+    "numpy",
+    "onnxruntime==1.15.1",
+    "imageio"
+   ]
+  },
+  "check": [
+   "{python}",
+   "{src}/cli.py",
+   "-h"
+  ],
+  "actions": {
+   "color_to_normals": {
+    "what": "Generate a normal map from a colour texture.",
+    "cmd": [
+     "{python}",
+     "{src}/cli.py",
+     "{input}",
+     "{output}",
+     "color_to_normals",
+     "--color_to_normals-overlap",
+     "{overlap}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "colour/albedo texture (RGB or RGBA)"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}_normal.png"
+     },
+     "overlap": {
+      "type": "choice",
+      "choices": [
+       "SMALL",
+       "MEDIUM",
+       "LARGE"
+      ],
+      "default": "LARGE",
+      "what": "tile overlap (larger = fewer seams, slower)"
+     }
+    },
+    "timeout": 600
+   },
+   "normals_to_height": {
+    "what": "Integrate a normal map into a height/displacement map.",
+    "cmd": [
+     "{python}",
+     "{src}/cli.py",
+     "{input}",
+     "{output}",
+     "normals_to_height",
+     "--normals_to_height-seamless",
+     "{seamless}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "normal map"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}_height.png"
+     },
+     "seamless": {
+      "type": "choice",
+      "choices": [
+       "FALSE",
+       "TRUE"
+      ],
+      "default": "FALSE",
+      "what": "treat the texture as tileable"
+     }
+    },
+    "timeout": 600
+   }
+  },
+  "notes": "LICENCE: GPL-3.0 (LICENSE file), not MIT. It runs as a separate process on your textures, so the output maps are yours. Do not bundle its code into closed tools. The ONNX models are committed to the repo (deepbump256.onnx 27 MB, upscale256.onnx 17 MB), so the clone has everything and there is no extra download. Tag v8 equals HEAD fad19ba except one line in cli.md. cli.md pins onnxruntime==1.15.1, which has no wheels for Python 3.12+, hence Python 3.11. Runs on CPUExecutionProvider. cli.py transposes H,W,C, so a single-channel greyscale input will fail; convert to RGB first. Other modules: normals_to_curvature (--normals_to_curvature-blur_radius) and lowres_to_highres (--lowres_to_highres-scale_factor x2|x4).",
+  "verified_from": "cli.md install + usage examples; cli.py argparse (positional in/out/module + per-module option choices) and imageio I/O; module_color_to_normals.py (onnx path next to module, CPUExecutionProvider, alpha dropped); LICENSE; git tag v8 (fa4b7e6) vs HEAD fad19ba"
+ },
+ {
+  "id": "laigter",
+  "name": "Laigter",
+  "area": "2d",
+  "what": "Generates normal, specular, occlusion and parallax maps from 2D sprites for dynamic 2D lighting (Godot/Unity sprites).",
+  "repo": "https://github.com/azagaya/laigter",
+  "license": "GPL-3.0-or-later",
+  "weights": null,
+  "hardware": "cpu",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "manual",
+   "manual": "Laigter publishes builds on itch.io (azagaya.itch.io/laigter, pay-what-you-want), not as GitHub release assets, so LOKI cannot fetch a pinned binary. Download the build for this OS (Windows: laigter-setup-<ver>.exe installer; macOS: laigter-mac.zip -> laigter.app, binary at laigter.app/Contents/MacOS/laigter; Linux: Laigter-x86_64.AppImage) or build from source with Qt (laigter.pro). Then set {exe} to the laigter binary in LOKI."
+  },
+  "check": [
+   "{exe}",
+   "--version"
+  ],
+  "actions": {
+   "maps": {
+    "what": "Generate a normal map (plus optional specular/occlusion/parallax) for a sprite; files are written next to the input as <name>_n/_s/_o/_p.<ext>.",
+    "cmd": [
+     "{exe}",
+     "--no-gui",
+     "-d",
+     "{input}",
+     "-n"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "what": "diffuse sprite (or a folder of sprites)",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg",
+       ".tga",
+       ".bmp"
+      ]
+     },
+     "specular": {
+      "type": "bool",
+      "flag": "-c",
+      "default": false,
+      "what": "also make a specular map (_s)"
+     },
+     "occlusion": {
+      "type": "bool",
+      "flag": "-o",
+      "default": false,
+      "what": "also make an occlusion map (_o)"
+     },
+     "parallax": {
+      "type": "bool",
+      "flag": "-p",
+      "default": false,
+      "what": "also make a parallax map (_p)"
+     },
+     "preset": {
+      "type": "file",
+      "optional": true,
+      "flag": "-r",
+      "what": "Laigter preset file to use instead of the default profile"
+     },
+     "software_gl": {
+      "type": "bool",
+      "flag": "-s",
+      "default": false,
+      "what": "use the software OpenGL renderer"
+     }
+    },
+    "timeout": 300
+   }
+  },
+  "notes": "It DOES have a command-line mode: main.cpp builds a QCommandLineParser, and --no-gui/-g creates a QCoreApplication instead of a GUI. Flags verified in README 'Using Laigter with command line' and main.cpp: -g/--no-gui, -d/--diffuse, -n/--normal, -c/--specular, -o/--occlusion, -p/--parallax, -r/--preset, -s/--software-opengl. It is still kind manual only because there are no downloadable GitHub release binaries (CI publishes to itch.io via butler; latest proper git tags are 1.9.x). Newer source (HEAD 8e14e60) also has -l/--location <outdir>, --flatten, --not-recursive, --check-changes and --normal-suffix etc., but tag 1.9.2 does not, so the action relies on the default next-to-input output and LOKI should copy the input into the workspace first. Processing uses Laigter's OpenGL pipeline, so a GPU/GL driver (or -s) is needed even with --no-gui. GPL-3.0: generated maps are yours.",
+  "verified_from": "README.md 'Using Laigter with command line' + examples + macOS symlink note; main.cpp createApplication() + QCommandLineParser options + CLI processing loop (suffixes _n/_s/_o/_p) at 8e14e60; main.cpp at tag 1.9.2 (no 'location' option); .github/workflows/laigter-{windows,mac,linux}.yaml (itch.io/butler, asset names); LICENSE"
+ },
+ {
+  "id": "marigold",
+  "name": "Marigold (depth + normals)",
+  "area": "2d",
+  "what": "Estimates a depth map or a surface-normal map from a single image with a fine-tuned Stable Diffusion model (for 2.5D lighting, parallax, relief).",
+  "repo": "https://github.com/prs-eth/Marigold",
+  "license": "Apache-2.0",
+  "weights": {
+   "name": "prs-eth/marigold-normals-v1-1 and prs-eth/marigold-depth-v1-1",
+   "license": "OpenRAIL++-M (LICENSE-MODEL.txt)",
+   "commercial": true,
+   "url": "https://huggingface.co/prs-eth/marigold-normals-v1-1"
+  },
+  "hardware": "gpu-or-mps",
+  "platforms": [
+   "darwin",
+   "win32",
+   "linux"
+  ],
+  "install": {
+   "kind": "git-pip",
+   "python": "3.11",
+   "git": "https://github.com/prs-eth/Marigold",
+   "ref": "2bfbdeae5d10a50b71f1ba20c865d46e480f6010",
+   "requirements_file": "requirements.txt",
+   "pip_index": {
+    "win32": "https://download.pytorch.org/whl/cu124"
+   }
+  },
+  "check": [
+   "{python}",
+   "-c",
+   "import sys;sys.path.insert(0,sys.argv[1]);import marigold",
+   "{src}"
+  ],
+  "actions": {
+   "normals": {
+    "what": "Predict a surface-normal map (PNG) from an image.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys,torch;sys.path.insert(0,sys.argv[1]);from PIL import Image;from marigold import MarigoldNormalsPipeline;d='cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu');p=MarigoldNormalsPipeline.from_pretrained('prs-eth/marigold-normals-v1-1').to(d);p(Image.open(sys.argv[2]).convert('RGB'),ensemble_size=int(sys.argv[4])).normals_img.save(sys.argv[3])",
+     "{src}",
+     "{input}",
+     "{output}",
+     "{ensemble}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "source image"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}_normals.png"
+     },
+     "ensemble": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10,
+      "what": "inference passes averaged (1 is usually enough)"
+     }
+    },
+    "timeout": 1200
+   },
+   "depth": {
+    "what": "Predict a 16-bit greyscale depth map (PNG) from an image.",
+    "cmd": [
+     "{python}",
+     "-c",
+     "import sys,torch,numpy as np;sys.path.insert(0,sys.argv[1]);from PIL import Image;from marigold import MarigoldDepthPipeline;d='cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu');p=MarigoldDepthPipeline.from_pretrained('prs-eth/marigold-depth-v1-1').to(d);o=p(Image.open(sys.argv[2]).convert('RGB'),ensemble_size=int(sys.argv[4]),color_map=None);Image.fromarray((o.depth_np*65535.0).astype(np.uint16)).save(sys.argv[3],mode='I;16')",
+     "{src}",
+     "{input}",
+     "{output}",
+     "{ensemble}"
+    ],
+    "args": {
+     "input": {
+      "type": "file",
+      "exts": [
+       ".png",
+       ".jpg",
+       ".jpeg"
+      ],
+      "what": "source image"
+     },
+     "output": {
+      "type": "out",
+      "ext": ".png",
+      "default": "{input_stem}_depth.png"
+     },
+     "ensemble": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10,
+      "what": "inference passes averaged"
+     }
+    },
+    "timeout": 1200
+   }
+  },
+  "notes": "WEIGHTS LICENCE: code is Apache-2.0, but the checkpoints are OpenRAIL++-M (LICENSE-MODEL.txt). Commercial use is allowed, with use-based restrictions that must pass on to anyone you distribute the model to. Outputs are not restricted the same way. The repo's own CLI (script/normals/run.py, script/depth/run.py) only takes --input_rgb_dir (a folder) and writes normals_vis/ + normals_npy/ (or depth_bw/ depth_colored/ depth_npy/) subfolders, so these one-liners call the repo's MarigoldNormalsPipeline/MarigoldDepthPipeline the same way run.py does (from_pretrained(checkpoint) -> pipe(image, ensemble_size=...) -> .normals_img / .depth_np*65535 saved as I;16, mirroring run.py). requirements.txt pins torch==2.4.1/torchvision==0.19.1; on Windows the cu124 index is needed to get CUDA builds. The Mac uses MPS (run.py has --apple_silicon for the same thing). Weights (~2-3 GB each, SD-based) download from Hugging Face on first run. VRAM on 8 GB was not documented; the run.py --fp16 path (variant='fp16', torch_dtype=float16) halves it but is not wired up here. Marigold pipelines also ship in diffusers>=0.28 (MarigoldNormalsPipeline), which was not used here to keep to code read in this repo.",
+  "verified_from": "README.md 'Inference' (run.py commands + options list), 'License'; LICENSE.txt + LICENSE-MODEL.txt; script/normals/run.py and script/depth/run.py argparse, device logic, pipeline calls and saving (depth uint16 I;16); marigold/marigold_normals_pipeline.py + marigold_depth_pipeline.py __call__ signatures and output fields; requirements.txt at 2bfbdea"
+ }
+]
