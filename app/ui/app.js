@@ -319,6 +319,7 @@ async function send(text, opts) {
     setStatus("Disconnected", false);
   } finally {
     clearInterval(progress);
+    if (window.LiveMeter) LiveMeter.finish();
     setBusy(false);
     const data = await api("/conversations").catch(() => null);
     if (data) applyConversations(data);
@@ -337,6 +338,7 @@ async function pollProgress() {
     state.cursor = Math.max(state.cursor, Number(event.id) || 0);
     const kind = String(event.event || "progress");
     const text = String(event.text || "");
+    if (kind === "usage") { if (window.LiveMeter) LiveMeter.update(text); continue; }   // the live meter (live_meter.js)
     if (kind === "thinking") setStatus("Thinking…");
     else if (kind === "assistant") addLoki(text);
     else if (kind in EVENT_LABELS && kind !== "approval") {

@@ -9113,7 +9113,17 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             _progress("assistant", str(part["text"])[:300])
         elif kind == "step_start":
             _progress("thinking", "OpenCode is working...")
+        elif kind == "step_finish":    # the live meter: tokens of each step, added up, and which model did it
+            tok = part.get("tokens") or {}
+            meter["input"] += int(tok.get("input") or 0) + int(((tok.get("cache") or {}).get("read")) or 0)
+            meter["output"] += int(tok.get("output") or 0) + int(tok.get("reasoning") or 0)
+            meter["cost"] += float(part.get("cost") or 0)
+            meter["step"] += 1
+            _progress("usage", json.dumps({"model": meter["model"].split("/", 1)[-1], "where": meter["where"],
+                                           "step": meter["step"], "input": meter["input"], "output": meter["output"],
+                                           "cost": round(meter["cost"], 4), "seconds": round(time.time() - meter["t0"], 1)}))
 
+    meter = {"model": "", "where": "", "input": 0, "output": 0, "cost": 0.0, "step": 0, "t0": time.time()}
     prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
                                     "before you say it is done. End with one line: 'DONE: <what you made>' or "
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
@@ -9121,6 +9131,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     used = ""
     for model in models[:3]:
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
+        pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")
+        meter.update(model=model, where=pname or "OpenCode")
+        _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
+                                       "step": meter["step"], "input": meter["input"], "output": meter["output"],
+                                       "seconds": round(time.time() - meter["t0"], 1)}))
         result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
                                          config_path=str(cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,

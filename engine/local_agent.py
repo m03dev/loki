@@ -180,9 +180,20 @@ def chat(base_url: str, model: str, messages: list, key: str = "", timeout: floa
                 data = json.loads(resp.read().decode("utf-8") or "{}")
         else:
             raise RuntimeError("the local model answered HTTP %s: %s" % (exc.code, detail)) from exc
-    if "message" in data:
+    LAST_USAGE.clear()
+    if "message" in data:              # Ollama: its own counters (tokens in / out, how long the answer took)
+        dur = float(data.get("eval_duration") or 0) / 1e9
+        LAST_USAGE.update(model=str(data.get("model") or model), input=int(data.get("prompt_eval_count") or 0),
+                          output=int(data.get("eval_count") or 0),
+                          tps=round(int(data.get("eval_count") or 0) / dur, 1) if dur else 0.0)
         return str((data.get("message") or {}).get("content") or "")
+    u = data.get("usage") or {}
+    LAST_USAGE.update(model=str(data.get("model") or model), input=int(u.get("prompt_tokens") or 0),
+                      output=int(u.get("completion_tokens") or 0), tps=0.0)
     return str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+
+
+LAST_USAGE: dict = {}       # the last reply's tokens, for the live meter (chat() fills it)
 
 
 # ------------------------------------------------------------------ the loop
@@ -210,6 +221,7 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
     msgs.append({"role": "user", "content": TASK.format(task=task, cwd=ws, system=platform.system() or sys.platform,
                                                          shell=shell_name, mac=mac)})
     started, steps, bad, last_thought, ran, exit_reason = time.time(), 0, 0, "", [], "steps"
+    tot_in = tot_out = 0
     while steps < max_steps:
         if cancelled and cancelled():
             exit_reason = "cancelled"
@@ -232,6 +244,14 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
         if reply is None:
             return {"ok": False, "reply": "NOT DONE - the local model did not answer: %s" % err_note, "steps": steps,
                     "changes": dsh_engine.changes(before, dsh_engine.snapshot(ws)), "exit": "model"}
+        if LAST_USAGE:                 # the live meter under the steps: which model, tokens so far, speed
+            tot_in += LAST_USAGE.get("input", 0)
+            tot_out += LAST_USAGE.get("output", 0)
+            host = (re.match(r"https?://([^/:]+)", base_url or "") or [None, ""])[1]
+            where = "this computer" if host in ("127.0.0.1", "localhost", "::1", "") else host
+            say("usage", json.dumps({"model": LAST_USAGE.get("model") or model, "where": where, "step": steps,
+                                     "input": tot_in, "output": tot_out, "tps": LAST_USAGE.get("tps", 0),
+                                     "seconds": round(time.time() - started, 1)}))
         msgs.append({"role": "assistant", "content": reply})
         cmd, err = parse_action(reply)
         thought = _BLOCK.sub("", re.sub(r"<think>.*?</think>", "", reply, flags=re.S)).strip()

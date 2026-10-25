@@ -253,3 +253,12 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
   overflow: auto; background: var(--side, #1b1d22); border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 14px;
   padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
 .approval.floating pre { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; }
+/* the live meter under the steps (live_meter.js): one quiet line */
+.live-meter { margin: 4px 0 2px 2px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.live-meter:not(.done)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%;
+  background: #6fd08c; vertical-align: 1px; animation: lm-pulse 1.4s ease-in-out infinite; }
+.live-meter.done { opacity: .6; }
+.live-switch { margin: 2px 0 0 2px; font-size: 11px; color: var(--muted); opacity: .7; }
+@keyframes lm-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-meter::before { animation: none !important; } }

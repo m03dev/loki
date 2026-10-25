@@ -66,7 +66,8 @@ class Ollama(BaseHTTPRequestHandler):
             data = b'{"error":"failed to parse tool call"}'
             self.send_response(500); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
             return
-        data = json.dumps({"model": body.get("model"), "message": {"role": "assistant", "content": text}, "done": True}).encode()
+        data = json.dumps({"model": body.get("model"), "message": {"role": "assistant", "content": text}, "done": True,
+                           "prompt_eval_count": 1000, "eval_count": 50, "eval_duration": int(2.5e9)}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -108,6 +109,10 @@ check("... a short prompt (system + task under 2,500 characters, vs OpenCode's ~
       sum(len(m["content"]) for m in body["messages"]) < 2500, sum(len(m["content"]) for m in body["messages"]))
 check("... each command's real output goes back to the model", "<returncode>0</returncode>" in STATE["bodies"][1][1]["messages"][-1]["content"])
 check("progress shows the commands as they run", any(k == "tool" and "git init" in t for k, t in seen), seen[:5])
+meters = [json.loads(t) for k, t in seen if k == "usage"]
+check("the live meter: after every step the model, 'this computer', tokens so far and tok/s", meters and meters[-1]["model"] == "loki-qwen3.5-9b"
+      and meters[-1]["where"] == "this computer" and meters[-1]["input"] == 1000 * len(meters) and meters[-1]["output"] == 50 * len(meters)
+      and meters[-1]["tps"] == 20.0, meters[-1:])
 
 res, ws, _ = go(LIAR)
 check("a model that only SAYS done: NOT DONE, nothing made", res["reply"].startswith("NOT DONE") and not res["ok"]
