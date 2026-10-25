@@ -126,7 +126,12 @@ def snapshot(root: Path) -> dict:
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for d in list(dirs):
             if d == ".git" and (Path(dirpath) / d / "HEAD").is_file():
-                out[os.path.normpath(os.path.join(rel_dir, ".git/HEAD"))] = (1, 0)
+                log = Path(dirpath) / d / "logs" / "HEAD"     # grows with every commit: a commit counts as a change
+                try:
+                    st = log.stat()
+                    out[os.path.normpath(os.path.join(rel_dir, ".git/HEAD"))] = (st.st_size, st.st_mtime_ns)
+                except OSError:
+                    out[os.path.normpath(os.path.join(rel_dir, ".git/HEAD"))] = (1, 0)
         for f in files:
             p = Path(dirpath) / f
             try:

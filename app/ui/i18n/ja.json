@@ -333,7 +333,9 @@
   "Drag onto a slot: left, middle or right.": "スロットにドラッグ：左、中央、右。",
   "Studio > Agents: every agent on every machine, Stop and Again, and Make (art, 3D, comics, novels, websites).": "Studio > エージェント：すべてのマシンのすべてのエージェント、停止とやり直し、そして作成（アート、3D、コミック、小説、ウェブサイト）。",
   "Only this computer is linked - Studio > Agents links the other one. ": "このコンピューターだけがリンクされています - Studio > エージェントでもう一台をリンクします。",
-  "Open it in Studio > Agents (Stop, Again, its output).": "Studio > エージェントで開く（停止、やり直し、出力）。"
+  "Open it in Studio > Agents (Stop, Again, its output).": "Studio > エージェントで開く（停止、やり直し、出力）。",
+  "Remove": "削除",
+  "Delete this model from this computer and get the space back.": "このモデルをこのコンピューターから削除して容量を空けます。"
  },
  "fb.email": "メールを書く",
  "fb.email_done": "{file} を保存しました。メールの下書きが開きました。ファイルを添付して送信してください。",

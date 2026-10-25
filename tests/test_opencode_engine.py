@@ -157,7 +157,20 @@ if loki:
     os.environ["LOKI_OPENCODE_EXE"] = str(D / "missing")
     real_find = oe.find_opencode
     oe.find_opencode = lambda: ""
+    os.environ["LOKI_LOCAL_AGENT"] = "off"     # LOKI's shell agent switched off: the plain install note
     out, ws, calls = turn(REQ, conv="c5")
+    os.environ.pop("LOKI_LOCAL_AGENT")
+    import loki as _lk  # noqa: E402
+    seen_local = []
+
+    async def fake_local(text, name, task=False, preamble=""):
+        seen_local.append(name)
+        return "made by the shell agent"
+    real_local, _lk.run_local = _lk.run_local, fake_local
+    out2, _, _ = turn(REQ, conv="c6")
+    _lk.run_local = real_local
+    check("not installed, shell agent on (default): LOKI's own shell agent does it with the picked model",
+          out2 == "made by the shell agent" and seen_local, (out2, seen_local))
     oe.find_opencode = real_find
     check("not installed: NOT DONE with how to install it (never the old loop pretending)",
           out.startswith("NOT DONE") and "npm i -g opencode-ai" in out and not calls, out[:200])

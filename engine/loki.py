@@ -8980,16 +8980,35 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     """One chat message (or a Build task / background job) done by OpenCode in the workspace, with CodeGraph; LOKI
     reports every tool. allow_bash=False: no shell (a job not allowed to run commands); preamble: a job's agent profile."""
     global _task_ok_calls, _task_failed_calls
+    # a model on THIS computer (Ollama, LM Studio ...): LOKI's own lean offline agent (engine/local_agent.py) - a 9B
+    # model cannot carry OpenCode's 12k-token prompt and 20 tools (owner 2026-10-25: "make me a git repo with my
+    # offline local model ... get it done")
+    first_name = active_model_name()
+    if AGENT_MODE not in ("ask", "plan") and _local_agent_for(first_name):
+        return await run_local(text, first_name, task=task, preamble=preamble)
     # owner 2026-10-25: "when we're using deepseek4.1 use deepseek harness" - DeepSeek's own agent (engine/dsh_engine.py)
     if AGENT_MODE not in ("ask", "plan") and not os.getenv("LOKI_OPENCODE_MODEL", "").strip():
         import dsh_engine  # pylint: disable=import-outside-toplevel
-        chosen = dsh_engine.pick(_oc_providers(active_model_name())) if dsh_engine.mode() != "off" else None
+        chosen = dsh_engine.pick(_oc_providers(first_name)) if dsh_engine.mode() != "off" else None
+        if chosen and chosen[0] in _DSH_BROKEN:
+            chosen = None
         dexe = dsh_engine.find_dsh() if chosen else ""
         if chosen and dexe:
-            return await run_dsh(text, chosen, dexe, task=task, preamble=preamble)
-        if chosen and not dexe:
+            out = await run_dsh(text, chosen, dexe, task=task, preamble=preamble)
+            if out is not None:
+                return out
+            messages.pop()                         # dsh could not even start (a bad key): OpenCode takes the message
+        elif chosen and not dexe:
             _progress("thinking", "DeepSeek Harness is not installed (%s) - OpenCode runs this one." % dsh_engine.INSTALL)
     exe = opencode_engine.find_opencode()
+    if not exe and AGENT_MODE not in ("ask", "plan") and os.getenv("LOKI_LOCAL_AGENT", "on").lower() not in ("off", "0", "no"):
+        # no OpenCode on this machine: LOKI's own shell agent does the work with whatever model is there - the one
+        # picked (Smart's pick included), else a model on this computer - never "install something first"
+        # (owner 2026-10-25: "smart windows made me pictures and opened up my windows folder" instead of a git repo)
+        pick = next(iter(_oc_providers(first_name)), "") or next(
+            (n for n in LOCAL_PROVIDERS + LOCAL_SERVERS if _local_agent_for(n, any_local=True)), "")
+        if pick:
+            return await run_local(text, pick, task=task, preamble=preamble)
     messages.append({"role": "user", "content": text})
     if not exe:
         reply = ("NOT DONE - LOKI's agent is OpenCode now and it is not installed on this computer. Install it once: "
@@ -9102,7 +9121,48 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     return reply
 
 
-async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = "") -> str:
+_DSH_BROKEN: set = set()
+
+
+def _local_agent_for(name: str, any_local: bool = False) -> bool:
+    """Is this provider a model on this computer, ready, and the local agent not switched off?"""
+    if os.getenv("LOKI_LOCAL_AGENT", "on").strip().lower() in ("off", "0", "no") or name not in MODELS:
+        return False
+    cfg = MODELS[name]
+    if not (_cfg_is_local(cfg) and str(cfg.base_url or "").startswith("http")):
+        return False
+    if name in ("loki-tuned",) and not TUNED_PROMOTED:
+        return False
+    if any_local:
+        return provider_configured(name) and bool(resolve_local_model(name) if "11434" in str(cfg.base_url) else cfg.model)
+    return True
+
+
+async def run_local(text: str, name: str, task: bool = False, preamble: str = "") -> str:
+    """One message done by the model on this computer with LOKI's offline agent (engine/local_agent.py): shell commands
+    one by one, the real output back, then LOKI checks the folder (and git log) itself."""
+    global _task_ok_calls, _task_failed_calls
+    import local_agent  # pylint: disable=import-outside-toplevel
+    cfg = MODELS[name]
+    model = resolve_local_model(name) if "11434" in str(cfg.base_url or "") else str(cfg.model or "")
+    where = "on this computer" if _cfg_is_local(cfg) else "through %s" % name
+    history = [m for m in messages if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)][-6:]
+    messages.append({"role": "user", "content": text})
+    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    goal = ("%s\n\n%s" % (preamble, text)) if preamble else text
+    _progress("thinking", "Working with %s %s - shell commands, one by one..." % (model, where))
+    res = await asyncio.to_thread(local_agent.run, goal, WORKSPACE, str(cfg.base_url), model,
+                                  key=str(cfg.api_key or ""), deny=_DESTRUCTIVE_SNIPPETS, progress=_progress,
+                                  cancelled=_cancel_event.is_set, history=history,
+                                  max_steps=int(os.getenv("LOKI_LOCAL_AGENT_STEPS", "30")))
+    _task_ok_calls, _task_failed_calls = int(res.get("commands") or 0), (0 if res.get("ok") else 1)
+    reply = res.get("reply") or ""
+    messages.append({"role": "assistant", "content": reply})
+    save_history()
+    return reply
+
+
+async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = ""):
     """One message (or Build task / job) done by DeepSeek Harness in the workspace. dsh prints only its last message,
     so LOKI looks at the folder before and after: 'done' with nothing changed is pushed back once, then NOT DONE."""
     global _task_ok_calls, _task_failed_calls
@@ -9120,6 +9180,13 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
                                   cancelled=_cancel_event.is_set,
                                   on_line=lambda ln: _progress("assistant", ln[:300]) if ln.strip() else None)
     chs = res.get("changes") or []
+    if res.get("exit") not in (0, None) and not chs and not res.get("text") and re.search(
+            r"auth|api key|invalid|401|403|unauthori", str(res.get("error") or ""), re.I):
+        # dsh could not start with this provider (owner's Mac 2026-10-25: "Your api key ****0Y0L is invalid"): never
+        # again this session - OpenCode answers instead, nothing lost
+        _DSH_BROKEN.add(name)
+        _progress("error", "DeepSeek Harness can't use %s (%s) - OpenCode takes over." % (name, str(res.get("error"))[:160]))
+        return None
     _task_ok_calls, _task_failed_calls = len(chs), (0 if res.get("exit") == 0 else 1)
     if chs:
         _progress("tool_result", "In the folder: " + dsh_engine.describe(chs))
@@ -9320,7 +9387,8 @@ async def run_job(job_path: str) -> int:
     try:
         if job.get("mcp"):
             await connect_mcp(stack)
-        if opencode_engine.engine_choice() == "opencode" and opencode_engine.find_opencode() and job.get("engine", "") != "loki":
+        if opencode_engine.engine_choice() == "opencode" and job.get("engine", "") != "loki" and (
+                opencode_engine.find_opencode() or _local_agent_for(active_model_name())):
             # background jobs and team agents run on OpenCode too (docs/AGENT_ENGINE.md); LOKI's own loop stays the
             # fallback where OpenCode is not installed (and for LOKI_AGENT_ENGINE=loki)
             pre = ("You are the agent \"%s\". %s\n" % (profile.get("name", "agent"), profile["instructions"])

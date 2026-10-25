@@ -358,7 +358,9 @@ def _child_env(ws: Path, job_id: str, extra: dict, scripted: bool, data: Path, n
                 "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "LOKI_EXPERIENCE": "0",
                 "LOKI_TEAM_ID": team_id, "LOKI_TEAM_ROLE": role_name, "LOKI_TIMESFM_APPROVED": "0"})
     if scripted:
-        env.update({"LOKI_AUTO_UPDATE": "0", "LOKI_LAYA": "off", "LOKI_PREFER": "local"})
+        # the scripted fakes reproduce small models inside LOKI's own tool loop: keep the offline shell agent
+        # (engine/local_agent.py, which a local model now uses) out of this bench
+        env.update({"LOKI_AUTO_UPDATE": "0", "LOKI_LAYA": "off", "LOKI_PREFER": "local", "LOKI_LOCAL_AGENT": "off"})
     if no_escalate:
         env["LOKI_NO_ESCALATE"] = "1"
     env.update(extra)

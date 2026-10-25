@@ -333,7 +333,9 @@
   "Drag onto a slot: left, middle or right.": "Arrástralo a un hueco: izquierda, centro o derecha.",
   "Studio > Agents: every agent on every machine, Stop and Again, and Make (art, 3D, comics, novels, websites).": "Studio > Agentes: cada agente en cada máquina, Detener y Otra vez, y Crear (arte, 3D, cómics, novelas, sitios web).",
   "Only this computer is linked - Studio > Agents links the other one. ": "Solo este ordenador está vinculado: Studio > Agentes vincula el otro. ",
-  "Open it in Studio > Agents (Stop, Again, its output).": "Ábrelo en Studio > Agentes (Detener, Otra vez, su resultado)."
+  "Open it in Studio > Agents (Stop, Again, its output).": "Ábrelo en Studio > Agentes (Detener, Otra vez, su resultado).",
+  "Remove": "Quitar",
+  "Delete this model from this computer and get the space back.": "Borra este modelo de este ordenador y recupera el espacio."
  },
  "fb.email": "Escribir un correo",
  "fb.email_done": "Guardado {file}. Se abrió un borrador de correo: adjunta el archivo y envíalo.",

@@ -30,6 +30,7 @@ TMP = Path(tempfile.mkdtemp(prefix="loki-tasksuccess-"))
 WS = TMP / "ws"
 WS.mkdir(parents=True, exist_ok=True)
 os.environ["LOKI_DATA"] = str(TMP / "data")
+os.environ["LOKI_LOCAL_AGENT"] = "off"      # this bench measures LOKI's own tool loop (a local model's shell agent has its own suite)
 os.environ["LOKI_WORKSPACE"] = str(WS)
 for _k in ("LOKI_JOB_ID", "LOKI_TEAM_ID", "LOKI_NO_ESCALATE", "LOKI_TASK_BENCH"):
     os.environ.pop(_k, None)

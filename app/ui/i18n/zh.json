@@ -333,7 +333,9 @@
   "Drag onto a slot: left, middle or right.": "拖到一个位置：左、中或右。",
   "Studio > Agents: every agent on every machine, Stop and Again, and Make (art, 3D, comics, novels, websites).": "Studio > 智能体：每台机器上的每个智能体，停止与重来，以及创作（艺术、3D、漫画、小说、网站）。",
   "Only this computer is linked - Studio > Agents links the other one. ": "只有这台电脑已连接——在 Studio > 智能体 中连接另一台。",
-  "Open it in Studio > Agents (Stop, Again, its output).": "在 Studio > 智能体 中打开（停止、重来、查看输出）。"
+  "Open it in Studio > Agents (Stop, Again, its output).": "在 Studio > 智能体 中打开（停止、重来、查看输出）。",
+  "Remove": "删除",
+  "Delete this model from this computer and get the space back.": "从这台电脑删除此模型并释放空间。"
  },
  "fb.email": "写邮件",
  "fb.email_done": "已保存 {file}。邮件草稿已打开——附上文件并发送。",
