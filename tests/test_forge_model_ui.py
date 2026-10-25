@@ -129,7 +129,7 @@ async def main():
         await page.click("#forge [data-prim='cube']")
         r = await page.evaluate("() => ({ f: forge.view.poly.f.length, sliders: document.querySelectorAll('#forge-model-params input').length,"
                                 " empty: document.getElementById('forge-empty').hidden })")
-        check("Cube from the Model bar: 6 faces and its slider", r["f"] == 6 and r["sliders"] == 1 and r["empty"], r)
+        check("Cube from the Model bar: 6 faces and its sliders (Segments, Baseline)", r["f"] == 6 and r["sliders"] == 2 and r["empty"], r)
         await page.evaluate("""() => { const i = document.querySelector('#forge-model-params input'); i.value = '3';
           i.dispatchEvent(new Event('input')); }""")
         r = await page.evaluate("forge.view.poly.f.length")
@@ -203,7 +203,8 @@ async def main():
         check("Combine: two cubes become one object polySurface1 (12 faces), the edited one", r["n1"] == r["n0"] - 1 and r["name"].startswith("polySurface") and r["f1"] == 12, r)
         check("Separate: the two pieces become two objects again", len(r["parts"]) == 2, r)
         check("Mirror (polyMirrorFace -axis 0) adds the mirrored copy across X", r["fm1"] == r["fm0"] * 2 and "Mirror" in r["res"]
-              and r["menu"][:3] == ["combine", "separate", "mirror"], r)
+              and [m for m in r["menu"] if m in ("combine", "separate", "mirror")][:3] == ["combine", "separate", "mirror"]
+              and r["menu"].index("combine") < r["menu"].index("separate") < r["menu"].index("mirror"), r)   # Booleans come first (Maya)
         # Edit Mesh > Fill Hole and Merge to Center, from the hotbox's commands
         r = await page.evaluate("""async () => { const v = forge.view, t = v.tree.api;
           forgeModelMode(false); await forgeAddPrimitive('cube'); forgeModelMode(true);

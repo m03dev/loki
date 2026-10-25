@@ -26,7 +26,7 @@ const ForgeSettings = (() => {
     // selection
     softRadius: 0.25, softFalloff: "smooth", softMode: "volume",
     // create
-    createMode: "object", createFrames: false,
+    createMode: "object", createFrames: false, createBaseline: 0,
     // interface
     accent: "#3d84c8", uiScale: 1,
   };
@@ -151,7 +151,8 @@ const ForgeSettings = (() => {
     ["create", "Create", (p) => {
       p.append(el("h3", "", "New objects"),
         row("Open in", "What a new cube / sphere ... is in when it appears.", choice("createMode", [["object", "Object mode, selected (Maya)"], ["component", "Component mode"]])),
-        row("Frame the new object", "Off: the camera stays where it is (Maya / Unreal).", toggle("createFrames")));
+        row("Frame the new object", "Off: the camera stays where it is (Maya / Unreal).", toggle("createFrames")),
+        row("Baseline", "Where a new object's base is: 0 sits on the grid, -0.5 is centred on it (the old way), up to -1 / 1. t on a new object changes it.", slider("createBaseline", -1, 1, 0.05)));
     }],
     ["hotkeys", "Hotkeys", (p) => { host(p, "forge-hotkeys", () => { if (typeof forgeHotkeyEditor === "function") forgeHotkeyEditor(true); }); }],
     ["menus", "Menus", (p) => { host(p, "fmenu-settings", () => { if (typeof forgeMenusSettings === "function") forgeMenusSettings(); }); }],

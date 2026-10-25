@@ -42,18 +42,20 @@
   // ------------------------------------------------------------------ primitives (GoBuild shape_creation_catalog)
   // Every primitive fits in a unit box centred on the origin. opts: segments / sides / rings with sensible defaults.
   P.PRIMITIVES = {
-    cube: { name: "Cube", what: "A box made of quads. Segments splits every side.", params: { segments: [1, 1, 8] } },
-    plane: { name: "Plane", what: "A flat grid of quads, one sided.", params: { segments: [4, 1, 32] } },
-    sphere: { name: "Sphere", what: "A UV sphere: rings and segments.", params: { segments: [24, 6, 64], rings: [12, 3, 48] } },
-    quadsphere: { name: "Quad sphere", what: "A subdivided cube pushed round: even quads, best for sculpting.", params: { segments: [6, 1, 24] } },
-    cylinder: { name: "Cylinder", what: "Sides and height segments, capped.", params: { sides: [16, 3, 64], segments: [1, 1, 16] } },
-    cone: { name: "Cone", what: "A capped cone.", params: { sides: [16, 3, 64] } },
-    torus: { name: "Torus", what: "A ring: ring segments and tube sides; thickness sets the tube.", params: { segments: [32, 3, 96], sides: [12, 3, 48], thickness: [0.3, 0.05, 0.45] } },
+    cube: { name: "Cube", what: "A box made of quads. Segments splits every side.", params: { segments: [1, 1, 8], baseline: [0, -1, 1] } },
+    plane: { name: "Plane", what: "A flat grid of quads, one sided.", params: { segments: [4, 1, 32], baseline: [0, -1, 1] } },
+    sphere: { name: "Sphere", what: "A UV sphere: rings and segments.", params: { segments: [24, 6, 64], rings: [12, 3, 48], baseline: [0, -1, 1] } },
+    quadsphere: { name: "Quad sphere", what: "A subdivided cube pushed round: even quads, best for sculpting.", params: { segments: [6, 1, 24], baseline: [0, -1, 1] } },
+    cylinder: { name: "Cylinder", what: "Sides and height segments, capped.", params: { sides: [16, 3, 64], segments: [1, 1, 16], baseline: [0, -1, 1] } },
+    cone: { name: "Cone", what: "A capped cone.", params: { sides: [16, 3, 64], baseline: [0, -1, 1] } },
+    torus: { name: "Torus", what: "A ring: ring segments and tube sides; thickness sets the tube.", params: { segments: [32, 3, 96], sides: [12, 3, 48], thickness: [0.3, 0.05, 0.45], baseline: [0, -1, 1] } },
   };
+  // float attributes (the rest are whole counts); the step the editors use for each
+  P.PRIM_FLOAT = { thickness: 0.01, baseline: 0.05 };
   function opt(kind, o, k) {
     const d = P.PRIMITIVES[kind].params[k];
     const x = o && o[k] != null ? +o[k] : d[0];
-    return Math.min(d[2], Math.max(d[1], k === "thickness" ? x : Math.round(x)));
+    return Math.min(d[2], Math.max(d[1], P.PRIM_FLOAT[k] ? x : Math.round(x)));
   }
   function grid(n, at) {   // an (n+1)^2 vertex grid over a face of the unit cube; at(u, v) -> point
     const v = [], f = [];
@@ -77,7 +79,20 @@
       grid(n, (u, v) => [-h + u, -h + v, h]), grid(n, (u, v) => [h - u, -h + v, -h]),
     ];
   }
+  // Baseline (owner 2026-10-25: "when I press t I should be able to adjust baseline height negative or positive so it
+  // goes on the grid. Right now it's .5, I should be able to get 0-1"): the height of the object's BASE above the grid,
+  // -1..1. 0 = it sits on the grid (its pivot, the origin, at its base); the old centred cube is baseline -0.5. Only
+  // when opts.baseline is given - the kernel's own callers (booleans, tests) still get the unit box centred on the origin.
   P.primitive = (kind, o) => {
+    const m = primitiveCentred(kind, o);
+    if (!o || o.baseline == null || !isFinite(+o.baseline)) return m;
+    let lo = Infinity;
+    for (const p of m.v) if (p[1] < lo) lo = p[1];
+    const b = Math.max(-1, Math.min(1, +o.baseline)), lift = b - (isFinite(lo) ? lo : 0);   // the lowest point lands on b
+    if (lift) m.v = m.v.map((p) => [p[0], p[1] + lift, p[2]]);
+    return m;
+  };
+  const primitiveCentred = (kind, o) => {
     if (!P.PRIMITIVES[kind]) throw new Error("no primitive " + kind);
     if (kind === "cube") return merge(cubeSides(opt(kind, o, "segments")));
     if (kind === "plane") { const n = opt(kind, o, "segments"); return grid(n, (u, v) => [-0.5 + u, 0, 0.5 - v]); }

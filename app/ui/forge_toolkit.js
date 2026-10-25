@@ -605,7 +605,7 @@ function forgeIveRows() {                         // what the editor edits now: 
     const p = window.ForgePoly.PRIMITIVES[pr.kind];
     return { title: "poly" + p.name.replace(/\s+/g, "") + "1", what: p.name,
       rows: Object.entries(p.params).map(([k, [def, lo, hi]]) => ({ k, label: k[0].toUpperCase() + k.slice(1), min: lo, max: hi,
-        step: k === "thickness" ? 0.01 : 1, get: () => (pr.opts[k] != null ? pr.opts[k] : def),
+        step: (window.ForgePoly.PRIM_FLOAT || {})[k] || 1, get: () => (pr.opts[k] != null ? pr.opts[k] : def),
         set: (x) => { pr.opts[k] = x; const poly = window.ForgePoly.primitive(pr.kind, pr.opts); pr.poly = poly; v.showPoly(poly, true, true); if (typeof forgeModelSync === "function") forgeModelSync(); } })) };
   }
   return null;

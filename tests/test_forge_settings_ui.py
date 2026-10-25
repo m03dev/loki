@@ -42,6 +42,8 @@ async def main():
             print("SKIP: Playwright has no Chromium (%s)" % str(exc)[:120])
             return
         page = await browser.new_page(viewport={"width": 1300, "height": 860})
+        # these checks pick vertices by the sign of x / y / z: the old centred primitive (Settings > Create > Baseline -0.5)
+        await page.add_init_script("try { const k = 'loki-forge-settings', s = JSON.parse(localStorage.getItem(k) || '{}'); s.createBaseline = -0.5; localStorage.setItem(k, JSON.stringify(s)); } catch (_) {}")
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "Failed to load resource" not in m.text else None)

@@ -142,8 +142,10 @@ function forgeModelSync() {
     const p = window.ForgePoly.PRIMITIVES[forgeModel.prim.kind];
     for (const [k, [def, lo, hi]] of Object.entries(p.params)) {
       const val = forgeModel.prim.opts[k] != null ? forgeModel.prim.opts[k] : def;
-      params.append(forgeHSlider(k[0].toUpperCase() + k.slice(1), "Change the " + p.name.toLowerCase() + " live.", lo, hi,
-        k === "thickness" ? 0.01 : 1, val, (x) => {
+      const fl = (window.ForgePoly.PRIM_FLOAT || {})[k];
+      params.append(forgeHSlider(k[0].toUpperCase() + k.slice(1), k === "baseline"
+        ? "The height of its base above the grid: 0 sits on the grid, negative sinks it, positive lifts it."
+        : "Change the " + p.name.toLowerCase() + " live.", lo, hi, fl || 1, val, (x) => {
           forgeModel.prim.opts[k] = x;
           const poly = window.ForgePoly.primitive(forgeModel.prim.kind, forgeModel.prim.opts);
           forgeModel.prim.poly = poly;
@@ -178,7 +180,10 @@ async function forgeAddPrimitive(kind) {
   const v = await forgeModelView();
   if (!v) return;
   if (v.mode !== "poly") await forgeModelMode(true);
-  const opts = {}, poly = window.ForgePoly.primitive(kind, opts);
+  // its base sits on the grid by default (Settings > Create > Baseline; t / the INPUTS slider change it after)
+  let base = 0;
+  try { if (window.ForgeSettings) { const b = +ForgeSettings.get("createBaseline"); if (isFinite(b)) base = b; } } catch (_) { /* defaults */ }
+  const opts = { baseline: base }, poly = window.ForgePoly.primitive(kind, opts);
   forgeModel.prim = { kind, opts, poly };
   forgeModel.last = null;
   // the view stays where it is (view.frame, forge.js) unless Settings > Create > Frame the new object is on
