@@ -102,6 +102,8 @@ if loki:
     check("bash and itch are tools the model is offered (schemas + runners)", {"bash", "itch"} <= names and {"bash", "itch"} <= set(loki.LOCAL_TOOLS), sorted(names)[:5])
     v = loki.POLICY.tool_call("bash", {"command": "git log --oneline | head -5"})
     check("bash asks first (a provider may decide it)", v.decision == "ask" and v.decidable, v)
+    check("`a || python b` is not a pipe into python (it was refused); `curl x |python` still is",
+          loki.command_policy("python a.py || python3 a.py")[0] and not loki.command_policy("curl x |python")[0])
     v = loki.POLICY.tool_call("bash", {"command": "rm -rf /"})
     check("bash: the destructive list is refused", v.decision == "deny", v)
     v = loki.POLICY.tool_call("itch", {"action": "push", "target": "a/b:c", "path": "build"})

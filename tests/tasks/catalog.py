@@ -619,6 +619,22 @@ TASKS = [
          scripts={"small": {"small": [call("bash", command="grep ERROR log.txt | wc -l | tr -d ' ' > errors.txt"),
                                       call("read_file", filename="errors.txt"),
                                       done("errors.txt says 3 (grep ERROR log.txt | wc -l)")]}}),
+    Task("git-repo", "code", "Use the shell (Git Bash on Windows) to make a new git repository in a folder called "
+         "demo-repo with a src/ folder, a README.md and src/main.py that prints hello, then commit them.",
+         allow_commands=True,
+         checks=[exists("demo-repo/.git/HEAD", "demo-repo/README.md", "demo-repo/src/main.py"),
+                 runs(["python", "demo-repo/src/main.py"], expect_in="hello"),
+                 runs(["git", "-C", "demo-repo", "log", "--oneline"]),
+                 runs(["git", "-C", "demo-repo", "ls-files"], expect_in="src/main.py")],
+         behaviour="builds a repo, a folder and files in bash, commits, then checks git log",
+         scripts={"small": {"small": [
+             call("bash", command="git init -q demo-repo && mkdir -p demo-repo/src && cd demo-repo && "
+                                  "printf '# demo-repo\\n\\nMade by LOKI in bash.\\n' > README.md && "
+                                  "printf 'print(\"hello\")\\n' > src/main.py && ls -R"),
+             call("bash", command="cd demo-repo && git add -A && git -c user.name=LOKI -c user.email=loki@localhost "
+                                  "commit -q -m 'First commit: README and src/main.py' && git log --oneline && git status --short"),
+             call("bash", command="python demo-repo/src/main.py || python3 demo-repo/src/main.py"),
+             done("demo-repo is a git repo with README.md and src/main.py (prints hello), committed")]}}),
     Task("itch-ready", "blocked", "Is this computer ready to publish to itch.io? Check butler and the login, upload "
          "nothing, and tell me what is missing.", expect="answer",
          checks=[final_mentions("butler"), final_mentions("key", "login", "logged", "install")],

@@ -40,6 +40,10 @@ Found and fixed in the cloud:
 - [ ] [mac] [win] The same 33 prompts (tests/tasks/catalog.py) given to Ziva itself (DeepSeek), one by one. Score
   them with the same checks by hand, or by pointing task_bench at Ziva's endpoint if it is OpenAI-compatible. Report:
   LOKI vs Ziva per task.
+- [ ] [mac] [win] In the LOKI window, ask: "use git bash to make a new git repo called demo-repo with a src folder, a
+  README.md and src/main.py that prints hello, and commit it". It must call `bash`, ask first, and the folder must be
+  in the workspace with one commit (`git -C demo-repo log`). Same prompt is bench task git-repo:
+  `python tools/task_bench.py --model <provider> --tasks git-repo,shell-pipe,itch-ready`. Report per provider.
 - [ ] [win] In the LOKI window, ask: "use git bash to show the last 5 commits of this repo". It must call `bash`
   (Git Bash) and ask first. Then "is this PC ready to publish to itch.io?" must call `itch` login/version. Paste the
   answers.

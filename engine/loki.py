@@ -2687,8 +2687,10 @@ def command_policy(command: str) -> tuple:
     for snippet in _DESTRUCTIVE_SNIPPETS:
         if snippet in text:
             return False, "refused: destructive command pattern (%s)" % snippet
+    # `a || python b` is "or", not a pipe (it refused a plain fallback, 2026-10-25); `|python` is still a pipe
+    piped = " ".join(text.replace("||", " \u2016 ").replace("|", "| ").split())
     for token in _REMOTE_EXEC_TOKENS:
-        if token in text:
+        if token in piped:
             return False, "refused: remote content piped into an interpreter (%s)" % token
     return True, "ok"
 
