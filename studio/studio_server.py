@@ -133,6 +133,12 @@ class StudioServer:
             except OSError:
                 pass
 
+    def _loki_bridge(self, method: str, path: str, body: dict | None = None) -> tuple:
+        """The running LOKI's own API (its bridge token, as the LOKI MCP API uses it)."""
+        import loki_mcp  # pylint: disable=import-outside-toplevel
+        api = loki_mcp.LokiAPI(worktree=self.studio.repo, repo=self.studio.repo, data=self.studio.data)
+        return api.bridge(method, path, body, timeout=20.0)
+
     def loki_status(self) -> dict:
         if time.time() - self._status_cache["t"] > 3:
             try:
@@ -197,6 +203,9 @@ class StudioServer:
             return 200, {"ok": True, **self.studio.destination()}
         if path == "/api/loki/settings":
             return 200, self.control.settings_overview(self.studio.repo, self.studio.data)
+        if path == "/api/loki/cleanup":   # Clean up: what could go in the running LOKI (engine/cleanup.py)
+            status, data = self._loki_bridge("GET", "/cleanup")
+            return (200, data) if status == 200 else (200, {"ok": False, "error": data.get("error") or "LOKI is not running"})
         if path == "/api/loki/logs":
             return 200, {"ok": True, "text": self.control.logs(q.get("which") or "engine", int(q.get("lines") or 200),
                                                               self.studio.data)}
@@ -297,6 +306,11 @@ class StudioServer:
             if not res.get("ok") and res.get("how"):
                 res["error"] = "%s\n\n%s" % (res.get("error", ""), res["how"])
             return 200, res
+        if path == "/api/loki/cleanup/remove":
+            if data.get("confirm") is not True:
+                return 400, {"ok": False, "error": "removing chats or memories needs the owner's confirmation"}
+            status, out = self._loki_bridge("POST", "/cleanup/remove", {"ids": list(data.get("ids") or [])})
+            return (200, out) if status == 200 else (200, {"ok": False, "error": out.get("error") or "LOKI is not running"})
         if path == "/api/loki/settings":
             if data.get("confirm") is not True:
                 return 400, {"ok": False, "error": "changing LOKI's settings needs the owner's confirmation"}

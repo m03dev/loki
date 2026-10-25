@@ -49,7 +49,7 @@ import policy  # noqa: E402
 
 REPO = ENGINE.parent
 VERSION = "1"
-RISKY_TOOLS = ("settings_set", "job_start", "job_stop", "restart_engine", "ship")
+RISKY_TOOLS = ("settings_set", "job_start", "job_stop", "restart_engine", "ship", "cleanup_remove")
 # Never readable or writable through this API, wherever they are.
 DENY_PARTS = {".git", "harness_data", "node_modules", "__pycache__"}
 DENY_NAMES = re.compile(r"(^|/)(\.env(\..*)?|.*\.token|.*\.pem|.*\.key|id_rsa.*|loki_session\.json)$", re.I)
@@ -334,6 +334,28 @@ class LokiAPI:
         """What is running right now: LOKI's agents, background jobs and teams, and the linked machines."""
         return self._out(*self.bridge("GET", "/world"))
 
+    def cleanup_scan(self) -> str:
+        """What LOKI could clean up: test / check chats, empty chats, memories from tests, duplicate memories - each
+        with an id and why. Removes nothing. Show the owner the list before cleanup_remove."""
+        status, data = self.bridge("GET", "/cleanup")
+        if status != 200:
+            return self._out(status, data)
+        keep = lambda rows: [r for r in rows if r.get("suggest")]  # noqa: E731
+        out = {"suggested": data.get("suggested", 0),
+               "chats": [{k: r[k] for k in ("id", "title", "count", "why")} for r in keep(data.get("chats") or [])],
+               "memories": [{k: r[k] for k in ("id", "text", "why")} for r in keep(data.get("memories") or [])],
+               "all_chats": len(data.get("chats") or []), "all_memories": len(data.get("memories") or [])}
+        return _redact(json.dumps(out, indent=1)[:MAX_READ])
+
+    def cleanup_remove(self, ids: list, confirm: str = "") -> str:
+        """Remove exactly these chats / memories (ids from cleanup_scan: "chat:..." / "memory:..."). The chat in use
+        is never removed. Asks the owner first."""
+        ids = [str(i) for i in (ids or [])][:500]
+        refusal = self.gate("cleanup_remove", {"ids": ids, "confirm": confirm})
+        if refusal:
+            return refusal
+        return self._out(*self.bridge("POST", "/cleanup/remove", {"ids": ids}))
+
     def memory_search(self, query: str) -> str:
         """What LOKI would recall for `query` from its memory (the same retrieval a request uses)."""
         from urllib.parse import quote  # pylint: disable=import-outside-toplevel
@@ -594,7 +616,8 @@ def ensure_worktree(repo: Path, target: Path, branch: str) -> Path:
 # ----------------------------------------------------------------- the MCP server
 TOOL_ORDER = ("chat", "task", "agent_status", "agent_install", "workspace_files", "workspace_read",
               "loki_status", "models_doctor", "settings_get", "settings_set", "jobs_list", "job_start", "job_stop",
-              "job_logs", "engine_logs", "world_summary", "memory_search", "tools_health", "creations_list",
+              "job_logs", "engine_logs", "world_summary", "memory_search", "cleanup_scan", "cleanup_remove", "tools_health",
+              "creations_list",
               "restart_engine", "read_file", "list_files", "search_files", "edit_file", "write_file", "git_status",
               "git_diff", "git_log", "read_doc", "run_tests", "ship")
 

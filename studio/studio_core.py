@@ -62,7 +62,8 @@ OWNER_ONLY = {"ship"}                       # the model never gets these
 ASK_TOOLS = set(loki_mcp.RISKY_TOOLS) - OWNER_ONLY
 FINAL = ("shipped", "discarded")
 READ_MCP = {"loki_status", "models_doctor", "settings_get", "jobs_list", "job_logs", "engine_logs", "world_summary",
-            "memory_search", "tools_health", "creations_list", "read_file", "list_files", "search_files", "git_status",
+            "memory_search", "cleanup_scan", "tools_health", "creations_list", "read_file", "list_files", "search_files",
+            "git_status",
             "git_diff", "git_log", "read_doc"}
 WRITE_MCP = {"edit_file", "write_file"}
 MODES = studio_tools.MODES

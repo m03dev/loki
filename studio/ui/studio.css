@@ -173,3 +173,6 @@ button.primary[data-icon], button.ship[data-icon] { display: inline-flex; align-
 .srow > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .srow input[type=text], .srow select { max-width: 46%; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
 .srow.done span { color: var(--muted); text-decoration: line-through; }
+/* Clean up LOKI */
+.cleanup .cleanup-list { max-height: 34vh; overflow: auto; margin-bottom: 10px; }
+.cleanup .srow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

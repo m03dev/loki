@@ -457,7 +457,7 @@ for name in ("loki_status", "models_doctor", "settings_get", "settings_set", "jo
              "run_tests", "ship"):
     if name not in tools:
         check("MCP tool %s exists" % name, False, tools)
-check("all %d tools are served over MCP" % len(loki_mcp.TOOL_ORDER), len(tools) == len(loki_mcp.TOOL_ORDER) == 31, tools)
+check("all %d tools are served over MCP" % len(loki_mcp.TOOL_ORDER), len(tools) == len(loki_mcp.TOOL_ORDER) == 33, tools)
 check("loki_status works with LOKI down (running: false + the version on disk)", '"running": false' in res["status"]
       and "commit" in res["status"], res["status"][:300])
 check("read_file reads the dev worktree", "The clear button." in res["read"])
@@ -615,7 +615,7 @@ async def stdio_list():
 
 try:
     names, text = asyncio.run(asyncio.wait_for(stdio_list(), 60))
-    check("python engine/loki_mcp.py over stdio: 31 tools, and they work", len(names) == 31 and "(tooltip)" in text, (len(names), text[:80]))
+    check("python engine/loki_mcp.py over stdio: 33 tools, and they work", len(names) == 33 and "(tooltip)" in text, (len(names), text[:80]))
 except Exception as exc:  # noqa: BLE001
     check("python engine/loki_mcp.py over stdio", False, exc)
 

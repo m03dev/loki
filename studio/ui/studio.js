@@ -525,6 +525,49 @@ async function showLokiSettings() {
   $("side-body").classList.add("form");
 }
 
+// ------------------------------------------------------------------ Clean up LOKI (engine/cleanup.py)
+async function showCleanup() {
+  let d;
+  try { d = await api("/api/loki/cleanup"); } catch (e) { alert(e.message); return; }
+  const box = el("div", "cleanup");
+  if (!d.ok) { box.append(el("p", "muted", d.error || "LOKI is not running - start it from the LOKI card.")); side("Clean up LOKI", box); return; }
+  const picked = new Set();
+  const count = el("b", "", "");
+  const go = el("button", "primary", "");
+  const refresh = () => { count.textContent = picked.size + " selected"; go.textContent = "Remove " + picked.size; go.disabled = !picked.size; };
+  const section = (title, rows, label) => {
+    const suggested = rows.filter((r) => r.suggest).length;
+    const head = el("div", "srow"); head.append(el("h4", "", title + " (" + rows.length + ", " + suggested + " suggested)"));
+    const all = el("button", "", "Select suggested"); all.type = "button";
+    head.append(all); box.append(head);
+    const list = el("div", "cleanup-list");
+    const boxes = [];
+    for (const r of rows.sort((a, b) => (b.suggest - a.suggest))) {
+      const c = el("input"); c.type = "checkbox"; c.checked = !!r.suggest; if (r.suggest) picked.add(r.id);
+      c.addEventListener("change", () => { c.checked ? picked.add(r.id) : picked.delete(r.id); refresh(); });
+      const row = srow(label(r) + (r.why ? "  -  " + r.why : ""), c); list.append(row); boxes.push([c, r]);
+    }
+    all.addEventListener("click", () => { for (const [c, r] of boxes) { c.checked = !!r.suggest; c.checked ? picked.add(r.id) : picked.delete(r.id); } refresh(); });
+    box.append(list);
+  };
+  box.append(el("p", "muted", "Ticked = suggested (tests, checks, empty chats, duplicate or test memories). The chat you are in is never listed. Nothing goes until you press Remove and confirm."));
+  section("Chats", d.chats || [], (r) => r.title + " · " + r.count + " messages");
+  section("Memories", d.memories || [], (r) => r.text);
+  const bar = el("div", "srow"); bar.append(count, go); box.append(bar);
+  go.type = "button";
+  go.addEventListener("click", async () => {
+    if (!picked.size || !confirm("Remove " + picked.size + " chats / memories from LOKI? This cannot be undone.")) return;
+    try {
+      const r = await api("/api/loki/cleanup/remove", { ids: [...picked], confirm: true });
+      alert(r.ok ? "Removed " + r.removed_chats + " chats and " + r.removed_memories + " memories." : (r.error || "not removed"));
+    } catch (e) { alert(e.message); }
+    showCleanup();
+  });
+  refresh();
+  side("Clean up LOKI", box);
+  $("side-body").classList.add("form");
+}
+
 // ------------------------------------------------------------------ wiring
 document.addEventListener("DOMContentLoaded", () => {
   S.token = (location.hash.match(/token=([^&]+)/) || [])[1] || "";
@@ -600,6 +643,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("side-close").addEventListener("click", () => { $("side").hidden = true; });
   $("loki-settings").addEventListener("click", showLokiSettings);
+  $("loki-cleanup").addEventListener("click", showCleanup);
   $("dest-card").addEventListener("click", openDestination);
   $("dest-cancel").addEventListener("click", () => $("dest-dialog").close());
   $("dest-form").addEventListener("submit", async (e) => {

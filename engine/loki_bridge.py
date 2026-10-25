@@ -1029,6 +1029,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if handled is not None:
             self._send_json(*handled)
             return
+        if route == "/cleanup":   # what could go: test chats, empty chats, test / duplicate memories (engine/cleanup.py)
+            import cleanup  # pylint: disable=import-outside-toplevel
+            self._send_json(*cleanup.route(self.server.state, "GET", route, {}))
+            return
         if route == "/local/models":   # every model downloaded on this computer (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(self.server.state, "GET", route, {}, {}))
@@ -1506,6 +1510,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             self._send_json(*godot_live.route("POST", route, data, {}))
+            return
+        if route == "/cleanup/remove":   # remove exactly the chosen chats / memories (the window asked the owner)
+            import cleanup  # pylint: disable=import-outside-toplevel
+            busy = state.try_busy()
+            if busy is None:
+                self._send_json(409, {"ok": False, "error": "Loki is busy; try again when it is done."})
+                return
+            try:
+                self._send_json(*cleanup.route(state, "POST", route, data))
+            finally:
+                state.release_busy(busy)
             return
         if route == "/open/link":   # a link the owner clicked in the chat: their browser (http/https only)
             url = str(data.get("url") or "").strip()
