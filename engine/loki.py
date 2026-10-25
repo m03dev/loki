@@ -9041,6 +9041,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         save_history()
         return reply
     WORKSPACE.mkdir(parents=True, exist_ok=True)
+    __import__("local_agent").protect(WORKSPACE)          # .loki/ (the chats) never ends up in a git commit
     cg = opencode_engine.find_codegraph()
     if cg and not (WORKSPACE / ".codegraph").is_dir():
         _progress("thinking", "CodeGraph: indexing the workspace once (it keeps itself up to date after)...")
@@ -9172,6 +9173,7 @@ async def run_local(text: str, name: str, task: bool = False, preamble: str = ""
     history = [m for m in messages if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)][-6:]
     messages.append({"role": "user", "content": text})
     WORKSPACE.mkdir(parents=True, exist_ok=True)
+    __import__("local_agent").protect(WORKSPACE)          # .loki/ (the chats) never ends up in a git commit
     goal = ("%s\n\n%s" % (preamble, text)) if preamble else text
     _progress("thinking", "Working with %s %s - shell commands, one by one..." % (model, where))
     res = await asyncio.to_thread(local_agent.run, goal, WORKSPACE, str(cfg.base_url), model,
@@ -9193,6 +9195,7 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
     name, prov = chosen
     messages.append({"role": "user", "content": text})
     WORKSPACE.mkdir(parents=True, exist_ok=True)
+    __import__("local_agent").protect(WORKSPACE)          # .loki/ (the chats) never ends up in a git commit
     home = dsh_engine.prepare_home(DATA_DIR / "dsh", prov)
     env = dsh_engine.env_for(home, prov)
     prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "

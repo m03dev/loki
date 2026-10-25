@@ -44,6 +44,10 @@ Rules:
 - One code block per reply. Never invent output - wait for the real output.
 - Each command runs in a fresh shell in the working folder; `cd x && ...` only lasts for that command.
 - Create files with a heredoc:  cat > path/file.py <<'EOF' ... EOF
+- A new project (a repo, an app, a site) goes in its OWN new folder inside the working folder: mkdir name && cd name
+  && git init -b main. Never run git init in the working folder itself, and never commit .loki/ (private chats).
+- GitHub: `gh auth status` first. Publish a folder with: cd name && gh repo create name --private --source=. --remote=origin --push
+  The remote is always called origin. If a push fails, read the error, run `git remote -v` and `git status`, fix it.
 - Pictures, 3D and video: never draw with text - run LOKI's makers:
   loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art oil-painting
   watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
@@ -137,6 +141,17 @@ def run_command(cmd: str, cwd: Path, timeout: float = 180, shell: list | None = 
         return 127, "could not run it: %s" % exc
 
 
+def protect(ws: Path) -> None:
+    """LOKI's private folder (.loki/: the chats) is never committed by any repo above it: a .gitignore of "*" inside it.
+    (2026-10-25: the agent ran git init in the workspace and committed .loki/loki_conversations.json.)"""
+    d = ws / ".loki"
+    try:
+        if d.is_dir() and not (d / ".gitignore").is_file():
+            (d / ".gitignore").write_text("# LOKI's private data - never in git\n*\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 # ------------------------------------------------------------------ the model
 def chat(base_url: str, model: str, messages: list, key: str = "", timeout: float = 600,
          opener=urllib.request.urlopen) -> str:
@@ -184,6 +199,8 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
     ask = ask or (lambda msgs: chat(base_url, model, msgs, key))
     execute = execute or (lambda cmd: run_command(cmd, ws, shell=shell))
     import dsh_engine  # pylint: disable=import-outside-toplevel - the folder before/after
+    protect(ws)
+    root_git = (ws / ".git").exists()
     before = dsh_engine.snapshot(ws)
     mac = " On macOS use `sed -i ''` (not `sed -i`)." if sys.platform == "darwin" else ""
     msgs = [{"role": "system", "content": SYSTEM}]
@@ -202,10 +219,18 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
             break
         steps += 1
         say("thinking", "Local model (%s), step %d..." % (model, steps))
-        try:
-            reply = ask(msgs)
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "reply": "NOT DONE - the local model did not answer: %s" % exc, "steps": steps,
+        reply, err_note = None, ""
+        for attempt in range(3):
+            try:
+                reply = ask(msgs if attempt == 0 else msgs + [{"role": "user", "content": (
+                    "Your last answer could not be read (%s). Answer again: a short THOUGHT, then ONE ```bash block. "
+                    "Plain text only - no <tool_call> or other tags." % err_note[:160])}])
+                break
+            except Exception as exc:  # noqa: BLE001 - Ollama answers 500 when its output parser chokes (qwen3.5 on the
+                err_note = str(exc)         # Mac, 2026-10-25: a tool-call tag with no tools) - ask again, don't give up
+                say("error", "The model's answer broke (%s) - asking again." % err_note[:160])
+        if reply is None:
+            return {"ok": False, "reply": "NOT DONE - the local model did not answer: %s" % err_note, "steps": steps,
                     "changes": dsh_engine.changes(before, dsh_engine.snapshot(ws)), "exit": "model"}
         msgs.append({"role": "assistant", "content": reply})
         cmd, err = parse_action(reply)
@@ -242,6 +267,9 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
         msgs.append({"role": "user", "content": observation(code, out) + extra})
     chs = dsh_engine.changes(before, dsh_engine.snapshot(ws))
     reply = verify(task, ws, chs, last_thought, exit_reason, ran, shell)
+    if not root_git and (ws / ".git").exists() and not re.search(r"\b(this|the) (folder|workspace)\b", task, re.I):
+        reply += ("\n\nNote: it also turned the whole working folder (%s) into a git repo. That was not asked for - "
+                  "remove its .git folder if you don't want it (your chats in .loki/ are kept out of git)." % ws)
     return {"ok": exit_reason == "done" and not reply.startswith("NOT DONE"), "reply": reply, "steps": steps,
             "changes": chs, "exit": exit_reason, "commands": len(ran)}
 

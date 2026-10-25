@@ -62,6 +62,10 @@ class Ollama(BaseHTTPRequestHandler):
         STATE["bodies"].append((self.path, body))
         text = STATE["script"][min(STATE["i"], len(STATE["script"]) - 1)]
         STATE["i"] += 1
+        if text == "__500__":      # Ollama's parser choking on the model's output (the Mac, 2026-10-25 13:53)
+            data = b'{"error":"failed to parse tool call"}'
+            self.send_response(500); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+            return
         data = json.dumps({"model": body.get("model"), "message": {"role": "assistant", "content": text}, "done": True}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -111,6 +115,20 @@ check("a model that only SAYS done: NOT DONE, nothing made", res["reply"].starts
 res, ws, seen = go(DANGER)
 check("a dangerous command (rm -rf ~) is refused, never run", any(k == "error" and "Refused" in t for k, t in seen)
       and "REFUSED by LOKI" in STATE["bodies"][1][1]["messages"][-1]["content"], seen)
+
+ROOTGIT = ["THOUGHT: init here.\n```bash\ngit init -q && git add -A && git commit -qm init && git log --oneline\n```",
+           "Done.\n```bash\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"]
+wsr = Path(tempfile.mkdtemp(prefix="ws-root-", dir=TMP)); (wsr / ".loki").mkdir(); (wsr / ".loki" / "loki_conversations.json").write_text("{}")
+res, wsr, _ = go(ROOTGIT, wsr)
+tracked = subprocess.run(["git", "-C", str(wsr), "ls-files"], capture_output=True, text=True).stdout
+check("a git repo made around the workspace never takes .loki/ (the private chats)", ".loki" not in tracked
+      and (wsr / ".loki" / ".gitignore").is_file(), tracked)
+check("... and the reply says the whole working folder became a repo (not asked for)", "turned the whole working folder" in res["reply"], res["reply"][-300:])
+
+res, ws, seen = go(["__500__"] + GOOD)
+check("Ollama answers 500 on a step (its parser choked): asked again, and the work still gets done",
+      res["ok"] and (ws / "loki-test-repo" / "src" / "main.py").is_file() and any("asking again" in t for k, t in seen)
+      and "could not be read" in STATE["bodies"][1][1]["messages"][-1]["content"], res["reply"][:300])
 
 code, out = local_agent.run_command("loki-make machines", TMP)
 check("the shell agent has LOKI's makers as a command: `loki-make machines` answers", code == 0 and '"machines"' in out, out[:300])
