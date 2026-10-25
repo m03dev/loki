@@ -24,6 +24,8 @@ system.
 
 | 4a | **Convert Selection.** To Vertices, Edges and Faces (Ctrl+F9 / F10 / F11, Maya's keys), To Contained Edges and Faces, To Edge, Vertex and Face Perimeter, To Shell and To Shell Border. Also **Select Similar** (faces with the same sides and about the same size) and **Shortest Edge Path** between two picked vertices. Still open in stage 4: loop/ring step, grow/shrink along loop, the paint-select brush, and saved sets. | forge_polyops.js `convertSel / similarFaces / shortestPath`, forge_toolkit.js | test_forge_select_ui, js/test_forge_select |
 
+| 4b | **File menu rows.** New Scene (everything goes in one undo step), Open Scene..., Import... (.glb / .gltf / .obj / .stl as NEW objects beside what is there) and Save Scene As... (the Export dialog on glTF), in Maya's places. The chrome's old "Import" is now "Import Image...". | forge_file.js | test_forge_file_ui |
+
 How stage 2 works: the editor has one cage (`view.poly`), so the session joins the other meshes into it. Each mesh is
 first carried into the working object's space, and nothing is welded. The other meshes' shapes step aside while the
 session runs. The session lives on the working node (`multiSession`), so undo snapshots carry it.

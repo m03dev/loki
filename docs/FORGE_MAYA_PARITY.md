@@ -27,11 +27,11 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-272 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (24%).
+276 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
-| File | 2 | 24 |
+| File | 6 | 24 |
 | Edit | 14 | 57 |
 | Create | 7 | 66 |
 | Select | 27 | 79 |
@@ -61,15 +61,15 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ### File
 
-- - New Scene (Maya: NewScene)
-- - Open Scene... (Maya: OpenScene)
+- ✓ `newScene` New Scene (Maya: NewScene)
+- ✓ `openScene` Open Scene... (Maya: OpenScene)
 - ✓ `save` Save Scene (Maya: SaveScene)
-- - Save Scene As... (Maya: SaveSceneAs)
+- ✓ `saveAs` Save Scene As... (Maya: SaveSceneAs)
 - - IncrementAndSave (Maya: IncrementAndSave)
 - - Archive Scene (Maya: ArchiveScene)
 - - Save Preferences (Maya: SavePreferences)
 - - Optimize Scene Size (Maya: OptimizeScene)
-- - Import... (Maya: Import)
+- ✓ `importFile` Import... (Maya: Import)
 - ✓ `export` Export All... (Maya: Export)
 - - Export Selection... (Maya: ExportSelection)
 - - Adobe(R) After Effects(R) Live Link (Maya: OpenAELiveLink)

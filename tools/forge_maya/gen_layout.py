@@ -79,6 +79,7 @@ MAP = {
     "ConvertSelectionToVertexPerimeter": "convertToVertexPerimeter", "ConvertSelectionToFacePerimeter": "convertToFacePerimeter",
     "ConvertSelectionToShell": "convertToShell", "ConvertSelectionToShellBorder": "convertToShellBorder",
     "SelectSimilar": "selectSimilar", "SelectShortestEdgePathTool": "shortestPath",
+    "NewScene": "newScene", "OpenScene": "openScene", "SaveSceneAs": "saveAs", "Import": "importFile",
     "SubdividePolygon": "addDivisions", "FlipTriangleEdge": "flipTriangleEdge", "Symmetrize": "symmetrize", "FlipMesh": "flipMesh",
     # Mesh Tools
     "ToggleModelingToolkit": "winToolkit", "SplitEdgeRingTool": "insertLoopTool", "MultiCutTool": "multiCut",

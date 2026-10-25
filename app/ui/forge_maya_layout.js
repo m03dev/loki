@@ -57,10 +57,27 @@ const FORGE_MAYA = {
  "menus": {
   "File": [
    [
+    "newScene",
+    "New Scene"
+   ],
+   [
+    "openScene",
+    "Open Scene..."
+   ],
+   "-",
+   [
     "save",
     "Save Scene"
    ],
+   [
+    "saveAs",
+    "Save Scene As..."
+   ],
    "#Import/Export",
+   [
+    "importFile",
+    "Import..."
+   ],
    [
     "export",
     "Export All..."

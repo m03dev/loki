@@ -304,7 +304,7 @@ function fmyBarMenus() {
   return FMY_MAIN_BAR.concat(names, ["Help"]);
 }
 const FMY_ADD = {
-  File: [["import", "Import (add a picture or a model)", () => fmyRun("image")]],
+  File: [["import", "Import Image... (a picture to model from, or to make a model of)", () => fmyRun("image")]],
   Select: ["-", ["Preferences", ["camSelAuto", "camSelOn", "camSelOff", "backfaces", "preselect"]]],
   // UV and Mesh Display come from the catalogue now; only the window's own extra (a toggle, not a command) stays here
   "Mesh Display": [["wos", "Wireframe on Shaded", () => fmyWireOnShaded(), () => !!(fmyView() && fmyView().wireOnShaded)]],
