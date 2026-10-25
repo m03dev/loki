@@ -348,6 +348,7 @@ import memory  # noqa: E402  (one interface over the four memory tiers)
 import memory_core  # noqa: E402  (learn / recall / forget + the per-request memory pack)
 import skill_learning  # noqa: E402  (verified multi-step work becomes a learned SKILL.md)
 import condenser  # noqa: E402  (summarize old turns so long tasks never overflow)
+import context_budget  # noqa: E402  (observation masking + cache-friendly batches: what each call sends)
 import stuck  # noqa: E402  (loop / stuck detection)
 import subagent  # noqa: E402  (run_subagent: a short-lived helper with its own context)
 import file_editor  # noqa: E402  (view ranges, unique str_replace, insert, undo)
@@ -1584,13 +1585,16 @@ def _paid_calls() -> int:
 
 def _record_request_usage(provider: str, response) -> None:
     entry = REQUEST_USAGE.setdefault(provider, {"calls": 0, "prompt_tokens": 0,
-                                                "completion_tokens": 0})
+                                                "completion_tokens": 0, "cached_tokens": 0})
     entry["calls"] += 1
     usage = getattr(response, "usage", None)
     for key in ("prompt_tokens", "completion_tokens"):
         value = getattr(usage, key, None) if usage is not None else None
         if isinstance(value, int):
             entry[key] += value
+    cached = context_budget.cached_tokens(usage)
+    if cached:
+        entry["cached_tokens"] = entry.get("cached_tokens", 0) + cached
 
 
 def usage_summary() -> str:
@@ -1601,6 +1605,8 @@ def usage_summary() -> str:
         text = "%s %d call%s" % (name, u["calls"], "" if u["calls"] == 1 else "s")
         if tokens:
             text += ", %s tokens" % (("%.1fk" % (tokens / 1000)) if tokens >= 1000 else tokens)
+            if u.get("cached_tokens") and u["prompt_tokens"]:
+                text += " (%d%% of the prompt from the cache)" % round(100 * u["cached_tokens"] / u["prompt_tokens"])
         if is_metered(name):
             text += " (paid)"
         parts.append(text)
@@ -7736,6 +7742,11 @@ def _record_usage(response, kwargs: dict, cfg, started: float) -> None:
                              prompt_chars=usage.messages_chars(kwargs.get("messages", [])) +
                              len(json.dumps(kwargs.get("tools", []))),
                              output_chars=out_chars)
+        hit = context_budget.cached_tokens(meta)
+        if hit:
+            entry["cached"] = hit
+        if MASK_STATS.get("saved_chars"):
+            entry["masked_chars"] = MASK_STATS["saved_chars"]
         LAST_USAGE.append(entry)
         _progress("usage", usage.line(entry))
         if "11434" in cfg.base_url:
@@ -7777,17 +7788,34 @@ def _history_sig(items: list) -> str:
     return h.hexdigest()
 
 
+MASK_STATS: dict = {"turns": 0, "masked": 0, "saved_chars": 0}
+
+
+def _masked(msgs: list) -> list:
+    """Old tool results stubbed for the model (engine/context_budget.py - observation masking, in cache-friendly
+    batches); the history itself keeps everything."""
+    st = context_budget.settings()
+    if not st["on"]:
+        return msgs
+    view, stats = context_budget.mask(msgs, keep=st["keep"], step=st["step"], min_chars=st["min_chars"])
+    MASK_STATS["turns"] += 1
+    MASK_STATS["masked"] = stats["masked"]
+    MASK_STATS["saved_chars"] = stats["saved_chars"]
+    return view
+
+
 async def _model_view(requested: bool = False) -> list:
-    """What the model is sent: the whole conversation, or - when it is too long - a condensed view."""
+    """What the model is sent: the conversation with old tool output masked, condensed when still too long."""
+    base = _masked(messages)
     if not condenser.enabled() or len(messages) < 6:
-        return messages
+        return base
     max_messages, max_chars = condenser.limits(local=_is_local_model())
     if MAX_CONTEXT_MESSAGES > 0:
         max_messages = min(max_messages, MAX_CONTEXT_MESSAGES) if max_messages else MAX_CONTEXT_MESSAGES
     cache = _CONDENSE_CACHE
-    view = messages
+    view = base
     if cache and cache.get("end", 0) <= len(messages) and cache.get("sig") == _history_sig(messages[:cache["end"]]):
-        view = messages[:cache["start"]] + [cache["note"]] + messages[cache["end"]:]
+        view = base[:cache["start"]] + [cache["note"]] + base[cache["end"]:]
     elif cache:
         cache.clear()
     if not requested and not condenser.reasons(view, max_messages, max_chars):
@@ -8022,7 +8050,7 @@ async def agent_turn(force_tool: bool = False) -> str:
             _REQUEST_TOOL_CALLS += 1
             result = await call_tool(fix.name, args)
             _note_result(result)
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": context_budget.cap_result(result)})
             # Break a loop where the model repeats an identical failing call forever.
             global _repeat_sig, _repeat_count
             signature = "%s|%s" % (fix.name, json.dumps(args, sort_keys=True)[:400])

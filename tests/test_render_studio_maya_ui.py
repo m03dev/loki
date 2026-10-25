@@ -77,7 +77,8 @@ async def main():
         await page.goto("http://127.0.0.1:8895/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
-        await page.click("#mode-render")
+        await page.evaluate("localStorage.setItem('loki-studio-view', 'render')")
+        await page.click("#mode-render")   # the Studio tab; its Render view is the Render Studio (the Farm view is studio_farm.js)
         await page.wait_for_selector("#render-studio", timeout=8000)
         await page.wait_for_timeout(400)
 

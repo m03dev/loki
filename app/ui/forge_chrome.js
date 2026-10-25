@@ -154,6 +154,8 @@ function fmyRow(it, depth) {
     return b;
   }
   const [id, label, run, on] = Array.isArray(it) ? it : [it];
+  // a menu-only item (its own function) becomes a command too, so it can go on the Quick Menu, a marking menu or a key
+  if (id && run && typeof FORGE_PRO_CMDS !== "undefined" && !(FORGE_PRO_CMDS[id] && FORGE_PRO_CMDS[id][1])) FORGE_PRO_CMDS[id] = [label || id, () => { run(); return ""; }];
   const c = fmyCmd(id);
   if (!run && !(c && c[1])) return null;                 // not in Forge yet: left out, a menu must not lie
   const b = fmyEl("button", "fmy-ditem");

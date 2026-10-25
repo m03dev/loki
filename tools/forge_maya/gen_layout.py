@@ -115,7 +115,7 @@ EXTRAS = {
                 ["Menus", ["wheel", "quickMenu"]], ["Layouts", ["layouts", "layoutReset", "hideUI"]],
                 ["Settings / Preferences", ["preferences", "hotkeyEditor", "menuSettings"]]],
     "Mesh": ["dynamesh", "meshStats", "mirrorY", "mirrorZ", "sculptModel", "bakeMaps"],
-    "Edit Mesh": ["inset", "relax", "deleteComp", "mergeThreshold"],
+    "Edit Mesh": ["inset", "relax", "deleteComp", "mergeThreshold", ["Flatten (Scale to 0)", ["flattenX", "flattenY", "flattenZ", "flattenNormal"]]],
     "Mesh Tools": ["edgeLoop", "multiCutStep", "retopoFinish", "softSel"],
     "Mesh Display": ["softHardAngle", "softHardDisplay", "faceNormals", "vertexNormals", "normalsBigger", "normalsSmaller"],
     "UV": [["Unfold", ["uvUnfold", "uvLayout"]], ["Automatic", ["uvSmart", "uvAtlas", "uvOptCuts"]], "uvMoveSew", "uvShell"],

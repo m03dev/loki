@@ -27,14 +27,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-234 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (21%).
+232 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (21%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 2 | 24 |
 | Edit | 14 | 57 |
 | Create | 7 | 66 |
-| Select | 17 | 79 |
+| Select | 15 | 79 |
 | Modify | 9 | 95 |
 | Display | 10 | 121 |
 | Windows | 12 | 80 |
@@ -253,11 +253,11 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `shrink` Shrink (Maya: ShrinkPolygonSelectionRegion)
 - - Shrink Along Loop (Maya: ShrinkLoopPolygonSelectionRegion)
 - ✓ `objComp` Object/Component (Maya: SelectToggleMode)
-- ✓ `multi` Components > Multi-Component (Maya: SelectMultiComponentMask)
+- - Components > Multi-Component (Maya: SelectMultiComponentMask)
 - ✓ `vertex` Components > Vertex (Maya: SelectVertexMask)
 - ✓ `edge` Components > Edge (Maya: SelectEdgeMask)
 - ✓ `face` Components > Face (Maya: SelectFacetMask)
-- ✓ `vertexFace` Components > Vertex Face (Maya: SelectVertexFaceMask)
+- - Components > Vertex Face (Maya: SelectVertexFaceMask)
 - ✓ `uv` Components > UV (Maya: SelectUVMask)
 - ✓ `uvShell` Components > UV Shell (Maya: SelectMeshUVShell)
 - - Contiguous Edges (Maya: SelectContiguousEdges)

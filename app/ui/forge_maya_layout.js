@@ -232,11 +232,6 @@ const FORGE_MAYA = {
     "Components",
     [
      [
-      "multi",
-      "Multi-Component"
-     ],
-     "-",
-     [
       "vertex",
       "Vertex"
      ],
@@ -247,10 +242,6 @@ const FORGE_MAYA = {
      [
       "face",
       "Face"
-     ],
-     [
-      "vertexFace",
-      "Vertex Face"
      ],
      [
       "uv",
@@ -651,7 +642,16 @@ const FORGE_MAYA = {
    "inset",
    "relax",
    "deleteComp",
-   "mergeThreshold"
+   "mergeThreshold",
+   [
+    "Flatten (Scale to 0)",
+    [
+     "flattenX",
+     "flattenY",
+     "flattenZ",
+     "flattenNormal"
+    ]
+   ]
   ],
   "Mesh Tools": [
    [

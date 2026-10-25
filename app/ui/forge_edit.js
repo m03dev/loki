@@ -601,6 +601,8 @@ function forgeEditAttach(view, ctx) {
   gizmo.addEventListener("objectChange", () => {
     if (!edit || edit.kind !== "handle") return;
     if (view.snapPivot) view.snapPivot(pivot);        // the pro x / c / v snapping (forge_pro.js) moves the handle first
+    // scale the handle back through its centre and the axis sticks at 0: the components lie flat (Maya / Unreal)
+    if (gizmo.mode === "scale" && typeof forgeScaleZeroSnap === "function") forgeScaleZeroSnap(pivot.scale, gizmo.axis, 0.06, 0);
     pivot.updateMatrix();
     applyM(new THREE.Matrix4().multiplyMatrices(pivot.matrix, edit.start.clone().invert()));
   });

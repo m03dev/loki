@@ -1,0 +1,141 @@
+{
+ "name": "ai_interpolate",
+ "version": "1.0",
+ "post": true,
+ "label": "AI speed-up: render every 2nd / 4th frame, AI fills the in-betweens (RIFE)",
+ "license": "AGPL-3.0 (LOKI's own graph, written from the node sources; docs/STUDIO_FARM.md)",
+ "sources": {
+  "comfyui": "comfyanonymous/ComfyUI@19ae172bff6c9e4c738e7f2e00fe087f5b5b46ab",
+  "RIFE VFI": "Fannovel16/ComfyUI-Frame-Interpolation@26545cc2dd95bc3d27f056016300673bdeee78f5 (vfi_models/rife/__init__.py)"
+ },
+ "about": "Path-trace only every 2nd (or 4th) frame; RIFE (real-time video frame interpolation) makes the frames in between: 2-4x fewer frames to render. Needs the ComfyUI-Frame-Interpolation pack; it downloads its RIFE checkpoint by itself on first use.",
+ "custom_nodes": {
+  "RIFE VFI": {
+   "repo": "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation",
+   "license": "MIT",
+   "commit": "26545cc2dd95bc3d27f056016300673bdeee78f5"
+  }
+ },
+ "constraints": {},
+ "control_switch": null,
+ "adaptive": {
+  "2": [
+   "dtype",
+   "torch_compile",
+   "batch_size"
+  ]
+ },
+ "uploads": {
+  "beauty": {
+   "node": "1",
+   "input": "image",
+   "pass": "beauty",
+   "format": "apng",
+   "frames": true
+  }
+ },
+ "params": {
+  "multiplier": {
+   "node": "2",
+   "input": "multiplier",
+   "type": "int",
+   "default": 2,
+   "min": 1,
+   "max": 16
+  },
+  "ckpt_name": {
+   "node": "2",
+   "input": "ckpt_name",
+   "type": "string",
+   "default": "rife49.pth"
+  },
+  "fps": {
+   "node": "4",
+   "input": "fps",
+   "type": "float",
+   "default": 48.0,
+   "min": 0.01,
+   "max": 1000.0
+  },
+  "prefix": {
+   "nodes": [
+    [
+     "3",
+     "filename_prefix"
+    ],
+    [
+     "4",
+     "filename_prefix"
+    ]
+   ],
+   "type": "string",
+   "default": "loki_render/job"
+  }
+ },
+ "models": [],
+ "outputs": {
+  "frames": "3",
+  "video": "4"
+ },
+ "prompt": {
+  "1": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/beauty.png"
+   },
+   "_meta": {
+    "title": "Path-traced key frames (APNG)"
+   }
+  },
+  "2": {
+   "class_type": "RIFE VFI",
+   "inputs": {
+    "ckpt_name": "rife49.pth",
+    "frames": [
+     "1",
+     0
+    ],
+    "clear_cache_after_n_frames": 10,
+    "multiplier": 2,
+    "fast_mode": true,
+    "ensemble": true,
+    "scale_factor": 1.0,
+    "dtype": "float32",
+    "torch_compile": false,
+    "batch_size": 1
+   },
+   "_meta": {
+    "title": "RIFE in-betweens"
+   }
+  },
+  "3": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "images": [
+     "2",
+     0
+    ],
+    "filename_prefix": "loki_render/job"
+   },
+   "_meta": {
+    "title": "Frames"
+   }
+  },
+  "4": {
+   "class_type": "SaveWEBM",
+   "inputs": {
+    "images": [
+     "2",
+     0
+    ],
+    "filename_prefix": "loki_render/job",
+    "codec": "vp9",
+    "fps": 48.0,
+    "crf": 10.0
+   },
+   "_meta": {
+    "title": "Video"
+   }
+  }
+ }
+}

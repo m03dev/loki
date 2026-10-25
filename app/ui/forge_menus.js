@@ -31,6 +31,16 @@ function forgeMenusPrefs() {
 function forgeMenusSave(p) { try { localStorage.setItem(FORGE_MENUS_STORE, JSON.stringify(p)); } catch (_) { /* private window */ } }
 function forgeMenusSay(msg) { if (msg && typeof forgeSay === "function") forgeSay(msg); return msg; }
 function forgeMenusQuick() { const q = forgeMenusPrefs().quick; return q && q.ring ? q : JSON.parse(JSON.stringify(FORGE_QUICK_DEFAULT)); }
+// a command that really runs (a saved Quick Menu or marking menu can hold an id an update removed - a dead button)
+const forgeMenusLive = (id) => typeof id !== "string" || id === "-" || id.startsWith("#")
+  || !!(typeof FORGE_PRO_CMDS !== "undefined" && FORGE_PRO_CMDS[id] && typeof FORGE_PRO_CMDS[id][1] === "function");
+/** The menu with every dead command taken out (its wedge stays empty, its list row goes). */
+function forgeMenusAlive(m) {
+  if (!m) return m;
+  const ring = {};
+  for (const k of Object.keys(m.ring || {})) if (forgeMenusLive(m.ring[k])) ring[k] = m.ring[k];
+  return Object.assign({}, m, { ring: ring, list: (m.list || []).filter((x) => typeof x !== "string" || forgeMenusLive(x)) });
+}
 const forgeMenusLabel = (id) => { const c = typeof FORGE_PRO_CMDS !== "undefined" && FORGE_PRO_CMDS[id]; return c ? c[0] : id; };
 
 // size + opacity on whichever menu just opened
@@ -56,8 +66,8 @@ if (typeof forgeProMenu === "function") {
   window.forgeProMenu = function (v, ctx) {
     const m = orig.apply(this, arguments);
     const c = forgeMenusPrefs().custom[forgeMenusKeyOf(m)];
-    if (m && c) return Object.assign({}, m, { ring: c.ring ? Object.assign({}, c.ring) : m.ring, list: Array.isArray(c.list) ? c.list.slice() : m.list });
-    return m;
+    if (m && c) return forgeMenusAlive(Object.assign({}, m, { ring: c.ring ? Object.assign({}, c.ring) : m.ring, list: Array.isArray(c.list) ? c.list.slice() : m.list }));
+    return forgeMenusAlive(m);
   };
 }
 if (typeof forgeProMarkShow === "function") {
@@ -295,7 +305,7 @@ function forgeMenusQuickOpen(v, at) {
   if (typeof forgeProMarkShow !== "function") return "";
   const q = forgeMenusQuick();
   const p = at || (v && v.pro && v.pro.mouse) || [innerWidth / 2, innerHeight / 2];
-  forgeProMarkShow(v, p[0], p[1], { title: "Quick", quick: true, ring: Object.assign({}, q.ring), list: (q.list || []).concat(["menuSettings"]) });
+  forgeProMarkShow(v, p[0], p[1], forgeMenusAlive({ title: "Quick", quick: true, ring: Object.assign({}, q.ring), list: (q.list || []).concat(["menuSettings"]) }));
   const host = document.getElementById("forge-pro-marking");
   if (host) {
     host.classList.add("fmenu-quick");
@@ -341,7 +351,7 @@ function forgeMenusDefaultOf(name) {
     "Edge tools": { ring: { S: "extrude", E: "bevel", SW: "deleteEdgeVert", N: "bridge", NE: "edgeLoop", W: "multiCut", NW: "connect", SE: "offsetEdgeLoop" }, list: ["merge", "collapse", "slideEdge", "spinEdge", "detach", "fillHole", "loopSel", "ringSel", "grow", "shrink"] },
     "Face tools": { ring: { S: "extrude", E: "bevel", SW: "wedge", NE: "poke", SE: "reverse", W: "multiCut", NW: "inset", N: "duplicateFace" }, list: ["extractFace", "collapse", "triangulate", "quadrangulate", "circularize", "deleteComp", "smooth", "grow", "shrink"] },
     "Mesh tools": { ring: { S: "extrude", SW: "edgeLoop", NE: "fillHole", N: "merge", W: "multiCut", NW: "sculpt", E: "softHard" }, list: ["smooth", "dynamesh", "makeLive"] },
-    Components: { ring: { N: "edge", W: "vertex", S: "uv", E: "face", SW: "vertexFace", SE: "uvShell", NW: "multi", NE: "objectMode" }, list: ["select", "move", "rotate", "scale", "frameSel", "hierarchy", "invert", "duplicate", "group", "centerPivot", "resetPivot", "resetXf", "freeze", "makeLive", "delete", "more"] },
+    Components: { ring: { N: "edge", W: "vertex", S: "uv", E: "face", SW: "loopSel", SE: "uvShell", NW: "ringSel", NE: "objectMode" }, list: ["select", "move", "rotate", "scale", "frameSel", "hierarchy", "invert", "duplicate", "group", "centerPivot", "resetPivot", "resetXf", "freeze", "makeLive", "delete", "more"] },
     "Empty space": { ring: {}, list: ["completeTool", "selectAll", "selectNone", "undo", "redo", "repeatLast", "frameAll", "more"] },
     Convert: { ring: { W: "vertex", N: "edge", S: "face", E: "toUV", NE: "grow", NW: "shrink", SE: "loopSel", SW: "ringSel" }, list: [] },
   };

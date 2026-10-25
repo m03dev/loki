@@ -264,8 +264,8 @@ ST = State()
 
 # ------------------------------------------------------------------ workflow graphs: valid against the captured schemas
 wfs = AR.workflows()
-check("four graphs ship (render, preprocess, two Z-Image reference graphs)",
-      set(wfs) == {"vace_render", "preprocess_lineart", "zimage_reference", "zimage_reference_depth"}, list(wfs))
+check("six graphs ship (render, preprocess, two Z-Image reference graphs, the two AI speed-ups)",
+      set(wfs) == {"vace_render", "preprocess_lineart", "zimage_reference", "zimage_reference_depth", "ai_upscale", "ai_interpolate"}, list(wfs))
 for name, wf in wfs.items():
     probs = AR.check_graph(wf["prompt"], FIX)
     check("%s: every link points at an existing node + output, every required input is set, no unknown input" % name, not probs, probs)

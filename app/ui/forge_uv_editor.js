@@ -706,6 +706,19 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("uvUnfold", "Unfold", () => O.unfold());
   add("uvLayout", "Layout", () => O.layout());
   add("uvShell", "Select UV Shell", () => O.selectShell());
+  // Select > Convert Selection > To UVs (the Ctrl + right-button marking menu's east wedge): the picked faces' (or
+  // vertices' faces') UV points, picked in the UV Editor
+  add("toUV", "To UVs", () => {
+    const v = S.view || (typeof forge !== "undefined" && forge.view), m = v && v.poly;
+    if (!m || !m.uv || !m.fuv) return "No UVs yet - Smart Unwrap (or any Create UVs) first.";
+    const sel = v.edit ? v.edit.sel : null, faces = new Set(sel ? sel.f : []);
+    if (sel && !faces.size && sel.v.size) m.f.forEach((f, fi) => { if (f.some((i) => sel.v.has(i))) faces.add(fi); });
+    if (!faces.size) m.f.forEach((_, fi) => faces.add(fi));
+    S.selUV = new Set();
+    for (const fi of faces) for (const i of m.fuv[fi] || []) S.selUV.add(i);
+    ForgeUVEditor.setWorkspace("uv"); S.mode = "uv"; ForgeUVEditor.draw();
+    return S.selUV.size + " UV points picked (from " + faces.size + " face" + (faces.size === 1 ? "" : "s") + ").";
+  });
   add("uvSmart", "Smart Unwrap", () => O.smart());
   add("uvAutoSeams", "Auto Seams", () => O.autoSeams());
   add("uvAtlas", "Atlas Unwrap", () => O.atlas());

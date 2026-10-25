@@ -185,9 +185,9 @@ async def main():
                   K({ key: '1', code: 'Digit1', ctrlKey: true }), K({ key: 'Shift', code: 'ShiftLeft', shiftKey: true })]; }""")
         check("keys become chords: Cmd = Ctrl, Option+D on a Mac is alt+d, > is >, Shift+D is shift+d",
               ch == ["ctrl+shift+z", "alt+d", ">", "f9", "shift+d", "ctrl+1", ""], ch)
-        dflt = await E("""() => [forgeHotkeys.action('w'), forgeHotkeys.action('ctrl+z'), forgeHotkeys.action('shift+z'),
+        dflt = await E("""() => [forgeHotkeys.action('w'), forgeHotkeys.action('ctrl+z'), forgeHotkeys.action('ctrl+shift+z'),
           forgeHotkeys.action('alt+shift+d'), forgeHotkeys.action('ctrl+d'), forgeHotkeys.action('f8'), forgeHotkeys.active()]""")
-        check("the default set is the pro one (w Move, Ctrl+Z / Shift+Z, Alt+Shift+D Delete History, F8)",
+        check("the default set is the pro one (w Move, Ctrl+Z / Ctrl+Shift+Z, Alt+Shift+D Delete History, F8)",
               dflt == ["move", "undo", "redo", "deleteHistory", "duplicate", "objComp", "Default"], dflt)
         await E("forgeModelMode(false)")
         await E(T + ".select(" + T + ".list()[0].id)")

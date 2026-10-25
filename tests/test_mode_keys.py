@@ -2,8 +2,8 @@
 
     python tests/test_mode_keys.py      (< 20 s; skips without Playwright + Chromium)
 
-In Forge, Ctrl/Cmd+1 is Isolate Select and stays in Forge; Godot's own mode keys (Option+1..4 on a Mac, Ctrl+F1..F4)
-switch from anywhere; outside Forge Ctrl/Cmd+1..4 still switch; the chat's Alt+Up / Mod+B leave Forge's keys alone.
+One key per mode: Option+1..4 on a Mac, Ctrl+F1..F4 on Windows (Godot's own), from anywhere; Ctrl/Cmd+1 is always
+Forge's Isolate Select, never a second mode key.
 """
 from __future__ import annotations
 
@@ -57,23 +57,33 @@ async def main():
             await pg.evaluate("LokiModeBar.init()")
             mode = lambda: pg.evaluate("LokiModeBar.active()")  # noqa: E731
             mod = "Meta" if plat == "MacIntel" else "Control"
-            await pg.keyboard.press(mod + "+Digit2")
-            check(plat + ": Ctrl/Cmd+2 opens Forge from Home", await mode() == "forge", await mode())
-            await pg.keyboard.press(mod + "+Digit1")
-            check(plat + ": in Forge Ctrl/Cmd+1 stays in Forge", await mode() == "forge", await mode())
-            check(plat + ": ...and reaches Forge (Isolate Select)", await pg.evaluate("window.isolated") == 1)
+            # ONE key per mode (owner 2026-10-25: nothing duplicated): Option+1..4 on a Mac, Ctrl+F1..F4 on Windows
             if plat == "MacIntel":
+                await pg.keyboard.press("Alt+Digit2")
+                check("Mac: Option+2 opens Forge", await mode() == "forge", await mode())
+                await pg.keyboard.press("Meta+Digit1")
+                check("Mac: in Forge Cmd+1 stays in Forge", await mode() == "forge", await mode())
+                check("Mac: ...and reaches Forge (Isolate Select)", await pg.evaluate("window.isolated") == 1)
                 await pg.keyboard.press("Alt+Digit1")
-                check("Mac: Option+1 goes Home (Godot's key)", await mode() == "loki", await mode())
+                check("Mac: Option+1 goes Home", await mode() == "loki", await mode())
                 await pg.keyboard.press("Alt+Digit4")
-                check("Mac: Option+4 opens Godot", await mode() == "godot", await mode())
-            await pg.keyboard.press(mod + "+Digit2")
-            await pg.keyboard.press("Control+F1")
-            check(plat + ": Ctrl+F1 goes Home from Forge", await mode() == "loki", await mode())
-            await pg.keyboard.press("Control+F4")
-            check(plat + ": Ctrl+F4 opens Godot", await mode() == "godot", await mode())
+                check("Mac: Option+4 opens Engine", await mode() == "godot", await mode())
+                await pg.keyboard.press("Control+F1")
+                check("Mac: Ctrl+F1 is not a second key for Home", await mode() == "godot", await mode())
+            else:
+                await pg.keyboard.press("Control+F2")
+                check("Win: Ctrl+F2 opens Forge", await mode() == "forge", await mode())
+                await pg.keyboard.press("Control+Digit1")
+                check("Win: in Forge Ctrl+1 stays in Forge", await mode() == "forge", await mode())
+                check("Win: ...and reaches Forge (Isolate Select)", await pg.evaluate("window.isolated") == 1)
+                await pg.keyboard.press("Control+F1")
+                check("Win: Ctrl+F1 goes Home", await mode() == "loki", await mode())
+                await pg.keyboard.press("Control+F4")
+                check("Win: Ctrl+F4 opens Engine", await mode() == "godot", await mode())
             await pg.keyboard.press(mod + "+Digit1")
-            check(plat + ": outside Forge Ctrl/Cmd+1 still goes Home", await mode() == "loki", await mode())
+            check(plat + ": Ctrl/Cmd+1 is no longer a second key for Home", await mode() == "godot", await mode())
+            names = await pg.evaluate("[...document.querySelectorAll('.modebar-tab span')].map(s => s.textContent)")
+            check(plat + ": the tabs are Home, Forge, Studio, Engine", names == ["Home", "Forge", "Studio", "Engine"], names)
             tip = await pg.get_attribute("#mode-forge", "title")
             check(plat + ": the tab shows Godot's key", ("⌥2" if plat == "MacIntel" else "Ctrl+F2") in tip, tip)
             check(plat + ": no page errors", not errs, errs)

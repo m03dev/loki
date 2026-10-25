@@ -315,6 +315,7 @@
     duplicateFaces: "Needs faces.",
     extractFaces: "Needs faces that share vertices with faces outside the selection.",
     averageVerts: "Needs vertices.",
+    flatten: "Needs two or more vertices (edges and faces give theirs). Scales them to 0 on X, Y, Z or their average normal, about the handle.",
     relax: "Border vertices stay pinned.",
     targetWeld: "Needs two different vertices of the mesh.",
     circularize: "Needs a closed loop of vertices or edges, or a patch of faces with one border.",
@@ -1415,6 +1416,35 @@
     const m = cp(m0); m.v = pos;
     return m;
   }
+  // Flatten = scale to 0 (owner 2026-10-25: "scale down to flatten verts/faces/edges ... it takes whatever you have
+  // selected and scales them all to 0"). Maya: Scale Tool + 0 on an axis (or the Channel Box's Scale = 0); Unreal's
+  // modeling mode does the same with its Transform gizmo. The pivot is the manipulator's (the selection's median,
+  // forge_edit.js placePivot), so the flattened points land on the plane through the handle. axis "normal" scales
+  // along the selection's average face normal (Maya's Scale tool in Normal axis orientation).
+  //   flatten(m, verts, { axis: "x" | "y" | "z" | "normal", amount = 1 })  -> the same vertices
+  // amount 1 = all the way to 0, 0.5 = halfway (a partial scale), so the last-tool tweak can dial it.
+  P.flatten = (m0, verts, o) => {
+    o = o || {};
+    const vs = vertIds(m0, verts);
+    if (vs.length < 2) return fail(m0, "Flatten: select two or more vertices, edges or faces.");
+    const axis = String(o.axis || "y").toLowerCase(), t = clamp(num(o.amount, 1), 0, 1);
+    const piv = typeof P.median === "function" ? P.median(m0, vs) : mul(vs.reduce((s, i) => add(s, m0.v[i]), [0, 0, 0]), 1 / vs.length);
+    let n;
+    if (axis === "normal") {
+      const inSel = new Set(vs);
+      let acc = [0, 0, 0], any = false;
+      for (const f of m0.f) if (f.every((i) => inSel.has(i))) { acc = add(acc, P.faceNormal(m0, f)); any = true; }
+      if (!any) for (const f of m0.f) if (f.some((i) => inSel.has(i))) acc = add(acc, P.faceNormal(m0, f));
+      n = norm(acc);
+      if (!len(n)) return fail(m0, "Flatten: the selection has no clear normal - pick an axis (X, Y or Z).");
+    } else n = axis === "x" ? [1, 0, 0] : axis === "z" ? [0, 0, 1] : [0, 1, 0];
+    const m = cp(m0);
+    for (const i of vs) {
+      const p = m0.v[i], d = dot(sub(p, piv), n);
+      m.v[i] = sub(p, mul(n, d * t));
+    }
+    return finish(m, { v: vs, e: [], f: [] }, "", true);
+  };
   P.averageVerts = (m0, verts, o) => {
     o = o || {};
     const vs = vertIds(m0, verts);

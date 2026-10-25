@@ -1,0 +1,159 @@
+{
+ "name": "ai_upscale",
+ "version": "1.0",
+ "post": true,
+ "label": "AI speed-up: render small, AI upscale (Real-ESRGAN 4x, then to the size you want)",
+ "license": "AGPL-3.0 (LOKI's own graph, written from the node sources; docs/STUDIO_FARM.md)",
+ "sources": {
+  "comfyui": "comfyanonymous/ComfyUI@19ae172bff6c9e4c738e7f2e00fe087f5b5b46ab (comfy_extras/nodes_upscale_model.py UpscaleModelLoader / ImageUpscaleWithModel, nodes.py ImageScaleBy, LoadImage, SaveImage; comfy_extras/nodes_video.py SaveWEBM)",
+  "model": "xinntao/Real-ESRGAN (BSD-3-Clause), RealESRGAN_x4plus.pth"
+ },
+ "about": "Render a quarter of the pixels (half width, half height) with Forge's path tracer, then Real-ESRGAN brings it back up: about 4x less path tracing. Core ComfyUI nodes only. Every frame of the path-traced render goes through.",
+ "custom_nodes": {},
+ "constraints": {},
+ "control_switch": null,
+ "uploads": {
+  "beauty": {
+   "node": "1",
+   "input": "image",
+   "pass": "beauty",
+   "format": "apng",
+   "frames": true
+  }
+ },
+ "params": {
+  "scale_by": {
+   "node": "4",
+   "input": "scale_by",
+   "type": "float",
+   "default": 0.5,
+   "min": 0.01,
+   "max": 8.0
+  },
+  "upscale_method": {
+   "node": "4",
+   "input": "upscale_method",
+   "type": "string",
+   "default": "lanczos"
+  },
+  "fps": {
+   "node": "6",
+   "input": "fps",
+   "type": "float",
+   "default": 24.0,
+   "min": 0.01,
+   "max": 1000.0
+  },
+  "prefix": {
+   "nodes": [
+    [
+     "5",
+     "filename_prefix"
+    ],
+    [
+     "6",
+     "filename_prefix"
+    ]
+   ],
+   "type": "string",
+   "default": "loki_render/job"
+  }
+ },
+ "models": [
+  {
+   "node": "2",
+   "input": "model_name",
+   "file": "RealESRGAN_x4plus.pth",
+   "folder": "models/upscale_models",
+   "repo": "lllyasviel/Annotators",
+   "revision": "main",
+   "path": "RealESRGAN_x4plus.pth",
+   "size": 67040989,
+   "license": "BSD-3-Clause (xinntao/Real-ESRGAN; size from its v0.1.0 release asset - re-check on the PC: ZIVA_TASKS 2026-10-25)",
+   "alternatives": []
+  }
+ ],
+ "outputs": {
+  "frames": "5",
+  "video": "6"
+ },
+ "prompt": {
+  "1": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "loki/beauty.png"
+   },
+   "_meta": {
+    "title": "Path-traced frames (APNG)"
+   }
+  },
+  "2": {
+   "class_type": "UpscaleModelLoader",
+   "inputs": {
+    "model_name": "RealESRGAN_x4plus.pth"
+   },
+   "_meta": {
+    "title": "Real-ESRGAN x4"
+   }
+  },
+  "3": {
+   "class_type": "ImageUpscaleWithModel",
+   "inputs": {
+    "upscale_model": [
+     "2",
+     0
+    ],
+    "image": [
+     "1",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "AI upscale 4x"
+   }
+  },
+  "4": {
+   "class_type": "ImageScaleBy",
+   "inputs": {
+    "image": [
+     "3",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "scale_by": 0.5
+   },
+   "_meta": {
+    "title": "To the final size (0.5 = 2x overall)"
+   }
+  },
+  "5": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "images": [
+     "4",
+     0
+    ],
+    "filename_prefix": "loki_render/job"
+   },
+   "_meta": {
+    "title": "Frames"
+   }
+  },
+  "6": {
+   "class_type": "SaveWEBM",
+   "inputs": {
+    "images": [
+     "4",
+     0
+    ],
+    "filename_prefix": "loki_render/job",
+    "codec": "vp9",
+    "fps": 24.0,
+    "crf": 10.0
+   },
+   "_meta": {
+    "title": "Video"
+   }
+  }
+ }
+}

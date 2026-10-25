@@ -464,7 +464,7 @@ function forgeProCommands() {
     outliner: ["Outliner", () => forgeProPanel("outliner")],
     layerEditor: ["Layer Editor", () => { const b = document.getElementById("forge-layer-editor"); if (!b) return "The Layer Editor is not built here."; b.hidden = !b.hidden; if (!b.hidden && !forgeProPanels().channel) forgeProPanel("channel", true); return b.hidden ? "Layer Editor hidden." : "Layer Editor shown (under the Channel Box)."; }],
     layerAdd: ["Create Empty Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; const l = t.layerAdd(); return "Layer " + l.name + " created."; }],
-    layerAssign: ["Assign to Current Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; t.layerAssign(t.curLayer, t.sel); return "Assigned the selection to the current layer."; }],
+    layerAssign: ["Assign to Current Layer", () => { const t = forge.view && forge.view.tree && forge.view.tree.api; if (!t) return "Open Forge first."; const cur = (t.layerList().find((l) => l.current) || { id: 0 }).id, ids = t.selected(); if (!ids.length) return "Select objects first."; t.layerAssign(cur, ids); return "Assigned the selection to the current layer."; }],
     symX: ["Symmetry X", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 1)],
     symY: ["Symmetry Y", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 2)],
     symZ: ["Symmetry Z", (v) => forgeProSym(v, (v.brush.symBits || 0) ^ 4)],
@@ -505,9 +505,7 @@ function forgeProCommands() {
     face: ["Face", (v) => forgeProComponents(v, "face")],
     objectMode: ["Object Mode", (v) => forgeProObjectMode(v)],
     uv: ["UV", null, "UV editing is not in Forge yet"],
-    vertexFace: ["Vertex Face", null, "Vertex faces are not in Forge yet"],
     uvShell: ["UV Shell", null, "UV shells are not in Forge yet"],
-    multi: ["Multi", null, "Multi-component selection is not in Forge yet"],
     extrude: ["Extrude", async (v) => { if (!comp(v)) await forgeProComponents(v, "face"); forgeProCall("forgeFaceOp", "extrude"); }],
     inset: ["Inset", (v) => forgeProCall("forgeFaceOp", "inset")],
     reverse: ["Reverse Normals", (v) => forgeProCall("forgeFaceOp", "flip")],
@@ -525,7 +523,6 @@ function forgeProCommands() {
     chamfer: ["Chamfer Vertex", null, "Chamfer is not in Forge yet (T8)"],
     poke: ["Poke Face", null, "Poke is not in Forge yet (T8)"],
     wedge: ["Wedge", null, "Wedge is not in Forge yet"],
-    toUV: ["To UVs", null, "UVs are not in Forge yet"],
     loopSel: ["To Edge Loop", (v) => { if (!comp(v) || !v.convertEdges) return "Select edges first (F10)."; const n = v.convertEdges("loop"); return n ? n + " edges in the loop(s)." : "Select an edge first."; }],
     ringSel: ["To Edge Ring", (v) => { if (!comp(v) || !v.convertEdges) return "Select edges first (F10)."; const n = v.convertEdges("ring"); return n ? n + " edges in the ring(s)." : "Select an edge first."; }],
     cube: ["Cube", () => forgeProCall("forgeAddPrimitive", "cube")],
@@ -608,7 +605,11 @@ async function forgeProRun(v, id) {
 // a menu: { title, ring: { N: id, NE: id, ... }, list: [id, ...] }
 function forgeProMenu(v, ctx) {
   const comp = forgeProComp(v), mode = v.edit ? v.edit.mode : "face";
+  // sculpting: Shift + right button = the Mask menu (the plain right button is the brush wheel - one button, one menu)
+  if (v.mode === "sculpt") return { title: "Mask", ring: { N: "maskInvert", S: "maskClear", E: "maskFill", W: "maskHideToggle", NE: "maskHide", NW: "maskShow" }, list: [] };
   if (ctx.key === "q") return { title: "Select", ring: { NW: "marquee", SE: "selectNone", E: "selectAll", W: "invert" }, list: [] };
+  // hold r + left button: Scale's marking menu - flatten (scale to 0) on an axis, as Maya / Unreal do with 0 typed in
+  if (ctx.key === "r") return { title: "Scale", ring: { W: "flattenX", N: "flattenY", E: "flattenZ", S: "flattenNormal", NW: "objectAxes", NE: "worldAxes" }, list: [] };
   if (ctx.key === "w" || ctx.key === "e") return { title: ctx.key === "w" ? "Move" : "Rotate", ring: { W: "worldAxes", NW: "objectAxes", N: "pivotEdit", S: "resetPivot" }, list: [] };
   if (ctx.ctrl) {                                   // convert the selection (polyConvertMM)
     return { title: "Convert", ring: { W: "vertex", N: "edge", S: "face", E: "toUV", NE: "grow", NW: "shrink", SE: "loopSel", SW: "ringSel" }, list: [] };
@@ -619,7 +620,7 @@ function forgeProMenu(v, ctx) {
   }
   if (ctx.node || comp) {                           // dagMenuProc: N Edge, W Vertex, S UV, E Face, SW VF, SE Shell, NW Multi, NE Object
     return { title: ctx.node ? ctx.node.name : "Components",
-      ring: { N: "edge", W: "vertex", S: "uv", E: "face", SW: "vertexFace", SE: "uvShell", NW: "multi", NE: "objectMode" },
+      ring: { N: "edge", W: "vertex", S: "uv", E: "face", SW: "loopSel", SE: "uvShell", NW: "ringSel", NE: "objectMode" },
       list: ["select", "move", "rotate", "scale", "frameSel", "hierarchy", "invert", "duplicate", "group", "centerPivot", "resetPivot",
         "resetXf", "freeze", "makeLive", "delete", "more"] };
   }
@@ -813,7 +814,7 @@ const FORGE_PRO_MENUS = {
   Create: [["Polygon Primitives", ["cube", "sphere", "cylinder", "cone", "plane", "torus", "quadsphere"]],
     ["Image Planes", ["imagePlane", "image"]], "-", ["Make with LOKI", ["draw", "describe", "creature"]]],
   Select: ["selectAll", "selectNone", "invert", "hierarchy", "marquee", "-",
-    ["Components", ["objComp", "vertex", "edge", "face", "uv", "vertexFace", "uvShell", "multi"]],
+    ["Components", ["objComp", "vertex", "edge", "face", "uv", "uvShell"]],
     ["Grow and Shrink", ["grow", "shrink"]], ["Loops and Rings", ["loopSel", "ringSel"]]],
   Modify: [["Transform Tools", ["select", "move", "rotate", "scale", "lastTool", "showManip"]],
     ["Axes", ["worldAxes", "objectAxes"]], ["Pivot", ["centerPivot", "resetPivot", "pivotEdit"]],
@@ -1542,8 +1543,8 @@ function forgeProAttach(view, ctx) {
   canvas.addEventListener("pointerdown", (e) => {
     pro.mouse = [e.clientX, e.clientY];
     if (e.button !== 0 || forgeCamMod(e)) return;         // every view, the four-view layout included (Ziva)
-    const held = ["q", "w", "e"].find((k) => pro.held.has(k));
-    if (held && view.mode !== "sculpt") {               // hold q / w / e + left button: that tool's marking menu
+    const held = ["q", "w", "e", "r"].find((k) => pro.held.has(k));
+    if (held && view.mode !== "sculpt") {               // hold q / w / e / r + left button: that tool's marking menu
       e.preventDefault(); e.stopImmediatePropagation();
       pro.open = "key";
       forgeProMarkShow(view, e.clientX, e.clientY, forgeProMenu(view, { key: held }));
@@ -1598,6 +1599,7 @@ function forgeProAttach(view, ctx) {
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 2 || forgeCamMod(e)) return;         // every view, the four-view layout included
     e.preventDefault();
+    if (view.mode === "sculpt" && !e.shiftKey) return;   // sculpting: the right button is the brush wheel (forge_sculpt_ui.js)
     pro.down = true; pro.at = [e.clientX, e.clientY];
     window.clearTimeout(pro.timer);
     const how = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };

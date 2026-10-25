@@ -474,28 +474,28 @@ else:
             check("Ctrl+Shift+S opens Studio inside Home and frames it", page.evaluate("document.body.dataset.mode") == "loki"
                   and page.evaluate("!!document.querySelector('#home-studio:not([hidden]) iframe[src*=studio]')") and "/studio/embed" in posts)
             page.keyboard.press("Escape")
-            page.keyboard.press("Control+4")
+            page.keyboard.press("Control+F4")
             page.wait_for_timeout(400)
-            check("Ctrl+4 switches to Godot (the project picker)",
+            check("Ctrl+F4 switches to Engine (the project picker)",
                   page.evaluate("document.body.dataset.mode") == "godot" and page.is_visible("[data-mode-pane=godot] select"))
             page.click("#mode-loki")
             page.keyboard.press("Control+Shift+S")
             page.keyboard.press("Escape")
-            page.keyboard.press("Control+1")
+            page.keyboard.press("Control+F1")
             page.wait_for_timeout(300)
             check("switching keeps each mode's state (the message, Studio's one frame, one embed call)",
                   page.evaluate("document.getElementById('prompt').value") == "half-typed message" and posts.count("/studio/embed") == 1
                   and page.evaluate("document.querySelectorAll('#home-studio iframe').length") == 1, posts)
             check("aria-selected follows the mode", page.get_attribute("#mode-loki", "aria-selected") == "true")
-            page.keyboard.press("Control+3")
+            page.keyboard.press("Control+F3")
             page.wait_for_timeout(300)
-            check("Ctrl+3: Render (says what to do when the Render Studio is not in this window)",
+            check("Ctrl+F3: Studio (says what to do when the Render Studio is not in this window)",
                   page.evaluate("document.body.dataset.mode") == "render" and page.evaluate("!!document.querySelector('[data-mode-pane=render]')"))
-            page.keyboard.press("Control+2")
+            page.keyboard.press("Control+F2")
             page.wait_for_timeout(500)
-            check("Ctrl+2: Forge opens forge.js (or says it is coming); there is no World panel anywhere",
+            check("Ctrl+F2: Forge opens forge.js (or says it is coming); there is no World panel anywhere",
                   page.evaluate("document.body.dataset.mode") == "forge" and not page.evaluate("!!document.querySelector('[data-panel=world]')"))
-            page.keyboard.press("Control+1")
+            page.keyboard.press("Control+F1")
             check("no script errors", not errs, errs[:3])
             b.close()
     except Exception as exc:  # noqa: BLE001

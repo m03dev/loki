@@ -305,27 +305,27 @@ async def window():
         await page.wait_for_timeout(600)
         check("a Godot card opens the Godot tab on that project", await E("document.body.dataset.mode") == "godot"
               and await E("document.querySelector('[data-mode-pane=godot] select').value") == "Racer")
-        await page.keyboard.press("Control+1")
+        await page.keyboard.press("Control+F1")   # Home's one key here (Option+1 on a Mac)
         await page.wait_for_timeout(200)
-        check("Ctrl+1 is Home again", await E("document.body.dataset.mode") == "loki" and await E("!document.getElementById('home-hub').hidden"))
+        check("Ctrl+F1 is Home again", await E("document.body.dataset.mode") == "loki" and await E("!document.getElementById('home-hub').hidden"))
         await E("window.forgeLoad = (n) => { window.__loaded = n; return Promise.resolve(); }")
         await page.dblclick(".home-card[data-kind=forge]")
         await page.wait_for_timeout(600)
         check("a Forge card opens Forge and loads that model", await E("document.body.dataset.mode") == "forge" and await E("window.__loaded") == "fox.glb",
               await E("[document.body.dataset.mode, window.__loaded]"))
-        await page.keyboard.press("Control+3")
+        await page.keyboard.press("Control+F3")
         await page.wait_for_timeout(300)
-        check("Ctrl+3 is Render (the Render Studio, or what to do when it is not in this window yet)",
-              await E("document.body.dataset.mode") == "render" and await E("!!document.querySelector('[data-mode-pane=render] .render-empty, [data-mode-pane=render] #render-studio')"))
-        await page.keyboard.press("Control+4")
+        check("Ctrl+F3 is Studio (the render farm and Render Studio, or what to do when it is not in this window yet)",
+              await E("document.body.dataset.mode") == "render" and await E("!!document.querySelector('[data-mode-pane=render] .render-empty, [data-mode-pane=render] #render-studio, [data-mode-pane=render] #studio-farm')"))
+        await page.keyboard.press("Control+F4")
         await page.wait_for_timeout(200)
-        check("Ctrl+4 is Godot", await E("document.body.dataset.mode") == "godot")
-        await page.keyboard.press("Control+1")
+        check("Ctrl+F4 is Engine", await E("document.body.dataset.mode") == "godot")
+        await page.keyboard.press("Control+F1")
         await page.wait_for_timeout(200)
         await page.click(".home-card[data-kind=render] .home-card-open")
         await page.wait_for_timeout(300)
-        check("a render card opens Render", await E("document.body.dataset.mode") == "render")
-        await page.keyboard.press("Control+1")
+        check("a render card opens Studio", await E("document.body.dataset.mode") == "render")
+        await page.keyboard.press("Control+F1")
         await page.wait_for_timeout(200)
 
         # Studio inside Home

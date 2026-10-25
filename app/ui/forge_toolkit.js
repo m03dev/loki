@@ -38,6 +38,7 @@ const FORGE_TK_TOOLS = {
   quadrangulate: ["Quadrangulate", "quadrangulate", "f*", [["angle", "Angle threshold", 0, 180, 1, 30], ["keepHardEdges", "Keep hard edges", 0, 1, 1, 0]], "Merge triangle pairs into quads."],
   duplicateFaces: ["Duplicate Face", "duplicateFaces", "f", [], "Copy the faces (a new piece of this mesh)."],
   extractFaces: ["Extract", "extractFaces", "f", [], "Cut the faces off into their own piece."],
+  flatten: ["Flatten", "flatten", "v", [["axis", "Axis", 0, 0, 0, "y", ["x", "y", "z", "normal"]], ["amount", "Amount", 0, 1, 0.01, 1]], "Scale the selection to 0 on one axis - it lies flat on the plane through the handle (Maya / Unreal: scale to 0)."],
   averageVerts: ["Average Vertices", "averageVerts", "v*", [["iterations", "Iterations", 1, 20, 1, 1]], "Smooth the selected vertices' positions."],
   relax: ["Relax", "relax", "v*", [["iterations", "Iterations", 1, 20, 1, 3]], "Relax the vertices (borders stay)."],
   circularize: ["Circularize", "circularize", "fv", [], "Lay the selected loop out on a circle."],
@@ -53,7 +54,7 @@ const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExt
   bridge: "polyBridgeEdge", poke: "polyPoke", wedge: "polyWedgeFace", chamferVerts: "polyChamferVtx", collapse: "polyCollapseEdge",
   connect: "polyConnectComponents", detach: "polySplitVert", dissolveEdges: "polyDelEdge", dissolveVerts: "polyDelVertex",
   triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
-  averageVerts: "polyAverageVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
+  averageVerts: "polyAverageVertex", flatten: "polyMoveVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
   softenEdges: "polySoftEdge", hardenEdges: "polySoftEdge", softHard: "polySoftEdge",
   slideEdge: "polyTweak", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
@@ -125,7 +126,33 @@ function forgeTkCall(op, m, items, opts) {
   return { m: out.m || m, sel: out.sel || null, warn: out.warn || "" };
 }
 
+// tools that work on the whole mesh when the object is picked with no components (Maya's behaviour per object)
+const FORGE_TK_WHOLE = { bevel: { e: 1 }, poke: "f", extrudeFaces: "f", flatten: "v", softenEdges: { e: 1 }, hardenEdges: { e: 1 }, softHard: { e: 1 } };
+/** Every face / edge / vertex of the mesh, in the form a tool takes ("f", "v", or { e } for the fe / edge tools). */
+function forgeTkWhole(v, kind) {
+  const m = v.poly;
+  if (!m || !m.f.length) return null;
+  if (kind === "f") return m.f.map((_, i) => i);
+  if (kind === "v") return m.v.map((_, i) => i);
+  const T = window.ForgePoly.topology(m), e = T.edges.map((x) => [x.a, x.b]);
+  return e.length ? { e: e } : null;
+}
+
 /** Run a tool on the selection: one undo step, one history step, the pro selection afterwards. */
+/** Scale handle -> 0 (Maya / Unreal "scale to flatten"): while the Scale handle drags, an axis within `eps` of 0 snaps
+ *  to exactly 0 (floor for objects, which must stay invertible to be picked), so dragging the handle back to its
+ *  centre flattens. `s` is a THREE.Vector3-like {x, y, z}; `axis` is TransformControls' "X", "YZ", "XYZ" ... Pure. */
+function forgeScaleZeroSnap(s, axis, eps, floor) {
+  if (!s || !axis) return false;
+  let hit = false;
+  for (const a of "xyz") {
+    if (axis.indexOf(a.toUpperCase()) < 0 || !(Math.abs(s[a]) < (eps || 0.06))) continue;
+    const z = floor || 0;
+    if (s[a] !== z) { s[a] = z; hit = true; }
+  }
+  return hit;
+}
+
 function forgeTkRun(id, override) {
   const v = forgeTkView();
   if (!v) { forgeTkSay("Edit a polygon mesh first: Create a primitive, or DynaMesh a sculpt.", true); return false; }
@@ -134,7 +161,10 @@ function forgeTkRun(id, override) {
   if (id === "fillHole") { if (typeof forgeMeshOp === "function") forgeMeshOp("fillHole"); return true; }
   const [label, op, takes, params] = tool;
   const sel = forgeTkSel(v);
-  const items = forgeTkItems(v, takes, sel);
+  let items = forgeTkItems(v, takes, sel), whole = false;
+  // Maya / Unreal per object: with the object picked and no components, these tools work on the whole mesh
+  // (Bevel = every edge, Poke = every face, Flatten = every vertex ...), as Maya's do on a selected object
+  if (items == null && !sel.v.length && !sel.e.length && !sel.f.length && FORGE_TK_WHOLE[id]) { items = forgeTkWhole(v, FORGE_TK_WHOLE[id]); whole = !!items; }
   if (items == null) { forgeTkSay(label + ": " + (FORGE_TK_NEED[takes.replace("*", "")] || "select components first."), true); return false; }
   const opts = {};
   for (const [k, , , , , def, choices] of params) opts[k] = choices ? forgeTkPrefStr(id, k, def) : forgeTkPref(id, k, def);
@@ -154,7 +184,7 @@ function forgeTkRun(id, override) {
     forgeTkSelect(v, res.sel);
     if (typeof forgeModel !== "undefined") { forgeModel.last = null; forgeModel.prim = null; }
   } finally { if (v.undoClose) v.undoClose(); }
-  forgeTkSay(label + (res.m.f.length !== base.f.length ? ": " + res.m.f.length.toLocaleString() + " faces." : "."));
+  forgeTkSay(label + (whole ? " (whole object)" : "") + (res.m.f.length !== base.f.length ? ": " + res.m.f.length.toLocaleString() + " faces." : "."));
   forgeTkSettings();
   if (typeof forgeModelSync === "function") forgeModelSync();
   return true;
@@ -201,8 +231,8 @@ function forgeTkExtrude() {
   const sel = forgeTkSel(v);
   const id = sel.mode === "face" && sel.f.length ? "extrudeFaces" : sel.mode === "edge" && sel.e.length ? "extrudeEdges"
     : sel.mode === "vert" && sel.v.length ? "extrudeVerts" : sel.f.length ? "extrudeFaces" : sel.e.length ? "extrudeEdges" : sel.v.length ? "extrudeVerts" : null;
-  if (!id) { forgeTkSay("Extrude: select faces, edges or vertices first.", true); return false; }
-  const ok = forgeTkRun(id, id === "extrudeVerts" ? null : { thickness: 0, offset: 0 });
+  const pick = id || "extrudeFaces";                  // nothing picked: every face of the object (Maya's Extrude per object)
+  const ok = forgeTkRun(pick, pick === "extrudeVerts" ? null : { thickness: 0, offset: 0 });
   if (ok && v.setTool && !(v.tool && v.tool())) v.setTool("translate");
   return ok;
 }
@@ -318,8 +348,30 @@ function forgeTkCommands() {
   const C = FORGE_PRO_CMDS;
   const comp = (v) => !!(v && v.mode === "poly");
   const toComp = async (v, sel) => { if (!comp(v) && typeof forgeProComponents === "function") await forgeProComponents(v, sel); };
+  // Flatten = scale to 0 (Maya / Unreal). Components: they lie flat on the plane through the handle (forge_polyops.js
+  // flatten, one undo + history step, its Axis / Amount in Tool Settings). Objects (the transform): Scale <axis> = 0 on
+  // every selected object, about its own pivot - Maya's default (forge_scene.js keeps it a hair above 0 so it stays
+  // pickable; the Channel Box reads 0).
+  const flat = (axis) => (v) => {
+    if (comp(v)) { forgeTkRun("flatten", { axis: axis, amount: 1 }); return ""; }
+    const t = v && v.tree && v.tree.api;
+    const picked = t ? (typeof t.selected === "function" ? t.selected() : t.sel || []) : [];
+    const ids = picked.slice();
+    if (!t || !ids.length) return "Select objects (or vertices / edges / faces), then Flatten.";
+    if (axis === "normal") return "Flatten Along Normal works on components - F9 / F10 / F11, pick them, then flatten.";
+    const ai = "xyz".indexOf(axis);
+    let n = 0;
+    for (const id of ids) if (t.setTransform(id, "scale", ai, 0)) n++;
+    if (v.tree.build) v.tree.build();
+    return n ? "Scale " + axis.toUpperCase() + " = 0 on " + n + " object" + (n === 1 ? "" : "s") + " - flat." : "Nothing to flatten.";
+  };
   Object.assign(C, {
-    extrude: ["Extrude", async (v) => { if (!comp(v)) { await toComp(v, "face"); return "Pick faces, edges or vertices, then Ctrl+E."; } forgeTkExtrude(); return ""; }],
+    flattenX: ["Flatten X (Scale X to 0)", flat("x")],
+    flattenY: ["Flatten Y (Scale Y to 0)", flat("y")],
+    flattenZ: ["Flatten Z (Scale Z to 0)", flat("z")],
+    flattenNormal: ["Flatten Along Normal", flat("normal")],
+    // Maya: Extrude on a picked object extrudes all its faces; on components, what is picked
+    extrude: ["Extrude", async (v) => { if (!comp(v)) await toComp(v, "face"); forgeTkExtrude(); return ""; }],
     bevel: ["Bevel", run("bevel")],
     bridge: ["Bridge", run("bridge")],
     poke: ["Poke Face", run("poke")],

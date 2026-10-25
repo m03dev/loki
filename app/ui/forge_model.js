@@ -408,7 +408,9 @@ function forgeMeshOp(kind, dist) {
   const verts = new Set(sel.v);
   if (!verts.size && sel.e.size) { const T = P.topology(base); for (const ei of sel.e) { const e = T.edges[ei]; if (e) { verts.add(e.a); verts.add(e.b); } } }
   if (!verts.size && sel.f.size) for (const fi of sel.f) for (const x of base.f[fi] || []) verts.add(x);
-  const list = [...verts];
+  // Maya / Unreal per object: Merge with nothing picked works on the whole mesh (every vertex within the threshold)
+  const whole = kind === "merge" && !verts.size;
+  const list = whole ? base.v.map((_, i) => i) : [...verts];
   let out, op, msg;
   if (kind === "fillHole") {
     out = P.fillHoles(base, list);
@@ -420,7 +422,7 @@ function forgeMeshOp(kind, dist) {
     out = P.mergeVerts(base, list, d, center);
     const gone = base.v.length - out.v.length;
     if (!gone) { forgeSay("Nothing within " + d.toPrecision(2) + " to merge - Merge to Center joins them all.", true); return ""; }
-    op = { kind: "merge", verts: list, dist: d, center }; msg = "Merged " + gone + (gone === 1 ? " vertex." : " vertices.");
+    op = { kind: "merge", verts: list, dist: d, center }; msg = "Merged " + gone + (gone === 1 ? " vertex" : " vertices") + (whole ? " (whole object)." : ".");
   }
   delete out.filled;
   forgeHistPush(op, base);
