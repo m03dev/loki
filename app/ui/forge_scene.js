@@ -994,7 +994,11 @@ function forgeSceneAttach(view, ctx) {
     tree.selMarks = true; drawMarks();
   };
   if (tc && tc.addEventListener) {
-    tc.addEventListener("objectChange", () => { if (tree.syncChannel) tree.syncChannel(); });
+    tc.addEventListener("objectChange", () => {
+      // an object's Scale handle near 0 snaps flat (kept a hair above 0 so it can still be picked; the Channel Box reads 0)
+      if (tc.mode === "scale" && tc.object && typeof forgeScaleZeroSnap === "function") forgeScaleZeroSnap(tc.object.scale, tc.axis, 0.06, 1e-4);
+      if (tree.syncChannel) tree.syncChannel();
+    });
     tc.addEventListener("dragging-changed", (ev) => { if (!ev.value) { drawMarks(); if (tree.syncChannel) tree.syncChannel(); if (tree.autoKey) api.autoKeyNow(); } });
   }
   // the viewer's own Move button attaches the handle to the SELECTED object, never to the bare holder

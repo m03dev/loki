@@ -24,10 +24,13 @@ const FORGE_KEY_DEFAULTS = [
   // tools (hold q / w / e + left button = that tool's marking menu)
   ["q", "select"], ["w", "move"], ["e", "rotate"], ["r", "scale"], ["t", "showManip"], ["y", "lastTool"],
   ["enter", "@completeTool"], ["g", "@repeatLast"],
-  // edit
-  ["z", "undo"], ["ctrl+z", "undo"], ["shift+z", "redo"], ["ctrl+shift+z", "redo"], ["ctrl+y", "redo"],
-  ["ctrl+d", "duplicate"], ["shift+d", "duplicateT"], ["ctrl+shift+d", "duplicateT"], ["ctrl+g", "group"], ["ctrl+shift+g", "ungroup"],
-  ["p", "parent"], ["shift+p", "unparent"], ["delete", "delete"], ["backspace", "delete"],
+  // edit - every command has ONE key and every key ONE command (owner 2026-10-25: "normalize a lot of the keybinds
+  // i dont want anything duplicated"): the second keys (z / Shift+Z / Ctrl+Y, Shift+A / Shift+F, Ctrl+F9-F11, Shift+X/C/V,
+  // +, Alt+Shift+V, Ctrl+Shift+D) are gone; Backspace and Delete are one key (forgeKeyChord reads Backspace as delete,
+  // the Mac keyboard's delete key), so Delete / Ctrl+Delete work on both machines with one entry each
+  ["ctrl+z", "undo"], ["ctrl+shift+z", "redo"],
+  ["ctrl+d", "duplicate"], ["shift+d", "duplicateT"], ["ctrl+g", "group"], ["ctrl+shift+g", "ungroup"],
+  ["p", "parent"], ["shift+p", "unparent"], ["delete", "delete"],
   ["alt+shift+d", "deleteHistory"],
   // display / visibility
   ["h", "hideToggle"], ["ctrl+h", "hide"], ["shift+h", "show"], ["ctrl+shift+h", "showLast"], ["alt+h", "hideOthers"],
@@ -37,24 +40,22 @@ const FORGE_KEY_DEFAULTS = [
   // select
   ["ctrl+shift+a", "selectAll"], ["alt+d", "selectNone"], ["ctrl+shift+i", "invert"], [">", "grow"], ["<", "shrink"],
   ["alt+f12", "uvShell"],
-  ["f8", "objComp"], ["f9", "vertex"], ["f10", "edge"], ["f11", "face"],
-  ["ctrl+f9", "vertex"], ["ctrl+f10", "edge"], ["ctrl+f11", "face"], ["f12", "uv"],
+  ["f8", "objComp"], ["f9", "vertex"], ["f10", "edge"], ["f11", "face"], ["f12", "uv"],
   ["arrowup", "@pickUp"], ["arrowdown", "@pickDown"], ["arrowleft", "@pickLeft"], ["arrowright", "@pickRight"],
   // view
-  ["a", "frameAll"], ["shift+a", "frameAll"], ["f", "frameSel"], ["shift+f", "frameSel"], ["alt+home", "defaultView"],
+  ["a", "frameAll"], ["f", "frameSel"], ["alt+home", "defaultView"],
   ["[", "@viewUndo"], ["]", "@viewRedo"],
   // pivots and snapping (held)
   ["d", "@pivotHold"], ["insert", "@pivotToggle"], ["home", "pivotEdit"],
   ["x", "@snapGrid"], ["c", "@snapEdge"], ["v", "@snapPoint"], ["j", "@snapStep"],
-  ["shift+x", "@snapGrid"], ["shift+c", "@snapEdge"], ["shift+v", "@snapPoint"],
-  ["-", "__smaller"], ["=", "__bigger"], ["+", "__bigger"],
+  ["-", "__smaller"], ["=", "__bigger"],
   ["alt+arrowup", "@nudgeUp"], ["alt+arrowdown", "@nudgeDown"], ["alt+arrowleft", "@nudgeLeft"], ["alt+arrowright", "@nudgeRight"],
   // windows
   ["ctrl+a", "channelBox"],
   // animation (the Time Slider)
-  ["s", "setKey"], ["alt+v", "playPause"], ["alt+shift+v", "playPause"],
+  ["s", "setKey"], ["alt+v", "playPause"],
   // modelling
-  ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+backspace", "deleteEdgeVert"], ["ctrl+delete", "deleteEdgeVert"],
+  ["ctrl+e", "extrude"], ["ctrl+b", "bevel"], ["ctrl+delete", "deleteEdgeVert"],
   ["ctrl+shift+x", "multiCut"], ["ctrl+shift+q", "quadDraw"], ["ctrl+alt+arrowleft", "spinEdgeBack"], ["ctrl+alt+arrowright", "spinEdge"],
   // file and the menu sets (F2 Modeling, F4 Animation, F6 Rendering - Maya's keys)
   ["ctrl+s", "save"], ["f2", "menuSetModeling"], ["f4", "menuSetAnimation"], ["f6", "menuSetRendering"],
@@ -85,14 +86,14 @@ const FORGE_KEY_SPECIAL = {
   "@brushSize": "Brush Size (hold + drag)", "@brushStrength": "Brush Strength (hold + drag)",
 };
 // held actions keep the letter the rest of Forge listens for (q/w/e marking menus, b/m brush drags, x/c/v snaps)
-const FORGE_KEY_HOLD = { select: "q", move: "w", rotate: "e", "@snapGrid": "x", "@snapEdge": "c", "@snapPoint": "v",
+const FORGE_KEY_HOLD = { select: "q", move: "w", rotate: "e", scale: "r", "@snapGrid": "x", "@snapEdge": "c", "@snapPoint": "v",
   "@brushSize": "b", "@brushStrength": "m" };
 // actions a held-down key repeats (everything else fires once per press)
 const FORGE_KEY_REPEATS = new Set(["__smaller", "__bigger", "@viewUndo", "@viewRedo", "undo", "redo", "@pickUp", "@pickDown",
   "@pickLeft", "@pickRight", "@nudgeUp", "@nudgeDown", "@nudgeLeft", "@nudgeRight"]);
 // the editor's groups (by command id; anything not listed goes under "Other")
 const FORGE_KEY_GROUPS = [
-  ["Tools", ["select", "move", "rotate", "scale", "showManip", "lastTool", "@completeTool", "@repeatLast", "softSel", "multiCut", "sculpt"]],
+  ["Tools", ["select", "move", "rotate", "scale", "flattenX", "flattenY", "flattenZ", "flattenNormal", "showManip", "lastTool", "@completeTool", "@repeatLast", "softSel", "multiCut", "sculpt"]],
   ["Edit", ["undo", "redo", "duplicate", "duplicateT", "group", "ungroup", "parent", "unparent", "delete", "deleteHistory"]],
   ["Display", ["hideToggle", "hide", "show", "showLast", "hideOthers", "showAll", "isolate", "xray", "smooth1", "smooth2", "smooth3",
     "wire", "shaded", "textured", "lights", "grid", "hideUI", "quadToggle"]],
@@ -129,6 +130,7 @@ function forgeKeyChord(e) {
     if (/[a-z]/i.test(k)) k = k.toLowerCase();
     else if (!/[0-9]/.test(k)) shiftCounts = false;   // symbols: ">" already says Shift
   } else k = k.toLowerCase();
+  if (k === "backspace") k = "delete";   // one key: the Mac's delete key sends Backspace, the PC's Delete key Delete
   if (k === "+" && !e.shiftKey) shiftCounts = false;
   const parts = [];
   if (e.ctrlKey || e.metaKey) parts.push("ctrl");
@@ -160,6 +162,11 @@ function forgeKeysLoad() {
   try { st = JSON.parse(localStorage.getItem(FORGE_KEYS_STORE) || "null"); } catch (_) { st = null; }
   if (!st || typeof st !== "object" || !st.sets || typeof st.sets !== "object") st = { active: FORGE_KEYS_DEFAULT_SET, sets: {} };
   delete st.sets[FORGE_KEYS_DEFAULT_SET];            // the default set is never stored: it is the code's
+  // Backspace and Delete are one key now (forgeKeyChord): an own set's "backspace" chords become "delete" ones
+  for (const set of Object.values(st.sets)) {
+    if (!set || typeof set !== "object") continue;
+    for (const k of Object.keys(set)) if (/(^|\+)backspace$/.test(k)) { const d = k.replace(/backspace$/, "delete"); if (!(d in set)) set[d] = set[k]; delete set[k]; }
+  }
   if (st.active !== FORGE_KEYS_DEFAULT_SET && !st.sets[st.active]) st.active = FORGE_KEYS_DEFAULT_SET;
   return st;
 }

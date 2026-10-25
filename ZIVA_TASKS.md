@@ -19,6 +19,65 @@ numbers refer to it).
 
 ## Requests
 
+### From Claude (2026-10-25 03:30) - Studio = render farm, Engine tab (Godot + Carbon), Forge scale-to-flatten, one key per command. Merge `agent/studio-farm-forge-scale`. [either]
+
+What changed (all checked in a cloud session: the suites named below pass; tools/ship.py could not run there):
+- Tabs renamed: **Render -> Studio**, **Godot -> Engine** (ids stay `render` / `godot`). Mode keys are ONE per mode now:
+  Option+1..4 on the Mac, Ctrl+F1..F4 on Windows (Ctrl/Cmd+1..4 are no longer a second way).
+- **Studio** opens on a new **Farm** view (Deadline / Eclipse style): GPU workers (ComfyUI each) with VRAM/status/pools,
+  jobs with priority / pool / dependencies / max errors / ETA, auto requeue + per-worker blacklist, an offline "farm
+  doctor" that explains each failure with its fix, and the render history. docs/STUDIO_FARM.md.
+- **Engine** has Godot | Carbon at the top; Carbon finds / builds / opens `cmmo_editor` (engine/carbon_editor.py).
+- **Forge**: Flatten X / Y / Z / Along Normal = scale to 0 (Maya / Unreal) on components (one undo step) and on
+  objects (Scale <axis> = 0); hold **R + left button** = Scale marking menu with them; Edit Mesh > Flatten; the Scale
+  handle snaps an axis to 0 when you drag it back through the centre. Per object like Maya: Bevel / Extrude / Merge /
+  Poke with the object picked and no components act on the whole mesh.
+- **Keys**: no command has two keys any more (z, Shift+Z, Ctrl+Y, Shift+A, Shift+F, Ctrl+F9-F11, Shift+X/C/V, +,
+  Alt+Shift+V, Ctrl+Shift+D gone; Backspace = Delete as one key). Sculpting: right button = brush wheel ONLY;
+  Shift + right = the Mask marking menu.
+- **Broken menu buttons fixed**: placeholder commands (Multi-Component, Vertex Face, To UVs) that did nothing are gone
+  or real (To UVs works); the Quick Menu / marking menus drop any saved command that no longer exists; menu-only items
+  (Wireframe on Shaded, Import) can be put on the Quick Menu now; Display Layers > Assign to Current Layer was broken
+  (read `t.sel`), fixed.
+
+- [ ] Merge: `git fetch origin && git merge --no-ff origin/agent/studio-farm-forge-scale`, then
+  `python tools/ship.py --check --only test_render_farm test_forge_flatten_ui test_studio_engine_ui test_mode_keys test_forge_hotkeys_unique test_home_projects test_render_studio_ui test_studio_destination`,
+  then ship.py and delete the branch. (test_forge_pro_ui hit its own 58 s budget in the cloud before AND after this
+  change - slow software GL there; it should pass on the Mac.)
+- [ ] [windows] Studio > Farm on the PC: start ComfyUI with `--listen`; the PC must show as a worker with the RTX 3070 Ti
+  and its VRAM. Render passes in the Render view, Submit, watch it run; report what the farm doctor says if it fails.
+- [ ] [mac] Engine > Carbon: the editor is found on Xero (after the DO FIRST build below) and Open starts it.
+
+### From Claude (2026-10-25 03:30) - owner: "ChatGPT web ... should be the main guy" - add codex-chatgpt-web as a model provider. [mac then windows]
+
+Owner wants github.com/miuuyy/codex-chatgpt-web (MIT, TypeScript/Bun) as LOKI's main model. What it is: an
+**unofficial browser automation** of chatgpt.com - you sign in to ChatGPT in its embedded browser and it uses your
+ChatGPT plan's limits; it is not an OpenAI API. So: it is the owner's own account, it can break when chatgpt.com
+changes, and automating the site is against OpenAI's terms (the account could be limited). Wire it in as a provider
+the owner turns on, not hard-wired:
+- [ ] Install it (`curl -fsSL https://github.com/miuuyy/codex-chatgpt-web/releases/latest/download/install-launcher.sh | sh`
+  on the Mac; the .ps1 on Windows), sign in once (the owner does the sign-in - never type his password).
+- [ ] Find its local endpoint (it has a loopback listener; its topics say Responses API): port, path, request shape.
+  Paste them into Reports.
+- [ ] Add it to engine/providers_catalog.py / the model router as "ChatGPT Web (your ChatGPT account, unofficial)",
+  off until chosen; when the owner picks it, make it the main driver with DeepSeek V4.1 Flash (NVIDIA) as the
+  fallback when it errors or hits its limit. A test with a fake loopback server.
+
+### From Claude (2026-10-25 03:30) - owner: "sometimes I get millions of tokens from a prompt - is Laya the problem or my harness?" [claude or either]
+
+Not Laya: Laya (engine/laya.py) is a local ONNX decision model - it generates no text and spends no LLM tokens. It is
+the harness. engine/loki.py sends the WHOLE conversation on every model call (`LOKI_MAX_CONTEXT=0` = keep
+everything), condenses only past 280,000 characters (~75k tokens) or 160 messages for a cloud model
+(engine/condenser.py limits), allows up to 400 model<->tool turns per request (HARD_MAX_TURNS), and sends the tool
+schemas (~110 of them) each call. A 40-step task near the limit = 40 x ~80-100k tokens = 3-4 million. Ziva / Claude
+Code stay cheap because the repeated prefix is cached and old tool output is cut early.
+- [ ] Measure first: log per model call the prompt tokens (from the provider's `usage`), message count, tool-schema
+  size, and the largest tool results; one real request that blew up -> numbers in Reports.
+- [ ] Then: condense cloud context at ~100k chars (not 280k); cut old tool results to a short summary after 2 turns;
+  send only the tools the request needs (tool_select.py) instead of all ~110 schemas; keep the system prompt + tool
+  list byte-identical across the turns of one request so DeepSeek / NVIDIA prefix caching can hit; show the tokens
+  per request in the chat (owner wanted Ziva-style usage). Each with a test; compare the same request before/after.
+
 ### DO FIRST - From Claude (2026-10-24 23:30, replaces the 22:10 version) - get the Carbon engine EDITOR running on the Mac. [mac]
 
 Owner: wants the new native C++ game-engine editor (`native/carbon_mmo`, README "The engine editor") open on the Mac.

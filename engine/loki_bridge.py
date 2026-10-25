@@ -1033,6 +1033,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import ai_renderer  # pylint: disable=import-outside-toplevel
             self._send_forge(ai_renderer.handle_get(self.server.state, self.path))
             return
+        if route.startswith("/farm/"):   # Studio's render farm manager (engine/render_farm.py)
+            import render_farm  # pylint: disable=import-outside-toplevel
+            self._send_json(*render_farm.route(self.server.state, "GET", self.path))
+            return
+        if route.startswith("/carbon/"):   # the Engine tab's Carbon Editor (engine/carbon_editor.py)
+            import carbon_editor  # pylint: disable=import-outside-toplevel
+            self._send_json(*carbon_editor.route("GET", route))
+            return
         if route.startswith("/api/godot/"):   # the live Godot editor link (engine/godot_live.py)
             import godot_live  # pylint: disable=import-outside-toplevel
             q = {k: (v[0] if v else "") for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1378,6 +1386,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(413, {"ok": False, "error": "Request body is too large."})
                 return
             self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
+            return
+        if route.startswith("/farm/") or route.startswith("/carbon/"):   # Studio's farm / the Engine tab's Carbon Editor
+            body = self._read_json() if int(self.headers.get("Content-Length", "0") or 0) > 0 else {}
+            if body is None:
+                return
+            if route.startswith("/farm/"):
+                import render_farm  # pylint: disable=import-outside-toplevel
+                self._send_json(*render_farm.route(self.server.state, "POST", self.path, body))
+            else:
+                import carbon_editor  # pylint: disable=import-outside-toplevel
+                self._send_json(*carbon_editor.route("POST", route, body))
             return
         if route.startswith("/render/"):   # Render Studio: jobs, passes, ComfyUI (engine/ai_renderer.py)
             import ai_renderer  # pylint: disable=import-outside-toplevel

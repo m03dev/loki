@@ -1,10 +1,10 @@
 // The mode bar across the top of LOKI's window, like Godot's 2D / 3D / Script / AssetLib bar (owner, 2026-10-17:
 // "utilize the top tab like godot engine to switch between modes"). LOKI is a game engine, render studio and AI farm
 // hive (owner, 2026-10-21), so the modes are: Home (the preview hub + chat, app/ui/home.js - LOKI Studio lives inside
-// it), Forge (3D making, forge.js), Render (the Render Studio, when it is in this window) and Godot (the owner's game
-// projects in the real Godot editor). The keys are Godot's own (owner 2026-10-21: "clean up the hot keys"): Option+1..4
-// on a Mac, Ctrl+F1..F4 on Windows - they switch from anywhere, Forge too. Ctrl/Cmd+1..4 still switch outside Forge, but
-// in Forge those are its own (Ctrl/Cmd+1 = Isolate Select), so Forge keeps them.
+// it), Forge (3D making, forge.js), Studio (the render farm manager + Render Studio, id "render") and Engine (Godot or
+// the Carbon Editor, id "godot" - the ids stay so saved links and hooks keep working; owner 2026-10-25 renamed the tabs).
+// The keys are Godot's own, one per mode (owner 2026-10-25: nothing duplicated): Option+1..4 on a Mac, Ctrl+F1..F4 on
+// Windows - they switch from anywhere, Forge too.
 // Each mode keeps its state: panes are built once and only hidden, never rebuilt.
 // Uses app.js's api() and state.token; plain DOM, CSP script-src 'self'.
 "use strict";
@@ -13,8 +13,8 @@ const LokiModeBar = (() => {
   const MODES = [
     { id: "loki", name: "Home", tip: "Home: your latest renders and projects, the chat with LOKI, and Studio.", icon: '<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19h12V9.5"/><path d="M10 19v-5h4v5"/>' },
     { id: "forge", name: "Forge", tip: "Forge: draw, add a picture or describe it - LOKI makes a 3D model you can sculpt and export.", icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>' },
-    { id: "render", name: "Render", tip: "Render: path-traced and AI renders of your scenes, on this computer or the worker farm.", icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
-    { id: "godot", name: "Godot", tip: "Godot: open one of your game projects in the Godot app; LOKI's agents work in it live, plugins from the Asset Library.", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
+    { id: "render", name: "Studio", tip: "Studio: the render farm - queue path-traced and AI renders, see every GPU worker, priorities, failures and their fixes.", icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
+    { id: "godot", name: "Engine", tip: "Engine: your game engines - Godot (LOKI's agents work in it live) or the Carbon Editor (your C++ engine).", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
   ];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   let active = "loki";
@@ -300,6 +300,75 @@ const LokiModeBar = (() => {
     p.addEventListener("remove", () => clearInterval(timer));
   }
 
+  // ---------------------------------------------------------------- Engine: Godot or the Carbon Editor
+  // Owner 2026-10-25: "rename godot tab to engine, well add our carbon engine in there as an option". A picker at the
+  // top; each engine's panel is built once, the choice is remembered (per viewer).
+  const ENGINE_STORE = "loki-engine-pick";
+  async function buildEngine(p) {
+    const bar = mk("div", "engine-pick"); bar.setAttribute("role", "tablist"); bar.setAttribute("aria-label", "Engine");
+    const godotBox = mk("div", "engine-panel"); godotBox.dataset.engine = "godot";
+    const carbonBox = mk("div", "engine-panel"); carbonBox.dataset.engine = "carbon"; carbonBox.hidden = true;
+    const tabs = {};
+    let carbonBuilt = false;
+    const show = (which) => {
+      for (const [k, b] of Object.entries(tabs)) b.setAttribute("aria-selected", String(k === which));
+      godotBox.hidden = which !== "godot"; carbonBox.hidden = which !== "carbon";
+      if (which === "carbon" && !carbonBuilt) { carbonBuilt = true; buildCarbon(carbonBox); }
+      try { localStorage.setItem(ENGINE_STORE, which); } catch (_) { /* private window */ }
+    };
+    for (const [k, label, tip] of [["godot", "Godot", "Godot 4: your game projects in the real Godot editor, LOKI's agents live in it."],
+      ["carbon", "Carbon", "The Carbon Editor: your own C++ engine (native/carbon_mmo) - Unreal-style viewport, terrain, Play-in-Editor."]]) {
+      const b = mk("button", "engine-tab", label); b.type = "button"; b.setAttribute("role", "tab");
+      b.title = tip; b.dataset.tipName = label; b.dataset.tipWhat = tip;
+      b.addEventListener("click", () => show(k));
+      tabs[k] = b; bar.append(b);
+    }
+    p.append(bar, godotBox, carbonBox);
+    await buildGodot(godotBox);
+    let pick = "godot";
+    try { pick = localStorage.getItem(ENGINE_STORE) === "carbon" ? "carbon" : "godot"; } catch (_) { /* private window */ }
+    show(pick);
+  }
+  function buildCarbon(p) {
+    const head = mk("div", "mode-tools");
+    const status = mk("span", "mode-note", "Looking for the Carbon Editor...");
+    const btn = (label, tip, fn, cls) => { const b = mk("button", cls || "quiet small", label); b.type = "button"; b.title = tip; b.addEventListener("click", fn); return b; };
+    const open = btn("Open Carbon Editor", "Start the Carbon Editor on this computer (File > New Starter Zone, then Play: Alt+P).", async () => {
+      open.disabled = true;
+      let r; try { r = await call("/carbon/open", {}); } catch (e) { r = { ok: false, error: e.message }; }
+      status.textContent = r.ok ? r.note : (r.error || "failed") + (r.how ? " " + r.how : "");
+      open.disabled = false; refresh();
+    }, "send small");
+    const build = btn("Build", "Build the Carbon Editor here (native/carbon_mmo/tools/build.py: CMake + this computer's C++ compiler; on the Mac it builds on Xero when it is plugged in).", async () => {
+      build.disabled = true;
+      let r; try { r = await call("/carbon/build", { open: true }); } catch (e) { r = { ok: false, error: e.message }; }
+      status.textContent = r.ok ? r.note : (r.error || "failed");
+      build.disabled = false; refresh();
+    });
+    head.append(open, build, status);
+    const info = mk("section", "godot-live");
+    const where = mk("p", "mode-note small");
+    const log = mk("pre", "carbon-log"); log.hidden = true;
+    info.append(mk("h3", "", "Carbon Editor"), mk("p", "mode-note",
+      "Your own engine on CCP's open-source Carbon: an Unreal-style toolbar and Play-in-Editor, Godot-style scene tree and inspector, terrain tools and an MMO gameplay layer, all C++. Forge exports (glTF / glb) drop straight into its Content Browser."),
+    where, log);
+    p.append(head, info);
+    async function refresh() {
+      let s; try { s = await call("/carbon/status"); } catch (e) { status.textContent = e.message; return; }
+      if (!s || !s.ok) { status.textContent = (s && s.error) || "LOKI's engine does not answer."; return; }
+      if (!status.textContent || /^Looking|^Ready|^Building|^Not built|is open/.test(status.textContent)) status.textContent = s.note;
+      open.disabled = !s.found || s.building;
+      build.textContent = s.found ? "Rebuild" : "Build";
+      build.disabled = s.building || !s.source;
+      where.textContent = (s.found ? "Editor: " + s.exe : "Build folder: " + s.build_dir) + " - content: " + s.content;
+      log.hidden = !(s.log_tail && s.log_tail.length);
+      log.textContent = (s.log_tail || []).join("\n");
+    }
+    refresh();
+    const timer = setInterval(() => { if (!p.hidden && !document.hidden) refresh(); }, 4000);
+    p.addEventListener("remove", () => clearInterval(timer));
+  }
+
   // ---------------------------------------------------------------- Forge: forge.js's own sheet
   function enterForge(p) {
     if (typeof window.forgeOpen === "function" || typeof forgeOpen === "function") {
@@ -321,7 +390,7 @@ const LokiModeBar = (() => {
     if (rs && typeof rs.open === "function") { rs.open(p, opts || {}); return; }
     if (p.childElementCount) return;
     const box = mk("div", "render-empty");
-    box.append(mk("h3", "", "Render"),
+    box.append(mk("h3", "", "Studio"),
       mk("p", "mode-note", "Render Studio is not in this window yet. Forge can already make a path-traced render of its scene."));
     const b = mk("button", "send small", "Open Forge's Render window"); b.type = "button";
     b.addEventListener("click", () => {
@@ -347,7 +416,7 @@ const LokiModeBar = (() => {
     if (hooks[id] && typeof hooks[id].enter === "function") { hooks[id].enter(p, opts || {}); return; }
     if (id === "forge") { enterForge(p); deliver(id, opts); return; }
     if (id === "render") { enterRender(p, opts); return; }
-    if (!built[id]) { built[id] = true; buildGodot(p).then(() => deliver(id, opts)); return; }
+    if (!built[id]) { built[id] = true; buildEngine(p).then(() => deliver(id, opts)); return; }
     deliver(id, opts);
   }
 
@@ -357,26 +426,23 @@ const LokiModeBar = (() => {
     if (id === "forge" && opts.model && typeof window.forgeLoad === "function") window.forgeLoad(opts.model);
     else if (id === "forge" && opts.model && typeof forgeLoad === "function") forgeLoad(opts.model);   // eslint-disable-line no-undef
     if (id === "godot" && opts.project) { if (godotPick) godotPick(opts.project); else wantProject = opts.project; }
-    if (id === "render" && window.LokiRenderStudio && typeof window.LokiRenderStudio.show === "function") window.LokiRenderStudio.show(opts);
+    if (id === "render" && window.LokiStudioFarm) window.LokiStudioFarm.open(panes.render, opts);
+    else if (id === "render" && window.LokiRenderStudio && typeof window.LokiRenderStudio.show === "function") window.LokiRenderStudio.show(opts);
   }
 
   function register(id, hook) { hooks[id] = hook || {}; }
 
-  // which mode a key asks for: Godot's keys (Option+1..4 Mac, Ctrl+F1..F4 Windows - Cmd+F1..F4 works on a Mac too),
-  // or Ctrl/Cmd+1..4 when Forge does not have that key (in Forge they are its own: Ctrl/Cmd+1 = Isolate Select)
+  // ONE key per mode (owner 2026-10-25: "i dont want anything duplicated"): Godot's own - Option+1..4 on a Mac,
+  // Ctrl+F1..F4 on Windows. Ctrl/Cmd+1..4 are no longer a second way (in Forge they are Forge's: Ctrl/Cmd+1 = Isolate).
   function keyMode(e) {
     if (e.shiftKey) return -1;
     const code = e.code || "";
-    let f = /^F([1-9])$/.exec(code) || /^F([1-9])$/.exec(e.key || "");
-    if (f && (e.ctrlKey || e.metaKey) && !e.altKey) return Number(f[1]) - 1;
-    const d = /^Digit([1-9])$/.exec(code) || (!code && /^([1-9])$/.exec(e.key || ""));
-    if (!d) return -1;
-    if (e.altKey && !e.ctrlKey && !e.metaKey && isMac) return Number(d[1]) - 1;
-    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-      if (typeof window.forgeOwnsKey === "function" && window.forgeOwnsKey(e)) return -1;   // Forge's own key
-      return Number(d[1]) - 1;
+    if (isMac) {
+      const d = /^Digit([1-9])$/.exec(code) || (!code && /^([1-9])$/.exec(e.key || ""));
+      return d && e.altKey && !e.ctrlKey && !e.metaKey ? Number(d[1]) - 1 : -1;
     }
-    return -1;
+    const f = /^F([1-9])$/.exec(code) || /^F([1-9])$/.exec(e.key || "");
+    return f && e.ctrlKey && !e.metaKey && !e.altKey ? Number(f[1]) - 1 : -1;
   }
 
   function onKey(e) {

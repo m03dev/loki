@@ -26,7 +26,14 @@ Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of 
 The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
 ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs again since the repo went public.
 
-## Now (2026-10-24)
+## Now (2026-10-25)
+
+Tabs are Home / Forge / **Studio** (the render farm manager + Render Studio, docs/STUDIO_FARM.md) / **Engine** (Godot
+or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on the whole mesh when only the object
+is picked, one key per command, sculpt right button = wheel only. Branch `agent/studio-farm-forge-scale`; next steps
+in ZIVA_TASKS.md (incl. the ChatGPT-web provider and the token blow-up diagnosis).
+
+## Earlier (2026-10-24)
 
 - **Rules rewritten** (owner: "delete all loki rules ... rewrite them better"): AGENTS.md is the one rulebook,
   ZIVA.md is gone, docs/BUILD_BRIEF.md is the new direction (3D creation engine). Cloud sessions hand work over on

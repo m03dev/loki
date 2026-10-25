@@ -40,6 +40,13 @@ for chord, act in pairs:
         dups.append("%s = %s and %s" % (chord, seen[chord], act))
     seen[chord] = act
 check("no key is listed twice in the hotkey table", not dups, dups)
+# ...and no command has two keys (owner 2026-10-25: "normalize a lot of the keybinds i dont want anything duplicated")
+by_act: dict = {}
+for chord, act in pairs:
+    by_act.setdefault(act, []).append(chord)
+check("no command has two keys", not [a for a, c in by_act.items() if len(c) > 1], {a: c for a, c in by_act.items() if len(c) > 1})
+check("Backspace and Delete are one key (no backspace entries; the chord reads Backspace as delete)",
+      not any(c.endswith("backspace") for c, _ in pairs) and 'if (k === "backspace") k = "delete";' in keys_src)
 
 # chords are written the canonical way forgeKeyChord produces (ctrl, alt, shift, key - in that order)
 bad_order = [c for c, _ in pairs if "+" in c.strip("+") and c.split("+")[:-1] != [m for m in ("ctrl", "alt", "shift") if m in c.split("+")[:-1]]]
@@ -76,8 +83,8 @@ for chord, act in (("d", "@pivotHold"), ("x", "@snapGrid"), ("h", "hideToggle"),
 
 # Maya 2027's own default keys (docs/forge/maya2027_layout.json, read from hotkeySetup.mel): where Forge has the command,
 # Forge's key is Maya's key (owner 2026-10-22: "almost 1:1 to maya")
-for chord, act in (("ctrl+s", "save"), ("ctrl+shift+x", "multiCut"), ("ctrl+shift+q", "quadDraw"), ("shift+x", "@snapGrid"),
-                   ("shift+c", "@snapEdge"), ("shift+v", "@snapPoint"), ("ctrl+alt+arrowleft", "spinEdgeBack"),
+for chord, act in (("ctrl+s", "save"), ("ctrl+shift+x", "multiCut"), ("ctrl+shift+q", "quadDraw"), ("x", "@snapGrid"),
+                   ("c", "@snapEdge"), ("v", "@snapPoint"), ("ctrl+alt+arrowleft", "spinEdgeBack"),
                    ("ctrl+alt+arrowright", "spinEdge"), ("alt+f12", "uvShell"), ("f2", "menuSetModeling"), ("f4", "menuSetAnimation"),
                    ("f6", "menuSetRendering"), ("ctrl+1", "isolate"), ("alt+shift+d", "deleteHistory"), ("ctrl+e", "extrude"), ("ctrl+b", "bevel")):
     check("Maya's key %s = %s" % (chord, act), seen.get(chord) == act, seen.get(chord))

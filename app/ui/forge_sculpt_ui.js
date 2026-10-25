@@ -577,6 +577,10 @@ function fscWheelPick(x, y) {
     const w = document.getElementById("fsc-wheel");
     if (w && !w.contains(e.target)) fscWheelClose();
     if (!v || v.mode !== "sculpt" || e.button !== 2 || forgeCamMod(e) || !e.target || e.target.id !== "forge-view") return;
+    // ONE button, one menu (owner 2026-10-25: "right click brings up the wheel and shift right click does the same
+    // thing we don't need it to do it twice"): the plain right button is the brush wheel; Shift + right is the Mask
+    // marking menu (forge_pro.js forgeProMenu, sculpt mode); Ctrl/Cmd + right does nothing while sculpting
+    if (e.shiftKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault(); e.stopImmediatePropagation();
     fscWheelOpen(e.clientX, e.clientY);
     press = { x: e.clientX, y: e.clientY, t: performance.now() };

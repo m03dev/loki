@@ -824,7 +824,8 @@ def _set(state, job, status=None, msg=None, **fields):
 
 
 def start(state: Any, job: str, client_factory: Callable[[str], Comfy] | None = None, env: dict | None = None,
-          poll_s: float = 1.0, wait: bool = False) -> dict:
+          poll_s: float = 1.0, wait: bool = False, url: str | None = None) -> dict:
+    """Run an AI job. `url` = the ComfyUI it runs on (the Studio's farm picks a worker); default: the saved one."""
     m = manifest(state, job)
     if m is None:
         raise RenderError("no such job")
@@ -832,13 +833,16 @@ def start(state: Any, job: str, client_factory: Callable[[str], Comfy] | None = 
         raise RenderError("only AI jobs run in ComfyUI")
     if m["status"] != "idle":
         raise RenderError("this job has already run (status %s) - use retry" % m["status"])
+    target = str(url or settings(state)["url"]).rstrip("/")
     with _LOCK:
-        for other in active(state):
-            if other["job"] != job and other["kind"] == "ai" and other.get("workflow") == m.get("workflow"):
+        for other in active(state):      # one job at a time per ComfyUI (other machines of the farm run in parallel)
+            om = manifest(state, other["job"]) or {}
+            if other["job"] != job and other["kind"] == "ai" and other.get("workflow") == m.get("workflow") and \
+                    str(om.get("comfy_url") or settings(state)["url"]).rstrip("/") == target:
                 raise RenderError("%s is still %s on this workflow; one at a time" % (other["name"], other["status"]))
         stop = threading.Event()
         _CANCEL[job] = stop
-        _set(state, job, "preflight", "preflight")
+        _set(state, job, "preflight", "preflight", comfy_url=target)
     t = threading.Thread(target=_run, args=(state, job, stop, client_factory or (lambda u: Comfy(u)), env, poll_s),
                          name="ai-render-" + job, daemon=True)
     _THREADS[job] = t
@@ -864,7 +868,7 @@ def _run_inner(state, job, stop, factory, env, poll_s):
     m = manifest(state, job)
     s = settings(state)
     wf = workflow(m["workflow"])
-    cl = factory(s["url"])
+    cl = factory(m.get("comfy_url") or s["url"])
     rep = preflight(state, wf["name"], m["params"], job=job, client=cl, env=env, control=m.get("control") or "both")
     if not rep["ok"]:
         _set(state, job, "failed", "preflight: " + "; ".join(rep["blockers"])[:560], preflight=rep)
@@ -1012,7 +1016,7 @@ def cancel(state: Any, job: str) -> dict:
         _set(state, job, None, "cancel asked")
         return manifest(state, job)
     if m["kind"] == "ai" and m.get("prompt_id") and m["status"] in ("queued", "running"):   # e.g. after a restart
-        _stop_remote(Comfy(settings(state)["url"]), m["prompt_id"])
+        _stop_remote(Comfy(m.get("comfy_url") or settings(state)["url"]), m["prompt_id"])
     return _set(state, job, "cancelled", "cancelled")
 
 

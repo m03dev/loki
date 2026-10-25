@@ -109,7 +109,8 @@ async def main():
         # ---- the Render tab
         tabs = await E("[...document.querySelectorAll('.modebar-tab')].map((b) => b.dataset.mode)")
         check("the title bar has Home / Forge / Render / Godot", tabs == ["loki", "forge", "render", "godot"], tabs)
-        await page.click("#mode-render")
+        await page.evaluate("localStorage.setItem('loki-studio-view', 'render')")
+        await page.click("#mode-render")   # the Studio tab; its Render view is the Render Studio (the Farm view is studio_farm.js)
         await page.wait_for_selector("#render-studio", timeout=8000)
         panes = await E("['rs-jobs', 'rs-centre', 'rs-settings'].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)]; })")
         check("Render Studio: jobs left, preview centre (the widest), settings right", all(w > 100 and h > 300 for w, h in panes) and panes[1][0] > panes[0][0], panes)
@@ -119,7 +120,7 @@ async def main():
         tips = await E("[...document.querySelectorAll('#render-studio button.rs-btn')].map((b) => [b.dataset.tipName, b.dataset.tipWhat, !!b.querySelector('svg')])")
         check("every Render Studio button is an icon with a tooltip (name + what it does)", tips and all(n and w and s for n, w, s in tips), [t for t in tips if not all(t)][:4])
         await page.hover("#rs-preflight")
-        await page.wait_for_function("(() => { const t = document.querySelector('.icon-tip'); return !!t && !t.hidden; })()", timeout=5000)
+        await page.wait_for_function("(() => { const t = document.querySelector('.icon-tip'); return !!t && !t.hidden && t.textContent.includes('Preflight'); })()", timeout=5000)
         tip = await E("(() => { const t = document.querySelector('.icon-tip'); return t && !t.hidden ? t.textContent : ''; })()")
         check("hovering an icon shows its tooltip", "Preflight" in tip, tip)
         url = await E("document.getElementById('rs-url').value")

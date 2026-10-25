@@ -74,7 +74,7 @@ const LokiHome = (() => {
   const keyOf = (it) => it.kind + ":" + it.path_or_id;
   const visible = () => S.items.filter((it) => it.kind !== "job" && (S.filter === "all" || it.kind === S.filter));
   const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
-  const whatOpens = { render: "opens it in Render", forge: "opens it in Forge", godot: "opens it in the Godot tab",
+  const whatOpens = { render: "opens it in Studio", forge: "opens it in Forge", godot: "opens it in the Engine tab",
     studio: "opens it in Studio", content: "opens it in Files", job: "shows how it is going" };
 
   // ---------------------------------------------------------------- building the hub (once)
