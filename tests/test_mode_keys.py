@@ -83,7 +83,7 @@ async def main():
             await pg.keyboard.press(mod + "+Digit1")
             check(plat + ": Ctrl/Cmd+1 is no longer a second key for Home", await mode() == "godot", await mode())
             names = await pg.evaluate("[...document.querySelectorAll('.modebar-tab span')].map(s => s.textContent)")
-            check(plat + ": the tabs are Home, Forge, Studio, Engine", names == ["Home", "Forge", "Studio", "Engine"], names)
+            check(plat + ": the tabs are Home, Forge, Lab, Engine", names == ["Home", "Forge", "Lab", "Engine"], names)
             tip = await pg.get_attribute("#mode-forge", "title")
             check(plat + ": the tab shows Godot's key", ("⌥2" if plat == "MacIntel" else "Ctrl+F2") in tip, tip)
             check(plat + ": no page errors", not errs, errs)

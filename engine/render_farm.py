@@ -74,7 +74,7 @@ DOCTOR = [
      "Open the job's preflight report in Studio - it lists exactly what is missing - fix that and Requeue."),
     (r"passes|no frames|upload",
      "The job has no input passes.",
-     "Render the passes from a Forge camera first (Studio > Render passes), then submit again."),
+     "Render the passes from a Forge camera first (Lab > Render passes), then submit again."),
     (r"cancel",
      "The job was cancelled.",
      "Requeue it if that was a mistake."),

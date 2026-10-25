@@ -79,7 +79,7 @@ async def main():
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
         names = await E("[...document.querySelectorAll('.modebar-tab span')].map(s => s.textContent)")
-        check("the tabs read Home, Forge, Studio, Engine", names == ["Home", "Forge", "Studio", "Engine"], names)
+        check("the tabs read Home, Forge, Lab, Engine", names == ["Home", "Forge", "Lab", "Engine"], names)
 
         await E("localStorage.removeItem('loki-studio-view'); LokiModeBar.go('render')")
         await page.wait_for_selector(".sf-view[data-view='farm']", timeout=8000)

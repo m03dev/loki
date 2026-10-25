@@ -1,4 +1,4 @@
-// Studio > Agents (owner 2026-10-25 11:20: "the studio should be a place i can see my agents working as well and other
+// Lab > Agents (owner 2026-10-25 11:20: "the studio should be a place i can see my agents working as well and other
 // machines. why do i only see one machine? and i should be able to have some sort of control over what im doing ... i
 // want them to make real things like art 3d models or paintings comic books novels real websites").
 //   Make      pick what to make (Art, Painting, 3D model, Comic book, Novel, Website, Game), say what, pick the machine:

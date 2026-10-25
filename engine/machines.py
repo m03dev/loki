@@ -6,7 +6,7 @@ its tools - for OpenCode through engine/make_mcp.py, and for LOKI's own tool loo
 
   list_machines                       this machine and every linked one: online or not, its OS, what it is doing
   run_on_machine {machine, task}      hand a task to the other machine's LOKI: it runs there as a background job (its
-                                      own agent, its own folder, bounded time) and shows in Studio > Agents on both
+                                      own agent, its own folder, bounded time) and shows in Lab > Agents on both
   machine_job    {machine, job}       how that job is going, and its result when it is done (wait= up to 120 s)
   stop_machine_job {machine, job}     stop it
 
@@ -22,8 +22,8 @@ from typing import Any
 import peers
 
 HOW_TO_LINK = ("No other machine is linked to this LOKI yet, so I can't reach it. To link them: on the other machine "
-               "open LOKI > Studio > Agents (or Settings > Machines) and turn on 'Let my other machines link' - it "
-               "shows a link code - then paste that code here in Studio > Agents > Link a machine. After that I can "
+               "open LOKI > Lab > Agents (or Settings > Machines) and turn on 'Let my other machines link' - it "
+               "shows a link code - then paste that code here in Lab > Agents > Link a machine. After that I can "
                "hand it work and check on it.")
 
 
@@ -96,7 +96,7 @@ def run_on_machine(args: dict, call=None) -> dict:
     if not got.get("ok") or not job.get("id"):
         return {"ok": False, "machine": p["name"], "error": str(got.get("error") or "it did not take the job")[:300]}
     return {"ok": True, "machine": p["name"], "job": job.get("id"), "status": job.get("status"),
-            "note": "Running on %s as job %s - it shows in Studio > Agents there and here. Check it with machine_job."
+            "note": "Running on %s as job %s - it shows in Lab > Agents there and here. Check it with machine_job."
                     % (p["name"], job.get("id"))}
 
 

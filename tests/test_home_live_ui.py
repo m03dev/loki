@@ -106,7 +106,7 @@ async def main():
         await E("LokiHomeLive.tick()"); await page.wait_for_timeout(400)
         idle = await E("(() => { const w = document.getElementById('home-livewall'); return [w.classList.contains('idle'), w.textContent]; })()")
         check("nobody working: one calm line - Live, the machine, Make something, how to link the other", idle[0] and "Make something" in idle[1]
-              and "mac" in idle[1] and "link the other in Studio > Agents" in idle[1], idle)
+              and "mac" in idle[1] and "link the other in Lab > Agents" in idle[1], idle)
         check("... and it sits in the header row (no extra height)", await E("document.getElementById('home-livewall').parentNode.classList.contains('home-head')"))
         check("no script errors", not errors, errors[:3])
         await browser.close()

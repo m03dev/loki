@@ -1,6 +1,6 @@
 // Home's live view (owner 2026-10-25 11:20: "what happened to my live view in the home page i still want to see stuff"):
 // the top of the Home hub shows your agents at work RIGHT NOW on every machine - what each is making, where, the stage,
-// its last line and its live screen when it has one - and the machines. A click opens Studio > Agents (Stop, Again,
+// its last line and its live screen when it has one - and the machines. A click opens Lab > Agents (Stop, Again,
 // Make). Nobody working: one calm line with the machines and a Make button. Reads GET /studio/agents
 // (engine/studio_agents.py) every 4 s while Home shows; nothing when the window is hidden.
 "use strict";
@@ -43,7 +43,7 @@ const LokiHomeLive = (() => {
     top.append(dot, mk("b", "hl-title", agents.length ? agents.length + " agent" + (agents.length === 1 ? "" : "s") + " working" : "Live"),
       mk("span", "hl-machines", machines.map((m) => (m.ok ? "● " : "○ ") + m.name + (m.working ? " (" + m.working + ")" : "")).join("   ")));
     const go = mk("button", "hl-open quiet small", agents.length ? "Watch in Studio" : "Make something");
-    go.type = "button"; go.dataset.tipName = go.textContent; go.dataset.tipWhat = "Studio > Agents: every agent on every machine, Stop and Again, and Make (art, 3D, comics, novels, websites).";
+    go.type = "button"; go.dataset.tipName = go.textContent; go.dataset.tipWhat = "Lab > Agents: every agent on every machine, Stop and Again, and Make (art, 3D, comics, novels, websites).";
     go.addEventListener("click", openStudio);
     top.append(go);
     S.box.append(top);
@@ -56,7 +56,7 @@ const LokiHomeLive = (() => {
     }
     if (!agents.length) {
       S.box.classList.add("idle");
-      if (d.hint && machines.length < 2) { go.dataset.tipWhat = "Only this computer is linked - Studio > Agents links the other one. " + go.dataset.tipWhat; S.box.append(mk("span", "hl-hint", "1 machine - link the other in Studio > Agents")); }
+      if (d.hint && machines.length < 2) { go.dataset.tipWhat = "Only this computer is linked - Lab > Agents links the other one. " + go.dataset.tipWhat; S.box.append(mk("span", "hl-hint", "1 machine - link the other in Lab > Agents")); }
       return;
     }
     S.box.classList.remove("idle");
@@ -64,7 +64,7 @@ const LokiHomeLive = (() => {
     for (const a of agents.slice(0, 4)) {
       const t = mk("button", "hl-agent"); t.type = "button"; t.dataset.machine = a.machine || ""; t.dataset.agent = a.id;
       t.addEventListener("click", openStudio);
-      t.dataset.tipName = a.task || a.name || "Agent"; t.dataset.tipWhat = "Open it in Studio > Agents (Stop, Again, its output).";
+      t.dataset.tipName = a.task || a.name || "Agent"; t.dataset.tipWhat = "Open it in Lab > Agents (Stop, Again, its output).";
       if (a.screenshot && a.job && !a.remote) {
         const img = mk("img", "hl-shot"); img.alt = ""; t.append(img);
         api("/jobs/screenshot?id=" + encodeURIComponent(a.job)).then((r) => { if (r && r.ok) img.src = r.image; }).catch(() => {});

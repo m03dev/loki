@@ -294,7 +294,7 @@ def callbacks(state: Any, agent: Any) -> dict:
         restart = getattr(state, "restart_engine", None) or (lambda: None)
         return update_all.apply_here(updater, restart)
 
-    def world() -> dict:   # Studio > Agents on a linked machine shows our agents (engine/studio_agents.py)
+    def world() -> dict:   # Lab > Agents on a linked machine shows our agents (engine/studio_agents.py)
         import studio_agents  # pylint: disable=import-outside-toplevel
         return studio_agents.world_for_peer(state)
 

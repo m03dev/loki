@@ -195,7 +195,7 @@ const LokiRenderStudio = (() => {
       ["upscale:4", "Quarter size, AI upscale 4x (~16x faster)"], ["interpolate:2", "Every 2nd frame, AI in-betweens (~2x faster)"],
       ["interpolate:4", "Every 4th frame, AI in-betweens (~4x faster)"]], "");
     ptg.append(row(field("Samples", num("rs-samples", 64, 1, 4096, 1)), field("Bounces", num("rs-bounces", 4, 1, 16, 1))),
-      field("AI speed-up", speed, "Render fewer pixels or frames here; when it is done the farm's GPU brings it back up with AI (Real-ESRGAN upscale, or RIFE in-betweens) - Studio > Farm shows it."),
+      field("AI speed-up", speed, "Render fewer pixels or frames here; when it is done the farm's GPU brings it back up with AI (Real-ESRGAN upscale, or RIFE in-betweens) - Lab > Farm shows it."),
       mk("p", "rs-note", window.ForgeRender ? "Forge's path tracer renders each frame here; keep the window open." : "Forge's path tracer is not in this window."));
     pt.append(ptg);
 
@@ -552,7 +552,7 @@ const LokiRenderStudio = (() => {
     if (s.post && status === "succeeded") {
       const r = await call("/farm/post", { job, op: s.post.op, factor: s.post.factor });
       say(r.ok ? "Rendered. The AI " + (s.post.op === "upscale" ? "upscale " + s.post.factor + "x" : "in-betweens x" + s.post.factor) +
-        " is queued on the farm (Studio > Farm)." : "Rendered, but the AI speed-up could not be queued: " + r.error, !r.ok);
+        " is queued on the farm (Lab > Farm)." : "Rendered, but the AI speed-up could not be queued: " + r.error, !r.ok);
       refresh();
     }
   }

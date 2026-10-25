@@ -1038,7 +1038,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             self._send_json(*chat_media.route(self.server.state, "GET", route, q, {}))
             return
-        if route == "/studio/agents":   # Studio > Agents: every agent on every machine (engine/studio_agents.py)
+        if route == "/studio/agents":   # Lab > Agents: every agent on every machine (engine/studio_agents.py)
             import studio_agents  # pylint: disable=import-outside-toplevel
             try:
                 self._send_json(200, studio_agents.view(self.server.state))

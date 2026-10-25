@@ -1,4 +1,4 @@
-"""Studio > Agents: every agent at work on every machine, what each one makes, and the controls.
+"""Lab > Agents: every agent at work on every machine, what each one makes, and the controls.
 
 Owner 2026-10-25 11:20: "the studio should be a place i can see my agents working as well and other machines. why do
 i only see one machine? and i should be able to have some sort of control over what im doing ... i want them to make
@@ -153,7 +153,7 @@ def view(state: Any) -> dict:
     linked = len([m for m in machines if not m.get("self")])
     hint = "" if linked else ("Only this computer is linked. To see the other one: on it, open Settings > Machines and "
                               "turn on 'Let my other machines link' - it shows a link code - then paste that code in "
-                              "Studio > Agents > Link a machine (or Settings > Machines) here.")
+                              "Lab > Agents > Link a machine (or Settings > Machines) here.")
     return {"ok": True, "machine": me, "machines": machines, "agents": agents, "stats": stats, "hint": hint,
             "kinds": [{"id": k, "label": v[1], "folder": v[0]} for k, v in KINDS.items()], "time": time.time()}
 

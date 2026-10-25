@@ -473,7 +473,7 @@ class PeerServer:
         cb = self.callbacks
         if method == "GET" and path == "/peer/hello":
             return 200, {"ok": True, **cb["hello"]()}
-        if method == "GET" and path == "/peer/world" and "world" in cb:   # the agents at work here (Studio > Agents)
+        if method == "GET" and path == "/peer/world" and "world" in cb:   # the agents at work here (Lab > Agents)
             return 200, {"ok": True, **cb["world"]()}
         if method == "POST" and path == "/peer/jobs":
             prompt = str(data.get("prompt") or "").strip()

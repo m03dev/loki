@@ -13,7 +13,7 @@ const LokiModeBar = (() => {
   const MODES = [
     { id: "loki", name: "Home", tip: "Home: your latest renders and projects, the chat with LOKI, and Studio.", icon: '<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19h12V9.5"/><path d="M10 19v-5h4v5"/>' },
     { id: "forge", name: "Forge", tip: "Forge: draw, add a picture or describe it - LOKI makes a 3D model you can sculpt and export.", icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>' },
-    { id: "render", name: "Studio", tip: "Studio: your agents at work on every machine (make art, 3D models, comics, novels, websites), the render farm and Render Studio.", icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
+    { id: "render", name: "Lab", tip: "Lab: your agents at work on every machine (make art, 3D models, comics, novels, websites), the render farm and Render Studio.", icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
     { id: "godot", name: "Engine", tip: "Engine: your game engines - Godot (LOKI's agents work in it live) or the Carbon Editor (your C++ engine).", icon: '<path d="M4 9.5l2-3.5 3 1.5L12 4l3 3.5 3-1.5 2 3.5-1.5 8.5h-13z"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/>' },
   ];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
@@ -390,7 +390,7 @@ const LokiModeBar = (() => {
     if (rs && typeof rs.open === "function") { rs.open(p, opts || {}); return; }
     if (p.childElementCount) return;
     const box = mk("div", "render-empty");
-    box.append(mk("h3", "", "Studio"),
+    box.append(mk("h3", "", "Lab"),
       mk("p", "mode-note", "Render Studio is not in this window yet. Forge can already make a path-traced render of its scene."));
     const b = mk("button", "send small", "Open Forge's Render window"); b.type = "button";
     b.addEventListener("click", () => {
