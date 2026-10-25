@@ -147,6 +147,7 @@ struct SelfTest
 	int playW = 0, playH = 0;
 	float wolfHp = 0;
 	Vector3 eye0, fwd0;
+	int xpBefore = 0;
 	int speed0 = 0;
 
 	void Check( const char* name, bool ok, const std::string& detail = "" )
@@ -375,6 +376,13 @@ struct SelfTest
 			ed.Undo();
 			ed.Undo();
 			Check( "Undo takes paste, snap and group back", ed.Scene().Entities().size() == n );
+			const uint32_t runeId = ed.Scene().FindByName( "Rune Stone" )->id;
+			const size_t comps = ed.Scene().Find( runeId )->components.size();
+			Check( "Add Component (Inspector) adds a Mover", ed.AddComponent( runeId, "Mover" ) && ed.Scene().Find( runeId )->components.size() == comps + 1 &&
+															  ed.Scene().Find( runeId )->components.back().value( "type", std::string() ) == "Mover" );
+			ed.Undo();
+			Check( "Undo removes it again", ed.Scene().Find( runeId )->components.size() == comps );
+			ed.Select( runeId );
 			ed.PanelOpen( editor::Editor::PControls ) = true;
 			step = 106;
 			wait = 2;
@@ -429,6 +437,29 @@ struct SelfTest
 			Check( "F talks to the quest giver (the quest dialog opens)", s.talkingTo >= 0 );
 			Check( "accepting the quest tracks it", s.talkingTo >= 0 && s.AcceptQuest( s.talkingTo ) && s.quests[0].state == world::Quest::Active );
 			s.talkingTo = -1;
+			step = 110;   // the rune stone pickup, then the wolves
+			{
+				const auto* rune = s.World().FindByName( "Rune Stone" );
+				xpBefore = s.xp;
+				if( rune ) s.SetPlayerPosition( s.World().WorldPosition( rune->id ) - Vector3( 0, 0.6f, 0 ) );
+			}
+			wait = 6;
+			break;
+		}
+		case 110:
+		{
+			world::PlaySession& s = *ed.Session();
+			const auto* rune = s.World().FindByName( "Rune Stone" );
+			Check( "walking into the Rune Stone (Pickup component) gives XP, a message, and hides it",
+				   rune && s.xp == xpBefore + 30 && !rune->visible && s.toastFor > 0, std::to_string( s.xp - xpBefore ) );
+			shotName = "pickup";
+			step = 111;
+			wait = 1;
+			break;
+		}
+		case 111:
+		{
+			world::PlaySession& s = *ed.Session();
 			// go to the wolves, face them, Tab, 1
 			const auto& wolves = s.World().WorldPosition( s.World().FindByName( "Wolf Den" )->id );
 			int closest = -1;
@@ -440,7 +471,7 @@ struct SelfTest
 				s.SetPlayerPosition( Vector3( w.x, s.World().GroundAt( w.x, w.z + 3 ), w.z + 3 ) );
 			}
 			Key( ImGuiKey_Tab, true );
-			++step;
+			step = 15;
 			wait = 1;
 			break;
 		}

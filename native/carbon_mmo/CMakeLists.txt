@@ -66,7 +66,7 @@ set_target_properties(cmmo_math PROPERTIES
 # ---------------------------------------------------------------------------
 # MODULE: world - scene, terrain, Play simulation, level files (no graphics)
 # ---------------------------------------------------------------------------
-add_library(cmmo_world STATIC cpp/world/World.cpp)
+add_library(cmmo_world STATIC cpp/world/World.cpp cpp/world/Physics.cpp cpp/world/Gameplay.cpp)
 target_include_directories(cmmo_world PUBLIC cpp)
 target_link_libraries(cmmo_world PUBLIC CarbonMath nlohmann_json::nlohmann_json)
 add_executable(test_world tests/cpp/test_world.cpp)

@@ -163,6 +163,7 @@ struct Entity
 	json props = json::object();
 	bool visible = true;
 	std::shared_ptr<Terrain> terrain;   // ActorType::Terrain only
+	json components = json::array();    // [{ "type": "Rotator", ... }] - see world/Gameplay.h
 };
 
 class Scene
@@ -257,10 +258,16 @@ struct FloatText
 	bool good = false;
 };
 
+class PhysicsWorld;
+class Behaviour;
+struct Body;
+
 class PlaySession
 {
 public:
 	PlaySession( const Scene& level, bool possess, uint32_t seed = 1234567 );
+	~PlaySession();
+	static constexpr float kRadius = 0.4f, kHeight = 1.8f;   // the player's capsule
 	void Tick( float dt, const PlayInput& in );
 
 	Scene& World() { return m_world; }
@@ -292,12 +299,22 @@ public:
 	bool AcceptQuest( int index );
 	bool CompleteQuest( int index );
 
+	// for components (world/Gameplay.h)
+	void Message( const std::string& text );   // the log + a message in the middle of the screen
+	void Heal( float amount );
+	void Damage( float amount );
+	void AddXp( int amount );
+	std::string toast;
+	float toastFor = 0;
+	const std::vector<Body>& Bodies() const;   // this tick's colliders
+
 private:
 	float Ground( float x, float z, float fallback ) const;
 	void MovePlayer( float dt, const PlayInput& in );
 	void MoveCreatures( float dt );
 	void Combat( float dt, const PlayInput& in );
 	void Zones();
+	void Triggers();
 	void GainXp( int amount );
 	float Rand();
 
@@ -312,6 +329,9 @@ private:
 	float m_time = 0.0f;
 	std::vector<Creature> m_creatures;
 	std::vector<std::string> m_log;
+	std::unique_ptr<PhysicsWorld> m_physics;
+	std::vector<std::unique_ptr<Behaviour>> m_behaviours;
+	std::vector<uint32_t> m_inside;   // triggers the player is in
 };
 
 // small helpers shared with the editor

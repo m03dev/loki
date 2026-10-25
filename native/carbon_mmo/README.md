@@ -49,6 +49,7 @@ zone) and press **Play**.
 | Inspector | name, visibility, transform (X / Y / Z fields), the actor's settings (creature level, health, damage, quest text, zone levels, colours...) |
 | Place Actors | Gameplay: Player Start, Creature Spawn, Trigger Box, Quest Giver. World: Terrain, Zone. Basic: Empty, Shape, Model. Lighting: Point Light, Sun |
 | Terrain | **tools, not a fixed map** (in the spirit of Terrain3D for Godot): create flat or from noise (size, resolution); Raise, Lower, Smooth, Flatten, Ramp, Noise, Paint, Foliage, Erase Foliage; brush size, strength, falloff; 4 texture layers + an auto-shader (rock on slopes, snow up high); foliage kinds (tree, pine, bush, rock, grass) and density - never on cliffs; Generate (seed, height, feature size, detail; replace or add) |
+| Components | Inspector > **Add Component** (like Unreal): Box / Sphere Collider (solid or trigger), Rotator, Bobber, Mover (platforms, doors; can wait for a trigger), Trigger Event (message, heal, damage, XP, teleport, show / hide another actor), Pickup (XP / health, respawns). Shapes collide by default ("collision" off to walk through); the selected actor's colliders are drawn green (solid) / cyan (trigger). All C++: `cpp/world/Gameplay.cpp` (a new component = a Behaviour class + one registry line), `cpp/world/Physics.cpp` (collision, swappable for Jolt / PhysX) |
 | Content Browser | levels, glTF / glb models (e.g. Forge exports) and prefabs as tiles; double-click or drag into the viewport |
 | World Settings | world name, sky, horizon, ambient, fog, gravity |
 | Output | the log |
@@ -64,8 +65,8 @@ walk, F talks to the quest giver, Tab targets, 1 casts, Esc) and saves `out.png`
 `out_flying.png`, `out_controls.png` and `out_play.png`; on Linux headless through EGL (Mesa), on macOS / Windows in a hidden window. `run_tests.py`
 includes it.
 
-Modules: `cpp/world/` (MODULE: world - scene, hierarchy, terrain, foliage, Play and the MMO layer, level files; no
-graphics; `test_world`), `cpp/editor/` (MODULE: editor, editor.render, editor.theme, editor.gl),
+Modules: `cpp/world/` (MODULE: world - scene, hierarchy, terrain, foliage, Play and the MMO layer, level files;
+world.physics - collision and triggers; world.gameplay - components; no graphics; `test_world`), `cpp/editor/` (MODULE: editor, editor.render, editor.theme, editor.gl),
 `cpp/apps/cmmo_editor.cpp` (window + ImGui backends). UI: Dear ImGui 1.92.8 (docking, MIT), ImGuizmo (MIT).
 Levels: nlohmann/json 3.11.3 (MIT). Models: cgltf 1.15 (MIT). Fonts in `third_party/fonts/`: IBM Plex Sans (OFL-1.1),
 Font Awesome 6 Free solid (OFL-1.1), IconFontCppHeaders (zlib).

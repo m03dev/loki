@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <string>
 
+#include "world/Gameplay.h"
+#include "world/Physics.h"
 #include "world/World.h"
 
 using namespace cmmo::world;
@@ -253,6 +255,90 @@ int main()
 		Check( "dead creatures respawn", p.Creatures()[0].state != Creature::Dead );
 	}
 
+
+	// ---- components, collision, triggers (world.gameplay + world.physics)
+	{
+		Scene c;
+		c.Create( ActorType::PlayerStart ).transform.position = Vector3( 0, 0, 0 );
+		Entity& wall = c.Create( ActorType::Mesh, "Wall" );
+		const uint32_t wallId = wall.id;
+		wall.transform.position = Vector3( 0, 0, -3 );
+		wall.transform.scale = Vector3( 4, 2, 0.5f );
+		Entity& ghost = c.Create( ActorType::Mesh, "Ghost Wall" );
+		ghost.transform.position = Vector3( 20, 0, -3 );
+		ghost.transform.scale = Vector3( 4, 2, 0.5f );
+		ghost.props["collision"] = false;
+		Entity& step = c.Create( ActorType::Mesh, "Step" );
+		step.transform.position = Vector3( 40, 0, 0 );
+		step.transform.scale = Vector3( 3, 0.4f, 3 );
+		Entity& trig = c.Create( ActorType::TriggerBox, "Spring" );
+		trig.transform.position = Vector3( 60, 0, 0 );
+		trig.components.push_back( MakeComponent( "TriggerEvent" ) );
+		trig.components.back()["action"] = "heal";
+		trig.components.back()["amount"] = 30;
+		trig.components.back()["text"] = "A healing spring.";
+		Entity& gem = c.Create( ActorType::Mesh, "Gem" );
+		gem.transform.position = Vector3( 80, 0, 0 );
+		gem.props["collision"] = false;
+		gem.components.push_back( MakeComponent( "Pickup" ) );
+		gem.components.back()["xp"] = 40;
+		gem.components.push_back( MakeComponent( "Rotator" ) );
+		const uint32_t gemId = gem.id;
+		Entity& lift = c.Create( ActorType::Mesh, "Lift" );
+		lift.transform.position = Vector3( 100, 0, 0 );
+		lift.components.push_back( MakeComponent( "Mover" ) );
+		lift.components.back()["duration"] = 1.0;
+		lift.components.back()["pingPong"] = false;
+		const uint32_t liftId = lift.id;
+
+		Check( "every component type has a label, a group and defaults", !ComponentTypes().empty() &&
+			   std::all_of( ComponentTypes().begin(), ComponentTypes().end(), []( const ComponentInfo& i ) { return !i.label.empty() && !i.group.empty() && i.defaults.is_object(); } ) );
+		Scene back;
+		Check( "components are saved and loaded with the level", back.FromJson( c.ToJson() ) && back.FindByName( "Gem" )->components.size() == 2 &&
+			   back.FindByName( "Gem" )->components[0].value( "xp", 0 ) == 40 );
+
+		PlayInput fwd;
+		fwd.forward = true;
+		{
+			PlaySession p( c, true );
+			for( int i = 0; i < 120; ++i ) p.Tick( 1.0f / 60.0f, fwd );
+			Check( "a Shape blocks the player (Unreal-style collision)", p.PlayerPosition().z > -2.8f && p.PlayerPosition().z < -2.0f, F( p.PlayerPosition().z ) );
+		}
+		{
+			PlaySession p( c, true );
+			p.SetPlayerPosition( Vector3( 20, 0, 0 ) );
+			for( int i = 0; i < 120; ++i ) p.Tick( 1.0f / 60.0f, fwd );
+			Check( "a Shape with collision off lets the player through", p.PlayerPosition().z < -6.0f, F( p.PlayerPosition().z ) );
+		}
+		{
+			PlaySession p( c, true );
+			p.SetPlayerPosition( Vector3( 40, 0, 2.5f ) );   // walk onto a 0.4 m step
+			for( int i = 0; i < 20; ++i ) p.Tick( 1.0f / 60.0f, fwd );
+			Check( "the player steps up onto a low box and stands on it", std::fabs( p.PlayerPosition().y - 0.4f ) < 0.02f && p.PlayerPosition().z < 1.0f,
+				   F( p.PlayerPosition().y ) + " z " + F( p.PlayerPosition().z ) );
+		}
+		{
+			PlaySession p( c, true );
+			p.hp = 40;
+			p.SetPlayerPosition( Vector3( 60, 0, 0 ) );
+			p.Tick( 1.0f / 60.0f, PlayInput() );
+			Check( "a Trigger Box with a Trigger Event heals and shows its message", p.hp >= 69.0f && p.toast == "A healing spring.", F( p.hp ) );
+			p.SetPlayerPosition( Vector3( 80, 0, 0 ) );
+			const int xp0 = p.xp;
+			const float rot0 = p.World().Find( gemId )->transform.rotation.y;
+			for( int i = 0; i < 30; ++i ) p.Tick( 1.0f / 60.0f, PlayInput() );
+			Check( "a Pickup gives XP and disappears", p.xp == xp0 + 40 && !p.World().Find( gemId )->visible, std::to_string( p.xp ) );
+			Check( "a Rotator spins its actor", std::fabs( p.World().Find( gemId )->transform.rotation.y - rot0 ) > 10.0f );
+			for( int i = 0; i < 40; ++i ) p.Tick( 1.0f / 60.0f, PlayInput() );
+			Check( "a Mover slides its actor by its offset", std::fabs( p.World().Find( liftId )->transform.position.y - 3.0f ) < 0.05f,
+				   F( p.World().Find( liftId )->transform.position.y ) );
+		}
+		Check( "Play never changes the level", c.Find( gemId )->visible && c.Find( gemId )->transform.rotation.y == 0.0f && c.Find( liftId )->transform.position.y == 0.0f );
+		std::vector<Body> bodies;
+		BodiesOf( c, *c.Find( wallId ), bodies );
+		Check( "a Shape's collider matches its size (4 x 2 x 0.5 on its pivot)", bodies.size() == 1 && std::fabs( bodies[0].max.y - 2.0f ) < 1e-4f &&
+			   std::fabs( bodies[0].max.x - bodies[0].min.x - 4.0f ) < 1e-4f );
+	}
 	std::printf( "\n%d passed, %d failed\n%s\n", g_pass, g_fail, g_fail ? "WORLD FAILED" : "WORLD OK" );
 	return g_fail ? 1 : 0;
 }

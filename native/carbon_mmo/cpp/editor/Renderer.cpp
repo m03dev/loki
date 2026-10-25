@@ -1,6 +1,8 @@
 // MODULE: editor.render
 #include "editor/Renderer.h"
 
+#include "world/Physics.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -808,6 +810,19 @@ void Renderer::Render( int width, int height, const FrameInfo& f )
 		}
 	}
 
+	// the selected actor's colliders (green: solid, cyan: trigger) - what Play will collide with
+	if( !playing && f.selected && scene.Find( f.selected ) )
+	{
+		std::vector<world::Body> bodies;
+		world::BodiesOf( scene, *scene.Find( f.selected ), bodies );
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		for( const auto& b : bodies )
+		{
+			const Vector3 size = b.max - b.min, c = ( b.min + b.max ) * 0.5f;
+			Draw( m_meshes["wirebox"], ScalingMatrix( std::max( size.x, 0.01f ), std::max( size.y, 0.01f ), std::max( size.z, 0.01f ) ) * TranslationMatrix( c ),
+				  b.trigger ? Vector3( 0.3f, 0.85f, 0.95f ) : Vector3( 0.35f, 0.95f, 0.45f ), false, true );
+		}
+	}
 	if( f.brushVisible && !playing )
 	{
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );

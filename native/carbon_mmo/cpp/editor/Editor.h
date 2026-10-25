@@ -50,6 +50,8 @@ public:
 	uint32_t Paste();                    // next to where it was copied from
 	bool SnapSelectedToGround();
 	uint32_t GroupSelected();            // wrap the selection in a new Empty
+	bool AddComponent( uint32_t actor, const std::string& type );   // world/Gameplay.h ComponentTypes()
+	bool RemoveComponent( uint32_t actor, size_t index );
 	uint32_t DuplicateSelected();
 	bool Reparent( uint32_t id, uint32_t parent );
 	void Commit( const char* what );
@@ -114,6 +116,7 @@ private:
 	world::json SubtreeJson( uint32_t root ) const;
 	uint32_t PlaceActorsJson( const world::json& actors, const Vector3& at, const char* what );
 	void ViewportContextMenu();
+	void ComponentsSection( world::Entity& e, bool& done );
 	void ControlsPanel();
 	void PrefsPanel();
 	void PlaceMenuItems( const Vector3& at );

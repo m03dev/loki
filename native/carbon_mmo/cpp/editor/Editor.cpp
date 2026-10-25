@@ -14,6 +14,8 @@
 #include <set>
 
 #include "editor/Theme.h"
+#include "world/Gameplay.h"
+#include "world/Physics.h"
 #include "imgui.h"
 #include "ImGuizmo.h"   // after imgui.h
 #include "imgui_internal.h"
@@ -59,6 +61,11 @@ ImU32 ColorOf( ActorType t )
 	default: return IM_COL32( 170, 178, 190, 255 );
 	}
 }
+const char* ComponentIcon( const std::string& key )
+{
+	return key == "box" ? ICON_FA_CUBE : key == "sphere" ? ICON_FA_CIRCLE : key == "rotate" ? ICON_FA_ROTATE : key == "bob" ? ICON_FA_ARROWS_UP_DOWN
+		 : key == "move" ? ICON_FA_ARROWS_LEFT_RIGHT : key == "bolt" ? ICON_FA_BOLT : key == "gem" ? ICON_FA_GEM : ICON_FA_PUZZLE_PIECE;
+}
 const char* AbilityIcon( const char* key )
 {
 	const std::string k = key;
@@ -95,6 +102,68 @@ std::string Pretty( const std::string& key )
 		out += i ? c : char( std::toupper( (unsigned char)c ) );
 	}
 	return out;
+}
+
+// a property editor for a JSON object: numbers, flags, colours (#rrggbb), text, X / Y / Z
+void EditFields( world::json& obj, std::initializer_list<const char*> skip, bool& done )
+{
+	for( auto it = obj.begin(); it != obj.end(); ++it )
+	{
+		const std::string key = it.key();
+		if( std::find( skip.begin(), skip.end(), key ) != skip.end() || key == "type" ) continue;
+		auto& v = it.value();
+		ImGui::PushID( key.c_str() );
+		const std::string label = Pretty( key );
+		if( !v.is_boolean() ) ui::Label( label.c_str() );
+		if( key == "action" && v.is_string() )   // Trigger Event: a list, not free text
+		{
+			static const char* actions[] = { "message", "heal", "damage", "xp", "teleport", "toggle" };
+			const std::string cur = v.get<std::string>();
+			if( ImGui::BeginCombo( "##v", cur.c_str() ) )
+			{
+				for( const char* a : actions )
+					if( ImGui::Selectable( a, cur == a ) ) { v = a; done = true; }
+				ImGui::EndCombo();
+			}
+		}
+		else if( v.is_boolean() )
+		{
+			bool b = v.get<bool>();
+			if( ImGui::Checkbox( label.c_str(), &b ) ) { v = b; done = true; }
+		}
+		else if( v.is_number_integer() )
+		{
+			int i = v.get<int>();
+			if( ImGui::DragInt( "##v", &i, 0.1f, 0, 100000 ) ) v = i;
+			done |= ImGui::IsItemDeactivatedAfterEdit();
+		}
+		else if( v.is_number() )
+		{
+			float f = v.get<float>();
+			if( ImGui::DragFloat( "##v", &f, 0.05f ) ) v = f;
+			done |= ImGui::IsItemDeactivatedAfterEdit();
+		}
+		else if( v.is_string() && v.get<std::string>().size() == 7 && v.get<std::string>()[0] == '#' )
+		{
+			Vector3 c = world::HexColor( v.get<std::string>() );
+			if( ImGui::ColorEdit3( "##v", &c.x, ImGuiColorEditFlags_NoInputs ) ) v = world::ToHex( c );
+			done |= ImGui::IsItemDeactivatedAfterEdit();
+		}
+		else if( v.is_string() )
+		{
+			char buf[1024];
+			std::snprintf( buf, sizeof( buf ), "%s", v.get<std::string>().c_str() );
+			const bool multi = key == "text" || key == "done";
+			if( multi ? ImGui::InputTextMultiline( "##v", buf, sizeof( buf ), ImVec2( -FLT_MIN, 64 ) ) : ImGui::InputText( "##v", buf, sizeof( buf ) ) ) v = std::string( buf );
+			done |= ImGui::IsItemDeactivatedAfterEdit();
+		}
+		else if( v.is_array() && v.size() == 3 )
+		{
+			float a[3] = { v[0].get<float>(), v[1].get<float>(), v[2].get<float>() };
+			if( ui::AxisField( label.c_str(), a, 0.1f, &done ) ) v = { a[0], a[1], a[2] };
+		}
+		ImGui::PopID();
+	}
 }
 
 std::string ReadFile( const fs::path& p )
@@ -216,6 +285,42 @@ void Editor::NewStarterZone()
 	child( ActorType::Mesh, "Crate2", Vector3( 3.8f, 0, 4.1f ), "cube", "#6e5134", Vector3( 0.8f, 0.8f, 0.8f ) );
 	const uint32_t giver = m_scene.Create( ActorType::QuestGiver, "Marshal Grey", camp ).id;
 	m_scene.Find( giver )->transform.position = Vector3( -2.5f, 0, 2.5f );
+	// gameplay components: a collectible rune stone, a healing spring, a welcome trigger at the camp edge
+	{
+		world::Entity& rune = m_scene.Create( ActorType::Mesh, "Rune Stone" );
+		rune.transform.position = ground( 9, 5 ) + Vector3( 0, 0.6f, 0 );
+		rune.transform.scale = Vector3( 0.6f, 0.9f, 0.6f );
+		rune.props["shape"] = "sphere";
+		rune.props["color"] = "#5fd0ff";
+		rune.props["collision"] = false;
+		rune.components.push_back( world::MakeComponent( "Rotator" ) );
+		rune.components.back()["speed"] = { 0.0, 90.0, 0.0 };
+		rune.components.push_back( world::MakeComponent( "Bobber" ) );
+		rune.components.back()["height"] = 0.4;
+		rune.components.push_back( world::MakeComponent( "Pickup" ) );
+		rune.components.back()["xp"] = 30;
+		rune.components.back()["message"] = "You found a rune stone!";
+		rune.components.back()["respawn"] = 30.0;
+		world::Entity& spring = m_scene.Create( ActorType::Mesh, "Healing Spring" );
+		spring.transform.position = ground( -11, 6 ) + Vector3( 0, 0.05f, 0 );
+		spring.transform.scale = Vector3( 3, 1, 3 );
+		spring.props["shape"] = "plane";
+		spring.props["color"] = "#3f8fd8";
+		spring.props["collision"] = false;
+		spring.components.push_back( world::MakeComponent( "BoxCollider" ) );
+		spring.components.back()["trigger"] = true;
+		spring.components.back()["size"] = { 1.0, 2.0, 1.0 };
+		spring.components.back()["offset"] = { 0.0, 1.0, 0.0 };
+		spring.components.push_back( world::MakeComponent( "TriggerEvent" ) );
+		spring.components.back()["action"] = "heal";
+		spring.components.back()["amount"] = 60;
+		spring.components.back()["text"] = "The spring's water restores you.";
+		world::Entity& gate = m_scene.Create( ActorType::TriggerBox, "Camp Edge" );
+		gate.transform.position = ground( 0, 17 ) + Vector3( 0, 1.5f, 0 );
+		gate.props["size"] = { 16.0, 4.0, 2.0 };
+		gate.components.push_back( world::MakeComponent( "TriggerEvent" ) );
+		gate.components.back()["text"] = "Greenhollow Camp - Marshal Grey has work for you.";
+	}
 	const uint32_t den = m_scene.Create( ActorType::CreatureSpawn, "Wolf Den" ).id;
 	m_scene.Find( den )->transform.position = ground( 46, -34 );
 	m_scene.Find( den )->props["count"] = 4;
@@ -236,7 +341,7 @@ void Editor::NewStarterZone()
 	m_dist = 70;
 	m_pitch = -0.42f;
 	OrbitFromAngles();
-	Print( "New Starter Zone: Greenhollow Vale - a camp with Marshal Grey (quest), wolves to the north-east, boars to the south-west. Alt+P to play." );
+	Print( "New Starter Zone: Greenhollow Vale - a camp with Marshal Grey (quest), a rune stone to collect, a healing spring, wolves to the north-east, boars to the south-west. Alt+P to play." );
 }
 
 bool Editor::SaveLevel( const std::string& path )
@@ -427,6 +532,67 @@ uint32_t Editor::GroupSelected()
 	m_selected = gid;
 	Commit( "Group" );
 	return gid;
+}
+
+bool Editor::AddComponent( uint32_t actor, const std::string& type )
+{
+	world::Entity* e = m_scene.Find( actor );
+	if( Playing() || !e || !world::FindComponentType( type ) ) return false;
+	e->components.push_back( world::MakeComponent( type ) );
+	Commit( "Add component" );
+	Print( "Added " + world::FindComponentType( type )->label + " to " + e->name );
+	return true;
+}
+
+bool Editor::RemoveComponent( uint32_t actor, size_t index )
+{
+	world::Entity* e = m_scene.Find( actor );
+	if( Playing() || !e || index >= e->components.size() ) return false;
+	e->components.erase( e->components.begin() + std::ptrdiff_t( index ) );
+	Commit( "Remove component" );
+	return true;
+}
+
+void Editor::ComponentsSection( world::Entity& e, bool& done )
+{
+	ui::Section( ICON_FA_PUZZLE_PIECE, "Components" );
+	int remove = -1;
+	for( size_t i = 0; i < e.components.size(); ++i )
+	{
+		world::json& c = e.components[i];
+		const world::ComponentInfo* info = world::FindComponentType( c.value( "type", std::string() ) );
+		ImGui::PushID( int( i ) );
+		const std::string title = std::string( ComponentIcon( info ? info->icon : "" ) ) + "  " + ( info ? info->label : c.value( "type", std::string( "?" ) ) );
+		const bool open = ImGui::CollapsingHeader( ( title + "###c" ).c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap );
+		ImGui::SameLine( ImGui::GetContentRegionMax().x - ImGui::GetFrameHeight() );
+		ImGui::PushStyleColor( ImGuiCol_Button, IM_COL32( 0, 0, 0, 0 ) );
+		if( ImGui::SmallButton( ICON_FA_XMARK ) ) remove = int( i );
+		ImGui::PopStyleColor();
+		if( info ) ui::Tip( info->label.c_str(), "Remove this component." );
+		if( open )
+		{
+			if( info ) ImGui::TextDisabled( "%s", info->what.c_str() );
+			EditFields( c, {}, done );
+		}
+		ImGui::PopID();
+	}
+	if( remove >= 0 ) RemoveComponent( e.id, size_t( remove ) );
+	if( e.components.empty() ) ImGui::TextDisabled( "No components. Add behaviour: spin, float, move, triggers, pickups, colliders." );
+	if( ui::WideButton( ICON_FA_PLUS, "Add Component", "Behaviour for this actor in Play (like Unreal's Add Component)." ) ) ImGui::OpenPopup( "##addcomp" );
+	if( ImGui::BeginPopup( "##addcomp" ) )
+	{
+		for( const char* group : { "Physics", "Motion", "Gameplay" } )
+		{
+			ImGui::SeparatorText( group );
+			for( const auto& t : world::ComponentTypes() )
+				if( t.group == group )
+				{
+					if( ImGui::MenuItem( ( std::string( ComponentIcon( t.icon ) ) + "  " + t.label ).c_str() ) ) AddComponent( e.id, t.type );
+					if( ImGui::IsItemHovered() ) ImGui::SetTooltip( "%s", t.what.c_str() );
+				}
+		}
+		ImGui::EndPopup();
+	}
 }
 
 bool Editor::DeleteSelected()
@@ -1532,6 +1698,14 @@ void Editor::Hud( float ox, float oy )
 		const ImVec2 is = ImGui::CalcTextSize( s.zoneInfo.c_str() );
 		text( F.bold, 15, ImVec2( ox + ( W - is.x ) * 0.5f, oy + H * 0.18f + 42 ), IM_COL32( 230, 230, 230, a ), s.zoneInfo.c_str() );
 	}
+	if( s.toastFor > 0 && !s.toast.empty() )   // a message from a Trigger Event / Pickup
+	{
+		const int a = int( 255 * std::min( 1.0f, s.toastFor ) );
+		const ImVec2 ts = F.big->CalcTextSizeA( 24, FLT_MAX, 0, s.toast.c_str() );
+		const ImVec2 p( ox + ( W - ts.x ) * 0.5f, oy + H * 0.32f );
+		dl->AddRectFilled( ImVec2( p.x - 18, p.y - 10 ), ImVec2( p.x + ts.x + 18, p.y + ts.y + 10 ), IM_COL32( 16, 17, 20, a * 200 / 255 ), 8 );
+		text( F.big, 24, p, IM_COL32( 245, 235, 205, a ), s.toast.c_str() );
+	}
 	if( s.deadFor > 0 )
 	{
 		dl->AddRectFilled( ImVec2( ox, oy ), ImVec2( ox + W, oy + H ), IM_COL32( 40, 0, 0, 110 ) );
@@ -1767,52 +1941,8 @@ void Editor::InspectorPanel()
 				ImGui::EndCombo();
 			}
 		}
-		for( auto it = e->props.begin(); it != e->props.end(); ++it )
-		{
-			const std::string key = it.key();
-			if( key == "shape" || key == "path" ) continue;
-			auto& v = it.value();
-			ImGui::PushID( key.c_str() );
-			const std::string label = Pretty( key );
-			if( !v.is_boolean() ) ui::Label( label.c_str() );
-			if( v.is_boolean() )
-			{
-				bool b = v.get<bool>();
-				if( ImGui::Checkbox( label.c_str(), &b ) ) { v = b; done = true; }
-			}
-			else if( v.is_number_integer() )
-			{
-				int i = v.get<int>();
-				if( ImGui::DragInt( "##v", &i, 0.1f, 0, 100000 ) ) v = i;
-				done |= ImGui::IsItemDeactivatedAfterEdit();
-			}
-			else if( v.is_number() )
-			{
-				float f = v.get<float>();
-				if( ImGui::DragFloat( "##v", &f, 0.05f ) ) v = f;
-				done |= ImGui::IsItemDeactivatedAfterEdit();
-			}
-			else if( v.is_string() && v.get<std::string>().size() == 7 && v.get<std::string>()[0] == '#' )
-			{
-				Vector3 c = world::HexColor( v.get<std::string>() );
-				if( ImGui::ColorEdit3( "##v", &c.x, ImGuiColorEditFlags_NoInputs ) ) v = world::ToHex( c );
-				done |= ImGui::IsItemDeactivatedAfterEdit();
-			}
-			else if( v.is_string() )
-			{
-				char buf[1024];
-				std::snprintf( buf, sizeof( buf ), "%s", v.get<std::string>().c_str() );
-				const bool multi = key == "text" || key == "done";
-				if( multi ? ImGui::InputTextMultiline( "##v", buf, sizeof( buf ), ImVec2( -FLT_MIN, 64 ) ) : ImGui::InputText( "##v", buf, sizeof( buf ) ) ) v = std::string( buf );
-				done |= ImGui::IsItemDeactivatedAfterEdit();
-			}
-			else if( v.is_array() && v.size() == 3 )
-			{
-				float a[3] = { v[0].get<float>(), v[1].get<float>(), v[2].get<float>() };
-				if( ui::AxisField( label.c_str(), a, 0.1f, &done ) ) v = { a[0], a[1], a[2] };
-			}
-			ImGui::PopID();
-		}
+		EditFields( e->props, { "shape", "path" }, done );
+		ComponentsSection( *e, done );
 		if( e->terrain )
 			ImGui::TextDisabled( "%d x %d over %.0f m, %d foliage. Edit it in the Terrain panel.", e->terrain->Res(), e->terrain->Res(), e->terrain->Size(), int( e->terrain->Foliage().size() ) );
 		ImGui::Spacing();

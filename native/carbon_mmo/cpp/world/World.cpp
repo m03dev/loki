@@ -1,6 +1,9 @@
 // MODULE: world
 #include "world/World.h"
 
+#include "world/Gameplay.h"
+#include "world/Physics.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -152,7 +155,7 @@ json DefaultProps( ActorType type )
 {
 	switch( type )
 	{
-	case ActorType::Mesh: return { { "shape", "cube" }, { "color", "#b8b2a6" } };
+	case ActorType::Mesh: return { { "shape", "cube" }, { "color", "#b8b2a6" }, { "collision", true } };
 	case ActorType::PointLight: return { { "color", "#ffb760" }, { "intensity", 2.0 }, { "range", 15.0 } };
 	case ActorType::DirLight: return { { "color", "#fff1dc" }, { "intensity", 1.0 } };
 	case ActorType::PlayerStart: return { { "speed", 7.0 }, { "jump", 6.0 }, { "camDist", 7.0 } };
@@ -691,6 +694,7 @@ json Scene::ToJson( const std::string& levelName ) const
 			{ "scale", { e.transform.scale.x, e.transform.scale.y, e.transform.scale.z } },
 		};
 		if( e.terrain ) a["terrain"] = e.terrain->Save();
+		if( !e.components.empty() ) a["components"] = e.components;
 		actors.push_back( std::move( a ) );
 	}
 	return { { "format", "cmmo-level" }, { "version", 2 }, { "name", levelName }, { "nextId", nextId }, { "settings", settings }, { "actors", actors } };
@@ -715,6 +719,9 @@ bool Scene::FromJson( const json& doc, std::string* error )
 			e.visible = a.value( "visible", true );
 			e.props = DefaultProps( e.type );
 			if( a.contains( "props" ) && a["props"].is_object() ) e.props.update( a["props"] );
+			if( a.contains( "components" ) && a["components"].is_array() )
+				for( const auto& c : a["components"] )
+					if( c.is_object() && c.contains( "type" ) ) e.components.push_back( c );
 			auto v3 = [&]( const char* k, Vector3 d ) {
 				if( !a.contains( k ) ) return d;
 				const auto& v = a[k];
@@ -850,7 +857,74 @@ PlaySession::PlaySession( const Scene& level, bool possess, uint32_t seed )
 			m_creatures.push_back( c );
 		}
 	}
+	// components -> behaviours (Gameplay module), colliders -> physics (Physics module)
+	m_physics = std::make_unique<PhysicsWorld>();
+	for( const auto& e : m_world.Entities() )
+		for( const auto& c : e.components )
+		{
+			const ComponentInfo* info = FindComponentType( c.value( "type", std::string() ) );
+			if( !info || !info->make ) continue;
+			auto b = info->make();
+			b->actor = e.id;
+			b->config = c;
+			m_behaviours.push_back( std::move( b ) );
+		}
+	for( auto& b : m_behaviours ) b->Start( *this );
+	m_physics->Build( m_world );
 	Zones();
+}
+
+PlaySession::~PlaySession() = default;
+
+const std::vector<Body>& PlaySession::Bodies() const { return m_physics->Bodies(); }
+
+void PlaySession::Message( const std::string& text )
+{
+	m_log.push_back( text );
+	toast = text;
+	toastFor = 4.0f;
+}
+
+void PlaySession::Heal( float amount )
+{
+	if( deadFor > 0 ) return;
+	const float before = hp;
+	hp = std::min( maxHp, hp + amount );
+	if( hp > before ) floats.push_back( { m_pos + Vector3( 0, 2.2f, 0 ), "+" + std::to_string( int( hp - before ) ), 0, true } );
+}
+
+void PlaySession::Damage( float amount )
+{
+	if( deadFor > 0 ) return;
+	hp -= amount;
+	floats.push_back( { m_pos + Vector3( 0, 2.2f, 0 ), "-" + std::to_string( int( amount ) ), 0, false } );
+	if( hp <= 0 )
+	{
+		hp = 0;
+		deadFor = 5;
+		m_log.push_back( "You died." );
+	}
+}
+
+void PlaySession::AddXp( int amount ) { GainXp( amount ); }
+
+void PlaySession::Triggers()
+{
+	std::vector<uint32_t> now;
+	if( m_possess && deadFor <= 0 ) m_physics->Triggers( m_pos, kRadius, kHeight, now );
+	for( uint32_t id : now )
+		if( std::find( m_inside.begin(), m_inside.end(), id ) == m_inside.end() )
+		{
+			const Entity* e = m_world.Find( id );
+			if( e && e->type == ActorType::TriggerBox && e->components.empty() ) m_log.push_back( "Entered " + e->name );
+			for( auto& b : m_behaviours )
+				if( b->actor == id ) b->Enter( *this );
+		}
+	for( uint32_t id : m_inside )
+		if( std::find( now.begin(), now.end(), id ) == now.end() )
+			for( auto& b : m_behaviours )
+				if( b->actor == id ) b->Exit( *this );
+	m_inside = std::move( now );
 }
 
 float PlaySession::Rand() { return std::uniform_real_distribution<float>( 0.0f, 1.0f )( m_rng ); }
@@ -866,6 +940,9 @@ void PlaySession::Tick( float dt, const PlayInput& in )
 {
 	dt = Clamp( dt, 0.0f, 0.1f );
 	m_time += dt;
+	for( auto& b : m_behaviours ) b->Tick( *this, m_time, dt );
+	m_physics->Build( m_world );   // colliders where the actors are now (movers, rotators)
+	if( toastFor > 0 ) toastFor -= dt;
 	if( m_possess )
 	{
 		if( deadFor > 0 )
@@ -882,6 +959,7 @@ void PlaySession::Tick( float dt, const PlayInput& in )
 		else
 		{
 			MovePlayer( dt, in );
+			Triggers();
 			Combat( dt, in );
 			Zones();
 		}
@@ -914,7 +992,8 @@ void PlaySession::MovePlayer( float dt, const PlayInput& in )
 	if( in.strafeLeft || ( in.turning && in.turnLeft ) ) mv -= right;
 	if( LengthSq( mv ) > 1.0f ) mv = Normalize( mv );
 	m_pos += mv * ( m_speed * ( in.run ? 1.6f : 1.0f ) * dt );
-	const float ground = Ground( m_pos.x, m_pos.z, m_baseY );
+	m_physics->PushOut( m_pos, kRadius, kHeight );   // walls, crates, tents
+	const float ground = std::max( Ground( m_pos.x, m_pos.z, m_baseY ), m_physics->FloorUnder( m_pos, kRadius ) );
 	if( in.jump && m_onGround )
 	{
 		m_vy = m_jump;
@@ -1175,7 +1254,8 @@ void PlaySession::MoveCreatures( float dt )
 			const Vector3 d = m_pos - c.position;
 			c.yaw = std::atan2( -d.x, -d.z );
 		}
-		c.position.y = Ground( c.position.x, c.position.z, c.home.y );
+		m_physics->PushOut( c.position, 0.5f, 1.2f );
+		c.position.y = std::max( Ground( c.position.x, c.position.z, c.home.y ), m_physics->FloorUnder( c.position, 0.5f ) );
 	}
 }
 
