@@ -113,7 +113,7 @@ bool Editor::Init( const EditorSettings& settings, std::string& error )
 	std::error_code ec;
 	for( const char* sub : { "levels", "models", "prefabs" } ) fs::create_directories( fs::path( m_settings.contentDir ) / sub, ec );
 	NewLevel();
-	Print( "Carbon MMO Editor ready. File > New Starter Zone for a playable example; Alt+P plays, Esc stops." );
+	Print( "Carbon Editor ready. File > New Starter Zone for a playable example; Alt+P plays, Esc stops." );
 	return true;
 }
 
@@ -844,7 +844,7 @@ void Editor::MenuBar()
 	{
 		if( ImGui::MenuItem( ICON_FA_KEYBOARD "  Controls", "F1" ) ) m_open[PControls] = true;
 		ImGui::Separator();
-		ImGui::TextDisabled( "Carbon MMO Editor - Carbon math, Dear ImGui, AGPL LOKI" );
+		ImGui::TextDisabled( "Carbon Editor - Carbon math, Dear ImGui, AGPL LOKI" );
 		ImGui::EndMenu();
 	}
 	const std::string world = m_scene.settings.value( "name", std::string( "New World" ) ) + ( levelPath.empty() ? "  (unsaved)" : "  -  " + fs::path( levelPath ).filename().string() );

@@ -24,7 +24,7 @@ custom ones one at a time.
  python/cmmo_game/       MODULE: game         example game layer (click-to-move)
 ```
 
-## The engine editor (`cmmo_editor`)
+## Carbon Editor (`cmmo_editor`)
 
 A native C++ **game engine editor** for a World of Warcraft-style online world: Unreal's toolbar and Play-in-Editor,
 Godot's scene tree and inspector, Terrain3D-style terrain tools, and an MMO gameplay layer (targeting, abilities,

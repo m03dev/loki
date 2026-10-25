@@ -21,7 +21,7 @@ namespace cmmo::editor
 {
 struct EditorSettings
 {
-	std::string title = "Carbon MMO Editor";
+	std::string title = "Carbon Editor";
 	std::string contentDir = "content";   // levels/, models/, prefabs/
 	std::string exePath;
 };

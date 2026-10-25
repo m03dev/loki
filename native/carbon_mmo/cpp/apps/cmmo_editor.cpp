@@ -1,5 +1,5 @@
 // MODULE: app (editor)
-// The Carbon MMO Editor's entry point: window + OpenGL context + Dear ImGui backends around editor::Editor.
+// The Carbon Editor's entry point: window + OpenGL context + Dear ImGui backends around editor::Editor.
 //
 //   cmmo_editor                                   the editor window (macOS / Windows: GLFW)
 //   cmmo_editor --selftest --screenshot out.png   drives the real editor (sculpt with the mouse, place, undo,
@@ -553,7 +553,7 @@ int main( int argc, char** argv )
 		std::string err;
 		if( host.RunInitHook( script, cfg, err ) )
 		{
-			settings.title = cfg.title;
+			// the window is always "Carbon Editor"; the hook's title is for the Phase 1 host window
 			width = std::max( 1600, cfg.width );   // an editor needs room: at least 1600 x 900
 			height = std::max( 900, cfg.height );
 		}
