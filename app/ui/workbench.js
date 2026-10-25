@@ -83,7 +83,9 @@ const Workbench = (function () {
   async function offerOptions(text, force) {
     if (typeof showChat === "function" && force) showChat();
     if (typeof setStatus === "function") setStatus("Thinking about what you might mean…");
-    const data = await api("/options", { text, force: !!force }).catch(() => null);
+    // never hold a message up for long: no readings within 6 s -> it goes ahead as written
+    const data = await Promise.race([api("/options", { text, force: !!force }).catch(() => null),
+      new Promise((res) => setTimeout(() => res(force ? null : { offer: false }), force ? 120000 : 6000))]);
     if (typeof setStatus === "function") setStatus("Ready", true);
     if (!data || !data.offer || !(data.options || []).length) {
       if (force) addNotice((data && data.error) || "No different readings came up - send it as it is.", !data);

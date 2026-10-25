@@ -136,6 +136,11 @@ if shutil.which("node"):
     check("sketch.js parses", proc.returncode == 0, proc.stderr)
 
 shutil.rmtree(TMP, ignore_errors=True)
+import options as _opts  # noqa: E402
+check("the readings step is OFF by default - a first message is never held up by it (owner: 'over a min')",
+      _opts.mode({}) == "off" and _opts.mode({"LOKI_OPTIONS": "auto"}) == "auto")
+check("... and the window never waits more than 6 s for it", "setTimeout(() => res(force ? null : { offer: false }), force ? 120000 : 6000)"
+      in (REPO / "app" / "ui" / "workbench.js").read_text(encoding="utf-8"))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

@@ -5,8 +5,8 @@ launch"), LOKI first offers 3 or 4 DIFFERENT readings of what you might mean, ea
 would do, and you pick one (or send it as written). The picked option is sent as a precise
 request, so the agent starts from the right goal instead of guessing.
 
-LOKI_OPTIONS (Settings > General): "auto" (default - only when a request looks open), "always",
-or "off". "/options <text>" asks for them on purpose.
+LOKI_OPTIONS (Settings > General): "off" (default since 2026-10-25), "auto" (only when a request looks open),
+or "always". "/options <text>" asks for them on purpose.
 
 The decision is cheap and local (`looks_open`); only when it says yes is a model asked, once,
 for JSON. A model that fails or answers badly just means no options: the request goes ahead.
@@ -30,8 +30,11 @@ _FACTUAL = re.compile(r"^(what|when|who|where|why|how many|how much|is|are|does|
 
 
 def mode(env: dict | None = None) -> str:
-    value = str((env if env is not None else os.environ).get("LOKI_OPTIONS", "auto")).strip().lower()
-    return value if value in ("auto", "always", "off") else "auto"
+    # off by default (owner 2026-10-25: "when i first type something ... it doesnt show the chat for over a min" - this
+    # step asked the model for readings BEFORE the message was even shown: 54 s on the Mac's local model). /options
+    # still asks on purpose; LOKI_OPTIONS=auto brings the automatic offer back.
+    value = str((env if env is not None else os.environ).get("LOKI_OPTIONS", "off")).strip().lower()
+    return value if value in ("auto", "always", "off") else "off"
 
 
 def looks_open(text: str) -> bool:
