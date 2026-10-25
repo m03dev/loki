@@ -1112,3 +1112,13 @@ Also: `test_forge_pro_ui`, `test_forge_undo_keys_ui`, `test_forge_rules_ui`, `te
 5. **Mac crash on Cmd+H in Forge** should be gone (macOS Hide is left alone; Forge's own hotkey is Control+H there).
    If LOKI still quits on a Cmd shortcut, copy the newest crash log from the LOKI log folder into ~/Loki/ so it can be read.
 6. **Home:** the New chat (+) button is a small square next to search; nothing touches it.
+
+## 2026-10-25 14:45 - [windows] slow start, local model, colibri
+
+1. **Slow start:** after updating, start LOKI once and paste `harness_data/app/startup.json` here (or the
+   `engine up in X s; slowest: ...` line from the engine log). It times every startup step - fix the slowest one.
+2. **Local model on Windows:** new chat, pick the local model (Harness: Auto or Shell agent), send "make a git repo
+   called win-test with a README, commit it and show git log". The reply must end with LOKI's own git log. Paste it.
+3. **colibri (the finish of the 2026-10-23 [windows] task above):** finish the qwen36-35b download, CUDA build for
+   sm_86, `Q36_DN_GPU=1`, then `c/coli serve` (port 8000). LOKI now finds it by itself: model menu "colibri (big
+   models, offloaded)"; run step 2 again with it picked and report tok/s.

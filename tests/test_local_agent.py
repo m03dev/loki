@@ -142,6 +142,28 @@ try:
 except Exception as exc:  # noqa: BLE001
     print("SKIP chat part: the engine does not import here (%s)" % exc)
 else:
+    # colibri (big MoE models, offloaded): found when `coli serve` answers, its model read from /v1/models
+    class Coli(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):  # noqa: N802
+            data = json.dumps({"data": [{"id": "qwen36-35b"}]}).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+    csrv = ThreadingHTTPServer(("127.0.0.1", 0), Coli)
+    threading.Thread(target=csrv.serve_forever, daemon=True).start()
+    loki.MODELS["colibri"].base_url = "http://127.0.0.1:%d/v1" % csrv.server_address[1]
+    check("colibri is a local provider: found when it answers, its model read from it, run by the shell agent",
+          loki.local_server_up("colibri") and loki.MODELS["colibri"].model == "qwen36-35b" and loki._local_agent_for("colibri")
+          and "colibri" in loki.SMART_ORDER, loki.MODELS["colibri"])
+    check("Smart tries free Nemotron (Ziva Baby's model) first after your main driver (NVIDIA DeepSeek)",
+          [p for p in loki.SMART_ORDER if p != loki.MAIN_DRIVER][0] == "nemotron-free", loki.SMART_ORDER[:3])
+    import loki_bridge  # noqa: E402
+    loki_bridge._STARTUP.update(t0=time.time(), last=time.time(), steps=[], cur="a")
+    loki_bridge._startup_mark("b"); time.sleep(0.05); loki_bridge._startup_mark("done"); loki_bridge._startup_report()
+    st = json.loads((Path(os.environ["LOKI_DATA"]) / "app" / "startup.json").read_text())
+    check("startup timing: each step timed and saved to startup.json (Windows slow start)", [x[0] for x in st["steps"]] == ["a", "b"]
+          and st["steps"][1][1] >= 0.04, st)
     loki.MODELS["local"].base_url = BASE
     loki.MODELS["local"].model = "loki-qwen3.5-9b"
     loki.model_name = "local"

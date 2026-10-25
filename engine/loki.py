@@ -600,6 +600,11 @@ MODELS = {
     # name for "the model I was started with" is "default_model", so that is the default.
     "mlx": ModelConfig(base_url=os.getenv("MLX_BASE_URL", "http://127.0.0.1:8082/v1"),
                        api_key="local", model=_mlx_model()),
+    # colibri (github.com/JustVugg/colibri, Apache-2.0): big MoE models with the experts offloaded to the SSD / the GPU -
+    # Qwen3.6-35B at 25-30 tok/s on the PC's 8 GB RTX 3070 Ti with CUDA, DeepSeek V4.1 Flash from a 2 TB SSD (slow, for
+    # background jobs). `coli serve` = OpenAI-compatible on :8000/v1; the model is whatever it serves.
+    "colibri": ModelConfig(base_url=os.getenv("COLIBRI_BASE_URL", "http://127.0.0.1:8000/v1"),
+                           api_key=os.getenv("COLI_API_KEY", "local"), model=os.getenv("COLIBRI_MODEL", "auto")),
     "vllm": ModelConfig(base_url=os.getenv("VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
                         api_key=os.getenv("VLLM_API_KEY", "local"), model=os.getenv("VLLM_MODEL", "auto")),
     "jan": ModelConfig(base_url=os.getenv("JAN_BASE_URL", "http://127.0.0.1:1337/v1"),
@@ -613,7 +618,7 @@ MODELS = {
 }
 
 # Local OpenAI-compatible servers that are not Ollama: "configured" means the server is up.
-LOCAL_SERVERS = ("lmstudio", "llamacpp", "mlx", "vllm", "jan", "kyojin")
+LOCAL_SERVERS = ("colibri", "lmstudio", "llamacpp", "mlx", "vllm", "jan", "kyojin")
 _LOCAL_UP: dict = {}   # name -> (checked_at, up)
 
 
@@ -650,10 +655,10 @@ model_name = os.getenv("LOKI_MODEL", "smart")
 # on Loki's ~8k-token request, so it sits lower.
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("openrouter", "nemotron-free", "9router", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
+SMART_ORDER = ("nemotron-free", "openrouter", "9router", "deepseek-4.1", "gemini", "groq", "mistral", "sambanova",
                "cloudflare", "together", "nous", "unorouter", "opencode-zen", "codestral",
                "vercel", "deepseek", "cerebras",
-               "vireonix", "claude-code", "codex", "local", "local-hermes")
+               "vireonix", "claude-code", "codex", "colibri", "local", "local-hermes")
 
 # Providers that need a GPU and a local download. The "online" mode exists so Loki is
 # usable with NEITHER - it never touches these.

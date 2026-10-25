@@ -2697,7 +2697,33 @@ def start_logging(project: Path) -> None:
         pass
 
 
+# Startup timing (owner 2026-10-25: "windows feels slow on start up"): how long each step before the window can talk to
+# the engine took, printed at "ready" (the slowest first) and kept in <data>/app/startup.json for System check.
+_STARTUP = {"t0": time.time(), "last": time.time(), "steps": [], "cur": "start (logging, paths)"}
+
+
+def _startup_mark(label: str) -> None:
+    """The step called `label` starts now; the one before it is timed."""
+    now = time.time()
+    _STARTUP["steps"].append((_STARTUP["cur"], round(now - _STARTUP["last"], 2)))
+    _STARTUP["last"], _STARTUP["cur"] = now, label
+
+
+def _startup_report() -> None:
+    total = round(time.time() - _STARTUP["t0"], 2)
+    slow = sorted(_STARTUP["steps"], key=lambda x: -x[1])[:6]
+    print("[loki-bridge] engine up in %.1f s; slowest: %s" % (total, ", ".join("%s %.1fs" % s for s in slow)), flush=True)
+    try:
+        data = Path(os.environ.get("LOKI_DATA") or Path(__file__).resolve().parent.parent / "harness_data") / "app"
+        data.mkdir(parents=True, exist_ok=True)
+        (data / "startup.json").write_text(json.dumps({"total_s": total, "steps": _STARTUP["steps"],
+                                                       "at": time.time()}, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
 async def serve() -> None:
+    _STARTUP.update(t0=time.time(), last=time.time())
     global STATE_DIR, UI_DIR
     args = parse_args()
     try:   # a restart after an update: let the old engine free its ports first
@@ -2722,7 +2748,9 @@ async def serve() -> None:
     os.environ["LOKI_AUTO_APPROVE"] = "0"
     # Do NOT force a model here: harness/.env (or the environment) decides,
     # via loki.model_name. Only fall back if that name is unknown.
+    _startup_mark("import loki (the engine)")
     import loki  # pylint: disable=import-outside-toplevel
+    _startup_mark("bridge state, session")
 
     if loki.model_name not in loki.MODELS:
         loki.model_name = "local-reasoning"
@@ -2733,11 +2761,13 @@ async def serve() -> None:
     state.restart_engine = restart_engine
     state.project = project
     threading.Thread(target=memory_guard, args=(state,), daemon=True, name="loki-memory-guard").start()
+    _startup_mark('forecast')
     try:   # the owner said yes to TimesFM-3 (2026-10-17): install it once where it is missing
         import forecast  # pylint: disable=import-outside-toplevel
         forecast.install_if_approved()
     except Exception:  # noqa: BLE001
         pass
+    _startup_mark('workbench')
     try:
         import workbench  # pylint: disable=import-outside-toplevel
         state.checkpoints = workbench.Checkpoints(project, (STATE_DIR or project / ".loki") / "checkpoints.git")
@@ -2790,6 +2820,7 @@ async def serve() -> None:
         finally:
             in_tool_wrapper = False
     loki.call_tool = observed_call_tool
+    _startup_mark('workers')
     try:
         import workers  # pylint: disable=import-outside-toplevel
         state.jobs = workers.default_supervisor(Path(loki.DATA_DIR))
@@ -2830,6 +2861,7 @@ async def serve() -> None:
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    _startup_mark('updater')
     try:
         import updater  # pylint: disable=import-outside-toplevel
         updater.RUNNING_COMMIT = updater.version().get("commit", "")
@@ -2852,6 +2884,7 @@ async def serve() -> None:
         print("[loki-bridge] version " + (updater.version().get("commit") or "(not a git checkout)"), flush=True)
     except Exception as exc:  # noqa: BLE001
         print(f"[loki-bridge] update checks unavailable: {exc}", flush=True)
+    _startup_mark('laya')
     try:
         import laya  # pylint: disable=import-outside-toplevel
         laya.warm()  # the first layer asks Laya about every request: load the model now
@@ -2860,6 +2893,7 @@ async def serve() -> None:
             "built-in rules (Laya not set up: tools/setup_laya.py)"), flush=True)
     except Exception as exc:  # noqa: BLE001 - Laya is optional; the rules answer without it
         print(f"[loki-bridge] Laya unavailable: {exc}", flush=True)
+    _startup_mark('peer_link')
     try:
         import peer_link  # pylint: disable=import-outside-toplevel
         state.peer_server = peer_link.start(state, loki)
@@ -2868,21 +2902,25 @@ async def serve() -> None:
         print(f"[loki-bridge] peer link could not listen: {exc}", flush=True)
     except Exception as exc:  # noqa: BLE001 - the link is optional; chat must still start
         print(f"[loki-bridge] peer link unavailable: {exc}", flush=True)
+    _startup_mark('phone_link')
     try:
         import phone_link  # pylint: disable=import-outside-toplevel
         state.phone_server = phone_link.start(state, loki)
     except Exception as exc:  # noqa: BLE001 - the phone link is optional; chat must still start
         print(f"[loki-bridge] phone link unavailable: {exc}", flush=True)
+    _startup_mark('channels')
     try:
         import channels  # pylint: disable=import-outside-toplevel
         channels.start(state, loki)   # Telegram: idle until a bot token is saved and this machine polls
     except Exception as exc:  # noqa: BLE001 - channels are optional; chat must still start
         print(f"[loki-bridge] channels unavailable: {exc}", flush=True)
+    _startup_mark('automations')
     try:   # session 29: automations - triggers -> conditions -> steps, one runner (engine/automations.py)
         import automations  # pylint: disable=import-outside-toplevel
         automations.start(state, loki)
     except Exception as exc:  # noqa: BLE001 - automations are optional; chat must still start
         print(f"[loki-bridge] automations unavailable: {exc}", flush=True)
+    _startup_mark('qol')
     try:   # session 29: chat QoL - interrupted turns, steering, allow-for-session (engine/qol.py)
         import qol  # pylint: disable=import-outside-toplevel
         qol.install(state, loki)
@@ -2890,19 +2928,25 @@ async def serve() -> None:
         print(f"[loki-bridge] chat QoL unavailable: {exc}", flush=True)
     threading.Thread(target=write_status_forever, args=(state,), daemon=True, name="loki-status").start()
     threading.Thread(target=lambda: loki.resolve_local(force=True), daemon=True, name="loki-local").start()
+    _startup_mark('ninerouter')
     try:   # 9Router (engine/ninerouter.py): start it on 127.0.0.1 when it is installed and not running
         import ninerouter  # pylint: disable=import-outside-toplevel
         ninerouter.start_background()
     except Exception as exc:  # noqa: BLE001 - an add-on; chat must still start
         print(f"[loki-bridge] 9router unavailable: {exc}", flush=True)
+    _startup_mark('provider health probes')
     try:   # each provider's live state for routing and Settings > Connections (free /models probes only)
         loki.provider_health.start_background(loki)
     except Exception as exc:  # noqa: BLE001 - routing works without it
         print(f"[loki-bridge] provider health probes unavailable: {exc}", flush=True)
     threading.Thread(target=initial_ecc_sync, args=(loki,), daemon=True).start()
     threading.Thread(target=dump_godot_api, args=(args.godot_exe, root), daemon=True).start()
+    _startup_mark('ECC sync, Godot API threads')
     try:
+        _startup_mark("start the HTTP server")
         server, server_thread = start_bridge_server(state, secret_path, secret)
+        _startup_mark("done")
+        _startup_report()
     except OSError as exc:
         await stack.aclose()
         raise RuntimeError(f"Bridge port {PORT} is already occupied; refusing to overwrite the active bridge token.") from exc
