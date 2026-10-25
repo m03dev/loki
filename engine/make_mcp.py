@@ -25,6 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+SHELL_ON = {"on": False}
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 VERSION = "1.0"
@@ -172,7 +173,8 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 
 
 def call(name: str, args: dict, cwd: Path) -> dict:
-    fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image}.get(name)
+    fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
+          "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:
             return _machines.FUNCS[name](args or {})
@@ -195,7 +197,7 @@ def handle(msg: dict, cwd: Path) -> dict | None:
         result = {"protocolVersion": (msg.get("params") or {}).get("protocolVersion", "2025-06-18"),
                   "capabilities": {"tools": {}}, "serverInfo": {"name": "loki-make", "version": VERSION}}
     elif method == "tools/list":
-        result = {"tools": TOOLS}
+        result = {"tools": TOOLS + ([SHELL_TOOL] if SHELL_ON["on"] else [])}
     elif method == "tools/call":
         p = msg.get("params") or {}
         out = call(str(p.get("name", "")), p.get("arguments") or {}, cwd)
@@ -221,6 +223,44 @@ def serve(stdin=sys.stdin, stdout=sys.stdout, cwd: Path | None = None) -> None:
         if reply is not None:
             stdout.write(json.dumps(reply) + "\n")
             stdout.flush()
+
+
+# --shell (how Ziva gets it, engine/ziva_link.py): a run_command tool, so an agent that only has Godot tools (Ziva)
+# can do real work for the owner too - git repos, files, builds - in LOKI Projects. Dangerous commands are refused.
+SHELL_DENY = ("rm -rf /", "rm -fr /", "rm -rf ~", "del /f /s /q", "del /s /q", "rd /s /q", "rmdir /s /q", "format ",
+              "mkfs", "diskpart", "fdisk", "wipefs", "dd if=", "dd of=/dev/", ":(){", "shutdown", "reboot", "poweroff",
+              "chmod -r 777 /", "chmod 777 /", "reg delete", "bcdedit", "vssadmin", "| sh", "| bash")
+SHELL_TOOL = {"name": "run_command",
+              "description": "Run a shell command on the owner's computer (bash; Git Bash on Windows) and get its real "
+                             "output - git, files, builds, scripts. folder= where it runs (default: ~/LOKI Projects/Home; "
+                             "a folder name there, or a full path in the owner's home). Make new projects in their own "
+                             "folder; GitHub: gh repo create <name> --private --source=. --remote=origin --push.",
+              "inputSchema": {"type": "object", "properties": {"command": {"type": "string"}, "folder": {"type": "string"},
+                                                              "timeout_s": {"type": "integer"}}, "required": ["command"]}}
+
+
+def run_shell(args: dict, cwd: Path) -> dict:  # noqa: ARG001 - the folder comes from args, not Ziva's cwd
+    import local_agent  # pylint: disable=import-outside-toplevel
+    cmd = str(args.get("command") or "").strip()
+    if not cmd:
+        return {"ok": False, "error": "which command?"}
+    hit = next((d for d in SHELL_DENY if d in cmd.lower()), "")
+    if hit:
+        return {"ok": False, "error": "refused: '%s' is a dangerous command" % hit.strip()}
+    try:
+        import agent_folders  # pylint: disable=import-outside-toplevel
+        base = agent_folders.projects_dir()
+    except Exception:  # noqa: BLE001
+        base = Path.home() / "LOKI Projects"
+    raw = str(args.get("folder") or "").strip()
+    where = Path(os.path.expanduser(raw)) if raw and (os.path.isabs(os.path.expanduser(raw))) else (base / (raw or "Home"))
+    where = where.resolve()
+    if Path.home().resolve() not in where.parents:
+        return {"ok": False, "error": "folder must be inside your home folder: %s" % where}
+    where.mkdir(parents=True, exist_ok=True)
+    local_agent.protect(where)
+    code, out = local_agent.run_command(cmd, where, timeout=max(10, min(int(args.get("timeout_s") or 300), 1800)))
+    return {"ok": code == 0, "exit": code, "folder": str(where), "output": out[-12000:]}
 
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image",
@@ -253,6 +293,10 @@ def cli(argv: list, cwd: Path | None = None) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if sys.argv[1:2] == ["--shell"]:
+        SHELL_ON["on"] = True
+        serve()
+    elif len(sys.argv) > 1:
         sys.exit(cli(sys.argv[1:]))
-    serve()
+    else:
+        serve()

@@ -2602,6 +2602,14 @@ def start_bridge_server(state: BridgeState, secret_path: Path, secret: str) -> t
     write_secret_atomic(secret_path, secret)
     server_thread = threading.Thread(target=server.serve_forever, name="loki-loopback-http", daemon=True)
     server_thread.start()
+
+    def ziva() -> None:   # Ziva (in the owner's Godot projects) gets LOKI's tools: engine/ziva_link.py
+        try:
+            import ziva_link  # pylint: disable=import-outside-toplevel
+            print("[loki] Ziva link: %s" % ziva_link.link().get("projects"), flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print("[loki] Ziva link skipped: %s" % exc, flush=True)
+    threading.Thread(target=ziva, name="loki-ziva-link", daemon=True).start()
     return server, server_thread
 
 
