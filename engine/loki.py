@@ -6181,10 +6181,11 @@ LOCAL_TOOLS["make_3d"] = make_3d_tool
 _FORGE_SCHEMA = schema(
     "make_3d", "Make a 3D model (.glb and .obj, saved in models/) from a picture in the workspace (path=) or from "
     "a description (prompt=; LOKI first draws a picture, then lifts it to 3D). backend: auto (best available: "
-    "TripoSR on this computer, then a free online Space, then an offline inflate that always works) | triposr | "
+    "Pixal3D on the owner's ComfyUI - a fully textured model that matches the picture - then TripoSR on this "
+    "computer, a free online Space, and an offline inflate that always works) | pixal3d | trellis2 | triposr | "
     "online | lift. Tell the user it opens in Forge for viewing and sculpting.",
     {"path": {"type": "string"}, "prompt": {"type": "string"},
-     "backend": {"type": "string", "enum": ["auto", "triposr", "online", "lift"]}})
+     "backend": {"type": "string", "enum": ["auto", "pixal3d", "trellis2", "triposr", "online", "lift"]}})
 TOOL_SCHEMAS.append(_FORGE_SCHEMA)
 MODEL_TOOL_SCHEMAS.append(_FORGE_SCHEMA)
 MODEL_TOOL_NAMES.add("make_3d")

@@ -1122,3 +1122,24 @@ Also: `test_forge_pro_ui`, `test_forge_undo_keys_ui`, `test_forge_rules_ui`, `te
 3. **colibri (the finish of the 2026-10-23 [windows] task above):** finish the qwen36-35b download, CUDA build for
    sm_86, `Q36_DN_GPU=1`, then `c/coli serve` (port 8000). LOKI now finds it by itself: model menu "colibri (big
    models, offloaded)"; run step 2 again with it picked and report tok/s.
+
+## 2026-10-25 evening - [windows] Forge: Pixal3D / TRELLIS.2 on the PC's ComfyUI
+
+Forge now makes fully textured, PBR-baked models through ComfyUI's own native TRELLIS.2 / Pixal3D nodes (Comfy Org's
+MIT template, engine/forge_workflows/). Nothing custom to install in ComfyUI - only an up-to-date ComfyUI and 6-8 model
+files. On the PC:
+
+1. **Update ComfyUI** (git pull in its folder + restart, or the desktop app's update). It needs the August 2026 nodes:
+   `Trellis2ShapeStage`, `Pixal3DConditioning`, `RemeshMesh`, `SaveGLB`. Then run `python tools/setup_trellis.py` in
+   the LOKI folder and paste its output here (reachable, nodes ok, which files are missing, the ComfyUI folder it found).
+2. **Install the models:** `python tools/setup_trellis.py install` (or Forge > Output > Install). About 8 files from
+   huggingface.co/Comfy-Org into ComfyUI/models/{diffusion_models,vae,clip_vision,geometry_estimation,background_removal}.
+   If it says "No ComfyUI on this computer", add `--comfy "<the ComfyUI folder>"`. Restart ComfyUI, run step 1 again:
+   all three modes must say ready.
+3. **One real run on the PC:** Forge > Image > a picture of one object (an axe, a chair), backend Pixal3D, Make 3D.
+   Report: did it finish, how long, VRAM peak if you can see it, and the model's triangles in Forge. If it stops with
+   "out of memory": restart ComfyUI with `--lowvram`, set Output > Detail 512 and Texture size 2048, try again; report
+   which settings worked on the 3070 Ti 8 GB.
+4. **From the Mac:** Forge there uses the PC's ComfyUI (Render's ComfyUI address). Same picture, Best available: the
+   status line must say Pixal3D, and the model must land in the Mac's models/. Then TRELLIS.2 once, and the
+   "4-view sheet" option with a character turnaround (front, left, back, right side by side). Report any error text.

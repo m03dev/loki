@@ -53,9 +53,11 @@ TOOLS = [
     {"name": "make_3d",
      "description": "Make a 3D model (.glb and .obj) from a description (prompt=; LOKI draws it first) or from a "
                     "picture in this folder (image=). Saved in folder= (default models). It opens in LOKI's Forge to "
-                    "look at, sculpt and export.",
+                    "look at, sculpt and export. backend: auto (the best available: Pixal3D on the owner's ComfyUI "
+                    "gives a fully textured model) | pixal3d | trellis2 | triposr | online | lift.",
      "inputSchema": {"type": "object", "properties": {
-         "prompt": {"type": "string"}, "image": {"type": "string"}, "folder": {"type": "string"}}}},
+         "prompt": {"type": "string"}, "image": {"type": "string"}, "folder": {"type": "string"},
+         "backend": {"type": "string", "enum": ["auto", "pixal3d", "trellis2", "triposr", "online", "lift"]}}}},
     {"name": "make_video",
      "description": "Make a short video clip (a few seconds) from a description, or animate a picture in this folder "
                     "(image=). Saved in videos/.",
@@ -146,7 +148,9 @@ def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
             raise RuntimeError("could not draw it first: %s" % res.get("error"))
         return str(res["file"])
 
-    res = make(src, out, prompt, "auto", image_maker=maker)
+    backend = str(args.get("backend") or "auto").lower()
+    res = make(src, out, prompt, backend if backend in ("auto", "pixal3d", "trellis2", "triposr", "online", "lift")
+               else "auto", image_maker=maker)
     if not res.get("ok"):
         return {"ok": False, "error": str(res.get("error", "the model was not made"))[:400]}
     files = [os.path.relpath(str(Path(f).resolve()), cwd) for f in (res.get("glb"), res.get("obj")) if f]

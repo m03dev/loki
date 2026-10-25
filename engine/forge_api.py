@@ -13,6 +13,10 @@ Every route needs the bridge's bearer token (the window fetches models with it, 
                      dropped picture), prompt = describe it (picture first, then 3D)
   POST /forge/save?name=x.glb     raw body: a sculpted/exported .glb/.obj, a material .png or a .ptex project,
                                   saved into models/ (never overwrites)
+  GET  /forge/trellis[?fresh=1]   Pixal3D / TRELLIS.2 on ComfyUI (engine/forge_trellis.py): reachable, new enough,
+                                  which model files each mode still needs, this computer's ComfyUI folder
+  POST /forge/trellis/install {mode?, names?, comfy_dir?}  download the missing model files (a job)
+  POST /forge/trellis/dir {comfy_dir}  remember where ComfyUI is installed on this computer
   GET  /forge/mm                  Material Maker on this computer: {installed, path, download}
   POST /forge/mm/open {name}      open models/<name> (.ptex / .glb / .obj) in Material Maker
   GET  /forge/creature            the anyCreature engine here: {ok, engine, outline, node}
@@ -99,6 +103,12 @@ def handle_get(state, path: str) -> tuple:
             found = forge3d.job(q["id"])
             return (200, {"ok": True, **found}) if found else (404, {"ok": False, "error": "no such job"})
         return 200, {"ok": True, "backends": forge3d.status(), "order": forge3d.plan("auto"), "jobs": forge3d.jobs()}
+    if route == "/forge/trellis":
+        import forge_trellis  # pylint: disable=import-outside-toplevel
+        forge_trellis.forget_cache() if q.get("fresh") else None
+        st = forge_trellis.status()
+        return 200, {"ok": True, **st, "models": [{"file": m["file"], "folder": m["folder"], "for": m["for"]}
+                                                  for m in forge_trellis.all_models()]}
     if route == "/forge/mm":
         import forge_mm  # pylint: disable=import-outside-toplevel
         return 200, {"ok": True, **forge_mm.status()}
@@ -164,6 +174,32 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             rel = _rel(state, file)
             return {"ok": bool(rel), "image": rel, "error": "" if rel else "the picture is outside the workspace"}
         return 200, forge3d.start_job(work, kind="image", label=prompt, thread=thread)
+    if route == "/forge/trellis/dir":
+        import ai_renderer  # pylint: disable=import-outside-toplevel
+        import forge_trellis  # pylint: disable=import-outside-toplevel
+        d = str(data.get("comfy_dir") or "").strip()
+        if d and not (Path(d).expanduser() / "models").is_dir():
+            return 400, {"ok": False, "error": "that folder has no models/ folder - pick the ComfyUI folder itself"}
+        f = ai_renderer._settings_file(state)  # pylint: disable=protected-access
+        cur = ai_renderer._read_json(f, {}) or {}  # pylint: disable=protected-access
+        cur["comfy_dir"] = str(Path(d).expanduser()) if d else ""
+        ai_renderer._write_json(f, cur)  # pylint: disable=protected-access
+        forge_trellis.forget_cache()
+        return 200, {"ok": True, "comfy_dir": cur["comfy_dir"]}
+    if route == "/forge/trellis/install":
+        import forge_trellis  # pylint: disable=import-outside-toplevel
+        mode = str(data.get("mode") or "") or None
+        names = data.get("names") if isinstance(data.get("names"), list) else None
+        if mode and mode not in forge_trellis.ALL_MODES:
+            return 400, {"ok": False, "error": "mode is pixal3d, trellis2 or pixal3d-views"}
+        if forge_trellis.find_comfy_dir() is None and not data.get("comfy_dir"):
+            return 400, {"ok": False, "error": "No ComfyUI folder on this computer. Set it in Forge > Output > ComfyUI, "
+                                               "or install from LOKI on the computer ComfyUI runs on."}
+
+        def work(progress):
+            return forge_trellis.install(names, data.get("comfy_dir") or None, mode,
+                                         progress=lambda msg, frac=None: progress(msg, frac if frac is not None else 0.5))
+        return 200, forge3d.start_job(work, kind="install", label="TRELLIS / Pixal3D models", thread=thread)
     if route == "/forge/make":
         backend = str(data.get("backend") or "auto")
         if backend not in forge3d.BACKENDS:

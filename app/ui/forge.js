@@ -129,7 +129,7 @@ function forgeLeft() {
   const go = el("div", "forge-go");
   const pick = el("select", "forge-backend"); pick.id = "forge-backend";
   pick.setAttribute("aria-label", "How to make the 3D model");
-  for (const [v, t] of [["auto", "Best available"], ["triposr", "TripoSR (this computer)"], ["online", "Online Space"], ["lift", "Offline lift (instant)"]]) {
+  for (const [v, t] of [["auto", "Best available"], ["pixal3d", "Pixal3D (ComfyUI)"], ["trellis2", "TRELLIS.2 (ComfyUI)"], ["triposr", "TripoSR (this computer)"], ["online", "Online Space"], ["lift", "Offline lift (instant)"]]) {
     const o = el("option", "", t); o.value = v; pick.append(o);
   }
   pick.addEventListener("change", () => { forge.backend = pick.value; forgeOutputState(); });
@@ -247,7 +247,69 @@ function forgeOutputBuild(options) {
   const reset = el("button", "quiet small", "Defaults"); reset.type = "button";
   reset.addEventListener("click", () => { try { localStorage.removeItem(FORGE_STORE); } catch (_) { /* */ } forgeOutputBuild(forge.options); });
   body.append(reset);
+  const comfy = el("div", "forge-comfy"); comfy.id = "forge-comfy";
+  body.prepend(comfy);
+  forgeComfyCheck();
   forgeOutputState();
+}
+
+// Pixal3D / TRELLIS.2 on ComfyUI (engine/forge_trellis.py): one quiet line - ready, what is missing, or how to fix it
+async function forgeComfyCheck(fresh) {
+  const box = document.getElementById("forge-comfy");
+  if (!box) return;
+  box.replaceChildren(el("span", "forge-comfy-text", "ComfyUI 3D: checking…"));
+  const r = await api("/forge/trellis" + (fresh ? "?fresh=1" : "")).catch(() => null);
+  box.replaceChildren();
+  const text = el("span", "forge-comfy-text");
+  const again = forgeBtn("update", "Check again", "Look at ComfyUI again (after updating it or adding models).", () => forgeComfyCheck(true), "forge-comfy-btn");
+  if (!r || !r.ok) { text.textContent = "ComfyUI 3D: could not check."; box.append(text, again); return; }
+  const modes = r.modes || {};
+  const ready = Object.keys(modes).filter((m) => modes[m].ready);
+  box.dataset.state = ready.length ? "ready" : (r.reachable ? "setup" : "off");
+  if (!r.reachable) {
+    text.textContent = "ComfyUI 3D (Pixal3D / TRELLIS.2): ComfyUI is not reachable - start it on the PC (same address as Render).";
+  } else if (!r.nodes_ok) {
+    text.textContent = "ComfyUI 3D: " + (r.error || "update ComfyUI");
+  } else {
+    const need = new Set();
+    for (const m of Object.keys(modes)) for (const f of modes[m].missing || []) need.add(f);
+    const names = { pixal3d: "Pixal3D", trellis2: "TRELLIS.2", "pixal3d-views": "4-view sheets" };
+    text.textContent = (ready.length ? "ComfyUI 3D ready: " + ready.map((m) => names[m] || m).join(", ") + "." : "ComfyUI 3D:")
+      + (need.size ? " " + need.size + " model file" + (need.size === 1 ? "" : "s") + " to add." : "");
+    if (!need.size) { box.append(text, again); return; }
+    if (r.comfy_dir) {
+      const inst = el("button", "quiet small", "Install"); inst.type = "button";
+      inst.title = "Download them into " + r.comfy_dir + " (several GB, from Hugging Face)";
+      inst.addEventListener("click", async () => {
+        inst.disabled = true;
+        const j = await api("/forge/trellis/install", {}).catch(() => null);
+        if (!j || !j.ok) { forgeSay((j && j.error) || "Could not start.", true); inst.disabled = false; return; }
+        forgeSay("Downloading the 3D models into ComfyUI…");
+        forgePoll(j.id, () => { forgeSay("Models installed - restart ComfyUI if it does not see them."); forgeComfyCheck(true); }, () => { inst.disabled = false; });
+      });
+      box.append(text, inst, again);
+      return;
+    }
+    text.title = "ComfyUI runs on another computer: install them from LOKI there (Forge > Output > Install), or: python tools/setup_trellis.py";
+    const dirBtn = el("button", "quiet small", "Folder"); dirBtn.type = "button";
+    dirBtn.title = "ComfyUI is on this computer? Tell LOKI its folder, then Install appears.";
+    dirBtn.addEventListener("click", () => {
+      const row = el("div", "forge-comfy-dir");
+      const inp = document.createElement("input"); inp.type = "text"; inp.placeholder = "ComfyUI folder (the one with models/)";
+      inp.setAttribute("aria-label", "ComfyUI folder");
+      const save = el("button", "quiet small", "Save"); save.type = "button";
+      save.addEventListener("click", async () => {
+        const j = await api("/forge/trellis/dir", { comfy_dir: inp.value.trim() }).catch(() => null);
+        if (!j || !j.ok) { forgeSay((j && j.error) || "Could not save it.", true); return; }
+        forgeComfyCheck(true);
+      });
+      row.append(inp, save);
+      box.after(row); dirBtn.remove(); inp.focus();
+    });
+    box.append(text, dirBtn, again);
+    return;
+  }
+  box.append(text, again);
 }
 
 function forgeOutputSet(id, value) {
@@ -770,7 +832,7 @@ function forgeOpen() {
     forge.order = r.order || [];
     if (r.backends && r.backends.options && !forge.options.length) forgeOutputBuild(r.backends.options);
     forgeOutputState();
-    if (r.order) forgeSay("Ready: " + r.order.join(" → ") + (r.backends && !r.backends.triposr ? " (TripoSR: python tools/setup_forge3d.py)" : ""));
+    if (r.order) forgeSay("Ready: " + r.order.join(" → "));
   }).catch(() => {});
   forgeViewer().then((v) => { if (v) v.start(); });
 }

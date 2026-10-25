@@ -11,6 +11,10 @@ the background is the colour around the edge, flood-filled in from the border) -
 backend, time), the same sidecar idea as images/ (engine/creations.py).
 
 Backends, best first ("auto"):
+  pixal3d  Pixal3D (TencentARC, MIT) through ComfyUI's native nodes (engine/forge_trellis.py): a fully textured,
+           PBR-baked model whose front matches the picture. Runs where ComfyUI runs (the PC); "auto" uses it when that
+           ComfyUI is reachable, new enough and has the models.
+  trellis2 TRELLIS.2 (Microsoft, MIT), the same ComfyUI pipeline without the camera step.
   triposr  TripoSR (github.com/VAST-AI-Research/TripoSR, MIT; weights stabilityai/TripoSR, MIT) on
            this computer: CUDA (about 6 GB - the PC's RTX 3070 Ti), Apple MPS, or CPU slowly.
            Installed by `python tools/setup_forge3d.py` into harness_data/tools/TripoSR + LOKI's venv;
@@ -42,7 +46,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNNERS = Path(__file__).resolve().parent / "runners"
-BACKENDS = ("auto", "triposr", "online", "lift")
+BACKENDS = ("auto", "pixal3d", "trellis2", "triposr", "online", "lift")
+COMFY_BACKENDS = ("pixal3d", "trellis2")
 MODEL_EXTS = (".glb", ".obj", ".png", ".ptex", ".level")   # what the file route serves from models/ (.level: Forge's Level workspace)
 SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
@@ -69,8 +74,12 @@ OPTIONS = [
      "applies_to": ["lift"], "what": "How far the lift puffs the shape out: low = a coin, high = a ball."},
     {"id": "smooth", "label": "Smoothing", "kind": "range", "min": 0, "max": 20, "step": 1, "default": 5,
      "applies_to": ["lift"], "what": "Smoothing passes on the outline (removes the pixel stairs)."},
-    {"id": "texture_size", "label": "Texture size", "kind": "range", "min": 512, "max": 4096, "step": 512, "default": 1024,
-     "applies_to": ["online"], "what": "Size of the baked colour texture."},
+    {"id": "texture_size", "label": "Texture size", "kind": "range", "min": 512, "max": 4096, "step": 512, "default": 2048,
+     "applies_to": ["pixal3d", "trellis2", "online"], "what": "Size of the baked textures (colour, normal, roughness...)."},
+    {"id": "faces", "label": "Triangles", "kind": "range", "min": 5000, "max": 1000000, "step": 5000, "default": 200000,
+     "applies_to": ["pixal3d", "trellis2"], "what": "How many triangles the finished model keeps (games: 20k-100k)."},
+    {"id": "detail", "label": "Detail", "kind": "range", "min": 256, "max": 1024, "step": 64, "default": 512,
+     "applies_to": ["pixal3d", "trellis2"], "what": "Remesh grid: higher keeps finer shape, needs more GPU memory (8 GB: 512-768)."},
     {"id": "image_size", "label": "Picture size", "kind": "range", "min": 512, "max": 2048, "step": 128, "default": 1024,
      "applies_to": ["image"], "what": "Resolution of the picture LOKI draws first (Describe it)."},
     {"id": "foreground", "label": "Subject fill", "kind": "range", "min": 0.5, "max": 1.0, "step": 0.05, "default": 0.85,
@@ -78,9 +87,12 @@ OPTIONS = [
     {"id": "cutout", "label": "Background cut-out", "kind": "range", "min": 0.05, "max": 0.6, "step": 0.01, "default": 0.19,
      "applies_to": ["triposr", "online", "lift"], "what": "How different from the background a pixel must be to count as the subject."},
     {"id": "symmetry", "label": "Mirror left/right", "kind": "toggle", "default": False,
-     "applies_to": ["triposr", "online", "lift"], "what": "Make the picture symmetric before shaping it (characters, vases)."},
+     "applies_to": ["pixal3d", "trellis2", "triposr", "online", "lift"], "what": "Make the picture symmetric before shaping it (characters, vases)."},
+    {"id": "views", "label": "4-view sheet", "kind": "toggle", "default": False,
+     "applies_to": ["pixal3d"], "what": "The picture is a turnaround sheet - front, left, back, right side by side: "
+     "Pixal3D's multi-view model matches all four sides."},
     {"id": "seed", "label": "Seed", "kind": "number", "min": 0, "max": 2147483647, "step": 1, "default": 0,
-     "applies_to": ["online", "image"], "what": "0 = random; the same seed makes the same result again."},
+     "applies_to": ["pixal3d", "trellis2", "online", "image"], "what": "0 = random; the same seed makes the same result again."},
 ]
 
 
@@ -124,8 +136,17 @@ def online_ready() -> bool:
     return importlib.util.find_spec("gradio_client") is not None
 
 
+def comfy_ready(mode: str) -> bool:
+    try:
+        import forge_trellis  # pylint: disable=import-outside-toplevel
+        return forge_trellis.ready(mode)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def status() -> dict:
-    return {"triposr": triposr_ready(), "online": online_ready(), "lift": True, "options": OPTIONS,
+    return {"pixal3d": comfy_ready("pixal3d"), "trellis2": comfy_ready("trellis2"),
+            "triposr": triposr_ready(), "online": online_ready(), "lift": True, "options": OPTIONS,
             "rembg": importlib.util.find_spec("rembg") is not None,
             "space": os.environ.get("LOKI_FORGE_SPACE", DEFAULT_SPACE),
             "setup": "python tools/setup_forge3d.py"}
@@ -137,7 +158,8 @@ def plan(backend: str = "auto") -> list:
     if backend not in BACKENDS:
         raise ForgeError("unknown backend %r (%s)" % (backend, ", ".join(BACKENDS)))
     if backend == "auto":
-        order = [b for b, ok in (("triposr", triposr_ready()), ("online", online_ready())) if ok]
+        order = [b for b in COMFY_BACKENDS if comfy_ready(b)][:1]   # the other ComfyUI mode would fail the same way
+        order += [b for b, ok in (("triposr", triposr_ready()), ("online", online_ready())) if ok]
     else:
         order = [backend] if backend != "lift" else []
     return order + ["lift"]
@@ -667,6 +689,13 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         cut_png = cut_dir / (base.name + "-cutout.png")
         cut.save(cut_png)
         def _run(name):
+            if name in COMFY_BACKENDS:
+                import forge_trellis  # pylint: disable=import-outside-toplevel
+                try:
+                    return forge_trellis.run(cut_png, base, name, opts or clean_options(),
+                                             progress=lambda msg: say(msg, 0.6))
+                except forge_trellis.TrellisError as exc:
+                    raise ForgeError(str(exc)) from None
             if name == "triposr":
                 return run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
             if name == "online":
