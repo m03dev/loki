@@ -23,6 +23,7 @@ const ForgeSettings = (() => {
     // manipulators
     handleSize: 1, axes: "object", pivotPlacement: "bbox",   // bbox (Maya) | median | last
     snapMove: 0, snapRotate: 15, snapScale: 0.1,             // the step snap (j): 0 = the grid step
+    discreteMove: false, discreteRotate: false, discreteScale: false,   // Maya's Discrete Move / Rotate / Scale: always step
     // selection
     softRadius: 0.25, softFalloff: "smooth", softMode: "volume",
     // create
@@ -58,7 +59,8 @@ const ForgeSettings = (() => {
     const v = typeof forge !== "undefined" && forge.view;
     if (k === "accent" || k == null) document.documentElement.style.setProperty("--fm-accent", get("accent"));
     if ((k === "handleSize" || k == null) && v) for (const tc of [v.transform, v.gizmo]) if (tc && tc.setSize) tc.setSize(0.8 * get("handleSize"));
-    if ((k === "axes" || k == null) && v && typeof forgeProSpace === "function") forgeProSpace(v, get("axes") === "world" ? "world" : "object");
+    if ((k === "axes" || k == null) && v && typeof forgeProSpace === "function") forgeProSpace(v, get("axes") === "world" ? "world" : get("axes") === "normal" && typeof forgeProComp === "function" && forgeProComp(v) ? "normal" : "object");
+    if ((k == null || /^(snap|discrete)(Move|Rotate|Scale)$/.test(k)) && v && typeof forgeProStepApply === "function") forgeProStepApply(v);
     if ((k === "softRadius" || k === "softFalloff" || k === "softMode" || k == null) && v && v.setProportional && v.edit)
       v.setProportional(null, get("softRadius"), get("softFalloff"), get("softMode"));
     if ((k === "uiScale" || k == null)) { const f = document.getElementById("forge"); if (f) f.style.zoom = get("uiScale") !== 1 ? String(get("uiScale")) : ""; }
@@ -133,14 +135,18 @@ const ForgeSettings = (() => {
     ["manipulators", "Manipulators", (p) => {
       p.append(el("h3", "", "Handles"),
         row("Handle size", "The move / rotate / scale handles (- and = change it too).", slider("handleSize", 0.3, 3, 0.05)),
-        row("Axes", "Which way the handles point.", choice("axes", [["object", "Object"], ["world", "World"]])),
+        row("Axes", "Which way the handles point. Component: along the picked components' normal (component mode).", choice("axes", [["object", "Object"], ["world", "World"], ["normal", "Component (normal)"]])),
         el("h3", "", "Pivot"),
         row("Component pivot", "Where the handle sits for picked vertices / edges / faces.", choice("pivotPlacement",
           [["bbox", "Centre of the bounding box (Maya)"], ["median", "Average of the picked points"], ["last", "Last picked vertex"]])),
         el("h3", "", "Step snap (hold j)"),
         row("Move step", "0 = the grid step.", slider("snapMove", 0, 5, 0.05)),
         row("Rotate step (degrees)", "", slider("snapRotate", 1, 90, 1)),
-        row("Scale step", "", slider("snapScale", 0.01, 1, 0.01)));
+        row("Scale step", "", slider("snapScale", 0.01, 1, 0.01)),
+        el("h3", "", "Always step (Maya's Discrete Move / Rotate / Scale)"),
+        row("Move", "The move handle always goes in steps, j or not.", toggle("discreteMove")),
+        row("Rotate", "The rotate handle always turns in steps.", toggle("discreteRotate")),
+        row("Scale", "The scale handle always scales in steps.", toggle("discreteScale")));
     }],
     ["selection", "Selection", (p) => {
       p.append(el("h3", "", "Soft selection"),

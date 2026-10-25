@@ -439,6 +439,14 @@ const FORGE_MAYA = {
    "pivotEach",
    "tweakMode",
    [
+    "Discrete Steps",
+    [
+     "discreteMove",
+     "discreteRotate",
+     "discreteScale"
+    ]
+   ],
+   [
     "Pivot",
     [
      "pivotBottom",

@@ -217,6 +217,13 @@ function forgeProPivotMode(v, on) {
   return "";
 }
 
+function forgeProDiscrete(key, what) {             // Modify > Discrete Move / Rotate / Scale: Settings' Always step
+  const S = window.ForgeSettings;
+  if (!S) return "";
+  S.set(key, !S.get(key));
+  const step = key === "discreteRotate" ? S.get("snapRotate") + "°" : key === "discreteScale" ? S.get("snapScale") : (+S.get("snapMove") || "the grid") + "";
+  return S.get(key) ? what + " goes in steps of " + step + " (Settings > Manipulators)." : what + " is smooth again (hold j to step).";
+}
 function forgeProSpace(v, space) {                // w / e + left button: World / Object / Component (normal)
   const tc = v.transform;
   if (space === "normal" && !forgeProComp(v)) return "Component axes work on components: F9 / F10 / F11 first.";
@@ -308,13 +315,22 @@ function forgeProSnapHud(v) {                       // the three snap chips in t
 }
 
 function forgeProSnap(v, kind, on) {              // j: the pro step snap for the move / rotate / scale handles
-  const tcs = [v.transform, v.gizmo].filter((x) => x && x.setTranslationSnap);
-  const step = forgeProGridStep(v);
-  // the steps are Settings > Manipulators (move 0 = the grid step)
-  const S = window.ForgeSettings, mv = S && +S.get("snapMove") > 0 ? +S.get("snapMove") : step;
-  const rot = (S ? +S.get("snapRotate") || 15 : 15) * Math.PI / 180, sc = S ? +S.get("snapScale") || 0.1 : 0.1;
-  for (const tc of tcs) if (kind === "step") { tc.setTranslationSnap(on ? mv : null); tc.setRotationSnap(on ? rot : null); tc.setScaleSnap(on ? sc : null); }
+  if (kind !== "step" || !v) return "";
+  if (v.pro) v.pro.stepHeld = !!on;
+  forgeProStepApply(v);
   return "";
+}
+// the handles' steps: j held, or Settings > Manipulators > Always step per tool (Maya's Discrete Move / Rotate / Scale)
+function forgeProStepApply(v) {
+  const tcs = [v && v.transform, v && v.gizmo].filter((x) => x && x.setTranslationSnap);
+  const S = window.ForgeSettings, held = !!(v && v.pro && v.pro.stepHeld), get = (k) => !!(S && S.get(k));
+  const mv = S && +S.get("snapMove") > 0 ? +S.get("snapMove") : forgeProGridStep(v);   // move 0 = the grid step
+  const rot = (S ? +S.get("snapRotate") || 15 : 15) * Math.PI / 180, sc = S ? +S.get("snapScale") || 0.1 : 0.1;
+  for (const tc of tcs) {
+    tc.setTranslationSnap(held || get("discreteMove") ? mv : null);
+    tc.setRotationSnap(held || get("discreteRotate") ? rot : null);
+    tc.setScaleSnap(held || get("discreteScale") ? sc : null);
+  }
 }
 
 // ---- the workspace: which panels show (pro: Windows menu, Ctrl+Space hides them all), remembered per machine
@@ -578,6 +594,9 @@ function forgeProCommands() {
     objectAxes: ["Object", (v) => forgeProSpace(v, "local")],
     componentAxes: ["Component (Normal)", (v) => forgeProSpace(v, "normal")],
     pivotEach: ["Each Piece About Its Own Centre", (v) => (v.setPivotEach ? (v.setPivotEach() ? "Rotate and scale: each piece of the selection about its own middle." : "Rotate and scale: about one pivot.") : "")],
+    discreteMove: ["Discrete Move", () => forgeProDiscrete("discreteMove", "Move")],
+    discreteRotate: ["Discrete Rotate", () => forgeProDiscrete("discreteRotate", "Rotate")],
+    discreteScale: ["Discrete Scale", () => forgeProDiscrete("discreteScale", "Scale")],
     tweakMode: ["Tweak Mode", (v) => (v.setTweak ? (v.setTweak() ? "Tweak mode: press on a component and drag it - no click to pick it first." : "Tweak mode off.") : "")],
     marquee: ["Marquee", () => "Drag a box to select (Shift toggles, Ctrl/Cmd removes)."],
     snapGrid: ["Snap to Grid", (v) => forgeProSnapToggle(v, "grid")],
