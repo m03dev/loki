@@ -784,6 +784,33 @@ function forgeSceneAttach(view, ctx) {
       setPivot(n, box.getCenter(new THREE.Vector3()));
       return true;
     },
+    // pivot placement (docs/FORGE_MODELING_FOUNDATION.md stage 3): the bottom middle of the object (where it stands on
+    // the grid - the Baseline's partner), the world origin, or the middle of the picked components. Nothing moves.
+    pivotBottom(id) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      const box = contentBox(n);
+      if (box.isEmpty()) return false;
+      const c = box.getCenter(new THREE.Vector3());
+      setPivot(n, new THREE.Vector3(c.x, box.min.y, c.z));
+      return true;
+    },
+    pivotOrigin(id) {
+      const n = node(id || api.active().id);
+      if (!n) return false;
+      n.grp.updateMatrixWorld(true);
+      setPivot(n, new THREE.Vector3().applyMatrix4(n.inner.matrixWorld.clone().invert()));
+      return true;
+    },
+    pivotToSelection() {
+      const r = root();
+      const vs = view.selectedVerts ? view.selectedVerts() : [];
+      if (!view.poly || !vs.length) return false;
+      const c = new THREE.Vector3();
+      for (const i of vs) c.add(new THREE.Vector3().fromArray(view.poly.v[i] || [0, 0, 0]));
+      setPivot(r, c.multiplyScalar(1 / vs.length));      // the cage is in the working object's own space
+      return true;
+    },
     // the pro Reset Pivot: back on the object's own origin
     resetPivot(id) {
       const n = node(id || api.active().id);
@@ -1944,7 +1971,7 @@ function forgeSceneAttach(view, ctx) {
   const RECORDED = ["add", "duplicate", "duplicateWithTransform", "rename", "setVisible", "toggleVisible", "hide", "show",
     "showLastHidden", "hideUnselected", "showAll", "remove", "removeSelected", "reparent", "parentSelected", "unparentSelected",
     "group", "ungroup", "select", "selectMany", "selectAll", "selectNone", "invertSelection", "selectHierarchy", "pickWalk",
-    "setTransform", "setPivot", "centerPivot", "resetPivot", "freeze", "resetTransform", "groupSelected", "makeWorking",
+    "setTransform", "setPivot", "centerPivot", "resetPivot", "pivotBottom", "pivotOrigin", "pivotToSelection", "freeze", "resetTransform", "groupSelected", "makeWorking",
     "combine", "separate", "replaceWith", "newObject", "dropOn", "multiBegin", "multiEnd",
     "layerAdd", "layerRemove", "layerRename", "layerSetVisible", "layerSetTemplate", "layerSetRef", "layerAssign", "layerCurrent", "addImagePlane",
     "setKey", "deleteKey", "clearKeys"];

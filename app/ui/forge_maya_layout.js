@@ -330,7 +330,15 @@ const FORGE_MAYA = {
      "objectAxes"
     ]
    ],
-   "pivotEdit"
+   "pivotEdit",
+   [
+    "Pivot",
+    [
+     "pivotBottom",
+     "pivotOrigin",
+     "pivotToSelection"
+    ]
+   ]
   ],
   "Display": [
    "#Viewport",

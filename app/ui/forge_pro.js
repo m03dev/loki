@@ -471,6 +471,10 @@ function forgeProCommands() {
     lights: ["Next Light", (v) => "Light: " + v.nextLight()],
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
     resetPivot: ["Reset Pivot", (v) => (T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    pivotBottom: ["Pivot to Bottom", (v) => (T(v).pivotBottom() ? "Pivot on the bottom middle - the object stands on it." : "")],
+    pivotOrigin: ["Pivot to World Origin", (v) => (T(v).pivotOrigin() ? "Pivot on the world origin." : "")],
+    pivotToSelection: ["Pivot to Selection", (v) => (T(v).pivotToSelection() ? "Pivot on the middle of the picked components."
+      : "Pick components first (F9 / F10 / F11) - the pivot goes to their middle.")],
     pivotEdit: ["Edit Pivot", (v) => forgeProPivotMode(v, null)],
     freeze: ["Freeze Transformations", (v) => (T(v).freeze() ? "Frozen: reads 0 / 0 / 1, nothing moved." : "")],
     resetXf: ["Reset Transformations", (v) => (T(v).resetTransform() ? "Back to 0 / 0 / 1." : "")],

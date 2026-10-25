@@ -20,6 +20,8 @@ system.
 
 | 2b | **Edit Mesh parity rows.** Add Divisions (neighbours take the edge points, so nothing opens), Flip Triangle Edge, Symmetrize (cut on the plane, mirrored, welded), and Flip. Each runs on picked components or the whole object, takes one undo step, and lives in Edit Mesh. | forge_polyops.js, forge_toolkit.js, gen_layout.py | test_forge_editmesh_ui, js/test_forge_editmesh |
 
+| 3a | **Pivot placement.** Modify > Pivot > Pivot to Bottom (where the object stands, the Baseline's partner), to World Origin, and to Selection (the middle of the picked components). The object never moves; each is one undo step. Still open in stage 3: `d` in component mode, bake pivot, and a per-object custom pivot memory. | forge_scene.js, forge_pro.js | test_forge_pivot_ui |
+
 How stage 2 works: the editor has one cage (`view.poly`), so the session joins the other meshes into it. Each mesh is
 first carried into the working object's space, and nothing is welded. The other meshes' shapes step aside while the
 session runs. The session lives on the working node (`multiSession`), so undo snapshots carry it.
