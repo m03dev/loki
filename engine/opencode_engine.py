@@ -35,7 +35,8 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 DEFAULT_TIMEOUT = int(os.getenv("LOKI_OPENCODE_TIMEOUT", "1200"))
-INSTALL = {"opencode": "npm i -g opencode-ai@latest", "codegraph": "npm i -g @colbymchenry/codegraph"}
+INSTALL = {"opencode": "npm i -g opencode-ai@latest", "codegraph": "npm i -g @colbymchenry/codegraph",
+           "dsh": "npm i -g @deepseek-ai/dsh"}   # dsh: DeepSeek Harness, the agent for a DeepSeek model (dsh_engine.py)
 OC_EXE = ("opencode", "opencode.cmd", "opencode.exe")
 CG_EXE = ("codegraph", "codegraph.cmd", "codegraph.exe")
 
@@ -88,10 +89,15 @@ def find_npm() -> str:
     return _find(("npm", "npm.cmd"), "LOKI_NPM_EXE", _in_bins(("npm", "npm.cmd")))
 
 
-def install(which: Iterable[str] = ("opencode", "codegraph"), runner=subprocess.run) -> dict:
+def _find_dsh() -> str:
+    import dsh_engine  # pylint: disable=import-outside-toplevel
+    return dsh_engine.find_dsh()
+
+
+def install(which: Iterable[str] = ("opencode", "codegraph", "dsh"), runner=subprocess.run) -> dict:
     """npm i -g the missing ones (the button in Settings > Agent). {name: "ok" | "already" | error}."""
-    have = {"opencode": find_opencode, "codegraph": find_codegraph}
-    pkgs = {"opencode": "opencode-ai@latest", "codegraph": "@colbymchenry/codegraph"}
+    have = {"opencode": find_opencode, "codegraph": find_codegraph, "dsh": _find_dsh}
+    pkgs = {"opencode": "opencode-ai@latest", "codegraph": "@colbymchenry/codegraph", "dsh": "@deepseek-ai/dsh"}
     npm = find_npm()
     out = {}
     for name in which:

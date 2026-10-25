@@ -1421,7 +1421,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     pass
                 self._send_json(200, {"ok": True, **agent.engine_status()})
             else:
-                done = agent.opencode_engine.install(body.get("which") or ("opencode", "codegraph"))
+                done = agent.opencode_engine.install(body.get("which") or ("opencode", "codegraph", "dsh"))
                 self._send_json(200, {"ok": all(v in ("ok", "already") for v in done.values()), "result": done,
                                       **agent.engine_status()})
             return

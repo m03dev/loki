@@ -8953,8 +8953,10 @@ def _oc_providers(first: str) -> dict:
 
 
 def engine_status() -> dict:
+    import dsh_engine  # pylint: disable=import-outside-toplevel
     oc, cg = opencode_engine.find_opencode(), opencode_engine.find_codegraph()
     return {"engine": opencode_engine.engine_choice(), "opencode": oc, "codegraph": cg,
+            "dsh": dsh_engine.find_dsh(), "deepseek_harness": dsh_engine.mode(),
             "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),
             "indexed": (WORKSPACE / ".codegraph").is_dir()}
 
@@ -8963,6 +8965,15 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     """One chat message (or a Build task / background job) done by OpenCode in the workspace, with CodeGraph; LOKI
     reports every tool. allow_bash=False: no shell (a job not allowed to run commands); preamble: a job's agent profile."""
     global _task_ok_calls, _task_failed_calls
+    # owner 2026-10-25: "when we're using deepseek4.1 use deepseek harness" - DeepSeek's own agent (engine/dsh_engine.py)
+    if AGENT_MODE not in ("ask", "plan") and not os.getenv("LOKI_OPENCODE_MODEL", "").strip():
+        import dsh_engine  # pylint: disable=import-outside-toplevel
+        chosen = dsh_engine.pick(_oc_providers(active_model_name())) if dsh_engine.mode() != "off" else None
+        dexe = dsh_engine.find_dsh() if chosen else ""
+        if chosen and dexe:
+            return await run_dsh(text, chosen, dexe, task=task, preamble=preamble)
+        if chosen and not dexe:
+            _progress("thinking", "DeepSeek Harness is not installed (%s) - OpenCode runs this one." % dsh_engine.INSTALL)
     exe = opencode_engine.find_opencode()
     messages.append({"role": "user", "content": text})
     if not exe:
@@ -9049,6 +9060,50 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     tools = result.get("tools") or []
     if tools and not plan:
         reply += "\n\n" + "Tools run: %d ok%s." % (_task_ok_calls, (", %d failed" % _task_failed_calls) if _task_failed_calls else "")
+    messages.append({"role": "assistant", "content": reply})
+    save_history()
+    return reply
+
+
+async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = "") -> str:
+    """One message (or Build task / job) done by DeepSeek Harness in the workspace. dsh prints only its last message,
+    so LOKI looks at the folder before and after: 'done' with nothing changed is pushed back once, then NOT DONE."""
+    global _task_ok_calls, _task_failed_calls
+    import dsh_engine  # pylint: disable=import-outside-toplevel
+    name, prov = chosen
+    messages.append({"role": "user", "content": text})
+    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    home = dsh_engine.prepare_home(DATA_DIR / "dsh", prov)
+    env = dsh_engine.env_for(home, prov)
+    prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
+                                    "before you say it is done. End with one line: 'DONE: <what you made>' or "
+                                    "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
+    _progress("thinking", "DeepSeek Harness (%s, %s) is working in %s..." % (name, prov.get("model", ""), WORKSPACE.name))
+    res = await asyncio.to_thread(dsh_engine.run_turn, prompt, str(WORKSPACE), exe=exe, env=env,
+                                  cancelled=_cancel_event.is_set,
+                                  on_line=lambda ln: _progress("assistant", ln[:300]) if ln.strip() else None)
+    chs = res.get("changes") or []
+    _task_ok_calls, _task_failed_calls = len(chs), (0 if res.get("exit") == 0 else 1)
+    if chs:
+        _progress("tool_result", "In the folder: " + dsh_engine.describe(chs))
+    reply = res.get("text") or ""
+    if res.get("error") and not reply:
+        reply = "NOT DONE - DeepSeek Harness stopped: %s" % res["error"]
+    elif _claims_unbacked(text, reply):
+        _progress("thinking", "Checked: it says done, but nothing changed in the folder - asking it to really do it.")
+        again = await asyncio.to_thread(
+            dsh_engine.run_turn, "Earlier you were asked: %s\n\nYou said it was done, but NOTHING changed in this "
+            "folder, so it was not done. Do it now with your tools (bash, write) and check the result. If you cannot, "
+            "say it was NOT done." % text[:4000], str(WORKSPACE), exe=exe, env=env, cancelled=_cancel_event.is_set)
+        chs = chs + (again.get("changes") or [])
+        _task_ok_calls = len(chs)
+        reply = again.get("text") or reply
+        if _claims_unbacked(text, reply):
+            reply = _not_done_note(reply)
+    if not reply:
+        reply = "(DeepSeek Harness finished without a reply.)"
+    if chs:
+        reply += "\n\nIn the folder: " + dsh_engine.describe(chs) + "."
     messages.append({"role": "assistant", "content": reply})
     save_history()
     return reply

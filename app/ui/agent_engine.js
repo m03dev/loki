@@ -22,10 +22,11 @@ const AgentEngine = (() => {
           + "using your connected providers, with CodeGraph as its map of the code. LOKI shows every tool it runs and says NOT DONE when nothing ran."),
         row("OpenCode", st.opencode || "not installed", !!st.opencode),
         row("CodeGraph", st.codegraph ? st.codegraph + (st.indexed ? " (workspace indexed)" : " (indexes on first use)") : "not installed", !!st.codegraph),
+        row("DeepSeek Harness", st.dsh ? st.dsh + " (runs the agent when the model is DeepSeek)" : "not installed - a DeepSeek model uses OpenCode until it is", !!st.dsh),
         row("Workspace", st.workspace || "", true));
       const acts = mk("div", "ae-acts");
-      if (!st.opencode || !st.codegraph) {
-        const b = mk("button", "send small", "Install " + [!st.opencode && "OpenCode", !st.codegraph && "CodeGraph"].filter(Boolean).join(" + "));
+      if (!st.opencode || !st.codegraph || !st.dsh) {
+        const b = mk("button", "send small", "Install " + [!st.opencode && "OpenCode", !st.codegraph && "CodeGraph", !st.dsh && "DeepSeek Harness"].filter(Boolean).join(" + "));
         b.type = "button"; b.id = "ae-install";
         b.addEventListener("click", install);
         acts.append(b);
