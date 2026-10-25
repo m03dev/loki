@@ -173,8 +173,14 @@ def tool(args: dict) -> dict:
 
 
 def describe(state: Any = None) -> str:  # noqa: ARG001
+    """What every agent turn is told about the owner's machines (OpenCode's instructions file, LOKI's own prompt)."""
+    me = "This machine: %s (%s)." % (peers.my_name(), platform.system() or "?")
     linked = [p["name"] for p in peers.peers()]
+    rule = ("Whenever the owner means another computer or device - the Mac, the PC, Windows, 'my other machine', "
+            "'help mac', 'the laptop', whatever the words - call list_machines FIRST to see what is linked and online. "
+            "Never guess, and never say you can't reach it before you have looked. To do something there, "
+            "run_on_machine with the full task (that machine's own LOKI does it), then machine_job to follow it and "
+            "report the result.")
     if not linked:
-        return "Other machines: none linked yet (list_machines says how to link)."
-    return ("Other machines linked: %s - you can hand them work with run_on_machine and check it with machine_job."
-            % ", ".join(linked))
+        return me + " No other machine is linked yet - if the owner asks for one, list_machines says how to link.\n" + rule
+    return me + " Linked: %s.\n%s" % (", ".join(linked), rule)

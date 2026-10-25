@@ -5030,7 +5030,8 @@ def identity_section() -> str:
                  model or "?", provider, cost),
              "- This machine: %s (%s)%s." % (machine or "this computer", sys.platform,
                                              (", LOKI version " + commit) if commit else ""),
-             "- Linked machines: %s." % (", ".join(linked) if linked else "none yet")]
+             "- Linked machines: %s. When the owner means another computer (the Mac, the PC, 'the other one'), "
+             "use the machines tool: list, run a task there, check its result." % (", ".join(linked) if linked else "none yet")]
     return chr(10).join(lines)
 
 
@@ -6854,12 +6855,19 @@ def system_prompt() -> str:   # noqa: F811 - the active mode's instructions on t
         text += chr(10) * 2 + folders_tool()
     except Exception:  # noqa: BLE001
         pass
+    try:   # the owner's other machines, every request (owner 2026-10-25: "it should know to go look for whats linked")
+        import machines  # pylint: disable=import-outside-toplevel
+        text += chr(10) * 2 + "# Your other machines" + chr(10) + machines.describe().replace(
+            "list_machines", "machines(action=list)").replace("run_on_machine", "machines(action=run)").replace(
+            "machine_job", "machines(action=status)")
+    except Exception:  # noqa: BLE001
+        pass
     return text
 
 
 _tool_enabled_before_modes = _tool_enabled
 # Always offered, even in a mode with only_tools: answering, planning and finding more tools.
-_MODE_ALWAYS = {"find_tools", "todo_add", "todo_list", "todo_done", "save_memory", "read_file", "list_files", "folders",
+_MODE_ALWAYS = {"machines", "find_tools", "todo_add", "todo_list", "todo_done", "save_memory", "read_file", "list_files", "folders",
                 "app_builder_guide", "make_app", "load_ecc_skill", "list_ecc_skills"}
 
 
@@ -9014,6 +9022,17 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         oc_cfg["permission"]["bash"] = "deny"
     if os.getenv("LOKI_JOB_ID"):                                   # a background job: its own config file
         cfg_path = cfg_dir / ("opencode-%s.json" % re.sub(r"[^\w-]", "", os.getenv("LOKI_JOB_ID", ""))[:40])
+    # every turn knows who and where it is and the owner's other machines - whatever words the owner uses (owner
+    # 2026-10-25: "it should know to go look for whats linked devices"): OpenCode's own instructions file
+    try:
+        import machines  # pylint: disable=import-outside-toplevel
+        ctx = cfg_dir / (("context-%s.md" % re.sub(r"[^\w-]", "", os.getenv("LOKI_JOB_ID", ""))[:40])
+                         if os.getenv("LOKI_JOB_ID") else "context.md")
+        ctx.write_text(identity_section() + "\n\n# Your other machines\n" + machines.describe() + "\n",
+                       encoding="utf-8")
+        oc_cfg["instructions"] = [str(ctx)]
+    except Exception as exc:  # noqa: BLE001
+        print("[loki] context for OpenCode not written: %s" % exc, flush=True)
     cfg_path.write_text(json.dumps(oc_cfg, indent=1), encoding="utf-8")
     env = opencode_engine.env_for(providers)
     conv = ("job-" + os.getenv("LOKI_JOB_ID", "")) if os.getenv("LOKI_JOB_ID") else (active_conversation_id() or "default")
@@ -9034,13 +9053,6 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     prompt = text if not task else ("%sGOAL: %s\n\nWork until it is done; check the result (run it, list it, git log) "
                                     "before you say it is done. End with one line: 'DONE: <what you made>' or "
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
-    if not plan and re.search(r"\b(mac|macbook|imac|windows|pc|other (machine|computer)|machines?)\b", text, re.I):
-        # the owner talks about another machine: say plainly which ones are linked and the tools that reach them
-        try:
-            import machines  # pylint: disable=import-outside-toplevel
-            prompt = "(%s Tools: list_machines, run_on_machine, machine_job.)\n\n%s" % (machines.describe(), prompt)
-        except Exception:  # noqa: BLE001
-            pass
     result: dict = {}
     used = ""
     for model in models[:3]:

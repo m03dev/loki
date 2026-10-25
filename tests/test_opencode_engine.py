@@ -181,6 +181,9 @@ if loki:
           "denied - and the agent's profile in the prompt",
           isinstance(jc["permission"]["bash"], dict) and jc["permission"]["bash"].get("*") == "allow"
           and jcalls and "Builder" in jcalls[0]["argv"][-1] and "--session" not in jcalls[0]["argv"], jc["permission"]["bash"])
+    ctx = Path((jc.get("instructions") or [""])[0])
+    check("every turn's instructions say which machines there are and to look (list_machines) whatever the words",
+          ctx.is_file() and "list_machines FIRST" in ctx.read_text() and "This machine:" in ctx.read_text(), jc.get("instructions"))
     job["no_shell"] = True; (jd / "job.json").write_text(json.dumps(job)); LOG.write_text("")
     asyncio.run(asyncio.wait_for(loki.run_job(str(jd / "job.json")), 50))
     jc = json.loads((Path(loki.DATA_DIR) / "opencode" / "opencode-job42.json").read_text())

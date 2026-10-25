@@ -104,6 +104,9 @@ try:
     res = json.loads(out.getvalue())["result"]
     check("... a tools/call answers with the machines", not res["isError"] and "mohameds-mac-mini" in res["content"][0]["text"], res)
     check("LOKI's own tool: machines {action: run}", machines.tool({"action": "run", "machine": "mac", "task": "say hi"})["ok"])
+    d = machines.describe()
+    check("describe (told every turn): this machine, the linked Mac, and to call list_machines first",
+          "This machine: pc" in d and "mohameds-mac-mini" in d and "list_machines FIRST" in d, d)
 finally:
     server.stop()
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
