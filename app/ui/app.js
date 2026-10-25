@@ -362,17 +362,20 @@ async function pollApproval() {
   setStatus("Waiting for your approval", "wait");
   const card = el("div", "approval");
   card.setAttribute("role", "alertdialog");
-  card.append(el("h3", "", "Loki wants to run " + ticket.tool));
+  card.append(el("h3", "", (/^DANGEROUS/.test(ticket.details || "") ? "⚠ " : "") + "Loki wants to run " + ticket.tool));
   card.append(el("p", "", "Allow only if you understand what this does."));
   card.append(el("pre", "", String(ticket.details || "")));
   const actions = el("div", "actions");
   const allow = el("button", "allow", "Allow");
   const deny = el("button", "", "Deny");
   allow.type = deny.type = "button";
+  // the chat is not on screen (Home, Forge, Studio...) or the ask comes from outside (Ziva): the card floats on top
+  const floating = !$("#transcript") || $("#transcript").offsetParent === null;
   const decide = async (approved) => {
     allow.disabled = deny.disabled = true;
     await api("/approval", { id: ticket.id, approved });
     card.classList.add("settled");
+    if (floating) setTimeout(() => card.remove(), 1500);
     actions.replaceChildren(el("span", "", approved ? "Allowed." : "Denied."));
     setStatus("Working…");
   };
@@ -380,8 +383,8 @@ async function pollApproval() {
   deny.addEventListener("click", () => decide(false));
   actions.append(allow, deny);
   card.append(actions);
-  $("#transcript").append(card);
-  scrollDown(true);
+  if (floating) { card.classList.add("floating"); document.body.append(card); }
+  else { $("#transcript").append(card); scrollDown(true); }
   allow.focus();
 }
 

@@ -1906,6 +1906,33 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"ok": True, **self.server.state.agent.categories_state()})
             return
+        if route == "/approval/ask":
+            # an outside agent (Ziva, through LOKI's tools - engine/make_mcp.py --shell) asks the owner first: the same
+            # Allow / Deny card as LOKI's own risky actions, with what it is going to do. Blocks until answered.
+            tool = str(data.get("tool") or "a command")[:120]
+            details = str(data.get("details") or "")[:10_000]
+            wait_s = max(10.0, min(float(data.get("timeout_s") or 600), 1800.0))
+            deadline = time.time() + wait_s
+            while True:                            # one card at a time: wait for the one on screen to be answered
+                with state.lock:
+                    if state.pending is None:
+                        ticket = {"id": uuid.uuid4().hex, "tool": tool, "details": details, "event": threading.Event(),
+                                  "approved": False}
+                        state.pending = ticket
+                        break
+                if time.time() > deadline:
+                    self._send_json(200, {"ok": True, "approved": False, "why": "another approval is still waiting"})
+                    return
+                time.sleep(0.5)
+            try:
+                answered = ticket["event"].wait(max(1.0, deadline - time.time()))
+            finally:
+                with state.lock:
+                    if state.pending is ticket:
+                        state.pending = None
+            self._send_json(200, {"ok": True, "approved": bool(answered and ticket["approved"]),
+                                  "why": "" if answered else "nobody answered in time"})
+            return
         if route == "/approval":
             ticket_id = data.get("id", "")
             approved = data.get("approved")

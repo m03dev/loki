@@ -225,38 +225,79 @@ def serve(stdin=sys.stdin, stdout=sys.stdout, cwd: Path | None = None) -> None:
             stdout.flush()
 
 
-# --shell (how Ziva gets it, engine/ziva_link.py): a run_command tool, so an agent that only has Godot tools (Ziva)
-# can do real work for the owner too - git repos, files, builds - in LOKI Projects. Dangerous commands are refused.
-SHELL_DENY = ("rm -rf /", "rm -fr /", "rm -rf ~", "del /f /s /q", "del /s /q", "rd /s /q", "rmdir /s /q", "format ",
-              "mkfs", "diskpart", "fdisk", "wipefs", "dd if=", "dd of=/dev/", ":(){", "shutdown", "reboot", "poweroff",
-              "chmod -r 777 /", "chmod 777 /", "reg delete", "bcdedit", "vssadmin", "| sh", "| bash")
+# --shell (how Ziva gets it, engine/ziva_link.py): run_command, so an agent that only has Godot tools (Ziva) can do
+# real work for the owner - anything, anywhere (owner 2026-10-25: "it needs to be allowed to do everything just ask
+# before and detail what its going to [do]"). EVERY command first shows the owner an Allow / Deny card in LOKI with
+# the plan, the exact command and the folder (POST /approval/ask on the running engine); nothing runs unless Allowed.
+# Commands that can wreck a machine are marked DANGEROUS on that card.
+DANGER = ("rm -rf /", "rm -fr /", "rm -rf ~", "del /f /s /q", "del /s /q", "rd /s /q", "rmdir /s /q", "format ",
+          "mkfs", "diskpart", "fdisk", "wipefs", "dd if=", "dd of=/dev/", ":(){", "shutdown", "reboot", "poweroff",
+          "chmod -r 777 /", "chmod 777 /", "reg delete", "bcdedit", "vssadmin", "| sh", "| bash", "sudo ")
 SHELL_TOOL = {"name": "run_command",
               "description": "Run a shell command on the owner's computer (bash; Git Bash on Windows) and get its real "
-                             "output - git, files, builds, scripts. folder= where it runs (default: ~/LOKI Projects/Home; "
-                             "a folder name there, or a full path in the owner's home). Make new projects in their own "
-                             "folder; GitHub: gh repo create <name> --private --source=. --remote=origin --push.",
-              "inputSchema": {"type": "object", "properties": {"command": {"type": "string"}, "folder": {"type": "string"},
-                                                              "timeout_s": {"type": "integer"}}, "required": ["command"]}}
+                             "output - git, files, folders anywhere, builds, scripts. The owner sees plan + command + "
+                             "folder and must click Allow in LOKI first, so write plan= clearly: what you will do and "
+                             "why. folder= where it runs (default ~/LOKI Projects/Home; a name there or a full path). "
+                             "GitHub: gh repo create <name> --private --source=. --remote=origin --push.",
+              "inputSchema": {"type": "object", "properties": {
+                  "plan": {"type": "string", "description": "for the owner: what this command does and why"},
+                  "command": {"type": "string"}, "folder": {"type": "string"}, "timeout_s": {"type": "integer"}},
+                  "required": ["plan", "command"]}}
 
 
-def run_shell(args: dict, cwd: Path) -> dict:  # noqa: ARG001 - the folder comes from args, not Ziva's cwd
+def _engine() -> tuple:
+    """(url, token) of the running LOKI (~/.loki/engine_connect.json, written by the engine at start)."""
+    try:
+        d = json.loads((Path.home() / ".loki" / "engine_connect.json").read_text(encoding="utf-8"))
+        if d.get("url") and d.get("token"):
+            return str(d["url"]).rstrip("/"), str(d["token"])
+    except (OSError, ValueError):
+        pass
+    return "", ""
+
+
+def ask_owner(tool: str, details: str, timeout_s: float = 600, opener=None) -> tuple:
+    """(approved, why): an Allow / Deny card in LOKI; False when LOKI is not running or nobody answers."""
+    import urllib.error  # pylint: disable=import-outside-toplevel
+    import urllib.request  # pylint: disable=import-outside-toplevel
+    url, token = _engine()
+    if not url:
+        return False, "LOKI is not running, so nobody can approve it - open LOKI and try again"
+    req = urllib.request.Request(url + "/approval/ask", method="POST",
+                                 data=json.dumps({"tool": tool, "details": details, "timeout_s": timeout_s}).encode(),
+                                 headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({})).open
+    try:
+        with opener(req, timeout=timeout_s + 30) as resp:
+            d = json.loads(resp.read().decode("utf-8") or "{}")
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return False, "LOKI did not answer (%s)" % getattr(exc, "reason", exc)
+    return bool(d.get("approved")), str(d.get("why") or ("" if d.get("approved") else "the owner said no"))
+
+
+def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the folder comes from args
     import local_agent  # pylint: disable=import-outside-toplevel
     cmd = str(args.get("command") or "").strip()
+    plan = str(args.get("plan") or "").strip()
     if not cmd:
         return {"ok": False, "error": "which command?"}
-    hit = next((d for d in SHELL_DENY if d in cmd.lower()), "")
-    if hit:
-        return {"ok": False, "error": "refused: '%s' is a dangerous command" % hit.strip()}
+    if len(plan) < 8:
+        return {"ok": False, "error": "say in plan= what this command will do and why - the owner reads it before allowing"}
     try:
         import agent_folders  # pylint: disable=import-outside-toplevel
         base = agent_folders.projects_dir()
     except Exception:  # noqa: BLE001
         base = Path.home() / "LOKI Projects"
-    raw = str(args.get("folder") or "").strip()
-    where = Path(os.path.expanduser(raw)) if raw and (os.path.isabs(os.path.expanduser(raw))) else (base / (raw or "Home"))
-    where = where.resolve()
-    if Path.home().resolve() not in where.parents:
-        return {"ok": False, "error": "folder must be inside your home folder: %s" % where}
+    raw = os.path.expanduser(str(args.get("folder") or "").strip())
+    where = (Path(raw) if raw and os.path.isabs(raw) else base / (raw or "Home")).resolve()
+    danger = next((d for d in DANGER if d in cmd.lower()), "")
+    details = "%s%s\n\nPlan: %s\n\nCommand:\n$ %s\n\nIn: %s%s" % (
+        "DANGEROUS - '%s' can destroy data or the system. " % danger.strip() if danger else "",
+        "Ziva (through LOKI's tools) wants to run a command.", plan[:2000], cmd[:4000], where,
+        "" if where.exists() else " (this folder does not exist yet - it will be made)")
+    ok, why = (ask or ask_owner)("run_command", details)
+    if not ok:
+        return {"ok": False, "error": "not run - %s" % why}
     where.mkdir(parents=True, exist_ok=True)
     local_agent.protect(where)
     code, out = local_agent.run_command(cmd, where, timeout=max(10, min(int(args.get("timeout_s") or 300), 1800)))
