@@ -217,6 +217,16 @@ function forgeProPivotMode(v, on) {
   return "";
 }
 
+function forgeProMatch(v, what) {                 // Modify > Match Transformations: onto the LAST picked object (Maya)
+  const t = forgeProTree(v);
+  if (!t || !t.matchTransforms) return "";
+  if (forgeProComp(v)) return "Match Transformations works on objects: F8 first.";
+  const ids = t.selected();
+  if (ids.length < 2) return "Pick two or more objects: the others match the last one you pick.";
+  const n = t.matchTransforms(what), last = t.node(ids[ids.length - 1]);
+  const word = { all: "translation, rotation and scale", translate: "translation", rotate: "rotation", scale: "scale", pivot: "pivot place" }[what];
+  return n ? n + (n === 1 ? " object has " : " objects have ") + last.name + "'s " + word + "." : "Nothing could match (locked, or the target's own parent).";
+}
 function forgeProDiscrete(key, what) {             // Modify > Discrete Move / Rotate / Scale: Settings' Always step
   const S = window.ForgeSettings;
   if (!S) return "";
@@ -500,6 +510,11 @@ function forgeProCommands() {
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
     resetPivot: ["Reset Pivot", (v) => (forgeProComp(v) && v.resetComponentPivot ? (v.resetComponentPivot() ? "The components' pivot is back in their middle." : "No custom pivot on these components.")
       : T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    matchAll: ["Match All Transforms", (v) => forgeProMatch(v, "all")],
+    matchTranslate: ["Match Translation", (v) => forgeProMatch(v, "translate")],
+    matchRotate: ["Match Rotation", (v) => forgeProMatch(v, "rotate")],
+    matchScale: ["Match Scaling", (v) => forgeProMatch(v, "scale")],
+    matchPivot: ["Match Pivots", (v) => forgeProMatch(v, "pivot")],
     bakePivot: ["Bake Pivot", (v) => { if (forgeProComp(v)) return "Bake Pivot works on objects: F8 first."; const t = T(v); return t.bakePivot && t.bakePivot() ? "Pivot baked: it is the object's origin now, and the translate took its place. Nothing moved." : ""; }],
     pivotBottom: ["Pivot to Bottom", (v) => (T(v).pivotBottom() ? "Pivot on the bottom middle - the object stands on it." : "")],
     pivotOrigin: ["Pivot to World Origin", (v) => (T(v).pivotOrigin() ? "Pivot on the world origin." : "")],

@@ -80,7 +80,9 @@ MAP = {
     "ConvertSelectionToShell": "convertToShell", "ConvertSelectionToShellBorder": "convertToShellBorder",
     "SelectSimilar": "selectSimilar", "SelectShortestEdgePathTool": "shortestPath",
     "GrowLoopPolygonSelectionRegion": "growLoop", "ShrinkLoopPolygonSelectionRegion": "shrinkLoop",
-    "SelectContiguousEdges": "contiguousEdges", "CreateQuickSelectSet": "quickSet", "ArtPaintSelectTool": "paintSelect", "BakeCustomPivot": "bakePivot", "SetEditor": "setEditor",
+    "SelectContiguousEdges": "contiguousEdges", "CreateQuickSelectSet": "quickSet", "ArtPaintSelectTool": "paintSelect", "BakeCustomPivot": "bakePivot",
+    "MatchTransform": "matchAll", "MatchTranslation": "matchTranslate", "MatchRotation": "matchRotate",
+    "MatchScaling": "matchScale", "MatchPivots": "matchPivot", "SetEditor": "setEditor",
     "NewScene": "newScene", "OpenScene": "openScene", "SaveSceneAs": "saveAs", "Import": "importFile",
     "SubdividePolygon": "addDivisions", "FlipTriangleEdge": "flipTriangleEdge", "Symmetrize": "symmetrize", "FlipMesh": "flipMesh",
     # Mesh Tools

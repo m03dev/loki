@@ -407,6 +407,33 @@ const FORGE_MAYA = {
     "freeze",
     "Freeze Transformations"
    ],
+   [
+    "Match Transformations",
+    [
+     [
+      "matchAll",
+      "Match All Transforms"
+     ],
+     "-",
+     [
+      "matchTranslate",
+      "Match Translation"
+     ],
+     [
+      "matchRotate",
+      "Match Rotation"
+     ],
+     [
+      "matchScale",
+      "Match Scaling"
+     ],
+     "-",
+     [
+      "matchPivot",
+      "Match Pivots"
+     ]
+    ]
+   ],
    "#Pivot",
    [
     "centerPivot",

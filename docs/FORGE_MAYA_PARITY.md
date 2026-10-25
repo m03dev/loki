@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-285 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (26%).
+290 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (26%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -35,7 +35,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Edit | 14 | 57 |
 | Create | 8 | 66 |
 | Select | 30 | 79 |
-| Modify | 10 | 95 |
+| Modify | 15 | 95 |
 | Display | 10 | 121 |
 | Windows | 13 | 80 |
 | Mesh | 15 | 32 |
@@ -316,11 +316,11 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Transformation Tools > Soft Modification Tool (Maya: SoftModTool)
 - ✓ `resetXf` Reset Transformations (Maya: ResetTransformations)
 - ✓ `freeze` Freeze Transformations (Maya: FreezeTransformations)
-- - Match Transformations > Match All Transforms (Maya: MatchTransform)
-- - Match Transformations > Match Translation (Maya: MatchTranslation)
-- - Match Transformations > Match Rotation (Maya: MatchRotation)
-- - Match Transformations > Match Scaling (Maya: MatchScaling)
-- - Match Transformations > Match Pivots (Maya: MatchPivots)
+- ✓ `matchAll` Match Transformations > Match All Transforms (Maya: MatchTransform)
+- ✓ `matchTranslate` Match Transformations > Match Translation (Maya: MatchTranslation)
+- ✓ `matchRotate` Match Transformations > Match Rotation (Maya: MatchRotation)
+- ✓ `matchScale` Match Transformations > Match Scaling (Maya: MatchScaling)
+- ✓ `matchPivot` Match Transformations > Match Pivots (Maya: MatchPivots)
 - ✓ `centerPivot` Center Pivot (Maya: CenterPivot)
 - ✓ `resetPivot` Zero Pivot (Maya: ZeroPivot)
 - ✓ `bakePivot` Bake Pivot (Maya: BakeCustomPivot)

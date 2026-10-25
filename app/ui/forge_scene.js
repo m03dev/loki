@@ -859,6 +859,39 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
+    // Modify > Match Transformations (Maya: MatchTransform / MatchTranslation / MatchRotation / MatchScaling /
+    // MatchPivots): every picked object takes the LAST picked one's world translation (its pivot onto the target's),
+    // rotation, scale or pivot place. what: "all" | "translate" | "rotate" | "scale" | "pivot". Returns how many moved.
+    matchTransforms(what) {
+      const ids = tree.sel.filter((id) => node(id)), target = node(ids[ids.length - 1]);
+      if (ids.length < 2 || !target) return 0;
+      scene.updateMatrixWorld(true);
+      const tp = new THREE.Vector3(), tq = new THREE.Quaternion(), ts = new THREE.Vector3();
+      target.grp.matrixWorld.decompose(tp, tq, ts);
+      let n = 0;
+      for (const id of ids.slice(0, -1)) {
+        const x = node(id);
+        if (!x || isAncestor(id, target.id) || api.layersLocked(id)) continue;
+        const par = x.grp.parent || scene;
+        par.updateMatrixWorld(true);
+        const pp = new THREE.Vector3(), pq = new THREE.Quaternion(), ps = new THREE.Vector3();
+        par.matrixWorld.decompose(pp, pq, ps);
+        if (what === "pivot") { setPivot(x, x.inner.worldToLocal(target.grp.getWorldPosition(new THREE.Vector3()))); n++; continue; }
+        if (what === "all" || what === "rotate") x.grp.quaternion.copy(pq.clone().invert().multiply(tq));
+        if (what === "all" || what === "scale") x.grp.scale.set(ts.x / (ps.x || 1), ts.y / (ps.y || 1), ts.z / (ps.z || 1));
+        if (what === "all" || what === "translate") {
+          x.grp.position.copy(par.worldToLocal(tp.clone()));            // the pivot (the node's origin) onto the target's
+          x.grp.updateMatrixWorld(true);
+          const T = translateOf(x); place(x, T);
+        }
+        x.grp.updateMatrixWorld(true);
+        n++;
+      }
+      if (tree.selMarks) drawMarks();
+      view.dirty = true;
+      return n;
+    },
+
     // Modify > Bake Pivot (Maya: BakeCustomPivot): the pivot becomes the object's origin - the geometry and the
     // children move under it, the translate takes the pivot's place. Nothing moves in the world.
     bakePivot(id) {
