@@ -47,6 +47,10 @@ const FORGE_TK_TOOLS = {
   fillHole: ["Fill Hole", null, "e", [], "Close the holes the selection touches."],
   offsetEdgeLoop: ["Offset Edge Loop", "offsetEdgeLoop", "e1", [["distance", "Distance", 0.01, 0.49, 0.01, 0.25], ["count", "Loops", 1, 32, 1, 1], ["equalDistance", "Equal distance", 0, 1, 1, 0]], "Two loops either side of the loop through the edge."],
   insertEdgeLoop: ["Insert Edge Loop", "insertEdgeLoop", "e1", [["t", "Position", 0.01, 0.99, 0.01, 0.5], ["count", "Number of loops", 1, 64, 1, 1], ["equalDistance", "Equal distance", 0, 1, 1, 0]], "A loop across the ring of quads the edge crosses."],
+  addDivisions: ["Add Divisions", "addDivisions", "f*", [["divisions", "Divisions", 1, 4, 1, 1]], "Split each picked face into quads round its middle (neighbours keep the new edge points, so nothing opens)."],
+  flipTriangleEdge: ["Flip Triangle Edge", "flipTriangleEdge", "e", [], "Turn the edge between two triangles to join their other two corners."],
+  symmetrize: ["Symmetrize", "symmetrize", "f*", [["axis", "Axis", 0, 0, 0, "x", ["x", "y", "z"]], ["direction", "Keep side", 0, 0, 0, "+", ["+", "-"]]], "Copy one side of the mesh onto the other (cut on the plane, mirrored, welded)."],
+  flipMesh: ["Flip", "flipMesh", "f*", [["axis", "Axis", 0, 0, 0, "x", ["x", "y", "z"]]], "Mirror the mesh in place across the plane through its origin."],
   mergeVerts: ["Merge", "merge", "v", [["threshold", "Threshold", 0, 2, 0.001, 0.001], ["alwaysMergeTwo", "Always merge two", 0, 1, 1, 0]], "Merge the selected vertices closer than the threshold."],
 };
 // the construction-history node each tool leaves (INPUTS)
@@ -56,7 +60,7 @@ const FORGE_TK_NODES = { extrudeFaces: "polyExtrudeFace", extrudeEdges: "polyExt
   triangulateFaces: "polyTriangulate", triangulate: "polyTriangulate", quadrangulate: "polyQuad", duplicateFaces: "polyChipOff", extractFaces: "polyChipOff",
   averageVerts: "polyAverageVertex", flatten: "polyMoveVertex", relax: "polyAverageVertex", circularize: "polyCircularize", spinEdge: "polyFlipEdge",
   softenEdges: "polySoftEdge", hardenEdges: "polySoftEdge", softHard: "polySoftEdge",
-  slideEdge: "polyTweak", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
+  slideEdge: "polyTweak", addDivisions: "polySubdFacet", flipTriangleEdge: "polyFlipEdge", symmetrize: "polySymmetrize", flipMesh: "polyFlip", insertEdgeLoop: "polySplitRing", merge: "polyMergeVert", cleanup: "polyCleanup", multiCut: "polySplit", targetWeld: "polyMergeVert", offsetEdgeLoop: "polySplitRing", sliceFaces: "polySplit" };
 if (typeof FORGE_HIST_NODE !== "undefined") Object.assign(FORGE_HIST_NODE, { op: "polyModifier" });
 
 const forgeTk = { last: null, tool: null };          // last: the op whose settings are live; tool: an interactive tool
@@ -119,7 +123,8 @@ function forgeTkCall(op, m, items, opts) {
   opts = opts || {};
   // the ops whose settings are plain arguments, not an options object (forge_polyops.js)
   const call = { slideEdge: () => fn(m, items, +opts.t || 0), spinEdge: () => fn(m, items, +opts.dir || 1),
-    targetWeld: () => fn(m, items.from, items.to), wedge: () => fn(m, items.faces, items.hinge, opts) }[op];
+    targetWeld: () => fn(m, items.from, items.to), wedge: () => fn(m, items.faces, items.hinge, opts),
+    symmetrize: () => fn(m, opts), flipMesh: () => fn(m, opts) }[op];
   try { out = call ? call() : fn(m, items, opts); } catch (exc) { return { m: m, sel: null, warn: (exc && exc.message) || String(exc) }; }
   if (!out) return { m: m, sel: null, warn: "Nothing changed." };
   if (out.v && out.f && !out.m) return { m: out, sel: null, warn: "" };     // a bare mesh
@@ -127,7 +132,7 @@ function forgeTkCall(op, m, items, opts) {
 }
 
 // tools that work on the whole mesh when the object is picked with no components (Maya's behaviour per object)
-const FORGE_TK_WHOLE = { bevel: { e: 1 }, poke: "f", extrudeFaces: "f", flatten: "v", softenEdges: { e: 1 }, hardenEdges: { e: 1 }, softHard: { e: 1 } };
+const FORGE_TK_WHOLE = { bevel: { e: 1 }, poke: "f", extrudeFaces: "f", flatten: "v", addDivisions: "f", symmetrize: "f", flipMesh: "f", softenEdges: { e: 1 }, hardenEdges: { e: 1 }, softHard: { e: 1 } };
 /** Every face / edge / vertex of the mesh, in the form a tool takes ("f", "v", or { e } for the fe / edge tools). */
 function forgeTkWhole(v, kind) {
   const m = v.poly;
@@ -379,6 +384,10 @@ function forgeTkCommands() {
     bevel: ["Bevel", run("bevel")],
     bridge: ["Bridge", run("bridge")],
     poke: ["Poke Face", run("poke")],
+    addDivisions: ["Add Divisions", run("addDivisions")],
+    flipTriangleEdge: ["Flip Triangle Edge", run("flipTriangleEdge")],
+    symmetrize: ["Symmetrize", run("symmetrize")],
+    flipMesh: ["Flip", run("flipMesh")],
     wedge: ["Wedge", run("wedge")],
     chamfer: ["Chamfer Vertex", run("chamferVerts")],
     collapse: ["Collapse", run("collapse")],

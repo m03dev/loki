@@ -18,6 +18,8 @@ system.
 | 1 | **Baseline.** New primitives sit on the grid (pivot at the base). `t` / INPUTS / In-View Editor has a Baseline attribute from -1 to 1. Settings > Create > Baseline sets the default; -0.5 is the old centred cube. | forge_poly.js `P.primitive(kind, {baseline})`, forge_model.js, forge_toolkit.js | test_forge_baseline_ui |
 | 2 | **Several objects' components at once (Maya hilite).** In component mode, Shift + click another mesh adds it. F9 with several meshes picked shows them all. F8, Sculpt or editing another object splits the cage back into the objects, each in its own space with its transform untouched. Undo works inside the session, and an undo in object mode never leaves the objects joined. | forge_poly.js `multiJoin / multiSplit`, forge_scene.js `multiBegin / multiEnd / multiIds`, forge_pro.js `forgeProComponents` | test_forge_multiedit_ui, js/test_forge_multiedit |
 
+| 2b | **Edit Mesh parity rows.** Add Divisions (neighbours take the edge points, so nothing opens), Flip Triangle Edge, Symmetrize (cut on the plane, mirrored, welded), and Flip. Each runs on picked components or the whole object, takes one undo step, and lives in Edit Mesh. | forge_polyops.js, forge_toolkit.js, gen_layout.py | test_forge_editmesh_ui, js/test_forge_editmesh |
+
 How stage 2 works: the editor has one cage (`view.poly`), so the session joins the other meshes into it. Each mesh is
 first carried into the working object's space, and nothing is welded. The other meshes' shapes step aside while the
 session runs. The session lives on the working node (`multiSession`), so undo snapshots carry it.

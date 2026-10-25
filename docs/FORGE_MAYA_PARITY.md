@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-240 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (22%).
+246 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (22%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -39,7 +39,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Display | 10 | 121 |
 | Windows | 12 | 80 |
 | Mesh | 15 | 32 |
-| Edit Mesh | 18 | 30 |
+| Edit Mesh | 22 | 30 |
 | Mesh Tools | 8 | 34 |
 | Mesh Display | 4 | 38 |
 | Curves | 0 | 36 |
@@ -50,8 +50,8 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Playback | 5 | 27 |
 | Shift+RMB object | 26 | 47 |
 | Shift+RMB vertex | 13 | 26 |
-| Shift+RMB edge | 24 | 37 |
-| Shift+RMB face | 22 | 36 |
+| Shift+RMB edge | 25 | 37 |
+| Shift+RMB face | 23 | 36 |
 | Shift+RMB default | 7 | 32 |
 | zones | 15 | 45 |
 
@@ -639,7 +639,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ### Edit Mesh
 
-- - Add Divisions (Maya: SubdividePolygon)
+- ✓ `addDivisions` Add Divisions (Maya: SubdividePolygon)
 - ✓ `bevel` Bevel (Maya: BevelPolygon)
 - - Smart Bevel (Maya: PolySmartBevel)
 - ✓ `bridge` Bridge (Maya: BridgeOrFill)
@@ -652,14 +652,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `merge` Merge (Maya: PolyMerge)
 - ✓ `mergeCenter` Merge to Center (Maya: MergeToCenter)
 - - Transform (Maya: MovePolygonComponent)
-- - Flip (Maya: FlipMesh)
-- - Symmetrize (Maya: Symmetrize)
+- ✓ `flipMesh` Flip (Maya: FlipMesh)
+- ✓ `symmetrize` Symmetrize (Maya: Symmetrize)
 - ✓ `averageVerts` Average Vertices (Maya: AverageVertex)
 - ✓ `chamfer` Chamfer Vertices (Maya: ChamferVertex)
 - - Reorder Vertices (Maya: ReorderVertex)
 - ✓ `deleteEdgeVert` Delete Edge/Vertex (Maya: DeletePolyElements)
 - - Edit Edge Flow (Maya: PolyEditEdgeFlow)
-- - Flip Triangle Edge (Maya: FlipTriangleEdge)
+- ✓ `flipTriangleEdge` Flip Triangle Edge (Maya: FlipTriangleEdge)
 - ✓ `spinEdgeBack` Spin Edge Backward (Maya: PolySpinEdgeBackward)
 - ✓ `spinEdge` Spin Edge Forward (Maya: PolySpinEdgeForward)
 - - Assign Invisible Faces (Maya: PolyAssignSubdivHole)
@@ -1093,7 +1093,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - (NW) Merge/Collapse Edges > Merge Edge Tool
 - ✓ `collapse` (E) Merge/Collapse Edges > Collapse Edge
 - ✓ `mergeCenter` (N) Merge/Collapse Edges > Merge Edges To Center
-- - (N) Flip/Spin Edge > Flip Triangle Edge
+- ✓ `flipTriangleEdge` (N) Flip/Spin Edge > Flip Triangle Edge
 - ✓ `spinEdge` (E) Flip/Spin Edge > Spin Forward
 - ✓ `spinEdgeBack` (W) Flip/Spin Edge > Spin Backward
 - ✓ `multiCut` (W) Edge tools > Multi-Cut
@@ -1136,7 +1136,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Smart Bevel (Maya: PolySmartBevel)
 - ✓ `smooth` Smooth Faces
 - - Assign Invisible Faces (Maya: PolyAssignSubdivHole)
-- - Add Divisions To Faces (Maya: SubdividePolygon)
+- ✓ `addDivisions` Add Divisions To Faces (Maya: SubdividePolygon)
 - ✓ `circularize` Circularize Components (Maya: PolyCircularize)
 - ✓ `connect` Connect Components (Maya: ConnectComponents)
 - ✓ `detach` Detach Components (Maya: DetachComponent)

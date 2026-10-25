@@ -585,6 +585,10 @@ const FORGE_MAYA = {
   "Edit Mesh": [
    "#Components",
    [
+    "addDivisions",
+    "Add Divisions"
+   ],
+   [
     "bevel",
     "Bevel"
    ],
@@ -620,6 +624,15 @@ const FORGE_MAYA = {
     "mergeCenter",
     "Merge to Center"
    ],
+   "-",
+   [
+    "flipMesh",
+    "Flip"
+   ],
+   [
+    "symmetrize",
+    "Symmetrize"
+   ],
    "#Vertex",
    [
     "averageVerts",
@@ -633,6 +646,10 @@ const FORGE_MAYA = {
    [
     "deleteEdgeVert",
     "Delete Edge/Vertex"
+   ],
+   [
+    "flipTriangleEdge",
+    "Flip Triangle Edge"
    ],
    [
     "spinEdgeBack",
@@ -1173,10 +1190,12 @@ const FORGE_MAYA = {
     "NE": {
      "title": "Flip/Spin Edge",
      "ring": {
+      "N": "flipTriangleEdge",
       "E": "spinEdge",
       "W": "spinEdgeBack"
      },
      "labels": {
+      "N": "Flip Triangle Edge",
       "E": "Spin Forward",
       "W": "Spin Backward"
      },
@@ -1280,6 +1299,10 @@ const FORGE_MAYA = {
     [
      "smooth",
      "Smooth Faces"
+    ],
+    [
+     "addDivisions",
+     "Add Divisions To Faces"
     ],
     [
      "circularize",

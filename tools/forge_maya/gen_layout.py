@@ -73,6 +73,7 @@ MAP = {
     "DeletePolyElements": "deleteEdgeVert", "DeleteEdge": "deleteEdgeVert", "DeleteVertex": "deleteEdgeVert",
     "PolySpinEdgeBackward": "spinEdgeBack", "PolySpinEdgeForward": "spinEdge", "DuplicateFace": "duplicateFace",
     "ExtractFace": "extractFace", "PokePolygon": "poke", "WedgePolygon": "wedge",
+    "SubdividePolygon": "addDivisions", "FlipTriangleEdge": "flipTriangleEdge", "Symmetrize": "symmetrize", "FlipMesh": "flipMesh",
     # Mesh Tools
     "ToggleModelingToolkit": "winToolkit", "SplitEdgeRingTool": "insertLoopTool", "MultiCutTool": "multiCut",
     "dR_multiCutTool": "multiCut", "DuplicateEdges": "offsetEdgeLoop", "QuadDrawTool": "quadDraw",

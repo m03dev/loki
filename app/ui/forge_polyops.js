@@ -2093,6 +2093,87 @@
     res.report = report;
     return res;
   };
+  // ------------------------------------------------------------------ Edit Mesh: Add Divisions, Flip Triangle Edge,
+  // Symmetrize, Flip (docs/FORGE_MAYA_PARITY.md "not yet" rows, Edit Mesh first)
+  // Add Divisions (Maya polySubdivideFacet, exponential): every picked face becomes quads around its middle - a vertex
+  // on each edge's middle and one in the face's middle - `divisions` times over. A neighbour that shares a split edge
+  // gets the middle vertex in its ring, so the mesh never opens (no T-junction gap).
+  P.addDivisions = (m0, faces, opts) => {
+    let fs = faceIds(m0, faces);
+    if (!fs.length) return fail(m0, "Add Divisions: select faces.");
+    const times = clamp(Math.round(num((opts || {}).divisions, 1)), 1, 4);
+    let m = cp(m0);
+    for (let t = 0; t < times; t++) {
+      const T = P.topology(m), mid = new Map(), pick = new Set(fs), out = [];
+      const midOf = (a, b) => {
+        const k = ekey(a, b);
+        if (!mid.has(k)) { mid.set(k, m.v.length); m.v.push(lerp(m.v[a], m.v[b], 0.5)); }
+        return mid.get(k);
+      };
+      for (const fi of fs) { const f = m.f[fi]; for (let k = 0; k < f.length; k++) midOf(f[k], f[(k + 1) % f.length]); }
+      // neighbours that are not divided keep their shape but take the new edge vertices into their ring
+      for (const [k, id] of mid) {
+        const [a, b] = k.split(",").map(Number), ei = T.edge(a, b);
+        if (ei === undefined) continue;
+        insertOnEdge(m, a, b, [id], T.edges[ei].faces.filter((fi) => !pick.has(fi)));
+      }
+      const keep = m.f.filter((_, i) => !pick.has(i));
+      for (const fi of fs) {
+        const f = m.f[fi], c = m.v.length;
+        m.v.push(P.centroid(m, f));
+        for (let k = 0; k < f.length; k++) {
+          const prev = f[(k + f.length - 1) % f.length], cur = f[k], next = f[(k + 1) % f.length];
+          out.push([midOf(prev, cur), cur, midOf(cur, next), c]);
+        }
+      }
+      m.f = keep.concat(out);
+      fs = out.map((_, i) => keep.length + i);
+    }
+    return finish(m, faceSel(m, fs));
+  };
+  // Flip Triangle Edge (Maya polyFlipEdge): the edge between two triangles turns to join their other two corners
+  P.flipTriangleEdge = (m0, edges) => {
+    const T = P.topology(m0), m = cp(m0), done = [];
+    for (const ei of edgeIds(m0, T, edges)) {
+      const e = T.edges[ei];
+      if (e.faces.length !== 2) continue;
+      const [f1, f2] = e.faces, A = m.f[f1], B = m.f[f2];
+      if (A.length !== 3 || B.length !== 3) continue;
+      const k1 = A.findIndex((x, k) => (x === e.a && A[(k + 1) % 3] === e.b) || (x === e.b && A[(k + 1) % 3] === e.a));
+      if (k1 < 0) continue;
+      const a = A[k1], b = A[(k1 + 1) % 3], c = A[(k1 + 2) % 3], d = B.find((x) => x !== a && x !== b);
+      if (d == null || d === c) continue;
+      m.f[f1] = [c, a, d];
+      m.f[f2] = [d, b, c];
+      done.push([c, d]);
+    }
+    if (!done.length) return fail(m0, "Flip Triangle Edge: pick edges between two triangles.");
+    return finish(m, edgeSel(done));
+  };
+  // Symmetrize (Maya polySymmetrize): one side of the plane through the origin is copied onto the other - the mesh is
+  // cut along the plane, the other side removed, the kept side mirrored and welded on the seam
+  P.symmetrize = (m0, a, b) => {   // (m, opts) or (m, faces, opts) - the history replays the second form
+    const o = b || (a && !Array.isArray(a) ? a : {}), ax = { x: 0, y: 1, z: 2 }[String(o.axis || "x").toLowerCase()] ?? 0;
+    const dir = String(o.direction || "+") === "-" ? -1 : 1, n = [0, 0, 0];
+    n[ax] = 1;
+    const cut = P.sliceFaces(m0, null, [0, 0, 0], n);
+    const m = cut.warn ? cp(m0) : cut.m, eps = 1e-6;
+    const side = (fi) => { const c = P.centroid(m, m.f[fi]); return c[ax] * dir; };
+    const kept = { v: m.v, f: m.f.filter((_, i) => side(i) >= -eps) };
+    if (!kept.f.length) return fail(m0, "Symmetrize: nothing on that side of the plane.");
+    const half = finish(kept, NONE()).m;
+    const both = P.mirror(half, [0, 0, 0], n, 1e-4);
+    return finish(both.f ? both : (both.m || both), NONE());
+  };
+  // Flip (Maya FlipMesh): the mesh mirrored in place across the plane through the origin (faces turned the right way)
+  P.flipMesh = (m0, a, b) => {
+    const o = b || (a && !Array.isArray(a) ? a : {});
+    const ax = { x: 0, y: 1, z: 2 }[String(o.axis || "x").toLowerCase()] ?? 0, m = cp(m0);
+    m.v = m.v.map((p) => { const q = p.slice(); q[ax] = -q[ax]; return q; });
+    m.f = m.f.map((f) => f.slice().reverse());
+    return finish(m, NONE(), "", true);
+  };
+
   // the heads-up display: what the mesh is made of
   P.meshStats = (m) => {
     const T = P.topology(m), { r } = analyse(m, {});
