@@ -38,7 +38,8 @@ const LokiHarness = (() => {
       const b = mk("button", "model-item" + (st.engine === h.id ? " current" : "")); b.type = "button";
       b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(st.engine === h.id)); b.dataset.harness = h.id;
       const top = mk("span", "model-item-top"); top.append(mk("span", "model-item-name", h.name));
-      const missing = (h.id === "opencode" && !st.opencode) || (h.id === "dsh" && !st.dsh);
+      const missing = (h.id === "opencode" && !st.opencode) || (h.id === "dsh" && !st.dsh)
+        || (h.id === "codex" && !st.codex) || (h.id === "claude-code" && !st.claude_code);
       if (missing) top.append(mk("span", "model-item-using", "not installed"));
       b.append(top, mk("span", "model-item-blurb", h.what));
       b.addEventListener("click", () => pick(h.id));

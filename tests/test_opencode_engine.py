@@ -210,7 +210,7 @@ if loki:
     os.environ.pop("LOKI_JOB_ID", None)
     st = loki.engine_status()
     check("Settings > Agent status: the engine, where OpenCode is, the install commands", st["opencode"] == str(FAKE)
-          and st["engine"] in oe.HARNESSES and "opencode" in st["install"] and len(st["harnesses"]) == 5, st)
+          and st["engine"] in oe.HARNESSES and "opencode" in st["install"] and len(st["harnesses"]) == len(oe.HARNESSES), st)
 
 zc = oe.ziva_mcp({"LOKI_ZIVA_MCP": "http://127.0.0.1:7357/mcp"})
 check("Ziva's MCP server (a pasted URL) becomes a remote MCP for OpenCode; a command becomes a local one; empty -> none",

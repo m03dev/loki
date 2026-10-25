@@ -129,6 +129,11 @@ HARNESSES = {
     "dsh": ("DeepSeek Harness", "DeepSeek's own open-source agent (dsh). Made for DeepSeek, runs any OpenAI-compatible model."),
     "shell": ("Shell agent", "mini-swe-agent's recipe: one shell command per step, the real output back. Small prompt - "
                              "the one for local models, works with any model."),
+    "codex": ("Codex (your ChatGPT plan)", "OpenAI's Codex CLI signed in with YOUR ChatGPT account - the latest GPT "
+                                           "(GPT-6 on Plus and up) on your plan's allowance, like Ziva's 'Use Existing "
+                                           "Subscriptions'. Needs `codex login` once."),
+    "claude-code": ("Claude Code (your Claude plan)", "Anthropic's Claude Code CLI on YOUR Claude subscription. Needs "
+                                                      "`claude` + /login once."),
     "loki": ("LOKI classic", "LOKI's own built-in loop with all of LOKI's tools (pictures, apps, browser, memory ...)."),
 }
 

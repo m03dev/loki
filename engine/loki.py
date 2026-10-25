@@ -8978,6 +8978,7 @@ def engine_status() -> dict:
     return {"engine": opencode_engine.engine_choice(), "harnesses": [{"id": k, "name": v[0], "what": v[1]}
                                                                      for k, v in opencode_engine.HARNESSES.items()],
             "opencode": oc, "codegraph": cg, "ziva_mcp": os.getenv("LOKI_ZIVA_MCP", ""),
+            "codex": __import__("cli_agents").find_cli("codex"), "claude_code": __import__("cli_agents").find_cli("claude-code"),
             "dsh": dsh_engine.find_dsh(), "deepseek_harness": dsh_engine.mode(),
             "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),
             "indexed": (WORKSPACE / ".codegraph").is_dir()}
@@ -8997,6 +8998,8 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         pick = first_name if _local_agent_for(first_name) else next(iter(_oc_providers(first_name)), "")
         if pick:
             return await run_local(text, pick, task=task, preamble=preamble)
+    if harness in ("codex", "claude-code"):        # the owner's own ChatGPT / Claude plan through its official CLI
+        return await run_cli_harness(text, harness, task=task, preamble=preamble)
     if harness == "dsh":                           # picked by hand: DeepSeek Harness runs whatever model is picked
         import dsh_engine  # pylint: disable=import-outside-toplevel
         prov = _oc_providers(first_name)
@@ -9140,6 +9143,45 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     tools = result.get("tools") or []
     if tools and not plan:
         reply += "\n\n" + "Tools run: %d ok%s." % (_task_ok_calls, (", %d failed" % _task_failed_calls) if _task_failed_calls else "")
+    messages.append({"role": "assistant", "content": reply})
+    save_history()
+    return reply
+
+
+async def run_cli_harness(text: str, name: str, task: bool = False, preamble: str = "") -> str:
+    """One message done by Codex (the owner's ChatGPT sign-in - GPT-6 on Plus and up) or Claude Code (their Claude
+    plan), the official CLIs (engine/cli_agents.py). LOKI checks the folder before/after and runs git log itself -
+    the same honesty as the Shell agent."""
+    global _task_ok_calls, _task_failed_calls
+    import cli_agents  # pylint: disable=import-outside-toplevel
+    import dsh_engine  # pylint: disable=import-outside-toplevel
+    import local_agent  # pylint: disable=import-outside-toplevel
+    label = cli_agents.CLI_AGENTS[name]["label"]
+    messages.append({"role": "user", "content": text})
+    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    local_agent.protect(WORKSPACE)
+    if not cli_agents.find_cli(name):
+        reply = "NOT DONE - %s is not installed here. Install it once: `%s`, then sign in: `%s`." % (
+            label, cli_agents.CLI_AGENTS[name]["install"], cli_agents.CLI_AGENTS[name]["signin"])
+        messages.append({"role": "assistant", "content": reply})
+        save_history()
+        return reply
+    history = "\n".join("%s: %s" % (m["role"], str(m["content"])[:1500]) for m in messages[-7:-1]
+                        if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str))
+    system = ((preamble + "\n\n") if preamble else "") + identity_section() + (
+        ("\n\n# The chat so far\n" + history) if history else "") + (
+        "\n\nDo the task with your tools in this folder and check the result before you say it is done.")
+    before = dsh_engine.snapshot(WORKSPACE)
+    _progress("thinking", "%s is working in %s..." % (label, WORKSPACE.name))
+    try:
+        out = await asyncio.to_thread(cli_agents.run, name, system, text, str(WORKSPACE), 1800)
+        failed = False
+    except Exception as exc:  # noqa: BLE001 - not signed in, timed out ...
+        out, failed = "NOT DONE - %s stopped: %s" % (label, exc), True
+    chs = dsh_engine.changes(before, dsh_engine.snapshot(WORKSPACE))
+    _task_ok_calls, _task_failed_calls = len(chs), int(failed)
+    reply = out if failed else local_agent.verify(text, WORKSPACE, chs, out, "done", [("cli", 0)] * max(1, len(chs)),
+                                                  local_agent.find_shell()[0])
     messages.append({"role": "assistant", "content": reply})
     save_history()
     return reply

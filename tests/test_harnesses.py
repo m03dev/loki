@@ -46,7 +46,8 @@ import opencode_engine  # noqa: E402
 import dsh_engine  # noqa: E402
 
 check("an old engine.txt 'opencode' (the old default) now means Auto", opencode_engine.engine_choice() == "auto", os.environ.get("LOKI_AGENT_ENGINE"))
-check("five harnesses: auto, opencode, dsh, shell, loki", list(opencode_engine.HARNESSES) == ["auto", "opencode", "dsh", "shell", "loki"])
+check("seven harnesses: auto, opencode, dsh, shell, codex, claude-code, loki",
+      list(opencode_engine.HARNESSES) == ["auto", "opencode", "dsh", "shell", "codex", "claude-code", "loki"])
 
 calls = []
 
@@ -83,6 +84,30 @@ check("OpenCode picked: even a local model goes to OpenCode", send("opencode", "
 check("DeepSeek Harness picked: dsh runs the picked model (not only DeepSeek)", send("dsh", "groq", CLOUD) == [("dsh", "groq")], calls)
 check("Auto + a local model: the shell agent", send("auto", "local", {}) == [("shell", "local")], calls)
 check("Auto + a cloud model: OpenCode", send("auto", "groq", CLOUD)[0] == ("opencode", "loki-groq/llama-3.3"), calls)
+
+import cli_agents  # noqa: E402
+cli_runs = []
+
+
+def fake_cli(name, system, prompt, ws, timeout=900):
+    cli_runs.append((name, prompt, "Who you are right now" in system))
+    import subprocess as sp
+    sp.run(["git", "init", "-q", "demo"], cwd=ws, check=True)
+    (Path(ws) / "demo" / "README.md").write_text("# demo\n")
+    sp.run(["git", "-C", "demo", "add", "-A"], cwd=ws, check=True)
+    sp.run(["git", "-C", "demo", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "first"], cwd=ws, check=True)
+    return "Made demo with a README and committed it."
+
+
+cli_agents.find_cli = lambda name: "/fake/" + name
+cli_agents.run = fake_cli
+os.environ["LOKI_AGENT_ENGINE"] = "codex"
+out = asyncio.run(asyncio.wait_for(loki.run_opencode("make a git repo called demo"), 20))
+check("Codex picked (your ChatGPT plan): codex runs it with LOKI's context, and LOKI's own git log is in the reply",
+      cli_runs and cli_runs[0][0] == "codex" and cli_runs[0][2] and "Checked by LOKI" in out and "first" in out, (cli_runs, out[:300]))
+cli_agents.find_cli = lambda name: ""
+out = asyncio.run(asyncio.wait_for(loki.run_opencode("make a git repo called demo2"), 20))
+check("... not installed: NOT DONE with the install and sign-in commands", out.startswith("NOT DONE") and "codex login" in out, out[:200])
 
 # ---- the window
 try:
@@ -128,7 +153,7 @@ async def ui():
         check("the Harness button sits beside the model button, same row, not touching", geo["sameRow"] and geo["gap"] >= 4, geo)
         await page.click("#harness-button")
         items = await page.evaluate("[...document.querySelectorAll('#harness-menu .model-item')].map((b) => b.textContent)")
-        check("its menu lists all five, with what each does ('not installed' on DeepSeek Harness here)", len(items) == 5
+        check("its menu lists all seven, with what each does ('not installed' on DeepSeek Harness here)", len(items) == 7
               and "Shell agent" in items[3] and "not installed" in items[2], items)
         await page.click("#harness-menu [data-harness='shell']")
         await page.wait_for_function("document.querySelector('#harness-button').textContent.includes('Shell agent')", timeout=5000)
