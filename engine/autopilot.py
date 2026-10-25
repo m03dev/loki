@@ -32,7 +32,7 @@ Duties, each on its own interval:
   creation (session 28, engine/creative.py) one picture a day from the owner's starred styles and
            subjects (a fox by default) - LOKI_DAILY_CREATION on|off|auto (auto: on with an NVIDIA GPU,
            off on the Mac).
-  task_bench (LOKI_TASK_BENCH, session 28) nightly, in LOKI_TASK_BENCH_HOURS (default 1-6, local
+  task_bench (LOKI_TASK_BENCH=on only - off by default since 2026-10-25) nightly, in LOKI_TASK_BENCH_HOURS (default 1-6, local
            time), at most every LOKI_TASK_BENCH_S (20h): tools/task_bench.py on the models in
            LOKI_TASK_BENCH_MODELS (default local,smart) - do LOKI's agents finish real tasks? Scores in
            Settings > Lab. auto = on on the Windows PC, off on the Mac. Nothing else starts while it runs.
@@ -89,12 +89,11 @@ def _emit(kind: str, payload: dict) -> None:
 
 
 def task_bench_enabled() -> bool:
-    """LOKI_TASK_BENCH=auto (default: on on the Windows PC, the worker; off on the Mac) | on | off."""
-    value = str(os.getenv("LOKI_TASK_BENCH", "auto")).strip().lower()
-    if value in ("", "auto"):
-        import sys  # pylint: disable=import-outside-toplevel
-        return sys.platform == "win32"
-    return value not in ("0", "off", "false", "no")
+    """LOKI_TASK_BENCH=on to run the nightly test benchmark; off by default on every machine (owner 2026-10-25: "why
+    do they keep making this stupid baker" - the bench's 33 test prompts, Dana's bakery among them, ran every night on
+    the PC and showed up as work). A developer turns it on for one machine with LOKI_TASK_BENCH=on."""
+    value = str(os.getenv("LOKI_TASK_BENCH", "off")).strip().lower()
+    return value in ("1", "on", "true", "yes")
 
 
 def in_hours(window: str, now: float) -> bool:

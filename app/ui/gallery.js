@@ -30,7 +30,7 @@
     ["essay_outline", "study", "Essay outline", "Make an outline for a 1,000-word essay on whether social media is good for teenagers, with arguments for and against."],
     ["bedtime_story", "creative", "Bedtime story", "Write a 200-word bedtime story about a fox who is afraid of the dark."],
     ["card_poem", "creative", "Poem for a card", "Write a warm 8-line poem for my grandmother's 80th birthday card."],
-    ["name_ideas", "creative", "Name ideas", "Give me 10 name ideas for a cosy neighbourhood bakery, with one line about each."],
+    ["name_ideas", "creative", "Name ideas", "Give me 10 name ideas for a dark-fantasy indie game, with one line about each."],
     ["drawing_ideas", "creative", "Drawing ideas", "Suggest 3 things a beginner could draw this weekend, with simple steps for one of them."],
     ["cleaning", "home", "Cleaning schedule", "Make a simple weekly cleaning schedule for a 2-bedroom flat, 20 minutes a day."],
     ["dripping_tap", "home", "Fix a dripping tap", "My kitchen tap is dripping. Explain the usual causes, the safe steps to fix it, and when to call a plumber."],

@@ -676,7 +676,9 @@ def run_bench(models: list, *, scripted: bool = False, scenario: str = "small", 
     runs: dict = {}
     for model in models:
         label = ("scripted-" + scenario) if scripted else model
-        data = Path(tempfile.mkdtemp(prefix="loki-bench-data-")) if scripted else data_dir()
+        # always a throwaway data folder: the bench's test jobs (Dana's bakery, todo.py ...) must never land in the
+        # owner's real LOKI data, where Studio and Home show them as work (owner 2026-10-25). Keys come from the env.
+        data = Path(tempfile.mkdtemp(prefix="loki-bench-data-"))
         logs = out / "logs" / date / re.sub(r"[^\w.-]+", "_", label)
         started = time.time()
         say("== %s: %d tasks%s" % (label, len(chosen), "" if scripted else " (model %s)" % model))

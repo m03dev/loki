@@ -185,13 +185,16 @@ check("exit 4, and the result file says BLOCKED, why, and what was kept",
 loki._task_files.clear()
 
 # =========================================================================== nightly on the PC
-section("the autopilot runs the benchmark nightly on the PC when idle")
+section("the nightly benchmark is OFF unless asked for (owner 2026-10-25: its test bakery showed up as work)")
 saved_platform = sys.platform
 try:
+    os.environ.pop("LOKI_TASK_BENCH", None)
     sys.platform = "win32"
-    check("LOKI_TASK_BENCH=auto: on on the Windows PC", autopilot.task_bench_enabled())
+    check("no setting: off on the Windows PC", not autopilot.task_bench_enabled())
     sys.platform = "darwin"
-    check("...off on the Mac", not autopilot.task_bench_enabled())
+    check("...and off on the Mac", not autopilot.task_bench_enabled())
+    os.environ["LOKI_TASK_BENCH"] = "auto"
+    check("'auto' (the old default) is off too", not autopilot.task_bench_enabled())
     os.environ["LOKI_TASK_BENCH"] = "on"
     check("on: on anywhere", autopilot.task_bench_enabled())
 finally:

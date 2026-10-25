@@ -66,13 +66,12 @@ Found and fixed in the cloud:
   BUTLER_API_KEY is the key.
 - A local model's short tool list now always includes a tool the request names (itch, bash).
 - Bench: tasks shell-pipe and itch-ready (33 tasks, scripted run 96/96).
-- [ ] [mac] [win] Pull, restart LOKI. Run the real-model bench on EVERY provider the owner just connected:
-  `python tools/task_bench.py --model <provider>` for each one (`--list` shows the names), plus `--model smart`.
-  Put each table (harness_data/bench/<date>.md) in Reports, then sort the providers by score and by tool calls per
-  task.
-- [ ] [mac] [win] The same 33 prompts (tests/tasks/catalog.py) given to Ziva itself (DeepSeek), one by one. Score
-  them with the same checks by hand, or by pointing task_bench at Ziva's endpoint if it is OpenAI-compatible. Report:
-  LOKI vs Ziva per task.
+- [x] ~~Run the 33-prompt bench on every provider / give Ziva the same 33 prompts~~ - CANCELLED by the owner
+  (2026-10-25 11:20: "why do they keep making this stupid baker ... i want them to make real things"). The bench's
+  test prompts (Dana's bakery, todo.py ...) are for developers only. Do not run tools/task_bench.py on the owner's
+  machines; the nightly bench is now off by default (LOKI_TASK_BENCH=on to turn it on) and always uses a throwaway
+  data folder. If there are old bench jobs or folders (Dana's bakery, loki-bench-*) in Studio or the workspace, move
+  them to a _to_delete folder and say so in Reports.
 - [ ] [mac] [win] In the LOKI window, ask: "use git bash to make a new git repo called demo-repo with a src folder, a
   README.md and src/main.py that prints hello, and commit it". It must call `bash`, ask first, and the folder must be
   in the workspace with one commit (`git -C demo-repo log`). Same prompt is bench task git-repo:
