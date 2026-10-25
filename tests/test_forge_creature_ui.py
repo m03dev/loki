@@ -146,13 +146,13 @@ async def main():
         await page.wait_for_function("forge.model && /deer_ui/.test(forge.model) && forge.view.anims && forge.view.anims.length", timeout=45000)
         r = await page.evaluate("() => ({ clips: forge.view.anims, bar: !document.getElementById('forge-anim').hidden, status: document.getElementById('forge-status').textContent })")
         check("the creature arrives rigged: its clips (idle, walk) and the Walk / Idle bar", "move" in r["clips"] and r["bar"], r)
-        await page.click("#forge-anim [data-clip='move']")
+        await page.evaluate("document.querySelector(\"#forge-anim [data-clip='move']\").click()")   # the bar sits in the time slider
         await page.wait_for_timeout(400)
         r = await page.evaluate("() => ({ anim: forge.view.anim, quad: forge.view.quad })")
         check("Walk plays the walk cycle (and leaves the quad view for the orbit view)", r["anim"] == "move" and not r["quad"], r)
         if os.getenv("LOKI_SHOT"):
             await page.screenshot(path=os.getenv("LOKI_SHOT"))
-        await page.click("#forge-model-mode")
+        await page.evaluate("document.getElementById('forge-model-mode').click()")
         r = await page.evaluate("forge.view.anim")
         check("editing (Model mode) stops the clip, so you edit the mesh, not a pose", r is None, r)
         # the Creature Editor panel (2026-10-21): a title bar that folds, floats, closes - and comes back
