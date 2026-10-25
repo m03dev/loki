@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-258 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (23%).
+272 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (24%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -40,7 +40,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Windows | 12 | 80 |
 | Mesh | 15 | 32 |
 | Edit Mesh | 22 | 30 |
-| Mesh Tools | 8 | 34 |
+| Mesh Tools | 22 | 34 |
 | Mesh Display | 4 | 38 |
 | Curves | 0 | 36 |
 | Surfaces | 0 | 41 |
@@ -683,23 +683,23 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Paint Transfer Attributes (Maya: PaintTransferAttributes)
 - ✓ `quadDraw` Quad Draw (Maya: QuadDrawTool)
 - ✓ `sculpt` Sculpting Tools > Sculpt Tool (Maya: SetMeshSculptTool)
-- - Sculpting Tools > Smooth Tool (Maya: SetMeshSmoothTool)
-- - Sculpting Tools > Relax Tool (Maya: SetMeshRelaxTool)
-- - Sculpting Tools > Grab Tool (Maya: SetMeshGrabTool)
-- - Sculpting Tools > Pinch Tool (Maya: SetMeshPinchTool)
-- - Sculpting Tools > Flatten Tool (Maya: SetMeshFlattenTool)
-- - Sculpting Tools > Foamy Tool (Maya: SetMeshFoamyTool)
+- ✓ `mayaSmoothTool` Sculpting Tools > Smooth Tool (Maya: SetMeshSmoothTool)
+- ✓ `mayaRelaxTool` Sculpting Tools > Relax Tool (Maya: SetMeshRelaxTool)
+- ✓ `mayaGrabTool` Sculpting Tools > Grab Tool (Maya: SetMeshGrabTool)
+- ✓ `mayaPinchTool` Sculpting Tools > Pinch Tool (Maya: SetMeshPinchTool)
+- ✓ `mayaFlattenTool` Sculpting Tools > Flatten Tool (Maya: SetMeshFlattenTool)
+- ✓ `mayaFoamyTool` Sculpting Tools > Foamy Tool (Maya: SetMeshFoamyTool)
 - - Sculpting Tools > Spray Tool (Maya: SetMeshSprayTool)
 - - Sculpting Tools > Repeat Tool (Maya: SetMeshRepeatTool)
-- - Sculpting Tools > Imprint Tool (Maya: SetMeshImprintTool)
-- - Sculpting Tools > Wax Tool (Maya: SetMeshWaxTool)
-- - Sculpting Tools > Scrape Tool (Maya: SetMeshScrapeTool)
-- - Sculpting Tools > Fill Tool (Maya: SetMeshFillTool)
-- - Sculpting Tools > Knife Tool (Maya: SetMeshKnifeTool)
-- - Sculpting Tools > Smear Tool (Maya: SetMeshSmearTool)
-- - Sculpting Tools > Bulge Tool (Maya: SetMeshBulgeTool)
+- ✓ `mayaImprintTool` Sculpting Tools > Imprint Tool (Maya: SetMeshImprintTool)
+- ✓ `mayaWaxTool` Sculpting Tools > Wax Tool (Maya: SetMeshWaxTool)
+- ✓ `mayaScrapeTool` Sculpting Tools > Scrape Tool (Maya: SetMeshScrapeTool)
+- ✓ `mayaFillTool` Sculpting Tools > Fill Tool (Maya: SetMeshFillTool)
+- ✓ `mayaKnifeTool` Sculpting Tools > Knife Tool (Maya: SetMeshKnifeTool)
+- ✓ `mayaSmearTool` Sculpting Tools > Smear Tool (Maya: SetMeshSmearTool)
+- ✓ `mayaBulgeTool` Sculpting Tools > Bulge Tool (Maya: SetMeshBulgeTool)
 - - Sculpting Tools > Amplify Tool (Maya: SetMeshAmplifyTool)
-- - Sculpting Tools > Freeze Tool (Maya: SetMeshFreezeTool)
+- ✓ `mayaFreezeTool` Sculpting Tools > Freeze Tool (Maya: SetMeshFreezeTool)
 - - Sculpting Tools > Smooth Target Tool (Maya: SetMeshSmoothTargetTool)
 - - Sculpting Tools > Clone Target Tool (Maya: SetMeshCloneTargetTool)
 - - Sculpting Tools > Mask Target Tool (Maya: SetMeshMaskTool)

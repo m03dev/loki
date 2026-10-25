@@ -85,6 +85,11 @@ MAP = {
     "dR_multiCutTool": "multiCut", "DuplicateEdges": "offsetEdgeLoop", "QuadDrawTool": "quadDraw",
     "dR_quadDrawTool": "quadDraw", "SlideEdgeTool": "slideEdge", "MergeVertexTool": "targetWeld",
     "dR_targetWeldTool": "targetWeld", "SetMeshSculptTool": "sculpt",
+    "SetMeshSmoothTool": "mayaSmoothTool", "SetMeshRelaxTool": "mayaRelaxTool", "SetMeshGrabTool": "mayaGrabTool",
+    "SetMeshPinchTool": "mayaPinchTool", "SetMeshFlattenTool": "mayaFlattenTool", "SetMeshFoamyTool": "mayaFoamyTool",
+    "SetMeshImprintTool": "mayaImprintTool", "SetMeshWaxTool": "mayaWaxTool", "SetMeshScrapeTool": "mayaScrapeTool",
+    "SetMeshFillTool": "mayaFillTool", "SetMeshKnifeTool": "mayaKnifeTool", "SetMeshSmearTool": "mayaSmearTool",
+    "SetMeshBulgeTool": "mayaBulgeTool", "SetMeshFreezeTool": "mayaFreezeTool",
     # Mesh Display
     "ConformPolygonNormals": "conformNormals", "ReversePolygonNormals": "reverse", "PolygonHardenEdge": "hardEdge",
     "PolygonSoftenEdge": "softEdge", "PolygonSoftenHarden": "softHard",

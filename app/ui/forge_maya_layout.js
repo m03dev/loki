@@ -779,6 +779,62 @@ const FORGE_MAYA = {
      [
       "sculpt",
       "Sculpt Tool"
+     ],
+     [
+      "mayaSmoothTool",
+      "Smooth Tool"
+     ],
+     [
+      "mayaRelaxTool",
+      "Relax Tool"
+     ],
+     [
+      "mayaGrabTool",
+      "Grab Tool"
+     ],
+     [
+      "mayaPinchTool",
+      "Pinch Tool"
+     ],
+     [
+      "mayaFlattenTool",
+      "Flatten Tool"
+     ],
+     [
+      "mayaFoamyTool",
+      "Foamy Tool"
+     ],
+     [
+      "mayaImprintTool",
+      "Imprint Tool"
+     ],
+     [
+      "mayaWaxTool",
+      "Wax Tool"
+     ],
+     [
+      "mayaScrapeTool",
+      "Scrape Tool"
+     ],
+     [
+      "mayaFillTool",
+      "Fill Tool"
+     ],
+     [
+      "mayaKnifeTool",
+      "Knife Tool"
+     ],
+     [
+      "mayaSmearTool",
+      "Smear Tool"
+     ],
+     [
+      "mayaBulgeTool",
+      "Bulge Tool"
+     ],
+     [
+      "mayaFreezeTool",
+      "Freeze Tool"
      ]
     ]
    ],

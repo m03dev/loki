@@ -84,6 +84,14 @@ async def main():
         await page.wait_for_timeout(300)
         gone = await E("(() => { const T = ForgePoly.topology(forge.view.poly), [a, b] = window.__flipped; return T.edge(a, b) === undefined; })()")
         check("Flip Triangle Edge on a picked triangle edge turns it", gone)
+        # Mesh Tools > Sculpting Tools > Scrape / Smooth (Maya's tools -> the brush that does the same job)
+        tools = await E("forgeMenuFlat((FMY_MENUS().find((m) => m[0] === 'Mesh Tools') || [0, []])[1])")
+        await E("forgeProRun(forge.view, 'mayaScrapeTool')"); await page.wait_for_timeout(400)
+        sc = await E("[forge.view.mode, fscCurrent()]")
+        await E("forgeProRun(forge.view, 'mayaSmoothTool')"); await page.wait_for_timeout(150)
+        sm = await E("fscCurrent()")
+        check("Mesh Tools > Sculpting Tools: Scrape Tool opens Sculpt with Scrape, Smooth Tool picks Smooth",
+              "mayaScrapeTool" in tools and sc == ["sculpt", "Scrape"] and sm == "Smooth", [sc, sm, len(tools)])
         check("no script errors", not errors, errors[:3])
         await browser.close()
 

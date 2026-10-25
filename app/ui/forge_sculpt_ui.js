@@ -635,3 +635,31 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   FORGE_PRO_CMDS.sculptWheel = ["Sculpt Brush Wheel", (v) => { const m = (v && v.pro && v.pro.mouse) || [innerWidth / 2, innerHeight / 2]; fscWheelOpen(m[0], m[1]); return ""; }];
 }
 window.forgeSculptUI = { sticky: FSC_STICKY, show: fscShow, exit: fscExit, pick: fscPick, fav: fscFav, wheel: fscWheelOpen, close: fscWheelClose, brushes: fscBrushes, prefs: fscPrefs };
+
+// ------------------------------------------------------------------------------------------ Maya's Sculpting Tools
+// Mesh Tools > Sculpting Tools > <tool> (docs/FORGE_MAYA_PARITY.md): each one opens Sculpt and picks the brush of
+// Forge's library that does the same job (vendor/sculpt/brushes.json names). Tools with no true twin are not listed.
+const FSC_MAYA_TOOLS = {
+  mayaSmoothTool: ["Smooth Tool", "Smooth"],
+  mayaRelaxTool: ["Relax Tool", "Smooth Relax"],
+  mayaGrabTool: ["Grab Tool", "Grab"],
+  mayaPinchTool: ["Pinch Tool", "Pinch"],
+  mayaFlattenTool: ["Flatten Tool", "Flatten"],
+  mayaFoamyTool: ["Foamy Tool", "Clay Soft"],
+  mayaImprintTool: ["Imprint Tool", "Ring Stamp"],
+  mayaWaxTool: ["Wax Tool", "Clay Buildup"],
+  mayaScrapeTool: ["Scrape Tool", "Scrape"],
+  mayaFillTool: ["Fill Tool", "Fill"],
+  mayaKnifeTool: ["Knife Tool", "Dam Standard"],
+  mayaSmearTool: ["Smear Tool", "Thumb Smear"],
+  mayaBulgeTool: ["Bulge Tool", "Bulge"],
+  mayaFreezeTool: ["Freeze Tool", "Mask Pen"],
+};
+if (typeof FORGE_PRO_CMDS !== "undefined") {
+  for (const [id, [label, brush]] of Object.entries(FSC_MAYA_TOOLS)) {
+    FORGE_PRO_CMDS[id] = [label, async (v) => {
+      if (v && v.mode !== "sculpt" && typeof forgeProRun === "function") await forgeProRun(v, "sculpt");
+      return fscPick(brush);
+    }];
+  }
+}
