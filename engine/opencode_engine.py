@@ -210,9 +210,29 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
     # code by itself; pictures, models and clips come from LOKI's own makers (not in Plan mode: they make files)
     if make_tools and not plan:
         mcp["loki-make"] = {"type": "local", "command": make_tools_command(), "enabled": True}
+    # Ziva's Godot tools (owner 2026-10-25: "use my ziva ... in loki"): Ziva's own MCP server - its URL or command
+    # from Ziva Settings > Models & Providers > Ziva as an MCP server, pasted into LOKI_ZIVA_MCP
+    ziva = ziva_mcp()
+    if ziva:
+        mcp["ziva-godot"] = ziva
     if mcp:
         cfg["mcp"] = mcp
     return cfg
+
+
+def ziva_mcp(env: dict | None = None) -> dict:
+    """OpenCode's entry for Ziva's MCP server: an http(s) URL -> remote, anything else -> a local command."""
+    raw = str((env if env is not None else os.environ).get("LOKI_ZIVA_MCP", "") or "").strip()
+    if not raw:
+        return {}
+    if raw.startswith(("http://", "https://")):
+        return {"type": "remote", "url": raw, "enabled": True}
+    try:
+        import shlex  # pylint: disable=import-outside-toplevel
+        cmd = shlex.split(raw, posix=os.name != "nt")
+    except ValueError:
+        cmd = raw.split()
+    return {"type": "local", "command": cmd, "enabled": True} if cmd else {}
 
 
 def env_for(providers: dict, base: dict | None = None) -> dict:

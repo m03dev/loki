@@ -337,7 +337,9 @@
   "Remove": "删除",
   "Delete this model from this computer and get the space back.": "从这台电脑删除此模型并释放空间。",
   "Harness": "执行框架",
-  "How the work gets done: OpenCode, DeepSeek Harness, the Shell agent or LOKI classic. Auto picks for the model.": "工作如何完成：OpenCode、DeepSeek Harness、Shell 智能体或 LOKI 经典版。自动会按模型选择。"
+  "How the work gets done: OpenCode, DeepSeek Harness, the Shell agent or LOKI classic. Auto picks for the model.": "工作如何完成：OpenCode、DeepSeek Harness、Shell 智能体或 LOKI 经典版。自动会按模型选择。",
+  "Connect Ziva": "连接 Ziva",
+  "LOKI's agent gets Ziva's Godot tools (scenes, nodes, scripts, run the game). Godot with Ziva must be open.": "LOKI 的智能体获得 Ziva 的 Godot 工具（场景、节点、脚本、运行游戏）。需要打开装有 Ziva 的 Godot。"
  },
  "fb.email": "写邮件",
  "fb.email_done": "已保存 {file}。邮件草稿已打开——附上文件并发送。",

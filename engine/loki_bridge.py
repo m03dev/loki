@@ -1414,6 +1414,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             self._send_forge(forge_api.handle_post(self.server.state, self.path, self.rfile.read(length)))
             return
+        if route == "/agent/ziva":   # Ziva's MCP server (its Godot tools) for LOKI's agent - Settings > Agent
+            body = self._read_json() or {}
+            value = str(body.get("value") or "").strip()[:1000]
+            import peer_link  # pylint: disable=import-outside-toplevel - write_env: the .env, live in os.environ too
+            peer_link.write_env(self.server.state.agent.env_file_path(), {"LOKI_ZIVA_MCP": value or None})
+            self._send_json(200, {"ok": True, **self.server.state.agent.engine_status()})
+            return
         if route in ("/agent/engine/install", "/agent/engine/set"):   # Settings > Agent
             body = self._read_json() if int(self.headers.get("Content-Length", "0") or 0) > 0 else {}
             if body is None:

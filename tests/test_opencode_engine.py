@@ -212,6 +212,11 @@ if loki:
     check("Settings > Agent status: the engine, where OpenCode is, the install commands", st["opencode"] == str(FAKE)
           and st["engine"] in oe.HARNESSES and "opencode" in st["install"] and len(st["harnesses"]) == 5, st)
 
+zc = oe.ziva_mcp({"LOKI_ZIVA_MCP": "http://127.0.0.1:7357/mcp"})
+check("Ziva's MCP server (a pasted URL) becomes a remote MCP for OpenCode; a command becomes a local one; empty -> none",
+      zc == {"type": "remote", "url": "http://127.0.0.1:7357/mcp", "enabled": True}
+      and oe.ziva_mcp({"LOKI_ZIVA_MCP": "npx -y ziva-mcp --project '/a b'"})["command"] == ["npx", "-y", "ziva-mcp", "--project", "/a b"]
+      and oe.ziva_mcp({}) == {})
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

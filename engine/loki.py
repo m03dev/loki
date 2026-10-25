@@ -8977,7 +8977,7 @@ def engine_status() -> dict:
     oc, cg = opencode_engine.find_opencode(), opencode_engine.find_codegraph()
     return {"engine": opencode_engine.engine_choice(), "harnesses": [{"id": k, "name": v[0], "what": v[1]}
                                                                      for k, v in opencode_engine.HARNESSES.items()],
-            "opencode": oc, "codegraph": cg,
+            "opencode": oc, "codegraph": cg, "ziva_mcp": os.getenv("LOKI_ZIVA_MCP", ""),
             "dsh": dsh_engine.find_dsh(), "deepseek_harness": dsh_engine.mode(),
             "install": opencode_engine.INSTALL, "workspace": str(WORKSPACE),
             "indexed": (WORKSPACE / ".codegraph").is_dir()}
