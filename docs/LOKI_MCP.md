@@ -4,6 +4,32 @@
 exposes LOKI's engine and LOKI's own code to an agent. LOKI Studio's development agent drives LOKI
 through it (docs/STUDIO.md); Claude Code, Codex and Ziva can connect to it the same way.
 
+## Drive LOKI from Claude (2026-10-25)
+
+On 2026-10-25 the owner said: "you build loki, how can you not control it - mcp, api, sdk". These tools let Claude
+(or any MCP client) use the running LOKI the way the owner does in its window, then check what really happened on
+disk.
+
+| Tool | What it does |
+|---|---|
+| `chat` | Sends a message to LOKI's chat, as the window does, and waits for the answer. The reply includes LOKI's response (OpenCode does the work) and the files that changed. |
+| `task` | Starts a Build task and waits until it is done or LOKI says NOT DONE. |
+| `agent_status` / `agent_install` | Shows LOKI's agent (OpenCode + CodeGraph) and the workspace; installs whatever is missing. |
+| `workspace_files` / `workspace_read` | Lists or reads what is really in LOKI's workspace. Secrets are refused. |
+
+**Setup on the Mac (once):**
+1. Open Claude desktop > Settings > Developer > Edit Config.
+2. Add this, then restart Claude desktop:
+   ```json
+   {"mcpServers": {"loki": {"command": "/bin/bash", "args": ["/Users/mohamed/Documents/loki/tools/loki_mcp_launch.sh"]}}}
+   ```
+   Use your checkout's real path.
+3. Claude sessions linked to that Mac then see the `loki` tools.
+
+The launcher finds the checkout's Python, which needs the `mcp` package from `engine/requirements.txt`. It also finds
+the running LOKI's data folder and engine token, either in `~/Library/Application Support/Loki` or in the checkout's
+`harness_data`. On Windows, use `tools\loki_mcp_launch.cmd` as the command.
+
 ## Two halves
 
 **The running LOKI** - through the engine's loopback API with its bridge token

@@ -347,3 +347,15 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 - Installers: docs/INSTALL.md, docs/TESTERS.md, docs/SPEED.md. Phone: docs/PHONE.md, mobile/INSTALL_PHONE.md.
 - Off-network link: docs/operations/OFF_NETWORK.md. Session log: docs/operations/SESSION_LOG.md.
 - Full history: docs/operations/archive/HANDOFF_until_2026-10-19.md.
+
+## Session 28 tools, connectors, computer use (worktree)
+
+- **Connectors:** email, calendar, GitHub, notes and peer files (`engine/connectors.py`, `engine/conn_*.py`).
+  Writes always ask the owner (`policy.ACTION_ALWAYS_ASK`).
+- **Computer use:** `engine/computer_use.py` and `engine/computer_backends.py`. It never acts on LOKI itself. See
+  docs/integrations/COMPUTER_USE.md.
+- **Tool health map:** `engine/tool_health.py` and Settings > Tools (`app/ui/tools_panel.js`). Dead tools are hidden
+  from the model and come with a one-click fix.
+- **Driving LOKI from outside (2026-10-25):** `engine/loki_mcp.py` has `chat` / `task` / `agent_status` /
+  `workspace_files` / `workspace_read`. Start it with `tools/loki_mcp_launch.sh` (Windows: `.cmd`). See
+  docs/LOKI_MCP.md "Drive LOKI from Claude".

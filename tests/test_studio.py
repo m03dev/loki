@@ -457,7 +457,7 @@ for name in ("loki_status", "models_doctor", "settings_get", "settings_set", "jo
              "run_tests", "ship"):
     if name not in tools:
         check("MCP tool %s exists" % name, False, tools)
-check("all 25 tools are served over MCP", len(tools) == 25, tools)
+check("all %d tools are served over MCP" % len(loki_mcp.TOOL_ORDER), len(tools) == len(loki_mcp.TOOL_ORDER) == 31, tools)
 check("loki_status works with LOKI down (running: false + the version on disk)", '"running": false' in res["status"]
       and "commit" in res["status"], res["status"][:300])
 check("read_file reads the dev worktree", "The clear button." in res["read"])
@@ -615,7 +615,7 @@ async def stdio_list():
 
 try:
     names, text = asyncio.run(asyncio.wait_for(stdio_list(), 60))
-    check("python engine/loki_mcp.py over stdio: 25 tools, and they work", len(names) == 25 and "(tooltip)" in text, (len(names), text[:80]))
+    check("python engine/loki_mcp.py over stdio: 31 tools, and they work", len(names) == 31 and "(tooltip)" in text, (len(names), text[:80]))
 except Exception as exc:  # noqa: BLE001
     check("python engine/loki_mcp.py over stdio", False, exc)
 
@@ -1020,7 +1020,10 @@ async def look():
         page2 = await browser.new_page(viewport={"width": 1240, "height": 820})
         await page2.route("http://127.0.0.1:8899/**", route)
         await page2.goto("http://127.0.0.1:8899/#token=t")
-        await page2.wait_for_selector("#open-studio svg", timeout=15000)
+        await page2.wait_for_selector("#open-studio svg", timeout=15000, state="attached")   # it lives in the More menu (ui_tidy.js)
+        if await page2.is_visible("#tidy-more") and not await page2.is_visible("#open-studio"):
+            await page2.click("#tidy-more")                # open the More menu first
+            await page2.wait_for_timeout(200)
         await page2.hover("#open-studio")
         await page2.wait_for_timeout(400)
         loki_tip = await page2.evaluate("() => { const t = document.querySelector('.icon-tip'); return t && !t.hidden ? t.textContent : ''; }")

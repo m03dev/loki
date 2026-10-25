@@ -223,6 +223,70 @@ class LokiAPI:
             return "refused: %s is not a General setting that may be changed here" % key
         return self._out(*self.bridge("POST", "/settings/general", {"values": {key: str(value)}}))
 
+    # ---- drive the running LOKI like the owner does in its window (owner 2026-10-25: "you build loki, how can you
+    # not control it - mcp, api, sdk, figure it out"). LOKI's own rules still apply: OpenCode's deny list, the
+    # workspace boundary, the NOT DONE check; Plan mode stays read-only.
+    def chat(self, message: str, wait_s: int = 900) -> str:
+        """Send a message to LOKI's chat exactly as the window does and wait for its answer (OpenCode does the work).
+        Returns the answer and the tools it ran."""
+        status, data = self.bridge("POST", "/chat", {"message": message}, timeout=max(30.0, float(wait_s)))
+        if status != 200:
+            return self._out(status, data)
+        return _redact(json.dumps({k: data.get(k) for k in ("ok", "response", "error", "checkpoint", "changed_files", "usage")
+                                   if data.get(k) is not None}, indent=1, default=str)[:MAX_READ])
+
+    def task(self, task: str, wait_s: int = 1800) -> str:
+        """Give LOKI a Build task (as the window's task button does) and wait until it is done or says NOT DONE."""
+        status, data = self.bridge("POST", "/task", {"task": task, "steps": 0}, timeout=max(30.0, float(wait_s)))
+        if status != 200:
+            return self._out(status, data)
+        return _redact(json.dumps({k: data.get(k) for k in ("ok", "response", "error") if data.get(k) is not None},
+                                  indent=1, default=str)[:MAX_READ])
+
+    def agent_status(self) -> str:
+        """LOKI's agent: the engine (OpenCode), where OpenCode and CodeGraph are, the workspace it works in."""
+        return self._out(*self.bridge("GET", "/agent/engine"))
+
+    def agent_install(self) -> str:
+        """Install the missing parts of LOKI's agent (npm i -g opencode-ai / @colbymchenry/codegraph)."""
+        return self._out(*self.bridge("POST", "/agent/engine/install", {}, timeout=900.0))
+
+    def workspace_files(self, path: str = ".", depth: int = 2) -> str:
+        """List what is in LOKI's workspace (where its agent works) - to check what a chat or task really made."""
+        root = self._workspace()
+        if root is None:
+            return "LOKI is not running (its workspace is not known)"
+        base = (root / path).resolve()
+        if root not in (base, *base.parents):
+            return "refused: outside the workspace"
+        out = []
+        for p in sorted(base.rglob("*")):
+            rel = p.relative_to(base)
+            if len(rel.parts) > max(1, int(depth)) or ".git" in rel.parts or ".codegraph" in rel.parts:
+                continue
+            out.append(("%s/" % rel.as_posix()) if p.is_dir() else "%s  (%d bytes)" % (rel.as_posix(), p.stat().st_size))
+            if len(out) >= 400:
+                break
+        return "%s\n%s" % (base, "\n".join(out) or "(empty)")
+
+    def workspace_read(self, path: str, max_chars: int = 20000) -> str:
+        """Read one file in LOKI's workspace (secrets refused)."""
+        root = self._workspace()
+        if root is None:
+            return "LOKI is not running (its workspace is not known)"
+        p = (root / path).resolve()
+        if root not in p.parents or DENY_NAMES.search(p.as_posix()) or set(p.relative_to(root).parts) & DENY_PARTS:
+            return "refused: outside the workspace or a secret"
+        try:
+            return _redact(p.read_text(encoding="utf-8", errors="replace")[:int(max_chars)])
+        except OSError as exc:
+            return "error: %s" % exc
+
+    def _workspace(self):
+        status, data = self.bridge("GET", "/agent/engine", timeout=5.0)
+        ws = data.get("workspace") if status == 200 and isinstance(data, dict) else ""
+        return Path(ws).resolve() if ws else None
+
     def jobs_list(self) -> str:
         """LOKI's background jobs: id, title, status, model, error."""
         status, data = self.bridge("GET", "/jobs")
@@ -528,7 +592,8 @@ def ensure_worktree(repo: Path, target: Path, branch: str) -> Path:
 
 
 # ----------------------------------------------------------------- the MCP server
-TOOL_ORDER = ("loki_status", "models_doctor", "settings_get", "settings_set", "jobs_list", "job_start", "job_stop",
+TOOL_ORDER = ("chat", "task", "agent_status", "agent_install", "workspace_files", "workspace_read",
+              "loki_status", "models_doctor", "settings_get", "settings_set", "jobs_list", "job_start", "job_stop",
               "job_logs", "engine_logs", "world_summary", "memory_search", "tools_health", "creations_list",
               "restart_engine", "read_file", "list_files", "search_files", "edit_file", "write_file", "git_status",
               "git_diff", "git_log", "read_doc", "run_tests", "ship")
