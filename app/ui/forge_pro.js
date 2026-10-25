@@ -217,6 +217,27 @@ function forgeProPivotMode(v, on) {
   return "";
 }
 
+function forgeProObjDisplay(v, what, said) {      // Display > Object Display (Maya): on the picked objects
+  const t = forgeProTree(v);
+  if (!t || !t.objectDisplay) return "";
+  if (forgeProComp(v)) return "Object Display works on objects: F8 first.";
+  if (!t.selected().length) return "Pick objects first (the Outliner picks a templated one).";
+  const n = t.objectDisplay(what);
+  return n + " object" + (n === 1 ? " " : "s ") + said + ".";
+}
+function forgeProKeyPart(v, parts) {              // Key > Set Key on Translate / Rotate / Scale: just those channels
+  const t = v && v.tree; if (!t || !t.api) return "Open Forge first.";
+  const n = t.api.active(), tr = n && t.api.transform();
+  if (!n || !tr) return "Select an object first.";
+  let c = 0;
+  t.api.undoChunk("set key", () => { for (const part of parts) for (let a = 0; a < 3; a++) if (t.api.setKey(n.id, t.time.frame, part, a, tr[part][a])) c++; });
+  return "Keyed " + n.name + "'s " + parts.join(" and ") + " (" + c + " channels) at frame " + Math.round(t.time.frame) + ".";
+}
+function forgeProLoop(v, how) {                     // Playback > Playback Looping
+  const t = v && v.tree; if (!t) return "Open Forge first.";
+  t.time.loop = how;
+  return "Playback loops: " + { continuous: "continuous (back to the start)", once: "once (stops at the end)", oscillate: "oscillate (back and forth)" }[how] + ".";
+}
 function forgeProMatch(v, what) {                 // Modify > Match Transformations: onto the LAST picked object (Maya)
   const t = forgeProTree(v);
   if (!t || !t.matchTransforms) return "";
@@ -510,6 +531,10 @@ function forgeProCommands() {
     centerPivot: ["Center Pivot", (v) => (T(v).centerPivot() ? "Pivot centred." : "")],
     resetPivot: ["Reset Pivot", (v) => (forgeProComp(v) && v.resetComponentPivot ? (v.resetComponentPivot() ? "The components' pivot is back in their middle." : "No custom pivot on these components.")
       : T(v).resetPivot() ? "Pivot back on the object's origin." : "")],
+    templateObj: ["Template", (v) => forgeProObjDisplay(v, "template", "templated: a grey wire, not picked in the viewport (the Outliner still picks it)")],
+    untemplateObj: ["Untemplate", (v) => forgeProObjDisplay(v, "untemplate", "back to normal")],
+    showBBox: ["Bounding Box", (v) => forgeProObjDisplay(v, "bbox", "drawn as a box")],
+    hideBBox: ["No Bounding Box", (v) => forgeProObjDisplay(v, "nobbox", "drawn as a mesh again")],
     copySel: ["Copy", (v) => { const t = T(v); if (forgeProComp(v)) return "Copy works on objects (F8 first)."; const n = t.copySelected(); return n ? "Copied " + n + " object" + (n === 1 ? "" : "s") + "." : "Pick objects to copy."; }],
     cutSel: ["Cut", (v) => { const t = T(v); if (forgeProComp(v)) return "Cut works on objects (F8 first)."; const n = t.copySelected(); if (!n) return "Pick objects to cut."; t.removeSelected(); return "Cut " + n + " object" + (n === 1 ? "" : "s") + ": Paste brings them back."; }],
     pasteSel: ["Paste", (v) => { const t = T(v); if (!t.clipboard()) return "Nothing copied yet."; if (forgeProComp(v)) return "Paste works in object mode (F8 first)."; const ids = t.pasteClip(); return ids.length ? "Pasted " + ids.length + " object" + (ids.length === 1 ? "" : "s") + "." : ""; }],
@@ -560,6 +585,23 @@ function forgeProCommands() {
     keyLinear: ["Keys: Linear", (v) => forgeProInterp(v, "linear")],
     keySmooth: ["Keys: Smooth", (v) => forgeProInterp(v, "bezier")],
     keyStep: ["Keys: Step", (v) => forgeProInterp(v, "step")],
+    keyAnimated: ["Set Key on Animated", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.active(), tr = n && t.api.transform();
+      if (!n || !tr) return "Select an object first."; const ch = Object.keys(n.keys || {}).filter((k) => (n.keys[k] || []).length);
+      if (!ch.length) return n.name + " has no animated channels yet: Set Key first.";
+      t.api.undoChunk("set key", () => { for (const k of ch) { const part = k.replace(/\d$/, ""), a = +k.slice(-1); if (tr[part]) t.api.setKey(n.id, t.time.frame, part, a, tr[part][a]); } });
+      return "Keyed " + n.name + "'s " + ch.length + " animated channels at frame " + Math.round(t.time.frame) + "."; }],
+    keyTranslate: ["Set Key on Translate", (v) => forgeProKeyPart(v, ["translate"])],
+    keyRotate: ["Set Key on Rotate", (v) => forgeProKeyPart(v, ["rotate"])],
+    keyScale: ["Set Key on Scale", (v) => forgeProKeyPart(v, ["scale"])],
+    cutKeys: ["Cut Keys", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.active(); if (!n || !n.keys) return "Nothing is keyed here.";
+      const c = t.api.copyAnim(); t.api.undoChunk("cut keys", () => t.api.clearKeys(n.id)); return "Cut " + c + " keys off " + n.name + " (Paste Keys puts them back)."; }],
+    playBack: ["Backward", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; t.time.dir = -1; t.api.play(true); return "Playing backward."; }],
+    playStop: ["Stop", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; t.api.stop(); t.time.dir = 1; return "Stopped at frame " + Math.round(t.time.frame) + "."; }],
+    nextFrame: ["Next Frame", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return "Frame " + t.api.setFrame(Math.round(t.time.frame) + 1) + "."; }],
+    prevFrame: ["Prev Frame", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; return "Frame " + t.api.setFrame(Math.round(t.time.frame) - 1) + "."; }],
+    loopContinuous: ["Continuous", (v) => forgeProLoop(v, "continuous")],
+    loopOnce: ["Once", (v) => forgeProLoop(v, "once")],
+    loopOscillate: ["Oscillate", (v) => forgeProLoop(v, "oscillate")],
     copyAnim: ["Copy Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; const n = t.api.copyAnim(); return n ? "Copied " + n + " keys." : "Nothing is keyed here."; }],
     pasteAnim: ["Paste Animation", (v) => { const t = v && v.tree; if (!t || !t.api) return "Open Forge first."; if (!t.clipKeys) return "Copy some animation first."; t.api.undoChunk("paste animation", () => t.api.pasteAnim()); return "Pasted at frame " + Math.round(t.time.frame) + "."; }],
     mirrorKeysX: ["Mirror Keys across YZ", (v) => forgeProMirror(v, 0)],

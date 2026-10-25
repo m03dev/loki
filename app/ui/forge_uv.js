@@ -275,7 +275,56 @@ window.ForgeUV = (() => {
     return m;
   }
 
-  // ------------------------------------------------------------------ transforms in UV space
+  // ------------------------------------------------------------------ UV points: split, merge (Maya's UV > Split UVs /
+  // Merge UVs). ids: UV point ids.
+  // Split: a UV point shared by several face corners becomes one point per corner (the faces come apart there in UV).
+  function splitUVs(m, ids) {
+    if (!has(m)) return clone(m);
+    const out = clone(m), want = new Set(ids), seen = new Set();
+    out.fuv.forEach((c, fi) => {
+      for (let k = 0; k < c.length; k++) {
+        const i = c[k];
+        if (!want.has(i)) continue;
+        if (!seen.has(i)) { seen.add(i); continue; }          // the first corner keeps the point
+        out.uv.push(out.uv[i].slice()); c[k] = out.uv.length - 1;
+      }
+    });
+    return out;
+  }
+  // Merge: picked UV points closer than dist (in UV space) become one, at their middle. Maya's default is 0.01.
+  function mergeUVs(m, ids, dist) {
+    if (!has(m)) return clone(m);
+    const d = dist == null ? 0.01 : +dist, list = [...new Set(ids)].filter((i) => i >= 0 && i < m.uv.length);
+    const parent = new Map(list.map((i) => [i, i]));
+    const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+    // a grid in UV space so a big pick is not n^2
+    const cell = Math.max(d, 1e-6), grid = new Map(), key = (a, b) => a + "," + b;
+    for (const i of list) { const p = m.uv[i], k = key(Math.floor(p[0] / cell), Math.floor(p[1] / cell)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+    for (const i of list) {
+      const p = m.uv[i], gx = Math.floor(p[0] / cell), gy = Math.floor(p[1] / cell);
+      for (let x = gx - 1; x <= gx + 1; x++) for (let y = gy - 1; y <= gy + 1; y++) for (const j of grid.get(key(x, y)) || []) {
+        if (j <= i) continue;
+        const q = m.uv[j];
+        if (Math.hypot(p[0] - q[0], p[1] - q[1]) <= d) { const a = find(i), b = find(j); if (a !== b) parent.set(a, b); }
+      }
+    }
+    const groups = new Map();
+    for (const i of list) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
+    const out = clone(m), to = new Map();
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const c = [0, 0]; for (const i of g) { c[0] += m.uv[i][0]; c[1] += m.uv[i][1]; }
+      out.uv[g[0]] = [c[0] / g.length, c[1] / g.length];
+      for (const i of g.slice(1)) to.set(i, g[0]);
+    }
+    if (!to.size) return out;
+    out.fuv = out.fuv.map((c) => c.map((i) => (to.has(i) ? to.get(i) : i)));
+    return compact(out);
+  }
+  // Delete UVs: the mesh without UVs (Forge keeps UVs for every face or none)
+  function deleteUVs(m) { const out = clone(m); delete out.uv; delete out.fuv; delete out.uvPins; out.uvDropped = true; return out; }   // uvDropped: showPoly must not carry the old UVs back
+
+  // ------------------------------------------------------------------ transforms in UV space  // ------------------------------------------------------------------ transforms in UV space
   function uvsOfFaces(m, faces) { const s = new Set(); for (const fi of faces) for (const i of m.fuv[fi]) s.add(i); return s; }
   function bbox(m, ids) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -526,5 +575,5 @@ window.ForgeUV = (() => {
   }
   return { optcuts, optcutsCancel, autoAtlas, has, clone, cornerUVs, edges, seams, shells, shellOfFace, rebuild, cut, sew, moveAndSew, planar, camera, cylindrical,
     spherical, automatic, transform, flip, density, setDensity, distortion, overlapCount, carry, unfold, layout, layoutBasic, uvsOfFaces,
-    bbox, faceAreaUV, faceArea3, compact, ekey };
+    bbox, faceAreaUV, faceArea3, compact, ekey, splitUVs, mergeUVs, deleteUVs };
 })();

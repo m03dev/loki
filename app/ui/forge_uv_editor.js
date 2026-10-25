@@ -45,7 +45,7 @@ const ForgeUVEditor = (() => {
     // an engine answer that arrives after the mesh changed (an undo, another step) must not overwrite it
     if (base && poly() !== base) { say("The mesh changed while that ran - nothing applied; run it again.", true); return false; }
     const faces = keepFaces || selFaces();
-    if (poly() && poly().uvPins) next.uvPins = poly().uvPins.filter((i) => i < next.uv.length);
+    if (poly() && poly().uvPins && next.uv) next.uvPins = poly().uvPins.filter((i) => i < next.uv.length);
     v.showPoly(next, true);
     if (faces.length && v.select) v.select(faces);
     if (v.mode !== "poly" && typeof forgeModelMode === "function") { /* keep the user's mode */ }
@@ -71,6 +71,39 @@ const ForgeUVEditor = (() => {
       const r = v.canvas.getBoundingClientRect(), aspect = r.width / (r.height || 1), p = new THREE.Vector3();
       const next = U().camera(m, selFaces(), (q) => { p.set(q[0], q[1], q[2]).applyMatrix4(M); return [p.x * aspect, p.y]; });
       commit(next, "Camera-based projection: what the view sees, on " + (selFaces().length || "every") + " face(s).");
+    },
+    // UV > Split UVs / Merge UVs: the UV points picked in the UV Editor, or the picked vertices' (faces': their
+    // corners') UV points in the viewport
+    pickedUVs() {
+      const m = poly(), v = S.view;
+      if (!m || !U().has(m)) return [];
+      if (S.selUV && S.selUV.size) return [...S.selUV];
+      const out = new Set(), sel = v && v.edit && v.mode === "poly" ? v.edit.sel : null;
+      if (!sel) return [];
+      m.f.forEach((f, fi) => f.forEach((vert, k) => { if (sel.v.has(vert) || sel.f.has(fi)) out.add(m.fuv[fi][k]); }));
+      return [...out];
+    },
+    splitUVs() {
+      const m = need(true); if (!m) return;
+      const ids = OPS.pickedUVs();
+      if (!ids.length) { say("Split UVs: pick UV points (UV Editor) or vertices first.", true); return; }
+      const next = U().splitUVs(m, ids), n = next.uv.length - m.uv.length;
+      if (!n) { say("Split UVs: those UV points are each on one face corner already."); return; }
+      commit(next, "Split UVs: " + n + " new UV point" + (n === 1 ? "" : "s") + " (one per face corner).");
+    },
+    mergeUVs(dist) {
+      const m = need(true); if (!m) return;
+      const ids = OPS.pickedUVs();
+      if (ids.length < 2) { say("Merge UVs: pick two or more UV points (UV Editor) or vertices first.", true); return; }
+      const d = dist == null ? +(forgeUvSettings().mergeDist || 0.01) : dist, next = U().mergeUVs(m, ids, d), n = m.uv.length - next.uv.length;
+      if (!n) { say("Merge UVs: no picked points are closer than " + d + " in UV space.", true); return; }
+      S.selUV = new Set();
+      commit(next, "Merge UVs: " + n + " UV point" + (n === 1 ? "" : "s") + " merged (closer than " + d + ").");
+    },
+    deleteUVs() {
+      const m = need(true); if (!m) return;
+      S.selUV = new Set();
+      commit(U().deleteUVs(m), "UVs deleted from the mesh (Create UVs makes new ones).");
     },
     planar(axis) { const m = need(false); if (!m) return; const a = axis || forgeUvSettings().planarAxis; commit(U().planar(m, selFaces(), a), "Planar projection (" + (a === "best" ? "best plane" : a.toUpperCase()) + ")."); },
     cylindrical() { const m = need(false); if (!m) return; commit(U().cylindrical(m, selFaces(), forgeUvSettings().cylAxis), "Cylindrical projection."); },
@@ -724,6 +757,10 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
   add("uvAtlas", "Atlas Unwrap", () => O.atlas());
   add("uvOptCuts", "OptCuts Unwrap", () => O.optcuts());
   add("uvChecker", "UV Checker on the Model", () => O.checker());
+  add("uvBestPlane", "Best Plane", () => O.planar("best"));
+  add("uvSplit", "Split UVs", () => O.splitUVs());
+  add("uvMerge", "Merge UVs", () => O.mergeUVs());
+  add("uvDelete", "Delete UVs", () => O.deleteUVs());
 }
 
 // Windows > Workspaces (owner 2026-10-22 00:35: "sculpting still isnt in the menu") - every workspace as a command, ticked

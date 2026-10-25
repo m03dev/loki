@@ -150,6 +150,24 @@ function forgeSceneAttach(view, ctx) {
       m.wireframe = true; m.transparent = true; m.opacity = 0.35; m.depthWrite = false; m.needsUpdate = true; }
     else if (!on && u.tplKeep) { Object.assign(m, u.tplKeep); delete u.tplKeep; m.needsUpdate = true; }
   }
+  // Display > Object Display > Bounding Box: the object draws as its box (a wire), the mesh hidden - a heavy object
+  // stays out of the way; No Bounding Box puts the mesh back
+  function bboxLook(n, on) {
+    const s = shapeOf(n), old = n.inner.children.find((c) => c.name === "forge-bbox");
+    if (old) { n.inner.remove(old); old.geometry.dispose(); }
+    if (s) s.visible = !on;
+    if (!on || !s || !s.geometry) return;
+    if (!s.geometry.boundingBox) s.geometry.computeBoundingBox();
+    const b = s.geometry.boundingBox, a = b.min, z = b.max;
+    const c = [[a.x, a.y, a.z], [z.x, a.y, a.z], [z.x, z.y, a.z], [a.x, z.y, a.z], [a.x, a.y, z.z], [z.x, a.y, z.z], [z.x, z.y, z.z], [a.x, z.y, z.z]];
+    const pairs = [0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7], pos = new Float32Array(pairs.length * 3);
+    pairs.forEach((k, i) => pos.set(c[k], i * 3));
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const box = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x9fb3c8 }));
+    box.name = "forge-bbox"; box.position.copy(s.position); box.quaternion.copy(s.quaternion); box.scale.copy(s.scale);
+    box.raycast = () => {};
+    n.inner.add(box);
+  }
   const ghost = (n) => !!(n && n.root && n.kind === "mesh" && !hasGeometry(n) && !kidsOf(n.id).length);
 
   function geometryFrom(tri, col) {
@@ -454,9 +472,10 @@ function forgeSceneAttach(view, ctx) {
 
     applyLayers() {
       for (const n of tree.nodes) {
-        n.templated = api.layersTemplate(n.id); n.referenced = api.layersRef(n.id);
+        n.templated = api.layersTemplate(n.id) || !!n.tmpl; n.referenced = api.layersRef(n.id);
         n.grp.visible = api.layerNorm(n);
         templateLook(n, n.templated);
+        bboxLook(n, !!n.bboxOnly);
       }
       // a templated object leaves the selection (the pro layer rule: a template cannot be selected at all)
       const keep = tree.sel.filter((id) => !api.layersTemplate(id));
@@ -859,6 +878,19 @@ function forgeSceneAttach(view, ctx) {
       return true;
     },
 
+    // Display > Object Display: Template / Untemplate (shown as a grey wire, not picked in the viewport - the Outliner
+    // still picks it, so Untemplate can reach it), Bounding Box / No Bounding Box. ids: the picked objects.
+    objectDisplay(what, ids) {
+      const list = (ids || tree.sel).map(node).filter((n) => n && !ghost(n));
+      for (const n of list) {
+        if (what === "template") n.tmpl = true; else if (what === "untemplate") n.tmpl = false;
+        else if (what === "bbox") n.bboxOnly = true; else if (what === "nobbox") n.bboxOnly = false;
+      }
+      api.applyLayers();
+      if (what === "template") { tree.sel = tree.sel.filter((id) => !list.some((n) => n.id === id)); tree.build(); if (api.onSelect) api.onSelect(); }
+      return list.length;
+    },
+
     // Edit > Cut / Copy / Paste (Maya: CutSelected / CopySelected / PasteSelected): the clipboard keeps the picked
     // objects. Paste makes copies in place (their transforms, children and history) while the originals still
     // exist, or - after a Cut or a Delete - new objects from the meshes as they were (in world space).
@@ -981,7 +1013,7 @@ function forgeSceneAttach(view, ctx) {
       for (const n of tree.nodes) {
         if (!n.visible || !api.layerNorm(n)) continue;
         if (sel && (api.layersLocked(n.id) || ghost(n))) continue;
-        if (api.layersTemplate(n.id)) continue;            // a template is not even snapped to (R still is - the pro rule)
+        if (api.layersTemplate(n.id) || n.tmpl) continue;  // a template is not even snapped to (R still is - the pro rule)
         let vis = true; for (let p = n.parent; p; p = node(p).parent) if (!node(p).visible) { vis = false; break; }
         if (!vis) continue;
         const s = shapeOf(n); if (s && s.geometry) out.push(s);
@@ -1990,6 +2022,7 @@ function forgeSceneAttach(view, ctx) {
       a.push.apply(a, n.piv.toArray()); a.push.apply(a, n.pc.toArray());
     }
     a.push("sets:" + JSON.stringify(tree.sets || []));
+    a.push("od:" + tree.nodes.map((n) => (n.tmpl ? "t" : "") + (n.bboxOnly ? "b" : "")).join("."));
     return a.join("|");
   }
   const histCopy = (h) => (h && typeof forgeHistCopy === "function" ? forgeHistCopy(h) : h ? JSON.parse(JSON.stringify(h)) : null);
@@ -1997,7 +2030,7 @@ function forgeSceneAttach(view, ctx) {
     sig: sceneSig(),
     nodes: tree.nodes.map((n) => ({ n: n, name: n.name, kind: n.kind, parent: n.parent, visible: n.visible, open: n.open,
       root: !!n.root, auto: !!n.auto, inner: n.inner, innerPos: n.inner.position.clone(), piv: n.piv.clone(), pc: n.pc.clone(),
-      rotOrder: n.rotOrder || "XYZ", attrs: (n.attrs || []).map((a) => ({ name: a.name, value: a.value })),
+      rotOrder: n.rotOrder || "XYZ", tmpl: !!n.tmpl, bboxOnly: !!n.bboxOnly, attrs: (n.attrs || []).map((a) => ({ name: a.name, value: a.value })),
       keys: n.keys ? JSON.parse(JSON.stringify(n.keys)) : null,
       pos: n.grp.position.clone(), quat: n.grp.quaternion.clone(), scale: n.grp.scale.clone(),
       shape: n.root ? null : shapeOf(n), poly: n.poly, hist: n.root ? null : histCopy(n.hist), tri: n.tri, multi: n.multiSession || null })),
@@ -2026,6 +2059,7 @@ function forgeSceneAttach(view, ctx) {
         Object.assign(n, { name: x.name, kind: x.kind, parent: x.parent, visible: x.visible, open: x.open, root: x.root,
           auto: x.auto, inner: x.inner, poly: x.poly, hist: histCopy(x.hist), tri: x.tri, multiSession: x.multi || null });
         n.piv.copy(x.piv); n.pc.copy(x.pc);
+        n.tmpl = !!x.tmpl; n.bboxOnly = !!x.bboxOnly;
         n.rotOrder = x.rotOrder || "XYZ"; n.grp.rotation.order = n.rotOrder;   // before the quaternion, so the Euler re-derives in the right order
         n.attrs = (x.attrs || []).map((a) => ({ name: a.name, value: a.value }));
         n.keys = x.keys ? JSON.parse(JSON.stringify(x.keys)) : null;

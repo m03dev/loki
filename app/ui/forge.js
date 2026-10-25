@@ -1924,7 +1924,7 @@ function forgeMakeView(lib, renderer, canvas) {
     });
     if (!keepView) { holder.position.set(0, 0, 0); holder.rotation.set(0, 0, 0); holder.scale.set(1, 1, 1); }
     // map UVs (forge_uv.js): a modelling step's new cage keeps the old one's UVs where its faces are still there
-    if (window.ForgeUV && keepView && view.poly && view.poly !== poly && !ForgeUV.has(poly) && ForgeUV.has(view.poly)) {   // a step, not a new object
+    if (window.ForgeUV && keepView && view.poly && view.poly !== poly && !ForgeUV.has(poly) && ForgeUV.has(view.poly) && !poly.uvDropped) {   // a step, not a new object (nor Delete UVs)
       const kept = ForgeUV.carry(view.poly, poly);
       if (kept && kept !== poly) { poly.uv = kept.uv; poly.fuv = kept.fuv; poly.uvNew = kept.uvNew; }
     }

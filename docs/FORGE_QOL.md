@@ -14,20 +14,20 @@ Status: **done** = in Forge now, **part** = some of it, **open** = not yet. Effo
 | 3 | Free image planes: alpha gain, all views / one camera, keep aspect | reference pictures to model over | done (alpha, aspect, view-facing); "looking through camera" open | S-M |
 | 4 | Outliner: hidden greyed, search, shapes, DAG-only, drag parent / reorder, colour | finding and organising objects | part (grey, search, drag, filters); per-node colour open | M |
 | 5 | Symmetry that holds the centre seam with every tool | top forum complaint | part (X/Y/Z sculpt + mirror ops); seam weld across poly tools open | L |
-| 6 | Mirror that never flips normals (or freezes a -1 scale) | black, reversed halves after mirroring | open - check Mesh > Mirror on a negatively scaled object | S |
+| 6 | Mirror that never flips normals (or freezes a -1 scale) | black, reversed halves after mirroring | part: Freeze / Bake Pivot of a -1 scale flip the faces so they face out (2026-10-25); Mesh > Conform repairs mixed ones; Mesh > Mirror on a negatively scaled object still to check | S |
 | 7 | Context marking menus (right / Shift-right), extrude + bevel ones | most modelling happens from them | done | M |
 | 8 | Snap from a chosen base point to a target vertex | precise placement | open | M |
 | 9 | Tumble / track while a transform runs | no need to stop the move to look | open | S |
 | 10 | Snap kind shown at the cursor (vertex / midpoint / edge) | knowing what you will snap to | open | S |
 | 11 | Grid snap + custom rotate / scale steps | precise hard-surface work | part (grid, j step) | S |
-| 12 | Soften / harden edges by angle, changeable later | clean shading on hard-surface models | open | S |
+| 12 | Soften / harden edges by angle, changeable later | clean shading on hard-surface models | done (Mesh Display > Soften/Harden Edges by angle, re-run with another angle; Set to Face / Average, 2026-10-25) | S |
 | 13 | Bevel limited to selected / hard / above-angle edges | bevel the whole model at once without wrecking it | open | M |
 | 14 | One interactive "smart" extrude that cuts, merges and unions | fewer clean-up steps | open | L |
 | 15 | Shape-following bevel on messy / boolean topology | bevels that survive real models | open | L |
 | 16 | Live booleans with visible inputs (slice, hole punch) | non-destructive hard-surface | open | L |
 | 17 | Grow / shrink loop and ring selections, one side only | fast selections | part (grow / shrink, loop / ring) | S-M |
 | 18 | Multi-cut showing % along the edge + edge-loop insert | exact cuts | part (multi-cut, insert loop); % readout open | M |
-| 19 | Manipulator aligned to the selected component without re-picking | fewer clicks | open | S |
+| 19 | Manipulator aligned to the selected component without re-picking | fewer clicks | done (Modify > Axes > Component (Normal), Edit Mesh > Transform; FORGE_MODELING_FOUNDATION 5a, 2026-10-25) | S |
 | 20 | Bridge not twisted by default | fewer undo-and-retry | check bridge twist default | S |
 | 21 | Wireframe colour / opacity per object | reading busy scenes | open | S |
 | 22 | Unsmooth (reverse a subdivision) | take a smoothed mesh back to a cage | open (the sculpt engine's levels can do Lower) | M |

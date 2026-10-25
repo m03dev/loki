@@ -27,16 +27,16 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-311 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (28%).
+332 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (30%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 6 | 24 |
-| Edit | 17 | 57 |
+| Edit | 18 | 57 |
 | Create | 8 | 66 |
 | Select | 30 | 79 |
 | Modify | 15 | 95 |
-| Display | 10 | 121 |
+| Display | 14 | 121 |
 | Windows | 13 | 80 |
 | Mesh | 19 | 32 |
 | Edit Mesh | 24 | 30 |
@@ -45,9 +45,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Curves | 0 | 36 |
 | Surfaces | 0 | 41 |
 | Deform | 0 | 75 |
-| UV | 10 | 19 |
-| Key | 4 | 36 |
-| Playback | 5 | 27 |
+| UV | 14 | 19 |
+| Key | 9 | 36 |
+| Playback | 12 | 27 |
 | Shift+RMB object | 30 | 47 |
 | Shift+RMB vertex | 16 | 26 |
 | Shift+RMB edge | 27 | 37 |
@@ -95,7 +95,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `cutSel` Cut (Maya: CutSelected)
 - ✓ `copySel` Copy (Maya: CopySelected)
 - ✓ `pasteSel` Paste (Maya: PasteSelected)
-- - Keys > Cut Keys (Maya: CutKeys)
+- ✓ `cutKeys` Keys > Cut Keys (Maya: CutKeys)
 - ✓ `copyAnim` Keys > Copy Keys (Maya: CopyKeys)
 - ✓ `pasteAnim` Keys > Paste Keys (Maya: PasteKeys)
 - ✓ `deleteKey` Keys > Delete Keys (Maya: DeleteKeys)
@@ -502,10 +502,10 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Show > Camera Manipulators (Maya: ShowCameraManipulators)
 - ✓ `hideToggle` Toggle Show/Hide (Maya: ToggleVisibilityAndKeepSelection)
 - - Wireframe Color... (Maya: SetWireframeColor)
-- - Object Display > Template (Maya: TemplateObject)
-- - Object Display > Untemplate (Maya: UntemplateObject)
-- - Object Display > Bounding Box (Maya: ShowBoundingBox)
-- - Object Display > No Bounding Box (Maya: HideBoundingBox)
+- ✓ `templateObj` Object Display > Template (Maya: TemplateObject)
+- ✓ `untemplateObj` Object Display > Untemplate (Maya: UntemplateObject)
+- ✓ `showBBox` Object Display > Bounding Box (Maya: ShowBoundingBox)
+- ✓ `hideBBox` Object Display > No Bounding Box (Maya: HideBoundingBox)
 - - Object Display > Geometry (Maya: ShowObjectGeometry)
 - - Object Display > No Geometry (Maya: HideObjectGeometry)
 - - Object Display > Ignore Hardware Shader (Maya: IgnoreHardwareShader)
@@ -915,7 +915,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - UV Set Editor (Maya: UVSetEditor)
 - ✓ `uvChecker` Assign Checker Shader (Maya: TogglePolyUVsCreateShader)
 - ✓ `uvAutomatic` Automatic (Maya: UVAutomaticProjection)
-- - Best Plane (Maya: BestPlaneTexturingTool)
+- ✓ `uvBestPlane` Best Plane (Maya: BestPlaneTexturingTool)
 - ✓ `uvCamera` Camera-based (Maya: UVCameraBasedProjection)
 - - Contour Stretch (Maya: UVContourStretchProjection)
 - - Normal-Based (Maya: UVNormalBasedProjection)
@@ -925,19 +925,19 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `uvAutoSeams` Auto Seams (Maya: AutoSeamUVs)
 - ✓ `uvCut` Cut UV Edges (Maya: CutUVsWithoutHotkey)
 - ✓ `uvSew` Sew UV Edges (Maya: SewUVsWithoutHotkey)
-- - Split UVs (Maya: SplitUV)
-- - Delete UVs (Maya: DeleteUVsWithoutHotkey)
-- - Merge UVs (Maya: MergeUV)
+- ✓ `uvSplit` Split UVs (Maya: SplitUV)
+- ✓ `uvDelete` Delete UVs (Maya: DeleteUVsWithoutHotkey)
+- ✓ `uvMerge` Merge UVs (Maya: MergeUV)
 - - 3D Cut and Sew UV Tool (Maya: SetCutSewUVTool)
 - - 3D Grab UV Tool (Maya: SetMeshGrabUVTool)
 
 ### Key
 
 - ✓ `setKey` Set Key (Maya: SetKey)
-- - Set Key on Animated (Maya: SetKeyAnimated)
-- - Set Key on Translate (Maya: SetKeyTranslate)
-- - Set Key on Rotate (Maya: SetKeyRotate)
-- - Set Key on Scale (Maya: SetKeyScale)
+- ✓ `keyAnimated` Set Key on Animated (Maya: SetKeyAnimated)
+- ✓ `keyTranslate` Set Key on Translate (Maya: SetKeyTranslate)
+- ✓ `keyRotate` Set Key on Rotate (Maya: SetKeyRotate)
+- ✓ `keyScale` Set Key on Scale (Maya: SetKeyScale)
 - - Set Breakdown Key (Maya: SetBreakdownKey)
 - - Set Driven Key > Set... (Maya: SetDrivenKey)
 - - Set Driven Key > Go to Previous (Maya: GoToPreviousDrivenKey)
@@ -947,7 +947,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Insert Key on Translate (Maya: InsertKeyTranslate)
 - - Insert Key on Rotate (Maya: InsertKeyRotate)
 - - Insert Key on Scale (Maya: InsertKeyScale)
-- - Cut Keys (Maya: CutKeys)
+- ✓ `cutKeys` Cut Keys (Maya: CutKeys)
 - ✓ `copyAnim` Copy Keys (Maya: CopyKeys)
 - ✓ `pasteAnim` Paste Keys (Maya: PasteKeys)
 - ✓ `deleteKey` Delete Keys (Maya: DeleteKeys)
@@ -974,14 +974,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 - - Playblast (Maya: PlayblastWindow)
 - ✓ `playPause` Play (Maya: PlaybackForward)
-- - Backward (Maya: PlaybackBackward)
-- - Stop (Maya: PlaybackStop)
+- ✓ `playBack` Backward (Maya: PlaybackBackward)
+- ✓ `playStop` Stop (Maya: PlaybackStop)
 - ✓ `nextKey` Next Key (Maya: NextKey)
 - ✓ `prevKey` Prev Key (Maya: PreviousKey)
 - - Select Next Key (Maya: SelectNextKey)
 - - Select Previous Key (Maya: SelectPreviousKey)
-- - Next Frame (Maya: NextFrame)
-- - Prev Frame (Maya: PreviousFrame)
+- ✓ `nextFrame` Next Frame (Maya: NextFrame)
+- ✓ `prevFrame` Prev Frame (Maya: PreviousFrame)
 - ✓ `rangeStart` Play Range Start (Maya: GoToMinFrame)
 - ✓ `rangeEnd` Play Range End (Maya: GoToMaxFrame)
 - - Set Range to > Enabled Clips (Maya: PlaybackRangeEnabledClips)
@@ -993,9 +993,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - Playback Speed > Play Every Frame, Free (Maya: PlaybackFree)
 - - Playback Speed > Play Every Frame, Max Real-time (Maya: PlaybackPefRealtime)
 - - Playback Speed > Real-time (Maya: PlaybackRealtime)
-- - Playback Looping > Continuous (Maya: PlaybackLoopContinuous)
-- - Playback Looping > Once (Maya: PlaybackLoopOnce)
-- - Playback Looping > Oscillate (Maya: PlaybackLoopOscillate)
+- ✓ `loopContinuous` Playback Looping > Continuous (Maya: PlaybackLoopContinuous)
+- ✓ `loopOnce` Playback Looping > Once (Maya: PlaybackLoopOnce)
+- ✓ `loopOscillate` Playback Looping > Oscillate (Maya: PlaybackLoopOscillate)
 - - Enable Stepped Preview (Maya: PlaybackSteppedPreview)
 - - Render Current Frame (Maya: RenderIntoNewWindow)
 - - RenderGlobalsWindow (Maya: RenderGlobalsWindow)

@@ -757,6 +757,10 @@ else:
             await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
             await page.wait_for_timeout(600)
             check("window: starts with the research-3 scripts and no script error", not errors, errors[:5])
+            try:   # icons.js paints a button made by another script on the next frame (a MutationObserver): wait for it
+                await page.wait_for_function("!!document.querySelector('#prompt-lib-btn svg.icon') && !!document.querySelector('#chat-menu-btn svg.icon')", timeout=3000)
+            except Exception:  # noqa: BLE001
+                pass
             check("window: chat menu and prompt library buttons are icons with tooltips",
                   await page.get_attribute("#chat-menu-btn", "data-tip-name") == "Chat menu"
                   and await page.eval_on_selector("#prompt-lib-btn", "n => !!n.querySelector('svg.icon')"))

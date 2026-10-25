@@ -867,7 +867,7 @@ const LokiQol = (function () {
     const table = node("div", "qol-keys");
     for (const a of ACTIONS) {
       const row = node("div", "qol-key-row");
-      const b = node("button", "qol-combo", showCombo(comboOfAction(a))); b.type = "button";
+      const b = node("button", "qol-combo", showCombo(comboOfAction(a))); b.type = "button"; b.dataset.action = a.id;
       b.setAttribute("aria-label", a.name + ": " + showCombo(comboOfAction(a)) + ". Press to change.");
       b.addEventListener("click", () => record(a, b, body));
       row.append(node("span", "", a.name), b,
@@ -907,7 +907,10 @@ const LokiQol = (function () {
     b.textContent = say("Press the keys… (Esc cancels)");
     b.classList.add("recording");
     let stopped = false;
-    const stop = () => { if (stopped) return; stopped = true; recording = null; b.removeEventListener("keydown", onRec, true); b.removeEventListener("blur", stop); paintPrefs(body); };
+    // the list is drawn again: focus goes back to this shortcut's new button, so a second Esc reaches the sheet and
+    // closes it (it used to land on the page body and the sheet stayed open)
+    const stop = () => { if (stopped) return; stopped = true; recording = null; b.removeEventListener("keydown", onRec, true); b.removeEventListener("blur", stop); paintPrefs(body);
+      const again = body.querySelector('.qol-combo[data-action="' + a.id + '"]'); if (again) again.focus(); };
     const onRec = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (e.key === "Escape" || e.key === "Tab") { stop(); return; }

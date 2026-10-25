@@ -487,10 +487,10 @@ def notify(title: str, text: str, run: bool = True) -> dict:
         argv, extra = automations.notify_argv(str(title or "LOKI")[:120], str(text or "")[:600])
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)[:200]}
+    if not run:                                     # a dry run shows the command, on any machine (tests, the doctor)
+        return {"ok": True, "sent": False, "how": argv[0], "argv": argv, "env": extra, "found": bool(shutil.which(argv[0]))}
     if not shutil.which(argv[0]):
         return {"ok": True, "sent": False, "how": argv[0] + " not found"}
-    if not run:
-        return {"ok": True, "sent": False, "how": argv[0], "argv": argv, "env": extra}
 
     def go() -> None:
         import subprocess  # pylint: disable=import-outside-toplevel

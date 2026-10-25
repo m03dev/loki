@@ -117,6 +117,10 @@ const FORGE_MAYA = {
     "Keys",
     [
      [
+      "cutKeys",
+      "Cut Keys"
+     ],
+     [
       "copyAnim",
       "Copy Keys"
      ],
@@ -543,6 +547,29 @@ const FORGE_MAYA = {
    [
     "hideToggle",
     "Toggle Show/Hide"
+   ],
+   "-",
+   [
+    "Object Display",
+    [
+     [
+      "templateObj",
+      "Template"
+     ],
+     [
+      "untemplateObj",
+      "Untemplate"
+     ],
+     "-",
+     [
+      "showBBox",
+      "Bounding Box"
+     ],
+     [
+      "hideBBox",
+      "No Bounding Box"
+     ]
+    ]
    ],
    "-",
    [
@@ -1041,6 +1068,10 @@ const FORGE_MAYA = {
     "Automatic"
    ],
    [
+    "uvBestPlane",
+    "Best Plane"
+   ],
+   [
     "uvCamera",
     "Camera-based"
    ],
@@ -1071,6 +1102,19 @@ const FORGE_MAYA = {
     "uvSew",
     "Sew UV Edges"
    ],
+   [
+    "uvSplit",
+    "Split UVs"
+   ],
+   "-",
+   [
+    "uvDelete",
+    "Delete UVs"
+   ],
+   [
+    "uvMerge",
+    "Merge UVs"
+   ],
    "#LOKI",
    [
     "Unfold",
@@ -1096,7 +1140,27 @@ const FORGE_MAYA = {
     "setKey",
     "Set Key"
    ],
+   [
+    "keyAnimated",
+    "Set Key on Animated"
+   ],
+   [
+    "keyTranslate",
+    "Set Key on Translate"
+   ],
+   [
+    "keyRotate",
+    "Set Key on Rotate"
+   ],
+   [
+    "keyScale",
+    "Set Key on Scale"
+   ],
    "#Edit",
+   [
+    "cutKeys",
+    "Cut Keys"
+   ],
    [
     "copyAnim",
     "Copy Keys"
@@ -1137,6 +1201,14 @@ const FORGE_MAYA = {
     "Play"
    ],
    [
+    "playBack",
+    "Backward"
+   ],
+   [
+    "playStop",
+    "Stop"
+   ],
+   [
     "nextKey",
     "Next Key"
    ],
@@ -1145,12 +1217,38 @@ const FORGE_MAYA = {
     "Prev Key"
    ],
    [
+    "nextFrame",
+    "Next Frame"
+   ],
+   [
+    "prevFrame",
+    "Prev Frame"
+   ],
+   [
     "rangeStart",
     "Play Range Start"
    ],
    [
     "rangeEnd",
     "Play Range End"
+   ],
+   "#Settings",
+   [
+    "Playback Looping",
+    [
+     [
+      "loopContinuous",
+      "Continuous"
+     ],
+     [
+      "loopOnce",
+      "Once"
+     ],
+     [
+      "loopOscillate",
+      "Oscillate"
+     ]
+    ]
    ]
   ],
   "Sculpt": [

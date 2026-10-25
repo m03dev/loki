@@ -26,6 +26,7 @@ sys.path.insert(0, str(REPO / "engine"))
 TMP = Path(tempfile.mkdtemp(prefix="loki-qol-"))
 os.environ["LOKI_DATA"] = str(TMP / "data")
 os.environ["LOKI_WORKSPACE"] = str(TMP / "ws")
+os.environ["LOKI_AGENT_ENGINE"] = "loki"   # this suite drives LOKI's own loop (steering goes into its messages)
 (TMP / "ws").mkdir(parents=True, exist_ok=True)
 os.environ.pop("LOKI_JOB_ID", None)
 

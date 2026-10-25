@@ -99,9 +99,15 @@ function forgeTimeAttach(view) {
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
     if (!t.playing) return;
-    let f = t.frame + dt * (t.fps || 24);
+    // Playback > Backward plays the other way; Playback Looping: continuous (the pro default), once, oscillate
+    const dir = t.dir === -1 ? -1 : 1, loop = t.loop || "continuous";
+    let f = t.frame + dir * dt * (t.fps || 24);
     const span = Math.max(1, t.end - t.start);
-    if (f > t.end) f = t.start + ((f - t.start) % span);        // loop the range, the pro default
+    if (f > t.end || f < t.start) {
+      if (loop === "once") { f = f > t.end ? t.end : t.start; t.playing = false; if (api.stop) api.stop(); }
+      else if (loop === "oscillate") { f = f > t.end ? t.end - (f - t.end) : t.start + (t.start - f); t.dir = -dir; }
+      else f = f > t.end ? t.start + ((f - t.start) % span) : t.end - ((t.start - f) % span);
+    }
     api.setFrame(f);
   };
 
