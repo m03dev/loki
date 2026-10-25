@@ -87,6 +87,12 @@ async def main():
         await page.wait_for_timeout(150)
         st = await E(S)
         check("Shortest Edge Path between opposite corners: 3 edges", st[0] == "edge" and st[2] == 3, st)
+        # speed: a click on a big mesh repaints only the colours (drawOverlay kept the wire), not 100k edges
+        sp = await E("""(async () => { const v = forge.view, P = ForgePoly; await forgeProRun(v, 'objectMode'); await forgeProRun(v, 'sphere');
+          let m = v.poly; while (m.f.length < 40000) m = P.smooth(m); v.showPoly(m, true);
+          await forgeProRun(v, 'face'); v.selectItems('face', [0], 'set');
+          const t = performance.now(); for (let k = 0; k < 5; k++) v.selectItems('face', [k], 'add'); return [m.f.length, (performance.now() - t) / 5]; })()""")
+        check("a click on a %d-face mesh takes under 25 ms (it was ~50: the whole wire was rebuilt)" % sp[0], sp[1] < 25, sp)
         check("no script errors", not errors, errors[:3])
         await browser.close()
 

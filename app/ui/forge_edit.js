@@ -63,39 +63,57 @@ function forgeEditAttach(view, ctx) {
   const dispose = (o) => { if (o) { over.remove(o); o.geometry.dispose(); } };
   function drawOverlay(poly) {
     poly = poly || view.poly;
-    dispose(wire); dispose(dots); dispose(fill); wire = dots = fill = null;
     const on = view.mode === "poly" && !!poly;
     over.visible = on;
     material.polygonOffset = on; material.polygonOffsetFactor = 1; material.polygonOffsetUnits = 1;
-    if (!on) { view.dirty = true; return; }
+    if (!on) { dispose(wire); dispose(dots); dispose(fill); wire = dots = fill = null; view.dirty = true; return; }
     const T = topo(), s = ed.sel, c0 = new THREE.Color(FORGE_SEL_COLORS.wire), c1 = new THREE.Color(FORGE_SEL_COLORS.wireSel);
-    const lp = new Float32Array(T.edges.length * 6), lc = new Float32Array(T.edges.length * 6);
-    T.edges.forEach((e, i) => {
-      lp.set(poly.v[e.a], i * 6); lp.set(poly.v[e.b], i * 6 + 3);
-      const c = s.e.has(i) ? c1 : c0;
-      lc.set([c.r, c.g, c.b, c.r, c.g, c.b], i * 6);
-    });
-    const lg = new THREE.BufferGeometry();
-    lg.setAttribute("position", new THREE.BufferAttribute(lp, 3)); lg.setAttribute("color", new THREE.BufferAttribute(lc, 3));
-    wire = new THREE.LineSegments(lg, lineMat); wire.renderOrder = 6; over.add(wire);
-    if (ed.mode === "vert") {
-      const pp = new Float32Array(poly.v.length * 3), pc = new Float32Array(poly.v.length * 3);
-      const v0 = new THREE.Color(FORGE_SEL_COLORS.vert), v1 = new THREE.Color(FORGE_SEL_COLORS.vertSel);
-      poly.v.forEach((p, i) => { pp.set(p, i * 3); const c = s.v.has(i) ? v1 : v0; pc.set([c.r, c.g, c.b], i * 3); });
-      const pg = new THREE.BufferGeometry();
-      pg.setAttribute("position", new THREE.BufferAttribute(pp, 3)); pg.setAttribute("color", new THREE.BufferAttribute(pc, 3));
-      dots = new THREE.Points(pg, pointMat); dots.renderOrder = 7; over.add(dots);
+    // the same mesh as last time (a selection change, the usual case): keep the wire's and the points' positions and
+    // only paint their colours again - rebuilding 100k edges on every click was most of a click's time
+    const same = wire && wire.userData.poly === poly && wire.userData.edges === T.edges.length;
+    if (!same) {
+      dispose(wire); dispose(dots); wire = dots = null;
+      const lp = new Float32Array(T.edges.length * 6);
+      for (let i = 0; i < T.edges.length; i++) { const e = T.edges[i], a = poly.v[e.a], b = poly.v[e.b], o = i * 6; lp[o] = a[0]; lp[o + 1] = a[1]; lp[o + 2] = a[2]; lp[o + 3] = b[0]; lp[o + 4] = b[1]; lp[o + 5] = b[2]; }
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute("position", new THREE.BufferAttribute(lp, 3)); lg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(T.edges.length * 6), 3));
+      wire = new THREE.LineSegments(lg, lineMat); wire.renderOrder = 6; over.add(wire);
+      wire.userData.poly = poly; wire.userData.edges = T.edges.length;
     }
+    const lc = wire.geometry.attributes.color.array;
+    for (let i = 0; i < T.edges.length; i++) {
+      const c = s.e.has(i) ? c1 : c0, o = i * 6;
+      lc[o] = lc[o + 3] = c.r; lc[o + 1] = lc[o + 4] = c.g; lc[o + 2] = lc[o + 5] = c.b;
+    }
+    wire.geometry.attributes.color.needsUpdate = true;
+    if (ed.mode === "vert") {
+      if (!dots || dots.userData.poly !== poly) {
+        dispose(dots);
+        const pp = new Float32Array(poly.v.length * 3);
+        for (let i = 0; i < poly.v.length; i++) { const p = poly.v[i]; pp[i * 3] = p[0]; pp[i * 3 + 1] = p[1]; pp[i * 3 + 2] = p[2]; }
+        const pg = new THREE.BufferGeometry();
+        pg.setAttribute("position", new THREE.BufferAttribute(pp, 3)); pg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(poly.v.length * 3), 3));
+        dots = new THREE.Points(pg, pointMat); dots.renderOrder = 7; over.add(dots); dots.userData.poly = poly;
+      }
+      const pc = dots.geometry.attributes.color.array, v0 = new THREE.Color(FORGE_SEL_COLORS.vert), v1 = new THREE.Color(FORGE_SEL_COLORS.vertSel);
+      for (let i = 0; i < poly.v.length; i++) { const c = s.v.has(i) ? v1 : v0; pc[i * 3] = c.r; pc[i * 3 + 1] = c.g; pc[i * 3 + 2] = c.b; }
+      dots.geometry.attributes.color.needsUpdate = true;
+    } else if (dots) { dispose(dots); dots = null; }
+    dispose(fill); fill = null;
     if (s.f.size) {
-      const F = [];
+      let n = 0;
+      for (const fi of s.f) { const f = poly.f[fi]; if (f) n += Math.max(0, f.length - 2); }
+      const F = new Float32Array(n * 9);
+      let o = 0;
       for (const fi of s.f) {
         const f = poly.f[fi];
-        if (f) for (let k = 1; k + 1 < f.length; k++) F.push(...poly.v[f[0]], ...poly.v[f[k]], ...poly.v[f[k + 1]]);
+        if (f) for (let k = 1; k + 1 < f.length; k++) { F.set(poly.v[f[0]], o); F.set(poly.v[f[k]], o + 3); F.set(poly.v[f[k + 1]], o + 6); o += 9; }
       }
-      const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(F, 3));
+      const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.BufferAttribute(F, 3));
       fill = new THREE.Mesh(fg, faceMat); fill.renderOrder = 5; over.add(fill);
     }
-    for (const m of [lineMat, pointMat, faceMat]) { m.depthTest = !ed.xray; m.needsUpdate = true; }
+    // X-ray changes the materials' depth test; only then do they need recompiling
+    for (const m of [lineMat, pointMat, faceMat]) if (m.depthTest !== !ed.xray) { m.depthTest = !ed.xray; m.needsUpdate = true; }
     view.dirty = true;
   }
   // while a move runs: the same overlay, only its positions (rebuilding 100k edges every mouse move is too slow)
@@ -105,6 +123,8 @@ function forgeEditAttach(view, ctx) {
     const lp = wire.geometry.attributes.position.array;
     T.edges.forEach((e, i) => { lp.set(poly.v[e.a], i * 6); lp.set(poly.v[e.b], i * 6 + 3); });
     wire.geometry.attributes.position.needsUpdate = true; wire.geometry.computeBoundingSphere();
+    wire.userData.poly = null;                         // its positions are the move's now: the next full draw rebuilds
+    if (dots) dots.userData.poly = null;
     if (dots) {
       const pp = dots.geometry.attributes.position.array;
       poly.v.forEach((q, i) => pp.set(q, i * 3));
