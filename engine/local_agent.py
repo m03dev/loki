@@ -65,6 +65,7 @@ Rules:
   watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
   loki-make 3d "<object>" [--backend pixal3d]   loki-make video "<clip>"   loki-make upscale pic.png
   loki-make pixel pic.png --size 64 --palette pico-8   (real game pixel art from any picture)
+  loki-make shelf --action list   loki-make shelf --action run --id gltfpack --run lod --args '{"input": "models/a.glb"}'   (game-dev tools; install asks the owner)
   loki-make voice --action speak --text "Hello, traveller" --instruct narrator   (voices, VoiceStudio; also --action transcribe --audio clip.mp4 -> .srt)
 - The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:

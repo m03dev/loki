@@ -262,3 +262,12 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .live-switch { margin: 2px 0 0 4px; font-size: 10.5px; color: var(--muted); opacity: .6; }
 @keyframes lm-pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .live-meter .lm-model::before { animation: none !important; } }
+/* Settings > Add-ons > Tool Shelf (toolshelf.js) */
+.ts-box { margin-bottom: 16px; }
+.ts-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.ts-head h4 { margin: 0; }
+.ts-area { border-top: 1px solid var(--line, rgba(255,255,255,.1)); padding: 6px 0; }
+.ts-area > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.ts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0 7px 12px; }
+.ts-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.ts-meta { font-size: 11px; opacity: .8; }

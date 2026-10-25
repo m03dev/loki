@@ -214,6 +214,11 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
     # code by itself; pictures, models and clips come from LOKI's own makers (not in Plan mode: they make files)
     if make_tools and not plan:
         mcp["loki-make"] = {"type": "local", "command": make_tools_command(), "enabled": True}
+    # Godot AI (github.com/hi-godot/godot-ai, MIT): the live Godot editor's 46 tools, when a project has the add-on
+    if not plan:
+        gai = godot_ai_mcp()
+        if gai:
+            mcp["godot-ai"] = gai
     # VoiceStudio's own MCP server (engine/voice_studio.py) when its backend answers: speech, voices, transcription
     if not plan:
         try:
@@ -380,3 +385,39 @@ def ensure_index(workspace: str, codegraph: str, runner=subprocess.run) -> str:
         return "" if r.returncode == 0 else ("codegraph init failed: %s" % ((r.stderr or r.stdout or "")[-300:]))
     except (OSError, subprocess.TimeoutExpired) as exc:
         return "codegraph init failed: %s" % exc
+
+
+def godot_ai_mcp(projects: list | None = None, uvx: str | None = None) -> dict:
+    """OpenCode's entry for Godot AI: `godot-ai attach` (stdio) pinned to the add-on version in the owner's project
+    (its docs/client-configuration.md shape). Nothing when no project has addons/godot_ai or uv is missing."""
+    import re as _re  # pylint: disable=import-outside-toplevel
+    from pathlib import Path as _P  # pylint: disable=import-outside-toplevel
+    if projects is None:
+        try:
+            import agent_folders  # pylint: disable=import-outside-toplevel
+            root = _P(agent_folders.projects_dir())
+        except Exception:  # noqa: BLE001
+            root = _P.home() / "LOKI Projects"
+        env_p = os.environ.get("LOKI_GODOT_PROJECT")
+        projects = ([_P(env_p)] if env_p else []) + ([p.parent.parent.parent for p in root.glob("*/addons/godot_ai/plugin.cfg")]
+                                                     + [p.parent.parent.parent for p in root.glob("*/*/addons/godot_ai/plugin.cfg")]
+                                                     if root.is_dir() else [])
+    version = ""
+    for proj in projects:
+        cfg = _P(proj) / "addons" / "godot_ai" / "plugin.cfg"
+        if cfg.is_file():
+            m = _re.search(r'^version="([0-9][0-9A-Za-z.\-]*)"', cfg.read_text(encoding="utf-8", errors="replace"), _re.M)
+            if m:
+                version = m.group(1)
+                break
+    if not version:
+        return {}
+    uvx = uvx if uvx is not None else (shutil.which("uvx") or next((str(p) for p in (
+        _P.home() / ".local" / "bin" / "uvx", _P.home() / ".cargo" / "bin" / "uvx") if p.exists()), ""))
+    if not uvx:
+        return {}
+    return {"type": "local", "enabled": True, "command": [
+        uvx, "--isolated", "--no-config", "--no-env-file", "--no-sources", "--no-build", "--index-strategy",
+        "first-index", "--keyring-provider", "disabled", "--index", "https://pypi.org/simple", "--default-index",
+        "https://pypi.org/simple", "--find-links", "https://pypi.org/simple/godot-ai/", "--link-mode", "copy",
+        "--from", "godot-ai==" + version, "godot-ai", "attach", "--port", "8000", "--ws-port", "9500"]}

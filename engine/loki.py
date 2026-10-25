@@ -6213,6 +6213,49 @@ async def voice_tool(action: str = "speak", text: str = "", voice: str = "", ins
 
 
 LOCAL_TOOLS["voice"] = voice_tool
+
+
+# --- The Tool Shelf (engine/toolshelf.py): open-source game-dev tools, installed when the owner allows ------------
+async def toolshelf_tool(action: str = "list", area: str = "", id: str = "", run: str = "",  # noqa: A002
+                         args: dict | None = None) -> str:
+    import toolshelf  # pylint: disable=import-outside-toplevel
+    req = {"action": action, "area": area, "id": id, "run": run, "args": args or {}}
+    if action in ("install", "remove"):
+        if os.getenv("LOKI_JOB_ID"):
+            return "DENIED: installing or removing a tool needs the owner - ask them."
+        try:
+            r = toolshelf.recipe(id)
+        except toolshelf.ShelfError as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        what = ("Install %s (%s, licence %s) - it downloads and runs its code in LOKI's tools folder."
+                % (r.get("name"), r.get("repo"), r.get("license")) if action == "install"
+                else "Remove %s and everything it downloaded." % r.get("name"))
+        if not await approve("toolshelf_" + action, what, False):
+            return "DENIED: the owner did not approve that."
+    ask = None
+    if action == "run":
+        try:
+            act = (toolshelf.recipe(id).get("actions") or {}).get(run) or {}
+        except toolshelf.ShelfError:
+            act = {}
+        if act.get("ask"):
+            if os.getenv("LOKI_JOB_ID"):
+                return "DENIED: %s needs the owner's OK - a background job may not; ask them." % run
+            ok = await approve("toolshelf_" + run, "%s: %s\n\n%s" % (id, act.get("what", run),
+                               json.dumps(args or {}, indent=1)[:3000]), False)
+            if not ok:
+                return "DENIED: the owner did not approve that."
+            ask = lambda *_a: True  # noqa: E731 - approved just now
+    res = await asyncio.to_thread(toolshelf.tool, req, WORKSPACE, ask)
+    return json.dumps(res)
+
+
+LOCAL_TOOLS["toolshelf"] = toolshelf_tool
+_SHELF_SCHEMA = schema("toolshelf", __import__("toolshelf").TOOL["description"],
+                       __import__("toolshelf").TOOL["inputSchema"]["properties"], ["action"])
+TOOL_SCHEMAS.append(_SHELF_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_SHELF_SCHEMA)
+MODEL_TOOL_NAMES.add("toolshelf")
 _VOICE_SCHEMA = schema("voice", __import__("voice_studio").TOOL["description"],
                        __import__("voice_studio").TOOL["inputSchema"]["properties"], ["action"])
 TOOL_SCHEMAS.append(_VOICE_SCHEMA)

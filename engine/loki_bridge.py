@@ -1033,6 +1033,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import cleanup  # pylint: disable=import-outside-toplevel
             self._send_json(*cleanup.route(self.server.state, "GET", route, {}))
             return
+        if route == "/tools/shelf":   # the Tool Shelf: game-dev tools installed on request (engine/toolshelf.py)
+            import toolshelf  # pylint: disable=import-outside-toplevel
+            self._send_json(*toolshelf.route(self.server.state, "GET", route, {}, {}))
+            return
         if route == "/local/models":   # every model downloaded on this computer (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(self.server.state, "GET", route, {}, {}))
@@ -1522,6 +1526,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
             self._send_json(200, {"ok": True})
+            return
+        if route in ("/tools/shelf/install", "/tools/shelf/remove"):   # engine/toolshelf.py (the window asked first)
+            import toolshelf  # pylint: disable=import-outside-toplevel
+            self._send_json(*toolshelf.route(state, "POST", route, {}, data))
             return
         if route == "/local/models/remove":   # uninstall a downloaded model (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
