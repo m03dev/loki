@@ -168,7 +168,12 @@ def voice(args: dict, cwd: Path) -> dict:
 
 def make_music(args: dict, cwd: Path) -> dict:
     import comfy_jobs  # pylint: disable=import-outside-toplevel
-    res = comfy_jobs.make_music(args or {}, inside(cwd, "", "audio"))
+    import music  # pylint: disable=import-outside-toplevel - ACE-Step's own server first, then ComfyUI
+    a = args or {}
+    res = music.make(str(a.get("tags") or a.get("prompt") or ""), inside(cwd, "", "music"), str(a.get("lyrics") or ""),
+                     float(a.get("seconds") or 0), int(a.get("bpm") or 0), str(a.get("key") or ""))
+    if not res.get("ok"):
+        res = comfy_jobs.make_music(a, inside(cwd, "", "music"))
     if res.get("ok"):
         res["files"] = [os.path.relpath(f, cwd) for f in res["files"]]
     return res

@@ -4403,8 +4403,14 @@ async def enhance_image_prompt(prompt: str, style: str = "", seed: int = 0) -> s
 async def make_music(prompt: str = "", lyrics: str = "", duration: float = 0, bpm: int = 0, key: str = "") -> str:
     """ACE-Step 1.5 on this computer (or LOKI_ACESTEP_URL): a song into music/."""
     out = await asyncio.to_thread(music.make, prompt, WORKSPACE / "music", lyrics, duration, bpm, key)
-    if not out.get("ok"):
-        return "error: %s" % out["error"]
+    if not out.get("ok"):                   # no ACE-Step server: the same model on the owner's ComfyUI (the PC)
+        import comfy_jobs  # pylint: disable=import-outside-toplevel
+        alt = await asyncio.to_thread(comfy_jobs.make_music, {"tags": prompt, "lyrics": lyrics,
+                                                              "seconds": duration or 60, "bpm": bpm or None,
+                                                              "key": key}, WORKSPACE / "music")
+        if not alt.get("ok"):
+            return "error: %s (ComfyUI: %s)" % (out["error"], alt.get("error"))
+        out = alt
     return "made %s" % ", ".join(Path(p).relative_to(WORKSPACE).as_posix() for p in out["files"])
 
 
@@ -4454,7 +4460,8 @@ _PORT_SCHEMAS = [
            "isometric, analog film, neonpunk, craft clay, origami, line art, 3d-model... (style='list' lists them). "
            "Then make the picture with the enhanced prompt.",
            {"prompt": {"type": "string"}, "style": {"type": "string"}, "seed": {"type": "integer"}}, ["prompt"]),
-    schema("make_music", "Make a song or a piece of music on this computer (ACE-Step, free). prompt = genre, mood, "
+    schema("make_music", "Make a song or a piece of music (ACE-Step 1.5, free: its server on this computer, else the "
+           "owner's ComfyUI on the PC). prompt = genre, mood, "
            "instruments, voice; lyrics optional ([verse]/[chorus] lines); duration in seconds.",
            {"prompt": {"type": "string"}, "lyrics": {"type": "string"}, "duration": {"type": "number"},
             "bpm": {"type": "integer"}, "key": {"type": "string"}}, []),
@@ -6252,25 +6259,6 @@ async def toolshelf_tool(action: str = "list", area: str = "", id: str = "", run
 
 LOCAL_TOOLS["toolshelf"] = toolshelf_tool
 
-
-async def make_music_tool(tags: str = "", lyrics: str = "", seconds: float = 60, bpm: int = 0, key: str = "",
-                          language: str = "", seed: int | None = None) -> str:
-    """Music with ACE-Step 1.5 on the owner's ComfyUI (engine/comfy_jobs.py) -> an MP3 in audio/."""
-    import comfy_jobs  # pylint: disable=import-outside-toplevel
-    res = await asyncio.to_thread(comfy_jobs.make_music, {"tags": tags, "lyrics": lyrics, "seconds": seconds,
-                                                          "bpm": bpm or None, "key": key, "language": language,
-                                                          "seed": seed}, WORKSPACE / "audio")
-    if res.get("ok"):
-        res["files"] = [Path(f).resolve().relative_to(WORKSPACE.resolve()).as_posix() for f in res["files"]]
-    return json.dumps(res)
-
-
-LOCAL_TOOLS["make_music"] = make_music_tool
-_MUSIC_SCHEMA = schema("make_music", __import__("comfy_jobs").MUSIC_TOOL["description"],
-                       __import__("comfy_jobs").MUSIC_TOOL["inputSchema"]["properties"], ["tags"])
-TOOL_SCHEMAS.append(_MUSIC_SCHEMA)
-MODEL_TOOL_SCHEMAS.append(_MUSIC_SCHEMA)
-MODEL_TOOL_NAMES.add("make_music")
 _SHELF_SCHEMA = schema("toolshelf", __import__("toolshelf").TOOL["description"],
                        __import__("toolshelf").TOOL["inputSchema"]["properties"], ["action"])
 TOOL_SCHEMAS.append(_SHELF_SCHEMA)
