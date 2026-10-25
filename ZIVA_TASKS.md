@@ -715,8 +715,8 @@ is linked".
       Alt+click loop; Forge > Creature: every starter builds, Walk plays.
 - [ ] [either] Poly: loop cut (Ctrl+R) and bevel (Ctrl+B) using P.topology / P.edgeRing in app/ui/forge_poly.js (the
       old bevel port left holes where 3 selected edges meet).
-- [ ] [either] Poly: extrude loose vertices / edges (Blender E in vert/edge mode), merge (M), knife.
-- [ ] [either] Poly: speed up commit after a move on 50k+ face meshes (view.showPoly rebuild in forge.js; ~0.7 s now).
+- [x] [either] Poly: extrude loose vertices / edges, merge, knife - in Forge (Extrude Vertex / Edge, Merge, Multi-Cut).
+- [x] [either] Poly: speed up commit after a move on 50k+ face meshes - Claude 2026-10-25: P.topology number keys + reuse for a moved copy (55k faces: 919 -> 568 ms in software GL; the topology part 459 -> 8 ms). Next: drawOverlay / forgeMeshFrom (~90 ms each).
 - [ ] [either] Creature: a tail-curl / stance slider, and bipeds (a second skeleton base) - add to SHAPE/PRESETS in
       engine/anycreature.py, probe extremes so they stand.
 - [ ] [mac] FORGE_PRO.md T6c: a sculpt stroke in the construction history (recorded vertex deltas, or the sculpt

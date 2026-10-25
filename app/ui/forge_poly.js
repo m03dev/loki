@@ -425,6 +425,11 @@
   // against a face list changed in place; callers treat the answer as read-only.
   const topoCache = new WeakMap();
   const faceSig = (m) => { let h = m.v.length | 0; for (const f of m.f) { h = (h * 31 + f.length) | 0; for (let k = 0; k < f.length; k++) h = (h * 31 + f[k]) | 0; } return h; };
+  // a second, independent hash: with the first and the counts it names a face list (a reused topology must be right)
+  const faceSig2 = (m) => { let h = 2166136261 | 0; for (const f of m.f) { h = Math.imul(h ^ (f.length + 0x9e37), 16777619); for (let k = 0; k < f.length; k++) h = Math.imul(h ^ f[k], 16777619); } return h; };
+  // the last few topologies by face list: a move makes a NEW cage with the SAME faces (a copy), which used to rebuild
+  // the whole topology on every commit (~0.5 s at 50k faces)
+  const topoRecent = [];
   P.topology = (m) => {
     const hit = m && m.f && topoCache.get(m.f);
     if (hit && hit.nv === m.v.length && hit.nf === m.f.length) {
@@ -432,16 +437,22 @@
       if (sig === hit.sig) return hit.T;
       topoCache.delete(m.f);
     }
-    const T = P.topologyBuild(m);
-    if (m && m.f) topoCache.set(m.f, { T, nv: m.v.length, nf: m.f.length, sig: faceSig(m) });
+    const sig = m && m.f ? faceSig(m) : 0, sig2 = m && m.f ? faceSig2(m) : 0;
+    const again = topoRecent.find((r) => r.nv === m.v.length && r.nf === m.f.length && r.sig === sig && r.sig2 === sig2);
+    const T = again ? again.T : P.topologyBuild(m);
+    if (m && m.f) {
+      topoCache.set(m.f, { T, nv: m.v.length, nf: m.f.length, sig });
+      if (!again) { topoRecent.unshift({ T, nv: m.v.length, nf: m.f.length, sig, sig2 }); if (topoRecent.length > 4) topoRecent.pop(); }
+    }
     return T;
   };
   P.topologyBuild = (m) => {
     const edges = [], index = new Map(), vertEdges = m.v.map(() => []), vertFaces = m.v.map(() => []), faceEdges = [];
+    const n = m.v.length + 1, nkey = (a, b) => (a < b ? a * n + b : b * n + a);   // a number key: far faster than "a,b"
     m.f.forEach((face, fi) => {
       const fe = [];
       for (let k = 0; k < face.length; k++) {
-        const a = face[k], b = face[(k + 1) % face.length], key = ekey(a, b);
+        const a = face[k], b = face[(k + 1) % face.length], key = nkey(a, b);
         let ei = index.get(key);
         if (ei === undefined) {
           ei = edges.length; index.set(key, ei);
@@ -454,7 +465,7 @@
       }
       faceEdges.push(fe);
     });
-    return { edges, index, vertEdges, vertFaces, faceEdges, edge: (a, b) => index.get(ekey(a, b)) };
+    return { edges, index, vertEdges, vertFaces, faceEdges, edge: (a, b) => index.get(nkey(a, b)) };
   };
   P.edgeKey = ekey;
 
