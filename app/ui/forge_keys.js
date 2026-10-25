@@ -41,6 +41,7 @@ const FORGE_KEY_DEFAULTS = [
   ["ctrl+shift+a", "selectAll"], ["alt+d", "selectNone"], ["ctrl+shift+i", "invert"], [">", "grow"], ["<", "shrink"],
   ["alt+f12", "uvShell"],
   ["f8", "objComp"], ["f9", "vertex"], ["f10", "edge"], ["f11", "face"], ["f12", "uv"],
+  ["ctrl+f9", "convertToVerts"], ["ctrl+f10", "convertToEdges"], ["ctrl+f11", "convertToFaces"],   // Maya's Convert Selection
   ["arrowup", "@pickUp"], ["arrowdown", "@pickDown"], ["arrowleft", "@pickLeft"], ["arrowright", "@pickRight"],
   // view
   ["a", "frameAll"], ["f", "frameSel"], ["alt+home", "defaultView"],

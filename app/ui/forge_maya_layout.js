@@ -213,6 +213,10 @@ const FORGE_MAYA = {
     "invert",
     "Inverse"
    ],
+   [
+    "selectSimilar",
+    "Similar"
+   ],
    "-",
    [
     "grow",
@@ -255,8 +259,26 @@ const FORGE_MAYA = {
    ],
    "-",
    [
+    "shortestPath",
+    "Shortest Edge Path Tool"
+   ],
+   "-",
+   [
     "Convert Selection",
     [
+     [
+      "convertToVerts",
+      "To Vertices"
+     ],
+     [
+      "convertToVertexPerimeter",
+      "To Vertex Perimeter"
+     ],
+     "-",
+     [
+      "convertToEdges",
+      "To Edges"
+     ],
      [
       "loopSel",
       "To Edge Loop"
@@ -265,10 +287,40 @@ const FORGE_MAYA = {
       "ringSel",
       "To Edge Ring"
      ],
+     [
+      "convertToContainedEdges",
+      "To Contained Edges"
+     ],
+     [
+      "convertToEdgePerimeter",
+      "To Edge Perimeter"
+     ],
+     "-",
+     [
+      "convertToFaces",
+      "To Faces"
+     ],
+     [
+      "convertToContainedFaces",
+      "To Contained Faces"
+     ],
+     [
+      "convertToFacePerimeter",
+      "To Face Perimeter"
+     ],
      "-",
      [
       "toUV",
       "To UVs"
+     ],
+     "-",
+     [
+      "convertToShell",
+      "To Shell"
+     ],
+     [
+      "convertToShellBorder",
+      "To Shell Border"
      ]
     ]
    ],

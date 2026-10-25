@@ -2174,6 +2174,106 @@
     return finish(m, NONE(), "", true);
   };
 
+  // ------------------------------------------------------------------ Select > Convert Selection and friends
+  // (docs/FORGE_MODELING_FOUNDATION.md stage 4). sel = { v: [ids], e: [[a, b]], f: [ids] } -> the same shape back.
+  P.convertSel = (m, sel, to) => {
+    const T = P.topology(m), s = { v: sel.v || [], e: sel.e || [], f: sel.f || [] };
+    const verts = new Set(s.v);
+    for (const [a, b] of s.e) { verts.add(a); verts.add(b); }
+    for (const fi of s.f) for (const x of m.f[fi] || []) verts.add(x);
+    const edgeOf = (ei) => [T.edges[ei].a, T.edges[ei].b];
+    const faceEdges = (fi) => T.faceEdges[fi] || [];
+    const pickedF = new Set(s.f);
+    const out = { v: [], e: [], f: [] };
+    switch (to) {
+      case "verts": out.v = [...verts]; break;
+      case "edges": {                                   // every edge touching the selection
+        const es = new Set();
+        for (const x of verts) for (const ei of T.vertEdges[x] || []) es.add(ei);
+        if (s.f.length && !s.v.length && !s.e.length) { es.clear(); for (const fi of s.f) for (const ei of faceEdges(fi)) es.add(ei); }
+        out.e = [...es].map(edgeOf); break;
+      }
+      case "containedEdges": {                          // edges whose both ends are picked
+        out.e = T.edges.filter((e) => verts.has(e.a) && verts.has(e.b)).map((e) => [e.a, e.b]); break;
+      }
+      case "faces": {                                   // faces touching the selection (Maya: To Faces)
+        const fs = new Set(s.f);
+        for (const x of verts) for (const fi of T.vertFaces[x] || []) fs.add(fi);
+        out.f = [...fs]; break;
+      }
+      case "containedFaces": out.f = m.f.map((f, i) => i).filter((i) => m.f[i].every((x) => verts.has(x))); break;
+      case "edgePerimeter": case "vertexPerimeter": case "facePerimeter": {
+        const fs = pickedF.size ? pickedF : new Set(m.f.map((f, i) => i).filter((i) => m.f[i].every((x) => verts.has(x))));
+        const border = T.edges.map((e, ei) => ei).filter((ei) => { const n = T.edges[ei].faces.filter((fi) => fs.has(fi)).length; return n === 1; });
+        if (to === "edgePerimeter") out.e = border.map(edgeOf);
+        else if (to === "vertexPerimeter") out.v = uniq(border.flatMap(edgeOf));
+        else {                                          // the picked faces on the border
+          const bset = new Set(border);
+          out.f = [...fs].filter((fi) => faceEdges(fi).some((ei) => bset.has(ei)));
+        }
+        break;
+      }
+      case "shell": {                                   // everything connected to the selection
+        const seed = [...verts];
+        const all = P.linked ? P.linked(m, T, seed) : seed;
+        const vs = new Set(all);
+        out.f = m.f.map((f, i) => i).filter((i) => m.f[i].some((x) => vs.has(x)));
+        out.v = [...vs]; break;
+      }
+      case "shellBorder": {
+        const vs = new Set(P.linked ? P.linked(m, T, [...verts]) : [...verts]);
+        out.e = T.edges.filter((e) => e.faces.length === 1 && vs.has(e.a)).map((e) => [e.a, e.b]); break;
+      }
+      default: return null;
+    }
+    return out;
+  };
+  // Select > Similar: faces with the same number of sides and about the same area (within `tol`) as the picked ones
+  P.similarFaces = (m, faces, tol) => {
+    const fs = faceIds(m, faces), t = num(tol, 0.1);
+    if (!fs.length) return [];
+    const area = (f) => len(P.faceNormal ? mul(newellVec(m, f), 0.5) : [0, 0, 0]);
+    const want = fs.map((fi) => [m.f[fi].length, area(m.f[fi])]);
+    return m.f.map((f, i) => i).filter((i) => {
+      const n = m.f[i].length, a = area(m.f[i]);
+      return want.some(([wn, wa]) => wn === n && Math.abs(a - wa) <= t * Math.max(wa, 1e-9));
+    });
+  };
+  function newellVec(m, f) {
+    let x = 0, y = 0, z = 0;
+    for (let k = 0; k < f.length; k++) {
+      const a = m.v[f[k]], b = m.v[f[(k + 1) % f.length]];
+      x += (a[1] - b[1]) * (a[2] + b[2]); y += (a[2] - b[2]) * (a[0] + b[0]); z += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    return [x, y, z];
+  }
+  // Shortest Edge Path (Maya's tool): the edges of the shortest path between two vertices, along the mesh's edges
+  P.shortestPath = (m, a, b) => {
+    const T = P.topology(m), n = m.v.length;
+    if (!(a >= 0 && a < n && b >= 0 && b < n) || a === b) return [];
+    const dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
+    dist[a] = 0;
+    const heap = [[0, a]];
+    const pushH = (it) => { heap.push(it); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const popH = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let k = i; if (l < heap.length && heap[l][0] < heap[k][0]) k = l; if (r < heap.length && heap[r][0] < heap[k][0]) k = r; if (k === i) break; [heap[k], heap[i]] = [heap[i], heap[k]]; i = k; } } return top; };
+    heap.length = 0; pushH([0, a]);
+    while (heap.length) {
+      const [d, x] = popH();
+      if (done[x]) continue;
+      done[x] = 1;
+      if (x === b) break;
+      for (const ei of T.vertEdges[x] || []) {
+        const e = T.edges[ei], y = e.a === x ? e.b : e.a, nd = d + dist3(m.v[x], m.v[y]);
+        if (nd < dist[y]) { dist[y] = nd; prev[y] = x; pushH([nd, y]); }
+      }
+    }
+    if (!done[b]) return [];
+    const path = [];
+    for (let x = b; prev[x] >= 0; x = prev[x]) path.push([prev[x], x]);
+    return path.reverse();
+  };
+  const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+
   // the heads-up display: what the mesh is made of
   P.meshStats = (m) => {
     const T = P.topology(m), { r } = analyse(m, {});

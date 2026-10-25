@@ -73,6 +73,12 @@ MAP = {
     "DeletePolyElements": "deleteEdgeVert", "DeleteEdge": "deleteEdgeVert", "DeleteVertex": "deleteEdgeVert",
     "PolySpinEdgeBackward": "spinEdgeBack", "PolySpinEdgeForward": "spinEdge", "DuplicateFace": "duplicateFace",
     "ExtractFace": "extractFace", "PokePolygon": "poke", "WedgePolygon": "wedge",
+    "ConvertSelectionToVertices": "convertToVerts", "ConvertSelectionToEdges": "convertToEdges",
+    "ConvertSelectionToFaces": "convertToFaces", "ConvertSelectionToContainedEdges": "convertToContainedEdges",
+    "ConvertSelectionToContainedFaces": "convertToContainedFaces", "ConvertSelectionToEdgePerimeter": "convertToEdgePerimeter",
+    "ConvertSelectionToVertexPerimeter": "convertToVertexPerimeter", "ConvertSelectionToFacePerimeter": "convertToFacePerimeter",
+    "ConvertSelectionToShell": "convertToShell", "ConvertSelectionToShellBorder": "convertToShellBorder",
+    "SelectSimilar": "selectSimilar", "SelectShortestEdgePathTool": "shortestPath",
     "SubdividePolygon": "addDivisions", "FlipTriangleEdge": "flipTriangleEdge", "Symmetrize": "symmetrize", "FlipMesh": "flipMesh",
     # Mesh Tools
     "ToggleModelingToolkit": "winToolkit", "SplitEdgeRingTool": "insertLoopTool", "MultiCutTool": "multiCut",

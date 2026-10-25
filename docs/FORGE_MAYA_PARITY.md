@@ -27,14 +27,14 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-246 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (22%).
+258 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (23%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
 | File | 2 | 24 |
 | Edit | 14 | 57 |
 | Create | 7 | 66 |
-| Select | 15 | 79 |
+| Select | 27 | 79 |
 | Modify | 9 | 95 |
 | Display | 10 | 121 |
 | Windows | 12 | 80 |
@@ -247,7 +247,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `selectNone` Deselect All (Maya: SelectNone)
 - ✓ `hierarchy` Hierarchy (Maya: SelectHierarchy)
 - ✓ `invert` Inverse (Maya: InvertSelection)
-- - Similar (Maya: SelectSimilar)
+- ✓ `selectSimilar` Similar (Maya: SelectSimilar)
 - ✓ `grow` Grow (Maya: GrowPolygonSelectionRegion)
 - - Grow Along Loop (Maya: GrowLoopPolygonSelectionRegion)
 - ✓ `shrink` Shrink (Maya: ShrinkPolygonSelectionRegion)
@@ -261,26 +261,26 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `uv` Components > UV (Maya: SelectUVMask)
 - ✓ `uvShell` Components > UV Shell (Maya: SelectMeshUVShell)
 - - Contiguous Edges (Maya: SelectContiguousEdges)
-- - Shortest Edge Path Tool (Maya: SelectShortestEdgePathTool)
-- - Convert Selection > To Vertices (Maya: ConvertSelectionToVertices)
+- ✓ `shortestPath` Shortest Edge Path Tool (Maya: SelectShortestEdgePathTool)
+- ✓ `convertToVerts` Convert Selection > To Vertices (Maya: ConvertSelectionToVertices)
 - - Convert Selection > To Vertex Faces (Maya: ConvertSelectionToVertexFaces)
-- - Convert Selection > To Vertex Perimeter (Maya: ConvertSelectionToVertexPerimeter)
-- - Convert Selection > To Edges (Maya: ConvertSelectionToEdges)
+- ✓ `convertToVertexPerimeter` Convert Selection > To Vertex Perimeter (Maya: ConvertSelectionToVertexPerimeter)
+- ✓ `convertToEdges` Convert Selection > To Edges (Maya: ConvertSelectionToEdges)
 - ✓ `loopSel` Convert Selection > To Edge Loop (Maya: SelectEdgeLoopSp)
 - ✓ `ringSel` Convert Selection > To Edge Ring (Maya: SelectEdgeRingSp)
-- - Convert Selection > To Contained Edges (Maya: ConvertSelectionToContainedEdges)
-- - Convert Selection > To Edge Perimeter (Maya: ConvertSelectionToEdgePerimeter)
-- - Convert Selection > To Faces (Maya: ConvertSelectionToFaces)
+- ✓ `convertToContainedEdges` Convert Selection > To Contained Edges (Maya: ConvertSelectionToContainedEdges)
+- ✓ `convertToEdgePerimeter` Convert Selection > To Edge Perimeter (Maya: ConvertSelectionToEdgePerimeter)
+- ✓ `convertToFaces` Convert Selection > To Faces (Maya: ConvertSelectionToFaces)
 - - Convert Selection > To Face Path (Maya: SelectFacePath)
-- - Convert Selection > To Contained Faces (Maya: ConvertSelectionToContainedFaces)
-- - Convert Selection > To Face Perimeter (Maya: ConvertSelectionToFacePerimeter)
+- ✓ `convertToContainedFaces` Convert Selection > To Contained Faces (Maya: ConvertSelectionToContainedFaces)
+- ✓ `convertToFacePerimeter` Convert Selection > To Face Perimeter (Maya: ConvertSelectionToFacePerimeter)
 - ✓ `toUV` Convert Selection > To UVs (Maya: ConvertSelectionToUVs)
 - - Convert Selection > To UV Shell (Maya: ConvertSelectionToUVShell)
 - - Convert Selection > To UV Shell Border (Maya: ConvertSelectionToUVShellBorder)
 - - Convert Selection > To UV Perimeter (Maya: ConvertSelectionToUVPerimeter)
 - - Convert Selection > To UV Edge Loop (Maya: ConvertSelectionToUVEdgeLoop)
-- - Convert Selection > To Shell (Maya: ConvertSelectionToShell)
-- - Convert Selection > To Shell Border (Maya: ConvertSelectionToShellBorder)
+- ✓ `convertToShell` Convert Selection > To Shell (Maya: ConvertSelectionToShell)
+- ✓ `convertToShellBorder` Convert Selection > To Shell Border (Maya: ConvertSelectionToShellBorder)
 - - Use Constraints... (Maya: PolygonSelectionConstraints)
 - - Components > Control Vertex (Maya: SelectCVsMask)
 - - Components > Curve Point (Maya: SelectCurvePointsMask)

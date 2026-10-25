@@ -22,6 +22,8 @@ system.
 
 | 3a | **Pivot placement.** Modify > Pivot > Pivot to Bottom (where the object stands, the Baseline's partner), to World Origin, and to Selection (the middle of the picked components). The object never moves; each is one undo step. Still open in stage 3: `d` in component mode, bake pivot, and a per-object custom pivot memory. | forge_scene.js, forge_pro.js | test_forge_pivot_ui |
 
+| 4a | **Convert Selection.** To Vertices, Edges and Faces (Ctrl+F9 / F10 / F11, Maya's keys), To Contained Edges and Faces, To Edge, Vertex and Face Perimeter, To Shell and To Shell Border. Also **Select Similar** (faces with the same sides and about the same size) and **Shortest Edge Path** between two picked vertices. Still open in stage 4: loop/ring step, grow/shrink along loop, the paint-select brush, and saved sets. | forge_polyops.js `convertSel / similarFaces / shortestPath`, forge_toolkit.js | test_forge_select_ui, js/test_forge_select |
+
 How stage 2 works: the editor has one cage (`view.poly`), so the session joins the other meshes into it. Each mesh is
 first carried into the working object's space, and nothing is welded. The other meshes' shapes step aside while the
 session runs. The session lives on the working node (`multiSession`), so undo snapshots carry it.

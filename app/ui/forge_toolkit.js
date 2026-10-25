@@ -115,6 +115,19 @@ function forgeTkItems(v, takes, sel) {
 const FORGE_TK_NEED = { f: "Select faces first (F11).", e: "Select edges first (F10).", e1: "Select an edge first (F10), or use the tool and click one.", v: "Select vertices first (F9).",
   fe: "Select edges or faces first.", ve: "Select vertices or edges first.", fv: "Select a loop of vertices or faces first." };
 
+/** Select > Convert Selection: the picked components as another kind (verts / edges / faces / perimeters / shell). */
+function forgeTkConvert(v, to) {
+  const P = window.ForgePoly;
+  if (!v || !v.poly) return "Open a mesh in component mode first.";
+  const sel = forgeTkSel(v);
+  if (!sel.v.length && !sel.e.length && !sel.f.length) return "Pick components first (F9 / F10 / F11).";
+  const out = P.convertSel(v.poly, sel, to);
+  if (!out) return "";
+  forgeTkSelect(v, out);
+  const n = out.f.length || out.e.length || out.v.length;
+  return n ? "" : "Nothing of that kind in the selection.";
+}
+
 /** Call a polyops function, whatever argument shape it takes: (m, items, opts) */
 function forgeTkCall(op, m, items, opts) {
   const P = window.ForgePoly, fn = P && P[op];
@@ -383,6 +396,30 @@ function forgeTkCommands() {
     extrude: ["Extrude", async (v) => { if (!comp(v)) await toComp(v, "face"); forgeTkExtrude(); return ""; }],
     bevel: ["Bevel", run("bevel")],
     bridge: ["Bridge", run("bridge")],
+    // Select > Convert Selection (Maya: Ctrl+F9 / F10 / F11) and friends - forge_polyops.js P.convertSel
+    convertToVerts: ["To Vertices", (v) => forgeTkConvert(v, "verts")],
+    convertToEdges: ["To Edges", (v) => forgeTkConvert(v, "edges")],
+    convertToFaces: ["To Faces", (v) => forgeTkConvert(v, "faces")],
+    convertToContainedEdges: ["To Contained Edges", (v) => forgeTkConvert(v, "containedEdges")],
+    convertToContainedFaces: ["To Contained Faces", (v) => forgeTkConvert(v, "containedFaces")],
+    convertToEdgePerimeter: ["To Edge Perimeter", (v) => forgeTkConvert(v, "edgePerimeter")],
+    convertToVertexPerimeter: ["To Vertex Perimeter", (v) => forgeTkConvert(v, "vertexPerimeter")],
+    convertToFacePerimeter: ["To Face Perimeter", (v) => forgeTkConvert(v, "facePerimeter")],
+    convertToShell: ["To Shell", (v) => forgeTkConvert(v, "shell")],
+    convertToShellBorder: ["To Shell Border", (v) => forgeTkConvert(v, "shellBorder")],
+    selectSimilar: ["Similar", (v) => {
+      const P = window.ForgePoly, sel = forgeTkSel(v);
+      if (!v.poly || !sel.f.length) return "Similar: pick faces first (F11).";
+      const fs = P.similarFaces(v.poly, sel.f, 0.1);
+      forgeTkSelect(v, { f: fs }); return "Similar: " + fs.length + " faces with the same sides and about the same size.";
+    }],
+    shortestPath: ["Shortest Edge Path", (v) => {
+      const P = window.ForgePoly, sel = forgeTkSel(v), vs = sel.v.length >= 2 ? sel.v : [...new Set(sel.e.flat())];
+      if (!v.poly || vs.length < 2) return "Shortest Edge Path: pick two vertices (F9), then run it.";
+      const a = vs[0], b = vs[vs.length - 1], path = P.shortestPath(v.poly, a, b);
+      if (!path.length) return "No path between those two vertices (different pieces?).";
+      forgeTkSelect(v, { e: path }); return "Shortest edge path: " + path.length + " edges.";
+    }],
     poke: ["Poke Face", run("poke")],
     addDivisions: ["Add Divisions", run("addDivisions")],
     flipTriangleEdge: ["Flip Triangle Edge", run("flipTriangleEdge")],
