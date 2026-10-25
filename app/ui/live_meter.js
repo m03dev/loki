@@ -26,7 +26,7 @@ const LiveMeter = (() => {
     const tok = (last.input || 0) + (last.output || 0);
     const bits = [span("lm-model" + (local(last.where) ? " local" : ""), nice(last.model))];
     if (!line.classList.contains("done") && last.step) bits.push(span("lm-bit", "step " + last.step));
-    bits.push(span("lm-bit", k(tok) + " tok"));
+    if (tok) bits.push(span("lm-bit", k(tok) + " tok"));      // Codex / Claude Code / dsh do not report tokens
     if (last.tps) bits.push(span("lm-bit", Math.round(last.tps) + " tok/s"));
     if (last.cost) bits.push(span("lm-bit", "$" + Number(last.cost).toFixed(3)));
     bits.push(span("lm-bit", secs + "s"));

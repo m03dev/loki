@@ -9206,12 +9206,15 @@ async def run_cli_harness(text: str, name: str, task: bool = False, preamble: st
         "\n\nDo the task with your tools in this folder and check the result before you say it is done.")
     before = dsh_engine.snapshot(WORKSPACE)
     _progress("thinking", "%s is working in %s..." % (label, WORKSPACE.name))
+    t_cli = time.time()
+    _progress("usage", json.dumps({"model": label, "where": "your plan", "seconds": 0}))
     try:
         out = await asyncio.to_thread(cli_agents.run, name, system, text, str(WORKSPACE), 1800)
         failed = False
     except Exception as exc:  # noqa: BLE001 - not signed in, timed out ...
         out, failed = "NOT DONE - %s stopped: %s" % (label, exc), True
     chs = dsh_engine.changes(before, dsh_engine.snapshot(WORKSPACE))
+    _progress("usage", json.dumps({"model": label, "where": "your plan", "seconds": round(time.time() - t_cli, 1)}))
     _task_ok_calls, _task_failed_calls = len(chs), int(failed)
     reply = out if failed else local_agent.verify(text, WORKSPACE, chs, out, "done", [("cli", 0)] * max(1, len(chs)),
                                                   local_agent.find_shell()[0])
@@ -9277,6 +9280,7 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
                                     "before you say it is done. End with one line: 'DONE: <what you made>' or "
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
     _progress("thinking", "DeepSeek Harness (%s, %s) is working in %s..." % (name, prov.get("model", ""), WORKSPACE.name))
+    _progress("usage", json.dumps({"model": prov.get("model", "") or name, "where": name, "seconds": 0}))
     res = await asyncio.to_thread(dsh_engine.run_turn, prompt, str(WORKSPACE), exe=exe, env=env,
                                   cancelled=_cancel_event.is_set,
                                   on_line=lambda ln: _progress("assistant", ln[:300]) if ln.strip() else None)
