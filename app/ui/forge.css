@@ -286,6 +286,8 @@ html.u-hc .forge-float, html.u-hc .fm-node { background: #000 !important; border
 .forge-marquee { position: absolute; pointer-events: none; z-index: 3; border: 1px dashed #ffb06a; background: rgba(237, 120, 43, .1); border-radius: 2px; }
 .forge-marquee.sub { border-color: #9fb6d8; background: rgba(159, 182, 216, .1); }
 .forge-marquee[hidden] { display: none; }
+.forge-paintsel { position: absolute; pointer-events: none; z-index: 3; border: 1.5px solid #ffb06a; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
+.forge-paintsel[hidden] { display: none; }
 .forge-modelbar .forge-falloff { flex: none; width: 100%; padding: 4px 6px; font-size: 11.5px; }
 
 /* ---------------------------------------------------------------- the pro markings (app/ui/forge_pro.js) */

@@ -365,6 +365,7 @@ const FORGE_MAYA = {
    ],
    "#LOKI",
    "marquee",
+   "paintSelect",
    [
     "Every Nth in Loop / Ring",
     [
@@ -1279,7 +1280,8 @@ const FORGE_MAYA = {
      "list": []
     },
     "NE": "averageVerts",
-    "W": "multiCut"
+    "W": "multiCut",
+    "NW": "paintSelect"
    },
    "labels": {
     "S": "Extrude Vertex",
@@ -1288,7 +1290,8 @@ const FORGE_MAYA = {
     "SE": "Vertex Normals",
     "N": "Merge Vertices",
     "NE": "Average Vertices",
-    "W": "Multi-Cut"
+    "W": "Multi-Cut",
+    "NW": "Paint Select Vertices"
    },
    "list": [
     [
@@ -1368,7 +1371,8 @@ const FORGE_MAYA = {
      },
      "list": []
     },
-    "W": "multiCut"
+    "W": "multiCut",
+    "NW": "paintSelect"
    },
    "labels": {
     "S": "Extrude Edge",
@@ -1377,7 +1381,8 @@ const FORGE_MAYA = {
     "SE": "Soften/Harden Edges",
     "N": "Merge/Collapse Edges",
     "NE": "Flip/Spin Edge",
-    "W": "Multi-Cut"
+    "W": "Multi-Cut",
+    "NW": "Paint Select Edges"
    },
    "list": [
     [
@@ -1451,7 +1456,8 @@ const FORGE_MAYA = {
      },
      "list": []
     },
-    "W": "multiCut"
+    "W": "multiCut",
+    "NW": "paintSelect"
    },
    "labels": {
     "N": "Merge Faces To Center",
@@ -1460,7 +1466,8 @@ const FORGE_MAYA = {
     "NE": "Poke Face",
     "E": "Bevel Face",
     "SE": "Face Normals",
-    "W": "Multi-Cut"
+    "W": "Multi-Cut",
+    "NW": "Paint Select Faces"
    },
    "list": [
     [

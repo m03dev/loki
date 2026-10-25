@@ -27,7 +27,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 
 ## Where Forge stands
 
-281 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (25%).
+284 of 1113 Maya rows in the menus, hotbox and marking menus are in Forge (26%).
 
 | Menu | In Forge | Maya rows |
 | --- | ---: | ---: |
@@ -49,9 +49,9 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 | Key | 4 | 36 |
 | Playback | 5 | 27 |
 | Shift+RMB object | 26 | 47 |
-| Shift+RMB vertex | 13 | 26 |
-| Shift+RMB edge | 25 | 37 |
-| Shift+RMB face | 23 | 36 |
+| Shift+RMB vertex | 14 | 26 |
+| Shift+RMB edge | 26 | 37 |
+| Shift+RMB face | 24 | 36 |
 | Shift+RMB default | 7 | 32 |
 | zones | 15 | 45 |
 
@@ -1064,7 +1064,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `targetWeld` (S) Merge Vertices > Target Weld Tool
 - ✓ `averageVerts` (NE) Vertex tools > Average Vertices
 - ✓ `multiCut` (W) Vertex tools > Multi-Cut
-- - (NW) Vertex tools > Paint Select Vertices
+- ✓ `paintSelect` (NW) Vertex tools > Paint Select Vertices
 - - Crease Tool (Maya: PolyCreaseTool)
 - ✓ `connect` Connect Components (Maya: ConnectComponents)
 - ✓ `detach` Detach Components (Maya: DetachComponent)
@@ -1097,7 +1097,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - ✓ `spinEdge` (E) Flip/Spin Edge > Spin Forward
 - ✓ `spinEdgeBack` (W) Flip/Spin Edge > Spin Backward
 - ✓ `multiCut` (W) Edge tools > Multi-Cut
-- - (NW) Edge tools > Paint Select Edges
+- ✓ `paintSelect` (NW) Edge tools > Paint Select Edges
 - - Smart Bevel (Maya: PolySmartBevel)
 - - Crease Tool (Maya: PolyCreaseTool)
 - ✓ `offsetEdgeLoop` Offset Edge Loop (Maya: DuplicateEdges)
@@ -1131,7 +1131,7 @@ order, compass positions and keys only - no Autodesk code). `tools/forge_maya/ge
 - - (SE) Face Normals > Conform Normals
 - ✓ `reverse` (E) Face Normals > Reverse Normals
 - ✓ `multiCut` (W) Face tools > Multi-Cut
-- - (NW) Face tools > Paint Select Faces
+- ✓ `paintSelect` (NW) Face tools > Paint Select Faces
 - - Smart Extrude (Maya: SmartExtrude)
 - - Smart Bevel (Maya: PolySmartBevel)
 - ✓ `smooth` Smooth Faces

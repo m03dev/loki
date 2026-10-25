@@ -91,6 +91,9 @@ Found and fixed in the cloud:
 - [ ] [mac] Forge: File > Import... an .obj and an .stl from disk - each lands as a new object in the Outliner.
   File > New Scene, then Ctrl+Z - everything is back. Report anything odd.
 - Sets: Create > Sets > Quick Select Set and Windows > Sets (stage 4d). test_forge_sets_ui.
+- Paint Selection Tool (Select menu; stage 4e). test_forge_paintsel_ui.
+- [ ] [mac] Forge: a plane, F11, Select > Paint Selection Tool, drag over it; Ctrl + drag; [ and ]; W puts it down.
+  Report how the brush feels (size, speed).
 - [ ] [mac] Forge: pick some faces, Create > Sets > Quick Select Set; F8, pick another object; Windows > Sets >
   Select - the same faces come back in face mode. Report anything odd.
 - [ ] [mac] Forge: a plane, F10, pick one inside edge, Select > Grow Along Loop twice, Shrink Along Loop once;

@@ -444,6 +444,68 @@ function forgeEditAttach(view, ctx) {
     view.selectItems(ed.mode, hits, how);
     return hits.length;
   };
+  // the components inside a circle on screen (the Paint Selection Tool's brush): vertices and edge middles inside it,
+  // faces seen under it (or, selecting through, whose middle is inside it)
+  view.circleSelect = (cx, cy, rad, how) => {
+    if (!view.poly) return 0;
+    renderPick();
+    const T = topo(), proj = projector(), r2 = rad * rad;
+    const inside = (s) => s && (s[0] - cx) * (s[0] - cx) + (s[1] - cy) * (s[1] - cy) <= r2;
+    const sv = view.poly.v.map((p) => proj(p)), hits = [];
+    if (ed.mode === "vert") view.poly.v.forEach((_, i) => { if (inside(sv[i]) && seesVert(i, sv[i])) hits.push(i); });
+    else if (ed.mode === "edge") {
+      T.edges.forEach((e, i) => {
+        const a = sv[e.a], b = sv[e.b];
+        if (!a || !b) return;
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (inside(mid) && seesEdge(i, mid)) hits.push(i);
+      });
+    } else if (through()) view.poly.f.forEach((f, i) => { const c = proj(P.centroid(view.poly, f)); if (c && inside(c)) hits.push(i); });
+    else {
+      const [bx0, by1] = bufXY(cx - rad, cy - rad), [bx1, by0] = bufXY(cx + rad, cy + rad), seen = new Set();
+      const [bcx, bcy] = bufXY(cx, cy), br = Math.max(1, (bx1 - bx0) / 2), br2 = br * br;
+      for (let y = Math.max(0, by0); y <= Math.min(pick.h - 1, by1); y++) for (let x = Math.max(0, bx0); x <= Math.min(pick.w - 1, bx1); x++) {
+        if ((x - bcx) * (x - bcx) + (y - bcy) * (y - bcy) > br2) continue;
+        const f = idAtBuf(x, y); if (f >= 0) seen.add(f);
+      }
+      hits.push(...seen);
+    }
+    if (hits.length || how === "set") view.selectItems(ed.mode, hits, how);
+    return hits.length;
+  };
+
+  // ---------------------------------------------------------------- the Paint Selection Tool (Maya: ArtPaintSelectTool)
+  // A brush: drag over components to add them, Ctrl / Cmd + drag takes them away. [ and ] (or B + drag sideways)
+  // change its size. Q / W / E / R, Esc or leaving component mode put it down.
+  const paintR = () => { try { return Math.max(4, Math.min(300, +localStorage.getItem("loki-forge-paintsel-r") || 30)); } catch (_) { return 30; } };
+  const ring = document.createElement("div"); ring.className = "forge-paintsel"; ring.hidden = true;
+  canvas.parentElement.append(ring);
+  function ringAt(p) {
+    const r = paintR();
+    Object.assign(ring.style, { left: p[0] - r + canvas.offsetLeft + "px", top: p[1] - r + canvas.offsetTop + "px", width: 2 * r + "px", height: 2 * r + "px" });
+  }
+  view.paintSelect = (on) => {
+    ed.paint = on == null ? !ed.paint : !!on;
+    ring.hidden = !ed.paint;
+    if (ed.paint) {
+      if (gizmo.object) gizmo.detach();
+      ringAt(ed.mouse || [canvas.clientWidth / 2, canvas.clientHeight / 2]);
+    }
+    view.dirty = true;
+    return ed.paint;
+  };
+  view.paintRadius = (r) => {
+    if (r != null) { try { localStorage.setItem("loki-forge-paintsel-r", String(Math.round(Math.max(4, Math.min(300, r))))); } catch (_) { /* */ } }
+    if (ed.paint && ed.mouse) ringAt(ed.mouse);
+    return paintR();
+  };
+  document.addEventListener("keydown", (e) => {
+    if (!ed.paint || e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.key === "[" || e.key === "]") { view.paintRadius(paintR() * (e.key === "]" ? 1.25 : 0.8)); e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (e.key === "b" || e.key === "B") { ed.paintSize = true; return; }
+    if (["Escape", "q", "w", "e", "r", "Q", "W", "E", "R"].includes(e.key)) view.paintSelect(false);
+  }, true);
+  document.addEventListener("keyup", (e) => { if (e.key === "b" || e.key === "B") ed.paintSize = false; }, true);
 
   // ---------------------------------------------------------------- moving: one edit, shared by the handle and G/R/S
   const pivot = new THREE.Object3D(); pivot.name = "forge-edit-pivot"; holder.add(pivot);
@@ -668,15 +730,29 @@ function forgeEditAttach(view, ctx) {
     canvas.setPointerCapture(e.pointerId);
     // the pro modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds
     const mod = e.ctrlKey || e.metaKey;
+    if (ed.paint) {                                 // the Paint Selection Tool: a stroke, not a box
+      gest = { at: ed.mouse, paint: true, how: mod ? "sub" : "add", size: ed.paintSize ? paintR() : 0 };
+      if (!gest.size) view.circleSelect(ed.mouse[0], ed.mouse[1], paintR(), gest.how);
+      return;
+    }
     const how = mod && e.shiftKey ? "add" : mod ? "sub" : e.shiftKey ? "toggle" : "set";
     gest = { at: ed.mouse, box: false, how: how, click: how };
   }, { capture: true });
   canvas.addEventListener("pointermove", (e) => {
     if (view.mode !== "poly") return;
     ed.mouse = local(e);
+    if (ed.paint) ringAt(ed.mouse);
     if (!gest || gest.alt) return;
     e.stopImmediatePropagation();
     const p = ed.mouse;
+    if (gest.paint) {
+      if (gest.size) { view.paintRadius(gest.size + (p[0] - gest.at[0]) / 2); return; }   // B + drag: the brush size
+      // stamps along the stroke, no gaps when the mouse moves fast
+      const last = gest.last || gest.at, d = Math.hypot(p[0] - last[0], p[1] - last[1]), r = paintR(), n = Math.max(1, Math.ceil(d / (r * 0.5)));
+      for (let k = 1; k <= n; k++) view.circleSelect(last[0] + ((p[0] - last[0]) * k) / n, last[1] + ((p[1] - last[1]) * k) / n, r, gest.how);
+      gest.last = p;
+      return;
+    }
     if (!gest.box && Math.hypot(p[0] - gest.at[0], p[1] - gest.at[1]) > 4) gest.box = true;
     if (gest.box) {
       box.hidden = false;
@@ -690,6 +766,7 @@ function forgeEditAttach(view, ctx) {
     const g = gest, p = local(e);
     gest = null;
     box.hidden = true;
+    if (g.paint) return;
     if (g.box) view.boxSelect(g.at[0], g.at[1], p[0], p[1], g.how);
     else view.clickSelect(p, g.click);
   }, { capture: true });
@@ -753,6 +830,7 @@ function forgeEditAttach(view, ctx) {
   const setMode = view.setMode;
   view.setMode = (m) => {
     const was = view.mode;
+    if (m !== "poly" && ed.paint) view.paintSelect(false);
     // one tool, two manipulators (the pro rule): the object manipulator never stays up in component mode - that
     // was why Shift over a face's handle duplicated the OBJECT instead of extruding the face - and the tool you had
     // carries across (move in object mode = move on the components, and back)

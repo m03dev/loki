@@ -438,6 +438,13 @@ function forgeTkCommands() {
       forgeTkSelect(v, { e: path }); return "Shortest edge path: " + path.length + " edges.";
     }],
     // Select > Grow / Shrink Along Loop, Contiguous Edges, every Nth (forge_polyops.js; FORGE_MODELING_FOUNDATION stage 4)
+    paintSelect: ["Paint Selection Tool", async (v) => {
+      if (!comp(v)) await toComp(v, "face");
+      if (!v.paintSelect) return "The brush is not in this build.";
+      const on = v.paintSelect(!v.edit.paint);
+      return on ? "Paint Selection: drag over " + ({ vert: "vertices", edge: "edges", face: "faces" }[v.edit.mode] || "components")
+        + " to add them, Ctrl + drag takes them away. [ ] or B + drag: the brush size. Q / W / E or Esc puts it down." : "Paint Selection off.";
+    }],
     growLoop: ["Grow Along Loop", (v) => forgeTkLoopSel(v, "growAlongLoop")],
     shrinkLoop: ["Shrink Along Loop", (v) => forgeTkLoopSel(v, "shrinkAlongLoop")],
     contiguousEdges: ["Contiguous Edges", (v) => forgeTkLoopSel(v, "contiguousEdges")],
