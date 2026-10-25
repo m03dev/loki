@@ -515,6 +515,11 @@ async def main():
             await page.wait_for_timeout(100)
             await page.hover('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-head')
             await page.wait_for_timeout(220)                 # the hover intent opens the Windows list
+            try:                                             # ... and is laid out (fitted) a frame later: wait for that, not a guess
+                await page.wait_for_function("""() => { const b = [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item')]
+                  .find((x) => x.dataset.proId === 'winChannel'); const r = b && b.getBoundingClientRect(); return !!r && r.height > 0 && r.top > 0; }""", timeout=1500)
+            except Exception:  # noqa: BLE001
+                pass
             strip = await page.evaluate("""() => {
               const item = [...document.querySelectorAll('#forge-pro-hotbox .forge-pro-col[data-menu="Windows"] .forge-pro-item')]
                 .find((b) => b.dataset.proId === 'winChannel');          // Maya's "OpenChannelsLayers" row

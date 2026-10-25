@@ -124,7 +124,7 @@ EXTRAS = {
     "File": ["saveObj", "-", "close"],
     "Create": [["Polygon Primitives", ["quadsphere"]], ["Make with LOKI", ["draw", "image", "describe", "creature"]]],
     "Select": ["marquee", "paintSelect", ["Every Nth in Loop / Ring", ["everyNth2", "everyNth3", "everyNth4"]]],                             # Select > Preferences (camera-based selection ...) is forge_chrome.js's
-    "Modify": ["lastTool", ["Axes", ["worldAxes", "objectAxes"]], "pivotEdit",
+    "Modify": ["lastTool", ["Axes", ["worldAxes", "objectAxes", "componentAxes"]], "pivotEdit", "pivotEach", "tweakMode",
                ["Pivot", ["pivotBottom", "pivotOrigin", "pivotToSelection"]]],
     "Display": ["isolate", "xray", "quadToggle", ["Smooth Mesh Preview", ["smooth1", "smooth2", "smooth3"]],
                 ["Display Layers", ["layerAdd", "layerAssign"]]],

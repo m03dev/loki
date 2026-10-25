@@ -217,11 +217,13 @@ function forgeProPivotMode(v, on) {
   return "";
 }
 
-function forgeProSpace(v, space) {                // w / e + left button: World / Object
+function forgeProSpace(v, space) {                // w / e + left button: World / Object / Component (normal)
   const tc = v.transform;
+  if (space === "normal" && !forgeProComp(v)) return "Component axes work on components: F9 / F10 / F11 first.";
   if (tc && tc.setSpace) tc.setSpace(space === "world" ? "world" : "local");
-  if (v.gizmo && v.gizmo.setSpace) v.gizmo.setSpace(space === "world" ? "world" : "local");
-  return space === "world" ? "Axes: World." : "Axes: Object.";
+  if (v.setAxes) v.setAxes(space === "world" ? "world" : space === "normal" ? "normal" : "object");
+  else if (v.gizmo && v.gizmo.setSpace) v.gizmo.setSpace(space === "world" ? "world" : "local");
+  return space === "world" ? "Axes: World." : space === "normal" ? "Axes: Component - Y along the picked components' normal." : "Axes: Object.";
 }
 
 // ---- snapping, the pro way: hold x = grid, c = curve / edge, v = point / vertex (or switch them on in the Snap menu)
@@ -574,6 +576,9 @@ function forgeProCommands() {
     panelMaterials: ["Materials", () => forgeProPanel("materials")],
     worldAxes: ["World", (v) => forgeProSpace(v, "world")],
     objectAxes: ["Object", (v) => forgeProSpace(v, "local")],
+    componentAxes: ["Component (Normal)", (v) => forgeProSpace(v, "normal")],
+    pivotEach: ["Each Piece About Its Own Centre", (v) => (v.setPivotEach ? (v.setPivotEach() ? "Rotate and scale: each piece of the selection about its own middle." : "Rotate and scale: about one pivot.") : "")],
+    tweakMode: ["Tweak Mode", (v) => (v.setTweak ? (v.setTweak() ? "Tweak mode: press on a component and drag it - no click to pick it first." : "Tweak mode off.") : "")],
     marquee: ["Marquee", () => "Drag a box to select (Shift toggles, Ctrl/Cmd removes)."],
     snapGrid: ["Snap to Grid", (v) => forgeProSnapToggle(v, "grid")],
     snapEdge: ["Snap to Edge (Curve)", (v) => forgeProSnapToggle(v, "edge")],
@@ -640,7 +645,7 @@ function forgeProMenu(v, ctx) {
   if (ctx.key === "q") return { title: "Select", ring: { NW: "marquee", SE: "selectNone", E: "selectAll", W: "invert" }, list: [] };
   // hold r + left button: Scale's marking menu - flatten (scale to 0) on an axis, as Maya / Unreal do with 0 typed in
   if (ctx.key === "r") return { title: "Scale", ring: { W: "flattenX", N: "flattenY", E: "flattenZ", S: "flattenNormal", NW: "objectAxes", NE: "worldAxes" }, list: [] };
-  if (ctx.key === "w" || ctx.key === "e") return { title: ctx.key === "w" ? "Move" : "Rotate", ring: { W: "worldAxes", NW: "objectAxes", N: "pivotEdit", S: "resetPivot" }, list: [] };
+  if (ctx.key === "w" || ctx.key === "e") return { title: ctx.key === "w" ? "Move" : "Rotate", ring: { W: "worldAxes", NW: "objectAxes", SW: "componentAxes", N: "pivotEdit", S: "resetPivot", NE: "tweakMode" }, list: [] };
   if (ctx.ctrl) {                                   // convert the selection (polyConvertMM)
     return { title: "Convert", ring: { W: "vertex", N: "edge", S: "face", E: "toUV", NE: "grow", NW: "shrink", SE: "loopSel", SW: "ringSel" }, list: [] };
   }

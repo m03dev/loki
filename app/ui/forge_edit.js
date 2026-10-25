@@ -568,11 +568,64 @@ function forgeEditAttach(view, ctx) {
     view.dirty = true;
     return on;
   };
+  // ---- manipulator axes (docs/FORGE_MODELING_FOUNDATION.md stage 5): "world", "object" (the object's own axes) or
+  // "normal" (Maya's Component axis: Y along the picked components' average normal, X as near world X as it can be)
+  ed.axes = "object";
+  function selNormal(verts) {
+    const m = view.poly, n = [0, 0, 0], T = topo();
+    const faces = ed.mode === "face" && ed.sel.f.size ? [...ed.sel.f] : [...new Set(verts.flatMap((i) => (T && T.vertFaces[i]) || []))];
+    for (const fi of faces) {
+      const f = m.f[fi];
+      if (!f) continue;
+      for (let k = 0; k < f.length; k++) {                // Newell: the face's area-weighted normal
+        const a = m.v[f[k]], b = m.v[f[(k + 1) % f.length]];
+        n[0] += (a[1] - b[1]) * (a[2] + b[2]); n[1] += (a[2] - b[2]) * (a[0] + b[0]); n[2] += (a[0] - b[0]) * (a[1] + b[1]);
+      }
+    }
+    const l = Math.hypot(n[0], n[1], n[2]);
+    return l > 1e-12 ? new THREE.Vector3(n[0] / l, n[1] / l, n[2] / l) : null;
+  }
+  function orientPivot(verts) {
+    pivot.rotation.set(0, 0, 0);
+    if (ed.axes !== "normal" || !verts.length) return;
+    const y = selNormal(verts);
+    if (!y) return;
+    const ref = Math.abs(y.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const x = ref.sub(y.clone().multiplyScalar(ref.dot(y))).normalize(), z = new THREE.Vector3().crossVectors(x, y);
+    pivot.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  }
+  view.setAxes = (mode) => {
+    if (mode === "local") mode = "object";
+    if (!["world", "object", "normal"].includes(mode)) return ed.axes;
+    ed.axes = mode;
+    if (gizmo.setSpace) gizmo.setSpace(mode === "world" ? "world" : "local");
+    placePivot();
+    view.dirty = true;
+    return ed.axes;
+  };
+  view.axes = () => ed.axes;
+  // ---- Each piece about its own centre (Blender's Individual Origins; Maya's per-face transform): rotate and
+  // scale turn every connected piece of the selection about its own middle. Move is the same either way.
+  ed.pivotEach = false;
+  ed.tweak = false;
+  view.setTweak = (on) => { ed.tweak = on == null ? !ed.tweak : !!on; return ed.tweak; };
+  view.setPivotEach = (on) => { ed.pivotEach = on == null ? !ed.pivotEach : !!on; return ed.pivotEach; };
+  function piecesOf(verts) {                         // the selection's connected pieces (along picked faces / edges)
+    const m = view.poly, T = topo(), inSel = new Set(verts), parent = new Map(verts.map((v) => [v, v]));
+    const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+    const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent.set(a, b); };
+    if (ed.mode === "face" && ed.sel.f.size) for (const fi of ed.sel.f) { const f = m.f[fi]; for (let k = 1; k < f.length; k++) join(f[0], f[k]); }
+    else for (const e of T.edges) if (inSel.has(e.a) && inSel.has(e.b)) join(e.a, e.b);
+    const groups = new Map();
+    for (const v of verts) { const r = find(v); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(v); }
+    return [...groups.values()];
+  }
+
   function placePivot() {
     if (edit) return;
     const verts = view.selectedVerts();
     if (!view.poly || !verts.length || view.mode !== "poly") { if (gizmo.object) gizmo.detach(); if (ed.pivotEdit) view.compPivotEdit(false); return; }
-    pivot.position.fromArray(handlePoint(verts.filter((id) => view.poly.v[id] !== undefined))); pivot.rotation.set(0, 0, 0); pivot.scale.set(1, 1, 1);
+    pivot.position.fromArray(handlePoint(verts.filter((id) => view.poly.v[id] !== undefined))); orientPivot(verts); pivot.scale.set(1, 1, 1);
     pivot.updateMatrix();
     if (ed.tool && !gizmo.object) { gizmo.attach(pivot); gizmo.setMode(ed.tool); }
     view.dirty = true;
@@ -595,6 +648,24 @@ function forgeEditAttach(view, ctx) {
     edit = { kind, base: view.poly, work: P.clone(view.poly), verts, weights: softWeights(view.poly, verts, radius),
       pivot: handlePoint(verts), start: pivot.matrix.clone(), keep: ed.sel };
     edit.sym = planSymmetry();
+    if (ed.pivotEach && kind === "handle") {
+      const pieces = piecesOf(verts);
+      if (pieces.length > 1) {
+        const at = new Map();
+        edit.pieces = pieces.map((g, k) => {
+          const c = forgePivotPoint(view.poly, g), w = new Map();
+          for (const v of g) { w.set(v, edit.weights.get(v) ?? 1); at.set(v, k); }
+          return { c, w };
+        });
+        // soft-selected neighbours go with their nearest piece
+        for (const [v, wt] of edit.weights) {
+          if (at.has(v)) continue;
+          let best = 0, bd = Infinity;
+          edit.pieces.forEach((pc, k) => { const p = view.poly.v[v], d = (p[0] - pc.c[0]) ** 2 + (p[1] - pc.c[1]) ** 2 + (p[2] - pc.c[2]) ** 2; if (d < bd) { bd = d; best = k; } });
+          edit.pieces[best].w.set(v, wt);
+        }
+      }
+    }
     return true;
   }
   function reweigh() {
@@ -650,6 +721,17 @@ function forgeEditAttach(view, ctx) {
 
   function applyM(M) {
     if (!M.elements.every(Number.isFinite)) return;                // a broken handle matrix never reaches the mesh
+    if (edit.pieces) {                                             // each piece about its own middle: T(c_i - c) M T(c - c_i)
+      const c = new THREE.Vector3().fromArray(edit.pivot);
+      for (const pc of edit.pieces) {
+        const d = new THREE.Vector3().fromArray(pc.c).sub(c);
+        const Mi = new THREE.Matrix4().makeTranslation(d.x, d.y, d.z).multiply(M).multiply(new THREE.Matrix4().makeTranslation(-d.x, -d.y, -d.z));
+        P.applyMatrix(edit.base, pc.w, Mi.elements, edit.work);
+      }
+      view.polyLive(edit.work);
+      moveOverlay(edit.work);
+      return;
+    }
     P.applyMatrix(edit.base, edit.weights, M.elements, edit.work);   // writes only the weighted vertices
     if (edit.sym) for (const s of edit.sym) P.applyMatrix(edit.base, s.map, mirrorMatrix(M.elements, s.S), edit.work);
     view.polyLive(edit.work);
@@ -771,6 +853,22 @@ function forgeEditAttach(view, ctx) {
     canvas.setPointerCapture(e.pointerId);
     // the pro modifiers, for a click and for a box: Shift toggles, Ctrl/Cmd takes away, Ctrl/Cmd+Shift adds
     const mod = e.ctrlKey || e.metaKey;
+    // Tweak mode (Maya's Move Tool option): press on a component and drag - it moves at once, no click to pick
+    // it first. Pressing on something already picked drags the whole selection.
+    if (ed.tweak && !mod && !e.shiftKey && !ed.paint && !ed.pivotEdit) {
+      const hit = view.pickElement(ed.mouse);
+      if (hit.id >= 0) {
+        const k = { vert: "v", edge: "e", face: "f" }[ed.mode];
+        if (!(ed.sel[k] && ed.sel[k].has(hit.id))) view.selectItems(ed.mode, [hit.id], "set");
+        if (begin("tweak")) {
+          holder.updateMatrixWorld(true);
+          const o = holder.localToWorld(new THREE.Vector3().fromArray(edit.pivot));
+          const nrm = camera.getWorldDirection(new THREE.Vector3());
+          gest = { tweak: true, at: ed.mouse, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(nrm, o), from: o };
+          return;
+        }
+      }
+    }
     if (ed.paint) {                                 // the Paint Selection Tool: a stroke, not a box
       gest = { at: ed.mouse, paint: true, how: mod ? "sub" : "add", size: ed.paintSize ? paintR() : 0 };
       if (!gest.size) view.circleSelect(ed.mouse[0], ed.mouse[1], paintR(), gest.how);
@@ -786,6 +884,16 @@ function forgeEditAttach(view, ctx) {
     if (!gest || gest.alt) return;
     e.stopImmediatePropagation();
     const p = ed.mouse;
+    if (gest.tweak) {                               // along the plane facing the camera, through the handle point
+      const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2((p[0] / r.width) * 2 - 1, -(p[1] / r.height) * 2 + 1), camera);
+      const hitW = ray.ray.intersectPlane(gest.plane, new THREE.Vector3());
+      if (!hitW || !edit) return;
+      const a = holder.worldToLocal(gest.from.clone()), b = holder.worldToLocal(hitW.clone());
+      applyM(new THREE.Matrix4().makeTranslation(b.x - a.x, b.y - a.y, b.z - a.z));
+      gest.moved = true;
+      return;
+    }
     if (gest.paint) {
       if (gest.size) { view.paintRadius(gest.size + (p[0] - gest.at[0]) / 2); return; }   // B + drag: the brush size
       // stamps along the stroke, no gaps when the mouse moves fast
@@ -808,6 +916,7 @@ function forgeEditAttach(view, ctx) {
     gest = null;
     box.hidden = true;
     if (g.paint) return;
+    if (g.tweak) { if (g.moved) commit(); else edit = null; stats(); return; }
     if (g.box) view.boxSelect(g.at[0], g.at[1], p[0], p[1], g.how);
     else view.clickSelect(p, g.click);
   }, { capture: true });

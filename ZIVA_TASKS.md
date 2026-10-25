@@ -96,6 +96,12 @@ Found and fixed in the cloud:
   (stage 3b). test_forge_pivot2_ui.
 - [ ] [mac] Forge: a cube, F11, pick a face, E (rotate), hold D and drag the handle off to one side, let go, rotate -
   the face swings round that point. Then F8, Modify > Pivot > Center Pivot, Modify > Bake Pivot: nothing moves.
+- Manipulators: Modify > Axes > Component (Normal), Each Piece About Its Own Centre, Tweak Mode (stage 5a).
+  test_forge_manip_ui. tests/test_forge_pro_ui.py's hotbox-strip check waited a guessed 220 ms; it now waits for the
+  menu's layout (it failed once in ~10 runs).
+- [ ] [mac] Forge: a cube, F11, pick a side face, W, Modify > Axes > Component - the handle leans with the face; drag
+  its green arrow. Pick two opposite faces, R, Modify > Each Piece, scale - each shrinks in place. Modify > Tweak Mode,
+  F9, drag a vertex you have not picked. Report how they feel.
 - [ ] [mac] Forge: a plane, F11, Select > Paint Selection Tool, drag over it; Ctrl + drag; [ and ]; W puts it down.
   Report how the brush feels (size, speed).
 - [ ] [mac] Forge: pick some faces, Create > Sets > Quick Select Set; F8, pick another object; Windows > Sets >

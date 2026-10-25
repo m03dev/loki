@@ -431,10 +431,13 @@ const FORGE_MAYA = {
     "Axes",
     [
      "worldAxes",
-     "objectAxes"
+     "objectAxes",
+     "componentAxes"
     ]
    ],
    "pivotEdit",
+   "pivotEach",
+   "tweakMode",
    [
     "Pivot",
     [
