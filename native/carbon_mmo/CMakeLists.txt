@@ -160,6 +160,7 @@ if(CMMO_BUILD_EDITOR AND (CMMO_WITH_GLFW OR CMMO_EDITOR_EGL))
     set_target_properties(cmmo_editor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/bin>")
     if(APPLE)
         target_compile_definitions(cmmo_editor_lib PUBLIC GL_SILENCE_DEPRECATION)
+        target_link_libraries(cmmo_editor PRIVATE objc)   # BringToFront(): the window opens in front
     endif()
     if(WIN32)
         target_compile_definitions(cmmo_editor_lib PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)   # windows.h (via glcorearb.h) vs std::max

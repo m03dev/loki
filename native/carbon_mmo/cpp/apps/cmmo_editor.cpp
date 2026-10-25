@@ -29,6 +29,10 @@
 #endif
 #include <filesystem>
 
+#if defined( CMMO_WITH_GLFW ) && defined( __APPLE__ )
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
 #if defined( CMMO_WITH_GLFW )
 #include "imgui_impl_glfw.h"
 #define GLFW_INCLUDE_NONE
@@ -44,6 +48,21 @@ using cmmo::world::ActorType;
 
 namespace
 {
+#if defined( CMMO_WITH_GLFW ) && defined( __APPLE__ )
+// Started from a script (not Finder) a plain executable opens BEHIND the other apps on macOS: bring it to the front.
+void BringToFront()
+{
+	using MsgId = id ( * )( id, SEL );
+	using MsgBool = void ( * )( id, SEL, BOOL );
+	id app = ( (MsgId)objc_msgSend )( (id)objc_getClass( "NSApplication" ), sel_registerName( "sharedApplication" ) );
+	if( !app ) return;
+	( (void ( * )( id, SEL, long ))objc_msgSend )( app, sel_registerName( "setActivationPolicy:" ), 0 );   // regular app: Dock icon + menu bar
+	if( class_respondsToSelector( object_getClass( app ), sel_registerName( "activate" ) ) )
+		( (void ( * )( id, SEL ))objc_msgSend )( app, sel_registerName( "activate" ) );   // macOS 14+
+	( (MsgBool)objc_msgSend )( app, sel_registerName( "activateIgnoringOtherApps:" ), YES );
+}
+#endif
+
 // ------------------------------------------------------------------------------------------ PNG (stored deflate)
 uint32_t Crc( const uint8_t* d, size_t n, uint32_t c = 0xFFFFFFFFu )
 {
@@ -557,6 +576,14 @@ int main( int argc, char** argv )
 	if( !window ) { std::fprintf( stderr, "could not open an OpenGL 3.3 window\n" ); glfwTerminate(); return 1; }
 	glfwMakeContextCurrent( window );
 	glfwSwapInterval( 1 );
+	if( !selftest )
+	{
+		glfwShowWindow( window );
+		glfwFocusWindow( window );
+#if defined( __APPLE__ )
+		BringToFront();
+#endif
+	}
 	if( const char* missing = gl::Load( []( const char* n ) { return (void*)glfwGetProcAddress( n ); } ) )
 	{
 		std::fprintf( stderr, "OpenGL function missing: %s\n", missing );
