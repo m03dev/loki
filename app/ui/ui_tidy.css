@@ -36,3 +36,11 @@ body.tidy-dragging, body.tidy-dragging * { user-select: none !important; }
 .tidy-menu .tidy-item { justify-content: flex-start !important; }
 .tidy-menu .tidy-item .tidy-lbl { flex: 1 1 auto; }
 .main.has-hub .home-hub { padding-bottom: 16px !important; }
+/* owner 2026-10-25: "+ button in home is too big and that thing in the center above it is touching it" - New chat is a
+   small square like the search button beside it, and the sidebar's move grip sits at the right end of that row */
+.sidebar.tidy .tidy-top { align-items: center; justify-content: flex-start; gap: 8px; padding-right: 30px; }
+.sidebar.tidy .tidy-top > #new-chat { flex: 0 0 36px; width: 36px; height: 36px; min-width: 0; padding: 0 !important; border-radius: 10px;
+  display: inline-grid; place-items: center; text-align: center; }
+.sidebar.tidy .tidy-top > #new-chat svg { width: 18px; height: 18px; }
+.sidebar.tidy .tidy-top > #qol-search-btn { width: 36px; height: 36px; }
+.sidebar.tidy > .pane-grip { top: 23px; right: 8px; left: auto; transform: none; width: 20px; height: 18px; }

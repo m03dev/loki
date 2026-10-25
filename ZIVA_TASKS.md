@@ -1095,3 +1095,20 @@ in a fresh `git worktree`, not in my tree. Two are fixed, one is yours to call.
 Also: `test_forge_pro_ui`, `test_forge_undo_keys_ui`, `test_forge_rules_ui`, `test_forge_layers_ui` and
 `test_forge_symmetry_ui` all timed out in ship's parallel run on this Mac and all pass one after another; their single
 `wait_for_selector(..., timeout=5000)` is now 15000, the same allowance you gave `test_forge_ui` for the same reason.
+
+## 2026-10-25 afternoon - check these on BOTH machines (Mac and PC), after updating
+
+1. **Link the machines.** Mac: Studio > Agents > turn on "Let my other machines link", copy the code. PC: Studio > Agents >
+   Link a machine, paste it. Studio > Agents and Home's live line must then show both machines.
+2. **The agent reaches the other machine.** In chat on the PC: "help the Mac - how much disk space is free there?"
+   It must call list_machines, then run_on_machine (a job appears in Studio > Agents on the Mac), then machine_job, and
+   answer with the Mac's number. Not linked -> it must say how to link, not "I don't understand". Report the reply.
+3. **DeepSeek 4.1 through NVIDIA/OpenRouter:** "make a git repo called demo2 with a README and commit it". No
+   `<｜DSML｜ calls>` text in the reply, `git -C demo2 log` shows the commit. If DSML still shows, paste the reply and
+   `opencode.json`'s provider baseURL (should be http://127.0.0.1:<port>/u/1 - engine/dsml_proxy.py). Never paste keys.
+4. **Pictures.** "make_image a lighthouse in a storm, style concept-art, upscale 4": the reply says backend nvidia (not
+   pollinations) and the picture shows in the chat with Save as JPG / PDF. If NVIDIA refuses flux.2-klein-4b (404) it
+   should fall back to flux.1-dev by itself - report which model it used. Real-ESRGAN installs once into the data folder.
+5. **Mac crash on Cmd+H in Forge** should be gone (macOS Hide is left alone; Forge's own hotkey is Control+H there).
+   If LOKI still quits on a Cmd shortcut, copy the newest crash log from the LOKI log folder into ~/Loki/ so it can be read.
+6. **Home:** the New chat (+) button is a small square next to search; nothing touches it.

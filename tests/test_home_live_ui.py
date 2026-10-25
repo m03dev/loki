@@ -80,6 +80,13 @@ async def main():
         await page.goto("http://127.0.0.1:8893/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
+        await page.wait_for_timeout(300)
+        geo = await E("""(() => { const r = (el) => el && el.getBoundingClientRect(); const n = r(document.getElementById('new-chat')),
+          g = r(document.querySelector('.sidebar > .pane-grip'));
+          const hit = n && g && !(g.right <= n.left || g.left >= n.right || g.bottom <= n.top || g.top >= n.bottom);
+          return { w: n && Math.round(n.width), h: n && Math.round(n.height), gap: n && g ? Math.round(g.left - n.right) : null, hit }; })()""")
+        check("New chat (+) is a small square, and the sidebar's grip does not touch it (owner: 'too big ... touching it')",
+              geo["w"] and geo["w"] <= 40 and geo["h"] <= 40 and not geo["hit"], geo)
         await page.wait_for_selector("#home-livewall .hl-agent", timeout=10000)
         info = await E("""(() => { const w = document.getElementById('home-livewall'), hub = document.getElementById('home-hub');
           const r = w.getBoundingClientRect(); return { inHub: hub.contains(w), shown: r.width > 0 && r.height > 0,
