@@ -198,7 +198,8 @@ UI_DIR: Path | None = None
 UI_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
             ".json": "application/json; charset=utf-8",
-            ".wasm": "application/wasm", ".pck": "application/octet-stream", ".gz": "application/gzip"}
+            ".wasm": "application/wasm", ".pck": "application/octet-stream", ".gz": "application/gzip",
+            ".woff2": "font/woff2"}   # the bundled Inter (app/ui/fonts): the same letters on the Mac and on Windows
 # style-src allows inline <style>: pywebview injects one for its drag regions (the Mac title bar)
 # and the bundled Mermaid adds one per diagram; both were blocked ("could not load (no address) -
 # <style>" in engine.out). Scripts stay 'self' only - no inline script, no eval.

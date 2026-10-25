@@ -374,8 +374,11 @@ async def window():
                    long: t.scrollHeight > t.clientHeight, bottom: t.scrollHeight - t.scrollTop - t.clientHeight < 4 }; })()""")
         check("a running conversation shows beside the hub, scrolls, and opens at the latest message", chat["hub"] and chat["shown"]
               and chat["scroll"] == "auto" and chat["long"] and chat["bottom"], chat)
-        await E("document.getElementById('transcript').scrollTop = 0")
-        await page.wait_for_timeout(250)
+        await E("(() => { const t = document.getElementById('transcript'); t.scrollTop = 0; t.dispatchEvent(new Event('scroll')); })()")
+        try:
+            await page.wait_for_function("!document.getElementById('jump-latest').hidden", timeout=3000)
+        except Exception:  # noqa: BLE001 - the check below reports it
+            pass
         check("scrolled up: a 'Latest' button appears", await E("!document.getElementById('jump-latest').hidden"))
         await E("addLoki('a new answer while you read')")
         await page.wait_for_timeout(150)
@@ -393,6 +396,43 @@ async def window():
         row = await E("""(() => { const r = document.querySelector('.composer-row'), b = r.getBoundingClientRect();
           return [...r.children].filter((c) => c.offsetParent).every((c) => { const x = c.getBoundingClientRect(); return x.left >= b.left - 1 && x.right <= b.right + 1; }); })()""")
         check("every button under the message box is inside it (they wrap, never cut off)", row)
+        # ---- modular: the panes swap slots (Godot-style presets and drag), the chat resizes, all remembered
+        POS = """(() => { const x = (s) => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().left) : -1; };
+          return [['sidebar', x('.sidebar')], ['hub', x('#home-hub')], ['chat', x('#chat-col')]].sort((a, b) => a[1] - b[1]).map((p) => p[0]); })()"""
+        check("default layout: chats | Home | chat", await E(POS) == ["sidebar", "hub", "chat"], await E(POS))
+        await page.click("#layout-btn")
+        await page.click('.layout-opt[data-order="sidebar,chat,hub"]')
+        await page.wait_for_timeout(150)
+        check("Layout > Chat in the middle", await E(POS) == ["sidebar", "chat", "hub"], await E(POS))
+        await page.click("#layout-btn")
+        await page.click('.layout-opt[data-order="hub,chat,sidebar"]')
+        await page.wait_for_timeout(150)
+        check("Layout > Chats on the right (the sidebar at the other end)", await E(POS) == ["hub", "chat", "sidebar"], await E(POS))
+        # drag the chat's grip onto the left slot
+        g = await E("(() => { const b = document.querySelector('#chat-col > .pane-grip').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()")
+        await page.mouse.move(g[0], g[1]); await page.mouse.down()
+        await page.mouse.move(60, 400, steps=6)
+        slots = await E("document.querySelectorAll('.lk-slots .lk-slot').length")
+        await page.mouse.up(); await page.wait_for_timeout(150)
+        check("dragging a pane's grip shows the three slots; dropping the chat on the left puts it there", slots == 3 and (await E(POS))[0] == "chat", [slots, await E(POS)])
+        check("the sidebar never lands in the middle", (await E(POS))[1] != "sidebar", await E(POS))
+        saved = await E("JSON.parse(localStorage.getItem('loki-home-layout')).order")
+        await page.reload()
+        await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
+        await page.wait_for_timeout(400)
+        check("the layout is remembered after a restart", await E(POS) == saved, [saved, await E(POS)])
+        # the chat column's inner edge resizes it
+        w0 = await E("document.getElementById('chat-col').getBoundingClientRect().width")
+        eb = await E("(() => { const b = document.querySelector('#chat-col > .chat-edge').getBoundingClientRect(); return [b.left + b.width / 2, b.top + 200]; })()")
+        first = await E("document.getElementById('loki-split').classList.contains('chat-first')")
+        await page.mouse.move(eb[0], eb[1]); await page.mouse.down(); await page.mouse.move(eb[0] + (120 if first else -120), eb[1], steps=5); await page.mouse.up()
+        w1 = await E("document.getElementById('chat-col').getBoundingClientRect().width")
+        check("dragging the chat's edge makes it wider (and it is saved)", w1 > w0 + 60 and await E("JSON.parse(localStorage.getItem('loki-home-layout')).chatW > 0"), [w0, w1])
+        await page.click("#layout-btn")
+        await page.click(".layout-opt.layout-wide:last-child")
+        await page.wait_for_timeout(150)
+        check("Layout > Reset: back to chats | Home | chat", await E(POS) == ["sidebar", "hub", "chat"], await E(POS))
+        check("one font on every system: the bundled Inter is loaded", await E("document.fonts.check('14px \"LOKI Inter\"') && getComputedStyle(document.body).fontFamily.startsWith('\"LOKI Inter\"')"))
         await E("showHome()")
         await page.wait_for_timeout(200)
 

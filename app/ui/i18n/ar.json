@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "شكل الفرشاة من المركز إلى الحافة: ناعم (حافة ناعمة)، كروي (مستدير وممتلئ)، جذر (مدبب)، حاد، خطي، ثابت (مسطح).",
   "The curve of the soft-selection pull.": "منحنى سحب التحديد الناعم.",
   "The normal lit look (no matcap).": "المظهر المضاء العادي (بدون matcap).",
-  "Working now": "يعمل الآن"
+  "Working now": "يعمل الآن",
+  "Drag onto a slot: left, middle or right.": "اسحب إلى خانة: يسار أو وسط أو يمين."
  },
  "fb.email": "كتابة بريد إلكتروني",
  "fb.email_done": "تم حفظ {file}. فُتحت مسودة بريد إلكتروني - أرفق الملف وأرسله.",

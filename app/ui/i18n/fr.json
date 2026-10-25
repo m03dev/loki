@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "Le profil du pinceau du centre au bord : Doux (bord doux), Sphère (rond, plein), Racine (pointu), Net, Linéaire, Constant (plat).",
   "The curve of the soft-selection pull.": "La courbe de l'attraction de la sélection douce.",
   "The normal lit look (no matcap).": "L'aspect éclairé normal (sans matcap).",
-  "Working now": "En cours"
+  "Working now": "En cours",
+  "Drag onto a slot: left, middle or right.": "Faites glisser vers un emplacement : gauche, milieu ou droite."
  },
  "fb.email": "Écrire un e-mail",
  "fb.email_done": "{file} enregistré. Un brouillon d'e-mail s'est ouvert : joignez le fichier et envoyez-le.",

@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "Das Profil des Pinsels von der Mitte zum Rand: Weich (weicher Rand), Kugel (rund, voll), Wurzel (spitz), Scharf, Linear, Konstant (flach).",
   "The curve of the soft-selection pull.": "Die Kurve des Soft-Selection-Zugs.",
   "The normal lit look (no matcap).": "Die normale beleuchtete Ansicht (keine Matcap).",
-  "Working now": "Läuft gerade"
+  "Working now": "Läuft gerade",
+  "Drag onto a slot: left, middle or right.": "Auf einen Platz ziehen: links, Mitte oder rechts."
  },
  "fb.email": "E-Mail schreiben",
  "fb.email_done": "{file} gespeichert. Ein E-Mail-Entwurf wurde geöffnet – Datei anhängen und senden.",

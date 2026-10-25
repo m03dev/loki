@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "中心から端までのブラシのプロファイル：スムーズ（柔らかい端）、球（丸く満たす）、ルート（尖る）、シャープ、リニア、コンスタント（平ら）。",
   "The curve of the soft-selection pull.": "ソフト選択の引っ張りのカーブ。",
   "The normal lit look (no matcap).": "通常のライティング表示（マットキャップなし）。",
-  "Working now": "実行中"
+  "Working now": "実行中",
+  "Drag onto a slot: left, middle or right.": "スロットにドラッグ：左、中央、右。"
  },
  "fb.email": "メールを書く",
  "fb.email_done": "{file} を保存しました。メールの下書きが開きました。ファイルを添付して送信してください。",

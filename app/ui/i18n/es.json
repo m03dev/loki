@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "El perfil del pincel del centro al borde: Suave (borde suave), Esfera (redondo, lleno), Raíz (puntiagudo), Afilado, Lineal, Constante (plano).",
   "The curve of the soft-selection pull.": "La curva del arrastre de la selección suave.",
   "The normal lit look (no matcap).": "El aspecto iluminado normal (sin matcap).",
-  "Working now": "En curso"
+  "Working now": "En curso",
+  "Drag onto a slot: left, middle or right.": "Arrástralo a un hueco: izquierda, centro o derecha."
  },
  "fb.email": "Escribir un correo",
  "fb.email_done": "Guardado {file}. Se abrió un borrador de correo: adjunta el archivo y envíalo.",

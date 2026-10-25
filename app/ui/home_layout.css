@@ -99,3 +99,75 @@
 }
 @media (prefers-reduced-motion: reduce) { .jump-latest { transition: none; } }
 html.u-hc .chat-col .transcript::-webkit-scrollbar-thumb { background: #fff; }
+
+/* ================================================================ modular: the panes swap slots (owner 2026-10-25: "the
+   home window should be modular - I should be able to move that chat window to the middle and vice versa, kind of like
+   the Godot preset windows, you swap slots - everything should always work across both systems the same").
+   Three panes - the sidebar (chats), the Home hub, the chat - in three slots. The sidebar sits at either end; the hub
+   and the chat take the other two in either order. Pick a preset (the top bar's Layout button) or drag a pane by its
+   grip onto a slot. The chat column's inner edge resizes it. All of it is remembered (localStorage loki-home-layout). */
+.loki-split { grid-template-columns: minmax(0, 1fr) clamp(320px, var(--chat-w, 39%), 72%); }
+.loki-split > .home-hub { grid-column: 1; grid-row: 1; }
+.loki-split > .chat-col { grid-column: 2; grid-row: 1; }
+.loki-split.chat-first { grid-template-columns: clamp(320px, var(--chat-w, 39%), 72%) minmax(0, 1fr); }
+.loki-split.chat-first > .chat-col { grid-column: 1; border-inline-start: 0; border-inline-end: 1px solid var(--line); }
+.loki-split.chat-first > .home-hub { grid-column: 2; }
+.main.hub-off .loki-split, .main.hub-off .loki-split.chat-first, .loki-split:not(:has(> .home-hub:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
+.main.hub-off .loki-split > .chat-col, .loki-split:not(:has(> .home-hub:not([hidden]))) > .chat-col { grid-column: 1; border-inline: 0; }
+
+/* the sidebar on the right */
+html.side-right .shell { grid-template-columns: minmax(0, 1fr) clamp(170px, var(--tidy-side, 19vw), 46vw) !important; }
+html.side-right .shell.tidy-folded { grid-template-columns: minmax(0, 1fr) 0 !important; }
+html.side-right .shell > .sidebar { grid-column: 2; grid-row: 1; border-right: 0; border-left: 1px solid var(--line); }
+html.side-right .shell > .main { grid-column: 1; grid-row: 1; }
+html.side-right .tidy-side-edge { right: auto; left: -3px; }
+
+/* the chat column's inner edge: drag to make it wider or narrower (double-click: back to the default) */
+.chat-edge { position: absolute; top: 0; bottom: 0; width: 7px; left: -4px; cursor: col-resize; z-index: 6; }
+.loki-split.chat-first .chat-edge { left: auto; right: -4px; }
+.chat-edge:hover, body.lk-dragging .chat-edge { background: rgba(120, 175, 220, .35); }
+.main.hub-off .chat-edge, .loki-split:not(:has(> .home-hub:not([hidden]))) .chat-edge { display: none; }
+body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: grabbing; }
+
+/* grips: a pane's handle to drag it to another slot */
+.pane-grip { display: inline-grid; place-items: center; width: 22px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); cursor: grab; flex: none; opacity: .55; }
+.pane-grip:hover { opacity: 1; background: var(--surface); color: var(--text); }
+.pane-grip svg { width: 14px; height: 14px; }
+.chat-col > .pane-grip { position: absolute; top: 6px; right: 8px; z-index: 5; }
+.loki-split.chat-first .chat-col > .pane-grip { right: 14px; }
+.sidebar .pane-grip { position: absolute; top: 2px; left: 50%; transform: translateX(-50%) rotate(90deg); width: 20px; height: 14px; }
+
+/* the slot picker while you drag: three targets over the window, Godot's dock-slot style */
+.lk-slots { position: fixed; inset: var(--titlebar-h, 0px) 0 0 0; z-index: 900; display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 10px; padding: 14px;
+  background: rgba(8, 10, 14, .35); pointer-events: none; }
+.lk-slot { border: 2px dashed rgba(140, 207, 196, .45); border-radius: 14px; display: grid; place-items: center; color: var(--text);
+  font-size: 13px; font-weight: 600; letter-spacing: .02em; background: rgba(20, 24, 30, .55); }
+.lk-slot.hot { border-style: solid; border-color: var(--accent, #8ccfc4); background: rgba(140, 207, 196, .16); }
+.lk-slot.off { opacity: .3; }
+
+/* the Layout button's menu: little pictures of the arrangements */
+.layout-btn { display: inline-grid; place-items: center; width: 32px; height: 30px; padding: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.layout-btn:hover, .layout-btn[aria-expanded="true"] { background: var(--surface); color: var(--text); }
+.layout-menu { position: fixed; z-index: 950; padding: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 300px;
+  background: var(--fm-surface, #202226); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); }
+.layout-menu[hidden] { display: none; }
+.layout-menu h4 { grid-column: 1 / -1; margin: 2px 4px 2px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.layout-opt { display: flex; flex-direction: column; gap: 5px; padding: 7px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text);
+  font-size: 12px; text-align: left; cursor: pointer; }
+.layout-opt:hover { background: rgba(255, 255, 255, .06); }
+.layout-opt[aria-checked="true"] { border-color: var(--accent, #8ccfc4); background: rgba(140, 207, 196, .1); }
+.layout-pic { display: grid; gap: 3px; height: 34px; }
+.layout-pic i { display: block; border-radius: 3px; background: rgba(255, 255, 255, .14); }
+.layout-pic i.s { background: rgba(255, 255, 255, .08); }
+.layout-pic i.c { background: rgba(140, 207, 196, .55); }
+.layout-menu .layout-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+@media (max-width: 900px) {
+  .loki-split > .home-hub { grid-column: 1; grid-row: 1; }
+  .loki-split > .chat-col { grid-column: 1; grid-row: 2; border-inline: 0; }
+  .main:not(.home) .loki-split > .chat-col, .main.hub-off .loki-split > .chat-col { grid-row: 1; }
+  .loki-split.chat-first, .main.hub-off .loki-split.chat-first { grid-template-columns: minmax(0, 1fr); }
+  .loki-split.chat-first > .chat-col, .loki-split.chat-first > .home-hub { grid-column: 1; }
+  .loki-split.chat-first > .chat-col { grid-row: 2; border-inline-end: 0; }
+  .chat-edge { display: none; }
+}

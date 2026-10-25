@@ -153,7 +153,8 @@
       tip(edge, "Sidebar width", "Drag to make the sidebar wider or narrower; double-click resets; Ctrl/Cmd+B folds it away.");
       $(".sidebar")?.append(edge);
       drag(edge, (ev) => {
-        const v = Math.max(12, Math.min(40, ev.clientX / window.innerWidth * 100));
+        const right = document.documentElement.classList.contains("side-right");   // the sidebar on the right (chat_view.js layout)
+        const v = Math.max(12, Math.min(40, (right ? window.innerWidth - ev.clientX : ev.clientX) / window.innerWidth * 100));
         document.documentElement.style.setProperty("--tidy-side", v.toFixed(2) + "vw"); edge.dataset.v = v.toFixed(2);
       }, () => ({}), () => { const pp = load(); if (edge.dataset.v) pp.side = +edge.dataset.v; save(pp); });
       edge.addEventListener("dblclick", () => { const pp = load(); pp.side = 19; save(pp); sideWidth(); });

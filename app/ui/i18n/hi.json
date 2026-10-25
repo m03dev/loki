@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "केंद्र से किनारे तक ब्रश की प्रोफ़ाइल: स्मूद (नरम किनारा), स्फ़ीयर (गोल, भरा), रूट (नुकीला), शार्प, लीनियर, कॉन्स्टेंट (सपाट)।",
   "The curve of the soft-selection pull.": "सॉफ़्ट-सिलेक्शन खिंचाव का वक्र।",
   "The normal lit look (no matcap).": "सामान्य रोशन रूप (मैटकैप नहीं)।",
-  "Working now": "अभी चल रहा है"
+  "Working now": "अभी चल रहा है",
+  "Drag onto a slot: left, middle or right.": "किसी स्लॉट पर खींचें: बाएँ, बीच में या दाएँ।"
  },
  "fb.email": "ईमेल लिखें",
  "fb.email_done": "{file} सहेजी गई। एक ईमेल ड्राफ़्ट खुला है - फ़ाइल जोड़ें और भेजें।",

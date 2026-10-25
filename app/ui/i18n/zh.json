@@ -329,7 +329,8 @@
   "The brush's profile from centre to edge: Smooth (soft edge), Sphere (round, full), Root (pointy), Sharp, Linear, Constant (flat).": "笔刷从中心到边缘的轮廓：平滑（柔和边缘）、球形（圆而饱满）、根部（尖）、锐利、线性、恒定（平）。",
   "The curve of the soft-selection pull.": "软选择拉动的曲线。",
   "The normal lit look (no matcap).": "普通的光照外观（无材质捕获）。",
-  "Working now": "正在运行"
+  "Working now": "正在运行",
+  "Drag onto a slot: left, middle or right.": "拖到一个位置：左、中或右。"
  },
  "fb.email": "写邮件",
  "fb.email_done": "已保存 {file}。邮件草稿已打开——附上文件并发送。",
