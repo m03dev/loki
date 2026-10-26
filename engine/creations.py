@@ -36,6 +36,7 @@ KINDS = {
     "audio": set(AUDIO),                     # VoiceStudio, sound effects, the Tool Shelf's audio tools
     "models": {".glb", ".gltf", ".obj", ".fbx"},   # Forge, Pixal3D / TRELLIS.2, the shelf's 3D tools
     "sprites": {".png", ".gif", ".webp"},   # pixel art, sprite sheets
+    "turnarounds": {".png", ".jpg", ".jpeg", ".webp"},   # the technical artist's sheets (engine/turnaround.py)
 }
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
          ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".mp3": "audio/mpeg",

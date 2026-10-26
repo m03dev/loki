@@ -69,6 +69,7 @@ TOOLS = [
     __import__("comfy_jobs").MUSIC_TOOL,
     __import__("creations").LIBRARY_TOOL,
     __import__("render_agent").TOOL,
+    __import__("turnaround").TOOL,
     {"name": "upscale_image",
      "description": "Enlarge a picture in this folder 2x or 4x with Real-ESRGAN (sharp detail, not blur); "
                     "anime=true for drawn / comic / anime art. Saves <name>-4x.png beside it.",
@@ -124,12 +125,23 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     job = {"prompt": prompt[:1800], "out_dir": str(out), "count": max(1, min(int(args.get("count") or 1), 4)),
            "width": int(args.get("width") or 1024), "height": int(args.get("height") or 1024),
            "negative": negative[:600], "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
+    if args.get("seed"):
+        job["seed"] = int(args["seed"])     # the technical artist draws every view of a turnaround on one seed
     res = run_imagegen(job, runner)
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error", "the picture was not made")}
     files = [str(Path(f).resolve()) for f in (res.get("files") or [res.get("file")]) if f]
     answer = {"ok": True, "files": [os.path.relpath(f, cwd) for f in files], "backend": res.get("backend", ""),
               "model": res.get("model", ""), "seed": res.get("seed")}
+    try:   # remember what each picture is: the technical artist and the 3D step reuse the concept's own words
+        import creations  # pylint: disable=import-outside-toplevel
+        for rel in answer["files"]:
+            rel = rel.replace("\\", "/")
+            if creations.meta_path(cwd, rel) is not None:
+                creations.write_meta(cwd, rel, idea=str(args.get("prompt") or "")[:600], prompt=prompt[:1800],
+                                     style=style, backend=answer["backend"], seed=answer["seed"] or 0)
+    except Exception:  # noqa: BLE001 - the sidecar is a nicety, never a failed picture
+        pass
     if style.lower() == "pixel-art" or args.get("pixel_size"):
         import pixel_art  # pylint: disable=import-outside-toplevel
         sprites = []
@@ -325,6 +337,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
           "pixelize": pixelize, "voice": voice, "toolshelf": toolshelf_call,
           "make_music": make_music, "make_sprite": make_sprite,
+          "make_turnaround": lambda a, cwd: __import__("turnaround").make_turnaround(a or {}, cwd, make_image),
           "render_scene": lambda a, cwd: __import__("render_agent").render(a or {}, cwd),
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
@@ -461,20 +474,21 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "voice": "voice", "shelf": "toolshelf", "music": "make_music", "library": "library",
-       "render": "render_scene", "sprite": "make_sprite", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+       "render": "render_scene", "sprite": "make_sprite", "turnaround": "make_turnaround", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 # what the first plain word means for each command (2026-10-25: `loki-make render models/x.glb` sent the file as the
 # prompt and the render tool said "no model None" - found by running it, not by reading it)
 POSITIONAL = {"upscale": "image", "pixel": "image", "run-on": "task", "render": "model", "voice": "text",
-              "music": "tags", "library": "search", "job": "job", "shelf": "id"}
+              "music": "tags", "library": "search", "job": "job", "shelf": "id",
+              "turnaround": "concept"}
 
 
 def cli(argv: list, cwd: Path | None = None) -> int:
     """`loki-make <what> "<prompt>" [--key value ...]` - the same tools for an agent that only has a shell
     (engine/local_agent.py): image, 3d, video, upscale, pixel, machines, run-on, job. Prints the JSON answer."""
     if not argv or argv[0] not in CLI:
-        print("usage: loki-make image|3d|video|upscale|pixel|render|voice|music|library|shelf|machines|run-on|job "
+        print("usage: loki-make image|3d|video|upscale|pixel|sprite|turnaround|render|voice|music|library|shelf|machines|run-on|job "
               "\"<prompt or file>\" [--style comic] "
               "[--count 4] [--upscale 4] [--image pic.png] [--machine mac] [--job id]")
         return 2

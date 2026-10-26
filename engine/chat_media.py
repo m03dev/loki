@@ -175,7 +175,7 @@ def route(state: Any, method: str, path: str, query: dict, body: dict) -> tuple:
 
 
 # ----------------------------------------------------------------------------- what a turn made, always shown
-MADE_DIRS = ("images", "sprites", "renders", "videos", "sketches", "media", "qa", "brand", "models", "audio")
+MADE_DIRS = ("images", "sprites", "turnarounds", "renders", "videos", "sketches", "media", "qa", "brand", "models", "audio")
 
 
 def made_since(state: Any, t0: float, limit: int = 8) -> list:

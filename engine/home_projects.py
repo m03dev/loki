@@ -224,7 +224,7 @@ def content(state: Any) -> list:
     return out
 
 
-MADE_KINDS = {"images": "image", "sprites": "image", "sketches": "image", "videos": "video"}
+MADE_KINDS = {"images": "image", "sprites": "image", "sketches": "image", "turnarounds": "image", "videos": "video"}
 
 
 def made(state: Any) -> list:
@@ -241,7 +241,7 @@ def made(state: Any) -> list:
         if not show or c.get("show") != show:
             continue
         url = "/creations/" + c["path"]
-        what = {"sprites": "sprite", "sketches": "sketch", "videos": "video"}.get(kind, "picture")
+        what = {"sprites": "sprite", "sketches": "sketch", "videos": "video", "turnarounds": "turnaround sheet"}.get(kind, "picture")
         out.append({"kind": "made", "name": c.get("title") or Path(c["path"]).stem, "path_or_id": c["path"],
                     "updated": float(c.get("t") or 0), "thumb": url if show == "image" else None,
                     "video": url if show == "video" else None, "status": "",
