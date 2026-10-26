@@ -23,7 +23,7 @@ Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of 
 | Godot | LOKI's own 4.7.2 when no other Godot; Godot_mono 4.8 dev is not LOKI's - never open the owner's projects in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
 
 The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
-ship.py keeps in step. CI (`.github/workflows/tests.yml`, macOS + Windows) runs again since the repo went public.
+ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
 
 ## Now (2026-10-25)
 

@@ -471,8 +471,8 @@ loki_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
 check("LOKI can improve its own code", "def improve_loki" in loki_src and '"improve_loki"' in loki_src)
 check("LOKI can ship its own code through ship.py", "def ship_loki" in loki_src and "tools\" / \"ship.py" in loki_src)
 check("Ask and Plan modes cannot change or push LOKI", all(n in loki_src.split("DELEGATING =")[1].split(chr(10))[0] for n in ('"improve_loki"', '"ship_loki"')))
-workflow = (REPO / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
-check("CI runs the tests on macOS and Windows on every push", "macos-latest" in workflow and "windows-latest" in workflow)
+check("no tests workflow mailing failures on every push (owner 2026-10-25: removed)",
+      not (REPO / ".github" / "workflows" / "tests.yml").exists())
 check("an AGENTS.md tells every agent the rules", (REPO / "AGENTS.md").is_file())
 
 shutil.rmtree(TMP, ignore_errors=True)
