@@ -26,6 +26,14 @@ import big_storage  # noqa: E402
 
 env = {"LOKI_DATA": str(TMP / "data")}
 check("no Xero mounted: big things go to LOKI's data folder (its own drive)", big_storage.big_dir(env) == TMP / "data" / "big")
+(TMP / "data" / "big" / "huggingface").mkdir(parents=True, exist_ok=True)
+_xero = big_storage.XERO
+big_storage.XERO = TMP / "Xero"
+(TMP / "Xero").mkdir(exist_ok=True)
+check("plugging Xero in never moves an existing big folder (models must not vanish)",
+      big_storage.big_dir({"LOKI_DATA": str(TMP / "data")}) == TMP / "data" / "big")
+check("never the old repo copy on Xero", "Xero/loki" + os.sep not in str(big_storage.big_dir({"LOKI_DATA": str(TMP / "fresh")})) + os.sep)
+big_storage.XERO = _xero
 check("LOKI_BIG_DIR wins", big_storage.big_dir({"LOKI_BIG_DIR": str(TMP / "x")}) == TMP / "x")
 done = big_storage.apply(env)
 check("model, package and tool caches all point there", all(Path(env[k]).is_relative_to(TMP / "data" / "big") for k in
@@ -33,6 +41,9 @@ check("model, package and tool caches all point there", all(Path(env[k]).is_rela
 env2 = {"LOKI_DATA": str(TMP / "data"), "HF_HOME": "/mine"}
 big_storage.apply(env2)
 check("a location the owner set himself is kept", env2["HF_HOME"] == "/mine")
+env3 = {"LOKI_DATA": str(TMP / "data"), "HF_HOME": "/Volumes/Xero/loki/huggingface"}
+big_storage.apply(env3)
+check("a stale Xero/loki path inherited from the broken build is replaced", Path(env3["HF_HOME"]) == TMP / "data" / "big" / "huggingface", env3)
 os.environ["LOKI_MIN_FREE_GB"] = "100000"
 check("an installer refuses when the internal drive is low, and says where big things go",
       big_storage.low_space() and "not installing" in big_storage.install_note("VoiceStudio"))

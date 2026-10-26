@@ -84,3 +84,7 @@ nothing is published or posted without the owner. Edit freely.
       (today: "no embedding model installed in Ollama", keyword-only).
 - Note: Kyojin needs an AMD Strix Halo (Ryzen AI Max+ 395, 128 GB); neither machine can run it (`KYOJIN_BASE_URL`).
 
+
+## 2026-10-26 - check the storage fix on the Mac
+- After this update, open the Local models tab on the Mac: the Hugging Face models (harness_data/big/huggingface, ~18 GB) and Ollama models must be listed again. Report the count in the task log.
+- Never write into /Volumes/Xero/loki - it is an old copy of the repo, not a cache folder. Big things go to harness_data/big (LokiSSD, which lives on Xero).
