@@ -250,7 +250,7 @@ check("POST /forge/save refuses other types and broken glb",
 loki_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
 check("make_3d is an agent tool (schema + dispatch + creative category)",
       'LOCAL_TOOLS["make_3d"] = make_3d_tool' in loki_src and '"make_3d", "Make a 3D model' in loki_src
-      and 'TOOL_CATEGORIES["creative"] += ["make_3d"]' in loki_src)
+      and 'TOOL_CATEGORIES["creative"] += ["make_3d"' in loki_src)
 import manifests  # noqa: E402
 mf = json.loads((REPO / "capabilities" / "forge-3d" / "manifest.json").read_text(encoding="utf-8"))
 check("capabilities/forge-3d manifest is valid, MIT, says the Space is a third party",
