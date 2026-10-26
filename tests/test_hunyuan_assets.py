@@ -234,10 +234,12 @@ model.parent.mkdir(parents=True, exist_ok=True)
 model.write_bytes(b"glTF")
 res = blender_link.polish(model, TMP / "ws", target=15000, turntable=0)
 kinds = [c["type"] for c in seen["cmds"]]
-check("polish: clear -> import -> cleanup -> normalize -> decimate -> uv(missing) -> shade -> stage -> render -> "
-      "export .glb + .blend -> lods -> scene_info", kinds == ["clear", "import", "cleanup", "normalize", "decimate", "uv",
-                                                               "shade", "stage", "render", "export", "export", "lods", "scene_info"]
-      and seen["cmds"][5]["params"]["mode"] == "missing" and seen["cmds"][4]["params"]["target"] == 15000, kinds)
+check("polish: clear -> import -> cleanup -> normalize -> repair -> bake -> decimate -> uv(missing) -> shade -> stage -> "
+      "render -> export .glb .gltf .fbx .blend -> lods -> scene_info", kinds == ["clear", "import", "cleanup", "normalize", "repair",
+                                                               "bake", "decimate", "uv", "shade", "stage", "render", "export",
+                                                               "export", "export", "export", "lods", "scene_info"]
+      and seen["cmds"][7]["params"]["mode"] == "missing" and seen["cmds"][6]["params"]["target"] == 15000
+      and [Path(c["params"]["path"]).suffix for c in seen["cmds"] if c["type"] == "export"] == [".glb", ".gltf", ".fbx", ".blend"], kinds)
 check("polish: all in one LOKI scene, files named by out_names", len({c["params"].get("scene") for c in seen["cmds"]}) == 1
       and seen["cmds"][0]["params"]["scene"].startswith("LOKI ") and Path(res["files"]["render"]).name.startswith("character-polished_"),
       (seen["cmds"][0]["params"], res["files"]))
