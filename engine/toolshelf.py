@@ -84,7 +84,7 @@ def _exe_name(name: str) -> str:
 def find_exe(d: Path, name: str) -> str:
     if not name:
         return ""
-    for base in (d / "bin", d / "node_modules" / ".bin", d / "src"):
+    for base in (d / "bin", d / "node_modules" / ".bin", d / "src", d):
         if base.is_dir():
             for cand in (_exe_name(name), name, name + ".cmd"):
                 for p in base.rglob(cand):
@@ -93,9 +93,20 @@ def find_exe(d: Path, name: str) -> str:
     return shutil.which(name) or ""
 
 
+def _plat() -> str:
+    return "linux" if sys.platform.startswith("linux") else sys.platform
+
+
+def exe_for(r: dict) -> str:
+    """The program's name: one name, or {platform: name} when the release names it per system."""
+    inst = r.get("install") or {}
+    exe = (inst.get("release") or {}).get("exe") or inst.get("exe") or ""
+    return str(exe.get(_plat()) or "") if isinstance(exe, dict) else str(exe)
+
+
 def placeholders(r: dict, d: Path) -> dict:
     inst = r.get("install") or {}
-    exe_name = (inst.get("release") or {}).get("exe") or inst.get("exe") or ""
+    exe_name = exe_for(r)
     py = venv_python(d)
     return {"python": str(py) if py.exists() else sys.executable, "exe": find_exe(d, exe_name), "src": str(d / "src"),
             "tool": str(d), "models": str(d / "models"), "loki_python": sys.executable,
@@ -217,6 +228,26 @@ def _unpack(archive: Path, into: Path) -> None:
     archive.unlink(missing_ok=True)
 
 
+def _unpack_dmg(dmg: Path, into: Path, run: Callable) -> None:
+    """A macOS disk image: mount it, copy what is on it (the .app), unmount it."""
+    mnt = dmg.with_suffix(".mnt")
+    mnt.mkdir(parents=True, exist_ok=True)
+    _run(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mnt), str(dmg)], run)
+    try:
+        into.mkdir(parents=True, exist_ok=True)
+        for item in mnt.iterdir():
+            if item.name.startswith(".") or item.is_symlink():
+                continue
+            dest = into / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest, symlinks=True, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
+    finally:
+        _run(["hdiutil", "detach", str(mnt)], run)
+    dmg.unlink(missing_ok=True)
+
+
 def install(tool_id: str, progress: Callable | None = None, run: Callable = subprocess.run,
             opener=urllib.request.urlopen) -> dict:
     r = recipe(tool_id)
@@ -263,10 +294,20 @@ def install(tool_id: str, progress: Callable | None = None, run: Callable = subp
             raise ShelfError("%s has no release build for this computer" % r.get("name"))
         url = "https://github.com/%s/releases/download/%s/%s" % (rel["repo"], rel["tag"], asset)
         say("downloading %s" % asset, 0.3)
-        _unpack(_download(url, d / "dl" / asset, opener, say), d / "bin")
-        if not find_exe(d, rel.get("exe", "")):
-            raise ShelfError("%s unpacked but %s was not found in it" % (asset, rel.get("exe")))
-        exe = find_exe(d, rel.get("exe", ""))
+        got = _download(url, d / "dl" / asset, opener, say)
+        name = exe_for(r)
+        if asset.lower().endswith(".dmg"):
+            _unpack_dmg(got, d / "bin", run)
+        elif re.search(r"\.(zip|tar\.gz|tgz|tar\.xz|tar\.bz2|tar)$", asset.lower()):
+            _unpack(got, d / "bin")
+        else:                                   # a bare program (an AppImage, a single binary): give it its name
+            (d / "bin").mkdir(parents=True, exist_ok=True)
+            target = d / "bin" / _exe_name(name)
+            shutil.move(str(got), str(target))
+            os.chmod(target, 0o755)
+        exe = find_exe(d, name)
+        if not exe:
+            raise ShelfError("%s unpacked but %s was not found in it" % (asset, name))
         os.chmod(exe, os.stat(exe).st_mode | 0o755)
     if kind == "npm":
         npm = shutil.which("npm")

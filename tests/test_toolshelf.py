@@ -62,7 +62,7 @@ for r in shipped.values():
             elif t == "bool":
                 args[an] = spec.get("default", False)
             else:
-                args[an] = spec.get("default", "a test")
+                args[an] = spec.get("default") or "a test"
         try:
             cmd, outs, _ = ts.build_command(r, name, args, ws, TMP / "tools" / r["id"])
             if any("{" in c and "}" in c and not c.startswith("{\"") and "{" + "input_stem}" not in c
