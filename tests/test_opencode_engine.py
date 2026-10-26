@@ -164,6 +164,8 @@ if loki:
 
     out, ws, calls = turn(REQ, mode="fail-first", conv="c3")
     models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
+    check("... and a 429 benches it for a while, so the next turns start on the next provider",
+          __import__("provider_speed").is_slow(loki.DATA_DIR, "groq"))
     check("the first provider fails -> the next one does it", len(models) >= 2 and models[0].startswith("loki-groq/")
           and models[1].startswith("loki-gemini/") and (ws / "loki-test-repo" / "src" / "main.py").is_file(), models)
 
@@ -172,6 +174,7 @@ if loki:
           len(calls) == 2 and "Continue the task" in calls[1]["argv"][-1] and (ws / "loki-test-repo" / "src" / "main.py").is_file()
           and not out.startswith("NOT DONE") and "DSML" not in out, (len(calls), out[:200]))
     import provider_speed  # noqa: E402
+    (Path(loki.DATA_DIR) / "provider_speed.json").unlink(missing_ok=True)   # the 429 test above benched groq
     provider_speed.SLOW_S = 0.5
     _t = time.time()
     out, ws, calls = turn(REQ, mode="slow-first", conv="slow")
