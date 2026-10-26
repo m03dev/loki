@@ -120,5 +120,18 @@ check("loki-make render <file> passes the file as the model (it was sent as the 
 check("loki-make voice <text> speaks it", _seen.get("voice") == {"text": "hello there", "action": "speak"}, _seen)
 check("loki-make 3d <picture> is a picture, <words> a description",
       _seen.get("make_3d", {}).get("prompt") == "a red fox", _seen)
+import time as _time  # noqa: E402
+_d3 = Path(_tf.mkdtemp())
+(_d3 / "images").mkdir()
+(_d3 / "images" / "old.png").write_bytes(b"x")
+_time.sleep(0.02)
+(_d3 / "images" / "golem.png").write_bytes(b"x")
+_e = make_mcp.make_3d({"backend": "online"}, _d3)
+check("make_3d without a picture says exactly what to send, naming the newest picture here",
+      not _e["ok"] and 'image="images/golem.png"' in _e["error"], _e)
+_got = {}
+make_mcp.make_3d({"image_path": "images/golem.png", "backend": "lift"}, _d3,
+                 make=lambda src, out, prompt, backend, **kw: (_got.update(src=src), {"ok": False, "error": "x"})[1])
+check("make_3d also takes image_path / path / file for the picture", str(_got.get("src", "")).endswith("golem.png"), _got)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

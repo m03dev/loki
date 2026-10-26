@@ -192,6 +192,15 @@ for stream in (True, False):
              else r["choices"][0]["message"].get("content") or "")
     check("an empty DeepSeek tag (no call in it) never reaches the agent (%s)" % ("streamed" if stream else "whole"),
           "DSML" not in words and "Let me look." in words, words)
+_B = "\uff5c"
+check("DSML with single-quoted attributes is still a call (it was dropped whole)",
+      dsml_proxy.parse("<%sDSML%s calls><%sDSML%sinvoke name='make_3d'><%sDSML%sparameter name='image' string='true'>images/g.png"
+                       "</%sDSML%sparameter></%sDSML%sinvoke></%sDSML%s calls>" % ((_B,) * 12))[1]
+      == [{"name": "make_3d", "arguments": {"image": "images/g.png"}}])
+check("DSML whose arguments are one JSON object keeps them (they were lost: make_3d arrived without its image)",
+      dsml_proxy.parse('<%sDSML%s calls><%sDSML%sinvoke name="make_3d">{"image": "images/g.png", "backend": "online"}'
+                       '</%sDSML%sinvoke></%sDSML%s calls>' % ((_B,) * 8))[1]
+      == [{"name": "make_3d", "arguments": {"image": "images/g.png", "backend": "online"}}])
 CASES["case unknown"] = '{"name": "launch_rockets", "arguments": {}}'
 r = ask("case unknown", False, TOOLS)
 check("a call to a tool the request did not offer is left as text", not r["choices"][0]["message"].get("tool_calls"), r)

@@ -43,12 +43,16 @@ TAG = r"<\s*/?\s*" + BAR + r"\s*DSML\s*" + BAR
 _ANY = re.compile(TAG + r"[^>]*>", re.I)
 _BLOCK = re.compile(r"<\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*(?:tool_calls|function_calls| ?calls)\s*>(.*?)"
                     r"(?:<\s*/\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*(?:tool_calls|function_calls| ?calls)\s*>|$)", re.S | re.I)
-_INVOKE = re.compile(r"<\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*invoke\s+name\s*=\s*\"([^\"]+)\"\s*>(.*?)"
+_Q = r"[\"']"
+_INVOKE = re.compile(r"<\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*invoke\s+name\s*=\s*" + _Q + r"(?P<name>[^\"']+)" + _Q +
+                     r"\s*>(?P<body>.*?)"
                      r"(?:<\s*/\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*invoke\s*>|(?=<\s*" + BAR + r"\s*DSML\s*" + BAR +
                      r"\s*invoke\b)|$)", re.S | re.I)
-_PARAM = re.compile(r"<\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*parameter\s+name\s*=\s*\"([^\"]+)\""
-                    r"(?:\s+string\s*=\s*\"(true|false)\")?\s*>(.*?)<\s*/\s*" + BAR + r"\s*DSML\s*" + BAR +
-                    r"\s*parameter\s*>", re.S | re.I)
+# a parameter: double or single quotes, a string="true|false" flag or not, any other attributes ignored
+_PARAM = re.compile(r"<\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*parameter\s+name\s*=\s*" + _Q + r"(?P<name>[^\"']+)" + _Q +
+                    r"(?P<attrs>[^>]*)>(?P<value>.*?)<\s*/\s*" + BAR + r"\s*DSML\s*" + BAR + r"\s*parameter\s*>",
+                    re.S | re.I)
+_STRING_FLAG = re.compile(r"string\s*=\s*[\"'](true|false)[\"']", re.I)
 _OPEN = re.compile(r"<\s*" + BAR + r"\s*DSML", re.I)
 OFFICIAL = ("api.deepseek.com",)
 
@@ -73,8 +77,20 @@ def parse(text: str) -> tuple:
     bodies = [m.group(1) for m in _BLOCK.finditer(text)] or ([text] if _INVOKE.search(text) else [])
     for body in bodies:
         for inv in _INVOKE.finditer(body):
-            args = {m.group(1): _value(m.group(3).strip("\n"), m.group(2)) for m in _PARAM.finditer(inv.group(2))}
-            calls.append({"name": inv.group(1).strip(), "arguments": args})
+            inner = inv.group("body")
+            args = {}
+            for m in _PARAM.finditer(inner):
+                flag = _STRING_FLAG.search(m.group("attrs") or "")
+                args[m.group("name")] = _value(m.group("value").strip("\n"), flag.group(1) if flag else None)
+            if not args and inner.strip().startswith("{"):
+                # the arguments written as one JSON object inside the invoke (2026-10-25: a make_3d reached the tool
+                # without its image - a call LOKI read but whose arguments it lost)
+                try:
+                    blob = json.loads(inner.strip()[:inner.strip().rfind("}") + 1])
+                    args = blob if isinstance(blob, dict) else {}
+                except ValueError:
+                    args = {}
+            calls.append({"name": inv.group("name").strip(), "arguments": args})
     clean = _BLOCK.sub("", text)
     clean = _INVOKE.sub("", clean)
     clean = _ANY.sub("", clean)

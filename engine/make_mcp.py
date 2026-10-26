@@ -256,10 +256,23 @@ def upscale_image(args: dict, cwd: Path) -> dict:
     return res
 
 
+IMAGE_ALIASES = ("image", "image_path", "path", "file", "source", "input", "picture", "filename")
+
+
+def newest_picture(cwd: Path) -> str:
+    pics = [p for p in (cwd / "images").glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+            and not p.stem.endswith(("-x8", "-x4", "-x10", "-x5"))] if (cwd / "images").is_dir() else []
+    return os.path.relpath(max(pics, key=lambda p: p.stat().st_mtime), cwd) if pics else ""
+
+
 def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
-    prompt, image = str(args.get("prompt") or "").strip(), str(args.get("image") or "").strip()
+    image = next((str(args[k]).strip() for k in IMAGE_ALIASES if str(args.get(k) or "").strip()), "")
+    prompt = str(args.get("prompt") or "").strip()
     if not prompt and not image:
-        return {"ok": False, "error": "give a description (prompt) or a picture (image)"}
+        # say exactly what to send (2026-10-25: an agent called make_3d {"backend": "online"} four times in a row)
+        hint = newest_picture(cwd)
+        return {"ok": False, "error": "make_3d needs image= (a picture in this folder) or prompt= (a description)."
+                + (" The newest picture here is %s - call make_3d with image=\"%s\"." % (hint, hint) if hint else "")}
     src = ""
     if image:
         p = (cwd / image).resolve()
