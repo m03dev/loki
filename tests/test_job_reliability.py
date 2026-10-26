@@ -72,6 +72,13 @@ check("a team job with no model of its own does not wait for the one local-model
 check("... unless LOKI_JOB_MODEL=same or local-only keeps it local",
       workers.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, dict(_env, LOKI_JOB_MODEL="same"))
       and workers.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, dict(_env, LOKI_LOCAL_ONLY="1")))
+_solo = team.agent_prompt({"id": "ab12cd34", "goal": "read this line aloud", "roles": ["builder"]}, "builder")
+check("a one-agent team does the goal itself - not 'Implement TEAM_PLAN.md' (an older team's plan)",
+      "Implement" not in _solo and "Do the team goal yourself" in _solo and "ignore them" in _solo, _solo[:400])
+_t2 = {"id": "ff00ee11", "goal": "make a game", "roles": ["architect", "builder", "tester", "reviewer"]}
+check("each team plans in its own file (team_plans/<id>.md), never the shared TEAM_PLAN.md",
+      "team_plans/ff00ee11.md" in team.agent_prompt(_t2, "architect") and "TEAM_PLAN.md in the project"
+      not in team.agent_prompt(_t2, "builder"))
 os.environ["LOKI_TEAM_SOLO"] = "off"
 check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
 os.environ.pop("LOKI_TEAM_SOLO")

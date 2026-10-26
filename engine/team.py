@@ -270,18 +270,38 @@ def fake_files(folder: str | Path, since: float = 0.0, limit: int = 2000) -> lis
     return out
 
 
+SOLO_BRIEF = ("Do the team goal yourself, start to finish, in the project folder, with your tools - make the files it "
+              "asks for. Then check the result (open it, list it, run it) and post what you made to the team board.")
+
+
+def plan_file(team: dict) -> str:
+    """This team's own plan, in the project folder (2026-10-25: every team shared one TEAM_PLAN.md, and a voice job
+    on the Mac 'implemented' an older team's Forge plan instead of its own goal)."""
+    return "team_plans/%s.md" % team["id"]
+
+
+def brief(team: dict, role: str) -> str:
+    spec = ROLES[role]
+    if role == "builder" and "architect" not in team.get("roles", []):
+        return SOLO_BRIEF
+    return spec["brief"].replace("TEAM_PLAN.md", plan_file(team))
+
+
 def agent_prompt(team: dict, role: str, extra: str = "") -> str:
     spec = ROLES[role]
     mates = ", ".join(ROLES[r]["name"] for r in team["roles"] if r != role)
     parts = [
         "You are the %s on a LOKI agent team (team %s)." % (spec["name"], team["id"]),
         "Team goal: %s" % team["goal"],
-        "Your teammates: %s. Talk to them on the team board: team_read to see it, team_post to "
-        "add a note (to='all' or a role name)." % mates,
-        "Your job: %s" % spec["brief"],
+        ("Your teammates: %s. Talk to them on the team board: team_read to see it, team_post to "
+         "add a note (to='all' or a role name)." % mates) if mates else
+        "You work alone on this goal; post what you made with team_post.",
+        "Your job: %s" % brief(team, role),
+        "Work only on THIS team's goal. TEAM_PLAN.md, team_board.md and other files in team_plans/ are from earlier "
+        "teams - ignore them unless the goal names them.",
     ]
     if team.get("method") == "sparc" and role in SPARC_PHASES:
-        parts.append(SPARC_PHASES[role])
+        parts.append(SPARC_PHASES[role].replace("TEAM_PLAN.md", plan_file(team)))
     history = board_text(team["id"])
     if history:
         parts.append("The team board so far:\n" + history)
@@ -436,7 +456,7 @@ class TeamRunner:
             "title": "Team %s · %s: %s" % (team["id"], spec["name"], team["goal"][:50]),
             "prompt": agent_prompt(team, role, extra), "team": team["id"],
             "profile": {"name": spec["name"], "role": role,
-                        "instructions": _with_playbook(role, spec["brief"])},
+                        "instructions": _with_playbook(role, brief(team, role))},
         })
         return job["id"]
 
