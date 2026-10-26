@@ -87,6 +87,17 @@ check("a provider out of credit (402) is benched for hours, a daily cap for 12 h
       and provider_speed.mark_out(_d, "groq", "HTTP 429 rate limit") == 600
       and provider_speed.mark_out(_d, "x", "connection reset") == 0)
 check("... and the next jobs start on the others", provider_speed.order(_d, ["openrouter", "nvidia", "nemo"])[0] == "nvidia")
+_d2 = TMP / "speed2"
+provider_speed.mark_out(_d2, "groq", "Request too large for model on input tokens per minute (ITPM): Limit 7000")
+provider_speed.mark_out(_d2, "gemini", "Too Many Requests: RESOURCE_EXHAUSTED")
+provider_speed.record(_d2, "nvidia", 300)
+_o = provider_speed.order(_d2, ["groq", "nvidia", "gemini", "local"], keep=("local",))
+check("providers that said they are out (Groq's per-minute cap, Gemini's quota) are left off; slow ones go last; "
+      "the local model always stays", _o == ["local", "nvidia"], _o)
+check("... but if every one is out, they are all still tried", provider_speed.order(_d2, ["groq", "gemini"]) == ["groq", "gemini"])
+provider_speed.record(_d2, "gemini", 5)
+check("... and one that answers again is back", "gemini" in provider_speed.order(_d2, ["groq", "gemini"]) and
+      not provider_speed.is_out(_d2, "gemini"))
 os.environ["LOKI_TEAM_SOLO"] = "off"
 check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
 os.environ.pop("LOKI_TEAM_SOLO")

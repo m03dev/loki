@@ -9202,8 +9202,12 @@ except OSError:
 
 
 def _oc_providers(first: str) -> dict:
-    """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider."""
+    """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider - and
+    this computer's local model always among them (it never runs out; 2026-10-26: with every free tier spent, jobs
+    stopped after six online routes and the local model was never asked)."""
     order, seen = [first] + [p for p in SMART_ORDER if p != first] + [n for n in MODELS if n not in SMART_ORDER], set()
+    local = next((n for n in LOCAL_PROVIDERS if n in MODELS and provider_configured(n)
+                  and str(MODELS[n].base_url or "").startswith("http")), "")
     out = {}
     for name in order:
         if name in seen or name not in MODELS:
@@ -9215,14 +9219,15 @@ def _oc_providers(first: str) -> dict:
             continue
         model = resolve_local_model(name) if "11434" in base else cfg.model
         out[name] = {"base_url": base, "model": model, "key": str(cfg.api_key or "")}
-        if len(out) >= 6:
-            break
-    try:   # a provider that crawled in the last 45 min goes last (engine/provider_speed.py)
+    try:   # crawling ones go last, ones that said they are out are left off (engine/provider_speed.py)
         import provider_speed  # pylint: disable=import-outside-toplevel
-        out = {n: out[n] for n in provider_speed.order(DATA_DIR, list(out))}
+        out = {n: out[n] for n in provider_speed.order(DATA_DIR, list(out), keep=(local,))}
     except Exception:  # noqa: BLE001
         pass
-    return out
+    names = list(out)[:6]
+    if local and local in out and local not in names:
+        names = names[:5] + [local]
+    return {n: out[n] for n in names}
 
 
 def engine_status() -> dict:

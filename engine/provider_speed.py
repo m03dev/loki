@@ -36,6 +36,7 @@ def record(data_dir, provider: str, step_s: float, now: float | None = None) -> 
     entry = data.get(provider) or {}
     slow = step_s > SLOW_S
     entry.update(t=now or time.time(), last_step_s=round(float(step_s), 1))
+    entry.pop("out", None)                  # it answered: whatever it said before is over
     if slow:
         entry["slow_until"] = (now or time.time()) + COOL_S
     elif step_s < SLOW_S / 2:
@@ -58,6 +59,10 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
         hold = 6 * 3600.0
     elif "per-day" in text or "per day" in text or "daily" in text:
         hold = 12 * 3600.0
+    elif "request too large" in text or "tokens per minute" in text:
+        hold = 12 * 3600.0          # Groq's free tier: OpenCode's prompt alone is over its per-minute limit
+    elif "resource_exhausted" in text or "too many requests" in text or "quota" in text:
+        hold = 3600.0               # Gemini's free quota
     elif "429" in text or "rate limit" in text:
         hold = 10 * 60.0
     else:
@@ -76,12 +81,22 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
     return hold
 
 
+def is_out(data_dir, provider: str, now: float | None = None) -> bool:
+    """Benched because it said it is out (credit, a daily or per-minute cap) - not merely slow."""
+    entry = _load(data_dir).get(provider) or {}
+    return bool(entry.get("out")) and float(entry.get("slow_until") or 0) > (now or time.time())
+
+
 def is_slow(data_dir, provider: str, now: float | None = None) -> bool:
     entry = _load(data_dir).get(provider) or {}
     return float(entry.get("slow_until") or 0) > (now or time.time())
 
 
-def order(data_dir, names: list, now: float | None = None) -> list:
-    """The same providers, the slow ones moved to the end (kept: better slow than nothing)."""
+def order(data_dir, names: list, now: float | None = None, keep=()) -> list:
+    """The same providers: the slow ones moved to the end (better slow than nothing), the ones that said they are
+    OUT left off (they would only fail again - 2026-10-26: every job still tried two daily-capped routes first).
+    `keep` (the local model) is never left off. If everything is out, all are kept (something must be tried)."""
+    live = [n for n in names if n in keep or not is_out(data_dir, n, now)] or list(names)
+    names = live
     fast = [n for n in names if not is_slow(data_dir, n, now)]
     return fast + [n for n in names if n not in fast]
