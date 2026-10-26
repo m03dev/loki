@@ -147,6 +147,9 @@ if loki:
     check("OpenCode got LOKI's config file and the keys as env vars", calls and calls[0]["config"].endswith("opencode.json")
           and "LOKI_OC_KEY_GROQ" in calls[0]["keys"])
     written = (Path(loki.DATA_DIR) / "opencode" / "opencode.json").read_text()
+    _lim = next(iter(json.loads(written)["provider"]["loki-groq"]["models"].values()))["limit"]
+    check("each model asks for a modest output (8192), not OpenCode's 32000 that free OpenRouter credit refuses",
+          _lim["output"] == 8192 and _lim["context"] >= 32768, _lim)
     check("the config on disk has no key in it", "gk-test" not in written and "{env:LOKI_OC_KEY_GROQ}" in written)
     check("the window saw the tool as it ran", any(e == "tool" and "bash" in t for e, t in events)
           and any(e == "tool_result" for e, _ in events))

@@ -12,3 +12,6 @@ python-pptx>=1.0.0
 pypdf>=5.0.0
 # arrays for the sandbox, forecasting and the anyCreature view renderer (engine/anycreature.py)
 numpy>=1.26
+# 3D from a picture through a free Hugging Face Space (TRELLIS) when this computer has no 3D model of its own -
+# without it make_3d fell back to the flat "lift" (2026-10-25: the Mac's fox came out as a puffed cut-out)
+gradio_client>=1.3

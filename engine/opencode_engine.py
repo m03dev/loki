@@ -199,7 +199,12 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
             "npm": "@ai-sdk/openai-compatible",
             "name": "LOKI: " + name,
             "options": {"baseURL": base.rstrip("/"), "apiKey": "{env:%s}" % key_env(name)},
-            "models": {str(p.get("model")): {"name": str(p.get("model"))}},
+            # a modest output cap: OpenCode otherwise asks for 32000 tokens a reply, and OpenRouter refuses that
+            # on a free-credit account (2026-10-25: the PC's hand-off job failed "requested 32000 max_tokens, can
+            # afford 3133" before it ever reached make_image). LOKI_OC_MAX_OUTPUT raises it.
+            "models": {str(p.get("model")): {"name": str(p.get("model")), "limit": {
+                "context": int(p.get("context") or (32768 if "11434" in base else 128000)),
+                "output": int(os.environ.get("LOKI_OC_MAX_OUTPUT", "8192") or 8192)}}},
         }
     cfg: dict = {"$schema": "https://opencode.ai/config.json", "provider": prov,
                  "permission": {"edit": "deny" if plan else "allow", "read": "allow", "glob": "allow", "grep": "allow",
