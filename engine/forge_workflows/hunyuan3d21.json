@@ -1,0 +1,146 @@
+{
+ "name": "hunyuan3d21",
+ "label": "Hunyuan3D 2.1 shape (owner-installed)",
+ "license": "Tencent Hunyuan 3D 2.1 Community License - NOT open source: EU/UK/KR excluded, >1M MAU needs Tencent's permission, output must not train other AI models. Owner-installed only; nothing of it is in LOKI.",
+ "sources": [
+  "https://comfy.org/workflows/3d_hunyuan3d-v2.1-bf82f1e42e83/",
+  "https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1"
+ ],
+ "about": "ComfyUI's own Hunyuan3D 2.1 template (native nodes, shape only): ImageOnlyCheckpointLoader -> CLIPVisionEncode(center) -> Hunyuan3Dv2Conditioning -> ModelSamplingAuraFlow(1) -> KSampler(30, cfg 5, euler, normal) on EmptyLatentHunyuan3Dv2(4096) -> VAEDecodeHunyuan3D(8000, 256) -> VoxelToMesh(surface net, 0.6) -> SaveGLB. ComfyUI's memory management fits it on the PC's 8 GB card.",
+ "nodes": {
+  "image": "2",
+  "sampler": "7",
+  "decode": "9",
+  "mesh": "10",
+  "save": "11",
+  "latent": "6"
+ },
+ "models": [
+  {
+   "file": "hunyuan_3d_v2.1.safetensors",
+   "folder": "checkpoints",
+   "url": "https://huggingface.co/Comfy-Org/hunyuan3D_2.1_repackaged/resolve/main/hunyuan_3d_v2.1.safetensors",
+   "repo": "Comfy-Org/hunyuan3D_2.1_repackaged",
+   "for": [
+    "hunyuan"
+   ]
+  }
+ ],
+ "api": {
+  "1": {
+   "class_type": "ImageOnlyCheckpointLoader",
+   "inputs": {
+    "ckpt_name": "hunyuan_3d_v2.1.safetensors"
+   }
+  },
+  "2": {
+   "class_type": "LoadImage",
+   "inputs": {
+    "image": "x.png"
+   }
+  },
+  "3": {
+   "class_type": "CLIPVisionEncode",
+   "inputs": {
+    "clip_vision": [
+     "1",
+     1
+    ],
+    "image": [
+     "2",
+     0
+    ],
+    "crop": "center"
+   }
+  },
+  "4": {
+   "class_type": "Hunyuan3Dv2Conditioning",
+   "inputs": {
+    "clip_vision_output": [
+     "3",
+     0
+    ]
+   }
+  },
+  "5": {
+   "class_type": "ModelSamplingAuraFlow",
+   "inputs": {
+    "model": [
+     "1",
+     0
+    ],
+    "shift": 1.0
+   }
+  },
+  "6": {
+   "class_type": "EmptyLatentHunyuan3Dv2",
+   "inputs": {
+    "resolution": 4096,
+    "batch_size": 1
+   }
+  },
+  "7": {
+   "class_type": "KSampler",
+   "inputs": {
+    "model": [
+     "5",
+     0
+    ],
+    "seed": 1234,
+    "steps": 30,
+    "cfg": 5.0,
+    "sampler_name": "euler",
+    "scheduler": "normal",
+    "positive": [
+     "4",
+     0
+    ],
+    "negative": [
+     "4",
+     1
+    ],
+    "latent_image": [
+     "6",
+     0
+    ],
+    "denoise": 1.0
+   }
+  },
+  "9": {
+   "class_type": "VAEDecodeHunyuan3D",
+   "inputs": {
+    "samples": [
+     "7",
+     0
+    ],
+    "vae": [
+     "1",
+     2
+    ],
+    "num_chunks": 8000,
+    "octree_resolution": 256
+   }
+  },
+  "10": {
+   "class_type": "VoxelToMesh",
+   "inputs": {
+    "voxel": [
+     "9",
+     0
+    ],
+    "algorithm": "surface net",
+    "threshold": 0.6
+   }
+  },
+  "11": {
+   "class_type": "SaveGLB",
+   "inputs": {
+    "mesh": [
+     "10",
+     0
+    ],
+    "filename_prefix": "loki/hunyuan"
+   }
+  }
+ }
+}

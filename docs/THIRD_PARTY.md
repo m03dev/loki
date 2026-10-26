@@ -103,3 +103,11 @@ remove or rewrite them as well before LOKI is ever published.
 | model weights for Render Studio (downloaded by the user, never in the repo) | [VACE_Skyreels_V3_R2V_Merge-GGUF](https://huggingface.co/mickmumpitz/VACE_Skyreels_V3_R2V_Merge-GGUF) (no licence stated; parents: Wan2.1-VACE-14B and Phantom apache-2.0, SkyReels-V3-R2V-14B Skywork Community License), Wan 2.1 umt5 text encoder + VAE ([Comfy-Org/Wan_2.1_ComfyUI_repackaged](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged)), Z-Image Turbo ([Comfy-Org/z_image_turbo](https://huggingface.co/Comfy-Org/z_image_turbo)), [Z-Image-Turbo-Fun-Controlnet-Union](https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union) | see docs/AI_RENDERER.md section 5 |
 | `engine/vendor_subagents/` | [shinpr/sub-agents-skills](https://github.com/shinpr/sub-agents-skills) @ `3c6cbf8`: the agent-file loader and external CLI backends, vendored unchanged; `engine/agent_defs.py` and `engine/subagents/*.md` follow its agent format | MIT - `engine/licenses/sub-agents-skills-MIT.txt` |
 | `engine/skill_learning.py`, `engine/subagent.py` (design only, no code copied) | [CopilotKit/OpenDots](https://github.com/CopilotKit/OpenDots) @ `8091324`: per-agent learning containers, skills delivered only once published, a skill catalog + load_skill, no claim without tool evidence | MIT - `engine/licenses/OpenDots-MIT.txt` |
+
+## Not in LOKI, used from it
+
+- **Hunyuan3D 2.1** (Tencent): owner-installed only (tools/setup_hunyuan3d.py). Tencent Hunyuan 3D 2.1 Community
+  License - not open source (EU/UK/KR excluded, >1M MAU needs Tencent, output must not train other models). LOKI only
+  sends HTTP / ComfyUI requests (engine/forge_hunyuan.py); models it makes carry `no_training` and the licence.
+- **CC0 assets** (engine/free_assets.py): Poly Haven (API terms: own User-Agent, "Powered by Poly Haven" credit),
+  ambientCG. Downloaded per user into the workspace, never committed.

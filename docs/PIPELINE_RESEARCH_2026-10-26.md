@@ -75,3 +75,36 @@ No mature open "art director -> technical artist -> 3D artist" framework exists;
 Hunyuan3D-2 / 2.1 / Paint / HunyuanWorld (Tencent community licence: EU/UK/KR excluded), SPAR3D and SV3D
 (Stability), FLUX.1-dev / Kontext-dev / Fill-dev / FLUX.2 klein 9B / FLUX.2-dev Fun ControlNet, Qwen-Image-2.1 and
 its LoRAs, InsightFace models, Zero123++ (so InstantMesh), StdGEN, RMBG-1.4 / 2.0, nvdiffrast / nvdiffrec.
+
+## Afternoon update (2026-10-26, owner: "add hunyuan3d-2.1 ... blender toolkit ... more open resources for free")
+
+Three research passes (sources in the session; GitHub/HF pages partly blocked, so "unverified" marks stay).
+
+**Hunyuan3D** - 2.1 (Jun 2025) is still the newest with downloadable weights; 2.5 / 3.0 / 3.1 / PolyGen are API-only
+(paid). Licence (read from the repo): Tencent Hunyuan 3D 2.1 Community License - same terms for code and weights,
+not valid in the EU/UK/South Korea, >1M MAU needs Tencent, 5.b: its output must not improve any other AI model, 3.e:
+a product built on it must say Tencent does not endorse it. => **owner-installed backend only**
+(engine/forge_hunyuan.py, tools/setup_hunyuan3d.py; nothing of it in LOKI) and its output is kept out of LOKI's
+training (experience.build_dataset skips "no_training"). 8 GB route: ComfyUI's native 2.1 shape nodes (official
+template, engine/forge_workflows/hunyuan3d21.json); the official api_server needs ~10 GB for shape and its
+--low_vram_mode only empties the cache. Texture: 2.1 PBR (21 GB) unproven at 8 GB - the 2.0 Paint(-Turbo) model via
+kijai's ComfyUI-Hunyuan3DWrapper is the 8 GB option (not wired yet).
+
+**Blender** - LOKI's own toolkit in the Blender core (engine/blender_scripts/loki_blender_core.py): import, cleanup,
+normalize, decimate, remesh (voxel / QuadriFlow), uv (only where missing - an AI model's own UVs carry its texture),
+shade, stage (PBR Neutral view transform: matches glTF viewers/Godot, keeps emission saturated), render, export,
+lods, turntable; blender_link.polish() chains them. Verified on the PC (Blender 5.2.3). "Blender toolkit" the owner
+named is most likely Dev-GOM's blender-toolkit Claude plugin (licence not stated - check before using). Second MCP:
+dcc-mcp-blender (MIT, ~205 tools; Blender 5.x unverified) - added opt-in. Official Blender Lab MCP (GPL-3.0, 26
+tools, Blender 5.1+) - optional. Avoid: Quad Remesher, Auto-Rig Pro (paid), Blender MCP Pro.
+
+**Free assets (CC0, commercial, no attribution for the assets)** - Poly Haven (API; LOKI's User-Agent + "Powered by
+Poly Haven" credit), ambientCG (API), Kenney, Quaternius, KayKit (no API). engine/free_assets.py (search/download,
+sidecar with licence + credit) - verified against the real APIs from the PC. Mixed: Poly Pizza (CC0 vs CC-BY per
+model), OpenGameArt, Freesound (has NC). Avoid for agents: Mixamo (no redistribution, no ML training), BlendKit RF
+assets in the public repo.
+
+**Next candidates** - UniRig (MIT code, weights licence unstated - check), gltfpack/meshoptimizer (MIT) for game
+export, glTF-Validator (Apache), Basis/KTX2 (Apache), PyMeshLab (GPL) and manifold3d (Apache) for repair, xatlas
+(MIT) for packing. More traps found: OmniPart (NVIDIA PartField + RMBG-2.0 in its NOTICE), PartPacker (NVIDIA NC),
+HY-Motion (Hunyuan licence), SMPL-based text-to-motion, Kimodo (NVIDIA Open Model License + bundled Llama terms).

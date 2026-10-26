@@ -407,8 +407,11 @@ def build_dataset(out_dir: Path, tool_schemas: dict, holdout: float = 0.1, seed:
     schemas of the tools it actually used, so the model learns the real call format.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    seen, rows = set(), []
+    seen, rows, skipped = set(), [], 0
     for item in trajectories(root):
+        if re.search(r'no_training\W{0,4}:\s*true', json.dumps(item)):   # also inside a tool's JSON text
+            skipped += 1              # e.g. Hunyuan3D output: its licence (5.b) forbids improving other models with it
+            continue
         key = hashlib.sha1(item.get("goal", "").strip().lower().encode()).hexdigest()
         if key in seen:
             continue
@@ -422,7 +425,7 @@ def build_dataset(out_dir: Path, tool_schemas: dict, holdout: float = 0.1, seed:
         with open(out_dir / name, "w", encoding="utf-8") as fh:
             for row in part:
                 fh.write(json.dumps(row) + "\n")
-    info = {"train": len(train_rows), "eval": len(eval_rows), "built": time.time()}
+    info = {"train": len(train_rows), "eval": len(eval_rows), "built": time.time(), "skipped_no_training": skipped}
     (out_dir / "dataset.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
     return info
 

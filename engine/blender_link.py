@@ -269,6 +269,57 @@ def build_render_export(code: str, scene: str, out_dir: Path, stem: str, width: 
     return res
 
 
+def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float = 2.0, target: int = 20000,
+           style: str = "studio", lods=(1.0, 0.5, 0.2), turntable: int = 0, remesh: float = 0.0, **kw) -> dict:
+    """AI model -> usable asset, in its own scene: import, cleanup, normalize (size m), [voxel remesh], decimate to
+    `target` triangles, UVs only where missing (an AI model's own UVs carry its texture), smooth shading, a staged
+    render, .glb + .blend, LODs, optional turntable. Checked on the PC 2026-10-26 (Blender 5.2.3) with a Forge model:
+    32.8k -> 20k triangles, textures kept, 16 s render."""
+    import out_names  # pylint: disable=import-outside-toplevel
+    model = Path(model)
+    stem_text = name or out_names.display_name(model.name) + " polished"
+    sc = ("LOKI " + stem_text)[:60]
+    png = out_names.path(Path(out_dir) / "renders", stem_text, "png")
+    glb = out_names.path(Path(out_dir) / "models", stem_text, "glb")
+    blend = glb.with_suffix(".blend")
+    cmds = [{"type": "clear", "params": {"scene": sc}},
+            {"type": "import", "params": {"scene": sc, "path": str(model)}},
+            {"type": "cleanup", "params": {"scene": sc}},
+            {"type": "normalize", "params": {"scene": sc, "size": size}}]
+    if remesh:
+        cmds.append({"type": "remesh", "params": {"scene": sc, "voxel": remesh}})
+    cmds += [{"type": "decimate", "params": {"scene": sc, "target": target}},
+             {"type": "uv", "params": {"scene": sc, "mode": "missing"}},
+             {"type": "shade", "params": {"scene": sc}},
+             {"type": "stage", "params": {"scene": sc, "style": style}},
+             {"type": "render", "params": {"scene": sc, "path": str(png), "width": 1280, "height": 1280}},
+             {"type": "export", "params": {"scene": sc, "path": str(glb)}},
+             {"type": "export", "params": {"scene": sc, "path": str(blend)}}]
+    if lods:
+        cmds.append({"type": "lods", "params": {"scene": sc, "stem": str(glb.with_suffix("")), "ratios": list(lods)}})
+    if turntable:
+        cmds.append({"type": "turntable", "params": {"scene": sc, "frames": int(turntable),
+                                                     "folder": str(png.with_suffix("")) + "_turntable"}})
+    cmds.append({"type": "scene_info", "params": {"scene": sc}})
+    res = run(cmds, name=stem_text, **kw)
+    res["files"] = {"render": str(png), "models": [str(glb), str(blend)]}
+    if turntable and res.get("ok"):
+        res["files"]["turntable"] = turntable_mp4(Path(str(png.with_suffix("")) + "_turntable"))
+    return res
+
+
+def turntable_mp4(folder: Path, fps: int = 24) -> str:
+    """frame_0001.png ... -> <folder>.mp4 with ffmpeg when it is installed ("" otherwise; the frames stay)."""
+    ff = shutil.which("ffmpeg")
+    if not ff or not any(Path(folder).glob("frame_*.png")):
+        return ""
+    out = Path(str(folder) + ".mp4")
+    proc = subprocess.run([ff, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(Path(folder) / "frame_%04d.png"),
+                           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "veryfast", str(out)],
+                          capture_output=True, text=True, timeout=300)
+    return str(out) if proc.returncode == 0 and out.is_file() else ""
+
+
 def proof(workspace: str | Path | None = None, **kw) -> dict:
     """The check: a low-poly campfire made from scratch (engine/blender_scripts/campfire.py), rendered and exported."""
     ws = Path(workspace or os.environ.get("LOKI_WORKSPACE") or Path.home() / "LOKI Projects" / "Home")
@@ -300,9 +351,14 @@ TOOL = {"name": "blender",
                        "bpy, bmesh ready; build with bpy.data / bmesh, link objects to scene.collection, set "
                        "scene.camera) - then it is rendered to renders/ and exported to models/ (.glb + .blend), named "
                        "after `name`. action=run: `commands` = a list of {type: python|render|export|scene_info, "
-                       "params} for anything else. action=status: is Blender there, is the MCP add-on on.",
+                       "params} - toolkit types: import, cleanup, normalize, decimate, remesh, uv, shade, stage, "
+                       "render, export, lods, turntable, scene_info, clear. action=polish: `path` = an AI model "
+                       "(.glb/.obj/.fbx from make_3d) -> cleaned, sized, decimated to `target` tris, staged render "
+                       "+ .glb/.blend + LODs (+ `turntable` frames -> mp4). action=status: is Blender there.",
         "inputSchema": {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["make", "run", "status"]},
+            "action": {"type": "string", "enum": ["make", "run", "polish", "status"]},
+            "path": {"type": "string"}, "target": {"type": "integer"}, "turntable": {"type": "integer"},
+            "style": {"type": "string", "enum": ["studio", "night", "outdoor"]},
             "name": {"type": "string"}, "code": {"type": "string"}, "scene": {"type": "string"},
             "width": {"type": "integer"}, "height": {"type": "integer"},
             "commands": {"type": "array", "items": {"type": "object"}}}, "required": ["action"]}}
@@ -315,6 +371,17 @@ def tool(args: dict, cwd: Path) -> dict:
         return {"ok": True, **status()}
     if act == "run":
         return run(list(a.get("commands") or []), name=str(a.get("name") or "run"))
+    if act == "polish":
+        p = Path(str(a.get("path") or ""))
+        p = p if p.is_absolute() else Path(cwd) / p
+        if not p.is_file():
+            return {"ok": False, "error": "no model at %s (path= a .glb/.obj/.fbx in this folder)" % p}
+        res = polish(p, Path(cwd), str(a.get("name") or ""), target=int(a.get("target") or 20000),
+                     style=str(a.get("style") or "studio"), turntable=int(a.get("turntable") or 0))
+        if res.get("ok"):
+            res["made"] = [x for x in [res["files"]["render"]] + res["files"]["models"] + [res["files"].get("turntable", "")]
+                           if x and Path(x).is_file()]
+        return res
     code = str(a.get("code") or "")
     if not code.strip():
         return {"ok": False, "error": "give the Blender Python that builds the model (code)"}

@@ -25,7 +25,12 @@ Backends, best first ("auto"):
            closed mesh (distance field -> round profile, front and back meeting at the outline,
            outline smoothed), vertex colours sampled from the picture. Written by write_glb below.
 
-No model with a non-commercial or region-restricted licence is used (no Hunyuan3D, no Stable Fast 3D).
+  hunyuan  Hunyuan3D 2.1 (engine/forge_hunyuan.py) - ONLY when the owner installed it on their own machine and
+           accepted its licence (Tencent community licence: not open source, EU/UK/KR excluded, its output must not
+           train other models - the sidecar says "no_training"). None of it ships with LOKI; "auto" uses it first
+           when it is ready, because the owner asked for it (2026-10-26).
+
+No other model with a non-commercial or region-restricted licence is used (no Stable Fast 3D).
 Standard library + Pillow (engine/requirements.txt). Jobs run in a thread; start_job()/job() for the API.
 """
 from __future__ import annotations
@@ -46,7 +51,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNNERS = Path(__file__).resolve().parent / "runners"
-BACKENDS = ("auto", "pixal3d", "trellis2", "triposr", "online", "lift")
+BACKENDS = ("auto", "hunyuan", "pixal3d", "trellis2", "triposr", "online", "lift")
 COMFY_BACKENDS = ("pixal3d", "trellis2")
 MODEL_EXTS = (".glb", ".obj", ".png", ".ptex", ".level")   # what the file route serves from models/ (.level: Forge's Level workspace)
 SAVE_EXTS = MODEL_EXTS
@@ -144,8 +149,16 @@ def comfy_ready(mode: str) -> bool:
         return False
 
 
+def hunyuan_ready() -> bool:
+    try:
+        import forge_hunyuan  # pylint: disable=import-outside-toplevel
+        return forge_hunyuan.ready()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def status() -> dict:
-    return {"pixal3d": comfy_ready("pixal3d"), "trellis2": comfy_ready("trellis2"),
+    return {"hunyuan": hunyuan_ready(), "pixal3d": comfy_ready("pixal3d"), "trellis2": comfy_ready("trellis2"),
             "triposr": triposr_ready(), "online": online_ready(), "lift": True, "options": OPTIONS,
             "rembg": importlib.util.find_spec("rembg") is not None,
             "space": os.environ.get("LOKI_FORGE_SPACE", DEFAULT_SPACE),
@@ -158,7 +171,8 @@ def plan(backend: str = "auto") -> list:
     if backend not in BACKENDS:
         raise ForgeError("unknown backend %r (%s)" % (backend, ", ".join(BACKENDS)))
     if backend == "auto":
-        order = [b for b in COMFY_BACKENDS if comfy_ready(b)][:1]   # the other ComfyUI mode would fail the same way
+        order = ["hunyuan"] if hunyuan_ready() else []            # owner-installed only (see the docstring)
+        order += [b for b in COMFY_BACKENDS if comfy_ready(b)][:1]   # the other ComfyUI mode would fail the same way
         order += [b for b, ok in (("triposr", triposr_ready()), ("online", online_ready())) if ok]
     else:
         order = [backend] if backend != "lift" else []
@@ -761,6 +775,12 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         cut_png = cut_dir / (base.name + "-cutout.png")
         cut.save(cut_png)
         def _run(name):
+            if name == "hunyuan":
+                import forge_hunyuan  # pylint: disable=import-outside-toplevel
+                try:
+                    return forge_hunyuan.run(cut_png, base, opts or clean_options())
+                except forge_hunyuan.HunyuanError as exc:
+                    raise ForgeError(str(exc)) from None
             if name in COMFY_BACKENDS:
                 import forge_trellis  # pylint: disable=import-outside-toplevel
                 try:
@@ -832,6 +852,9 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         if verdict is not None:
             meta["judge"] = {k: v for k, v in verdict.items() if k != "views"}   # the score, not the paths
             meta["judged"] = retried
+        for k in ("licence", "licence_url", "no_training"):   # e.g. Hunyuan3D: its licence travels with the model
+            if result.get(k):
+                meta[k] = result[k]
         (cut_dir / (glb.name + ".json")).write_text(json.dumps(meta, indent=1), encoding="utf-8")
         say("done", 1.0)
         out = {"ok": True, "glb": str(glb), "obj": str(result.get("obj") or ""), "backend": used, "meta": meta,

@@ -165,6 +165,17 @@
       },
       "cwd": "${LOKI_DATA}",
       "note": "MCP for Blender (github.com/ahujasid/mcp-for-blender, MIT), pinned to the vendored add-on's commit febcd90 - server and add-on must speak the same protocol (15). Starts when Blender is installed on this machine; the add-on (contrib/blender_mcp, installed by `python engine/blender_link.py setup`) listens on 9876 while Blender is open. Telemetry off, paid generators never switched on."
+    },
+    "blender_dcc": {
+      "command": "uvx",
+      "args": [
+        "dcc-mcp-blender"
+      ],
+      "requires_cmd": "uvx",
+      "requires_check": "blender_link.find_blender",
+      "enabled": false,
+      "cwd": "${LOKI_DATA}",
+      "note": "dcc-mcp-blender (github.com/loonghao/dcc-mcp-blender, MIT): ~205 typed Blender tools (mesh, UV, rigging, materials, render). Needs its own Blender extension installed; Blender 5.x support unverified. Opt in with LOKI_MCP_ENABLE=blender_dcc after LOKI_TASKS checks it on the PC."
     }
   }
 }

@@ -326,6 +326,12 @@ def make_video(args: dict, cwd: Path, make=None) -> dict:
     return res if isinstance(res, dict) else {"ok": False, "error": "no answer"}
 
 
+try:   # CC0 assets: Poly Haven, ambientCG (engine/free_assets.py)
+    import free_assets as _assets  # noqa: E402
+    TOOLS.append(_assets.TOOL)
+except Exception:  # noqa: BLE001
+    _assets = None
+
 try:   # Blender: build, render, export (engine/blender_link.py) - window or background
     import blender_link as _blender  # noqa: E402
     TOOLS.append(_blender.TOOL)
@@ -349,6 +355,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
                                                                    str((a or {}).get("search") or ""),
                                                                    int((a or {}).get("limit") or 40)),
           "blender": (lambda a, cwd: _blender.tool(a or {}, cwd)) if _blender else None,
+          "free_assets": (lambda a, cwd: _assets.tool(a or {}, cwd)) if _assets else None,
           "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:

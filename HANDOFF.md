@@ -40,6 +40,10 @@ Blender never sees them. Design (engine/blender_link.py docstring): a permanent 
 changes - fixes are a file write, never a restart; the core runs jobs in their own scene in a window + 3D-view
 context, a watchdog keeps the MCP add-on + socket on; with no window, run() uses a background Blender. Proven on
 the PC 2026-10-26: switched over live, core hot-reloaded .2 -> .3, campfire rendered (EEVEE, 3 s) + .glb + .blend.
+3D afternoon (2026-10-26): Blender toolkit in the core (import/cleanup/normalize/decimate/remesh/uv/shade/stage/render/
+export/lods/turntable) + blender_link.polish() - verified on the PC (Forge character 32.8k->20k tris textures kept;
+Poly Haven cannon 41k->15k). free_assets.py (Poly Haven + ambientCG, CC0) verified against the real APIs from the PC.
+Hunyuan3D 2.1 = owner-installed Forge backend (forge_hunyuan.py; ComfyUI native nodes on 8 GB), not accepted yet.
 Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home preview or a chat picture -> big, ‹ › / ← →
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
