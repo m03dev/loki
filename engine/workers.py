@@ -301,6 +301,11 @@ def prepare_workspace(job: dict, data_dir: Path, runner=subprocess.run) -> tuple
     top = _git(["rev-parse", "--show-toplevel"], workspace, runner)
     if top.returncode != 0:
         return workspace, "git unavailable - working directly in " + workspace
+    head = _git(["rev-parse", "--verify", "--quiet", "HEAD"], workspace, runner)
+    if head.returncode != 0:
+        # a repo with no commit yet has no HEAD to branch from (the PC, 2026-10-26: every job sent to
+        # ~/LOKI Projects/Home failed at once with "fatal: invalid reference: HEAD") - work in the folder instead
+        return workspace, "git repository with no commits yet - working directly in " + workspace
     branch = "loki/job-" + job["id"]
     target = Path(data_dir) / "worktrees" / job["id"]
     target.parent.mkdir(parents=True, exist_ok=True)
