@@ -22,6 +22,14 @@ from pathlib import Path
 GENERAL_NEG = ("blurry, low resolution, jpeg artifacts, watermark, signature, text artifacts, extra fingers, "
                "deformed hands, bad anatomy, duplicated limbs, cropped, out of frame, oversaturated, muddy colors")
 STYLES = {
+    # Owner 2026-10-25 21:02: "who made the concept art its fantastic we need more like that, who ever made that is
+    # hired" - the red baby dragon by LOKI's builder (prompt) + FLUX.2 klein 4B on NVIDIA (picture). Its recipe:
+    "game-concept": ("game concept art, cinematic dramatic lighting, painterly fantasy style, detailed textures, "
+                     "glowing accents, rich warm color, atmospheric depth, 16:9 ultra wide", GENERAL_NEG),
+    # the same hand, for a subject that will become a sprite or a 3D model: alone, whole, readable, on plain white
+    "sprite-source": ("single subject, full body, centered, isolated on a plain flat white background, no scenery, "
+                      "no ground shadow, clean readable silhouette, game asset reference, painterly fantasy style, "
+                      "dramatic lighting, detailed", GENERAL_NEG + ", background scenery, multiple subjects, cut off"),
     "concept-art": ("professional concept art, matte painting, cinematic composition, dramatic volumetric lighting, "
                     "rich atmospheric depth, highly detailed, art station quality", GENERAL_NEG),
     "oil-painting": ("oil painting on canvas, visible confident brushstrokes, painterly, classical composition, "

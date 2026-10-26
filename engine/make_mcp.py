@@ -47,7 +47,10 @@ TOOLS = [
          "negative": {"type": "string"}, "upscale": {"type": "integer", "enum": [2, 4]},
          "pixel_size": {"type": "integer"}, "palette": {"type": "string"}}, "required": ["prompt"]}},
     {"name": "pixelize",
-     "description": "Turn a picture in this folder into real game pixel art (PixelOE's contrast-aware outlines + "
+     "description": "Turn a picture in this folder into real game pixel art. sprite=true for a GAME SPRITE: the "
+                    "subject is cut out (background removed), centred on transparency, its own colours, a dark "
+                    "1-px outline - use it for characters, props and creatures (a whole scene is for backgrounds "
+                    "only). Under the hood PixelOE's contrast-aware outlines + "
                     "per-patch downscale): size= the sprite's longer side in pixels (16-512, default 64), palette= "
                     "pico-8 | sweetie-16 | endesga-32 | gameboy | grayscale-4 | '#hex #hex ...', or colors= 2-256; "
                     "dither= none | floyd | bayer; outline= 0-4 (thickness of kept outlines); mode= contrast | center | "
@@ -55,10 +58,12 @@ TOOLS = [
                     "<name>-pixel<size>.png and an enlarged preview beside it.",
      "inputSchema": {"type": "object", "properties": {
          "image": {"type": "string"}, "size": {"type": "integer"}, "palette": {"type": "string"},
+         "sprite": {"type": "boolean"},
          "colors": {"type": "integer"}, "dither": {"type": "string", "enum": ["none", "floyd", "bayer"]},
          "outline": {"type": "integer"}, "mode": {"type": "string",
                                                    "enum": ["contrast", "center", "median", "k-centroid", "nearest"]}},
          "required": ["image"]}},
+    "MAKE_SPRITE",
     __import__("voice_studio").TOOL,
     __import__("toolshelf").TOOL,
     __import__("comfy_jobs").MUSIC_TOOL,
@@ -152,12 +157,59 @@ def pixelize(args: dict, cwd: Path) -> dict:
     try:
         res = pixel_art.pixelize(p, size=int(args.get("size") or 64), outline=int(args.get("outline", 2) or 0),
                                  mode=str(args.get("mode") or "contrast"), colors=int(args.get("colors") or 0),
-                                 palette=str(args.get("palette") or ""), dither=str(args.get("dither") or "none"))
+                                 palette=str(args.get("palette") or ""), dither=str(args.get("dither") or "none"),
+                                 sprite=str(args.get("sprite", "")).lower() in ("1", "true", "yes", "on"))
     except pixel_art.PixelError as exc:
         return {"ok": False, "error": str(exc)}
     res["file"] = os.path.relpath(res["file"], cwd)
     res["preview"] = os.path.relpath(res["preview"], cwd)
     return res
+
+
+def make_sprite(args: dict, cwd: Path, image_maker=None) -> dict:
+    """A game sprite in one step: from a picture here (image=), or drawn first from a description (prompt=) in the
+    'sprite-source' style - the subject alone on plain white, so it cuts out cleanly - then cut out, centred,
+    pixelized with its own colours and outlined. Saves the source in images/ and the sprite in sprites/."""
+    a = dict(args or {})
+    src = str(a.get("image") or "")
+    made = {}
+    if not src:
+        if not str(a.get("prompt") or "").strip():
+            return {"ok": False, "error": "describe the sprite (prompt) or give a picture (image)"}
+        made = (image_maker or make_image)({"prompt": a["prompt"], "style": "sprite-source", "width": 1024,
+                                            "height": 1024}, cwd)
+        if not made.get("ok"):
+            return made
+        src = made["files"][0]
+    p = (cwd / src).resolve()
+    if cwd.resolve() not in p.parents or not p.is_file():
+        return {"ok": False, "error": "no such picture in this folder: %s" % src}
+    import pixel_art  # pylint: disable=import-outside-toplevel
+    out_dir = inside(cwd, "", "sprites")
+    size = int(a.get("size") or 64)
+    try:
+        res = pixel_art.pixelize(p, out=out_dir / ("%s-sprite%d.png" % (p.stem, size)), size=size, sprite=True,
+                                 palette=str(a.get("palette") or ""), colors=int(a.get("colors") or 0),
+                                 outline=int(a.get("outline", 2) or 0))
+    except pixel_art.PixelError as exc:
+        return {"ok": False, "error": str(exc), "source": os.path.relpath(p, cwd)}
+    out = {"ok": True, "files": [os.path.relpath(res["file"], cwd), os.path.relpath(res["preview"], cwd)],
+           "source": os.path.relpath(p, cwd), "colors": res["colors"]}
+    if made:
+        out.update(backend=made.get("backend", ""), model=made.get("model", ""))
+    return out
+
+
+MAKE_SPRITE_TOOL = {"name": "make_sprite",
+                    "description": "Make a GAME SPRITE: prompt= what it is (it is drawn alone on a plain background "
+                                   "first, then cut out) or image= a picture here; size= 32-128 (default 64); palette= "
+                                   "optional (pico-8, endesga-32 ...). The subject is cut out, centred on transparency, "
+                                   "its own colours, a dark outline. Saves the source in images/ and the sprite in "
+                                   "sprites/ (plus an enlarged preview).",
+                    "inputSchema": {"type": "object", "properties": {
+                        "prompt": {"type": "string"}, "image": {"type": "string"}, "size": {"type": "integer"},
+                        "palette": {"type": "string"}, "colors": {"type": "integer"}}}}
+TOOLS[TOOLS.index("MAKE_SPRITE")] = MAKE_SPRITE_TOOL
 
 
 def voice(args: dict, cwd: Path) -> dict:
@@ -259,7 +311,7 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
           "pixelize": pixelize, "voice": voice, "toolshelf": toolshelf_call,
-          "make_music": make_music,
+          "make_music": make_music, "make_sprite": make_sprite,
           "render_scene": lambda a, cwd: __import__("render_agent").render(a or {}, cwd),
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
@@ -396,7 +448,7 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "voice": "voice", "shelf": "toolshelf", "music": "make_music", "library": "library",
-       "render": "render_scene", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+       "render": "render_scene", "sprite": "make_sprite", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 # what the first plain word means for each command (2026-10-25: `loki-make render models/x.glb` sent the file as the
@@ -422,7 +474,7 @@ def cli(argv: list, cwd: Path | None = None) -> int:
             args[a[2:].replace("-", "_")] = int(v) if v.isdigit() else v
         elif what in POSITIONAL:
             args.setdefault(POSITIONAL[what], a)
-        elif what in ("3d", "video") and (Path(cwd or os.getcwd()) / a).is_file():
+        elif what in ("3d", "video", "sprite") and (Path(cwd or os.getcwd()) / a).is_file():
             args.setdefault("image", a)          # loki-make 3d images/fox.jpg: a picture, not a description
         else:
             args.setdefault("prompt", a)

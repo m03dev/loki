@@ -109,8 +109,8 @@ for bad, kw in (("mode", {"mode": "blur"}), ("palette", {"palette": "#12"}), ("d
 
 # ------------------------------------------------------------------ where it is offered
 import make_mcp  # noqa: E402
-ws = TMP / "ws"
-(ws / "images").mkdir(parents=True)
+ws = TMP / "ws-sprite"
+(ws / "images").mkdir(parents=True, exist_ok=True)
 Image.open(pic).save(ws / "images" / "knight.png")
 got = make_mcp.call_tool("pixelize", {"image": "images/knight.png", "size": 32, "palette": "endesga-32"}, ws) \
     if hasattr(make_mcp, "call_tool") else make_mcp.pixelize({"image": "images/knight.png", "size": 32,
@@ -152,6 +152,54 @@ check("the chat's Pixel art button makes the sprite and hands back its preview",
 js = (REPO / "app" / "ui" / "chat_media.js").read_text()
 check("pictures in the chat have a Pixel art button", '"Pixel art"' in js and '"pixel"' in js)
 check("PixelOE's licence is kept", (REPO / "engine" / "licenses" / "PixelOE-Apache-2.0.txt").is_file())
+
+# ------------------------------------------------------------------ sprites: the subject, not the whole scene
+src = TMP / "creature-on-white.png"
+im = Image.new("RGB", (640, 480), (250, 250, 248))
+d = ImageDraw.Draw(im)
+d.ellipse((230, 150, 430, 380), fill=(170, 40, 35))           # body
+d.ellipse((380, 110, 470, 200), fill=(190, 60, 40))           # head
+d.polygon([(250, 200), (150, 120), (260, 260)], fill=(120, 30, 30))   # wing
+d.ellipse((420, 140, 440, 160), fill=(255, 210, 60))          # eye
+im.save(src)
+r = pa.pixelize(src, size=64, sprite=True, use_rembg=False)
+sp = np.asarray(Image.open(r["file"]).convert("RGBA"))
+check("sprite: square 64x64 around the subject, not the 640x480 scene", (r["width"], r["height"]) == (64, 64), r)
+check("sprite: transparent around the subject, solid inside", sp[0, 0, 3] == 0 and sp[-1, -1, 3] == 0
+      and sp[32, 32, 3] == 255 and 0.15 < (sp[..., 3] > 0).mean() < 0.85, (sp[..., 3] > 0).mean())
+edge = sp[..., 3] > 0
+inner = edge.copy()
+for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+    inner &= np.roll(np.roll(edge, dy, 0), dx, 1)
+rim = sp[edge & ~inner][:, :3].astype(int)
+check("sprite: a dark outline all round the silhouette", rim.size and rim.sum(1).mean() < 200, rim.sum(1).mean() if rim.size else 0)
+check("sprite: the subject's own colours (red), not white background", sp[edge & inner][:, 0].mean() > 100
+      and sp[edge & inner][:, 2].mean() < 90)
+check("sprite: named -sprite64 so it is not mistaken for a scene", r["file"].endswith("-sprite64.png") and r["sprite"])
+
+import make_mcp  # noqa: E402
+ws = TMP / "ws-sprite"
+(ws / "images").mkdir(parents=True, exist_ok=True)
+_seen = {}
+
+
+def _fake_image(a, cwd):
+    _seen.update(a)
+    dst = cwd / "images" / "new-creature.png"
+    Image.open(src).save(dst)
+    return {"ok": True, "files": ["images/new-creature.png"], "backend": "nvidia", "model": "flux.2-klein-4b"}
+
+
+out = make_mcp.make_sprite({"prompt": "a red baby dragon"}, ws, image_maker=_fake_image)
+check("make_sprite: draws the subject alone on plain white first ('sprite-source'), then the sprite in sprites/",
+      out["ok"] and _seen.get("style") == "sprite-source" and out["files"][0].startswith("sprites/")
+      and (ws / out["files"][0]).is_file() and out["source"] == "images/new-creature.png", out)
+check("make_sprite is a loki-make tool and `loki-make sprite` maps to it",
+      any(t["name"] == "make_sprite" for t in make_mcp.TOOLS) and make_mcp.CLI.get("sprite") == "make_sprite")
+import art_direction  # noqa: E402
+check("the hired concept-art recipe is a style (game-concept) and sprites get their own source style",
+      "painterly fantasy style" in art_direction.STYLES["game-concept"][0]
+      and "plain flat white background" in art_direction.STYLES["sprite-source"][0])
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

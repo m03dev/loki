@@ -316,9 +316,98 @@ def quantize(rgb, colors: int = 0, palette=None, dither: str = "none"):
     return rgb
 
 
+# ----------------------------------------------------------------------------- sprites
+# Owner 2026-10-25: "the pixel and 3d need work" - LOKI's first sprite was a whole 16:9 cave scene squeezed into
+# 64x36 and dithered: the dragon was gone. A game sprite is the SUBJECT: cut out, centred, transparent, a clean
+# outline, colours from the art itself.
+
+def subject_mask(rgba, use_rembg: bool = True):
+    """A float mask (0..1) of the subject: rembg when this computer has it, else the background flood-filled in
+    from the borders (works for the plain backgrounds a sprite prompt asks for)."""
+    np = _np()
+    from PIL import Image  # pylint: disable=import-outside-toplevel
+    a = np.asarray(rgba)
+    if a[..., 3].min() < 250:                               # already cut out
+        return a[..., 3].astype(np.float32) / 255.0
+    if use_rembg:
+        try:
+            import rembg  # pylint: disable=import-outside-toplevel
+            cut = np.asarray(rembg.remove(rgba.convert("RGB")).convert("RGBA"))
+            m = cut[..., 3].astype(np.float32) / 255.0
+            if 0.02 < (m > 0.5).mean() < 0.98:
+                return m
+        except Exception:  # noqa: BLE001 - not installed, or no model: the flood fill below
+            pass
+    small = rgba.convert("RGB")
+    k = 256 / max(small.size)
+    small = small.resize((max(8, round(small.width * k)), max(8, round(small.height * k))), Image.BILINEAR)
+    lab = lab_f(np.asarray(small, np.float32) / 255.0)
+    border = np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])
+    ref = np.median(border, axis=0)
+    dist = np.sqrt(((lab - ref) ** 2).sum(-1))
+    spread = np.sqrt(((border - ref) ** 2).sum(-1))
+    like_bg = dist < max(8.0, float(np.percentile(spread, 90)) * 1.6)
+    bg = np.zeros_like(like_bg)
+    bg[0], bg[-1], bg[:, 0], bg[:, -1] = like_bg[0], like_bg[-1], like_bg[:, 0], like_bg[:, -1]
+    for _ in range(2 * max(bg.shape)):                      # grow from the borders through background-like pixels
+        grown = bg.copy()
+        grown[1:] |= bg[:-1]
+        grown[:-1] |= bg[1:]
+        grown[:, 1:] |= bg[:, :-1]
+        grown[:, :-1] |= bg[:, 1:]
+        grown &= like_bg
+        if (grown == bg).all():
+            break
+        bg = grown
+    m = Image.fromarray(((~bg) * 255).astype(np.uint8)).resize(rgba.size, Image.BILINEAR)
+    return np.asarray(m, np.float32) / 255.0
+
+
+def sprite_source(rgba, margin: float = 0.06, use_rembg: bool = True):
+    """The subject cut out, cropped to it and centred on a transparent square."""
+    np = _np()
+    from PIL import Image  # pylint: disable=import-outside-toplevel
+    m = subject_mask(rgba, use_rembg)
+    solid = m > 0.5
+    if not solid.any() or solid.mean() > 0.97:
+        raise PixelError("could not find a subject to cut out - ask for one on a plain background")
+    ys, xs = np.nonzero(solid)
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    a = np.asarray(rgba).copy()
+    from PIL import ImageFilter  # pylint: disable=import-outside-toplevel
+    k = max(3, (max(rgba.size) // 160) | 1)         # trim the edge a little: the background's halo stays outside
+    trimmed = Image.fromarray((np.clip(m, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(k))
+    a[..., 3] = np.where(np.asarray(trimmed) > 127, 255, 0).astype(np.uint8)
+    crop = Image.fromarray(a[y0:y1, x0:x1])
+    side = int(max(crop.size) * (1 + 2 * margin))
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
+    return canvas
+
+
+def sprite_outline(img):
+    """A 1-pixel outline outside the silhouette, in a dark shade of the colour next to it (hand-made sprite style)."""
+    np = _np()
+    from PIL import Image  # pylint: disable=import-outside-toplevel
+    a = np.asarray(img.convert("RGBA")).copy()
+    solid = a[..., 3] > 0
+    ring = np.zeros_like(solid)
+    src = np.zeros(a.shape[:2] + (3,), np.float32)
+    for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        shifted = np.roll(np.roll(solid, dy, 0), dx, 1)
+        col = np.roll(np.roll(a[..., :3], dy, 0), dx, 1).astype(np.float32)
+        new = shifted & ~solid & ~ring
+        src[new] = col[new]
+        ring |= shifted & ~solid
+    a[ring, :3] = (src[ring] * 0.28).astype(np.uint8)
+    a[ring, 3] = 255
+    return Image.fromarray(a)
+
+
 # ----------------------------------------------------------------------------- the whole thing
 def pixelize(src, out=None, size: int = 64, patch: int = 0, outline: int = 2, mode: str = "contrast",
-             colors: int = 0, palette="", dither: str = "none", scale: int = 0, keep_alpha: bool = True) -> dict:
+             colors: int = 0, palette="", dither: str = "none", scale: int = 0, keep_alpha: bool = True,
+             sprite: bool = False, use_rembg: bool = True) -> dict:
     np = _np()
     from PIL import Image  # pylint: disable=import-outside-toplevel
     src = Path(src)
@@ -332,6 +421,9 @@ def pixelize(src, out=None, size: int = 64, patch: int = 0, outline: int = 2, mo
     with Image.open(src) as im:
         im.load()
         rgba = im.convert("RGBA")
+    if sprite:                       # the subject only, centred on transparency; its own colours, no dither
+        rgba = sprite_source(rgba, use_rembg=use_rembg)
+        colors = int(colors or (0 if pal else 24))
     size = max(8, min(512, int(size or 64)))
     w0, h0 = rgba.size
     tw, th = (size, max(1, round(size * h0 / w0))) if w0 >= h0 else (max(1, round(size * w0 / h0)), size)
@@ -354,7 +446,9 @@ def pixelize(src, out=None, size: int = 64, patch: int = 0, outline: int = 2, mo
     if keep_alpha and alpha.min() < 250:
         a_small = alpha.reshape(th, patch, tw, patch).mean(axis=(1, 3))
         out_img.putalpha(Image.fromarray(np.where(a_small > 127, 255, 0).astype(np.uint8)))
-    dest = Path(out) if out else src.with_name("%s-pixel%d.png" % (src.stem, size))
+    if sprite:
+        out_img = sprite_outline(out_img)
+    dest = Path(out) if out else src.with_name("%s-%s%d.png" % (src.stem, "sprite" if sprite else "pixel", size))
     dest.parent.mkdir(parents=True, exist_ok=True)
     out_img.save(dest)
     k = int(scale or max(1, 512 // max(tw, th)))
@@ -362,4 +456,5 @@ def pixelize(src, out=None, size: int = 64, patch: int = 0, outline: int = 2, mo
     out_img.resize((tw * k, th * k), Image.NEAREST).save(preview)
     used = len(out_img.convert("RGB").getcolors(1 << 16) or [])
     return {"ok": True, "file": str(dest), "preview": str(preview), "width": tw, "height": th, "colors": used,
-            "palette": palette if isinstance(palette, str) else ("custom" if pal else ""), "mode": mode}
+            "palette": palette if isinstance(palette, str) else ("custom" if pal else ""), "mode": mode,
+            "sprite": bool(sprite)}
