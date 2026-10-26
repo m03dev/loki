@@ -9340,6 +9340,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         print("[loki] context for OpenCode not written: %s" % exc, flush=True)
     cfg_path.write_text(json.dumps(oc_cfg, indent=1), encoding="utf-8")
     env = opencode_engine.env_for(providers)
+    if os.getenv("LOKI_JOB_ID"):
+        # background jobs run side by side: each gets its own OpenCode data folder, or their OpenCode processes lock
+        # one database (2026-10-25 on the Mac: "database is locked" with three jobs at once)
+        env.update(opencode_engine.job_data_env(DATA_DIR / "opencode" / "jobs" / re.sub(r"[^\w-]", "",
+                                                                                        os.getenv("LOKI_JOB_ID", ""))[:40]))
     conv = ("job-" + os.getenv("LOKI_JOB_ID", "")) if os.getenv("LOKI_JOB_ID") else (active_conversation_id() or "default")
     session = OC_SESSIONS.get(conv)
     models = ([pinned] if pinned else ["%s/%s" % (opencode_engine.provider_id(n), p["model"]) for n, p in providers.items()]) or [""]

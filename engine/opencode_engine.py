@@ -238,6 +238,24 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
     return cfg
 
 
+def job_data_env(folder, home: str | None = None) -> dict:
+    """XDG_DATA_HOME / XDG_STATE_HOME of one background job's own OpenCode (its sessions database), with the owner's
+    OpenCode sign-in (auth.json) copied in so OpenCode's own models still work there."""
+    import shutil  # pylint: disable=import-outside-toplevel
+    folder = Path(folder)
+    data, state = folder / "data", folder / "state"
+    (data / "opencode").mkdir(parents=True, exist_ok=True)
+    state.mkdir(parents=True, exist_ok=True)
+    src_home = Path(home or os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+    auth = src_home / "opencode" / "auth.json"
+    try:
+        if auth.is_file() and not (data / "opencode" / "auth.json").exists():
+            shutil.copy2(auth, data / "opencode" / "auth.json")
+    except OSError:
+        pass
+    return {"XDG_DATA_HOME": str(data), "XDG_STATE_HOME": str(state)}
+
+
 def env_for(providers: dict, base: dict | None = None) -> dict:
     env = dict(base if base is not None else os.environ)
     for name, p in providers.items():

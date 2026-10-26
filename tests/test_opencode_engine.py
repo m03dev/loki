@@ -68,6 +68,7 @@ args = sys.argv[1:]
 log = os.environ.get("FAKE_OC_LOG")
 if log:
     with open(log, "a") as f: f.write(json.dumps({"argv": args, "config": os.environ.get("OPENCODE_CONFIG", ""),
+                                                  "xdg": os.environ.get("XDG_DATA_HOME", ""),
                                                   "keys": sorted(k for k in os.environ if k.startswith("LOKI_OC_KEY_"))}) + "\n")
 mode = os.environ.get("FAKE_OC_MODE", "work")
 sid = args[args.index("--session") + 1] if "--session" in args else "ses_" + uuid.uuid4().hex[:8]
@@ -228,6 +229,8 @@ if loki:
           "denied - and the agent's profile in the prompt",
           isinstance(jc["permission"]["bash"], dict) and jc["permission"]["bash"].get("*") == "allow"
           and jcalls and "Builder" in jcalls[0]["argv"][-1] and "--session" not in jcalls[0]["argv"], jc["permission"]["bash"])
+    check("...and its own OpenCode data folder, so jobs side by side never lock one database",
+          jcalls and "opencode/jobs/job42" in jcalls[0]["xdg"].replace("\\", "/"), jcalls[0].get("xdg") if jcalls else None)
     ctx = Path((jc.get("instructions") or [""])[0])
     check("every turn's instructions say which machines there are and to look (list_machines) whatever the words",
           ctx.is_file() and "list_machines FIRST" in ctx.read_text() and "This machine:" in ctx.read_text(), jc.get("instructions"))
