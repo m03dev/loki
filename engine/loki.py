@@ -5227,7 +5227,15 @@ def conversation_messages(cid: str) -> list:
             if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)]
 
 
+def _job_process() -> bool:
+    """A background job / team agent runs as its own engine process in the same folder: it must never write the
+    owner's chats (2026-10-25: a team job saved its own prompt over the owner's open chat on the Mac)."""
+    return bool(os.getenv("LOKI_JOB_ID") or os.getenv("LOKI_TEAM_ID"))
+
+
 def save_conversations() -> None:
+    if _job_process():
+        return
     try:
         CONVERSATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
         payload = {"active": active_conversation, "profile": PROFILE,
@@ -5238,6 +5246,8 @@ def save_conversations() -> None:
 
 
 def save_history() -> None:
+    if _job_process():
+        return
     convo = CONVERSATIONS.get(active_conversation)
     if convo is None:
         return
@@ -6258,6 +6268,19 @@ async def toolshelf_tool(action: str = "list", area: str = "", id: str = "", run
 
 
 LOCAL_TOOLS["toolshelf"] = toolshelf_tool
+
+
+async def library_tool(kind: str = "", search: str = "", limit: int = 40) -> str:
+    import creations  # pylint: disable=import-outside-toplevel
+    return json.dumps(await asyncio.to_thread(creations.library, WORKSPACE, kind, search, limit))
+
+
+LOCAL_TOOLS["library"] = library_tool
+_LIB_SCHEMA = schema("library", __import__("creations").LIBRARY_TOOL["description"],
+                     __import__("creations").LIBRARY_TOOL["inputSchema"]["properties"], [])
+TOOL_SCHEMAS.append(_LIB_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_LIB_SCHEMA)
+MODEL_TOOL_NAMES.add("library")
 
 _SHELF_SCHEMA = schema("toolshelf", __import__("toolshelf").TOOL["description"],
                        __import__("toolshelf").TOOL["inputSchema"]["properties"], ["action"])

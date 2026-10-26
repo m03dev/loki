@@ -219,6 +219,11 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
         gai = godot_ai_mcp()
         if gai:
             mcp["godot-ai"] = gai
+    # showtime (github.com/FavioVazquez/showtime, MIT): the local video studio's MCP tools, once it is on the shelf
+    if not plan:
+        st = showtime_mcp()
+        if st:
+            mcp["showtime"] = st
     # VoiceStudio's own MCP server (engine/voice_studio.py) when its backend answers: speech, voices, transcription
     if not plan:
         try:
@@ -421,3 +426,15 @@ def godot_ai_mcp(projects: list | None = None, uvx: str | None = None) -> dict:
         "first-index", "--keyring-provider", "disabled", "--index", "https://pypi.org/simple", "--default-index",
         "https://pypi.org/simple", "--find-links", "https://pypi.org/simple/godot-ai/", "--link-mode", "copy",
         "--from", "godot-ai==" + version, "godot-ai", "attach", "--port", "8000", "--ws-port", "9500"]}
+
+
+def showtime_mcp() -> dict:
+    """OpenCode's entry for showtime's MCP server when the Tool Shelf installed it (engine/toolshelf.py)."""
+    try:
+        import toolshelf  # pylint: disable=import-outside-toplevel
+        if not toolshelf.installed("showtime"):
+            return {}
+        exe = toolshelf.find_exe(toolshelf.tool_dir("showtime"), "showtime-mcp")
+    except Exception:  # noqa: BLE001
+        return {}
+    return {"type": "local", "command": [exe], "enabled": True} if exe else {}

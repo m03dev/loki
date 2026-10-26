@@ -12,6 +12,7 @@ A path may be absolute (inside those folders), relative to the workspace, or rel
 from __future__ import annotations
 
 import base64
+import re
 import io
 import os
 import subprocess
@@ -48,6 +49,8 @@ def find(state: Any, raw: str) -> Path:
     p = Path(os.path.expanduser(raw.replace("\\", "/") if sys.platform != "win32" else raw))
     roots = bases(state)
     candidates = [p] if p.is_absolute() else [b / p for b in roots]
+    if not p.is_absolute() and len(p.parts) == 1:      # "fox.png": the makers' folders too (images/, sprites/ ...)
+        candidates += [b / d / p for b in roots for d in MADE_DIRS]
     for c in candidates:
         try:
             c = c.resolve()
@@ -169,3 +172,40 @@ def route(state: Any, method: str, path: str, query: dict, body: dict) -> tuple:
     except (OSError, ValueError) as exc:
         return 400, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+# ----------------------------------------------------------------------------- what a turn made, always shown
+MADE_DIRS = ("images", "sprites", "renders", "videos", "sketches", "media", "qa", "brand", "models", "audio")
+
+
+def made_since(state: Any, t0: float, limit: int = 8) -> list:
+    """Pictures and PDFs written into the workspace since t0 (a chat turn's start), newest last - whatever made them
+    (the image tool, OpenCode, the shell agent, a Tool Shelf tool) and whether or not the reply names them."""
+    roots = bases(state)[:1]
+    found = []
+    for root in roots:
+        for sub in MADE_DIRS + ("",):
+            folder = root / sub if sub else root
+            if not folder.is_dir():
+                continue
+            pattern = "**/*" if sub else "*"
+            try:
+                for p in folder.glob(pattern):
+                    if p.suffix.lower() in MEDIA and p.is_file() and p.stat().st_mtime >= t0 - 1 and not any(
+                            part.startswith(".") for part in p.relative_to(root).parts):
+                        found.append((p.stat().st_mtime, p.relative_to(root).as_posix()))
+            except OSError:
+                continue
+    out = []
+    for _, rel in sorted(set(found)):
+        if rel not in out and not re.search(r"-x\d+\.png$", rel):      # pixel previews: the sprite itself is shown
+            out.append(rel)
+    return out[-limit:]
+
+
+def with_made(text: str, made: list) -> str:
+    """The reply, plus a line naming the files it made but did not name (the window shows each one in the chat)."""
+    missing = [m for m in made if m not in (text or "") and Path(m).name not in (text or "")]
+    if not missing:
+        return text
+    return (text or "").rstrip() + "\n\nMade: " + "  ".join("`%s`" % m for m in missing)

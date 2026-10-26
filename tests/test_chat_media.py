@@ -158,5 +158,36 @@ async def ui():
 if async_playwright:
     asyncio.run(asyncio.wait_for(ui(), 45))
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
+
+# ------------------------------------------------------------------ what a turn made is shown even when not named
+import time as _t  # noqa: E402
+import tempfile as _tf  # noqa: E402
+_ws = Path(_tf.mkdtemp())
+
+
+class _A:
+    WORKSPACE = str(_ws)
+
+
+class _S:
+    agent = _A()
+
+
+_t0 = _t.time()
+(_ws / "images").mkdir()
+(_ws / "images" / "dragon.png").write_bytes(b"\x89PNG")
+(_ws / "sprites").mkdir()
+(_ws / "sprites" / "hero-pixel64.png").write_bytes(b"\x89PNG")
+(_ws / "sprites" / "hero-pixel64-x8.png").write_bytes(b"\x89PNG")
+_made = chat_media.made_since(_S(), _t0)
+check("a turn's new pictures are found (not the pixel previews, not hidden folders)",
+      _made == ["images/dragon.png", "sprites/hero-pixel64.png"], _made)
+_txt = chat_media.with_made("I made an image of a dragon.", _made)
+check("a reply that only says 'I made an image' gets the files named, so the chat shows them",
+      "`images/dragon.png`" in _txt and "`sprites/hero-pixel64.png`" in _txt, _txt)
+check("files the reply already names are not repeated", chat_media.with_made("See images/dragon.png", ["images/dragon.png"])
+      == "See images/dragon.png")
+check("a bare file name is found in the makers' folders", chat_media.find(_S(), "dragon.png") == (_ws / "images" / "dragon.png").resolve())
+check("the bridge adds what the turn made to the chat reply", "made_since" in (REPO / "engine" / "loki_bridge.py").read_text())
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

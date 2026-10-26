@@ -1673,7 +1673,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     future = asyncio.run_coroutine_threadsafe(state.request_task(prompt.strip(), steps), state.loop)
                 else:
                     future = asyncio.run_coroutine_threadsafe(state.request_chat(prompt.strip()), state.loop)
+                turn_t0 = time.time()
                 result = future.result()  # wait as long as the task needs
+                try:   # what the turn made is shown in the chat even when the reply only says "I made an image"
+                    import chat_media  # pylint: disable=import-outside-toplevel
+                    made = chat_media.made_since(state, turn_t0)
+                    if made and isinstance(result, dict) and isinstance(result.get("response"), str):
+                        new = chat_media.with_made(result["response"], made)
+                        if new != result["response"]:
+                            for m in reversed(getattr(state.agent, "messages", [])):
+                                if m.get("role") == "assistant" and m.get("content") == result["response"]:
+                                    m["content"] = new          # the saved chat shows them too
+                                    break
+                            result["response"] = new
+                        result["made"] = made
+                except Exception:  # noqa: BLE001 - never lose the reply over this
+                    pass
                 if isinstance(result, dict) and extra:
                     result = {**result, **extra}
                     if extra.get("checkpoint") and getattr(state, "checkpoints", None) is not None:

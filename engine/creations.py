@@ -33,13 +33,16 @@ KINDS = {
     "media": {".mp3", ".m4a", ".wav", ".ogg", ".mp4", ".webm"},
     "music": set(AUDIO),
     "voice": set(AUDIO),
+    "audio": set(AUDIO),                     # VoiceStudio, sound effects, the Tool Shelf's audio tools
+    "models": {".glb", ".gltf", ".obj", ".fbx"},   # Forge, Pixal3D / TRELLIS.2, the shelf's 3D tools
+    "sprites": {".png", ".gif", ".webp"},   # pixel art, sprite sheets
 }
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
          ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".mp3": "audio/mpeg",
          ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac"}
 SHOWN = {".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", ".gif": "image",
          ".mp4": "video", ".webm": "video", ".mov": "video", ".mp3": "audio", ".m4a": "audio", ".wav": "audio",
-         ".ogg": "audio", ".flac": "audio"}
+         ".ogg": "audio", ".flac": "audio", ".glb": "model", ".gltf": "model", ".obj": "model", ".fbx": "model"}
 META_DIR = ".meta"
 TRASH = "trash"
 META_KEYS = ("idea", "prompt", "negative", "style", "backend", "seed", "aspect", "liked", "daily", "parent", "model")
@@ -452,3 +455,29 @@ def animate(agent, rel: str, prompt: str = "", seconds: float = 3.0, thread: boo
     text += "" if prompt else ", gentle natural motion, the camera slowly pushes in"
     return make_video(agent, text, image=rel, seconds=seconds, seed=int(meta.get("seed") or 0), parent=rel,
                       thread=thread, maker=maker)
+
+
+# ----------------------------------------------------------------------------- one library for every maker and agent
+LIBRARY_TOOL = {"name": "library",
+                "description": "Everything LOKI and its agents have made in this workspace - pictures, sprites, 3D models, "
+                               "music, voices, sounds, videos - newest first, with the prompt each was made from. Look "
+                               "here BEFORE making something new: reuse or build on what exists (a model's picture, a "
+                               "voice line for a trailer, music for a video). kind= images | sprites | models | music | "
+                               "voice | audio | videos (empty = all); search= words in the name or prompt.",
+                "inputSchema": {"type": "object", "properties": {"kind": {"type": "string"}, "search": {"type": "string"},
+                                                                 "limit": {"type": "integer"}}}}
+
+
+def library(workspace: Path, kind: str = "", search: str = "", limit: int = 40) -> dict:
+    words = [w for w in re.split(r"\W+", str(search or "").lower()) if w]
+    out = []
+    for c in list_creations(workspace, limit=2000):
+        if kind and c["kind"] != kind and c["show"] != kind.rstrip("s"):
+            continue
+        hay = " ".join(str(c.get(k) or "") for k in ("path", "title", "prompt", "idea", "style")).lower()
+        if words and not all(w in hay for w in words):
+            continue
+        out.append({k: c[k] for k in ("path", "kind", "show", "title", "prompt", "style", "backend", "liked") if c.get(k)})
+        if len(out) >= max(1, min(int(limit or 40), 200)):
+            break
+    return {"ok": True, "items": out, "count": len(out)}
