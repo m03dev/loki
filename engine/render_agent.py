@@ -21,7 +21,8 @@ import scene_passes
 
 TOOL = {"name": "render_scene",
         "description": "Render a 3D model (.glb in this folder, e.g. from make_3d) with no window open. Without prompt: "
-                       "depth / lineart / normal / beauty passes and a contact sheet, in seconds. With prompt: the AI "
+                       "depth / lineart / normal / beauty passes and a contact sheet, in seconds; frames=48 adds a "
+                       "turntable video (turntable.mp4). With prompt: the AI "
                        "Renderer on the owner's ComfyUI - frames=1 a finished still (waits for it), frames>1 a "
                        "turntable video (runs in the background; action=status job=<id> to collect it). Options: "
                        "size='832x480', azimuth (degrees, default 30), elevation (15), orbit (degrees turned over the "
@@ -69,6 +70,23 @@ def contact_sheet(made: dict, out: Path, index: int = 0) -> str:
         sheet.paste(im, ((i % cols) * w, (i // cols) * h))
     sheet.save(out)
     return str(out)
+
+
+def turntable_video(frames: list, target: Path, fps: int = 24) -> str:
+    """The beauty frames as an H.264 MP4 (ffmpeg, if this computer has it) - a turntable with no GPU at all."""
+    import shutil as _sh  # pylint: disable=import-outside-toplevel
+    import subprocess  # pylint: disable=import-outside-toplevel
+    exe = _sh.which("ffmpeg")
+    if not exe or len(frames) < 2:
+        return ""
+    pattern = str(Path(frames[0]).parent / "%04d.png")
+    try:
+        subprocess.run([exe, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern, "-c:v", "libx264",
+                        "-preset", "veryfast", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+                        "-movflags", "+faststart", str(target)], check=True, timeout=300, capture_output=True)
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    return str(target) if target.is_file() else ""
 
 
 def _bring(state, job: str, ws: Path, stem: str) -> list:
@@ -138,6 +156,8 @@ def render(args: dict, ws, state=None, wait_s: float = 900, starter=None) -> dic
         frames = (frames - 1 + 3) // 4 * 4 + 1                 # Wan: 4n+1
     want = [p.strip() for p in str(args.get("passes") or "").split(",") if p.strip()] or (
         list(scene_passes.PASSES) if not prompt else ["depth", "lineart"] if frames > 1 else ["depth"])
+    if not prompt and frames > 1 and "beauty" not in want:
+        want.append("beauty")                     # the turntable video is made from it
     stem = "".join(c if c.isalnum() or c in "-_" else "-" for c in model.stem)[:40] or "model"
     out = ws / "renders" / ("%s-%s" % (stem, time.strftime("%Y%m%d-%H%M%S")))
     try:
@@ -148,8 +168,12 @@ def render(args: dict, ws, state=None, wait_s: float = 900, starter=None) -> dic
         return {"ok": False, "error": "could not read %s: %s" % (model.name, exc)}
     sheet = contact_sheet(res["passes"], out / "sheet.png")
     if not prompt:
+        files = [sheet] if sheet else []
+        video = turntable_video(res["passes"].get("beauty") or [], out / "turntable.mp4") if frames > 1 else ""
+        if video:
+            files.insert(0, video)
         return {"ok": True, "folder": str(out), "sheet": sheet, "frames": frames, "seconds": res["seconds"],
-                "files": [sheet] if sheet else [], "passes": {k: len(v) for k, v in res["passes"].items()}}
+                "files": files, "video": video, "passes": {k: len(v) for k, v in res["passes"].items()}}
 
     import ai_renderer  # pylint: disable=import-outside-toplevel
     start = starter or (lambda st, job, wait: ai_renderer.start(st, job, wait=wait))

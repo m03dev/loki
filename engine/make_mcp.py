@@ -399,11 +399,18 @@ CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale":
        "render": "render_scene", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
+# what the first plain word means for each command (2026-10-25: `loki-make render models/x.glb` sent the file as the
+# prompt and the render tool said "no model None" - found by running it, not by reading it)
+POSITIONAL = {"upscale": "image", "pixel": "image", "run-on": "task", "render": "model", "voice": "text",
+              "music": "tags", "library": "search", "job": "job", "shelf": "id"}
+
+
 def cli(argv: list, cwd: Path | None = None) -> int:
     """`loki-make <what> "<prompt>" [--key value ...]` - the same tools for an agent that only has a shell
     (engine/local_agent.py): image, 3d, video, upscale, pixel, machines, run-on, job. Prints the JSON answer."""
     if not argv or argv[0] not in CLI:
-        print("usage: loki-make image|3d|video|upscale|pixel|machines|run-on|job \"<prompt or file>\" [--style comic] "
+        print("usage: loki-make image|3d|video|upscale|pixel|render|voice|music|library|shelf|machines|run-on|job "
+              "\"<prompt or file>\" [--style comic] "
               "[--count 4] [--upscale 4] [--image pic.png] [--machine mac] [--job id]")
         return 2
     what, rest = argv[0], argv[1:]
@@ -413,12 +420,16 @@ def cli(argv: list, cwd: Path | None = None) -> int:
         if a.startswith("--") and rest:
             v = rest.pop(0)
             args[a[2:].replace("-", "_")] = int(v) if v.isdigit() else v
-        elif what in ("upscale", "pixel"):
-            args.setdefault("image", a)
-        elif what == "run-on":
-            args.setdefault("task", a)
+        elif what in POSITIONAL:
+            args.setdefault(POSITIONAL[what], a)
+        elif what in ("3d", "video") and (Path(cwd or os.getcwd()) / a).is_file():
+            args.setdefault("image", a)          # loki-make 3d images/fox.jpg: a picture, not a description
         else:
             args.setdefault("prompt", a)
+    if what == "voice":
+        args.setdefault("action", "speak")
+    if what == "shelf":
+        args.setdefault("action", "list")
     out = call(CLI[what], args, Path(cwd or os.getcwd()))
     print(json.dumps(out, indent=1))
     return 0 if out.get("ok") else 1

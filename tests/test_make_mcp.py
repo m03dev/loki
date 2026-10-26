@@ -103,5 +103,22 @@ cfg = opencode_engine.build_config({"local": {"base_url": "http://127.0.0.1:1143
 check("... but not in Plan mode (making files is not planning)", "loki-make" not in (cfg.get("mcp") or {}), cfg.get("mcp"))
 
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
+import contextlib as _cl, io as _io, tempfile as _tf  # noqa: E402
+_d = Path(_tf.mkdtemp())
+_seen = {}
+_orig = make_mcp.call
+make_mcp.call = lambda name, args, cwd: (_seen.update({name: dict(args)}), {"ok": True})[1]
+(_d / "fox.jpg").write_bytes(b"x")
+with _cl.redirect_stdout(_io.StringIO()):
+    make_mcp.cli(["render", "models/x.glb", "--frames", "48"], _d)
+    make_mcp.cli(["voice", "hello there"], _d)
+    make_mcp.cli(["3d", "fox.jpg"], _d)
+    make_mcp.cli(["3d", "a red fox"], _d)
+make_mcp.call = _orig
+check("loki-make render <file> passes the file as the model (it was sent as the prompt)",
+      _seen.get("render_scene", {}).get("model") == "models/x.glb" and _seen["render_scene"].get("frames") == 48, _seen)
+check("loki-make voice <text> speaks it", _seen.get("voice") == {"text": "hello there", "action": "speak"}, _seen)
+check("loki-make 3d <picture> is a picture, <words> a description",
+      _seen.get("make_3d", {}).get("prompt") == "a red fox", _seen)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

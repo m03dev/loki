@@ -326,10 +326,17 @@ def _beauty(scene, tid, bary, normal):
             c = c * m["tex"][np.rint(v).astype(np.int64), np.rint(u).astype(np.int64)]
         base[sel] = c
     n = normal[hit]
-    light = np.array([-0.45, 0.65, 0.62])
-    light /= np.linalg.norm(light)
-    shade = 0.32 + 0.68 * np.clip(n @ light, 0, 1)
-    out[hit] = np.clip(base * col * shade[:, None], 0, 1) ** (1 / 1.1)
+    key = np.array([-0.45, 0.65, 0.62])
+    key /= np.linalg.norm(key)
+    fill = np.array([0.7, 0.1, 0.7])
+    fill /= np.linalg.norm(fill)
+    rim = np.clip(1.0 - n[:, 2], 0, 1) ** 3                       # light around the silhouette
+    shade = 0.38 + 0.62 * np.clip(n @ key, 0, 1) + 0.28 * np.clip(n @ fill, 0, 1) + 0.25 * rim
+    lit = base * col * shade[:, None]
+    lum = float(np.percentile(lit.max(1), 90)) if len(lit) else 1.0
+    if 0 < lum < 0.55:                                            # a dark model: exposed up, not left in the shadows
+        lit = lit * min(2.5, 0.75 / lum)
+    out[hit] = np.clip(lit, 0, 1) ** (1 / 1.15)
     return out
 
 
