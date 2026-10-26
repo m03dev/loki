@@ -179,6 +179,14 @@ def uses_local_model(job: dict, env: dict | None = None) -> bool:
     env = env if env is not None else os.environ
     if job.get("agent") != "loki" or job.get("backend") != "local" or job.get("selfcheck"):
         return False   # a System check job asks no model, so it never waits for the model slot
+    if not str(job.get("model") or "").strip():
+        # no model of its own: the job process picks (loki.job_model_choice) - a background job leaves a local chat
+        # model for Smart online unless LOKI_JOB_MODEL=same or local-only is on. Counting those as local made every
+        # team job wait for the one local-model slot (2026-10-25: three teams on the Mac ran one at a time)
+        same = str(env.get("LOKI_JOB_MODEL", "smart")).strip().lower() == "same"
+        local_only = str(env.get("LOKI_LOCAL_ONLY", "0")).strip().lower() in ("1", "true", "yes", "on")
+        if not (same or local_only):
+            return False
     model = str(job.get("model") or env.get("LOKI_MODEL", "smart")).strip().lower()
     if model == "smart":
         return str(env.get("LOKI_PREFER", "local")).strip().lower() == "local"

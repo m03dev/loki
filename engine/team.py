@@ -175,8 +175,12 @@ def _safe(team_id: str) -> str:
 
 # --- planning the team --------------------------------------------------------------
 
-_BIG = re.compile(r"\b(build|design|architect\w*|implement|refactor|app|game|feature|system|website|engine|pipeline|"
-                  r"research|compare|campaign|several|multiple|team|function|class|module|unit tests?|tests)\b", re.I)
+_BIG = re.compile(r"\b(build|design|architect\w*|implement|refactor|research|compare|campaign|several|multiple|"
+                  r"function|class|module|unit tests?|tests)\b"
+                  # a product noun counts only as the thing being made ("make a game", "create the app") - "game
+                  # concept art" or "a sprite for the game" is one picture (2026-10-25: those got four agents)
+                  r"|\b(?:make|create|develop|code|write|start)\s+(?:an?\s+|the\s+|my\s+|our\s+|new\s+|small\s+|simple\s+)*"
+                  r"(?:\w+\s+)?(?:app|game|website|engine|system|feature|pipeline|platformer)\b", re.I)
 
 
 def solo_goal(goal: str, triage: dict | None = None) -> bool:

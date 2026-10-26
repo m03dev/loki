@@ -60,6 +60,18 @@ check("a small concrete job gets one agent", team.choose_roles(
     "Pixel art check: pixelize three pictures from images/ with `loki-make pixel <file> --size 64` and write qa/pixel.md") == ["builder"])
 check("a real build still gets the full team", team.choose_roles(
     "Build a small platformer game in Godot with a menu and three levels")[:4] == ["architect", "builder", "tester", "reviewer"])
+for _g in ("Make now: one picture of a red baby dragon, game concept art, 16:9 (make_image) into images/",
+           "Turn the newest picture in images/ into a 64-pixel game sprite in sprites/",
+           "make one new piece of promo art for the owner's game into images/"):
+    check("one picture 'for the game' is one agent's job: %s" % _g[:40], team.choose_roles(_g) == ["builder"], team.choose_roles(_g))
+check("making a game is still a team's job", len(team.choose_roles("make a game where you jump on clouds")) >= 4)
+import workers  # noqa: E402
+_env = {"LOKI_MODEL": "local-reasoning", "LOKI_PREFER": "local"}
+check("a team job with no model of its own does not wait for the one local-model slot (it runs on Smart)",
+      not workers.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, _env))
+check("... unless LOKI_JOB_MODEL=same or local-only keeps it local",
+      workers.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, dict(_env, LOKI_JOB_MODEL="same"))
+      and workers.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, dict(_env, LOKI_LOCAL_ONLY="1")))
 os.environ["LOKI_TEAM_SOLO"] = "off"
 check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
 os.environ.pop("LOKI_TEAM_SOLO")
