@@ -56,6 +56,8 @@ def title_of(name: str) -> str:
     """'20261014-201742-red-fox-in-studio-light.jpg' -> 'Red fox in studio light'."""
     stem = Path(name).stem
     stem = re.sub(r"^(sketch-|higgsfield-)?\d{8}-\d{6}-?", "", stem)
+    stem = re.sub(r"-x\d+$", "", stem)
+    stem = re.sub(r"_\d{8}-\d{4}(?:_[a-z0-9]+)*(?:_\d+)?$", "", stem)   # new names (engine/out_names.py)
     words = re.sub(r"[-_]+", " ", stem).strip()
     return (words[:1].upper() + words[1:])[:90] if words else Path(name).stem[:90]
 

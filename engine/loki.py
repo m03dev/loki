@@ -5587,6 +5587,15 @@ def _server_skip_reason(spec: dict, name: str = "") -> str:
     required = spec.get("requires_env")
     if required and not str(os.environ.get(required) or "").strip():
         return "needs %s to be set" % required
+    check = spec.get("requires_check")     # "module.function": start only when it returns something truthy
+    if check:
+        try:
+            import importlib  # pylint: disable=import-outside-toplevel
+            mod, fn = str(check).rsplit(".", 1)
+            if not getattr(importlib.import_module(mod), fn)():
+                return "%s found nothing on this machine" % check
+        except Exception as exc:  # noqa: BLE001 - a broken check never starts a server
+            return "%s failed: %s" % (check, type(exc).__name__)
     command_needed = spec.get("requires_cmd")
     if command_needed and not spec.get("url") and not shutil.which(command_needed):
         return "needs '%s' on PATH" % command_needed

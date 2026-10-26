@@ -733,12 +733,11 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             source = made_image = call_image_maker(maker, prompt.strip(), opts)
         say("reading the picture", 0.2)
         img = load_image(source)
-        base = out / ("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), _slug(prompt or (Path(source).stem if isinstance(
-            source, str) and not source.startswith("data:") else "drawing"))))
-        n = 2
-        while base.with_suffix(".glb").exists():
-            base = base.with_name("%s-%d" % (base.name, n))
-            n += 1
+        import out_names  # pylint: disable=import-outside-toplevel
+        what = prompt or (out_names.display_name(Path(source).name) if isinstance(source, str)
+                          and not source.startswith("data:") else "drawing")
+        glb = out_names.path(out, what, "glb", fallback="model")
+        base = glb.with_suffix("")
         say("cutting out the subject", 0.3)
         cut = None
         if _plain_background(img):

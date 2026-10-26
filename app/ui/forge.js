@@ -941,7 +941,7 @@ async function forgeList() {
   for (const it of items.slice(0, 40)) {
     const b = el("button", "forge-model" + (it.name === forge.model ? " on" : ""));
     b.type = "button";
-    b.append(el("span", "forge-model-name", it.prompt || it.name.replace(/^\d{8}-\d{6}-/, "").replace(/\.glb$/, "")),
+    b.append(el("span", "forge-model-name", it.prompt || it.name.replace(/^\d{8}-\d{6}-/, "").replace(/_\d{8}-\d{4}(?:_[a-z0-9]+)*(?:_\d+)?(?=\.|$)/, "").replace(/\.glb$/, "")),
       el("span", "forge-model-meta", [it.backend, it.triangles ? it.triangles.toLocaleString() + " tris" : ""].filter(Boolean).join(" · ")));
     b.title = it.name;
     b.addEventListener("click", () => forgeLoad(it.name));

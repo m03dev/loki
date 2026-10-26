@@ -11,9 +11,9 @@ Each view is drawn on its own with the SAME seed and the same fixed description,
 neutral pose (T-pose for characters) on a plain light grey background - one subject, nothing else - so the views
 match each other and cut out cleanly. Saved in turnarounds/:
 
-    turnarounds/<stamp>-<slug>-sheet.png        all views side by side, labelled (shows on Home)
-    turnarounds/<stamp>-<slug>/<view>.png       each view alone - the input for multi-view / image-to-3D
-    turnarounds/<stamp>-<slug>/turnaround.json  the lineage: which concept, subject, kind, seed, backend, views
+    turnarounds/<subject>_<stamp>-sheet.png      all views side by side, labelled (shows on Home)
+    turnarounds/<subject>_<stamp>/<view>.png     each view alone - the input for multi-view / image-to-3D
+    turnarounds/<subject>_<stamp>/turnaround.json  the lineage: which concept, subject, kind, seed, backend, views
 
 so the 3D step (make_3d image=<front view>) and the render step always know where a model came from.
 """
@@ -123,8 +123,9 @@ def make_turnaround(args: dict, cwd: Path, image_maker: Callable[[dict, Path], d
     if bad or not views:
         return {"ok": False, "error": "views are %s (not %s)" % (", ".join(VIEWS), ", ".join(bad) or "none")}
     seed = int(a.get("seed") or (int(clock()) % 2**31))
+    import out_names  # pylint: disable=import-outside-toplevel
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(clock()))
-    name = "%s-%s" % (stamp, _slug(subject))
+    name = out_names.name(subject, fallback="subject", at=clock())
     folder = cwd / ROOT / name
     folder.mkdir(parents=True, exist_ok=True)
     tall = kind in ("character", "creature")

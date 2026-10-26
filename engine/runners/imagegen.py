@@ -40,8 +40,13 @@ MODELSCOPE_BASE = os.environ.get("LOKI_MODELSCOPE_IMAGE_BASE", "https://api-infe
 def _out_path(out_dir, prompt, ext="png"):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower()).strip("-")[:48] or "image"
-    return out / ("%s-%s.%s" % (time.strftime("%Y%m%d-%H%M%S"), slug, ext))
+    try:                                   # one naming rule for everything LOKI makes (engine/out_names.py)
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import out_names  # pylint: disable=import-outside-toplevel
+        return out_names.path(out, prompt, ext, fallback="image")
+    except ImportError:
+        slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower()).strip("-")[:40] or "image"
+        return out / ("%s_%s.%s" % (slug, time.strftime("%Y%m%d-%H%M"), ext))
 
 
 def total_ram_gb():

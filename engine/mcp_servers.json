@@ -148,6 +148,21 @@
       "enabled": false,
       "capability": "cadcraft",
       "note": "CADCraft (github.com/storytold/cadcraft, MIT OR Apache-2.0, a separate program): AutoCAD-style 2D drafting (DXF/DWG, layers, dimensions, hatches, blocks) driven by LOKI's agents over MCP - command_line, execute, inspect_drawing, query_entities, render. Install: python tools/setup_extras.py cadcraft; turn on in Settings > Add-ons, or LOKI_MCP_ENABLE=cadcraft."
+    },
+    "blender": {
+      "command": "uvx",
+      "args": [
+        "mcp-for-blender"
+      ],
+      "requires_cmd": "uvx",
+      "requires_check": "blender_link.find_blender",
+      "env": {
+        "DISABLE_TELEMETRY": "true",
+        "BLENDER_HOST": "localhost",
+        "BLENDER_PORT": "9876"
+      },
+      "cwd": "${LOKI_DATA}",
+      "note": "MCP for Blender (github.com/ahujasid/mcp-for-blender, MIT). Starts when Blender is installed on this machine; the add-on (contrib/blender_mcp, installed by `python engine/blender_link.py setup`) listens on 9876 while Blender is open. Telemetry off, paid generators never switched on."
     }
   }
 }

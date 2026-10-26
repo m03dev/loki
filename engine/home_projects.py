@@ -29,6 +29,15 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+
+def _display(file_name: str) -> str:
+    """Readable title from an output file name, old or new style (engine/out_names.py)."""
+    try:
+        import out_names  # pylint: disable=import-outside-toplevel
+        return out_names.display_name(file_name)
+    except ImportError:
+        return re.sub(r"^\d{8}-\d{6}-", "", str(file_name)).rsplit(".", 1)[0]
+
 REPO = Path(__file__).resolve().parent.parent
 KINDS = ("made", "render", "forge", "godot", "studio", "content", "job")
 THUMB_MAX = 400_000
@@ -126,7 +135,7 @@ def forge(state: Any) -> list:
     ws = _workspace(state)
     out = []
     for it in forge3d.list_models(ws / "models", limit=PER_KIND):
-        name = str(it.get("prompt") or re.sub(r"^\d{8}-\d{6}-", "", it["name"]).rsplit(".", 1)[0] or it["name"])
+        name = str(it.get("prompt") or _display(it["name"]) or it["name"])
         out.append({"kind": "forge", "name": name[:120], "path_or_id": "models/" + it["name"], "updated": float(it.get("t") or 0),
                     "thumb": _creation_url(ws, str(it.get("image") or "")), "status": "",
                     "detail": "%s triangles" % format(int(it["triangles"]), ",") if it.get("triangles") else "",

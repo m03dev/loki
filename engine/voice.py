@@ -128,7 +128,8 @@ def speak(text: str, out_dir: Path, voice: str = "", kokoro_loader=load_kokoro, 
         return {"ok": False, "error": "give the text to speak"}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / ("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), slug(text)))
+    import out_names  # pylint: disable=import-outside-toplevel
+    out = out_names.path(out_dir, text, fallback="speech")
     use_kokoro = str(os.getenv("LOKI_TTS", "auto")).lower() != "os"
     kokoro = kokoro_loader() if use_kokoro else None
     if kokoro:

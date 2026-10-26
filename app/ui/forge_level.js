@@ -186,7 +186,7 @@ const ForgeLevelUI = (() => {
     try {
       const { GLTFLoader } = await import("/ui/vendor/three/addons/loaders/GLTFLoader.js");
       const gltf = await new GLTFLoader().parseAsync(await (await fetchFile(name)).arrayBuffer(), "");
-      const stem = name.replace(/^\d{8}-\d{6}-/, "").replace(/\.glb$/i, "").replace(/[^A-Za-z0-9_]+/g, "_") || "mesh";
+      const stem = name.replace(/^\d{8}-\d{6}-/, "").replace(/_\d{8}-\d{4}(?:_[a-z0-9]+)*(?:_\d+)?(?=\.|$)/, "").replace(/\.glb$/i, "").replace(/[^A-Za-z0-9_]+/g, "_") || "mesh";
       const n = undoable("Place " + stem, () => a.addActor(stem, "mesh", { asset: name }, gltf.scene));
       details(); S.view.dirty = true;
       return say(n ? "Placed " + name + " as " + n.name + "." : "Could not place " + name + ".", !n);
@@ -200,7 +200,7 @@ const ForgeLevelUI = (() => {
     const items = (models && models.items) || [];
     if (!items.length) box.append(el("p", "note", "No models yet - make or save one in Forge."));
     for (const it of items.slice(0, 60)) {
-      const b = el("button", "flv-asset", it.name.replace(/^\d{8}-\d{6}-/, "").replace(/\.glb$/, ""));
+      const b = el("button", "flv-asset", it.name.replace(/^\d{8}-\d{6}-/, "").replace(/_\d{8}-\d{4}(?:_[a-z0-9]+)*(?:_\d+)?(?=\.|$)/, "").replace(/\.glb$/, ""));
       b.type = "button"; b.title = "Place " + it.name + " in the level"; b.dataset.asset = it.name;
       b.addEventListener("click", () => placeAsset(it.name));
       box.append(b);

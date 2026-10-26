@@ -292,7 +292,7 @@ res = creative.run_local_image("a red fox in snow", "", 1024, 1024, 100, 4, WS /
 check("4 pictures from ONE sd.cpp run", len(runs) == 1 and len(res["files"]) == 4 and all(Path(f).is_file() for f in res["files"]),
       res)
 check("seeds 100..103, names LOKI's own (newest-first wall reads them)", res["seeds"] == [100, 101, 102, 103]
-      and all("a-red-fox-in-snow" in Path(f).name for f in res["files"]) and res["backend"] == "sdcpp", res)
+      and all(Path(f).name.startswith("red-fox-snow_") for f in res["files"]) and all("red-fox-snow" in Path(f).name for f in res["files"]) and res["backend"] == "sdcpp", res)
 for f in res["files"]:
     Path(f).unlink()
 

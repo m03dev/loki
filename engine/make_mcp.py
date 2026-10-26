@@ -200,7 +200,7 @@ def make_sprite(args: dict, cwd: Path, image_maker=None) -> dict:
     out_dir = inside(cwd, "", "sprites")
     size = int(a.get("size") or 64)
     try:
-        res = pixel_art.pixelize(p, out=out_dir / ("%s-sprite%d.png" % (p.stem, size)), size=size, sprite=True,
+        res = pixel_art.pixelize(p, out=out_dir / ("%s_sprite%d.png" % (p.stem, size)), size=size, sprite=True,
                                  palette=str(a.get("palette") or ""), colors=int(a.get("colors") or 0),
                                  outline=int(a.get("outline", 2) or 0))
     except pixel_art.PixelError as exc:

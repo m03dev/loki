@@ -27,6 +27,13 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-26 (Claude, cloud):** output names are one rule now - `engine/out_names.py`: `<subject>_<YYYYMMDD-HHMM>[_tag][_n].ext`
+(e.g. `knight-sword-shield_20261026-1021.png`; filler/style words dropped, never cut mid-word), used by images, video,
+3D, turnarounds, voice and sprites; old names still display. Blender MCP built in: `engine/blender_link.py`
+(setup/open/status) + vendored add-on `contrib/blender_mcp/` + the "blender" server in mcp_servers.json (starts only
+where Blender is installed). Home's scroll bar on the Mac: WebKit scroll bar + a fixed grid row in home_layout.css
+(checked only in cloud Chromium - the Mac must confirm). Maya MCP: not found on the PC; LOKI_TASKS has the Mac search.
+
 Tabs are Home / Forge / **Studio** (the render farm manager + Render Studio, docs/STUDIO_FARM.md) / **Engine** (Godot
 or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on the whole mesh when only the object
 is picked, one key per command, sculpt right button = wheel only. Branch `agent/studio-farm-forge-scale`; next steps

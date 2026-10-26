@@ -321,9 +321,9 @@ def run_local_image(prompt: str, negative: str, width: int, height: int, seed: i
         raise RuntimeError(status.get("why") or "no local image backend")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    slug = file_slug(prompt, "image")
-    path_of = out_path or (lambda i: out_dir / ("%s-%s%s.png" % (stamp, slug, "" if i == 0 else "-%d" % (i + 1))))
+    import out_names  # pylint: disable=import-outside-toplevel
+    first = out_names.path(out_dir, prompt, "png", fallback="image")
+    path_of = out_path or (lambda i: first if i == 0 else first.with_name("%s_%d.png" % (first.stem, i + 1)))
     started = time.time()
     files, seeds = [], []
     if status["backend"] == "sdcpp":
@@ -667,8 +667,8 @@ def make_video(prompt: str, workspace: Path, image: str = "", seconds: float = 3
         return {"ok": False, "error": status["why"]}
     videos = workspace / "videos"
     videos.mkdir(parents=True, exist_ok=True)
-    slug = file_slug(prompt, "video")
-    target = videos / ("%s-%s.mp4" % (time.strftime("%Y%m%d-%H%M%S"), slug))
+    import out_names  # pylint: disable=import-outside-toplevel
+    target = out_names.path(videos, prompt, "mp4", fallback="video")
     started = time.time()
     if status["backend"] == "wan2gp":
         work = videos / ".wan2gp"

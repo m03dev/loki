@@ -9,11 +9,22 @@
    Loaded last (index.html), so it wins over the older home rules in app.css / home.css / glass.css. */
 
 .loki-split { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr); }
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr);
+  grid-template-rows: minmax(0, 1fr); }   /* one row the window's height: WebKit (Mac) otherwise sizes it to content */
 .main.hub-off .loki-split, .loki-split:not(:has(> .home-hub:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------------------------------------------------------------- the hub pane */
-.loki-split > .home-hub { grid-column: 1; min-width: 0; max-width: none; margin: 0; height: 100%; container-type: inline-size; }
+.loki-split > .home-hub { grid-column: 1; min-width: 0; max-width: none; margin: 0; height: 100%; container-type: inline-size;
+  min-height: 0; align-self: stretch; }
+/* Home's scroll bar (owner 2026-10-26: "mac scroll bar at home doesnt work but windows works"). macOS hides overlay
+   scroll bars and `scrollbar-width: thin` gave WebKit nothing to grab; the same always-there bar as the chat column. */
+.loki-split > .home-hub, .home-hub { overflow-y: auto; scrollbar-width: auto; scrollbar-color: rgba(255, 255, 255, .34) rgba(255, 255, 255, .04);
+  scrollbar-gutter: stable; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.home-hub::-webkit-scrollbar { width: 12px; }
+.home-hub::-webkit-scrollbar-track { background: rgba(255, 255, 255, .04); border-radius: 999px; }
+.home-hub::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .32); border-radius: 999px; border: 3px solid transparent;
+  background-clip: padding-box; min-height: 40px; }
+.home-hub::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .5); background-clip: padding-box; }
 .loki-split > .home-hub[hidden] { display: none; }
 /* the hub pane beside the chat is narrower than the old full-width Home: the preview stacks and stays short, so the
    recent cards are still on screen under it */
