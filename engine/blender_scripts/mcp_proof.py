@@ -29,11 +29,15 @@ def cmd(kind, **params):
 
 report["ping"] = cmd("ping")
 BUILD = r'''
-import bpy, math, random
+import bpy, bmesh, math, random
+from mathutils import Matrix, Vector
 random.seed(7)
-bpy.ops.wm.read_factory_settings(use_empty=True)
+# context-free on purpose: MCP commands run from a timer, where bpy.context.object / most operators are missing
+scene = bpy.data.scenes[0]
+for o in list(bpy.data.objects):
+    bpy.data.objects.remove(o, do_unlink=True)
 def mat(name, rgb, emit=0.0):
-    m = bpy.data.materials.new(name); m.use_nodes = True
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name); m.use_nodes = True
     b = m.node_tree.nodes.get("Principled BSDF")
     b.inputs["Base Color"].default_value = (*rgb, 1)
     b.inputs["Roughness"].default_value = 0.85
@@ -41,35 +45,44 @@ def mat(name, rgb, emit=0.0):
         key = "Emission Color" if "Emission Color" in b.inputs else "Emission"
         b.inputs[key].default_value = (*rgb, 1)
         b.inputs["Emission Strength"].default_value = emit
+    m.diffuse_color = (*rgb, 1)
     return m
 wood, bark, stone, fire, ember, grass = (mat("Wood", (0.42, 0.24, 0.12)), mat("Bark", (0.22, 0.13, 0.07)),
     mat("Stone", (0.45, 0.45, 0.48)), mat("Flame", (1.0, 0.45, 0.08), 6.0), mat("Ember", (1.0, 0.15, 0.02), 3.0),
     mat("Ground", (0.18, 0.30, 0.12)))
-root = bpy.data.objects.new("Campfire", None); bpy.context.scene.collection.objects.link(root)
-def put(o, m, name):
-    o.name = name; o.data.materials.append(m); o.parent = root
-    for p in o.data.polygons: p.use_smooth = False
+root = bpy.data.objects.new("Campfire", None); scene.collection.objects.link(root)
+def obj(name, build, m, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
+    me = bpy.data.meshes.new(name); bm = bmesh.new(); build(bm); bm.to_mesh(me); bm.free()
+    me.materials.append(m)
+    o = bpy.data.objects.new(name, me); scene.collection.objects.link(o)
+    o.location, o.rotation_euler, o.scale, o.parent = loc, rot, scale, root
     return o
-bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=2.2, depth=0.1, location=(0, 0, -0.05)); put(bpy.context.object, grass, "Ground")
+cyl = lambda segs, r, d: (lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, segments=segs, radius1=r, radius2=r, depth=d))
+cone = lambda segs, r, d: (lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, segments=segs, radius1=r, radius2=0, depth=d))
+ico = lambda r: (lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r))
+obj("Ground", cyl(24, 2.2, 0.1), grass, (0, 0, -0.05))
 for i in range(9):                                     # ring of stones
     a = i / 9 * math.tau
-    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.22, location=(math.cos(a) * 0.85, math.sin(a) * 0.85, 0.1))
-    s = put(bpy.context.object, stone, "Stone.%02d" % i); s.scale = (1.2, 0.9, 0.7); s.rotation_euler = (0, 0, random.random() * 3)
+    obj("Stone.%02d" % i, ico(0.22), stone, (math.cos(a) * 0.85, math.sin(a) * 0.85, 0.1), (0, 0, random.random() * 3), (1.2, 0.9, 0.7))
 for i in range(5):                                     # logs leaning into a teepee
     a = i / 5 * math.tau
-    bpy.ops.mesh.primitive_cylinder_add(vertices=7, radius=0.07, depth=1.1,
-        location=(math.cos(a) * 0.28, math.sin(a) * 0.28, 0.38), rotation=(0, math.radians(32), a + math.pi))
-    put(bpy.context.object, wood if i % 2 else bark, "Log.%02d" % i)
+    obj("Log.%02d" % i, cyl(7, 0.07, 1.1), wood if i % 2 else bark, (math.cos(a) * 0.28, math.sin(a) * 0.28, 0.38),
+        (0, math.radians(32), a + math.pi))
 for i, (h, r) in enumerate(((0.95, 0.24), (0.7, 0.16), (0.5, 0.11))):   # low-poly flames
-    bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=r, depth=h, location=(0.05 * i - 0.05, 0.04 * i, 0.25 + h / 2))
-    put(bpy.context.object, fire if i == 0 else ember, "Flame.%d" % i).rotation_euler = (0, 0, i * 0.6)
-bpy.ops.object.light_add(type="POINT", location=(0, 0, 0.8)); L = bpy.context.object; L.data.energy = 220; L.data.color = (1, 0.55, 0.2); L.parent = root
-bpy.ops.object.light_add(type="SUN", location=(3, -3, 5), rotation=(math.radians(50), 0, math.radians(35))); bpy.context.object.data.energy = 1.2
-bpy.ops.object.camera_add(location=(3.0, -3.2, 2.1)); cam = bpy.context.object
-d = cam.constraints.new("TRACK_TO"); d.target = root; d.track_axis = "TRACK_NEGATIVE_Z"; d.up_axis = "UP_Y"
-bpy.context.scene.camera = cam
-w = bpy.data.worlds.new("Night"); w.use_nodes = True; w.node_tree.nodes["Background"].inputs[0].default_value = (0.02, 0.03, 0.06, 1)
-bpy.context.scene.world = w
+    obj("Flame.%d" % i, cone(6, r, h), fire if i == 0 else ember, (0.05 * i - 0.05, 0.04 * i, 0.25 + h / 2), (0, 0, i * 0.6))
+def light(name, kind, loc, energy, color=(1, 1, 1), rot=(0, 0, 0)):
+    ld = bpy.data.lights.new(name, kind); ld.energy = energy; ld.color = color
+    o = bpy.data.objects.new(name, ld); scene.collection.objects.link(o); o.location = loc; o.rotation_euler = rot
+    return o
+light("Firelight", "POINT", (0, 0, 0.8), 220, (1, 0.55, 0.2)).parent = root
+light("Moon", "SUN", (3, -3, 5), 1.2, (0.7, 0.8, 1.0), (math.radians(50), 0, math.radians(35)))
+cd = bpy.data.cameras.new("Camera"); cam = bpy.data.objects.new("Camera", cd); scene.collection.objects.link(cam)
+cam.location = (3.0, -3.2, 2.1)
+cam.rotation_euler = (Vector((0, 0, 0.35)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+scene.camera = cam
+w = bpy.data.worlds.get("Night") or bpy.data.worlds.new("Night"); w.use_nodes = True
+w.node_tree.nodes["Background"].inputs[0].default_value = (0.02, 0.03, 0.06, 1)
+scene.world = w
 print(len([o for o in bpy.data.objects if o.type == "MESH"]), "meshes")
 '''
 report["build"] = cmd("execute_code", code=BUILD)

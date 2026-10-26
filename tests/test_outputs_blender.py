@@ -141,7 +141,7 @@ if loki:
 
 # the startup script, run against a fake bpy: a job in the inbox goes through the add-on's execute_command
 fake_bpy = types.ModuleType("bpy")
-fake_bpy.types = types.SimpleNamespace()
+fake_bpy.types = types.SimpleNamespace(Scene=types.SimpleNamespace(blendermcp_use_polyhaven=False))
 fake_bpy.app = types.SimpleNamespace(version_string="5.2.0", timers=types.SimpleNamespace(register=lambda *a, **k: None,
                                      is_registered=lambda f: False, unregister=lambda f: None))
 fake_bpy.data = types.SimpleNamespace(filepath="")
@@ -164,6 +164,11 @@ check("inbox: each command goes through the add-on's execute_command, the answer
 lb._heartbeat()
 check("heartbeat says Blender's version and whether the MCP socket is up",
       json.loads((TMP / "bl" / "status.json").read_text())["mcp_socket"] is True)
+regs = []
+fake_bpy.app.timers.register = lambda fn, **k: regs.append(fn.__module__)
+lb.reload_self()
+check("loki_reload loads the script from its file (Blender keeps no sys.modules entry) and registers fresh timers",
+      regs and all(m.startswith("loki_blender_live_") for m in regs), regs)
 del sys.modules["bpy"]
 os.environ.pop("LOKI_BLENDER_INBOX")
 

@@ -80,6 +80,9 @@ def run_job(path: Path) -> dict:
                 exec(c.get("params", {}).get("code", ""), ns)  # noqa: S102 - the owner's own inbox folder only
                 res = {"status": "success", "result": {"done": True}}
             else:
+                if not hasattr(bpy.types.Scene, "blendermcp_use_polyhaven"):   # something turned the add-on off
+                    log("add-on was off before", c.get("type"), "- turning it on again")
+                    ensure_mcp()
                 res = _mcp().execute_command(c)
         except Exception as exc:  # noqa: BLE001 - the answer says what broke
             res = {"status": "error", "message": "%s: %s" % (type(exc).__name__, exc), "traceback": traceback.format_exc()}
@@ -179,11 +182,18 @@ def ensure_mcp():
 
 
 def reload_self():
-    """Job {"type": "loki_reload"}: load this script again from disk (a fix reaches a running Blender, no restart)."""
-    import importlib  # pylint: disable=import-outside-toplevel
-    mod = sys.modules.get(__name__)
+    """Job {"type": "loki_reload"}: load this script again from disk (a fix reaches a running Blender, no restart).
+    Blender does not keep startup modules in sys.modules, so load the file itself; the old timers stop only after
+    the new copy loaded (2026-10-26: importlib.reload(None) killed the inbox on the PC)."""
+    import importlib.util  # pylint: disable=import-outside-toplevel
+    try:
+        spec = importlib.util.spec_from_file_location("loki_blender_live_%d" % int(time.time()), __file__)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception:  # noqa: BLE001 - keep the running copy
+        log("reload failed, keeping the running copy:", traceback.format_exc())
+        return None
     unregister()
-    mod = importlib.reload(mod)
     mod.register()
     log("reloaded", __file__)
     return None
