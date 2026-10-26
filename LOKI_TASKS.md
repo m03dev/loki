@@ -26,6 +26,9 @@ into the workspace's qa/ folder. The owner and Claude add requests here; nobody 
 - [ ] [loki] [windows] Make now, from scratch on this PC: a new picture of a stone golem guardian in a mossy forest, game concept art, 16:9 (make_image) into images/, then a textured 3D model of it (make_3d, backend pixal3d or trellis2 on ComfyUI) into models/, then render_scene it with frames 48 into renders/. Reply with every file path. (owner via Claude, 2026-10-25 19:57)
 - [ ] [loki] [windows] Make now, from scratch on this PC: a 30-second instrumental music loop, mysterious forest temple, soft drums and flute (make_music) into music/. Reply with the file path. (owner via Claude, 2026-10-25 19:57)
 - [ ] [loki] [mac] Hand one job to the PC with run_on_machine (machine pc): "make a new picture of a glowing crystal sword on a stone altar, game concept art (make_image), save it in images/ and reply with the path" - then check it with machine_job until it is done and write the result into qa/pc-handoff.md. (owner via Claude, 2026-10-25 19:57)
+- [ ] [loki] [mac] Make now: three new pieces of game concept art like the red baby dragon the owner loved (make_image with style game-concept, 16:9): a moss golem waking in a ruined forest temple, a fox spirit with blue flame tails on a cliff at dusk, an ice wyvern over a frozen lake - into images/. Reply with the paths. (owner via Claude, 2026-10-25 21:10)
+- [ ] [loki] [mac] Make now: game sprites with make_sprite (loki-make sprite): one from images/20261025-205231-concept-art-of-a-red-baby-dragon-guarding-a-pile.png (size 64), and two drawn from scratch - "a fox spirit with blue flame tails" and "a small moss golem" (size 64) - into sprites/. Reply with the paths. (owner via Claude, 2026-10-25 21:10)
+- [ ] [loki] [mac] Hand one job to the PC with run_on_machine (machine pc): "make_3d from a new picture: draw 'a red baby dragon, full body, game asset' (make_image style sprite-source), then make_3d it with the best 3D backend this PC has (pixal3d or trellis2 on ComfyUI, else online), then render_scene it with frames 48; reply with every file path" - follow it with machine_job until it is done and write the result into qa/pc-3d.md. (owner via Claude, 2026-10-25 21:10)
 
 ## Always
 
@@ -33,8 +36,8 @@ Standing goals: LOKI's agents keep working through these, in turn, whenever a sl
 waiting - up to 3 at once (LOKI_AUTOPILOT_SLOTS), anything that needs the GPU one at a time. Drafts and assets only:
 nothing is published or posted without the owner. Edit freely.
 
-- [loki] Look in the library first, then make one new piece of promo art for the owner's game (concept-art style, 16:9) into images/, with a two-line caption draft in brand/drafts/.
-- [loki] Turn the newest picture in images/ that has no sprite yet into a 64-pixel game sprite in sprites/ (loki-make pixel) and note it in brand/drafts/assets.md.
+- [loki] Look in the library first, then make one new piece of game concept art for the owner's game (make_image style game-concept - the owner's favourite, 16:9) into images/, with a two-line caption draft in brand/drafts/.
+- [loki] Turn the newest picture in images/ that has no sprite yet into a 64-pixel game sprite in sprites/ (make_sprite - the subject cut out, not the whole scene) and note it in brand/drafts/assets.md.
 - [loki] Write one short devlog / social post draft about what changed in LOKI since yesterday (git log in the LOKI folder) into brand/drafts/, with a suggested picture from the library.
 - [loki] Make one 30-60 second instrumental music loop for the game (make_music; a mood not made before - check the library) into music/.
 - [loki] [windows] Make one textured 3D prop for the game from the best picture in images/ (make_3d, backend pixal3d) into models/.
