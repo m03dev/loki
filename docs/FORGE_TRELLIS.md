@@ -28,3 +28,18 @@ Files:
 `--lowvram` and lower Output > Detail (remesh grid) and Texture size. Weights' licences: TRELLIS.2 MIT, Pixal3D MIT,
 MoGe MIT, BiRefNet MIT; DINOv3 is Meta's DINOv3 licence (read it before selling models made with it commercially).
 Retopology beyond the template's remesh + decimate is Forge's own Retopo tools.
+
+## Rendering without the window (render_scene)
+
+`engine/scene_passes.py` makes Forge's control passes (depth, line art, normals, a shaded beauty) straight from a .glb in
+numpy - no browser, no GPU - with the same conventions as `app/ui/forge_passes.js` (depth white = near, normalised over
+the model's bounding sphere so a turntable does not pump). `engine/render_agent.py` is the agents' `render_scene` tool
+(chat, OpenCode via loki-make, `loki-make render <model.glb> --prompt "..."`):
+
+- no prompt: the passes and a contact sheet in `renders/<model>-<time>/`, in seconds
+- prompt, 1 frame: an AI Renderer still (`zimage_reference_depth`) on the owner's ComfyUI, waited for
+- prompt, frames > 1: a still first (or `start=`), then a `vace_render` turntable in the background; `action=status job=`
+  brings the video into `renders/`
+
+About 0.5 s a frame for 100k triangles at 832x480 (all four passes): triangles are bucketed by screen size and every
+bucket is rasterized in one vectorized step, so neither Rust nor C++ is needed for it.

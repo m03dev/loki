@@ -63,6 +63,7 @@ TOOLS = [
     __import__("toolshelf").TOOL,
     __import__("comfy_jobs").MUSIC_TOOL,
     __import__("creations").LIBRARY_TOOL,
+    __import__("render_agent").TOOL,
     {"name": "upscale_image",
      "description": "Enlarge a picture in this folder 2x or 4x with Real-ESRGAN (sharp detail, not blur); "
                     "anime=true for drawn / comic / anime art. Saves <name>-4x.png beside it.",
@@ -258,6 +259,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
           "pixelize": pixelize, "voice": voice, "toolshelf": toolshelf_call,
           "make_music": make_music,
+          "render_scene": lambda a, cwd: __import__("render_agent").render(a or {}, cwd),
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
                                                                    int((a or {}).get("limit") or 40)),
@@ -393,7 +395,7 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "voice": "voice", "shelf": "toolshelf", "music": "make_music", "library": "library",
-       "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+       "render": "render_scene", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 def cli(argv: list, cwd: Path | None = None) -> int:

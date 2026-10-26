@@ -6276,6 +6276,19 @@ async def library_tool(kind: str = "", search: str = "", limit: int = 40) -> str
 
 
 LOCAL_TOOLS["library"] = library_tool
+
+
+async def render_scene_tool(**args) -> str:
+    import render_agent  # pylint: disable=import-outside-toplevel
+    return json.dumps(await asyncio.to_thread(render_agent.render, args, WORKSPACE))
+
+
+LOCAL_TOOLS["render_scene"] = render_scene_tool
+_RENDER_SCHEMA = schema("render_scene", __import__("render_agent").TOOL["description"],
+                        __import__("render_agent").TOOL["inputSchema"]["properties"], [])
+TOOL_SCHEMAS.append(_RENDER_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_RENDER_SCHEMA)
+MODEL_TOOL_NAMES.add("render_scene")
 _LIB_SCHEMA = schema("library", __import__("creations").LIBRARY_TOOL["description"],
                      __import__("creations").LIBRARY_TOOL["inputSchema"]["properties"], [])
 TOOL_SCHEMAS.append(_LIB_SCHEMA)
@@ -6292,7 +6305,7 @@ _VOICE_SCHEMA = schema("voice", __import__("voice_studio").TOOL["description"],
 TOOL_SCHEMAS.append(_VOICE_SCHEMA)
 MODEL_TOOL_SCHEMAS.append(_VOICE_SCHEMA)
 MODEL_TOOL_NAMES.add("voice")
-TOOL_CATEGORIES["creative"] += ["make_3d"]
+TOOL_CATEGORIES["creative"] += ["make_3d", "render_scene"]
 MODIFYING |= {"make_3d"}
 
 

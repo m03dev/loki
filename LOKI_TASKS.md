@@ -29,6 +29,7 @@ only while LOKI is idle). Drafts and assets only - nothing is published or poste
 - [loki] Write one short devlog / social post draft about what changed in LOKI since yesterday (git log in the LOKI folder) into brand/drafts/, with a suggested picture from the library.
 - [loki] Make one 30-60 second instrumental music loop for the game (make_music; a mood not made before - check the library) into music/.
 - [loki] [windows] Make one textured 3D prop for the game from the best picture in images/ (make_3d, backend pixal3d) into models/.
+- [loki] Render the newest model in models/ that has no render yet (render_scene; a finished still with a prompt in the game's style, and a 33-frame turntable when ComfyUI is free) into renders/.
 
 ## Needs Mohamed
 
