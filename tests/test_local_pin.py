@@ -37,5 +37,10 @@ check("live in this process too", os.environ.get("LOKI_LOCAL_MODEL", "").startsw
 w("LOKI_LOCAL_MODEL", "")
 check("an empty pick removes it", "LOKI_LOCAL_MODEL" not in (TMP / ".env").read_text() and "LOKI_LOCAL_MODEL" not in os.environ)
 check("a bad name is refused", not w("bad name", "x"))
+res = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == "_resolve_local")
+check("the engine reads the pick from loki_settings.json when no LOKI_LOCAL_MODEL is set",
+      '"local_model"' in ast.get_source_segment(src, res) and "loki_settings.json" in ast.get_source_segment(src, res))
+bridge = (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8")
+check('"use this model" saves the pick in loki_settings.json', 'saved["local_model"]' in bridge)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

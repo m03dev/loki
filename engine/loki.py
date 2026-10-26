@@ -1113,6 +1113,14 @@ def _resolve_local() -> dict:
         LOCAL_STATE["version"] = ""
     version = LOCAL_STATE["version"]
     LOCAL_STATE["skipped"] = ""
+    if not os.getenv("LOKI_LOCAL_MODEL"):
+        try:   # the owner's pick, kept in loki_settings.json ("local_model") as well as the .env
+            picked = str(json.loads((DATA_DIR / "loki_settings.json").read_text(encoding="utf-8")).get("local_model")
+                         or "").strip()
+            if picked:
+                os.environ["LOKI_LOCAL_MODEL"] = picked
+        except (OSError, ValueError, AttributeError):
+            pass
     if os.getenv("LOKI_LOCAL_MODEL") and model_setup.is_broken(os.environ["LOKI_LOCAL_MODEL"], version):
         LOCAL_STATE["skipped"] = ("Ollama %s cannot load the chosen model %s; LOKI uses the best other one"
                                   % (version or "", os.environ["LOKI_LOCAL_MODEL"]))

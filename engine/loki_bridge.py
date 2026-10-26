@@ -2351,6 +2351,13 @@ def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tupl
             os.environ.pop("LOKI_LOCAL_MODEL", None)
         try:   # remembered: survives an update restart and reaches every background job
             agent.write_env_setting("LOKI_LOCAL_MODEL", model or "")
+            sfile = agent.DATA_DIR / "loki_settings.json"
+            try:
+                saved = json.loads(sfile.read_text(encoding="utf-8")) if sfile.is_file() else {}
+            except ValueError:
+                saved = {}
+            saved["local_model"] = model or ""
+            sfile.write_text(json.dumps(saved, indent=1), encoding="utf-8")
         except Exception as exc:  # noqa: BLE001
             print("  [setup] could not remember the local model: %s" % exc)
         return agent.resolve_local(force=True)
