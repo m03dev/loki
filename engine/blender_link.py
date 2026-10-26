@@ -29,6 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ADDON_SRC = ROOT / "contrib" / "blender_mcp" / "addon.py"
+STARTUP_SRC = ROOT / "engine" / "blender_scripts" / "loki_blender_startup.py"   # turns the add-on on + file inbox
 ADDON_NAME = "blender_mcp"                 # the module name inside Blender's add-ons folder
 PORT = int(os.environ.get("BLENDER_PORT", "9876"))
 # Mac: the internal drive is full - big installs live on the external drive (Xero, LokiSSD while Xero is away)
@@ -84,6 +85,8 @@ INSTALL_EXPR = (
     "src = sys.argv[sys.argv.index('--') + 1]\n"
     "dst = bpy.utils.user_resource('SCRIPTS', path='addons', create=True)\n"
     "shutil.copyfile(src, os.path.join(dst, '%s.py'))\n"
+    "start = bpy.utils.user_resource('SCRIPTS', path='startup', create=True)\n"
+    "shutil.copyfile(sys.argv[sys.argv.index('--') + 2], os.path.join(start, 'loki_blender.py'))\n"
     "addon_utils.modules_refresh() if hasattr(addon_utils, 'modules_refresh') else None\n"
     "addon_utils.enable('%s', default_set=True, persistent=True)\n"
     "bpy.ops.wm.save_userpref()\n"
@@ -148,7 +151,7 @@ def setup(install: bool = False, run=subprocess.run) -> dict:
                 % ", ".join(candidates()[:4] or ["the usual places"])}
     if not ADDON_SRC.is_file():
         return {"ok": False, "error": "contrib/blender_mcp/addon.py is missing"}
-    proc = run([blender, "--background", "--factory-startup", "--python-expr", INSTALL_EXPR, "--", str(ADDON_SRC)],
+    proc = run([blender, "--background", "--factory-startup", "--python-expr", INSTALL_EXPR, "--", str(ADDON_SRC), str(STARTUP_SRC)],
                capture_output=True, text=True, timeout=180)
     ok = "LOKI_BLENDER_ADDON_OK" in (proc.stdout or "")
     return {"ok": ok, "blender": blender, "addon": _installed_copy(blender, run) if ok else "",

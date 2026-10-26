@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import tempfile
 import types
 from pathlib import Path
@@ -94,6 +95,8 @@ def fake_run(argv, **kw):
     check("the vendored add-on is what gets installed", src.name == "addon.py" and src.is_file(), src)
     check("... copied into Blender's add-ons folder as blender_mcp.py (no addon_install operator: Blender 4.2+ safe)",
           "blender_mcp.py" in script and "addon_install" not in script, script[:200])
+    check("... and LOKI's startup script (add-on on at launch + file inbox) into scripts/startup",
+          "'startup'" in script and Path(argv[argv.index("--") + 2]).name == "loki_blender_startup.py")
     (TMP / "blender_mcp.py").write_text("x")
     return types.SimpleNamespace(returncode=0, stdout="LOKI_BLENDER_ADDON_OK (True, True)\n", stderr="")
 
@@ -135,6 +138,34 @@ if loki:
     blender_link.find_blender = lambda: "/x/blender"
     check("MCP gate passes when Blender is there",
           loki._server_skip_reason({"requires_check": "blender_link.find_blender"}, "blender") == "")
+
+# the startup script, run against a fake bpy: a job in the inbox goes through the add-on's execute_command
+fake_bpy = types.ModuleType("bpy")
+fake_bpy.types = types.SimpleNamespace()
+fake_bpy.app = types.SimpleNamespace(version_string="5.2.0", timers=types.SimpleNamespace(register=lambda *a, **k: None,
+                                     is_registered=lambda f: False, unregister=lambda f: None))
+fake_bpy.data = types.SimpleNamespace(filepath="")
+ran = []
+fake_bpy.types.blendermcp_server = types.SimpleNamespace(running=True, execute_command=lambda c: (ran.append(c) or
+                                                         {"status": "success", "result": {"pong": True}}))
+sys.modules["bpy"] = fake_bpy
+import importlib.util  # noqa: E402
+spec = importlib.util.spec_from_file_location("loki_blender", REPO / "engine/blender_scripts/loki_blender_startup.py")
+lb = importlib.util.module_from_spec(spec); spec.loader.exec_module(lb)
+os.environ["LOKI_BLENDER_INBOX"] = str(TMP / "bl")
+(TMP / "bl" / "inbox").mkdir(parents=True)
+job = TMP / "bl" / "inbox" / "j1.json"
+job.write_text(json.dumps([{"type": "ping", "params": {}}, {"type": "execute_code", "params": {"code": "print(1)"}}]))
+os.utime(job, (time.time() - 5,) * 2)
+lb.poll()
+ans = json.loads((TMP / "bl" / "outbox" / "j1.json").read_text())
+check("inbox: each command goes through the add-on's execute_command, the answer lands in outbox, the job in done",
+      [c["type"] for c in ran] == ["ping", "execute_code"] and ans["ok"] and (TMP / "bl" / "done" / "j1.json").is_file(), ans)
+lb._heartbeat()
+check("heartbeat says Blender's version and whether the MCP socket is up",
+      json.loads((TMP / "bl" / "status.json").read_text())["mcp_socket"] is True)
+del sys.modules["bpy"]
+os.environ.pop("LOKI_BLENDER_INBOX")
 
 # ---- Home's scroll bar on the Mac (WebKit)
 css = (REPO / "app/ui/home_layout.css").read_text(encoding="utf-8")
