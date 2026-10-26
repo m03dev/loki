@@ -161,8 +161,8 @@ section("one duty per pass, each on its own schedule")
 # The PC-only duties (selftest, task_bench; auto = on for the PC) would run here and, once
 # the bench starts, make the autopilot busy - this test is about the base duty rotation,
 # so turn them off for it (they have their own suites).
-_saved_env = {k: os.environ.get(k) for k in ("LOKI_SELFTEST", "LOKI_TASK_BENCH")}
-os.environ["LOKI_SELFTEST"] = os.environ["LOKI_TASK_BENCH"] = "0"
+_saved_env = {k: os.environ.get(k) for k in ("LOKI_SELFTEST", "LOKI_TASK_BENCH", "LOKI_AUTOPILOT_ALWAYS")}
+os.environ["LOKI_SELFTEST"] = os.environ["LOKI_TASK_BENCH"] = os.environ["LOKI_AUTOPILOT_ALWAYS"] = "0"
 clock = Clock()
 calls: list = []
 auto = autopilot.Autopilot(data_dir=TMP / "t", repo=TASKS, clock=clock, state=FakeState(),
@@ -213,6 +213,26 @@ check("report names the best model per role", "builder: local" in text, text)
 check("report notes the routing change", "Measured results changed" in text, text)
 check("report counts tool-call repairs", "repaired 3" in text, text)
 check("report states new training examples", "12 new verified example" in text, text)
+
+
+# ------------------------------------------------------------------ standing goals keep the agents busy
+_tasks = TASKS / "LOKI_TASKS.md"
+_tasks.write_text("# x\n\n## Requests\n\n## Always\n\n- [loki] make promo art\n- [loki] write a devlog draft\n"
+                  "- [loki] [%s] a job for another machine\n" % ("mac" if sys.platform == "win32" else "windows"))
+check("standing goals are read from ## Always, other machines' left out",
+      autopilot.always_goals(_tasks) == ["make promo art", "write a devlog draft"], autopilot.always_goals(_tasks))
+_started = []
+_ap = autopilot.Autopilot(data_dir=TMP / "always", repo=TASKS, clock=lambda: 1000.0,
+                          start_team=lambda g: (_started.append(g), "started team T%d" % len(_started))[1])
+_ap._team_running = lambda tid: False  # pylint: disable=protected-access
+_ap.duty_always()
+_ap.duty_always()
+_ap.duty_always()
+check("one standing goal per pass, in turn, round and round", [g.split(" (standing")[0] for g in _started]
+      == ["make promo art", "write a devlog draft", "make promo art"], _started)
+check("each is marked drafts-only (never publish)", all("never publish" in g for g in _started))
+_ap._team_running = lambda tid: True  # pylint: disable=protected-access
+check("not while one of them is still running", _ap.duty_always() == "" and len(_started) == 3)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

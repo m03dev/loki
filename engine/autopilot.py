@@ -49,6 +49,8 @@ Duties, each on its own interval:
     LOKI_AUTOPILOT_HEALTH_S          (default 21600 = 6h)
     LOKI_AUTOPILOT_INBOX=on|off      (default on)   LOKI_AUTOPILOT_INBOX_S (default 900)
     LOKI_AUTOPILOT_REPORT_S          (default 604800 = a week)
+    LOKI_AUTOPILOT_ALWAYS=on|off     (default on)   LOKI_AUTOPILOT_ALWAYS_S (default 3600): with the inbox empty,
+                                     the next standing goal from LOKI_TASKS.md "## Always" (drafts and assets only)
 
 Everything outside is injected (state, agent, teams, check runner, clock), so
 tests/test_autopilot.py runs it with fakes.
@@ -112,6 +114,29 @@ def in_hours(window: str, now: float) -> bool:
 
 def _this_os() -> str:
     return "windows" if sys.platform == "win32" else ("mac" if sys.platform == "darwin" else "linux")
+
+
+def always_goals(path: Path) -> list:
+    """The standing goals under "## Always" in LOKI_TASKS.md (`- [loki] ...` lines, [mac]/[windows] respected):
+    the work LOKI's agents keep doing when nothing else is asked - drafts and assets, never anything published."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out, inside = [], False
+    for line in lines:
+        if line.startswith("## "):
+            inside = line.strip().lower().startswith("## always")
+            continue
+        m = re.match(r"^\s*-\s*\[loki\]\s*(.+?)\s*$", line, re.I) if inside else None
+        if not m:
+            continue
+        text = m.group(1)
+        want = re.match(r"^\[(windows|mac|linux)\]\s*", text, re.I)
+        if want and want.group(1).lower() != _this_os():
+            continue
+        out.append(text)
+    return out
 
 
 def inbox_requests(path: Path) -> list:
@@ -273,6 +298,32 @@ class Autopilot:
                       request=item["id"], team=match.group(1) if match else "")
             return reply
         return ""
+
+    def duty_always(self) -> str:
+        """Nothing in the inbox: the next standing goal from LOKI_TASKS.md "## Always", in turn (owner 2026-10-25: "i
+        want them to always be doing stuff"). One at a time; drafts and assets only - publishing always asks."""
+        if self.start_team is None:
+            return ""
+        for team_id in [v.get("team") for v in self.data["started"].values() if v.get("open")]:
+            if team_id and self._team_running(team_id):
+                return ""
+        if any(item["id"] not in self.data["started"] for item in inbox_requests(self.repo / "LOKI_TASKS.md")):
+            return ""                # the inbox comes first
+        goals = always_goals(self.repo / "LOKI_TASKS.md")
+        if not goals:
+            return ""
+        i = int(self.data.get("always_next") or 0) % len(goals)
+        self.data["always_next"] = i + 1
+        goal = goals[i] + (" (standing goal, %s - make drafts and assets only; never publish or post)"
+                           % time.strftime("%Y-%m-%d", time.localtime(self.clock())))
+        reply = str(self.start_team(goal) or "")
+        match = re.search(r"started team (\S+)", reply)
+        key = "always-%d-%d" % (i, int(self.clock()))
+        self.data["started"][key] = {"text": goal[:300], "t": self.clock(), "team": match.group(1) if match else "",
+                                     "open": bool(match), "reply": reply[:300]}
+        self._log("always", ("Working on: " if match else "Could not start: ") + goals[i][:200],
+                  team=match.group(1) if match else "")
+        return reply
 
     def duty_schedules(self) -> str:
         """Start the first due scheduled task as a background job (one per pass)."""
@@ -578,6 +629,8 @@ class Autopilot:
         duties = [("health", _env_s("LOKI_AUTOPILOT_HEALTH_S", 21600), self.duty_health)]
         if _env_on("LOKI_AUTOPILOT_INBOX"):
             duties.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 900), self.duty_inbox))
+        if _env_on("LOKI_AUTOPILOT_ALWAYS"):
+            duties.append(("always", _env_s("LOKI_AUTOPILOT_ALWAYS_S", 3600), self.duty_always))
         if self.evolve is not None:
             import evolve as _evolve  # pylint: disable=import-outside-toplevel
             if _evolve.enabled():

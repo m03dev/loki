@@ -19,6 +19,17 @@ into the workspace's qa/ folder. The owner and Claude add requests here; nobody 
 - [ ] [loki] Social content kit: a positioning line, 3 audience personas (3D artists, indie game devs, AI-curious creators), a 2-week posting calendar for X, Instagram, TikTok/Shorts, LinkedIn and Reddit (r/3Dmodeling, r/blender, r/IndieDev - follow each subreddit's self-promotion rules), 14 ready captions with hashtags, 5 short-video scripts (15-45 s: Forge sculpting, Multi-Cut, the AI renderer, the agent farm) and 6 post images made from real Forge renders and screenshots. Save to brand/content/ with brand/content/calendar.md. Draft only: post nothing. (owner via Claude, 2026-10-22)
 - [ ] [loki] Ad drafts: 3 ad concepts, one per persona in brand/content/, each with a headline, body, call to action and visual, made for 1080x1920 (Instagram / TikTok), 1200x675 (X / LinkedIn) and a 15 s YouTube pre-roll script; make the visuals with the image generator and Forge renders. Save to brand/ads/ with brand/ads/index.md. No ad accounts, no spend: drafts for the owner. (owner via Claude, 2026-10-22)
 
+## Always
+
+Standing goals: with no request waiting, LOKI's agents work on the next one of these in turn (about one an hour,
+only while LOKI is idle). Drafts and assets only - nothing is published or posted without the owner. Edit freely.
+
+- [loki] Look in the library first, then make one new piece of promo art for the owner's game (concept-art style, 16:9) into images/, with a two-line caption draft in brand/drafts/.
+- [loki] Turn the newest picture in images/ that has no sprite yet into a 64-pixel game sprite in sprites/ (loki-make pixel) and note it in brand/drafts/assets.md.
+- [loki] Write one short devlog / social post draft about what changed in LOKI since yesterday (git log in the LOKI folder) into brand/drafts/, with a suggested picture from the library.
+- [loki] Make one 30-60 second instrumental music loop for the game (make_music; a mood not made before - check the library) into music/.
+- [loki] [windows] Make one textured 3D prop for the game from the best picture in images/ (make_3d, backend pixal3d) into models/.
+
 ## Needs Mohamed
 
 - [ ] **Release signing key + the first release.** Installed copies only update to a SIGNED release. Nobody has
