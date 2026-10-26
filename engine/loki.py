@@ -9385,7 +9385,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
     result: dict = {}
     used = ""
-    tries = models[:3]
+    tries = models[:6]   # every provider LOKI has (up to 6) before giving up - the last ones may be slow but working
     for i, model in enumerate(tries):
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
         pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")

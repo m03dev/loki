@@ -147,9 +147,15 @@ if loki:
     check("OpenCode got LOKI's config file and the keys as env vars", calls and calls[0]["config"].endswith("opencode.json")
           and "LOKI_OC_KEY_GROQ" in calls[0]["keys"])
     written = (Path(loki.DATA_DIR) / "opencode" / "opencode.json").read_text()
-    _lim = next(iter(json.loads(written)["provider"]["loki-groq"]["models"].values()))["limit"]
+    _cfg = json.loads(written)["provider"]
+    _lim = next(iter(_cfg["loki-gemini"]["models"].values()))["limit"] if "loki-gemini" in _cfg else None
+    _glim = next(iter(_cfg["loki-groq"]["models"].values()))["limit"]
     check("each model asks for a modest output (8192), not OpenCode's 32000 that free OpenRouter credit refuses",
-          _lim["output"] == 8192 and _lim["context"] >= 32768, _lim)
+          (_lim is None or _lim["output"] == 8192) and _glim["context"] >= 32768, (_lim, _glim))
+    check("Groq asks for at most 900 (its free tier caps output tokens per minute at 1000) - also through the proxy",
+          _glim["output"] == 900 and oe.output_cap("http://127.0.0.1:5/u/1") == 8192
+          and oe.build_config({"groq": {"base_url": "http://127.0.0.1:5/u/1", "upstream": "https://api.groq.com/openai/v1",
+                                        "model": "m"}})["provider"]["loki-groq"]["models"]["m"]["limit"]["output"] == 900, _glim)
     check("the config on disk has no key in it", "gk-test" not in written and "{env:LOKI_OC_KEY_GROQ}" in written)
     check("the window saw the tool as it ran", any(e == "tool" and "bash" in t for e, t in events)
           and any(e == "tool_result" for e, _ in events))

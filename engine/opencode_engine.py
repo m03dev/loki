@@ -187,6 +187,18 @@ def make_tools_command(python: str = "") -> list:
     return [python or sys.executable, str(Path(__file__).resolve().parent / "make_mcp.py")]
 
 
+# hosts whose free tier caps output tokens PER MINUTE below one normal reply: asking more is refused outright
+# (2026-10-25: Groq "Request too large ... output tokens per minute (OTPM): Limit 1000")
+OUTPUT_CAPS = {"groq.com": 900}
+
+
+def output_cap(base_url: str) -> int:
+    for host, cap in OUTPUT_CAPS.items():
+        if host in str(base_url or ""):
+            return int(os.environ.get("LOKI_OC_MAX_OUTPUT_" + host.split(".")[0].upper(), cap) or cap)
+    return int(os.environ.get("LOKI_OC_MAX_OUTPUT", "8192") or 8192)
+
+
 def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny: Iterable[str] = (),
                  make_tools: bool = True) -> dict:
     """providers: name -> {"base_url", "model", "key"}; returns OpenCode's config (keys referenced by env, not inlined)."""
@@ -204,7 +216,7 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
             # afford 3133" before it ever reached make_image). LOKI_OC_MAX_OUTPUT raises it.
             "models": {str(p.get("model")): {"name": str(p.get("model")), "limit": {
                 "context": int(p.get("context") or (32768 if "11434" in base else 128000)),
-                "output": int(os.environ.get("LOKI_OC_MAX_OUTPUT", "8192") or 8192)}}},
+                "output": output_cap(p.get("upstream") or base)}}},
         }
     cfg: dict = {"$schema": "https://opencode.ai/config.json", "provider": prov,
                  "permission": {"edit": "deny" if plan else "allow", "read": "allow", "glob": "allow", "grep": "allow",

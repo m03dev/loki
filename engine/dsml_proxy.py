@@ -535,6 +535,6 @@ def wrap(providers: dict) -> dict:
     out = {}
     for name, p in providers.items():
         if needs_fix(p):
-            p = {**p, "base_url": proxy().url_for(str(p["base_url"])), "dsml_fixed": True}
+            p = {**p, "base_url": proxy().url_for(str(p["base_url"])), "dsml_fixed": True, "upstream": str(p["base_url"])}
         out[name] = p
     return out
