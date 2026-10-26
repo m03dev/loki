@@ -68,6 +68,36 @@ check("... FLUX.1 gets the nearest size it takes (16:9 -> 1344x768) and dev sett
 check("... the key goes as a Bearer token to ai.api.nvidia.com", asked[0][0].startswith("https://ai.api.nvidia.com/v1/genai/"))
 
 
+_hits, _waits = [], []
+
+
+def flaky(url, key, body=None, headers=None, timeout=60):
+    _hits.append(url)
+    if len(_hits) == 1:
+        raise urllib.error.HTTPError(url, 429, "rate limited", {}, io.BytesIO(b""))
+    return {"artifacts": [{"base64": base64.b64encode(PNG).decode(), "finishReason": "SUCCESS", "seed": 7}]}
+
+
+r = imagegen.nvidia("a fox spirit", 1280, 720, str(TMP / "out"), 7, request=flaky, sleep=_waits.append)
+check("NVIDIA: a passing rate limit is waited out and FLUX.2 [klein] still makes it (no fall to Pollinations)",
+      r["model"] == "black-forest-labs/flux.2-klein-4b" and len(_hits) == 2 and _waits == [8.0], (r, _hits, _waits))
+_hits.clear()
+_waits.clear()
+
+
+def limited(url, key, body=None, headers=None, timeout=60):
+    _hits.append(url)
+    raise urllib.error.HTTPError(url, 429, "rate limited", {}, io.BytesIO(b""))
+
+
+try:
+    imagegen.nvidia("x", 1024, 1024, str(TMP / "out"), 1, request=limited, sleep=_waits.append)
+    check("a lasting rate limit gives up after two waits (then the next backend)", False)
+except RuntimeError:
+    check("a lasting rate limit gives up after two waits (then the next backend)", len(_hits) == 3 and _waits == [8.0, 20.0],
+          (_hits, _waits))
+
+
 def filtered(url, key, body=None, headers=None, timeout=60):
     return {"artifacts": [{"base64": "", "finishReason": "CONTENT_FILTERED"}]}
 

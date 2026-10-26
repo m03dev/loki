@@ -378,7 +378,15 @@ def _b64_image(data):
     return base64.b64decode(raw.split(",", 1)[-1])
 
 
-def nvidia(prompt, width, height, out_dir, seed, request=None):
+NVIDIA_RETRY_WAITS = (8.0, 20.0)
+
+
+def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None):
+    """NVIDIA's hosted FLUX. A rate limit or a server hiccup is waited out twice (Retry-After, else 8 s then 20 s)
+    before giving up - 2026-10-25: three concept pieces asked 10 s apart, the middle one hit a passing 429 and fell
+    all the way to Pollinations while its neighbours came from FLUX."""
+    import time as _time  # pylint: disable=import-outside-toplevel
+    sleep = sleep or _time.sleep
     key = os.environ.get("NVIDIA_API_KEY", "").strip()
     if not key:
         raise RuntimeError("NVIDIA_API_KEY is not set")
@@ -391,11 +399,27 @@ def nvidia(prompt, width, height, out_dir, seed, request=None):
                 "steps": 4 if "schnell" in model or "klein" in model else 30}
         if "dev" in model:
             body.update(cfg_scale=3.5, mode="base")
-        try:
-            data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, body, {"Accept": "application/json"}, 180)
-        except urllib.error.HTTPError as exc:
-            errors.append("%s: HTTP %s" % (model, exc.code))
-            if exc.code in (401, 403, 429):
+        data, exc = None, None
+        for wait in (0.0,) + NVIDIA_RETRY_WAITS:
+            if wait:
+                sleep(wait)
+            try:
+                data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, body, {"Accept": "application/json"}, 180)
+                break
+            except urllib.error.HTTPError as err:
+                exc = err
+                if err.code not in (429, 500, 502, 503, 504):
+                    break
+                try:
+                    after = float((err.headers or {}).get("Retry-After") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    after = 0.0
+                if after and wait is not NVIDIA_RETRY_WAITS[-1]:
+                    sleep(min(after, 30.0))
+        if data is None:
+            code = getattr(exc, "code", "?")
+            errors.append("%s: HTTP %s" % (model, code))
+            if code in (401, 403, 429):
                 break            # the key or the quota, not the model: the next model would fail the same way
             continue
         path = _out_path(out_dir, prompt)
