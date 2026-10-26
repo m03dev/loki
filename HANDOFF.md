@@ -33,6 +33,10 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 (setup/open/status) + vendored add-on `contrib/blender_mcp/` + the "blender" server in mcp_servers.json (starts only
 where Blender is installed). Home's scroll bar on the Mac: WebKit scroll bar + a fixed grid row in home_layout.css
 (checked only in cloud Chromium - the Mac must confirm). Maya MCP: not found on the PC; LOKI_TASKS has the Mac search.
+Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home preview or a chat picture -> big, ‹ › / ← →
+through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
+(local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
+original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
 
 Tabs are Home / Forge / **Studio** (the render farm manager + Render Studio, docs/STUDIO_FARM.md) / **Engine** (Godot
 or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on the whole mesh when only the object

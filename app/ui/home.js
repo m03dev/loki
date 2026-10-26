@@ -202,7 +202,25 @@ const LokiHome = (() => {
     const go = mk("button", "send small home-hero-open", it.kind === "job" ? "Show in the work strip" : it.kind === "made" ? "Show in Files" : "Open in " + k.label);
     go.type = "button"; go.addEventListener("click", () => open(it));
     side.append(go);
-    hero.append(pic || thumbOf(it, "home-hero-pic"), side);
+    pic = pic || thumbOf(it, "home-hero-pic");
+    const pics = pictures(), at = pics.findIndex((p) => p.key === keyOf(it));
+    if (at >= 0) {   // a picture: click it to see it big and step through everything (image_viewer.js)
+      pic.classList.add("home-hero-viewable");
+      pic.title = "Click to see it big - then ‹ › (or ← →) through all your pictures, select an area to focus, crop or edit only it";
+      pic.addEventListener("click", () => { if (window.LokiViewer) window.LokiViewer.open(pics, at); });
+      const stepTo = (d) => { const j = at + d; if (pics[j]) { S.pick = pics[j].key; render(); } };
+      const nav = (d, cls, name, icon) => {
+        const b = iconBtn("home-hero-nav " + cls, icon, name, d < 0 ? "The picture before this one." : "The next picture.", (e) => { e.stopPropagation(); stepTo(d); });
+        b.disabled = !pics[at + d]; return b;
+      };
+      pic.append(nav(-1, "prev", "Before", '<path d="M15 5l-7 7 7 7"/>'), nav(1, "next", "Next", '<path d="M9 5l7 7-7 7"/>'));
+    }
+    hero.append(pic, side);
+  }
+  /** Every picture Home shows, in Home's order: what the viewer steps through. */
+  function pictures() {
+    return S.items.filter((x) => x.thumb && !x.video && x.kind !== "job")
+      .map((x) => ({ key: keyOf(x), src: x.thumb, name: x.name, path: x.kind === "made" ? x.path_or_id : "" }));
   }
 
   async function jobDetail(id) {

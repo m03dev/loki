@@ -116,3 +116,11 @@
 }
 @media (prefers-reduced-motion: reduce) { .home-card { transition: none; } .home-live-dot { animation: none; } }
 html.u-hc .home-card-thumb, html.u-hc .home-hero-pic { background: #000 !important; border: 1px solid #fff !important; }
+
+/* the preview's own ‹ › and click-to-view (image_viewer.js) */
+.home-hero-viewable { cursor: zoom-in; }
+.home-hero-pic .home-hero-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 52px; border-radius: 10px;
+  background: rgba(0, 0, 0, .38); color: #fff; opacity: 0; transition: opacity .15s; z-index: 2; }
+.home-hero-pic .home-hero-nav.prev { left: 8px; } .home-hero-pic .home-hero-nav.next { right: 8px; }
+.home-hero-pic:hover .home-hero-nav:not(:disabled), .home-hero-pic .home-hero-nav:focus-visible { opacity: 1; }
+.home-hero-pic .home-hero-nav:disabled { display: none; }

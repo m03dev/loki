@@ -81,6 +81,14 @@ const LokiChatMedia = (() => {
     }
   }
   function bigView(src, name) {
+    if (window.LokiViewer) {   // the viewer: ‹ › through every picture in the chat, area select / crop / edit
+      const tiles = [...document.querySelectorAll(".cm-tile.cm-image")];
+      const items = tiles.map((t) => { const p = t.querySelector(".cm-pic"); return { src: p && p.src, name: p && p.alt, path: t.dataset.path }; });
+      let at = items.findIndex((x) => x.src === src);
+      if (at < 0) { items.push({ src, name, path: "" }); at = items.length - 1; }
+      window.LokiViewer.open(items, at);
+      return;
+    }
     const old = document.getElementById("cm-big"); if (old) old.remove();
     const wrap = mk("div", "cm-big"); wrap.id = "cm-big"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", name);
     const img = mk("img"); img.src = src; img.alt = name;
