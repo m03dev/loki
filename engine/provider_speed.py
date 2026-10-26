@@ -65,6 +65,11 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
         hold = 3600.0               # Gemini's free quota
     elif "429" in text or "rate limit" in text:
         hold = 10 * 60.0
+    elif "insufficient balance" in text or "insufficient_quota" in text or "out of credit" in text:
+        hold = 12 * 3600.0          # DeepSeek's own API with an empty balance (the PC, 2026-10-26)
+    elif "model is unavailable" in text or "timed out after" in text or "non-answer" in text:
+        hold = 3600.0               # a free model that is down, a route that hung for the whole turn, or one that
+                                    # answered without working (a guardrail refusal) - the PC, 2026-10-26
     else:
         return 0.0
     if not provider:

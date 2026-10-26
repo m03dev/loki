@@ -9424,6 +9424,19 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                 provider_speed.mark_out(DATA_DIR, meter.get("where") or "", str(result.get("error")))
             except Exception:  # noqa: BLE001
                 pass
+        if (not plan and i + 1 < len(tries) and not result.get("tools") and not _cancel_event.is_set()
+                and opencode_engine.non_answer(result.get("text") or "")):
+            # the route answered without working: a guardrail refusal or "I don't see a goal" while the goal was in
+            # the prompt (the PC, 2026-10-26: Vireonix 'auto' did this to 4 team jobs and they stopped there, never
+            # reaching the next provider or this computer's own local model)
+            try:
+                import provider_speed  # pylint: disable=import-outside-toplevel
+                provider_speed.mark_out(DATA_DIR, meter.get("where") or "", "non-answer: " + (result.get("text") or "")[:120])
+            except Exception:  # noqa: BLE001
+                pass
+            _progress("error", "%s answered without doing anything (%s) - trying the next provider"
+                      % (model or "OpenCode", (result.get("text") or "").strip()[:80]))
+            continue
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))

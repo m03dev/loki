@@ -234,6 +234,16 @@ if git_ok:
     check("on its own branch", "loki/job-abc12345" in subprocess.run(
         ["git", "branch"], cwd=repo, capture_output=True, text=True).stdout)
     check("the user's uncommitted work is untouched", (repo / "a.txt").read_text() == "my uncommitted edit")
+if git_ok:
+    empty = TMP / "emptyrepo"
+    empty.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=empty, check=True)
+    try:
+        where, note = workers.prepare_workspace({"id": "nohead1", "workspace": str(empty), "isolate": True}, TMP / "wtdata")
+        check("a repo with no commits yet is used directly, not a failed job (PC 2026-10-26)",
+              where == str(empty) and "no commits" in note, note)
+    except RuntimeError as exc:
+        check("a repo with no commits yet is used directly, not a failed job (PC 2026-10-26)", False, exc)
 plain, note = workers.prepare_workspace({"id": "x", "workspace": str(work), "isolate": True}, TMP)
 check("a non-git folder is used directly (and says so)", plain == str(work) and "not a git" in note)
 

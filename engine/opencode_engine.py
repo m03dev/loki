@@ -473,3 +473,16 @@ def showtime_mcp() -> dict:
     except Exception:  # noqa: BLE001
         return {}
     return {"type": "local", "command": [exe], "enabled": True} if exe else {}
+
+
+_NON_ANSWER = re.compile(
+    r"internal guardrails|unable to answer question|i can(?:'|no)t (?:help|assist) with (?:that|this)|"
+    r"(?:don't|do not|didn't|did not) see (?:a|any) (?:specific )?(?:team )?(?:goal|task|project)|"
+    r"could you (?:please )?provide|please provide (?:the|more) (?:details|goal|task)|what (?:is the|specific) (?:team )?goal",
+    re.I)
+
+
+def non_answer(reply: str) -> bool:
+    """A short reply that did no work: a provider's guardrail refusal, or asking for a goal it was given."""
+    text = str(reply or "").strip()
+    return bool(text) and len(text) < 1500 and bool(_NON_ANSWER.search(text))
