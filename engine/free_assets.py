@@ -183,13 +183,17 @@ def download(source: str, aid: str, workspace: Path, resolution: str = "1k", kin
     else:
         raise AssetError("source is polyhaven or ambientcg")
     side = {"source": source, "id": aid, "licence": LICENCE, "credit": credit, "url": url, "resolution": resolution,
+            "must_modify": True,                     # owner rule: raw material only - LOKI changes it before using it
             "files": [os.path.relpath(f, dest) for f in res["files"]]}
     (dest / "loki_asset.json").write_text(json.dumps(side, indent=1), encoding="utf-8")
-    return dict(res, ok=True, licence=LICENCE, credit=credit, url=url, folder=str(dest))
+    return dict(res, ok=True, licence=LICENCE, credit=credit, url=url, folder=str(dest), must_modify=True,
+                note="Raw material: never use it as it is - change it (blender tool, action=polish with edits).")
 
 
 TOOL = {"name": "free_assets",
-        "description": "CC0 assets, free for anything: Poly Haven (models, HDRIs, PBR textures) and ambientCG (PBR "
+        "description": "CC0 assets as RAW MATERIAL (owner rule: never used as they are - always change them, e.g. the "
+                       "blender tool action=polish with edits: tint, lowpoly, taper/bend/twist, displace, scale, a new "
+                       "material, or combine several). Sources: Poly Haven (models, HDRIs, PBR textures) and ambientCG (PBR "
                        "materials, HDRIs). action=search: source (polyhaven|ambientcg), query, kind (polyhaven: "
                        "models|hdris|textures; ambientcg: Material|HDRI). action=download: source, id, resolution "
                        "(1k default) -> assets/<source>/<id>/ (use the main file with the blender tool: import). "

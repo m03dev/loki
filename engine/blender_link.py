@@ -270,41 +270,130 @@ def build_render_export(code: str, scene: str, out_dir: Path, stem: str, width: 
 
 
 def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float = 2.0, target: int = 20000,
-           style: str = "studio", lods=(1.0, 0.5, 0.2), turntable: int = 0, remesh: float = 0.0, **kw) -> dict:
-    """AI model -> usable asset, in its own scene: import, cleanup, normalize (size m), [voxel remesh], decimate to
-    `target` triangles, UVs only where missing (an AI model's own UVs carry its texture), smooth shading, a staged
-    render, .glb + .blend, LODs, optional turntable. Checked on the PC 2026-10-26 (Blender 5.2.3) with a Forge model:
-    32.8k -> 20k triangles, textures kept, 16 s render."""
+           style: str = "studio", lods=(1.0, 0.5, 0.2), turntable: int = 0, remesh: float = 0.0, edits=None,
+           formats=("glb", "gltf", "fbx", "blend"), repair: bool = True, symmetric: bool = False, **kw) -> dict:
+    """AI model (or a free asset + `edits`) -> finished asset, in its own scene: import, cleanup, normalize (size m),
+    [voxel remesh], [remix edits], decimate to `target` triangles, UVs only where missing (an AI model's own UVs carry
+    its texture), smooth shading, a staged render, every format in `formats` (.glb, a .gltf folder, .fbx, .blend), LODs,
+    optional turntable - and the sidecar Forge and Home read (models/.meta/<name>.glb.json: the render as its picture,
+    triangles, formats, where it came from, licence / no_training carried over). Checked on the PC 2026-10-26
+    (Blender 5.2.3): a Forge character 32.8k -> 20k triangles with its textures; a Poly Haven cannon remixed."""
     import out_names  # pylint: disable=import-outside-toplevel
-    model = Path(model)
-    stem_text = name or out_names.display_name(model.name) + " polished"
+    model, out_dir = Path(model), Path(out_dir)
+    free = is_free_asset(model)
+    if free and not edits:
+        return {"ok": False, "error": "%s is a free asset (%s): change it first - give edits (tint, lowpoly, taper, "
+                                      "bend, twist, displace, bevel, scale, material). Free assets are never used as "
+                                      "they are." % (model.name, free)}
+    stem_text = name or out_names.display_name(model.name) + (" remix" if free else " polished")
     sc = ("LOKI " + stem_text)[:60]
-    png = out_names.path(Path(out_dir) / "renders", stem_text, "png")
-    glb = out_names.path(Path(out_dir) / "models", stem_text, "glb")
-    blend = glb.with_suffix(".blend")
+    png = out_names.path(out_dir / "renders", stem_text, "png")
+    glb = out_names.path(out_dir / "models", stem_text, "glb")
+    stem = glb.with_suffix("")
+    outs = {"glb": glb, "gltf": Path(str(stem) + "_gltf") / (stem.name + ".gltf"), "fbx": stem.with_suffix(".fbx"),
+            "blend": stem.with_suffix(".blend")}
     cmds = [{"type": "clear", "params": {"scene": sc}},
             {"type": "import", "params": {"scene": sc, "path": str(model)}},
             {"type": "cleanup", "params": {"scene": sc}},
             {"type": "normalize", "params": {"scene": sc, "size": size}}]
+    if repair:                                   # AI garbage -> clean surface; its colours baked across when rebuilt
+        cmds += [{"type": "repair", "params": {"scene": sc, "symmetric": bool(symmetric)}},
+                 {"type": "bake", "params": {"scene": sc, "size": 2048, "folder": str(out_dir / "models" / "textures")}}]
     if remesh:
         cmds.append({"type": "remesh", "params": {"scene": sc, "voxel": remesh}})
+    if edits:
+        cmds.append({"type": "remix", "params": {"scene": sc, "edits": list(edits)}})
     cmds += [{"type": "decimate", "params": {"scene": sc, "target": target}},
              {"type": "uv", "params": {"scene": sc, "mode": "missing"}},
              {"type": "shade", "params": {"scene": sc}},
              {"type": "stage", "params": {"scene": sc, "style": style}},
-             {"type": "render", "params": {"scene": sc, "path": str(png), "width": 1280, "height": 1280}},
-             {"type": "export", "params": {"scene": sc, "path": str(glb)}},
-             {"type": "export", "params": {"scene": sc, "path": str(blend)}}]
+             {"type": "render", "params": {"scene": sc, "path": str(png), "width": 1280, "height": 1280}}]
+    cmds += [{"type": "export", "params": {"scene": sc, "path": str(outs[f])}} for f in formats if f in outs]
     if lods:
-        cmds.append({"type": "lods", "params": {"scene": sc, "stem": str(glb.with_suffix("")), "ratios": list(lods)}})
+        cmds.append({"type": "lods", "params": {"scene": sc, "stem": str(stem), "ratios": list(lods)}})
     if turntable:
         cmds.append({"type": "turntable", "params": {"scene": sc, "frames": int(turntable),
                                                      "folder": str(png.with_suffix("")) + "_turntable"}})
     cmds.append({"type": "scene_info", "params": {"scene": sc}})
     res = run(cmds, name=stem_text, **kw)
-    res["files"] = {"render": str(png), "models": [str(glb), str(blend)]}
+    res["files"] = {"render": str(png), "models": [str(outs[f]) for f in formats if f in outs]}
     if turntable and res.get("ok"):
         res["files"]["turntable"] = turntable_mp4(Path(str(png.with_suffix("")) + "_turntable"))
+    rep = next((r.get("result") for r in res.get("results", []) if r.get("type") == "repair"), None)
+    if rep:
+        res["quality"] = {"verdict": rep.get("verdict"),
+                          "problems": sorted({p for v in (rep.get("objects") or {}).values() for p in v.get("problems", [])})}
+    if res.get("ok"):
+        info = next((r.get("result") for r in res.get("results", []) if r.get("type") == "scene_info"), {}) or {}
+        if rep:
+            info = dict(info, quality=res["quality"])
+        write_sidecar(glb, out_dir, png, model, info, [f for f in formats if f in outs], free, edits)
+    return res
+
+
+def is_free_asset(path: Path) -> str:
+    """'polyhaven/cannon_01' when `path` is a downloaded free asset (engine/free_assets.py), else ''."""
+    p = Path(path)
+    for d in [p.parent] + list(p.parents)[:3]:
+        side = d / "loki_asset.json"
+        if side.is_file():
+            try:
+                info = json.loads(side.read_text(encoding="utf-8"))
+                return "%s/%s" % (info.get("source", "?"), info.get("id", d.name))
+            except ValueError:
+                return d.name
+    return ""
+
+
+def write_sidecar(glb: Path, out_dir: Path, png: Path, source: Path, info: dict, formats: list, free: str = "",
+                  edits=None) -> Path:
+    """models/.meta/<name>.glb.json - what Forge's list and Home's preview read (forge3d.list_models)."""
+    meta_dir = Path(glb).parent / ".meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    src_meta = {}
+    try:
+        src_meta = json.loads((Path(source).parent / ".meta" / (Path(source).name + ".json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    try:
+        image = Path(png).resolve().relative_to(Path(out_dir).resolve()).as_posix()
+    except ValueError:
+        image = str(png)
+    meta = {"prompt": src_meta.get("prompt") or "", "backend": "blender polish",
+            "made_from": src_meta.get("backend") or ("free asset " + free if free else "imported model"),
+            "source": str(source), "image": image, "triangles": int(info.get("triangles") or 0),
+            "formats": formats, "t": time.time(), "quality": info.get("quality")}
+    for k in ("licence", "licence_url", "no_training"):
+        if src_meta.get(k):
+            meta[k] = src_meta[k]
+    if free:
+        meta.update(free_asset=free, edits=[e.get("op") for e in (edits or [])],
+                    licence=meta.get("licence") or "made from a CC0 asset, changed by LOKI")
+    side = meta_dir / (Path(glb).name + ".json")
+    side.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    return side
+
+
+def convert(path: str | Path, to: str, out_dir: str | Path | None = None, **kw) -> dict:
+    """One model file -> another format (fbx, gltf, glb, obj, blend) through Blender (window or background); the new
+    file goes beside the old one with the same name. Forge's Export uses it for FBX."""
+    path = Path(path)
+    to = str(to).lower().lstrip(".")
+    if to not in ("fbx", "gltf", "glb", "obj", "blend"):
+        return {"ok": False, "error": "convert to fbx, gltf, glb, obj or blend"}
+    if not path.is_file():
+        return {"ok": False, "error": "no such file: %s" % path.name}
+    out_dir = Path(out_dir or path.parent)
+    target = (out_dir / (path.stem + "_gltf") / (path.stem + ".gltf")) if to == "gltf" else out_dir / (path.stem + "." + to)
+    if target.exists():
+        target = target.with_name(target.stem + "_%s%s" % (time.strftime("%H%M%S"), target.suffix))
+    sc = ("LOKI convert " + path.stem)[:60]
+    res = run([{"type": "clear", "params": {"scene": sc}}, {"type": "import", "params": {"scene": sc, "path": str(path)}},
+               {"type": "export", "params": {"scene": sc, "path": str(target)}},
+               {"type": "clear", "params": {"scene": sc}}], name="convert " + path.stem, **kw)
+    res["file"] = str(target) if Path(target).is_file() else ""
+    if res.get("ok") and not res["file"]:
+        res.update(ok=False, error="Blender wrote nothing")
     return res
 
 
@@ -354,10 +443,14 @@ TOOL = {"name": "blender",
                        "params} - toolkit types: import, cleanup, normalize, decimate, remesh, uv, shade, stage, "
                        "render, export, lods, turntable, scene_info, clear. action=polish: `path` = an AI model "
                        "(.glb/.obj/.fbx from make_3d) -> cleaned, sized, decimated to `target` tris, staged render "
-                       "+ .glb/.blend + LODs (+ `turntable` frames -> mp4). action=status: is Blender there.",
+                       "+ .glb, .gltf, .fbx, .blend + LODs (+ `turntable` frames -> mp4); shows in Home as a 3D model and "
+                       "opens in Forge. FREE ASSETS (assets/ from free_assets) MUST be changed: give `edits` "
+                       "[{op: tint|lowpoly|taper|bend|twist|displace|bevel|scale|material, ...}] - without edits it is "
+                       "refused. action=status: is Blender there.",
         "inputSchema": {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["make", "run", "polish", "status"]},
             "path": {"type": "string"}, "target": {"type": "integer"}, "turntable": {"type": "integer"},
+            "edits": {"type": "array", "items": {"type": "object"}},
             "style": {"type": "string", "enum": ["studio", "night", "outdoor"]},
             "name": {"type": "string"}, "code": {"type": "string"}, "scene": {"type": "string"},
             "width": {"type": "integer"}, "height": {"type": "integer"},
@@ -377,7 +470,8 @@ def tool(args: dict, cwd: Path) -> dict:
         if not p.is_file():
             return {"ok": False, "error": "no model at %s (path= a .glb/.obj/.fbx in this folder)" % p}
         res = polish(p, Path(cwd), str(a.get("name") or ""), target=int(a.get("target") or 20000),
-                     style=str(a.get("style") or "studio"), turntable=int(a.get("turntable") or 0))
+                     style=str(a.get("style") or "studio"), turntable=int(a.get("turntable") or 0),
+                     edits=a.get("edits") if isinstance(a.get("edits"), list) else None)
         if res.get("ok"):
             res["made"] = [x for x in [res["files"]["render"]] + res["files"]["models"] + [res["files"].get("turntable", "")]
                            if x and Path(x).is_file()]

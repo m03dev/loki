@@ -13,6 +13,8 @@ the job's OWN scene - the scene the owner is working in is never touched):
     decimate (ratio | target), remesh (voxel), uv (smart project), shade (smooth + sharp angle | flat), stage
     (camera + 3 lights + ground + world; studio | night | outdoor), turntable (frames -> folder), lods (ratios ->
     <stem>_lodN.glb), clear (a LOKI scene); render takes view_transform ("Standard" for saturated emission)
+  remix (tint / lowpoly / taper / bend / twist / displace / bevel / scale / material): free assets imported from
+    assets/ are marked and export / lods REFUSE them until remix changed them
     "execute_code" (the MCP add-on's own name for "python") is run here too; any other type goes to the MCP add-on.
 
 Also, in a window: a watchdog keeps the MCP for Blender add-on registered and its socket (9876) up - whatever turned
@@ -29,7 +31,7 @@ from pathlib import Path
 
 import bpy
 
-VERSION = "2026-10-26.7"
+VERSION = "2026-10-26.11"
 WATCH_S = 5.0
 _S = {"log": print, "root": None, "last_watch": 0.0, "patched": None, "jobs": 0, "last_job": "", "mcp": False}
 
@@ -257,16 +259,28 @@ def cmd_export(p):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     ext = Path(path).suffix.lower()
     with job_context(p.get("scene")) as sc:
+        for h in [o for o in sc.objects if o.name.endswith("__high")]:   # repair's leftovers never ship
+            bpy.data.objects.remove(h, do_unlink=True)
+        raw = _unmodified_free([o for o in sc.objects if o.type == "MESH"])
+        if raw:
+            raise RuntimeError("these are free assets used as they are - change them first (remix): %s" % ", ".join(raw[:8]))
         if ext == ".blend":
             bpy.data.libraries.write(path, {sc}, fake_user=True)   # only this scene and what it uses
         elif ext in (".glb", ".gltf"):
-            kw = dict(filepath=path, export_format="GLB" if ext == ".glb" else "GLTF_SEPARATE")
+            kw = dict(filepath=path, export_format="GLB" if ext == ".glb" else "GLTF_SEPARATE", export_yup=True,
+                      export_apply=True)
             try:
                 bpy.ops.export_scene.gltf(use_active_scene=True, **kw)
             except TypeError:
                 bpy.ops.export_scene.gltf(**kw)
-        elif ext == ".fbx":
-            bpy.ops.export_scene.fbx(filepath=path)
+        elif ext == ".fbx":                                 # game-engine friendly: metres, Y up, textures copied
+            try:
+                bpy.ops.export_scene.fbx(filepath=path, use_active_scene=True, apply_unit_scale=True,
+                                         apply_scale_options="FBX_SCALE_ALL", path_mode="COPY", embed_textures=True,
+                                         mesh_smooth_type="FACE", add_leaf_bones=False, axis_forward="-Z", axis_up="Y",
+                                         use_mesh_modifiers=True)
+            except TypeError:
+                bpy.ops.export_scene.fbx(filepath=path)
         elif ext == ".obj":
             bpy.ops.wm.obj_export(filepath=path)
         else:
@@ -303,8 +317,11 @@ def _meshes(sc, names=None):
 
 
 def _apply_modifier(o, mod):
-    """Bake one modifier into the mesh without operators (works from timers and in the background)."""
-    dg = bpy.context.evaluated_depsgraph_get()
+    """Bake one modifier into the mesh without operators (works from timers and in the background). Evaluated in the
+    depsgraph of the scene the object is in - the context's one does not see a temporary scene (the PC 2026-10-26:
+    every LOD came out identical to the full model)."""
+    sc = o.users_scene[0] if o.users_scene else None
+    dg = sc.view_layers[0].depsgraph if sc is not None else bpy.context.evaluated_depsgraph_get()
     dg.update()
     new = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     old = o.data
@@ -340,8 +357,146 @@ def cmd_import(p):
         else:
             raise ValueError("cannot import %s" % ext)
         new = [o for o in sc.objects if o.name not in before]
-        return {"scene": sc.name, "imported": [o.name for o in new],
+        src = _free_asset_source(path)
+        for o in new:                                     # a free asset is raw material: it must be changed first
+            if src:
+                o["loki_free_asset"] = src
+        return {"scene": sc.name, "imported": [o.name for o in new], "free_asset": src or None,
                 "meshes": sum(o.type == "MESH" for o in new), "triangles": _tris([o for o in new if o.type == "MESH"])}
+
+
+def _free_asset_source(path):
+    """'polyhaven/cannon_01' when the file is a downloaded free asset (engine/free_assets.py: assets/<source>/<id>/,
+    loki_asset.json beside it), else ''."""
+    p = Path(path).resolve()
+    for d in [p.parent] + list(p.parents)[:3]:
+        side = d / "loki_asset.json"
+        if side.is_file():
+            try:
+                info = json.loads(side.read_text(encoding="utf-8"))
+                return "%s/%s" % (info.get("source", "?"), info.get("id", d.name))
+            except ValueError:
+                return d.name
+    parts = [x.lower() for x in p.parts]
+    if "assets" in parts and parts.index("assets") + 2 < len(parts):
+        i = parts.index("assets")
+        return "%s/%s" % (p.parts[i + 1], p.parts[i + 2])
+    return ""
+
+
+def _unmodified_free(objs):
+    return [o.name for o in objs if o.get("loki_free_asset") and not o.get("loki_modified")]
+
+
+def cmd_remix(p):
+    """Change free-asset parts so they become LOKI's own (owner 2026-10-26: "they can download them but must edit them
+    never just use free assets as is"). `edits`: a list of
+      {"op": "tint", "color": [r,g,b], "amount": 0.6}        recolour every material (mix toward the colour)
+      {"op": "lowpoly", "ratio": 0.25}                         stylise: fewer faces, flat shading
+      {"op": "taper" | "bend" | "twist", "factor": 0.4}        reshape (Simple Deform, baked)
+      {"op": "displace", "strength": 0.05, "scale": 0.4}       roughen the surface with noise (baked)
+      {"op": "bevel", "width": 0.01}                           soften every edge
+      {"op": "scale", "xyz": [1.2, 0.8, 1.0]}                  re-proportion
+      {"op": "material", "path": ".../Color.jpg"}              a new base-colour texture (e.g. an ambientCG one)
+    Each changed object records what was done (custom property loki_modified); export refuses unchanged free assets."""
+    edits = list(p.get("edits") or [])
+    if not edits:
+        raise ValueError("remix needs edits - free assets must be changed, never used as they are")
+    import bmesh  # pylint: disable=import-outside-toplevel
+    done = {}
+    with job_context(p.get("scene")) as sc:
+        objs = _meshes(sc, p.get("objects"))
+        shape_ops = {"taper", "bend", "twist", "displace", "scale"}
+        if len(objs) > 1 and any(str(e.get("op")) in shape_ops for e in edits):
+            # one mesh first: a reshape works over each object's own bounds, so separate parts would drift apart
+            # (PC 2026-10-26: a tapered Poly Haven cannon lost its wheels)
+            keep = objs[0]
+            for o in objs:
+                o.select_set(True)
+            with _with_active(sc, keep):
+                for o in objs:
+                    o.select_set(True)
+                with bpy.context.temp_override(active_object=keep, object=keep, selected_objects=objs,
+                                               selected_editable_objects=objs):
+                    bpy.ops.object.join()
+            objs = _meshes(sc, [keep.name])        # the joined mesh keeps the first part's free-asset mark
+        for e in edits:
+            op = str(e.get("op") or "")
+            for o in objs:
+                if op == "tint":
+                    col = tuple(float(c) for c in (e.get("color") or [0.6, 0.3, 0.2]))[:3]
+                    amt = float(e.get("amount") or 0.6)
+                    for slot in o.material_slots:
+                        m = slot.material
+                        if m is None:
+                            continue
+                        m = m.copy() if m.users > 1 else m
+                        slot.material = m
+                        m.diffuse_color = tuple(a * (1 - amt) + b * amt for a, b in zip(m.diffuse_color[:3], col)) + (1,)
+                        nt = getattr(m, "node_tree", None)
+                        bsdf = nt.nodes.get("Principled BSDF") if nt else None
+                        if bsdf is not None:
+                            inp = bsdf.inputs["Base Color"]
+                            mix = nt.nodes.new("ShaderNodeMix")
+                            mix.data_type = "RGBA"
+                            mix.blend_type = "MULTIPLY" if e.get("multiply") else "MIX"
+                            mix.inputs["Factor"].default_value = amt
+                            mix.inputs[7].default_value = (*col, 1)            # B (colour)
+                            if inp.links:
+                                nt.links.new(inp.links[0].from_socket, mix.inputs[6])   # A (colour)
+                            else:
+                                mix.inputs[6].default_value = inp.default_value
+                            nt.links.new(mix.outputs[2], inp)
+                elif op in ("taper", "bend", "twist"):
+                    m = o.modifiers.new("LOKI " + op, "SIMPLE_DEFORM")
+                    m.deform_method = op.upper()
+                    m.factor = float(e.get("factor") or 0.3)
+                    m.deform_axis = str(e.get("axis") or "Z").upper()
+                    _apply_modifier(o, m)
+                elif op == "displace":
+                    tex = bpy.data.textures.new("LOKI noise", "CLOUDS")
+                    tex.noise_scale = float(e.get("scale") or 0.4)
+                    m = o.modifiers.new("LOKI displace", "DISPLACE")
+                    m.texture, m.strength = tex, float(e.get("strength") or 0.04)
+                    _apply_modifier(o, m)
+                elif op == "bevel":
+                    m = o.modifiers.new("LOKI bevel", "BEVEL")
+                    m.width, m.segments = float(e.get("width") or 0.01), int(e.get("segments") or 2)
+                    m.limit_method = "ANGLE"
+                    _apply_modifier(o, m)
+                elif op == "lowpoly":
+                    m = o.modifiers.new("LOKI lowpoly", "DECIMATE")
+                    m.ratio = float(e.get("ratio") or 0.25)
+                    _apply_modifier(o, m)
+                    for poly in o.data.polygons:
+                        poly.use_smooth = False
+                elif op == "scale":
+                    from mathutils import Matrix  # pylint: disable=import-outside-toplevel
+                    x, y, z = [float(v) for v in (e.get("xyz") or [1.1, 1.1, 1.1])][:3]
+                    o.data.transform(Matrix.Diagonal((x, y, z, 1.0)))
+                    o.data.update()
+                elif op == "material":
+                    img_path = str(e.get("path") or "")
+                    if not Path(img_path).is_file():
+                        raise FileNotFoundError(img_path)
+                    m = bpy.data.materials.new("LOKI remix")
+                    try:
+                        m.use_nodes = True
+                    except AttributeError:
+                        pass
+                    nt = m.node_tree
+                    tex = nt.nodes.new("ShaderNodeTexImage")
+                    tex.image = bpy.data.images.load(img_path, check_existing=True)
+                    nt.links.new(tex.outputs["Color"], nt.nodes["Principled BSDF"].inputs["Base Color"])
+                    o.data.materials.clear()
+                    o.data.materials.append(m)
+                else:
+                    raise ValueError("unknown remix op %r" % op)
+                rec = list(o.get("loki_modified") or [])
+                rec.append(op)
+                o["loki_modified"] = rec
+                done.setdefault(o.name, []).append(op)
+    return {"changed": done}
 
 
 def cmd_cleanup(p):
@@ -614,6 +769,9 @@ def cmd_lods(p):
     out = []
     with job_context(p.get("scene")) as sc:
         src = _meshes(sc, p.get("objects"))
+        raw = _unmodified_free(src)
+        if raw:
+            raise RuntimeError("these are free assets used as they are - change them first (remix): %s" % ", ".join(raw[:8]))
         for i, r in enumerate(ratios):
             tmp = bpy.data.scenes.new("%s LOD%d" % (sc.name, i))
             copies = []
@@ -666,7 +824,237 @@ def cmd_clear(p):
     return {"cleared": True}
 
 
-COMMANDS.update({"import": cmd_import, "cleanup": cmd_cleanup, "normalize": cmd_normalize, "decimate": cmd_decimate,
+# ----------------------------------------------------------------------------- repair: AI mesh garbage -> clean surface
+# Owner 2026-10-26: "some of the models come out like garbage clean it up do research". Recipe from that research:
+# floaters (small loose pieces) out, small holes filled, broken / open / paper-thin surfaces rebuilt watertight by a
+# voxel remesh (the original kept as "<name>__high" so `bake` moves its texture onto the new surface), marching-cube
+# bumps relaxed (Laplacian, volume kept), optional upright + symmetry, and a quality score so garbage is named.
+def _components(bm):
+    seen, comps = set(), []
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        stack, comp = [f], []
+        seen.add(f.index)
+        while stack:
+            cur = stack.pop()
+            comp.append(cur)
+            for e in cur.edges:
+                for nf in e.link_faces:
+                    if nf.index not in seen:
+                        seen.add(nf.index)
+                        stack.append(nf)
+        comps.append(comp)
+    return comps
+
+
+def _quality(bm):
+    """Numbers that tell a clean model from garbage (research thresholds, unverified starting points)."""
+    import bmesh  # pylint: disable=import-outside-toplevel
+    bm.faces.ensure_lookup_table()
+    bm.faces.index_update()
+    edges = len(bm.edges) or 1
+    boundary = sum(1 for e in bm.edges if e.is_boundary)
+    nonmanifold = sum(1 for e in bm.edges if not e.is_manifold and not e.is_boundary)
+    thin = 0
+    faces = list(bm.faces)
+    step = max(1, len(faces) // 20000)
+    sample = faces[::step]
+    noise = []
+    for f in sample:
+        if min((l.calc_angle() for l in f.loops), default=1.0) < 0.0873:      # < 5 degrees
+            thin += 1
+        nb = [lf for e in f.edges for lf in e.link_faces if lf is not f]
+        if nb:
+            avg = sum((x.normal for x in nb), f.normal * 0)
+            if avg.length > 1e-9:
+                noise.append(f.normal.angle(avg.normalized(), 0.0))
+    comps = _components(bm)
+    areas = sorted((sum(x.calc_area() for x in c) for c in comps), reverse=True)
+    total = sum(areas) or 1.0
+    import math
+    return {"faces": len(bm.faces), "components": len(comps), "largest_share": round(areas[0] / total, 3) if areas else 0,
+            "boundary_edges": boundary, "nonmanifold_edges": nonmanifold, "open_ratio": round((boundary + nonmanifold) / edges, 4),
+            "thin_ratio": round(thin / max(1, len(sample)), 3),
+            "noise_deg": round(math.degrees(sum(noise) / len(noise)), 2) if noise else 0.0}
+
+
+def _verdict(q):
+    bad, warn = [], []
+    if q["faces"] < 500:
+        bad.append("too few faces (%d)" % q["faces"])
+    if q["largest_share"] < 0.85:
+        warn.append("broken into pieces (largest part %d%%)" % int(q["largest_share"] * 100))
+    if q["open_ratio"] > 0.01:
+        warn.append("open / broken surface (%.1f%% edges)" % (q["open_ratio"] * 100))
+    if q["thin_ratio"] > 0.2:
+        warn.append("many sliver triangles (%d%%)" % int(q["thin_ratio"] * 100))
+    if q["noise_deg"] > 12:
+        warn.append("bumpy surface (%.0f deg)" % q["noise_deg"])
+    return {"verdict": "garbage" if bad or len(warn) >= 3 else "rough" if warn else "clean", "problems": bad + warn}
+
+
+def _has_texture(o):
+    for slot in o.material_slots:
+        m = slot.material
+        if m and m.node_tree and any(n.type in ("TEX_IMAGE", "ATTRIBUTE", "VERTEX_COLOR") for n in m.node_tree.nodes):
+            return True
+    return bool(getattr(o.data, "color_attributes", None) and len(o.data.color_attributes))
+
+
+def cmd_repair(p):
+    """keep: drop loose pieces under this share of the area (0.02); holes: fill holes up to this many sides (64);
+    remesh: "auto" (rebuild when the surface is open/broken), true, false; voxel: divisions of the size (200);
+    smooth: Laplacian iterations, "auto" = only when bumpy (default); upright: rotate the tallest side to up;
+    symmetric: mirror the left half onto the right (creatures seen from the front)."""
+    import bmesh  # pylint: disable=import-outside-toplevel
+    from mathutils import Matrix  # pylint: disable=import-outside-toplevel
+    keep = float(p.get("keep", 0.02))
+    sides = int(p.get("holes", 64))
+    remesh = p.get("remesh", "auto")
+    out = {}
+    with job_context(p.get("scene")) as sc:
+        for o in _meshes(sc, p.get("objects")):
+            if o.name.endswith("__high"):
+                continue
+            bm = bmesh.new()
+            bm.from_mesh(o.data)
+            before = _quality(bm)
+            comps = _components(bm)
+            areas = [sum(f.calc_area() for f in c) for c in comps]
+            total = sum(areas) or 1.0
+            drop = [f for c, a in zip(comps, areas) if a < keep * total for f in c]
+            if drop and len(drop) < len(bm.faces):
+                bmesh.ops.delete(bm, geom=drop, context="FACES")
+                loose = [v for v in bm.verts if not v.link_faces]
+                if loose:
+                    bmesh.ops.delete(bm, geom=loose, context="VERTS")
+            boundary = [e for e in bm.edges if e.is_boundary]
+            if boundary and sides:
+                bmesh.ops.holes_fill(bm, edges=boundary, sides=sides)
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            mid = _quality(bm)
+            bm.to_mesh(o.data)
+            bm.free()
+            o.data.update()
+            rebuilt = False
+            if remesh is True or (remesh == "auto" and (mid["open_ratio"] > 0.005 or mid["thin_ratio"] > 0.25)):
+                dims = o.dimensions
+                size = max(max(dims), 1e-6) / float(p.get("voxel") or 200)
+                if _has_texture(o):                       # keep the original: `bake` moves its colours across
+                    high = o.copy()
+                    high.data = o.data.copy()
+                    high.name = o.name + "__high"
+                    sc.collection.objects.link(high)
+                    high.hide_render = True
+                m = o.modifiers.new("LOKI rebuild", "REMESH")
+                m.mode, m.voxel_size, m.use_smooth_shade = "VOXEL", size, True
+                _apply_modifier(o, m)
+                rebuilt = True
+            it = p.get("smooth", "auto")
+            if it == "auto":
+                it = 4 if mid["noise_deg"] > 12 or rebuilt else 0
+            if int(it):
+                m = o.modifiers.new("LOKI smooth", "LAPLACIANSMOOTH")
+                m.iterations, m.lambda_factor, m.use_volume_preserve, m.use_normalized = int(it), 0.5, True, True
+                _apply_modifier(o, m)
+            if p.get("upright"):
+                d = o.dimensions
+                if d.x > d.z * 1.3 and d.x >= d.y:
+                    o.data.transform(Matrix.Rotation(1.5708, 4, "Y"))
+                elif d.y > d.z * 1.3 and d.y > d.x:
+                    o.data.transform(Matrix.Rotation(-1.5708, 4, "X"))
+            if p.get("symmetric"):
+                bm = bmesh.new()
+                bm.from_mesh(o.data)
+                bmesh.ops.symmetrize(bm, input=bm.verts[:] + bm.edges[:] + bm.faces[:], direction="X", dist=1e-4)
+                bm.to_mesh(o.data)
+                bm.free()
+            bm = bmesh.new()
+            bm.from_mesh(o.data)
+            after = _quality(bm)
+            bm.free()
+            out[o.name] = {"before": before, "after": after, "removed_faces": len(drop), "rebuilt": rebuilt,
+                           "smoothed": int(it), **_verdict(after), "verdict_before": _verdict(before)["verdict"]}
+    worst = max((v["verdict"] for v in out.values()), key=["clean", "rough", "garbage"].index, default="clean")
+    return {"objects": out, "verdict": worst}
+
+
+def cmd_bake(p):
+    """Move the original's colours onto a rebuilt surface: for each "<name>__high" left by repair, UV the new mesh,
+    bake DIFFUSE colour (Cycles, selected -> active) into a `size` texture, give it a clean material, drop the
+    original. Headless-safe."""
+    import math  # pylint: disable=import-outside-toplevel
+    size = int(p.get("size") or 2048)
+    folder = Path(str(p.get("folder") or (_out_dir() / "models" / "textures")))
+    folder.mkdir(parents=True, exist_ok=True)
+    done = []
+    with job_context(p.get("scene")) as sc:
+        prev_engine = sc.render.engine
+        sc.render.engine = "CYCLES"
+        sc.cycles.samples = int(p.get("samples") or 8)
+        try:
+            sc.cycles.device = "GPU"
+        except TypeError:
+            pass
+        try:
+            for high in [o for o in sc.objects if o.name.endswith("__high")]:
+                low = sc.objects.get(high.name[:-6])
+                if low is None:
+                    bpy.data.objects.remove(high, do_unlink=True)
+                    continue
+                diag = max(low.dimensions.length, 1e-4)
+                layers = low.data.uv_layers
+                for lay in list(layers):
+                    layers.remove(lay)
+                layers.new(name="LOKI_UV")
+                with _with_active(sc, low):
+                    bpy.ops.object.mode_set(mode="EDIT")
+                    try:
+                        bpy.ops.mesh.select_all(action="SELECT")
+                        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.003)
+                    finally:
+                        bpy.ops.object.mode_set(mode="OBJECT")
+                img = bpy.data.images.new("%s_baked" % low.name, size, size)
+                mat = bpy.data.materials.new("LOKI baked %s" % low.name)
+                mat.use_nodes = True
+                nt = mat.node_tree
+                bsdf = nt.nodes.get("Principled BSDF")
+                tex = nt.nodes.new("ShaderNodeTexImage")
+                tex.image = img
+                nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+                bsdf.inputs["Roughness"].default_value = 0.7
+                nt.nodes.active = tex
+                low.data.materials.clear()
+                low.data.materials.append(mat)
+                high.hide_render = False
+                for x in sc.objects:
+                    try:
+                        x.select_set(x in (high, low))
+                    except RuntimeError:
+                        pass
+                sc.view_layers[0].objects.active = low
+                with bpy.context.temp_override(active_object=low, object=low, selected_objects=[high, low],
+                                               selected_editable_objects=[high, low]):
+                    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_selected_to_active=True,
+                                        cage_extrusion=0.01 * diag, max_ray_distance=0.03 * diag, margin=16)
+                path = folder / ("%s_baked.png" % "".join(c if c.isalnum() or c in "-_" else "_" for c in low.name))
+                img.filepath_raw = str(path)
+                img.file_format = "PNG"
+                img.save()
+                img.pack()
+                data = high.data
+                bpy.data.objects.remove(high, do_unlink=True)
+                if data.users == 0:
+                    bpy.data.meshes.remove(data)
+                done.append({"object": low.name, "texture": str(path)})
+        finally:
+            sc.render.engine = prev_engine
+    return {"baked": done}
+
+
+
+COMMANDS.update({"repair": cmd_repair, "bake": cmd_bake, "remix": cmd_remix, "import": cmd_import, "cleanup": cmd_cleanup, "normalize": cmd_normalize, "decimate": cmd_decimate,
                  "remesh": cmd_remesh, "uv": cmd_uv, "shade": cmd_shade, "stage": cmd_stage, "turntable": cmd_turntable,
                  "lods": cmd_lods, "clear": cmd_clear})
 
@@ -713,10 +1101,27 @@ def run_job_file(path):
             "mode": "background" if bpy.app.background else "window", "at": time.time()}
 
 
+def _prune(root, keep=40):
+    """Keep blender/outbox and done/ small: the newest `keep` answers/jobs (owner 2026-10-26: "clean up everything")."""
+    for d in ("outbox", "done"):
+        try:
+            files = sorted((p for p in (root / d).iterdir() if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError:
+            continue
+        for old in files[keep:]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+
 def _inbox_once():
     root = _S["root"]
     if root is None:
         return
+    if _S["jobs"] % 20 == 0 and time.time() - _S.get("pruned", 0) > 600:
+        _S["pruned"] = time.time()
+        _prune(root)
     inbox, outbox, done = root / "inbox", root / "outbox", root / "done"
     try:
         jobs = sorted(p for p in inbox.iterdir() if p.suffix in (".json", ".py") and p.is_file())

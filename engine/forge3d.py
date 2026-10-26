@@ -737,7 +737,26 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     try:
+        if backend in ("auto", "pixal3d", "trellis2", "hunyuan"):    # a real model needs ComfyUI: start it when it is
+            try:                                                      # this computer's and not running (the PC 2026-10-26:
+                import comfy_autostart  # pylint: disable=import-outside-toplevel   # it was off -> a "lift" blob)
+                import forge_trellis  # pylint: disable=import-outside-toplevel
+                up = comfy_autostart.ensure(forge_trellis.comfy_url(), wait=float(os.environ.get("LOKI_COMFY_WAIT", "150")))
+                if up.get("started"):
+                    say("started ComfyUI on this computer", 0.03)
+                    forge_trellis.forget_cache()
+                    try:
+                        import forge_hunyuan  # pylint: disable=import-outside-toplevel
+                        forge_hunyuan._READY.clear()  # pylint: disable=protected-access
+                    except Exception:  # noqa: BLE001
+                        pass
+            except Exception:  # noqa: BLE001 - never block a make on the starter
+                pass
         order = plan(backend)
+        if backend == "auto" and not (options or {}).get("allow_draft") and set(order) <= {"lift"}:
+            raise ForgeError("no real 3D model can run right now - ComfyUI (Pixal3D / TRELLIS.2) is not reachable and "
+                             "TripoSR is not installed. Start ComfyUI (Lab, or python tools/setup_comfyui.py --start) or "
+                             "pick 'lift' to get a rough silhouette draft on purpose.")
         made_image = ""
         if not source:
             if not (prompt or "").strip():

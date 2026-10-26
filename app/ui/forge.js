@@ -449,7 +449,9 @@ function forgeStage() {
   const out = el("div", "forge-float forge-exportbar"); out.id = "forge-exportbar";   // the menubar commands select this by id
   out.append(forgeBtn("save", "Save .glb", "Save this model (sculpting and material included) as .glb in models/ - any 3D app opens it.", () => forgeSave("glb")),
     forgeBtn("file", "Save .obj", "Save it as .obj in models/ (any 3D app).", () => forgeSave("obj")),
-    forgeBtn("export", "Export\u2026", "Export with options: glTF / OBJ / STL (3D printing) / PLY, a unit scale and a name.", () => forgeExportDialog()),
+    forgeBtn("export", "Export\u2026", "Export with options: glTF / FBX / OBJ / STL (3D printing) / PLY, a unit scale and a name.", () => forgeExportDialog()),
+    forgeBtn("sparkle", "Clean up", "Blender cleans this model up: loose bits out, holes and broken surfaces rebuilt (colours baked back on), "
+      + "smoothed, sized, decimated for games - then .glb, .gltf, .fbx and .blend in models/, and it opens here.", () => forgeFinish()),
     forgeBtn("folder", "Show in Files", "Open the models folder in Files.", () => {
       if (typeof openFiles === "function") { forgeClose(); openFiles(forge.model ? "models/" + forge.model : undefined); }
     }));
@@ -1044,6 +1046,8 @@ function forgeWritePly(A, title) {
 const forgeExport = { fmt: "glb", scale: "1", stlAscii: false, dlg: null };
 const FORGE_EXPORT_FMTS = [
   ["glb", "glTF (.glb)", "Binary glTF - geometry, vertex colours and the material in one file (any 3D app)."],
+  ["fbx", "FBX (.fbx)", "Unity, Unreal, Maya - textures inside (made by Blender from the saved .glb)."],
+  ["gltf", "glTF + files (.gltf)", "glTF as a folder: .gltf, .bin and the textures (made by Blender from the saved .glb)."],
   ["obj", "Wavefront (.obj)", "Geometry only - the format every tool reads."],
   ["stl", "STL (.stl)", "Faceted triangles with per-face normals, for 3D printing and CAD."],
   ["ply", "PLY (.ply)", "Binary point/face file with normals - what scan and print tools expect."],
@@ -1111,6 +1115,7 @@ function forgeExportRender() {
 
 async function forgeSave(kind, opts) {
   opts = opts || {};
+  if (kind === "fbx" || kind === "gltf") return forgeSaveVia(kind, opts);
   if (!forge.view || !forge.view.sm) { forgeSay("Nothing to save yet.", true); return; }
   const ext = kind === "stl-ascii" ? "stl" : kind;
   const given = opts.name || forgeExport.name;
@@ -1127,6 +1132,32 @@ async function forgeSave(kind, opts) {
   forgeSay("Saved " + r.path);
   if (kind === "glb") forge.model = r.name;
   forgeList();
+}
+
+// FBX / glTF-with-files: save the .glb, then Blender converts it (POST /forge/convert, engine/blender_link.py convert)
+async function forgeSaveVia(kind, opts) {
+  await forgeSave("glb", opts);                   // sets forge.model to the saved .glb
+  if (!forge.model) return;
+  const r = await api("/forge/convert", { name: forge.model, to: kind }).catch((e) => ({ ok: false, error: e.message }));
+  if (!r || !r.ok || !r.id) { forgeSay((r && r.error) || "Could not start Blender.", true); return; }
+  forgeSay("Blender is making the " + kind.toUpperCase() + "\u2026");
+  forgePoll(r.id, (res) => { forgeSay("Saved " + (res.folder ? res.folder + "/" : "models/") + res.file); forgeList(); });
+}
+
+// Clean up: the open model through Blender's repair + polish; the finished .glb opens here (POST /forge/finish)
+async function forgeFinish() {
+  if (!forge.model) { forgeSay("Open or save a model first (it cleans up the saved file).", true); return; }
+  const r = await api("/forge/finish", { name: forge.model, symmetric: !!(forge.view && forge.view.brush && forge.view.brush.symmetry) })
+    .catch((e) => ({ ok: false, error: e.message }));
+  if (!r || !r.ok || !r.id) { forgeSay((r && r.error) || "Could not start Blender.", true); return; }
+  forgeSay("Blender is cleaning it up\u2026");
+  forgePoll(r.id, async (res) => {
+    const q = res.quality || {};
+    forgeSay("Cleaned up: " + res.files.join(", ") + (q.verdict ? "  \u00b7  quality: " + q.verdict + (q.problems && q.problems.length ? " (" + q.problems.join("; ") + ")" : "") : ""),
+      q.verdict === "garbage");
+    await forgeLoad(res.name);
+    forgeList();
+  });
 }
 
 // ------------------------------------------------------------------------------------------ the sculpt mesh

@@ -213,7 +213,7 @@ def run(cutout_png: Path, out_base: Path, mode: str = "pixal3d", opts: dict | No
     else:
         image = upload(Path(cutout_png).read_bytes(), "")
     prompt = build(mode, image, opts)
-    pid = uuid.uuid4().hex
+    pid = str(uuid.uuid4())          # ComfyUI wants a real UUID ("prompt_id must be a valid UUID", the PC 2026-10-26)
     started = time.time()
     say("queued on ComfyUI (%s)" % mode)
     got = cl.queue_prompt(prompt, "loki-forge", pid)

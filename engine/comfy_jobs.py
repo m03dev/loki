@@ -101,7 +101,7 @@ def run(name: str, params: dict, out_dir: str | Path, cl=None, sleep: Callable =
     api = build(name, params, wf)
     for (nid, inp), value in uploaded.items():
         api[nid]["inputs"][inp] = value
-    pid = uuid.uuid4().hex
+    pid = str(uuid.uuid4())          # ComfyUI wants a real UUID ("prompt_id must be a valid UUID", the PC 2026-10-26)
     started = time.time()
     got = cl.queue_prompt(api, "loki-jobs", pid)
     if got.get("node_errors"):

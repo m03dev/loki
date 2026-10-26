@@ -200,6 +200,37 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             return forge_trellis.install(names, data.get("comfy_dir") or None, mode,
                                          progress=lambda msg, frac=None: progress(msg, frac if frac is not None else 0.5))
         return 200, forge3d.start_job(work, kind="install", label="TRELLIS / Pixal3D models", thread=thread)
+    if route in ("/forge/finish", "/forge/convert"):   # Blender: clean up a model / another format (engine/blender_link.py)
+        import blender_link  # pylint: disable=import-outside-toplevel
+        found = forge3d.model_file(models_dir(state), str(data.get("name") or ""))
+        if found is None:
+            return 404, {"ok": False, "error": "no such model in models/"}
+        if not blender_link.find_blender():
+            return 400, {"ok": False, "error": "Blender is not installed on this computer (python engine/blender_link.py setup --install)"}
+        ws = workspace(state)
+        if route == "/forge/convert":
+            to = str(data.get("to") or "fbx")
+
+            def work(progress):
+                progress("Blender: %s -> %s" % (found.name, to), 0.3)
+                r = blender_link.convert(found, to)
+                return {"ok": bool(r.get("ok")), "file": Path(r["file"]).name if r.get("file") else "",
+                        "folder": _rel(state, str(Path(r["file"]).parent)) if r.get("file") else "",
+                        "error": r.get("error") or ("" if r.get("ok") else "Blender could not convert it")}
+            return 200, forge3d.start_job(work, kind="convert", label="%s -> %s" % (found.name, to), thread=thread)
+
+        def work(progress):
+            progress("Blender: repairing, cleaning, baking, exporting %s" % found.name, 0.2)
+            r = blender_link.polish(found, ws, str(data.get("name") or ""), size=float(data.get("size") or 2.0),
+                                    target=int(data.get("target") or 25000), symmetric=bool(data.get("symmetric")),
+                                    lods=(1.0, 0.5, 0.2), turntable=0)
+            if not r.get("ok"):
+                bad = next((x for x in r.get("results", []) if x.get("status") != "success"), {})
+                return {"ok": False, "error": r.get("error") or bad.get("message") or "Blender could not clean it up"}
+            glb = next((m for m in r["files"]["models"] if m.endswith(".glb")), "")
+            return {"ok": True, "name": Path(glb).name, "files": [Path(m).name for m in r["files"]["models"]],
+                    "render": _rel(state, r["files"]["render"]), "quality": r.get("quality"), "via": r.get("via")}
+        return 200, forge3d.start_job(work, kind="finish", label="clean up " + found.name, thread=thread)
     if route == "/forge/make":
         backend = str(data.get("backend") or "auto")
         if backend not in forge3d.BACKENDS:
@@ -226,6 +257,8 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             # the four angles itself when the model is not a creature (which has its own views).
             res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress,
                                   options=options, judge=judge)
+            if res.get("ok") and data.get("finish", True) and res.get("backend") != "lift":
+                res = _finish_after_make(state, res, progress, bool(data.get("symmetric")))
             if res.get("ok") and res.get("image"):
                 res["image"] = _rel(state, res["image"])
             out = {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
@@ -276,6 +309,27 @@ def list_levels(models: Path, limit: int = 120) -> list:
             continue
         items.append({"name": p.name, "actors": actors, "modified": int(p.stat().st_mtime)})
     return items
+
+
+def _finish_after_make(state, res: dict, progress, symmetric: bool = False) -> dict:
+    """A new AI model -> Blender's repair + polish when Blender is on this computer: the cleaned .glb (+ .gltf, .fbx,
+    .blend, LODs, a render) becomes what Forge opens and Home shows; the raw model stays beside it. Any failure keeps
+    the raw model (owner 2026-10-26: "clean up everything and make sure things are working")."""
+    try:
+        import blender_link  # pylint: disable=import-outside-toplevel
+        if not blender_link.find_blender():
+            return res
+        progress("Blender: repairing and cleaning it up", 0.9)
+        r = blender_link.polish(Path(res["glb"]), workspace(state), str(res.get("prompt") or ""), target=25000,
+                                symmetric=symmetric, lods=(1.0, 0.5, 0.2), turntable=0)
+    except Exception as exc:  # noqa: BLE001
+        return dict(res, finish_error="%s: %s" % (type(exc).__name__, str(exc)[:200]))
+    if not r.get("ok"):
+        bad = next((x for x in r.get("results", []) if x.get("status") != "success"), {})
+        return dict(res, finish_error=r.get("error") or bad.get("message") or "Blender could not clean it up")
+    glb = next((m for m in r["files"]["models"] if m.endswith(".glb")), "")
+    return dict(res, raw=Path(res["glb"]).name, glb=glb, name=Path(glb).name, files=[Path(m).name for m in r["files"]["models"]],
+                render=_rel(state, r["files"]["render"]), quality=r.get("quality"), finished=True)
 
 
 def save(state, name: str, body: bytes) -> tuple:

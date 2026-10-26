@@ -124,3 +124,8 @@ html.u-hc .home-card-thumb, html.u-hc .home-hero-pic { background: #000 !importa
 .home-hero-pic .home-hero-nav.prev { left: 8px; } .home-hero-pic .home-hero-nav.next { right: 8px; }
 .home-hero-pic:hover .home-hero-nav:not(:disabled), .home-hero-pic .home-hero-nav:focus-visible { opacity: 1; }
 .home-hero-pic .home-hero-nav:disabled { display: none; }
+
+/* a model in the big preview: the model itself, live (app/ui/model_preview.js) */
+.home-hero-3d { cursor: grab; }
+.home-hero-3d:active { cursor: grabbing; }
+.home-hero-pic .mp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

@@ -195,7 +195,7 @@ def run_comfy(cut_png: Path, base: Path, opts: dict | None = None, cl=None, slee
     name = "loki-hunyuan-%s.png" % uuid.uuid4().hex[:10]
     up = cl.upload_image(name, Path(cut_png).read_bytes(), subfolder="loki")
     image = ("%s/%s" % (up["subfolder"], up.get("name") or name)) if up.get("subfolder") else (up.get("name") or name)
-    pid, t0 = uuid.uuid4().hex, time.time()
+    pid, t0 = str(uuid.uuid4()), time.time()   # ComfyUI wants a real UUID
     got = cl.queue_prompt(build(image, opts), "loki-forge", pid)
     if got.get("node_errors"):
         raise HunyuanError("ComfyUI refused the graph: %s" % json.dumps(got["node_errors"])[:300])

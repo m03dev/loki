@@ -181,6 +181,7 @@ const LokiHome = (() => {
   }
 
   function renderHero() {
+    if (S.preview) { S.preview.dispose(); S.preview = null; }   // one live 3D preview at a time
     hero.replaceChildren();
     const it = heroItem();
     if (!it) { hero.hidden = true; return; }
@@ -203,6 +204,11 @@ const LokiHome = (() => {
     go.type = "button"; go.addEventListener("click", () => open(it));
     side.append(go);
     pic = pic || thumbOf(it, "home-hero-pic");
+    if (it.kind === "forge" && window.LokiModelPreview && it.open && it.open.model) {   // a model: the model itself, live
+      pic.classList.add("home-hero-3d");
+      pic.title = "Drag to turn it, scroll to zoom - double-click opens it in Forge";
+      S.preview = window.LokiModelPreview.mount(pic, it.open.model, { onOpen: () => open(it) });
+    }
     const pics = pictures(), at = pics.findIndex((p) => p.key === keyOf(it));
     if (at >= 0) {   // a picture: click it to see it big and step through everything (image_viewer.js)
       pic.classList.add("home-hero-viewable");
@@ -219,7 +225,7 @@ const LokiHome = (() => {
   }
   /** Every picture Home shows, in Home's order: what the viewer steps through. */
   function pictures() {
-    return S.items.filter((x) => x.thumb && !x.video && x.kind !== "job")
+    return S.items.filter((x) => x.thumb && !x.video && x.kind !== "job" && x.kind !== "forge")   // models: the 3D preview
       .map((x) => ({ key: keyOf(x), src: x.thumb, name: x.name, path: x.kind === "made" ? x.path_or_id : "" }));
   }
 

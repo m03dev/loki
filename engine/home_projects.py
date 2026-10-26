@@ -93,7 +93,7 @@ def _creation_url(workspace: Path, path: str) -> str | None:
         rel = p.resolve().relative_to(workspace.resolve()).as_posix()
     except (OSError, ValueError):
         return None
-    if rel.count("/") == 1 and rel.split("/")[0] in ("images", "sketches") and Path(rel).suffix.lower() in IMAGE_TYPES:
+    if rel.count("/") == 1 and rel.split("/")[0] in ("images", "sketches", "renders") and Path(rel).suffix.lower() in IMAGE_TYPES:
         return "/creations/" + rel
     return None
 
