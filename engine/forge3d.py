@@ -579,6 +579,49 @@ def gradio_client_for(Client, space: str, token):  # noqa: N803 - the class itse
     return Client(space)
 
 
+KNOWN_STEPS = [("/image_to_3d", [{"parameter_name": n} for n in (
+    "image", "multiimages", "seed", "ss_guidance_strength", "ss_sampling_steps", "slat_guidance_strength",
+    "slat_sampling_steps", "multiimage_algo")]), ("/extract_glb", [{"parameter_name": "mesh_simplify"},
+                                                                    {"parameter_name": "texture_size"}])]
+
+
+def space_steps(client) -> list:
+    """[(api_name, [parameter info])] to run in order, read from the Space itself (2026-10-25: TRELLIS renamed its
+    endpoints - "Cannot find a function with api_name: /image_to_3d" - and every hard-coded name breaks the same way).
+    One endpoint that generates AND extracts a GLB wins; else generate, then extract."""
+    try:
+        info = client.view_api(return_format="dict", print_info=False) or {}
+        named = info.get("named_endpoints") or {}
+    except Exception:  # noqa: BLE001 - an old client or a Space without the info route
+        named = {}
+    if not named:
+        return KNOWN_STEPS
+    names = list(named)
+    start = [("/start_session", [])] if "/start_session" in named else []   # newer apps keep files per session
+    one = [n for n in names if "glb" in n.lower() and ("generate" in n.lower() or "to_3d" in n.lower())]
+    if one:
+        return start + [(one[0], named[one[0]].get("parameters") or [])]
+    gen = [n for n in names if "image_to_3d" in n.lower() or n.lower() in ("/generate", "/generate_3d", "/run")]
+    ext = [n for n in names if "extract_glb" in n.lower() or n.lower() in ("/extract", "/export_glb")]
+    if not gen or not ext:
+        raise ForgeError("the Space's endpoints did not include image-to-3D + GLB: %s" % ", ".join(names[:12]))
+    return start + [(gen[0], named[gen[0]].get("parameters") or []), (ext[0], named[ext[0]].get("parameters") or [])]
+
+
+def _find_glb(res):
+    """The .glb path anywhere in a Space's answer (a string, a dict with value/path, a list or tuple)."""
+    stack = [res]
+    while stack:
+        cur = stack.pop(0)
+        if isinstance(cur, str) and cur.lower().endswith((".glb", ".gltf")):
+            return cur
+        if isinstance(cur, dict):
+            stack += [cur.get("value"), cur.get("path"), cur.get("name")] + list(cur.values())
+        elif isinstance(cur, (list, tuple)):
+            stack += list(cur)
+    return res
+
+
 def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict | None = None) -> dict:
     """A Hugging Face Space through gradio_client (TRELLIS by default: /image_to_3d, then
     /extract_glb). The picture goes to that Space - a third party."""
@@ -595,24 +638,36 @@ def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict
     # TRELLIS' mesh_simplify is the share of triangles REMOVED (0.9-0.98); "keep %" maps onto it.
     simplify = round(min(0.98, max(0.9, 0.98 - 0.08 * (o["keep"] - 5) / 95.0)), 3)
     tex = min(2048, int(o["texture_size"]))
+    values = {"image": lambda: handle_file(str(cutout_png)), "multiimages": lambda: [], "seed": lambda: int(o["seed"]),
+              "randomize_seed": lambda: False, "ss_guidance_strength": lambda: 7.5, "ss_sampling_steps": lambda: 12,
+              "slat_guidance_strength": lambda: 3.0, "slat_sampling_steps": lambda: 12,
+              "multiimage_algo": lambda: "stochastic", "mesh_simplify": lambda: simplify, "texture_size": lambda: tex,
+              "is_multiimage": lambda: False}
     try:
-        try:
-            client.predict(api_name="/start_session")       # newer TRELLIS apps keep each user's files per session
-        except Exception:  # noqa: BLE001 - older apps have no such endpoint
-            pass
-        try:
-            client.predict(image=handle_file(str(cutout_png)), multiimages=[], seed=int(o["seed"]),
-                           ss_guidance_strength=7.5, ss_sampling_steps=12, slat_guidance_strength=3.0,
-                           slat_sampling_steps=12, multiimage_algo="stochastic", api_name="/image_to_3d")
-            res = client.predict(mesh_simplify=simplify, texture_size=tex, api_name="/extract_glb")
-        except Exception as first:  # noqa: BLE001 - the older app: image -> (state, video); (state, ...) -> glb
-            if "argument" not in str(first) and "parameter" not in str(first) and "keyword" not in str(first):
-                raise
-            state, _video = client.predict(handle_file(str(cutout_png)), api_name="/image_to_3d")
-            res = client.predict(state, simplify, tex, api_name="/extract_glb")
+        steps = space_steps(client)
+        if steps is KNOWN_STEPS:               # no endpoint list to read: the session start may or may not exist
+            try:
+                client.predict(api_name="/start_session")
+            except Exception:  # noqa: BLE001
+                pass
+        res = None
+        for name, params in steps:
+            kwargs = {}
+            for prm in params:
+                key = prm.get("parameter_name") or prm.get("label") or ""
+                if key in values:
+                    kwargs[key] = values[key]()
+                elif not prm.get("parameter_has_default", True):
+                    raise ForgeError("the Space's %s wants %r, which LOKI does not know" % (name, key))
+            res = client.predict(api_name=name, **kwargs)
+        if res is None:
+            raise ForgeError("the Space has no image-to-3D endpoint")
+    except ForgeError as exc:
+        raise ForgeError("the online Space %s failed: %s" % (space, str(exc)[:200])) from None
     except Exception as exc:  # noqa: BLE001 - Spaces change, sleep, or run out of quota
         raise ForgeError("the online Space %s failed: %s" % (space, str(exc)[:200])) from None
-    found = res[1] if isinstance(res, (list, tuple)) and len(res) > 1 else res
+    res = _find_glb(res)
+    found = res if isinstance(res, str) else (res[1] if isinstance(res, (list, tuple)) and len(res) > 1 else res)
     if isinstance(found, dict):
         found = found.get("value") or found.get("path") or ""
     src = Path(str(found or ""))

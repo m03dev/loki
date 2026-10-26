@@ -421,25 +421,63 @@ _calls = []
 
 
 class _OldSpace:
+    """The older TRELLIS app: /image_to_3d takes only the image; /extract_glb the two settings (state is kept by
+    the client's session) - as its view_api says."""
+    def view_api(self, return_format="dict", print_info=False):
+        return {"named_endpoints": {
+            "/preprocess_image": {"parameters": [{"parameter_name": "image", "parameter_has_default": False}]},
+            "/image_to_3d": {"parameters": [{"parameter_name": "image", "parameter_has_default": False}]},
+            "/extract_glb": {"parameters": [{"parameter_name": "mesh_simplify", "parameter_has_default": True},
+                                            {"parameter_name": "texture_size", "parameter_has_default": True}]}}}
+
     def predict(self, *args, api_name="", **kw):
-        _calls.append(api_name)
+        _calls.append((api_name, sorted(kw)))
         if api_name == "/start_session":
             raise ValueError("no such endpoint")
         if api_name == "/image_to_3d":
-            if kw:
-                raise TypeError("predict() got an unexpected keyword argument 'multiimages'")
-            return {"state": 1}, "video.mp4"
+            return "video.mp4"
         if api_name == "/extract_glb":
-            if kw:
-                raise TypeError("unexpected keyword argument")
             return str(_glb), str(_glb)
+
+
+class _OneShotSpace:
+    def view_api(self, return_format="dict", print_info=False):
+        return {"named_endpoints": {"/generate_and_extract_glb": {"parameters": [
+            {"parameter_name": "image", "parameter_has_default": False},
+            {"parameter_name": "seed", "parameter_has_default": True},
+            {"parameter_name": "style_strength", "parameter_has_default": True}]}}}
+
+    def predict(self, *args, api_name="", **kw):
+        _calls.append((api_name, sorted(kw)))
+        if api_name == "/generate_and_extract_glb":
+            return {"video": "v.mp4", "model": {"path": str(_glb)}}
 
 
 _png = TMP / "cut.png"
 __import__("PIL.Image", fromlist=["Image"]).new("RGBA", (8, 8), (200, 0, 0, 255)).save(_png)
 _r = forge3d.run_online(_png, TMP / "online_model", client_factory=lambda space: (_OldSpace(), lambda p: p))
-check("the older TRELLIS Space (image -> state -> glb) works too, instead of falling to the flat lift",
-      Path(_r["glb"]).is_file() and _calls.count("/image_to_3d") == 2 and _calls[-1] == "/extract_glb", (_calls, _r))
+check("the Space's own endpoint list is used: the older TRELLIS (image only, then extract) works",
+      Path(_r["glb"]).is_file() and ("/image_to_3d", ["image"]) in _calls
+      and ("/extract_glb", ["mesh_simplify", "texture_size"]) in _calls, _calls)
+_calls.clear()
+_r = forge3d.run_online(_png, TMP / "online_model2", client_factory=lambda space: (_OneShotSpace(), lambda p: p))
+check("a one-step generate-and-extract endpoint is used as is, unknown optional settings left at their defaults",
+      Path(_r["glb"]).is_file() and _calls == [("/generate_and_extract_glb", ["image", "seed"])], _calls)
+
+
+class _StrangeSpace:
+    def view_api(self, return_format="dict", print_info=False):
+        return {"named_endpoints": {"/chat": {"parameters": []}}}
+
+    def predict(self, *a, **k):
+        return None
+
+
+try:
+    forge3d.run_online(_png, TMP / "x", client_factory=lambda space: (_StrangeSpace(), lambda p: p))
+    check("a Space with no 3D endpoint says what it has instead", False)
+except forge3d.ForgeError as exc:
+    check("a Space with no 3D endpoint says what it has instead", "/chat" in str(exc), exc)
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
