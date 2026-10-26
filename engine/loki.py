@@ -9410,6 +9410,19 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
     _task_ok_calls, _task_failed_calls = ok, failed
     reply = result.get("text") or ""
+    if opencode_engine.leaked_tool_markup(reply) and result.get("tools") and not plan \
+            and not opencode_engine.strip_tool_markup(reply).strip() and not _cancel_event.is_set():
+        # the model stopped on a bare tool tag after real work (2026-10-25 on the Mac: 5 tools ran, then the turn
+        # ended on an empty "<|DSML| calls>" and the job was called NOT DONE): carry on in the same session once
+        _progress("thinking", "The model stopped mid-task - telling it to carry on.")
+        again = await asyncio.to_thread(
+            opencode_engine.run_turn, "Continue the task from where you stopped and finish it with your tools. The "
+            "goal: %s" % text[:4000], str(WORKSPACE), exe=exe, config_path=str(cfg_path), env=env, session=session,
+            model=used, agent="", on_event=on_event, cancelled=_cancel_event.is_set)
+        result = dict(again, tools=list(result.get("tools") or []) + list(again.get("tools") or []))
+        ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
+        _task_ok_calls, _task_failed_calls = ok, failed
+        reply = again.get("text") or ""
     if opencode_engine.leaked_tool_markup(reply):
         # should not happen any more (dsml_proxy turns them into real calls) - never show the raw tags, never pretend
         reply = opencode_engine.strip_tool_markup(reply)

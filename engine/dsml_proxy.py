@@ -96,6 +96,7 @@ def extract_calls(text: str, names=None) -> tuple:
         clean, calls = parse(text)
         if calls:
             return clean, calls
+        text = clean          # a bare or empty DSML tag is noise either way: it never reaches the agent
     names = [n for n in (names or []) if n]
     if not names:
         return text, []
@@ -152,6 +153,8 @@ def fix_message(body: dict, names=None) -> dict:
             continue
         clean, calls = extract_calls(msg["content"], names)
         if not calls:
+            if clean != msg["content"] and has_markup(msg["content"]):
+                msg["content"] = clean or None          # a bare tag: dropped, the words kept
             continue
         msg["content"] = clean or None
         if calls:

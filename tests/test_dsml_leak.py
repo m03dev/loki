@@ -185,6 +185,13 @@ r = ask("case code", True, TOOLS)
 check("an answer with braces, brackets and code passes through whole and stays an answer",
       "".join((c["choices"][0]["delta"].get("content") or "") for c in r if c.get("choices")) == CASES["case code"]
       and not any(c["choices"][0]["delta"].get("tool_calls") for c in r if c.get("choices")), r)
+CASES["case empty tag"] = "Let me look.\n\n<\uff5cDSML\uff5c calls>\n\n"
+for stream in (True, False):
+    r = ask("case empty tag", stream, TOOLS)
+    words = ("".join((c["choices"][0]["delta"].get("content") or "") for c in r if c.get("choices")) if stream
+             else r["choices"][0]["message"].get("content") or "")
+    check("an empty DeepSeek tag (no call in it) never reaches the agent (%s)" % ("streamed" if stream else "whole"),
+          "DSML" not in words and "Let me look." in words, words)
 CASES["case unknown"] = '{"name": "launch_rockets", "arguments": {}}'
 r = ask("case unknown", False, TOOLS)
 check("a call to a tool the request did not offer is left as text", not r["choices"][0]["message"].get("tool_calls"), r)

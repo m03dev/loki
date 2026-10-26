@@ -82,6 +82,12 @@ if mode == "slow-first" and "groq" in model:
     out("step_finish", part={"type": "step-finish", "reason": "tool-calls"})
     time.sleep(20)
     sys.exit(0)
+if mode == "stops-on-tag" and "Continue the task" not in args[-1]:
+    out("step_start", part={"type": "step-start"})
+    out("tool_use", part={"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "ls"}, "output": "x"}})
+    out("text", part={"type": "text", "text": "\n<\uff5cDSML\uff5c calls>\n"})
+    out("step_finish", part={"type": "step-finish", "reason": "stop"})
+    sys.exit(0)
 if mode == "liar":
     out("text", part={"type": "text", "text": "Done! I created a new git repo called loki-test-repo and committed it."}); sys.exit(0)
 out("step_start", part={"type": "step-start"})
@@ -157,6 +163,10 @@ if loki:
     check("the first provider fails -> the next one does it", len(models) >= 2 and models[0].startswith("loki-groq/")
           and models[1].startswith("loki-gemini/") and (ws / "loki-test-repo" / "src" / "main.py").is_file(), models)
 
+    out, ws, calls = turn(REQ, mode="stops-on-tag", conv="tag")
+    check("a turn that stops on a bare tool tag after real work carries on in the same session and finishes",
+          len(calls) == 2 and "Continue the task" in calls[1]["argv"][-1] and (ws / "loki-test-repo" / "src" / "main.py").is_file()
+          and not out.startswith("NOT DONE") and "DSML" not in out, (len(calls), out[:200]))
     import provider_speed  # noqa: E402
     provider_speed.SLOW_S = 0.5
     _t = time.time()
