@@ -208,6 +208,30 @@ def env_file_path() -> Path:
     return DATA_DIR / ".env"
 
 
+def write_env_setting(name: str, value: str) -> bool:
+    """Keep one setting (e.g. LOKI_LOCAL_MODEL) in LOKI's .env so it survives a restart and reaches background jobs;
+    an empty value removes it. (The PC, 2026-10-26: the abliterated model picked with "use this model" was only set
+    in the running engine, so the next job still ran Bonsai and an update restart forgot the choice.)"""
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", str(name or "")):
+        return False
+    value = str(value or "").strip().replace("\n", " ")
+    path = env_file_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+        lines = [ln for ln in lines if not ln.strip().startswith(name + "=")]
+        if value:
+            lines.append(name + "=" + value)
+        path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+    except OSError:
+        return False
+    if value:
+        os.environ[name] = value
+    else:
+        os.environ.pop(name, None)
+    return True
+
+
 def write_provider_key(provider: str, key: str) -> bool:
     """Persist a provider key into the .env and make it live for this session."""
     name = PROVIDER_ENV_VARS.get((provider or "").strip().lower())

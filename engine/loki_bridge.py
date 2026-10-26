@@ -2349,6 +2349,10 @@ def setup_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tupl
             os.environ["LOKI_LOCAL_MODEL"] = model
         else:
             os.environ.pop("LOKI_LOCAL_MODEL", None)
+        try:   # remembered: survives an update restart and reaches every background job
+            agent.write_env_setting("LOKI_LOCAL_MODEL", model or "")
+        except Exception as exc:  # noqa: BLE001
+            print("  [setup] could not remember the local model: %s" % exc)
         return agent.resolve_local(force=True)
     if route in ("/setup/auto", "/setup/upgrade"):
         # One click: Ollama -> best fitting model -> long context -> switch -> keep warm.

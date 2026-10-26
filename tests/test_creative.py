@@ -624,6 +624,8 @@ third = (REPO / "docs" / "THIRD_PARTY.md").read_text(encoding="utf-8")
 check("THIRD_PARTY names stable-diffusion.cpp, mflux and Wan2GP",
       all(s in third for s in ("stable-diffusion.cpp", "mflux", "Wan2GP")))
 
+check("file names are cut at a whole word (PC 2026-10-26: '...-concep.png')",
+      creative.file_slug("knight with sword and shield, professional concept art", "image") == "knight-with-sword-and-shield-professional")
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

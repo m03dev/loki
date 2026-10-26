@@ -62,6 +62,16 @@ MFLUX_DEFAULT = "filipstrand/Z-Image-Turbo-mflux-4bit"
 
 # ----------------------------------------------------------------------------- where things live
 
+def file_slug(text: str, fallback: str, limit: int = 48) -> str:
+    """A file-name slug cut at a whole word, never mid-word (the PC, 2026-10-26: "...-professional-concep.png" - the
+    local model 'fixed' the name it was given to "concept" and looped three times on a file that did not exist)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", str(text or "").lower()).strip("-")
+    if len(slug) > limit:
+        cut = slug[:limit + 1]
+        slug = cut[:cut.rfind("-")] if "-" in cut[1:] else slug[:limit]
+    return slug.strip("-") or fallback
+
+
 def data_dir(env: dict | None = None) -> Path:
     env = os.environ if env is None else env
     return Path(env.get("LOKI_DATA") or (ROOT / "harness_data"))
@@ -312,7 +322,7 @@ def run_local_image(prompt: str, negative: str, width: int, height: int, seed: i
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower()).strip("-")[:48] or "image"
+    slug = file_slug(prompt, "image")
     path_of = out_path or (lambda i: out_dir / ("%s-%s%s.png" % (stamp, slug, "" if i == 0 else "-%d" % (i + 1))))
     started = time.time()
     files, seeds = [], []
@@ -657,7 +667,7 @@ def make_video(prompt: str, workspace: Path, image: str = "", seconds: float = 3
         return {"ok": False, "error": status["why"]}
     videos = workspace / "videos"
     videos.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower()).strip("-")[:48] or "video"
+    slug = file_slug(prompt, "video")
     target = videos / ("%s-%s.mp4" % (time.strftime("%Y%m%d-%H%M%S"), slug))
     started = time.time()
     if status["backend"] == "wan2gp":
