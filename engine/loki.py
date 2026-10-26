@@ -6453,6 +6453,23 @@ TOOL_CATEGORIES["creative"] += ["make_3d", "render_scene"]
 MODIFYING |= {"make_3d"}
 
 
+# --- the asset pipeline (engine/asset_pipeline.py): concept -> turnaround -> model -> finish -> render, each stage
+# checked before it is handed on, lessons kept per stage (owner 2026-10-26: "like an industry pipeline")
+async def asset_pipeline_tool(**args) -> str:
+    import asset_pipeline  # pylint: disable=import-outside-toplevel
+    return json.dumps(await asyncio.to_thread(asset_pipeline.tool, args, WORKSPACE), default=str)
+
+
+LOCAL_TOOLS["asset_pipeline"] = asset_pipeline_tool
+_PIPE_SCHEMA = schema("asset_pipeline", __import__("asset_pipeline").TOOL["description"],
+                      __import__("asset_pipeline").TOOL["inputSchema"]["properties"], ["action"])
+TOOL_SCHEMAS.append(_PIPE_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_PIPE_SCHEMA)
+MODEL_TOOL_NAMES.add("asset_pipeline")
+TOOL_CATEGORIES["creative"] += ["asset_pipeline"]
+MODIFYING |= {"asset_pipeline"}
+
+
 # --- anyCreature (contrib/anycreature/, MIT; engine/anycreature.py): an ACS spec -> a creature .glb --------
 async def make_creature_tool(preset: str = "", spec: str = "", size: float = 0, smooth: int = 0,
                              body_color: str = "", accent_color: str = "", name: str = "creature",

@@ -48,6 +48,14 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Asset pipeline (2026-10-26 night, owner: "like an industry pipeline where they pass on work to each other and can
+improve"):** engine/asset_pipeline.py + docs/ASSET_PIPELINE.md. concept -> turnaround -> model -> finish (Blender
+retopo) -> render; each stage's output is checked before the next stage gets its APPROVED hand-off record
+(pipeline/<asset>/<stage>/v00N/record.json + handoff.md); retries change what failed (seed / backend / quad count), 3
+fails -> retake; review notes (retake=true) reopen a stage and send everything after it back; lessons per stage voted
+by results, promoted into skills/learned/pipeline-<stage>; settings that worked reused. Driven by the autopilot
+`pipeline` duty, the `asset_pipeline` tool, and the PRODUCER / ART DIRECTOR standing goals (they replace the three
+"newest file without X" goals). Cloud: tests/test_asset_pipeline.py 35/35. Not run on a machine yet.
 **Workable topology (2026-10-26 evening, owner: "the entire point of blender is so it can edit the mesh and make em
 workable"):** core command `retopo` (engine/blender_scripts/loki_blender_core.py, core 2026-10-26.14): original kept as
 `<name>__high`, scale applied, voxel surface, tiny edges merged until Blender's own QuadriFlow pre-check passes

@@ -140,3 +140,25 @@ QuadWild guides (seams / face sets where loops should run), symmetry (centre, sy
 human pass. Agent side: skills/blender-gameready (router + cleanup / retopo / uv-bake / qa stages with numeric gates,
 the layout of arjun988/blender-skills, MIT); research systems (LL3M - non-commercial, not used; BlenderGym: spending
 compute on verification pays) check with renders only - none measure topology, which LOKI now does.
+
+## Night update: the agent pipeline (owner: "like an industry pipeline where they pass on work to each other and can improve")
+
+Built as engine/asset_pipeline.py (docs/ASSET_PIPELINE.md). What each idea came from (web research; licences as found,
+nothing vendored):
+
+| Source | Licence | Taken |
+| --- | --- | --- |
+| Pyblish | LGPL-3.0 | collect -> validate -> integrate: nothing failed is handed on |
+| Kitsu / Zou (CGWire) | AGPL-3.0 | task statuses incl. retake |
+| ShotGrid / Flow | proprietary | review notes as their own records, open until a version addresses them |
+| OpenCue / Gaffer | Apache-2.0 / BSD-3 | stages with `needs` (a dependency graph) |
+| OpenAssetIO | Apache-2.0 (unverified) | `loki://asset/stage@approved` references |
+| MetaGPT / ChatDev | MIT / Apache-2.0 | structured hand-off documents; only the agreed result goes forward |
+| CrewAI | MIT (unverified) | expected output + guardrail + 3 retries with the error fed back |
+| LangGraph | MIT | a checkpoint after every step |
+| Reflexion / ExpeL / ACE | MIT / CC-BY paper / Apache-2.0 | lessons after failures, helpful/harmful votes, delete at 0, dedupe |
+| Voyager | MIT | promote only verified knowledge into the skill library |
+| BlenderGym, planner-actor-critic (2601.05016) | papers | spend on verification; cap refinement at ~3 rounds |
+
+Not used: LL3M (academic licence), SkillWeaver (OpenRAIL research-only) - ideas only. Studio pipelines also version
+every publish (AYON products -> versions -> representations); LOKI keeps every try as v00N with its record.

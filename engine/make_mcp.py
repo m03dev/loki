@@ -332,6 +332,12 @@ try:   # CC0 assets: Poly Haven, ambientCG (engine/free_assets.py)
 except Exception:  # noqa: BLE001
     _assets = None
 
+try:   # the asset pipeline (engine/asset_pipeline.py): stages handed on with checks, lessons per stage
+    import asset_pipeline as _pipeline  # noqa: E402
+    TOOLS.append(_pipeline.TOOL)
+except Exception:  # noqa: BLE001
+    _pipeline = None
+
 try:   # Blender: build, render, export (engine/blender_link.py) - window or background
     import blender_link as _blender  # noqa: E402
     TOOLS.append(_blender.TOOL)
@@ -356,6 +362,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
                                                                    int((a or {}).get("limit") or 40)),
           "blender": (lambda a, cwd: _blender.tool(a or {}, cwd)) if _blender else None,
           "free_assets": (lambda a, cwd: _assets.tool(a or {}, cwd)) if _assets else None,
+          "asset_pipeline": (lambda a, cwd: _pipeline.tool(a or {}, cwd)) if _pipeline else None,
           "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:

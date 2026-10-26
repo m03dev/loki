@@ -51,6 +51,8 @@ Duties, each on its own interval:
     LOKI_AUTOPILOT_REPORT_S          (default 604800 = a week)
     LOKI_AUTOPILOT_ALWAYS=on|off     (default on)   LOKI_AUTOPILOT_ALWAYS_S (default 600): with the inbox empty,
                                      the next standing goals from LOKI_TASKS.md "## Always" (drafts and assets only)
+    LOKI_AUTOPILOT_PIPELINE=on|off   (default on)   LOKI_AUTOPILOT_PIPELINE_S (default 120): the asset pipeline
+                                     (engine/asset_pipeline.py) runs the next ready stage when none is running
     LOKI_AUTOPILOT_SLOTS             (default 3) requests and standing goals running side by side; work that needs
                                      the GPU (renders, 3D, music, video, installs) runs one at a time in its lane.
                                      New work keeps starting while jobs run (only a request from the owner, a recent
@@ -394,6 +396,17 @@ class Autopilot:
                 started.append(reply)
         return "\n".join(started)
 
+    def duty_pipeline(self) -> str:
+        """The asset pipeline (engine/asset_pipeline.py): when no stage is running, start the next ready stage of the
+        oldest asset in the background - its checks decide whether it is handed on or retried."""
+        if self.agent is None or not hasattr(self.agent, "WORKSPACE"):
+            return ""
+        import asset_pipeline  # pylint: disable=import-outside-toplevel
+        out = asset_pipeline.tick(Path(self.agent.WORKSPACE))
+        if out:
+            self._log("pipeline", out)
+        return out
+
     def duty_schedules(self) -> str:
         """Start the first due scheduled task as a background job (one per pass)."""
         jobs = getattr(self.state, "jobs", None)
@@ -700,6 +713,8 @@ class Autopilot:
                 work.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 120), self.duty_inbox))
             if _env_on("LOKI_AUTOPILOT_ALWAYS"):
                 work.append(("always", _env_s("LOKI_AUTOPILOT_ALWAYS_S", 600), self.duty_always))
+            if _env_on("LOKI_AUTOPILOT_PIPELINE"):
+                work.append(("pipeline", _env_s("LOKI_AUTOPILOT_PIPELINE_S", 120), self.duty_pipeline))
             with self.lock:
                 for name, every, fn in work:
                     if not self.due(name, every):
