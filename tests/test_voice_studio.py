@@ -16,6 +16,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "engine"))
+os.environ["LOKI_MIN_FREE_GB"] = "0"   # this machine's own free space is not what these checks are about
 TMP = Path(tempfile.mkdtemp(prefix="loki-voice-"))
 os.environ["LOKI_DATA"] = str(TMP / "data")
 PASS: list = []

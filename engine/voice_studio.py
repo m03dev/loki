@@ -224,13 +224,19 @@ def tool(args: dict, workspace: Path | None = None, ask=None, run=None, opener=N
         if action == "status":
             return {"ok": True, **status(opener)}
         if action == "install":
+            import big_storage  # pylint: disable=import-outside-toplevel
+            if big_storage.low_space():
+                return {"ok": False, "error": big_storage.install_note("VoiceStudio (it downloads several GB of voice "
+                                                                         "models)")}
             cmd = install_command()
             detail = ("Install VoiceStudio (AGPL-3.0, %s) with its official installer - it downloads the app and runs "
                       "it:\n$ %s" % (HOME, " ".join(cmd)))
             if ask is not None and not ask("voice install", detail):
                 return {"ok": False, "error": "not installed - the owner said no"}
             import subprocess  # pylint: disable=import-outside-toplevel
-            proc = (run or subprocess.run)(cmd, capture_output=True, text=True, timeout=1800)
+            env = dict(os.environ)
+            big_storage.apply(env)           # its models go to the big drive, not the internal one
+            proc = (run or subprocess.run)(cmd, capture_output=True, text=True, timeout=1800, env=env)
             return {"ok": proc.returncode == 0, "output": (proc.stdout or proc.stderr or "")[-3000:],
                     "next": "open VoiceStudio once; it downloads its voice model (about 2.3 GB) on first use"}
         if action == "voices":

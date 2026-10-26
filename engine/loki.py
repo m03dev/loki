@@ -55,6 +55,12 @@ def _resolve_data_dir() -> Path:
 
 
 DATA_DIR = _resolve_data_dir()
+try:   # everything big (model caches, package caches, Tool Shelf installs) on Xero / LOKI's drive, never the
+    import big_storage as _big     # internal one (owner 2026-10-26: a voice install filled the Mac's drive)
+    os.environ.setdefault("LOKI_DATA", str(DATA_DIR))
+    _big.apply(os.environ)
+except Exception as _exc:  # noqa: BLE001 - storage advice must never stop LOKI
+    print("  [storage] %s" % _exc)
 
 # --- configuration (override with environment variables) --------------------
 # GAME_PROJECT  : path to the Godot game project the agent should work on.

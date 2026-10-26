@@ -258,6 +258,9 @@ def install(tool_id: str, progress: Callable | None = None, run: Callable = subp
         return {"ok": False, "manual": True, "error": inst.get("manual") or "install it by hand: %s" % r.get("repo", "")}
     if not platform_ok(r):
         raise ShelfError("%s does not run on this computer (%s only)" % (r.get("name"), ", ".join(r.get("platforms"))))
+    import big_storage  # pylint: disable=import-outside-toplevel
+    if big_storage.low_space() and not str(tools_root()).startswith(str(big_storage.big_dir())):
+        raise ShelfError(big_storage.install_note(r.get("name") or tool_id))
     d = tool_dir(tool_id)
     d.mkdir(parents=True, exist_ok=True)
     log = []
