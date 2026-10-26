@@ -48,6 +48,22 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Workable topology (2026-10-26 evening, owner: "the entire point of blender is so it can edit the mesh and make em
+workable"):** core command `retopo` (engine/blender_scripts/loki_blender_core.py, core 2026-10-26.14): original kept as
+`<name>__high`, scale applied, voxel surface, tiny edges merged until Blender's own QuadriFlow pre-check passes
+(`qf_problems` - QuadriFlow refuses any edge < 1e-4 in local units, which is why every AI mesh "failed as non-manifold"),
+QuadriFlow (3 seeds) -> Instant Meshes (BSD, when LOKI_INSTANT_MESHES points at its binary) -> clean voxel surface,
+projected back; `bake` normal=true adds a tangent normal map; colour is baked as EMISSION of Base Color (a DIFFUSE bake
+was pure black on glTF's metallic=1 - never noticed before because no earlier run had a textured high mesh). polish()
+retopo=<quads> skips decimate; Forge Clean up and every new Forge model use retopo=8000 (`retopo: 0` = old behaviour).
+Verified on the PC (Blender 5.2.3): fantasy character 32,834 tris / 0% quads / 92.6% poles -> 7,260 quads, 100% quads,
+4.2% poles, 0 non-manifold, texture + normal map baked (renders/retopo/before_*.png vs after_*.png); robot 9,934 tris ->
+8,196 quads, 1.0% poles (its source is an old silhouette-lift blob: clean quads, still a blob). Also fixed on the PC
+(core .14/.15): LODs crashed in a fresh scene (no depsgraph); every .glb/.fbx/LOD carried the studio's ground plane
+(exports now hold only the model); every FBX was written with Blender defaults (no embedded textures) because
+export_scene.fbx has no use_active_scene - `_op()` now drops unknown options and keeps the rest (FBX 0.5 MB -> 8 MB). Skill pack for agents:
+skills/blender-gameready (router + 4 stages), template agent "3D Finisher" (engine/agents.py). tests/test_retopo.py.
+Limit: even quads, not artist loops at eyes/mouth/joints; thin cloth can get holes at voxel 160.
 
 Tabs are Home / Forge / **Studio** (the render farm manager + Render Studio, docs/STUDIO_FARM.md) / **Engine** (Godot
 or the Carbon Editor). Forge: Flatten = scale to 0 (Maya / Unreal), tools act on the whole mesh when only the object

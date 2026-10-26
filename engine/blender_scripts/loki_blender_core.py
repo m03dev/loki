@@ -25,13 +25,14 @@ import contextlib
 import io
 import json
 import os
+import sys
 import time
 import traceback
 from pathlib import Path
 
 import bpy
 
-VERSION = "2026-10-26.11"
+VERSION = "2026-10-26.15"
 WATCH_S = 5.0
 _S = {"log": print, "root": None, "last_watch": 0.0, "patched": None, "jobs": 0, "last_job": "", "mcp": False}
 
@@ -252,6 +253,30 @@ def cmd_render(p):
     raise RuntimeError("render failed: " + " | ".join(errors))
 
 
+def _asset_objects(sc):
+    """What a model file should hold: everything but the stage (LOKI Camera / Key / Fill / Rim / Ground), the bake's
+    originals (__high), retopo's helpers (__vox) and wireframe preview copies (__wire). Found on the PC 2026-10-26:
+    every exported .glb / .fbx carried the studio's ground plane."""
+    return [o for o in sc.objects if not o.name.startswith("LOKI ")
+            and not o.name.endswith(("__high", "__vox", "__wire")) and o.type in ("MESH", "ARMATURE", "EMPTY", "CURVE")]
+
+
+def _op(fn, **kw):
+    """Call an operator, dropping keywords this Blender does not know (they differ between versions) instead of
+    falling back to bare defaults (found on the PC: FBX has no use_active_scene, so every FBX lost its embedded
+    textures and settings)."""
+    import re  # pylint: disable=import-outside-toplevel
+    for _ in range(len(kw) + 1):
+        try:
+            return fn(**kw)
+        except TypeError as exc:
+            m = re.search(r'keyword "(\w+)" unrecognized', str(exc))
+            if not m or m.group(1) not in kw:
+                raise
+            kw.pop(m.group(1))
+    return fn(**kw)
+
+
 def cmd_export(p):
     path = str(p.get("path") or "")
     if not path:
@@ -266,25 +291,31 @@ def cmd_export(p):
             raise RuntimeError("these are free assets used as they are - change them first (remix): %s" % ", ".join(raw[:8]))
         if ext == ".blend":
             bpy.data.libraries.write(path, {sc}, fake_user=True)   # only this scene and what it uses
-        elif ext in (".glb", ".gltf"):
-            kw = dict(filepath=path, export_format="GLB" if ext == ".glb" else "GLTF_SEPARATE", export_yup=True,
-                      export_apply=True)
-            try:
-                bpy.ops.export_scene.gltf(use_active_scene=True, **kw)
-            except TypeError:
-                bpy.ops.export_scene.gltf(**kw)
-        elif ext == ".fbx":                                 # game-engine friendly: metres, Y up, textures copied
-            try:
-                bpy.ops.export_scene.fbx(filepath=path, use_active_scene=True, apply_unit_scale=True,
-                                         apply_scale_options="FBX_SCALE_ALL", path_mode="COPY", embed_textures=True,
-                                         mesh_smooth_type="FACE", add_leaf_bones=False, axis_forward="-Z", axis_up="Y",
-                                         use_mesh_modifiers=True)
-            except TypeError:
-                bpy.ops.export_scene.fbx(filepath=path)
-        elif ext == ".obj":
-            bpy.ops.wm.obj_export(filepath=path)
         else:
-            raise ValueError("unknown export type %s" % ext)
+            ship = _asset_objects(sc)                       # the model only: never the stage's ground, lights, camera
+            if not ship:
+                raise RuntimeError("nothing to export in %s" % sc.name)
+            vl = sc.view_layers[0]
+            for o in sc.objects:
+                try:
+                    o.select_set(o in ship)
+                except RuntimeError:
+                    pass
+            vl.objects.active = ship[0]
+            with bpy.context.temp_override(selected_objects=ship, active_object=ship[0], object=ship[0]):
+                if ext in (".glb", ".gltf"):
+                    _op(bpy.ops.export_scene.gltf, filepath=path, use_selection=True, use_active_scene=True,
+                        export_format="GLB" if ext == ".glb" else "GLTF_SEPARATE", export_yup=True, export_apply=True)
+                elif ext == ".fbx":                         # game-engine friendly: metres, Y up, textures inside
+                    _op(bpy.ops.export_scene.fbx, filepath=path, use_selection=True,
+                        object_types={"MESH", "ARMATURE", "EMPTY"}, apply_unit_scale=True,
+                        apply_scale_options="FBX_SCALE_ALL", path_mode="COPY", embed_textures=True,
+                        mesh_smooth_type="FACE", add_leaf_bones=False, axis_forward="-Z", axis_up="Y",
+                        use_mesh_modifiers=True)
+                elif ext == ".obj":
+                    _op(bpy.ops.wm.obj_export, filepath=path, export_selected_objects=True)
+                else:
+                    raise ValueError("unknown export type %s" % ext)
     if not Path(path).is_file():
         raise RuntimeError("export wrote nothing: %s" % path)
     return {"path": path, "bytes": Path(path).stat().st_size}
@@ -321,7 +352,12 @@ def _apply_modifier(o, mod):
     depsgraph of the scene the object is in - the context's one does not see a temporary scene (the PC 2026-10-26:
     every LOD came out identical to the full model)."""
     sc = o.users_scene[0] if o.users_scene else None
-    dg = sc.view_layers[0].depsgraph if sc is not None else bpy.context.evaluated_depsgraph_get()
+    dg = sc.view_layers[0].depsgraph if sc is not None else None
+    if dg is None and sc is not None:                  # a scene made this job has no depsgraph until updated
+        sc.view_layers[0].update()
+        dg = sc.view_layers[0].depsgraph
+    if dg is None:
+        dg = bpy.context.evaluated_depsgraph_get()
     dg.update()
     new = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     old = o.data
@@ -768,7 +804,7 @@ def cmd_lods(p):
     ratios = [float(r) for r in (p.get("ratios") or [1.0, 0.5, 0.25])]
     out = []
     with job_context(p.get("scene")) as sc:
-        src = _meshes(sc, p.get("objects"))
+        src = _meshes(sc, p.get("objects")) if p.get("objects") else [o for o in _asset_objects(sc) if o.type == "MESH"]
         raw = _unmodified_free(src)
         if raw:
             raise RuntimeError("these are free assets used as they are - change them first (remix): %s" % ", ".join(raw[:8]))
@@ -778,14 +814,17 @@ def cmd_lods(p):
             for o in src:
                 c = o.copy()
                 c.data = o.data.copy()
-                tmp.collection.objects.link(c)
-                copies.append(c)
+                sc.collection.objects.link(c)              # decimated in the job's scene (it has a depsgraph -
+                copies.append(c)                           # a new scene has none: the PC, 2026-10-26)
             try:
                 if r < 0.999:
                     for c in copies:
                         m = c.modifiers.new("LOKI lod", "DECIMATE")
                         m.ratio = r
                         _apply_modifier(c, m)
+                for c in copies:
+                    sc.collection.objects.unlink(c)
+                    tmp.collection.objects.link(c)
                 path = "%s_lod%d.glb" % (stem, i)
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
                 with job_context(tmp.name):
@@ -980,6 +1019,60 @@ def cmd_repair(p):
     return {"objects": out, "verdict": worst}
 
 
+def _principled(mat):
+    if not (mat and mat.use_nodes and mat.node_tree):
+        return None
+    return next((n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+
+
+def _surface_values(o):
+    """Metallic / roughness of the original's first Principled BSDF when they are plain values (a texture there is not
+    carried over: 0 / 0.7)."""
+    for slot in o.material_slots:
+        b = _principled(slot.material)
+        if b is not None:
+            m, r = b.inputs["Metallic"], b.inputs["Roughness"]
+            return (0.0 if m.is_linked else float(m.default_value)), (0.7 if r.is_linked else float(r.default_value))
+    return 0.0, 0.7
+
+
+@contextlib.contextmanager
+def _emit_base_colour(o):
+    """Bake the original's BASE COLOUR, whatever its metallic: a DIFFUSE colour bake is black for metallic surfaces
+    (found on the PC 2026-10-26 - glTF's default metallic is 1.0, so a Forge character baked to pure black). Each
+    material's Base Color (texture or value) is wired to an Emission shader for the bake, then put back."""
+    undo = []
+    try:
+        for slot in o.material_slots:
+            mat = slot.material
+            b = _principled(mat)
+            if b is None or any(u[0] is mat for u in undo):
+                continue
+            nt = mat.node_tree
+            outp = next((n for n in nt.nodes if n.type == "OUTPUT_MATERIAL" and n.is_active_output),
+                        next((n for n in nt.nodes if n.type == "OUTPUT_MATERIAL"), None))
+            if outp is None:
+                continue
+            surf = outp.inputs["Surface"]
+            old = surf.links[0].from_socket if surf.links else None
+            em = nt.nodes.new("ShaderNodeEmission")
+            em.inputs["Strength"].default_value = 1.0
+            base = b.inputs["Base Color"]
+            if base.links:
+                nt.links.new(base.links[0].from_socket, em.inputs["Color"])
+            else:
+                em.inputs["Color"].default_value = base.default_value
+            nt.links.new(em.outputs["Emission"], surf)
+            undo.append((mat, em, surf, old))
+        yield
+    finally:
+        for mat, em, surf, old in undo:
+            nt = mat.node_tree
+            nt.nodes.remove(em)
+            if old is not None:
+                nt.links.new(old, surf)
+
+
 def cmd_bake(p):
     """Move the original's colours onto a rebuilt surface: for each "<name>__high" left by repair, UV the new mesh,
     bake DIFFUSE colour (Cycles, selected -> active) into a `size` texture, give it a clean material, drop the
@@ -1034,27 +1127,304 @@ def cmd_bake(p):
                     except RuntimeError:
                         pass
                 sc.view_layers[0].objects.active = low
-                with bpy.context.temp_override(active_object=low, object=low, selected_objects=[high, low],
-                                               selected_editable_objects=[high, low]):
-                    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_selected_to_active=True,
+                metal, rough = _surface_values(high)
+                bsdf.inputs["Metallic"].default_value = metal
+                bsdf.inputs["Roughness"].default_value = rough
+                with _emit_base_colour(high), bpy.context.temp_override(
+                        active_object=low, object=low, selected_objects=[high, low], selected_editable_objects=[high, low]):
+                    bpy.ops.object.bake(type="EMIT", use_selected_to_active=True,
                                         cage_extrusion=0.01 * diag, max_ray_distance=0.03 * diag, margin=16)
-                path = folder / ("%s_baked.png" % "".join(c if c.isalnum() or c in "-_" else "_" for c in low.name))
+                safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in low.name)
+                path = folder / ("%s_baked.png" % safe)
                 img.filepath_raw = str(path)
                 img.file_format = "PNG"
                 img.save()
                 img.pack()
+                nrm_path = None
+                if p.get("normal"):                     # retopo: the original's detail as a tangent-space normal map
+                    nimg = bpy.data.images.new("%s_normal" % low.name, size, size)
+                    nimg.colorspace_settings.name = "Non-Color"
+                    ntex = nt.nodes.new("ShaderNodeTexImage")
+                    ntex.image = nimg
+                    nmap = nt.nodes.new("ShaderNodeNormalMap")
+                    nt.nodes.active = ntex
+                    with bpy.context.temp_override(active_object=low, object=low, selected_objects=[high, low],
+                                                   selected_editable_objects=[high, low]):
+                        bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", use_selected_to_active=True,
+                                            cage_extrusion=0.01 * diag, max_ray_distance=0.03 * diag, margin=16)
+                    nt.links.new(ntex.outputs["Color"], nmap.inputs["Color"])
+                    nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
+                    nrm_path = folder / ("%s_normal.png" % safe)
+                    nimg.filepath_raw = str(nrm_path)
+                    nimg.file_format = "PNG"
+                    nimg.save()
+                    nimg.pack()
                 data = high.data
                 bpy.data.objects.remove(high, do_unlink=True)
                 if data.users == 0:
                     bpy.data.meshes.remove(data)
-                done.append({"object": low.name, "texture": str(path)})
+                done.append({"object": low.name, "texture": str(path), "normal": str(nrm_path) if nrm_path else None})
         finally:
             sc.render.engine = prev_engine
     return {"baked": done}
 
 
 
-COMMANDS.update({"repair": cmd_repair, "bake": cmd_bake, "remix": cmd_remix, "import": cmd_import, "cleanup": cmd_cleanup, "normalize": cmd_normalize, "decimate": cmd_decimate,
+def topology_report(o):
+    """How workable a mesh is (owner 2026-10-26: "models to be improved with working topology"): quad share, triangles,
+    n-gons, poles (vertices with 3 or 5+ edges - where edge loops break), non-manifold / boundary edges, sliver faces,
+    UV layers. A verdict: "quads" (animation-ready flow), "mixed", "soup" (AI triangles: needs retopology)."""
+    import bmesh  # pylint: disable=import-outside-toplevel
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    f = len(bm.faces) or 1
+    quads = sum(1 for x in bm.faces if len(x.verts) == 4)
+    tris = sum(1 for x in bm.faces if len(x.verts) == 3)
+    inner = [v for v in bm.verts if not v.is_boundary and v.link_edges]
+    poles = sum(1 for v in inner if len(v.link_edges) != 4)
+    nonman = sum(1 for e in bm.edges if not e.is_manifold and not e.is_boundary)
+    boundary = sum(1 for e in bm.edges if e.is_boundary)
+    slivers = 0
+    for x in bm.faces:
+        ls = [e.calc_length() for e in x.edges]
+        if ls and min(ls) > 0 and max(ls) / min(ls) > 8:
+            slivers += 1
+    r = {"faces": len(bm.faces), "quad_pct": round(100.0 * quads / f, 1), "tri_pct": round(100.0 * tris / f, 1),
+         "ngons": len(bm.faces) - quads - tris, "poles": poles, "pole_pct": round(100.0 * poles / max(1, len(inner)), 1),
+         "nonmanifold": nonman, "boundary": boundary, "sliver_pct": round(100.0 * slivers / f, 1),
+         "uv_layers": [u.name for u in o.data.uv_layers]}
+    bm.free()
+    r["verdict"] = ("quads" if r["quad_pct"] >= 90 and r["pole_pct"] <= 15 and not r["nonmanifold"] else
+                    "soup" if r["tri_pct"] >= 70 else "mixed")
+    return r
+
+
+def cmd_topology(p):
+    with job_context(p.get("scene")) as sc:
+        return {o.name: topology_report(o) for o in _meshes(sc, p.get("objects")) if not o.name.endswith("__high")}
+
+
+# ----------------------------------------------------------------------------- retopo: AI soup -> clean quads
+# Owner 2026-10-26: "the entire point of blender is so it can edit the mesh and make em workable ... i need the models
+# to be improved with working topology". Research (docs/PIPELINE_RESEARCH_2026-10-26.md, "Retopology"): watertight
+# voxel surface first, then QuadriFlow (built in; Instant Meshes, BSD, when its binary is given), project back onto the
+# surface, then `bake` moves colour + a normal map from the original. Found on the PC (Blender 5.2.3): QuadriFlow
+# refuses a voxel mesh my manifold check passed - Blender's own check (object_remesh.cc mesh_is_manifold_consistent)
+# also fails on any edge shorter than 1e-4 in LOCAL coordinates (compare_v3v3), and marching voxels make such edges.
+def qf_problems(me) -> dict:
+    """Blender's QuadriFlow pre-check, counted instead of stopping at the first problem: edges in >2 faces, faces
+    flipped against a neighbour, wire edges (no face), edges shorter than 1e-4 on every axis (local coordinates)."""
+    n = len(me.edges)
+    count = [0] * n
+    first = [-1] * n
+    flips = gt2 = 0
+    for lp in me.loops:
+        e, v = lp.edge_index, lp.vertex_index
+        count[e] += 1
+        if count[e] > 2:
+            gt2 += 1
+        if first[e] == -1:
+            first[e] = v
+        elif first[e] == v:
+            flips += 1
+    co = me.vertices
+    short = 0
+    for ed in me.edges:
+        a, b = co[ed.vertices[0]].co, co[ed.vertices[1]].co
+        if abs(a.x - b.x) <= 1e-4 and abs(a.y - b.y) <= 1e-4 and abs(a.z - b.z) <= 1e-4:
+            short += 1
+    r = {"gt2": gt2, "flips": flips, "wire": sum(1 for c in count if c == 0), "short": short}
+    r["ok"] = not any(r.values())
+    return r
+
+
+def _apply_scale(o):
+    """Scale into the mesh (QuadriFlow's check and lengths are in local units); location / rotation stay."""
+    from mathutils import Matrix  # pylint: disable=import-outside-toplevel
+    s = o.scale
+    if max(abs(s.x - 1), abs(s.y - 1), abs(s.z - 1)) > 1e-6:
+        if o.data.users > 1:
+            o.data = o.data.copy()
+        o.data.transform(Matrix.Diagonal((s.x, s.y, s.z, 1.0)))
+        o.scale = (1.0, 1.0, 1.0)
+
+
+def _clean_for_quads(me, dist):
+    import bmesh  # pylint: disable=import-outside-toplevel
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=dist)
+    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=dist)
+    wire = [e for e in bm.edges if not e.link_faces]
+    if wire:
+        bmesh.ops.delete(bm, geom=wire, context="EDGES")
+    loose = [v for v in bm.verts if not v.link_edges]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    bad = [e for e in bm.edges if len(e.link_faces) > 2]       # rare after a voxel pass: cut the fins off
+    if bad:
+        bmesh.ops.delete(bm, geom=list({f for e in bad for f in e.link_faces}), context="FACES")
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+
+def prep_for_quads(o, voxel_div=160) -> dict:
+    """Make `o` a surface QuadriFlow accepts: scale applied, voxel rebuilt (watertight, one shell), tiny edges merged,
+    normals one way. Returns the pre-check after each round."""
+    _apply_scale(o)
+    d = o.dimensions
+    diag = max((d.x * d.x + d.y * d.y + d.z * d.z) ** 0.5, 1e-4)
+    m = o.modifiers.new("LOKI voxel", "REMESH")
+    m.mode, m.voxel_size, m.use_smooth_shade = "VOXEL", diag / float(voxel_div), True
+    _apply_modifier(o, m)
+    rounds = []
+    dist = max(2e-4, diag * 2e-5)
+    for _ in range(4):
+        _clean_for_quads(o.data, dist)
+        chk = qf_problems(o.data)
+        rounds.append(dict(chk, dist=round(dist, 6)))
+        if chk["ok"]:
+            break
+        dist *= 3
+    return {"voxel": round(diag / float(voxel_div), 5), "faces": len(o.data.polygons), "rounds": rounds,
+            "ok": rounds[-1]["ok"]}
+
+
+def _obj_write(me, path):
+    with open(path, "w", encoding="utf-8") as fh:
+        for v in me.vertices:
+            fh.write("v %.6f %.6f %.6f\n" % tuple(v.co))
+        for poly in me.polygons:
+            fh.write("f " + " ".join(str(i + 1) for i in poly.vertices) + "\n")
+
+
+def _obj_read(path):
+    verts, faces = [], []
+    with open(path, encoding="utf-8") as fh:
+        for ln in fh:
+            if ln.startswith("v "):
+                verts.append(tuple(float(x) for x in ln.split()[1:4]))
+            elif ln.startswith("f "):
+                faces.append([int(t.split("/")[0]) - 1 for t in ln.split()[1:]])
+    return verts, faces
+
+
+def instant_meshes(o, exe, faces, timeout=240) -> dict:
+    """Instant Meshes (BSD-3, wjakob) as a subprocess: pure quads, seconds even on dense input."""
+    import subprocess  # pylint: disable=import-outside-toplevel
+    import tempfile  # pylint: disable=import-outside-toplevel
+    tmp = Path(tempfile.mkdtemp(prefix="loki-im-"))
+    src, dst = tmp / "in.obj", tmp / "out.obj"
+    _obj_write(o.data, src)
+    kw = {"creationflags": 0x08000000} if sys.platform == "win32" else {}          # no console window
+    try:
+        cp = subprocess.run([str(exe), str(src), "-o", str(dst), "-f", str(int(faces)), "-d", "-S", "2", "-b",
+                             "-r", "4", "-p", "4"], capture_output=True, text=True, timeout=timeout, check=False, **kw)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "why": str(exc)}
+    if cp.returncode or not dst.is_file():
+        return {"ok": False, "why": (cp.stderr or cp.stdout or "no output")[-400:]}
+    verts, polys = _obj_read(dst)
+    if not polys:
+        return {"ok": False, "why": "empty result"}
+    me = bpy.data.meshes.new(o.data.name + "_im")
+    me.from_pydata(verts, [], polys)
+    me.update()
+    old = o.data
+    o.data = me
+    if old.users == 0:
+        bpy.data.meshes.remove(old)
+    return {"ok": True}
+
+
+def _quadriflow(sc, o, faces, symmetric, seeds=(0, 7, 42)) -> dict:
+    tries = []
+    o.data.use_mirror_x = bool(symmetric)
+    for seed in seeds:
+        before = len(o.data.polygons)
+        with _with_active(sc, o):
+            ret = bpy.ops.object.quadriflow_remesh(mode="FACES", target_faces=int(faces), seed=seed,
+                                                   use_mesh_symmetry=bool(symmetric), use_preserve_sharp=False,
+                                                   use_preserve_boundary=False, smooth_normals=True)
+        after = len(o.data.polygons)
+        tries.append({"seed": seed, "ret": sorted(ret), "faces": after})
+        if "FINISHED" in ret and after and after != before:
+            return {"ok": True, "tries": tries}
+    return {"ok": False, "tries": tries}
+
+
+def _project(o, target, rounds=2):
+    """Pull the new quads onto `target`'s surface, relax, pull again (keeps the flow even)."""
+    for i in range(rounds):
+        m = o.modifiers.new("LOKI project", "SHRINKWRAP")
+        m.target, m.wrap_method, m.wrap_mode, m.offset = target, "NEAREST_SURFACEPOINT", "ON_SURFACE", 0.0
+        _apply_modifier(o, m)
+        if i < rounds - 1:
+            m = o.modifiers.new("LOKI relax", "SMOOTH")
+            m.factor, m.iterations = 0.5, 1
+            _apply_modifier(o, m)
+
+
+def cmd_retopo(p):
+    """faces: quads wanted (8000 - a game creature; 3000 a prop, 15000 a hero); symmetric: mirror flow on X;
+    voxel: surface rebuild divisions of the diagonal (160); instant_meshes: path of its binary (optional, tried when
+    QuadriFlow refuses); fallback_tris: when no quads come out, the clean voxel surface decimated to this.
+    The original stays as "<name>__high" so `bake` (normal=True) moves its colours and detail onto the quads."""
+    faces = int(p.get("faces") or 8000)
+    out = {}
+    with job_context(p.get("scene")) as sc:
+        for o in _meshes(sc, p.get("objects")):
+            if o.name.endswith(("__high", "__vox")):
+                continue
+            t0 = time.time()
+            before = topology_report(o)
+            if sc.objects.get(o.name + "__high") is None:            # the original: colour + detail source for bake
+                high = o.copy()
+                high.data = o.data.copy()
+                high.name = o.name + "__high"
+                sc.collection.objects.link(high)
+                high.hide_render = True
+            prep = prep_for_quads(o, int(p.get("voxel") or 160))
+            vox = o.copy()                                           # the clean surface the quads are projected onto
+            vox.data = o.data.copy()
+            vox.name = o.name + "__vox"
+            sc.collection.objects.link(vox)
+            vox.hide_render = True
+            how, tries = None, {}
+            if prep["ok"]:
+                qf = _quadriflow(sc, o, faces, p.get("symmetric"))
+                tries["quadriflow"] = qf["tries"]
+                how = "quadriflow" if qf["ok"] else None
+            exe = p.get("instant_meshes") or os.environ.get("LOKI_INSTANT_MESHES")
+            if how is None and exe and Path(exe).is_file():
+                im = instant_meshes(o, exe, faces)
+                tries["instant_meshes"] = im
+                how = "instant_meshes" if im["ok"] else None
+            if how:
+                _project(o, vox)
+            else:                                                    # no quads: still a clean, light surface
+                limit = int(p.get("fallback_tris") or 20000)
+                tris = _tris([o])
+                if tris > limit:
+                    m = o.modifiers.new("LOKI decimate", "DECIMATE")
+                    m.ratio = limit / float(tris)
+                    _apply_modifier(o, m)
+                how = "voxel only"
+            vdata = vox.data
+            bpy.data.objects.remove(vox, do_unlink=True)
+            if vdata.users == 0:
+                bpy.data.meshes.remove(vdata)
+            for poly in o.data.polygons:
+                poly.use_smooth = True
+            out[o.name] = {"how": how, "quads": how in ("quadriflow", "instant_meshes"), "prep": prep, "tries": tries,
+                           "before": before, "after": topology_report(o), "seconds": round(time.time() - t0, 1)}
+    return {"objects": out, "quads": all(v["quads"] for v in out.values()) if out else False}
+
+
+
+COMMANDS.update({"retopo": cmd_retopo, "topology": cmd_topology, "repair": cmd_repair, "bake": cmd_bake, "remix": cmd_remix, "import": cmd_import, "cleanup": cmd_cleanup, "normalize": cmd_normalize, "decimate": cmd_decimate,
                  "remesh": cmd_remesh, "uv": cmd_uv, "shade": cmd_shade, "stage": cmd_stage, "turntable": cmd_turntable,
                  "lods": cmd_lods, "clear": cmd_clear})
 

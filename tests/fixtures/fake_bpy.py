@@ -34,6 +34,13 @@ class Obj:
     def __init__(self, name, data=None):
         self.name, self.data = name, data
         self.type = "MESH" if data is not None and getattr(data, "polygons", None) is not None else "EMPTY"
+        self.selected = False
+
+    def select_set(self, state):
+        self.selected = bool(state)
+
+    def get(self, key, default=None):          # custom properties (o["loki_free_asset"])
+        return getattr(self, "_props", {}).get(key, default)
 
 
 class Coll:
@@ -49,7 +56,7 @@ class Linker(list):
 class Scene:
     def __init__(self, name):
         self.name, self.collection, self.camera = name, Coll(), None
-        self.view_layers = [types.SimpleNamespace(name="ViewLayer")]
+        self.view_layers = [types.SimpleNamespace(name="ViewLayer", objects=types.SimpleNamespace(active=None))]
         self.render = types.SimpleNamespace(engine="BLENDER_EEVEE", filepath="", resolution_x=0, resolution_y=0,
                                             resolution_percentage=100, image_settings=types.SimpleNamespace(file_format=""))
         self.cycles = types.SimpleNamespace(samples=0, device="CPU")

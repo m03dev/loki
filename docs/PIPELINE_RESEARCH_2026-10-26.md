@@ -108,3 +108,35 @@ assets in the public repo.
 export, glTF-Validator (Apache), Basis/KTX2 (Apache), PyMeshLab (GPL) and manifold3d (Apache) for repair, xatlas
 (MIT) for packing. More traps found: OmniPart (NVIDIA PartField + RMBG-2.0 in its NOTICE), PartPacker (NVIDIA NC),
 HY-Motion (Hunyuan licence), SMPL-based text-to-motion, Kimodo (NVIDIA Open Model License + bundled Llama terms).
+
+## Evening update: retopology - from AI soup to workable quads (owner: "i need the models to be improved with working topology")
+
+What exists (web research, two agents; nothing here was tested except where it says "PC"):
+
+| Tool | Licence | Use in LOKI |
+| --- | --- | --- |
+| Blender QuadriFlow | GPL, inside Blender | primary, built in. **PC: works** once the mesh passes Blender's own pre-check |
+| Instant Meshes (wjakob) | BSD-3 | fallback CLI (`-o -f -d -S 2 -b -r 4 -p 4`), LOKI_INSTANT_MESHES; also already inside Forge's WASM sculpt engine |
+| QuadWild Bi-MDF (cgg-bern) | GPL-3.0 | best flow of the open tools, minutes per mesh, prebuilt binaries; next fallback (LOKI_TASKS) |
+| QRemeshify (Blender add-on over QuadWild) | GPL | guides from seams / sharp edges; headless use unverified |
+| Quad Remesher (Exoside), Auto-Rig Pro | proprietary | never vendored; the owner may install them himself |
+| MeshAnything V1/V2, BPT, DeepMesh, FastMesh, TreeMeshGPT | non-commercial or unclear; 0.8k-8k faces, triangles | not usable for creatures |
+| Meshtron, QuadGPT, Nautilus, Silksong | no weights | re-check in 2027 |
+
+Why QuadriFlow "failed as non-manifold" on every AI mesh (PC, found by reading Blender's source,
+`source/blender/editors/object/object_remesh.cc` mesh_is_manifold_consistent): besides >2 faces per edge, flipped
+neighbours and wire edges, it rejects ANY edge shorter than 1e-4 on every axis in LOCAL coordinates - and voxel /
+marching surfaces make such edges. Scaling the object does nothing (the check reads the mesh data). LOKI's `retopo`
+applies scale, voxel-rebuilds, merges below ~0.2 mm, repeats until its replica (`qf_problems`) is clean.
+
+Recipe now in the core (`retopo` + `bake normal=true`): original kept -> voxel (diag/160) -> clean until the
+pre-check passes -> QuadriFlow 3 seeds -> Instant Meshes -> voxel-only fallback -> shrinkwrap / relax / shrinkwrap onto
+the voxel surface -> UV -> bake Base Color as emission (DIFFUSE is black when metallic=1, glTF's default) + tangent
+normal map from the original -> topology report. PC numbers: fantasy character 32,834 tris (0% quads, 92.6% poles)
+-> 7,260 quads, 100% quads, 4.2% poles, 0 non-manifold, ~5-12 s; robot 9,934 tris -> 8,196 quads, 1.0% poles.
+
+Not automatic anywhere (open or paid): artist edge loops around eyes and mouth and extra loops at joints. Levers:
+QuadWild guides (seams / face sets where loops should run), symmetry (centre, symmetrize, remesh half, mirror), or a
+human pass. Agent side: skills/blender-gameready (router + cleanup / retopo / uv-bake / qa stages with numeric gates,
+the layout of arjun988/blender-skills, MIT); research systems (LL3M - non-commercial, not used; BlenderGym: spending
+compute on verification pays) check with renders only - none measure topology, which LOKI now does.

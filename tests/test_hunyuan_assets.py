@@ -234,9 +234,9 @@ model.parent.mkdir(parents=True, exist_ok=True)
 model.write_bytes(b"glTF")
 res = blender_link.polish(model, TMP / "ws", target=15000, turntable=0)
 kinds = [c["type"] for c in seen["cmds"]]
-check("polish: clear -> import -> cleanup -> normalize -> repair -> bake -> decimate -> uv(missing) -> shade -> stage -> "
-      "render -> export .glb .gltf .fbx .blend -> lods -> scene_info", kinds == ["clear", "import", "cleanup", "normalize", "repair",
-                                                               "bake", "decimate", "uv", "shade", "stage", "render", "export",
+check("polish: clear -> import -> cleanup -> normalize -> repair -> bake -> decimate -> uv(missing) -> topology -> shade -> "
+      "stage -> render -> export .glb .gltf .fbx .blend -> lods -> scene_info", kinds == ["clear", "import", "cleanup", "normalize",
+                                                               "repair", "bake", "decimate", "uv", "topology", "shade", "stage", "render", "export",
                                                                "export", "export", "export", "lods", "scene_info"]
       and seen["cmds"][7]["params"]["mode"] == "missing" and seen["cmds"][6]["params"]["target"] == 15000
       and [Path(c["params"]["path"]).suffix for c in seen["cmds"] if c["type"] == "export"] == [".glb", ".gltf", ".fbx", ".blend"], kinds)

@@ -108,6 +108,14 @@ TEMPLATES = STARTERS + [
      "role": "create", "goal": "make images for the project", "tools": ["files", "image"], "color": "#bf616a",
      "instructions": "You make images. Write a precise prompt (subject, style, lighting, framing), "
                      "generate with the image tool, save into images/, and list what you made."},
+    {"id": "3d-finisher", "name": "3D Finisher", "engine": "opencode", "allow_commands": True,
+     "role": "create", "goal": "make AI 3D models workable: clean quads, UVs, baked colour + normal map, FBX / GLB",
+     "tools": ["files", "commands"], "color": "#d08770",
+     "skills": ["blender-gameready", "gameready-cleanup", "gameready-retopo", "gameready-uv-bake", "gameready-qa"],
+     "instructions": "You finish 3D models in Blender with the blender tool (LOKI's making tools). For each model: "
+                     "polish it with retopo (quads for its kind), read the topology numbers, look at the renders, "
+                     "retry a failed stage at most three times, then report SHIP or NO-SHIP with the numbers, the "
+                     "renders and the files. Free assets are always changed before export."},
     {"id": "opencode-coder", "name": "OpenCode Coder", "engine": "opencode", "allow_commands": True,
      "role": "build", "goal": "code with OpenCode on any provider (Zen's free models work)",
      "tools": ["files", "commands"], "color": "#a3be8c",
@@ -293,6 +301,8 @@ def skill_roots(repo: Path, data_dir: Path) -> list:
              # the novel pipeline's stage prompts (MuMuAINovel, GPL-3.0 - LICENSE in skills/novel-writer)
              ("novel", Path(repo) / "skills" / "novel-writer" / "stages"),
              ("marketing", Path(repo) / "skills" / "marketing"),
+             # blender-gameready's stage skills (cleanup, retopo, uv-bake, qa) - LOKI's own
+             ("gameready", Path(repo) / "skills" / "blender-gameready" / "stages"),
              # session 27: open-source skills from anthropics/skills (Apache-2.0, LICENSE beside them)
              ("anthropic", Path(repo) / "skills" / "anthropic")]
     try:   # Ruflo's core skills and every plugin's (contrib/ruflo)

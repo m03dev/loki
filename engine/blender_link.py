@@ -271,7 +271,8 @@ def build_render_export(code: str, scene: str, out_dir: Path, stem: str, width: 
 
 def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float = 2.0, target: int = 20000,
            style: str = "studio", lods=(1.0, 0.5, 0.2), turntable: int = 0, remesh: float = 0.0, edits=None,
-           formats=("glb", "gltf", "fbx", "blend"), repair: bool = True, symmetric: bool = False, **kw) -> dict:
+           formats=("glb", "gltf", "fbx", "blend"), repair: bool = True, symmetric: bool = False, retopo: int = 0,
+           **kw) -> dict:
     """AI model (or a free asset + `edits`) -> finished asset, in its own scene: import, cleanup, normalize (size m),
     [voxel remesh], [remix edits], decimate to `target` triangles, UVs only where missing (an AI model's own UVs carry
     its texture), smooth shading, a staged render, every format in `formats` (.glb, a .gltf folder, .fbx, .blend), LODs,
@@ -296,15 +297,23 @@ def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float =
             {"type": "import", "params": {"scene": sc, "path": str(model)}},
             {"type": "cleanup", "params": {"scene": sc}},
             {"type": "normalize", "params": {"scene": sc, "size": size}}]
+    bake = {"type": "bake", "params": {"scene": sc, "size": 2048, "folder": str(out_dir / "models" / "textures")}}
     if repair:                                   # AI garbage -> clean surface; its colours baked across when rebuilt
-        cmds += [{"type": "repair", "params": {"scene": sc, "symmetric": bool(symmetric)}},
-                 {"type": "bake", "params": {"scene": sc, "size": 2048, "folder": str(out_dir / "models" / "textures")}}]
-    if remesh:
+        cmds.append({"type": "repair", "params": {"scene": sc, "symmetric": bool(symmetric),
+                                                  **({"remesh": False} if retopo else {})}})
+    if retopo:                                   # workable topology: clean quads, colour + detail baked from the original
+        cmds += [{"type": "retopo", "params": {"scene": sc, "faces": int(retopo), "symmetric": bool(symmetric)}},
+                 dict(bake, params=dict(bake["params"], normal=True))]
+    elif repair:
+        cmds.append(bake)
+    if remesh and not retopo:
         cmds.append({"type": "remesh", "params": {"scene": sc, "voxel": remesh}})
     if edits:
         cmds.append({"type": "remix", "params": {"scene": sc, "edits": list(edits)}})
-    cmds += [{"type": "decimate", "params": {"scene": sc, "target": target}},
-             {"type": "uv", "params": {"scene": sc, "mode": "missing"}},
+    if not retopo:                               # decimating would turn the quads back into triangles
+        cmds.append({"type": "decimate", "params": {"scene": sc, "target": target}})
+    cmds += [{"type": "uv", "params": {"scene": sc, "mode": "missing"}},
+             {"type": "topology", "params": {"scene": sc}},
              {"type": "shade", "params": {"scene": sc}},
              {"type": "stage", "params": {"scene": sc, "style": style}},
              {"type": "render", "params": {"scene": sc, "path": str(png), "width": 1280, "height": 1280}}]
@@ -323,12 +332,36 @@ def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float =
     if rep:
         res["quality"] = {"verdict": rep.get("verdict"),
                           "problems": sorted({p for v in (rep.get("objects") or {}).values() for p in v.get("problems", [])})}
+    topo = next((r.get("result") for r in res.get("results", []) if r.get("type") == "topology"), None)
+    if topo:
+        res["topology"] = topology_summary(topo, next((r.get("result") for r in res.get("results", [])
+                                                       if r.get("type") == "retopo"), None))
     if res.get("ok"):
         info = next((r.get("result") for r in res.get("results", []) if r.get("type") == "scene_info"), {}) or {}
         if rep:
             info = dict(info, quality=res["quality"])
+        if topo:
+            info = dict(info, topology=res["topology"])
         write_sidecar(glb, out_dir, png, model, info, [f for f in formats if f in outs], free, edits)
     return res
+
+
+def topology_summary(topo: dict, retopo: dict | None = None) -> dict:
+    """The core's per-object topology reports -> one line Forge and Home show: the worst verdict ("quads" / "mixed" /
+    "soup"), quads %, poles %, faces, and how the quads were made (QuadriFlow, Instant Meshes, or not at all)."""
+    objs = [v for v in (topo or {}).values() if isinstance(v, dict) and "verdict" in v]
+    if not objs:
+        return {}
+    order = ["quads", "mixed", "soup"]
+    faces = sum(v.get("faces", 0) for v in objs) or 1
+    out = {"verdict": max((v["verdict"] for v in objs), key=order.index),
+           "faces": sum(v.get("faces", 0) for v in objs),
+           "quad_pct": round(sum(v.get("quad_pct", 0) * v.get("faces", 0) for v in objs) / faces, 1),
+           "pole_pct": round(max(v.get("pole_pct", 0) for v in objs), 1)}
+    if retopo:
+        hows = sorted({v.get("how") for v in (retopo.get("objects") or {}).values() if v.get("how")})
+        out["retopo"] = ", ".join(hows) or "not run"
+    return out
 
 
 def is_free_asset(path: Path) -> str:
@@ -362,7 +395,7 @@ def write_sidecar(glb: Path, out_dir: Path, png: Path, source: Path, info: dict,
     meta = {"prompt": src_meta.get("prompt") or "", "backend": "blender polish",
             "made_from": src_meta.get("backend") or ("free asset " + free if free else "imported model"),
             "source": str(source), "image": image, "triangles": int(info.get("triangles") or 0),
-            "formats": formats, "t": time.time(), "quality": info.get("quality")}
+            "formats": formats, "t": time.time(), "quality": info.get("quality"), "topology": info.get("topology")}
     for k in ("licence", "licence_url", "no_training"):
         if src_meta.get(k):
             meta[k] = src_meta[k]
@@ -441,8 +474,10 @@ TOOL = {"name": "blender",
                        "scene.camera) - then it is rendered to renders/ and exported to models/ (.glb + .blend), named "
                        "after `name`. action=run: `commands` = a list of {type: python|render|export|scene_info, "
                        "params} - toolkit types: import, cleanup, normalize, decimate, remesh, uv, shade, stage, "
-                       "render, export, lods, turntable, scene_info, clear. action=polish: `path` = an AI model "
-                       "(.glb/.obj/.fbx from make_3d) -> cleaned, sized, decimated to `target` tris, staged render "
+                       "render, export, lods, turntable, scene_info, clear, repair, retopo, bake, topology. action=polish: "
+                       "`path` = an AI model (.glb/.obj/.fbx from make_3d) -> repaired, sized, and with `retopo` "
+                       "(quads wanted, 8000 for a creature, 3000 a prop) rebuilt as clean quads with its colour + a "
+                       "normal map baked on (else decimated to `target` tris), staged render "
                        "+ .glb, .gltf, .fbx, .blend + LODs (+ `turntable` frames -> mp4); shows in Home as a 3D model and "
                        "opens in Forge. FREE ASSETS (assets/ from free_assets) MUST be changed: give `edits` "
                        "[{op: tint|lowpoly|taper|bend|twist|displace|bevel|scale|material, ...}] - without edits it is "
@@ -450,6 +485,7 @@ TOOL = {"name": "blender",
         "inputSchema": {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["make", "run", "polish", "status"]},
             "path": {"type": "string"}, "target": {"type": "integer"}, "turntable": {"type": "integer"},
+            "retopo": {"type": "integer"},
             "edits": {"type": "array", "items": {"type": "object"}},
             "style": {"type": "string", "enum": ["studio", "night", "outdoor"]},
             "name": {"type": "string"}, "code": {"type": "string"}, "scene": {"type": "string"},
@@ -471,7 +507,8 @@ def tool(args: dict, cwd: Path) -> dict:
             return {"ok": False, "error": "no model at %s (path= a .glb/.obj/.fbx in this folder)" % p}
         res = polish(p, Path(cwd), str(a.get("name") or ""), target=int(a.get("target") or 20000),
                      style=str(a.get("style") or "studio"), turntable=int(a.get("turntable") or 0),
-                     edits=a.get("edits") if isinstance(a.get("edits"), list) else None)
+                     edits=a.get("edits") if isinstance(a.get("edits"), list) else None,
+                     retopo=int(a.get("retopo") or 0))
         if res.get("ok"):
             res["made"] = [x for x in [res["files"]["render"]] + res["files"]["models"] + [res["files"].get("turntable", "")]
                            if x and Path(x).is_file()]

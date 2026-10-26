@@ -223,7 +223,7 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             progress("Blender: repairing, cleaning, baking, exporting %s" % found.name, 0.2)
             r = blender_link.polish(found, ws, str(data.get("name") or ""), size=float(data.get("size") or 2.0),
                                     target=int(data.get("target") or 25000), symmetric=bool(data.get("symmetric")),
-                                    lods=(1.0, 0.5, 0.2), turntable=0)
+                                    retopo=_retopo_faces(data), lods=(1.0, 0.5, 0.2), turntable=0)
             if not r.get("ok"):
                 bad = next((x for x in r.get("results", []) if x.get("status") != "success"), {})
                 return {"ok": False, "error": r.get("error") or bad.get("message") or "Blender could not clean it up"}
@@ -258,7 +258,7 @@ def handle_post(state, path: str, body: bytes, thread: bool = True) -> tuple:
             res = forge3d.make_3d(source, out_dir, prompt, backend, image_maker=maker, progress=progress,
                                   options=options, judge=judge)
             if res.get("ok") and data.get("finish", True) and res.get("backend") != "lift":
-                res = _finish_after_make(state, res, progress, bool(data.get("symmetric")))
+                res = _finish_after_make(state, res, progress, bool(data.get("symmetric")), _retopo_faces(data))
             if res.get("ok") and res.get("image"):
                 res["image"] = _rel(state, res["image"])
             out = {k: v for k, v in res.items() if k not in ("glb", "obj")} | (
@@ -311,7 +311,19 @@ def list_levels(models: Path, limit: int = 120) -> list:
     return items
 
 
-def _finish_after_make(state, res: dict, progress, symmetric: bool = False) -> dict:
+RETOPO_FACES = 8000      # quads for a game creature (research: ~3k props, 8-15k characters)
+
+
+def _retopo_faces(data: dict) -> int:
+    """Quads wanted from a Clean up: the request's `retopo` (0 = old clean-up, decimate only), else RETOPO_FACES."""
+    v = data.get("retopo", RETOPO_FACES)
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return RETOPO_FACES if v else 0
+
+
+def _finish_after_make(state, res: dict, progress, symmetric: bool = False, retopo: int = RETOPO_FACES) -> dict:
     """A new AI model -> Blender's repair + polish when Blender is on this computer: the cleaned .glb (+ .gltf, .fbx,
     .blend, LODs, a render) becomes what Forge opens and Home shows; the raw model stays beside it. Any failure keeps
     the raw model (owner 2026-10-26: "clean up everything and make sure things are working")."""
@@ -319,9 +331,9 @@ def _finish_after_make(state, res: dict, progress, symmetric: bool = False) -> d
         import blender_link  # pylint: disable=import-outside-toplevel
         if not blender_link.find_blender():
             return res
-        progress("Blender: repairing and cleaning it up", 0.9)
+        progress("Blender: repairing it and rebuilding it as clean quads", 0.9)
         r = blender_link.polish(Path(res["glb"]), workspace(state), str(res.get("prompt") or ""), target=25000,
-                                symmetric=symmetric, lods=(1.0, 0.5, 0.2), turntable=0)
+                                symmetric=symmetric, retopo=retopo, lods=(1.0, 0.5, 0.2), turntable=0)
     except Exception as exc:  # noqa: BLE001
         return dict(res, finish_error="%s: %s" % (type(exc).__name__, str(exc)[:200]))
     if not r.get("ok"):

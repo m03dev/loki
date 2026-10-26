@@ -158,7 +158,9 @@ check("... and the owner's scene is still back", bpy.win.scene is owner_scene)
 
 # render / export / scene_info in the job's scene
 png, glb, blend = TMP / "out" / "x.png", TMP / "out" / "x.glb", TMP / "out" / "x.blend"
-job("rx", [{"type": "python", "params": {"scene": "R", "code": "import types\nscene.camera = types.SimpleNamespace(name='Cam')"}},
+job("rx", [{"type": "python", "params": {"scene": "R", "code": "import types, fake_bpy\nscene.camera = types.SimpleNamespace(name='Cam')\n"
+                                                            "for n in ('Rock', 'LOKI Ground'):\n"
+                                                            "    scene.collection.objects.link(fake_bpy.Obj(n, types.SimpleNamespace(polygons=[])))"}},
            {"type": "render", "params": {"scene": "R", "path": str(png)}},
            {"type": "export", "params": {"scene": "R", "path": str(glb)}},
            {"type": "export", "params": {"scene": "R", "path": str(blend)}},
@@ -166,6 +168,9 @@ job("rx", [{"type": "python", "params": {"scene": "R", "code": "import types\nsc
 tick()
 rx = answer("rx")
 check("render + export (.glb, .blend) + scene_info", rx["ok"] and png.is_file() and glb.is_file() and blend.is_file(), rx)
+sc_r = bpy.data.scenes.get("R")
+check("a model file holds the model, never the stage's ground (the PC: every .glb carried LOKI Ground)",
+      sc_r and [o.name for o in sc_r.objects if o.selected] == ["Rock"], sc_r and [(o.name, o.selected) for o in sc_r.objects])
 job("nocam", [{"type": "render", "params": {"scene": "Empty", "path": str(TMP / "out" / "n.png")}}])
 tick()
 check("render without a camera says so", "has no camera" in answer("nocam")["results"][0]["message"])
