@@ -109,6 +109,9 @@ def run_imagegen(job: dict, runner=subprocess.run) -> dict:
     return json.loads(lines[-1]) if lines else {"ok": False, "error": (proc.stderr or "no answer")[-400:]}
 
 
+QUALITY_STYLES = ("game-concept", "sprite-source", "concept-art")
+
+
 def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     prompt = str(args.get("prompt") or "").strip()
     if not prompt:
@@ -130,6 +133,17 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     if res.get("backend") == "pollinations":
         answer["note"] = ("made by Pollinations, the weakest fallback - no better model was reachable (set an NVIDIA "
                           "key or HF_TOKEN in Settings, or install the local image model)")
+        if style.lower() in QUALITY_STYLES and not args.get("allow_weak"):
+            # game art from the weak fallback carries a watermark and muddy detail (2026-10-26: an orc warlord for
+            # the owner's game came out stamped "pollinations.ai") - not kept as an asset; try again later
+            for f in files:
+                try:
+                    Path(f).rename(Path(f).with_name(Path(f).stem + "-weak-draft" + Path(f).suffix))
+                except OSError:
+                    pass
+            return {"ok": False, "error": "only Pollinations (the weak, watermarked fallback) was reachable for this "
+                    "%s picture - NVIDIA's FLUX is busy. Try again in 10-30 minutes; allow_weak=true keeps a draft "
+                    "anyway." % style, "backend": "pollinations"}
     if style.lower() == "pixel-art" or args.get("pixel_size"):
         import pixel_art  # pylint: disable=import-outside-toplevel
         sprites = []

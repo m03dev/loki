@@ -133,5 +133,22 @@ _got = {}
 make_mcp.make_3d({"image_path": "images/golem.png", "backend": "lift"}, _d3,
                  make=lambda src, out, prompt, backend, **kw: (_got.update(src=src), {"ok": False, "error": "x"})[1])
 check("make_3d also takes image_path / path / file for the picture", str(_got.get("src", "")).endswith("golem.png"), _got)
+_dw = Path(_tf.mkdtemp())
+(_dw / "images").mkdir()
+_saved_run = make_mcp.run_imagegen
+
+
+def _weak(job, runner):
+    f = Path(job["out_dir"]) / "orc.jpg"
+    f.write_bytes(b"x")
+    return {"ok": True, "files": [str(f)], "backend": "pollinations"}
+
+
+make_mcp.run_imagegen = _weak
+_w = make_mcp.make_image({"prompt": "an orc warlord", "style": "game-concept"}, _dw)
+check("game art from the weak, watermarked fallback is not kept as an asset: 'try again later', file set aside",
+      not _w["ok"] and "Try again" in _w["error"] and (_dw / "images" / "orc-weak-draft.jpg").exists(), _w)
+check("... other pictures still come back (with the note)", make_mcp.make_image({"prompt": "a test"}, _dw)["ok"])
+make_mcp.run_imagegen = _saved_run
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)
