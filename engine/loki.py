@@ -27,7 +27,16 @@ from pathlib import Path
 # The MCP client (`mcp`) is imported where it is used (connect_mcp, which runs in the background
 # after the window opens): it is ~0.7 s of the engine's ~1.2 s start (docs/SPEED.md).
 import openai
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI as _RawAsyncOpenAI
+
+
+def AsyncOpenAI(*args, **kwargs):  # noqa: N802 - every model client in LOKI is made here
+    """openai.AsyncOpenAI, with the base URL through the tool-call fix (engine/dsml_proxy.py): a call the model
+    WRITES as text comes back as a real tool call, for every model, agent and harness (owner 2026-10-25)."""
+    if kwargs.get("base_url"):
+        import dsml_proxy  # pylint: disable=import-outside-toplevel
+        kwargs["base_url"] = dsml_proxy.client_url(kwargs["base_url"])
+    return _RawAsyncOpenAI(*args, **kwargs)
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parent   # engine/: Loki's own code

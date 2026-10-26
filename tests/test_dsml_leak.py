@@ -55,6 +55,7 @@ check("opencode_engine's guard sees both forms", opencode_engine.leaked_tool_mar
 
 # ---- a fake host answering the way NVIDIA / OpenRouter did
 HITS: list = []
+CASES: dict = {}
 
 
 def pieces(text, n=7):
@@ -68,7 +69,8 @@ class Host(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         HITS.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
-        text = V41 if "repo" in body["messages"][-1]["content"] else "Plain answer: 2 < 3, and <b> is a tag."
+        last = body["messages"][-1]["content"]
+        text = CASES.get(last) or (V41 if "repo" in last else "Plain answer: 2 < 3, and <b> is a tag.")
         if body.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -95,11 +97,13 @@ UP = "http://127.0.0.1:%d/v1" % host.server_address[1]
 base = dsml_proxy.proxy().url_for(UP)
 
 
-def ask(content, stream):
+def ask(content, stream, tools=None):
+    payload = {"model": "deepseek/deepseek-v4.1-flash", "stream": stream,
+               "messages": [{"role": "user", "content": content}]}
+    if tools:
+        payload["tools"] = [{"type": "function", "function": {"name": n, "parameters": {"type": "object"}}} for n in tools]
     req = urllib.request.Request(base + "/chat/completions", method="POST", headers={
-        "Content-Type": "application/json", "Authorization": "Bearer sk-test"},
-        data=json.dumps({"model": "deepseek/deepseek-v4.1-flash", "stream": stream,
-                         "messages": [{"role": "user", "content": content}]}).encode())
+        "Content-Type": "application/json", "Authorization": "Bearer sk-test"}, data=json.dumps(payload).encode())
     with urllib.request.urlopen(req, timeout=20) as r:
         raw = r.read().decode()
     if not stream:
@@ -129,10 +133,61 @@ check("not streamed: message.tool_calls, clean content, finish tool_calls", [t["
 w = dsml_proxy.wrap({"nvidia": {"base_url": "https://integrate.api.nvidia.com/v1", "model": "deepseek-ai/deepseek-v4.1-flash"},
                      "openrouter": {"base_url": "https://openrouter.ai/api/v1", "model": "deepseek/deepseek-v4.1-flash"},
                      "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-flash"},
-                     "groq": {"base_url": "https://api.groq.com/openai/v1", "model": "llama-3.3"}})
-check("wrap: DeepSeek on NVIDIA and OpenRouter go through the fix; DeepSeek's own API and other models do not",
-      w["nvidia"]["base_url"].startswith("http://127.0.0.1") and w["openrouter"]["base_url"].startswith("http://127.0.0.1")
-      and w["deepseek"]["base_url"] == "https://api.deepseek.com" and w["groq"]["base_url"].startswith("https://api.groq"), w)
+                     "groq": {"base_url": "https://api.groq.com/openai/v1", "model": "llama-3.3"},
+                     "ollama": {"base_url": "http://127.0.0.1:11434/v1", "model": "qwen3.5:9b"}})
+check("wrap: every host goes through the fix (local Ollama too) - except first-party APIs like DeepSeek's own",
+      all(w[k]["base_url"].startswith("http://127.0.0.1") and w[k].get("dsml_fixed") for k in ("nvidia", "openrouter", "groq", "ollama"))
+      and w["deepseek"]["base_url"] == "https://api.deepseek.com", w)
+check("client_url: the same rule for every model client; first-party APIs go direct",
+      dsml_proxy.client_url("https://api.groq.com/openai/v1").startswith("http://127.0.0.1")
+      and dsml_proxy.client_url("https://api.openai.com/v1") == "https://api.openai.com/v1"
+      and dsml_proxy.client_url(dsml_proxy.client_url("https://x.ai/v1")) == dsml_proxy.client_url("https://x.ai/v1"))
+os.environ["LOKI_TOOLCALL_FIX"] = "off"
+check("LOKI_TOOLCALL_FIX=off goes direct", dsml_proxy.client_url("https://api.groq.com/openai/v1") == "https://api.groq.com/openai/v1")
+os.environ.pop("LOKI_TOOLCALL_FIX")
+
+# ---- every OTHER way a model writes a call instead of making it
+TOOLS = ["write_file", "run_command", "read_file"]
+FORMS = {
+    "qwen <tool_call>": 'Sure.\n<tool_call>\n{"name": "write_file", "arguments": {"filename": "a.txt", "content": "hi"}}\n</tool_call>',
+    "bare JSON": '{"name": "write_file", "arguments": {"filename": "a.txt", "content": "hi"}}',
+    "json fence": 'I will write it.\n```json\n{"name": "write_file", "arguments": {"filename": "a.txt", "content": "hi"}}\n```',
+    "llama [TOOL_CALLS]": '[TOOL_CALLS] [{"name": "write_file", "arguments": {"filename": "a.txt", "content": "hi"}}]',
+    "code style": 'write_file(filename="a.txt", content="hi")',
+}
+for label, reply in FORMS.items():
+    CASES["case " + label] = reply
+    for stream in (False, True):
+        r = ask("case " + label, stream, TOOLS)
+        if stream:
+            calls = [t for c in r if c.get("choices") for t in (c["choices"][0]["delta"].get("tool_calls") or [])]
+            words = "".join((c["choices"][0]["delta"].get("content") or "") for c in r if c.get("choices"))
+            fin = [c["choices"][0]["finish_reason"] for c in r if c.get("choices") and c["choices"][0].get("finish_reason")]
+        else:
+            m = r["choices"][0]
+            calls, words, fin = m["message"].get("tool_calls") or [], m["message"].get("content") or "", [m["finish_reason"]]
+        ok = [c["function"]["name"] for c in calls] == ["write_file"] and json.loads(calls[0]["function"]["arguments"]) \
+            == {"filename": "a.txt", "content": "hi"} and fin == ["tool_calls"] and '"name"' not in words
+        check("%s, %s: a real write_file call, nothing left in the text" % (label, "streamed" if stream else "whole"), ok,
+              (calls, words, fin))
+CASES["case code"] = "Here is a dict: {'a': 1} and a list [1, 2]. Then:\n```python\nprint({'x': 2})\n```\nDone."
+r = ask("case code", True, TOOLS)
+check("an answer with braces, brackets and code passes through whole and stays an answer",
+      "".join((c["choices"][0]["delta"].get("content") or "") for c in r if c.get("choices")) == CASES["case code"]
+      and not any(c["choices"][0]["delta"].get("tool_calls") for c in r if c.get("choices")), r)
+CASES["case unknown"] = '{"name": "launch_rockets", "arguments": {}}'
+r = ask("case unknown", False, TOOLS)
+check("a call to a tool the request did not offer is left as text", not r["choices"][0]["message"].get("tool_calls"), r)
+r = ask("case bare JSON", False)
+check("a request with no tools is passed through untouched", not r["choices"][0]["message"].get("tool_calls")
+      and '"name"' in r["choices"][0]["message"]["content"], r)
+try:
+    import loki  # noqa: E402
+    _c = loki.AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key="k")
+    check("every client LOKI makes goes through it (loki.AsyncOpenAI)", str(_c.base_url).startswith("http://127.0.0.1"),
+          _c.base_url)
+except ModuleNotFoundError as _exc:
+    print("  (skipped the loki.AsyncOpenAI check: %s)" % _exc)
 
 import types  # noqa: E402
 import tool_harness  # noqa: E402

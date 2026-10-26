@@ -13,6 +13,20 @@ without newlines) is parsed into OpenAI tool_calls - streamed or not - and the m
 
     wrap(providers) -> the same providers, DeepSeek ones not on api.deepseek.com pointed at the proxy (started once)
     parse(text) -> (text without the markup, [{"name", "arguments": dict}])
+
+Owner 2026-10-25 19:36: "i thought this writing instead of call tool problem was fixed ... i dont want that to be a
+thing anymore". It is not only DeepSeek: small and local models write calls as <tool_call> JSON, a bare {"name": ...}
+object, a ```json fence, [TOOL_CALLS], or write_file(path=...) - and every new way LOKI ran a model (OpenCode,
+DeepSeek Harness, sub-agents) had to remember the fix. So the proxy is now THE gate, for every format and every model:
+
+    extract_calls(text, tool_names) -> (text left, [{"name", "arguments"}])  DSML, tool_harness.parse's formats
+                                       (tool_call tags, JSON objects / lists / fences, [TOOL_CALLS]) and code-style
+                                       calls - only names the request offered (DSML needs none)
+    client_url(base_url)            -> the base URL every client in LOKI uses (loki.AsyncOpenAI goes through it):
+                                       every OpenAI-compatible host, local Ollama included, except the first-party
+                                       APIs that parse their own models' calls (LOKI_TOOLCALL_FIX = auto | all | off)
+
+A request that offers no tools is passed through untouched; a reply that already has tool_calls is left alone.
 """
 from __future__ import annotations
 
@@ -73,13 +87,62 @@ def _openai_calls(calls: list, start: int = 0) -> list:
              "function": {"name": c["name"], "arguments": json.dumps(c["arguments"])}} for i, c in enumerate(calls)]
 
 
-def fix_message(body: dict) -> dict:
-    """A non-streamed chat completion: DSML in message.content -> message.tool_calls."""
+def extract_calls(text: str, names=None) -> tuple:
+    """(text left, [{"name", "arguments"}]) for a tool call the model WROTE instead of making."""
+    text = str(text or "")
+    if not text.strip():
+        return text, []
+    if has_markup(text):
+        clean, calls = parse(text)
+        if calls:
+            return clean, calls
+    names = [n for n in (names or []) if n]
+    if not names:
+        return text, []
+    try:
+        import tool_harness  # pylint: disable=import-outside-toplevel
+        found, rest = tool_harness.parse(text, names)
+    except Exception:  # noqa: BLE001
+        found, rest = [], text
+    if found:
+        return rest, [{"name": n, "arguments": a} for n, a in found]
+    try:
+        import tool_guard  # pylint: disable=import-outside-toplevel
+        found = tool_guard.parse_function_syntax(text, names) if "(" in text else []
+    except Exception:  # noqa: BLE001
+        found = []
+    if found:
+        rest = re.sub(r"```(?:python|py|tool_code)?\s*.*?```", "", text, flags=re.S)
+        rest = "\n".join(ln for ln in rest.splitlines()
+                         if not any(ln.strip().startswith(n + "(") for n, _a in found)).strip()
+        return rest, [{"name": n, "arguments": a} for n, a in found]
+    return text, []
+
+
+def request_tools(body) -> list:
+    """The tool names a chat request offered (the calls a reply may make)."""
+    try:
+        data = json.loads(body) if isinstance(body, (bytes, str)) else (body or {})
+    except ValueError:
+        return []
+    out = []
+    for t in data.get("tools") or [] if isinstance(data, dict) else []:
+        fn = (t or {}).get("function") if isinstance(t, dict) else None
+        name = (fn or t or {}).get("name") if isinstance(fn or t, dict) else None
+        if isinstance(name, str):
+            out.append(name)
+    return out
+
+
+def fix_message(body: dict, names=None) -> dict:
+    """A non-streamed chat completion: a call written in message.content -> message.tool_calls."""
     for ch in body.get("choices") or []:
         msg = ch.get("message") or {}
-        if not has_markup(msg.get("content") or ""):
+        if msg.get("tool_calls") or not isinstance(msg.get("content"), str):
             continue
-        clean, calls = parse(msg["content"])
+        clean, calls = extract_calls(msg["content"], names)
+        if not calls:
+            continue
         msg["content"] = clean or None
         if calls:
             msg["tool_calls"] = list(msg.get("tool_calls") or []) + [
@@ -88,17 +151,48 @@ def fix_message(body: dict) -> dict:
     return body
 
 
+_OPENERS = ('<tool_call>', '<function_call>', '<|tool_call|>', '[tool_calls]', '<function=', '{"name"', "{'name'",
+            '{"tool"', '{"function"', '{"tool_calls"', '[{"name"', '```json{"name"', '```json[{"name"', '```{"name"',
+            '```json{"tool', '```tool_code', '```json{"function"')
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", "", text).lower()
+
+
 class StreamFixer:
-    """SSE chat-completion chunks in -> chunks out. Text is passed on live, except from a '<' that may start DSML:
-    held until it is clearly not markup (then let go) or the stream ends (then parsed into tool_calls)."""
+    """SSE chat-completion chunks in -> chunks out. Text is passed on live, except from a point where a written tool
+    call may start (DSML, <tool_call>, {"name", a ```json fence, [TOOL_CALLS], `tool_name(` at a line start): held
+    until it is clearly not a call (then let go) or the stream ends (then parsed into tool_calls)."""
     MAYBE = re.compile(r"^<\s*(?:[｜|]{1,2}\s*(?:D(?:S(?:M(?:L)?)?)?)?)?$", re.I)
 
-    def __init__(self) -> None:
-        self.held = ""          # text held back (may be DSML)
-        self.dsml = False       # the held text IS markup: hold to the end
+    def __init__(self, names=None) -> None:
+        self.names = [n for n in (names or []) if n]
+        self.held = ""          # text held back (may be a call)
+        self.dsml = False       # the held text IS a call: hold to the end
         self.native = 0         # tool calls the host did parse (our indexes come after them)
         self.template: dict = {}
         self.finish = None
+        self.line_start = True
+        self.openers = _OPENERS + tuple(n.lower() + "(" for n in self.names)
+
+    def _verdict(self, buf: str, line_start: bool) -> str:
+        """'call' (a call starts here), 'maybe' (cannot tell yet) or 'no'."""
+        if _OPEN.match(buf):
+            return "call"
+        if self.MAYBE.match(buf):
+            return "maybe"
+        if not self.names:
+            return "no"
+        n = _norm(buf[:80])
+        for op in self.openers:
+            if op.endswith("(") and not line_start:
+                continue
+            if n.startswith(op):
+                return "call"
+            if op.startswith(n):
+                return "maybe"
+        return "no"
 
     def _release(self, text: str) -> str:
         """Feed text; return what can be shown now."""
@@ -109,19 +203,34 @@ class StreamFixer:
             if self.dsml:
                 self.held += buf
                 return out
-            i = buf.find("<")
-            if i < 0:
-                return out + buf
+            i = 0
+            while i < len(buf):
+                c = buf[i]
+                at_start = self.line_start if i == 0 else buf[i - 1] == "\n"
+                if c in "<{[`" or (at_start and c.isalpha() and self.names):
+                    break
+                i += 1
             out += buf[:i]
+            if i:
+                self.line_start = buf[i - 1] == "\n"
             buf = buf[i:]
-            if _OPEN.match(buf):
+            if not buf:
+                return out
+            v = self._verdict(buf, self.line_start)
+            if v == "call":
                 self.dsml = True
                 continue
-            if self.MAYBE.match(buf):     # "<｜DS" so far: wait for more
+            if v == "maybe":
                 self.held = buf
                 return out
             out += buf[0]
+            self.line_start = buf[0] == "\n"
             buf = buf[1:]
+            # a word at a line start that is not a tool name: let the whole word go
+            if out and out[-1].isalpha():
+                m = re.match(r"[\w-]*", buf)
+                out += m.group(0)
+                buf = buf[m.end():]
         return out
 
     def chunk(self, data: dict) -> list:
@@ -154,7 +263,7 @@ class StreamFixer:
         out = []
         held, self.held = self.held, ""
         if held:
-            clean, calls = parse(held) if self.dsml else (held, [])
+            clean, calls = extract_calls(held, self.names) if self.dsml else (held, [])
             if clean:
                 out.append({**base, "choices": [{"index": 0, "delta": {"content": clean}, "finish_reason": None}]})
             if calls:
@@ -204,13 +313,14 @@ class _Proxy:
                     return
                 ctype = resp.headers.get("Content-Type", "")
                 chat = "chat/completions" in url and getattr(resp, "status", 200) == 200
+                names = request_tools(body) if chat and body else []
                 if chat and "text/event-stream" in ctype:
-                    self._stream(resp)
+                    self._stream(resp, names)
                     return
                 data = resp.read()
                 if chat and "json" in ctype:
                     try:
-                        data = json.dumps(fix_message(json.loads(data))).encode()
+                        data = json.dumps(fix_message(json.loads(data), names)).encode()
                     except ValueError:
                         pass
                 self.send_response(getattr(resp, "status", 200) or 200)
@@ -219,7 +329,7 @@ class _Proxy:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def _stream(self, resp) -> None:
+            def _stream(self, resp, names=None) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
@@ -230,7 +340,7 @@ class _Proxy:
                     raw = ("data: %s\n\n" % (obj if isinstance(obj, str) else json.dumps(obj))).encode()
                     self.wfile.write(b"%x\r\n%s\r\n" % (len(raw), raw))
                     self.wfile.flush()
-                fx = StreamFixer()
+                fx = StreamFixer(names)
                 ended = False
                 try:
                     for line in resp:
@@ -289,14 +399,43 @@ def proxy() -> _Proxy:
     return _PROXY["p"]
 
 
+FIRST_PARTY = ("api.deepseek.com", "api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com")
+
+
+def fix_mode(env=None) -> str:
+    import os  # pylint: disable=import-outside-toplevel
+    v = str((env if env is not None else os.environ).get("LOKI_TOOLCALL_FIX", "auto")).strip().lower()
+    return v if v in ("auto", "all", "off") else "auto"
+
+
+def _is_ours(base: str) -> bool:
+    p = _PROXY.get("p")
+    return bool(p) and base.startswith("http://127.0.0.1:%d/" % p.port)
+
+
 def needs_fix(p: dict) -> bool:
-    base, model = str(p.get("base_url") or "").lower(), str(p.get("model") or "").lower()
-    return "deepseek" in model and base.startswith("http") and not any(h in base for h in OFFICIAL) \
-        and not base.startswith("http://127.0.0.1")
+    """Every OpenAI-compatible host goes through the fix (local Ollama included) - except the first-party APIs that
+    parse their own models' calls, unless LOKI_TOOLCALL_FIX=all; never with LOKI_TOOLCALL_FIX=off."""
+    base = str(p.get("base_url") or "").strip()
+    low = base.lower()
+    mode = fix_mode()
+    if mode == "off" or not low.startswith("http") or _is_ours(base):
+        return False
+    return mode == "all" or not any(h in low for h in FIRST_PARTY)
+
+
+def client_url(base_url):
+    """The base URL a model client should use: through the fix when the host needs it."""
+    if not base_url:
+        return base_url
+    try:
+        return proxy().url_for(str(base_url)) if needs_fix({"base_url": str(base_url)}) else base_url
+    except Exception:  # noqa: BLE001 - the fix must never stop a request: go direct
+        return base_url
 
 
 def wrap(providers: dict) -> dict:
-    """DeepSeek models on a host other than DeepSeek's own API go through the fixing proxy."""
+    """The providers OpenCode / DeepSeek Harness get: every one that needs it pointed at the fix."""
     out = {}
     for name, p in providers.items():
         if needs_fix(p):
