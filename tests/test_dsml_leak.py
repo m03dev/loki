@@ -70,6 +70,16 @@ class Host(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         HITS.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
         last = body["messages"][-1]["content"]
+        if last == "case slow":
+            time.sleep(2.0)
+        if last == "case limit":
+            data = json.dumps({"error": {"message": "rate limit, try later", "code": 429}}).encode()
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         text = CASES.get(last) or (V41 if "repo" in last else "Plain answer: 2 < 3, and <b> is a tag.")
         if body.get("stream"):
             self.send_response(200)
@@ -181,6 +191,25 @@ check("a call to a tool the request did not offer is left as text", not r["choic
 r = ask("case bare JSON", False)
 check("a request with no tools is passed through untouched", not r["choices"][0]["message"].get("tool_calls")
       and '"name"' in r["choices"][0]["message"]["content"], r)
+# ---- a slow host: the client is answered at once and kept alive (DeepSeek Harness hung up on a silent proxy)
+dsml_proxy.KEEPALIVE_S = 0.3
+CASES["case slow"] = "Slow but here."
+import socket  # noqa: E402
+_req = urllib.request.Request(base + "/chat/completions", method="POST", headers={"Content-Type": "application/json"},
+                              data=json.dumps({"model": "m", "stream": True, "tools": [{"type": "function", "function": {"name": "write_file"}}],
+                                               "messages": [{"role": "user", "content": "case slow"}]}).encode())
+try:
+    with urllib.request.urlopen(_req, timeout=1.0) as _r:     # gives up after 1 s of silence; the host takes 2 s
+        _raw = _r.read().decode()
+    check("a host that takes 2 s: a client that hangs up after 1 s of silence still gets the answer (keep-alives)",
+          "Slow but here." in "".join(json.loads(ln[5:])["choices"][0]["delta"].get("content") or ""
+                                      for ln in _raw.splitlines() if ln.startswith("data:") and "[DONE]" not in ln
+                                      and json.loads(ln[5:]).get("choices")) and ": keep-alive" in _raw, _raw[:300])
+except (socket.timeout, TimeoutError, OSError) as exc:
+    check("a host that takes 2 s: a client that hangs up after 1 s of silence still gets the answer (keep-alives)", False, exc)
+r = ask("case limit", True, TOOLS)
+check("a host error while streaming arrives as an SSE error event the agent can read (not a hang)",
+      any("rate limit" in json.dumps(c.get("error") or {}) for c in r), r)
 try:
     import loki  # noqa: E402
     _c = loki.AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key="k")

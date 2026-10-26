@@ -119,6 +119,16 @@ def extract_calls(text: str, names=None) -> tuple:
     return text, []
 
 
+KEEPALIVE_S = 8.0
+
+
+def _wants_stream(body) -> bool:
+    try:
+        return bool(json.loads(body or b"{}").get("stream"))
+    except (ValueError, AttributeError):
+        return False
+
+
 def request_tools(body) -> list:
     """The tool names a chat request offered (the calls a reply may make)."""
     try:
@@ -299,6 +309,9 @@ class _Proxy:
                 headers = {k: v for k, v in self.headers.items()
                            if k.lower() not in ("host", "content-length", "connection", "accept-encoding")}
                 req = urllib.request.Request(url, data=body, method=method, headers=headers)
+                if "chat/completions" in url and _wants_stream(body):
+                    self._early_stream(req, request_tools(body))
+                    return
                 try:
                     resp = urllib.request.urlopen(req, timeout=600)  # noqa: S310 - the provider's own URL
                 except urllib.error.HTTPError as exc:
@@ -329,13 +342,77 @@ class _Proxy:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def _stream(self, resp, names=None) -> None:
+            def _early_stream(self, req, names) -> None:
+                """A streamed chat: answer the client AT ONCE and keep the line alive while the host thinks
+                (2026-10-25: NVIDIA's free DeepSeek took minutes to start; DeepSeek Harness hung up on the silent
+                proxy - BrokenPipe - retried, and stalled for 15 minutes). Errors arrive as an SSE error event."""
+                box: dict = {}
+                done = threading.Event()
+
+                def fetch() -> None:
+                    try:
+                        box["resp"] = urllib.request.urlopen(req, timeout=600)  # noqa: S310
+                    except urllib.error.HTTPError as exc:
+                        box["resp"] = exc
+                    except Exception as exc:  # noqa: BLE001
+                        box["error"] = str(exc)
+                    done.set()
+                threading.Thread(target=fetch, daemon=True).start()
+                try:
+                    self._headers()
+                    while not done.wait(KEEPALIVE_S):
+                        self._chunk(b": keep-alive\n\n")
+                    resp = box.get("resp")
+                    status = getattr(resp, "status", None) or getattr(resp, "code", 0)
+                    ctype = resp.headers.get("Content-Type", "") if resp is not None else ""
+                    if resp is None or status != 200 or "text/event-stream" not in ctype:
+                        raw = resp.read() if resp is not None else b""
+                        try:
+                            err = json.loads(raw).get("error") if raw else None
+                        except (ValueError, AttributeError):
+                            err = None
+                        if status == 200 and raw and not err:     # a host that answered whole: stream it as one
+                            try:
+                                whole = fix_message(json.loads(raw), names)
+                                ch = (whole.get("choices") or [{}])[0]
+                                msg = ch.get("message") or {}
+                                delta = {k: v for k, v in msg.items() if k in ("content", "tool_calls") and v}
+                                for i, tc in enumerate(delta.get("tool_calls") or []):
+                                    tc["index"] = i
+                                self._event({"id": whole.get("id", "x"), "object": "chat.completion.chunk",
+                                             "choices": [{"index": 0, "delta": delta,
+                                                          "finish_reason": ch.get("finish_reason") or "stop"}]})
+                            except (ValueError, AttributeError, IndexError):
+                                pass
+                        else:
+                            self._event({"error": err or {"message": "LOKI proxy: %s" % (
+                                box.get("error") or "host answered %s: %s" % (status, raw[:300].decode("utf-8", "replace")))}})
+                        self._event("[DONE]")
+                        self._chunk(b"")
+                        return
+                    self._pump(resp, names)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def _headers(self) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
 
+            def _chunk(self, raw: bytes) -> None:
+                self.wfile.write(b"%x\r\n%s\r\n" % (len(raw), raw))
+                self.wfile.flush()
+
+            def _event(self, obj) -> None:
+                self._chunk(("data: %s\n\n" % (obj if isinstance(obj, str) else json.dumps(obj))).encode())
+
+            def _stream(self, resp, names=None) -> None:
+                self._headers()
+                self._pump(resp, names)
+
+            def _pump(self, resp, names=None) -> None:
                 def send(obj) -> None:
                     raw = ("data: %s\n\n" % (obj if isinstance(obj, str) else json.dumps(obj))).encode()
                     self.wfile.write(b"%x\r\n%s\r\n" % (len(raw), raw))
