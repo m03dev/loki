@@ -151,13 +151,25 @@ def changes(before: dict, after: dict) -> list:
     return [("made", k) for k in made] + [("changed", k) for k in changed] + [("removed", k) for k in gone]
 
 
+STALL_S = float(os.getenv("LOKI_DSH_STALL_S", "900") or 900)
+TICK_S = 60.0
+
+
 def run_turn(prompt: str, workspace: str, *, exe: str, env: dict, timeout: float = 3600.0,
              cancelled: Callable[[], bool] | None = None, popen: Callable = subprocess.Popen,
-             on_line: Callable[[str], None] | None = None) -> dict:
-    """One headless dsh turn in the workspace -> {text, exit, changes, error, seconds}."""
+             on_line: Callable[[str], None] | None = None, on_tick: Callable[[str], None] | None = None,
+             stall_s: float | None = None, tick_s: float | None = None) -> dict:
+    """One headless dsh turn in the workspace -> {text, exit, changes, error, seconds}.
+
+    dsh prints nothing until its final message, so a watchdog looks at the folder every minute: `on_tick` gets a
+    "still working - N files changed" line, and a turn with no output and no change in the folder for `stall_s`
+    (LOKI_DSH_STALL_S, default 15 min) is stopped instead of running to the hour (2026-10-25: a pixel check sat
+    silent on the Mac while dsh could not read DeepSeek's text tool calls)."""
     ws = Path(workspace)
     before = snapshot(ws)
     started = time.time()
+    stall = STALL_S if stall_s is None else stall_s
+    tick = TICK_S if tick_s is None else tick_s
     try:
         proc = popen([exe, "--profile", "headless", prompt], cwd=str(ws), env=env, stdout=subprocess.PIPE,
                      stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
@@ -173,6 +185,30 @@ def run_turn(prompt: str, workspace: str, *, exe: str, env: dict, timeout: float
             pass
     t = threading.Thread(target=read_err, daemon=True)
     t.start()
+    stalled: list = []
+    done = threading.Event()
+
+    def watch() -> None:
+        last_seen, last_change, last_lines = before, time.time(), 0
+        while not done.wait(tick):
+            now_snap = snapshot(ws)
+            if now_snap != last_seen or len(out_lines) != last_lines:
+                last_seen, last_change, last_lines = now_snap, time.time(), len(out_lines)
+            if on_tick:
+                try:
+                    on_tick("DeepSeek Harness still working (%d min, %d file(s) changed so far)"
+                            % ((time.time() - started) // 60, len(changes(before, now_snap))))
+                except Exception:  # noqa: BLE001
+                    pass
+            if stall and time.time() - last_change > stall:
+                stalled.append(int(time.time() - last_change))
+                try:
+                    proc.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+                return
+    w = threading.Thread(target=watch, daemon=True)
+    w.start()
     try:
         for line in proc.stdout:
             out_lines.append(line)
@@ -190,11 +226,14 @@ def run_turn(prompt: str, workspace: str, *, exe: str, env: dict, timeout: float
             proc.kill()
         except Exception:  # noqa: BLE001
             pass
+    done.set()
     t.join(2)
     text = "".join(out_lines).strip()
     code = proc.returncode if proc.returncode is not None else -1
     err = ""
-    if cancelled and cancelled():
+    if stalled:
+        err = "dsh made no progress for %d min (no output, nothing changed in the folder) - stopped" % (stalled[0] // 60)
+    elif cancelled and cancelled():
         err = "stopped"
     elif time.time() - started > timeout:
         err = "dsh ran past %d s" % timeout

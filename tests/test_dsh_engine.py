@@ -125,6 +125,29 @@ check("a non-DeepSeek model never goes to dsh (OpenCode, or its install note)", 
 
 st = loki.engine_status()
 check("Settings > Agent shows DeepSeek Harness and its install command", "dsh" in st and "@deepseek-ai/dsh" in st["install"]["dsh"], st)
+# ------------------------------------------------------------------ the watchdog: dsh is silent until it ends
+import subprocess as _sp  # noqa: E402
+_ws = TMP / "stall"
+_ws.mkdir(exist_ok=True)
+_ticks = []
+_r = dsh_engine.run_turn("x", str(_ws), exe=sys.executable, env=dict(os.environ),
+                         popen=lambda args, **kw: _sp.Popen([sys.executable, "-c", "import time; time.sleep(30)"], **kw),
+                         on_tick=_ticks.append, stall_s=1.0, tick_s=0.3)
+check("a silent dsh that changes nothing is stopped by the watchdog", "no progress" in _r["error"]
+      and _r["seconds"] < 10, _r)
+check("while it runs, the watchdog says it is still working", _ticks and "still working" in _ticks[0], _ticks)
+_r = dsh_engine.run_turn("x", str(_ws), exe=sys.executable, env=dict(os.environ), popen=lambda args, **kw: _sp.Popen(
+    [sys.executable, "-c", "import time, pathlib\nfor i in range(6):\n    pathlib.Path('f%d.txt' % i).write_text('x')\n"
+     "    time.sleep(0.4)\nprint('made six files')"], **kw), stall_s=1.0, tick_s=0.3)
+check("a dsh that keeps changing files is not stopped", not _r["error"] and len(_r["changes"]) == 6, _r)
+if loki is not None:
+    import dsml_proxy  # noqa: E402
+    _wrapped = loki._dsml_fixed({"nvidia": {"base_url": "https://integrate.api.nvidia.com/v1",  # pylint: disable=protected-access
+                                            "model": "deepseek-ai/deepseek-v4.1-flash", "api_key": "k"}})
+    check("DeepSeek on NVIDIA goes to dsh through the DSML-fixing proxy, and is still picked as DeepSeek",
+          _wrapped["nvidia"].get("dsml_fixed") and dsh_engine.pick(_wrapped, {"LOKI_DEEPSEEK_HARNESS": "auto"}), _wrapped)
+    _src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
+    check("both dsh paths use it", _src.count("_dsml_fixed(_oc_providers(first_name))") == 2)
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -9241,7 +9241,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         return await run_cli_harness(text, harness, task=task, preamble=preamble)
     if harness == "dsh":                           # picked by hand: DeepSeek Harness runs whatever model is picked
         import dsh_engine  # pylint: disable=import-outside-toplevel
-        prov = _oc_providers(first_name)
+        prov = _dsml_fixed(_oc_providers(first_name))
         dexe = dsh_engine.find_dsh()
         if prov and dexe:
             name0 = next(iter(prov))
@@ -9254,7 +9254,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     # owner 2026-10-25: "when we're using deepseek4.1 use deepseek harness" - DeepSeek's own agent (engine/dsh_engine.py)
     if harness == "auto" and acting and not os.getenv("LOKI_OPENCODE_MODEL", "").strip():
         import dsh_engine  # pylint: disable=import-outside-toplevel
-        chosen = dsh_engine.pick(_oc_providers(first_name)) if dsh_engine.mode() != "off" else None
+        chosen = dsh_engine.pick(_dsml_fixed(_oc_providers(first_name))) if dsh_engine.mode() != "off" else None
         if chosen and chosen[0] in _DSH_BROKEN:
             chosen = None
         dexe = dsh_engine.find_dsh() if chosen else ""
@@ -9513,6 +9513,16 @@ async def run_local(text: str, name: str, task: bool = False, preamble: str = ""
     return reply
 
 
+def _dsml_fixed(providers: dict) -> dict:
+    """DeepSeek 4.1 on NVIDIA / OpenRouter writes its tool calls as text: DeepSeek Harness gets them through the same
+    fixing proxy OpenCode does (2026-10-25: dsh ran without it and sat silent on the Mac)."""
+    try:
+        import dsml_proxy  # pylint: disable=import-outside-toplevel
+        return dsml_proxy.wrap(providers)
+    except Exception:  # noqa: BLE001
+        return providers
+
+
 async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamble: str = ""):
     """One message (or Build task / job) done by DeepSeek Harness in the workspace. dsh prints only its last message,
     so LOKI looks at the folder before and after: 'done' with nothing changed is pushed back once, then NOT DONE."""
@@ -9531,7 +9541,8 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
     _progress("usage", json.dumps({"model": prov.get("model", "") or name, "where": name, "seconds": 0}))
     res = await asyncio.to_thread(dsh_engine.run_turn, prompt, str(WORKSPACE), exe=exe, env=env,
                                   cancelled=_cancel_event.is_set,
-                                  on_line=lambda ln: _progress("assistant", ln[:300]) if ln.strip() else None)
+                                  on_line=lambda ln: _progress("assistant", ln[:300]) if ln.strip() else None,
+                                  on_tick=lambda note: _progress("thinking", note))
     chs = res.get("changes") or []
     if res.get("exit") not in (0, None) and not chs and not res.get("text") and re.search(
             r"auth|api key|invalid|401|403|unauthori", str(res.get("error") or ""), re.I):
