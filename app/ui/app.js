@@ -827,6 +827,12 @@ function renderJobs(jobs) {
     if (job.note) card.append(el("div", "job-meta", job.note));
     if (job.forecast && job.forecast.line) card.append(el("div", "job-meta forecast", job.forecast.line));
     if (job.error) card.append(el("div", "err", job.error));
+    if (job.output && /^(done|finished|failed|blocked)$/i.test(job.status || "") && window.LokiChatMedia) {
+      // the pictures a finished job made, shown as pictures on its card (owner 2026-10-26: real results, not text)
+      const pics = el("div", "job-pics");
+      card.append(pics);
+      window.LokiChatMedia.attach(pics, job.output);
+    }
     if (job.output || job.screenshot) {
       const details = el("details");
       details.dataset.id = job.id;

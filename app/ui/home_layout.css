@@ -225,6 +225,13 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .cm-say { font-size: 12px; color: var(--muted); flex-basis: 100%; }
 .cm-say:empty { display: none; }
 .cm-say.bad { color: #e39a9a; }
+/* a finished job's pictures on its card in the work strip */
+.job-pics .cm-strip { margin: 6px 0 2px; }
+.job-pics .cm-tile { max-width: min(100%, 14rem); }
+.job-pics .cm-pic { max-height: 10rem; }
+/* Home: a video plays in its card / the preview */
+.home-card-thumb video, .home-hero-pic video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-hero-pic video { object-fit: contain; }
 .cm-big { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, .86); display: flex; align-items: center; justify-content: center; padding: 3%; }
 .cm-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
 .cm-close { position: absolute; top: 14px; right: 18px; font-size: 26px; line-height: 1; background: transparent; color: #fff; border: 0; }

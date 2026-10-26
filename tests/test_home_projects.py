@@ -132,7 +132,11 @@ print("== 1. GET /home/projects")
 out = home_projects.collect(State())
 items = out["items"]
 kinds = [i["kind"] for i in items]
-check("every kind is listed: render, forge, godot, studio, content, job", set(kinds) == {"render", "forge", "godot", "studio", "content", "job"}, kinds)
+check("every kind is listed: made, render, forge, godot, studio, content, job", set(kinds) == {"made", "render", "forge", "godot", "studio", "content", "job"}, kinds)
+madeit = [i for i in items if i["kind"] == "made"]
+check("Made: the pictures LOKI made, the picture itself as the thumbnail (/creations/...), opened in Files (owner 2026-10-26: real results)",
+      madeit and all(i["thumb"] == "/creations/" + i["path_or_id"] and i["open"] == {"mode": "files", "path": i["path_or_id"]}
+                     for i in madeit), madeit)
 cont = sorted((i for i in items if i["kind"] == "content"), key=lambda i: i["path_or_id"])
 check("Content: the brand/ files (not hidden ones), a picture with a thumbnail, opened in Files",
       [i["path_or_id"] for i in cont] == ["brand/logo/mark.svg", "brand/name.md"] and cont[0]["thumb"].startswith("data:image/svg")
@@ -170,7 +174,7 @@ def boom(_state):
 bad = home_projects.collect(State(), dict(home_projects.SOURCES, godot=boom))
 check("one source failing never fails the whole answer (the others are there, the error is named)",
       bad["ok"] and "godot" in bad["errors"] and "disk gone" in bad["errors"]["godot"]
-      and {i["kind"] for i in bad["items"]} == {"render", "forge", "studio", "content", "job"}, bad["errors"])
+      and {i["kind"] for i in bad["items"]} == {"made", "render", "forge", "studio", "content", "job"}, bad["errors"])
 none = home_projects.collect(type("S", (), {"agent": type("A", (), {"DATA_DIR": str(TMP / "nothing"), "WORKSPACE": str(TMP / "nothing")})(), "jobs": None})())
 check("nothing made yet: ok, empty", none["ok"] and [i for i in none["items"] if i["kind"] != "godot"] == [], none)
 check("a big picture is not inlined (thumb stays small)", home_projects.data_url(TMP / "missing.png") is None)
@@ -225,7 +229,11 @@ ITEMS = {"ok": True, "errors": {}, "items": [
      "thumb": "data:image/png;base64," + base64.b64encode(png(16, 9, (220, 160, 60))).decode(), "open": {"mode": "render", "job": "r-0001"}},
     {"kind": "job", "name": "Render frames 1-24 on the PC", "path_or_id": "j1", "updated": now - 110, "status": "working", "detail": "pc",
      "thumb": None, "open": {"mode": "job", "id": "j1"}},
-    {"kind": "forge", "name": "a fox", "path_or_id": "models/fox.glb", "updated": now - 600, "thumb": None, "detail": "",
+    {"kind": "made", "name": "Knight with sword and shield", "path_or_id": "images/knight.png", "updated": now - 300,
+     "thumb": "data:image/png;base64," + base64.b64encode(png(8, 8, (90, 90, 120))).decode(), "detail": "picture",
+     "open": {"mode": "files", "path": "images/knight.png"}},
+    {"kind": "forge", "name": "a fox", "path_or_id": "models/fox.glb", "updated": now - 600,
+     "thumb": "data:image/png;base64," + base64.b64encode(png(8, 8, (200, 90, 40))).decode(), "detail": "",
      "open": {"mode": "forge", "model": "fox.glb"}},
     {"kind": "godot", "name": "Racer", "path_or_id": "Racer", "updated": now - 1200, "thumb": None, "detail": "",
      "open": {"mode": "godot", "project": "Racer"}},
@@ -261,6 +269,9 @@ async def window():
             if bare == "/godot-editor/status":
                 return await r.fulfill(json={"ok": True, "projects": [{"name": "Other", "label": "Other"}, {"name": "Racer", "label": "Racer"}],
                                              "native": "/x/godot", "projects_dir": "p"})
+            if bare == "/chat/media":
+                return await r.fulfill(json={"ok": True, "kind": "image", "path": "images/knight.png", "name": "knight.png",
+                                             "data_url": ITEMS["items"][2]["thumb"], "width": 8, "height": 8})
             if bare == "/jobs":
                 return await r.fulfill(json={"ok": True, "jobs": [{"id": "j1", "title": "Render frames", "status": "working", "output": "frame 7 of 24"}], "counts": {"working": 1}})
             return await r.fulfill(json={"ok": True})
@@ -277,22 +288,24 @@ async def window():
         check("the first tab is called Home", names[:1] == ["Home"], names)
         check("no live world behind the home screen", not await E("!!document.querySelector('.world-bg, #world-home, iframe.world-godot')"))
         cards = await E("[...document.querySelectorAll('.home-card')].map((c) => c.dataset.kind)")
-        check("the hub shows a card per thing, newest first - jobs are not cards", cards == ["render", "forge", "godot", "studio"], cards)
+        check("the hub shows only things you can see, newest first - no job, game-folder or Studio text cards (owner 2026-10-26)",
+              cards == ["render", "made", "forge"], cards)
         live = await E("(() => { const l = document.querySelector('.home-live'); return l && !l.hidden ? l.textContent : ''; })()")
         check("a 'working now' chip counts what runs", live == "1 working", live)
         check("no refresh or fold buttons (it refreshes itself)", not await E("!!document.querySelector('.home-refresh, .home-fold')"))
-        info = await E("""(() => { const c = document.querySelector('.home-card[data-kind=render]'), f = document.querySelector('.home-card[data-kind=forge]');
-          return { img: !!c.querySelector('.home-card-thumb img'), icon: !!f.querySelector('.home-card-thumb svg'),
+        info = await E("""(() => { const c = document.querySelector('.home-card[data-kind=render]'), f = document.querySelector('.home-card[data-kind=made]');
+          return { img: !!c.querySelector('.home-card-thumb img'), icon: !!f.querySelector('.home-card-thumb img'),
                    name: c.querySelector('.home-card-name').textContent, when: c.querySelector('.home-card-when').textContent,
                    tip: c.dataset.tipName, what: c.dataset.tipWhat }; })()""")
-        check("a card: its picture (or its kind's icon), name and when", info["img"] and info["icon"] and info["name"] == "Castle at dusk"
+        check("every card is a real picture, with its name and when", info["img"] and info["icon"] and info["name"] == "Castle at dusk"
               and info["when"] == "1 min ago", info)
         check("cards and icons have hover tooltips (name + what it does)", info["tip"] == "Castle at dusk" and "Render" in info["what"]
               and await E("[...document.querySelectorAll('.home-ico')].every((b) => b.dataset.tipName && b.dataset.tipWhat && b.getAttribute('aria-label'))"), info)
         hero = await E("(() => { const h = document.querySelector('.home-hero'); return h && !h.hidden ? h.querySelector('.home-hero-name').textContent : ''; })()")
         check("the big preview shows the latest render", hero == "Castle at dusk", hero)
-        await page.click(".home-card[data-kind=godot]")
-        check("a click on a card shows it big", await E("document.querySelector('.home-hero-name').textContent") == "Racer")
+        await page.click(".home-card[data-kind=made]")
+        check("a click on a picture LOKI made shows it big", await E("document.querySelector('.home-hero-name').textContent") == "Knight with sword and shield"
+              and await E("!!document.querySelector('.home-hero-pic img')"))
         await page.hover(".home-kind[data-kind=forge]")
         await page.wait_for_timeout(500)
         check("hovering an icon shows its tooltip", await E("(() => { const t = document.querySelector('.icon-tip'); return !!t && !t.hidden && t.textContent.includes('Forge'); })()"))
@@ -301,9 +314,9 @@ async def window():
         await page.click(".home-kind[data-kind=all]")
 
         # open where it lives
-        await page.click(".home-card[data-kind=godot] .home-card-open")
+        await page.evaluate("LokiHome.open({kind: 'godot', open: {mode: 'godot', project: 'Racer'}})")
         await page.wait_for_timeout(600)
-        check("a Godot card opens the Godot tab on that project", await E("document.body.dataset.mode") == "godot"
+        check("opening a game still lands on the Engine tab on that project", await E("document.body.dataset.mode") == "godot"
               and await E("document.querySelector('[data-mode-pane=godot] select').value") == "Racer")
         await page.keyboard.press("Control+F1")   # Home's one key here (Option+1 on a Mac)
         await page.wait_for_timeout(200)
@@ -344,9 +357,9 @@ async def window():
         check("Ctrl/Cmd+Shift+S opens Studio", not await E("document.getElementById('home-studio').hidden"))
         await page.click(".home-studio-back")
         check("the back control closes it", await E("document.getElementById('home-studio').hidden"))
-        await page.click(".home-card[data-kind=studio] .home-card-open")
+        await page.evaluate("LokiHome.open({kind: 'studio', open: {mode: 'studio', session: 's1'}})")
         await page.wait_for_timeout(300)
-        check("a Studio card opens Studio on that session", await E("document.querySelector('#home-studio iframe').src.includes('session=s1')")
+        check("opening a Studio session opens Studio on it", await E("document.querySelector('#home-studio iframe').src.includes('session=s1')")
               and posts.count("/studio/embed") == 1, (await E("document.querySelector('#home-studio iframe').src"), posts))
         await page.keyboard.press("Escape")
         await page.evaluate("document.getElementById('open-studio').click()")
@@ -357,7 +370,9 @@ async def window():
         # a job card -> its status; the chat stays reachable
         await page.click(".home-live")
         await page.wait_for_timeout(400)
-        check("the working chip shows the job live in the preview", "frame 7 of 24" in await E("document.querySelector('.home-hero').textContent"))
+        hj = await E("({ name: document.querySelector('.home-hero-name').textContent, log: !!document.querySelector('.home-hero pre') })")
+        check("the working chip shows the job in the preview - its picture, never its log text", hj["name"] == "Render frames 1-24 on the PC"
+              and not hj["log"], hj)
         # the split (home_layout.css / chat_view.js): the chat column is always beside the hub, in both views
         await page.click("#prompt")
         await page.wait_for_timeout(300)
@@ -443,9 +458,9 @@ async def window():
         start = await E("[...document.querySelectorAll('.home-start-btn')].map((b) => b.dataset.kind)")
         check("empty: one calm line and three places to start", start == ["forge", "render", "godot"]
               and not await E("document.querySelectorAll('.home-empty-row').length"), start)
-        await page.click(".home-kind[data-kind=godot]")
+        await page.click(".home-kind[data-kind=made]")
         rows = await E("[...document.querySelectorAll('.home-empty-row')].map((r) => r.textContent)")
-        check("one kind picked and none of it: how to make one", len(rows) == 1 and "LOKI Projects" in rows[0], rows)
+        check("one kind picked and none of it: how to make one", len(rows) == 1 and "ask LOKI for a picture" in rows[0], rows)
         await page.click(".home-kind[data-kind=all]")
         many = dict(ITEMS, items=[dict(ITEMS["items"][2], name="m%d" % i, path_or_id="models/m%d.glb" % i) for i in range(20)])
         state["items"] = many
@@ -465,6 +480,9 @@ async def window():
           return { inside: h.right <= W + 0.5 && cards.every((r) => r.right <= h.right + 0.5 && r.left >= h.left - 0.5),
                    noX: document.documentElement.scrollWidth <= W + 1 }; })()""")
         check("it fits a small window (no sideways scroll, cards inside)", fit["inside"] and fit["noX"], fit)
+        pics = await E("""(async () => { const d = document.createElement('div'); document.body.append(d);
+          await LokiChatMedia.attach(d, 'DONE: made `images/knight.png` (64x64)'); return d.querySelectorAll('.cm-strip img.cm-pic').length; })()""")
+        check("a finished job's card shows the picture it made, as a picture (owner 2026-10-26)", pics == 1, pics)
         check("no script errors", not errors, errors[:3])
         await browser.close()
 

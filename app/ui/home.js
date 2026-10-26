@@ -18,6 +18,9 @@
 
 const LokiHome = (() => {
   const KIND = {
+    made: { label: "Made", tip: "Pictures, sprites, sketches and videos LOKI made - the real thing, newest first.",
+      empty: "Nothing made yet: ask LOKI for a picture, a sprite or a video and it shows up here.",
+      icon: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8"/>' },
     content: { label: "Content", tip: "What LOKI's agents make for the brand and marketing: names, logos, posts, ad drafts (the workspace's brand/ folder).",
       empty: "No content yet: LOKI's agents put names, logos, posts and ad drafts here (brand/ in the workspace).",
       icon: '<path d="M4 5h16v11H8l-4 3.5z"/><path d="M8 9h8M8 12h5"/>' },
@@ -37,7 +40,11 @@ const LokiHome = (() => {
       empty: "No jobs yet: tick Run in background on a message, or start a render on the farm.",
       icon: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>' },
   };
-  const ORDER = ["render", "forge", "godot", "studio", "content"];   // the filter and the grid; jobs live in the chip
+  // Owner 2026-10-26: "whats the point of the home middle collum if it doesnt have a thumbnail preview of whats inside
+  // ... i dont wanna see folders or text i wanna see real results". The grid and the big preview show only things you
+  // can SEE (a picture, a render, a model's picture, a video); games and Studio sessions live in the Engine tab and the
+  // Studio button, jobs in the "working now" chip - and a job in the preview shows the picture it made, never its log.
+  const ORDER = ["made", "render", "forge", "content"];   // the filter and the grid
   const ICON = {
     all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
     open: '<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 13.5v5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -50,7 +57,7 @@ const LokiHome = (() => {
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   const S = { items: [], errors: {}, filter: "all", pick: "", all: false, timer: 0, loading: false, loaded: false };
   let root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
-  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (S.filter === "job") S.filter = "all"; } catch (_) { /* private mode */ }
+  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content"].includes(S.filter)) S.filter = "all"; } catch (_) { /* private mode */ }
   const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter })); } catch (_) { /* private mode */ } };
 
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -72,9 +79,10 @@ const LokiHome = (() => {
     return new Date(t * 1000).toLocaleDateString();
   }
   const keyOf = (it) => it.kind + ":" + it.path_or_id;
-  const visible = () => S.items.filter((it) => it.kind !== "job" && (S.filter === "all" || it.kind === S.filter));
+  const seeable = (it) => !!(it.thumb || it.video);
+  const visible = () => S.items.filter((it) => it.kind !== "job" && seeable(it) && (S.filter === "all" || it.kind === S.filter));
   const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
-  const whatOpens = { render: "opens it in Studio", forge: "opens it in Forge", godot: "opens it in the Engine tab",
+  const whatOpens = { made: "opens it in Files", render: "opens it in Studio", forge: "opens it in Forge", godot: "opens it in the Engine tab",
     studio: "opens it in Studio", content: "opens it in Files", job: "shows how it is going" };
 
   // ---------------------------------------------------------------- building the hub (once)
@@ -89,7 +97,7 @@ const LokiHome = (() => {
       b.dataset.kind = id; b.setAttribute("aria-pressed", String(S.filter === id));
       return b;
     };
-    kinds.append(kindBtn("all", ICON.all, "Everything", "Every render, model, game, Studio session and job, newest first."));
+    kinds.append(kindBtn("all", ICON.all, "Everything", "Everything LOKI made that you can see - pictures, renders, models, videos - newest first."));
     for (const k of ORDER) kinds.append(kindBtn(k, KIND[k].icon, KIND[k].label, KIND[k].tip));
     const acts = mk("div", "home-acts");
     acts.append(
@@ -132,6 +140,14 @@ const LokiHome = (() => {
 
   function thumbOf(it, cls) {
     const box = mk("div", cls + " kind-" + it.kind);
+    if (it.video && !it.thumb) {   // a video: its own first frames, playing silently
+      const v = mk("video"); v.src = it.video; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata";
+      v.autoplay = cls === "home-hero-pic";
+      if (!v.autoplay) { box.addEventListener("mouseenter", () => v.play().catch(() => {})); box.addEventListener("mouseleave", () => v.pause()); }
+      v.addEventListener("error", () => { v.remove(); box.innerHTML = svg((KIND[it.kind] || KIND.job).icon); });
+      box.append(v);
+      return box;
+    }
     if (it.thumb) {
       const img = mk("img"); img.alt = ""; img.src = it.thumb; img.loading = "lazy"; img.decoding = "async";
       img.addEventListener("error", () => { img.remove(); box.innerHTML = svg(KIND[it.kind].icon); });
@@ -161,7 +177,7 @@ const LokiHome = (() => {
   function heroItem() {
     const list = visible();
     const picked = S.items.find((it) => keyOf(it) === S.pick);
-    return picked || list.find((it) => it.kind === "render" && it.thumb) || list.find((it) => it.thumb) || list[0] || null;
+    return picked || list[0] || null;   // the newest real thing (a running job only when you pick it)
   }
 
   function renderHero() {
@@ -175,20 +191,32 @@ const LokiHome = (() => {
     side.append(kind, mk("h3", "home-hero-name", it.name));
     const facts = mk("p", "home-hero-facts", [ago(it.updated), it.detail, it.status].filter(Boolean).join(" · "));
     side.append(facts);
-    if (it.kind === "job") {
-      const out = mk("pre", "home-hero-out", "");
-      side.append(out);
-      jobDetail(it.path_or_id).then((j) => { if (j) out.textContent = (j.error || j.output || j.note || "").slice(-1200); });
+    let pic = null;
+    if (it.kind === "job") {   // the newest picture the job made, not its log
+      pic = mk("div", "home-hero-pic kind-job"); pic.innerHTML = svg(KIND.job.icon);
+      jobPicture(it.path_or_id).then((src) => {
+        if (!src || !pic.isConnected) return;
+        const img = mk("img"); img.alt = it.name; img.src = src; pic.replaceChildren(img);
+      });
     }
-    const go = mk("button", "send small home-hero-open", it.kind === "job" ? "Show in the work strip" : "Open in " + k.label);
+    const go = mk("button", "send small home-hero-open", it.kind === "job" ? "Show in the work strip" : it.kind === "made" ? "Show in Files" : "Open in " + k.label);
     go.type = "button"; go.addEventListener("click", () => open(it));
     side.append(go);
-    hero.append(thumbOf(it, "home-hero-pic"), side);
+    hero.append(pic || thumbOf(it, "home-hero-pic"), side);
   }
 
   async function jobDetail(id) {
     const r = await call("/jobs").catch(() => null);
     return ((r && r.jobs) || []).find((j) => j.id === id) || null;
+  }
+  async function jobPicture(id) {
+    const j = await jobDetail(id);
+    const paths = (j && window.LokiChatMedia) ? window.LokiChatMedia.pathsIn(j.output || "").filter((p) => !/\.pdf$/i.test(p)) : [];
+    for (const p of paths.reverse()) {
+      const m = await call("/chat/media?path=" + encodeURIComponent(p)).catch(() => null);
+      if (m && m.ok && m.data_url) return m.data_url;
+    }
+    return "";
   }
 
   function renderEmpty() {

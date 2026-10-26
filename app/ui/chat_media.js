@@ -114,6 +114,24 @@ const LokiChatMedia = (() => {
     }
     if (shown && typeof scrollDown === "function") scrollDown();
   }
+  /** Under a job's output in the work strip: the pictures it made, as pictures (owner 2026-10-26: "if its an image it
+   *  should show the image"). Once per element; the text stays below for the details. */
+  const SEEN = new Map();
+  async function attach(el, text) {
+    if (!el || el.dataset.mediaDone) return;
+    el.dataset.mediaDone = "1";
+    const paths = pathsIn(text || "").filter((p) => !/\.pdf$/i.test(p));
+    if (!paths.length) return;
+    const strip = mk("div", "cm-strip"); strip.setAttribute("aria-label", "Pictures this job made");
+    for (const p of paths) {
+      if (!SEEN.has(p)) SEEN.set(p, call("/chat/media?path=" + encodeURIComponent(p)).catch(() => null));   // the work strip redraws often: fetch each picture once
+      if (SEEN.size > 200) SEEN.delete(SEEN.keys().next().value);
+      const m = await SEEN.get(p);
+      if (!m || !m.ok || m.kind === "pdf" || strip.querySelector('[data-path="' + CSS.escape(m.path) + '"]')) continue;
+      try { strip.append(imageTile(m)); } catch (exc) { console.warn("job media:", exc); }
+    }
+    if (strip.childElementCount) el.prepend(strip);
+  }
   function scan(root) {
     for (const t of (root || document).querySelectorAll("#transcript .turn.loki:not([data-media-done])")) decorate(t);
   }
@@ -125,6 +143,6 @@ const LokiChatMedia = (() => {
       .observe(tr, { childList: true, subtree: true });
     scan();
   });
-  return { pathsIn, decorate, scan };
+  return { pathsIn, decorate, scan, attach };
 })();
 window.LokiChatMedia = LokiChatMedia;

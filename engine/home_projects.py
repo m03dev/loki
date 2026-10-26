@@ -4,6 +4,7 @@
 
 Each item: {kind, name, path_or_id, updated (epoch seconds), thumb, status?, open: {mode, ...}}
 
+  kind "made"    a picture, sprite, sketch or video LOKI made in the workspace (thumb / video = /creations/<path>)
   kind "render"  a render job: <data>/renders/<job>/manifest.json {name, kind, status, created, outputs, thumb}
                  (the Render tab writes them); open {mode: "render", job}
   kind "forge"   a Forge model or scene in the workspace's models/ (.glb, engine/forge3d.list_models);
@@ -29,7 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 REPO = Path(__file__).resolve().parent.parent
-KINDS = ("render", "forge", "godot", "studio", "content", "job")
+KINDS = ("made", "render", "forge", "godot", "studio", "content", "job")
 THUMB_MAX = 400_000
 PER_KIND = 24
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml"}
@@ -223,7 +224,36 @@ def content(state: Any) -> list:
     return out
 
 
-SOURCES: dict = {"render": renders, "forge": forge, "godot": godot, "studio": studio, "content": content, "job": jobs}
+MADE_KINDS = {"images": "image", "sprites": "image", "sketches": "image", "videos": "video"}
+
+
+def made(state: Any) -> list:
+    """What LOKI's makers wrote into the workspace - pictures, sprites, sketches, videos - as real previews (owner
+    2026-10-26: "whats the point of the home middle collum if it doesnt have a thumbnail preview ... i dont wanna see
+    folders or text i wanna see real results"). The picture itself is the thumbnail, served at /creations/<kind>/<file>
+    (any size, no data URL in the payload)."""
+    import creations  # pylint: disable=import-outside-toplevel
+    ws = _workspace(state)
+    out: list = []
+    for c in creations.list_creations(ws, limit=PER_KIND * 3):
+        kind = c["path"].split("/", 1)[0]
+        show = MADE_KINDS.get(kind)
+        if not show or c.get("show") != show:
+            continue
+        url = "/creations/" + c["path"]
+        what = {"sprites": "sprite", "sketches": "sketch", "videos": "video"}.get(kind, "picture")
+        out.append({"kind": "made", "name": c.get("title") or Path(c["path"]).stem, "path_or_id": c["path"],
+                    "updated": float(c.get("t") or 0), "thumb": url if show == "image" else None,
+                    "video": url if show == "video" else None, "status": "",
+                    "detail": what + (" · " + str(c["prompt"])[:80] if c.get("prompt") else ""),
+                    "open": {"mode": "files", "path": c["path"]}})
+        if len(out) >= PER_KIND * 2:
+            break
+    return out
+
+
+SOURCES: dict = {"made": made, "render": renders, "forge": forge, "godot": godot, "studio": studio, "content": content,
+                 "job": jobs}
 
 
 def collect(state: Any, sources: dict | None = None, clock: Callable[[], float] = time.time) -> dict:
@@ -233,7 +263,7 @@ def collect(state: Any, sources: dict | None = None, clock: Callable[[], float] 
     counts: dict = {}
     for kind, fn in (sources or SOURCES).items():
         try:
-            got = sorted(fn(state), key=lambda i: -float(i.get("updated") or 0))[:PER_KIND]
+            got = sorted(fn(state), key=lambda i: -float(i.get("updated") or 0))[:PER_KIND * (2 if kind == "made" else 1)]
         except Exception as exc:  # noqa: BLE001 - one source never takes the home screen down
             errors[kind] = "%s: %s" % (type(exc).__name__, str(exc)[:200])
             got = []
