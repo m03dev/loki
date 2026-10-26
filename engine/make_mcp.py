@@ -326,6 +326,12 @@ def make_video(args: dict, cwd: Path, make=None) -> dict:
     return res if isinstance(res, dict) else {"ok": False, "error": "no answer"}
 
 
+try:   # Blender: build, render, export (engine/blender_link.py) - window or background
+    import blender_link as _blender  # noqa: E402
+    TOOLS.append(_blender.TOOL)
+except Exception:  # noqa: BLE001 - the making tools work without it
+    _blender = None
+
 try:   # the owner's other machines (engine/machines.py): list them, hand one a task, check on it
     import machines as _machines  # noqa: E402
     TOOLS += _machines.TOOLS
@@ -342,6 +348,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
                                                                    int((a or {}).get("limit") or 40)),
+          "blender": (lambda a, cwd: _blender.tool(a or {}, cwd)) if _blender else None,
           "run_command": run_shell if SHELL_ON["on"] else None}.get(name)
     if fn is None and _machines is not None and name in _machines.FUNCS:
         try:

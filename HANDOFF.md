@@ -36,8 +36,10 @@ where Blender is installed). Home's scroll bar on the Mac: WebKit scroll bar + a
 Blender on the PC (5.2.3 LTS, C:\Program Files\Blender Foundation\Blender 5.2): Script Directory set by the owner to
 ~/LOKI Projects/Home/blender/scripts (startup/loki_blender.py + addons/blender_mcp.py) - NOT %APPDATA%: the Claude
 desktop app on the PC is an MSIX package, so files it writes into AppData land in its virtualized LocalCache and
-Blender never sees them. The inbox (blender/inbox -> outbox, status.json, loki_blender.log) works: ping answered.
-addon_utils.enable fails inside a startup register() (RestrictBlend) -> enabled from a timer instead (ensure_mcp).
+Blender never sees them. Design (engine/blender_link.py docstring): a permanent loader (startup/) hot-reloads the core (loki/) when its file
+changes - fixes are a file write, never a restart; the core runs jobs in their own scene in a window + 3D-view
+context, a watchdog keeps the MCP add-on + socket on; with no window, run() uses a background Blender. Proven on
+the PC 2026-10-26: switched over live, core hot-reloaded .2 -> .3, campfire rendered (EEVEE, 3 s) + .glb + .blend.
 Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home preview or a chat picture -> big, ‹ › / ← →
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
