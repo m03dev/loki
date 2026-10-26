@@ -184,8 +184,15 @@ def edit(path: Path, action: str, width: int = 0, height: int = 0, box: str = ""
         except ImportError:
             raise ImageError("removing a background needs the rembg add-on: Settings > Add-ons > rembg > Install "
                              "(about 170 MB the first time). Nothing is uploaded.") from None
-        session = rembg.new_session(model) if model else None
-        out_img = rembg.remove(img, session=session) if session is not None else rembg.remove(img)
+        import cutout  # pylint: disable=import-outside-toplevel
+        if model in cutout.FORBIDDEN:
+            raise ImageError("%s is not used (non-commercial licence); LOKI uses BiRefNet or U^2-Net" % model)
+        model = model or cutout.ALLOWED[0]          # never rembg's default (bria-rmbg, non-commercial)
+        try:
+            session = rembg.new_session(model)
+        except Exception:  # noqa: BLE001 - not downloadable: the next licence-safe one
+            session = rembg.new_session(cutout.ALLOWED[2])
+        out_img = rembg.remove(img, session=session)
         target = _out(src, "nobg", "png")
         _save(out_img, target)
         return {"ok": True, "path": target, "detail": "background removed: %s (transparent PNG)" % target.name}

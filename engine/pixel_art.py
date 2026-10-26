@@ -331,8 +331,11 @@ def subject_mask(rgba, use_rembg: bool = True):
         return a[..., 3].astype(np.float32) / 255.0
     if use_rembg:
         try:
-            import rembg  # pylint: disable=import-outside-toplevel
-            cut = np.asarray(rembg.remove(rgba.convert("RGB")).convert("RGBA"))
+            import cutout  # pylint: disable=import-outside-toplevel  (never rembg's non-commercial default model)
+            got = cutout.remove(rgba.convert("RGB"))
+            if got is None:
+                raise RuntimeError("no licence-safe cut-out model here")
+            cut = np.asarray(got)
             m = cut[..., 3].astype(np.float32) / 255.0
             if 0.02 < (m > 0.5).mean() < 0.98:
                 return m

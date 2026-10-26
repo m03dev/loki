@@ -203,14 +203,8 @@ def load_image(source):
 
 
 def _rembg_cutout(img):
-    try:
-        import rembg  # pylint: disable=import-outside-toplevel
-    except ImportError:
-        return None
-    try:
-        return rembg.remove(img).convert("RGBA")
-    except Exception:  # noqa: BLE001 - fall back to the border-colour cut-out
-        return None
+    import cutout  # pylint: disable=import-outside-toplevel  (BiRefNet / U^2-Net - never rembg's non-commercial default)
+    return cutout.remove(img)
 
 
 def _plain_background(img, tol: float = 22.0) -> bool:
