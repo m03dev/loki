@@ -6190,10 +6190,11 @@ async def make_3d_tool(path: str = "", prompt: str = "", backend: str = "auto") 
         return "error: " + str(out.get("error"))
     meta = out["meta"]
     return ("made models/%s with %s (%d vertices, %d triangles)%s%s. Open it in Forge (the cube in the sidebar) "
-            "to look at it, sculpt it and export it." % (out["name"], out["backend"], meta.get("vertices", 0),
+            "to look at it, sculpt it and export it; render_scene model=models/%s renders it (passes, an AI still or a "
+            "turntable)." % (out["name"], out["backend"], meta.get("vertices", 0),
                                                          meta.get("triangles", 0),
                                                          "; also models/%s" % Path(out["obj"]).name if out["obj"] else "",
-                                                         "; %s" % meta["note"] if meta.get("note") else ""))
+                                                         "; %s" % meta["note"] if meta.get("note") else "", out["name"]))
 
 
 LOCAL_TOOLS["make_3d"] = make_3d_tool

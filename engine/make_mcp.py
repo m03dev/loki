@@ -234,7 +234,8 @@ def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
         return {"ok": False, "error": str(res.get("error", "the model was not made"))[:400]}
     files = [os.path.relpath(str(Path(f).resolve()), cwd) for f in (res.get("glb"), res.get("obj")) if f]
     return {"ok": True, "files": files, "backend": res.get("backend", ""),
-            "triangles": (res.get("meta") or {}).get("triangles", 0)}
+            "triangles": (res.get("meta") or {}).get("triangles", 0),
+            "next": "render_scene model=%s (passes, an AI still or a turntable)" % files[0] if files else ""}
 
 
 def make_video(args: dict, cwd: Path, make=None) -> dict:
