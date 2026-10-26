@@ -23,6 +23,9 @@ into the workspace's qa/ folder. The owner and Claude add requests here; nobody 
 - [ ] [loki] Make now: render models/creature.glb with render_scene - passes and contact sheet (no prompt), then a 9-frame turntable of passes - into renders/. Reply with the folder. (owner via Claude, 2026-10-25 19:50)
 - [ ] [loki] Make now: read this line aloud with the voice tool and save it in voice/: "LOKI is online. Your agents are building while you sleep." Reply with the file path. (owner via Claude, 2026-10-25 19:50)
 - [ ] [loki] Make now: a 3D model from images/20261017-115147-a-red-fox-sitting-in-green-grass-soft-morning-li.jpg (make_3d, best backend this computer has) into models/, then render_scene it into renders/. Reply with the paths. (owner via Claude, 2026-10-25 19:50)
+- [ ] [loki] [windows] Make now, from scratch on this PC: a new picture of a stone golem guardian in a mossy forest, game concept art, 16:9 (make_image) into images/, then a textured 3D model of it (make_3d, backend pixal3d or trellis2 on ComfyUI) into models/, then render_scene it with frames 48 into renders/. Reply with every file path. (owner via Claude, 2026-10-25 19:57)
+- [ ] [loki] [windows] Make now, from scratch on this PC: a 30-second instrumental music loop, mysterious forest temple, soft drums and flute (make_music) into music/. Reply with the file path. (owner via Claude, 2026-10-25 19:57)
+- [ ] [loki] [mac] Hand one job to the PC with run_on_machine (machine pc): "make a new picture of a glowing crystal sword on a stone altar, game concept art (make_image), save it in images/ and reply with the path" - then check it with machine_job until it is done and write the result into qa/pc-handoff.md. (owner via Claude, 2026-10-25 19:57)
 
 ## Always
 
