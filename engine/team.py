@@ -94,10 +94,27 @@ def _with_playbook(role: str, brief: str) -> str:
         extra = ruflo_library.playbook(role)
     except Exception:  # noqa: BLE001 - the library is optional
         extra = ""
+    extra = clean_playbook(extra)
     if not extra:
         return brief
     return (brief + "\n\n## Playbook (from Ruflo, github.com/ruvnet/ruflo; your brief above wins "
             "where they differ)\n" + extra)
+
+
+def clean_playbook(text: str, limit: int = 1500) -> str:
+    """Ruflo's playbooks name tools LOKI's agents do not have (mcp__claude-flow__*, its memory API) and run to
+    thousands of characters - small models then chase the tools or lose the task. Keep the guidance, drop the code
+    and tool sections, cap the length."""
+    text = re.sub(r"```.*?```", "", str(text or ""), flags=re.S)
+    keep, skip = [], False
+    for line in text.splitlines():
+        if re.match(r"^#{1,4}\s", line):
+            skip = bool(re.search(r"mcp|tool integration|memory|hooks?|coordination protocol|javascript|claude-flow",
+                                  line, re.I))
+        if not skip and "mcp__" not in line and "claude-flow" not in line:
+            keep.append(line)
+    out = re.sub(r"\n{3,}", "\n\n", "\n".join(keep)).strip()
+    return out[:limit].rsplit("\n", 1)[0] if len(out) > limit else out
 
 
 def _data_dir() -> Path:
@@ -158,12 +175,31 @@ def _safe(team_id: str) -> str:
 
 # --- planning the team --------------------------------------------------------------
 
+_BIG = re.compile(r"\b(build|design|architect\w*|implement|refactor|app|game|feature|system|website|engine|pipeline|"
+                  r"research|compare|campaign|several|multiple|team|function|class|module|unit tests?|tests)\b", re.I)
+
+
+def solo_goal(goal: str, triage: dict | None = None) -> bool:
+    """True for a small, concrete goal one agent does start to finish."""
+    if os.getenv("LOKI_TEAM_SOLO", "auto").strip().lower() in ("off", "0", "no"):
+        return False
+    t = triage or {}
+    if int(t.get("difficulty") or 0) >= 3:
+        return False
+    text = re.sub(r"`[^`]*`", " ", str(goal or ""))
+    return len(text) < 500 and not _BIG.search(text)
+
+
 def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     """The roles this goal needs, in stage order. `decide` is laya.decide (or None)."""
     triage = triage or {}
     kind = triage.get("kind", "")
     text = goal.lower()
     roles = ["architect", "builder", "tester", "reviewer"]
+    # a small, concrete job (a check, a conversion, one file) needs one agent, not four in turn (2026-10-25: a
+    # "pixelize three pictures" request became an Architect writing a plan for 25 minutes on a 9B model)
+    if solo_goal(goal, triage):
+        return ["builder"]
     wants = {"researcher": kind == "research" or bool(re.search(r"\b(research|latest|compare|which|best)\b", text)),
              "browser": kind == "browse" or bool(re.search(r"\b(website|web app|landing page|site|browser|html)\b", text))}
     if decide is not None:

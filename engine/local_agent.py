@@ -61,13 +61,11 @@ Rules:
 - QUESTION: when you need the owner's decision (overwrite? which one? a login?), reply with one line
   QUESTION: <your question>   and no code block. You stop there; the owner's answer comes as the next message.
 - Pictures, 3D and video: never draw with text - run LOKI's makers:
-  loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art oil-painting
-  watercolor comic manga book-cover photo product 3d-render pixel-art character-sheet texture; --upscale 4)
+  loki-make image "<full art-director prompt>" --style concept-art --count 2   (styles: concept-art comic
+  photo pixel-art 3d-render texture ...; --upscale 4)
   loki-make 3d "<object>" [--backend pixal3d]   loki-make video "<clip>"   loki-make upscale pic.png
-  loki-make pixel pic.png --size 64 --palette pico-8   (real game pixel art from any picture)
-  loki-make shelf --action list   loki-make shelf --action run --id gltfpack --run lod --args '{"input": "models/a.glb"}'   (game-dev tools; install asks the owner)
-  loki-make music "epic orchestral battle theme, taiko, choir" --seconds 60   (music, ACE-Step on the PC's ComfyUI)
-  loki-make voice --action speak --text "Hello, traveller" --instruct narrator   (voices, VoiceStudio; also --action transcribe --audio clip.mp4 -> .srt)
+  loki-make pixel pic.png --size 64   loki-make music "<style>" --seconds 60   loki-make voice --action speak --text "Hi"
+  loki-make shelf --action list   (more tools: sfx, sprites, LODs, captions)
 - The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:
 ```bash
@@ -141,7 +139,8 @@ def parse_action(text: str) -> tuple:
 def observation(code: int, out: str) -> str:
     out = out or ""
     if len(out) > MAX_OUTPUT:
-        out = (out[:MAX_OUTPUT // 2] + "\n... (%d characters cut - use head/tail/grep for less) ...\n" %
+        out = (out[:MAX_OUTPUT // 2] + "\n... (%d characters not shown HERE - the file/output itself is complete, "
+               "only this view is shortened; use head/tail/grep/wc to look at parts) ...\n" %
                (len(out) - MAX_OUTPUT) + out[-MAX_OUTPUT // 2:])
     return "<returncode>%d</returncode>\n<output>\n%s\n</output>" % (code, out)
 
@@ -213,6 +212,44 @@ LAST_USAGE: dict = {}       # the last reply's tokens, for the live meter (chat(
 
 
 # ------------------------------------------------------------------ the loop
+CTX_CHARS = int(os.getenv("LOKI_LOCAL_AGENT_CTX", "16384")) * 3     # about 3 characters a token, room for the reply
+
+
+def compact(msgs: list, budget: int | None = None, keep_last: int = 8) -> list:
+    """The conversation, kept inside the model's context: the system prompt and the task always, the last few
+    steps in full, older command outputs shortened to one line. Ollama silently cuts the FRONT of a too-long prompt -
+    the task itself - and the model then loops (2026-10-25: a team job at 300k tokens re-appending one file)."""
+    budget = budget or CTX_CHARS
+    head = [m for m in msgs[:2]]
+    body = msgs[2:]
+    size = lambda ms: sum(len(str(m.get("content") or "")) for m in ms)  # noqa: E731
+    if size(msgs) <= budget:
+        return msgs
+    out = []
+    for i, m in enumerate(body):
+        recent = i >= len(body) - keep_last
+        c = str(m.get("content") or "")
+        if not recent and m["role"] == "user" and c.startswith(("exit ", "Exit ", "OBSERVATION", "<returncode>")) or (
+                not recent and m["role"] == "user" and len(c) > 400):
+            first = c.strip().splitlines()[0][:160] if c.strip() else ""
+            c = "%s ... (older output, %d characters, left out to keep the task in view)" % (first, len(c))
+        elif not recent and m["role"] == "assistant" and len(c) > 600:
+            c = c[:600] + " ..."
+        out.append({"role": m["role"], "content": c})
+    while size(head + out) > budget and len(out) > keep_last:
+        out.pop(0)
+    for m in out[:-2]:                      # still too long: shorten the recent outputs too, all but the newest
+        if size(head + out) <= budget:
+            break
+        if m["role"] == "user" and len(m["content"]) > 1500:
+            m["content"] = m["content"][:700] + "\n... (shortened to keep the task in view) ...\n" + m["content"][-500:]
+    return head + out
+
+
+def _cmd_key(cmd: str) -> str:
+    return re.sub(r"\s+", " ", (cmd or "").strip().splitlines()[0] if (cmd or "").strip() else "")[:200]
+
+
 def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str = "", max_steps: int = 30,
         wall_s: float = 1800, deny: tuple = (), progress: Callable[[str, str], None] | None = None,
         cancelled: Callable[[], bool] | None = None, ask: Callable = None, execute: Callable = None,
@@ -239,6 +276,7 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
     started, steps, bad, last_thought, ran, exit_reason = time.time(), 0, 0, "", [], "steps"
     tot_in = tot_out = 0
     fails: list = []
+    nudged = 0
     while steps < max_steps:
         if cancelled and cancelled():
             exit_reason = "cancelled"
@@ -251,7 +289,8 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
         reply, err_note = None, ""
         for attempt in range(3):
             try:
-                reply = ask(msgs if attempt == 0 else msgs + [{"role": "user", "content": (
+                view = compact(msgs)
+                reply = ask(view if attempt == 0 else view + [{"role": "user", "content": (
                     "Your last answer could not be read (%s). Answer again: a short THOUGHT, then ONE ```bash block. "
                     "Plain text only - no <tool_call> or other tags." % err_note[:160])}])
                 break
@@ -313,6 +352,19 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
                 msgs.append({"role": "user", "content": observation(126, "NOT RUN - the owner did not allow it%s." % (
                     "" if approve else " (nobody is there to ask)"))})
                 continue
+        recent = [_cmd_key(c) for c, _ in ran[-8:]]
+        if recent.count(_cmd_key(cmd)) >= 3:
+            # going round in circles (cat the file, append to it, cat it again ...): say so once, then stop
+            if nudged:
+                last_thought = ("BLOCKED - going round in circles: `%s` ran %d times in the last 8 steps without "
+                                "getting anywhere." % (_cmd_key(cmd)[:120], recent.count(_cmd_key(cmd)) + 1))
+                exit_reason = "stuck"
+                break
+            nudged = 1
+            msgs.append({"role": "user", "content": "STOP: you already ran `%s` %d times. Long outputs are only "
+                         "SHORTENED in your view - the files on disk are complete. Check with `wc -l` or `tail`, then "
+                         "move to the next part of the task or finish." % (_cmd_key(cmd)[:120], recent.count(_cmd_key(cmd)))})
+            continue
         say("tool", "$ " + cmd[:400])
         code, out = (builtins(cmd) if builtins and re.match(r"^\s*loki\s+chats\b", cmd) else None) or execute(cmd)
         ran.append((cmd, code))

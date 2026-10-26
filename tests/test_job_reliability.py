@@ -1,0 +1,95 @@
+"""Why background tasks failed, fixed (2026-10-25, from the Mac's 45 job records: 12 BLOCKED, most "the model stopped
+calling tools" on the 9B local model, one 29-step loop re-appending a file at 300k tokens, four-agent teams for
+one-line checks, Ruflo playbooks naming tools nobody has). Offline, seconds.
+
+    python tests/test_job_reliability.py
+"""
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "engine"))
+TMP = Path(tempfile.mkdtemp(prefix="loki-jobrel-"))
+os.environ["LOKI_DATA"] = str(TMP / "data")
+PASS: list = []
+FAIL: list = []
+
+
+def check(name, ok, detail=""):
+    (PASS if ok else FAIL).append(name)
+    print(("  PASS " if ok else "  FAIL ") + name + ("" if ok else "  <- %s" % (str(detail)[:400],)))
+
+
+import local_agent as la  # noqa: E402
+import team  # noqa: E402
+
+# ------------------------------------------------------------------ the context stays inside the model's window
+msgs = [{"role": "system", "content": "SYSTEM"}, {"role": "user", "content": "THE TASK"}]
+for i in range(40):
+    msgs.append({"role": "assistant", "content": "THOUGHT %d\n```bash\ncat big.txt\n```" % i})
+    msgs.append({"role": "user", "content": "exit 0: " + ("line of the file\n" * 400)})
+view = la.compact(msgs, budget=20000)
+check("a long run is compacted under the budget", sum(len(m["content"]) for m in view) <= 20000,
+      sum(len(m["content"]) for m in view))
+check("the system prompt and THE TASK are always kept", view[0]["content"] == "SYSTEM" and view[1]["content"] == "THE TASK")
+check("the last steps are kept in full", view[-1]["content"] == msgs[-1]["content"])
+check("a short run is left as it is", la.compact(msgs[:6], budget=10**6) == msgs[:6])
+
+# ------------------------------------------------------------------ going round in circles stops
+script = []
+for i in range(12):
+    script.append("THOUGHT: the file looks cut off, let me look again\n```bash\ncat TEAM_PLAN.md\n```")
+    script.append("THOUGHT: append the rest\n```bash\necho more >> TEAM_PLAN.md\n```")
+replies = iter(script)
+seen = []
+res = la.run("write TEAM_PLAN.md", TMP / "ws", "http://127.0.0.1:1", "m", ask=lambda m: (seen.append(m[-1]["content"]), next(replies))[1],
+             execute=lambda cmd: (0, "x"), max_steps=30)
+check("cat / append / cat ... is caught: told once, then stopped", res["exit"] == "stuck" and res["steps"] < 15
+      and "round in circles" in res["reply"], (res["exit"], res["steps"], res["reply"][:200]))
+check("the nudge tells the model the file on disk is complete",
+      any("files on disk are complete" in c for c in seen), "")
+out = la.observation(0, "y" * 20000)
+check("a shortened output says only the VIEW is shortened, the file is complete", "only this view is shortened" in out)
+
+# ------------------------------------------------------------------ the right team size
+check("a small concrete job gets one agent", team.choose_roles(
+    "Pixel art check: pixelize three pictures from images/ with `loki-make pixel <file> --size 64` and write qa/pixel.md") == ["builder"])
+check("a real build still gets the full team", team.choose_roles(
+    "Build a small platformer game in Godot with a menu and three levels")[:4] == ["architect", "builder", "tester", "reviewer"])
+os.environ["LOKI_TEAM_SOLO"] = "off"
+check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
+os.environ.pop("LOKI_TEAM_SOLO")
+pb = team.clean_playbook("# Planner\nPlan well.\n## MCP Tool Integration\n```javascript\nmcp__claude-flow__task_orchestrate {}\n```\n"
+                         "Use mcp__claude-flow__memory_usage.\n## Best Practices\nKeep it short.\n" + "x\n" * 2000)
+check("playbooks lose the tools nobody has and stay short", "mcp__" not in pb and "claude-flow" not in pb
+      and "Plan well." in pb and "Keep it short." in pb and len(pb) <= 1500, pb[:300])
+
+# ------------------------------------------------------------------ which model a background job runs on
+shim = REPO.parent / "_shim_unused"
+try:
+    import loki  # noqa: E402
+except ModuleNotFoundError:
+    loki = None
+if loki is not None:
+    local = "local"
+    loki.online = lambda: True
+    loki._free_capable_online = lambda needs: "nemotron-free"  # pylint: disable=protected-access
+    os.environ.pop("LOKI_JOB_MODEL", None)
+    check("a chat pinned to a local model hands background jobs to Smart",
+          loki.job_model_choice({}, local) == "smart" and "LOKI_JOB_MODEL=same" in loki.JOB_MODEL_NOTE.get("why", ""), local)
+    check("a job's own model always wins", loki.job_model_choice({"model": local}, "smart") == local)
+    os.environ["LOKI_JOB_MODEL"] = "same"
+    check("LOKI_JOB_MODEL=same keeps the chat's model", loki.job_model_choice({}, local) == local)
+    os.environ.pop("LOKI_JOB_MODEL")
+    loki._free_capable_online = lambda needs: ""  # pylint: disable=protected-access
+    loki.main_driver_ready = lambda needs=None: (False, "")
+    check("nothing online ready: the job stays on the local model", loki.job_model_choice({}, local) == local)
+else:
+    print("  (the engine's openai dependency is missing here: the job-model checks are skipped)")
+
+print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
+sys.exit(1 if FAIL else 0)

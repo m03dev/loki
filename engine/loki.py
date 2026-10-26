@@ -9563,6 +9563,10 @@ async def run_job(job_path: str) -> int:
                 pass
         return 0
     allow_commands = bool(job.get("allow_commands"))
+    picked = job_model_choice(job, model_name)
+    if picked != model_name:
+        print("[loki-job] %s | %s" % (job.get("id", ""), JOB_MODEL_NOTE.get("why", "")), flush=True)
+        model_name = picked
     if job.get("model"):
         model_name = str(job["model"])
         # The agent builder's fallback: use it when the first choice is not set up here.
@@ -9633,6 +9637,35 @@ async def run_job(job_path: str) -> int:
     print("\n" + (result or "").strip(), flush=True)
     _write_result(job, result)
     return 2 if reply_outcome(result) == "blocked" else 0
+
+
+JOB_MODEL_NOTE: dict = {}
+
+
+def job_model_choice(job: dict, current: str) -> str:
+    """Which model a background job runs on (2026-10-25: most failed tasks were team jobs on the 9B local model the
+    chat happened to be pinned to - 12 tok/s, a 16k context it overflowed, then loops and 'stopped calling tools').
+    A job's own model wins; LOKI_JOB_MODEL=same keeps the chat's choice; otherwise ('smart', the default) a chat
+    pinned to a LOCAL model hands the job to Smart, which gives background work the best free model that calls
+    tools reliably - unless local-only is on or nothing online is ready."""
+    if job.get("model"):
+        return str(job["model"])
+    pref = os.getenv("LOKI_JOB_MODEL", "smart").strip().lower()
+    if pref == "same" or current in AUTO_ROUTING_MODES:
+        return current
+    if pref not in ("smart", "") and pref in MODELS:
+        JOB_MODEL_NOTE["why"] = "LOKI_JOB_MODEL picks %s for background jobs" % pref
+        return pref
+    if current in MODELS and _cfg_is_local(MODELS[current]) and not routing.local_only_setting():
+        try:
+            ready = online() and bool(_free_capable_online(dict(routing.needs_for({}, background=True), local_only=False)))
+        except Exception:  # noqa: BLE001
+            ready = False
+        if ready or main_driver_ready()[0]:
+            JOB_MODEL_NOTE["why"] = ("the chat is on the local model %s; this background job runs on Smart (the best "
+                                     "free model that calls tools reliably) - LOKI_JOB_MODEL=same keeps it local" % current)
+            return "smart"
+    return current
 
 
 def _job_outcome(reply: str) -> str:
