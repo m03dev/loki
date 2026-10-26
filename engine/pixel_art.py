@@ -113,15 +113,33 @@ def local_stat(data, kernel: int, stride: int, stat: str):
     p = np.pad(data, pad)
     view = np.lib.stride_tricks.sliding_window_view(p, (kernel, kernel))[::stride, ::stride]
     lh, lw = view.shape[:2]
-    flat = view.reshape(lh, lw, -1)
-    vals = {"median": lambda v: np.median(v, axis=-1), "max": lambda v: v.max(axis=-1),
-            "min": lambda v: v.min(axis=-1)}[stat](flat)
-    acc = np.zeros((lh * stride + kernel, lw * stride + kernel), dtype=np.float64)
-    cnt = np.zeros_like(acc)
-    for i in range(lh):
-        for j in range(lw):
-            acc[i * stride:i * stride + kernel, j * stride:j * stride + kernel] += vals[i, j]
-            cnt[i * stride:i * stride + kernel, j * stride:j * stride + kernel] += 1
+    if stat in ("max", "min") and kernel % stride == 0:
+        # a window is m x m whole stride-blocks: reduce each block once, then the windows over the blocks
+        m, red = kernel // stride, (np.max if stat == "max" else np.min)
+        nb, nbw = lh - 1 + m, lw - 1 + m
+        blocks = red(p[:nb * stride, :nbw * stride].reshape(nb, stride, nbw, stride), axis=(1, 3))
+        vals = red(np.lib.stride_tricks.sliding_window_view(blocks, (m, m)), axis=(-1, -2))
+    else:
+        flat = view.reshape(lh, lw, -1)
+        vals = {"median": lambda v: np.median(v, axis=-1), "max": lambda v: v.max(axis=-1),
+                "min": lambda v: v.min(axis=-1)}[stat](flat)
+    # every window adds its value over its kernel x kernel square: put each value at its square's corner and box-sum
+    # the result with a summed-area table - the same sums as adding the squares one by one, without a Python loop
+    H, W = lh * stride + kernel, lw * stride + kernel
+    imp = np.zeros((H, W), dtype=np.float64)
+    one = np.zeros((H, W), dtype=np.float64)
+    imp[0:lh * stride:stride, 0:lw * stride:stride] = vals
+    one[0:lh * stride:stride, 0:lw * stride:stride] = 1.0
+
+    def box(a):
+        c = np.zeros((H + 1, W + 1))
+        c[1:, 1:] = a.cumsum(0).cumsum(1)
+        y = np.arange(H)[:, None]
+        x = np.arange(W)[None, :]
+        y0, x0 = np.maximum(y - kernel + 1, 0), np.maximum(x - kernel + 1, 0)
+        return c[y + 1, x + 1] - c[y0, x + 1] - c[y + 1, x0] + c[y0, x0]
+
+    acc, cnt = box(imp), np.rint(box(one))
     return (acc[pad:pad + h, pad:pad + w] / (cnt[pad:pad + h, pad:pad + w] + 1e-8)).astype(np.float32)
 
 
