@@ -38,7 +38,7 @@ waiting - up to 3 at once (LOKI_AUTOPILOT_SLOTS), anything that needs the GPU on
 nothing is published or posted without the owner. Edit freely.
 
 - [loki] Look in the library first, then make one new piece of game concept art for the owner's game (make_image style game-concept - the owner's favourite, 16:9) into images/, with a two-line caption draft in brand/drafts/.
-- [loki] Turn the newest picture in images/ that has no sprite yet into a 64-pixel game sprite in sprites/ (make_sprite - the subject cut out, not the whole scene) and note it in brand/drafts/assets.md.
+- [loki] Make a 64-pixel game sprite of the main subject of the newest concept picture in images/ that has no sprite yet: describe that subject in a few words and draw it fresh with make_sprite prompt=... (not cut from the scene - a sprite from a busy scene loses parts), into sprites/, and note it in brand/drafts/assets.md.
 - [loki] Write one short devlog / social post draft about what changed in LOKI since yesterday (git log in the LOKI folder) into brand/drafts/, with a suggested picture from the library.
 - [loki] Make one 30-60 second instrumental music loop for the game (make_music; a mood not made before - check the library) into music/.
 - [loki] [windows] Make one textured 3D prop for the game from the best picture in images/ (make_3d, backend pixal3d) into models/.
