@@ -43,5 +43,10 @@ for reply in ("DONE: made sprites/knight.png (64x64) and checked it opens",
               "The project is already complete and verified across 5 rounds. npm test passes.", ""):
     check("real answer kept: %r" % reply[:40], not opencode_engine.non_answer(reply), reply)
 
+src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
+check("a local model runs with the sub-agent tool denied (it called `task` with made-up ids - PC 2026-10-26)",
+      'task="deny"' in src and "cfg_local if is_local else cfg_path" in src)
+check("moving to the next provider never tells the model 'the previous model was too slow' (it made that its task)",
+      "the previous model was too slow). The goal" not in src)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -9382,6 +9382,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     except Exception as exc:  # noqa: BLE001
         print("[loki] context for OpenCode not written: %s" % exc, flush=True)
     cfg_path.write_text(json.dumps(oc_cfg, indent=1), encoding="utf-8")
+    # a small local model gets no sub-agent tool: it calls `task` with made-up ids ("Expected a string starting with
+    # 'ses', got 'fa80f7f4'") and then loops on the error (the PC, 2026-10-26, jobs ea20a306 / c5c22343)
+    cfg_local = cfg_path.with_name(cfg_path.stem + "-local.json")
+    cfg_local.write_text(json.dumps(dict(oc_cfg, permission=dict(oc_cfg.get("permission") or {}, task="deny")), indent=1),
+                         encoding="utf-8")
     env = opencode_engine.env_for(providers)
     if os.getenv("LOKI_JOB_ID"):
         # background jobs run side by side: each gets its own OpenCode data folder, or their OpenCode processes lock
@@ -9437,8 +9442,9 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
+        is_local = "11434" in str((providers.get(pname) or {}).get("base_url") or "")
         result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
-                                         config_path=str(cfg_path), env=env, session=session, model=model,
+                                         config_path=str(cfg_local if is_local else cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,
                                          cancelled=lambda: _cancel_event.is_set() or bool(meter.get("too_slow")))
         used = model
@@ -9447,7 +9453,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             OC_SESSIONS.set(conv, session)
         if meter.get("too_slow") and not _cancel_event.is_set():
             # carry on in the same session with the next provider; the tools that already ran stay counted
-            prompt = ("Continue the task from where you are (the previous model was too slow). The goal: %s" % text[:4000])
+            # never mention the switch: a small model took "the previous model was too slow" as its new task and spent
+            # the job "optimizing the previous model" (the PC, 2026-10-26, job ea20a306 - no sprite was made)
+            prompt = ("Carry on with this task from where it stands; check what is already done first, then finish it "
+                      "with your tools.\n\nGOAL: %s\n\nEnd with one line: 'DONE: <what you made>' or 'BLOCKED: <exactly "
+                      "what you need>'." % text[:4000])
             meter["carried"] = list(meter.get("carried") or []) + list(result.get("tools") or [])
             continue
         if result.get("error"):
