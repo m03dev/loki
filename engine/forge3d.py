@@ -565,6 +565,20 @@ def run_triposr(cutout_png: Path, out_base: Path, runner=None, timeout: int = 18
     return out
 
 
+def gradio_client_for(Client, space: str, token):  # noqa: N803 - the class itself
+    """gradio_client.Client across versions: newer ones take token=, older ones hf_token= (2026-10-25 on the Mac:
+    "Client.__init__() got an unexpected keyword argument 'hf_token'" - every online 3D fell back to the lift)."""
+    if not token:
+        return Client(space)
+    for kw in ("token", "hf_token"):
+        try:
+            return Client(space, **{kw: token})
+        except TypeError as exc:
+            if kw not in str(exc):
+                raise
+    return Client(space)
+
+
 def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict | None = None) -> dict:
     """A Hugging Face Space through gradio_client (TRELLIS by default: /image_to_3d, then
     /extract_glb). The picture goes to that Space - a third party."""
@@ -574,18 +588,28 @@ def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict
             from gradio_client import Client, handle_file  # pylint: disable=import-outside-toplevel
         except ImportError:
             raise ForgeError("gradio_client is not installed (pip install gradio_client)") from None
-        client = Client(space, hf_token=os.environ.get("HF_TOKEN") or None)
+        client = gradio_client_for(Client, space, os.environ.get("HF_TOKEN") or None)
     else:
         client, handle_file = client_factory(space)
     o = clean_options(opts)
     # TRELLIS' mesh_simplify is the share of triangles REMOVED (0.9-0.98); "keep %" maps onto it.
     simplify = round(min(0.98, max(0.9, 0.98 - 0.08 * (o["keep"] - 5) / 95.0)), 3)
+    tex = min(2048, int(o["texture_size"]))
     try:
-        client.predict(image=handle_file(str(cutout_png)), multiimages=[], seed=int(o["seed"]), ss_guidance_strength=7.5,
-                       ss_sampling_steps=12, slat_guidance_strength=3.0, slat_sampling_steps=12,
-                       multiimage_algo="stochastic", api_name="/image_to_3d")
-        res = client.predict(mesh_simplify=simplify, texture_size=min(2048, int(o["texture_size"])),
-                             api_name="/extract_glb")
+        try:
+            client.predict(api_name="/start_session")       # newer TRELLIS apps keep each user's files per session
+        except Exception:  # noqa: BLE001 - older apps have no such endpoint
+            pass
+        try:
+            client.predict(image=handle_file(str(cutout_png)), multiimages=[], seed=int(o["seed"]),
+                           ss_guidance_strength=7.5, ss_sampling_steps=12, slat_guidance_strength=3.0,
+                           slat_sampling_steps=12, multiimage_algo="stochastic", api_name="/image_to_3d")
+            res = client.predict(mesh_simplify=simplify, texture_size=tex, api_name="/extract_glb")
+        except Exception as first:  # noqa: BLE001 - the older app: image -> (state, video); (state, ...) -> glb
+            if "argument" not in str(first) and "parameter" not in str(first) and "keyword" not in str(first):
+                raise
+            state, _video = client.predict(handle_file(str(cutout_png)), api_name="/image_to_3d")
+            res = client.predict(state, simplify, tex, api_name="/extract_glb")
     except Exception as exc:  # noqa: BLE001 - Spaces change, sleep, or run out of quota
         raise ForgeError("the online Space %s failed: %s" % (space, str(exc)[:200])) from None
     found = res[1] if isinstance(res, (list, tuple)) and len(res) > 1 else res

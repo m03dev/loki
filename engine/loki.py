@@ -9407,6 +9407,12 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             prompt = ("Continue the task from where you are (the previous model was too slow). The goal: %s" % text[:4000])
             meter["carried"] = list(meter.get("carried") or []) + list(result.get("tools") or [])
             continue
+        if result.get("error"):
+            try:   # out of credit / daily cap: benched for hours, not just skipped this once
+                import provider_speed  # pylint: disable=import-outside-toplevel
+                provider_speed.mark_out(DATA_DIR, meter.get("where") or "", str(result.get("error")))
+            except Exception:  # noqa: BLE001
+                pass
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))

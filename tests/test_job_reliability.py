@@ -79,6 +79,14 @@ _t2 = {"id": "ff00ee11", "goal": "make a game", "roles": ["architect", "builder"
 check("each team plans in its own file (team_plans/<id>.md), never the shared TEAM_PLAN.md",
       "team_plans/ff00ee11.md" in team.agent_prompt(_t2, "architect") and "TEAM_PLAN.md in the project"
       not in team.agent_prompt(_t2, "builder"))
+import provider_speed  # noqa: E402
+_d = TMP / "speed"
+check("a provider out of credit (402) is benched for hours, a daily cap for 12 h, a passing 429 for minutes",
+      provider_speed.mark_out(_d, "openrouter", '{"message":"would exceed your available credits","code":402}') == 21600
+      and provider_speed.mark_out(_d, "nemo", '{"message":"Rate limit exceeded: free-models-per-day","code":429}') == 43200
+      and provider_speed.mark_out(_d, "groq", "HTTP 429 rate limit") == 600
+      and provider_speed.mark_out(_d, "x", "connection reset") == 0)
+check("... and the next jobs start on the others", provider_speed.order(_d, ["openrouter", "nvidia", "nemo"])[0] == "nvidia")
 os.environ["LOKI_TEAM_SOLO"] = "off"
 check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
 os.environ.pop("LOKI_TEAM_SOLO")

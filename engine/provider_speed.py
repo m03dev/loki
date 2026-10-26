@@ -49,6 +49,33 @@ def record(data_dir, provider: str, step_s: float, now: float | None = None) -> 
     return slow
 
 
+def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> float:
+    """A provider that said it is OUT - 402 (no credit) or a daily cap (429 free-models-per-day) - goes last for hours,
+    so the next jobs do not start on it again (2026-10-25: three Mac jobs in a row hit OpenRouter's 402). Returns
+    the seconds it is benched (0 = not an out-of-quota error)."""
+    text = str(error or "").lower()
+    if '"code":402' in text.replace(" ", "") or "402" in text and "credit" in text:
+        hold = 6 * 3600.0
+    elif "per-day" in text or "per day" in text or "daily" in text:
+        hold = 12 * 3600.0
+    elif "429" in text or "rate limit" in text:
+        hold = 10 * 60.0
+    else:
+        return 0.0
+    if not provider:
+        return 0.0
+    data = _load(data_dir)
+    entry = data.get(provider) or {}
+    entry.update(t=now or time.time(), slow_until=(now or time.time()) + hold, out=str(error)[:200])
+    data[provider] = entry
+    try:
+        _file(data_dir).parent.mkdir(parents=True, exist_ok=True)
+        _file(data_dir).write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return hold
+
+
 def is_slow(data_dir, provider: str, now: float | None = None) -> bool:
     entry = _load(data_dir).get(provider) or {}
     return float(entry.get("slow_until") or 0) > (now or time.time())

@@ -308,7 +308,9 @@ fc = FakeClient()
 r_on = forge3d.make_3d(str(circle), WS / "models", backend="online", online_factory=lambda space: (fc, lambda f: f),
                        options={"texture_size": 2048, "keep": 5, "seed": 7})
 check("the online Space gets texture size, simplify and seed", r_on["ok"] and r_on["backend"] == "online"
-      and fc.calls[1]["texture_size"] == 2048 and fc.calls[1]["mesh_simplify"] == 0.98 and fc.calls[0]["seed"] == 7, fc.calls)
+      and [c for c in fc.calls if c.get("api_name") == "/extract_glb"][0]["texture_size"] == 2048
+      and [c for c in fc.calls if c.get("api_name") == "/extract_glb"][0]["mesh_simplify"] == 0.98
+      and [c for c in fc.calls if c.get("api_name") == "/image_to_3d"][0]["seed"] == 7, fc.calls)
 coarse = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"resolution": 64, "smooth": 0})
 fine = forge3d.make_3d(str(circle), WS / "models", backend="lift", options={"resolution": 512})
 check("the lift's grid follows Mesh resolution", coarse["meta"]["triangles"] * 8 < fine["meta"]["triangles"],
@@ -399,6 +401,46 @@ else:
 check("ship.py runs the Forge window suite too", '"test_forge_ui"' in (REPO / "tools" / "ship.py").read_text(encoding="utf-8"))
 
 srv.shutdown()
+# ------------------------------------------------------------------ the online Space across versions
+class _NewClient:
+    def __init__(self, space, token=None):
+        self.kw = ("token", token)
+
+
+class _OldClient:
+    def __init__(self, space, hf_token=None):
+        self.kw = ("hf_token", hf_token)
+
+
+check("gradio_client: token= on new versions, hf_token= on old ones (the Mac's 'unexpected keyword hf_token')",
+      forge3d.gradio_client_for(_NewClient, "s", "t").kw == ("token", "t")
+      and forge3d.gradio_client_for(_OldClient, "s", "t").kw == ("hf_token", "t"))
+_glb = TMP / "space_out.glb"
+forge3d.write_glb(_glb, forge3d.lift_mesh([[True]], [[(1, 2, 3)]], 1, 1))
+_calls = []
+
+
+class _OldSpace:
+    def predict(self, *args, api_name="", **kw):
+        _calls.append(api_name)
+        if api_name == "/start_session":
+            raise ValueError("no such endpoint")
+        if api_name == "/image_to_3d":
+            if kw:
+                raise TypeError("predict() got an unexpected keyword argument 'multiimages'")
+            return {"state": 1}, "video.mp4"
+        if api_name == "/extract_glb":
+            if kw:
+                raise TypeError("unexpected keyword argument")
+            return str(_glb), str(_glb)
+
+
+_png = TMP / "cut.png"
+__import__("PIL.Image", fromlist=["Image"]).new("RGBA", (8, 8), (200, 0, 0, 255)).save(_png)
+_r = forge3d.run_online(_png, TMP / "online_model", client_factory=lambda space: (_OldSpace(), lambda p: p))
+check("the older TRELLIS Space (image -> state -> glb) works too, instead of falling to the flat lift",
+      Path(_r["glb"]).is_file() and _calls.count("/image_to_3d") == 2 and _calls[-1] == "/extract_glb", (_calls, _r))
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))
