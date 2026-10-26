@@ -152,6 +152,40 @@ def changes(before: dict, after: dict) -> list:
 
 
 STALL_S = float(os.getenv("LOKI_DSH_STALL_S", "900") or 900)
+BENCH_S = float(os.getenv("LOKI_DSH_BENCH_S", "86400") or 86400)
+
+
+def _health_file(home) -> Path:
+    return Path(home) / "health.json"
+
+
+def benched(home, name: str, now: float | None = None) -> str:
+    """Why dsh is benched for this provider on this computer ("" = use it). A run that failed or stalled benches it
+    for a day (LOKI_DSH_BENCH_S); OpenCode does the work meanwhile."""
+    import json  # pylint: disable=import-outside-toplevel
+    try:
+        data = json.loads(_health_file(home).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    entry = data.get(name) or {}
+    if entry.get("ok") is False and (now or time.time()) - float(entry.get("t") or 0) < BENCH_S:
+        return str(entry.get("why") or "it failed")
+    return ""
+
+
+def record(home, name: str, ok: bool, why: str = "") -> None:
+    import json  # pylint: disable=import-outside-toplevel
+    f = _health_file(home)
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data[name] = {"ok": bool(ok), "t": time.time(), "why": str(why)[:300]}
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except OSError:
+        pass
 TICK_S = 60.0
 
 

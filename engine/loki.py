@@ -9266,6 +9266,12 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         chosen = dsh_engine.pick(_dsml_fixed(_oc_providers(first_name))) if dsh_engine.mode() != "off" else None
         if chosen and chosen[0] in _DSH_BROKEN:
             chosen = None
+        if chosen and dsh_engine.mode() == "auto":
+            why = dsh_engine.benched(DATA_DIR / "dsh", chosen[0])
+            if why:
+                _progress("thinking", "DeepSeek Harness is benched on this computer (%s) - OpenCode does this one."
+                          % why[:120])
+                chosen = None
         dexe = dsh_engine.find_dsh() if chosen else ""
         if chosen and dexe:
             out = await run_dsh(text, chosen, dexe, task=task, preamble=preamble)
@@ -9560,9 +9566,17 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
         _DSH_BROKEN.add(name)
         _progress("error", "DeepSeek Harness can't use %s (%s) - OpenCode takes over." % (name, str(res.get("error"))[:160]))
         return None
+    if not chs and (res.get("error") or not res.get("text") or __import__("dsml_proxy").has_markup(res.get("text") or "")):
+        # stalled, crashed or answered with nothing done: OpenCode does this message now, and dsh sits out a day on
+        # this computer (2026-10-25: every dsh run on the Mac stalled - the work must still get done)
+        why = str(res.get("error") or "no reply and nothing changed")[:200]
+        dsh_engine.record(DATA_DIR / "dsh", name, False, why)
+        _progress("error", "DeepSeek Harness did not get it done (%s) - OpenCode takes over now." % why[:140])
+        return None
     _task_ok_calls, _task_failed_calls = len(chs), (0 if res.get("exit") == 0 else 1)
     if chs:
         _progress("tool_result", "In the folder: " + dsh_engine.describe(chs))
+        dsh_engine.record(DATA_DIR / "dsh", name, True)
     reply = res.get("text") or ""
     if res.get("error") and not reply:
         reply = "NOT DONE - DeepSeek Harness stopped: %s" % res["error"]
@@ -9575,6 +9589,10 @@ async def run_dsh(text: str, chosen: tuple, exe: str, task: bool = False, preamb
         chs = chs + (again.get("changes") or [])
         _task_ok_calls = len(chs)
         reply = again.get("text") or reply
+        if _claims_unbacked(text, reply) and not chs:
+            dsh_engine.record(DATA_DIR / "dsh", name, False, "said done twice with nothing changed")
+            _progress("error", "DeepSeek Harness said it was done twice with nothing made - OpenCode takes over now.")
+            return None
         if _claims_unbacked(text, reply):
             reply = _not_done_note(reply)
     if not reply:
