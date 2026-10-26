@@ -2,7 +2,7 @@
   "name": "image-gen",
   "version": "0.1.0",
   "kind": "tool",
-  "description": "Image generation. Local: Z-Image Turbo (Tongyi-MAI/Z-Image-Turbo, Apache-2.0) through diffusers on CUDA (the PC, with CPU offload on 8 GB) or Apple MPS (the Mac); set up with tools/setup_imagegen.py. Free online: Qwen-Image 2.1 through ModelScope (set MODELSCOPE_API_KEY; about 250 a day). Zero-setup fallback: Pollinations (free, no account; prompts go to a third party). LOKI's `image` specialist.",
+  "description": "Image generation. Local: Z-Image Turbo (Tongyi-MAI/Z-Image-Turbo, Apache-2.0) through diffusers on CUDA (the PC, with CPU offload on 8 GB) or Apple MPS (the Mac); set up with tools/setup_imagegen.py. Free online: Qwen-Image 2.1 through ModelScope (set MODELSCOPE_API_KEY; about 250 a day). Online: FLUX on NVIDIA (NVIDIA_API_KEY) or Hugging Face (HF_TOKEN). LOKI's `image` specialist.",
   "license": "Apache-2.0",
   "homepage": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo",
   "permissions": [

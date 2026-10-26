@@ -181,7 +181,6 @@ PROVIDER_ENV_VARS = {
     "codestral": "CODESTRAL_API_KEY",
     "opencode-zen": "OPENCODE_API_KEY",
     "vercel": "AI_GATEWAY_API_KEY",
-    "pollinations": "POLLINATIONS_API_KEY",
     "nebius": "NEBIUS_API_KEY",
     "scaleway": "SCALEWAY_API_KEY",
     "hyperbolic": "HYPERBOLIC_API_KEY",
@@ -585,10 +584,6 @@ MODELS = {
     "vercel": ModelConfig(base_url=os.getenv("VERCEL_BASE_URL", "https://ai-gateway.vercel.sh/v1"),
                           api_key=os.getenv("AI_GATEWAY_API_KEY", ""),
                           model=os.getenv("VERCEL_MODEL", "openai/gpt-oss-120b")),
-    # Keyless: a placeholder key so it counts as configured; a real key raises the limits.
-    "pollinations": ModelConfig(base_url=os.getenv("POLLINATIONS_BASE_URL", "https://text.pollinations.ai/openai"),
-                                api_key=os.getenv("POLLINATIONS_API_KEY", "pollinations"),
-                                model=os.getenv("POLLINATIONS_MODEL", "openai")),
     "nebius": ModelConfig(base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1"),
                           api_key=os.getenv("NEBIUS_API_KEY", ""),
                           model=os.getenv("NEBIUS_MODEL", "deepseek-ai/DeepSeek-R1-0528")),

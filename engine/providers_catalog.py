@@ -142,9 +142,6 @@ CATALOG: list[dict] = [
     {"id": "vireonix", "name": "Vireonix", "group": "keyless", "auth": ["none"], "tools": True,
      "blurb": "No key, no account, no card. Prompts and file contents go to a third party.",
      "signup": "https://vireonix.ai", "docs": "https://vireonix.ai"},
-    {"id": "pollinations", "name": "Pollinations", "group": "keyless", "auth": ["none", "key"], "tools": False,
-     "env": "POLLINATIONS_API_KEY", "blurb": "Free text and image generation with no sign-up (also LOKI's zero-setup image backend).",
-     "signup": "https://pollinations.ai", "keys": "https://auth.pollinations.ai", "docs": "https://github.com/pollinations/pollinations/blob/master/APIDOCS.md"},
     # ----------------------------------------------------------------- trial
     {"id": "nebius", "name": "Nebius Token Factory", "group": "trial", "auth": ["key"], "tools": True,
      "env": "NEBIUS_API_KEY", "blurb": "$1 of starter credit; DeepSeek, Qwen, Llama.",

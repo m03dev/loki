@@ -165,7 +165,8 @@ check("every key provider names its env var", all(p.get("env") for p in pc.CATAL
 check("every link is https (or the provider's own site)", all(str(p.get(k, "https://")).startswith("https://")
                                                               for p in pc.CATALOG for k in ("signup", "keys", "docs")))
 check("GitHub Models (retired 2026-07-30) is not offered", "github-models" not in ids)
-for wanted in ("opencode-zen", "codestral", "vercel", "nebius", "mlx", "lmstudio", "kyojin", "opencode", "pollinations",
+check("Pollinations is not offered (owner 2026-10-26: awful results)", "pollinations" not in ids)
+for wanted in ("opencode-zen", "codestral", "vercel", "nebius", "mlx", "lmstudio", "kyojin", "opencode",
                "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"):
     check("the portal offers %s" % wanted, wanted in ids)
 

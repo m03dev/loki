@@ -146,9 +146,8 @@ def _weak(job, runner):
 
 make_mcp.run_imagegen = _weak
 _w = make_mcp.make_image({"prompt": "an orc warlord", "style": "game-concept"}, _dw)
-check("game art from the weak, watermarked fallback is not kept as an asset: 'try again later', file set aside",
-      not _w["ok"] and "Try again" in _w["error"] and (_dw / "images" / "orc-weak-draft.jpg").exists(), _w)
-check("... other pictures still come back (with the note)", make_mcp.make_image({"prompt": "a test"}, _dw)["ok"])
+check("no special Pollinations path any more (it is gone as a backend, owner 2026-10-26)",
+      "pollinations" not in (REPO / "engine" / "make_mcp.py").read_text(encoding="utf-8").lower())
 make_mcp.run_imagegen = _saved_run
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -313,7 +313,7 @@ orig_status = creative.local_image_status
 creative.local_image_status = lambda env=None, info=None, which=None: {"backend": "sdcpp", "ready": True, "why": ""}
 imagegen._creative = lambda: creative
 order = imagegen.plan_order("auto")["order"]
-check("auto order: sdcpp, ..., pollinations last", order[0] == "sdcpp" and order[-1] == "pollinations", order)
+check("auto order: sdcpp first, and no Pollinations any more (owner 2026-10-26)", order[0] == "sdcpp" and "pollinations" not in order, order)
 creative.local_image_status = lambda env=None, info=None, which=None: {"backend": "mflux", "ready": False, "why": "not installed"}
 plan = imagegen.plan_order("auto")
 check("not installed: skipped with the reason (System check shows it)", "mflux" not in plan["order"]

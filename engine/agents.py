@@ -43,7 +43,7 @@ TOOL_GROUPS = {
     "commands": "run commands (tests, builds) in its workspace",
     "web": "read web pages and search (conductor read_web / research, Agent Reach)",
     "media": "video and audio: info, transcripts, downloads (yt-dlp)",
-    "image": "generate images (Z-Image Turbo locally, or Pollinations)",
+    "image": "generate images (Z-Image Turbo locally, or FLUX on NVIDIA / Hugging Face)",
     "vision": "track objects in videos: cars, people (conductor track; RF-DETR + Roboflow trackers)",
     "browser": "drive a real browser (Browser Use; always asks first)",
     "memory": "long-term memory (Hindsight)",

@@ -12,7 +12,7 @@ Ported from Fooocus (lllyasviel/Fooocus, GPL-3.0 - see engine/licenses/Fooocus-G
     answers, falls back to a seeded pick from words that are in Fooocus' positive.txt.
 
 The owner loved a fox picture LOKI made; this makes "a fox" into a prompt a free backend
-(Pollinations, FLUX, SDXL) turns into a much better picture, in a named style
+(FLUX, Z-Image, SDXL) turns into a much better picture, in a named style
 ("pixel art", "cinematic", "anime", ...). It does not call an image backend itself - the caller
 passes the result to generate_media / the image specialist. Pure functions + one async call.
 """

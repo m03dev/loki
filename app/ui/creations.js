@@ -156,7 +156,7 @@ function creationsBackendLine(info) {
   const img = info.image || {}, vid = info.video || {};
   const parts = [];
   parts.push(img.ready ? "Pictures: " + (img.label || img.backend) + " on this computer"
-    : "Pictures: online (Pollinations) - Add-ons > local-image makes them here, free and private");
+    : "Pictures: online (FLUX on NVIDIA / Hugging Face) - Add-ons > local-image makes them here, free and private");
   parts.push(vid.ready ? "Videos: " + (vid.backend === "wan2gp" ? "Wan2GP on this computer" : "Higgsfield")
     : "Videos: " + (vid.why || "none yet"));
   for (const [name, job] of Object.entries(info.install || {})) {

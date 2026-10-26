@@ -693,8 +693,7 @@ def _default_image_plan() -> dict:
 
 
 IMAGE_NAMES = {"zimage": "Z-Image Turbo (on this computer)", "qwen": "Qwen-Image (ModelScope, free)",
-               "nvidia": "FLUX on NVIDIA (your NVIDIA key)", "huggingface": "FLUX on Hugging Face (HF_TOKEN)",
-               "pollinations": "Pollinations (free online service, last resort)"}
+               "nvidia": "FLUX on NVIDIA (your NVIDIA key)", "huggingface": "FLUX on Hugging Face (HF_TOKEN)"}
 
 
 def check_specialists(ctx: Context) -> dict:

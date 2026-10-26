@@ -7,7 +7,7 @@ folder the agent works in:
 
   make_image  {prompt, count 1-4, width, height, folder="images", negative}  LOKI's image runner (runners/imagegen.py):
               this machine's local model when installed (stable-diffusion.cpp on the PC, mflux on the Mac), else
-              Z-Image / Qwen-Image / Pollinations - the same backends as the image specialist
+              Z-Image / Qwen-Image / FLUX on NVIDIA - the same backends as the image specialist
   make_3d     {prompt | image, folder="models"}  forge3d.make_3d: a picture (or a description, drawn first) lifted to
               a .glb + .obj (TripoSR here, an online Space, or the offline inflate that always works); opens in Forge
   make_video  {prompt, seconds, image}  creative.make_video: Wan2GP on the PC, Higgsfield when its key is set
@@ -130,20 +130,6 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     files = [str(Path(f).resolve()) for f in (res.get("files") or [res.get("file")]) if f]
     answer = {"ok": True, "files": [os.path.relpath(f, cwd) for f in files], "backend": res.get("backend", ""),
               "model": res.get("model", ""), "seed": res.get("seed")}
-    if res.get("backend") == "pollinations":
-        answer["note"] = ("made by Pollinations, the weakest fallback - no better model was reachable (set an NVIDIA "
-                          "key or HF_TOKEN in Settings, or install the local image model)")
-        if style.lower() in QUALITY_STYLES and not args.get("allow_weak"):
-            # game art from the weak fallback carries a watermark and muddy detail (2026-10-26: an orc warlord for
-            # the owner's game came out stamped "pollinations.ai") - not kept as an asset; try again later
-            for f in files:
-                try:
-                    Path(f).rename(Path(f).with_name(Path(f).stem + "-weak-draft" + Path(f).suffix))
-                except OSError:
-                    pass
-            return {"ok": False, "error": "only Pollinations (the weak, watermarked fallback) was reachable for this "
-                    "%s picture - NVIDIA's FLUX is busy. Try again in 10-30 minutes; allow_weak=true keeps a draft "
-                    "anyway." % style, "backend": "pollinations"}
     if style.lower() == "pixel-art" or args.get("pixel_size"):
         import pixel_art  # pylint: disable=import-outside-toplevel
         sprites = []

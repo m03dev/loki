@@ -50,8 +50,6 @@ check("the engine marks it, switches at once and says so",
 
 # --- a remote provider that dropped its model gets the one it serves now (the PC: pollinations)
 import provider_health as ph  # noqa: E402
-check("Pollinations without 'openai' moves to a model it still serves",
-      ph.replacement("pollinations", "openai", ["mistral", "openai-fast"]) == "openai-fast")
 check("NVIDIA's DeepSeek under its other name", ph.replacement("nvidia", "deepseek-ai/deepseek-v4.1-flash",
                                                                 ["nvidia/deepseek-v4.1-flash"]) == "nvidia/deepseek-v4.1-flash")
 check("a paid provider is never switched to a random model", ph.replacement("openai", "gpt-x", ["gpt-y"]) == "")

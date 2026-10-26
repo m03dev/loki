@@ -42,12 +42,12 @@ import imagegen  # noqa: E402
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 imagegen.local_status = lambda: ("sdcpp", False, "not installed")
 imagegen.zimage_status = lambda: (False, "not installed")
-check("no keys: Pollinations only (and why the others are skipped)", imagegen.plan_order()["order"] == ["pollinations"]
+check("no keys: nothing to try - no Pollinations fallback (and why the others are skipped)", imagegen.plan_order()["order"] == []
       and "nvidia" in imagegen.plan_order()["skipped"])
 os.environ["NVIDIA_API_KEY"] = "nvapi-test"
 os.environ["HF_TOKEN"] = "hf_test"
 order = imagegen.plan_order()["order"]
-check("with the NVIDIA key and HF_TOKEN: nvidia, huggingface, then Pollinations last", order == ["nvidia", "huggingface", "pollinations"], order)
+check("with the NVIDIA key and HF_TOKEN: nvidia, then huggingface (no Pollinations)", order == ["nvidia", "huggingface"], order)
 
 asked = []
 
@@ -172,7 +172,6 @@ ws = TMP / "ws"; ws.mkdir()
 r = make_mcp.make_image({"prompt": "a dragon over a city", "style": "comic"}, ws)
 check("make_image style=comic: the prompt gets the comic finish and its negative", "bold clean inks" in jobs[0]["prompt"]
       and "blurry lines" in jobs[0]["negative"], jobs[0])
-check("... and says plainly when Pollinations (the weak fallback) made it", "Pollinations" in r.get("note", ""), r)
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

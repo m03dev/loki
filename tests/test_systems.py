@@ -645,16 +645,16 @@ zplan = DATA / "app" / "imagegen_plan.json"
 zplan.parent.mkdir(parents=True, exist_ok=True)
 zplan.write_text(json.dumps({"works": None, "failed_at": time.time(), "failures": ["offload-bf16: crashed (exit 3221225477)"]}))
 row = system_check.check_specialists(healthy(image_plan=lambda: {
-    "order": ["pollinations"], "skipped": {"zimage": "it crashed on this machine recently: offload-bf16: crashed"}}))
-check("a crashing local Z-Image is a warning: images still work through Pollinations",
-      row["status"] == "warn" and "Pollinations" in row["detail"] and row["fix"]["action"] == "zimage_retry", row)
+    "order": ["nvidia"], "skipped": {"zimage": "it crashed on this machine recently: offload-bf16: crashed"}}))
+check("a crashing local Z-Image is a warning: images still work through FLUX on NVIDIA",
+      row["status"] == "warn" and "NVIDIA" in row["detail"] and row["fix"]["action"] == "zimage_retry", row)
 system_check.apply_fix(STATE, "zimage_retry", {})
 check("its safe fix lets the next image try Z-Image again", not zplan.exists())
 sys.path.insert(0, str(REPO / "engine" / "runners"))
 import imagegen  # noqa: E402
 
-check("the image runner's own plan matches what auto really tries", imagegen.plan_order("pollinations")["order"] == ["pollinations"]
-      and imagegen.plan_order("auto")["order"][-1] == "pollinations")
+check("the image runner's own plan matches what auto really tries (no Pollinations)", imagegen.plan_order("nvidia")["order"] == ["nvidia"]
+      and "pollinations" not in imagegen.plan_order("auto")["order"])
 # Mac: a 16 GB M4 filled its swap and crashed every Z-Image plan. Gate it on memory.
 ok16, why16 = imagegen.memory_gate(ram_gb=16, nvidia=False)
 check("a 16 GB Mac without an NVIDIA GPU skips local Z-Image, saying why",

@@ -337,25 +337,8 @@ check("GET /forge/status serves the option modules for the window", [o["id"] for
 # ------------------------------------------------------------------ watermark: every Pollinations request asks for none
 sys.path.insert(0, str(REPO / "engine" / "runners"))
 import imagegen  # noqa: E402
-from urllib.parse import parse_qs, urlparse  # noqa: E402
-req, signed = imagegen.pollinations_request("a fox", 1024, 768, 5, key="")
-q = parse_qs(urlparse(req.full_url).query)
-check("Pollinations: nologo=true and private=true on the request", q.get("nologo") == ["true"] and q.get("private") == ["true"]
-      and not signed, req.full_url)
-req2, signed2 = imagegen.pollinations_request("a fox", 1024, 768, 5, key="tok")
-check("Pollinations: with a key it goes as a Bearer token (their docs: nologo needs an account)",
-      signed2 and req2.get_header("Authorization") == "Bearer tok")
-check("Pollinations: the text endpoint's placeholder key is not sent", not imagegen.pollinations_request("x", 512, 512, 0, key="pollinations")[1])
-import re as _re  # noqa: E402
-bad = []
-for f in list((REPO / "engine").rglob("*.py")) + list((REPO / "app" / "ui").glob("*.js")):
-    text = f.read_text(encoding="utf-8", errors="replace")
-    for m in _re.finditer(r"image\.pollinations\.ai", text):
-        line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.end())]
-        if "POLLINATIONS_IMAGE" not in line and "image.pollinations.ai:" not in line and "#" not in line.split("image.pollinations")[0][-3:]:
-            if f.name != "imagegen.py" or "POLLINATIONS_IMAGE =" not in line:
-                bad.append("%s: %s" % (f.name, line.strip()[:100]))
-check("no other code builds a Pollinations image URL by hand", not bad, bad)
+check("Pollinations is gone from the image runner (owner 2026-10-26: 'giving awful results')",
+      not hasattr(imagegen, "pollinations") and "pollinations" not in imagegen.plan_order("auto")["order"])
 
 # ------------------------------------------------------------------ Material Maker: find it, open files in it, save .ptex/.png
 import forge_mm  # noqa: E402

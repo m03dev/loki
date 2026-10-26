@@ -1,7 +1,7 @@
 """Make one image. stdin/stdout JSON, like every runner.
 
     {"prompt": "...", "width": 1024, "height": 1024, "out_dir": "<workspace>/images",
-     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "nvidia" | "huggingface" | "pollinations", "seed": 0,
+     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "nvidia" | "huggingface", "seed": 0,
      "count": 1-4, "negative": "..."}
     -> {"ok", "file", "files", "seed", "seeds", "backend", ...}   (seed 0 = a random one, reported)
 
@@ -20,7 +20,6 @@ Backends, in "auto" order:
   nvidia        FLUX.2 [klein] / FLUX.1 [dev] / [schnell] on NVIDIA's hosted API (build.nvidia.com), with the
                 NVIDIA_API_KEY the chat already uses.
   huggingface   FLUX.1 [dev] / [schnell] through Hugging Face Inference (HF_TOKEN, free monthly credits).
-  pollinations  image.pollinations.ai: free, no account, the weakest - only when nothing else is there.
 """
 import json
 import os
@@ -158,10 +157,11 @@ def plan_order(backend=None):
     hf = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
     if not hf:
         skipped["huggingface"] = "HF_TOKEN is not set"
-    # this machine's own model first (free, private), then the strongest hosted ones, Pollinations only last
+    # this machine's own model first (free, private), then the strongest hosted ones. No Pollinations any more
+    # (owner 2026-10-26: "pollination is giving awful results lets get rid of it")
     order = ([local] if local_ready else []) + (["zimage"] if ready else []) + \
         (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + \
-        (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["huggingface"] if hf else []) + ["pollinations"]
+        (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["huggingface"] if hf else [])
     return {"order": order, "skipped": skipped, "forced": False}
 
 
@@ -346,7 +346,7 @@ def qwen(prompt, width, height, out_dir, seed, sleep=time.sleep, request=None):
 
 # NVIDIA's hosted FLUX (build.nvidia.com; the same NVIDIA_API_KEY LOKI's chat already uses, free credits): newest first,
 # the next one when a model is not offered on the key (404/422). Owner 2026-10-25: "this poli img gen is bad... it
-# should be professional" - Pollinations is now only the last resort.
+# should be professional" - Pollinations is gone (2026-10-26).
 NVIDIA_IMAGE_BASE = os.environ.get("LOKI_NVIDIA_IMAGE_BASE", "https://ai.api.nvidia.com/v1/genai").rstrip("/")
 NVIDIA_IMAGE_MODELS = [m.strip() for m in os.environ.get(
     "LOKI_NVIDIA_IMAGE_MODELS",
@@ -384,7 +384,7 @@ NVIDIA_RETRY_WAITS = (8.0, 20.0)
 def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None):
     """NVIDIA's hosted FLUX. A rate limit or a server hiccup is waited out twice (Retry-After, else 8 s then 20 s)
     before giving up - 2026-10-25: three concept pieces asked 10 s apart, the middle one hit a passing 429 and fell
-    all the way to Pollinations while its neighbours came from FLUX."""
+    all the way to the weakest backend while its neighbours came from FLUX."""
     import time as _time  # pylint: disable=import-outside-toplevel
     sleep = sleep or _time.sleep
     key = os.environ.get("NVIDIA_API_KEY", "").strip()
@@ -463,40 +463,6 @@ def huggingface(prompt, width, height, out_dir, seed, opener=None):
     raise RuntimeError("Hugging Face image models: " + "; ".join(errors))
 
 
-POLLINATIONS_IMAGE = "https://image.pollinations.ai/prompt/"
-
-
-def pollinations_request(prompt, width, height, seed, key=None):
-    """The Pollinations request, built in one place so every call asks for no logo.
-    nologo=true removes Pollinations' mark, but their docs say that needs an account: with
-    POLLINATIONS_API_KEY set (a free token from auth.pollinations.ai) it goes as a Bearer token and
-    the picture has no mark; anonymous pictures may still carry it - LOKI never paints over it.
-    private=true keeps the prompt off Pollinations' public feed."""
-    params = {"width": width, "height": height, "nologo": "true", "private": "true", "referrer": "loki"}
-    if seed:
-        params["seed"] = int(seed)
-    url = POLLINATIONS_IMAGE + "%s?%s" % (urllib.parse.quote(prompt[:1500]), urllib.parse.urlencode(params))
-    key = os.environ.get("POLLINATIONS_API_KEY", "").strip() if key is None else key
-    headers = {"User-Agent": "Loki/1.0"}
-    if key and key != "pollinations":     # "pollinations" is the text endpoint's placeholder, not a token
-        headers["Authorization"] = "Bearer " + key
-    return urllib.request.Request(url, headers=headers), bool(headers.get("Authorization"))
-
-
-def pollinations(prompt, width, height, out_dir, seed):
-    req, signed_in = pollinations_request(prompt, width, height, seed)
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        data = resp.read()
-        kind = resp.headers.get("Content-Type", "image/jpeg")
-    if not data or not kind.startswith("image/"):
-        raise RuntimeError("Pollinations returned no image")
-    path = _out_path(out_dir, prompt, "png" if "png" in kind else "jpg")
-    path.write_bytes(data)
-    note = "made by a free third-party service" + ("" if signed_in else
-                                                    "; may carry Pollinations' mark - set POLLINATIONS_API_KEY to remove it")
-    return {"file": str(path), "backend": "pollinations", "note": note, "watermark_free": signed_in}
-
-
 def local(prompt, width, height, out_dir, seed, count=1, negative=""):
     """sd.cpp (PC) or mflux (Mac) through engine/creative.py; a whole batch in one go."""
     return _creative().run_local_image(prompt, negative, width, height, seed, count, Path(out_dir))
@@ -540,17 +506,16 @@ def main():
                     result = local(prompt, width, height, out_dir, seed, count, negative)
                     print(json.dumps({"ok": True, **result}))
                     return
-                fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "huggingface": huggingface,
-                      "pollinations": pollinations}.get(name)
+                fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "huggingface": huggingface}.get(name)
                 if fn is None:
-                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, huggingface, "
-                                     "pollinations)" % name)
+                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, huggingface)" % name)
                 result = one_by_one(fn, prompt, width, height, out_dir, seed, count)
                 print(json.dumps({"ok": True, **result}))
                 return
             except Exception as exc:  # noqa: BLE001 - try the next backend
                 errors.append("%s: %s: %s" % (name, type(exc).__name__, str(exc)[:200]))
-        raise RuntimeError("; ".join(errors) or "no image backend")
+        raise RuntimeError("; ".join(errors) or "no image backend is ready on this computer: install the local image "
+                           "model (Add-ons > local-image) or set NVIDIA_API_KEY / HF_TOKEN in Settings")
     except Exception as exc:  # noqa: BLE001
         print(json.dumps({"ok": False, "error": str(exc)[:600]}))
 

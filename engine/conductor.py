@@ -11,7 +11,7 @@ the call to whichever enabled capability can do it:
     remember   store a lasting fact in Hindsight               (hindsight)
     recall     ask Hindsight what it knows                     (hindsight)
     media      video/audio: transcripts, details, downloads     (media: yt-dlp)
-    image      make an image                                   (image-gen: Z-Image Turbo / Pollinations)
+    image      make an image                                   (image-gen: Z-Image Turbo / FLUX)
     reach      the web through Agent Reach: pages, GitHub      (agent-reach)
     track      track objects in a workspace video (RF-DETR + Roboflow trackers)  (vision-track)
     scrape     one page as markdown, or crawl a site into scraped/<domain>/ (scrapling);
@@ -64,7 +64,7 @@ ROLES: dict[str, dict] = {
                          "'audio', 'video', or 'search: <words>'", "ask": False},
     "image": {"capabilities": ("image-gen",), "permission": "fs:workspace",
               "summary": "make an image from task=<prompt> (locally: stable-diffusion.cpp on the PC, mflux on "
-                         "the Mac, or Z-Image Turbo; else Pollinations); "
+                         "the Mac, or Z-Image Turbo; else FLUX on NVIDIA / Hugging Face); "
                          "saved in images/", "ask": False},
     "reach": {"capabilities": ("agent-reach",), "permission": "network",
               "summary": "Agent Reach: url=<page> reads it as text; task='github: <words or repo url>'; "
