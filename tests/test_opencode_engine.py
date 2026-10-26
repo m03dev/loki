@@ -75,6 +75,13 @@ model = args[args.index("--model") + 1] if "--model" in args else ""
 def out(kind, **kw): print(json.dumps({"type": kind, "timestamp": 0, "sessionID": sid, **kw}), flush=True)
 if mode == "fail" or (mode == "fail-first" and "groq" in model):
     out("error", error={"name": "APIError", "data": {"message": "429 rate limited"}}); sys.exit(1)
+if mode == "slow-first" and "groq" in model:
+    import time
+    out("step_start", part={"type": "step-start"})
+    time.sleep(1.2)
+    out("step_finish", part={"type": "step-finish", "reason": "tool-calls"})
+    time.sleep(20)
+    sys.exit(0)
 if mode == "liar":
     out("text", part={"type": "text", "text": "Done! I created a new git repo called loki-test-repo and committed it."}); sys.exit(0)
 out("step_start", part={"type": "step-start"})
@@ -149,6 +156,22 @@ if loki:
     models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
     check("the first provider fails -> the next one does it", len(models) >= 2 and models[0].startswith("loki-groq/")
           and models[1].startswith("loki-gemini/") and (ws / "loki-test-repo" / "src" / "main.py").is_file(), models)
+
+    import provider_speed  # noqa: E402
+    provider_speed.SLOW_S = 0.5
+    _t = time.time()
+    out, ws, calls = turn(REQ, mode="slow-first", conv="slow")
+    models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
+    sessions = [c["argv"][c["argv"].index("--session") + 1] for c in calls if "--session" in c["argv"]]
+    check("a provider that crawls is left mid-turn: the next one finishes the job (not 20 s of waiting)",
+          models[:1] and models[0].startswith("loki-groq/") and any(m.startswith("loki-gemini/") for m in models[1:])
+          and (ws / "loki-test-repo" / "src" / "main.py").is_file() and time.time() - _t < 15, (models, round(time.time() - _t, 1)))
+    check("... it carries on in the same OpenCode session", sessions and len(set(sessions)) == 1, sessions)
+    check("... and is marked slow, so the next turns put it last",
+          provider_speed.is_slow(loki.DATA_DIR, "groq") and list(loki._oc_providers("groq"))[0] == "gemini",  # pylint: disable=protected-access
+          list(loki._oc_providers("groq")))  # pylint: disable=protected-access
+    provider_speed.SLOW_S = 120
+    (Path(loki.DATA_DIR) / "provider_speed.json").unlink()
 
     out, ws, calls = turn("what does this project do?", agent_mode="plan", conv="c4")
     a = calls[0]["argv"]

@@ -9217,6 +9217,11 @@ def _oc_providers(first: str) -> dict:
         out[name] = {"base_url": base, "model": model, "key": str(cfg.api_key or "")}
         if len(out) >= 6:
             break
+    try:   # a provider that crawled in the last 45 min goes last (engine/provider_speed.py)
+        import provider_speed  # pylint: disable=import-outside-toplevel
+        out = {n: out[n] for n in provider_speed.order(DATA_DIR, list(out))}
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 
@@ -9355,6 +9360,16 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             meter["output"] += int(tok.get("output") or 0) + int(tok.get("reasoning") or 0)
             meter["cost"] += float(part.get("cost") or 0)
             meter["step"] += 1
+            step_s = time.time() - float(meter.get("last") or meter["t0"])
+            meter["last"] = time.time()
+            try:
+                import provider_speed  # pylint: disable=import-outside-toplevel
+                if provider_speed.record(DATA_DIR, meter["where"], step_s) and meter.get("can_move"):
+                    meter["too_slow"] = True       # the loop below moves this turn to the next provider
+                    _progress("thinking", "%s took %d s for one step - moving to the next provider." % (
+                        meter["where"], step_s))
+            except Exception:  # noqa: BLE001
+                pass
             _progress("usage", json.dumps({"model": meter["model"].split("/", 1)[-1], "where": meter["where"],
                                            "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                            "cost": round(meter["cost"], 4), "seconds": round(time.time() - meter["t0"], 1)}))
@@ -9365,24 +9380,33 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
     result: dict = {}
     used = ""
-    for model in models[:3]:
+    tries = models[:3]
+    for i, model in enumerate(tries):
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
         pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")
-        meter.update(model=model, where=pname or "OpenCode")
+        meter.update(model=model, where=pname or "OpenCode", last=time.time(), too_slow=False,
+                     can_move=i + 1 < len(tries))
         _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
         result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
                                          config_path=str(cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,
-                                         cancelled=_cancel_event.is_set)
+                                         cancelled=lambda: _cancel_event.is_set() or bool(meter.get("too_slow")))
         used = model
         if result.get("session"):
             session = result["session"]
             OC_SESSIONS.set(conv, session)
+        if meter.get("too_slow") and not _cancel_event.is_set():
+            # carry on in the same session with the next provider; the tools that already ran stay counted
+            prompt = ("Continue the task from where you are (the previous model was too slow). The goal: %s" % text[:4000])
+            meter["carried"] = list(meter.get("carried") or []) + list(result.get("tools") or [])
+            continue
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))
+    if meter.get("carried"):
+        result = dict(result, tools=list(meter["carried"]) + list(result.get("tools") or []))
     ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
     _task_ok_calls, _task_failed_calls = ok, failed
     reply = result.get("text") or ""
