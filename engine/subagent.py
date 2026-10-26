@@ -48,7 +48,10 @@ When you have the answer, reply with ONE final message (no tool call) that start
 'RESULT:' and holds everything the caller needs - facts, file paths with line numbers, short
 quotes - in at most 40 lines. If you cannot finish, reply 'RESULT: incomplete - <what you found
 and what is missing>'.
-
+Never claim anything you did not see in a tool result. You only have the tools listed below:
+if you need one you do not have, say so in the result - it tells nothing about what the agent
+that called you can do.
+{role}
 Your tools: {tools}
 
 Task:
@@ -96,21 +99,29 @@ def _as_message(raw: Any) -> dict:
     return msg
 
 
+NO_EVIDENCE = ("You answered without using any of your tools, so nothing in it was checked. Use your tools to "
+               "check it now, or reply 'RESULT: incomplete - ...' if they cannot help.")
+
+
 async def run(task: str, tools: list, schemas: list, request: Request, call_tool: CallTool,
-              max_turns: int = 0, progress: Callable[[str], None] | None = None) -> dict:
+              max_turns: int = 0, progress: Callable[[str], None] | None = None, role: str = "",
+              context_chars: int = 0) -> dict:
     """Run one sub-agent. Returns {"ok", "result", "turns", "tools_used", "stopped"}."""
     task = str(task or "").strip()
     if not task:
         return {"ok": False, "result": "error: give the sub-agent a task", "turns": 0, "tools_used": []}
     schemas = [s for s in schemas if s.get("function", {}).get("name") in set(tools)]
     cap = max_turns or MAX_TURNS
-    messages: list = [{"role": "system", "content": PROMPT.format(tools=", ".join(tools) or "(none)", task=task)},
+    role = ("\nYour role (follow its Task, Out of Scope and Done When):\n" + role.strip() + "\n") if role.strip() else ""
+    budget = int(context_chars or CONTEXT_CHARS)
+    messages: list = [{"role": "system", "content": PROMPT.format(tools=", ".join(tools) or "(none)", task=task,
+                                                                  role=role)},
                       {"role": "user", "content": task}]
     used: list = []
     nudged = False
     for turn in range(1, cap + 1):
-        if condenser.size(messages) > CONTEXT_CHARS:
-            await condenser.condense(messages, None, 0, CONTEXT_CHARS, keep_first=1)
+        if condenser.size(messages) > budget:
+            await condenser.condense(messages, None, 0, budget, keep_first=1)
         try:
             msg = _as_message(await request(messages, schemas))
         except Exception as exc:  # noqa: BLE001 - one failed child must not fail the parent
@@ -120,6 +131,10 @@ async def run(task: str, tools: list, schemas: list, request: Request, call_tool
         calls = msg.get("tool_calls") or []
         if not calls:
             text = msg["content"].strip()
+            if not used and tools and not nudged and "incomplete" not in text[:40].lower():
+                nudged = True        # an answer from nowhere: check it first (weak models guess on turn 1)
+                messages.append({"role": "user", "content": NO_EVIDENCE})
+                continue
             if text.upper().startswith("RESULT:"):
                 text = text[7:].strip()
             return {"ok": bool(text), "result": (text or "(the sub-agent gave no result)")[:RESULT_CHARS],
@@ -143,8 +158,9 @@ async def run(task: str, tools: list, schemas: list, request: Request, call_tool
                     result = str(await call_tool(name, args))
                 except Exception as exc:  # noqa: BLE001
                     result = "error: %s" % exc
-            if len(result) > TOOL_RESULT_CHARS:
-                result = result[:TOOL_RESULT_CHARS] + "\n...[cut; ask for a smaller range]"
+            cap_chars = min(TOOL_RESULT_CHARS, max(1500, budget // 6))
+            if len(result) > cap_chars:
+                result = result[:cap_chars] + "\n...[only this view is cut - ask for a smaller range]"
             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": result})
         pattern = stuck.detect(messages)
         if pattern:
@@ -167,13 +183,14 @@ async def run(task: str, tools: list, schemas: list, request: Request, call_tool
 
 
 async def run_many(tasks: list, tools: list, schemas: list, request: Request, call_tool: CallTool,
-                   max_turns: int = 0) -> list:
-    """Several sub-agents side by side (at most MAX_PARALLEL at once)."""
-    gate = asyncio.Semaphore(MAX_PARALLEL)
+                   max_turns: int = 0, role: str = "", context_chars: int = 0, parallel: int = 0) -> list:
+    """Several sub-agents side by side (at most MAX_PARALLEL at once; a local model runs them one at a time)."""
+    gate = asyncio.Semaphore(max(1, int(parallel or MAX_PARALLEL)))
 
     async def one(t: str) -> dict:
         async with gate:
-            return await run(t, tools, schemas, request, call_tool, max_turns)
+            return await run(t, tools, schemas, request, call_tool, max_turns, role=role,
+                             context_chars=context_chars)
     return list(await asyncio.gather(*(one(t) for t in tasks)))
 
 

@@ -439,22 +439,18 @@ def pack(query: str, root: Path | None = None, repo: Path | None = None, budget:
                          extra=extra, skip_texts=skip_texts)
     except Exception:  # noqa: BLE001 - memory is advice; it must never break a request
         return empty
-    if not found["items"]:
-        return empty
-    skills = []
-    more = ""
-    try:
+    skills, more = [], ""
+    try:   # learned skills are not recalled as memory lines: the request gets their catalog (OpenDots-style)
         import skill_learning  # pylint: disable=import-outside-toplevel
-        for cite in found["items"]:
-            if cite["id"].startswith("skill:") and not skills:
-                body = skill_learning.body(cite["id"][6:], root)
-                if body:
-                    skills.append(cite["id"][6:])
-                    more = ("\n\nLearned skill `%s` (a procedure that worked before; follow it if it fits, "
-                            "and say \"used learned skill %s\" in your reply):\n%s"
-                            % (cite["id"][6:], cite["id"][6:], body[:max(400, budget // 2)]))
+        found["items"] = [i for i in found["items"] if not i["id"].startswith("skill:")]
+        listed = skill_learning.catalog(query, root)
+        if listed:
+            skills = [i["id"] for i in listed]
+            more = "\n\n" + skill_learning.catalog_text(listed)
     except Exception:  # noqa: BLE001
         pass
+    if not found["items"] and not more:
+        return empty
     text = ("# Memory (recalled for this request)\nContext from LOKI's memory, looked up for this request. It "
             "may be incomplete or unrelated - use what helps; the `memory` tool recalls more.\n"
             + "\n".join(i["line"] for i in found["items"]) + more)

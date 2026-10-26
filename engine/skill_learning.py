@@ -17,7 +17,18 @@ judge itself, the same rule as reasoning_bank.py):
     Result            the final DONE line
 
 A request like an earlier learned skill (most of its words in common) refreshes that skill
-instead of adding a near-copy. Secrets are masked; a skill that the safety scan would block
+instead of adding a near-copy.
+
+Delivery follows CopilotKit OpenDots (github.com/CopilotKit/OpenDots, MIT - per-Dot Learning containers, skills
+delivered only once published, a catalog in the prompt and load_skill to open one):
+
+    containers   each agent role learns for itself: a Builder's skill is offered to Builders, a chat's to chats
+                 (LOKI_TEAM_ROLE, else "chat") - one QA sweep no longer leaks into every other kind of job
+    draft        a new skill is a draft: never offered. It is PUBLISHED by evidence - a second verified success on
+                 a request like it - or by the owner (publish / unpublish)
+    catalog      a request sees at most CATALOG_MAX published skills of its container that look related, one line
+                 each, and opens one with load_skill only if it fits; the body never lands in the prompt unasked
+    retired      a skill loaded on 3 more failed runs than good ones is moved to _retired/ and never offered again Secrets are masked; a skill that the safety scan would block
 is not kept. LOKI_SKILL_LEARNING=off turns it off. Standard library only.
 """
 from __future__ import annotations
@@ -70,8 +81,31 @@ def _save_index(data: dict, root: Path | None = None) -> None:
     os.replace(tmp, path)
 
 
+_WRAPPER = re.compile(r"^\s*You are (?:the|a|an) [^\n]{0,80}?(?:team|agent)[^\n]*\n", re.I)
+_TEAM_GOAL = re.compile(r"(?:^|\n)\s*(?:Team goal|Goal|Task)\s*:\s*(.+?)(?:\n\s*\n|$)", re.I | re.S)
+_NOTE = re.compile(r"\s*\((?:standing goal|owner via [^)]*|\d{4}-\d{2}-\d{2})[^)]*\)\s*", re.I)
+
+
+def core_goal(goal: str) -> str:
+    """The request itself, without the job wrapper around it (2026-10-25: every team job starts "You are the
+    Builder on a LOKI agent team (team ...)", so a skill learned from one QA sweep was named and matched by that
+    sentence and offered to every builder job after it - 18 unrelated jobs)."""
+    text = str(goal or "").strip()
+    if _WRAPPER.match(text):
+        m = _TEAM_GOAL.search(text)
+        text = m.group(1) if m else _WRAPPER.sub("", text, count=1)
+    return _NOTE.sub(" ", " ".join(text.split())).strip()
+
+
+def wrapper_only(goal: str) -> bool:
+    """A stored goal that is still the job wrapper (a skill learned before core_goal existed)."""
+    return bool(_WRAPPER.match(str(goal or "")))
+
+
 def _words(text: str) -> set:
-    stop = {"the", "and", "for", "with", "that", "this", "from", "into", "loki", "make", "add", "please"}
+    stop = {"the", "and", "for", "with", "that", "this", "from", "into", "loki", "make", "add", "please", "you",
+            "are", "your", "team", "agent", "builder", "architect", "tester", "reviewer", "researcher", "goal",
+            "task", "then", "each", "one", "all", "its", "will", "can", "not", "use", "using", "write", "run"}
     return {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", str(text).lower()) if w not in stop}
 
 
@@ -166,9 +200,15 @@ def learned(root: Path | None = None) -> list:
     base = learned_dir(root)
     if not base.is_dir():
         return []
+    try:
+        tidy(root)
+    except Exception:  # noqa: BLE001 - listing must never fail on housekeeping
+        pass
     index = _index(root)
     out = []
     for md in sorted(base.glob("*/SKILL.md")):
+        if md.parent.name.startswith("_") or (index.get(md.parent.name) or {}).get("retired"):
+            continue
         try:
             text = md.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -204,23 +244,147 @@ def mark_used(sid: str, root: Path | None = None) -> None:
         _save_index(index, root)
 
 
+def overlap(a: str, b: str) -> float:
+    """How much two requests share: common words over the LARGER word set (a short request does not match a
+    long one just because its few words appear in it)."""
+    x, y = _words(core_goal(a)), _words(core_goal(b))
+    if not x or not y:
+        return 0.0
+    return len(x & y) / max(len(x), len(y))
+
+
 def similar(goal: str, root: Path | None = None) -> str:
     """The id of a learned skill for (nearly) the same request, or ""."""
-    mine = _words(goal)
-    if not mine:
-        return ""
+    best, score = "", 0.0
     for sid, info in _index(root).items():
-        theirs = _words(info.get("goal", ""))
-        if theirs and len(mine & theirs) / max(1, min(len(mine), len(theirs))) >= SIMILAR \
-                and (learned_dir(root) / sid / "SKILL.md").is_file():
-            return sid
-    return ""
+        if info.get("retired") or not (learned_dir(root) / sid / "SKILL.md").is_file():
+            continue
+        o = overlap(goal, info.get("goal", ""))
+        if o >= SIMILAR and o > score:
+            best, score = sid, o
+    return best
+
+
+FITS = float(os.getenv("LOKI_SKILL_FITS", "0.35") or 0.35)
+LISTED = float(os.getenv("LOKI_SKILL_LISTED", "0.15") or 0.15)
+CATALOG_MAX = 5
+PUBLISH_AFTER = int(os.getenv("LOKI_SKILL_PUBLISH_AFTER", "2") or 2)
+
+
+def container(env: dict | None = None) -> str:
+    """The learning container of the agent running now: its team role, or "chat"."""
+    role = str((env if env is not None else os.environ).get("LOKI_TEAM_ROLE", "") or "").strip().lower()
+    return re.sub(r"[^a-z0-9-]", "-", role)[:40] or "chat"
+
+
+def published(info: dict) -> bool:
+    return info.get("status", "published" if int(info.get("times_learned", 0)) >= PUBLISH_AFTER else "draft") \
+        == "published" and not info.get("retired")
+
+
+def set_status(sid: str, status: str, root: Path | None = None) -> dict:
+    """The owner publishes or unpublishes a skill (status: published | draft)."""
+    index = _index(root)
+    if sid not in index or index[sid].get("retired"):
+        return {"ok": False, "error": "no learned skill %r" % sid}
+    index[sid]["status"] = "published" if status == "published" else "draft"
+    index[sid]["by_owner"] = True
+    _save_index(index, root)
+    return {"ok": True, "id": sid, "status": index[sid]["status"]}
+
+
+def catalog(request: str, root: Path | None = None, where: str | None = None) -> list:
+    """[{id, description, score}] - the published skills of this container that look related, best first."""
+    where = where or container()
+    out = []
+    for sid, info in _index(root).items():
+        if not published(info) or info.get("container", "chat") != where or wrapper_only(info.get("goal", "")):
+            continue
+        if not (learned_dir(root) / sid / "SKILL.md").is_file():
+            continue
+        score = overlap(request, info.get("goal", ""))
+        if score >= LISTED:
+            out.append({"id": sid, "description": core_goal(info.get("goal", ""))[:140], "score": round(score, 2)})
+    return sorted(out, key=lambda x: -x["score"])[:CATALOG_MAX]
+
+
+def catalog_text(items: list) -> str:
+    if not items:
+        return ""
+    return ("Learned skills (procedures that worked before for requests like this one). If one fits, open it with "
+            "load_skill(name) before you start and follow it; if none fits, ignore them:\n"
+            + "\n".join("- %s: %s" % (i["id"], i["description"]) for i in items))
+
+
+def load(sid: str, root: Path | None = None, where: str | None = None) -> str:
+    """load_skill: the body of a published skill of this container."""
+    sid = re.sub(r"[^a-z0-9_-]", "", str(sid or "").lower())
+    info = _index(root).get(sid) or {}
+    if not info or not published(info) or info.get("container", "chat") != (where or container()):
+        return ""
+    return body(sid, root)
+
+
+def fits(sid: str, request: str, root: Path | None = None) -> bool:
+    """Offer this skill to this request? Only when the request is really like the one it was learned from, and the
+    skill has not been failing."""
+    info = _index(root).get(sid) or {}
+    if not info or not published(info) or wrapper_only(info.get("goal", "")) \
+            or info.get("container", "chat") != container():
+        return False
+    return overlap(request, info.get("goal", "")) >= FITS
+
+
+def record_outcome(sids, ok: bool, root: Path | None = None) -> list:
+    """After a request that was offered these skills: count it. A skill that fails 3 times more often than it
+    helps is retired (kept on disk under _retired/, never offered again). Returns the ids retired now."""
+    index = _index(root)
+    gone = []
+    for sid in sids or []:
+        info = index.get(sid)
+        if not info:
+            continue
+        info["ok" if ok else "failed"] = int(info.get("ok" if ok else "failed", 0)) + 1
+        if not ok and info["failed"] >= 3 and info["failed"] > int(info.get("ok", 0)):
+            _retire(sid, index, root, "failed %d times" % info["failed"])
+            gone.append(sid)
+    _save_index(index, root)
+    return gone
+
+
+def _retire(sid: str, index: dict, root: Path | None, why: str) -> None:
+    src = learned_dir(root) / sid
+    dest = learned_dir(root) / "_retired" / sid
+    try:
+        if src.is_dir():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                import shutil  # pylint: disable=import-outside-toplevel
+                shutil.rmtree(dest)
+            src.rename(dest)
+    except OSError:
+        pass
+    index.setdefault(sid, {}).update(retired=why, retired_t=time.time())
+
+
+def tidy(root: Path | None = None) -> list:
+    """Retire skills learned from a job wrapper instead of a request (the old bug). Returns their ids."""
+    index = _index(root)
+    gone = [sid for sid, info in index.items() if not info.get("retired") and wrapper_only(info.get("goal", ""))]
+    for sid in gone:
+        _retire(sid, index, root, "learned from a job wrapper, not a request")
+    if gone:
+        _save_index(index, root)
+    return gone
 
 
 def learn_from(goal: str, messages: list, status: str, outcome: str, tool_calls: int,
                root: Path | None = None, clock=time.time) -> dict | None:
     """Write (or refresh) a learned skill for a verified multi-step success. None = nothing learned."""
     if not should_learn(status, outcome, tool_calls):
+        return None
+    goal = core_goal(goal)
+    if len(goal) < 8:
         return None
     calls, pitfalls, final, files = steps_from(messages)
     if len(calls) <= MIN_TOOL_CALLS:
@@ -246,9 +410,13 @@ def learn_from(goal: str, messages: list, status: str, outcome: str, tool_calls:
     except Exception:  # noqa: BLE001
         pass
     index = _index(root)
-    entry = index.get(sid, {"uses": 0, "created": clock()})
+    entry = index.get(sid, {"uses": 0, "created": clock(), "container": container(), "status": "draft"})
     entry.update({"t": clock(), "goal": _scrub(goal)[:400], "steps": len(calls),
                   "times_learned": int(entry.get("times_learned", 0)) + 1})
+    entry.setdefault("container", container())
+    if entry.get("status") != "published" and not entry.get("by_owner") and entry["times_learned"] >= PUBLISH_AFTER:
+        entry["status"] = "published"          # the evidence: a second verified success on a request like it
     index[sid] = entry
     _save_index(index, root)
-    return {"id": sid, "path": str(md), "steps": len(calls), "refreshed": entry["times_learned"] > 1}
+    return {"id": sid, "path": str(md), "steps": len(calls), "refreshed": entry["times_learned"] > 1,
+            "status": entry["status"], "container": entry["container"]}

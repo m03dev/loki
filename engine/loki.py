@@ -3574,7 +3574,8 @@ def conductor_tool(role: str, task: str = "", url: str = "") -> str:
 
 MEMORY_BUDGET = memory_core.Budget()
 LAST_RECALL: list = []      # memories this request used: the pack's citations + the memory tool's recalls
-LAST_SKILLS: list = []      # learned skills offered to this request
+LAST_SKILLS: list = []      # learned skills listed for this request (the catalog)
+LOADED_SKILLS: list = []    # the ones the agent opened with load_skill (their outcome is counted)
 LAST_LEARNED: dict = {}     # the skill learned from the last request, if any
 LAST_NOTED: list = []       # what the last request taught LOKI about the owner (memory.after_request)
 
@@ -3729,12 +3730,36 @@ def task_tracker_tool(command: str = "view", task_list=None) -> str:
 SUBAGENT_DEPTH = 0
 
 
-async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: int = 0) -> str:
+def subagent_model(wanted: str = "") -> str:
+    """Which model a sub-agent runs on: the definition's model if it is set up here; else, when this request is on
+    a LOCAL model and a capable free online model is ready, that one (2026-10-25: helpers on the 9B local model
+    overflowed its 16k window and guessed); else this request's own model."""
+    if wanted and wanted in MODELS and provider_configured(wanted):
+        return wanted
+    current = active_model_name()
+    if current in MODELS and _cfg_is_local(MODELS[current]) and not routing.local_only_setting() \
+            and os.getenv("LOKI_SUBAGENT_MODEL", "auto").strip().lower() != "same":
+        try:
+            picked = _free_capable_online(dict(routing.needs_for({}, background=True), local_only=False)) \
+                if online() else ""
+        except Exception:  # noqa: BLE001
+            picked = ""
+        if picked and picked in MODELS:
+            return picked
+    return current
+
+
+async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: int = 0, agent: str = "") -> str:
     """A short-lived helper with a narrow tool set and its own small context; returns one result.
-    `tasks` (a list) runs several side by side. Same model routing as this request."""
+    `agent` = a named subagent (a .agents/<name>.md definition, or LOKI's built-in researcher, code-reviewer,
+    bug-investigator, file-finder, checker, writer); agent="list" lists them. `tasks` (a list) runs several side
+    by side."""
     global SUBAGENT_DEPTH
+    import agent_defs  # pylint: disable=import-outside-toplevel
     if SUBAGENT_DEPTH > 0:
         return "error: a sub-agent cannot start another sub-agent"
+    if str(agent or "").strip().lower() in ("list", "?", "help"):
+        return "Subagents (run_subagent agent=<name> task=...):\n" + agent_defs.describe(WORKSPACE)
     if isinstance(tasks, str):
         try:
             tasks = json.loads(tasks)
@@ -3744,13 +3769,39 @@ async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: i
         ([str(task).strip()] if str(task or "").strip() else [])
     if not todo:
         return "error: give the sub-agent a task"
+    defn = None
+    if str(agent or "").strip():
+        try:
+            defn = agent_defs.load(str(agent).strip(), WORKSPACE)
+        except (FileNotFoundError, ValueError) as exc:
+            return "error: %s" % exc
+    if defn and defn["run_agent"] != "loki":
+        if not agent_defs.cli_ready(defn["run_agent"]):
+            _progress("thinking", "%s is set to run on %s, which is not installed here - running it on LOKI instead."
+                      % (defn["name"], defn["run_agent"]))
+            defn = dict(defn, run_agent="loki", model=None)
+        else:
+            if defn["permission"] == "yolo" and not await approve(
+                    "run_subagent", "Run the %s subagent on %s with NO approvals or sandbox (permission: yolo) in "
+                    "%s:\n%s" % (defn["name"], defn["run_agent"], WORKSPACE, "\n".join(todo)[:2000]), False):
+                return "DENIED: the owner did not approve running %s without a sandbox." % defn["name"]
+            _progress("thinking", "Starting %s on %s." % (defn["name"], defn["run_agent"]))
+            outs = await asyncio.gather(*(asyncio.to_thread(agent_defs.run_external, defn, t, WORKSPACE) for t in todo))
+            return subagent.format_results(todo, [
+                {"ok": o["ok"], "turns": 1, "tools_used": [o["cli"]],
+                 "result": o["result"] or ("error: %s" % (o.get("error") or o.get("status") or "no result"))}
+                for o in outs])
     offered = model_tool_schemas()
-    names = subagent.narrow(tools, [s["function"]["name"] for s in offered])
+    names = subagent.narrow(tools or (defn["tools"] if defn else ""), [s["function"]["name"] for s in offered])
     if not names:
         return "error: none of those tools can be given to a sub-agent here (try: %s)" % ", ".join(subagent.DEFAULT_TOOLS)
-    provider = active_model_name()
+    provider = subagent_model((defn or {}).get("model") or "")
     cfg = MODELS[provider]
-    client = make_client()
+    client = make_client() if provider == active_model_name() else make_client(provider)
+    local = _cfg_is_local(cfg)
+    budget = subagent.CONTEXT_CHARS
+    if local:   # stay inside the local model's window (about 3 characters a token, room for the reply)
+        budget = max(8000, min(budget, int(getattr(condenser, "LOCAL_WINDOW_TOKENS", 8192)) * 3 - 6000))
 
     async def request(msgs: list, schemas: list):
         kwargs = {"model": cfg.model, "messages": msgs, "max_tokens": int(os.getenv("LOKI_SUBAGENT_TOKENS", "4096"))}
@@ -3777,15 +3828,19 @@ async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: i
             return "error: %s" % fix.error
         return await call_tool(fix.name, fix.args)
 
-    _progress("thinking", "Starting %d sub-agent(s) with %s." % (len(todo), ", ".join(names)))
+    _progress("thinking", "Starting %d %s on %s with %s." % (
+        len(todo), defn["name"] if defn else "sub-agent(s)", provider, ", ".join(names)))
     SUBAGENT_DEPTH += 1
     try:
         cap = subagent.iter_cap(autonomous=bool(os.getenv("LOKI_JOB_ID")), requested=int(max_turns or 0))
-        results = await subagent.run_many(todo, names, offered, request, run_tool, max_turns=cap)
+        results = await subagent.run_many(todo, names, offered, request, run_tool, max_turns=cap,
+                                          role=(defn or {}).get("system", ""), context_chars=budget,
+                                          parallel=1 if local else 0)
     finally:
         SUBAGENT_DEPTH -= 1
     try:
-        events.emit("agent.message", "LOKI sub-agent", {"subagents": [t[:200] for t in todo],
+        events.emit("agent.message", "LOKI sub-agent", {"subagents": [t[:200] for t in todo], "agent": agent or "",
+                                                         "model": provider,
                                                          "ok": [bool(r.get("ok")) for r in results]})
     except Exception:  # noqa: BLE001
         pass
@@ -3952,9 +4007,9 @@ TOOL_SCHEMAS = [
     schema("schedule_task", "Tasks LOKI does by itself later, as background jobs. action='add' with prompt=what to do and schedule='every weekday at 9am' | 'in 30m' (once) | 'every 2h' | 'every monday 18:00' | a cron line '0 9 * * 1-5' | '2026-11-03T14:00'; 'list'; 'remove'/'pause'/'resume' with id.",
            {"action": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string"},
             "id": {"type": "string"}, "repeat": {"type": "string"}}, ["action"]),
-    schema("run_subagent", "Hand ONE focused sub-task to a short-lived helper agent with its own small context and a narrow tool set; it returns one result, so your own context stays small. Good for: searching the code for something, reading a few files and summarizing them, reading web pages. tools = comma list (default read_file, search_files, list_tree, list_files, read_web, memory). tasks = a list of several tasks to run side by side (at most 4).",
-           {"task": {"type": "string"}, "tools": {"type": "string"}, "tasks": {"type": "array", "items": {"type": "string"}},
-            "max_turns": {"type": "integer"}}, []),
+    schema("run_subagent", "Hand ONE focused sub-task to a short-lived helper agent with its own small context and a narrow tool set; it returns one result, so your own context stays small. agent = a named subagent: researcher (sourced web answers), code-reviewer, bug-investigator, file-finder, checker (verifies work that was said to be done), writer (writes one file), or one from the project's .agents/ folder - agent='list' lists them. Without agent: a general helper; tools = comma list (default read_file, search_files, list_tree, list_files, read_web, memory). tasks = a list of several tasks to run side by side (at most 4). The helper's tools are narrower than yours: a tool it lacks says nothing about yours.",
+           {"task": {"type": "string"}, "agent": {"type": "string"}, "tools": {"type": "string"},
+            "tasks": {"type": "array", "items": {"type": "string"}}, "max_turns": {"type": "integer"}}, []),
     schema("sketch_reply", "Draw back on the user's drawing pad, so your answer appears on the canvas beside their sketch (a corrected layout, an arrow to the spot, labels, a diagram). shapes = list of {type: line|arrow|rect|circle|text|path, x1,y1,x2,y2 (line/arrow) | x,y,w,h (rect) | cx,cy,r (circle) | x,y,text (text) | points [[x,y],...] (path), color '#rrggbb'}; coordinates 0..1000 across and down. The user sees it when they open the pad.",
            {"shapes": {"type": "array", "items": {"type": "object"}}, "note": {"type": "string"}}, ["shapes"]),
     schema("task_tracker", "Your plan for a multi-step task, with statuses. command='view' shows it; command='plan' with task_list = the FULL list [{title, notes, status: todo|in_progress|done}] replaces it. Mark a task in_progress before you start it and done when it is verified.",
@@ -5121,7 +5176,7 @@ def _triage(text: str) -> dict:
         LAST_SKILLS[:] = list(mem.get("skills") or [])
         _progress("thinking", "Recalled %d memor%s%s." % (
             len(mem["used"]), "y" if len(mem["used"]) == 1 else "ies",
-            (" and learned skill " + ", ".join(LAST_SKILLS)) if LAST_SKILLS else ""))
+            (" and %d learned skill(s) to choose from" % len(LAST_SKILLS)) if LAST_SKILLS else ""))
     events.emit("decision.made", "Laya" if verdict.get("source") == "laya" else "LOKI rules",
                 dict(verdict, request=text[:300]))
     events.emit("agent.status", "LOKI", {"state": "working", "kind": verdict.get("kind", "")})
@@ -6294,6 +6349,28 @@ async def library_tool(kind: str = "", search: str = "", limit: int = 40) -> str
 LOCAL_TOOLS["library"] = library_tool
 
 
+def load_skill(name: str = "") -> str:
+    """Open one of the learned skills listed for this request (OpenDots-style delivery: the catalog first, the
+    procedure only when the agent decides it fits)."""
+    text = skill_learning.load(name, root=DATA_DIR)
+    if not text:
+        return "error: %r is not one of the learned skills listed for this request" % name
+    sid = re.sub(r"[^a-z0-9_-]", "", str(name).lower())
+    if sid not in LOADED_SKILLS:
+        LOADED_SKILLS.append(sid)
+        skill_learning.mark_used(sid, root=DATA_DIR)
+    return text
+
+
+LOCAL_TOOLS["load_skill"] = load_skill
+_LOAD_SKILL_SCHEMA = schema("load_skill", "Open a learned skill listed in your memory notes for this request (a "
+                            "procedure that worked before). Only for names in that list.",
+                            {"name": {"type": "string"}}, ["name"])
+TOOL_SCHEMAS.append(_LOAD_SKILL_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_LOAD_SKILL_SCHEMA)
+MODEL_TOOL_NAMES.add("load_skill")
+
+
 async def render_scene_tool(**args) -> str:
     import render_agent  # pylint: disable=import-outside-toplevel
     return json.dumps(await asyncio.to_thread(render_agent.render, args, WORKSPACE))
@@ -7090,18 +7167,19 @@ def model_down_hint(cfg) -> str:
     )
 
 
-def make_client():
-    """An AsyncOpenAI for HTTP providers, or the CLI-agent shim for subscription ones."""
-    cfg = MODELS[active_model_name()]
+def make_client(provider: str = ""):
+    """An AsyncOpenAI for HTTP providers, or the CLI-agent shim for subscription ones (default: the active model)."""
+    provider = provider if provider in MODELS else active_model_name()
+    cfg = MODELS[provider]
     if "11434" in str(cfg.base_url or ""):
-        cfg.model = resolve_local_model(active_model_name())   # a preset tag is per-machine: use what is installed
+        cfg.model = resolve_local_model(provider)   # a preset tag is per-machine: use what is installed
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         return cli_agents.make_client(cfg.base_url[len(CLI_AGENT_PREFIX):], str(WORKSPACE))
     base_url = cfg.base_url
     if not str(cfg.api_key or "").strip() and "11434" not in base_url:
         # A provider with no key: say which key, instead of the client library's
         # "Missing credentials ... OPENAI_API_KEY" traceback (which names the wrong key).
-        name = active_model_name()
+        name = provider
         raise ModelUnavailable(
             "[model unavailable] %s needs an API key and none is set. Add %s in Settings > "
             "Connections (or harness_data/.env), or pick 'smart' so Loki uses a provider "
@@ -8938,6 +9016,7 @@ def _start_request() -> tuple:
     MEMORY_BUDGET.reset()
     LAST_RECALL.clear()
     LAST_SKILLS.clear()
+    LOADED_SKILLS.clear()
     LAST_LEARNED.clear()
     LAST_NOTED.clear()
     _GUARD_AT_START["repaired"] = GUARD_STATS["repaired"]
@@ -8992,6 +9071,11 @@ def _record_experience(kind: str, goal: str, status: str, started: float, start_
         reasoning_bank.remember(goal, status, outcome, [m for m in messages[start_index:] if isinstance(m, dict)],
                                 extra={"kind": kind, "provider": providers[-1] if providers else "",
                                        "seconds": round(time.time() - started, 1)})
+        if LOADED_SKILLS:   # did the skills this request opened help? 3 failures more than successes retire one
+            gone = skill_learning.record_outcome(list(LOADED_SKILLS), status == "done" and outcome == "verified",
+                                                 root=DATA_DIR)
+            if gone:
+                print("  [skills] retired (kept failing): %s" % ", ".join(gone))
         # Roadmap E2: a verified success that took more than a few tool calls becomes a learned skill.
         learned = skill_learning.learn_from(goal, [m for m in messages[start_index:] if isinstance(m, dict)],
                                             status, outcome, _REQUEST_TOOL_CALLS, root=DATA_DIR)
@@ -9017,9 +9101,9 @@ def _triage_record(start_index: int = 0) -> dict:
 
 
 def _skill_note(reply: str) -> str:
-    """Roadmap E2: when a learned skill was offered for this request, the reply says so."""
-    if LAST_SKILLS and "learned skill" not in str(reply or "").lower():
-        return str(reply or "").rstrip() + "\n\n(used learned skill: %s)" % ", ".join(LAST_SKILLS)
+    """Roadmap E2: when a learned skill was opened for this request, the reply says so (listed is not used)."""
+    if LOADED_SKILLS and "learned skill" not in str(reply or "").lower():
+        return str(reply or "").rstrip() + "\n\n(used learned skill: %s)" % ", ".join(LOADED_SKILLS)
     return reply
 
 

@@ -151,10 +151,35 @@ check("a similar request refreshes the same skill", again and again["id"] == lea
 import agents  # noqa: E402
 cat = agents.skills_catalog(agents.skill_roots(REPO, SROOT))
 check("the skills catalog lists it under 'learned'", any(s["id"] == learned["id"] and s["source"] == "learned" for s in cat))
+check("learned twice (two verified successes) it is published", again.get("status") == "published", again)
 pk = memory_core.pack("add a dark mode toggle to settings", root=SROOT, budget=1500)
-check("the next similar request gets the learned skill in its memory pack",
-      learned["id"] in pk["skills"] and "Steps that worked" in pk["text"], pk)
-check("using it is counted", skill_learning._index(SROOT)[learned["id"]]["uses"] >= 1)
+check("the next similar request sees it in the skill catalog (a line, not the whole procedure)",
+      learned["id"] in pk["skills"] and "load_skill" in pk["text"] and "Steps that worked" not in pk["text"], pk)
+check("load_skill opens the procedure", "Steps that worked" in skill_learning.load(learned["id"], SROOT))
+check("an unrelated request does not see it",
+      not memory_core.pack("render the dragon turntable for the trailer", root=SROOT, budget=1500).get("skills"))
+os.environ["LOKI_TEAM_ROLE"] = "reviewer"
+check("another agent's learning container does not see it",
+      not memory_core.pack("add a dark mode toggle to settings", root=SROOT, budget=1500).get("skills"))
+os.environ.pop("LOKI_TEAM_ROLE")
+wrapped = skill_learning.learn_from("You are the Builder on a LOKI agent team (team 1a2b3c4d).\n\nTeam goal: "
+                                    "Forge QA sweep: run the forge QA tool three times and write qa/sweep.md\n\n"
+                                    "Your job: build it.", traj, "done", "verified", 6, root=SROOT)
+check("a team job's skill is learned from its goal, not the 'You are the Builder' wrapper",
+      wrapped and wrapped["id"].startswith("forge-sweep") and wrapped["status"] == "draft", wrapped)
+idx = skill_learning._index(SROOT)
+idx["you-are-the-builder-loki-agent"] = {"goal": "You are the Builder on a LOKI agent team (team 6860de68).\n\nTeam "
+                                         "goal: Forge QA sweep", "times_learned": 1, "uses": 18}
+(SROOT / "skills" / "learned" / "you-are-the-builder-loki-agent").mkdir(parents=True, exist_ok=True)
+(SROOT / "skills" / "learned" / "you-are-the-builder-loki-agent" / "SKILL.md").write_text("---\nname: x\n---\nold", encoding="utf-8")
+skill_learning._save_index(idx, SROOT)
+listed = [x["id"] for x in skill_learning.learned(SROOT)]
+check("an old skill learned from the wrapper is retired (moved to _retired/, never offered)",
+      "you-are-the-builder-loki-agent" not in listed
+      and (SROOT / "skills" / "learned" / "_retired" / "you-are-the-builder-loki-agent" / "SKILL.md").is_file(), listed)
+for _ in range(3):
+    skill_learning.record_outcome([learned["id"]], False, SROOT)
+check("a skill that keeps failing is retired", skill_learning._index(SROOT)[learned["id"]].get("retired"))
 
 # =========================================================================== condenser
 section("context condenser (OpenHands LLMSummarizingCondenser)")
@@ -618,11 +643,19 @@ try:
     learned_now = dict(loki.LAST_LEARNED)
     check("a verified 6-call task through pursue_goal is learned as a skill",
           learned_now.get("id") and (DATA / "skills" / "learned" / learned_now["id"] / "SKILL.md").is_file(), learned_now)
-    loki.make_client = fake_model([{"content": "DONE: done again"}])
+    check("one success makes a draft: not offered yet", learned_now.get("status") == "draft", learned_now)
+    loki.make_client = fake_model(steps)
+    loki.messages[:] = [{"role": "system", "content": "sys"}]
+    asyncio.run(loki.pursue_goal("create the three source files a b c in src"))
+    check("a second verified success publishes it", dict(loki.LAST_LEARNED).get("status") == "published",
+          dict(loki.LAST_LEARNED))
+    loki.make_client = fake_model([{"tool": "load_skill", "args": {"name": learned_now.get("id")}},
+                                   {"content": "DONE: done again"}])
     loki.messages[:] = [{"role": "system", "content": "sys"}]
     again_reply = asyncio.run(loki.pursue_goal("create the three source files a b c in src"))
-    check("the next similar request is told about it, and the reply says it used it",
-          learned_now.get("id") in loki.LAST_SKILLS and "used learned skill" in again_reply, (loki.LAST_SKILLS, again_reply))
+    check("the next similar request is told about it, opens it, and the reply says it used it",
+          learned_now.get("id") in loki.LAST_SKILLS and learned_now.get("id") in loki.LOADED_SKILLS
+          and "used learned skill" in again_reply, (loki.LAST_SKILLS, loki.LOADED_SKILLS, again_reply))
 finally:
     loki.first_layer.triage = saved_ft
     loki.check_script = saved_check
@@ -747,7 +780,7 @@ ap = autopilot.Autopilot(state=state, agent=agent, data_dir=EVDATA, repo=FAKE_RE
 def evolve_tick():
     """One autopilot pass where only the evolve duty is due (the others ran a moment ago)."""
     ap.data["last"].update({"health": clock[0], "inbox": clock[0], "report": clock[0], "evolve": 0,
-                            "selftest": clock[0], "task_bench": clock[0]})
+                            "selftest": clock[0], "task_bench": clock[0], "always": clock[0]})
     return ap.tick()
 
 
