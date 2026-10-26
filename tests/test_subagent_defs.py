@@ -118,7 +118,10 @@ async def slow_req(msgs, schemas):
     return {"content": "RESULT: incomplete - x"}
 
 asyncio.run(subagent.run_many(["a", "b", "c"], ["read_file"], [], slow_req, tool, parallel=1))
-check("on a local model the helpers run one at a time", peak[0] == 1, peak)
+check("a parallel limit is kept (a local model: LOKI_LOCAL_PARALLEL, default 2)", peak[0] == 1, peak)
+peak[0] = 0
+asyncio.run(subagent.run_many(["a", "b", "c"], ["read_file"], [], slow_req, tool, parallel=2))
+check("two at a time when allowed", peak[0] == 2, peak)
 
 # ------------------------------------------------------------------ in the engine
 try:

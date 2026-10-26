@@ -146,8 +146,9 @@ check("only open [loki] requests are read, in order", [r["text"][:10] for r in r
 auto = autopilot.Autopilot(data_dir=TMP / "i", repo=TASKS, clock=Clock(), state=FakeState(),
                            agent=types.SimpleNamespace(TEAMS=types.SimpleNamespace(get=lambda _id: {"status": "working"})),
                            start_team=start_team)
+os.environ["LOKI_AUTOPILOT_SLOTS"] = "1"
 auto.duty_inbox()
-check("the oldest request was started", started == ["build a landing page and test it - owner (2026-10-15)"], started)
+check("one slot: the oldest request was started", started == ["build a landing page and test it - owner (2026-10-15)"], started)
 auto.duty_inbox()
 check("it is not started again while its team is working", len(started) == 1, started)
 
@@ -155,6 +156,30 @@ check("it is not started again while its team is working", len(started) == 1, st
 auto.agent = types.SimpleNamespace(TEAMS=types.SimpleNamespace(get=lambda _id: {"status": "done"}))
 auto.duty_inbox()
 check("once the team finishes, the next request starts", len(started) == 2 and "second job" in started[1], started)
+
+section("slots: several at once, the GPU one at a time")
+os.environ["LOKI_AUTOPILOT_SLOTS"] = "3"
+started.clear()
+(TASKS / "LOKI_TASKS.md").write_text(
+    "## Requests\n\n- [ ] [loki] write the devlog draft\n- [ ] [loki] render the dragon turntable\n"
+    "- [ ] [loki] make a music loop for the menu\n- [ ] [loki] pixel art check on three pictures\n"
+    "- [ ] [loki] research five ad ideas\n", encoding="utf-8")
+auto = autopilot.Autopilot(data_dir=TMP / "slots", repo=TASKS, clock=Clock(), state=FakeState(),
+                           agent=types.SimpleNamespace(TEAMS=types.SimpleNamespace(get=lambda _id: {"status": "working"})),
+                           start_team=start_team)
+auto.duty_inbox()
+check("one pass fills the free slots, the GPU lane once (the music waits behind the render)",
+      [t.split()[0] + " " + t.split()[1] for t in started] == ["write the", "render the", "pixel art"], started)
+auto.duty_inbox()
+check("full slots: nothing more starts", len(started) == 3, started)
+check("lanes: renders, music and 3D need the GPU; writing and pixel art do not",
+      autopilot.lane("render the dragon") == "gpu" and autopilot.lane("make a music loop") == "gpu"
+      and autopilot.lane("make_3d a prop") == "gpu" and autopilot.lane("write a devlog") == "light"
+      and autopilot.lane("pixelize three pictures with `loki-make pixel --size 64`") == "light")
+auto.agent = types.SimpleNamespace(TEAMS=types.SimpleNamespace(get=lambda _id: {"status": "done"}))
+auto.duty_inbox()
+check("as they finish, the rest start", len(started) == 5 and any("music" in t for t in started[3:]), started)
+os.environ.pop("LOKI_AUTOPILOT_SLOTS")
 
 # ---------------------------------------------------------------------------- one duty per pass
 section("one duty per pass, each on its own schedule")
@@ -225,14 +250,56 @@ _started = []
 _ap = autopilot.Autopilot(data_dir=TMP / "always", repo=TASKS, clock=lambda: 1000.0,
                           start_team=lambda g: (_started.append(g), "started team T%d" % len(_started))[1])
 _ap._team_running = lambda tid: False  # pylint: disable=protected-access
+_running = set()
+_ap._team_running = lambda tid: tid in _running  # pylint: disable=protected-access
 _ap.duty_always()
-_ap.duty_always()
-_ap.duty_always()
-check("one standing goal per pass, in turn, round and round", [g.split(" (standing")[0] for g in _started]
-      == ["make promo art", "write a devlog draft", "make promo art"], _started)
+check("free slots: both standing goals start side by side", [g.split(" (standing")[0] for g in _started]
+      == ["make promo art", "write a devlog draft"], _started)
 check("each is marked drafts-only (never publish)", all("never publish" in g for g in _started))
-_ap._team_running = lambda tid: True  # pylint: disable=protected-access
-check("not while one of them is still running", _ap.duty_always() == "" and len(_started) == 3)
+_running.update({"T1", "T2"})
+_ap.duty_always()
+check("a goal never runs twice at once", len(_started) == 2, _started)
+_running.discard("T1")
+_ap.duty_always()
+check("one finished: the next one in turn starts", [g.split(" (standing")[0] for g in _started][2:] == ["make promo art"],
+      _started)
+_running.update({"T3"})
+os.environ["LOKI_AUTOPILOT_SLOTS"] = "2"
+_ap.data["started"]["x"] = {"open": True, "team": "T9", "text": "other"}
+_running.add("T9")
+check("not while the slots are full", _ap.duty_always() == "" and len(_started) == 3)
+os.environ.pop("LOKI_AUTOPILOT_SLOTS")
+
+section("work goes on beside running jobs; updates and overdue checks get a quiet moment")
+
+
+class _Jobs:
+    class store:  # noqa: N801
+        @staticmethod
+        def all():
+            return [{"status": "working"}]
+
+
+_st = FakeState()
+_st.jobs = _Jobs()
+_w = []
+_ap2 = autopilot.Autopilot(data_dir=TMP / "beside", repo=TASKS, clock=lambda: 10_000_000.0, state=_st,
+                           start_team=lambda g: (_w.append(g), "started team W%d" % len(_w))[1])
+_ap2._team_running = lambda tid: True  # pylint: disable=protected-access
+_ap2.data["last"].update({"health": 10_000_000.0, "report": 10_000_000.0})
+ran = _ap2.tick()
+check("a background job running does not stop new work from starting", ran and ran[0][0] in ("inbox", "always"), ran)
+_ap2.data["last"]["health"] = 1.0
+check("a long-overdue health check drains: no new work until it ran", "health" in _ap2.drain())
+import updater  # noqa: E402
+_ap2.data["last"]["health"] = 10_000_000.0
+updater.STATE["update_available"] = True
+_saved_force = updater.force_enabled
+updater.force_enabled = lambda: True
+check("an update waiting drains too (so it can be applied)", "update" in _ap2.drain())
+updater.STATE.pop("update_available")
+updater.force_enabled = _saved_force
+check("otherwise no drain", _ap2.drain() == "")
 
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:

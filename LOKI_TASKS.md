@@ -22,8 +22,9 @@ into the workspace's qa/ folder. The owner and Claude add requests here; nobody 
 
 ## Always
 
-Standing goals: with no request waiting, LOKI's agents work on the next one of these in turn (about one an hour,
-only while LOKI is idle). Drafts and assets only - nothing is published or posted without the owner. Edit freely.
+Standing goals: LOKI's agents keep working through these, in turn, whenever a slot is free and no request is
+waiting - up to 3 at once (LOKI_AUTOPILOT_SLOTS), anything that needs the GPU one at a time. Drafts and assets only:
+nothing is published or posted without the owner. Edit freely.
 
 - [loki] Look in the library first, then make one new piece of promo art for the owner's game (concept-art style, 16:9) into images/, with a two-line caption draft in brand/drafts/.
 - [loki] Turn the newest picture in images/ that has no sprite yet into a 64-pixel game sprite in sprites/ (loki-make pixel) and note it in brand/drafts/assets.md.
@@ -31,6 +32,7 @@ only while LOKI is idle). Drafts and assets only - nothing is published or poste
 - [loki] Make one 30-60 second instrumental music loop for the game (make_music; a mood not made before - check the library) into music/.
 - [loki] [windows] Make one textured 3D prop for the game from the best picture in images/ (make_3d, backend pixal3d) into models/.
 - [loki] Render the newest model in models/ that has no render yet (render_scene; a finished still with a prompt in the game's style, and a 33-frame turntable when ComfyUI is free) into renders/.
+- [loki] Test one of LOKI's makers on a real file, in turn (loki-make pixel, render, image, voice, music, library - the next one after the last in qa/makers.md): run it, open what it made, and add a row to qa/makers.md (date, maker, input, output file, worked / broke and the error).
 
 ## Needs Mohamed
 

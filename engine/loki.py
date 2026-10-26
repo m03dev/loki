@@ -3835,7 +3835,7 @@ async def run_subagent(task: str = "", tools: str = "", tasks=None, max_turns: i
         cap = subagent.iter_cap(autonomous=bool(os.getenv("LOKI_JOB_ID")), requested=int(max_turns or 0))
         results = await subagent.run_many(todo, names, offered, request, run_tool, max_turns=cap,
                                           role=(defn or {}).get("system", ""), context_chars=budget,
-                                          parallel=1 if local else 0)
+                                          parallel=int(os.getenv("LOKI_LOCAL_PARALLEL", "2") or 2) if local else 0)
     finally:
         SUBAGENT_DEPTH -= 1
     try:

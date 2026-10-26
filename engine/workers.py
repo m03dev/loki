@@ -62,7 +62,7 @@ DEFAULT_TIMEOUT_S = 3600
 MAX_TIMEOUT_S = 24 * 3600
 MAX_PROMPT_CHARS = 16_000
 TAIL_CHARS = 4000
-DEFAULT_LIMITS = {"local": 2, "herdr": 4, "cua": 1}
+DEFAULT_LIMITS = {"local": 4, "herdr": 4, "cua": 1}   # local 4: the autopilot's 3 slots + one you start (2026-10-25)
 
 
 def _now() -> float:

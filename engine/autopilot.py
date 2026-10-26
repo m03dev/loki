@@ -47,10 +47,15 @@ Duties, each on its own interval:
     LOKI_AUTOPILOT=on|off            (default on)
     LOKI_AUTOPILOT_IDLE_S            quiet time before it acts (default 600)
     LOKI_AUTOPILOT_HEALTH_S          (default 21600 = 6h)
-    LOKI_AUTOPILOT_INBOX=on|off      (default on)   LOKI_AUTOPILOT_INBOX_S (default 900)
+    LOKI_AUTOPILOT_INBOX=on|off      (default on)   LOKI_AUTOPILOT_INBOX_S (default 120): requests, as slots free up
     LOKI_AUTOPILOT_REPORT_S          (default 604800 = a week)
-    LOKI_AUTOPILOT_ALWAYS=on|off     (default on)   LOKI_AUTOPILOT_ALWAYS_S (default 3600): with the inbox empty,
-                                     the next standing goal from LOKI_TASKS.md "## Always" (drafts and assets only)
+    LOKI_AUTOPILOT_ALWAYS=on|off     (default on)   LOKI_AUTOPILOT_ALWAYS_S (default 600): with the inbox empty,
+                                     the next standing goals from LOKI_TASKS.md "## Always" (drafts and assets only)
+    LOKI_AUTOPILOT_SLOTS             (default 3) requests and standing goals running side by side; work that needs
+                                     the GPU (renders, 3D, music, video, installs) runs one at a time in its lane.
+                                     New work keeps starting while jobs run (only a request from the owner, a recent
+                                     ask, or a drain stops it); it drains when an update waits or a check is overdue
+                                     by LOKI_AUTOPILOT_DRAIN_S (default 3600)
 
 Everything outside is injected (state, agent, teams, check runner, clock), so
 tests/test_autopilot.py runs it with fakes.
@@ -163,6 +168,24 @@ def inbox_requests(path: Path) -> list:
     return out
 
 
+# ------------------------------------------------------------------------ work slots
+# Owner 2026-10-25: "they can run two at a time or more depending on the task ... i want them making stuff".
+# Requests and standing goals run side by side in SLOTS (LOKI_AUTOPILOT_SLOTS, default 3). A task that needs the GPU
+# (ComfyUI renders, 3D, music, video, model installs) takes the GPU lane, and only one runs there at a time; light
+# work (writing, research, pixel art, code) fills the other slots.
+_GPU = re.compile(r"\b(render\w*|comfyui|make_3d|3d|trellis|pixal3d|turntable|music|song|loop|video|clip|trailer|"
+                  r"upscale|install\w*|setup_trellis|train\w*|benchmark)\b", re.I)
+
+
+def lane(text: str) -> str:
+    """"gpu" for work that needs the graphics card or a big download, else "light"."""
+    return "gpu" if _GPU.search(re.sub(r"`[^`]*`", " ", str(text or ""))) else "light"
+
+
+def slots() -> int:
+    return max(1, int(_env_s("LOKI_AUTOPILOT_SLOTS", 3)))
+
+
 class Autopilot:
     def __init__(self, state: Any = None, agent: Any = None, data_dir: Path | None = None,
                  repo: Path | None = None, clock: Callable[[], float] = time.time,
@@ -230,8 +253,9 @@ class Autopilot:
     def enabled() -> bool:
         return _env_on("LOKI_AUTOPILOT")
 
-    def idle(self) -> tuple:
-        """(idle, why not). Quiet means: no request in flight, no job running, no recent ask."""
+    def idle(self, for_work: bool = False) -> tuple:
+        """(idle, why not). Quiet means: no request in flight, no job running, no recent ask. `for_work`: may the
+        autopilot start MORE work (requests, standing goals) - background jobs do not count then (the slots do)."""
         state = self.state
         if self.bench_running():
             return False, "the task benchmark is running"
@@ -243,7 +267,7 @@ class Autopilot:
                 return False, "a request is running"
             state.release_busy(held)
         jobs = getattr(state, "jobs", None)
-        if jobs is not None:
+        if jobs is not None and not for_work:
             try:
                 if any(j.get("status") in ACTIVE_JOB for j in jobs.store.all()):
                     return False, "a background job is running"
@@ -281,50 +305,94 @@ class Autopilot:
         self._log("health", line, fixed=fixed, needs_owner=left)
         return line
 
-    def duty_inbox(self) -> str:
-        if self.start_team is None:
-            return ""
-        for team_id in [v.get("team") for v in self.data["started"].values() if v.get("open")]:
-            if team_id and self._team_running(team_id):
-                return ""            # one autopilot team at a time
-        for item in inbox_requests(self.repo / "LOKI_TASKS.md"):
-            if item["id"] in self.data["started"]:
-                continue
-            reply = str(self.start_team(item["text"]) or "")
-            match = re.search(r"started team (\S+)", reply)
-            self.data["started"][item["id"]] = {"text": item["text"][:300], "t": self.clock(),
-                                                "team": match.group(1) if match else "",
-                                                "open": bool(match), "reply": reply[:300]}
-            self._log("inbox", ("Started a team for: " if match else "Could not start: ") + item["text"][:200],
-                      request=item["id"], team=match.group(1) if match else "")
-            return reply
+    def running_work(self) -> list:
+        """The autopilot's teams still at work: [{"key", "text", "lane"}]."""
+        out = []
+        for key, entry in self.data["started"].items():
+            if entry.get("open") and entry.get("team") and self._team_running(entry["team"]):
+                out.append({"key": key, "text": entry.get("text", ""), "lane": entry.get("lane") or lane(entry.get("text", ""))})
+        return out
+
+    def can_start(self, text: str, running: list | None = None) -> bool:
+        running = self.running_work() if running is None else running
+        if len(running) >= slots():
+            return False
+        return lane(text) != "gpu" or not any(r["lane"] == "gpu" for r in running)
+
+    def drain(self) -> str:
+        """Why no NEW work should start now (so the running work ends and the machine gets a quiet moment), or "".
+        An update waiting to be applied, or a maintenance duty (health, self-test ...) long overdue."""
+        try:
+            import updater  # pylint: disable=import-outside-toplevel
+            if updater.STATE.get("update_available") and updater.force_enabled():
+                return "an update is waiting to be applied"
+        except Exception:  # noqa: BLE001
+            pass
+        grace = _env_s("LOKI_AUTOPILOT_DRAIN_S", 3600)
+        for name, every in (("health", _env_s("LOKI_AUTOPILOT_HEALTH_S", 21600)),
+                            ("report", _env_s("LOKI_AUTOPILOT_REPORT_S", 604800))):
+            last = float(self.data["last"].get(name, 0) or 0)
+            if last and self.clock() - last > every + grace:
+                return "%s is overdue" % name
         return ""
 
-    def duty_always(self) -> str:
-        """Nothing in the inbox: the next standing goal from LOKI_TASKS.md "## Always", in turn (owner 2026-10-25: "i
-        want them to always be doing stuff"). One at a time; drafts and assets only - publishing always asks."""
+    def _start(self, key: str, text: str, kind: str, extra: dict | None = None) -> str:
+        reply = str(self.start_team(text) or "")
+        match = re.search(r"started team (\S+)", reply)
+        self.data["started"][key] = dict({"text": text[:300], "t": self.clock(), "team": match.group(1) if match else "",
+                                          "open": bool(match), "reply": reply[:300], "lane": lane(text)}, **(extra or {}))
+        return reply if match else ""
+
+    def duty_inbox(self) -> str:
+        """Start every open request that fits in a free slot (the GPU lane one at a time)."""
         if self.start_team is None:
             return ""
-        for team_id in [v.get("team") for v in self.data["started"].values() if v.get("open")]:
-            if team_id and self._team_running(team_id):
-                return ""
-        if any(item["id"] not in self.data["started"] for item in inbox_requests(self.repo / "LOKI_TASKS.md")):
+        running, started = self.running_work(), []
+        for item in inbox_requests(self.repo / "LOKI_TASKS.md"):
+            if item["id"] in self.data["started"] or not self.can_start(item["text"], running):
+                continue
+            reply = self._start(item["id"], item["text"], "inbox")
+            team = self.data["started"][item["id"]]["team"]
+            self._log("inbox", ("Started a team for: " if team else "Could not start: ") + item["text"][:200],
+                      request=item["id"], team=team)
+            if team:
+                running.append({"key": item["id"], "text": item["text"], "lane": lane(item["text"])})
+                started.append(reply)
+        return "\n".join(started)
+
+    def duty_always(self) -> str:
+        """Free slots and nothing waiting in the inbox: the next standing goals from LOKI_TASKS.md "## Always", in
+        turn (owner 2026-10-25: "i want them to always be doing stuff"). A goal never runs twice at once; drafts and
+        assets only - publishing always asks."""
+        if self.start_team is None:
+            return ""
+        running = self.running_work()
+        if any(item["id"] not in self.data["started"] and self.can_start(item["text"], running)
+               for item in inbox_requests(self.repo / "LOKI_TASKS.md")):
             return ""                # the inbox comes first
         goals = always_goals(self.repo / "LOKI_TASKS.md")
         if not goals:
             return ""
-        i = int(self.data.get("always_next") or 0) % len(goals)
-        self.data["always_next"] = i + 1
-        goal = goals[i] + (" (standing goal, %s - make drafts and assets only; never publish or post)"
-                           % time.strftime("%Y-%m-%d", time.localtime(self.clock())))
-        reply = str(self.start_team(goal) or "")
-        match = re.search(r"started team (\S+)", reply)
-        key = "always-%d-%d" % (i, int(self.clock()))
-        self.data["started"][key] = {"text": goal[:300], "t": self.clock(), "team": match.group(1) if match else "",
-                                     "open": bool(match), "reply": reply[:300]}
-        self._log("always", ("Working on: " if match else "Could not start: ") + goals[i][:200],
-                  team=match.group(1) if match else "")
-        return reply
+        busy = {r.get("goal") for r in (self.data["started"].get(x["key"]) or {} for x in running) if r.get("goal")}
+        started = []
+        for _ in range(len(goals)):
+            if len(running) >= slots():
+                break
+            i = int(self.data.get("always_next") or 0) % len(goals)
+            self.data["always_next"] = i + 1
+            if goals[i] in busy or not self.can_start(goals[i], running):
+                continue
+            goal = goals[i] + (" (standing goal, %s - make drafts and assets only; never publish or post)"
+                               % time.strftime("%Y-%m-%d", time.localtime(self.clock())))
+            key = "always-%d-%d" % (i, int(self.clock()))
+            reply = self._start(key, goal, "always", {"goal": goals[i]})
+            team = self.data["started"][key]["team"]
+            self._log("always", ("Working on: " if team else "Could not start: ") + goals[i][:200], team=team)
+            if team:
+                running.append({"key": key, "text": goal, "lane": lane(goals[i])})
+                busy.add(goals[i])
+                started.append(reply)
+        return "\n".join(started)
 
     def duty_schedules(self) -> str:
         """Start the first due scheduled task as a background job (one per pass)."""
@@ -624,14 +692,31 @@ class Autopilot:
                     self._save()
         except Exception as exc:  # noqa: BLE001
             self._log("qa", "failed: %s: %s" % (type(exc).__name__, exc))
+        work_ok, _ = self.idle(for_work=True)
+        if work_ok and not self.drain():
+            # requests and standing goals fill free slots side by side, even while other work runs
+            work = []
+            if _env_on("LOKI_AUTOPILOT_INBOX"):
+                work.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 120), self.duty_inbox))
+            if _env_on("LOKI_AUTOPILOT_ALWAYS"):
+                work.append(("always", _env_s("LOKI_AUTOPILOT_ALWAYS_S", 600), self.duty_always))
+            with self.lock:
+                for name, every, fn in work:
+                    if not self.due(name, every):
+                        continue
+                    self.data["last"][name] = self.clock()
+                    try:
+                        out = fn()
+                    except Exception as exc:  # noqa: BLE001
+                        out = ""
+                        self._log(name, "failed: %s: %s" % (type(exc).__name__, exc))
+                    self._save()
+                    if out:
+                        return [(name, out)]
         ok, _why = self.idle()
         if not ok:
             return []
         duties = [("health", _env_s("LOKI_AUTOPILOT_HEALTH_S", 21600), self.duty_health)]
-        if _env_on("LOKI_AUTOPILOT_INBOX"):
-            duties.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 900), self.duty_inbox))
-        if _env_on("LOKI_AUTOPILOT_ALWAYS"):
-            duties.append(("always", _env_s("LOKI_AUTOPILOT_ALWAYS_S", 3600), self.duty_always))
         if self.evolve is not None:
             import evolve as _evolve  # pylint: disable=import-outside-toplevel
             if _evolve.enabled():
