@@ -88,6 +88,28 @@ if loki is not None:
     loki._free_capable_online = lambda needs: ""  # pylint: disable=protected-access
     loki.main_driver_ready = lambda needs=None: (False, "")
     check("nothing online ready: the job stays on the local model", loki.job_model_choice({}, local) == local)
+    loki._free_capable_online = lambda needs: "nemotron-free"  # pylint: disable=protected-access
+    loki.experience.best_for_role = lambda role, cands, tier, min_samples=0: local
+    loki.provider_configured = lambda name: True
+    check("a team role whose best record is the local model is handed back to Smart", loki.model_for_role("builder") == "")
+    os.environ["LOKI_JOB_MODEL"] = "same"
+    check("... unless LOKI_JOB_MODEL=same", loki.model_for_role("builder") == local)
+    os.environ.pop("LOKI_JOB_MODEL")
+    online_pick = next(n for n in loki.MODELS if not loki._cfg_is_local(loki.MODELS[n]))  # pylint: disable=protected-access
+    loki.experience.best_for_role = lambda role, cands, tier, min_samples=0: online_pick
+    check("an online best pick stays", loki.model_for_role("builder") == online_pick)
+    seen = {}
+
+    class _Teams:
+        def start(self, goal, ws, triage=None, model=""):
+            seen["triage"] = triage
+            return {"id": "t1", "roles": ["builder"]}
+    loki.TEAMS, loki.LAST_TRIAGE = _Teams(), {"difficulty": 4}
+    loki.start_team_background("Pixel art check")
+    check("the autopilot's team start ignores the last chat's triage", seen["triage"] == {}, seen)
+    import autopilot  # noqa: E402
+    ap = autopilot.Autopilot(data_dir=TMP / "ap", repo=TMP, agent=loki)
+    check("the autopilot uses that start", getattr(ap.start_team, "__name__", "") == "start_team_background")
 else:
     print("  (the engine's openai dependency is missing here: the job-model checks are skipped)")
 

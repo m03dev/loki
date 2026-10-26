@@ -181,7 +181,8 @@ class Autopilot:
         self.repo = repo or Path(__file__).resolve().parent.parent
         self.run_check = run_check
         self.apply_fix = apply_fix
-        self.start_team = start_team or (getattr(agent, "start_team", None) if agent is not None else None)
+        self.start_team = start_team or (getattr(agent, "start_team_background", None) or getattr(agent, "start_team", None)
+                                         if agent is not None else None)
         self.evolve = evolve
         self.improve = improve or (getattr(agent, "improve_loki", None) if agent is not None else None)
         self.bench_start = bench_start      # models -> a Popen-like (tests inject one)

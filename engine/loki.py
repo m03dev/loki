@@ -3335,17 +3335,32 @@ def model_for_role(role: str) -> str:
             if provider_tier(name) == "paid" and not paid_allowed_automatically():
                 continue
             candidates.append(name)
-        return experience.best_for_role(role, candidates, provider_tier, min_samples=ROLE_MIN_SAMPLES)
+        best = experience.best_for_role(role, candidates, provider_tier, min_samples=ROLE_MIN_SAMPLES)
     except Exception:  # noqa: BLE001
         return ""
+    # a LOCAL pick goes back to job_model_choice, the same rule as every background job (2026-10-25: the Mac's team
+    # roles kept landing on the 9B local model because its own past runs made it "best" - and failed the same way)
+    if best in MODELS and _cfg_is_local(MODELS[best]) and os.getenv("LOKI_JOB_MODEL", "smart").strip().lower() != "same":
+        return ""
+    return best or ""
 
 
 def start_team(goal: str) -> str:
     """Build a team for this goal and start it (roles, specs and stages are chosen for you)."""
+    return _start_team(goal, dict(LAST_TRIAGE or {}))
+
+
+def start_team_background(goal: str) -> str:
+    """The autopilot's start: the goal is judged on its own, not by the last chat's triage (2026-10-25: a one-line
+    pixel check got four roles because the chat before it had been a hard one)."""
+    return _start_team(goal, {})
+
+
+def _start_team(goal: str, triage: dict) -> str:
     if TEAMS is None:
         return "error: agent teams are not running in this Loki"
     try:
-        team = TEAMS.start(goal, str(WORKSPACE), triage=dict(LAST_TRIAGE or {}), model="")
+        team = TEAMS.start(goal, str(WORKSPACE), triage=triage, model="")
     except ValueError as exc:
         return "error: %s" % exc
     return ("started team %s (%s) on %s. They plan, build, test and review in turn and talk on a "
