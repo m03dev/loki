@@ -6,6 +6,7 @@ into the workspace's qa/ folder. The owner and Claude add requests here; nobody 
 
 ## Requests
 
+- [ ] [loki] [windows] DO FIRST - local model test, on THIS PC's local model (loki-huihui_ai-qwen3-abliterated-8b, no cloud): draw "a knight with a sword and shield" with make_sprite (size 64) into sprites/, then list sprites/ and reply with the exact file path, its size in pixels and the model that made it. Write the same into qa/local-abliterated.md. (owner via Claude, 2026-10-26 10:40)
 - [ ] [loki] [windows] Forge 3D on this PC: update ComfyUI (git pull in its folder, restart it), then run `python tools/setup_trellis.py` and `python tools/setup_trellis.py install` from LOKI's folder; restart ComfyUI; run setup_trellis.py again until pixal3d, trellis2 and pixal3d-views all say ready. Then make one model in Forge (Image, a picture of one object, backend Pixal3D) and write qa/trellis.md: time taken, triangles, any error text; if it ran out of GPU memory, retry with ComfyUI started with --lowvram and Output > Detail 512, Texture 2048, and write which settings worked. (2026-10-25)
 - [ ] [loki] [windows] Startup time: start LOKI once after updating and copy harness_data/app/startup.json into qa/startup.md with the slowest step named. (2026-10-25)
 - [ ] [loki] [windows] Local model check: in a new chat on the local model, "make a git repo called win-test with a README, commit it and show git log"; paste the reply's git log into qa/local-model.md. (2026-10-25)
