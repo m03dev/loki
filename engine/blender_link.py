@@ -10,6 +10,7 @@ This module does the Blender half and tells LOKI whether the server half can sta
     python engine/blender_link.py setup --install   # also install Blender if missing (winget / brew, big files
                                                     #   on the external drive on the Mac)
     python engine/blender_link.py open              # start Blender so the socket is live
+    python engine/blender_link.py proof [workspace] # build + render + export a campfire through the add-on
 
 Telemetry stays off (the add-on's consent defaults to off; the server gets DISABLE_TELEMETRY=true from
 mcp_servers.json) and the paid generators (Hyper3D, Sketchfab, Hunyuan) are never switched on here.
@@ -76,14 +77,17 @@ def socket_live(port: int = PORT, timeout: float = 0.5) -> bool:
         return False
 
 
-# the script Blender runs (in the background) to install + enable the add-on and save that choice
+# the script Blender runs (in the background) to install + enable the add-on and save that choice. It copies the file
+# into Blender's own add-ons folder itself (the addon_install operator moved in Blender 4.2's extensions rework).
 INSTALL_EXPR = (
-    "import bpy, addon_utils, sys\n"
+    "import bpy, addon_utils, sys, shutil, os\n"
     "src = sys.argv[sys.argv.index('--') + 1]\n"
-    "bpy.ops.preferences.addon_install(filepath=src, overwrite=True)\n"
+    "dst = bpy.utils.user_resource('SCRIPTS', path='addons', create=True)\n"
+    "shutil.copyfile(src, os.path.join(dst, '%s.py'))\n"
+    "addon_utils.modules_refresh() if hasattr(addon_utils, 'modules_refresh') else None\n"
     "addon_utils.enable('%s', default_set=True, persistent=True)\n"
     "bpy.ops.wm.save_userpref()\n"
-    "print('LOKI_BLENDER_ADDON_OK', addon_utils.check('%s'))\n" % (ADDON_NAME, ADDON_NAME))
+    "print('LOKI_BLENDER_ADDON_OK', addon_utils.check('%s'))\n" % (ADDON_NAME, ADDON_NAME, ADDON_NAME))
 
 
 def _installed_copy(blender: str, run=subprocess.run) -> str:
@@ -144,16 +148,34 @@ def setup(install: bool = False, run=subprocess.run) -> dict:
                 % ", ".join(candidates()[:4] or ["the usual places"])}
     if not ADDON_SRC.is_file():
         return {"ok": False, "error": "contrib/blender_mcp/addon.py is missing"}
-    import tempfile  # pylint: disable=import-outside-toplevel
-    with tempfile.TemporaryDirectory() as tmp:  # Blender names the add-on after the file: blender_mcp.py
-        src = Path(tmp) / (ADDON_NAME + ".py")
-        shutil.copyfile(ADDON_SRC, src)
-        proc = run([blender, "--background", "--factory-startup", "--python-expr", INSTALL_EXPR, "--", str(src)],
-                   capture_output=True, text=True, timeout=180)
+    proc = run([blender, "--background", "--factory-startup", "--python-expr", INSTALL_EXPR, "--", str(ADDON_SRC)],
+               capture_output=True, text=True, timeout=180)
     ok = "LOKI_BLENDER_ADDON_OK" in (proc.stdout or "")
     return {"ok": ok, "blender": blender, "addon": _installed_copy(blender, run) if ok else "",
             "log": "" if ok else ((proc.stdout or "") + (proc.stderr or ""))[-800:],
             "next": "open Blender - the add-on starts its server on port %d by itself" % PORT}
+
+
+def proof(workspace: str | Path | None = None, run=subprocess.run) -> dict:
+    """Make something real through the add-on in this machine's Blender: a low-poly campfire built with the MCP
+    commands (engine/blender_scripts/mcp_proof.py), rendered to renders/ and exported to models/ in the workspace."""
+    import out_names  # pylint: disable=import-outside-toplevel
+    blender = find_blender()
+    if not blender:
+        return {"ok": False, "error": "Blender not found - python engine/blender_link.py setup --install"}
+    ws = Path(workspace or os.environ.get("LOKI_WORKSPACE") or Path.home() / "LOKI Projects" / "Home")
+    glb = out_names.path(ws / "models", "campfire blender mcp", "glb")
+    png = out_names.path(ws / "renders", "campfire blender mcp", "png")
+    script = Path(__file__).resolve().parent / "blender_scripts" / "mcp_proof.py"
+    proc = run([blender, "--background", "--factory-startup", "--python", str(script), "--", str(ADDON_SRC), str(glb),
+                str(png)], capture_output=True, text=True, timeout=900)
+    out = (proc.stdout or "") + (proc.stderr or "")
+    line = next((l for l in out.splitlines() if l.startswith("LOKI_PROOF ")), "")
+    if not line:
+        return {"ok": False, "error": "the proof did not finish", "log": out[-1500:]}
+    rep = json.loads(line[len("LOKI_PROOF "):])
+    rep["ok"] = Path(rep.get("glb") or "").is_file()
+    return rep
 
 
 def open_blender(blend: str = "", popen=subprocess.Popen) -> dict:
@@ -177,6 +199,8 @@ def main(argv: list) -> int:
     cmd = argv[1] if len(argv) > 1 else "status"
     if cmd == "setup":
         res = setup(install="--install" in argv)
+    elif cmd == "proof":
+        res = proof(next((a for a in argv[2:] if not a.startswith("-")), None))
     elif cmd == "open":
         res = open_blender(next((a for a in argv[2:] if a.endswith(".blend")), ""))
     else:

@@ -152,6 +152,8 @@
     "blender": {
       "command": "uvx",
       "args": [
+        "--from",
+        "git+https://github.com/ahujasid/mcp-for-blender@febcd90",
         "mcp-for-blender"
       ],
       "requires_cmd": "uvx",
@@ -162,7 +164,7 @@
         "BLENDER_PORT": "9876"
       },
       "cwd": "${LOKI_DATA}",
-      "note": "MCP for Blender (github.com/ahujasid/mcp-for-blender, MIT). Starts when Blender is installed on this machine; the add-on (contrib/blender_mcp, installed by `python engine/blender_link.py setup`) listens on 9876 while Blender is open. Telemetry off, paid generators never switched on."
+      "note": "MCP for Blender (github.com/ahujasid/mcp-for-blender, MIT), pinned to the vendored add-on's commit febcd90 - server and add-on must speak the same protocol (15). Starts when Blender is installed on this machine; the add-on (contrib/blender_mcp, installed by `python engine/blender_link.py setup`) listens on 9876 while Blender is open. Telemetry off, paid generators never switched on."
     }
   }
 }

@@ -58,7 +58,22 @@ import blender_link  # noqa: E402
 
 cfg = json.loads((REPO / "engine" / "mcp_servers.json").read_text(encoding="utf-8"))["mcpServers"]
 b = cfg.get("blender") or {}
-check("blender MCP server registered", b.get("command") == "uvx" and b.get("args") == ["mcp-for-blender"], b)
+check("blender MCP server registered, pinned to the add-on's commit (same protocol)", b.get("command") == "uvx"
+      and b.get("args") == ["--from", "git+https://github.com/ahujasid/mcp-for-blender@febcd90", "mcp-for-blender"], b)
+proto = [ln for ln in (REPO / "contrib/blender_mcp/addon.py").read_text(encoding="utf-8").splitlines()
+         if ln.startswith("ADDON_PROTOCOL_VERSION")]
+check("vendored add-on speaks protocol 15 (the pinned server's EXPECTED_ADDON_PROTOCOL_VERSION)",
+      proto == ["ADDON_PROTOCOL_VERSION = 15"], proto)
+import ast  # noqa: E402
+_proof_src = (REPO / "engine/blender_scripts/mcp_proof.py").read_text(encoding="utf-8")
+_q = "'" * 3
+_build = _proof_src.split("BUILD = r" + _q, 1)[1].split(_q, 1)[0]
+try:
+    ast.parse(_proof_src)
+    ast.parse(_build)
+    check("the proof script and the campfire code the add-on runs are valid Python", bool(_build.strip()))
+except SyntaxError as exc:
+    check("the proof script and the campfire code the add-on runs are valid Python", False, exc)
 check("telemetry off", (b.get("env") or {}).get("DISABLE_TELEMETRY") == "true")
 check("starts only where Blender is installed", b.get("requires_check") == "blender_link.find_blender")
 check("vendored add-on and its MIT licence", (REPO / "contrib/blender_mcp/addon.py").is_file()
@@ -76,7 +91,9 @@ def fake_run(argv, **kw):
     if "LOKI_ADDONS" in script:
         return types.SimpleNamespace(returncode=0, stdout="LOKI_ADDONS %s\n" % TMP, stderr="")
     src = Path(argv[argv.index("--") + 1])
-    check("add-on is installed under the name blender_mcp", src.name == "blender_mcp.py", src.name)
+    check("the vendored add-on is what gets installed", src.name == "addon.py" and src.is_file(), src)
+    check("... copied into Blender's add-ons folder as blender_mcp.py (no addon_install operator: Blender 4.2+ safe)",
+          "blender_mcp.py" in script and "addon_install" not in script, script[:200])
     (TMP / "blender_mcp.py").write_text("x")
     return types.SimpleNamespace(returncode=0, stdout="LOKI_BLENDER_ADDON_OK (True, True)\n", stderr="")
 
@@ -87,6 +104,24 @@ os.environ["LOKI_BLENDER"] = str(fake)
 res = blender_link.setup(run=fake_run)
 check("setup installs and enables the add-on", res.get("ok") and res.get("addon"), res)
 check("setup runs Blender in the background (no window)", all("--background" in c for c in calls))
+
+
+def fake_proof_run(argv, **kw):
+    calls.append(argv)
+    a = argv[argv.index("--") + 1:]
+    Path(a[1]).write_bytes(b"glTF")
+    rep = {"blender": "4.5.0", "ping": {"pong": True}, "objects": 22, "render_engine": "BLENDER_EEVEE_NEXT",
+           "triangles": 1200, "glb": a[1], "png": a[2]}
+    return types.SimpleNamespace(returncode=0, stdout="noise\nLOKI_PROOF " + json.dumps(rep) + "\n", stderr="")
+
+
+pr = blender_link.proof(TMP / "ws", run=fake_proof_run)
+check("proof: Blender runs mcp_proof.py with the vendored add-on, in the background",
+      calls[-1][1:4] == ["--background", "--factory-startup", "--python"] and calls[-1][4].endswith("mcp_proof.py")
+      and calls[-1][6].endswith("addon.py"), calls[-1])
+check("proof: the model goes to models/, the render to renders/, named by out_names",
+      pr.get("ok") and Path(pr["glb"]).parent.name == "models" and Path(pr["png"]).parent.name == "renders"
+      and Path(pr["glb"]).name.startswith("campfire-blender-mcp_"), pr)
 os.environ.pop("LOKI_BLENDER")
 try:
     import loki  # noqa: E402  pylint: disable=wrong-import-position
