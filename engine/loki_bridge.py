@@ -2685,7 +2685,7 @@ def model_menu(agent: Any) -> dict[str, Any]:
                       "(free on NVIDIA, thinking on). Slower - for hard builds, debugging and planning.",
              "using": labels.get(resolved, resolved) if current == "max" else ""},
             {"name": "fast", "label": "Fast", "group": "auto", "ready": True,
-             "blurb": "The quickest capable model that is ready (Cerebras / Groq / Nemotron Lightning) - for quick "
+             "blurb": "The quickest capable model that is ready (Nemotron on NVIDIA, then DeepSeek V4.1 Flash) - for quick "
                       "questions and many small steps.",
              "using": labels.get(resolved, resolved) if current == "fast" else ""}]
     return {"entries": auto + entries, "groups": [{"id": g, "label": label} for g, label in MENU_GROUPS],
@@ -3226,6 +3226,9 @@ async def serve() -> None:
             if "nvidia-pro" in loki.MODELS:   # Max mode: the strongest model this key serves (nim_models.STRONGEST)
                 nim_models.fix_later(loki.MODELS["nvidia-pro"], key=loki.MODELS["nvidia"].api_key,
                                      on_change=lambda c: print("[loki-bridge] Max mode model " + c, flush=True))
+            if "nvidia-nemotron" in loki.MODELS:   # Fast mode: the Nemotron this key serves (nim_models.NEMOTRON)
+                nim_models.fix_later(loki.MODELS["nvidia-nemotron"], key=loki.MODELS["nvidia"].api_key,
+                                     on_change=lambda c: print("[loki-bridge] Nemotron model " + c, flush=True))
     except Exception:  # noqa: BLE001
         pass
     try:   # speed watch (E6): how long the engine took to answer

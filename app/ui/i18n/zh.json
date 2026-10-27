@@ -382,7 +382,7 @@
  "ob.way_both": "两者",
  "ob.way_both_sub": "本地模型下载期间立即在线聊天。",
  "ob.way_cloud": "连接账户",
- "ob.way_cloud_sub": "在任何电脑上都很快。免费选项：OpenRouter、NVIDIA、Groq、Gemini。",
+ "ob.way_cloud_sub": "在任何电脑上都很快。免费：NVIDIA（DeepSeek V4.1 Flash、Nemotron）。付费：OpenRouter。",
  "ob.way_local": "在这台电脑上运行 AI",
  "ob.way_local_dl": "{model} · 下载 {size} GB，在后台进行",
  "ob.way_local_have": "{model} 已经下载好了",

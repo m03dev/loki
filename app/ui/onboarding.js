@@ -3,7 +3,7 @@
 //   2. How LOKI thinks (session 30): "Run AI on this computer" (hardware detected, a quick model
 //      that fits, Ollama installed silently, downloaded IN THE BACKGROUND with progress that outlives
 //      the tour), "Connect an account" (OpenRouter one click; NVIDIA NIM - DeepSeek V4.1 Flash, LOKI's
-//      main driver -, Groq, Gemini keys) or "Both" (chat online while the local model downloads)
+//      main driver; Groq / Gemini removed 2026-10-27 for their daily caps) or "Both" (chat online while the local model downloads)
 //   3. What should LOKI help with (saved; the gallery and the examples follow it)
 //   4. Try 3 examples, each one click
 // Every error says what to do next and every step can be skipped: no dead ends.
@@ -24,8 +24,6 @@
     ["openrouter", "OpenRouter", "oauth", "https://openrouter.ai", "https://openrouter.ai/keys", "sk-or-"],
     ["nvidia", "NVIDIA NIM", "key", "https://build.nvidia.com", "https://build.nvidia.com/settings/api-keys", "nvapi-",
       "ob.nvidia_why", "DeepSeek V4.1 Flash, free - LOKI's main driver: fast, smart, calls tools."],
-    ["groq", "Groq", "key", "https://console.groq.com", "https://console.groq.com/keys", "gsk_"],
-    ["gemini", "Google Gemini", "key", "https://aistudio.google.com", "https://aistudio.google.com/apikey", "AIza"],
   ];
   const view = { dlg: null, step: 0, data: null, setup: null, interests: [], timer: 0, connected: "", way: "" };
 
@@ -158,7 +156,7 @@
   // ------------------------------------------------------------ 2. a model (session 30: three ways)
   // "Run AI on this computer" (free, private: a model that fits, Ollama installed silently, the
   // download in the BACKGROUND - LokiBgSetup below keeps going after the tour closes), "Connect an
-  // account" (OpenRouter one click, NVIDIA NIM / Groq / Gemini keys), or "Both" (chat online at once
+  // account" (OpenRouter one click, an NVIDIA NIM key), or "Both" (chat online at once
   // while the local model downloads). Nothing blocks; every step can be skipped.
   function working(setup) {
     const act = (setup && setup.active) || {};
@@ -216,7 +214,7 @@
         : tr("ob.way_local_nofit", "No local model fits this computer well");
     const WAYS = [
       ["local", "ob.way_local", "Run AI on this computer", "ob.way_local_sub", "Free and private. Works offline once it is downloaded.", localWhat],
-      ["cloud", "ob.way_cloud", "Connect an account", "ob.way_cloud_sub", "Fast on any computer. Free options: OpenRouter, NVIDIA, Groq, Gemini.", ""],
+      ["cloud", "ob.way_cloud", "Connect an account", "ob.way_cloud_sub", "Fast on any computer. Free: NVIDIA (DeepSeek V4.1 Flash, Nemotron). Paid: OpenRouter.", ""],
       ["both", "ob.way_both", "Both", "ob.way_both_sub", "Chat online right away while the local model downloads.", ""],
     ];
     const show = (way) => {

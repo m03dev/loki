@@ -53,7 +53,7 @@ ENGINE = REPO / "engine"
 TESTS = REPO / "tests"
 BONSAI_TAG = "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0"
 SCRIPTED_LOCAL = "qwen3:8b"          # what the scripted fake pretends to be (a local qwen3)
-STRONG = "groq"                       # the provider a scripted job escalates to
+STRONG = "nvidia"                     # the provider a scripted job escalates to (groq removed 2026-10-27)
 REAL_TIMEOUT_S = float(os.getenv("LOKI_BENCH_TIMEOUT", "900"))
 # A scripted team task can need well over a minute on Windows (team-primes measured 83.5 s on
 # the PC); 60 cut it off and made the suite machine-speed-sensitive. Tasks with their own

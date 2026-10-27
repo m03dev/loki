@@ -23,18 +23,13 @@ KINDS = ("provider", "cli-agent", "tool", "mcp", "skill-library")
 # Where to get a key, for the ones that need one. Onboarding copy, kept here so a
 # capability report can point a user at the exact page.
 PROVIDER_DOCS = {
-    "gemini": "https://aistudio.google.com/apikey",
-    "groq": "https://console.groq.com/keys",
     "openrouter": "https://openrouter.ai/keys",
     "deepseek-4.1": "https://openrouter.ai/keys",
     "mistral": "https://console.mistral.ai/api-keys",
-    "sambanova": "https://cloud.sambanova.ai/apis",
-    "cloudflare": "https://dash.cloudflare.com (Workers AI; also set CLOUDFLARE_ACCOUNT_ID)",
     "together": "https://api.together.ai/settings/api-keys",
     "nous": "https://portal.nousresearch.com",
     "unorouter": "https://unorouter.com",
     "deepseek": "https://platform.deepseek.com/api_keys",
-    "cerebras": "https://cloud.cerebras.ai",
     "gpt": "https://platform.openai.com/api-keys",
     "claude": "https://console.anthropic.com/settings/keys",
     "claude-code": "install @anthropic-ai/claude-code, then run claude and /login",
@@ -46,8 +41,8 @@ PROVIDER_DOCS = {
     "zai": "https://open.bigmodel.cn/usercenter/apikeys",
     "huggingface": "https://huggingface.co/settings/tokens",
     "kilocode": "https://app.kilo.ai/profile",
-    "modelscope": "https://modelscope.cn/my/myaccesstoken",
     "nvidia": "https://build.nvidia.com/explore/discover",
+    "nvidia-nemotron": "the same NVIDIA key (build.nvidia.com/settings/api-keys)",
     "ollama-cloud": "https://ollama.com/settings/keys",
     "ovh": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",
     "siliconflow": "https://cloud.siliconflow.cn/account/ak",

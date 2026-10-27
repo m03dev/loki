@@ -65,37 +65,21 @@ CATALOG: list[dict] = [
      "signup": "https://github.com/Yamz-Labs/kyojin", "docs": "https://github.com/Yamz-Labs/kyojin/blob/main/doc/models.md",
      "needs": "an AMD Ryzen AI Max+ 395 (gfx1151) with 128 GB; not the Mac mini or the RTX 3070 Ti"},
     # ----------------------------------------------------------------- free
-    {"id": "openrouter", "name": "OpenRouter", "group": "free", "auth": ["oauth", "key"], "tools": True,
-     "env": "OPENROUTER_API_KEY", "blurb": "Hundreds of models behind one key; :free models cost nothing (50 requests/day, 1,000 after a one-time $10 top-up).",
+    {"id": "openrouter", "name": "OpenRouter", "group": "paid", "auth": ["oauth", "key"], "tools": True,
+     "env": "OPENROUTER_API_KEY", "blurb": "Hundreds of models behind one key, paid per token (DeepSeek V4.1 Flash by default). Its :free models (50 requests/day) are not used.",
      "signup": "https://openrouter.ai", "keys": "https://openrouter.ai/keys", "docs": "https://openrouter.ai/docs"},
-    {"id": "nemotron-free", "name": "Nemotron 3.5 Lightning (free)", "group": "free", "auth": ["key"], "tools": True,
-     "env": "OPENROUTER_API_KEY", "blurb": "NVIDIA's fast 1M-context model, free on OpenRouter. Your OpenRouter key.",
-     "signup": "https://openrouter.ai", "keys": "https://openrouter.ai/keys", "docs": "https://openrouter.ai/nvidia/nemotron-3.5-lightning:free"},
     {"id": "gpt6-luna", "name": "GPT-6 Luna", "group": "paid", "auth": ["key"], "tools": True,
      "env": "OPENAI_API_KEY", "blurb": "OpenAI's small GPT-6 ($0.10 in / $0.50 out per million tokens). An OpenAI key, or your OpenRouter key.",
      "signup": "https://platform.openai.com", "keys": "https://platform.openai.com/api-keys", "docs": "https://openai.com/index/introducing-gpt-6-sol-and-luna/"},
-    {"id": "gemini", "name": "Google AI Studio (Gemini)", "group": "free", "auth": ["key"], "tools": True,
-     "env": "GEMINI_API_KEY", "blurb": "Gemini Flash and Gemma models with a free tier. The free tier may use your prompts to improve Google products.",
-     "signup": "https://aistudio.google.com", "keys": "https://aistudio.google.com/apikey", "docs": "https://ai.google.dev/gemini-api/docs/openai"},
-    {"id": "groq", "name": "Groq", "group": "free", "auth": ["key"], "tools": True,
-     "env": "GROQ_API_KEY", "blurb": "Very fast Llama, gpt-oss and Qwen models; per-model daily limits.",
-     "signup": "https://console.groq.com", "keys": "https://console.groq.com/keys", "docs": "https://console.groq.com/docs/openai"},
     {"id": "mistral", "name": "Mistral La Plateforme", "group": "free", "auth": ["key"], "tools": True,
      "env": "MISTRAL_API_KEY", "blurb": "Free Experiment plan (needs phone verification and opting in to training use).",
      "signup": "https://console.mistral.ai", "keys": "https://console.mistral.ai/api-keys", "docs": "https://docs.mistral.ai"},
-    {"id": "codestral", "name": "Codestral", "group": "free", "auth": ["key"], "tools": True,
-     "env": "CODESTRAL_API_KEY", "blurb": "Mistral's coding model, free: 30 requests/min, 2,000/day.",
-     "signup": "https://console.mistral.ai/codestral", "keys": "https://console.mistral.ai/codestral", "docs": "https://docs.mistral.ai/capabilities/code_generation/"},
     {"id": "nvidia", "name": "NVIDIA NIM", "group": "free", "auth": ["key"], "tools": True,
      "env": "NVIDIA_API_KEY", "main_driver": True,
      "setup": "Get a free key at build.nvidia.com (Settings > API Keys) and paste it here - that is all.",
      "blurb": "LOKI's main driver: DeepSeek V4.1 Flash, free (about 40 requests/min, LOKI paces itself), "
               "1M context, calls tools. Get a free key at build.nvidia.com and paste it here.",
      "signup": "https://build.nvidia.com", "keys": "https://build.nvidia.com/settings/api-keys", "docs": "https://docs.api.nvidia.com"},
-    {"id": "cloudflare", "name": "Cloudflare Workers AI", "group": "free", "auth": ["key"], "tools": True,
-     "env": "CLOUDFLARE_API_TOKEN", "extra_env": ["CLOUDFLARE_ACCOUNT_ID"],
-     "blurb": "10,000 Neurons/day free: gpt-oss, Kimi, GLM, Llama, Gemma. Needs your account ID too.",
-     "signup": "https://dash.cloudflare.com", "keys": "https://dash.cloudflare.com/profile/api-tokens", "docs": "https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/"},
     {"id": "cohere", "name": "Cohere", "group": "free", "auth": ["key"], "tools": True,
      "env": "COHERE_API_KEY", "blurb": "Trial key: 20 requests/min, 1,000/month (Command A).",
      "signup": "https://dashboard.cohere.com", "keys": "https://dashboard.cohere.com/api-keys", "docs": "https://docs.cohere.com/docs/compatibility-api"},
@@ -108,9 +92,6 @@ CATALOG: list[dict] = [
     {"id": "opencode-zen", "name": "OpenCode Zen", "group": "free", "auth": ["key"], "tools": True,
      "env": "OPENCODE_API_KEY", "blurb": "Free coding models (DeepSeek V4 Flash, Qwen 3.6 Plus, MiniMax, Nemotron). Free models may be used to improve them.",
      "signup": "https://opencode.ai/zen", "keys": "https://opencode.ai/auth", "docs": "https://opencode.ai/docs/zen"},
-    {"id": "sambanova", "name": "SambaNova Cloud", "group": "free", "auth": ["key"], "tools": True,
-     "env": "SAMBANOVA_API_KEY", "blurb": "Fast open models; free tier plus starter credits.",
-     "signup": "https://cloud.sambanova.ai", "keys": "https://cloud.sambanova.ai/apis", "docs": "https://docs.sambanova.ai"},
     {"id": "together", "name": "Together AI", "group": "free", "auth": ["key"], "tools": True,
      "env": "TOGETHER_API_KEY", "blurb": "Open models; some :Free endpoints.",
      "signup": "https://api.together.ai", "keys": "https://api.together.ai/settings/api-keys", "docs": "https://docs.together.ai"},
@@ -123,9 +104,6 @@ CATALOG: list[dict] = [
     {"id": "zai", "name": "Z.ai (GLM)", "group": "free", "auth": ["key"], "tools": True,
      "env": "ZAI_API_KEY", "blurb": "GLM Flash models free on Zhipu's open platform.",
      "signup": "https://open.bigmodel.cn", "keys": "https://open.bigmodel.cn/usercenter/apikeys", "docs": "https://open.bigmodel.cn/dev/api"},
-    {"id": "modelscope", "name": "ModelScope", "group": "free", "auth": ["key"], "tools": True,
-     "env": "MODELSCOPE_API_KEY", "blurb": "Free daily inference on Qwen models, and free Qwen-Image 2.1 pictures (about 250 a day with a verified Alibaba Cloud account) - LOKI's image tool uses it when the key is set.",
-     "signup": "https://modelscope.cn", "keys": "https://modelscope.cn/my/myaccesstoken", "docs": "https://modelscope.cn/docs"},
     {"id": "siliconflow", "name": "SiliconFlow", "group": "free", "auth": ["key"], "tools": True,
      "env": "SILICONFLOW_API_KEY", "blurb": "Small Qwen models free.",
      "signup": "https://cloud.siliconflow.cn", "keys": "https://cloud.siliconflow.cn/account/ak", "docs": "https://docs.siliconflow.cn"},
@@ -179,9 +157,6 @@ CATALOG: list[dict] = [
     {"id": "upstage", "name": "Upstage (Solar)", "group": "trial", "auth": ["key"], "tools": True,
      "env": "UPSTAGE_API_KEY", "blurb": "$10 of credit for 3 months: Solar Pro and Solar Mini.",
      "signup": "https://console.upstage.ai", "keys": "https://console.upstage.ai/api-keys", "docs": "https://console.upstage.ai/docs"},
-    {"id": "cerebras", "name": "Cerebras", "group": "trial", "auth": ["key"], "tools": True,
-     "env": "CEREBRAS_API_KEY", "blurb": "Extremely fast; free per-model limits, needs a verified payment method.",
-     "signup": "https://cloud.cerebras.ai", "keys": "https://cloud.cerebras.ai/platform", "docs": "https://inference-docs.cerebras.ai"},
     # ----------------------------------------------------------------- subscription
     {"id": "claude-code", "name": "Claude Code", "group": "subscription", "auth": ["cli"], "tools": True,
      "blurb": "Your Claude subscription as a coding agent. Install, then run `claude` and /login once.",
@@ -214,6 +189,10 @@ _BY_ID = {p["id"]: p for p in CATALOG}
 _BY_ID["nvidia-pro"] = dict(_BY_ID["nvidia"], id="nvidia-pro", name="DeepSeek V4 Pro (NVIDIA)", main_driver=False,
                             blurb="The strongest free open model on your NVIDIA key: DeepSeek V4 Pro, 1M context, calls "
                                   "tools, thinks before it answers. Slower than Flash - Max mode uses it for hard tasks.")
+# Nemotron on the same key (owner 2026-10-27: "nemotron is free in nvidia"): Fast mode's first pick, no daily cap.
+_BY_ID["nvidia-nemotron"] = dict(_BY_ID["nvidia"], id="nvidia-nemotron", name="Nemotron (NVIDIA)", main_driver=False,
+                                 blurb="NVIDIA's own fast Nemotron model on your NVIDIA key - free, only the per-minute "
+                                       "limit LOKI already paces, no daily cap. Fast mode uses it first.")
 _TESTS: dict = {}          # id -> {"ok", "detail", "at", "ms"}
 _MODELS_CACHE: dict = {}   # id -> (at, [model ids])
 

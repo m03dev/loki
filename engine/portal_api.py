@@ -115,14 +115,9 @@ def _write_env(agent: Any):
 
 
 def connect(agent: Any, provider: str, key: str, account_id: str = "") -> dict:
-    """Check and save a key; Cloudflare also needs the account id in its URL."""
+    """Check and save a key. (`account_id` was Cloudflare's, removed 2026-10-27 with the daily-capped free tiers; the
+    argument stays so older windows still call this.)"""
     provider = (provider or "").strip().lower()
-    if provider == "cloudflare" and account_id.strip():
-        aid = "".join(ch for ch in account_id.strip() if ch.isalnum())[:64]
-        _write_env(agent)({"CLOUDFLARE_ACCOUNT_ID": aid})
-        cfg = agent.MODELS.get("cloudflare")
-        if cfg is not None and not os.environ.get("CLOUDFLARE_BASE_URL"):
-            cfg.base_url = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1" % aid
     return agent.connect_provider(provider, key)
 
 

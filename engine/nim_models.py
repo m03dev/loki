@@ -25,6 +25,13 @@ DEEPSEEK_FLASH = ["deepseek-ai/deepseek-v4.1-flash", "nvidia/deepseek-v4.1-flash
 # Pro - Max asked for it, got model_missing, and every Max job fell to weaker routes. The first one the key serves wins.
 STRONGEST = ["z-ai/glm-5.3", "deepseek-ai/deepseek-v4-pro", "deepseek-ai/deepseek-v4-pro-0813", "moonshotai/kimi-k3",
              "moonshotai/kimi-k2.6", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/llama-3.1-nemotron-ultra-253b-v1"]
+# Nemotron on the NVIDIA key (owner 2026-10-27: "nemotron is free in nvidia"), fastest first - Fast mode's pick. Ids
+# change between releases, so when none of these is served, any chat Nemotron the key lists is taken (NEMOTRON_SKIP
+# filters out the embedding / reward / safety / vision ones).
+NEMOTRON = ["nvidia/nemotron-3.5-lightning", "nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-super-120b-a12b",
+            "nvidia/llama-3.3-nemotron-super-49b-v1.5", "nvidia/llama-3.3-nemotron-super-49b-v1",
+            "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/llama-3.1-nemotron-ultra-253b-v1"]
+NEMOTRON_SKIP = ("embed", "reward", "safety", "guard", "-vl", "vlm", "parse", "rerank", "retriever", "content", "nano-vl")
 TTL_S = 3600.0
 _cache: dict = {}            # base_url -> (time, [ids])
 _lock = threading.Lock()
@@ -73,6 +80,8 @@ def family(model: str) -> list:
         return DEEPSEEK_FLASH
     if model in STRONGEST:   # nvidia-pro (Max mode): whichever of the strongest ones this key serves
         return STRONGEST
+    if "nemotron" in low:    # nvidia-nemotron (Fast mode)
+        return NEMOTRON
     return []
 
 
@@ -80,9 +89,15 @@ def resolve(model: str, ids: list) -> str:
     """The id to send: `model` when it is served (or nothing is known), else a served alias."""
     if not ids or model in ids:
         return model
-    for alt in family(model):
+    fam = family(model)
+    for alt in fam:
         if alt in ids:
             return alt
+    if fam is NEMOTRON:   # a newer Nemotron than this list knows: any chat Nemotron the key serves
+        for i in ids:
+            low = i.lower()
+            if "nemotron" in low and not any(k in low for k in NEMOTRON_SKIP):
+                return i
     return model
 
 

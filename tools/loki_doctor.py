@@ -18,17 +18,12 @@ import loki  # noqa: E402
 # Where to get each provider working. Kept here (not in loki.py) because it is
 # onboarding copy, not runtime config.
 SIGNUP = {
-    "gemini": "https://aistudio.google.com/apikey",
-    "groq": "https://console.groq.com/keys",
     "openrouter": "https://openrouter.ai/keys",
     "mistral": "https://console.mistral.ai/api-keys",
-    "sambanova": "https://cloud.sambanova.ai/apis",
-    "cloudflare": "https://dash.cloudflare.com (Workers AI; also set CLOUDFLARE_ACCOUNT_ID)",
     "together": "https://api.together.ai/settings/api-keys",
     "nous": "https://portal.nousresearch.com",
     "unorouter": "https://unorouter.com",
     "deepseek": "https://platform.deepseek.com/api_keys",
-    "cerebras": "https://cloud.cerebras.ai",
     "gpt": "https://platform.openai.com/api-keys",
     "claude": "https://console.anthropic.com/settings/keys",
     "claude-code": "npm install -g @anthropic-ai/claude-code   then run:  claude  ->  /login",
@@ -41,7 +36,6 @@ SIGNUP = {
     "huggingface": "https://huggingface.co/settings/tokens",
     "kilocode": "https://app.kilo.ai/profile",
     "llm7": "https://token.llm7.io  (optional - anonymous use works)",
-    "modelscope": "https://modelscope.cn/my/myaccesstoken",
     "nvidia": "https://build.nvidia.com/explore/discover",
     "ollama-cloud": "https://ollama.com/settings/keys",
     "ovh": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",

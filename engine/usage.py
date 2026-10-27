@@ -33,8 +33,10 @@ PRICES: list[tuple[str, float, float]] = [
 FREE_PROVIDERS = {"local", "local-small", "local-coder", "local-hermes", "local-reasoning",
                   "local-tools", "local-fast", "vireonix", "llm7", "claude-code", "codex",
                   "lmstudio", "llamacpp", "jan", "omniroute", "mlx", "vllm", "kyojin"}
-# Providers whose default use is a free tier (cost shown as 0 but tokens still counted).
-FREE_TIER = {"gemini", "groq", "cerebras", "sambanova", "cloudflare", "nous", "huggingface",
+# Providers whose default use is a free tier (cost shown as 0 but tokens still counted). gemini / groq / cerebras /
+# sambanova / cloudflare / modelscope were removed as routes on 2026-10-27 (daily caps); kept here so old usage lines
+# still read as free.
+FREE_TIER = {"nvidia-nemotron", "nvidia-pro", "gemini", "groq", "cerebras", "sambanova", "cloudflare", "nous", "huggingface",
              "openrouter-free", "kilocode", "modelscope", "nvidia"}
 
 

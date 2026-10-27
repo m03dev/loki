@@ -382,7 +382,7 @@
  "ob.way_both": "Ambos",
  "ob.way_both_sub": "Chatea en línea ya mientras se descarga el modelo local.",
  "ob.way_cloud": "Conectar una cuenta",
- "ob.way_cloud_sub": "Rápido en cualquier ordenador. Opciones gratis: OpenRouter, NVIDIA, Groq, Gemini.",
+ "ob.way_cloud_sub": "Rápido en cualquier ordenador. Gratis: NVIDIA (DeepSeek V4.1 Flash, Nemotron). De pago: OpenRouter.",
  "ob.way_local": "Usar IA en este ordenador",
  "ob.way_local_dl": "{model} · descarga de {size} GB, en segundo plano",
  "ob.way_local_have": "{model} ya está descargado",
