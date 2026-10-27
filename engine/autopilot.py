@@ -562,12 +562,13 @@ class Autopilot:
             owner_review.kick_expert(self.agent, ws)
         except Exception as exc:  # noqa: BLE001
             self._log("pipeline", "Prompt Expert could not start: %s" % str(exc)[:160])
-        if any(r["lane"] == "gpu" for r in self.running_work()):   # one GPU / memory-heavy thing at a time (the
-            return ""                                              # Mac crashed 2026-10-26 with three at once)
         import asset_pipeline  # pylint: disable=import-outside-toplevel
-        out = asset_pipeline.tick(ws)
-        if not out and _env_on("LOKI_PIPELINE_PROPOSE") and self.due("propose", _env_s("LOKI_PIPELINE_PROPOSE_S", 1800)):
-            # the Concept Artist proposes the next asset - as a prompt card for the owner, nothing is drawn yet
+        out = ""
+        # The Concept Artist's proposal is a text call and a prompt card - nothing is drawn - so it never waits for the
+        # GPU (on the PC a 3D job blocked every proposal for hours, 2026-10-27). propose() itself only runs when the
+        # pipeline is empty and nothing waits for the owner.
+        if _env_on("LOKI_PIPELINE_PROPOSE") and not asset_pipeline.unfinished(ws) \
+                and self.due("propose", _env_s("LOKI_PIPELINE_PROPOSE_S", 1800)):
             self.data["last"]["propose"] = self.clock()
             try:
                 made = asset_pipeline.propose(ws, self._concept_ask)
@@ -575,9 +576,20 @@ class Autopilot:
                 made = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
             if made.get("ok"):
                 out = "Concept Artist proposed: %s (waits for your OK on its prompt)" % made["brief"][:160]
-                asset_pipeline.tick(ws)          # queue its prompt card now
+                try:   # queue its prompt card now (a card only: its prompt is not approved, so nothing is drawn)
+                    import owner_review  # pylint: disable=import-outside-toplevel
+                    if owner_review.on():
+                        asset_pipeline.advance(ws, made["asset"])
+                        owner_review.kick_expert(self.agent, ws)
+                except Exception as exc:  # noqa: BLE001
+                    self._log("pipeline", "could not queue the prompt card: %s" % str(exc)[:160])
             elif made.get("error"):
                 self._log("pipeline", "Concept Artist could not propose: %s" % str(made["error"])[:200])
+        if any(r["lane"] == "gpu" for r in self.running_work()):   # one GPU / memory-heavy thing at a time (the
+            if out:                                                # Mac crashed 2026-10-26 with three at once)
+                self._log("pipeline", out)
+            return out
+        out = asset_pipeline.tick(ws) or out
         if out:
             self._log("pipeline", out)
         return out

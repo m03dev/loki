@@ -202,6 +202,24 @@ try:
     check("the autopilot's pipeline duty: the Concept Artist proposes, and its prompt card is waiting (2026-10-27: a "
           "name clash broke this on the PC)", "Concept Artist proposed" in said and cards
           and cards[0]["who"] == "Concept Artist", (said, pilot.data["log"][-2:]))
+    # a 3D job on the GPU must not hold the proposal back (it blocked every proposal on the PC for hours, 2026-10-27)
+    for c in orv.waiting():
+        orv.decide(c["id"], "reject" if c["kind"] == "prompt" else "approve")
+    WS3 = TMP / "ws3"
+    (WS3 / "images").mkdir(parents=True)
+    pilot.agent = types.SimpleNamespace(WORKSPACE=str(WS3))
+    pilot.data = {"last": {}, "log": []}
+    pilot.running_work = lambda: [{"lane": "gpu", "title": "TRELLIS proof"}]
+    drawn = []
+    ap.tick = lambda ws, call=None, thread=True: drawn.append("tick") or ""
+    try:
+        said = pilot.duty_pipeline()
+    finally:
+        ap.tick = ap_tick
+    cards = [c for c in orv.waiting() if c["kind"] == "prompt" and c.get("asset")]
+    check("the GPU busy with a 3D job: the Concept Artist still proposes and its card waits; nothing runs on the GPU",
+          "Concept Artist proposed" in said and len(cards) == 1 and not drawn
+          and not list((WS3 / "images").glob("*.png")), (said, cards, drawn))
     import inspect  # noqa: PLC0415
     check("the proposal's model call takes the prompt (not the self-review's ask)",
           list(inspect.signature(autopilot.Autopilot._concept_ask).parameters) == ["self", "prompt"])
