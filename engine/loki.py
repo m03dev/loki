@@ -3492,6 +3492,14 @@ def ship_loki(message: str, path: str = "") -> str:
 def conductor_tool(role: str, task: str = "", url: str = "") -> str:
     """Hand one step to a specialist: research, read_web, browse, remember, recall, media, image, reach, track."""
     role = str(role).strip().lower()
+    if role == "image":   # an agent's picture waits for the owner's OK on its prompt (engine/owner_review.py, 2026-10-27)
+        try:
+            import owner_review  # pylint: disable=import-outside-toplevel
+            waits = owner_review.gate("make_image", {"prompt": str(task or "")}, WORKSPACE)
+            if waits is not None:
+                return "error: " + waits["error"]
+        except ImportError:
+            pass
     out = CONDUCTOR.run(role, str(task or ""), str(url or ""))
     if role == "read_web" and str(out).startswith("error: no specialist") and not _private_host(str(url or task or "")):
         return web_reader.read(str(url or task or "").strip())   # no add-on: read it natively

@@ -22,7 +22,10 @@ lessons with helpful / harmful votes, Voyager's "promote what verified work prov
                  same kind starts from the last settings that passed
 
 Statuses: waiting (an upstream stage is not approved) -> ready -> wip -> approved | retake (3 tries failed: it waits
-for the owner or an agent with notes) ; omitted. A retake note on an earlier stage reopens it and sends everything
+for the owner or an agent with notes) ; omitted ; owner - the owner's turn (engine/owner_review.py, owner 2026-10-27:
+"i should be overseeing the prompt ... i should see the hand offs"): a picture stage (concept, turnaround) waits for
+the owner's OK on its prompt before it draws, and EVERY stage that passed its checks waits for the owner's check-off
+before it is approved and handed on. LOKI_OWNER_REVIEW=off approves on the checks alone (the old way). A retake note on an earlier stage reopens it and sends everything
 after it back to waiting (their versions are kept).
 
     python engine/asset_pipeline.py start "a moss golem guardian" [--kind creature] [--concept images/x.png]
@@ -40,7 +43,8 @@ import threading
 import time
 from pathlib import Path
 
-STATUSES = ("waiting", "ready", "wip", "approved", "retake", "omitted")
+STATUSES = ("waiting", "ready", "wip", "approved", "retake", "omitted", "owner")
+PROMPT_STAGES = ("concept", "turnaround")   # their words are shown to the owner before anything is drawn
 MAX_TRIES = 3
 FRESH_WIP_S = 3 * 3600          # a wip older than this is a crashed run: it may start again
 KINDS = ("character", "creature", "prop", "vehicle")
@@ -588,7 +592,7 @@ def note(ws: Path, asset_id: str, stage: str, text: str, author: str = "owner", 
                     rec = _read(asset_dir(ws, asset_id) / stage / st["approved"] / "record.json", {})   # same model
                     rejected += [f.get("sha256") for f in rec.get("files") or [] if f.get("sha256")]   # 3 times)
                 st.update(status="ready", tries=0, approved=None, retakes=int(st.get("retakes") or 0) + 1,
-                          rejected=rejected[-60:], retake_note=n["text"][:300])
+                          rejected=rejected[-60:], retake_note=n["text"][:300], prompt_ok=False, pending=None)
             for d in downstream(stage):
                 if asset["stages"][d]["status"] != "omitted":
                     asset["stages"][d].update(status="waiting", tries=0, approved=None)
@@ -736,11 +740,20 @@ def _settle(ws: Path, asset_id: str, stage: dict, outputs: list, report: dict, p
         st["versions"].append(version)
         failed = [c for c in validation if not c["ok"]]
         remember_params(stage["name"], asset["kind"], params, not failed)
-        if not failed:
+        review = _review()
+        if not failed and review is not None and review.on() and author != "owner":
+            # the checks passed: the owner sees the hand-off before it goes on (owner 2026-10-27)
+            card = review.queue("result", stage.get("tool_name", stage["name"]), {"prompt": asset["brief"]}, str(ws),
+                                who=stage["role"], asset=asset_id, stage=stage["name"], files=outputs,
+                                handoff=_handoff_text(ws, asset_id, stage["name"], version))
+            st.update(status="owner", waiting="result", pending=version, params=params, review=card["id"])
+            _log(asset, "%s %s passed its checks - waits for the owner's check-off" % (stage["name"], version))
+        elif not failed:
             st.update(status="approved", approved=version, params=params)
             rec["notes_addressed"] = _close_notes(ws, asset_id, stage["name"], version)
             _write(asset_dir(ws, asset_id) / stage["name"] / version / "record.json", rec)
             _log(asset, "%s %s approved (%s)" % (stage["name"], version, "; ".join(c["detail"] for c in validation)[:160]))
+        if not failed:
             if st["tries"] > 0 and st.get("last_failed"):     # it failed before and a changed setting fixed it
                 changed = {k: v for k, v in params.items() if st.get("last_params", {}).get(k) != v and k != "seed"}
                 if changed:
@@ -767,6 +780,119 @@ def _settle(ws: Path, asset_id: str, stage: dict, outputs: list, report: dict, p
     if not failed:
         promote(stage["name"])
     return rec
+
+
+# ----------------------------------------------------------------------------- the owner's turn (engine/owner_review.py)
+def _review():
+    try:
+        import owner_review  # pylint: disable=import-outside-toplevel
+        return owner_review
+    except ImportError:
+        return None
+
+
+def _brief_for_owner(ws: Path, asset: dict, stage: dict, inputs: dict) -> str:
+    """What the owner reads on a prompt card: who asks, for which asset, what comes from upstream, open notes."""
+    lines = ["%s for %s (%s): %s" % (stage["role"], asset["name"], asset["kind"], asset["brief"]),
+             "Delivers: %s" % stage["expected"]]
+    for n, rec in (inputs or {}).items():
+        lines.append("From %s %s: %s" % (n, rec.get("version", ""), ", ".join(rec.get("outputs_rel", [])[:4])))
+    lessons = recall(stage["name"], asset["kind"], asset["brief"], k=3)
+    if lessons:
+        lines.append("Lessons it uses: " + " | ".join(r["text"][:120] for r in lessons))
+    return "\n".join(lines)
+
+
+def _handoff_text(ws: Path, asset_id: str, stage: str, version: str) -> str:
+    try:
+        return (asset_dir(ws, asset_id) / stage / version / "handoff.md").read_text(encoding="utf-8")[:4000]
+    except OSError:
+        return ""
+
+
+def owner_prompt(ws: Path, asset_id: str, stage: str, ok: bool, args: dict | None = None, note: str = "") -> dict:
+    """The owner's answer on a stage's prompt: OK (with their own words, if edited) -> the stage runs; no -> it waits
+    as a retake with the owner's note (the agent's next prompt must address it)."""
+    with LOCK:
+        asset = load(ws, asset_id)
+        st = asset["stages"][stage]
+        if ok:
+            keep = {k: v for k, v in (args or {}).items() if k in ("prompt", "subject", "style", "negative")}
+            st.update(status="ready", prompt_ok=True, owner_args=keep, waiting="")
+            _log(asset, "%s: the owner approved the prompt" % stage)
+        else:
+            st.update(status="retake", prompt_ok=False, waiting="", retake_note=("the owner said no to the prompt: "
+                                                                             + str(note or ""))[:300])
+            _log(asset, "%s: the owner said no to the prompt%s" % (stage, (": " + note[:100]) if note else ""))
+        save(ws, asset)
+    if not ok and note:
+        globals()["note"](ws, asset_id, stage, note)
+    return asset["stages"][stage]
+
+
+def owner_result(ws: Path, asset_id: str, stage: str, ok: bool, note: str = "") -> dict:
+    """The owner's check-off on a stage that passed its checks: approve -> it is handed on to the next agent; retake
+    -> back to the stage with the note (and its prompt comes back to the owner first)."""
+    if not ok:
+        with LOCK:
+            asset = load(ws, asset_id)
+            asset["stages"][stage].update(prompt_ok=False, waiting="")
+            save(ws, asset)
+        return globals()["note"](ws, asset_id, stage, note or "the owner sent it back", retake=True)
+    with LOCK:
+        asset = load(ws, asset_id)
+        st = asset["stages"][stage]
+        version = st.get("pending") or (st["versions"][-1] if st.get("versions") else None)
+        if not version:
+            raise RuntimeError("%s has nothing waiting for a check-off" % stage)
+        st.update(status="approved", approved=version, pending=None, waiting="", prompt_ok=False)
+        path = asset_dir(ws, asset_id) / stage / version / "record.json"
+        rec = _read(path, {})
+        rec["notes_addressed"] = _close_notes(ws, asset_id, stage, version)
+        rec["owner"] = "approved"
+        _write(path, rec)
+        _log(asset, "%s %s approved by the owner - handed on" % (stage, version))
+        _refresh(asset)
+        save(ws, asset)
+    return asset["stages"][stage]
+
+
+TASTE = ("painterly game concept art for the owner's fantasy game - they loved a red baby dragon guarding its gold "
+         "and a fox; creatures, characters and props with a clear silhouette")
+
+
+def unfinished(ws: Path) -> list:
+    """Assets still in the pipeline (a stage not approved or omitted)."""
+    return [a for a in assets(ws) if any(a["stages"][n]["status"] not in ("approved", "omitted") for n in ORDER)]
+
+
+def propose(ws: Path, ask, taste: str = "") -> dict:
+    """The Concept Artist proposes the next asset when the pipeline is empty and nothing waits for the owner. It only
+    STARTS the asset: its concept prompt then waits for the owner's OK (nothing is drawn before that)."""
+    review = _review()
+    if unfinished(ws):
+        return {"ok": False, "why": "an asset is still in the pipeline"}
+    if review is not None and review.waiting():
+        return {"ok": False, "why": "the owner has cards waiting"}
+    recent = [a["brief"] for a in sorted(assets(ws), key=lambda a: a.get("created", 0))][-12:]
+    text = ask("You are the Concept Artist on a small game studio's asset pipeline (concept -> turnaround -> 3D -> "
+               "finish -> render). Propose ONE new asset to make next. Taste: %s. Not one of these (already made): %s. "
+               "Answer with JSON only: {\"brief\": \"one sentence: the subject, its look, materials and colours, pose - "
+               "a single full-body subject on a plain background\", \"kind\": \"creature|character|prop|vehicle\"}"
+               % (taste or TASTE, "; ".join(recent) or "nothing yet"))
+    m = re.search(r"\{.*\}", str(text or ""), re.S)
+    try:
+        idea = json.loads(m.group(0)) if m else {}
+    except ValueError:
+        idea = {}
+    brief = " ".join(str(idea.get("brief") or "").split())[:400]
+    if len(brief) < 12:
+        return {"ok": False, "error": "the model gave no usable brief: %s" % str(text or "")[:160]}
+    kind = str(idea.get("kind") or "creature").lower()
+    asset = start(ws, brief, kind if kind in KINDS else "creature")
+    _log(asset, "proposed by the Concept Artist")
+    save(ws, asset)
+    return {"ok": True, "brief": brief, "kind": asset["kind"], "asset": asset["id"]}
 
 
 def submit(ws: Path, asset_id: str, stage_name: str, files: list, report: dict | None = None,
@@ -816,6 +942,18 @@ def advance(ws: Path, asset_id: str, call=None, stage_name: str = "") -> dict:
                                     n, asset["kind"])
             params["seed"] = int(params.get("seed") or 1000) + 104729 * n
         tool, args = stage["args"](asset, inputs, params)
+        args.update(st.get("owner_args") or {})      # the owner's own words for this stage's prompt
+        review = _review()
+        if review is not None and review.on() and name in PROMPT_STAGES and not st.get("prompt_ok"):
+            card = review.queue("prompt", tool, args, str(ws), who=stage["role"], asset=asset_id, stage=name,
+                                handoff=_brief_for_owner(ws, asset, stage, inputs), note=str(st.get("retake_note") or ""))
+            st.update(status="owner", waiting="prompt", review=card["id"])
+            _log(asset, "%s: %s's prompt waits for the owner" % (name, stage["role"]))
+            save(ws, asset)
+            return {"ok": True, "waiting_for_owner": True, "stage": name, "review": card["id"],
+                    "status": summary(asset)}
+        if review is not None:
+            args[review.OWNER_OK] = True                # the pipeline did its own gate (or the owner turned it off)
         st.update(status="wip", started=_now())
         _log(asset, "%s started by %s (%s, try %d)" % (name, stage["role"], tool, st["tries"] + 1))
         save(ws, asset)

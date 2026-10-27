@@ -49,7 +49,8 @@ Duties, each on its own interval:
     LOKI_AUTOPILOT_HEALTH_S          (default 21600 = 6h)
     LOKI_AUTOPILOT_INBOX=on|off      (default on)   LOKI_AUTOPILOT_INBOX_S (default 120): requests, as slots free up
     LOKI_AUTOPILOT_REPORT_S          (default 604800 = a week)
-    LOKI_AUTOPILOT_ALWAYS=on|off     (default on)   LOKI_AUTOPILOT_ALWAYS_S (default 600): with the inbox empty,
+    LOKI_AUTOPILOT_ALWAYS=on|off     (default OFF since 2026-10-27 - the owner: "pause them for now", focus on the
+                                     pipeline's agents) LOKI_AUTOPILOT_ALWAYS_S (default 600): with the inbox empty,
                                      the next standing goals from LOKI_TASKS.md "## Always" (drafts and assets only)
     LOKI_AUTOPILOT_PIPELINE=on|off   (default on)   LOKI_AUTOPILOT_PIPELINE_S (default 120): the asset pipeline
                                      (engine/asset_pipeline.py) runs the next ready stage when none is running
@@ -390,6 +391,20 @@ class Autopilot:
             team = self._teams_get(entry["team"])
             if team is None or team.get("status") == "working":
                 continue
+            try:   # a picture it asked for waits for the owner's OK (engine/owner_review.py): not a failure, no retry
+                import owner_review  # pylint: disable=import-outside-toplevel
+                owner_cards = owner_review.waiting_for_jobs((team.get("jobs") or {}).values())
+            except Exception:  # noqa: BLE001
+                owner_cards = []
+            if owner_cards and not key.startswith("always-"):
+                att = self.data["attempts"].setdefault(key, {"n": 1})
+                att.update(given_up=True, waiting_owner=[c["id"] for c in owner_cards][:5],
+                           reasons=["Waits for your OK in Home > For you (%d card%s)" % (len(owner_cards),
+                                                                                          "s" if len(owner_cards) > 1 else "")])
+                self._log("inbox", "Waits for you: " + entry.get("text", "")[:160], request=key, team=entry["team"])
+                entry.update(settled=True, open=False)
+                n += 1
+                continue
             ok = bool(task_board.verdict_ok(team.get("verdict"))) and team.get("status") != "cancelled"
             why = "" if ok else (task_board.why_failed(team, self._data_dir(), self._job_get)
                                  or task_board.plain(team.get("verdict"), team.get("status")))
@@ -544,10 +559,38 @@ class Autopilot:
         if any(r["lane"] == "gpu" for r in self.running_work()):   # one GPU / memory-heavy thing at a time (the
             return ""                                              # Mac crashed 2026-10-26 with three at once)
         import asset_pipeline  # pylint: disable=import-outside-toplevel
-        out = asset_pipeline.tick(Path(self.agent.WORKSPACE))
+        ws = Path(self.agent.WORKSPACE)
+        out = asset_pipeline.tick(ws)
+        if not out and _env_on("LOKI_PIPELINE_PROPOSE") and self.due("propose", _env_s("LOKI_PIPELINE_PROPOSE_S", 1800)):
+            # the Concept Artist proposes the next asset - as a prompt card for the owner, nothing is drawn yet
+            self.data["last"]["propose"] = self.clock()
+            try:
+                made = asset_pipeline.propose(ws, self._ask_model)
+            except Exception as exc:  # noqa: BLE001
+                made = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+            if made.get("ok"):
+                out = "Concept Artist proposed: %s (waits for your OK on its prompt)" % made["brief"][:160]
+                asset_pipeline.tick(ws)          # queue its prompt card now
+            elif made.get("error"):
+                self._log("pipeline", "Concept Artist could not propose: %s" % str(made["error"])[:200])
         if out:
             self._log("pipeline", out)
         return out
+
+    def _ask_model(self, prompt: str) -> str:
+        """One short answer from the free cloud model (the main driver), for the Concept Artist's proposal."""
+        import asyncio  # pylint: disable=import-outside-toplevel
+        agent = self.agent
+        provider = "nvidia" if "nvidia" in getattr(agent, "MODELS", {}) and agent.provider_configured("nvidia") else ""
+        if not provider:
+            raise RuntimeError("no free cloud model is set up (an NVIDIA key)")
+        client = agent.make_client(provider)
+
+        async def go():
+            r = await client.chat.completions.create(model=agent.MODELS[provider].model, max_tokens=300,
+                                                     messages=[{"role": "user", "content": prompt}])
+            return str(r.choices[0].message.content or "")
+        return asyncio.run(go())
 
     def duty_schedules(self) -> str:
         """Start the first due scheduled task as a background job (one per pass)."""
@@ -896,7 +939,7 @@ class Autopilot:
             work = []
             if _env_on("LOKI_AUTOPILOT_INBOX"):
                 work.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 120), self.duty_inbox))
-            if _env_on("LOKI_AUTOPILOT_ALWAYS"):
+            if _env_on("LOKI_AUTOPILOT_ALWAYS", "off"):
                 work.append(("always", always_every_s(), self.duty_always))
             if _env_on("LOKI_AUTOPILOT_PIPELINE"):
                 work.append(("pipeline", _env_s("LOKI_AUTOPILOT_PIPELINE_S", 120), self.duty_pipeline))

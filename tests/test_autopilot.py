@@ -76,6 +76,7 @@ import os  # noqa: E402
 
 os.environ["LOKI_AUTOPILOT"] = "on"
 os.environ["LOKI_AUTOPILOT_STORAGE"] = "off"   # storage has its own suite (tests/test_storage.py)
+os.environ["LOKI_AUTOPILOT_ALWAYS"] = "on"   # standing goals are off by default since 2026-10-27; this suite tests them
 os.environ["LOKI_MACHINE_ROLE"] = "main"     # the slot tests are about the PC's 3 slots; the light default is checked below
 os.environ["LOKI_FORGE_QA"] = "off"          # the real Forge QA sweep is not run here (tests/test_forge_qa_duty.py fakes it)
 

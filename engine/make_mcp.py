@@ -379,6 +379,14 @@ except Exception:  # noqa: BLE001 - the making tools work without it
 
 
 def call(name: str, args: dict, cwd: Path) -> dict:
+    try:   # every picture an agent makes waits for the owner's OK on its prompt first (engine/owner_review.py)
+        import owner_review  # pylint: disable=import-outside-toplevel
+        waits = owner_review.gate(name, args or {}, cwd)
+        if waits is not None:
+            return waits
+        args = {k: v for k, v in (args or {}).items() if k != owner_review.OWNER_OK}
+    except ImportError:
+        pass
     fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
           "pixelize": pixelize, "voice": voice, "toolshelf": toolshelf_call,
           "make_music": make_music, "make_sprite": make_sprite,

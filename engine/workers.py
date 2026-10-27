@@ -370,7 +370,9 @@ class LocalBackend(Backend):
             env = dict(os.environ, LOKI_WORKSPACE=job["run_dir"], LOKI_DATA=str(self.data_dir),
                        LOKI_MODE="build", PYTHONUNBUFFERED="1", LOKI_JOB_ID=job["id"],
                        LOKI_TEAM_ID=str(job.get("team") or ""),
-                       LOKI_TEAM_ROLE=str((job.get("profile") or {}).get("name") or ""))
+                       LOKI_TEAM_ROLE=str((job.get("profile") or {}).get("name") or ""),
+                       # who is asking, on the owner's review cards (engine/owner_review.py)
+                       LOKI_JOB_TITLE=str((job.get("profile") or {}).get("name") or job.get("title") or "")[:80])
             env.pop("GAME_PROJECT", None)
             if "godot_editor" in str(job.get("prompt") or ""):
                 env["LOKI_GODOT_LIVE"] = "1"   # a job for the live Godot editor (the Godot tab): its tool leads the list

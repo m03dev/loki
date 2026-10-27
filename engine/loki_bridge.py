@@ -1013,6 +1013,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(self.server.state, "GET", route, {}, {}))
             return
+        if route == "/review":   # what waits for the owner's OK: prompts and hand-offs (engine/owner_review.py)
+            import owner_review  # pylint: disable=import-outside-toplevel
+            self._send_json(*owner_review.route(self.server.state, "GET", route, {}, {}))
+            return
         if route in ("/image/settings", "/image/info", "/image/remake", "/image/feedback"):   # engine/image_api.py
             import image_api  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1526,6 +1530,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/local/models/remove":   # uninstall a downloaded model (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(state, "POST", route, {}, data))
+            return
+        if route == "/review/decide":   # the owner approves / edits / rejects / sends back (engine/owner_review.py)
+            import owner_review  # pylint: disable=import-outside-toplevel
+            self._send_json(*owner_review.route(state, "POST", route, {}, data))
             return
         if route in ("/image/remake", "/image/rate", "/image/delete"):   # settings, thumbs, delete (engine/image_api.py)
             import image_api  # pylint: disable=import-outside-toplevel
