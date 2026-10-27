@@ -10020,7 +10020,10 @@ async def run_job(job_path: str) -> int:
             pre = ("You are the agent \"%s\". %s\n" % (profile.get("name", "agent"), profile["instructions"])
                    if profile.get("instructions") else "") + (
                 "You run unattended as a background job; nobody can answer questions, so make reasonable choices "
-                "and say what you chose.")
+                "and say what you chose. Put what you make in its folder (images/, sprites/, models/, renders/, music/, "
+                "brand/, qa/) and only what was asked; do not set up npm/node or other build projects, test scripts or "
+                "logs in the workspace unless the task asks for one (space is limited). You are done only when the "
+                "files really exist - LOKI checks them; never say DONE for something you did not make.")
             # the shell is ON for every job (owner 2026-10-25: "i told you it needs to be able to bash" - Studio and
             # team jobs without allow_commands got no bash at all, and the agent said "No shell/Bash tool is
             # available"). OpenCode still blocks the destructive commands and anything outside the job's folder; a

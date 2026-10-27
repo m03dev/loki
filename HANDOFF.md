@@ -27,6 +27,18 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-27 later (Claude, cloud) - proof, not claims; storage that stays inside a budget.** Read from the PC (read-only):
+music/ EMPTY after the music goal said DONE 21 times overnight; sprites/ got 1 file for 25 DONEs; 38 stale worktrees
+(~3 GB); an npm project with node_modules agents built in Home; identical LOD copies of every model. Done:
+`engine/proof.py` - a team's "done" is checked from the outside (what the request asks: sprite / 3D / audio / doc /
+named qa files; the file is new, opens, is real - not a flat colour, a weak draft, an empty GLB, half a second of sound,
+the request pasted back; every file the answer names exists); the autopilot treats an unproven done as a failure
+("Said it was done - it was not." + what is missing) so requests are retried and faking goals rest; done rows say
+"Proven: <files>". `engine/storage.py` + Lab > Storage + the autopilot's storage duty (docs/STORAGE.md). Blender LODs
+that did not shrink are not written. Jobs are told not to scaffold build projects and that LOKI checks their files.
+Cloud: test_proof 30, test_storage 30, test_storage_ui 12, test_task_board 26, test_autopilot 36, test_blender_bridge 46,
+test_hunyuan_assets 31, test_retopo 26, test_asset_pipeline 40 + 23 more suites green. The PC / Mac: LOKI_TASKS DO FIRST.
+
 **2026-10-27 (Claude, cloud, read the PC's own records through the desktop bridge) - why the PC "did nothing".** It ran
 all night (353 jobs in 36 h) but: (1) the autopilot started each LOKI_TASKS request ONCE - 159 of 281 teams ended "needs
 you", nothing retried or reported them, no box ever changed, and the four standing goals filled the night (57% failing);

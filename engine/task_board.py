@@ -138,8 +138,16 @@ def row_for(key: str, entry: dict, attempts: dict, team: dict | None, data_dir: 
         row.update(status="running", summary="Working - stage %s." % (team.get("stage") or "plan"))
     elif team.get("status") == "cancelled":
         row.update(status="failed", summary="Stopped.")
+    elif ok and (entry.get("proof") or {}).get("ok") is False:
+        # the team said done; the outcome says otherwise (engine/proof.py)
+        problems = (entry.get("proof") or {}).get("problems") or ["nothing real was made"]
+        row.update(status="failed", summary="Said it was done - it was not.", why="; ".join(problems)[:300], proof=entry["proof"])
+        if kind == "request" and row["tries"] < row["max_tries"] and not tries.get("given_up"):
+            row.update(status="retrying", next_try=float(tries.get("next") or 0) or (row["finished"] + RETRY_AFTER_S))
     elif ok:
-        row.update(status="done", summary=plain(team.get("verdict"), team.get("status")))
+        pr = entry.get("proof") or {}
+        row.update(status="done", summary=plain(team.get("verdict"), team.get("status"))
+                   + (" Proven: %s." % ", ".join(pr["evidence"][:3]) if pr.get("evidence") else ""), proof=pr or None)
     else:
         row.update(status="failed", summary=plain(team.get("verdict"), team.get("status")),
                    why=why_failed(team, data_dir, job_get))
@@ -153,6 +161,20 @@ def row_for(key: str, entry: dict, attempts: dict, team: dict | None, data_dir: 
     if workspace is not None and row["status"] != "running":
         row["files"] = made_files(Path(team.get("workspace") or workspace), row["started"], row["finished"])
     return row
+
+
+def prove(entry: dict, team: dict, data_dir: Path, job_get: Callable[[str], Any], agent: Any = None) -> dict:
+    """engine/proof.py on a team that says it is done: what was asked, what appeared in its folder, what it answered."""
+    import proof  # pylint: disable=import-outside-toplevel
+    ws = Path(team.get("workspace") or getattr(agent, "WORKSPACE", "") or ".")
+    files = made_files(ws, float(entry.get("t") or team.get("created") or 0), float(team.get("finished") or time.time()), most=40)
+    answers = []
+    for role, job_id in (team.get("jobs") or {}).items():
+        answers.append(_answer(job_id, Path(data_dir), job_get))
+    try:
+        return proof.check(entry.get("text", ""), files, "\n".join(answers), ws)
+    except Exception as exc:  # noqa: BLE001 - a broken check never blocks the board; it says so
+        return {"ok": True, "problems": [], "evidence": [], "error": "proof check failed: %s" % exc}
 
 
 def build(started: dict, attempts: dict, teams_get: Callable[[str], Any], job_get: Callable[[str], Any],

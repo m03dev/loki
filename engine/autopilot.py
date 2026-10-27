@@ -360,7 +360,7 @@ class Autopilot:
     def _start(self, key: str, text: str, kind: str, extra: dict | None = None) -> str:
         reply = str(self.start_team(text) or "")
         match = re.search(r"started team (\S+)", reply)
-        self.data["started"][key] = dict({"text": text[:300], "t": self.clock(), "team": match.group(1) if match else "",
+        self.data["started"][key] = dict({"text": text[:4000], "t": self.clock(), "team": match.group(1) if match else "",
                                           "open": bool(match), "reply": reply[:300], "lane": lane(text)}, **(extra or {}))
         return reply if match else ""
 
@@ -393,6 +393,14 @@ class Autopilot:
             ok = bool(task_board.verdict_ok(team.get("verdict"))) and team.get("status") != "cancelled"
             why = "" if ok else (task_board.why_failed(team, self._data_dir(), self._job_get)
                                  or task_board.plain(team.get("verdict"), team.get("status")))
+            if ok:   # the team says done: check the outcome itself, not its word (engine/proof.py)
+                full = next((it["text"] for it in inbox_requests(self.repo / "LOKI_TASKS.md") if it["id"] == key), "") \
+                    or entry.get("goal") or ""
+                entry["proof"] = task_board.prove(dict(entry, text=full or entry.get("text", "")), team, self._data_dir(),
+                                                  self._job_get, self.agent)
+                if not entry["proof"].get("ok"):
+                    ok = False
+                    why = "Said done, but " + "; ".join(entry["proof"].get("problems") or ["nothing real was made"])
             fin = float(team.get("finished") or self.clock())
             if not ok and not key.startswith("always-") and self.clock() - fin > _env_s("LOKI_TASK_RETRY_WINDOW_S", 172800):
                 # failed long before this board existed (first start after the update): listed, not re-run
@@ -774,6 +782,27 @@ class Autopilot:
                     entry["open"] = False
         return running
 
+    def duty_storage(self) -> str:
+        """Keep LOKI inside its space (engine/storage.py): finished-job code copies, old job logs, agents' build
+        leftovers and old Home deletes go; drafts and caches too when over budget or the drive is low; the trash
+        empties itself after LOKI_TRASH_DAYS. Old finished jobs leave the job list (the newest 500 stay)."""
+        import storage  # pylint: disable=import-outside-toplevel
+        ws = Path(getattr(self.agent, "WORKSPACE", "") or "") if getattr(self.agent, "WORKSPACE", "") else None
+        jobs = getattr(self.state, "jobs", None)
+        res = storage.auto(self._data_dir(), ws, job_status=lambda j: str((self._job_get(j) or {}).get("status") or ""),
+                           repo=self.repo)
+        try:
+            dropped = jobs.store.remove_finished(keep=500) if jobs is not None and hasattr(jobs.store, "remove_finished") else 0
+        except Exception:  # noqa: BLE001
+            dropped = 0
+        text = "Storage: freed %.0f MB (%d items%s)%s%s" % (
+            (res.get("freed", 0) + (res.get("trash") or {}).get("freed", 0)) / 1e6, res.get("removed", 0),
+            ", over budget - drafts and caches too" if res.get("tight") else "",
+            "; %d old jobs off the list" % dropped if dropped else "",
+            "; " + "; ".join(res.get("errors") or [])[:200] if res.get("errors") else "")
+        self._log("storage", text)
+        return text
+
     def duty_report(self) -> str:
         try:
             import experience  # pylint: disable=import-outside-toplevel
@@ -846,6 +875,15 @@ class Autopilot:
                     self.write_board()
         except Exception as exc:  # noqa: BLE001
             self._log("board", "failed: %s: %s" % (type(exc).__name__, exc))
+        try:   # storage runs on its own clock, busy or not - it only touches finished work (never idle on the PC)
+            if _env_on("LOKI_AUTOPILOT_STORAGE") and self.due("storage", _env_s("LOKI_STORAGE_EVERY_S", 21600)):
+                with self.lock:
+                    self.data["last"]["storage"] = self.clock()
+                    out = self.duty_storage()
+                    self._save()
+                return [("storage", out)]
+        except Exception as exc:  # noqa: BLE001
+            self._log("storage", "failed: %s: %s" % (type(exc).__name__, exc))
         work_ok, _ = self.idle(for_work=True)
         if work_ok and not self.drain():
             # requests and standing goals fill free slots side by side, even while other work runs

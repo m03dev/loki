@@ -22,6 +22,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(REPO / "engine")]
 os.environ["LOKI_AUTOPILOT"] = "on"
+os.environ["LOKI_AUTOPILOT_STORAGE"] = "off"
 os.environ["LOKI_MACHINE_ROLE"] = "main"
 os.environ["LOKI_AUTOPILOT_SLOTS"] = "3"
 T0 = time.time()
@@ -96,13 +97,14 @@ dragon = next(k for k, v in auto.data["started"].items() if "dragon" in v["text"
 check("the board says they are working", {r["status"] for r in auto.board()["rows"]} == {"running"})
 
 clock.t += 300
-(WS / "images" / "knight.png").write_bytes(b"\x89PNG fake")
+from PIL import Image, ImageDraw  # noqa: E402  (a REAL picture - engine/proof.py refuses a fake one)
+_im = Image.new("RGB", (128, 128), (20, 20, 30)); ImageDraw.Draw(_im).rectangle((40, 20, 90, 110), fill=(180, 180, 200)); _im.save(WS / "images" / "knight.png")
 os.utime(WS / "images" / "knight.png", (clock.t, clock.t))
 finish(auto.data["started"][knight]["team"], True, "DONE: drew images/knight.png")
 finish(auto.data["started"][dragon]["team"], False, "BLOCKED: NOT DONE - OpenCode stopped: The command line is too long.")
 check("settle counts both", auto.settle() == 2)
 board = {r["id"]: r for r in auto.board()["rows"]}
-check("the knight is finished", board[knight]["status"] == "done" and board[knight]["summary"] == "Done and checked.", board[knight])
+check("the knight is finished - and proven by the picture it made", board[knight]["status"] == "done" and board[knight]["summary"].startswith("Done and checked.") and "Proven: images/knight.png" in board[knight]["summary"], board[knight])
 check("... with its answer", "knight.png" in board[knight]["answer"])
 check("... and what it made", board[knight]["files"] == ["images/knight.png"], board[knight]["files"])
 check("the dragon failed and will be tried again", board[dragon]["status"] == "retrying", board[dragon]["status"])

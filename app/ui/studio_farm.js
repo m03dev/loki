@@ -8,7 +8,7 @@
 "use strict";
 
 const LokiStudioFarm = (() => {
-  const S = { root: null, tasks: null, agents: null, farm: null, render: null, view: "tasks", timer: 0, data: null, sel: null, rjobs: [] };
+  const S = { root: null, tasks: null, storage: null, agents: null, farm: null, render: null, view: "tasks", timer: 0, data: null, sel: null, rjobs: [] };
   const STORE = "loki-studio-view";
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const call = (path, body) => (typeof api === "function" ? api(path, body) : Promise.reject(new Error("not ready")));
@@ -38,7 +38,8 @@ const LokiStudioFarm = (() => {
     for (const [id, label, tip] of [["tasks", "Tasks", "What the agents were asked to do on this computer: finished, failed (and why), being tried again, working now."],
       ["agents", "Agents", "Every agent at work on every machine, with Stop and Again - and Make: art, paintings, 3D models, comics, novels, websites, games."],
       ["farm", "Farm", "The render farm: every job and GPU worker, priorities, failures and their fixes, the history."],
-      ["render", "Render", "Render Studio: render the passes from a Forge camera, the AI Renderer settings, the preview."]]) {
+      ["render", "Render", "Render Studio: render the passes from a Forge camera, the AI Renderer settings, the preview."],
+      ["storage", "Storage", "How much space LOKI uses, what may go and why, one click to clean, a trash you can restore."]]) {
       const b = mk("button", "sf-view", label); b.type = "button"; b.dataset.view = id; b.setAttribute("role", "tab");
       b.title = tip; b.dataset.tipName = label; b.dataset.tipWhat = tip;
       b.addEventListener("click", () => show(id));
@@ -50,25 +51,33 @@ const LokiStudioFarm = (() => {
     const strip = document.getElementById("work");
     if (strip) { S.work.append(strip); strip.classList.remove("collapsed"); }
     S.tasks = mk("div", "sf-tasks"); S.tasks.hidden = true;
+    S.storage = mk("div", "sf-tasks sf-storage"); S.storage.hidden = true;
     S.agents = mk("div", "sf-agents"); S.agents.id = "studio-agents"; S.agents.hidden = true;
     S.farm = mk("div", "sf-farm"); S.farm.id = "studio-farm";
     S.render = mk("div", "sf-render"); S.render.hidden = true;
-    p.append(bar, S.tasks, S.work, S.agents, S.farm, S.render);
+    p.append(bar, S.tasks, S.storage, S.work, S.agents, S.farm, S.render);
     S.root = p;
     buildFarm(S.farm);
   }
   function show(v, opts) {
     // Tasks first (owner 2026-10-27: "there should be a clear finished jobs and tasks"), then Agents
-    S.view = v === "render" || v === "farm" || v === "agents" ? v : "tasks";
+    S.view = ["render", "farm", "agents", "storage"].includes(v) ? v : "tasks";
     try { localStorage.setItem(STORE, S.view); } catch (_) { /* private window */ }
     for (const b of S.root.querySelectorAll(".sf-view")) b.setAttribute("aria-selected", String(b.dataset.view === S.view));
     S.agents.hidden = S.view !== "agents"; S.farm.hidden = S.view !== "farm"; S.render.hidden = S.view !== "render";
     S.tasks.hidden = S.view !== "tasks";
+    S.storage.hidden = S.view !== "storage";
     if (S.view !== "tasks" && window.LokiTaskBoard) window.LokiTaskBoard.leave();
     S.work.hidden = S.view !== "agents";
     if (S.view === "agents" && typeof refreshJobs === "function") refreshJobs();
     if (S.view !== "agents" && window.LokiStudioAgents) window.LokiStudioAgents.leave();
-    if (S.view === "tasks") {
+    if (S.view === "storage") {
+      clearInterval(S.timer); S.timer = 0;
+      if (window.LokiRenderStudio) window.LokiRenderStudio.leave();
+      if (window.LokiStudioAgents) window.LokiStudioAgents.leave();
+      if (window.LokiStorage) window.LokiStorage.open(S.storage);
+      else S.storage.textContent = "Storage is not in this window.";
+    } else if (S.view === "tasks") {
       clearInterval(S.timer); S.timer = 0;
       if (window.LokiRenderStudio) window.LokiRenderStudio.leave();
       if (window.LokiStudioAgents) window.LokiStudioAgents.leave();

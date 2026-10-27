@@ -1238,6 +1238,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             auto = getattr(self.server.state, "autopilot", None)
             self._send_json(200, {"ok": True, **(auto.status() if auto is not None else {"enabled": False})})
             return
+        if route == "/storage":   # Lab > Storage: usage, what may go, the trash (engine/storage.py)
+            self._send_json(*storage_route(self.server.state, "GET", route, dict((k, v[0]) for k, v in parse_qs(urlparse(self.path).query).items())))
+            return
         if route == "/tasks/board":   # Lab > Tasks: what the agents were asked, finished, failed and why (task_board.py)
             self._send_json(*task_board_route(self.server.state, "GET", route, {}))
             return
@@ -2107,6 +2110,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"vault failed: {exc}"})
             return
+        if route in ("/storage/clean", "/storage/restore", "/storage/keep", "/storage/empty-trash"):
+            self._send_json(*storage_route(state, "POST", route, data))
+            return
         if route in ("/tasks/retry", "/tasks/dismiss"):
             self._send_json(*task_board_route(state, "POST", route, data))
             return
@@ -2195,6 +2201,27 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def storage_route(state: "BridgeState", method: str, route: str, data: dict) -> tuple:
+    import storage  # pylint: disable=import-outside-toplevel
+    agent = state.agent
+    data_dir = Path(getattr(agent, "DATA_DIR", "") or Path(__file__).resolve().parent.parent / "harness_data")
+    ws = Path(getattr(agent, "WORKSPACE", "")) if getattr(agent, "WORKSPACE", "") else None
+    return storage.route(data_dir, ws, method, route, data, job_status=_job_status_fn(state),
+                         repo=Path(__file__).resolve().parent.parent)
+
+
+def _job_status_fn(state: "BridgeState"):
+    jobs = getattr(state, "jobs", None)
+
+    def status(job_id: str) -> str:
+        try:
+            j = jobs.store.get(job_id) if jobs is not None else None
+        except Exception:  # noqa: BLE001
+            j = None
+        return str((j or {}).get("status") or "")
+    return status
 
 
 def task_board_route(state: "BridgeState", method: str, route: str, data: dict) -> tuple:

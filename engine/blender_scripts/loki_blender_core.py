@@ -825,6 +825,12 @@ def cmd_lods(p):
                 for c in copies:
                     sc.collection.objects.unlink(c)
                     tmp.collection.objects.link(c)
+                tris = _tris(copies)
+                if i and out and r < 0.999 and tris >= 0.95 * (out[-1].get("triangles") or tris + 1):
+                    # the decimate did nothing: a "LOD" with the full mesh is a duplicate, not a LOD (the PC, 2026-10-26:
+                    # _lod0/_lod1/_lod2 all 5,281,644 bytes - the same model saved three times). Say so, write nothing.
+                    out.append({"path": "", "ratio": r, "triangles": tris, "skipped": "decimate had no effect"})
+                    continue
                 path = "%s_lod%d.glb" % (stem, i)
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
                 with job_context(tmp.name):
@@ -832,7 +838,7 @@ def cmd_lods(p):
                         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_active_scene=True)
                     except TypeError:
                         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB")
-                out.append({"path": path, "ratio": r, "triangles": _tris(copies)})
+                out.append({"path": path, "ratio": r, "triangles": tris})
             finally:
                 for c in copies:
                     data = c.data

@@ -83,3 +83,26 @@
 .tb-answer { margin: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; font: 12px/1.45 var(--mono, monospace); color: var(--muted);
   background: rgba(0, 0, 0, .25); border-radius: 8px; padding: 8px 10px; }
 .tb-empty { color: var(--muted); font-size: 13px; text-align: center; margin: 8vh 0; }
+
+/* Lab > Storage (app/ui/storage_view.js) */
+.st { display: flex; flex-direction: column; gap: 8px; padding: 12px clamp(10px, 2%, 24px) 24px; max-width: 1100px; margin: 0 auto; box-sizing: border-box; }
+.st-title { margin: 0; font-size: 16px; }
+.st-line { margin: 0; font-size: 12px; color: var(--muted); }
+.st-h { margin: 12px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.st-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); overflow: hidden; flex: 1 1 8rem; min-width: 4rem; }
+.st-bar i { display: block; height: 100%; background: var(--accent, #8ccfc4); border-radius: 999px; }
+.st-bar.over i { background: #e0736b; }
+.st-head { display: flex; flex-direction: column; gap: 6px; }
+.st-areas { display: flex; flex-direction: column; gap: 4px; }
+.st-area { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12.5px; }
+.st-a-name { flex: 0 1 16rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-a-size { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 4.5rem; text-align: end; }
+.st-cat { border: 1px solid var(--line, #34343c); border-radius: 10px; padding: 6px 10px; }
+.st-cat-sum { display: flex; align-items: center; gap: 8px; cursor: pointer; flex-wrap: wrap; font-size: 13px; }
+.st-cat-name { font-weight: 600; }
+.st-cat-meta { font-size: 11.5px; color: var(--muted); }
+.st-item { display: flex; align-items: baseline; gap: 8px; padding: 3px 0 3px 22px; font-size: 12px; min-width: 0; }
+.st-i-path { flex: 0 1 18rem; min-width: 0; overflow-wrap: anywhere; }
+.st-i-why { flex: 1 1 12rem; color: var(--muted); min-width: 0; }
+.st-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.st-say { font-size: 12.5px; color: var(--muted); }
