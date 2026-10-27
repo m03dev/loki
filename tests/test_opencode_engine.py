@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import os
 import stat
 import subprocess
@@ -46,9 +47,40 @@ check("config: an OpenAI-compatible provider per LOKI provider, the key by env v
       cfg["provider"]["loki-groq"]["options"]["apiKey"] == "{env:LOKI_OC_KEY_GROQ}" and "SECRET123" not in text
       and cfg["provider"]["loki-groq"]["npm"] == "@ai-sdk/openai-compatible" and "loki-codex" not in cfg["provider"])
 check("config: CodeGraph is OpenCode's MCP code map", cfg["mcp"]["codegraph"]["command"] == ["/usr/bin/codegraph", "serve", "--mcp"])
+ext = cfg["permission"]["external_directory"]
 check("config: LOKI's destructive list is denied, the rest of bash allowed, outside the workspace denied",
       cfg["permission"]["bash"]["*"] == "allow" and cfg["permission"]["bash"]["*rm -rf /*"] == "deny"
-      and cfg["permission"]["external_directory"] == "deny")
+      and isinstance(ext, dict) and ext.get("*") == "deny", ext)
+
+
+def _oc_match(inp, pat, win=True):
+    """OpenCode's own Wildcard.match (packages/core/src/util/wildcard.ts): \\ -> /, * any, ' *' = optional args,
+    case-insensitive on Windows."""
+    n = inp.replace("\\", "/")
+    e = re.sub(r"[.+^${}()|\[\]\\]", lambda m: "\\" + m.group(0), pat.replace("\\", "/")).replace("*", ".*").replace("?", ".")
+    if e.endswith(" .*"):
+        e = e[:-3] + "( .*)?"
+    return re.match("^" + e + "$", n, re.S | (re.I if win else 0)) is not None
+
+
+def _denied(cmd, rules):
+    last = None
+    for pat, act in rules.items():          # last match wins
+        if _oc_match(cmd, pat):
+            last = act
+    return last == "deny"
+
+
+_real = oe.deny_rules(("rm -rf /", "format ", "shutdown", "dd if="))
+check("PowerShell's Format-Table / Format-List are allowed (the 'format ' rule is the disk formatter only - 2026-10-27, "
+      "the PC: every job's folder listing was denied)",
+      not _denied("Format-Table -AutoSize", _real) and not _denied("Format-List *", _real)
+      and _denied("format C: /q", _real) and _denied("FORMAT D:", _real) and _denied("rm -rf /", _real), _real)
+_allow = oe.external_rules()
+_repo = str(REPO).replace("\\", "/")
+check("outside the workspace: LOKI's own folder and LOKI Projects are allowed, everything else denied",
+      _allow["*"] == "deny" and _allow.get(_repo + "/*") == "allow"
+      and any(k.endswith("LOKI Projects/*") for k in _allow) and oe.external_rules(plan=True) == "deny", _allow)
 plan = oe.build_config({}, plan=True)
 check("plan mode: no edits, no bash", plan["permission"]["edit"] == "deny" and plan["permission"]["bash"] == "deny")
 env = oe.env_for({"groq": {"key": "SECRET123"}}, base={"PATH": "/bin"})

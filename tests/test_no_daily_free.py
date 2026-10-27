@@ -99,6 +99,21 @@ try:
 except ImportError as exc:   # studio deps missing in a bare checkout
     print("SKIP studio_models: %s" % exc)
 
+# a job's OpenCode routes: NVIDIA ids the key serves, never Hugging Face (only a download token)
+_saved = (loki.provider_configured, nim_models.served, loki.MODELS["nvidia"].api_key)
+try:
+    loki.provider_configured = lambda n: n in ("nvidia", "nvidia-nemotron", "huggingface")
+    for _n in ("nvidia", "nvidia-nemotron"):
+        loki.MODELS[_n].api_key = "nvapi-test"
+    nim_models.served = lambda base="", key="", timeout=6.0, opener=None: ["deepseek-ai/deepseek-v4.1-flash",
+                                                                         "nvidia/nemotron-3-super-120b-a12b"]
+    _routes = loki._oc_providers("nvidia-nemotron")
+    check("a job asks NVIDIA for the Nemotron its key serves (2026-10-27: the PC's first try was a 404 every time)",
+          (_routes.get("nvidia-nemotron") or {}).get("model") == "nvidia/nemotron-3-super-120b-a12b", _routes)
+    check("Hugging Face is never a chat route for jobs", "huggingface" not in _routes, list(_routes))
+finally:
+    loki.provider_configured, nim_models.served, loki.MODELS["nvidia"].api_key = _saved
+
 onb = (REPO / "app" / "ui" / "onboarding.js").read_text(encoding="utf-8")
 check("onboarding offers only NVIDIA", '["groq"' not in onb and '["gemini"' not in onb and '["openrouter"' not in onb
       and '["nvidia"' in onb)

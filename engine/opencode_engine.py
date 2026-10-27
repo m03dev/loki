@@ -154,12 +154,52 @@ def provider_id(name: str) -> str:
 
 
 def deny_rules(snippets: Iterable[str]) -> dict:
-    """LOKI's destructive command list as OpenCode bash rules: allow everything, then deny these (last match wins)."""
+    """LOKI's destructive command list as OpenCode bash rules: allow everything, then deny these (last match wins).
+
+    OpenCode checks each command of a pipeline on its own, case-insensitively on Windows. A snippet that ends in a space
+    is a COMMAND NAME ("format " = the disk formatter): it becomes "format *" (that command, with any arguments) - never
+    "*format*", which denied every PowerShell `Format-Table` / `Format-List` (2026-10-27, the PC: jobs could not even
+    list a folder). The others match anywhere in the command."""
     rules = {"*": "allow"}
     for s in snippets:
-        s = " ".join(str(s).split())
-        if s:
+        raw = str(s)
+        s = " ".join(raw.split())
+        if not s:
+            continue
+        if raw.endswith(" ") and " " not in s:
+            rules[s + " *"] = "deny"
+        else:
             rules["*" + s + "*"] = "deny"
+    return rules
+
+
+def outside_dirs() -> list:
+    """Folders outside the job's workspace an unattended job may use: LOKI's own folder (the tasks say "in LOKI's
+    folder: ..."), the owner's LOKI Projects and the temp folder. Everything else stays denied - `opencode run` cannot
+    ask anyone, and an "ask" is a refusal (2026-10-27, the PC: every DO FIRST task died on its first command in D:/loki).
+    LOKI_OC_ALLOW_DIRS (os.pathsep-separated) adds more."""
+    import tempfile  # pylint: disable=import-outside-toplevel
+    dirs = [Path(__file__).resolve().parent.parent, Path.home() / "LOKI Projects", Path(tempfile.gettempdir())]
+    data = os.getenv("LOKI_DATA", "").strip()
+    if data:
+        dirs.append(Path(data))
+    dirs += [Path(p) for p in os.getenv("LOKI_OC_ALLOW_DIRS", "").split(os.pathsep) if p.strip()]
+    out, seen = [], set()
+    for d in dirs:
+        key = str(d).replace("\\", "/").rstrip("/")
+        if key and key.lower() not in seen:
+            seen.add(key.lower())
+            out.append(key)
+    return out
+
+
+def external_rules(plan: bool = False) -> dict | str:
+    if plan:
+        return "deny"
+    rules: dict = {"*": "deny"}
+    for d in outside_dirs():
+        rules[d + "/*"] = "allow"
+        rules[d] = "allow"
     return rules
 
 
@@ -223,7 +263,7 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
                  "permission": {"edit": "deny" if plan else "allow", "read": "allow", "glob": "allow", "grep": "allow",
                                 "list": "allow", "webfetch": "allow", "todowrite": "allow",
                                 "bash": "deny" if plan else deny_rules(deny),
-                                "external_directory": "deny"},
+                                "external_directory": external_rules(plan)},
                  "autoupdate": False, "share": "disabled"}
     mcp: dict = {}
     if codegraph:

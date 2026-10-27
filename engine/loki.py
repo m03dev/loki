@@ -9185,6 +9185,9 @@ except OSError:
 WEAK_FOR_JOBS = tuple(p.strip() for p in os.getenv("LOKI_WEAK_FOR_JOBS", "llm7,omniroute,local-fast,local-small").split(",") if p.strip())
 
 
+NOT_CHAT_ROUTES = ("huggingface",)
+
+
 def _oc_providers(first: str) -> dict:
     """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider - and
     this computer's local model always among them (it never runs out; 2026-10-26: with every free tier spent, jobs
@@ -9194,14 +9197,22 @@ def _oc_providers(first: str) -> dict:
                   and str(MODELS[n].base_url or "").startswith("http")), "")
     out = {}
     for name in order:
-        if name in seen or name not in MODELS or name in AUTO_ROUTING_MODES:   # smart / online / max / fast are modes
-            continue
+        if name in seen or name not in MODELS or name in AUTO_ROUTING_MODES or name in NOT_CHAT_ROUTES:
+            continue   # smart / online / max / fast are modes; huggingface is only the token for model downloads
         seen.add(name)
         cfg = MODELS[name]
         base = str(cfg.base_url or "")
         if not base.startswith("http") or not provider_configured(name):
             continue
         model = resolve_local_model(name) if "11434" in base else cfg.model
+        if "integrate.api.nvidia.com" in base:
+            # the name this NVIDIA key really serves (2026-10-27, the PC: every job's first try was Nemotron under a
+            # name the key does not have - HTTP 404 - before it fell to the next route). Cached an hour per process.
+            try:
+                import nim_models  # pylint: disable=import-outside-toplevel
+                model = nim_models.resolve(model, nim_models.served(base, str(cfg.api_key or ""), timeout=8.0))
+            except Exception:  # noqa: BLE001 - offline: keep the configured name
+                pass
         out[name] = {"base_url": base, "model": model, "key": str(cfg.api_key or "")}
     try:   # crawling ones go last, ones that said they are out are left off (engine/provider_speed.py)
         import provider_speed  # pylint: disable=import-outside-toplevel

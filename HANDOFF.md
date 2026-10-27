@@ -27,6 +27,8 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-27 afternoon (Claude, cloud) - why the PC made nothing for 8 hours.** Read from the PC after it took 7056e41: (1) LOKI's destructive list had "format " (the disk formatter); OpenCode got "*format*" (the space was stripped) and checks each command of a pipeline case-insensitively on Windows, so every `... | Format-Table` was DENIED - jobs could not list a folder and wrote essays about the rule instead. deny_rules now turns a trailing-space snippet into "<command> *". (2) external_directory was "deny" and this OpenCode reports it as "ask" (a refusal in `opencode run`): every "in LOKI's folder" task died on its first command. opencode_engine.external_rules(): LOKI's folder, LOKI Projects, temp (+ LOKI_OC_ALLOW_DIRS) allowed, the rest denied. (3) Nemotron 404: the job built its routes from the configured id; _oc_providers now asks nim_models which id the NVIDIA key serves. Hugging Face is never a chat route. Checked (cloud): test_opencode_engine 38 (OpenCode's own Wildcard.match replayed), test_no_daily_free.
+
 **2026-10-27 midday (Claude, cloud) - the lean provider set; one way to ship.** Owner: "get rid of free models with
 daily limits" / "nemotron is free in nvidia" / "its these providers that are doing the same thing we dont need the
 reduncency ... if those get capped in a day within a few hours we dont need them" / "why do you keep pushing to branch
