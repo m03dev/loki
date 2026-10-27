@@ -13,6 +13,12 @@
 // many"): one header row with its icons on the left (the kind filter, a "working now" chip, chat + Studio), the big preview, then ONE row
 // of recent things with "All" to see the rest. Jobs are not cards any more: the chip counts what runs and a click shows
 // it live in the preview. No refresh / fold buttons (it refreshes itself). Later: a live view in the preview spot.
+// Reworked 2026-10-26 (owner: "when i click on an image it takes me to the top and shows me thats wrong its jarring ...
+// look at how other programs are managing it"): like Google Photos / Lightroom / Midjourney - a click on a card opens it
+// RIGHT THERE in the viewer (pictures and 3D models; ‹ › through everything), the page never jumps or redraws; every
+// card has thumbs up / down / delete on hover; the grid is everything, grouped by day (Today, Yesterday, dates) with
+// "Show more" at the end instead of one row + "All"; thumbnail size S / M / L is remembered. Double-click (or the
+// card's open icon, or Shift+Enter) still opens it where it lives. Keys: arrows walk, Enter opens, Del deletes (twice).
 // Plain DOM, CSP script-src 'self' (no inline script, no eval); sizes in % / fr so it fits any window.
 "use strict";
 
@@ -51,14 +57,19 @@ const LokiHome = (() => {
     chat: '<path d="M5 6.5h14v9H9l-4 3.5z"/>',
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
     fold: '<path d="M6 9l6 6 6-6"/>',
+    size: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.4"/>',
+    up: '<path d="M7 11v9H4v-9z"/><path d="M7 11l4-8c1.5 0 2.5 1 2.5 2.5V9h5a2 2 0 012 2.3l-1.2 7A2 2 0 0117.3 20H7"/>',
+    down: '<path d="M17 13V4h3v9z"/><path d="M17 13l-4 8c-1.5 0-2.5-1-2.5-2.5V15h-5a2 2 0 01-2-2.3l1.2-7A2 2 0 016.7 4H17"/>',
+    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
   };
   const STORE = "loki-home";
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
-  const S = { items: [], errors: {}, filter: "all", pick: "", all: false, timer: 0, loading: false, loaded: false };
+  const S = { items: [], errors: {}, filter: "all", pick: "", shown: 60, size: "m", timer: 0, loading: false, loaded: false };
+  const PAGE = 60, SIZES = { s: 110, m: 160, l: 240 };
   let root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
-  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content"].includes(S.filter)) S.filter = "all"; } catch (_) { /* private mode */ }
-  const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter })); } catch (_) { /* private mode */ } };
+  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content"].includes(S.filter)) S.filter = "all"; if (SIZES[saved.size]) S.size = saved.size; } catch (_) { /* private mode */ }
+  const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter, size: S.size })); } catch (_) { /* private mode */ } };
 
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const svg = (paths) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + "</svg>";
@@ -93,7 +104,7 @@ const LokiHome = (() => {
     const head = mk("div", "home-head");
     const kinds = mk("div", "home-kinds"); kinds.setAttribute("role", "toolbar"); kinds.setAttribute("aria-label", "Show");
     const kindBtn = (id, icon, name, what) => {
-      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; remember(); render(); });
+      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; S.shown = PAGE; remember(); render(); });
       b.dataset.kind = id; b.setAttribute("aria-pressed", String(S.filter === id));
       return b;
     };
@@ -107,15 +118,20 @@ const LokiHome = (() => {
     live = mk("button", "home-live"); live.type = "button"; live.hidden = true;
     live.dataset.tipName = "Working now"; live.dataset.tipWhat = "Jobs running on this computer and the worker farm - click to watch one in the preview.";
     live.addEventListener("click", () => { const r = running(); if (!r.length) return; const i = r.findIndex((it) => keyOf(it) === S.pick); S.pick = keyOf(r[(i + 1) % r.length]); render(); });
+    const sizeBtn = iconBtn("home-size", ICON.size, "Thumbnail size", "Small, medium or large thumbnails (remembered).", () => {
+      S.size = { s: "m", m: "l", l: "s" }[S.size] || "m"; remember(); applySize();
+    });
+    acts.prepend(sizeBtn);
     head.append(kinds, live, acts);   // all icons on the left; no title (the Home tab already says Home)
     hero = mk("div", "home-hero"); hero.setAttribute("aria-live", "polite");
-    const recent = mk("div", "home-recent-head");
-    more = mk("button", "home-more quiet small"); more.type = "button";
-    more.addEventListener("click", () => { S.all = !S.all; render(); });
-    recent.append(mk("h3", "home-recent-title", "Recent"), more);
+    const recent = mk("div", "home-recent-head");     // kept for the chat-folded layout's styles
+    recent.hidden = true;
     grid = mk("div", "home-grid"); grid.setAttribute("role", "list");
+    more = mk("button", "home-more quiet small"); more.type = "button";
+    more.addEventListener("click", () => { S.shown += PAGE; render(); });
     empty = mk("div", "home-empty");
-    root.append(head, hero, recent, grid, empty);
+    root.append(head, hero, recent, grid, more, empty);
+    applySize();
     // left of the chat column (index.html #loki-split); older pages without the split: before the summon word
     const split = document.getElementById("loki-split"), summonBtn = document.getElementById("summon");
     if (split) split.prepend(root);
@@ -125,19 +141,17 @@ const LokiHome = (() => {
       if (i < 0) return;
       const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols(), ArrowUp: -cols() }[e.key];
       if (step) { e.preventDefault(); const n = cards[Math.max(0, Math.min(cards.length - 1, i + step))]; if (n) n.focus(); }
-      else if (e.key === "Enter") { e.preventDefault(); open(S.items.find((it) => keyOf(it) === document.activeElement.dataset.key)); }
+      else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        const it = S.items.find((x) => keyOf(x) === document.activeElement.dataset.key);
+        if (e.shiftKey) open(it); else look(it);
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        const del = document.activeElement.querySelector(".home-card-del"); if (del) { e.preventDefault(); del.click(); }
+      }
     });
     sync();
   }
   function cols() { return Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").length); }
-  // how many cards fit one row at this width (the grid's own auto-fill columns, min 150 px)
-  function perRow() {
-    // auto-fill: the real column count at this width; beside the chat (the split layout) the pane is narrower, so two rows
-    const rows = document.getElementById("loki-split") ? 2 : 1;
-    if (grid && grid.clientWidth > 0) return Math.max(2, cols()) * rows;
-    const w = (root && root.clientWidth) || 900; return Math.max(2, Math.floor((w + 12) / 162));
-  }
-
   function thumbOf(it, cls) {
     const box = mk("div", cls + " kind-" + it.kind);
     if (it.video && !it.thumb) {   // a video: its own first frames, playing silently
@@ -167,11 +181,70 @@ const LokiHome = (() => {
     meta.append(kindIco, mk("span", "home-card-when", ago(it.updated)));
     if (it.status) meta.append(mk("span", "pill home-pill " + it.status, it.status));
     const go = iconBtn("home-card-open", ICON.open, "Open " + it.name, k.label + " - " + whatOpens[it.kind] + ".", (e) => { e.stopPropagation(); open(it); });
-    c.append(thumbOf(it, "home-card-thumb"), mk("div", "home-card-name", it.name), meta, go);
-    c.dataset.tipName = it.name; c.dataset.tipWhat = k.label + (it.detail ? " · " + it.detail : "") + (it.updated ? " · " + ago(it.updated) : "") + " - click to preview, double-click " + whatOpens[it.kind] + ".";
-    c.addEventListener("click", () => { S.pick = keyOf(it); render(); });
-    c.addEventListener("dblclick", () => open(it));
+    const tools = mk("div", "home-card-tools");
+    const path = ratePath(it);
+    if (path) {   // thumbs + delete on the card itself (engine/image_feedback.py through /image/rate, /image/delete)
+      const up = iconBtn("home-card-up", ICON.up, "Thumbs up", "I like this one - LOKI makes more like it.", (e) => { e.stopPropagation(); rateCard(c, path, 1); });
+      const down = iconBtn("home-card-down", ICON.down, "Thumbs down", "I don't like this one - opens it and asks why.", (e) => { e.stopPropagation(); look(it, { rate: -1 }); });
+      const del = iconBtn("home-card-del", ICON.trash, "Delete", "Really don't like it: remove it (click twice). It goes to the trash folder; LOKI learns from it.", (e) => { e.stopPropagation(); deleteCard(c, it, path, del); });
+      tools.append(up, down, del);
+    }
+    tools.append(go);
+    c.append(thumbOf(it, "home-card-thumb"), mk("div", "home-card-name", it.name), meta, tools);
+    c.dataset.tipName = it.name; c.dataset.tipWhat = k.label + (it.detail ? " · " + it.detail : "") + (it.updated ? " · " + ago(it.updated) : "") + " - click to see it big, double-click " + whatOpens[it.kind] + ".";
+    let t = 0;   // one click: see it big right here; a double click: open it where it lives (Forge, Files ...)
+    c.addEventListener("click", () => { clearTimeout(t); t = setTimeout(() => look(it), 230); });
+    c.addEventListener("dblclick", () => { clearTimeout(t); open(it); });
     return c;
+  }
+  /** The workspace path thumbs / delete work on (pictures LOKI made, Forge models), or "". */
+  function ratePath(it) {
+    if (it.kind === "made") return it.path_or_id;
+    if (it.kind === "forge" && /^models\//.test(it.path_or_id || "")) return it.path_or_id;
+    return "";
+  }
+  async function rateCard(c, path, n) {
+    const r = await call("/image/rate", { path, rating: n }).catch(() => null);
+    if (r && r.ok) { c.classList.toggle("liked", r.rating > 0); c.classList.toggle("disliked", r.rating < 0); }
+  }
+  async function deleteCard(c, it, path, del) {
+    if (!del.dataset.armed) {   // two clicks, no pop-up dialog
+      del.dataset.armed = "1"; del.classList.add("armed"); del.dataset.tipName = "Click again to delete";
+      setTimeout(() => { delete del.dataset.armed; del.classList.remove("armed"); del.dataset.tipName = "Delete"; }, 3000);
+      return;
+    }
+    const r = await call("/image/delete", { path }).catch(() => null);
+    if (r && r.ok) {             // gone at once, in place: no redraw, no jump
+      S.items = S.items.filter((x) => keyOf(x) !== keyOf(it));
+      const next = c.nextElementSibling; c.remove(); if (next && next.focus) next.focus();
+    }
+  }
+  /** Everything the viewer can show (pictures + 3D models), in the grid's order. */
+  function viewables() {
+    return visible().filter((x) => (x.thumb && !x.video) || (x.kind === "forge" && x.open && x.open.model))
+      .map((x) => ({ key: keyOf(x), src: x.thumb || "", name: x.name, path: ratePath(x),
+                     model: x.kind === "forge" && x.open ? x.open.model : "" }));
+  }
+  /** See it big, right where you are (image_viewer.js). Videos and other kinds open where they live. */
+  function look(it, opts) {
+    if (!it) return;
+    const list = viewables(), at = list.findIndex((p) => p.key === keyOf(it));
+    if (at < 0 || !window.LokiViewer) { open(it); return; }
+    window.LokiViewer.open(list, at, opts || {});
+  }
+  function applySize() {
+    if (root) root.style.setProperty("--home-card-min", SIZES[S.size] + "px");
+    const b = root && root.querySelector(".home-size"); if (b) b.dataset.size = S.size;
+  }
+  function dayOf(t) {
+    if (!t) return "Earlier";
+    const d = new Date(t * 1000), now = new Date();
+    const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const days = Math.round((start(now) - start(d)) / 86400000);
+    if (days <= 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: days > 300 ? "numeric" : undefined });
   }
 
   function heroItem() {
@@ -209,7 +282,7 @@ const LokiHome = (() => {
       pic.title = "Drag to turn it, scroll to zoom - double-click opens it in Forge";
       S.preview = window.LokiModelPreview.mount(pic, it.open.model, { onOpen: () => open(it) });
     }
-    const pics = pictures(), at = pics.findIndex((p) => p.key === keyOf(it));
+    const pics = viewables().filter((p) => !p.model), at = pics.findIndex((p) => p.key === keyOf(it));
     if (at >= 0) {   // a picture: click it to see it big and step through everything (image_viewer.js)
       pic.classList.add("home-hero-viewable");
       pic.title = "Click to see it big - then ‹ › (or ← →) through all your pictures, select an area to focus, crop or edit only it";
@@ -250,12 +323,6 @@ const LokiHome = (() => {
     }
     hero.append(pic, side);
   }
-  /** Every picture Home shows, in Home's order: what the viewer steps through. */
-  function pictures() {
-    return S.items.filter((x) => x.thumb && !x.video && x.kind !== "job" && x.kind !== "forge")   // models: the 3D preview
-      .map((x) => ({ key: keyOf(x), src: x.thumb, name: x.name, path: x.kind === "made" ? x.path_or_id : "" }));
-  }
-
   async function jobDetail(id) {
     const r = await call("/jobs").catch(() => null);
     return ((r && r.jobs) || []).find((j) => j.id === id) || null;
@@ -297,12 +364,19 @@ const LokiHome = (() => {
   function render() {
     if (!root) return;
     for (const b of root.querySelectorAll(".home-kind")) b.setAttribute("aria-pressed", String(b.dataset.kind === S.filter));
-    const list = visible(), n = perRow();
-    grid.replaceChildren(...(S.all ? list : list.slice(0, n)).map(card));
-    more.hidden = list.length <= n;
-    more.textContent = S.all ? "Fewer" : "All " + list.length;
-    more.title = S.all ? "Show one row again." : "Show all " + list.length + ".";
-    root.querySelector(".home-recent-head").hidden = !list.length;
+    const list = visible(), shown = list.slice(0, S.shown), nodes = [];
+    let day = "";
+    for (const it of shown) {   // grouped by day, newest first (Google Photos / Lightroom style)
+      const d = dayOf(it.updated);
+      if (d !== day) { day = d; nodes.push(mk("h3", "home-day", d)); }
+      nodes.push(card(it));
+    }
+    const top = root.scrollTop;   // a redraw (new things arriving) never moves the page
+    grid.replaceChildren(...nodes);
+    root.scrollTop = top;
+    more.hidden = list.length <= shown.length;
+    more.textContent = "Show more (" + (list.length - shown.length) + ")";
+    more.title = "Show the next " + Math.min(PAGE, list.length - shown.length) + ".";
     const r = running();
     live.hidden = !r.length;
     live.replaceChildren(mk("span", "home-live-dot"), mk("span", "", r.length + " working"));
@@ -426,6 +500,6 @@ const LokiHome = (() => {
   }
 
   document.addEventListener("DOMContentLoaded", start);
-  return { refresh, open, openStudio, closeStudio, studioOpen, sync, items: () => S.items.slice() };
+  return { refresh, open, look, openStudio, closeStudio, studioOpen, sync, items: () => S.items.slice(), dayOf };
 })();
 window.LokiHome = LokiHome;

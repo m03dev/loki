@@ -110,6 +110,10 @@ async def main():
         await E("window.LokiHome && LokiHome.refresh && LokiHome.refresh()")
         await page.wait_for_selector(".home-hero-rate .home-rate-up", timeout=10000)
         check("Home: thumbs up / down right next to the picture", True)
+        if SHOTS:
+            await page.hover(".home-card")
+            await page.wait_for_timeout(200)
+            await page.screenshot(path=str(SHOTS / "0_home.png"))
         await page.click(".home-hero-rate .home-rate-up")
         await page.wait_for_function("document.querySelector('.home-rate-up').getAttribute('aria-pressed') === 'true'", timeout=5000)
         check("... thumbs up on Home is saved", image_feedback.rating_of(WS, "images/" + NAMES[0]) == 1)

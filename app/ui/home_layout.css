@@ -31,7 +31,7 @@
 @container (max-width: 640px) {
   .home-hero { grid-template-columns: 1fr; gap: 6px; }
   .home-hero-pic { max-height: 27vh; }
-  .home-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; }
+  .home-grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--home-card-min, 160px), 124px), 1fr)); gap: 10px; }
   .home-hero-side { padding: 0; gap: 2px; flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
   .home-hero-name { font-size: 16px; }
   .home-hero-out { display: none; }

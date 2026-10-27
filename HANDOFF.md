@@ -48,6 +48,15 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Home + turnarounds v3 (2026-10-26 20:00, owner: "when i click on an image it takes me to the top ... jarring ...
+it needs to match in every perspective, environment pieces dont need 4 views"):** Home works like a photo app now - a
+click opens the picture (or a 3D model) in the viewer right there, no jump or redraw; double-click / Shift+Enter opens it
+where it lives; thumbs up / down / delete on every card; the grid is everything grouped by day with "Show more" (60 at a
+time) instead of one row + "All"; thumbnail size S/M/L; the hero shows the whole picture (it cropped tall ones).
+Turnarounds: front / side / back drawn on ONE canvas (1568x672) from the concept and split at the gaps; characters and
+creatures get no top view, props / vehicles do; scenes are concept only. NVIDIA reference pictures: every known input
+form is tried (inline PNG list / string / JPEG / smaller / NVCF asset) and the one that works is remembered
+(harness_data/nvidia_reference_format.json) - the Mac's v2 run got HTTP 422 on the first form.
 **Pictures (2026-10-26 evening, owner: "thumbs down ... lots of settings ... the perspective technical images are
 awful"):** thumbs up / down beside every picture (Home + viewer; down asks why with reason chips) -> engine/image_feedback.py
 (ratings.jsonl + sidecar; the reasons become words in the next prompts for that folder; a pipeline picture's stage is

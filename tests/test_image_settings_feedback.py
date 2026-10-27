@@ -94,7 +94,36 @@ imagegen.NVIDIA_IMAGE_MODELS[:] = ["black-forest-labs/flux.2-klein-4b"]
 r = imagegen.nvidia("side view", 768, 1024, str(TMP / "out"), 5, request=fake_request,
                     extra={"reference": [str(pic)], "steps": 6})
 check("FLUX.2 klein on NVIDIA edits with the reference ('image' list) and the asked steps",
-      sent["body"]["image"][0].startswith("data:image/jpeg") and sent["body"]["steps"] == 6 and r["reference"], sent.get("body", {}).keys())
+      sent["body"]["image"][0].startswith("data:image/png;base64,") and sent["body"]["steps"] == 6 and r["reference"], sent.get("body", {}).keys())
+import io  # noqa: E402
+import urllib.error  # noqa: E402
+forms = []
+
+
+def picky(url, key, body, headers, timeout):     # the Mac 2026-10-26: HTTP 422 on our first form
+    img = body.get("image")
+    form = "asset" if "NVCF-INPUT-ASSET-REFERENCES" in headers else ("one" if isinstance(img, str) else "list")
+    forms.append(form)
+    if form != "asset":
+        raise urllib.error.HTTPError(url, 422, "Unprocessable", {}, io.BytesIO(b'{"detail":"image: expected asset"}'))
+    return fake_request(url, key, body, headers, timeout)
+
+
+out_png = TMP / "out" / "edit.png"
+r = imagegen.nvidia_edit("black-forest-labs/flux.2-klein-4b", {"prompt": "x", "width": 768, "height": 1024}, [str(pic)],
+                         "k", picky, out_png, upload=lambda png, key: "asset-123")
+check("a 422 tries the next way of sending the picture (inline list, one string, JPEG, smaller, NVCF asset) and keeps "
+      "the one that worked", r["reference_form"] == "asset" and forms[-1] == "asset" and out_png.is_file()
+      and json.loads(imagegen._ref_format_path().read_text())["black-forest-labs/flux.2-klein-4b"] == "asset", forms)
+forms.clear()
+imagegen.nvidia_edit("black-forest-labs/flux.2-klein-4b", {"prompt": "x"}, [str(pic)], "k", picky, out_png,
+                     upload=lambda png, key: "asset-123")
+check("... next time it starts with that way", forms == ["asset"], forms)
+try:
+    imagegen.nvidia_edit("m", {"prompt": "x"}, [str(pic)], "k", picky, out_png, upload=lambda png, key: (_ for _ in ()).throw(RuntimeError("no assets")))
+    check("every way refused -> an error that quotes what NVIDIA said", False)
+except RuntimeError as exc:
+    check("every way refused -> an error that quotes what NVIDIA said", "expected asset" in str(exc) and "HTTP 422" in str(exc), str(exc)[:300])
 os.environ.pop("NVIDIA_API_KEY")
 
 # ---- thumbs up / down

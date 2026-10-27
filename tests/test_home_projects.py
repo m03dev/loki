@@ -303,11 +303,23 @@ async def window():
               and await E("[...document.querySelectorAll('.home-ico')].every((b) => b.dataset.tipName && b.dataset.tipWhat && b.getAttribute('aria-label'))"), info)
         hero = await E("(() => { const h = document.querySelector('.home-hero'); return h && !h.hidden ? h.querySelector('.home-hero-name').textContent : ''; })()")
         check("the big preview shows the latest render", hero == "Castle at dusk", hero)
+        top0 = await E("document.getElementById('home-hub').scrollTop")
         await page.click(".home-card[data-kind=made]")
-        check("a click on a picture LOKI made shows it big", await E("document.querySelector('.home-hero-name').textContent") == "Knight with sword and shield"
-              and await E("!!document.querySelector('.home-hero-pic img')"))
+        await page.wait_for_selector(".lv .lv-img", timeout=5000)
+        check("a click on a picture opens it big RIGHT THERE (the viewer), the page does not jump or redraw (owner 2026-10-26)",
+              await E("document.querySelector('.lv-name').textContent") == "Knight with sword and shield"
+              and await E("document.querySelector('.home-hero-name').textContent") == "Castle at dusk"
+              and await E("document.getElementById('home-hub').scrollTop") == top0)
+        await page.keyboard.press("Escape")
+        check("... Esc closes it and you are where you were", await E("!document.querySelector('.lv')"))
+        days = await E("[...document.querySelectorAll('.home-day')].map((d) => d.textContent)")
+        check("the grid is grouped by day", days[:1] == ["Today"], days)
+        tools = await E("(() => { const c = document.querySelector('.home-card[data-kind=made]'); return [...c.querySelectorAll('.home-card-tools .home-ico')].map((b) => b.dataset.tipName); })()")
+        check("each picture card has thumbs up / down / delete / open on hover", tools == ["Thumbs up", "Thumbs down", "Delete", "Open Knight with sword and shield"], tools)
+        await page.mouse.move(2, 2)
+        await page.wait_for_timeout(200)
         await page.hover(".home-kind[data-kind=forge]")
-        await page.wait_for_timeout(500)
+        await page.wait_for_timeout(700)
         check("hovering an icon shows its tooltip", await E("(() => { const t = document.querySelector('.icon-tip'); return !!t && !t.hidden && t.textContent.includes('Forge'); })()"))
         await page.click(".home-kind[data-kind=forge]")
         check("the kind icons filter the grid", await E("[...document.querySelectorAll('.home-card')].map((c) => c.dataset.kind)") == ["forge"])
@@ -462,15 +474,15 @@ async def window():
         rows = await E("[...document.querySelectorAll('.home-empty-row')].map((r) => r.textContent)")
         check("one kind picked and none of it: how to make one", len(rows) == 1 and "ask LOKI for a picture" in rows[0], rows)
         await page.click(".home-kind[data-kind=all]")
-        many = dict(ITEMS, items=[dict(ITEMS["items"][2], name="m%d" % i, path_or_id="models/m%d.glb" % i) for i in range(20)])
+        many = dict(ITEMS, items=[dict(ITEMS["items"][2], name="m%d" % i, path_or_id="models/m%d.glb" % i) for i in range(70)])
         state["items"] = many
         await E("LokiHome.refresh()")
         await page.wait_for_timeout(300)
-        row = await E("(() => { const c = [...document.querySelectorAll('.home-card')]; return { n: c.length, tops: new Set(c.map((x) => Math.round(x.getBoundingClientRect().top))).size, more: document.querySelector('.home-more').textContent }; })()")
-        check("two rows of recent things beside the chat, 'All 20' for the rest", row["tops"] == 2 and 2 <= row["n"] < 20 and row["more"] == "All 20", row)
+        row = await E("(() => { const c = [...document.querySelectorAll('.home-card')], m = document.querySelector('.home-more'); return { n: c.length, more: m.hidden ? '' : m.textContent }; })()")
+        check("the grid shows everything (60 at a time), 'Show more' for the rest - no one-row 'All' toggle", row == {"n": 60, "more": "Show more (10)"}, row)
         await page.click(".home-more")
-        check("All shows every one", await E("document.querySelectorAll('.home-card').length") == 20)
-        await page.click(".home-more")
+        check("Show more adds the rest, in place", await E("document.querySelectorAll('.home-card').length") == 70
+              and await E("document.querySelector('.home-more').hidden"))
         state["items"] = ITEMS
         await E("LokiHome.refresh()")
         await page.set_viewport_size({"width": 760, "height": 540})

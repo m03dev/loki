@@ -49,22 +49,49 @@ def fake_maker(args, cwd):
 
 r = turnaround.make_turnaround({"concept": "images/20261026-dragon.png", "kind": "creature"}, ws, fake_maker,
                                clock=lambda: 1793030000.0)
-check("it makes front, side, back and top, and one sheet", r.get("ok") and set(r["views"]) == {"front", "side", "back", "top"}
-      and (ws / r["sheet"]).is_file() and all((ws / v).is_file() for v in r["views"].values()), r)
-check("the design comes from the concept's own prompt (harmonious with the concept artist)",
-      all("a red baby dragon with golden horns and a scaled belly" in a["prompt"] for a in asked), asked[:1])
-check("every view on the same seed, flat orthographic, plain background, its own view words",
-      len({a["seed"] for a in asked}) == 1 and all("orthographic" in a["prompt"] and "plain flat light grey" in a["prompt"]
-                                                 for a in asked) and "BACK view" in asked[2]["prompt"], asked)
-check("the concept is the REFERENCE for every view (an edit, not a new drawing) and the front joins it after",
-      all(a.get("reference") and a["reference"][0] == "images/20261026-dragon.png" and a.get("need_edit") for a in asked)
-      and len(asked[0]["reference"]) == 1 and asked[1]["reference"][1].endswith("/front.png"), [a.get("reference") for a in asked])
-check("no words that make the model write labels ('model sheet', 'turnaround'), and 'no text' is asked",
-      all("sheet" not in a["prompt"].lower() and "no text, no letters, no labels" in a["prompt"] for a in asked))
+check("a creature: front, side and back (no top view - that is for props), and one sheet",
+      r.get("ok") and set(r["views"]) == {"front", "side", "back"} and (ws / r["sheet"]).is_file()
+      and all((ws / v).is_file() for v in r["views"].values()), r)
+check("front, side and back are drawn TOGETHER on one wide canvas (one picture = one design), then split",
+      len(asked) == 1 and (asked[0]["width"], asked[0]["height"]) == turnaround.SHEET_SIZE
+      and "FRONT view" in asked[0]["prompt"] and "SIDE view" in asked[0]["prompt"] and "BACK view" in asked[0]["prompt"]
+      and "exactly the same creature" in asked[0]["prompt"] and set(r["mode"].values()) == {"reference+sheet"}, (asked, r.get("mode")))
+check("the design comes from the concept: its picture as the reference AND its own words",
+      asked[0].get("reference") == ["images/20261026-dragon.png"] and asked[0].get("need_edit")
+      and "a red baby dragon with golden horns and a scaled belly" in asked[0]["prompt"], asked[0])
+check("no words that make the model write labels ('model sheet'), and 'no text' is asked",
+      "model sheet" not in asked[0]["prompt"].lower() and "no text, no letters, no labels" in asked[0]["prompt"])
 check("each view's colours are checked against the concept (the red stays red)",
-      min(r["colour_match"].values()) > 0.8 and set(r["mode"].values()) == {"reference"}, (r.get("colour_match"), r.get("mode")))
+      min(r["colour_match"].values()) > 0.8, r.get("colour_match"))
+asked.clear()
+rp = turnaround.make_turnaround({"concept": "images/20261026-dragon.png", "subject": "a red lantern", "kind": "prop"}, ws, fake_maker)
+check("a prop also gets a top view, drawn after from the concept + the front", rp["ok"] and set(rp["views"]) == {"front", "side", "back", "top"}
+      and len(asked) == 2 and asked[1]["reference"][1].endswith("/front.png") and "TOP view" in asked[1]["prompt"], [a.get("reference") for a in asked])
+asked.clear()
+r1 = turnaround.make_turnaround({"concept": "images/20261026-dragon.png", "kind": "creature", "layout": "views"}, ws, fake_maker)
+check("layout=views: one view at a time, the concept + the front as references",
+      r1["ok"] and len(asked) == 3 and len(asked[0]["reference"]) == 1 and asked[1]["reference"][1].endswith("/front.png"), asked)
+asked.clear()
+# splitting: three figures on a grey canvas, cut at the gaps
+sheet_png = TMP / "three.png"
+im = Image.new("RGB", (1568, 672), (200, 200, 200))
+from PIL import ImageDraw  # noqa: E402
+d = ImageDraw.Draw(im)
+for x0 in (180, 700, 1180):
+    d.rectangle((x0, 80, x0 + 220, 620), fill=(150, 40, 40))
+im.save(sheet_png)
+panels = turnaround.split_panels(sheet_png, 3)
+check("a wide sheet splits at the gaps between the figures into 3 panels, each figure whole and centred",
+      len(panels) == 3 and turnaround.split_panels.last == "gaps"
+      and all(abs(turnaround.silhouette_box(_p)[1]) < 0.06 if False else True for _p in [])
+      and all(p.height == 672 for p in panels), [p.size for p in panels])
+for i, p in enumerate(panels):
+    p.save(TMP / ("panel%d.png" % i))
+check("... each panel holds one whole figure in the middle", all(abs(turnaround.silhouette_box(TMP / ("panel%d.png" % i))[1]) < 0.06
+      and turnaround.silhouette_box(TMP / ("panel%d.png" % i))[0] > 0.7 for i in range(3)),
+      [turnaround.silhouette_box(TMP / ("panel%d.png" % i)) for i in range(3)])
 check("a creature gets the neutral reference pose; a character the T-pose",
-      "neutral reference pose" in asked[0]["prompt"] and "T-pose" in turnaround.view_prompt("a knight", "character", "front"))
+      "neutral reference pose" in turnaround.sheet_prompt("a golem", "creature", True) and "T-pose" in turnaround.view_prompt("a knight", "character", "front"))
 info = json.loads((ws / "turnarounds" / r["sheet"].split("/")[-1].replace("-sheet.png", "") / "turnaround.json").read_text())
 check("the lineage is saved: which concept, subject, kind, seed, views", info["concept"] == "images/20261026-dragon.png"
       and info["kind"] == "creature" and info["views"]["front"].endswith("/front.png"), info)
@@ -82,7 +109,7 @@ def text_only(args, cwd):
 asked.clear()
 r2 = turnaround.make_turnaround({"concept": "images/20261026-dragon.png", "kind": "creature"}, ws, text_only)
 check("no edit-capable model: drawn from text, and the turnaround SAYS so (mode, notes) with a low colour match",
-      r2["ok"] and set(r2["mode"].values()) == {"text"} and r2["notes"] and max(r2["colour_match"].values()) < 0.5, r2)
+      r2["ok"] and set(r2["mode"].values()) == {"text+sheet"} and r2["notes"] and max(r2["colour_match"].values()) < 0.5, r2)
 Image.new("RGB", (1344, 768), (90, 120, 160)).save(ws / "images" / "fortress.png")
 r3 = turnaround.make_turnaround({"concept": "images/fortress.png", "subject": "a glacier fortress under an aurora"}, ws, fake_maker)
 check("a scene is refused - a turnaround needs one subject (the library interior on the Mac)",

@@ -406,6 +406,100 @@ def reference_data_urls(paths, max_side=768):
     return out
 
 
+REF_FORMAT_FILE = "nvidia_reference_format.json"     # which way of sending reference pictures this key's API took
+
+
+def _ref_format_path():
+    base = Path(os.environ.get("LOKI_DATA") or (Path(__file__).resolve().parent.parent.parent / "harness_data"))
+    return base / REF_FORMAT_FILE
+
+
+def _http_detail(err):
+    try:
+        return (err.read() or b"").decode("utf-8", "replace")[:300]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def nvcf_asset(png: bytes, key: str, opener=None) -> str:
+    """Upload a picture as an NVCF asset (NVIDIA's way for images too big to inline); its asset id."""
+    opener = opener or urllib.request.urlopen
+    req = urllib.request.Request("https://api.nvcf.nvidia.com/v2/nvcf/assets", method="POST",
+                                 data=json.dumps({"contentType": "image/png", "description": "loki reference"}).encode(),
+                                 headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                                          "Accept": "application/json"})
+    with opener(req, timeout=60) as resp:
+        made = json.loads(resp.read().decode("utf-8") or "{}")
+    put = urllib.request.Request(made["uploadUrl"], data=png, method="PUT",
+                                 headers={"Content-Type": "image/png", "x-amz-meta-nvcf-asset-description": "loki reference"})
+    with opener(put, timeout=120) as resp:
+        resp.read()
+    return made["assetId"]
+
+
+def _small_png(path, max_side):
+    import io
+    try:
+        from PIL import Image  # pylint: disable=import-outside-toplevel
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            im.thumbnail((max_side, max_side))
+            buf = io.BytesIO()
+            im.save(buf, "PNG", optimize=True)
+            return buf.getvalue()
+    except ImportError:
+        return Path(path).read_bytes()
+
+
+def nvidia_edit(model, body, refs, key, call, path, upload=None):
+    """FLUX.2 klein editing with reference pictures on NVIDIA. The hosted API's exact input format is not documented
+    (the Mac, 2026-10-26: our first form got HTTP 422), so each known form is tried in turn - inline base64 PNG list,
+    a single string, JPEG, then NVCF assets - and the one that works is remembered for next time."""
+    import base64
+    forms = {
+        "png-list": lambda: {"image": ["data:image/png;base64," + base64.b64encode(_small_png(r, 768)).decode() for r in refs]},
+        "png-one": lambda: {"image": "data:image/png;base64," + base64.b64encode(_small_png(refs[0], 768)).decode()},
+        "jpeg-list": lambda: {"image": reference_data_urls(refs)},
+        "png-small": lambda: {"image": ["data:image/png;base64," + base64.b64encode(_small_png(r, 384)).decode() for r in refs]},
+        "asset": None,
+    }
+    try:
+        first = json.loads(_ref_format_path().read_text(encoding="utf-8")).get(model)
+    except (OSError, ValueError):
+        first = None
+    order = ([first] if first in forms else []) + [f for f in forms if f != first]
+    tried = []
+    for form in order:
+        headers = {"Accept": "application/json"}
+        try:
+            if form == "asset":
+                ids = [(upload or nvcf_asset)(_small_png(r, 1024), key) for r in refs]
+                extra = {"image": ["data:image/png;asset_id,%s" % i for i in ids]}
+                headers["NVCF-INPUT-ASSET-REFERENCES"] = ",".join(ids)
+            else:
+                extra = forms[form]()
+            data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, dict(body, **extra), headers, 180)
+            Path(path).write_bytes(_b64_image(data))
+        except urllib.error.HTTPError as err:
+            tried.append("%s: HTTP %s %s" % (form, err.code, _http_detail(err)))
+            if err.code in (401, 403, 429):
+                break
+            continue
+        except Exception as exc:  # noqa: BLE001
+            tried.append("%s: %s" % (form, str(exc)[:160]))
+            continue
+        try:
+            p = _ref_format_path()
+            known = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+            known[model] = form
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(known), encoding="utf-8")
+        except (OSError, ValueError):
+            pass
+        return {"file": str(path), "reference_form": form}
+    raise RuntimeError("NVIDIA %s would not take the reference pictures: %s" % (model, " | ".join(tried)))
+
+
 def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra=None):
     """NVIDIA's hosted FLUX. A rate limit or a server hiccup is waited out twice (Retry-After, else 8 s then 20 s)
     before giving up - 2026-10-25: three concept pieces asked 10 s apart, the middle one hit a passing 429 and fell
@@ -429,7 +523,9 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
             if "flux.2" not in model:        # only FLUX.2 edits with reference pictures here
                 errors.append("%s: no reference editing" % model)
                 continue
-            body["image"] = reference_data_urls(ex["reference"])
+            path = _out_path(out_dir, prompt)
+            res = nvidia_edit(model, body, ex["reference"], key, call, path)
+            return dict(res, backend="nvidia", model=model, width=w, height=h, reference=True)
         data, exc = None, None
         for wait in (0.0,) + NVIDIA_RETRY_WAITS:
             if wait:

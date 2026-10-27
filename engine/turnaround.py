@@ -29,6 +29,13 @@ from typing import Callable
 KINDS = ("character", "creature", "prop", "vehicle")
 VIEWS = ("front", "side", "back", "top", "three-quarter")
 DEFAULT_VIEWS = ("front", "side", "back", "top")
+# Owner 2026-10-26: "it needs to match in every perspective". Front, side and back are drawn TOGETHER on one wide canvas
+# (one picture = one design: the model's attention keeps them the same), then split into three panels. A top view
+# (props and vehicles) is drawn after, from the concept + the front. Characters / creatures get no top view by default.
+SHEET_VIEWS = ("front", "side", "back")
+SHEET_SIZE = (1568, 672)                 # a wide size FLUX.2 klein supports; each panel ~520 x 672
+KIND_VIEWS = {"character": ("front", "side", "back"), "creature": ("front", "side", "back"),
+              "prop": ("front", "side", "back", "top"), "vehicle": ("front", "side", "back", "top")}
 POSE = {
     "character": "standing in a T-pose, arms straight out to the sides at shoulder height, palms down, legs straight "
                  "and slightly apart, feet flat, neutral face, looking straight ahead",
@@ -102,6 +109,71 @@ def is_scene(subject: str, concept_size: tuple | None = None) -> str:
     if concept_size and concept_size[1] and concept_size[0] / float(concept_size[1]) > 1.6:
         return "the concept is a wide %dx%d picture (a scene) - a turnaround needs one subject" % concept_size
     return ""
+
+
+def sheet_prompt(subject: str, kind: str, reference: bool) -> str:
+    pose = POSE.get(kind, POSE["prop"])
+    who = ("the same %s as in the reference picture (%s) - keep its exact design, shapes, proportions, colours, "
+           "materials, markings and art style - " % (kind, subject.rstrip(". ")[:300])) if reference \
+        else "%s, " % subject.rstrip(". ")[:300]
+    return ("Three full-body views of %sside by side on one wide canvas, evenly spaced with clear empty space between "
+            "them, all the same size and scale, feet on the same level line: on the left the orthographic FRONT view "
+            "facing the camera, in the middle the orthographic SIDE view (exact left profile), on the right the "
+            "orthographic BACK view. %s in every view. The three views show exactly the same %s. %s."
+            % (who, pose[:1].upper() + pose[1:], kind, VIEW_STYLE))
+
+
+def split_panels(path, n: int = 3) -> list:
+    """A wide sheet -> n panel images (PIL), cut at the background gaps between the figures; even thirds when the gaps
+    are not clear. Each panel keeps the full height; the background colour is read from the corners."""
+    from PIL import Image  # pylint: disable=import-outside-toplevel
+    with Image.open(path) as im:
+        img = im.convert("RGB")
+    W, H = img.size
+    small = img.resize((min(W, 784), max(1, round(H * min(W, 784) / W))))
+    sw, sh = small.size
+    corners = [small.getpixel(p) for p in ((1, 1), (sw - 2, 1), (1, sh - 2), (sw - 2, sh - 2))]
+    bg = tuple(sorted(c[i] for c in corners)[1] for i in range(3))
+    px = small.load()
+    fg = []
+    for x in range(sw):
+        cnt = 0
+        for y in range(0, sh, 2):
+            r, g, b = px[x, y]
+            if abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2]) > 60:
+                cnt += 1
+        fg.append(cnt > 1)
+    runs, x = [], 0
+    while x < sw:                       # runs of columns with something in them
+        if fg[x]:
+            x0 = x
+            while x < sw and fg[x]:
+                x += 1
+            runs.append([x0, x])
+        x += 1
+    merged = []                         # close small gaps (a tail or an arm parted from the body)
+    for r in runs:
+        if merged and r[0] - merged[-1][1] < sw * 0.02:
+            merged[-1][1] = r[1]
+        else:
+            merged.append(r)
+    big = sorted(sorted(merged, key=lambda r: r[1] - r[0], reverse=True)[:n])
+    scale = W / float(sw)
+    if len(big) == n and all(r[1] - r[0] > sw * 0.05 for r in big):
+        cuts = [0] + [round((big[i][1] + big[i + 1][0]) / 2 * scale) for i in range(n - 1)] + [W]
+        how = "gaps"
+    else:
+        cuts = [round(W * i / n) for i in range(n + 1)]
+        how = "thirds"
+    panels = []
+    for i in range(n):
+        panel = img.crop((cuts[i], 0, cuts[i + 1], H))
+        side = max(panel.width, round(H * 0.75))         # a 3:4 panel on the same background, figure centred
+        canvas = Image.new("RGB", (side, H), bg)
+        canvas.paste(panel, ((side - panel.width) // 2, 0))
+        panels.append(canvas)
+    split_panels.last = how
+    return panels
 
 
 def silhouette_box(path) -> tuple:
@@ -179,7 +251,8 @@ def make_turnaround(args: dict, cwd: Path, image_maker: Callable[[dict, Path], d
     kind = str(a.get("kind") or "character").strip().lower()
     if kind not in KINDS:
         return {"ok": False, "error": "kind must be one of %s" % ", ".join(KINDS)}
-    raw = a.get("views") or DEFAULT_VIEWS
+    kind_pre = str(a.get("kind") or "character").strip().lower()
+    raw = a.get("views") or KIND_VIEWS.get(kind_pre, DEFAULT_VIEWS)
     views = [v.strip().lower() for v in (raw.split(",") if isinstance(raw, str) else raw) if str(v).strip()]
     bad = [v for v in views if v not in VIEWS]
     if bad or not views:
@@ -205,7 +278,47 @@ def make_turnaround(args: dict, cwd: Path, image_maker: Callable[[dict, Path], d
     tall = kind in ("character", "creature")
     made, labels, backend, model, errors, modes, match, shape = [], [], "", "", [], {}, {}, {}
     use_ref = bool(concept) and str(a.get("reference", "on")).lower() not in ("off", "0", "false", "no")
+    layout = str(a.get("layout") or "sheet").lower()
+    together = [v for v in SHEET_VIEWS if v in views]
+    if layout == "sheet" and len(together) == 3:
+        job = {"prompt": sheet_prompt(subject, kind, False), "negative": SHEET_NEG, "width": SHEET_SIZE[0],
+               "height": SHEET_SIZE[1], "seed": seed, "folder": "%s/%s" % (ROOT, name)}
+        res, mode = {"ok": False}, "text"
+        if use_ref:
+            res = image_maker(dict(job, prompt=sheet_prompt(subject, kind, True), reference=[concept], need_edit=True), cwd)
+            mode = "reference" if res.get("ok") else "text"
+            if not res.get("ok"):
+                errors.append("sheet: no reference edit (%s) - drawn from text" % str(res.get("error") or "")[:160])
+        if not res.get("ok"):
+            res = image_maker(job, cwd)
+        if res.get("ok"):
+            src = (cwd / res["files"][0]).resolve()
+            whole = folder / ("views%s" % (src.suffix.lower() or ".png"))
+            try:
+                os.replace(src, whole)
+                for view, panel in zip(SHEET_VIEWS, split_panels(whole, 3)):
+                    dest = (folder / (view + ".png")).resolve()
+                    panel.save(dest)
+                    made.append(dest)
+                    labels.append(view)
+                    modes[view] = mode + "+sheet"
+                    if concept:
+                        try:
+                            match[view] = colour_match(cwd / concept, dest)
+                        except Exception:  # noqa: BLE001
+                            pass
+                    try:
+                        shape[view] = silhouette_box(dest)
+                    except Exception:  # noqa: BLE001
+                        pass
+                backend, model = res.get("backend", ""), res.get("model", "")
+            except Exception as exc:  # noqa: BLE001 - fall back to one view at a time
+                errors.append("sheet: could not split (%s) - one view at a time" % str(exc)[:120])
+        else:
+            errors.append("sheet: %s - one view at a time" % str(res.get("error") or "not made")[:160])
     for view in views:
+        if view in labels:
+            continue
         w, h = (768, 1024) if tall and view not in ("top",) else (1024, 1024)
         job = {"prompt": view_prompt(subject, kind, view), "negative": SHEET_NEG, "width": w, "height": h,
                "seed": seed, "folder": "%s/%s" % (ROOT, name)}
@@ -249,7 +362,8 @@ def make_turnaround(args: dict, cwd: Path, image_maker: Callable[[dict, Path], d
     rel = lambda p: Path(p).resolve().relative_to(cwd.resolve()).as_posix()  # noqa: E731
     info = {"concept": concept, "subject": subject, "kind": kind, "seed": seed, "backend": backend, "model": model,
             "views": {v: rel(f) for v, f in zip(labels, made)}, "sheet": rel(sheet), "made": stamp,
-            "missing": [e for e in errors if "drawn from text" not in e], "notes": [e for e in errors if "drawn from text" in e],
+            "missing": [e for e in errors if "drawn from text" not in e and "one view at a time" not in e],
+            "notes": [e for e in errors if "drawn from text" in e or "one view at a time" in e], "layout": layout,
             "mode": modes, "colour_match": match, "silhouette": shape}
     (folder / "turnaround.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
     front = info["views"].get("front") or next(iter(info["views"].values()))

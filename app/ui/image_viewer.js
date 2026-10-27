@@ -45,12 +45,13 @@ const LokiViewer = (() => {
     const r = (v) => Math.round(v * 10000) / 10000;
     return bw > 0 && bh > 0 ? [r(x), r(y), r(bw), r(bh)] : null;
   }
-  /** Pictures only, each once, in order. */
+  /** Pictures (and 3D models: {model}) each once, in order. */
   function clean(items) {
     const seen = new Set(), out = [];
     for (const it of items || []) {
-      if (!it || !it.src || seen.has(it.src)) continue;
-      seen.add(it.src); out.push({ src: it.src, name: it.name || "", path: it.path || "" });
+      const id = it && (it.model ? "model:" + it.model : it.src);
+      if (!it || !id || seen.has(id)) continue;
+      seen.add(id); out.push({ src: it.src || "", name: it.name || "", path: it.path || "", model: it.model || "" });
     }
     return out;
   }
@@ -166,21 +167,30 @@ const LokiViewer = (() => {
     if (!V) return;
     stopSelect();
     const it = V.list[V.i];
-    V.img.src = it.src; V.img.alt = it.name;
+    if (V.model3d) { V.model3d.dispose(); V.model3d = null; }
+    if (V.box3d) { V.box3d.remove(); V.box3d = null; }
+    const is3d = !!(it.model && window.LokiModelPreview);
+    V.img.hidden = is3d;
+    if (is3d) {   // a 3D model: turn it right here (model_preview.js); its tools are Forge's
+      V.box3d = mk("div", "lv-model"); V.img.parentNode.append(V.box3d);
+      V.model3d = window.LokiModelPreview.mount(V.box3d, it.model, {});
+    } else { V.img.src = it.src; }
+    V.img.alt = it.name;
     V.title.textContent = it.name || "";
     V.count.textContent = (V.i + 1) + " / " + V.list.length;
     V.prev.disabled = V.i <= 0; V.next.disabled = V.i >= V.list.length - 1;
     const editable = !!it.path;
-    for (const b of [V.bSelect, V.bFocus, V.bCrop, V.bEdit]) b.disabled = false;
-    V.bCrop.disabled = V.bEdit.disabled = !editable;
+    for (const b of [V.bSelect, V.bFocus, V.bCrop, V.bEdit]) b.disabled = is3d;
+    V.bCrop.disabled = V.bEdit.disabled = !editable || is3d;
     if (!editable) { V.bCrop.title = V.bEdit.title = "Only pictures LOKI saved in its folders can be cropped or edited."; }
     V.bCompare.hidden = !V.before || V.list[V.i].before !== V.before;
     V.editRow.hidden = true; V.why.hidden = true;
     for (const b of [V.bUp, V.bDown, V.bSet, V.bDel]) b.disabled = !editable;
+    V.bSet.disabled = !editable || is3d;
     disarm();
     V.rating = 0; paintThumbs(); V.info = null;
     if (editable) loadInfo(it);
-    for (const d of [-1, 1]) { const n = V.list[V.i + d]; if (n) { const pre = new Image(); pre.src = n.src; } }   // next one is instant
+    for (const d of [-1, 1]) { const n = V.list[V.i + d]; if (n && n.src && !n.model) { const pre = new Image(); pre.src = n.src; } }   // next one is instant
   }
 
   function go(d) {
@@ -443,6 +453,7 @@ const LokiViewer = (() => {
   function close() {
     if (!V) return;
     stopSelect();
+    if (V.model3d) { V.model3d.dispose(); V.model3d = null; }
     document.removeEventListener("keydown", onKey, true);
     document.removeEventListener("keyup", onKeyUp, true);
     V.wrap.remove(); V = null;
