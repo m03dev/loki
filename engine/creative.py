@@ -272,15 +272,20 @@ def local_image_status(env: dict | None = None, info: dict | None = None, which:
 
 # ----------------------------------------------------------------------------- command lines
 def sdcpp_argv(binary: str, key: str, prompt: str, negative: str, width: int, height: int, seed: int,
-               out: Path, count: int = 1, info: dict | None = None, env: dict | None = None) -> list:
+               out: Path, count: int = 1, info: dict | None = None, env: dict | None = None, steps=None, cfg=None,
+               sampler=None, init_image=None, strength=None) -> list:
     spec = SDCPP_MODELS[key]
     files = {role: str(path) for role, _u, path, _g in model_files(key, env)}
     argv = [str(binary), "--diffusion-model", files["diffusion"], "--vae", files["vae"], "--llm", files["llm"],
-            "-p", prompt, "--cfg-scale", str(spec["cfg"]), "--steps", str(spec["steps"]),
+            "-p", prompt, "--cfg-scale", str(cfg if cfg else spec["cfg"]), "--steps", str(int(steps or spec["steps"])),
             "-W", str(int(width)), "-H", str(int(height)), "-s", str(int(seed)), "-o", str(out),
             "--diffusion-fa"]
     if negative:
         argv += ["-n", negative]
+    if sampler:
+        argv += ["--sampling-method", str(sampler)]
+    if init_image:                        # image-to-image: start from that picture
+        argv += ["-i", str(init_image), "--strength", "%.2f" % float(strength or 0.6)]
     if int(count) > 1:
         argv += ["-b", str(int(count))]
     vram = float((info or {}).get("vram_gb") or 0)
@@ -292,9 +297,13 @@ def sdcpp_argv(binary: str, key: str, prompt: str, negative: str, width: int, he
 
 
 def mflux_argv(cmd: str, model: str, prompt: str, width: int, height: int, seed: int, out: Path,
-               steps: int = 9, low_ram: bool = False) -> list:
+               steps: int = 9, low_ram: bool = False, guidance=None, init_image=None, strength=None) -> list:
     argv = [str(cmd), "--model", model, "--prompt", prompt, "--width", str(int(width)), "--height", str(int(height)),
-            "--seed", str(int(seed)), "--steps", str(int(steps)), "--output", str(out)]
+            "--seed", str(int(seed)), "--steps", str(int(steps or 9)), "--output", str(out)]
+    if guidance:
+        argv += ["--guidance", "%.2f" % float(guidance)]
+    if init_image:                        # mflux: --image-strength is how much of the picture to KEEP
+        argv += ["--image-path", str(init_image), "--image-strength", "%.2f" % (1.0 - float(strength or 0.6))]
     if low_ram:
         argv.append("--low-ram")
     return argv
@@ -311,9 +320,37 @@ def batch_files(out: Path, count: int) -> list:
     return found[:int(count)]
 
 
+MFLUX_EDIT_MODEL = os.environ.get("LOKI_MFLUX_EDIT_MODEL", "flux2-klein-4b")   # Apache-2.0 (the 9B is non-commercial)
+
+
+def mflux_edit_cmd(status: dict, which: Callable = shutil.which) -> str:
+    """mflux's FLUX.2 edit command beside the z-image one (same install), or on PATH; "" when absent."""
+    cmd = str(status.get("cmd") or "")
+    names = ("mflux-generate-flux2-edit", "mflux-generate-flux2-edit.exe")
+    if cmd:
+        for n in names:
+            cand = Path(cmd).parent / n
+            if cand.is_file():
+                return str(cand)
+    return which(names[0]) or ""
+
+
+def mflux_edit_argv(cmd: str, refs: list, prompt: str, width: int, height: int, seed: int, out: Path,
+                    steps: int = 4, low_ram: bool = True, quant: int = 8) -> list:
+    """FLUX.2 klein 4B editing with reference pictures (docs/PIPELINE_RESEARCH_2026-10-26.md, turnarounds):
+    the concept (+ the front view) in, the same subject turned to a new view out. -q 8 fits a 16 GB Mac."""
+    argv = [str(cmd), "--model", MFLUX_EDIT_MODEL, "-q", str(int(quant)), "--image-paths"] + [str(r) for r in refs] + \
+           ["--prompt", prompt, "--steps", str(int(steps or 4)), "--seed", str(int(seed)), "--width", str(int(width)),
+            "--height", str(int(height)), "--output", str(out)]
+    if low_ram:
+        argv.append("--low-ram")
+    return argv
+
+
 def run_local_image(prompt: str, negative: str, width: int, height: int, seed: int, count: int, out_dir: Path,
                     run: Callable = subprocess.run, env: dict | None = None, info: dict | None = None,
-                    status: dict | None = None, out_path: Callable | None = None) -> dict:
+                    status: dict | None = None, out_path: Callable | None = None, steps=None, cfg=None,
+                    sampler=None, init_image=None, strength=None, edit_refs=None) -> dict:
     """Make `count` pictures with this machine's local backend. {"files", "seeds", "backend", "model"}."""
     info = info if info is not None else machine()
     status = status if status is not None else local_image_status(env, info)
@@ -326,9 +363,28 @@ def run_local_image(prompt: str, negative: str, width: int, height: int, seed: i
     path_of = out_path or (lambda i: first if i == 0 else first.with_name("%s_%d.png" % (first.stem, i + 1)))
     started = time.time()
     files, seeds = [], []
+    if edit_refs:              # turn / edit the subject of reference pictures (not image-to-image)
+        cmd = mflux_edit_cmd(status) if status["backend"] == "mflux" else ""
+        if not cmd:
+            raise RuntimeError("no local edit model here (mflux-generate-flux2-edit on the Mac; the PC: Qwen-Image-Edit "
+                               "or FLUX.2 klein through sd.cpp -r, not set up yet)")
+        for i in range(int(count)):
+            out = path_of(i)
+            proc = run(mflux_edit_argv(cmd, edit_refs, prompt, width, height, int(seed) + i, out, steps=int(steps or 4)),
+                       capture_output=True, text=True, timeout=2400)
+            if getattr(proc, "returncode", 1) != 0 or not Path(out).is_file():
+                tail = ((getattr(proc, "stderr", "") or "") + (getattr(proc, "stdout", "") or "")).strip()[-400:]
+                if files:
+                    break
+                raise RuntimeError("mflux FLUX.2 edit failed (exit %s): %s" % (getattr(proc, "returncode", "?"), tail))
+            files.append(str(out))
+            seeds.append(int(seed) + i)
+        return {"files": files, "file": files[0], "seeds": seeds, "seed": seeds[0], "backend": "mflux",
+                "model": MFLUX_EDIT_MODEL, "reference": True, "seconds": round(time.time() - started, 1)}
     if status["backend"] == "sdcpp":
         out = path_of(0)
-        argv = sdcpp_argv(status["bin"], status["model"], prompt, negative, width, height, seed, out, count, info, env)
+        argv = sdcpp_argv(status["bin"], status["model"], prompt, negative, width, height, seed, out, count, info, env,
+                          steps=steps, cfg=cfg, sampler=sampler, init_image=init_image, strength=strength)
         proc = run(argv, capture_output=True, text=True, timeout=1800)
         made = batch_files(out, count)
         if getattr(proc, "returncode", 1) != 0 or not made:
@@ -345,7 +401,8 @@ def run_local_image(prompt: str, negative: str, width: int, height: int, seed: i
         for i in range(int(count)):          # MLX: one at a time (weights stay in the page cache)
             out = path_of(i)
             argv = mflux_argv(status["cmd"], status["model"], prompt, width, height, int(seed) + i, out,
-                              low_ram=low_ram)
+                              steps=int(steps or 9), low_ram=low_ram, guidance=cfg, init_image=init_image,
+                              strength=strength)
             proc = run(argv, capture_output=True, text=True, timeout=1800)
             if getattr(proc, "returncode", 1) != 0 or not Path(out).is_file():
                 tail = ((getattr(proc, "stderr", "") or "") + (getattr(proc, "stdout", "") or "")).strip()[-400:]

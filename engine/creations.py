@@ -47,7 +47,8 @@ SHOWN = {".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", "
          ".ogg": "audio", ".flac": "audio", ".glb": "model", ".gltf": "model", ".obj": "model", ".fbx": "model"}
 META_DIR = ".meta"
 TRASH = "trash"
-META_KEYS = ("idea", "prompt", "negative", "style", "backend", "seed", "aspect", "liked", "daily", "parent", "model")
+META_KEYS = ("idea", "prompt", "negative", "style", "backend", "seed", "aspect", "liked", "daily", "parent", "model",
+             "settings", "rating", "reasons", "note")      # settings / rating: engine/image_api.py, image_feedback.py
 # Sizes for each aspect ratio, about one megapixel, multiples of 64 (Z-Image / FLUX / SDXL all like these).
 ASPECTS = {"1:1": (1024, 1024), "4:3": (1152, 896), "3:4": (896, 1152), "3:2": (1216, 832), "2:3": (832, 1216),
            "16:9": (1344, 768), "9:16": (768, 1344)}

@@ -386,7 +386,27 @@ def _b64_image(data):
 NVIDIA_RETRY_WAITS = (8.0, 20.0)
 
 
-def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None):
+def reference_data_urls(paths, max_side=768):
+    """Reference pictures as small JPEG data URLs (hosted APIs cap the request size): the longest side <= max_side."""
+    import base64
+    import io
+    out = []
+    for p in paths or []:
+        try:
+            from PIL import Image  # pylint: disable=import-outside-toplevel
+            with Image.open(p) as im:
+                im = im.convert("RGB")
+                im.thumbnail((max_side, max_side))
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=88)
+                data = buf.getvalue()
+        except ImportError:
+            data = Path(p).read_bytes()
+        out.append("data:image/jpeg;base64," + base64.b64encode(data).decode())
+    return out
+
+
+def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra=None):
     """NVIDIA's hosted FLUX. A rate limit or a server hiccup is waited out twice (Retry-After, else 8 s then 20 s)
     before giving up - 2026-10-25: three concept pieces asked 10 s apart, the middle one hit a passing 429 and fell
     all the way to the weakest backend while its neighbours came from FLUX."""
@@ -400,10 +420,16 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None):
     for model in NVIDIA_IMAGE_MODELS:
         flux1 = "flux.1" in model
         w, h = nearest_size(width, height) if flux1 else (width, height)
+        ex = extra or {}
         body = {"prompt": prompt[:2000], "width": w, "height": h, "seed": int(seed) % 2**32,
-                "steps": 4 if "schnell" in model or "klein" in model else 30}
+                "steps": int(ex.get("steps") or (4 if "schnell" in model or "klein" in model else 30))}
         if "dev" in model:
             body.update(cfg_scale=3.5, mode="base")
+        if ex.get("reference"):
+            if "flux.2" not in model:        # only FLUX.2 edits with reference pictures here
+                errors.append("%s: no reference editing" % model)
+                continue
+            body["image"] = reference_data_urls(ex["reference"])
         data, exc = None, None
         for wait in (0.0,) + NVIDIA_RETRY_WAITS:
             if wait:
@@ -429,7 +455,8 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None):
             continue
         path = _out_path(out_dir, prompt)
         path.write_bytes(_b64_image(data))
-        return {"file": str(path), "backend": "nvidia", "model": model, "width": w, "height": h}
+        return {"file": str(path), "backend": "nvidia", "model": model, "width": w, "height": h,
+                "reference": bool((extra or {}).get("reference"))}
     raise RuntimeError("NVIDIA image models: " + "; ".join(errors))
 
 
@@ -468,9 +495,16 @@ def huggingface(prompt, width, height, out_dir, seed, opener=None):
     raise RuntimeError("Hugging Face image models: " + "; ".join(errors))
 
 
-def local(prompt, width, height, out_dir, seed, count=1, negative=""):
-    """sd.cpp (PC) or mflux (Mac) through engine/creative.py; a whole batch in one go."""
-    return _creative().run_local_image(prompt, negative, width, height, seed, count, Path(out_dir))
+def local(prompt, width, height, out_dir, seed, count=1, negative="", extra=None):
+    """sd.cpp (PC) or mflux (Mac) through engine/creative.py; a whole batch in one go. `extra`: steps, guidance,
+    sampler, and a reference picture + strength (image-to-image) from engine/image_settings.py."""
+    ex = extra or {}
+    refs = ex.get("reference") or []
+    edit = bool(refs) and bool(ex.get("need_edit"))
+    return _creative().run_local_image(prompt, negative, width, height, seed, count, Path(out_dir),
+                                       steps=ex.get("steps"), cfg=ex.get("guidance"), sampler=ex.get("sampler"),
+                                       init_image=refs[0] if refs and not edit else None, strength=ex.get("strength"),
+                                       edit_refs=refs if edit else None)
 
 
 def one_by_one(fn, prompt, width, height, out_dir, seed, count):
@@ -500,6 +534,11 @@ def main():
     count = max(1, min(int(job.get("count") or 1), 4))
     negative = str(job.get("negative") or "").strip()
     backend = str(job.get("backend") or os.environ.get("LOKI_IMAGE_BACKEND", "auto")).lower()
+    # engine/image_settings.py: steps, guidance, sampler; reference pictures (+ strength) = edit / image-to-image
+    extra = {k: job[k] for k in ("steps", "guidance", "sampler", "strength") if job.get(k) not in (None, "", 0)}
+    refs = [str(r) for r in (job.get("reference") or []) if r and Path(str(r)).is_file()]
+    if refs:
+        extra["reference"] = refs[:4]
     try:
         if not prompt:
             raise ValueError("describe the image")
@@ -508,12 +547,19 @@ def main():
         for name in order:
             try:
                 if name in ("sdcpp", "mflux", "local"):
-                    result = local(prompt, width, height, out_dir, seed, count, negative)
+                    # a turnaround needs a model that can TURN the subject: FLUX.2 klein edit (mflux) - plain
+                    # image-to-image only redraws the same view, so it is never used for that
+                    result = local(prompt, width, height, out_dir, seed, count, negative,
+                                   dict(extra, need_edit=bool(job.get("need_edit"))))
                     print(json.dumps({"ok": True, **result}))
                     return
                 fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "huggingface": huggingface}.get(name)
                 if fn is None:
                     raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, huggingface)" % name)
+                if refs and name != "nvidia":
+                    raise ValueError("%s cannot use a reference picture" % name)
+                if name == "nvidia":
+                    fn = (lambda p, w, h, o, sd, _x=extra: nvidia(p, w, h, o, sd, extra=_x))
                 result = one_by_one(fn, prompt, width, height, out_dir, seed, count)
                 print(json.dumps({"ok": True, **result}))
                 return

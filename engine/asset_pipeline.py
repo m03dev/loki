@@ -49,6 +49,7 @@ QUADS = {"prop": 3000, "vehicle": 6000, "character": 8000, "creature": 8000}
 BACKENDS = (("auto", "online", "triposr", "pixal3d", "trellis2") if sys.platform == "darwin"
             else ("auto", "pixal3d", "trellis2", "online", "triposr"))
 LIKENESS = float(os.environ.get("LOKI_PIPELINE_LIKENESS", "0.6"))
+VIEW_MATCH = float(os.environ.get("LOKI_PIPELINE_VIEW_MATCH", "0.45"))   # turnaround view vs concept colours
 LOCK = threading.RLock()       # re-entrant: settling a stage also writes lessons
 
 
@@ -182,7 +183,24 @@ def check_views(ctx) -> tuple:
     if need or rep.get("missing"):
         return False, "views missing: %s" % ", ".join(need or [str(m)[:60] for m in rep["missing"]]), \
             "draw the missing views on the same seed; a creature needs front, side and back for 3D"
-    return True, "front, side, back (+%d)" % (len(views) - 3), ""
+    sil = rep.get("silhouette") or {}
+    front_h = (sil.get("front") or [0, 0])[0]
+    if front_h:
+        bad = {v: hc for v, hc in sil.items() if v in ("side", "back") and hc[0] and abs(hc[0] - front_h) / front_h > 0.12}
+        off = {v: hc for v, hc in sil.items() if v in ("front", "side", "back") and abs(hc[1]) > 0.08}
+        if bad or off:
+            return False, "views do not line up: %s" % ", ".join(
+                ["%s height %.0f%% of front" % (v, 100 * hc[0] / front_h) for v, hc in bad.items()] +
+                ["%s off-centre %.0f%%" % (v, 100 * hc[1]) for v, hc in off.items()]), \
+                "same scale and centred in every view: full body in frame, same margin, feet on one line"
+    match = rep.get("colour_match") or {}
+    off = {v: m for v, m in match.items() if m < VIEW_MATCH}
+    if off:
+        return False, "views do not match the concept's colours: %s (mode %s)" % (
+            ", ".join("%s %.2f" % kv for kv in off.items()), rep.get("mode") or "?"), \
+            "draw the views FROM the concept (an edit-capable model: FLUX.2 klein on NVIDIA), not from text"
+    return True, "front, side, back (+%d)%s" % (len(views) - 3, "; colour match " + ", ".join(
+        "%s %.2f" % kv for kv in match.items()) if match else ""), ""
 
 
 def check_model(ctx) -> tuple:

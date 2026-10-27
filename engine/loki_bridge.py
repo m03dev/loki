@@ -1041,6 +1041,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(self.server.state, "GET", route, {}, {}))
             return
+        if route in ("/image/settings", "/image/info", "/image/remake", "/image/feedback"):   # engine/image_api.py
+            import image_api  # pylint: disable=import-outside-toplevel
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            self._send_json(*image_api.route(self.server.state, "GET", route, q, {}))
+            return
         if route == "/image/edit-area":   # an area edit's progress (engine/region_edit.py)
             import region_edit  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1539,6 +1544,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/local/models/remove":   # uninstall a downloaded model (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(state, "POST", route, {}, data))
+            return
+        if route in ("/image/remake", "/image/rate"):   # settings + thumbs up / down (engine/image_api.py)
+            import image_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*image_api.route(state, "POST", route, {}, data))
             return
         if route in ("/image/edit-area", "/image/crop"):   # edit / crop one area of a picture (engine/region_edit.py)
             import region_edit  # pylint: disable=import-outside-toplevel

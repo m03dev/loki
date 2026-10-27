@@ -220,6 +220,24 @@ const LokiHome = (() => {
         b.disabled = !pics[at + d]; return b;
       };
       pic.append(nav(-1, "prev", "Before", '<path d="M15 5l-7 7 7 7"/>'), nav(1, "next", "Next", '<path d="M9 5l7 7-7 7"/>'));
+      if (pics[at].path) {   // thumbs up / down right next to the picture (engine/image_feedback.py)
+        const row = mk("div", "home-hero-rate"), say = mk("span", "home-hero-rated");
+        const up = iconBtn("home-rate-up", '<path d="M7 11v9H4v-9z"/><path d="M7 11l4-8c1.5 0 2.5 1 2.5 2.5V9h5a2 2 0 012 2.3l-1.2 7A2 2 0 0117.3 20H7"/>',
+          "Thumbs up", "I like this one - LOKI makes more like it.", async () => {
+            const r = await call("/image/rate", { path: pics[at].path, rating: 1 }).catch(() => null);
+            say.textContent = r && r.ok ? "Liked" : "Not saved"; up.setAttribute("aria-pressed", String(!!(r && r.ok)));
+          });
+        const down = iconBtn("home-rate-down", '<path d="M17 13V4h3v9z"/><path d="M17 13l-4 8c-1.5 0-2.5-1-2.5-2.5V15h-5a2 2 0 01-2-2.3l1.2-7A2 2 0 016.7 4H17"/>',
+          "Thumbs down", "I don't like this one - say why in the viewer; LOKI avoids it next time.", () => {
+            if (window.LokiViewer) window.LokiViewer.open(pics, at, { rate: -1 });
+          });
+        row.append(up, down, say); side.insertBefore(row, go);
+        call("/image/info?path=" + encodeURIComponent(pics[at].path)).then((r) => {
+          if (!r || !r.ok) return;
+          up.setAttribute("aria-pressed", String(r.rating > 0)); down.setAttribute("aria-pressed", String(r.rating < 0));
+          if (r.rating) say.textContent = r.rating > 0 ? "Liked" : "Disliked" + (r.reasons && r.reasons.length ? ": " + r.reasons.join(", ") : "");
+        }).catch(() => {});
+      }
     }
     hero.append(pic, side);
   }

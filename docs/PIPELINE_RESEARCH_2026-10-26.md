@@ -162,3 +162,35 @@ nothing vendored):
 
 Not used: LL3M (academic licence), SkillWeaver (OpenRAIL research-only) - ideas only. Studio pipelines also version
 every publish (AYON products -> versions -> representations); LOKI keeps every try as v00N with its record.
+
+## Late update: turnarounds, settings, feedback, common problems (owner: "the perspective technical images ... are awful")
+
+What was wrong (seen on the Mac): every view was drawn from TEXT with the same seed - a red pixel-art dragon came back
+grey and realistic; "model sheet" wording made FLUX write fake labels; scenes (a library interior, a glacier fortress)
+were "turned around". Fixed in engine/turnaround.py: the concept is the REFERENCE for every view (FLUX.2 klein 4B edit,
+Apache-2.0 - NVIDIA's hosted `image: [...]` field on the Mac; `mflux-generate-flux2-edit --image-paths` when mflux is
+installed), the front view joins as a second reference, prompts say "no text, no letters, no labels", scenes are refused,
+and each view is scored: colour match vs the concept + silhouette height / centring vs the front (the pipeline's
+turnaround check fails a view that drifts). A view drawn from text when no edit model answered is marked mode "text".
+
+| Option for views from one concept | Licence | Use |
+| --- | --- | --- |
+| FLUX.2 klein 4B edit / multi-reference | Apache-2.0 | default (hosted NVIDIA; mflux -q 8 on the Mac; sd.cpp `-r` on the PC) |
+| Qwen-Image-Edit-2511 (+ Multiple-Angles LoRA) | Apache-2.0 (LoRA licence unverified) | PC high-quality path: sd.cpp `--model-args qwen_image_zero_cond_t=true` |
+| MV-Adapter (SD2.1 variant < 6 GB) | Apache-2.0 code, OpenRAIL base | orthographic 6-view fallback on 8 GB |
+| Era3D | AGPL-3.0 | possible |
+| FLUX.1 Kontext dev, FLUX.2 klein 9B, FLUX 3 Klein, Qwen-Image 2.1, Zero123++ weights, SV3D | non-commercial / restricted | NOT used |
+
+Next for turnarounds (LOKI_TASKS): a Blender orthographic T-pose mannequin as reference 2 (pose, scale, camera in one),
+front first then the rest from it, a DINOv2 similarity check, Qwen-Image-Edit-2511 on the PC.
+
+Common problems -> fixes (sources in the research notes): mflux OOM on 16 GB -> `-q 8`/`-q 4`, `--low-ram`; sd.cpp on
+8 GB -> `--offload-to-cpu`, `--vae-tiling`, `--clip-on-cpu`, flash attention; ComfyUI 8 GB -> `--lowvram`, GGUF;
+TRELLIS Spaces -> token, endpoint discovery (view_api), several Spaces in turn; rembg -> never the default bria model
+(engine/cutout.py names BiRefNet); image-to-3D input -> square, centred, flat light, no perspective; QuadriFlow -> clean
+until Blender's own pre-check passes (engine/blender_scripts retopo); black bakes -> emission bake of Base Color.
+
+Settings (engine/image_settings.py, ideas from Fooocus / InvokeAI / SwarmUI / Draw Things): one list drives the
+viewer's panel; distilled FLUX / Turbo models ignore CFG and the negative prompt, hosted APIs ignore samplers - the
+panel greys what the chosen model ignores. Feedback (engine/image_feedback.py): thumbs up / down + reasons, Midjourney-
+style preference memory without a model download (LAION aesthetic / ImageReward / PickScore later; check weights).

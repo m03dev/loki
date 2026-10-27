@@ -318,7 +318,8 @@ def _conductor_media(self, task: str, url: str) -> str:
     return json.dumps(result, default=str)[:MAX_TEXT]
 
 
-IMAGE_OPTIONS = ("width", "height", "seed", "count", "negative", "backend")
+IMAGE_OPTIONS = ("width", "height", "seed", "count", "negative", "backend", "steps", "guidance", "sampler",
+                 "strength", "reference", "need_edit")      # engine/image_settings.py
 
 
 def _conductor_make_image(self, task: str, options: dict | None = None) -> dict:

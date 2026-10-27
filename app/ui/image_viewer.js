@@ -8,6 +8,11 @@
 //   Edit area (E)         say what the area should become; LOKI redraws ONLY that box (engine/region_edit.py) and
 //                         saves a new picture beside the original - the original and everything outside the box stay
 //   Before / after (B)    hold to see the original again after an edit
+//   Thumbs up / down      tell LOKI you like it or not; a thumbs down asks why (chips + a note) - engine/image_feedback.py:
+//                         the reasons shape the next prompts, and a pipeline picture's stage is redone with them
+//   Settings (G)          every setting the picture can be made with (engine/image_settings.py draws the panel: size in
+//                         pixels or aspect + megapixels, steps, guidance, sampler, seed, count, change amount, start from
+//                         this picture, style, avoid, upscale, pixel-art size, palette, model) - Remake makes a new one
 // Plain DOM, CSP script-src 'self'; api() from app.js. One global: window.LokiViewer.open(items, index).
 "use strict";
 
@@ -20,6 +25,9 @@ const LokiViewer = (() => {
     crop: '<path d="M6 2v16h16"/><path d="M2 6h16v16"/><path d="M14 10l4-4"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
     compare: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>', open: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    up: '<path d="M7 11v9H4v-9z"/><path d="M7 11l4-8c1.5 0 2.5 1 2.5 2.5V9h5a2 2 0 012 2.3l-1.2 7A2 2 0 0117.3 20H7"/>',
+    down: '<path d="M17 13V4h3v9z"/><path d="M17 13l-4 8c-1.5 0-2.5-1-2.5-2.5V15h-5a2 2 0 01-2-2.3l1.2-7A2 2 0 016.7 4H17"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   };
   const svg = (p) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
 
@@ -44,6 +52,31 @@ const LokiViewer = (() => {
     return out;
   }
 
+  /** Is a setting live for this model? (engine/image_settings.py "honoured"): {on, why}. */
+  function fieldState(setting, backend) {
+    const b = backend || "auto";
+    const on = !setting.honoured || setting.honoured.includes(b);
+    return { on, why: on ? "" : "The " + b + " model ignores " + setting.label + "." };
+  }
+  /** The panel's values -> the settings sent to /image/remake: empty / default numbers left out, exact pixels only
+   *  when "exact size" is on (otherwise aspect + megapixels). */
+  function collect(values, schema, exact) {
+    const out = {};
+    for (const s of schema || []) {
+      if (!(s.key in values)) continue;
+      let v = values[s.key];
+      if ((s.key === "width" || s.key === "height") && !exact) continue;
+      if ((s.key === "aspect" || s.key === "megapixels") && exact) continue;
+      if (s.type === "int" || s.type === "float") { if (v === "" || v == null) continue; v = Number(v); if (!isFinite(v)) continue; }
+      if (s.type === "bool") v = !!v;
+      if (s.type === "text" || s.type === "enum") { if (v === "" || v == null) continue; }
+      out[s.key] = v;
+    }
+    return out;
+  }
+  /** Rating state for the two thumbs: [upPressed, downPressed]. */
+  function thumbs(rating) { return [rating > 0, rating < 0]; }
+
   let V = null;   // the open viewer's state
 
   function btn(icon, name, what, fn, key) {
@@ -54,7 +87,7 @@ const LokiViewer = (() => {
     return b;
   }
 
-  function open(items, index) {
+  function open(items, index, opts) {
     const list = clean(items);
     if (!list.length) return;
     close();
@@ -76,7 +109,11 @@ const LokiViewer = (() => {
     const bCompare = btn("compare", "Before / after", "Hold to see the picture before the edit.", () => {}, "B");
     const bOpen = btn("open", "Open", "Open it in this computer's own viewer.", () => { const it = V.list[V.i]; if (it.path) call("/chat/media/open", { path: it.path }); });
     const bClose = btn("close", "Close", "Close the viewer.", close, "Esc");
-    tools.append(bSelect, bFocus, bCrop, bEdit, bCompare, bOpen, bClose);
+    const bUp = btn("up", "Thumbs up", "I like this one - LOKI makes more like it (and stars it).", () => rate(1));
+    const bDown = btn("down", "Thumbs down", "I don't like this one - say why, LOKI avoids it next time (a pipeline picture is redone).", () => rate(-1));
+    const bSet = btn("settings", "Settings", "Every setting this picture can be made with - change them and Remake.", toggleSettings, "G");
+    bUp.classList.add("lv-up"); bDown.classList.add("lv-down");
+    tools.append(bUp, bDown, bSet, bSelect, bFocus, bCrop, bEdit, bCompare, bOpen, bClose);
     bar.append(title, count, tools);
     const editRow = mk("form", "lv-edit"); editRow.hidden = true;
     const prompt = mk("input", "lv-prompt"); prompt.type = "text"; prompt.placeholder = "What should the selected area become?  e.g. a golden helmet";
@@ -86,14 +123,23 @@ const LokiViewer = (() => {
     const apply = mk("button", "send small", "Edit"); apply.type = "submit";
     const cancel = mk("button", "quiet small", "Cancel"); cancel.type = "button";
     editRow.append(prompt, strength, apply, cancel);
+    const why = mk("form", "lv-why"); why.hidden = true;            // the thumbs-down reasons
+    const chips = mk("span", "lv-chips"), note = mk("input", "lv-prompt"); note.type = "text";
+    note.placeholder = "Anything else? e.g. the side view is a different creature";
+    const sendWhy = mk("button", "send small", "Send"); sendWhy.type = "submit";
+    const skipWhy = mk("button", "quiet small", "Skip"); skipWhy.type = "button";
+    why.append(chips, note, sendWhy, skipWhy);
+    const panel = mk("aside", "lv-settings"); panel.hidden = true; panel.setAttribute("aria-label", "Picture settings");
     const say = mk("div", "lv-say"); say.setAttribute("aria-live", "polite");
-    wrap.append(stage, editRow, bar, say);
+    wrap.append(stage, editRow, why, bar, say, panel);
     document.body.append(wrap);
 
     V = { wrap, stage, img, list, i: Math.max(0, Math.min(list.length - 1, index | 0)), title, count, prev, next, say,
           editRow, prompt, strength, bSelect, bFocus, bCrop, bEdit, bCompare, cropper: null, focus: false, before: "",
-          touchX: null, busy: false };
+          touchX: null, busy: false, bUp, bDown, bSet, why, chips, note, panel, info: null, schema: null, rating: 0 };
     editRow.addEventListener("submit", (e) => { e.preventDefault(); runEdit(); });
+    why.addEventListener("submit", (e) => { e.preventDefault(); sendRating(-1); });
+    skipWhy.addEventListener("click", () => sendRating(-1));
     cancel.addEventListener("click", () => { editRow.hidden = true; });
     wrap.addEventListener("click", (e) => { if (e.target === wrap || e.target === stage || e.target === frame) { if (!V.cropper) close(); } });
     const hold = (on) => { if (!V || !V.before) return; V.img.src = on ? V.before : V.list[V.i].src; V.wrap.classList.toggle("lv-showing-before", on); };
@@ -109,6 +155,7 @@ const LokiViewer = (() => {
     document.addEventListener("keyup", onKeyUp, true);
     show();
     bClose.focus();
+    if (opts && opts.rate === -1 && V.list[V.i].path) rate(-1);       // Home's thumbs down: straight to "why?"
   }
 
   function show() {
@@ -124,7 +171,10 @@ const LokiViewer = (() => {
     V.bCrop.disabled = V.bEdit.disabled = !editable;
     if (!editable) { V.bCrop.title = V.bEdit.title = "Only pictures LOKI saved in its folders can be cropped or edited."; }
     V.bCompare.hidden = !V.before || V.list[V.i].before !== V.before;
-    V.editRow.hidden = true;
+    V.editRow.hidden = true; V.why.hidden = true;
+    for (const b of [V.bUp, V.bDown, V.bSet]) b.disabled = !editable;
+    V.rating = 0; paintThumbs(); V.info = null;
+    if (editable) loadInfo(it);
     for (const d of [-1, 1]) { const n = V.list[V.i + d]; if (n) { const pre = new Image(); pre.src = n.src; } }   // next one is instant
   }
 
@@ -222,6 +272,123 @@ const LokiViewer = (() => {
     else call("/chat/media?path=" + encodeURIComponent(r.path)).then((m) => { if (m && m.ok && V) add(m.data_url); }).catch(() => {});
   }
 
+  // ---- thumbs up / down (engine/image_feedback.py through /image/rate)
+  const REASONS = { match: "Doesn't match the design", perspective: "Wrong view / perspective", text: "Text or letters",
+    anatomy: "Bad anatomy / limbs", detail: "Blurry / low detail", style: "Wrong style", colour: "Wrong colours",
+    background: "Background not plain", cropped: "Cut off", pose: "Wrong pose", boring: "Boring" };
+  function paintThumbs() {
+    if (!V) return;
+    const [up, down] = thumbs(V.rating);
+    V.bUp.setAttribute("aria-pressed", String(up)); V.bDown.setAttribute("aria-pressed", String(down));
+  }
+  async function loadInfo(it) {
+    const r = await call("/image/info?path=" + encodeURIComponent(it.path)).catch(() => null);
+    if (!V || V.list[V.i] !== it || !r || !r.ok) return;
+    V.info = r; V.rating = r.rating || 0; paintThumbs();
+    if (!V.panel.hidden) fillSettings();
+  }
+  function rate(n) {
+    if (!V || !V.list[V.i].path) return;
+    if (V.rating === n) { sendRating(0); return; }          // pressing it again clears it
+    if (n > 0) { sendRating(1); return; }
+    V.chips.replaceChildren();
+    for (const [k, label] of Object.entries(REASONS)) {
+      const c = mk("button", "lv-chip", label); c.type = "button"; c.dataset.reason = k;
+      c.addEventListener("click", () => c.setAttribute("aria-pressed", String(c.getAttribute("aria-pressed") !== "true")));
+      V.chips.append(c);
+    }
+    V.note.value = ""; V.why.hidden = false;
+    tell("What is wrong with it? Pick any that fit - LOKI uses them for the next pictures.");
+  }
+  async function sendRating(n) {
+    const it = V.list[V.i];
+    const reasons = n < 0 ? [...V.chips.querySelectorAll('[aria-pressed="true"]')].map((c) => c.dataset.reason) : [];
+    V.why.hidden = true;
+    const r = await call("/image/rate", { path: it.path, rating: n, reasons, note: n < 0 ? V.note.value.trim() : "" })
+      .catch((e) => ({ ok: false, error: e.message }));
+    if (!r || !r.ok) { tell("Not saved: " + ((r && r.error) || "no answer"), true); return; }
+    V.rating = r.rating; paintThumbs();
+    tell(n > 0 ? "Liked - LOKI makes more like this." : n < 0 ? ("Noted" + (reasons.length ? ": " + reasons.map((k) => REASONS[k]).join(", ") : "") +
+      (r.retake ? " - its " + r.retake.stage + " stage is being redone." : ".")) : "Cleared.");
+  }
+
+  // ---- settings (engine/image_settings.py draws the panel; /image/remake makes the new picture)
+  async function toggleSettings() {
+    if (!V) return;
+    if (!V.panel.hidden) { V.panel.hidden = true; V.wrap.classList.remove("lv-with-settings"); V.bSet.removeAttribute("aria-pressed"); return; }
+    if (!V.schema) {
+      const r = await call("/image/settings").catch(() => null);
+      if (!V) return;
+      if (!r || !r.ok) { tell("The settings did not load.", true); return; }
+      V.schema = r.settings; V.backends = (r.backends && r.backends.order) || [];
+    }
+    V.panel.hidden = false; V.wrap.classList.add("lv-with-settings"); V.bSet.setAttribute("aria-pressed", "true");
+    fillSettings();
+  }
+  function fillSettings() {
+    const it = V.list[V.i], info = V.info || {}, meta = info.meta || {}, prev = meta.settings || {};
+    const start = Object.assign({ prompt: meta.idea || meta.prompt || "", seed: meta.seed || 0, style: meta.style || "",
+      width: info.size ? info.size[0] : 1024, height: info.size ? info.size[1] : 1024 }, prev);
+    const p = V.panel; p.replaceChildren();
+    const head = mk("div", "lv-set-head"); head.append(mk("strong", "", "Settings"), mk("span", "lv-set-file", it.name || ""));
+    const shut = btn("close", "Close settings", "Close this panel.", toggleSettings); head.append(shut);
+    const form = mk("form", "lv-set-form"); const fields = {};
+    const promptBox = mk("textarea", "lv-set-prompt"); promptBox.rows = 3; promptBox.value = start.prompt || "";
+    promptBox.title = "What the picture shows - the prompt it is remade from"; fields.prompt = promptBox;
+    form.append(mk("label", "lv-set-label", "Prompt"), promptBox);
+    const exact = mk("input"); exact.type = "checkbox"; exact.checked = !!(prev.width || prev.height);
+    const exactRow = mk("label", "lv-set-check"); exactRow.append(exact, mk("span", "", "Exact size in pixels"));
+    exactRow.title = "On: width and height in pixels. Off: aspect + megapixels (the sizes models are trained near).";
+    let group = "";
+    for (const s of V.schema) {
+      if (s.group !== group) { group = s.group; form.append(mk("div", "lv-set-group", group)); if (group === "Size") form.append(exactRow); }
+      const row = mk("label", "lv-set-row"); row.title = s.what; row.dataset.key = s.key;
+      row.append(mk("span", "lv-set-label", s.label));
+      let input;
+      if (s.type === "enum") { input = mk("select"); for (const o of s.options) { const op = mk("option", "", String(o) === "" ? "(default)" : String(o)); op.value = String(o); input.append(op); } }
+      else if (s.type === "bool") { input = mk("input"); input.type = "checkbox"; }
+      else if (s.type === "text") { input = mk("input"); input.type = "text"; }
+      else { input = mk("input"); input.type = "number"; input.min = s.min; input.max = s.max; input.step = s.step; }
+      const v = s.key in start ? start[s.key] : s.default;
+      if (s.type === "bool") input.checked = !!v; else input.value = v == null ? "" : String(v);
+      fields[s.key] = input; row.append(input); form.append(row);
+    }
+    const paint = () => {
+      const be = fields.backend ? fields.backend.value : "auto";
+      for (const s of V.schema) {
+        const row = form.querySelector('[data-key="' + s.key + '"]'); const st = fieldState(s, be);
+        const sizeOff = ((s.key === "width" || s.key === "height") && !exact.checked) || ((s.key === "aspect" || s.key === "megapixels") && exact.checked);
+        row.classList.toggle("lv-set-off", !st.on || sizeOff);
+        row.title = st.on ? s.what : st.why;
+      }
+    };
+    form.addEventListener("input", paint); exact.addEventListener("change", paint); paint();
+    const go = mk("button", "send small", "Remake"); go.type = "submit";
+    go.title = "Make a new picture with these settings - this one is kept";
+    const out = mk("div", "lv-set-notes");
+    form.append(go, out);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const values = {}; for (const [k, el] of Object.entries(fields)) values[k] = el.type === "checkbox" ? el.checked : el.value;
+      const settings = Object.assign(collect(values, V.schema, exact.checked), { prompt: promptBox.value.trim() });
+      out.textContent = "Starting...";
+      const r = await call("/image/remake", { path: it.path, settings }).catch((er) => ({ ok: false, error: er.message }));
+      if (!r || !r.ok) { out.textContent = "Not started: " + ((r && r.error) || "no answer"); return; }
+      out.textContent = (r.notes || []).join(" · ") || "Making it...";
+      const t0 = Date.now();
+      for (;;) {
+        await new Promise((ok) => setTimeout(ok, 2000));
+        if (!V) return;
+        const j = await call("/image/remake?job=" + encodeURIComponent(r.job)).catch(() => null);
+        if (j && j.status === "done") { out.textContent = "Made " + (j.files || []).join(", ") + " with " + (j.backend || "?");
+          for (const f of (j.files || []).slice().reverse()) insertMade({ file: f.split("/").pop(), path: f }, null); return; }
+        if (j && j.status === "failed") { out.textContent = "Not made: " + j.error; return; }
+        out.textContent = "Making it... " + Math.round((Date.now() - t0) / 1000) + " s";
+      }
+    });
+    p.append(head, form);
+  }
+
   function tell(text, bad) { if (!V) return; V.say.textContent = text || ""; V.say.classList.toggle("bad", !!bad); }
 
   function onKey(e) {
@@ -229,12 +396,13 @@ const LokiViewer = (() => {
     const typing = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
     if (e.key === "Escape") {
       e.preventDefault(); e.stopPropagation();
-      if (!V.editRow.hidden) V.editRow.hidden = true; else if (V.focus) unfocus(); else if (V.cropper) { stopSelect(); tell(""); } else close();
+      if (!V.editRow.hidden) V.editRow.hidden = true; else if (!V.why.hidden) V.why.hidden = true;
+      else if (!V.panel.hidden) toggleSettings(); else if (V.focus) unfocus(); else if (V.cropper) { stopSelect(); tell(""); } else close();
       return;
     }
     if (typing) return;
     const k = e.key.toLowerCase();
-    const handled = { arrowleft: () => go(-1), arrowright: () => go(1), s: toggleSelect, f: toggleFocus, e: showEdit,
+    const handled = { arrowleft: () => go(-1), arrowright: () => go(1), s: toggleSelect, f: toggleFocus, e: showEdit, g: toggleSettings,
                       b: () => { if (V.before && !V.wrap.classList.contains("lv-showing-before")) { V.img.src = V.before; V.wrap.classList.add("lv-showing-before"); } } }[k];
     if (handled && !(V.cropper && k.startsWith("arrow"))) { e.preventDefault(); e.stopPropagation(); handled(); }
     else if (V) e.stopPropagation();   // the viewer is modal: keys don't reach Forge or the chat
@@ -251,7 +419,7 @@ const LokiViewer = (() => {
     V.wrap.remove(); V = null;
   }
 
-  const api_ = { open, close, step, shareBox, clean, isOpen: () => !!V };
+  const api_ = { open, close, step, shareBox, clean, fieldState, collect, thumbs, isOpen: () => !!V };
   if (typeof window !== "undefined") window.LokiViewer = api_;
   return api_;
 })();

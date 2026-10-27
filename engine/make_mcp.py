@@ -121,18 +121,34 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
     import art_direction  # pylint: disable=import-outside-toplevel
     style = str(args.get("style") or "")
     prompt, style_neg = art_direction.direct(prompt, style)
+    try:   # the owner's thumbs-down reasons for this folder become words in the next prompt (engine/image_feedback.py)
+        import image_feedback  # pylint: disable=import-outside-toplevel
+        avoid = image_feedback.hints(cwd, out.relative_to(cwd.resolve()).parts[0] if out.is_relative_to(cwd.resolve())
+                                     else "images")
+        if avoid:
+            prompt = "%s. %s" % (prompt.rstrip(". "), avoid)
+    except Exception:  # noqa: BLE001 - a hint is a nicety
+        pass
     negative = ", ".join(x for x in (str(args.get("negative") or "").strip(), style_neg) if x)
     job = {"prompt": prompt[:1800], "out_dir": str(out), "count": max(1, min(int(args.get("count") or 1), 4)),
            "width": int(args.get("width") or 1024), "height": int(args.get("height") or 1024),
            "negative": negative[:600], "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
     if args.get("seed"):
         job["seed"] = int(args["seed"])     # the technical artist draws every view of a turnaround on one seed
+    for k in ("steps", "guidance", "sampler", "strength", "need_edit"):   # engine/image_settings.py
+        if args.get(k) not in (None, ""):
+            job[k] = args[k]
+    refs = args.get("reference") or []
+    refs = [refs] if isinstance(refs, str) else refs
+    if refs:                                # reference pictures: edit / turn the subject (inside this folder only)
+        job["reference"] = [str((cwd / r).resolve()) for r in refs[:4]
+                            if (cwd / r).resolve().is_file() and cwd.resolve() in (cwd / r).resolve().parents]
     res = run_imagegen(job, runner)
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error", "the picture was not made")}
     files = [str(Path(f).resolve()) for f in (res.get("files") or [res.get("file")]) if f]
     answer = {"ok": True, "files": [os.path.relpath(f, cwd) for f in files], "backend": res.get("backend", ""),
-              "model": res.get("model", ""), "seed": res.get("seed")}
+              "model": res.get("model", ""), "seed": res.get("seed"), "reference": bool(res.get("reference"))}
     try:   # remember what each picture is: the technical artist and the 3D step reuse the concept's own words
         import creations  # pylint: disable=import-outside-toplevel
         for rel in answer["files"]:

@@ -16,5 +16,17 @@ check("box clamped to the picture", V.shareBox({ x: 900, y: -10, width: 300, hei
 check("no box outside", V.shareBox({ x: 1200, y: 0, width: 10, height: 10 }, 1000, 500) === null);
 const c = V.clean([{ src: "a" }, { src: "b", path: "images/b.png" }, { src: "a" }, null, { name: "no src" }]);
 check("pictures once, in order", c.length === 2 && c[0].src === "a" && c[1].path === "images/b.png", c);
+// thumbs + settings (engine/image_settings.py's "honoured" lists drive the panel)
+const steps = { key: "steps", label: "Steps", type: "int", honoured: ["sdcpp", "mflux", "nvidia", "auto"] };
+check("a setting the model honours is live", V.fieldState(steps, "mflux").on === true);
+check("a setting the model ignores is greyed with why", V.fieldState({ key: "sampler", label: "Sampler", honoured: ["sdcpp"] }, "nvidia").on === false
+      && /ignores Sampler/.test(V.fieldState({ key: "sampler", label: "Sampler", honoured: ["sdcpp"] }, "nvidia").why));
+const schema = [{ key: "aspect", type: "enum" }, { key: "megapixels", type: "float" }, { key: "width", type: "int" },
+  { key: "height", type: "int" }, { key: "steps", type: "int" }, { key: "negative", type: "text" }, { key: "from_picture", type: "bool" }];
+const a = V.collect({ aspect: "16:9", megapixels: "1", width: "800", height: "600", steps: "", negative: "", from_picture: true }, schema, false);
+check("aspect + megapixels unless exact size; empty fields left out", JSON.stringify(a) === JSON.stringify({ aspect: "16:9", megapixels: 1, from_picture: true }), a);
+const b = V.collect({ aspect: "16:9", megapixels: "1", width: "800", height: "600", steps: "12" }, schema, true);
+check("exact size: width and height in pixels, numbers as numbers", b.width === 800 && b.height === 600 && b.steps === 12 && !("aspect" in b), b);
+check("thumbs: up, down, none", JSON.stringify([V.thumbs(1), V.thumbs(-1), V.thumbs(0)]) === "[[true,false],[false,true],[false,false]]");
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

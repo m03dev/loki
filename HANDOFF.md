@@ -48,6 +48,17 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Pictures (2026-10-26 evening, owner: "thumbs down ... lots of settings ... the perspective technical images are
+awful"):** thumbs up / down beside every picture (Home + viewer; down asks why with reason chips) -> engine/image_feedback.py
+(ratings.jsonl + sidecar; the reasons become words in the next prompts for that folder; a pipeline picture's stage is
+retaken; a lesson for its stage). Settings panel in the viewer (G) drawn from engine/image_settings.py (size by aspect +
+megapixels or exact pixels, steps, guidance, sampler, seed, count, change amount, start from this picture, style, avoid,
+upscale, pixel size, palette, model; what a model ignores is greyed) -> Remake (engine/image_api.py). Steps / guidance /
+sampler / image-to-image now reach sd.cpp, mflux and NVIDIA. Turnaround v2 (engine/turnaround.py): views are edits of
+the concept (FLUX.2 klein reference images), no "sheet" wording, scenes refused, colour + silhouette checks. Viewer
+fix: tall pictures were cut off at the bottom. Cloud: test_image_settings_feedback 32/32, test_image_rate_ui 14/14
+(real window + real routes), test_turnaround 18/18, test_viewer_e2e_ui 19/19. NVIDIA's reference-image format is
+unverified until the Mac runs it (LOKI_TASKS DO FIRST).
 **Blob fix (2026-10-26 late, owner: "that golem looks so bad its just a blob ... looks nothing like images"):** every
 model on the Mac had been the silhouette 'lift' (models/.meta backend lift) - the online TRELLIS Space failed and
 forge3d fell through to lift without a word. Now: a failed real backend is an error (lift only when asked for or

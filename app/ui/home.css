@@ -129,3 +129,9 @@ html.u-hc .home-card-thumb, html.u-hc .home-hero-pic { background: #000 !importa
 .home-hero-3d { cursor: grab; }
 .home-hero-3d:active { cursor: grabbing; }
 .home-hero-pic .mp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* thumbs up / down beside the picture (home.js renderHero; engine/image_feedback.py) */
+.home-hero-rate { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.home-hero-rated { color: var(--muted, #999); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.home-rate-up[aria-pressed="true"] { background: rgba(120, 210, 140, .25); }
+.home-rate-down[aria-pressed="true"] { background: rgba(240, 120, 110, .28); }
