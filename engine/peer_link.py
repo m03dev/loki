@@ -314,6 +314,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "apps_sync": lambda origin, data: _apps_receive(agent, origin, data),
 
             "files": _files_receive,
+            "library": lambda origin, data: _library_receive(agent, data),
             "work": _work_receive,
             "automations": _automations_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
@@ -330,6 +331,12 @@ def _apps_receive(agent: Any, origin: str, data: dict) -> dict:
     import apps  # pylint: disable=import-outside-toplevel
     root = getattr(agent, "DATA_DIR", "")
     return apps.sync_receive(Path(getattr(agent, "WORKSPACE", ".")), origin, data, Path(root) if root else None)
+
+
+def _library_receive(agent: Any, data: dict) -> tuple:
+    """POST /peer/library: the other machine lists / reads what LOKI made here (engine/library_sync.py)."""
+    import library_sync  # pylint: disable=import-outside-toplevel
+    return library_sync.serve(Path(getattr(agent, "WORKSPACE", ".")), data)
 
 
 def _files_receive(origin: str, data: dict) -> tuple:
@@ -526,6 +533,11 @@ def sync_forever(state: Any, agent: Any) -> None:
     try:   # one memory on every machine: its own loop, so a learned fact travels in seconds
         import memory_sync  # pylint: disable=import-outside-toplevel
         threading.Thread(target=memory_sync.run_forever, args=(agent,), daemon=True, name="loki-memory-sync").start()
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # one picture / model library on every machine (engine/library_sync.py)
+        import library_sync  # pylint: disable=import-outside-toplevel
+        threading.Thread(target=library_sync.run_forever, args=(agent,), daemon=True, name="loki-library-sync").start()
     except Exception:  # noqa: BLE001
         pass
     time.sleep(20)   # let the engine finish starting

@@ -536,6 +536,12 @@ class PeerServer:
             if "files" not in cb:
                 return 404, {"ok": False, "error": "file sharing is not available here"}
             return cb["files"](origin, data)
+        if method == "POST" and path == "/peer/library":
+            # One library on every machine (engine/library_sync.py): list what LOKI made here, read a file in chunks.
+            # Read-only - the asking machine copies what it lacks into its own workspace.
+            if "library" not in cb:
+                return 404, {"ok": False, "error": "library sync is not available here"}
+            return cb["library"](origin, data)
         if method == "POST" and path == "/peer/automations":
             # Automations listed on every machine (engine/automations.py): the caller's in, ours out,
             # last writer wins per automation. Only the machine that owns one ever fires it.
