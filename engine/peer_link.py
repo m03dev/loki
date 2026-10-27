@@ -121,7 +121,15 @@ def hello(state: Any, agent: Any) -> dict:
         build = updater.version()
     except Exception:  # noqa: BLE001
         build = {}
+    work, work_why = [], {}
+    try:
+        import offload  # pylint: disable=import-outside-toplevel
+        work, work_why = offload.serves()
+    except Exception:  # noqa: BLE001 - an older or broken offload must not break hello
+        pass
     return {
+        "work": work,              # heavy work this machine takes from a light one (engine/offload.py)
+        "work_why": work_why,
         "name": peers.my_name(),
         "version": build,
         "capabilities": machine_capabilities(agent, local_models),
@@ -306,6 +314,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "apps_sync": lambda origin, data: _apps_receive(agent, origin, data),
 
             "files": _files_receive,
+            "work": _work_receive,
             "automations": _automations_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 
@@ -327,6 +336,12 @@ def _files_receive(origin: str, data: dict) -> tuple:
     """POST /peer/files: another machine lists/reads (or, when allowed here, writes) the shared folder."""
     import conn_peer_files  # pylint: disable=import-outside-toplevel
     return conn_peer_files.serve(origin, data)
+
+
+def _work_receive(origin: str, data: dict) -> tuple:
+    """POST /peer/work: heavy work a light machine gives this one (engine/offload.py)."""
+    import offload  # pylint: disable=import-outside-toplevel
+    return offload.serve(origin, data)
 
 
 def _automations_receive(origin: str, data: dict) -> dict:

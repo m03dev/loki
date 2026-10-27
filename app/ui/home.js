@@ -62,12 +62,13 @@ const LokiHome = (() => {
     down: '<path d="M17 13V4h3v9z"/><path d="M17 13l-4 8c-1.5 0-2.5-1-2.5-2.5V15h-5a2 2 0 01-2-2.3l1.2-7A2 2 0 016.7 4H17"/>',
     trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
+    pc: '<rect x="3" y="4" width="18" height="12" rx="1.6"/><path d="M8 20h8M12 16v4"/>',
   };
   const STORE = "loki-home";
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   const S = { items: [], errors: {}, filter: "all", pick: "", shown: 60, size: "m", timer: 0, loading: false, loaded: false };
   const PAGE = 60, SIZES = { s: 110, m: 160, l: 240 };
-  let root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
+  let pc = null, root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
   try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content"].includes(S.filter)) S.filter = "all"; if (SIZES[saved.size]) S.size = saved.size; } catch (_) { /* private mode */ }
   const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter, size: S.size })); } catch (_) { /* private mode */ } };
 
@@ -122,6 +123,10 @@ const LokiHome = (() => {
       S.size = { s: "m", m: "l", l: "s" }[S.size] || "m"; remember(); applySize();
     });
     acts.prepend(sizeBtn);
+    // where the heavy work goes (engine/offload.py): the Mac gives pictures, area edits, 3D and model clean-ups to the PC
+    pc = iconBtn("home-pc", ICON.pc, "Your PC", "Checking whether your PC can take the heavy work ...", () => machines());
+    pc.hidden = true;
+    acts.prepend(pc);
     head.append(kinds, live, acts);   // all icons on the left; no title (the Home tab already says Home)
     hero = mk("div", "home-hero"); hero.setAttribute("aria-live", "polite");
     const recent = mk("div", "home-recent-head");     // kept for the chat-folded layout's styles
@@ -150,6 +155,26 @@ const LokiHome = (() => {
       }
     });
     sync();
+  }
+  const WORK = { image: "pictures", img2img: "area edits", make_3d: "3D models", polish: "model clean-ups" };
+  function pcText(st) {
+    const m = (st.machines || [])[0];
+    const gives = Object.keys(WORK).filter((k) => (st.gives || {})[k]);
+    if (gives.length) return { on: true, name: "Your PC (" + st.gives[gives[0]] + ") does the heavy work",
+      what: gives.map((k) => WORK[k]).join(", ") + " run on " + st.gives[gives[0]] + "; this computer stays light." };
+    if (!m) return { on: false, name: "No PC linked", what: "Link your PC in Settings > Machines (paste its link code) and the heavy work runs there." };
+    if (!m.online) return { on: false, name: m.name + " is not answering", what: "Open LOKI on " + m.name + " - until then heavy work waits or runs here. " + (m.error || "") };
+    if (!m.work) return { on: false, name: m.name + " needs an update", what: m.name + " runs an older LOKI that cannot take work yet; it was asked to update itself." };
+    return { on: false, name: m.name + " cannot take work yet", what: Object.entries(m.work_why || {}).map(([k, v]) => (WORK[k] || k) + ": " + v).join("; ") };
+  }
+  function machines() {
+    if (!pc) return;
+    call("/offload/status").then((st) => {
+      if (!st || st.role !== "light") { pc.hidden = true; return; }   // the PC itself: nothing to show
+      const t = pcText(st);
+      pc.hidden = false; pc.classList.toggle("on", t.on); pc.classList.toggle("off", !t.on);
+      pc.dataset.tipName = t.name; pc.dataset.tipWhat = t.what; pc.setAttribute("aria-label", t.name);
+    }).catch(() => {});
   }
   function cols() { return Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").length); }
   function thumbOf(it, cls) {
@@ -489,6 +514,8 @@ const LokiHome = (() => {
     for (let i = 0; i < 400 && !window.LOKI_READY; i++) await new Promise((r) => setTimeout(r, 150));
     if (!window.LOKI_READY) return;
     refresh();
+    machines();
+    setInterval(() => { if (!document.hidden) machines(); }, 60000);   // once a minute is plenty
     let tick = 0;   // every 15 s; every 5 s while something runs, so the preview stays live
     S.timer = setInterval(() => {
       const m = document.getElementById("main");
@@ -500,6 +527,6 @@ const LokiHome = (() => {
   }
 
   document.addEventListener("DOMContentLoaded", start);
-  return { refresh, open, look, openStudio, closeStudio, studioOpen, sync, items: () => S.items.slice(), dayOf };
+  return { refresh, open, look, openStudio, closeStudio, studioOpen, sync, items: () => S.items.slice(), dayOf, pcText };
 })();
 window.LokiHome = LokiHome;

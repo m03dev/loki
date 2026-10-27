@@ -27,6 +27,15 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-26 evening (Claude, cloud) - the Mac gives heavy work to the PC.** `engine/offload.py` over the signed peer
+link (POST /peer/work, chunked files with sha256, whitelisted kinds + settings, results back into the Mac's folders; no
+git): pictures (after the hosted models), area edits, 3D models (Mac never starts its own ComfyUI) and Blender
+polish. A light machine = the Mac or anything without NVIDIA (LOKI_MACHINE_ROLE / LOKI_OFFLOAD=off|always). Hello now
+lists `work`; an older PC LOKI is asked to update once an hour. Home has a "Your PC" button (green = PC takes the work).
+The 2026-10-26 Mac crash: a local FLUX.2 task ran an 8 GB model beside Blender - `engine/heavy.py` (one heavy job, 5 GB
+floor), mflux moved to harness_data/disabled_mflux. NOT yet live: the PC needs this code (LOKI_TASKS DO FIRST: the Mac
+ships, both restart). Cloud: tests/test_offload.py 32, tests/js/test_home_pc.js 5, related suites green.
+
 **2026-10-26 (Claude, cloud):** output names are one rule now - `engine/out_names.py`: `<subject>_<YYYYMMDD-HHMM>[_tag][_n].ext`
 (e.g. `knight-sword-shield_20261026-1021.png`; filler/style words dropped, never cut mid-word), used by images, video,
 3D, turnarounds, voice and sprites; old names still display. Blender MCP built in: `engine/blender_link.py`

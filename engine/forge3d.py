@@ -42,6 +42,7 @@ import json
 import math
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -707,6 +708,41 @@ def run_online_space(space: str, cutout_png: Path, out_base: Path, client_factor
 
 
 # ----------------------------------------------------------------------------- make_3d
+REMOTE_BACKENDS = ("auto", "hunyuan", "pixal3d", "trellis2", "triposr")   # what the PC can run for a light machine
+
+
+def run_remote(peer: dict, cutout_png: Path, out_base: Path, backend: str, opts, prompt: str = "",
+               say=None, send=None) -> dict:
+    """The model made on the linked PC from this cut-out; its .glb (and .obj) saved here as out_base.*"""
+    import tempfile  # pylint: disable=import-outside-toplevel
+    import offload  # pylint: disable=import-outside-toplevel
+    say = say or (lambda stage, frac: None)
+    with tempfile.TemporaryDirectory(prefix="loki-pc-") as tmp:
+        try:
+            got = (send or offload.run)("make_3d", {"backend": backend, "options": opts, "prompt": prompt},
+                                        {"cutout.png": cutout_png}, Path(tmp), peer=peer,
+                                        progress=lambda msg: say(msg, 0.6))
+        except offload.OffloadError as exc:
+            raise ForgeError(str(exc)) from None
+        glb = next((f for f in got["files"] if f.lower().endswith(".glb")), None)
+        if not glb:
+            raise ForgeError("%s sent no model back" % got.get("peer", "the PC"))
+        out = {"glb": str(out_base) + ".glb"}
+        shutil.move(glb, out["glb"])
+        obj = next((f for f in got["files"] if f.lower().endswith(".obj")), None)
+        if obj:
+            out["obj"] = str(out_base) + ".obj"
+            shutil.move(obj, out["obj"])
+    r = got.get("result") or {}
+    meta = r.get("meta") or {}
+    out["used"] = "%s:%s" % (got["peer"], r.get("backend") or backend)
+    out["note"] = "made on %s with %s in %ss" % (got["peer"], r.get("backend") or backend, got.get("seconds"))
+    for k in ("licence", "licence_url", "no_training"):
+        if meta.get(k):
+            out[k] = meta[k]
+    return out
+
+
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:40] or "model"
 
@@ -755,8 +791,15 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
     say = progress or (lambda stage, frac: None)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    remote = None
+    if backend in REMOTE_BACKENDS and triposr_runner is None and online_factory is None:
+        try:                         # the Mac gives 3D to the linked PC (engine/offload.py; owner 2026-10-26: "the mac
+            import offload  # pylint: disable=import-outside-toplevel   # isnt the power house")
+            remote = offload.target("make_3d")
+        except Exception:  # noqa: BLE001
+            remote = None
     try:
-        if backend in ("auto", "pixal3d", "trellis2", "hunyuan"):    # a real model needs ComfyUI: start it when it is
+        if remote is None and backend in ("auto", "pixal3d", "trellis2", "hunyuan"):    # a real model needs ComfyUI: start it when it is
             try:                                                      # this computer's and not running (the PC 2026-10-26:
                 import comfy_autostart  # pylint: disable=import-outside-toplevel   # it was off -> a "lift" blob)
                 import forge_trellis  # pylint: disable=import-outside-toplevel
@@ -772,6 +815,8 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             except Exception:  # noqa: BLE001 - never block a make on the starter
                 pass
         order = plan(backend)
+        if remote is not None:       # the PC first; for "auto" the online Space after it (no ComfyUI here)
+            order = ["pc"] + (["online"] if backend == "auto" and online_ready() else []) + ["lift"]
         if backend == "auto" and not (options or {}).get("allow_draft") and set(order) <= {"lift"}:
             raise ForgeError("no real 3D model can run right now - ComfyUI (Pixal3D / TRELLIS.2) is not reachable and "
                              "TripoSR is not installed. Start ComfyUI (Lab, or python tools/setup_comfyui.py --start) or "
@@ -813,6 +858,8 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
         cut_png = cut_dir / (base.name + "-cutout.png")
         cut.save(cut_png)
         def _run(name):
+            if name == "pc":
+                return run_remote(remote, cut_png, base, backend, opts, prompt, say)
             if name == "hunyuan":
                 import forge_hunyuan  # pylint: disable=import-outside-toplevel
                 try:
@@ -845,7 +892,7 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             tried.append(name)
             try:
                 result = _run(name)
-                used = name
+                used = result.get("used") or name
                 break
             except Exception as exc:  # noqa: BLE001 - try the next backend
                 errors.append("%s: %s" % (name, str(exc)[:200]))
@@ -870,7 +917,7 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             except Exception as exc:  # noqa: BLE001 - a judge that cannot look must not undo the build
                 verdict = {"score": None, "error": str(exc)[:200], "backend": used}
             # E19: one retry with a backend that was not tried yet, kept only if it scores better.
-            rest = [b for b in plan(backend) if b not in tried]
+            rest = [b for b in (order if remote is not None else plan(backend)) if b not in tried and b != "lift"]
             if (verdict.get("score") is not None and verdict["score"] < JUDGE_LOW and rest):
                 better = rest[0]
                 say("that did not match well - trying %s" % better, 0.9)

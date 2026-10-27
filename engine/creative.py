@@ -348,13 +348,75 @@ def mflux_edit_argv(cmd: str, refs: list, prompt: str, width: int, height: int, 
 
 
 def run_local_image(*args, **kw) -> dict:
-    """This machine's local image model, one heavy job at a time and only with memory free (engine/heavy.py)."""
+    """This machine's image model - or the PC's: a light machine (the Mac) gives the work to a linked PC first
+    (engine/offload.py). Here: one heavy job at a time and only with memory free (engine/heavy.py)."""
+    remote = _offload_image(args, kw)
+    if remote is not None:
+        return remote
     try:
         import heavy  # pylint: disable=import-outside-toplevel
     except ImportError:
         return _run_local_image(*args, **kw)
     with heavy.slot("local image model", wait_s=float(os.environ.get("LOKI_HEAVY_WAIT_S", "1800"))):
         return _run_local_image(*args, **kw)
+
+
+def _offload_image(args: tuple, kw: dict):
+    """The same job on the linked PC, its pictures saved here under LOKI's names. None = run it here."""
+    import inspect  # pylint: disable=import-outside-toplevel
+    try:
+        bound = inspect.signature(_run_local_image).bind(*args, **kw)
+    except TypeError:
+        return None
+    a = bound.arguments
+    if any(a.get(k) is not None for k in ("run", "status", "info", "env", "out_path")):
+        return None                       # a test or a caller that drives this machine on purpose
+    try:
+        import offload  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return None
+    peer = offload.target("image")
+    here = None
+    if peer is None:
+        if offload.role() == "light":
+            here = local_image_status()
+            if not here.get("ready"):     # say where it should have gone, not "install mflux" (it crashed the Mac)
+                raise RuntimeError("pictures are made on your PC, but %s" % (offload.why_not("image") or "it is not "
+                                   "linked") + " - and this Mac has no image model of its own (%s)" % here.get("why"))
+        return None
+    out_dir = Path(a["out_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    inputs = {}
+    if a.get("init_image"):
+        inputs["init" + Path(str(a["init_image"])).suffix] = a["init_image"]
+    for i, ref in enumerate(a.get("edit_refs") or []):
+        inputs["ref%d%s" % (i, Path(str(ref)).suffix)] = ref
+    params = {"prompt": a["prompt"], "negative": a.get("negative") or "", "width": a["width"], "height": a["height"],
+              "seed": a["seed"], "count": a.get("count") or 1, "steps": a.get("steps"), "cfg": a.get("cfg"),
+              "sampler": a.get("sampler"), "strength": a.get("strength")}
+    import tempfile  # pylint: disable=import-outside-toplevel
+    import out_names  # pylint: disable=import-outside-toplevel
+    try:
+        with tempfile.TemporaryDirectory(prefix="loki-pc-") as tmp:
+            got = offload.run("image", params, inputs, Path(tmp))
+            first = out_names.path(out_dir, a["prompt"], "png", fallback="image")
+            files = []
+            for i, f in enumerate(sorted(got["files"])):
+                target = first if i == 0 else first.with_name("%s_%d%s" % (first.stem, i + 1, Path(f).suffix))
+                shutil.move(f, target)
+                files.append(str(target))
+    except offload.OffloadError as exc:
+        here = local_image_status()
+        if here.get("ready") and offload.role() != "light":
+            return None
+        raise RuntimeError("the PC could not make it: %s" % exc) from None
+    if not files:
+        raise RuntimeError("the PC made no picture")
+    r = got.get("result") or {}
+    seeds = r.get("seeds") or [int(a["seed"]) + i for i in range(len(files))]
+    return {"files": files, "file": files[0], "seeds": seeds, "seed": seeds[0],
+            "backend": "%s:%s" % (got["peer"], r.get("backend") or "?"), "model": r.get("model") or "",
+            "machine": got["peer"], "seconds": got.get("seconds"), **({"reference": True} if r.get("reference") else {})}
 
 
 def mflux_edit_allowed(info: dict | None = None, env: dict | None = None) -> str:

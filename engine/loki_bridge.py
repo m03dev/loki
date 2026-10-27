@@ -1046,6 +1046,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             self._send_json(*image_api.route(self.server.state, "GET", route, q, {}))
             return
+        if route == "/offload/status":   # which work this machine gives the PC, and what the PC can take (engine/offload.py)
+            import offload  # pylint: disable=import-outside-toplevel
+            self._send_json(*offload.route(self.server.state, "GET", route, {}, {}))
+            return
         if route == "/image/edit-area":   # an area edit's progress (engine/region_edit.py)
             import region_edit  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}

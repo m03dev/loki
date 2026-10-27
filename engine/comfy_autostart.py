@@ -47,6 +47,14 @@ def vram_gb() -> float:
         return 0.0
 
 
+def _light() -> bool:
+    try:
+        import offload  # pylint: disable=import-outside-toplevel
+        return offload.role() == "light"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def ensure(url: str, wait: float = 150, opener=urllib.request.urlopen, starter=None, sleep=time.sleep,
            clock=time.time) -> dict:
     if reachable(url, opener=opener):
@@ -61,6 +69,11 @@ def ensure(url: str, wait: float = 150, opener=urllib.request.urlopen, starter=N
         if not (root / "ComfyUI" / "main.py").is_file():
             return {"ok": False, "started": False,
                     "why": "ComfyUI is not installed on this computer (python tools/setup_comfyui.py --install)"}
+        if os.environ.get("LOKI_COMFY_AUTOSTART", "1") != "force" and _light():
+            # the 16 GB Mac (2026-10-26: "you used all my vram"): 3D goes to the PC (engine/offload.py), never a local
+            # ComfyUI with TRELLIS beside everything else. LOKI_COMFY_AUTOSTART=force starts it anyway.
+            return {"ok": False, "started": False, "why": "ComfyUI is not started on this light machine - 3D runs on your PC "
+                    "(LOKI_COMFY_AUTOSTART=force to start it here anyway)"}
         setup = _setup()
         low = 0 < vram_gb() <= 8.5
 

@@ -33,6 +33,8 @@ WS.mkdir()
 os.environ["LOKI_DATA"] = str(TMP / "data")
 os.environ["LOKI_TRIPOSR_DIR"] = str(TMP / "no-triposr")
 os.environ["LOKI_FORGE_JUDGE"] = "0"    # E19 judging is tested on its own in tests/test_forge_judge.py
+os.environ["LOKI_OFFLOAD"] = "off"      # 3D on a linked PC is tests/test_offload.py
+sys.modules["gradio_client"] = None     # these checks are about it MISSING (LOKI's venv has it since 2026-10-25)
 PASS: list = []
 FAIL: list = []
 

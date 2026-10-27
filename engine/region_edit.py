@@ -4,7 +4,7 @@ on it and we can edit the area thats croped or focused not deleting or touching 
 How it keeps the rest untouched:
   1. take the selected box plus some context around it (CONTEXT, so the edit matches its surroundings);
   2. scale that crop to a size the model likes (multiple of 64, about 1 MP) and run image-to-image on it with the
-     prompt - this machine's local backend: stable-diffusion.cpp on the PC (with an inpaint mask), mflux on the Mac;
+     prompt - on the PC (stable-diffusion.cpp with an inpaint mask); the Mac sends the crop to the PC (offload.py);
   3. scale the result back and paste ONLY the selected box into a copy of the original, with a soft edge (feather)
      that stays inside the box. Every pixel outside the box is copied from the original byte for byte.
   4. save the copy as a new file beside the original (<subject>_<stamp>_edit.png, engine/out_names.py); the original
@@ -114,6 +114,34 @@ def local_img2img(init: Path, mask: Path, prompt: str, width: int, height: int, 
     return Path(out)
 
 
+def model_step(init: Path, mask: Path, prompt: str, width: int, height: int, strength: float, seed: int,
+               out: Path, target: Callable | None = None, send: Callable | None = None,
+               local: Callable | None = None) -> Path:
+    """The model step where it belongs: a light machine (the Mac) sends the crop + mask to the linked PC
+    (engine/offload.py - sd.cpp inpaints there); a strong one, or nothing linked, runs it here."""
+    import offload  # pylint: disable=import-outside-toplevel
+    local = local or local_img2img
+    peer = (target or offload.target)("img2img")
+    if peer is None:
+        if offload.role() == "light":
+            import creative  # pylint: disable=import-outside-toplevel
+            here = creative.local_image_status()
+            if not here.get("ready"):
+                raise EditError("area edits run on your PC, but %s." % (offload.why_not("img2img") or "it is not linked"))
+        return local(init, mask, prompt, width, height, strength, seed, out)
+    params = {"prompt": prompt, "width": width, "height": height, "strength": strength, "seed": seed}
+    try:
+        with tempfile.TemporaryDirectory(prefix="loki-pc-") as tmp:
+            got = (send or offload.run)("img2img", params, {"init.png": init, "mask.png": mask}, Path(tmp), peer=peer)
+            made = next((f for f in got["files"] if Path(f).name.startswith("out")), None)
+            if not made:
+                raise EditError("%s sent no picture back" % got.get("peer", "the PC"))
+            Path(out).write_bytes(Path(made).read_bytes())
+    except offload.OffloadError as exc:
+        raise EditError("the PC could not edit it: %s" % exc) from None
+    return Path(out)
+
+
 # ----------------------------------------------------------------------------- edit + crop
 def edit_area(src: Path, box, prompt: str, strength: float = 0.75, feather: int = 12, seed: int = 0,
               model: Callable | None = None) -> dict:
@@ -148,7 +176,7 @@ def edit_area(src: Path, box, prompt: str, strength: float = 0.75, feather: int 
         ImageDraw.Draw(hard).rectangle((int(inner[0] * sx), int(inner[1] * sy), int(inner[2] * sx) - 1,
                                         int(inner[3] * sy) - 1), fill=255)
         hard.save(mask_path)
-        made = (model or local_img2img)(init, mask_path, prompt, mw, mh, strength, seed, out)
+        made = (model or model_step)(init, mask_path, prompt, mw, mh, strength, seed, out)
         result = Image.open(made).convert("RGB").resize((cw, ch), Image.LANCZOS)
     patch = result.convert(mode)
     blend = feather_mask((cw, ch), inner, feather)

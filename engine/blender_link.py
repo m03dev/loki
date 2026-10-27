@@ -316,6 +316,17 @@ def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float =
                                       "bend, twist, displace, bevel, scale, material). Free assets are never used as "
                                       "they are." % (model.name, free)}
     stem_text = name or out_names.display_name(model.name) + (" remix" if free else " polished")
+    peer = None
+    if "run_proc" not in kw and not kw.pop("here", False):
+        try:                         # the Mac gives Blender work to the linked PC (engine/offload.py)
+            import offload  # pylint: disable=import-outside-toplevel
+            peer = offload.target("polish")
+        except Exception:  # noqa: BLE001
+            peer = None
+    if peer is not None:
+        return polish_remote(peer, model, out_dir, free, edits, dict(
+            name=stem_text, size=size, target=target, style=style, lods=list(lods or ()), turntable=turntable,
+            remesh=remesh, edits=edits, formats=list(formats), repair=repair, symmetric=symmetric, retopo=retopo))
     sc = ("LOKI " + stem_text)[:60]
     png = out_names.path(out_dir / "renders", stem_text, "png")
     glb = out_names.path(out_dir / "models", stem_text, "glb")
@@ -372,6 +383,39 @@ def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float =
         if topo:
             info = dict(info, topology=res["topology"])
         write_sidecar(glb, out_dir, png, model, info, [f for f in formats if f in outs], free, edits)
+    return res
+
+
+def polish_remote(peer: dict, model: Path, out_dir: Path, free: str, edits, params: dict, send=None) -> dict:
+    """polish() on the linked PC: the model goes up, the finished files come back into out_dir (renders/, models/)
+    and the sidecar Forge and Home read is written here, with this machine's paths."""
+    import offload  # pylint: disable=import-outside-toplevel
+    out_dir = Path(out_dir)
+    try:
+        got = (send or offload.run)("polish", params, {"model" + model.suffix.lower(): model}, out_dir, peer=peer)
+    except offload.OffloadError as exc:
+        return {"ok": False, "error": "the PC could not finish it: %s" % exc, "machine": peer.get("name")}
+    r = got.get("result") or {}
+    local = dict(zip(got.get("rel") or [], got["files"]))
+    rf = r.get("files") or {}
+    png = Path(local.get(rf.get("render") or "", "") or "")
+    models = [local[m] for m in rf.get("models") or [] if m in local]
+    res = {"ok": True, "machine": got["peer"], "seconds": got.get("seconds"),
+           "files": {"render": str(png) if png.name else "", "models": models}}
+    if rf.get("turntable") and rf["turntable"] in local:
+        res["files"]["turntable"] = local[rf["turntable"]]
+    for k in ("quality", "topology"):
+        if r.get(k):
+            res[k] = r[k]
+    glb = next((Path(m) for m in models if m.lower().endswith(".glb")), None)
+    if glb is not None and png.name:
+        info = dict(r.get("info") or {}, made_on=got["peer"])
+        for k in ("quality", "topology"):
+            if r.get(k):
+                info[k] = r[k]
+        fmts = [f for f in params.get("formats") or () if any(str(m).lower().endswith("." + f) or
+                                                             (f == "gltf" and m.lower().endswith(".gltf")) for m in models)]
+        write_sidecar(glb, out_dir, png, model, info, fmts, free, edits)
     return res
 
 
@@ -437,6 +481,8 @@ def write_sidecar(glb: Path, out_dir: Path, png: Path, source: Path, info: dict,
     for k in ("licence", "licence_url", "no_training"):
         if src_meta.get(k):
             meta[k] = src_meta[k]
+    if info.get("made_on"):             # finished on the linked PC (engine/offload.py)
+        meta["made_on"] = info["made_on"]
     if free:
         meta.update(free_asset=free, edits=[e.get("op") for e in (edits or [])],
                     licence=meta.get("licence") or "made from a CC0 asset, changed by LOKI")

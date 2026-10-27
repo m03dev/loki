@@ -14,6 +14,10 @@
   background: transparent; color: var(--muted); }
 .home-ico svg { width: 17px; height: 17px; }
 .home-ico:hover { background: var(--surface); color: var(--text); }
+.home-pc { position: relative; }
+.home-pc::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted, #888); box-shadow: 0 0 0 2px var(--bg, #111); }
+.home-pc.on::after { background: #5fc98f; }
 .home-ico[aria-pressed="true"] { background: rgba(140, 207, 196, .14); color: var(--text); }
 .home-live { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px;
   color: var(--text); background: rgba(163, 190, 140, .12); border: 1px solid rgba(163, 190, 140, .32); }

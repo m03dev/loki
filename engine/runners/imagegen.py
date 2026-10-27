@@ -153,6 +153,9 @@ def plan_order(backend=None):
     local, local_ready, local_why = local_status()
     skipped = {} if local_ready else {local: local_why}
     ready, why = zimage_status()     # diffusers Z-Image stays the next try (the PC has it from session 22)
+    pc = _pc_for_pictures()
+    if ready and _light():            # a big torch model on the 16 GB Mac (2026-10-26 crash): the PC does that
+        ready, why = False, "a heavy local model - this machine gives picture work to the PC"
     if not ready:
         skipped["zimage"] = why
     if not os.environ.get("MODELSCOPE_API_KEY"):
@@ -167,7 +170,31 @@ def plan_order(backend=None):
     order = ([local] if local_ready else []) + (["zimage"] if ready else []) + \
         (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + \
         (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["huggingface"] if hf else [])
-    return {"order": order, "skipped": skipped, "forced": False}
+    if pc and not local_ready:        # the linked PC's own model (engine/offload.py): after the hosted ones the owner
+        order.append("local")         # liked, before giving up; area edits always go to it (region_edit.py)
+        skipped.pop(local, None)
+    return {"order": order, "skipped": skipped, "forced": False, **({"pc": pc} if pc else {})}
+
+
+def _offload():
+    _creative()                       # puts the engine folder on the path
+    import offload  # pylint: disable=import-outside-toplevel
+    return offload
+
+
+def _light() -> bool:
+    try:
+        return _offload().role() == "light"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _pc_for_pictures() -> str:
+    """The linked machine that makes pictures for this one, or ""."""
+    try:
+        return (_offload().target("image") or {}).get("name", "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 # Ways to run Z-Image on a small GPU, safest last. A native crash (segfault / access
