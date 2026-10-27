@@ -129,7 +129,7 @@ function forgeLeft() {
   const go = el("div", "forge-go");
   const pick = el("select", "forge-backend"); pick.id = "forge-backend";
   pick.setAttribute("aria-label", "How to make the 3D model");
-  for (const [v, t] of [["auto", "Best available"], ["pixal3d", "Pixal3D (ComfyUI)"], ["trellis2", "TRELLIS.2 (ComfyUI)"], ["triposr", "TripoSR (this computer)"], ["online", "Online Space"], ["lift", "Offline lift (instant)"]]) {
+  for (const [v, t] of [["auto", "Best available"], ["trellis2", "TRELLIS.2 (ComfyUI)"], ["pixal3d", "Pixal3D (ComfyUI)"], ["triposr", "TripoSR (this computer)"], ["online", "Online Space"], ["lift", "Offline lift (instant)"]]) {
     const o = el("option", "", t); o.value = v; pick.append(o);
   }
   pick.addEventListener("change", () => { forge.backend = pick.value; forgeOutputState(); });

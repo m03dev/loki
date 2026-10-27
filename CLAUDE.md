@@ -1,5 +1,5 @@
 @AGENTS.md
 
-Claude-specific: a cloud session usually has no LOKI venv, so `tools/ship.py` can't run its suites there.
-Verify what you can (`node tests/js/...`, the suites that do run), then push an `agent/<topic>` branch whose
-last commit message is the hand-over - see AGENTS.md > Git and shipping.
+Claude-specific: ship to `master` with `tools/ship.py` like every other agent - never an `agent/<topic>` branch (the
+owner's machines only install master; branches left fixes stranded). A cloud session has no LOKI venv: first
+`pip install --break-system-packages -r engine/requirements.txt`, then `python3 tools/ship.py -m "..."`.

@@ -382,7 +382,7 @@
  "ob.way_both": "Beides",
  "ob.way_both_sub": "Sofort online chatten, während das lokale Modell lädt.",
  "ob.way_cloud": "Ein Konto verbinden",
- "ob.way_cloud_sub": "Schnell auf jedem Computer. Kostenlos: NVIDIA (DeepSeek V4.1 Flash, Nemotron). Kostenpflichtig: OpenRouter.",
+ "ob.way_cloud_sub": "Schnell auf jedem Computer. Kostenlos: NVIDIA (DeepSeek V4.1 Flash, GLM-5.3, Nemotron).",
  "ob.way_local": "KI auf diesem Computer ausführen",
  "ob.way_local_dl": "{model} · {size} GB Download, im Hintergrund",
  "ob.way_local_have": "{model} ist schon heruntergeladen",

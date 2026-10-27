@@ -1,5 +1,5 @@
 // MODULE: app (editor)
-// The Carbon MMO Editor's entry point: window + OpenGL context + Dear ImGui backends around editor::Editor.
+// The Carbon Editor's entry point: window + OpenGL context + Dear ImGui backends around editor::Editor.
 //
 //   cmmo_editor                                   the editor window (macOS / Windows: GLFW)
 //   cmmo_editor --selftest --screenshot out.png   drives the real editor (sculpt with the mouse, place, undo,
@@ -24,8 +24,15 @@
 #include "imgui.h"
 #include "ImGuizmo.h"   // after imgui.h
 #include "imgui_impl_opengl3.h"
+#if CMMO_EDITOR_PYTHON
 #include "script_host/ScriptHost.h"
+#endif
+#include <filesystem>
 
+#if defined( CMMO_WITH_GLFW ) && defined( __APPLE__ )
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
 #if defined( CMMO_WITH_GLFW )
 #include "imgui_impl_glfw.h"
 #define GLFW_INCLUDE_NONE
@@ -41,6 +48,21 @@ using cmmo::world::ActorType;
 
 namespace
 {
+#if defined( CMMO_WITH_GLFW ) && defined( __APPLE__ )
+// Started from a script (not Finder) a plain executable opens BEHIND the other apps on macOS: bring it to the front.
+void BringToFront()
+{
+	using MsgId = id ( * )( id, SEL );
+	using MsgBool = void ( * )( id, SEL, BOOL );
+	id app = ( (MsgId)objc_msgSend )( (id)objc_getClass( "NSApplication" ), sel_registerName( "sharedApplication" ) );
+	if( !app ) return;
+	( (void ( * )( id, SEL, long ))objc_msgSend )( app, sel_registerName( "setActivationPolicy:" ), 0 );   // regular app: Dock icon + menu bar
+	if( class_respondsToSelector( object_getClass( app ), sel_registerName( "activate" ) ) )
+		( (void ( * )( id, SEL ))objc_msgSend )( app, sel_registerName( "activate" ) );   // macOS 14+
+	( (MsgBool)objc_msgSend )( app, sel_registerName( "activateIgnoringOtherApps:" ), YES );
+}
+#endif
+
 // ------------------------------------------------------------------------------------------ PNG (stored deflate)
 uint32_t Crc( const uint8_t* d, size_t n, uint32_t c = 0xFFFFFFFFu )
 {
@@ -124,6 +146,9 @@ struct SelfTest
 	std::vector<uint8_t> playShot;
 	int playW = 0, playH = 0;
 	float wolfHp = 0;
+	Vector3 eye0, fwd0;
+	int xpBefore = 0;
+	int speed0 = 0;
 
 	void Check( const char* name, bool ok, const std::string& detail = "" )
 	{
@@ -285,7 +310,92 @@ struct SelfTest
 			break;
 		case 10:
 			shotName = "terrain";
-			++step;
+			step = 100;
+			wait = 1;
+			break;
+		// ---- Unreal-style camera: hold RMB + W flies forward; W / Q are not tool keys while flying; wheel = speed
+		case 100:
+			ed.Tool() = -1;
+			ed.Select( 0 );
+			eye0 = ed.Camera().eye;
+			fwd0 = Normalize( ed.Camera().target - ed.Camera().eye );
+			speed0 = ed.CameraSpeed();
+			io.AddMousePosEvent( cx, cy );
+			step = 101;
+			wait = 1;
+			break;
+		case 101:
+			io.AddMouseButtonEvent( 1, true );
+			step = 102;
+			wait = 1;
+			break;
+		case 102:
+			Key( ImGuiKey_W, true );
+			Key( ImGuiKey_Q, true );
+			step = 103;
+			wait = 30;
+			break;
+		case 103:
+		{
+			Key( ImGuiKey_W, false );
+			Key( ImGuiKey_Q, false );
+			io.AddMouseWheelEvent( 0, 1 );
+			const Vector3 moved = ed.Camera().eye - eye0;
+			Check( "hold RMB + W flies the camera forward (Unreal)", Dot( moved, fwd0 ) > 1.0f, std::to_string( Dot( moved, fwd0 ) ) );
+			Check( "hold RMB + Q flies down", moved.y < -0.3f, std::to_string( moved.y ) );
+			Check( "W / Q while flying don't switch the move / select tool", ed.GizmoOp() == 1 && ed.Flying() );
+			shotName = "flying";
+			step = 104;
+			wait = 1;
+			break;
+		}
+		case 104:
+			Check( "the wheel while flying changes the camera speed", ed.CameraSpeed() == speed0 + 1 );
+			io.AddMouseButtonEvent( 1, false );
+			step = 105;
+			wait = 2;
+			break;
+		case 105:
+		{
+			Check( "releasing RMB stops flying", !ed.Flying() );
+			Check( "a flight is not a click: no viewport menu", !ImGui::IsPopupOpen( "##viewctx", ImGuiPopupFlags_AnyPopupId ) );
+			auto* grey = ed.Scene().FindByName( "Marshal Grey" );
+			ed.Select( grey->id );
+			const size_t n = ed.Scene().Entities().size();
+			Check( "Copy + Paste (Ctrl+C / Ctrl+V)", ed.CopySelected() && ed.Paste() && ed.Scene().Entities().size() == n + 1 );
+			ed.Scene().Find( ed.Selected() )->transform.position.y += 5;
+			const Vector3 w = ed.Scene().WorldPosition( ed.Selected() );
+			Check( "Snap to Ground (End)", ed.SnapSelectedToGround() &&
+											   std::fabs( ed.Scene().WorldPosition( ed.Selected() ).y - ed.Scene().GroundAt( w.x, w.z ) ) < 1e-3f );
+			const uint32_t pasted = ed.Selected();
+			const uint32_t g = ed.GroupSelected();
+			Check( "Group (Ctrl+G) wraps it in an Empty and keeps it in place", g && ed.Scene().Find( pasted )->parent == g &&
+																					 Length( ed.Scene().WorldPosition( pasted ) - Vector3( w.x, ed.Scene().GroundAt( w.x, w.z ), w.z ) ) < 1e-3f );
+			ed.Undo();
+			ed.Undo();
+			ed.Undo();
+			ed.Undo();
+			Check( "Undo takes paste, snap and group back", ed.Scene().Entities().size() == n );
+			const uint32_t runeId = ed.Scene().FindByName( "Rune Stone" )->id;
+			const size_t comps = ed.Scene().Find( runeId )->components.size();
+			Check( "Add Component (Inspector) adds a Mover", ed.AddComponent( runeId, "Mover" ) && ed.Scene().Find( runeId )->components.size() == comps + 1 &&
+															  ed.Scene().Find( runeId )->components.back().value( "type", std::string() ) == "Mover" );
+			ed.Undo();
+			Check( "Undo removes it again", ed.Scene().Find( runeId )->components.size() == comps );
+			ed.Select( runeId );
+			ed.PanelOpen( editor::Editor::PControls ) = true;
+			step = 106;
+			wait = 2;
+			break;
+		}
+		case 106:
+			shotName = "controls";
+			step = 107;
+			wait = 1;
+			break;
+		case 107:
+			ed.PanelOpen( editor::Editor::PControls ) = false;
+			step = 11;
 			wait = 1;
 			break;
 		case 11:
@@ -327,6 +437,29 @@ struct SelfTest
 			Check( "F talks to the quest giver (the quest dialog opens)", s.talkingTo >= 0 );
 			Check( "accepting the quest tracks it", s.talkingTo >= 0 && s.AcceptQuest( s.talkingTo ) && s.quests[0].state == world::Quest::Active );
 			s.talkingTo = -1;
+			step = 110;   // the rune stone pickup, then the wolves
+			{
+				const auto* rune = s.World().FindByName( "Rune Stone" );
+				xpBefore = s.xp;
+				if( rune ) s.SetPlayerPosition( s.World().WorldPosition( rune->id ) - Vector3( 0, 0.6f, 0 ) );
+			}
+			wait = 6;
+			break;
+		}
+		case 110:
+		{
+			world::PlaySession& s = *ed.Session();
+			const auto* rune = s.World().FindByName( "Rune Stone" );
+			Check( "walking into the Rune Stone (Pickup component) gives XP, a message, and hides it",
+				   rune && s.xp == xpBefore + 30 && !rune->visible && s.toastFor > 0, std::to_string( s.xp - xpBefore ) );
+			shotName = "pickup";
+			step = 111;
+			wait = 1;
+			break;
+		}
+		case 111:
+		{
+			world::PlaySession& s = *ed.Session();
 			// go to the wolves, face them, Tab, 1
 			const auto& wolves = s.World().WorldPosition( s.World().FindByName( "Wolf Den" )->id );
 			int closest = -1;
@@ -338,7 +471,7 @@ struct SelfTest
 				s.SetPlayerPosition( Vector3( w.x, s.World().GroundAt( w.x, w.z + 3 ), w.z + 3 ) );
 			}
 			Key( ImGuiKey_Tab, true );
-			++step;
+			step = 15;
 			wait = 1;
 			break;
 		}
@@ -404,14 +537,14 @@ struct SelfTest
 
 int main( int argc, char** argv )
 {
-	bool selftest = false;
+	bool selftest = false, contentGiven = false;
 	std::string shot, content = "content", script = std::string( CMMO_SOURCE_DIR ) + "/scripts/init_render.py";
 	for( int i = 1; i < argc; ++i )
 	{
 		const std::string a = argv[i];
 		if( a == "--selftest" ) selftest = true;
 		else if( a == "--screenshot" && i + 1 < argc ) shot = argv[++i];
-		else if( ( a == "--content" || a == "--levels" ) && i + 1 < argc ) content = argv[++i];   // --levels: the old name
+		else if( ( a == "--content" || a == "--levels" ) && i + 1 < argc ) { content = argv[++i]; contentGiven = true; }   // --levels: the old name
 		else if( a == "--script" && i + 1 < argc ) script = argv[++i];
 		else
 		{
@@ -420,11 +553,28 @@ int main( int argc, char** argv )
 		}
 	}
 
+	// Opened from Finder / Explorer (an app bundle, or the working directory is "/"): keep levels in Documents.
+	{
+		namespace fs = std::filesystem;
+		std::error_code ec;
+		const std::string exe = argv[0];
+		const bool bundle = exe.find( ".app/Contents/MacOS" ) != std::string::npos;
+		if( !contentGiven && !selftest && ( bundle || fs::current_path( ec ) == fs::path( "/" ) ) )
+		{
+			const char* home = std::getenv( "HOME" );
+			if( !home ) home = std::getenv( "USERPROFILE" );
+			if( home ) content = ( fs::path( home ) / "Documents" / "Carbon MMO" / "content" ).string();
+		}
+	}
+	static std::string iniPath;
+	iniPath = ( std::filesystem::path( content ).parent_path() / "cmmo_editor_layout.ini" ).string();
+
 	// ---- the Python init hook (same pipeline as Phase 1): title, size, sky colour
 	editor::EditorSettings settings;
 	settings.contentDir = content;
 	settings.exePath = argv[0];
 	int width = 1600, height = 900;
+#if CMMO_EDITOR_PYTHON
 	{
 		cmmo::RenderConfig cfg;
 		cfg.title = settings.title;
@@ -434,13 +584,16 @@ int main( int argc, char** argv )
 		std::string err;
 		if( host.RunInitHook( script, cfg, err ) )
 		{
-			settings.title = cfg.title;
+			// the window is always "Carbon Editor"; the hook's title is for the Phase 1 host window
 			width = std::max( 1600, cfg.width );   // an editor needs room: at least 1600 x 900
 			height = std::max( 900, cfg.height );
 		}
 		else
 			std::printf( "[editor] init hook skipped: %s\n", err.c_str() );
 	}
+#else
+	(void)script;   // a build without the embedded Python (the portable app): defaults only
+#endif
 
 	// ---- window / context
 #if defined( CMMO_WITH_GLFW )
@@ -454,6 +607,14 @@ int main( int argc, char** argv )
 	if( !window ) { std::fprintf( stderr, "could not open an OpenGL 3.3 window\n" ); glfwTerminate(); return 1; }
 	glfwMakeContextCurrent( window );
 	glfwSwapInterval( 1 );
+	if( !selftest )
+	{
+		glfwShowWindow( window );
+		glfwFocusWindow( window );
+#if defined( __APPLE__ )
+		BringToFront();
+#endif
+	}
 	if( const char* missing = gl::Load( []( const char* n ) { return (void*)glfwGetProcAddress( n ); } ) )
 	{
 		std::fprintf( stderr, "OpenGL function missing: %s\n", missing );
@@ -507,7 +668,7 @@ int main( int argc, char** argv )
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
-	io.IniFilename = selftest ? nullptr : "cmmo_editor_layout.ini";
+	io.IniFilename = selftest ? nullptr : iniPath.c_str();
 	const std::string fonts = editor::ui::Setup( argv[0] );
 	std::printf( "[editor] fonts: %s\n", fonts.empty() ? "built-in (fonts folder not found)" : fonts.c_str() );
 #if defined( CMMO_WITH_GLFW )

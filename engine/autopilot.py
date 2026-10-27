@@ -844,7 +844,7 @@ class Autopilot:
 
     # ------------------------------------------------------------ the loop
     def tick(self) -> list:
-        """One pass: at most one duty. Returns [(duty, result)] for what ran."""
+        """One pass: at most one duty (plus the storage clean-up when it is due). Returns [(duty, result)] for what ran."""
         if not self.enabled():
             return []
         try:   # scheduled tasks run at their time, idle or not
@@ -875,15 +875,21 @@ class Autopilot:
                     self.write_board()
         except Exception as exc:  # noqa: BLE001
             self._log("board", "failed: %s: %s" % (type(exc).__name__, exc))
-        try:   # storage runs on its own clock, busy or not - it only touches finished work (never idle on the PC)
+        cleaned: list = []
+        try:   # storage runs on its own clock, busy or not - it only touches finished work (never idle on the PC).
+            # It does NOT use up the tick (2026-10-27): it used to return here, so every start (and every 6 h) the
+            # duty that was due - evolve, the inbox, a retry - waited a whole tick behind a clean-up.
             if _env_on("LOKI_AUTOPILOT_STORAGE") and self.due("storage", _env_s("LOKI_STORAGE_EVERY_S", 21600)):
                 with self.lock:
                     self.data["last"]["storage"] = self.clock()
-                    out = self.duty_storage()
+                    cleaned = [("storage", self.duty_storage())]
                     self._save()
-                return [("storage", out)]
         except Exception as exc:  # noqa: BLE001
             self._log("storage", "failed: %s: %s" % (type(exc).__name__, exc))
+        return cleaned + self._tick_work()
+
+    def _tick_work(self) -> list:
+        """The rest of tick(): requests, goals, retries, then the idle duties."""
         work_ok, _ = self.idle(for_work=True)
         if work_ok and not self.drain():
             # requests and standing goals fill free slots side by side, even while other work runs

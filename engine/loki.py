@@ -144,48 +144,18 @@ MAX_CONTEXT_MESSAGES = int(os.getenv("LOKI_MAX_CONTEXT", "0"))      # context wi
 # ---------------------------------------------------------------------------
 
 PROVIDER_ENV_VARS = {
-    "openrouter": "OPENROUTER_API_KEY",
-    "gpt6-luna": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "together": "TOGETHER_API_KEY",
-    "nous": "NOUS_API_KEY",
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
-    "unorouter": "UNOROUTER_API_KEY",
     "9router": "NINEROUTER_API_KEY",
-    "omniroute": "OMNIROUTE_API_KEY",
-    "vireonix": "VIREONIX_API_KEY",
     "typesafe": "TYPESAFE_API_KEY",
     # added with the Connections portal (engine/providers_catalog.py); the portal's cards use
     # the MODELS names, so "gpt" and "claude" are accepted alongside openai / anthropic.
     "gpt": "OPENAI_API_KEY",
     "claude": "ANTHROPIC_API_KEY",
-    "cohere": "COHERE_API_KEY",
     "huggingface": "HF_TOKEN",
-    "kilocode": "KILOCODE_API_KEY",
-    "llm7": "LLM7_API_KEY",
     "nvidia": "NVIDIA_API_KEY",
     "nvidia-nemotron": "NVIDIA_API_KEY",
-    "ollama-cloud": "OLLAMA_API_KEY",
-    "ovh": "OVH_API_KEY",
-    "siliconflow": "SILICONFLOW_API_KEY",
-    "zai": "ZAI_API_KEY",
-    "aion": "AION_API_KEY",
-    "opencode-zen": "OPENCODE_API_KEY",
-    "vercel": "AI_GATEWAY_API_KEY",
-    "nebius": "NEBIUS_API_KEY",
-    "scaleway": "SCALEWAY_API_KEY",
-    "hyperbolic": "HYPERBOLIC_API_KEY",
-    "novita": "NOVITA_API_KEY",
-    "fireworks": "FIREWORKS_API_KEY",
-    "dashscope": "DASHSCOPE_API_KEY",
-    "deepinfra": "DEEPINFRA_API_KEY",
-    "chutes": "CHUTES_API_KEY",
-    "baseten": "BASETEN_API_KEY",
-    "inference-net": "INFERENCE_API_KEY",
-    "ai21": "AI21_API_KEY",
-    "upstage": "UPSTAGE_API_KEY",
 }
 
 
@@ -260,7 +230,7 @@ def write_provider_key(provider: str, key: str) -> bool:
 
 # Endpoints that actually REQUIRE the key: /models is public on several providers,
 # so a bad key would still return 200 and the check would be worthless.
-_VERIFY_PATHS = {"openrouter": "/key"}
+_VERIFY_PATHS: dict = {}
 
 
 def verify_provider_key(provider: str, key: str, timeout: float = 12.0) -> str:
@@ -440,33 +410,11 @@ MODELS = {
     # LOKI_MODEL=claude-code (or codex).
     "claude-code": ModelConfig(base_url="cli-agent://claude-code", model="claude-code"),
     "codex": ModelConfig(base_url="cli-agent://codex", model="codex"),
-    # OmniRoute: local AI gateway (one OpenAI-compatible endpoint -> many providers,
-    # free tiers and auto-fallback). Run it, set a provider key, then use LOKI_MODEL=omniroute.
-    # Keys go in harness/.env. OpenAI-compatible endpoints.
-    # No free tiers with a DAILY cap (owner 2026-10-27: "get rid of free models with daily limits we dont need them"):
-    # OpenRouter's :free models (50/day), Gemini, Groq, Codestral, Cloudflare, ModelScope, SambaNova and Cerebras are
-    # gone - they ran out every day and made jobs fail over. RETIRED_PROVIDERS maps old names to Smart.
-    # OpenRouter stays as a paid account (its sign-in, DeepSeek V4.1 / GPT-6 Luna); no :free model by default.
-    "openrouter": ModelConfig(base_url="https://openrouter.ai/api/v1",
-                              api_key=os.getenv("OPENROUTER_API_KEY", ""),
-                              model=os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-v4.1-flash")),
-    # DeepSeek V4.1-Flash on OpenRouter - the go-to model. One account, 1M context,
-    # very cheap, and it tolerates a 200-tool request where Gemini/Groq refuse one
-    # well below that (paid per token, no daily cap). Equivalent to LOKI_MODEL=openrouter with OPENROUTER_MODEL set;
-    # this alias exists so "deepseek-4.1" can be named directly.
-    "deepseek-4.1": ModelConfig(
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-        api_key=os.getenv("OPENROUTER_API_KEY", ""),
-        model=os.getenv("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash")),
-    # GPT-6 Luna (OpenAI, $0.10 / $0.50 per million tokens) through your OpenAI key (or OpenRouter) when you pick it.
-    "gpt6-luna": ModelConfig(
-        base_url="https://api.openai.com/v1" if os.getenv("OPENAI_API_KEY") else "https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY", ""),
-        model=os.getenv("GPT6_LUNA_MODEL", "gpt-6-luna" if os.getenv("OPENAI_API_KEY") else "openai/gpt-6-luna")),
-    "mistral": ModelConfig(base_url="https://api.mistral.ai/v1",
-                           api_key=os.getenv("MISTRAL_API_KEY", ""), model=os.getenv("MISTRAL_MODEL", "mistral-large-latest")),
-    "together": ModelConfig(base_url="https://api.together.xyz/v1",
-                            api_key=os.getenv("TOGETHER_API_KEY", ""), model=os.getenv("TOGETHER_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free")),
+    # The lean set (owner 2026-10-27: "its these providers that are doing the same thing we dont need the reduncency ...
+    # if those get capped in a day within a few hours we dont need them"): NVIDIA (free, per-minute pacing only) for
+    # DeepSeek V4.1 Flash / GLM-5.3 / Nemotron, the owner's subscriptions (Claude Code, Codex), local servers, 9Router,
+    # and pay-per-use OpenAI / Anthropic / DeepSeek only when paid use is on. ~35 others (OpenRouter, Gemini, Groq,
+    # Vireonix, LLM7, Kilo, OpenCode Zen, trial-credit hosts...) were removed - RETIRED_PROVIDERS maps their names.
     # DeepSeek V4.1-Flash. The live model name is "deepseek-flash" (the retired
     # deepseek-v4-flash and deepseek-chat names route to it). NOT free - it is
     # pay-as-you-go, and off-peak is half price: $0.15/1M in, $0.60/1M out.
@@ -474,62 +422,16 @@ MODELS = {
     "deepseek": ModelConfig(base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
                             api_key=os.getenv("DEEPSEEK_API_KEY", ""),
                             model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash")),
-    # Vireonix: OpenAI-compatible, needs NO key, NO account and NO card, and mixes
-    # MiniMax/Nemotron/GLM/Qwen/GPT-OSS behind "auto". 20M input tokens/hour, 1M
-    # context. This is the "nothing to set up at all" option - note that prompts
-    # and file contents are sent to a third-party service.
-    "vireonix": ModelConfig(base_url=os.getenv("VIREONIX_BASE_URL", "https://vireonix.ai/v1"),
-                            api_key=os.getenv("VIREONIX_API_KEY", "vireonix"),
-                            model=os.getenv("VIREONIX_MODEL", "auto")),
-    # --- Additional STANDING free tiers (verified 2026-10). These are providers that
-    # keep a free tier indefinitely, as opposed to a one-off trial. Model names move
-    # around, so every one is overridable with <PROVIDER>_MODEL.
-    # 9Router (engine/ninerouter.py, MIT, a separate Node program LOKI starts on 127.0.0.1): your subscriptions, free
-    # tiers and keys behind one OpenAI endpoint with its own fallback chains. Model "loki" = a combo you name so in
+    # 9Router (engine/ninerouter.py, MIT, a separate Node program LOKI starts on 127.0.0.1): your subscriptions
+    # and keys behind one OpenAI endpoint with its own fallback chains. Model "loki" = a combo you name so in
     # its dashboard; without one LOKI takes the first model it lists (provider_health.SWAP_PREFERENCE).
     "9router": ModelConfig(base_url=os.getenv("NINEROUTER_BASE_URL", "http://127.0.0.1:%s/v1" % (os.getenv("NINEROUTER_PORT") or "20128")),
                            api_key=os.getenv("NINEROUTER_API_KEY", ""),
                            model=os.getenv("NINEROUTER_MODEL", "loki")),
-    # UnoRouter: a large catalogue of :free routes, no card required.
-    "unorouter": ModelConfig(base_url=os.getenv("UNOROUTER_BASE_URL", "https://api.unorouter.com/v1"),
-                             api_key=os.getenv("UNOROUTER_API_KEY", ""),
-                             model=os.getenv("UNOROUTER_MODEL", "ling-3.1-flash:free")),
-    # Nous Portal: the $0 plan includes :free models.
-    "nous": ModelConfig(base_url=os.getenv("NOUS_BASE_URL", "https://inference-api.nousresearch.com/v1"),
-                        api_key=os.getenv("NOUS_API_KEY", ""),
-                        model=os.getenv("NOUS_MODEL", "hermes-4-405b:free")),
-    "omniroute": ModelConfig(
-        base_url=os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1"),
-        api_key=os.getenv("OMNIROUTE_API_KEY", "omniroute"),
-        model=os.getenv("OMNIROUTE_MODEL", "auto"),
-    ),
-    # --- More standing free tiers, taken from awesome-free-llm-apis
-    # (github.com/mnfst/awesome-free-llm-apis, data.json - a machine-readable catalogue of
-    # LLM APIs with permanent free tiers; verified 2026-10). All are OpenAI-compatible
-    # endpoints, every model name is overridable with <PROVIDER>_MODEL, and every base URL
-    # with <PROVIDER>_BASE_URL. Put the key in harness_data/.env; run tools/loki_doctor.py
-    # to see what is configured. See docs/providers.md.
-    "aion": ModelConfig(base_url=os.getenv("AION_BASE_URL", "https://api.aionlabs.ai/v1"),
-                        api_key=os.getenv("AION_API_KEY", ""),
-                        model=os.getenv("AION_MODEL", "aion-labs/aion-3.0")),
-    # Cohere's own v2 API is not OpenAI-shaped, so this points at their OpenAI
-    # compatibility endpoint instead.
-    "cohere": ModelConfig(base_url=os.getenv("COHERE_BASE_URL", "https://api.cohere.com/compatibility/v1"),
-                          api_key=os.getenv("COHERE_API_KEY", ""),
-                          model=os.getenv("COHERE_MODEL", "command-a-plus-05-2026")),
-    "zai": ModelConfig(base_url=os.getenv("ZAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
-                       api_key=os.getenv("ZAI_API_KEY", ""),
-                       model=os.getenv("ZAI_MODEL", "glm-4.7-flash")),
+    # Hugging Face: kept for its token (HF_TOKEN, used for model downloads and its sign-in code); not in any order.
     "huggingface": ModelConfig(base_url=os.getenv("HUGGINGFACE_BASE_URL", "https://router.huggingface.co/v1"),
                                api_key=os.getenv("HF_TOKEN", os.getenv("HUGGINGFACE_API_KEY", "")),
                                model=os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.1-8B-Instruct")),
-    "kilocode": ModelConfig(base_url=os.getenv("KILOCODE_BASE_URL", "https://api.kilo.ai/api/gateway"),
-                            api_key=os.getenv("KILOCODE_API_KEY", ""),
-                            model=os.getenv("KILOCODE_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")),
-    # LLM7.io answers without a token; a token raises the limits.
-    "llm7": ModelConfig(base_url=os.getenv("LLM7_BASE_URL", "https://api.llm7.io/v1"),
-                        api_key=os.getenv("LLM7_API_KEY", "unused"),
-                        model=os.getenv("LLM7_MODEL", "gpt-oss:20b")),
     # NVIDIA NIM, free with an account key (nvapi-..., build.nvidia.com/settings/api-keys), about
     # 40 requests/min. Since session 29 it serves LOKI's MAIN DRIVER: DeepSeek V4.1 Flash (1M
     # context, native tool calling). Paced client-side (engine/ratelimit.py, LOKI_NVIDIA_RPM);
@@ -548,62 +450,6 @@ MODELS = {
     "nvidia-nemotron": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                                    api_key=os.getenv("NVIDIA_API_KEY", ""),
                                    model=os.getenv("NVIDIA_NEMOTRON_MODEL", "nvidia/nemotron-3.5-lightning")),
-    "ollama-cloud": ModelConfig(base_url=os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/api"),
-                                api_key=os.getenv("OLLAMA_API_KEY", ""),
-                                model=os.getenv("OLLAMA_CLOUD_MODEL", "deepseek-v4-pro")),
-    "ovh": ModelConfig(base_url=os.getenv("OVH_BASE_URL", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"),
-                       api_key=os.getenv("OVH_API_KEY", ""),
-                       model=os.getenv("OVH_MODEL", "Qwen3.5-397B-A17B")),
-    "siliconflow": ModelConfig(base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"),
-                               api_key=os.getenv("SILICONFLOW_API_KEY", ""),
-                               model=os.getenv("SILICONFLOW_MODEL", "Qwen/Qwen3-8B")),
-    # --- Added 2026-10 with the Connections portal (engine/providers_catalog.py describes
-    # each one: free limits, where to get a key, how to sign in). Every base URL and model
-    # is overridable with <PROVIDER>_BASE_URL / <PROVIDER>_MODEL, and the portal's model
-    # picker reads each provider's live /models list.
-    "opencode-zen": ModelConfig(base_url=os.getenv("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1"),
-                                api_key=os.getenv("OPENCODE_API_KEY", ""),
-                                model=os.getenv("OPENCODE_ZEN_MODEL", "deepseek-v4-flash-free")),
-    "vercel": ModelConfig(base_url=os.getenv("VERCEL_BASE_URL", "https://ai-gateway.vercel.sh/v1"),
-                          api_key=os.getenv("AI_GATEWAY_API_KEY", ""),
-                          model=os.getenv("VERCEL_MODEL", "openai/gpt-oss-120b")),
-    "nebius": ModelConfig(base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1"),
-                          api_key=os.getenv("NEBIUS_API_KEY", ""),
-                          model=os.getenv("NEBIUS_MODEL", "deepseek-ai/DeepSeek-R1-0528")),
-    "scaleway": ModelConfig(base_url=os.getenv("SCALEWAY_BASE_URL", "https://api.scaleway.ai/v1"),
-                            api_key=os.getenv("SCALEWAY_API_KEY", ""),
-                            model=os.getenv("SCALEWAY_MODEL", "gpt-oss-120b")),
-    "hyperbolic": ModelConfig(base_url=os.getenv("HYPERBOLIC_BASE_URL", "https://api.hyperbolic.xyz/v1"),
-                              api_key=os.getenv("HYPERBOLIC_API_KEY", ""),
-                              model=os.getenv("HYPERBOLIC_MODEL", "Qwen/Qwen3-Coder-480B-A35B-Instruct")),
-    "novita": ModelConfig(base_url=os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/openai"),
-                          api_key=os.getenv("NOVITA_API_KEY", ""),
-                          model=os.getenv("NOVITA_MODEL", "deepseek/deepseek-v3-0324")),
-    "fireworks": ModelConfig(base_url=os.getenv("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1"),
-                             api_key=os.getenv("FIREWORKS_API_KEY", ""),
-                             model=os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/gpt-oss-120b")),
-    "dashscope": ModelConfig(base_url=os.getenv("DASHSCOPE_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
-                             api_key=os.getenv("DASHSCOPE_API_KEY", ""),
-                             model=os.getenv("DASHSCOPE_MODEL", "qwen-plus")),
-    # More hosts with starter credits (2026-10-14).
-    "deepinfra": ModelConfig(base_url=os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai"),
-                             api_key=os.getenv("DEEPINFRA_API_KEY", ""),
-                             model=os.getenv("DEEPINFRA_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
-    "chutes": ModelConfig(base_url=os.getenv("CHUTES_BASE_URL", "https://llm.chutes.ai/v1"),
-                          api_key=os.getenv("CHUTES_API_KEY", ""),
-                          model=os.getenv("CHUTES_MODEL", "deepseek-ai/DeepSeek-V3")),
-    "baseten": ModelConfig(base_url=os.getenv("BASETEN_BASE_URL", "https://inference.baseten.co/v1"),
-                           api_key=os.getenv("BASETEN_API_KEY", ""),
-                           model=os.getenv("BASETEN_MODEL", "openai/gpt-oss-120b")),
-    "inference-net": ModelConfig(base_url=os.getenv("INFERENCE_NET_BASE_URL", "https://api.inference.net/v1"),
-                                 api_key=os.getenv("INFERENCE_API_KEY", ""),
-                                 model=os.getenv("INFERENCE_NET_MODEL", "glm-5.2")),
-    "ai21": ModelConfig(base_url=os.getenv("AI21_BASE_URL", "https://api.ai21.com/studio/v1"),
-                        api_key=os.getenv("AI21_API_KEY", ""),
-                        model=os.getenv("AI21_MODEL", "jamba-mini")),
-    "upstage": ModelConfig(base_url=os.getenv("UPSTAGE_BASE_URL", "https://api.upstage.ai/v1"),
-                           api_key=os.getenv("UPSTAGE_API_KEY", ""),
-                           model=os.getenv("UPSTAGE_MODEL", "solar-mini")),
     # --- Local OpenAI-compatible servers. "auto" = the first model the server lists.
     "lmstudio": ModelConfig(base_url=os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
                             api_key="local", model=os.getenv("LMSTUDIO_MODEL", "auto")),
@@ -624,16 +470,12 @@ MODELS = {
                         api_key=os.getenv("VLLM_API_KEY", "local"), model=os.getenv("VLLM_MODEL", "auto")),
     "jan": ModelConfig(base_url=os.getenv("JAN_BASE_URL", "http://127.0.0.1:1337/v1"),
                        api_key=os.getenv("JAN_API_KEY", "local"), model=os.getenv("JAN_MODEL", "auto")),
-    # Kyojin (github.com/Yamz-Labs/kyojin): ExLlamaV3 server for 100 GB-class packs on an
-    # AMD Strix Halo box. Point KYOJIN_BASE_URL at that machine (its container uses 8731).
-    "kyojin": ModelConfig(base_url=os.getenv("KYOJIN_BASE_URL", "http://127.0.0.1:8731/v1"),
-                          api_key=os.getenv("KYOJIN_API_KEY", "local"), model=os.getenv("KYOJIN_MODEL", "auto")),
     # OpenCode (github.com/anomalyco/opencode) as a subscription-style coding agent.
     "opencode": ModelConfig(base_url="cli-agent://opencode", model="opencode"),
 }
 
 # Local OpenAI-compatible servers that are not Ollama: "configured" means the server is up.
-LOCAL_SERVERS = ("colibri", "lmstudio", "llamacpp", "mlx", "vllm", "jan", "kyojin")
+LOCAL_SERVERS = ("colibri", "lmstudio", "llamacpp", "mlx", "vllm", "jan")
 _LOCAL_UP: dict = {}   # name -> (checked_at, up)
 
 
@@ -661,8 +503,13 @@ def local_server_up(name: str, max_age: float = 30.0) -> bool:
 
 # Free tiers with a daily cap, removed 2026-10-27 (owner: "get rid of free models with daily limits we dont need them").
 # A saved LOKI_MODEL / route / setting that still names one goes to its replacement instead of failing.
-RETIRED_PROVIDERS = {"nemotron-free": "nvidia-nemotron", "gemini": "smart", "groq": "smart", "codestral": "smart",
-                     "cloudflare": "smart", "modelscope": "smart", "sambanova": "smart", "cerebras": "fast"}
+RETIRED_PROVIDERS = {"nemotron-free": "nvidia-nemotron", "openrouter": "nvidia", "deepseek-4.1": "nvidia",
+                     "gpt6-luna": "gpt", "cerebras": "fast"}
+for _gone in ("gemini", "groq", "codestral", "cloudflare", "modelscope", "sambanova", "mistral", "together", "vireonix",
+              "unorouter", "nous", "omniroute", "aion", "cohere", "zai", "kilocode", "llm7", "ollama-cloud", "ovh",
+              "siliconflow", "opencode-zen", "vercel", "nebius", "scaleway", "hyperbolic", "novita", "fireworks",
+              "dashscope", "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage", "kyojin"):
+    RETIRED_PROVIDERS.setdefault(_gone, "smart")
 
 
 def current_provider_name(name: str) -> str:
@@ -681,10 +528,8 @@ model_name = current_provider_name(os.getenv("LOKI_MODEL", "smart") or "smart")
 # every day, so they are gone (RETIRED_PROVIDERS).
 # Free cloud tiers first, then the subscription agents - when every free quota is
 # spent it is better to hand the job to a real coding agent than a weak local model.
-SMART_ORDER = ("nvidia-nemotron", "9router", "deepseek-4.1", "mistral",
-               "together", "nous", "unorouter", "opencode-zen",
-               "vercel", "deepseek",
-               "vireonix", "claude-code", "codex", "colibri", "local", "local-hermes")
+SMART_ORDER = ("nvidia-nemotron", "nvidia-pro", "9router", "claude-code", "codex", "deepseek",
+               "colibri", "local", "local-hermes")
 
 # Providers that need a GPU and a local download. The "online" mode exists so Loki is
 # usable with NEITHER - it never touches these.
@@ -723,17 +568,17 @@ ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
 # MAX: the strongest model that is ready, in this order, no learned reshuffling and no main-driver jump (the main
 # driver is a fast Flash model - the wrong pick for a hard task). The owner's subscriptions first (Claude Code runs
 # Claude Opus / Sonnet 5.5, Codex runs GPT-6.x - flat rate, nothing extra), then the strongest FREE open model
-# (DeepSeek V4 Pro on NVIDIA, thinking on), then the API frontier models only when paid use is allowed, then the
+# (GLM-5.3 on NVIDIA, thinking on), then the API frontier models only when paid use is allowed, then the
 # rest of Smart's order so a hard task never dead-ends. Research behind it: docs/MODELS.md (2026-10-26).
 # LOKI_MAX_ORDER=a,b,c replaces it.
 MAX_ORDER = tuple(p for p in (os.getenv("LOKI_MAX_ORDER", "").replace(" ", "").split(",") if os.getenv("LOKI_MAX_ORDER", "").strip() else
-                  ("claude-code", "codex", "nvidia-pro", "claude", "gpt", "deepseek-4.1", "nvidia")) if p in MODELS)
+                  ("claude-code", "codex", "nvidia-pro", "claude", "gpt", "nvidia")) if p in MODELS)
 MAX_ORDER = MAX_ORDER + tuple(p for p in SMART_ORDER if p not in MAX_ORDER)
 # FAST: the quickest capable model - Nemotron on the NVIDIA key first (no daily cap; Cerebras / Groq / SambaNova /
 # Gemini were removed 2026-10-27 for their daily caps), then the main driver, Vireonix, a small local model, the rest.
 # LOKI_FAST_ORDER=a,b,c replaces it.
 FAST_ORDER = tuple(p for p in (os.getenv("LOKI_FAST_ORDER", "").replace(" ", "").split(",") if os.getenv("LOKI_FAST_ORDER", "").strip() else
-                   ("nvidia-nemotron", "nvidia", "vireonix", "local-fast")) if p in MODELS)
+                   ("nvidia-nemotron", "nvidia", "local-fast")) if p in MODELS)
 FAST_ORDER = FAST_ORDER + tuple(p for p in SMART_ORDER if p not in FAST_ORDER)
 
 
@@ -1642,9 +1487,7 @@ def redact_secrets(text: str) -> str:
 # (LOKI_MAX_TURNS still applies to everything). A provider billed per token cannot run
 # away: after LOKI_PAID_MAX_CALLS model calls in one request, the request stops and says
 # why. Override the lists with LOKI_PAID_PROVIDERS / LOKI_FREE_PROVIDERS (comma lists).
-_METERED_DEFAULT = {"gpt", "gpt6-luna", "claude", "deepseek", "deepseek-4.1", "aion",
-                    "ollama-cloud", "nebius", "scaleway", "hyperbolic", "novita", "fireworks",
-                    "dashscope", "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"}
+_METERED_DEFAULT = {"gpt", "claude", "deepseek"}
 PAID_MAX_CALLS = int(os.getenv("LOKI_PAID_MAX_CALLS", "40"))
 # Spending policy (docs/VISION.md 6): automatic routing never picks a paid provider unless
 # LOKI_ALLOW_PAID=1, and paid use stops for the day at LOKI_DAILY_USD_LIMIT (from the usage
@@ -3530,7 +3373,10 @@ def check_env(base: dict | None = None) -> dict:
     env = dict(base if base is not None else os.environ)
     keys = set(PROVIDER_ENV_VARS.values())
     for name in list(env):
-        if name.startswith(("LOKI_", "HARNESS_")) or name in keys or name in _CHECK_ENV_DROP:
+        # any key-shaped variable too, not only the providers LOKI still lists (a key for a removed provider, e.g.
+        # GROQ_API_KEY after 2026-10-27, must not leak into test runs either)
+        secret = name.endswith(("_API_KEY", "_API_TOKEN", "_TOKEN", "_SECRET")) and name not in ("GITHUB_TOKEN",)
+        if name.startswith(("LOKI_", "HARNESS_")) or name in keys or secret or name in _CHECK_ENV_DROP:
             env.pop(name, None)
     env["GIT_TERMINAL_PROMPT"] = "0"
     return env
@@ -7974,7 +7820,7 @@ def _provider_kwargs(provider: str, cfg, kwargs: dict) -> dict:
     extra.pop("think", None)
     thinking = NVIDIA_THINKING not in ("off", "0", "false", "no", "") or (model_name == "max" and provider == "nvidia-pro")
     tmpl: dict = {"thinking": thinking}
-    if thinking:   # Max mode on DeepSeek V4 Pro thinks hard (high), LOKI_NVIDIA_THINKING=max goes further
+    if thinking:   # Max mode on GLM-5.3 thinks hard (high), LOKI_NVIDIA_THINKING=max goes further
         tmpl["reasoning_effort"] = "max" if NVIDIA_THINKING == "max" else "high"
     extra["chat_template_kwargs"] = tmpl
     return dict(kwargs, extra_body=extra)

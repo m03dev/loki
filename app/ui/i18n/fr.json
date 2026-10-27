@@ -382,7 +382,7 @@
  "ob.way_both": "Les deux",
  "ob.way_both_sub": "Discutez en ligne tout de suite pendant que le modèle local se télécharge.",
  "ob.way_cloud": "Connecter un compte",
- "ob.way_cloud_sub": "Rapide sur n'importe quel ordinateur. Gratuit : NVIDIA (DeepSeek V4.1 Flash, Nemotron). Payant : OpenRouter.",
+ "ob.way_cloud_sub": "Rapide sur n'importe quel ordinateur. Gratuit : NVIDIA (DeepSeek V4.1 Flash, GLM-5.3, Nemotron).",
  "ob.way_local": "Faire tourner l'IA sur cet ordinateur",
  "ob.way_local_dl": "{model} · téléchargement de {size} Go, en arrière-plan",
  "ob.way_local_have": "{model} est déjà téléchargé",

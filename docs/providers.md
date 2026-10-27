@@ -33,40 +33,30 @@ NVIDIA NIM. That is all.
   NIM's own switch); `LOKI_NVIDIA_THINKING=high|max` turns it on. Whatever reasoning comes
   back (`reasoning_content`, `reasoning`, `<think>...</think>`) is shown as a "thinking" line
   and taken out of the message: it never lands in the history and is never re-sent.
-- **Fallbacks.** Every other provider stays behind it: OpenRouter's DeepSeek V4.1 Flash
-  (`deepseek-4.1`), Gemini, Groq, ... and the local model.
+- **Fallbacks.** Nemotron and GLM-5.3 on the same key, your subscriptions, then the local model.
 
-| `LOKI_MODEL` | Provider | Free tier |
+## The lean set (2026-10-27)
+
+The owner: "its these providers that are doing the same thing we dont need the reduncency ... if those get capped in
+a day within a few hours we dont need them". So LOKI keeps ONE route per job and nothing that runs out within a day:
+
+| `LOKI_MODEL` | What | Limit |
 |---|---|---|
-| `local` / `local-reasoning` | Ollama (local) | yes, local |
-| `local-tools` | Ollama `llama3-groq-tool-use:8b` | yes - best tool-caller for an 8 GB card |
-| `local-fast` | Ollama `qwen3:4b` | yes - ~2.8 GB, ~80 tok/s |
-| `online` | **online mode** - see below | resolves to the best online provider |
-| `gemini` | Google AI Studio | yes |
-| `groq` | Groq | yes |
-| `openrouter` | OpenRouter | yes (`:free` models) |
-| `cerebras` | Cerebras | no - needs a verified payment method |
-| `sambanova` | SambaNova Cloud | yes (20 req/min, 20/day, 200k tok/day) |
-| `cloudflare` | Cloudflare Workers AI | yes (10,000 Neurons/day) |
-| `unorouter` | UnoRouter | yes (many `:free` routes, no card) |
-| `nous` | Nous Portal | yes ($0 plan `:free` models) |
-| `mistral` | Mistral | yes |
-| `together` | Together AI | yes |
-| `deepseek` | DeepSeek V4.1-Flash (`deepseek-flash`) | no - $0.15/M in, $0.60/M out off-peak |
-| `omniroute` | local OmniRoute gateway | routes to any of the above |
+| `nvidia` | DeepSeek V4.1 Flash on NVIDIA NIM - the main driver | free, ~40 requests/min (paced) |
+| `nvidia-pro` | GLM-5.3 (or the strongest the key serves) - Max mode | same key, same window |
+| `nvidia-nemotron` | Nemotron (the id the key serves, `nim_models.NEMOTRON`) - Fast mode | same key, same window |
+| `claude-code` / `codex` | your subscriptions as coding agents | your plan |
+| `9router` | your subscriptions and keys behind one local endpoint | - |
+| `local`, `local-*` | Ollama on this computer | none |
+| `colibri`, `lmstudio`, `llamacpp`, `mlx`, `vllm`, `jan` | local OpenAI-compatible servers, used when running | none |
+| `deepseek`, `gpt`, `claude` | pay per token - only with `LOKI_ALLOW_PAID=1` | your budget |
+| `smart` / `online` / `max` / `fast` | modes: pick the best ready route above | - |
 
-| `gpt` / `claude` | OpenAI / Anthropic | paid |
-| `claude-code` | Claude Code CLI (your subscription) | no key - flat rate you already pay |
-| `codex` | Codex CLI (your subscription) | no key - flat rate you already pay |
-
-## More providers (2026-10)
-
-Settings > Connections shows every provider below as a card (engine/providers_catalog.py
-has the facts and links). New ids: `codestral`, `opencode-zen`, `vercel`, `pollinations`
-(keyless), `nebius`, `scaleway`, `hyperbolic`, `novita`, `fireworks`, `dashscope`
-(free credits; counted as paid), local servers `lmstudio`, `llamacpp`, `mlx` (port 8082),
-`vllm`, `jan`, `kyojin` (`KYOJIN_BASE_URL`), and the `opencode` CLI agent. GitHub Models
-was retired on 2026-07-30. Switch any provider off with its card (`LOKI_DISABLED_PROVIDERS`).
+Removed (they ran out daily or hourly, or did the same job as one above): OpenRouter (and its browser sign-in),
+Gemini, Groq, Cerebras, SambaNova, Cloudflare, Codestral, ModelScope, Mistral, Together, Vireonix, LLM7, Kilo,
+OpenCode Zen, UnoRouter, Nous, OmniRoute, Cohere, Z.ai, OVH, SiliconFlow, Aion, Ollama Cloud, Vercel and the
+trial-credit hosts, Kyojin. A saved setting that still names one goes to its replacement
+(`loki.RETIRED_PROVIDERS`), so nothing breaks. Hugging Face stays only as the token for model downloads.
 
 Models with no native tool calling get tools as text (engine/tool_harness.py). List more
 providers for that with `LOKI_PROMPTED_TOOLS=name,name`; an endpoint that refuses a tools
@@ -76,8 +66,8 @@ list is switched to it automatically.
 
 Smart mode (and online mode) choose per TASK, not once. Ask LOKI to explain it any time:
 type `/models doctor` (or Settings > Connections > **Explain routing**). It answers in plain
-words, e.g. "Pictures -> gemini, because free, sees pictures; Background jobs -> openrouter,
-because background jobs get the best free model that calls tools reliably", lists what is
+words, e.g. "Background jobs -> nvidia, because background jobs get the best free model that calls
+tools reliably", lists what is
 skipped right now with a one-line fix, and the local side (Ollama version, Bonsai, context).
 
 1. **Provider health** (`engine/provider_health.py`). Every failure is classified and
@@ -106,8 +96,7 @@ skipped right now with a one-line fix, and the local side (Ollama version, Bonsa
    to paid; paid is only automatic with `LOKI_ALLOW_PAID=1`.
 3. **Background jobs** get the best FREE capable online model, not the local 8B just because the
    triage said "easy" (subscription agents are not used up by unattended jobs; they stay in the
-   smart order after the free tiers). Anonymous keyless routes (vireonix, llm7, pollinations) must earn it first
-   (a measured tool score). `LOKI_LOCAL_ONLY=1` (Settings > General > "Private") keeps everything,
+   smart order after the free tiers). `LOKI_LOCAL_ONLY=1` (Settings > General > "Private") keeps everything,
    jobs included, on this computer.
 4. **Failover mid-task keeps the conversation**: 429 / 402 / 401 / context too long / timeout /
    empty choices / 413 all move the SAME turn to the next provider. With another provider ready a
@@ -165,22 +154,10 @@ local model as a last resort.
 
 ## Environment variables
 
-- `<PROVIDER>_API_KEY` — the key (for example `GEMINI_API_KEY`).
+- `<PROVIDER>_API_KEY` — the key (for example `NVIDIA_API_KEY`).
 - `<PROVIDER>_MODEL` — override the model name.
 - `LOKI_MODEL` — which provider to use by default.
 - `GODOT_EXE` — path to your Godot 4 executable.
-
-## OmniRoute (optional)
-
-A single local gateway that fronts many providers with automatic fallback.
-
-```
-npm install -g omniroute      # needs Node 22
-omniroute --no-open           # serves http://localhost:20128/v1
-```
-
-Create an API key in the dashboard, put it in `OMNIROUTE_API_KEY`, and set
-`LOKI_MODEL=omniroute`.
 
 ## Jev (optional typed decisions)
 
@@ -208,40 +185,3 @@ Each provider is one entry in `MODELS` in `engine/loki.py`:
 ```python
 "myprovider": ModelConfig(base_url="https://.../v1", api_key=os.getenv("MYPROVIDER_API_KEY",""), model="...")
 ```
-
-## Go-to model: DeepSeek V4.1 via OpenRouter
-
-The default go-to is **`deepseek/deepseek-v4.1-flash`** on OpenRouter: one account, 1M
-context, very cheap, and it tolerates a **200-tool** request where Gemini and Groq refuse
-one well below that. It leads `SMART_ORDER`, so smart mode picks it whenever
-`OPENROUTER_API_KEY` is set. Name it directly with `LOKI_MODEL=deepseek-4.1`, or use
-`deepseek-4.1`'s override `DEEPSEEK_41_MODEL`.
-
-## More free tiers (awesome-free-llm-apis)
-
-These providers come from [github.com/mnfst/awesome-free-llm-apis](https://github.com/mnfst/awesome-free-llm-apis),
-a catalogue of LLM APIs with **permanent** free tiers (it ships a machine-readable `data.json`).
-Each is an OpenAI-compatible endpoint, and each is overridable with `<PROVIDER>_MODEL` and
-`<PROVIDER>_BASE_URL`. Run `tools/loki_doctor.py` for the signup link of each.
-
-| Loki name | Endpoint | Where to get the key |
-| --- | --- | --- |
-| `aion` | `https://api.aionlabs.ai/v1` | https://www.aionlabs.ai/app/api-keys/ |
-| `cohere` | `https://api.cohere.com/compatibility/v1` | https://dashboard.cohere.com/api-keys |
-| `zai` | `https://open.bigmodel.cn/api/paas/v4` | https://open.bigmodel.cn/usercenter/apikeys |
-| `huggingface` | `https://router.huggingface.co/v1` | https://huggingface.co/settings/tokens |
-| `kilocode` | `https://api.kilo.ai/api/gateway` | https://app.kilo.ai/profile |
-| `llm7` | `https://api.llm7.io/v1` | https://token.llm7.io (optional - anonymous use works) |
-| `modelscope` | `https://api-inference.modelscope.cn/v1` | https://modelscope.cn/my/myaccesstoken |
-| `nvidia` | `https://integrate.api.nvidia.com/v1` (default model `deepseek-ai/deepseek-v4.1-flash`, the main driver) | https://build.nvidia.com/settings/api-keys |
-| `ollama-cloud` | `https://ollama.com/api` | https://ollama.com/settings/keys |
-| `ovh` | `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1` | https://www.ovhcloud.com/en/public-cloud/ai-endpoints/ |
-| `siliconflow` | `https://api.siliconflow.cn/v1` | https://cloud.siliconflow.cn/account/ak |
-
-Notes:
-- These are **selectable by name** (`LOKI_MODEL=zai`). They are deliberately **not** added to
-  `SMART_ORDER`, so smart mode keeps its verified failover chain; name one to use it directly.
-- Cohere's own v2 API is not OpenAI-shaped, so `cohere` points at Cohere's OpenAI compatibility
-  endpoint.
-- `llm7` answers anonymously, so it works with no key (like `vireonix`).
-- Free-tier terms change and model names move; every value here is an override-able default.

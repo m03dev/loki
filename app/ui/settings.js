@@ -215,12 +215,6 @@ function providerCard(p) {
   }
   const auth = p.auth || [];
 
-  if (auth.includes("oauth") && !p.has_key) {
-    const row = el("div", "pcard-actions");
-    row.append(button("Sign in with " + p.name, "primary", () => signInOpenRouter(result)),
-               button("Sign in on my phone", "", () => signInOpenRouterPhone()));
-    body.append(row);
-  }
   if (auth.includes("device") && !p.has_key) {
     body.append(el("div", "pcard-actions"));
     body.lastChild.append(button("Sign in with a code", "", () => signInDevice(p, result)));
@@ -554,40 +548,6 @@ async function phoneKey(p) {
       if (s.result.ok) { loadPortal(); setTimeout(closeQR, 1800); }
     } else qrStatus("Waiting for your phone… " + Math.floor(s.expires_in / 60) + ":" + String(s.expires_in % 60).padStart(2, "0"));
   }, 1500);
-}
-
-async function signInOpenRouter(result) {
-  result.textContent = "Opening OpenRouter in your browser…";
-  const r = await api("/signin/openrouter", { mode: "browser" });
-  if (!r.ok) { result.textContent = "✗ " + (r.error || ""); return; }
-  result.textContent = "Approve LOKI in the browser tab that opened. Waiting…";
-  watchFlow(r.state, (s) => { result.textContent = s; });
-}
-
-async function signInOpenRouterPhone() {
-  const r = await api("/signin/openrouter", { mode: "code" });
-  if (!r.ok) return;
-  const svg = await qrSvg(r.url);
-  const form = el("form", "key-form");
-  const input = el("input");
-  input.placeholder = "Code from OpenRouter";
-  input.setAttribute("aria-label", "OpenRouter code");
-  const go = el("button", "primary", "Connect");
-  go.type = "submit";
-  form.append(input, go);
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    go.disabled = true;
-    qrStatus("Connecting…");
-    const done = await api("/signin/openrouter/code", { state: r.state, code: input.value });
-    go.disabled = false;
-    qrStatus(done.ok ? "✓ " + (done.message || "Connected") : "✗ " + (done.error || ""));
-    if (done.ok) { loadPortal(); setTimeout(closeQR, 1500); }
-  });
-  showQR({ title: "Sign in to OpenRouter on your phone", text: "", svg,
-           steps: ["Scan the code with your phone's camera.", "Sign in to OpenRouter there and tap Authorize.",
-                   "OpenRouter shows a code. Type it here."], actions: [form] });
-  input.focus();
 }
 
 async function signInDevice(p, result) {

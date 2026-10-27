@@ -10,11 +10,9 @@ only has to route here:
   POST /providers/models     {id}         its live model list
   POST /providers/model      {id, model}  use this model for it
   POST /providers/enable     {id, on}     switch it on/off for routing
-  POST /providers/connect    {id, key, account_id?}   check + save a key
+  POST /providers/connect    {id, key}    check + save a key
   POST /providers/disconnect {id}         forget its key
   POST /providers/default    {id}         make it the default (LOKI_MODEL)
-  POST /signin/openrouter    {mode}       browser | code  -> {state, url}
-  POST /signin/openrouter/code {state, code}
   POST /signin/device        {id}         RFC 8628 sign-in code
   GET  /signin/status?state=              is that sign-in done
   POST /handoff              {id}         one-time "send a key from your phone" page
@@ -30,9 +28,7 @@ only has to route here:
   POST /update/everywhere                 update all linked machines, then this one
   POST /update/apply                      update this machine now and restart
 
-The OAuth callback (GET /oauth/openrouter/callback) is the one route without the bearer
-token - the browser reaches it straight from openrouter.ai - and it only finishes a flow
-this engine started (its `state`).
+(OpenRouter's browser sign-in and its /oauth callback were removed 2026-10-27 with OpenRouter.)
 """
 from __future__ import annotations
 
@@ -202,7 +198,7 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
                     known.add(cap["homepage"])
         except Exception:  # noqa: BLE001 - a broken manifest never widens what can be opened
             pass
-        if url not in known and not url.startswith(signin.OPENROUTER_AUTH + "?"):
+        if url not in known:
             return 400, {"ok": False, "error": "LOKI only opens the pages listed for each provider"}
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
         return 200, {"ok": True}
@@ -236,15 +232,6 @@ def handle_post(state: Any, route: str, data: dict, port: int = 0, job_action=No
         agent.model_name = pid
         write_env({"LOKI_MODEL": pid})
         return 200, {"ok": True, "default": pid}
-    if route == "/signin/openrouter":
-        mode = "code" if data.get("mode") == "code" else "browser"
-        flow = signin.openrouter_start(port, mode)
-        if mode == "browser":
-            threading.Thread(target=webbrowser.open, args=(flow["url"],), daemon=True).start()
-        return 200, flow
-    if route == "/signin/openrouter/code":
-        return 200, signin.openrouter_finish(str(data.get("state", "")), str(data.get("code", "")),
-                                             lambda p, k: connect(agent, p, k))
     if route == "/signin/device":
         return 200, signin.device_start(pid, os.environ, lambda p, k: connect(agent, p, k))
     if route == "/handoff":

@@ -74,9 +74,9 @@ mode = os.environ.get("FAKE_OC_MODE", "work")
 sid = args[args.index("--session") + 1] if "--session" in args else "ses_" + uuid.uuid4().hex[:8]
 model = args[args.index("--model") + 1] if "--model" in args else ""
 def out(kind, **kw): print(json.dumps({"type": kind, "timestamp": 0, "sessionID": sid, **kw}), flush=True)
-if mode == "fail" or (mode == "fail-first" and "groq" in model):
+if mode == "fail" or (mode == "fail-first" and "nemotron" in model):
     out("error", error={"name": "APIError", "data": {"message": "429 rate limited"}}); sys.exit(1)
-if mode == "slow-first" and "groq" in model:
+if mode == "slow-first" and "nemotron" in model:
     import time
     out("step_start", part={"type": "step-start"})
     time.sleep(1.2)
@@ -117,10 +117,10 @@ except Exception as exc:  # noqa: BLE001
 if loki:
     events = []
     loki.loki_progress_callback = lambda e, t: events.append((e, t))
-    loki.provider_configured = lambda name: name in ("groq", "gemini")
-    loki.MODELS["groq"].api_key = "gk-test"
-    loki.MODELS["gemini"].api_key = "gm-test"
-    loki.model_name = "groq"
+    loki.provider_configured = lambda name: name in ("nvidia-nemotron", "nvidia-pro")
+    loki.MODELS["nvidia-nemotron"].api_key = "gk-test"
+    loki.MODELS["nvidia-pro"].api_key = "gm-test"
+    loki.model_name = "nvidia-nemotron"
 
     def turn(text, mode="work", ws=None, agent_mode="build", conv="c1"):
         os.environ["FAKE_OC_MODE"] = mode
@@ -141,22 +141,23 @@ if loki:
           and (r / "README.md").is_file() and log.returncode == 0 and log.stdout.strip(), (out[:200], log.stderr))
     check("the reply is OpenCode's report + what ran", "Created loki-test-repo" in out and "Tools run: 1 ok" in out, out[-200:])
     a = calls[0]["argv"] if calls else []
-    check("argv: run --format json --dir <workspace> --model loki-groq/<model> <text>",
+    check("argv: run --format json --dir <workspace> --model loki-nvidia-nemotron/<model> <text>",
           a[:3] == ["run", "--format", "json"] and a[a.index("--dir") + 1] == str(ws) and "--model" in a
-          and a[a.index("--model") + 1].startswith("loki-groq/") and a[-1].startswith("use git bash"), a)
+          and a[a.index("--model") + 1].startswith("loki-nvidia-nemotron/") and a[-1].startswith("use git bash"), a)
     check("OpenCode got LOKI's config file and the keys as env vars", calls and calls[0]["config"].endswith("opencode.json")
-          and "LOKI_OC_KEY_GROQ" in calls[0]["keys"])
+          and "LOKI_OC_KEY_NVIDIA_NEMOTRON" in calls[0]["keys"])
     written = (Path(loki.DATA_DIR) / "opencode" / "opencode.json").read_text()
     _cfg = json.loads(written)["provider"]
-    _lim = next(iter(_cfg["loki-gemini"]["models"].values()))["limit"] if "loki-gemini" in _cfg else None
-    _glim = next(iter(_cfg["loki-groq"]["models"].values()))["limit"]
+    _lim = next(iter(_cfg["loki-nvidia-pro"]["models"].values()))["limit"] if "loki-nvidia-pro" in _cfg else None
+    _glim = next(iter(_cfg["loki-nvidia-nemotron"]["models"].values()))["limit"]
     check("each model asks for a modest output (8192), not OpenCode's 32000 that free OpenRouter credit refuses",
-          (_lim is None or _lim["output"] == 8192) and _glim["context"] >= 32768, (_lim, _glim))
+          (_lim is None or _lim["output"] == 8192) and _glim["output"] == 8192 and _glim["context"] >= 32768, (_lim, _glim))
     check("Groq asks for at most 900 (its free tier caps output tokens per minute at 1000) - also through the proxy",
-          _glim["output"] == 900 and oe.output_cap("http://127.0.0.1:5/u/1") == 8192
+          oe.build_config({"groq": {"base_url": "https://api.groq.com/openai/v1", "model": "m"}})["provider"]["loki-groq"]
+          ["models"]["m"]["limit"]["output"] == 900 and oe.output_cap("http://127.0.0.1:5/u/1") == 8192
           and oe.build_config({"groq": {"base_url": "http://127.0.0.1:5/u/1", "upstream": "https://api.groq.com/openai/v1",
                                         "model": "m"}})["provider"]["loki-groq"]["models"]["m"]["limit"]["output"] == 900, _glim)
-    check("the config on disk has no key in it", "gk-test" not in written and "{env:LOKI_OC_KEY_GROQ}" in written)
+    check("the config on disk has no key in it", "gk-test" not in written and "{env:LOKI_OC_KEY_NVIDIA_NEMOTRON}" in written)
     check("the window saw the tool as it ran", any(e == "tool" and "bash" in t for e, t in events)
           and any(e == "tool_result" for e, _ in events))
     sid = loki.OC_SESSIONS.get("c1")
@@ -171,28 +172,28 @@ if loki:
     out, ws, calls = turn(REQ, mode="fail-first", conv="c3")
     models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
     check("... and a 429 benches it for a while, so the next turns start on the next provider",
-          __import__("provider_speed").is_slow(loki.DATA_DIR, "groq"))
-    check("the first provider fails -> the next one does it", len(models) >= 2 and models[0].startswith("loki-groq/")
-          and models[1].startswith("loki-gemini/") and (ws / "loki-test-repo" / "src" / "main.py").is_file(), models)
+          __import__("provider_speed").is_slow(loki.DATA_DIR, "nvidia-nemotron"))
+    check("the first provider fails -> the next one does it", len(models) >= 2 and models[0].startswith("loki-nvidia-nemotron/")
+          and models[1].startswith("loki-nvidia-pro/") and (ws / "loki-test-repo" / "src" / "main.py").is_file(), models)
 
     out, ws, calls = turn(REQ, mode="stops-on-tag", conv="tag")
     check("a turn that stops on a bare tool tag after real work carries on in the same session and finishes",
           len(calls) == 2 and "Continue the task" in calls[1]["argv"][-1] and (ws / "loki-test-repo" / "src" / "main.py").is_file()
           and not out.startswith("NOT DONE") and "DSML" not in out, (len(calls), out[:200]))
     import provider_speed  # noqa: E402
-    (Path(loki.DATA_DIR) / "provider_speed.json").unlink(missing_ok=True)   # the 429 test above benched groq
+    (Path(loki.DATA_DIR) / "provider_speed.json").unlink(missing_ok=True)   # the 429 test above benched nvidia-nemotron
     provider_speed.SLOW_S = 0.5
     _t = time.time()
     out, ws, calls = turn(REQ, mode="slow-first", conv="slow")
     models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
     sessions = [c["argv"][c["argv"].index("--session") + 1] for c in calls if "--session" in c["argv"]]
     check("a provider that crawls is left mid-turn: the next one finishes the job (not 20 s of waiting)",
-          models[:1] and models[0].startswith("loki-groq/") and any(m.startswith("loki-gemini/") for m in models[1:])
+          models[:1] and models[0].startswith("loki-nvidia-nemotron/") and any(m.startswith("loki-nvidia-pro/") for m in models[1:])
           and (ws / "loki-test-repo" / "src" / "main.py").is_file() and time.time() - _t < 15, (models, round(time.time() - _t, 1)))
     check("... it carries on in the same OpenCode session", sessions and len(set(sessions)) == 1, sessions)
     check("... and is marked slow, so the next turns put it last",
-          provider_speed.is_slow(loki.DATA_DIR, "groq") and list(loki._oc_providers("groq"))[0] == "gemini",  # pylint: disable=protected-access
-          list(loki._oc_providers("groq")))  # pylint: disable=protected-access
+          provider_speed.is_slow(loki.DATA_DIR, "nvidia-nemotron") and list(loki._oc_providers("nvidia-nemotron"))[0] == "nvidia-pro",  # pylint: disable=protected-access
+          list(loki._oc_providers("nvidia-nemotron")))  # pylint: disable=protected-access
     provider_speed.SLOW_S = 120
     (Path(loki.DATA_DIR) / "provider_speed.json").unlink()
 

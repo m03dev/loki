@@ -143,7 +143,7 @@ check("attach() turns the text into real tool_calls", tc and tc[0].function.name
 os.environ["LOKI_PROMPTED_TOOLS"] = "myserver"
 check("LOKI_PROMPTED_TOOLS puts a provider on prompted tools", tool_harness.configured("myserver"))
 check("catalog tools=false providers are prompted (MLX)", tool_harness.configured("mlx"))
-check("native providers are not", not tool_harness.configured("groq"))
+check("native providers are not", not tool_harness.configured("nvidia"))
 tool_harness.learn("weaklocal")
 check("a provider that fails a forced call is moved onto prompted tools",
       tool_harness.configured("weaklocal"))
@@ -166,9 +166,17 @@ check("every link is https (or the provider's own site)", all(str(p.get(k, "http
                                                               for p in pc.CATALOG for k in ("signup", "keys", "docs")))
 check("GitHub Models (retired 2026-07-30) is not offered", "github-models" not in ids)
 check("Pollinations is not offered (owner 2026-10-26: awful results)", "pollinations" not in ids)
-for wanted in ("opencode-zen", "codestral", "vercel", "nebius", "mlx", "lmstudio", "kyojin", "opencode",
-               "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage"):
+for wanted in ("nvidia", "9router", "huggingface", "mlx", "lmstudio", "llamacpp", "colibri", "vllm", "jan", "opencode",
+               "claude-code", "codex", "deepseek", "gpt", "claude"):
     check("the portal offers %s" % wanted, wanted in ids)
+# 2026-10-27: every redundant provider and every free tier with a daily / hourly cap is gone
+_REMOVED_PROVIDERS = ("openrouter", "nemotron-free", "deepseek-4.1", "gpt6-luna", "gemini", "groq", "codestral", "cloudflare",
+                      "modelscope", "sambanova", "cerebras", "mistral", "together", "vireonix", "unorouter", "nous",
+                      "omniroute", "aion", "cohere", "zai", "kilocode", "llm7", "ollama-cloud", "ovh", "siliconflow",
+                      "opencode-zen", "vercel", "nebius", "scaleway", "hyperbolic", "novita", "fireworks", "dashscope",
+                      "deepinfra", "chutes", "baseten", "inference-net", "ai21", "upstage", "kyojin")
+check("the portal offers none of the removed providers", not set(ids) & set(_REMOVED_PROVIDERS),
+      sorted(set(ids) & set(_REMOVED_PROVIDERS)))
 
 
 class Cfg:
@@ -177,25 +185,26 @@ class Cfg:
 
 
 fake = types.SimpleNamespace()
-fake.MODELS = {pid: Cfg("https://api.example/v1", "k-" + pid if pid in ("groq",) else "", "m-" + pid) for pid in ids}
+fake.MODELS = {pid: Cfg("https://api.example/v1", "k-" + pid if pid in ("nvidia",) else "", "m-" + pid) for pid in ids}
 fake.MODELS["claude-code"] = Cfg("cli-agent://claude-code", "", "claude-code")
-fake.model_name, fake.SMART_ORDER = "smart", ("groq",)
-fake.active_model_name = lambda: "groq"
-fake.provider_configured = lambda n: n == "groq"
+fake.MODELS["nvidia-pro"] = Cfg("https://api.example/v1", "", "m-nvidia-pro")
+fake.model_name, fake.SMART_ORDER = "smart", ("nvidia",)
+fake.active_model_name = lambda: "nvidia"
+fake.provider_configured = lambda n: n == "nvidia"
 fake.is_metered = lambda n: n == "gpt"
-env = {"GROQ_API_KEY": "secret-value-xyz", "LOKI_DISABLED_PROVIDERS": "cohere"}
+env = {"NVIDIA_API_KEY": "secret-value-xyz", "LOKI_DISABLED_PROVIDERS": "deepseek"}
 view = pc.present(fake, env)
 cards = {c["id"]: c for c in view["providers"]}
 check("present() never contains a key value", "secret-value-xyz" not in json.dumps(view))
-check("a configured provider shows as connected and in use", cards["groq"]["configured"] and cards["groq"]["active"]
-      and cards["groq"]["has_key"])
-check("a switched-off provider shows as off", cards["cohere"]["enabled"] is False)
+check("a configured provider shows as connected and in use", cards["nvidia"]["configured"] and cards["nvidia"]["active"]
+      and cards["nvidia"]["has_key"])
+check("a switched-off provider shows as off", cards["deepseek"]["enabled"] is False)
 check("the counter counts connected and enabled providers", view["connected"] == 1)
 saved = {}
-pc.set_enabled("groq", False, saved.update, env)
-check("switching a provider off writes LOKI_DISABLED_PROVIDERS", set(saved["LOKI_DISABLED_PROVIDERS"].split(",")) == {"cohere", "groq"})
+pc.set_enabled("nvidia", False, saved.update, env)
+check("switching a provider off writes LOKI_DISABLED_PROVIDERS", set(saved["LOKI_DISABLED_PROVIDERS"].split(",")) == {"deepseek", "nvidia"})
 check("an unknown provider cannot be switched", not pc.set_enabled("nope", True, saved.update, env)["ok"])
-listing = pc.list_models(fake, "groq", opener=lambda req, timeout: FakeResponse({"data": [{"id": "b"}, {"id": "a:free"}]}),
+listing = pc.list_models(fake, "nvidia", opener=lambda req, timeout: FakeResponse({"data": [{"id": "b"}, {"id": "a:free"}]}),
                          max_age=0)
 check("the model list comes from /models, free first", listing["ok"] and listing["models"] == ["a:free", "b"])
 seen = {}
@@ -204,24 +213,24 @@ seen = {}
 def chat_opener(req, timeout):
     seen["body"] = json.loads(req.data.decode())
     seen["auth"] = req.headers.get("Authorization")
-    return FakeResponse({"model": "m-groq", "choices": []})
+    return FakeResponse({"model": "m-nvidia", "choices": []})
 
 
-result = pc.test(fake, "groq", opener=chat_opener)["test"]
+result = pc.test(fake, "nvidia", opener=chat_opener)["test"]
 check("Test sends one tiny request (a few tokens) with the key", result["ok"] and seen["body"]["max_tokens"] <= 8
-      and seen["auth"] == "Bearer k-groq")
+      and seen["auth"] == "Bearer k-nvidia")
 
 
 def deny_opener(req, timeout):
     raise urllib.error.HTTPError(req.full_url, 401, "no", {}, io.BytesIO(b'{"error": {"message": "bad key"}}'))
 
 
-result = pc.test(fake, "groq", opener=deny_opener)["test"]
+result = pc.test(fake, "nvidia", opener=deny_opener)["test"]
 check("a rejected key is reported plainly", not result["ok"] and "rejected" in result["detail"] and "bad key" in result["detail"])
 check("a CLI provider's test is whether it is installed", pc.test(fake, "claude-code")["test"]["ok"] is False)
 saved.clear()
-check("set_model writes <PROVIDER>_MODEL", pc.set_model(fake, "opencode-zen", "qwen3.6-plus-free", saved.update)["ok"]
-      and saved == {"OPENCODE_ZEN_MODEL": "qwen3.6-plus-free"})
+check("set_model writes <PROVIDER>_MODEL", pc.set_model(fake, "nvidia-pro", "z-ai/glm-5.3", saved.update)["ok"]
+      and saved == {"NVIDIA_PRO_MODEL": "z-ai/glm-5.3"})
 
 # --------------------------------------------------------------------------- sign-in
 section("sign-in, sign-in codes and the phone (engine/signin.py)")
@@ -234,28 +243,10 @@ import signin  # noqa: E402
 verifier, challenge = signin.pkce_pair()
 check("PKCE challenge = base64url(sha256(verifier))", challenge == base64.urlsafe_b64encode(
     hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode() and 43 <= len(verifier) <= 128)
-flow = signin.openrouter_start(8767, "browser")
-q = urllib.parse.parse_qs(urllib.parse.urlparse(flow["url"]).query)
-check("browser sign-in calls back to this engine on localhost",
-      q["callback_url"] == ["http://localhost:8767/oauth/openrouter/callback"] and q["code_challenge_method"] == ["S256"])
-phone = signin.openrouter_start(8767, "code")
-check("phone sign-in has no callback (OpenRouter shows a code)", "callback_url" not in urllib.parse.parse_qs(
-    urllib.parse.urlparse(phone["url"]).query))
-got = {}
-
-
-def exchange_opener(req, timeout):
-    got.update(json.loads(req.data.decode()))
-    return FakeResponse({"key": "sk-or-new"})
-
-
-connected = []
-res = signin.openrouter_finish(phone["state"], "the-code", lambda p, k: (connected.append((p, k)), {"ok": True})[1],
-                               opener=exchange_opener)
-check("the code is swapped for a key with the verifier", res["ok"] and got["code"] == "the-code"
-      and got["code_verifier"] and connected == [("openrouter", "sk-or-new")])
-check("a finished sign-in reports done", signin.flow_status(phone["state"])["done"])
-check("an unknown state is refused", not signin.openrouter_finish("forged", "x", lambda p, k: {"ok": True})["ok"])
+# 2026-10-27: OpenRouter is gone, and with it its browser / code sign-in (device sign-in and the phone stay)
+check("the OpenRouter sign-in is gone", not any(hasattr(signin, n) for n in (
+    "openrouter_start", "openrouter_exchange", "openrouter_finish", "OPENROUTER_AUTH", "OPENROUTER_KEYS")))
+check("an unknown sign-in state is not reported done", not signin.flow_status("forged").get("done"))
 check("sign-in codes need an OAuth app id", not signin.device_start("huggingface", {}, lambda p, k: {})["ok"])
 
 answers = iter([{"device_code": "d", "user_code": "ABCD-1234", "verification_uri": "https://huggingface.co/device",
@@ -286,22 +277,22 @@ def fetch(url, data=None):
 
 
 handoff_keys = []
-ho = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: (handoff_keys.append((p, k)), {"ok": True, "message": "ok"})[1],
+ho = signin.PhoneHandoff("nvidia", "NVIDIA NIM", lambda p, k: (handoff_keys.append((p, k)), {"ok": True, "message": "ok"})[1],
                          "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
 code, page = fetch(ho.url)
 check("the phone page is a form, served once to the private network", code == 200 and "Send a key to LOKI" in page
       and "<form" in page, ("elapsed=%.3f ttl=%r result=%r created=%r now=%r" % (time.time() - ho.created, ho.ttl_s,
                                                                                 ho.result, ho.created, time.time()), code))
-code, reply = fetch(ho.url, data=b"key=AIza-test")
-check("posting the key connects it", code == 200 and handoff_keys == [("gemini", "AIza-test")] and "&#10003;" in reply,
+code, reply = fetch(ho.url, data=b"key=nvapi-test")
+check("posting the key connects it", code == 200 and handoff_keys == [("nvidia", "nvapi-test")] and "&#10003;" in reply,
       (code, reply[-260:], handoff_keys))
 code, _ = fetch(ho.url)
 check("the page stops working after one key", code in (0, 410), code)
 ho.stop()
-ho2 = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: False, ttl_s=30, bind="127.0.0.1")
+ho2 = signin.PhoneHandoff("nvidia", "NVIDIA NIM", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: False, ttl_s=30, bind="127.0.0.1")
 check("devices outside the private network are refused", fetch(ho2.url)[0] == 403)
 ho2.stop()
-ho3 = signin.PhoneHandoff("gemini", "Gemini", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
+ho3 = signin.PhoneHandoff("nvidia", "NVIDIA NIM", lambda p, k: {"ok": True}, "127.0.0.1", lambda ip: True, ttl_s=30, bind="127.0.0.1")
 check("a wrong token is refused", fetch(ho3.url.rsplit("/", 1)[0] + "/wrong-token")[0] == 404)
 ho3.stop()
 
@@ -656,9 +647,10 @@ check("reach: github goes to gh", runs[-1][1]["op"] == "github")
 section("capability manifests")
 import manifests  # noqa: E402
 
-for name in ("opencode", "agent-reach", "media", "image-gen", "mlx", "kyojin", "ruflo"):
+for name in ("opencode", "agent-reach", "media", "image-gen", "mlx", "ruflo"):
     data = json.loads((REPO / "capabilities" / name / "manifest.json").read_text(encoding="utf-8"))
     check("manifest %s is valid" % name, manifests.validate(data) == [], manifests.validate(data))
+check("the kyojin capability is gone with its provider (2026-10-27)", not (REPO / "capabilities" / "kyojin").exists())
 check("OpenCode jobs need the opencode capability", policy_mod.AGENT_CAPABILITY.get("opencode") == "opencode")
 
 import addons_install  # noqa: E402
@@ -715,7 +707,9 @@ check("still CSP-clean (no inline script or style)", "<script>" not in html and 
 settings_js = (ui / "settings.js").read_text(encoding="utf-8")
 home_js = (ui / "home.js").read_text(encoding="utf-8")
 check("the portal tests, signs in, hands off and updates everywhere", all(s in settings_js for s in (
-    "/providers/test", "/signin/openrouter", "/handoff", "/update/everywhere", "/agents/draft", "/agents/launch")))
+    "/providers/test", "/signin/device", "/handoff", "/update/everywhere", "/agents/draft", "/agents/launch")))
+check("the portal no longer offers the OpenRouter sign-in", "/signin/openrouter" not in settings_js
+      and "signInOpenRouter" not in settings_js)
 check("the home hub reads one engine call through api() (GET /home/projects); the JS worlds stay gone",
       'call("/home/projects")' in home_js and "fetch(" not in home_js
       and not any((ui / f).exists() for f in ("world_babylon.js", "world_three.js", "world_noise.js", "character.js", "mmo/mmo_core.js"))
@@ -754,17 +748,24 @@ except ImportError as exc:
         print("  SKIP: %s (install engine/requirements.txt to run this part)" % exc)
     loki = None
 if loki is not None:
-    for pid in ("codestral", "opencode-zen", "vercel", "mlx", "lmstudio", "kyojin", "opencode", "nebius"):
+    for pid in ("nvidia", "nvidia-nemotron", "nvidia-pro", "mlx", "lmstudio", "llamacpp", "opencode", "deepseek"):
         check("MODELS has %s" % pid, pid in loki.MODELS)
+    check("MODELS has none of the removed providers", not set(loki.MODELS) & set(_REMOVED_PROVIDERS),
+          sorted(set(loki.MODELS) & set(_REMOVED_PROVIDERS)))
     check("every catalog provider exists in MODELS", all(p["id"] in loki.MODELS for p in pc.CATALOG), [p["id"] for p in pc.CATALOG if p["id"] not in loki.MODELS])
     check("every catalog key env is accepted by connect_provider",
           all(loki.PROVIDER_ENV_VARS.get(p["id"]) == p["env"] for p in pc.CATALOG if p.get("env") and p["group"] not in ("local",)),
           [p["id"] for p in pc.CATALOG if p.get("env") and loki.PROVIDER_ENV_VARS.get(p["id"]) != p["env"]])
-    os.environ["LOKI_DISABLED_PROVIDERS"] = "groq"
-    check("a switched-off provider is never configured", loki.provider_disabled("groq") and not loki.provider_configured("groq"))
+    _saved_nv_key = loki.MODELS["nvidia-nemotron"].api_key
+    loki.MODELS["nvidia-nemotron"].api_key = "nvapi-test"
+    os.environ["LOKI_DISABLED_PROVIDERS"] = "nvidia-nemotron"
+    check("a switched-off provider is never configured", loki.provider_disabled("nvidia-nemotron")
+          and not loki.provider_configured("nvidia-nemotron"))
+    loki.MODELS["nvidia-nemotron"].api_key = _saved_nv_key
     os.environ.pop("LOKI_DISABLED_PROVIDERS")
     check("a local server that is not running is not configured", not loki.provider_configured("vllm"))
-    check("trial-credit providers count as paid", loki.is_metered("nebius") and not loki.is_metered("opencode-zen"))
+    check("paid key providers count as paid, the free NVIDIA routes do not",
+          loki.is_metered("deepseek") and not loki.is_metered("nvidia") and not loki.is_metered("nvidia-nemotron"))
     ident = loki.identity_section()
     check("LOKI's prompt says who it is and which model answers", "You are LOKI" in ident
           and loki.MODELS[loki.active_model_name()].model in ident and "Linked machines" in ident)
@@ -810,7 +811,10 @@ if loki is not None:
     check("ship.py can run one suite for a quick check", "--only" in (REPO / "tools" / "ship.py").read_text(encoding="utf-8"))
     import workers as _w  # noqa: E402
     check("jobs on the local model take turns (one GPU), cloud-model jobs do not",
-          _w.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, {"LOKI_PREFER": "local"})
+          _w.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, {"LOKI_PREFER": "local", "LOKI_LOCAL_ONLY": "1"})
+          and _w.uses_local_model({"agent": "loki", "backend": "local", "model": "local"}, {})
+          # a job with no model of its own runs on Smart online (2026-10-25: teams no longer queue for the local slot)
+          and not _w.uses_local_model({"agent": "loki", "backend": "local", "model": ""}, {"LOKI_PREFER": "local"})
           and not _w.uses_local_model({"agent": "loki", "backend": "local", "model": "online"}, {})
           and not _w.uses_local_model({"agent": "claude-code", "backend": "local"}, {}) and _w.local_model_limit({}) == 1)
     import cli_agents  # noqa: E402

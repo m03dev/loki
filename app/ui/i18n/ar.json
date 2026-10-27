@@ -382,7 +382,7 @@
  "ob.way_both": "كلاهما",
  "ob.way_both_sub": "دردش عبر الإنترنت فورًا بينما يُنزَّل النموذج المحلي.",
  "ob.way_cloud": "ربط حساب",
- "ob.way_cloud_sub": "سريع على أي كمبيوتر. مجانًا: NVIDIA (DeepSeek V4.1 Flash وNemotron). مدفوع: OpenRouter.",
+ "ob.way_cloud_sub": "سريع على أي كمبيوتر. مجانًا: NVIDIA (DeepSeek V4.1 Flash وGLM-5.3 وNemotron).",
  "ob.way_local": "تشغيل الذكاء الاصطناعي على هذا الكمبيوتر",
  "ob.way_local_dl": "{model} · تنزيل {size} غيغابايت، في الخلفية",
  "ob.way_local_have": "{model} مُنزَّل بالفعل",

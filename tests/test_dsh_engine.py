@@ -126,7 +126,7 @@ check("a question is answered as it is (no pushback)", not out.startswith("NOT D
 
 n1 = len((TMP / "data" / "dsh" / "calls.jsonl").read_text().splitlines())
 loki.messages[:] = loki.messages[:1]
-out, ws = run("honest", providers={"groq": {"base_url": "https://api.groq.com/openai/v1", "model": "llama-3.3", "key": "k"}})
+out, ws = run("honest", providers={"gpt": {"base_url": "https://api.openai.com/v1", "model": "gpt-5.2", "key": "k"}})
 check("a non-DeepSeek model never goes to dsh (OpenCode, or its install note)", len((TMP / "data" / "dsh" / "calls.jsonl").read_text().splitlines()) == n1, out[:160])
 
 st = loki.engine_status()

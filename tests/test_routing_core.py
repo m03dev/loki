@@ -152,10 +152,10 @@ check("no key is ever written to the file (only a short hash)",
 reg.record_failure("leaky", "Incorrect API key provided: sk-abcdefghijklmnopqrstuvwxyz", 401)
 check("a key echoed in an error body is masked before it is stored",
       "abcdefghijklmnop" not in (TMP / "h1.json").read_text())
-cat = providers_catalog.get("mistral")
-fix = provider_health.fix_for("mistral", {"state": "key_rejected"}, cat)
+cat = providers_catalog.get("nvidia")
+fix = provider_health.fix_for("nvidia", {"state": "key_rejected"}, cat)
 check("a rejected key's fix says where to paste it and where to get one",
-      "Settings > Connections" in fix and "MISTRAL_API_KEY" in fix and "console.mistral.ai" in fix, fix)
+      "Settings > Connections" in fix and "NVIDIA_API_KEY" in fix and "build.nvidia.com" in fix, fix)
 check("a spent quota needs nothing from you", "Nothing to do" in provider_health.fix_for("gemini", {"state": "quota"}))
 check("no credit says add credit or switch it off",
       "Add credit" in provider_health.fix_for("deepseek", {"state": "no_credit"}, providers_catalog.get("deepseek")))
@@ -261,7 +261,7 @@ check("Claude Code is a coding agent with its own tools", ab["tools"] == "agent"
 loki.MODELS["local-tiny"] = loki.ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3.5:2b")
 ab = routing.abilities(loki, "local-tiny", {})
 check("a 2B local model is too small to call tools reliably", not ab["tools_reliable"], ab)
-ab = routing.abilities(loki, "gemini", {"model_info": {"vision": True, "context": 1_048_576}})
+ab = routing.abilities(loki, "nvidia-nemotron", {"model_info": {"vision": True, "context": 1_048_576}})
 check("abilities from the provider's own metadata beat name guesses", ab["vision"] and ab["context"] == 1_048_576
       and ab["source"] == "provider", ab)
 check("fits(): a tool-heavy job does not fit a model that cannot call tools reliably",
@@ -271,33 +271,33 @@ check("fits(): a picture does not fit a text-only model",
 
 # A learned success table from real outcomes (the experience log).
 for i in range(6):
-    experience.record({"id": "a%d" % i, "goal": "fix bug", "status": "done", "outcome": "verified", "provider": "groq",
-                       "model": loki.MODELS["groq"].model, "triage": {"kind": "code"}, "files": ["a.py"], "tool_calls": 3})
+    experience.record({"id": "a%d" % i, "goal": "fix bug", "status": "done", "outcome": "verified", "provider": "nvidia-nemotron",
+                       "model": loki.MODELS["nvidia-nemotron"].model, "triage": {"kind": "code"}, "files": ["a.py"], "tool_calls": 3})
     experience.record({"id": "b%d" % i, "goal": "fix bug", "status": "blocked", "outcome": "failed",
-                       "provider": "mistral", "model": loki.MODELS["mistral"].model, "triage": {"kind": "code"},
+                       "provider": "nvidia-pro", "model": loki.MODELS["nvidia-pro"].model, "triage": {"kind": "code"},
                        "files": ["a.py"], "tool_calls": 2,
-                       "route": [{"provider": "cerebras", "reason": "rate/size limit"}]})
+                       "route": [{"provider": "deepseek", "reason": "rate/size limit"}]})
 routing.reset_caches()
 table = routing.success_table()
 check("the success table counts per (provider, task kind) from real outcomes",
-      table[("groq", "code")]["rate"] == 1.0 and table[("mistral", "code")]["rate"] == 0.0, {k: v for k, v in table.items()})
+      table[("nvidia-nemotron", "code")]["rate"] == 1.0 and table[("nvidia-pro", "code")]["rate"] == 0.0, {k: v for k, v in table.items()})
 check("a provider switched away from mid-request counts as a failure for that kind",
-      table[("cerebras", "code")]["good"] == 0 and table[("cerebras", "code")]["n"] == 6)
-for pid in ("mistral", "groq", "cerebras"):
+      table[("deepseek", "code")]["good"] == 0 and table[("deepseek", "code")]["n"] == 6)
+for pid in ("nvidia-pro", "nvidia-nemotron", "deepseek"):
     loki.MODELS[pid].api_key = "k-" + pid
 reg3 = provider_health.Registry(TMP / "h3.json", clock=time.time)
-ordered, notes = routing.order_for(loki, ["mistral", "groq"], routing.needs_for({"kind": "code"}), registry=reg3)
+ordered, notes = routing.order_for(loki, ["nvidia-pro", "nvidia-nemotron"], routing.needs_for({"kind": "code"}), registry=reg3)
 check("for code, the provider that did code best goes first (within the same cost tier)",
-      ordered == ["groq", "mistral"], ordered)
-ordered, notes = routing.order_for(loki, ["mistral", "groq"], routing.needs_for({"kind": "question"}), registry=reg3)
-check("for another kind of task the code record changes nothing", ordered == ["mistral", "groq"], ordered)
-ordered, notes = routing.order_for(loki, ["mistral", "groq", "cerebras"], routing.needs_for({"kind": "code"}),
+      ordered == ["nvidia-nemotron", "nvidia-pro"], ordered)
+ordered, notes = routing.order_for(loki, ["nvidia-pro", "nvidia-nemotron"], routing.needs_for({"kind": "question"}), registry=reg3)
+check("for another kind of task the code record changes nothing", ordered == ["nvidia-pro", "nvidia-nemotron"], ordered)
+ordered, notes = routing.order_for(loki, ["nvidia-pro", "nvidia-nemotron", "deepseek"], routing.needs_for({"kind": "code"}),
                                    registry=reg3)
-check("...and it never moves a provider across cost tiers (paid cerebras stays after the free ones)",
-      ordered[-1] == "cerebras", ordered)
-reg3.record_failure("mistral", "Unauthorized", 401, key="k-mistral")
-ordered, notes = routing.order_for(loki, ["mistral", "groq"], routing.needs_for({"kind": "question"}), registry=reg3)
-check("a dead provider is left out, and the notes say why", "mistral" not in ordered and "key rejected" in notes["mistral"],
+check("...and it never moves a provider across cost tiers (paid deepseek stays after the free ones)",
+      ordered[-1] == "deepseek", ordered)
+reg3.record_failure("nvidia-pro", "Unauthorized", 401, key="k-nvidia-pro")
+ordered, notes = routing.order_for(loki, ["nvidia-pro", "nvidia-nemotron"], routing.needs_for({"kind": "question"}), registry=reg3)
+check("a dead provider is left out, and the notes say why", "nvidia-pro" not in ordered and "key rejected" in notes["nvidia-pro"],
       (ordered, notes))
 ordered, notes = routing.order_for(loki, ["fake-prompted", "fake-native"], routing.needs_for({"kind": "code"}),
                                    registry=reg3)
@@ -309,36 +309,38 @@ section("3. loki: background jobs, health, pictures, local only, never a dead en
 saved = (loki.SMART_ORDER, loki.online, loki.local_ready, loki.provider_configured, loki.PREFER, loki.model_name)
 fresh = provider_health.Registry(TMP / "h4.json")
 provider_health.set_registry(fresh)
-loki.SMART_ORDER = ("openrouter", "gemini", "groq", "vireonix", "claude-code", "local")
+# an anonymous third-party route (the catalog's "keyless" group): none ships in the lean set, so a stand-in
+loki.MODELS["anon-route"] = loki.ModelConfig(base_url="https://anon.example/v1", api_key="anon", model="some-model")
+providers_catalog._BY_ID["anon-route"] = {"id": "anon-route", "name": "Anon", "group": "keyless", "auth": "none"}
+loki.SMART_ORDER = ("nvidia-nemotron", "nvidia-pro", "huggingface", "anon-route", "claude-code", "local")
 loki.online = lambda *a, **k: True
 loki.local_ready = lambda: True
-READY = {"openrouter", "gemini", "groq", "vireonix", "local"}
+READY = {"nvidia-nemotron", "nvidia-pro", "huggingface", "anon-route", "local"}
 loki.provider_configured = lambda n: n in READY
 loki.PREFER = "local"
 loki.model_name = "smart"
 loki._SMART_FAILED.clear()
 loki.LAST_TRIAGE = {"kind": "question", "difficulty": 1}
 loki.messages[:] = [{"role": "system", "content": "x"}, {"role": "user", "content": "hi"}]
-for pid in ("openrouter", "gemini", "groq"):
+for pid in ("nvidia-nemotron", "nvidia-pro", "huggingface"):
     loki.MODELS[pid].api_key = "key-" + pid
-loki.MODELS["gemini"].model = "gemini-2.5-flash"
 routing.reset_caches()
 check("easy chat stays local first (LOKI_PREFER=local)", loki.active_model_name() == "local", loki.active_model_name())
 os.environ["LOKI_JOB_ID"] = "job-1"
 loki.LAST_TRIAGE = {"kind": "code", "difficulty": 1}
 pick = loki.active_model_name()
 check("a background job (even 'easy') gets the best FREE capable model, not the 8B local one",
-      pick == "openrouter", pick)
-READY.discard("openrouter")
-READY.discard("gemini")
-READY.discard("groq")
-check("...a job with only an anonymous keyless route set up stays local (vireonix has not earned it)",
+      pick == "nvidia-nemotron", pick)
+READY.discard("nvidia-nemotron")
+READY.discard("nvidia-pro")
+READY.discard("huggingface")
+check("...a job with only an anonymous keyless route set up stays local (anon-route has not earned it)",
       loki.active_model_name() == "local", loki.active_model_name())
 READY.add("claude-code")
 check("...and with only Claude Code it stays local too (an unattended job does not use up your plan)",
       loki.active_model_name() == "local", loki.active_model_name())
 READY.discard("claude-code")
-READY.update({"openrouter", "gemini", "groq"})
+READY.update({"nvidia-nemotron", "nvidia-pro", "huggingface"})
 os.environ["LOKI_LOCAL_ONLY"] = "1"
 check("local only (privacy) keeps even a background job on this computer", loki.active_model_name() == "local")
 os.environ.pop("LOKI_LOCAL_ONLY")
@@ -347,52 +349,55 @@ os.environ.pop("LOKI_JOB_ID")
 loki.PREFER = "cloud"
 loki.LAST_TRIAGE = {"kind": "question", "difficulty": 1}
 other_process = provider_health.Registry(TMP / "h4.json")
-other_process.record_failure("openrouter", "Insufficient credits", 402, key="key-openrouter")
+other_process.record_failure("nvidia-nemotron", "Insufficient credits", 402, key="key-nvidia-nemotron")
 fresh.refresh()
 pick = loki.active_model_name()
 check("a provider another process found out of credit is skipped up front (no failed request first)",
-      pick == "gemini", pick)
-check("...and the routing notes say why", "credit" in loki.ROUTE_NOTES.get("openrouter", ""), loki.ROUTE_NOTES)
-loki.MODELS["openrouter"].api_key = "a-new-key"
-check("a new key brings it straight back", loki.active_model_name() == "openrouter", loki.active_model_name())
-loki.MODELS["openrouter"].api_key = "key-openrouter"
+      pick == "nvidia-pro", pick)
+check("...and the routing notes say why", "credit" in loki.ROUTE_NOTES.get("nvidia-nemotron", ""), loki.ROUTE_NOTES)
+loki.MODELS["nvidia-nemotron"].api_key = "a-new-key"
+check("a new key brings it straight back", loki.active_model_name() == "nvidia-nemotron", loki.active_model_name())
+loki.MODELS["nvidia-nemotron"].api_key = "key-nvidia-nemotron"
 
 loki.messages.append({"role": "user", "content": pic[0]["content"]})
-fresh.record_probe("gemini", {"state": "ok", "model_info": {"vision": True, "context": 1_000_000}}, key="key-gemini")
-loki.MODELS["groq"].model = "qwen/qwen3.8-27b"
+fresh.record_probe("nvidia-pro", {"state": "ok", "model_info": {"vision": True, "context": 1_000_000}},
+                   key="key-nvidia-pro")
+loki.MODELS["huggingface"].model = "qwen/qwen3.8-27b"
 order_before = loki.SMART_ORDER
-loki.SMART_ORDER = ("groq", "gemini", "local")
+loki.SMART_ORDER = ("huggingface", "nvidia-pro", "local")
 pick = loki.active_model_name()
-check("a picture goes to a model that can see (gemini), past one that cannot (groq)", pick == "gemini", pick)
+check("a picture goes to a model that can see (nvidia-pro), past one that cannot (huggingface)",
+      pick == "nvidia-pro", pick)
 loki.messages[:] = [{"role": "system", "content": "x"}, {"role": "user", "content": "hi"}]
-check("without a picture the order is as before (groq first)", loki.active_model_name() == "groq")
+check("without a picture the order is as before (huggingface first)", loki.active_model_name() == "huggingface",
+      loki.active_model_name())
 loki.SMART_ORDER = order_before
 
-for pid in ("gemini", "groq"):
+for pid in ("nvidia-pro", "huggingface"):
     fresh.record_failure(pid, "quota exceeded RESOURCE_EXHAUSTED", 429, key="key-" + pid)
-fresh.record_failure("vireonix", "rate limit", 429, key=loki.MODELS["vireonix"].api_key)
-loki.provider_configured = lambda n: n in {"openrouter", "gemini", "groq", "vireonix"}
-loki._SMART_FAILED.update({"openrouter"})
+fresh.record_failure("anon-route", "rate limit", 429, key=loki.MODELS["anon-route"].api_key)
+loki.provider_configured = lambda n: n in {"nvidia-nemotron", "nvidia-pro", "huggingface", "anon-route"}
+loki._SMART_FAILED.update({"nvidia-nemotron"})
 loki._SMART_FAILED.discard("x")
 check("never a dead end: with everything spent, the one whose limit ends soonest is tried (not a missing local model)",
-      loki.active_model_name() == "vireonix", loki.active_model_name())
+      loki.active_model_name() == "anon-route", loki.active_model_name())
 loki._SMART_FAILED.clear()
 check("clearing the used-up set (an in-process revive) also forgets this process's health marks",
-      fresh.usable("gemini", "key-gemini")[0])
-check("...while the other process's mark (openrouter's credit) stays", not fresh.usable("openrouter", "key-openrouter")[0])
+      fresh.usable("nvidia-pro", "key-nvidia-pro")[0])
+check("...while the other process's mark (nvidia-nemotron's credit) stays", not fresh.usable("nvidia-nemotron", "key-nvidia-nemotron")[0])
 
 loki.MODELS["paid-one"] = loki.ModelConfig(base_url="https://paid.example/v1", api_key="k", model="m")
 loki._METERED_DEFAULT.add("paid-one")
-loki.SMART_ORDER = ("paid-one", "groq")
-loki.provider_configured = lambda n: n in {"paid-one", "groq"}
+loki.SMART_ORDER = ("paid-one", "huggingface")
+loki.provider_configured = lambda n: n in {"paid-one", "huggingface"}
 loki.ALLOW_PAID = False
-check("a paid provider is never picked on its own", loki.active_model_name() == "groq")
-loki.SMART_ORDER = ("openrouter", "gemini", "groq", "vireonix", "claude-code", "local")
+check("a paid provider is never picked on its own", loki.active_model_name() == "huggingface", loki.active_model_name())
+loki.SMART_ORDER = ("nvidia-nemotron", "nvidia-pro", "huggingface", "anon-route", "claude-code", "local")
 loki.provider_configured = lambda n: n in READY
 
 pid, why = loki.route_for(routing.needs_for({"kind": "code", "difficulty": 1}, background=True))
 check("route_for explains a choice in words", pid and why, (pid, why))
-loki.model_name = "groq"
+loki.model_name = "huggingface"
 check("a pinned model is reported as pinned", "pinned" in loki.route_for(routing.needs_for({}))[1])
 loki.model_name = "smart"
 
@@ -461,7 +466,7 @@ def err(status, message, headers=None, delay=0):
 
 
 cloud = FakeCloud()
-NAMES = ("openrouter", "gemini", "groq", "mistral")
+NAMES = ("nvidia-nemotron", "nvidia-pro", "huggingface", "9router")
 for pid in NAMES:
     loki.MODELS[pid] = loki.ModelConfig(base_url=cloud.url(pid), api_key="key-" + pid, model="model-" + pid)
 loki.SMART_ORDER = NAMES
@@ -503,70 +508,70 @@ cases = [
      "quota", "quota spent"),
 ]
 for label, failure, state, reason in cases:
-    cloud.script = {"openrouter": [ok_tool("list_tree", {}), failure],
-                    "gemini": [ok_text("DONE: finished on gemini")]}
+    cloud.script = {"nvidia-nemotron": [ok_tool("list_tree", {}), failure],
+                    "nvidia-pro": [ok_text("DONE: finished on nvidia-pro")]}
     answer = run_turn("list the files")
     trail = tried()
-    check("%s: the turn moved to the next provider and finished" % label, "finished on gemini" in answer, (answer, trail))
-    got = [b for n, b in cloud.calls if n == "gemini"]
+    check("%s: the turn moved to the next provider and finished" % label, "finished on nvidia-pro" in answer, (answer, trail))
+    got = [b for n, b in cloud.calls if n == "nvidia-pro"]
     check("%s: the next provider got the WHOLE conversation (the earlier tool result too)" % label,
           got and any(m.get("role") == "tool" for m in got[0]["messages"]) and
           any(m.get("role") == "user" and m.get("content") == "list the files" for m in got[0]["messages"]), got[:1])
     check("%s: no long back-off on the failing provider (at most one retry)" % label,
-          trail.count("openrouter") <= 3, trail)
-    h = provider_health.registry().get("openrouter")
+          trail.count("nvidia-nemotron") <= 3, trail)
+    h = provider_health.registry().get("nvidia-nemotron")
     check("%s: health remembers it as %s" % (label, state), h.get("state") == state, h)
     check("%s: the route trace says '%s'" % (label, reason),
-          loki.ROUTE_TRACE and loki.ROUTE_TRACE[0]["provider"] == "openrouter" and loki.ROUTE_TRACE[0]["reason"] == reason,
+          loki.ROUTE_TRACE and loki.ROUTE_TRACE[0]["provider"] == "nvidia-nemotron" and loki.ROUTE_TRACE[0]["reason"] == reason,
           loki.ROUTE_TRACE)
-h = provider_health.registry().get("openrouter")
+h = provider_health.registry().get("nvidia-nemotron")
 
-cloud.script = {"openrouter": [err(400, "This model's maximum context length is 8192 tokens. However, your messages "
+cloud.script = {"nvidia-nemotron": [err(400, "This model's maximum context length is 8192 tokens. However, your messages "
                                         "resulted in 9000 tokens.")],
-                "gemini": [ok_text("DONE: long one on gemini")]}
+                "nvidia-pro": [ok_text("DONE: long one on nvidia-pro")]}
 answer = run_turn("summarise this long thing")
-check("context too long: fails over to a provider with room", "long one on gemini" in answer, (answer, tried()))
-check("...and the window it named is remembered (8192)", provider_health.registry().get("openrouter").get("context") == 8192,
-      provider_health.registry().get("openrouter"))
+check("context too long: fails over to a provider with room", "long one on nvidia-pro" in answer, (answer, tried()))
+check("...and the window it named is remembered (8192)", provider_health.registry().get("nvidia-nemotron").get("context") == 8192,
+      provider_health.registry().get("nvidia-nemotron"))
 check("...the route says why", loki.ROUTE_TRACE and loki.ROUTE_TRACE[0]["reason"] == "context too long", loki.ROUTE_TRACE)
 
 loki.MODEL_TIMEOUT_S = 1.0
-cloud.script = {"openrouter": [ok_text("too late")[:3] + (3,)], "gemini": [ok_text("DONE: answered after a timeout")]}
+cloud.script = {"nvidia-nemotron": [ok_text("too late")[:3] + (3,)], "nvidia-pro": [ok_text("DONE: answered after a timeout")]}
 started = time.monotonic()
 answer = run_turn("hello")
 took = time.monotonic() - started
 check("a timeout: one retry, then the next provider answers", "answered after a timeout" in answer, (answer, tried()))
 check("...without four slow retries (under ~10 s)", took < 10, took)
-check("...health says it did not answer", provider_health.registry().get("openrouter").get("state") == "unreachable",
-      provider_health.registry().get("openrouter"))
+check("...health says it did not answer", provider_health.registry().get("nvidia-nemotron").get("state") == "unreachable",
+      provider_health.registry().get("nvidia-nemotron"))
 loki.MODEL_TIMEOUT_S = 180.0
 
 empty = (200, {"id": "x", "object": "chat.completion", "choices": [], "usage": None}, {}, 0)
-cloud.script = {"openrouter": [empty, empty], "gemini": [ok_text("DONE: not empty")]}
+cloud.script = {"nvidia-nemotron": [empty, empty], "nvidia-pro": [ok_text("DONE: not empty")]}
 answer = run_turn("hello")
 check("empty choices: asked again once, then failed over (no IndexError)", "not empty" in answer, (answer, tried()))
 check("...an empty reply is named in the route", loki.ROUTE_TRACE and loki.ROUTE_TRACE[0]["reason"] == "empty reply",
       loki.ROUTE_TRACE)
 
-cloud.script = {"openrouter": [err(413, "Request too large for model on tokens per minute (TPM): Limit 600, Requested "
+cloud.script = {"nvidia-nemotron": [err(413, "Request too large for model on tokens per minute (TPM): Limit 600, Requested "
                                         "900, please reduce your message size")],
-                "gemini": [ok_text("DONE: big one")]}
+                "nvidia-pro": [ok_text("DONE: big one")]}
 answer = run_turn("x" * 4000)
 check("413 (Groq's per-minute size limit): fails over", "big one" in answer, (answer, tried()))
-check("...the limit is remembered", provider_health.registry().get("openrouter").get("max_request") == 600)
+check("...the limit is remembered", provider_health.registry().get("nvidia-nemotron").get("max_request") == 600)
 cloud.calls.clear()
 loki._SMART_FAILED.clear()
 loki.messages[:] = [{"role": "system", "content": "s"}, {"role": "user", "content": "y" * 4000}]
-check("...and the next big request skips it up front", loki.active_model_name() == "gemini", loki.ROUTE_NOTES)
+check("...and the next big request skips it up front", loki.active_model_name() == "nvidia-pro", loki.ROUTE_NOTES)
 loki.messages[:] = [{"role": "system", "content": "s"}, {"role": "user", "content": "short"}]
 loki._TOOL_CHARS["n"] = 100
-check("...while a small one may still use it", loki.active_model_name() == "openrouter", loki.ROUTE_NOTES)
+check("...while a small one may still use it", loki.active_model_name() == "nvidia-nemotron", loki.ROUTE_NOTES)
 loki._TOOL_CHARS["n"] = 0
 
-cloud.script = {"openrouter": [err(429, "Too Many Requests")], "gemini": [err(429, "Too Many Requests")],
-                "groq": [err(401, "Invalid API Key")], "mistral": [ok_text("DONE: mistral saved the day")]}
+cloud.script = {"nvidia-nemotron": [err(429, "Too Many Requests")], "nvidia-pro": [err(429, "Too Many Requests")],
+                "huggingface": [err(401, "Invalid API Key")], "9router": [ok_text("DONE: 9router saved the day")]}
 answer = run_turn("hello")
-check("a chain of failures (429, 429, 401) still ends on the one that works", "mistral saved the day" in answer,
+check("a chain of failures (429, 429, 401) still ends on the one that works", "9router saved the day" in answer,
       (answer, tried()))
 check("...each hop recorded with its reason",
       [r["reason"] for r in loki.ROUTE_TRACE] == ["rate/size limit", "rate/size limit", "key rejected"], loki.ROUTE_TRACE)
@@ -574,7 +579,7 @@ check("...each hop recorded with its reason",
 # A background job is its own process: it must know what the engine learned.
 shared = TMP / "shared_health.json"
 provider_health.set_registry(provider_health.Registry(shared))
-provider_health.registry().record_failure("openrouter", "You exceeded your current quota", 429, key="key-openrouter",
+provider_health.registry().record_failure("nvidia-nemotron", "You exceeded your current quota", 429, key="key-nvidia-nemotron",
                                           session=False)
 code = ("import sys; sys.path.insert(0, %r); import loki\n"
         "loki.online = lambda *a, **k: True\nloki.local_ready = lambda: False\n"
@@ -583,7 +588,7 @@ code = ("import sys; sys.path.insert(0, %r); import loki\n"
         "print('PICK=' + loki.active_model_name())\n") % (str(REPO / "engine"), NAMES, NAMES, NAMES)
 env = dict(os.environ, LOKI_HEALTH_FILE=str(shared), LOKI_JOB_ID="job-x", LOKI_MODEL="smart")
 out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=120)
-check("a new background-job process skips the provider the engine found spent", "PICK=gemini" in out.stdout,
+check("a new background-job process skips the provider the engine found spent", "PICK=nvidia-pro" in out.stdout,
       (out.stdout[-300:], out.stderr[-500:]))
 
 # ================================================================== 5. local models
@@ -681,9 +686,9 @@ for pid in NAMES:
 loki._SMART_FAILED.clear()
 provider_health.set_registry(provider_health.Registry(TMP / "h-doctor.json"))
 reg = provider_health.registry()
-reg.record_failure("mistral", "Unauthorized", 401, key="key-mistral")
-reg.record_failure("gemini", "quota exceeded per day", 429, key="key-gemini")
-reg.record_probe("groq", {"state": "ok", "model_info": {"vision": False, "context": 131072, "tools": True}}, key="key-groq")
+reg.record_failure("9router", "Unauthorized", 401, key="key-9router")
+reg.record_failure("nvidia-pro", "quota exceeded per day", 429, key="key-nvidia-pro")
+reg.record_probe("huggingface", {"state": "ok", "model_info": {"vision": False, "context": 131072, "tools": True}}, key="key-huggingface")
 loki.online = lambda *a, **k: True
 loki.local_ready = lambda: True
 loki.PREFER = "local"
@@ -699,8 +704,8 @@ bg = next(r for r in doc["routes"] if r["id"] == "background")
 check("background jobs are routed past the local model, and it says why", bg["provider"] != "local"
       and "background" in bg["why"], bg)
 check("it lists what is skipped right now with the one-line fix",
-      "mistral: key rejected" in text and "Fix: Paste a new" in text and "gemini: free quota used up" in text, text)
-check("a rejected key is a 'needs you' item", any(x.startswith("mistral") for x in doc["needs_you"]), doc["needs_you"])
+      "9router: key rejected" in text and "Fix: Paste a new" in text and "nvidia-pro: free quota used up" in text, text)
+check("a rejected key is a 'needs you' item", any(x.startswith("9router") for x in doc["needs_you"]), doc["needs_you"])
 check("the local side is in it (Ollama version, Bonsai)", "Ollama 0.40.6" in text, text)
 state_obj = types.SimpleNamespace(agent=loki)
 code_, payload = portal_api.handle_get(state_obj, "/models/doctor")
@@ -708,10 +713,10 @@ check("GET /models/doctor serves it to the window", code_ == 200 and payload["te
 code_, payload = portal_api.handle_get(state_obj, "/providers")
 cards = {p["id"]: p for p in payload["providers"]}
 check("each Connections card carries the live health and the fix",
-      cards["mistral"]["health"]["state"] == "key_rejected" and "Paste a new" in cards["mistral"]["health"]["fix"]
-      and cards["groq"]["health"]["live"], cards["mistral"].get("health"))
+      cards["9router"]["health"]["state"] == "key_rejected" and "Paste a new" in cards["9router"]["health"]["fix"]
+      and cards["huggingface"]["health"]["live"], cards["9router"].get("health"))
 code_, payload = portal_api.handle_get(state_obj, "/providers/health")
-check("GET /providers/health returns the registry without keys", code_ == 200 and "mistral" in payload["providers"]
+check("GET /providers/health returns the registry without keys", code_ == 200 and "9router" in payload["providers"]
       and "key_fp" not in json.dumps(payload))
 check("'Private: only models on this computer' is a General setting", "LOKI_LOCAL_ONLY" in portal_api.GENERAL)
 html = (REPO / "app" / "ui" / "index.html").read_text(encoding="utf-8")

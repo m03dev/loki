@@ -50,6 +50,22 @@ class FakeOllama:
                 "model": body.get("model", ""), "choices": [{"index": 0, "message": message,
                                                               "finish_reason": "stop"}], "usage": usage}
 
+    def shell_reply(self, body: dict) -> dict:
+        """The local shell agent's protocol (mini-swe-agent style): a THOUGHT and one ```bash block per turn. First
+        turn writes the file the task names; the next one says it is complete."""
+        messages = body.get("messages", [])
+        text = " ".join(str(m.get("content", "")) for m in messages if m.get("role") == "user")
+        match = re.findall(r"file ([\w./-]+)", text)
+        path = match[-1] if match else "notes/out.txt"
+        folder = path.rsplit("/", 1)[0] if "/" in path else "."
+        if not any(m.get("role") == "assistant" for m in messages):
+            content = ("THOUGHT: write the file.\n```bash\nmkdir -p %s && printf 'hello from the fake model\\n' > %s\n```"
+                       % (folder, path))
+        else:
+            content = "THOUGHT: the file is written.\n```bash\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"
+        return {"model": body.get("model", ""), "message": {"role": "assistant", "content": content}, "done": True,
+                "prompt_eval_count": 1200, "eval_count": 40, "eval_duration": 400000000}
+
     # ------------------------------------------------------------------ server
     def start(self) -> "FakeOllama":
         fake = self
@@ -116,6 +132,11 @@ class FakeOllama:
                     fake.models[tag] = 5e9
                     self.wfile.write(json.dumps({"status": "success"}).encode() + b"\n")
                     return
+                if self.path == "/api/chat":     # Ollama's own chat - LOKI's local shell agent (engine/local_agent.py)
+                    model = body.get("model", "")
+                    if model not in fake.models and model + ":latest" not in fake.models:
+                        return self._json(404, {"error": "model '%s' not found" % model})
+                    return self._json(200, fake.shell_reply(body))
                 if self.path == "/v1/chat/completions":
                     model = body.get("model", "")
                     if model not in fake.models and model + ":latest" not in fake.models:

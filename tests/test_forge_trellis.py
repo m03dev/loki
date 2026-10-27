@@ -188,8 +188,8 @@ st = ft.status()
 check("status: reachable, new enough, both modes ready", st["reachable"] and st["nodes_ok"]
       and st["modes"]["pixal3d"]["ready"] and st["modes"]["trellis2"]["ready"], st)
 check("the 4-view sheet mode is ready too", st["modes"]["pixal3d-views"]["ready"], st["modes"].get("pixal3d-views"))
-check("Forge's best-available order starts with Pixal3D (one ComfyUI mode, then the rest)",
-      forge3d.plan("auto")[:1] == ["pixal3d"] and "trellis2" not in forge3d.plan("auto"), forge3d.plan("auto"))
+check("Forge's best-available order: TRELLIS.2 first, Tencent's Pixal3D as the second try (owner 2026-10-27)",
+      forge3d.plan("auto")[:2] == ["trellis2", "pixal3d"], forge3d.plan("auto"))
 
 from PIL import Image, ImageDraw  # noqa: E402
 pic = TMP / "axe.png"
@@ -197,14 +197,14 @@ im = Image.new("RGB", (256, 256), (250, 250, 250))
 ImageDraw.Draw(im).rectangle((100, 40, 150, 220), fill=(120, 80, 40))
 im.save(pic)
 out = forge3d.make_3d(str(pic), TMP / "ws" / "models", prompt="axe", backend="auto", options={"faces": 40000})
-check("a whole Forge run on ComfyUI: Pixal3D made it, the .glb is saved and valid",
-      out.get("ok") and out["backend"] == "pixal3d" and Path(out["glb"]).read_bytes() == GLB_BYTES, out)
+check("a whole Forge run on ComfyUI: TRELLIS.2 made it, the .glb is saved and valid",
+      out.get("ok") and out["backend"] == "trellis2" and Path(out["glb"]).read_bytes() == GLB_BYTES, out)
 check("the picture was uploaded and the graph ComfyUI got was whole", STATE["uploads"] and not STATE["problems"],
       STATE["problems"])
 sent = STATE["prompts"][-1][1]
 check("the queued graph uses the uploaded picture and Forge's triangle count",
       sent["122"]["inputs"]["image"] == "loki/loki-up.png" and sent["186"]["inputs"]["target_face_count"] == 40000)
-check("the model's note says who made it", "Pixal3D" in (out.get("meta") or {}).get("note", ""), out.get("meta"))
+check("the model's note says who made it", "TRELLIS.2" in (out.get("meta") or {}).get("note", ""), out.get("meta"))
 sheet = TMP / "sheet.png"
 im = Image.new("RGB", (800, 200), (250, 250, 250))
 for i, c in enumerate([(200, 0, 0), (0, 200, 0), (0, 0, 200), (200, 200, 0)]):

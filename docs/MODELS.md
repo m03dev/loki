@@ -9,8 +9,11 @@ research on best models". The model picker now has four automatic modes; the ord
 | --- | --- | --- | --- |
 | **Smart** | everyday chat and jobs | the main driver: DeepSeek V4.1 Flash on NVIDIA (free) | learned order, local model |
 | **Online only** | Smart without this computer's models | same | free cloud only |
-| **Max (hard tasks)** | hard builds, debugging, planning, anything Smart got wrong | Claude Code (your plan: Claude Opus / Sonnet 5.5), Codex (your plan: GPT-6.x) | `nvidia-pro` = **DeepSeek V4 Pro** on the same free NVIDIA key, thinking on (high); paid APIs only if paid use is allowed; then Smart's order |
-| **Fast** | quick questions, many small steps | Cerebras (gpt-oss-120B), Groq | Nemotron 3.5 Lightning (free, OpenRouter), SambaNova, the main driver, then Smart's order |
+| **Max (hard tasks)** | hard builds, debugging, planning, anything Smart got wrong | Claude Code (your plan: Claude Opus / Sonnet 5.5), Codex (your plan: GPT-6.x) | `nvidia-pro` = the strongest open model the free NVIDIA key serves (GLM-5.3), thinking on; paid APIs only if paid use is allowed; then Smart's order |
+| **Fast** | quick questions, many small steps | `nvidia-nemotron` = Nemotron on the free NVIDIA key | the main driver, a small local model, then Smart's order |
+
+2026-10-27: Cerebras, Groq, SambaNova and OpenRouter's free models were removed - they run out daily (see
+docs/providers.md "The lean set"); the research below is kept as the record of why they were picked then.
 
 Max never switches to a pay-per-use API by itself (same rule as Smart). The `nvidia-pro` route shares NVIDIA's
 per-minute window with the main driver (`engine/ratelimit.py` buckets every `nvidia-*` route) - it is one key.

@@ -445,7 +445,7 @@ class Engine:
                     "auto": {"tag": "qwen3:8b", "size_gb": 5.2, "installed": False}, "picks": {}, "recommend": []}
         if p == "/providers/connect":
             key = (body or {}).get("key", "")
-            if key == "gsk_good":
+            if key == "nvapi-good":
                 self.connected = (body or {}).get("id", "")
                 return {"ok": True, "provider": self.connected}
             return {"ok": False, "error": "the provider said 401 invalid API key"}
@@ -547,20 +547,22 @@ async def headless() -> None:
         check("choosing Both starts the quick local download in the background", any(p_ == "/setup/auto" and (b or {}).get("quick") for p_, b in eng.posts)
               and await page.is_visible("#u-bgsetup"), [x[0] for x in eng.posts][-5:])
         step2 = await page.inner_text("#u-onboarding")
-        check("step 2 offers OpenRouter sign-in, NVIDIA NIM, Groq and Gemini", all(s in step2 for s in ("OpenRouter", "NVIDIA NIM", "Groq", "Google Gemini")))
+        # 2026-10-27: OpenRouter (and its sign-in), Groq and Gemini are gone - NVIDIA NIM is the account to connect
+        check("step 2 offers NVIDIA NIM and none of the removed providers", "NVIDIA NIM" in step2
+              and not any(s in step2 for s in ("OpenRouter", "Groq", "Google Gemini")), step2)
         v = await rules(page, "#u-onboarding")
         check("accessibility rules: model step", not v, fmt(v))
         await page.screenshot(path=str(SHOTS / "usability_onboarding_2.png"))
-        groq = page.locator("#u-onboarding .u-keyform").nth(1)   # NVIDIA NIM is first (session 30), then Groq
-        await groq.locator("input").focus()
-        await page.keyboard.type("gsk_wrong")
+        nvkey = page.locator("#u-onboarding .u-keyform").nth(0)   # NVIDIA NIM (the main driver's key)
+        await nvkey.locator("input").focus()
+        await page.keyboard.type("nvapi-wrong")
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(300)
-        err = await page.inner_text("#u-onboarding .u-cloud:nth-of-type(3) .u-say")
+        err = await page.inner_text("#u-onboarding .u-cloud:nth-of-type(1) .u-say")
         check("a wrong key says why and what to do", "401" in err and ("Copy it again" in err or "start with" in err), err)
-        await groq.locator("input").fill("")
-        await groq.locator("input").focus()
-        await page.keyboard.type("gsk_good")
+        await nvkey.locator("input").fill("")
+        await nvkey.locator("input").focus()
+        await page.keyboard.type("nvapi-good")
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(300)
         check("a good key connects and the step says so", "Connected" in await page.inner_text("#u-onboarding .u-body > .u-say"))

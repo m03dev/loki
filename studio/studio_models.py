@@ -82,10 +82,6 @@ def providers(env: dict | None = None) -> list:
         Provider("nvidia-nemotron", "Nemotron on NVIDIA NIM", nim_base,
                  nim_models.resolve(e.get("NVIDIA_NEMOTRON_MODEL", nim_models.NEMOTRON[0]), nim_models.cached(nim_base, nim_key)),
                  "NVIDIA_API_KEY", nim_key),
-        Provider("openrouter", "DeepSeek V4.1 Flash on OpenRouter", e.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-                 e.get("DEEPSEEK_41_MODEL", "deepseek/deepseek-v4.1-flash"), "OPENROUTER_API_KEY", e.get("OPENROUTER_API_KEY", "")),
-        Provider("opencode-zen", "DeepSeek V4 Flash on OpenCode Zen (free)", e.get("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1"),
-                 e.get("OPENCODE_ZEN_MODEL", "deepseek-v4-flash-free"), "OPENCODE_API_KEY", e.get("OPENCODE_API_KEY", "")),
     ]
     if allow_paid:
         out.append(Provider("deepseek", "DeepSeek (paid)", e.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),

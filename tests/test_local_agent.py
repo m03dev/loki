@@ -218,8 +218,8 @@ else:
     check("colibri is a local provider: found when it answers, its model read from it, run by the shell agent",
           loki.local_server_up("colibri") and loki.MODELS["colibri"].model == "qwen36-35b" and loki._local_agent_for("colibri")
           and "colibri" in loki.SMART_ORDER, loki.MODELS["colibri"])
-    check("Smart tries free Nemotron first after your main driver (NVIDIA DeepSeek)",
-          [p for p in loki.SMART_ORDER if p != loki.MAIN_DRIVER][0] == "nemotron-free", loki.SMART_ORDER[:3])
+    check("Smart tries Nemotron on NVIDIA first after your main driver (NVIDIA DeepSeek)",
+          [p for p in loki.SMART_ORDER if p != loki.MAIN_DRIVER][0] == "nvidia-nemotron", loki.SMART_ORDER[:3])
     import loki_bridge  # noqa: E402
     loki_bridge._STARTUP.update(t0=time.time(), last=time.time(), steps=[], cur="a")
     loki_bridge._startup_mark("b"); time.sleep(0.05); loki_bridge._startup_mark("done"); loki_bridge._startup_report()

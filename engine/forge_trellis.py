@@ -7,8 +7,9 @@ engine/forge_workflows/trellis2_pixal3d.json (the original UI file sits beside i
 metallic, roughness, normal, AO) -> one textured .glb.
 
     pixal3d   Pixal3D (TencentARC, MIT): pixel-aligned - MoGe estimates the camera's field of view, so the model's
-              front matches the picture. The default.
+              front matches the picture. Second choice since 2026-10-27.
     trellis2  TRELLIS.2 (Microsoft, MIT): the same pipeline without the camera step; a little faster, one model less.
+              The default since 2026-10-27 (owner: "trellis might be better then tencent").
 
 It runs where ComfyUI runs - the PC (RTX 3070 Ti, 8 GB: the int8 models fit; start ComfyUI with --lowvram if it runs
 out) - and LOKI on the Mac reaches it over the LAN like Render Studio does (ai_renderer settings: the same ComfyUI
@@ -56,7 +57,7 @@ class TrellisError(RuntimeError):
     pass
 
 
-def workflow(mode: str = "pixal3d") -> dict:
+def workflow(mode: str = "trellis2") -> dict:
     return json.loads((VIEWS_WORKFLOW if mode == "pixal3d-views" else WORKFLOW).read_text(encoding="utf-8"))
 
 
@@ -177,7 +178,7 @@ def forget_cache() -> None:
 
 
 # ----------------------------------------------------------------------------- one run
-def run(cutout_png: Path, out_base: Path, mode: str = "pixal3d", opts: dict | None = None, cl=None,
+def run(cutout_png: Path, out_base: Path, mode: str = "trellis2", opts: dict | None = None, cl=None,
         sleep: Callable = time.sleep, timeout: float = 3600.0, progress: Callable | None = None) -> dict:
     """The picture -> a textured .glb at out_base.glb. Raises TrellisError with the reason."""
     import ai_renderer  # pylint: disable=import-outside-toplevel

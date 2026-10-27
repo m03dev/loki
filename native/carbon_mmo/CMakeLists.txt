@@ -66,7 +66,7 @@ set_target_properties(cmmo_math PROPERTIES
 # ---------------------------------------------------------------------------
 # MODULE: world - scene, terrain, Play simulation, level files (no graphics)
 # ---------------------------------------------------------------------------
-add_library(cmmo_world STATIC cpp/world/World.cpp)
+add_library(cmmo_world STATIC cpp/world/World.cpp cpp/world/Physics.cpp cpp/world/Gameplay.cpp)
 target_include_directories(cmmo_world PUBLIC cpp)
 target_link_libraries(cmmo_world PUBLIC CarbonMath nlohmann_json::nlohmann_json)
 add_executable(test_world tests/cpp/test_world.cpp)
@@ -140,8 +140,16 @@ if(CMMO_BUILD_EDITOR AND (CMMO_WITH_GLFW OR CMMO_EDITOR_EGL))
     target_compile_definitions(cmmo_editor_lib PRIVATE CMMO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     target_link_libraries(cmmo_editor_lib PUBLIC cmmo_world cmmo_imgui)
 
-    add_executable(cmmo_editor cpp/apps/cmmo_editor.cpp cpp/script_host/ScriptHost.cpp cpp/script_host/EngineModule.cpp)
-    target_link_libraries(cmmo_editor PRIVATE cmmo_editor_lib cmmo_render cmmo_math_bindings pybind11::embed)
+    option(CMMO_EDITOR_PYTHON "Embed Python in the editor (the Phase 1 init hook). OFF = a portable editor with no Python dependency" ON)
+    if(CMMO_EDITOR_PYTHON)
+        add_executable(cmmo_editor cpp/apps/cmmo_editor.cpp cpp/script_host/ScriptHost.cpp cpp/script_host/EngineModule.cpp)
+        target_link_libraries(cmmo_editor PRIVATE cmmo_editor_lib cmmo_render cmmo_math_bindings pybind11::embed)
+        target_compile_definitions(cmmo_editor PRIVATE CMMO_EDITOR_PYTHON=1)
+    else()
+        add_executable(cmmo_editor cpp/apps/cmmo_editor.cpp)
+        target_link_libraries(cmmo_editor PRIVATE cmmo_editor_lib)
+        target_compile_definitions(cmmo_editor PRIVATE CMMO_EDITOR_PYTHON=0)
+    endif()
     target_compile_definitions(cmmo_editor PRIVATE
         CMMO_PYTHON_HOME="${CMMO_PYTHON_HOME}" CMMO_SOURCE_DIR="${CMAKE_SOURCE_DIR}" CMMO_BINARY_DIR="${CMAKE_BINARY_DIR}")
     if(CMMO_WITH_GLFW)
@@ -152,6 +160,7 @@ if(CMMO_BUILD_EDITOR AND (CMMO_WITH_GLFW OR CMMO_EDITOR_EGL))
     set_target_properties(cmmo_editor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/bin>")
     if(APPLE)
         target_compile_definitions(cmmo_editor_lib PUBLIC GL_SILENCE_DEPRECATION)
+        target_link_libraries(cmmo_editor PRIVATE objc)   # BringToFront(): the window opens in front
     endif()
     if(WIN32)
         target_compile_definitions(cmmo_editor_lib PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)   # windows.h (via glcorearb.h) vs std::max

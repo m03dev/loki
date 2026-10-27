@@ -23,30 +23,14 @@ KINDS = ("provider", "cli-agent", "tool", "mcp", "skill-library")
 # Where to get a key, for the ones that need one. Onboarding copy, kept here so a
 # capability report can point a user at the exact page.
 PROVIDER_DOCS = {
-    "openrouter": "https://openrouter.ai/keys",
-    "deepseek-4.1": "https://openrouter.ai/keys",
-    "mistral": "https://console.mistral.ai/api-keys",
-    "together": "https://api.together.ai/settings/api-keys",
-    "nous": "https://portal.nousresearch.com",
-    "unorouter": "https://unorouter.com",
     "deepseek": "https://platform.deepseek.com/api_keys",
     "gpt": "https://platform.openai.com/api-keys",
     "claude": "https://console.anthropic.com/settings/keys",
     "claude-code": "install @anthropic-ai/claude-code, then run claude and /login",
     "codex": "install @openai/codex, then run codex login",
-    "vireonix": "nothing to do - needs no key, no account and no card",
-    "llm7": "https://token.llm7.io (optional - anonymous use works)",
-    "aion": "https://www.aionlabs.ai/app/api-keys/",
-    "cohere": "https://dashboard.cohere.com/api-keys",
-    "zai": "https://open.bigmodel.cn/usercenter/apikeys",
     "huggingface": "https://huggingface.co/settings/tokens",
-    "kilocode": "https://app.kilo.ai/profile",
     "nvidia": "https://build.nvidia.com/explore/discover",
     "nvidia-nemotron": "the same NVIDIA key (build.nvidia.com/settings/api-keys)",
-    "ollama-cloud": "https://ollama.com/settings/keys",
-    "ovh": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",
-    "siliconflow": "https://cloud.siliconflow.cn/account/ak",
-    "omniroute": "local gateway on http://localhost:20128 (see docs/providers.md)",
 }
 
 

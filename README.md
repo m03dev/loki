@@ -68,10 +68,10 @@ LOKI's own task list and inbox is [LOKI_TASKS.md](LOKI_TASKS.md).
 
 ## Settings: connections, agents, world, updates
 
-- **Connections**: one card per provider (local servers, free tiers, no-account services, free
-  credits, your subscriptions, paid). Each has an on/off switch, **Test** (a real 1-token call),
-  a live model picker, **Make default** and **Disconnect**. Connect by **Sign in with
-  OpenRouter**, by pasting a key, or with your phone: **Use my phone** shows a QR code for a
+- **Connections**: one card per provider - a lean set with nothing that runs out within a day (local
+  servers, NVIDIA's free models, your subscriptions, paid). Each has an on/off switch, **Test** (a real
+  1-token call), a live model picker, **Make default** and **Disconnect**. Connect by pasting a key, or
+  with your phone: **Use my phone** shows a QR code for a
   one-time page on your Wi-Fi that sends the key to LOKI.
 - **Any model can use tools**: models without native tool calling (MLX, plain llama.cpp,
   keyless endpoints) get the tools as text and their calls come back as real tool calls

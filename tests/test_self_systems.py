@@ -59,6 +59,11 @@ def check(name, ok, detail=""):
     print(("  PASS " if ok else "  FAIL ") + name + ("" if ok else "  <- %s" % (str(detail)[:400],)))
 
 
+def _work(ran):
+    """What a tick did besides the storage clean-up (which runs alongside other duties since 2026-10-27)."""
+    return [r for r in (ran or []) if r[0] != "storage"]
+
+
 def section(title):
     print("\n== " + title)
 
@@ -141,7 +146,7 @@ def script_loop():
     LOOP_SAVED = (loki.make_client, loki.refresh_mcp_tools, loki.provider_configured, loki.model_name, loki.MODEL_RETRIES,
                   loki.local_ready, loki.online, loki.PREFER, loki.save_history, loki.first_layer.triage, loki.approve)
     loki.refresh_mcp_tools = _noop
-    loki.provider_configured = lambda n: n == "openrouter"
+    loki.provider_configured = lambda n: n == "nvidia-pro"
     loki.model_name = "smart"
     loki.MODEL_RETRIES = 0
     loki.local_ready = lambda: False
@@ -545,7 +550,7 @@ ap = autopilot.Autopilot(state=astate, agent=types.SimpleNamespace(DATA_DIR=APD)
                          clock=lambda: aclock[0])
 ap.data["last"].update({"health": aclock[0], "inbox": aclock[0], "report": aclock[0], "selftest": 0})
 first = ap.tick()
-check("an idle autopilot starts the daily self-test", first and first[0][0] == "selftest" and len(astate.jobs.created) == 3, first)
+check("an idle autopilot starts the daily self-test", _work(first) and _work(first)[0][0] == "selftest" and len(astate.jobs.created) == 3, first)
 for j in astate.jobs.created:
     j.update(status="done")
 (Path(astate.jobs.created[0]["workspace"]) / "selftest_hello.txt").write_text("LOKI self-test OK", encoding="utf-8")
@@ -596,7 +601,7 @@ ap2 = autopilot.Autopilot(state=FakeState(), agent=types.SimpleNamespace(DATA_DI
                           clock=time.time, evolve=evolve.Evolve(FAKE_REPO, RV), improve=lambda task: "error: not now")
 ap2.data["last"].update({"health": time.time(), "inbox": time.time(), "report": time.time(), "evolve": time.time()})
 ran = ap2.tick()
-check("the weekly review is an autopilot duty (where evolve runs)", ran and ran[0][0] == "review", ran)
+check("the weekly review is an autopilot duty (where evolve runs)", _work(ran) and _work(ran)[0][0] == "review", ran)
 ran = ap2.tick()
 check("so is the weekly speed check", ran and ran[0][0] == "speed", ran)
 os.environ.pop("LOKI_EVOLVE")
@@ -638,7 +643,7 @@ saved_run = loki.subprocess.run
 try:
     first = evolve_tick()
     job = estate.jobs.created[0] if estate.jobs.created else {}
-    check("the idle autopilot hands the next roadmap step to the REAL improve_loki", first and first[0][0] == "evolve"
+    check("the idle autopilot hands the next roadmap step to the REAL improve_loki", _work(first) and _work(first)[0][0] == "evolve"
           and job.get("title", "").startswith("Improve LOKI") and "E9" in job.get("prompt", "") and eev.busy(), (first, job.get("title")))
     check("the job is a LOKI agent with commands allowed (it must test and ship)", job.get("agent") == "loki"
           and job.get("allow_commands") is True and job.get("model") in ("smart", "online"), job)

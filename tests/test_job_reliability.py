@@ -115,7 +115,7 @@ except ModuleNotFoundError:
 if loki is not None:
     local = "local"
     loki.online = lambda: True
-    loki._free_capable_online = lambda needs: "nemotron-free"  # pylint: disable=protected-access
+    loki._free_capable_online = lambda needs: "nvidia-nemotron"  # pylint: disable=protected-access
     os.environ.pop("LOKI_JOB_MODEL", None)
     check("a chat pinned to a local model hands background jobs to Smart",
           loki.job_model_choice({}, local) == "smart" and "LOKI_JOB_MODEL=same" in loki.JOB_MODEL_NOTE.get("why", ""), local)
@@ -126,7 +126,7 @@ if loki is not None:
     loki._free_capable_online = lambda needs: ""  # pylint: disable=protected-access
     loki.main_driver_ready = lambda needs=None: (False, "")
     check("nothing online ready: the job stays on the local model", loki.job_model_choice({}, local) == local)
-    loki._free_capable_online = lambda needs: "nemotron-free"  # pylint: disable=protected-access
+    loki._free_capable_online = lambda needs: "nvidia-nemotron"  # pylint: disable=protected-access
     loki.experience.best_for_role = lambda role, cands, tier, min_samples=0: local
     loki.provider_configured = lambda name: True
     check("a team role whose best record is the local model is handed back to Smart", loki.model_for_role("builder") == "")

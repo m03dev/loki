@@ -382,7 +382,7 @@
  "ob.way_both": "दोनों",
  "ob.way_both_sub": "लोकल मॉडल डाउनलोड होते समय तुरंत ऑनलाइन चैट करें।",
  "ob.way_cloud": "एक खाता जोड़ें",
- "ob.way_cloud_sub": "किसी भी कंप्यूटर पर तेज़। मुफ़्त: NVIDIA (DeepSeek V4.1 Flash, Nemotron)। सशुल्क: OpenRouter।",
+ "ob.way_cloud_sub": "किसी भी कंप्यूटर पर तेज़। मुफ़्त: NVIDIA (DeepSeek V4.1 Flash, GLM-5.3, Nemotron)।",
  "ob.way_local": "इस कंप्यूटर पर AI चलाएँ",
  "ob.way_local_dl": "{model} · {size} GB डाउनलोड, बैकग्राउंड में",
  "ob.way_local_have": "{model} पहले से डाउनलोड है",

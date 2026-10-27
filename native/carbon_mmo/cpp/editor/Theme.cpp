@@ -41,6 +41,7 @@ std::string FindFonts( const char* exePath )
 	where.emplace_back( fs::path( CMMO_SOURCE_DIR ) / "third_party" / "fonts" );
 #endif
 	if( exePath ) where.push_back( fs::path( exePath ).parent_path() / "fonts" );
+	if( exePath ) where.push_back( fs::path( exePath ).parent_path().parent_path() / "Resources" / "fonts" );   // macOS .app
 	for( const auto& p : where )
 	{
 		std::error_code ec;

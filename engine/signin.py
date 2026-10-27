@@ -1,23 +1,16 @@
 """Connect accounts without copying keys around: browser sign-in, sign-in codes, and the phone.
 
-Three ways, all ending with a key saved by loki.connect_provider (checked, then written to
+Two ways, all ending with a key saved by loki.connect_provider (checked, then written to
 harness_data/.env):
 
-1. OpenRouter sign-in (OAuth PKCE, https://openrouter.ai/docs/guides/overview/auth/oauth)
-     browser mode: LOKI opens openrouter.ai/auth in your browser with a callback to this
-       engine (http://localhost:<port>/oauth/openrouter/callback); you click Authorize and
-       the key arrives by itself.
-     code mode (for the QR code): no callback; the OpenRouter page shows a code, you scan
-       the QR with your phone, sign in there, and type the code into LOKI.
-   Either way the code is swapped for a key at POST /api/v1/auth/keys with the verifier,
-   so an intercepted code is useless on its own.
+(OpenRouter's browser sign-in was removed 2026-10-27 with OpenRouter itself - see loki.RETIRED_PROVIDERS.)
 
-2. Sign-in codes (OAuth device flow, RFC 8628) for providers that offer it - Hugging Face
+1. Sign-in codes (OAuth device flow, RFC 8628) for providers that offer it - Hugging Face
    today. It needs an OAuth app's client id (LOKI_HF_CLIENT_ID); without one the card
    falls back to "paste a token". LOKI shows the short code and a QR of the verification
    page; it polls until you approve on any device.
 
-3. Send a key from your phone (PhoneHandoff): LOKI opens a one-time page on your home
+2. Send a key from your phone (PhoneHandoff): LOKI opens a one-time page on your home
    network for five minutes and shows its QR code. Open it on the phone (where you just
    created the key), paste, send. One use, private-network clients only, then it closes.
    It is plain HTTP on your LAN - fine at home, and the UI says so.
@@ -39,9 +32,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
-OPENROUTER_AUTH = "https://openrouter.ai/auth"
-OPENROUTER_KEYS = "https://openrouter.ai/api/v1/auth/keys"
-FLOW_TTL_S = 600          # OpenRouter codes expire after 10 minutes
+FLOW_TTL_S = 600          # sign-in flows expire after 10 minutes
 HANDOFF_TTL_S = 300
 
 DEVICE_PROVIDERS = {
@@ -68,61 +59,6 @@ def _prune() -> None:
     now = time.time()
     for key in [k for k, f in _FLOWS.items() if now - f["created"] > FLOW_TTL_S]:
         _FLOWS.pop(key, None)
-
-
-def openrouter_start(port: int, mode: str = "browser") -> dict:
-    """Begin an OpenRouter sign-in. Returns {state, url}; open `url` (or show its QR)."""
-    verifier, challenge = pkce_pair()
-    state = _b64url(secrets.token_bytes(18))
-    params = {"code_challenge": challenge, "code_challenge_method": "S256", "state": state,
-              "key_label": "LOKI"}
-    if mode == "browser":
-        params["callback_url"] = "http://localhost:%d/oauth/openrouter/callback" % int(port)
-    with _lock:
-        _prune()
-        _FLOWS[state] = {"provider": "openrouter", "verifier": verifier, "mode": mode,
-                         "created": time.time(), "done": False, "result": None}
-    return {"ok": True, "state": state, "mode": mode, "url": OPENROUTER_AUTH + "?" + urllib.parse.urlencode(params),
-            "expires_in": FLOW_TTL_S}
-
-
-def openrouter_exchange(code: str, verifier: str, opener=urllib.request.urlopen) -> str:
-    body = json.dumps({"code": code, "code_verifier": verifier, "code_challenge_method": "S256"}).encode()
-    req = urllib.request.Request(OPENROUTER_KEYS, data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "User-Agent": "Loki/1.0"})
-    try:
-        with opener(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as exc:
-        raise ValueError({400: "the sign-in method did not match; start again",
-                          403: "that code is wrong or expired; start again"}.get(exc.code, "OpenRouter answered HTTP %d" % exc.code)) from None
-    key = str(data.get("key") or "").strip()
-    if not key:
-        raise ValueError("OpenRouter sent no key back")
-    return key
-
-
-def openrouter_finish(state: str, code: str, connect: Callable[[str, str], dict],
-                      opener=urllib.request.urlopen) -> dict:
-    """Swap the code for a key and connect it. `state` must be a flow this engine started."""
-    with _lock:
-        _prune()
-        flow = _FLOWS.get(str(state or ""))
-    if flow is None:
-        return {"ok": False, "error": "this sign-in has expired or was not started here; start again"}
-    if flow["done"]:
-        return flow["result"]
-    code = str(code or "").strip()
-    if not code or len(code) > 400:
-        return {"ok": False, "error": "enter the code OpenRouter showed you"}
-    try:
-        key = openrouter_exchange(code, flow["verifier"], opener=opener)
-        result = connect("openrouter", key)
-    except ValueError as exc:
-        result = {"ok": False, "error": str(exc)}
-    with _lock:
-        flow.update({"done": True, "result": result})
-    return result
 
 
 def flow_status(state: str) -> dict:

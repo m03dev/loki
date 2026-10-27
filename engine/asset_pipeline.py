@@ -46,8 +46,8 @@ FRESH_WIP_S = 3 * 3600          # a wip older than this is a crashed run: it may
 KINDS = ("character", "creature", "prop", "vehicle")
 QUADS = {"prop": 3000, "vehicle": 6000, "character": 8000, "creature": 8000}
 # retries walk through these; without an NVIDIA card (the Mac) the ComfyUI ones cannot run, so online comes first
-BACKENDS = (("auto", "online", "triposr", "pixal3d", "trellis2") if sys.platform == "darwin"
-            else ("auto", "pixal3d", "trellis2", "online", "triposr"))
+BACKENDS = (("auto", "online", "triposr", "trellis2", "pixal3d") if sys.platform == "darwin"
+            else ("auto", "trellis2", "pixal3d", "online", "triposr"))   # TRELLIS.2 before Tencent's Pixal3D (2026-10-27)
 LIKENESS = float(os.environ.get("LOKI_PIPELINE_LIKENESS", "0.6"))
 VIEW_MATCH = float(os.environ.get("LOKI_PIPELINE_VIEW_MATCH", "0.45"))   # turnaround view vs concept colours
 LOCK = threading.RLock()       # re-entrant: settling a stage also writes lessons
@@ -336,7 +336,7 @@ def _retry_concept(params, failed, tries, kind=""):
 
 def _retry_model(params, failed, tries, kind=""):
     cur = params.get("backend", "auto")
-    nxt = BACKENDS[(BACKENDS.index(cur) + 1) % len(BACKENDS)] if cur in BACKENDS else "pixal3d"
+    nxt = BACKENDS[(BACKENDS.index(cur) + 1) % len(BACKENDS)] if cur in BACKENDS else "trellis2"
     return dict(params, backend=nxt, seed=int(params.get("seed") or 7) + 7919 * int(tries or 1))
 
 

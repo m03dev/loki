@@ -18,28 +18,13 @@ import loki  # noqa: E402
 # Where to get each provider working. Kept here (not in loki.py) because it is
 # onboarding copy, not runtime config.
 SIGNUP = {
-    "openrouter": "https://openrouter.ai/keys",
-    "mistral": "https://console.mistral.ai/api-keys",
-    "together": "https://api.together.ai/settings/api-keys",
-    "nous": "https://portal.nousresearch.com",
-    "unorouter": "https://unorouter.com",
     "deepseek": "https://platform.deepseek.com/api_keys",
     "gpt": "https://platform.openai.com/api-keys",
     "claude": "https://console.anthropic.com/settings/keys",
     "claude-code": "npm install -g @anthropic-ai/claude-code   then run:  claude  ->  /login",
     "codex": "npm install -g @openai/codex   then run:  codex login",
-    "vireonix": "nothing to do - needs no key, no account and no card",
-    "omniroute": "local gateway on http://localhost:20128 (see docs/providers.md)",
-    "aion": "https://www.aionlabs.ai/app/api-keys/",
-    "cohere": "https://dashboard.cohere.com/api-keys",
-    "zai": "https://open.bigmodel.cn/usercenter/apikeys",
     "huggingface": "https://huggingface.co/settings/tokens",
-    "kilocode": "https://app.kilo.ai/profile",
-    "llm7": "https://token.llm7.io  (optional - anonymous use works)",
     "nvidia": "https://build.nvidia.com/explore/discover",
-    "ollama-cloud": "https://ollama.com/settings/keys",
-    "ovh": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",
-    "siliconflow": "https://cloud.siliconflow.cn/account/ak",
 }
 LOCAL_HINT = "Ollama:  ollama pull qwen3:8b"
 
@@ -88,11 +73,10 @@ def main() -> int:
     print("  (claude-code / codex show ready when INSTALLED; run them once to sign in)")
     if ready == 0:
         print("  Nothing configured - and that is fine: Loki runs with NO keys at all.")
-    print("  Zero-setup: 'vireonix' needs no key, no account and no card. Prompts go to a")
-    print("  third party, so use a key you own for anything private.")
+    print("  Free: one NVIDIA key (build.nvidia.com) runs DeepSeek V4.1 Flash, GLM-5.3 and Nemotron.")
     print()
     print("  Put a key in %s (copy from .env.example), e.g.:" % (loki.DATA_DIR / ".env"))
-    print("      GEMINI_API_KEY=...      then set  LOKI_MODEL=smart")
+    print("      NVIDIA_API_KEY=nvapi-...      then set  LOKI_MODEL=smart")
     print("  Or leave it empty and run  LOKI_MODEL=smart  - it uses whatever is available.")
     print()
     try:

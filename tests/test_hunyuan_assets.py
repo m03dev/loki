@@ -144,10 +144,12 @@ os.environ["LOKI_HUNYUAN_MODE"] = "comfy"
 import forge3d  # noqa: E402
 check("Forge knows the hunyuan backend", "hunyuan" in forge3d.BACKENDS)
 forge3d.hunyuan_ready = lambda: True
-forge3d.comfy_ready = lambda m: m == "pixal3d"
-check("auto: hunyuan first when the owner installed it, then Pixal3D ...", forge3d.plan("auto")[:2] == ["hunyuan", "pixal3d"], forge3d.plan("auto"))
+forge3d.comfy_ready = lambda m: m in ("trellis2", "pixal3d")
+check("auto never picks Tencent's Hunyuan, even installed (owner 2026-10-27) - TRELLIS.2 leads",
+      "hunyuan" not in forge3d.plan("auto") and forge3d.plan("auto")[0] == "trellis2", forge3d.plan("auto"))
+check("... but naming it still runs it", forge3d.plan("hunyuan")[0] == "hunyuan")
 forge3d.hunyuan_ready = lambda: False
-check("auto: without it nothing changes", forge3d.plan("auto")[0] == "pixal3d")
+check("auto: without it nothing changes", forge3d.plan("auto")[0] == "trellis2")
 
 # ------------------------------------------------------------------ the training guard (licence 5.b)
 import experience  # noqa: E402

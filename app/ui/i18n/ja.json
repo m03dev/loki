@@ -382,7 +382,7 @@
  "ob.way_both": "両方",
  "ob.way_both_sub": "ローカルモデルのダウンロード中もすぐにオンラインでチャット。",
  "ob.way_cloud": "アカウントを接続",
- "ob.way_cloud_sub": "どのコンピューターでも速い。無料: NVIDIA (DeepSeek V4.1 Flash、Nemotron)。有料: OpenRouter。",
+ "ob.way_cloud_sub": "どのコンピューターでも速い。無料: NVIDIA (DeepSeek V4.1 Flash、GLM-5.3、Nemotron)。",
  "ob.way_local": "このコンピューターで AI を動かす",
  "ob.way_local_dl": "{model} · {size} GB をバックグラウンドでダウンロード",
  "ob.way_local_have": "{model} はダウンロード済みです",

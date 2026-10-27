@@ -95,7 +95,7 @@ async def _no_mcp(*_a, **_k):
     return []
 
 
-READY = {"openrouter", "gemini", "groq", "mistral", "deepseek-4.1"}
+READY = {"nvidia", "nvidia-nemotron", "nvidia-pro", "9router", "deepseek"}
 for _pid in READY:
     loki.MODELS[_pid].api_key = "test-key-" + _pid
 loki.approve = _deny                          # nobody is there to click Allow
@@ -103,6 +103,7 @@ loki.refresh_mcp_tools = _no_mcp
 loki.local_ready = lambda: False              # hermetic: no Ollama on the test machine counts
 loki.online = lambda *a, **k: True
 loki.MODEL_RETRIES = 0
+loki.STREAM_MODELS = "off"                    # the fake servers answer in one piece (streaming: test_studio_stream)
 loki.model_name = "smart"
 loki.cli_agents.is_available = lambda name: False
 loki.provider_configured = lambda name: name in READY and not loki.provider_disabled(name)
@@ -188,14 +189,14 @@ def fake_runner(argv, input="", **_kw):          # the image runner, without a G
 loki.CONDUCTOR.runner = fake_runner
 
 
-def openrouter_image(kwargs, n):
+def main_driver_image(kwargs, n):
     if not has_tool_result(kwargs):
         return reply(calls=[("conductor", {"role": "image", "task": "a red fox in studio light"}),
                             ("read_file", {"filename": "../../../etc/passwd"})])
     return reply("DONE: made the image images/red-fox.png with the image specialist")
 
 
-MODELS.script = {"openrouter": openrouter_image}
+MODELS.script = {"nvidia": main_driver_image}
 mark = events.latest_seq()
 usage_before = len(loki.USAGE.entries())
 answer = asyncio.run(loki.run_agent("make an image of a red fox in studio light"))
@@ -205,7 +206,7 @@ check("the first layer decided before the model was asked",
       decisions and decisions[0]["seq"] <= first_call[2], (decisions, first_call[2]))
 check("the decision is the full structure (intent, route, capabilities, approval)",
       all(k in decisions[0]["payload"] for k in ("intent", "route", "capabilities", "approval")) if decisions else False)
-check("the smart route sent the request to the first ready free provider", first_call[0] == "openrouter", first_call[0])
+check("the smart route sent the request to the first ready free provider", first_call[0] == "nvidia", first_call[0])
 check("the model was told which specialists are ready, and through what",
       "image:" in system_text(first_call[1]) and "via image-gen" in system_text(first_call[1]), system_text(first_call[1])[-600:])
 check("the conductor picked the image specialist and ran its runner",
@@ -219,7 +220,7 @@ check("the policy refused the path outside the project in the same turn",
 check("the turn finished with the model's answer", answer.startswith("DONE: made the image"), answer)
 new_usage = loki.USAGE.entries()[usage_before:]
 check("both model calls were counted in the usage ledger, for the provider that answered",
-      len(new_usage) == 2 and all(e["provider"] == "openrouter" and e["in"] == 900 and e["out"] == 40 for e in new_usage),
+      len(new_usage) == 2 and all(e["provider"] == "nvidia" and e["in"] == 900 and e["out"] == 40 for e in new_usage),
       new_usage)
 check("the usage meter for the reply adds up", loki_bridge.usage_total(loki.LAST_USAGE).get("calls") == 2,
       loki_bridge.usage_total(loki.LAST_USAGE))
@@ -231,11 +232,11 @@ check("ReasoningBank stored the lesson as one that WORKED (a finished request wi
       lesson and lesson[-1]["worked"] is True and "conductor" in lesson[-1]["steps"], lesson)
 exp_log = DATA / "experience" / "log.jsonl"
 check("the experience log recorded the request with its provider and decision",
-      exp_log.is_file() and '"provider": "openrouter"' in exp_log.read_text(encoding="utf-8")
+      exp_log.is_file() and '"provider": "nvidia"' in exp_log.read_text(encoding="utf-8")
       and '"triage"' in exp_log.read_text(encoding="utf-8"))
 
 MODELS.calls.clear()
-MODELS.script = {"openrouter": lambda kwargs, n: reply("DONE: made a second fox image")}
+MODELS.script = {"nvidia": lambda kwargs, n: reply("DONE: made a second fox image")}
 asyncio.run(loki.run_agent("make an image of a red fox in the snow"))
 prompt = system_text(MODELS.calls[0][1]) if MODELS.calls else ""
 check("the next similar goal gets the lesson in its prompt (what worked, step by step)",
@@ -282,7 +283,7 @@ listed = [j for j in SUP.status()["jobs"] if j["id"] == job_id]
 check("GET /jobs serves it as done", listed and listed[0]["status"] == "done", listed)
 check("a check job never waits for the one local-model slot (it asks no model)",
       not workers.uses_local_model({"agent": "loki", "backend": "local", "selfcheck": True}, {"LOKI_PREFER": "local"})
-      and workers.uses_local_model({"agent": "loki", "backend": "local"}, {"LOKI_PREFER": "local"}))
+      and workers.uses_local_model({"agent": "loki", "backend": "local"}, {"LOKI_PREFER": "local", "LOKI_LOCAL_ONLY": "1"}))
 _idle = workers.Supervisor(workers.JobStore(TMP / "idle-jobs.json"), {"local": workers.LocalBackend(TMP)}, TMP)  # never started
 check("only the built-in agent can be a check job",
       _idle.create({"backend": "local", "agent": "codex", "prompt": "x", "workspace": str(WS), "selfcheck": True})["selfcheck"] is False)
@@ -368,27 +369,27 @@ loki.ROUTE_TRACE.clear()
 MODELS.calls.clear()
 
 
-def openrouter_dies(kwargs, n):
+def main_driver_dies(kwargs, n):
     if n == 1:
         return reply(calls=[("list_tree", {})])        # the first step works...
     raise http_error(402, "Insufficient credit: add credits to keep going")   # ...then the credit runs out
 
 
 MODELS.script = {
-    "openrouter": openrouter_dies,
-    "gemini": lambda kwargs, n: (_ for _ in ()).throw(http_error(401, "Incorrect API key provided")),
-    "groq": lambda kwargs, n: reply("DONE: listed the project (answered by groq)"),
+    "nvidia": main_driver_dies,
+    "nvidia-nemotron": lambda kwargs, n: (_ for _ in ()).throw(http_error(401, "Incorrect API key provided")),
+    "nvidia-pro": lambda kwargs, n: reply("DONE: listed the project (answered by nvidia-pro)"),
 }
 answer = asyncio.run(loki.run_agent("list the files in this project and summarise them"))
 tried = [p for p, _, _ in MODELS.calls]
-check("the run started on openrouter, which then ran out of credit", tried[:2] == ["openrouter", "openrouter"], tried)
-check("smart routing skipped gemini's rejected key and finished on groq", tried[2:] == ["gemini", "groq"], tried)
-check("the turn still finished", "answered by groq" in answer, answer)
+check("the run started on nvidia, which then ran out of credit", tried[:2] == ["nvidia", "nvidia"], tried)
+check("smart routing skipped nvidia-nemotron's rejected key and finished on nvidia-pro", tried[2:] == ["nvidia-nemotron", "nvidia-pro"], tried)
+check("the turn still finished", "answered by nvidia-pro" in answer, answer)
 check("the route records why each provider was skipped",
-      [(r["provider"], r["reason"]) for r in loki.ROUTE_TRACE] == [("openrouter", "quota spent"), ("gemini", "key rejected")],
+      [(r["provider"], r["reason"]) for r in loki.ROUTE_TRACE] == [("nvidia", "quota spent"), ("nvidia-nemotron", "key rejected")],
       loki.ROUTE_TRACE)
 check("the tool call made before the failure was kept", any(m.get("role") == "tool" for m in loki.messages[-6:] if isinstance(m, dict)))
-check("usage was counted for the provider that answered", loki.USAGE.entries()[-1]["provider"] == "groq",
+check("usage was counted for the provider that answered", loki.USAGE.entries()[-1]["provider"] == "nvidia-pro",
       loki.USAGE.entries()[-1])
 
 
@@ -401,8 +402,8 @@ def fake_urlopen(req, timeout=0):
             break
     else:
         raise urllib.error.URLError("unknown host")
-    errors = {"openrouter": (402, "Insufficient credit"), "gemini": (401, "API key not valid"),
-              "mistral": (401, "Unauthorized")}
+    errors = {"nvidia": (402, "Insufficient credit"), "nvidia-nemotron": (401, "API key not valid"),
+              "9router": (401, "Unauthorized")}
     if pid in errors:
         status, text = errors[pid]
         raise urllib.error.HTTPError(req.full_url, status, text, {}, io.BytesIO(json.dumps({"error": {"message": text}}).encode()))
@@ -429,27 +430,27 @@ def catalog_test(agent, pid, timeout):
 ctx = system_check.Context(loki, STATE, deps={"provider_test": catalog_test})
 row = system_check.check_models(ctx)
 items = {i["id"]: i for i in row["items"]}
-check("the System check finds a working route: groq answered", row["status"] == "warn" and ctx.shared["answered_by"] == "groq",
+check("the System check finds a working route: nvidia-pro answered", row["status"] == "warn" and ctx.shared["answered_by"] == "nvidia-pro",
       (row["status"], row["detail"]))
 check("it names each dead provider with the reason in plain words",
-      "out of credit" in items["openrouter"]["detail"] and "key rejected" in items["gemini"]["detail"]
-      and "key rejected" in items["mistral"]["detail"], items)
+      "out of credit" in items["nvidia"]["detail"] and "key rejected" in items["nvidia-nemotron"]["detail"]
+      and "key rejected" in items["9router"]["detail"], items)
 check("each dead provider gets a safe 'Switch off' fix",
-      all(items[p]["fix"]["action"] == "provider_off" and items[p]["fix"]["args"] == {"id": p} for p in ("openrouter", "gemini", "mistral")))
+      all(items[p]["fix"]["action"] == "provider_off" and items[p]["fix"]["args"] == {"id": p} for p in ("nvidia", "nvidia-nemotron", "9router")))
 check("a paid key is only checked for presence (no money spent)",
-      items["deepseek-4.1"]["status"] == "skip" and "paid" in items["deepseek-4.1"]["detail"], items.get("deepseek-4.1"))
+      items["deepseek"]["status"] == "skip" and "paid" in items["deepseek"]["detail"], items.get("deepseek"))
 check("the row's fix switches all the dead ones off at once",
-      row["fix"]["action"] == "provider_off" and sorted(row["fix"]["args"]["ids"]) == ["gemini", "mistral", "openrouter"], row["fix"])
-check("the Connections cards show the same test results", providers_catalog._TESTS["groq"]["ok"]
-      and not providers_catalog._TESTS["mistral"]["ok"])
+      row["fix"]["action"] == "provider_off" and sorted(row["fix"]["args"]["ids"]) == ["9router", "nvidia", "nvidia-nemotron"], row["fix"])
+check("the Connections cards show the same test results", providers_catalog._TESTS["nvidia-pro"]["ok"]
+      and not providers_catalog._TESTS["9router"]["ok"])
 env_file = DATA / ".env"
 done = system_check.apply_fix(STATE, row["fix"]["action"], row["fix"]["args"],
                               write_env=lambda updates: peer_link.write_env(env_file, updates))
 check("the safe fix switched them off (saved, and live at once)",
-      done["ok"] and set(os.environ["LOKI_DISABLED_PROVIDERS"].split(",")) == {"gemini", "mistral", "openrouter"}
+      done["ok"] and set(os.environ["LOKI_DISABLED_PROVIDERS"].split(",")) == {"nvidia-nemotron", "9router", "nvidia"}
       and "LOKI_DISABLED_PROVIDERS" in env_file.read_text(), (done, os.environ.get("LOKI_DISABLED_PROVIDERS")))
 loki._SMART_FAILED.clear()
-check("routing no longer tries them: smart now picks groq first", loki.active_model_name() == "groq", loki.active_model_name())
+check("routing no longer tries them: smart now picks nvidia-pro first", loki.active_model_name() == "nvidia-pro", loki.active_model_name())
 row2 = system_check.check_models(system_check.Context(loki, STATE, deps={"provider_test": catalog_test}))
 check("a re-check is green and lists what is switched off", row2["status"] == "ok" and "Switched off" in row2["detail"],
       (row2["status"], row2["detail"]))
@@ -573,23 +574,23 @@ sys.path.insert(0, str(REPO / "tests"))
 from fake_ollama import FakeOllama  # noqa: E402
 
 fake_server = FakeOllama(models=["qwen3.5:9b"], port=0).start()
-saved_groq = (loki.MODELS["groq"].base_url, loki.MODELS["groq"].model)
+saved_pro = (loki.MODELS["nvidia-pro"].base_url, loki.MODELS["nvidia-pro"].model)
 saved_ready = set(READY)
-loki.MODELS["groq"].base_url = "http://127.0.0.1:%d/v1" % fake_server.server.server_address[1]
-loki.MODELS["groq"].model = "qwen3.5:9b"
+loki.MODELS["nvidia-pro"].base_url = "http://127.0.0.1:%d/v1" % fake_server.server.server_address[1]
+loki.MODELS["nvidia-pro"].model = "qwen3.5:9b"
 READY.clear()
-READY.add("groq")
+READY.add("nvidia-pro")
 row = system_check.check_models(system_check.Context(loki, STATE))      # the real provider test, real sockets
 check("the real provider test reaches an OpenAI-compatible server and reports the latency",
-      row["status"] == "ok" and row["data"]["answered"] == "groq" and "ms" in row["detail"]
+      row["status"] == "ok" and row["data"]["answered"] == "nvidia-pro" and "ms" in row["detail"]
       # providers_catalog.test sends one tiny request ("Say OK", max_tokens 8) - it was 1 token
       and any(r.get("max_tokens") == 8 for r in fake_server.chat_requests()), (row["status"], row["detail"]))
-loki.MODELS["groq"].model = "not-pulled:1b"
+loki.MODELS["nvidia-pro"].model = "not-pulled:1b"
 row = system_check.check_models(system_check.Context(loki, STATE))
 check("a model the server does not have is named as such, with what to do",
       row["status"] == "fail" and "model not found" in row["items"][0]["detail"]
       and "Pick another model" in row["items"][0]["fix"]["text"], row)
-loki.MODELS["groq"].base_url, loki.MODELS["groq"].model = saved_groq
+loki.MODELS["nvidia-pro"].base_url, loki.MODELS["nvidia-pro"].model = saved_pro
 READY.update(saved_ready)
 fake_server.stop()
 providers_catalog._TESTS.clear()

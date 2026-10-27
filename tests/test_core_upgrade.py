@@ -546,7 +546,7 @@ async def _noop(*a, **k):
 SAVED = (loki.make_client, loki.refresh_mcp_tools, loki.provider_configured, loki.model_name, loki.MODEL_RETRIES,
          loki.local_ready, loki.online, loki.PREFER, loki.save_history, loki.EXPERIENCE_ENABLED)
 loki.refresh_mcp_tools = _noop
-loki.provider_configured = lambda n: n == "openrouter"
+loki.provider_configured = lambda n: n == "nvidia-pro"
 loki.model_name = "smart"
 loki.MODEL_RETRIES = 0
 loki.local_ready = lambda: False
@@ -622,7 +622,7 @@ saved_check = loki.check_script
 saved_cfg = (loki.make_client, loki.refresh_mcp_tools, loki.provider_configured, loki.model_name, loki.MODEL_RETRIES,
              loki.local_ready, loki.online, loki.PREFER)
 loki.refresh_mcp_tools = _noop
-loki.provider_configured = lambda n: n == "openrouter"
+loki.provider_configured = lambda n: n == "nvidia-pro"
 loki.model_name = "smart"
 loki.MODEL_RETRIES = 0
 loki.local_ready = lambda: False
@@ -669,7 +669,7 @@ saved_pc = loki.provider_configured
 loki.provider_configured = lambda n: False
 check("no online provider set up -> the improve job runs on 'smart' (the local model), not a model that "
       "can only answer BLOCKED", loki.improve_model() == "smart")
-loki.provider_configured = lambda n: n == "groq"
+loki.provider_configured = lambda n: n == "nvidia"
 check("a free online provider set up -> 'online'", loki.improve_model() == "online")
 loki.provider_configured = saved_pc
 
@@ -822,7 +822,7 @@ os.environ.pop("LOKI_EVOLVE")
 saved = (loki.make_client, loki.refresh_mcp_tools, loki.provider_configured, loki.model_name, loki.MODEL_RETRIES,
          loki.local_ready, loki.online, loki.PREFER, loki.save_history, dict(loki.LOCAL_TOOLS))
 loki.refresh_mcp_tools = _noop
-loki.provider_configured = lambda n: n == "openrouter"
+loki.provider_configured = lambda n: n == "nvidia-pro"
 loki.model_name = "smart"
 loki.MODEL_RETRIES = 0
 loki.local_ready = lambda: False

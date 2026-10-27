@@ -2,7 +2,7 @@
 //   1. What LOKI is + pick a language (and bigger text / high contrast right there)
 //   2. How LOKI thinks (session 30): "Run AI on this computer" (hardware detected, a quick model
 //      that fits, Ollama installed silently, downloaded IN THE BACKGROUND with progress that outlives
-//      the tour), "Connect an account" (OpenRouter one click; NVIDIA NIM - DeepSeek V4.1 Flash, LOKI's
+//      the tour), "Connect an account" (NVIDIA NIM - DeepSeek V4.1 Flash, LOKI's
 //      main driver; Groq / Gemini removed 2026-10-27 for their daily caps) or "Both" (chat online while the local model downloads)
 //   3. What should LOKI help with (saved; the gallery and the examples follow it)
 //   4. Try 3 examples, each one click
@@ -21,7 +21,6 @@
   ];
   const CLOUD = [
     // [id, name, how, sign-up page, key page, key hint, note key, note]
-    ["openrouter", "OpenRouter", "oauth", "https://openrouter.ai", "https://openrouter.ai/keys", "sk-or-"],
     ["nvidia", "NVIDIA NIM", "key", "https://build.nvidia.com", "https://build.nvidia.com/settings/api-keys", "nvapi-",
       "ob.nvidia_why", "DeepSeek V4.1 Flash, free - LOKI's main driver: fast, smart, calls tools."],
   ];
@@ -156,7 +155,7 @@
   // ------------------------------------------------------------ 2. a model (session 30: three ways)
   // "Run AI on this computer" (free, private: a model that fits, Ollama installed silently, the
   // download in the BACKGROUND - LokiBgSetup below keeps going after the tour closes), "Connect an
-  // account" (OpenRouter one click, an NVIDIA NIM key), or "Both" (chat online at once
+  // account" (an NVIDIA NIM key), or "Both" (chat online at once
   // while the local model downloads). Nothing blocks; every step can be skipped.
   function working(setup) {
     const act = (setup && setup.active) || {};
@@ -214,7 +213,7 @@
         : tr("ob.way_local_nofit", "No local model fits this computer well");
     const WAYS = [
       ["local", "ob.way_local", "Run AI on this computer", "ob.way_local_sub", "Free and private. Works offline once it is downloaded.", localWhat],
-      ["cloud", "ob.way_cloud", "Connect an account", "ob.way_cloud_sub", "Fast on any computer. Free: NVIDIA (DeepSeek V4.1 Flash, Nemotron). Paid: OpenRouter.", ""],
+      ["cloud", "ob.way_cloud", "Connect an account", "ob.way_cloud_sub", "Fast on any computer. Free: NVIDIA (DeepSeek V4.1 Flash, GLM-5.3, Nemotron).", ""],
       ["both", "ob.way_both", "Both", "ob.way_both_sub", "Chat online right away while the local model downloads.", ""],
     ];
     const show = (way) => {
@@ -361,33 +360,7 @@
       if (extraKey) row.append(keyed(node("p", "note"), extraKey, extraEn));
       const out = node("p", "u-say");
       out.setAttribute("aria-live", "polite");
-      if (how === "oauth") {
-        row.append(keyed(node("p", "note"), "ob.or_how", "Sign in (or make a free account) in your browser and approve LOKI - no key to copy."));
-        const b = node("button", "send");
-        b.type = "button";
-        b.textContent = tr("ob.signin", "Sign in with {name}", { name });
-        b.addEventListener("click", async () => {
-          b.disabled = true;
-          say(out, tr("ob.opening", "Opening {name} in your browser…", { name }));
-          const r = await call("/signin/openrouter", { mode: "browser" });
-          if (!r.ok) { b.disabled = false; say(out, tr("ob.signin_failed", "Could not start the sign-in: {error}. Check the internet connection and try again, or use another option.", { error: r.error || "?" }), "bad"); return; }
-          say(out, tr("ob.approve", "Approve LOKI in the browser tab that opened. Waiting…"));
-          const started = Date.now();
-          const timer = setInterval(async () => {
-            const s = await call("/signin/status?state=" + encodeURIComponent(r.state));
-            const late = Date.now() - started > 600000;
-            if (!s || !s.ok || late) { clearInterval(timer); b.disabled = false; say(out, tr("ob.expired", "This sign-in expired. Press the button to try again."), "bad"); return; }
-            if (s.done) {
-              clearInterval(timer);
-              b.disabled = false;
-              const res = s.result || {};
-              if (res.ok) connected(out, status, name, id);
-              else say(out, tr("ob.signin_failed", "Could not sign in: {error}. Try again, or use another option.", { error: res.error || "?" }), "bad");
-            }
-          }, 2000);
-        });
-        row.append(b);
-      } else {
+      {   // a key to paste (OpenRouter's browser sign-in was removed 2026-10-27 with OpenRouter)
         const steps = node("ol", "u-howto");
         const s1 = node("li");
         const link = node("button", "link u-link", tr("ob.open_signup", "Open {name} (free sign-up)", { name }));

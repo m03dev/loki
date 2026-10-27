@@ -76,6 +76,9 @@ def _suite_env() -> dict:
     # "gemini quota spent" never steers another's routing; and no background probes.
     env["LOKI_HEALTH_FILE"] = str(slot / "provider_health.json")
     env["LOKI_HEALTH_PROBES"] = "0"
+    # ... and its own NVIDIA pacing window (engine/ratelimit.py): fixtures run fake turns on nvidia-* routes since the
+    # lean provider set (2026-10-27); a shared window made suites wait on each other and wrote the owner's real file.
+    env["LOKI_RATE_FILE_DIR"] = str(slot / "ratelimit")
     root =(os.environ.get("TEMP") or "") if os.name == "nt" else "/tmp"
     if not root or not os.path.isdir(root) or not os.access(root, os.W_OK):
         root = tempfile.gettempdir()

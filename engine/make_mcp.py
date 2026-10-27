@@ -79,11 +79,11 @@ TOOLS = [
     {"name": "make_3d",
      "description": "Make a 3D model (.glb and .obj) from a description (prompt=; LOKI draws it first) or from a "
                     "picture in this folder (image=). Saved in folder= (default models). It opens in LOKI's Forge to "
-                    "look at, sculpt and export. backend: auto (the best available: Pixal3D on the owner's ComfyUI "
-                    "gives a fully textured model) | pixal3d | trellis2 | triposr | online | lift.",
+                    "look at, sculpt and export. backend: auto (the best available: TRELLIS.2 on the owner's ComfyUI "
+                    "gives a fully textured model, Pixal3D is the second try) | trellis2 | pixal3d | triposr | online | lift.",
      "inputSchema": {"type": "object", "properties": {
          "prompt": {"type": "string"}, "image": {"type": "string"}, "folder": {"type": "string"},
-         "backend": {"type": "string", "enum": ["auto", "pixal3d", "trellis2", "triposr", "online", "lift"]}}}},
+         "backend": {"type": "string", "enum": ["auto", "trellis2", "pixal3d", "triposr", "online", "lift"]}}}},
     {"name": "make_video",
      "description": "Make a short video clip (a few seconds) from a description, or animate a picture in this folder "
                     "(image=). Saved in videos/.",

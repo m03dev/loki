@@ -1,9 +1,11 @@
-"""No free models with a daily cap (owner 2026-10-27: "get rid of free models with daily limits we dont need them";
-"nemotron is free in nvidia"). On the PC they ran out every day (OpenRouter free-models-per-day 429, Gemini quota,
+"""The lean provider set (owner 2026-10-27: "get rid of free models with daily limits we dont need them"; "nemotron is
+free in nvidia"; "its these providers that are doing the same thing we dont need the reduncency ... if those get capped
+in a day within a few hours we dont need them"). On the PC they ran out every day (OpenRouter free-models-per-day 429, Gemini quota,
 Groq TPM) and every job failed over through them first. Checked here, no network:
-  - OpenRouter :free, Gemini, Groq, Codestral, Cloudflare, ModelScope, SambaNova and Cerebras are not routes any more
-    (MODELS, Smart / Online / Max / Fast orders, Connections catalog, Studio, onboarding)
-  - Nemotron runs on the NVIDIA key (nvidia-nemotron) and leads Fast mode; OpenRouter's default is not a :free model
+  - only the lean set is left: NVIDIA (DeepSeek / GLM-5.3 / Nemotron), Claude Code, Codex, local servers, 9Router, paid
+    OpenAI / Anthropic / DeepSeek - none of the ~40 removed ones in MODELS, any order, Connections, Studio or onboarding
+  - OpenRouter's browser sign-in is gone with it (route, callback, buttons)
+  - Nemotron runs on the NVIDIA key (nvidia-nemotron) and leads Fast mode
   - an old setting that names a removed provider goes to its replacement instead of failing
   - nim_models picks the Nemotron the NVIDIA key really serves (listed name, else any chat Nemotron)
 
@@ -27,20 +29,35 @@ import providers_catalog  # noqa: E402
 FAILED = []
 
 
-def check(name, ok):
-    print(("PASS " if ok else "FAIL ") + name)
+def check(name, ok, detail=""):
+    print(("PASS " if ok else "FAIL ") + name + ("" if ok or not detail else "  <- %s" % (detail,)))
     if not ok:
         FAILED.append(name)
 
 
-GONE = ("nemotron-free", "gemini", "groq", "codestral", "cloudflare", "modelscope", "sambanova", "cerebras")
+GONE = ("nemotron-free", "gemini", "groq", "codestral", "cloudflare", "modelscope", "sambanova", "cerebras", "openrouter",
+        "deepseek-4.1", "gpt6-luna", "mistral", "together", "vireonix", "unorouter", "nous", "omniroute", "aion", "cohere",
+        "zai", "kilocode", "llm7", "ollama-cloud", "ovh", "siliconflow", "opencode-zen", "vercel", "nebius", "scaleway",
+        "hyperbolic", "novita", "fireworks", "dashscope", "deepinfra", "chutes", "baseten", "inference-net", "ai21",
+        "upstage", "kyojin")
+LEAN = {"nvidia", "nvidia-pro", "nvidia-nemotron", "claude-code", "codex", "9router", "deepseek", "gpt", "claude",
+        "colibri", "lmstudio", "llamacpp", "mlx", "vllm", "jan", "huggingface", "opencode", "loki-tuned",
+        "smart", "online", "max", "fast"}
 
-check("no daily-capped free provider in MODELS", not [p for p in GONE if p in loki.MODELS])
+check("no removed provider in MODELS", not [p for p in GONE if p in loki.MODELS])
+check("MODELS is only the lean set (+ local Ollama variants)",
+      not [p for p in loki.MODELS if p not in LEAN and not p.startswith("local")], sorted(set(loki.MODELS) - LEAN))
 for order in ("SMART_ORDER", "ONLINE_ORDER", "MAX_ORDER", "FAST_ORDER"):
     check("none in %s" % order, not [p for p in GONE if p in getattr(loki, order)])
 check("Connections lists none of them", not [p["id"] for p in providers_catalog.CATALOG if p["id"] in GONE])
-check("OpenRouter's default model is not a :free one", ":free" not in loki.MODELS["openrouter"].model)
-check("OpenRouter is a paid account in Connections", providers_catalog.get("openrouter")["group"] == "paid")
+check("every one maps to a replacement", all(loki.current_provider_name(p) in loki.MODELS for p in GONE))
+import portal_api  # noqa: E402
+import signin  # noqa: E402
+check("OpenRouter's sign-in is gone (engine)", not hasattr(signin, "openrouter_start")
+      and "/signin/openrouter" not in (REPO / "engine" / "portal_api.py").read_text(encoding="utf-8")
+      and "/oauth/openrouter" not in (REPO / "engine" / "loki_bridge.py").read_text(encoding="utf-8"))
+check("OpenRouter's sign-in is gone (window)", "signInOpenRouter" not in (REPO / "app" / "ui" / "settings.js").read_text(encoding="utf-8")
+      and "/signin/openrouter" not in (REPO / "app" / "ui" / "onboarding.js").read_text(encoding="utf-8"))
 
 nem = loki.MODELS.get("nvidia-nemotron")
 check("Nemotron is a route on the NVIDIA key", nem is not None and "integrate.api.nvidia.com" in nem.base_url
@@ -52,6 +69,8 @@ check("Connections knows the NVIDIA Nemotron route", (providers_catalog.get("nvi
 # old settings
 check("nemotron-free -> nvidia-nemotron", loki.current_provider_name("nemotron-free") == "nvidia-nemotron")
 check("gemini -> smart", loki.current_provider_name("gemini") == "smart")
+check("openrouter / deepseek-4.1 -> nvidia (the same DeepSeek, free)", loki.current_provider_name("openrouter") == "nvidia"
+      and loki.current_provider_name("deepseek-4.1") == "nvidia")
 check("a real provider is unchanged", loki.current_provider_name("nvidia") == "nvidia")
 saved = loki.model_name
 try:
@@ -76,12 +95,13 @@ check("DeepSeek resolving is unchanged", nim_models.resolve("deepseek-ai/deepsee
 try:
     import studio_models  # noqa: E402
     ids_ = [p.id for p in studio_models.providers({"NVIDIA_API_KEY": "nvapi-x"})]
-    check("Studio offers none of them, and Nemotron on NVIDIA", not [p for p in GONE if p in ids_] and "nvidia-nemotron" in ids_)
+    check("Studio offers none of them, and Nemotron on NVIDIA", not [p for p in GONE if p in ids_] and "nvidia-nemotron" in ids_, ids_)
 except ImportError as exc:   # studio deps missing in a bare checkout
     print("SKIP studio_models: %s" % exc)
 
 onb = (REPO / "app" / "ui" / "onboarding.js").read_text(encoding="utf-8")
-check("onboarding offers no Groq / Gemini key", '["groq"' not in onb and '["gemini"' not in onb)
+check("onboarding offers only NVIDIA", '["groq"' not in onb and '["gemini"' not in onb and '["openrouter"' not in onb
+      and '["nvidia"' in onb)
 
 print("%d failed" % len(FAILED) if FAILED else "all passed")
 sys.exit(1 if FAILED else 0)

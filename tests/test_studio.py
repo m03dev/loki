@@ -151,7 +151,7 @@ section("1. the rate limiter (NVIDIA NIM: ~40 requests/min)")
 import ratelimit  # noqa: E402
 
 check("NVIDIA is paced at 36/min by default (40 minus headroom)", ratelimit.rpm("nvidia") == 36, ratelimit.rpm("nvidia"))
-check("other providers are not paced", ratelimit.rpm("gemini") == 0)
+check("other providers are not paced", ratelimit.rpm("deepseek") == 0 and ratelimit.rpm("9router") == 0)
 os.environ["LOKI_NVIDIA_RPM"] = "3"
 check("LOKI_NVIDIA_RPM overrides the cap", ratelimit.rpm("nvidia") == 3)
 ratelimit.reset()
@@ -189,7 +189,8 @@ check("NVIDIA's default model is DeepSeek V4.1 Flash", loki.MODELS["nvidia"].mod
 check("NVIDIA's endpoint is integrate.api.nvidia.com/v1", loki.MODELS["nvidia"].base_url == "https://integrate.api.nvidia.com/v1")
 check("the main driver leads the smart AND online order", loki.SMART_ORDER[0] == "nvidia" and loki.ONLINE_ORDER[0] == "nvidia",
       (loki.SMART_ORDER[:3], loki.ONLINE_ORDER[:3]))
-check("every other provider is still there as the fallback", {"openrouter", "gemini", "groq", "local"} <= set(loki.SMART_ORDER))
+check("every other provider is still there as the fallback", {"nvidia-nemotron", "nvidia-pro", "9router", "local"} <= set(loki.SMART_ORDER),
+      loki.SMART_ORDER)
 check("the routing layer counts it as able to call tools (native) and a 1M context",
       routing.abilities(loki, "nvidia")["tools"] == "native" and routing.abilities(loki, "nvidia")["context"] >= 1_000_000,
       routing.abilities(loki, "nvidia"))
@@ -257,13 +258,13 @@ check("Settings > General has the main-driver and thinking switches",
 
 # ================================================================= 3. the agent loop on a fake NVIDIA
 section("3. the real agent loop against a fake NVIDIA NIM")
-for pid in ("nvidia", "openrouter"):
-    loki.MODELS[pid] = loki.ModelConfig(base_url=cloud.url(pid), api_key="nvapi-fake" if pid == "nvidia" else "key-or",
-                                        model="deepseek-ai/deepseek-v4.1-flash" if pid == "nvidia" else "deepseek/deepseek-v4.1-flash")
+for pid in ("nvidia", "9router"):
+    loki.MODELS[pid] = loki.ModelConfig(base_url=cloud.url(pid), api_key="nvapi-fake" if pid == "nvidia" else "key-9r",
+                                        model="deepseek-ai/deepseek-v4.1-flash" if pid == "nvidia" else "loki")
 saved_orders = (loki.SMART_ORDER, loki.ONLINE_ORDER, loki.provider_configured)
-loki.SMART_ORDER = ("nvidia", "openrouter")
-loki.ONLINE_ORDER = ("nvidia", "openrouter")
-loki.provider_configured = lambda n: n in ("nvidia", "openrouter")
+loki.SMART_ORDER = ("nvidia", "9router")
+loki.ONLINE_ORDER = ("nvidia", "9router")
+loki.provider_configured = lambda n: n in ("nvidia", "9router")
 loki.PREFER = "cloud"
 loki.model_name = "smart"
 loki.loki_progress_callback = lambda event, text: PROGRESS.append((event, text))
@@ -332,7 +333,7 @@ started = time.monotonic()
 answer = run_turn("read notes.txt three times")
 elapsed = time.monotonic() - started
 check("4 requests, a 3-per-second server cap, paced at 2: all answered on NVIDIA, no 429, no failover",
-      "three times" in answer and not cloud.bodies("openrouter") and not loki.ROUTE_TRACE, (answer, loki.ROUTE_TRACE))
+      "three times" in answer and not cloud.bodies("9router") and not loki.ROUTE_TRACE, (answer, loki.ROUTE_TRACE))
 check("...because LOKI queued them (it waited, and said so)", elapsed >= 0.8 and any("requests a minute" in t for _e, t in PROGRESS),
       (elapsed, [t for _e, t in PROGRESS][-6:], dict(loki.ROUTE_TRACE)))
 cloud.cap = {}
@@ -341,16 +342,16 @@ os.environ.pop("LOKI_NVIDIA_RPM")
 ratelimit.reset()
 
 cloud.script = {"nvidia": [ok_tool("read_file", {"filename": "notes.txt"}), err(429, "Too Many Requests", {"Retry-After": "30"})],
-                "openrouter": [ok_text("DONE: finished on openrouter")]}
+                "9router": [ok_text("DONE: finished on 9router")]}
 answer = run_turn("read notes.txt")
 check("a 429 although LOKI paces itself (the key is busy elsewhere): fail over at once, the next provider finishes",
-      "finished on openrouter" in answer and [n for n, _ in cloud.calls].count("nvidia") == 2,
+      "finished on 9router" in answer and [n for n, _ in cloud.calls].count("nvidia") == 2,
       (answer, [n for n, _ in cloud.calls]))
 check("provider health remembers NVIDIA as rate limited", provider_health.registry().get("nvidia").get("state") == "rate_limited",
       provider_health.registry().get("nvidia"))
 check("...and the pacer holds NVIDIA's next requests back", ratelimit.wait_s("nvidia") > 5, ratelimit.wait_s("nvidia"))
 check("...and the main driver steps aside until it recovers", not loki.main_driver_ready({})[0], loki.main_driver_ready({}))
-got = cloud.bodies("openrouter")
+got = cloud.bodies("9router")
 check("the fallback got the whole conversation (the tool result too)", got and any(m.get("role") == "tool" for m in got[0]["messages"]))
 ratelimit.reset()
 split = loki.split_reasoning("plan the edit</think>The answer")
@@ -663,8 +664,8 @@ import studio_core  # noqa: E402
 
 DRIVER = studio_models.Provider("nvidia", "DeepSeek V4.1 Flash on NVIDIA NIM", cloud.url("studio-nvidia"), studio_models.DRIVER_MODEL,
                                 "NVIDIA_API_KEY", "nvapi-fake", extra=studio_models.thinking_fields())
-FALLBACK = studio_models.Provider("openrouter", "DeepSeek on OpenRouter", cloud.url("studio-or"), "deepseek/deepseek-v4.1-flash",
-                                  "OPENROUTER_API_KEY", "or-fake")
+FALLBACK = studio_models.Provider("nvidia-nemotron", "Nemotron on NVIDIA NIM", cloud.url("studio-or"), "nvidia/nemotron-3.5-lightning",
+                                  "NVIDIA_API_KEY", "nvapi-fake")
 CHAIN = [DRIVER, FALLBACK]
 
 
@@ -810,12 +811,15 @@ check("history is kept: a restarted Studio lists both sessions with their events
 saved_env = {k: os.environ.pop(k) for k in list(os.environ) if k.endswith("_API_KEY")}
 st = studio_models.driver_status(env={"LOKI_STUDIO_LOCAL_MODEL": "x"})
 check("no NVIDIA key: Studio says exactly how to get one", "build.nvidia.com/settings/api-keys" in st["how"] and "nvapi-" in st["how"], st)
-st = studio_models.driver_status(env={"GEMINI_API_KEY": "g"})
-check("...and uses the next best free model meanwhile", st["provider"] == "gemini" and "next best free model" in st["text"], st)
+st = studio_models.driver_status(env={"LMSTUDIO_BASE_URL": cloud.url("studio-lms")})
+check("...and uses the next best free model meanwhile (a local one: no daily-capped free tiers)",
+      st["provider"] == "lmstudio" and "next best free model" in st["text"] and st["how"], st)
 st = studio_models.driver_status(env={"NVIDIA_API_KEY": "nvapi-x"})
 check("with the key: 'Driving: DeepSeek V4.1 Flash on NVIDIA NIM'", st["provider"] == "nvidia" and "Driving" in st["text"] and not st["how"], st)
-check("Studio's order: NVIDIA first, then OpenRouter's DeepSeek, then other free ones",
-      [p.id for p in studio_models.providers({})][:3] == ["nvidia", "openrouter", "opencode-zen"])
+studio_ids = [p.id for p in studio_models.providers({})]
+check("Studio's order: NVIDIA first, then Nemotron on the same key, then the local models (none of the removed providers)",
+      studio_ids[:3] == ["nvidia", "nvidia-nemotron", "local"]
+      and not {"openrouter", "opencode-zen", "gemini", "groq", "cerebras"} & set(studio_ids), studio_ids)
 try:
     studio_models.chat([{"role": "user", "content": "hi"}], None, [])
     check("no model at all: a clear error", False)
@@ -824,7 +828,7 @@ except studio_models.ModelError as exc:
 os.environ.update(saved_env)
 cloud.script = {"studio-nvidia": [err(401, "Authentication failed")], "studio-or": [ok_text("fallback answered")]}
 prov, msg, _r = studio_models.chat([{"role": "user", "content": "hi"}], None, CHAIN, sleep=lambda s: None)
-check("Studio fails over from a rejected NVIDIA key to the next model", prov.id == "openrouter" and msg["content"] == "fallback answered", (prov.id, msg))
+check("Studio fails over from a rejected NVIDIA key to the next model", prov.id == "nvidia-nemotron" and msg["content"] == "fallback answered", (prov.id, msg))
 
 # ================================================================= 6. Studio's hands on LOKI
 section("6. Studio's hands on LOKI: logs, start, rollback, the pinned copy")

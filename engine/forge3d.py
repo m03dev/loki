@@ -27,8 +27,8 @@ Backends, best first ("auto"):
 
   hunyuan  Hunyuan3D 2.1 (engine/forge_hunyuan.py) - ONLY when the owner installed it on their own machine and
            accepted its licence (Tencent community licence: not open source, EU/UK/KR excluded, its output must not
-           train other models - the sidecar says "no_training"). None of it ships with LOKI; "auto" uses it first
-           when it is ready, because the owner asked for it (2026-10-26).
+           train other models - the sidecar says "no_training"). None of it ships with LOKI. Since 2026-10-27 "auto"
+           never picks it (the owner: "tencent has been making shit models") - backend="hunyuan" still runs it.
 
 No other model with a non-commercial or region-restricted licence is used (no Stable Fast 3D).
 Standard library + Pillow (engine/requirements.txt). Jobs run in a thread; start_job()/job() for the API.
@@ -53,7 +53,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNNERS = Path(__file__).resolve().parent / "runners"
 BACKENDS = ("auto", "hunyuan", "pixal3d", "trellis2", "triposr", "online", "lift")
-COMFY_BACKENDS = ("pixal3d", "trellis2")
+# TRELLIS.2 (Microsoft, MIT) first, then Pixal3D (TencentARC) - owner 2026-10-27: "trellis might be better then tencent
+# tencent has been making shit models". Hunyuan3D (Tencent) is never picked by "auto" any more: name it to use it.
+COMFY_BACKENDS = ("trellis2", "pixal3d")
 MODEL_EXTS = (".glb", ".obj", ".png", ".ptex", ".level")   # what the file route serves from models/ (.level: Forge's Level workspace)
 SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
@@ -173,8 +175,9 @@ def plan(backend: str = "auto") -> list:
     if backend not in BACKENDS:
         raise ForgeError("unknown backend %r (%s)" % (backend, ", ".join(BACKENDS)))
     if backend == "auto":
-        order = ["hunyuan"] if hunyuan_ready() else []            # owner-installed only (see the docstring)
-        order += [b for b in COMFY_BACKENDS if comfy_ready(b)][:1]   # the other ComfyUI mode would fail the same way
+        # TRELLIS.2 first; Pixal3D is the second ComfyUI try (the likeness check retries with it and keeps the better
+        # model). Hunyuan only when named (see the docstring).
+        order = [b for b in COMFY_BACKENDS if comfy_ready(b)]
         order += [b for b, ok in (("triposr", triposr_ready()), ("online", online_ready())) if ok]
     else:
         order = [backend] if backend != "lift" else []

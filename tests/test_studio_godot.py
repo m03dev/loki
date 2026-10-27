@@ -677,8 +677,10 @@ argv = seen_argv.get("argv", [])
 cfg_mcp = json.loads((g3.root / "mcp.json").read_text()) if (g3.root / "mcp.json").exists() else {}
 check("...started with Studio's MCP server for the project and acceptEdits (Plan -> plan)", "--mcp-config" in argv and "acceptEdits" in argv
       and "studio_mcp.py" in json.dumps(cfg_mcp) and str(GP.resolve()) in json.dumps(cfg_mcp), argv)
-check("the model list offers Auto, DeepSeek on NVIDIA, LM Studio, Ollama, Claude Code and Codex",
-      {"auto", "nvidia", "openrouter", "local", "lmstudio", "claude-code", "codex"} <= {m["id"] for m in studio_models.choices({})})
+model_ids = {m["id"] for m in studio_models.choices({})}
+check("the model list offers Auto, DeepSeek and Nemotron on NVIDIA, LM Studio, Ollama, Claude Code and Codex (no removed ones)",
+      {"auto", "nvidia", "nvidia-nemotron", "local", "lmstudio", "claude-code", "codex"} <= model_ids
+      and not {"openrouter", "gemini", "groq"} & model_ids, model_ids)
 
 # ================================================================= 9. real Godot
 section("9. REAL Godot: the plugin in a headless editor, the game bridge in a running game")

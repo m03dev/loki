@@ -117,8 +117,8 @@ check("model: the turnaround's FRONT view goes in; a 'lift' blob fails its check
       and calls[-1][1]["image"].endswith("front.png") and not r["ok"]
       and any("lift" in c["detail"] for c in r["checks"]), (calls[-1], r))
 r = ap.advance(WS, a["id"], fake)
-check("... the retry switches backend (auto -> pixal3d) and passes", r["ok"] and calls[-1][1]["backend"] == "pixal3d", r)
-check("... 'backend=pixal3d fixed it' is remembered", any("backend=pixal3d" in x["text"] for x in ap.recall("model", "creature")))
+check("... the retry switches backend (auto -> TRELLIS.2) and passes", r["ok"] and calls[-1][1]["backend"] == "trellis2", r)
+check("... 'backend=trellis2 fixed it' is remembered", any("backend=trellis2" in x["text"] for x in ap.recall("model", "creature")))
 script["finish_bad"] = 1
 r = ap.advance(WS, a["id"], fake)
 check("finish: Blender polish with retopo for a creature (8000 quads); 60% quads fails", calls[-1][0] == "blender"
@@ -144,7 +144,7 @@ check("the stage brief carries the upstream hand-off, the lessons and the open n
       "From turnaround" in brief and "front.png" in brief and n["id"] in brief and "Lessons" in brief, brief)
 r = ap.advance(WS, a["id"], fake)
 check("a retaken model is NOT made the same way again: another backend and a new seed; the note is addressed",
-      r["ok"] and calls[-1][1]["backend"] != "pixal3d" and calls[-1][1].get("seed") and not ap.notes(WS, a["id"], "model", open_only=True), calls[-1])
+      r["ok"] and calls[-1][1]["backend"] != "trellis2" and calls[-1][1].get("seed") and not ap.notes(WS, a["id"], "model", open_only=True), calls[-1])
 # the same files coming back after a retake are refused
 mrec = ap.resolve(WS, ap.ref(a["id"], "model"))
 ap.note(WS, a["id"], "model", "still wrong", retake=True)
@@ -206,9 +206,9 @@ check("... a judge that could not look passes but says so in the record", ok and
 check("the model stage asks make_3d to judge itself", ap._args_model(
     {"brief": "x", "kind": "creature"}, {"turnaround": {"report": {"views": {"front": "t/front.png"}}, "outputs_rel": []}},
     {})[1].get("judge") is True)
-mac = (("auto", "online", "triposr", "pixal3d", "trellis2"))
+mac = (("auto", "online", "triposr", "trellis2", "pixal3d"))
 check("on the Mac a failed model retries online first (no NVIDIA card for ComfyUI)",
-      "sys.platform == \"darwin\"" in (REPO / "engine" / "asset_pipeline.py").read_text() and ap.BACKENDS in (mac, ("auto", "pixal3d", "trellis2", "online", "triposr")))
+      "sys.platform == \"darwin\"" in (REPO / "engine" / "asset_pipeline.py").read_text() and ap.BACKENDS in (mac, ("auto", "trellis2", "pixal3d", "online", "triposr")))
 
 # wiring
 import make_mcp  # noqa: E402

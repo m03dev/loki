@@ -973,33 +973,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
             pass
         return True
 
-    def _oauth_callback(self, route: str) -> bool:
-        """GET /oauth/openrouter/callback: the browser comes straight back from openrouter.ai.
-        No bearer token here; signin.openrouter_finish only completes a flow this engine
-        started (its random `state`), and the Host must be this machine's loopback."""
-        if route != "/oauth/openrouter/callback":
-            return False
-        import signin  # pylint: disable=import-outside-toplevel
-        import portal_api  # pylint: disable=import-outside-toplevel
-        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
-            self._send_json(403, {"ok": False, "error": "Host not allowed."})
-            return True
-        query = parse_qs(urlparse(self.path).query)
-        result = signin.openrouter_finish((query.get("state") or [""])[0], (query.get("code") or [""])[0],
-                                          lambda p, k: portal_api.connect(self.server.state.agent, p, k))
-        body = signin.callback_page(bool(result.get("ok")), result.get("message") or result.get("error", "")).encode()
-        try:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Referrer-Policy", "no-referrer")
-            self.end_headers()
-            self.wfile.write(body)
-        except (BrokenPipeError, ConnectionError, OSError):
-            pass
-        return True
-
     def do_GET(self) -> None:
         route = urlparse(self.path).path
         if route.startswith("/artifact/"):   # research round 3: a chat preview page, sandboxed (engine/assist_api.py)
@@ -1017,8 +990,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self._serve_creation(route):
             return
         if self._serve_app(route):   # LOKI Apps: a mini-app's files for its sandboxed frame
-            return
-        if self._oauth_callback(route):
             return
         if not self._authorized():
             return
@@ -2681,7 +2652,7 @@ def model_menu(agent: Any) -> dict[str, Any]:
             {"name": "online", "label": "Online only", "group": "auto", "ready": True,
              "blurb": "Like Smart, but never uses a model on this computer."},
             {"name": "max", "label": "Max (hard tasks)", "group": "auto", "ready": True,
-             "blurb": "The strongest model that is ready: your Claude Code / Codex plan first, then DeepSeek V4 Pro "
+             "blurb": "The strongest model that is ready: your Claude Code / Codex plan first, then GLM-5.3 "
                       "(free on NVIDIA, thinking on). Slower - for hard builds, debugging and planning.",
              "using": labels.get(resolved, resolved) if current == "max" else ""},
             {"name": "fast", "label": "Fast", "group": "auto", "ready": True,

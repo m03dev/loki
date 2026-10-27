@@ -158,7 +158,7 @@
  "ob.way_both": "Both",
  "ob.way_both_sub": "Chat online right away while the local model downloads.",
  "ob.way_cloud": "Connect an account",
- "ob.way_cloud_sub": "Fast on any computer. Free: NVIDIA (DeepSeek V4.1 Flash, Nemotron). Paid: OpenRouter.",
+ "ob.way_cloud_sub": "Fast on any computer. Free: NVIDIA (DeepSeek V4.1 Flash, GLM-5.3, Nemotron).",
  "ob.way_local": "Run AI on this computer",
  "ob.way_local_dl": "{model} · {size} GB download, in the background",
  "ob.way_local_have": "{model} is already downloaded",

@@ -25,6 +25,11 @@ def check(name, ok, detail=""):
     print("  %s %s%s" % ("PASS" if ok else "FAIL", name, ("  <- " + str(detail)[:240]) if (detail and not ok) else ""))
 
 
+def _work(ran):
+    """What a tick did besides the storage clean-up (which runs alongside other duties since 2026-10-27)."""
+    return [r for r in (ran or []) if r[0] != "storage"]
+
+
 def section(title):
     print("\n" + title)
 
@@ -106,7 +111,7 @@ pilot = autopilot.Autopilot(state=State(), data_dir=TMP / "ap", repo=FAKE_REPO, 
                             improve=lambda t: started.append(t) or "started job k1: ok")
 pilot.data["last"].update({"health": 9e18, "inbox": 9e18})
 ran = pilot.tick()
-check("the evolve duty starts the next step", ran and ran[0][0] == "evolve" and len(started) == 1, ran)
+check("the evolve duty starts the next step", _work(ran) and _work(ran)[0][0] == "evolve" and len(started) == 1, ran)
 check("and logs it for the Lab", any(e["duty"] == "evolve" for e in pilot.data["log"]))
 os.environ["LOKI_EVOLVE"] = "off"
 pilot.data["last"]["evolve"] = 0

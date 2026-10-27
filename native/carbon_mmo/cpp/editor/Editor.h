@@ -21,7 +21,7 @@ namespace cmmo::editor
 {
 struct EditorSettings
 {
-	std::string title = "Carbon MMO Editor";
+	std::string title = "Carbon Editor";
 	std::string contentDir = "content";   // levels/, models/, prefabs/
 	std::string exePath;
 };
@@ -46,6 +46,12 @@ public:
 	void Select( uint32_t id ) { m_selected = id; }
 	uint32_t Selected() const { return m_selected; }
 	bool DeleteSelected();
+	bool CopySelected();                 // the selection and its children
+	uint32_t Paste();                    // next to where it was copied from
+	bool SnapSelectedToGround();
+	uint32_t GroupSelected();            // wrap the selection in a new Empty
+	bool AddComponent( uint32_t actor, const std::string& type );   // world/Gameplay.h ComponentTypes()
+	bool RemoveComponent( uint32_t actor, size_t index );
 	uint32_t DuplicateSelected();
 	bool Reparent( uint32_t id, uint32_t parent );
 	void Commit( const char* what );
@@ -61,6 +67,15 @@ public:
 	bool StrokeTo( const Vector3& p );   // one dab of the current tool on the terrain under the point
 	void EndStroke();
 	void FrameSelected();
+
+	// ---- the editor camera (Unreal-style): hold the right mouse button and use W A S D (Q / E down / up), the
+	// wheel while flying changes the speed; LMB drag moves and turns; MMB drag pans; Alt+LMB orbits; F frames
+	int& CameraSpeed() { return m_camSpeed; }       // 1..8
+	float CameraSpeedMps() const;
+	bool Flying() const { return m_flying; }
+	int GizmoOp() const { return m_gizmoOp; }   // 0 select, 1 move, 2 rotate, 3 scale
+	enum Panel { PScene, PPlace, PInspector, PTerrain, PWorld, PContent, POutput, PControls, PPrefs, PanelCount };
+	bool& PanelOpen( Panel p ) { return m_open[p]; }
 
 	int& Tool() { return m_tool; }        // -1 = none, else world::Brush::Mode
 	world::Brush& Brush() { return m_brush; }
@@ -98,6 +113,13 @@ private:
 	void OrbitFromAngles();
 	Vector3 PlacementPoint();
 	Vector3 DropPoint( float mx, float my );
+	world::json SubtreeJson( uint32_t root ) const;
+	uint32_t PlaceActorsJson( const world::json& actors, const Vector3& at, const char* what );
+	void ViewportContextMenu();
+	void ComponentsSection( world::Entity& e, bool& done );
+	void ControlsPanel();
+	void PrefsPanel();
+	void PlaceMenuItems( const Vector3& at );
 
 	EditorSettings m_settings;
 	Renderer m_renderer;
@@ -132,5 +154,15 @@ private:
 	int m_contentTab = 0;
 	char m_saveName[128] = "my_level";
 	char m_prefabName[128] = "prefab";
+	world::json m_clipboard = world::json::array();
+	Vector3 m_clipboardAt{ 0, 0, 0 };
+	int m_camSpeed = 4;
+	float m_lookSens = 1.0f;
+	bool m_flying = false, m_viewHovered = false, m_resetLayout = false;
+	int m_navButton = -1;          // the mouse button driving the camera this drag (-1 none)
+	float m_navMoved = 0;          // pixels the mouse moved since that button went down
+	bool m_navUsedKeys = false;    // WASD / wheel used while the right button was held
+	Vector3 m_contextAt{ 0, 0, 0 };
+	bool m_open[PanelCount] = { true, true, true, true, true, true, true, false, false };
 };
 }

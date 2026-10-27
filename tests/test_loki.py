@@ -87,18 +87,17 @@ if _env.is_file():
 # that reorder Smart (gemini "used up until ..." made the failover check pick groq) - this run keeps its own
 import tempfile as _tf  # noqa: E402
 os.environ["LOKI_HEALTH_FILE"] = str(Path(_tf.mkdtemp(prefix="loki-health-")) / "provider_health.json")
+# ...and its own request pacing: the routing checks drive fake nvidia-* turns, which the real NVIDIA per-minute
+# limiter (engine/ratelimit.py) would book in harness_data/ratelimit - shared with every other process - and then
+# wait ~20 s per turn once 36 were booked. The fake models have no cap.
+os.environ["LOKI_RATE_FILE_DIR"] = _tf.mkdtemp(prefix="loki-rate-")
+os.environ["LOKI_NVIDIA_RPM"] = "0"
 import loki  # noqa: E402
 # Tests drive real turns with fake models: they must never write into the user's real
 # experience log or let it reorder providers. The self-improvement tests opt back in,
 # in a temp data dir.
 loki.EXPERIENCE_ENABLED = False
 loki.LEARN_ROUTING = False
-# Hermetic: harness_data/.env (loaded above) can set OPENROUTER_MODEL to a PAID model, which
-# makes "openrouter" metered and changes smart-mode routing and the metering checks. The
-# offline tests must see the documented free default, not this machine's config.
-loki.MODELS["openrouter"] = loki.ModelConfig(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=loki.MODELS["openrouter"].api_key, model="poolside/laguna-s-2.1:free")
 loki.ALLOW_PAID = False
 # ...and never add test calls to the user's real credits ledger.
 import tempfile as _usage_tf  # noqa: E402
@@ -312,16 +311,16 @@ check("a transient rate limit IS still retried",
 _failed_before = set(loki._SMART_FAILED)
 
 
-loki.model_name = "gemini"
+loki.model_name = "nvidia-nemotron"
 
 
 _next = loki.failover_target()
 
 
-check("failover marks the spent provider", "gemini" in loki._SMART_FAILED)
+check("failover marks the spent provider", "nvidia-nemotron" in loki._SMART_FAILED)
 
 
-check("failover moves to a different provider", _next != "gemini", _next)
+check("failover moves to a different provider", _next != "nvidia-nemotron", _next)
 
 
 loki._SMART_FAILED.clear()
@@ -521,10 +520,16 @@ check("Chrome, PowerShell and CMake prerequisites are inventoried", all(term in 
 _envx = (_checkout / ".env.example").read_text(encoding="utf-8")
 
 
-check(".env.example does not disable the zero-key provider",
+check(".env.example asks for the NVIDIA key (the free main driver)",
 
 
-      not any(line.strip() == "VIREONIX_API_KEY=" for line in _envx.splitlines()))
+      any(line.strip() == "NVIDIA_API_KEY=" for line in _envx.splitlines()))
+
+
+check(".env.example names no removed provider's key",
+
+
+      not [n for n in loki.RETIRED_PROVIDERS if n.upper().replace("-", "_").replace(".", "_") + "_API_KEY" in _envx])
 
 
 check(".env.example defaults to smart", "LOKI_MODEL=smart" in _envx)
@@ -542,10 +547,11 @@ check("LOKI_MODEL is smart by default (zero-config)",
       'os.getenv("LOKI_MODEL", "smart")' in (_checkout / "loki.py").read_text(encoding="utf-8"))
 
 
-check("vireonix needs no key", loki.provider_configured("vireonix"))
+check("the removed zero-key vireonix is no longer a provider", "vireonix" not in loki.MODELS)
 
 
-check("vireonix is tried before local", loki.SMART_ORDER.index("vireonix") < loki.SMART_ORDER.index("local"))
+check("the free NVIDIA routes are tried before local",
+      all(loki.SMART_ORDER.index(n) < loki.SMART_ORDER.index("local") for n in ("nvidia", "nvidia-nemotron", "nvidia-pro")))
 
 
 
@@ -1145,8 +1151,8 @@ check("an HTTP 400 (tool list refused) fails over instead of ending the run",
 check("an HTTP 429 fails over", loki._is_limit_error(Exception("HTTP 429 quota")) is True)
 check("a genuine 500 is not mistaken for a limit",
       loki._is_limit_error(Exception("HTTP 500 server exploded")) is False)
-check("smart mode offers a zero-key/local landing spot",
-      "vireonix" in loki.SMART_ORDER and "local" in loki.SMART_ORDER)
+check("smart mode offers a local landing spot (no cloud key needed)",
+      "local" in loki.SMART_ORDER and "vireonix" not in loki.SMART_ORDER)
 
 
 
@@ -1164,26 +1170,29 @@ check("distinct replies both survive",
       len(loki._sanitize_history([{"role": "assistant", "content": "a"},
                                   {"role": "assistant", "content": "b"}])) == 2)
 
-section("go-to model: DeepSeek 4.1 via OpenRouter")
-check("the deepseek-4.1 alias exists", "deepseek-4.1" in loki.MODELS)
-check("it points at deepseek v4.1 flash",
-      "v4.1" in loki.MODELS["deepseek-4.1"].model, loki.MODELS["deepseek-4.1"].model)
-# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; 2026-10-25: then free Nemotron (
-# model), then OpenRouter
-check("the main driver leads smart mode, free Nemotron then OpenRouter right after",
-      loki.SMART_ORDER[:3] == ("nvidia", "nemotron-free", "openrouter"), loki.SMART_ORDER[:3])
+section("go-to model: DeepSeek 4.1 Flash on NVIDIA")
+check("the retired deepseek-4.1 alias is gone and maps to the NVIDIA main driver",
+      "deepseek-4.1" not in loki.MODELS and loki.current_provider_name("deepseek-4.1") == "nvidia")
+check("the main driver points at deepseek v4.1 flash",
+      "v4.1" in loki.MODELS["nvidia"].model, loki.MODELS["nvidia"].model)
+# session 29: the main driver (DeepSeek V4.1 Flash on NVIDIA NIM) leads; 2026-10-27: then Nemotron and GLM on the
+# same NVIDIA key (OpenRouter and the daily-capped free tiers are gone)
+check("the main driver leads smart mode, Nemotron then GLM on NVIDIA right after",
+      loki.SMART_ORDER[:3] == ("nvidia", "nvidia-nemotron", "nvidia-pro"), loki.SMART_ORDER[:3])
 
 
 
 section("account connection")
 check("every connectable provider maps to an env var",
-      set(loki.PROVIDER_ENV_VARS) >= {"openrouter", "gemini", "groq", "deepseek"})
+      set(loki.PROVIDER_ENV_VARS) >= {"nvidia", "nvidia-nemotron", "deepseek", "huggingface"})
+check("no removed provider can still be connected",
+      not set(loki.PROVIDER_ENV_VARS) & set(loki.RETIRED_PROVIDERS), set(loki.PROVIDER_ENV_VARS) & set(loki.RETIRED_PROVIDERS))
 check("an unknown provider is refused",
       loki.connect_provider("nope", "x")["ok"] is False)
 check("an empty key is refused",
-      loki.connect_provider("openrouter", "")["ok"] is False)
+      loki.connect_provider("nvidia", "")["ok"] is False)
 check("a rejected key is reported, not saved",
-      loki.verify_provider_key("openrouter", "sk-or-definitely-not-real") != "")
+      loki.verify_provider_key("nvidia", "nvapi-definitely-not-real") != "")
 check("the env file path is absolute-ish", str(loki.env_file_path()).endswith(".env"), str(loki.env_file_path()))
 
 
@@ -1750,10 +1759,14 @@ check("probe_scene rejects a non-array inputs value", loki.probe_scene("res://x.
 section("free providers from awesome-free-llm-apis")
 
 
-_free_apis = ("aion", "cohere", "zai", "huggingface", "kilocode", "llm7",
+# 2026-10-27: the daily-capped ones (aion, cohere, zai, kilocode, llm7, modelscope, ollama-cloud, ovh,
+# siliconflow) are gone; the NVIDIA key and the Hugging Face token holder stay.
+_free_apis = ("huggingface", "nvidia")
+_gone_free_apis = ("aion", "cohere", "zai", "kilocode", "llm7", "modelscope", "ollama-cloud", "ovh", "siliconflow")
 
 
-              "modelscope", "nvidia", "ollama-cloud", "ovh", "siliconflow")
+check("the removed daily-capped free providers are not registered",
+      not [n for n in _gone_free_apis if n in loki.MODELS], [n for n in _gone_free_apis if n in loki.MODELS])
 
 
 for _name in _free_apis:
@@ -1812,7 +1825,7 @@ check("the mode pseudo-providers are not entries",
 check("a provider can be found by name",
 
 
-      any(e["id"] == "zai" for e in loki.capabilities.search(_caps, "zai")))
+      any(e["id"] == "nvidia" for e in loki.capabilities.search(_caps, "nvidia")))
 
 
 check("an empty query returns everything",
@@ -2130,14 +2143,14 @@ try:
     loki.PREFER = "local"
     loki.local_ready = lambda: True
     loki.online = lambda *a, **k: True
-    loki.provider_configured = lambda name: name == "openrouter"
+    loki.provider_configured = lambda name: name == "nvidia-nemotron"
     loki._SMART_FAILED = set()
     loki.LAST_TRIAGE = {"difficulty": 0}
     check("an easy request stays on the local model (unchanged default)",
           loki.active_model_name() == "local", loki.active_model_name())
     loki.LAST_TRIAGE = {"difficulty": 3}
     check("a HARD request does not stay on the local model - it takes the best available",
-          loki.active_model_name() == "openrouter", loki.active_model_name())
+          loki.active_model_name() == "nvidia-nemotron", loki.active_model_name())
     loki.LAST_TRIAGE = {}
     check("no triage at all leaves local-first alone (the barrier default is 2)",
           loki.active_model_name() == "local" and loki.triage_difficulty() == 1,
@@ -2203,41 +2216,41 @@ def _fo_run(mode, ready, fail_on, status=429, text="You exceeded your current qu
 
 
 try:
-    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini", "groq"}, {"openrouter"})
+    _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro", "9router"}, {"nvidia-nemotron"})
     check("a spent quota moves to the NEXT ready provider, not the one after",
-          _t == ["openrouter", "gemini"], _t)
-    check("only the provider that failed is marked used-up", _used == {"openrouter"}, _used)
-    check("the turn is answered by the next provider", _out == "answer from gemini", _out)
+          _t == ["nvidia-nemotron", "nvidia-pro"], _t)
+    check("only the provider that failed is marked used-up", _used == {"nvidia-nemotron"}, _used)
+    check("the turn is answered by the next provider", _out == "answer from nvidia-pro", _out)
     check("the switch is recorded with its reason",
           [(r["provider"], r["reason"], r["next"]) for r in loki.ROUTE_TRACE]
-          == [("openrouter", "quota spent", "gemini")], loki.ROUTE_TRACE)
+          == [("nvidia-nemotron", "quota spent", "nvidia-pro")], loki.ROUTE_TRACE)
 
-    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"})
+    _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro"}, {"nvidia-nemotron"})
     check("with two keys, a spent quota uses the second key (never an unset local model)",
-          _t == ["openrouter", "gemini"] and _out == "answer from gemini", (_t, _out))
+          _t == ["nvidia-nemotron", "nvidia-pro"] and _out == "answer from nvidia-pro", (_t, _out))
 
-    _t, _used, _out, _mode = _fo_run("online", {"openrouter", "gemini", "local"}, {"openrouter"})
+    _t, _used, _out, _mode = _fo_run("online", {"nvidia-nemotron", "nvidia-pro", "local"}, {"nvidia-nemotron"})
     check("online mode stays online after a failover", _mode == "online", _mode)
     check("online failover never reaches a local model", "local" not in _t, _t)
 
-    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"},
+    _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro"}, {"nvidia-nemotron"},
                                  status=401, text="Incorrect API key provided")
-    check("smart mode skips a provider whose key is rejected", _out == "answer from gemini", (_t, _out))
+    check("smart mode skips a provider whose key is rejected", _out == "answer from nvidia-pro", (_t, _out))
     check("a rejected key is recorded as such",
           bool(loki.ROUTE_TRACE) and loki.ROUTE_TRACE[0]["reason"] == "key rejected", loki.ROUTE_TRACE)
 
-    _t, _used, _out, _mode = _fo_run("gemini", {"gemini", "groq"}, {"gemini"},
+    _t, _used, _out, _mode = _fo_run("nvidia-pro", {"nvidia-pro", "9router"}, {"nvidia-pro"},
                                      status=401, text="Incorrect API key provided")
     check("a PINNED provider with a bad key surfaces the error (no silent switch)",
-          _out.startswith("ERROR:") and _t == ["gemini"] and _mode == "gemini", (_t, _out, _mode))
+          _out.startswith("ERROR:") and _t == ["nvidia-pro"] and _mode == "nvidia-pro", (_t, _out, _mode))
 
-    _t, _used, _out, _ = _fo_run("smart", {"openrouter"}, {"openrouter"})
+    _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron"}, {"nvidia-nemotron"})
     check("with nothing else configured, the ORIGINAL error is shown",
-          _out.startswith("ERROR:") and "quota" in _out.lower() and _t == ["openrouter"], (_t, _out))
+          _out.startswith("ERROR:") and "quota" in _out.lower() and _t == ["nvidia-nemotron"], (_t, _out))
 
-    _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter"},
+    _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro"}, {"nvidia-nemotron"},
                                  status=400, text="KeyError: objects")
-    check("an HTTP 400 still fails over (existing behaviour kept)", _out == "answer from gemini", (_t, _out))
+    check("an HTTP 400 still fails over (existing behaviour kept)", _out == "answer from nvidia-pro", (_t, _out))
 
     class _BusyOnce:
         """Every provider answers 429 the first time it is asked, then works."""
@@ -2253,11 +2266,11 @@ try:
     _cool_saved = loki.RATE_LIMIT_COOLDOWN_S
     loki.RATE_LIMIT_COOLDOWN_S = 0.01
     try:
-        _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, _BusyOnce(),
+        _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro"}, _BusyOnce(),
                                      text="HTTP 429: Too Many Requests (rate limit)")
         check("when every provider is rate-limited, Loki waits and retries instead of ending the run",
-              _out.startswith("answer from") and _t[:2] == ["openrouter", "gemini"] and len(_t) == 3, (_t, _out))
-        _t, _used, _out, _ = _fo_run("smart", {"openrouter", "gemini"}, {"openrouter", "gemini"})
+              _out.startswith("answer from") and _t[:2] == ["nvidia-nemotron", "nvidia-pro"] and len(_t) == 3, (_t, _out))
+        _t, _used, _out, _ = _fo_run("smart", {"nvidia-nemotron", "nvidia-pro"}, {"nvidia-nemotron", "nvidia-pro"})
         check("a spent QUOTA is not waited for (the run reports it)", _out.startswith("ERROR:") and len(_t) == 2,
               (_t, _out))
     finally:
@@ -2388,7 +2401,7 @@ try:
     loki.save_history = lambda: None
     loki.todo_clear = lambda: "cleared"   # never touch the user's real plan.md
     loki.refresh_mcp_tools = _v_noop
-    loki.provider_configured = lambda name: name == "openrouter"
+    loki.provider_configured = lambda name: name == "nvidia-nemotron"
     loki.model_name = "smart"
     loki._SMART_FAILED.clear()
     loki.MODEL_RETRIES = 0
@@ -2512,8 +2525,8 @@ finally:
     loki._task_modified = _mb_saved[2]
 
 check("gpt and claude are metered", loki.is_metered("gpt") and loki.is_metered("claude"))
-check("a :free OpenRouter model is not metered", not loki.is_metered("openrouter"))
-check("a non-free OpenRouter model is metered", loki.is_metered("deepseek-4.1"))
+check("a free NVIDIA route is not metered", not loki.is_metered("nvidia-nemotron") and not loki.is_metered("nvidia"))
+check("a paid key route is metered", loki.is_metered("deepseek"))
 check("subscription CLIs and local models are not metered",
       not loki.is_metered("claude-code") and not loki.is_metered("local"))
 os.environ["LOKI_FREE_PROVIDERS"] = "gpt"
@@ -2653,7 +2666,7 @@ check("a perfect PAID provider never jumps ahead of free ones", _lo.index("p") =
 check("no stats, no change", _ex.learned_order(["a", "b"], _tiers.get, {}) == ["a", "b"])
 check("loki tiers: local, subscription, paid, free",
       (loki.provider_tier("local"), loki.provider_tier("claude-code"), loki.provider_tier("gpt"),
-       loki.provider_tier("gemini")) == ("local", "subscription", "paid", "free"))
+       loki.provider_tier("nvidia")) == ("local", "subscription", "paid", "free"))
 check("the tuned model exists but is not routed until promoted",
       "loki-tuned" in loki.MODELS and ("loki-tuned" in loki.SMART_ORDER) == loki.TUNED_PROMOTED)
 
@@ -2698,7 +2711,7 @@ try:
     loki.save_history = lambda: None
     loki.todo_clear = lambda: "cleared"
     loki.refresh_mcp_tools = _s_noop
-    loki.provider_configured = lambda n: n == "openrouter"
+    loki.provider_configured = lambda n: n == "nvidia-nemotron"
     loki.model_name = "smart"
     loki.MODEL_RETRIES = 0
     loki.AGENT_MODE = "build"
@@ -2710,7 +2723,7 @@ try:
     asyncio.run(loki.pursue_goal("create a jump script"))
     _log = _ex.entries()
     check("a verified task is logged as verified",
-          _log and _log[-1]["outcome"] == "verified" and _log[-1]["provider"] == "openrouter", _log[-1:])
+          _log and _log[-1]["outcome"] == "verified" and _log[-1]["provider"] == "nvidia-nemotron", _log[-1:])
     check("its trajectory is kept", _log[-1]["trajectory"] and len(_ex.trajectories()) == 1)
     _traj = json.dumps(_ex.trajectories()[0])
     check("the trajectory carries the generic system prompt, not the user's memory",
@@ -2733,10 +2746,10 @@ try:
 
     _ps = _ex.provider_stats()
     check("provider stats count verified and failed work",
-          _ps["openrouter"]["verified"] == 1 and _ps["openrouter"]["failed"] == 1, _ps)
+          _ps["nvidia-nemotron"]["verified"] == 1 and _ps["nvidia-nemotron"]["failed"] == 1, _ps)
 
     _ts = _ex.tool_stats()
-    _row = _ts["by_provider"].get("openrouter") or {}
+    _row = _ts["by_provider"].get("nvidia-nemotron") or {}
     check("tool stats count how often a model actually CALLED a tool (not just wrote files)",
           _row.get("requests", 0) >= 2 and _row.get("with_tools", 0) >= 1 and _row.get("tool_rate") is not None, _ts["by_provider"])
     check("a per-model row is kept, so each local model can be scored on its own",
@@ -2972,21 +2985,21 @@ check("the token travels in the URL fragment, not the query", "location.hash" in
 # first with what it uses now, ready models grouped by cost, the rest tucked away.
 class _MenuAgent:
     MODELS = {"smart": 1, "online": 1, "local": _types.SimpleNamespace(model="qwen3:8b"),
-              "gemini": _types.SimpleNamespace(model="gemini-x"), "mistral": _types.SimpleNamespace(model="m"),
+              "nvidia-nemotron": _types.SimpleNamespace(model="n"), "nvidia-pro": _types.SimpleNamespace(model="m"),
               "gpt": _types.SimpleNamespace(model="g"), "broken": _types.SimpleNamespace(model="b")}
     model_name = "smart"
-    def active_model_name(self): return "gemini"
+    def active_model_name(self): return "nvidia-nemotron"
     def provider_configured(self, name):
         if name == "broken":
             raise RuntimeError("probe failed")
-        return name in ("local", "gemini")
+        return name in ("local", "nvidia-nemotron")
     def provider_tier(self, name): return {"local": "local", "gpt": "paid"}.get(name, "free")
 _menu = _lb.model_menu(_MenuAgent())
 _names = [e["name"] for e in _menu["entries"]]
 check("the picker lists Smart and Online first", _names[:2] == ["smart", "online"])
-check("Smart says what it uses right now", _menu["entries"][0]["using"] == "Google AI Studio (Gemini)" and _menu["resolved"] == "gemini")
+check("Smart says what it uses right now", _menu["entries"][0]["using"] == "Nemotron (NVIDIA)" and _menu["resolved"] == "nvidia-nemotron")
 check("ready models come before the ones that still need setting up",
-      _names.index("local") < _names.index("mistral") and _names.index("gemini") < _names.index("gpt"))
+      _names.index("local") < _names.index("nvidia-pro") and _names.index("nvidia-nemotron") < _names.index("gpt"))
 check("a provider whose check fails is listed as not ready, not an error",
       [e for e in _menu["entries"] if e["name"] == "broken"][0]["ready"] is False)
 check("ready count and groups are given", _menu["ready_count"] == 2 and _menu["groups"][0]["id"] == "auto")
@@ -3077,8 +3090,8 @@ section("MLX (the Mac)")
 check("MLX asks mlx_lm.server for the model it was started with, never 'auto'",
       loki.MODELS["mlx"].model == "default_model" or bool(os.getenv("MLX_MODEL", "").strip() not in ("", "auto")))
 import usage as _usage_mod  # noqa: E402
-check("a local MLX / vLLM / Kyojin model is never priced as paid",
-      all(_usage_mod.price_for(p, "mlx-community/Qwen3-4B-4bit")[:2] == (0.0, 0.0) for p in ("mlx", "vllm", "kyojin")))
+check("a local MLX / vLLM / llama.cpp model is never priced as paid",
+      all(_usage_mod.price_for(p, "mlx-community/Qwen3-4B-4bit")[:2] == (0.0, 0.0) for p in ("mlx", "vllm", "llamacpp")))
 
 section("/ruflo in chat (Ruflo commands as LOKI workflows)")
 _lst, _none = loki.ruflo_command("/ruflo list swarm")

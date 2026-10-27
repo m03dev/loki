@@ -218,20 +218,20 @@ check("LOKI reports working, then idle", status[:1] == ["working"] and status[-1
 
 section("spending policy: never paid on its own, and a daily cap")
 saved = (loki.provider_configured, loki.online, loki.local_ready, loki.model_name, loki.ALLOW_PAID)
-loki.provider_configured = lambda name: name in ("deepseek-4.1", "gemini")
+loki.provider_configured = lambda name: name in ("deepseek", "nvidia-nemotron")
 loki.online = lambda: True
 loki.local_ready = lambda: False
 loki.model_name = "smart"
 loki._SMART_FAILED.clear()
 loki.ALLOW_PAID = False
-check("smart skips a configured paid provider and uses the free one", loki.active_model_name() == "gemini", loki.active_model_name())
-loki._SMART_FAILED.add("gemini")
-check("even when the free one is used up, it does not switch to paid by itself", loki.active_model_name() != "deepseek-4.1")
+check("smart skips a configured paid provider and uses the free one", loki.active_model_name() == "nvidia-nemotron", loki.active_model_name())
+loki._SMART_FAILED.add("nvidia-nemotron")
+check("even when the free one is used up, it does not switch to paid by itself", loki.active_model_name() != "deepseek")
 loki.ALLOW_PAID = True
-check("paid is used only once you allow it", loki.active_model_name() == "deepseek-4.1")
-loki.USAGE.record("deepseek-4.1", "x", 1, 1, 10)
-loki.USAGE.path.write_text('{"t": %f, "provider": "deepseek-4.1", "model": "x", "in": 1, "out": 1, "ms": 10, "cost": 5.0, "free": false}\n' % time.time())
-check("the daily dollar limit stops automatic paid use", loki.active_model_name() != "deepseek-4.1")
+check("paid is used only once you allow it", loki.active_model_name() == "deepseek")
+loki.USAGE.record("deepseek", "x", 1, 1, 10)
+loki.USAGE.path.write_text('{"t": %f, "provider": "deepseek", "model": "x", "in": 1, "out": 1, "ms": 10, "cost": 5.0, "free": false}\n' % time.time())
+check("the daily dollar limit stops automatic paid use", loki.active_model_name() != "deepseek")
 loki.provider_configured, loki.online, loki.local_ready, loki.model_name, loki.ALLOW_PAID = saved
 loki._SMART_FAILED.clear()
 check("the call path refuses paid calls past the daily limit", "hit the daily paid budget" in

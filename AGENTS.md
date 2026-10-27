@@ -1,8 +1,8 @@
 # AGENTS.md - how to work on LOKI
 
-For every agent: Claude, Codex, Ziva, LOKI's own agents. Short on purpose: it is read at the start of every
+For every agent: Claude, Codex, LOKI's own agents. Short on purpose: it is read at the start of every
 session. The owner's direction is `docs/BUILD_BRIEF.md`; where the work stands is `HANDOFF.md`; requests that
-need a real machine are in `ZIVA_TASKS.md`. Rewritten 2026-10-24 for the current scope (owner: "rewrite them
+need a real machine are in `LOKI_TASKS.md`. Rewritten 2026-10-24 for the current scope (owner: "rewrite them
 better for us ... modular and lightweight, maybe rust or c++, everything's on the table").
 
 ## What LOKI is now
@@ -69,12 +69,12 @@ The separate MMO engine base lives in `native/carbon_mmo/` (its own README and r
 - `master` is what both machines run: they update from GitHub at start, and an update is kept only if
   `--self-test` passes and the window reports ready. **Only `tools/ship.py` writes `master`** (test, commit,
   rebase, re-test, push, tell the other machine). Never bypass it; never `push --force` or `reset --hard`.
-- **Can't run ship.py** (e.g. a cloud session without LOKI's venv)? Push a branch `agent/<topic>` - the branch
-  IS the request. Its last commit says what it does, what was verified, and what the machine must check; a
-  `ZIVA_TASKS.md` edit inside it carries any longer steps. Machine agents run `git fetch origin` and
-  `git branch -r --no-merged origin/master --list "origin/agent/*"` at session start, then for each:
-  `git merge --no-ff origin/agent/<topic>`, do its checks, ship.py, `git push origin --delete agent/<topic>`.
-  Branches never auto-update anyone.
+- **Every agent ships to `master` with `tools/ship.py` - cloud sessions too.** No `agent/*` side branches (owner
+  2026-10-27: "why do you keep pushing to branch and confusing my system ... why do they keep not updating"). Machines
+  only ever install `master`; a branch is never seen by them, and branches nobody merged left fixes stranded for days.
+  A cloud session without LOKI's venv installs what the suites need first:
+  `pip install -r engine/requirements.txt` (add `--break-system-packages` on a system Python), then ship.py as usual.
+  If ship.py really cannot run, stop and tell the owner what is blocking it - do not leave a branch behind.
 - Commit messages say what changed and how it was checked. Update `HANDOFF.md` (its "Now" section, in place).
 
 ## Boundaries
@@ -88,13 +88,12 @@ The separate MMO engine base lives in `native/carbon_mmo/` (its own README and r
   `studio/godot_plugin/addons/loki_studio/`. No `project.godot`, `.gd`, `.tscn`, `.uid` or `addons/` anywhere
   else. The owner's games live in `~/LOKI Projects/<name>`.
 - Safety stays: `engine/policy.py`, approvals for risky actions, the signed peer link. Ask the owner before
-  anything irreversible or that costs money (`ZIVA_TASKS.md` > Needs Mohamed).
+  anything irreversible or that costs money (say so in the chat and wait).
 
-## Machine agents (Ziva on the Mac and the PC, LOKI's own agents)
+## Machine agents (LOKI's own agents on the Mac and the PC)
 
-- Start every session: pull, read this file, the top of `HANDOFF.md`, merge waiting `agent/*` branches (Git and
-  shipping above), then your open requests in `ZIVA_TASKS.md` (oldest first unless marked DO FIRST). Answer
-  under the request, report at the top of Reports, tick it, ship.
+- Start every session: pull, read this file, the top of `HANDOFF.md`, then your open requests in `LOKI_TASKS.md`
+  (oldest first unless marked DO FIRST). Answer under the request, report at the top of Reports, tick it, ship.
 - **Mac mini:** checkout `~/Loki`. Its drive is nearly full: builds, downloads, caches and models go on the
   external drive **`/Volumes/Xero`** (stop and ask if it isn't mounted).
 - **PC:** `D:\loki` (moved off a full C: on 2026-10-21; `C:\Users\macul\Documents\loki` no longer exists), RTX 3070 Ti, on 24/7 - the farm's GPU worker (ComfyUI, training).

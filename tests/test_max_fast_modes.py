@@ -51,22 +51,22 @@ check("max and fast are auto-routing modes", "max" in loki.AUTO_ROUTING_MODES an
 check("max starts with the owner's subscriptions, then DeepSeek V4 Pro", loki.MAX_ORDER[:3] == ("claude-code", "codex", "nvidia-pro"), loki.MAX_ORDER[:4])
 check("nvidia-pro is the strongest model on the NVIDIA key (GLM-5.3 by default)", loki.MODELS["nvidia-pro"].model in nim_models_STRONGEST
       and "integrate.api.nvidia.com" in loki.MODELS["nvidia-pro"].base_url, loki.MODELS["nvidia-pro"].model)
-check("fast starts with Cerebras and Groq", loki.FAST_ORDER[:2] == ("cerebras", "groq"), loki.FAST_ORDER[:3])
+check("fast starts with Nemotron on NVIDIA, then the main driver", loki.FAST_ORDER[:2] == ("nvidia-nemotron", "nvidia"), loki.FAST_ORDER[:3])
 check("every smart provider is still behind max / fast (never a dead end)",
       all(p in loki.MAX_ORDER and p in loki.FAST_ORDER for p in loki.SMART_ORDER))
 
 loki.model_name = "max"
-READY.clear(); READY.update({"nvidia", "nvidia-pro", "gemini"})
+READY.clear(); READY.update({"nvidia", "nvidia-pro", "nvidia-nemotron"})
 check("max with only free keys picks DeepSeek V4 Pro, not the Flash main driver", loki.active_model_name() == "nvidia-pro", loki.active_model_name())
 READY.add("claude-code")
 check("max picks Claude Code when the plan is signed in", loki.active_model_name() == "claude-code")
 loki._SMART_FAILED.add("claude-code")
 check("... and fails over to the next strongest when it is used up", loki.active_model_name() == "nvidia-pro")
 loki._SMART_FAILED.clear()
-READY.clear(); READY.update({"gpt", "gemini"})
+READY.clear(); READY.update({"gpt", "nvidia-nemotron"})
 paid = loki.paid_allowed_automatically
 loki.paid_allowed_automatically = lambda: False
-check("max never picks a paid API on its own", loki.active_model_name() == "gemini", loki.active_model_name())
+check("max never picks a paid API on its own", loki.active_model_name() == "nvidia-nemotron", loki.active_model_name())
 loki.paid_allowed_automatically = paid
 
 _pro = loki.MODELS["nvidia-pro"].model
@@ -81,10 +81,10 @@ check("smart on the Flash main driver keeps thinking off", ((kw.get("extra_body"
       or loki.NVIDIA_THINKING not in ("off", ""))
 
 loki.model_name = "fast"
-READY.clear(); READY.update({"nvidia", "groq", "claude-code"})
-check("fast picks Groq over the main driver and the subscriptions", loki.active_model_name() == "groq", loki.active_model_name())
+READY.clear(); READY.update({"nvidia", "nvidia-nemotron", "claude-code"})
+check("fast picks Nemotron over the main driver and the subscriptions", loki.active_model_name() == "nvidia-nemotron", loki.active_model_name())
 pick, why = loki.route_for({"kind": "question", "difficulty": 1})
-check("route_for explains fast", pick == "groq" and "Fast" in why, (pick, why))
+check("route_for explains fast", pick == "nvidia-nemotron" and "Fast" in why, (pick, why))
 
 check("nvidia-pro shares NVIDIA's per-minute window (one key)", ratelimit.bucket("nvidia-pro") == "nvidia" and ratelimit.rpm("nvidia-pro") == ratelimit.rpm("nvidia"))
 ratelimit.reset()
@@ -118,7 +118,7 @@ check("Max on NVIDIA asks for a model the key really serves (the PC's key has no
       nim_models.resolve("deepseek-ai/deepseek-v4-pro", PC_KEY) == "z-ai/glm-5.3")
 check("... GLM-5.3 by default", loki.MODELS["nvidia-pro"].model == "z-ai/glm-5.3" or os.getenv("NVIDIA_PRO_MODEL"))
 check("... and Kimi K2.6 when the key has no GLM", nim_models.resolve("z-ai/glm-5.3", ["moonshotai/kimi-k2.6"]) == "moonshotai/kimi-k2.6")
-READY.clear(); READY.update({"nvidia", "groq", "local", "llm7"})
+READY.clear(); READY.update({"nvidia", "nvidia-nemotron", "local", "local-fast"})
 loki.model_name = "smart"
 provs = loki._oc_providers("nvidia")
 check("modes (smart / online / max / fast) are never handed to OpenCode as providers",
@@ -131,7 +131,7 @@ try:
 finally:
     os.environ.pop("LOKI_JOB_ID", None)
 check("in a background job a slow capable route stays ahead of the small local / weak free models",
-      job_order.index("nvidia") < min(job_order.index(x) for x in ("local", "llm7") if x in job_order), job_order)
+      job_order.index("nvidia") < min(job_order.index(x) for x in ("local", "local-fast") if x in job_order), job_order)
 check("this suite stays under 60 s", time.time() - T0 < 60, round(time.time() - T0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

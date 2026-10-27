@@ -92,11 +92,10 @@ links = [(e["id"], e.get("keys", "")) for e in providers_catalog.CATALOG if e.ge
     if hasattr(providers_catalog, "CATALOG") else []
 check("every provider key page is https", links and all(u.startswith("https://") for _, u in links),
       [l for l in links if not l[1].startswith("https://")])
-flow = signin.openrouter_start(8767, "code")
-check("OpenRouter phone sign-in is OpenRouter's own page with no localhost callback",
-      flow["url"].startswith("https://openrouter.ai/auth?") and "callback_url" not in flow["url"], flow["url"])
-
 js = (REPO / "app" / "ui" / "settings.js").read_text(encoding="utf-8")
+# OpenRouter was removed with the other daily-capped providers (2026-10-27): its browser sign-in went with it
+check("OpenRouter's browser sign-in is gone (no flow, no button code)",
+      not hasattr(signin, "openrouter_start") and "signInOpenRouter" not in js and "openrouter.ai/auth" not in js)
 check("the key QR window offers the other addresses and the key page", "Try another address" in js and "key page instead" in js)
 check("the key QR window tells the user Paste works too", "use Paste next to the key box" in js)
 check("the key QR window offers the internet link and the Windows allow", "internet link" in js and "/handoff/firewall" in js)

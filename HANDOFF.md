@@ -27,7 +27,23 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
-**2026-10-27 midday (Claude, cloud) - no free models with a daily cap.** Owner: "get rid of free models with daily limits we dont need them" / "nemotron is free in nvidia". The PC's provider_speed.json showed OpenRouter free-models-per-day 429, Gemini quota, Groq TPM - every job walked through them first. Removed as routes: OpenRouter :free (OpenRouter stays as a PAID account: sign-in, DeepSeek V4.1 by default), nemotron-free, Gemini, Groq, Codestral, Cloudflare, ModelScope, SambaNova, Cerebras (MODELS, Smart/Online/Max/Fast orders, Connections, Studio, onboarding + 8 languages). New `nvidia-nemotron` on the NVIDIA key leads Fast mode; nim_models.NEMOTRON picks the Nemotron the key serves (else any chat Nemotron it lists). loki.RETIRED_PROVIDERS sends an old LOKI_MODEL / pinned name to Smart (nemotron-free -> nvidia-nemotron). tests/test_no_daily_free.py 23 passed (cloud).
+**2026-10-27 midday (Claude, cloud) - the lean provider set; one way to ship.** Owner: "get rid of free models with
+daily limits" / "nemotron is free in nvidia" / "its these providers that are doing the same thing we dont need the
+reduncency ... if those get capped in a day within a few hours we dont need them" / "why do you keep pushing to branch
+and confusing my system ... why do they keep not updating". (1) MODELS is now only: NVIDIA x3 (nvidia = DeepSeek V4.1
+Flash, nvidia-pro = GLM-5.3 for Max, NEW nvidia-nemotron for Fast; nim_models.NEMOTRON picks the id the key serves),
+Claude Code, Codex, 9Router, local servers (Ollama, colibri, LM Studio, llama.cpp, MLX, vLLM, Jan), paid gpt / claude /
+deepseek (only with LOKI_ALLOW_PAID). ~40 removed (OpenRouter incl. its browser sign-in, Gemini, Groq, Vireonix, LLM7,
+Kilo, OpenCode Zen, Mistral, Together, trial-credit hosts, Ollama Cloud, Kyojin...). loki.RETIRED_PROVIDERS maps old
+names (a saved LOKI_MODEL never breaks). check_env strips any *_API_KEY-shaped variable. (2) Why fixes never reached
+the machines: cloud sessions pushed agent/* branches nobody merged (carbon-editor's last 4 commits sat since 10-24).
+AGENTS.md / CLAUDE.md: everyone ships to master with tools/ship.py (cloud: pip install -r engine/requirements.txt
+first); no side branches. Carbon Editor's stranded commits (viewport nav, window in front, its name, components +
+collision) are in; all agent/* branches deleted. (3) 3D: Forge's "auto" order is TRELLIS.2 (Microsoft, MIT) first, then Pixal3D
+(TencentARC) as the likeness-check retry; Hunyuan3D (Tencent) only when named (owner: "tencent has been making shit
+models"). Same order in the asset pipeline's retries. Hyper3D Rodin was NOT added: it is a paid API (Business plan for
+API access) - waiting on the owner. PC proof: LOKI_TASKS DO FIRST "3D proof, TRELLIS.2 vs Pixal3D". Checks: test_no_daily_free (cloud), the suites that named removed
+providers updated to the lean set.
 
 **2026-10-27 midday (Claude, cloud) - why Windows jobs kept failing: npm's opencode.cmd.** Read from the PC: after ee1798f (the 24,000-char --file fix) jobs still died in 0.1 s on all six providers with "The command line is too long." That is cmd.exe's message: on Windows `shutil.which("opencode")` finds npm's `opencode.cmd`, so every turn ran inside cmd.exe (8,191-char line, newlines cut arguments). Failing job.json files were 10-15 KB, working ones 4-5 KB. New engine/win_shim.py: `real_exe()` follows an npm shim to the .exe it forwards to (PC: %APPDATA%\npm\node_modules\opencode-ai\bin\opencode.exe); find_opencode / find_codegraph / cli_agents.find_cli use it; if only a .cmd exists, run_turn sends multi-line or >7000-char messages as --file. tests/test_win_shim.py 13 passed (cloud), test_opencode_engine 9, test_task_board 26. PC check: LOKI_TASKS DO FIRST.
 

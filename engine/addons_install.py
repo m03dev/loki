@@ -48,7 +48,6 @@ MANUAL: dict = {
     "agent-reach": "pipx install https://github.com/Panniantong/agent-reach/archive/main.zip",
     "skillspector": "Install SkillSpector from https://github.com/NVIDIA/SkillSpector",
     "cua": "Needs a virtual machine; see docs/ARCHITECTURE.md",
-    "kyojin": "Needs an AMD Strix Halo machine (set KYOJIN_BASE_URL)",
 }
 
 
