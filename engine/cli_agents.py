@@ -110,12 +110,13 @@ def find_cli(name: str) -> str:
     if spec is None:
         return ""
     override = os.getenv("LOKI_%s_EXE" % name.upper().replace("-", "_"), "").strip()
+    from win_shim import real_exe  # pylint: disable=import-outside-toplevel
     if override and Path(override).exists():
-        return override
+        return real_exe(override)
     for candidate in spec["exe"]:
         found = shutil.which(candidate)
-        if found:
-            return found
+        if found:   # Windows: an npm .cmd shim runs in cmd.exe (8,191-char line, mangled newlines) - use its .exe
+            return real_exe(found)
     return ""
 
 

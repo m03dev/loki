@@ -27,6 +27,8 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-27 midday (Claude, cloud) - why Windows jobs kept failing: npm's opencode.cmd.** Read from the PC: after ee1798f (the 24,000-char --file fix) jobs still died in 0.1 s on all six providers with "The command line is too long." That is cmd.exe's message: on Windows `shutil.which("opencode")` finds npm's `opencode.cmd`, so every turn ran inside cmd.exe (8,191-char line, newlines cut arguments). Failing job.json files were 10-15 KB, working ones 4-5 KB. New engine/win_shim.py: `real_exe()` follows an npm shim to the .exe it forwards to (PC: %APPDATA%\npm\node_modules\opencode-ai\bin\opencode.exe); find_opencode / find_codegraph / cli_agents.find_cli use it; if only a .cmd exists, run_turn sends multi-line or >7000-char messages as --file. tests/test_win_shim.py 13 passed (cloud), test_opencode_engine 9, test_task_board 26. PC check: LOKI_TASKS DO FIRST.
+
 **2026-10-27 later (Claude, cloud) - proof, not claims; storage that stays inside a budget.** Read from the PC (read-only):
 music/ EMPTY after the music goal said DONE 21 times overnight; sprites/ got 1 file for 25 DONEs; 38 stale worktrees
 (~3 GB); an npm project with node_modules agents built in Home; identical LOD copies of every model. Done:

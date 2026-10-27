@@ -43,16 +43,17 @@ CG_EXE = ("codegraph", "codegraph.cmd", "codegraph.exe")
 
 # ------------------------------------------------------------------ finding the programs
 def _find(names: Iterable[str], env_key: str, extra: Iterable[str] = ()) -> str:
+    from win_shim import real_exe  # pylint: disable=import-outside-toplevel
     own = os.getenv(env_key, "").strip()
     if own and Path(own).is_file():
-        return own
+        return real_exe(own)
     for n in names:
         found = shutil.which(n)
-        if found:
-            return found
+        if found:   # Windows: npm's opencode.cmd runs inside cmd.exe (8,191-char line) - start the real .exe
+            return real_exe(found)
     for p in extra:
         if p and Path(p).is_file():
-            return p
+            return real_exe(p)
     return ""
 
 
@@ -383,7 +384,10 @@ def run_turn(text: str, workspace: str, *, exe: str, config_path: str, env: dict
         argv += ["--model", model]
     if agent:
         argv += ["--agent", agent]
-    msg_file = long_message_file(text, workspace)
+    from win_shim import argv_limit, is_batch  # pylint: disable=import-outside-toplevel
+    # Still a .cmd (no .exe found behind it)? cmd.exe allows 8,191 chars and breaks arguments at newlines.
+    msg_file = long_message_file(text, workspace, limit=0 if is_batch(exe) and "\n" in (text or "")
+                                 else argv_limit(exe, ARGV_MAX))
     if msg_file:   # Windows caps a whole command line at 32,767 characters (the PC, 2026-10-27: 35+ jobs died on
         # "The command line is too long" - every provider in turn); a long message goes as an attached file
         argv += ["--file", msg_file, LONG_MESSAGE_POINTER % Path(msg_file).name]
