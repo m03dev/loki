@@ -32,7 +32,7 @@ from pathlib import Path
 
 import bpy
 
-VERSION = "2026-10-26.15"
+VERSION = "2026-10-26.16"
 WATCH_S = 5.0
 _S = {"log": print, "root": None, "last_watch": 0.0, "patched": None, "jobs": 0, "last_job": "", "mcp": False}
 
@@ -1015,7 +1015,23 @@ def cmd_repair(p):
             bm.free()
             out[o.name] = {"before": before, "after": after, "removed_faces": len(drop), "rebuilt": rebuilt,
                            "smoothed": int(it), **_verdict(after), "verdict_before": _verdict(before)["verdict"]}
-    worst = max((v["verdict"] for v in out.values()), key=["clean", "rough", "garbage"].index, default="clean")
+        # floaters that are whole OBJECTS (an AI model's stray bit exported as its own mesh - the Mac's dragon had a cyan
+        # blob beside it): drop any mesh under `keep` of the biggest one's surface
+        objs = [o for o in _meshes(sc, p.get("objects")) if not o.name.endswith("__high")]
+        if len(objs) > 1:
+            def area(o):
+                return sum(poly.area for poly in o.data.polygons) * max(o.scale) ** 2
+            areas = {o.name: area(o) for o in objs}
+            top = max(areas.values()) or 1.0
+            for o in objs:
+                if areas[o.name] < keep * top:
+                    data = o.data
+                    bpy.data.objects.remove(o, do_unlink=True)
+                    if data.users == 0:
+                        bpy.data.meshes.remove(data)
+                    out.pop(o.name, None)
+    worst = max((v["verdict"] for v in out.values() if isinstance(v, dict)), key=["clean", "rough", "garbage"].index,
+                default="clean")
     return {"objects": out, "verdict": worst}
 
 

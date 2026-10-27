@@ -96,6 +96,8 @@ def fbx(**kw):
 core._op(fbx, filepath="x.fbx", use_active_scene=True, embed_textures=True)
 check("an option this Blender lacks is dropped, the rest kept (FBX lost embed_textures on the PC)",
       calls[-1] == ["embed_textures", "filepath"], calls)
+check("repair drops floater OBJECTS too (the Mac's dragon had a stray cyan blob beside it)",
+      "floaters that are whole OBJECTS" in src_core if (src_core := (REPO / "engine" / "blender_scripts" / "loki_blender_core.py").read_text()) else False)
 check("retopo, topology and bake are core commands", {"retopo", "topology", "bake"} <= set(core.COMMANDS))
 src = (REPO / "engine" / "blender_scripts" / "loki_blender_core.py").read_text(encoding="utf-8")
 check("colour is baked as emission of Base Color (a DIFFUSE bake is black on metallic glTF - the PC)",
