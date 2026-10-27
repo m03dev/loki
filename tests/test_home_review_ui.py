@@ -129,6 +129,29 @@ async def main():
                                                        "note": "the back view does not match the front"}, posts[-1:])
         check("all done: the panel hides again", await E("document.getElementById('home-review').hidden"))
 
+        # the Prompt Expert (engine/prompt_expert.py): improving..., then the better words with the agent's own below
+        working = dict(PROMPT, id="cccccc333333", expert={"status": "working"})
+        state["waiting"] = [working]
+        await E("LokiHomeReview.refresh(true)")
+        await page.wait_for_selector(".rv-expert.working", timeout=8000)
+        done = dict(working, args={"prompt": "A moss golem guardian of stacked mossy boulders, amber eyes, front view"},
+                    agent_prompt="moss golem", expert={"status": "done", "why": "added materials and view", "by": "nvidia"})
+        state["waiting"] = [done]
+        await E("LokiHomeReview.refresh(true)")
+        await page.wait_for_selector(".rv-expert.done", timeout=8000)
+        ex = await E("""(() => { const c = document.querySelector('.rv-prompt');
+          return { line: c.querySelector('.rv-expert').textContent, words: c.querySelector('.rv-words').value,
+                   agent: c.querySelector('.rv-agent pre').textContent }; })()""")
+        check("Prompt Expert: 'improving...' first, then its better words in the box, the agent's own words below",
+              ex["line"].startswith("Improved by the Prompt Expert: added materials") and ex["words"].startswith("A moss golem guardian of")
+              and ex["agent"] == "moss golem", ex)
+        typed = dict(done, expert={"status": "done", "why": "x"}, id=done["id"])
+        await page.fill(".rv-prompt .rv-words", "my own words")
+        state["waiting"] = [dict(typed, expert={"status": "failed", "error": "late"})]
+        await E("LokiHomeReview.refresh(true)")
+        await page.wait_for_timeout(300)
+        check("what the owner is typing is never wiped by a refresh", await E("document.querySelector('.rv-prompt .rv-words').value") == "my own words")
+
         state["waiting"] = [RESULT]
         await page.set_viewport_size({"width": 700, "height": 1200})     # the owner's vertical screen
         await E("LokiHomeReview.refresh(true)")

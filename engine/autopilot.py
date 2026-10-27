@@ -556,10 +556,15 @@ class Autopilot:
         oldest asset in the background - its checks decide whether it is handed on or retried."""
         if self.agent is None or not hasattr(self.agent, "WORKSPACE"):
             return ""
+        ws = Path(self.agent.WORKSPACE)
+        try:   # new prompt cards go through the Prompt Expert before the owner sees them (engine/prompt_expert.py) -
+            import owner_review  # pylint: disable=import-outside-toplevel   (a text call: it runs beside GPU work)
+            owner_review.kick_expert(self.agent, ws)
+        except Exception as exc:  # noqa: BLE001
+            self._log("pipeline", "Prompt Expert could not start: %s" % str(exc)[:160])
         if any(r["lane"] == "gpu" for r in self.running_work()):   # one GPU / memory-heavy thing at a time (the
             return ""                                              # Mac crashed 2026-10-26 with three at once)
         import asset_pipeline  # pylint: disable=import-outside-toplevel
-        ws = Path(self.agent.WORKSPACE)
         out = asset_pipeline.tick(ws)
         if not out and _env_on("LOKI_PIPELINE_PROPOSE") and self.due("propose", _env_s("LOKI_PIPELINE_PROPOSE_S", 1800)):
             # the Concept Artist proposes the next asset - as a prompt card for the owner, nothing is drawn yet

@@ -99,17 +99,30 @@ const LokiHomeReview = (() => {
     const c = mk("div", "rv-card rv-prompt"); c.setAttribute("role", "listitem"); c.dataset.id = it.id;
     c.append(head(it));
     if (it.note) c.append(mk("div", "rv-note", "Your note: " + it.note));
-    const box = mk("textarea", "rv-words"); box.value = words(it); box.rows = 3;
+    const ex = it.expert || {};   // the Prompt Expert (engine/prompt_expert.py) rewrites the agent's words first
+    if (ex.status === "working") c.append(mk("div", "rv-expert working", "Prompt Expert is improving this prompt…"));
+    else if (ex.status === "done") {
+      const e = mk("div", "rv-expert done", "Improved by the Prompt Expert" + (ex.why ? ": " + ex.why : ""));
+      e.dataset.tipName = "Prompt Expert"; e.dataset.tipWhat = "An art director rewrote the agent's prompt" + (ex.by ? " (" + ex.by + ")" : "") + ". Edit it freely before you approve.";
+      c.append(e);
+    } else if (ex.status === "failed") c.append(mk("div", "rv-expert failed", "The Prompt Expert could not run (" + (ex.error || "?") + ") - these are the agent's own words."));
+    const box = mk("textarea", "rv-words"); box.value = words(it); box.rows = 3; box.dataset.orig = box.value;
     box.setAttribute("aria-label", "The prompt - edit it before you approve");
     box.dataset.tipName = "The prompt"; box.dataset.tipWhat = "Edit the words if you want - Approve uses what is in this box.";
     const b = brief(it);
+    let agentWords = null;
+    if (it.agent_prompt) {
+      agentWords = mk("details", "rv-brief rv-agent");
+      const sm = mk("summary"); sm.innerHTML = svg(ICON.brief); sm.append(mk("span", "", "What the agent wrote"));
+      agentWords.append(sm, mk("pre", "rv-notes", it.agent_prompt));
+    }
     const acts = mk("div", "rv-acts");
     acts.append(
       iconBtn("rv-ok", ICON.ok, "Approve and draw", "Draw it with the words in the box (your edits included).", () => decide(it, "approve", { prompt: box.value }, c)),
       iconBtn("rv-no", ICON.no, "No", "Do not draw this. The note box below says why (optional).", () => decide(it, "reject", { note: note.value }, c)));
     const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Note (optional)";
     note.setAttribute("aria-label", "A note for the agent");
-    c.append(box); if (b) c.append(b);
+    c.append(box); if (agentWords) c.append(agentWords); if (b) c.append(b);
     c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
     c.append(mk("div", "rv-err"));
     if (it.status === "working") { box.disabled = true; acts.hidden = true; note.hidden = true; c.classList.add("working"); }
@@ -152,9 +165,12 @@ const LokiHomeReview = (() => {
     const have = new Map([...list.children].map((n) => [n.dataset.id, n]));
     const order = [];
     for (const it of items) {
-      const key = it.id + "|" + it.status;
+      const key = it.id + "|" + it.status + "|" + ((it.expert && it.expert.status) || "");
       let n = have.get(it.id);
-      if (!n || n.dataset.key !== key) { n = it.kind === "prompt" ? promptCard(it) : resultCard(it); n.dataset.key = key; }
+      const box = n && n.querySelector(".rv-words"), note = n && n.querySelector(".rv-note-in");
+      const typing = n && ((box && (document.activeElement === box || box.value !== box.dataset.orig))
+                           || (note && (document.activeElement === note || note.value)));
+      if (!n || (n.dataset.key !== key && !typing)) { n = it.kind === "prompt" ? promptCard(it) : resultCard(it); n.dataset.key = key; }
       order.push(n);
     }
     list.replaceChildren(...order);

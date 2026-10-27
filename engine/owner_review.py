@@ -247,6 +247,65 @@ def run_in_background(it: dict) -> None:
     threading.Thread(target=draw, args=(it,), daemon=True, name="owner-review-" + it["id"]).start()
 
 
+# ----------------------------------------------------------------------------- the Prompt Expert (engine/prompt_expert.py)
+EXPERT_ASK: dict = {"ask": None}     # tests put a fake ask(system, user) -> (text, model) here
+EXPERT_STALE_S = 600
+
+
+def expert_on() -> bool:
+    return str(os.environ.get("LOKI_PROMPT_EXPERT", "on")).strip().lower() not in ("0", "off", "false", "no")
+
+
+def run_expert(item_id: str, ask, ws=None) -> dict | None:
+    """Rewrite one waiting prompt card's words (the agent's own stay on the card as agent_prompt)."""
+    it = get(item_id)
+    if it is None or it["kind"] != "prompt" or it["status"] != "waiting":
+        return it
+    import prompt_expert  # pylint: disable=import-outside-toplevel
+    key = "subject" if it["tool"] == "make_turnaround" and "subject" in it["args"] else "prompt"
+    try:
+        better = prompt_expert.improve(it, ask, ws)
+    except Exception as exc:  # noqa: BLE001 - the card keeps the agent's words and says why
+        it = get(item_id) or it
+        it["expert"] = {"status": "failed", "error": str(exc)[:200], "t": time.time()}
+        return _save(it)
+    it = get(item_id) or it
+    if it["status"] != "waiting":        # the owner decided while the expert was writing: their decision stands
+        return it
+    it["agent_prompt"] = str(it["args"].get(key) or "")
+    it["args"][key] = better["prompt"]
+    it["expert"] = {"status": "done", "by": better.get("by", ""), "why": better.get("why", ""), "t": time.time()}
+    return _save(it)
+
+
+def kick_expert(agent=None, ws=None, thread: bool = True) -> int:
+    """Start the Prompt Expert on every waiting prompt card it has not done yet (the engine calls this when the
+    owner looks at For you and on the autopilot's pass). Returns how many it started."""
+    if not on() or not expert_on():
+        return 0
+    ask = EXPERT_ASK["ask"]
+    if ask is None:
+        if agent is None:
+            return 0
+        import prompt_expert  # pylint: disable=import-outside-toplevel
+        ask = prompt_expert.asker(agent)
+    n = 0
+    for it in items(("waiting",)):
+        ex = it.get("expert") or {}
+        if it["kind"] != "prompt" or ex.get("status") in ("done", "failed") or (
+                ex.get("status") == "working" and time.time() - float(ex.get("t") or 0) < EXPERT_STALE_S):
+            continue
+        it["expert"] = {"status": "working", "t": time.time()}
+        _save(it)
+        n += 1
+        if thread:
+            threading.Thread(target=run_expert, args=(it["id"], ask, ws), daemon=True,
+                             name="prompt-expert-" + it["id"]).start()
+        else:
+            run_expert(it["id"], ask, ws)
+    return n
+
+
 def summary() -> dict:
     w = waiting()
     return {"waiting": sum(1 for it in w if it["status"] == "waiting"),
@@ -260,6 +319,10 @@ def route(state: Any, method: str, route_: str, q: dict, data: dict) -> tuple:
     """GET /review (what waits for the owner + the last decisions), POST /review/decide {id, action, prompt?, note?}."""
     ws = Path(getattr(getattr(state, "agent", None), "WORKSPACE", "") or ".")
     if (method, route_) == ("GET", "/review"):
+        try:   # every new prompt card goes through the Prompt Expert first (in the background)
+            kick_expert(getattr(state, "agent", None), ws)
+        except Exception:  # noqa: BLE001 - the cards show as they are
+            pass
         recent = [it for it in items(("approved", "rejected", "retake", "done", "failed"))][-20:]
         return 200, {"ok": True, "on": on(), "waiting": waiting(), "recent": recent[::-1], "summary": summary(),
                      "workspace": str(ws)}

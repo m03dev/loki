@@ -206,6 +206,67 @@ try:
     check("the proposal's model call takes the prompt (not the self-review's ask)",
           list(inspect.signature(autopilot.Autopilot._concept_ask).parameters) == ["self", "prompt"])
 
+    # ------------------------------------------------------------------ the Prompt Expert (engine/prompt_expert.py)
+    import prompt_expert  # noqa: E402,PLC0415
+    for c in orv.waiting():
+        orv.decide(c["id"], "reject" if c["kind"] == "prompt" else "approve")
+    seen = []
+
+    def expert(system, user):
+        seen.append((system, user))
+        return ('{"prompt": "A small red baby dragon curled protectively around a heap of gold coins in a dim cave, '
+                'amber eyes half closed, warm torchlight from the left, painterly", "why": "added pose, light and '
+                'setting"}', "fake-model")
+    os.environ["LOKI_JOB_ID"] = "job77"
+    r = make_mcp.call("make_image", {"prompt": "dragon with gold", "style": "game-concept"}, WS)
+    os.environ.pop("LOKI_JOB_ID")
+    orv.EXPERT_ASK["ask"] = expert
+    started = orv.kick_expert(None, WS, thread=False)
+    card = orv.get(r["review"])
+    check("a new prompt card goes through the Prompt Expert first: better words on the card, the agent's own kept",
+          started == 1 and card["args"]["prompt"].startswith("A small red baby dragon curled") and
+          card["agent_prompt"] == "dragon with gold" and card["expert"]["status"] == "done"
+          and card["expert"]["by"] == "fake-model", card)
+    check("... the expert was told the rules, the owner's taste and what the picture is for",
+          "Never put words in the picture" in seen[-1][0] and "red baby dragon guarding its gold" in seen[-1][1]
+          and "The agent's prompt: dragon with gold" in seen[-1][1] and "style game-concept" in seen[-1][1], seen[-1][1])
+    check("... and it runs once per card", orv.kick_expert(None, WS, thread=False) == 0 and len(seen) == 1)
+    ran.clear()
+    orv.decide(card["id"], "approve", prompt=card["args"]["prompt"], runner=ran.append)
+    check("approving draws the expert's words (the owner could still edit them)",
+          ran and ran[0]["args"]["prompt"].startswith("A small red baby dragon"), ran[:1])
+    r2 = make_mcp.call("make_image", {"prompt": "a lantern"}, WS)
+    orv.EXPERT_ASK["ask"] = lambda system, user: ("no idea", "fake")
+    orv.kick_expert(None, WS, thread=False)
+    c2 = orv.get(r2["review"])
+    check("an expert that answers nonsense: the card keeps the agent's words and says the expert could not run",
+          c2["args"]["prompt"] == "a lantern" and c2["expert"]["status"] == "failed" and "agent_prompt" not in c2, c2)
+    r3 = make_mcp.call("make_image", {"prompt": "a boat"}, WS)
+    orv.decide(r3["review"], "reject")
+    late = orv.run_expert(r3["review"], expert, WS)
+    check("the owner's decision stands if they decided while the expert was writing",
+          late["status"] == "rejected" and late["args"]["prompt"] == "a boat", late)
+    os.environ["LOKI_PROMPT_EXPERT"] = "off"
+    r4 = make_mcp.call("make_image", {"prompt": "a cup"}, WS)
+    check("LOKI_PROMPT_EXPERT=off: cards stay as the agent wrote them", orv.kick_expert(None, WS, thread=False) == 0
+          and "expert" not in orv.get(r4["review"]))
+    os.environ.pop("LOKI_PROMPT_EXPERT")
+    orv.EXPERT_ASK["ask"] = None
+    import heavy  # noqa: E402,PLC0415
+    _hb = heavy.busy
+    heavy.busy = lambda *a, **k: True
+    tried = []
+    agent = types.SimpleNamespace(MODELS={"local": types.SimpleNamespace(model="qwen3:8b")},
+                                  provider_configured=lambda n: n == "local",
+                                  make_client=lambda n: tried.append(n))
+    try:
+        prompt_expert.asker(agent)("s", "u")
+        local_skipped = False
+    except RuntimeError as exc:
+        local_skipped = "heavy work is running" in str(exc)
+    heavy.busy = _hb
+    check("never loads a local model beside heavy work (the Mac crashed 2026-10-26)", local_skipped and not tried, tried)
+
     # ------------------------------------------------------------------ the routes
     state = types.SimpleNamespace(agent=types.SimpleNamespace(WORKSPACE=str(WS)))
     code, body = orv.route(state, "GET", "/review", {}, {})
