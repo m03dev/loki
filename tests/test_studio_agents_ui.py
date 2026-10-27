@@ -81,7 +81,7 @@ async def main():
         await page.goto("http://127.0.0.1:8893/#token=s3cret")
         await page.wait_for_function("window.LOKI_READY === true", timeout=20000)
         E = page.evaluate
-        await E("localStorage.removeItem('loki-studio-view'); LokiModeBar.go('render')")
+        await E("localStorage.removeItem('loki-studio-view'); LokiModeBar.go('render', {view: 'agents'})")   # Lab opens on Tasks now
         await page.wait_for_selector("#sa-agents .sa-card", timeout=8000)
         check("Studio opens on Agents", await E("document.querySelector(\".sf-view[data-view='agents']\").getAttribute('aria-selected')") == "true")
         ms = await E("[...document.querySelectorAll('.sa-machine')].map((m) => [m.dataset.machine, m.classList.contains('on'), m.textContent])")

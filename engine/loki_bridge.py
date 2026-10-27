@@ -1238,6 +1238,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             auto = getattr(self.server.state, "autopilot", None)
             self._send_json(200, {"ok": True, **(auto.status() if auto is not None else {"enabled": False})})
             return
+        if route == "/tasks/board":   # Lab > Tasks: what the agents were asked, finished, failed and why (task_board.py)
+            self._send_json(*task_board_route(self.server.state, "GET", route, {}))
+            return
         if route == "/sessions":
             agent = self.server.state.agent
             text = agent.agent_sessions() if hasattr(agent, "agent_sessions") else ""
@@ -2104,6 +2107,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"vault failed: {exc}"})
             return
+        if route in ("/tasks/retry", "/tasks/dismiss"):
+            self._send_json(*task_board_route(state, "POST", route, data))
+            return
         if route.startswith("/jobs"):
             self._send_json(*job_action(state, route, data))
             return
@@ -2189,6 +2195,23 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def task_board_route(state: "BridgeState", method: str, route: str, data: dict) -> tuple:
+    """GET /tasks/board; POST /tasks/retry {id} (try it again now), /tasks/dismiss {id} (take it off the board)."""
+    auto = getattr(state, "autopilot", None)
+    if auto is None:
+        return 503, {"ok": False, "error": "The autopilot is not running on this computer."}
+    with auto.lock:
+        if method == "POST":
+            key = str(data.get("id") or "")
+            done = auto.retry(key) if route == "/tasks/retry" else auto.dismiss(key)
+            if not done:
+                return 404, {"ok": False, "error": "No such task (or a standing goal - those run in turn on their own)."}
+            auto._save()  # pylint: disable=protected-access
+        auto.settle()
+        board = auto.board()
+    return 200, board
 
 
 def deps_status() -> dict:
@@ -3173,6 +3196,9 @@ async def serve() -> None:
         import nim_models  # pylint: disable=import-outside-toplevel
         if "nvidia" in loki.MODELS:
             nim_models.fix_later(loki.MODELS["nvidia"], on_change=lambda c: print("[loki-bridge] NVIDIA model " + c, flush=True))
+            if "nvidia-pro" in loki.MODELS:   # Max mode: the strongest model this key serves (nim_models.STRONGEST)
+                nim_models.fix_later(loki.MODELS["nvidia-pro"], key=loki.MODELS["nvidia"].api_key,
+                                     on_change=lambda c: print("[loki-bridge] Max mode model " + c, flush=True))
     except Exception:  # noqa: BLE001
         pass
     try:   # speed watch (E6): how long the engine took to answer

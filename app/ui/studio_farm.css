@@ -50,3 +50,36 @@
 .engine-panel[hidden] { display: none; }
 .carbon-log { font-size: 11px; max-height: 40vh; overflow: auto; background: #0d0d10; border-radius: 8px; padding: 8px; white-space: pre-wrap; }
 @media (max-width: 900px) { .sf-grid { grid-template-columns: 1fr; grid-template-rows: auto; overflow-y: auto; } }
+
+/* Lab > Tasks (app/ui/task_board.js): what the agents were asked, finished, failed and why. Sizes in %/rem, no overlap. */
+.sf-tasks { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.sf-tasks[hidden] { display: none; }
+.tb { display: flex; flex-direction: column; gap: 10px; padding: 12px clamp(10px, 2%, 24px) 24px; max-width: 1100px; margin: 0 auto; box-sizing: border-box; }
+.tb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.tb-filters, .tb-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.tb-filter, .tb-kind { height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line, #34343c); background: transparent;
+  color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.tb-filter[aria-selected="true"], .tb-kind[aria-pressed="true"] { background: rgba(140, 207, 196, .16); border-color: var(--accent, #8ccfc4); color: var(--text); }
+.tb-line { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+.tb-list { display: flex; flex-direction: column; gap: 8px; }
+.tb-row { border: 1px solid var(--line, #34343c); border-left-width: 4px; border-radius: 10px; padding: 10px 12px; background: rgba(255, 255, 255, .025);
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tb-done { border-left-color: #5fbf8f; } .tb-failed { border-left-color: #e0736b; } .tb-retrying { border-left-color: #e3c07d; }
+.tb-running { border-left-color: #7fb2ff; } .tb-unknown { border-left-color: var(--muted, #888); }
+.tb-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.tb-pill { flex: none; font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); }
+.tb-done .tb-pill { color: #9fe0b0; } .tb-failed .tb-pill { color: #f2a39c; } .tb-retrying .tb-pill { color: #f0d49a; } .tb-running .tb-pill { color: #a9c9ff; }
+.tb-name { flex: 1 1 18rem; min-width: 0; font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+.tb-meta { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.tb-sum, .tb-why, .tb-files { margin: 0; font-size: 12.5px; }
+.tb-why { color: #f2a39c; overflow-wrap: anywhere; }
+.tb-files { color: var(--muted); overflow-wrap: anywhere; }
+.tb-link { cursor: pointer; text-decoration: underline dotted; }
+.tb-pics { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-pic { width: clamp(64px, 14%, 120px); aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #000; cursor: zoom-in;
+  box-shadow: 0 0 0 1px var(--line, #34343c); }
+.tb-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-btn { height: 26px; padding: 0 10px; border-radius: 7px; font-size: 12px; }
+.tb-answer { margin: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; font: 12px/1.45 var(--mono, monospace); color: var(--muted);
+  background: rgba(0, 0, 0, .25); border-radius: 8px; padding: 8px 10px; }
+.tb-empty { color: var(--muted); font-size: 13px; text-align: center; margin: 8vh 0; }

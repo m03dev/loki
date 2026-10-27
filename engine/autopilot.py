@@ -249,6 +249,9 @@ class Autopilot:
         data.setdefault("started", {})
         data.setdefault("log", [])
         data.setdefault("order", [])
+        data.setdefault("attempts", {})     # request id -> tries, why they failed, when the next one is (task_board)
+        data.setdefault("goal_fails", {})   # standing goal -> failures in a row, resting until
+        data.setdefault("dismissed", [])    # board rows the owner took off
         return data
 
     def _save(self) -> None:
@@ -361,11 +364,121 @@ class Autopilot:
                                           "open": bool(match), "reply": reply[:300], "lane": lane(text)}, **(extra or {}))
         return reply if match else ""
 
+    # ------------------------------------------------------------ the task board (engine/task_board.py)
+    def _teams_get(self, team_id: str):
+        runner = getattr(self.agent, "TEAMS", None)
+        try:
+            return runner.get(team_id) if runner is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _job_get(self, job_id: str):
+        jobs = getattr(self.state, "jobs", None)
+        try:
+            return jobs.store.get(job_id) if jobs is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def settle(self) -> int:
+        """Look at every started team that has finished and not been counted yet: a request that failed gets its next
+        try planned (or is given up with the reason), a standing goal that keeps failing rests. Returns how many."""
+        import task_board  # pylint: disable=import-outside-toplevel
+        n = 0
+        for key, entry in self.data["started"].items():
+            if entry.get("settled") or not entry.get("team"):
+                continue
+            team = self._teams_get(entry["team"])
+            if team is None or team.get("status") == "working":
+                continue
+            ok = bool(task_board.verdict_ok(team.get("verdict"))) and team.get("status") != "cancelled"
+            why = "" if ok else (task_board.why_failed(team, self._data_dir(), self._job_get)
+                                 or task_board.plain(team.get("verdict"), team.get("status")))
+            fin = float(team.get("finished") or self.clock())
+            if not ok and not key.startswith("always-") and self.clock() - fin > _env_s("LOKI_TASK_RETRY_WINDOW_S", 172800):
+                # failed long before this board existed (first start after the update): listed, not re-run
+                att = self.data["attempts"].setdefault(key, {"n": 1})
+                att.update(given_up=True, seen_finish=fin, reasons=[why[:300]])
+                entry.update(settled=True, open=False)
+                n += 1
+                continue
+            if key.startswith("always-"):
+                task_board.note_goal(self.data["goal_fails"], entry.get("goal") or entry.get("text", ""), ok, fin)
+            else:
+                att = task_board.note_finished(self.data["attempts"], key, ok, fin, why)
+                self._log("inbox", ("Finished: " if ok else ("Gave up after %d tries: " % att.get("n", 1)) if att.get("given_up")
+                                    else "Failed (will try again): ") + entry.get("text", "")[:160] + ("" if ok else " - " + why[:160]),
+                          request=key, team=entry["team"])
+            entry["settled"] = True
+            entry["open"] = False
+            n += 1
+        return n
+
+    def board(self) -> dict:
+        import task_board  # pylint: disable=import-outside-toplevel
+        try:
+            import offload  # pylint: disable=import-outside-toplevel
+            machine = "this Mac" if sys.platform == "darwin" else ("this PC" if offload.role() == "main" else "this computer")
+        except Exception:  # noqa: BLE001
+            machine = "this computer"
+        ws = Path(getattr(self.agent, "WORKSPACE", "") or "") if getattr(self.agent, "WORKSPACE", "") else None
+        return task_board.build(self.data["started"], self.data["attempts"], self._teams_get, self._job_get,
+                                self._data_dir(), ws, machine, set(self.data.get("dismissed") or []), self.clock())
+
+    def write_board(self) -> str:
+        import task_board  # pylint: disable=import-outside-toplevel
+        try:
+            return task_board.write_report(self.board(), self._data_dir())
+        except Exception as exc:  # noqa: BLE001
+            self._log("board", "could not write the task report: %s" % exc)
+            return ""
+
+    def retry(self, key: str) -> bool:
+        """The owner's "Try again" on the board: plan the next try now (a given-up request gets one more)."""
+        entry = self.data["attempts"].setdefault(key, {"n": 1})
+        if key not in self.data["started"] or key.startswith("always-"):
+            return False
+        entry.update(given_up=False, last_ok=False, next=self.clock())
+        self.data["started"][key]["settled"] = True
+        self.data["last"]["inbox"] = 0
+        return True
+
+    def dismiss(self, key: str) -> bool:
+        if key not in self.data["started"]:
+            return False
+        if key not in self.data["dismissed"]:
+            self.data["dismissed"] = (self.data["dismissed"] + [key])[-500:]
+        return True
+
+    def _retry_waiting(self, running: list) -> list:
+        """Requests whose next try is due (oldest first)."""
+        import task_board  # pylint: disable=import-outside-toplevel
+        now = self.clock()
+        return [item for item in inbox_requests(self.repo / "LOKI_TASKS.md")
+                if item["id"] in self.data["started"] and task_board.retry_due(self.data["attempts"], item["id"], now)]
+
     def duty_inbox(self) -> str:
-        """Start every open request that fits in a free slot (the GPU lane one at a time)."""
+        """Start every open request that fits in a free slot (the GPU lane one at a time) - new ones, and failed ones
+        whose next try is due (told why the last one failed)."""
         if self.start_team is None:
             return ""
+        import task_board  # pylint: disable=import-outside-toplevel
+        self.settle()
         running, started = self.running_work(), []
+        for item in self._retry_waiting(running):
+            if not self.can_start(item["text"], running):
+                continue
+            att = self.data["attempts"].setdefault(item["id"], {"n": 1})
+            prev = self.data["started"][item["id"]]
+            att["n"] = int(att.get("n") or 1) + 1
+            att.pop("next", None)
+            reply = self._start(item["id"], task_board.retry_text(item["text"], self.data["attempts"], item["id"]), "inbox",
+                                {"prev_teams": (prev.get("prev_teams") or []) + [prev.get("team", "")]})
+            team = self.data["started"][item["id"]]["team"]
+            self._log("inbox", ("Trying again (%d of %d): " % (att["n"], task_board.RETRIES + 1) if team else "Could not start: ")
+                      + item["text"][:200], request=item["id"], team=team)
+            if team:
+                running.append({"key": item["id"], "text": item["text"], "lane": lane(item["text"])})
+                started.append(reply)
         for item in inbox_requests(self.repo / "LOKI_TASKS.md"):
             if item["id"] in self.data["started"] or not self.can_start(item["text"], running):
                 continue
@@ -384,10 +497,12 @@ class Autopilot:
         assets only - publishing always asks."""
         if self.start_team is None:
             return ""
+        import task_board  # pylint: disable=import-outside-toplevel
+        self.settle()
         running = self.running_work()
         if any(item["id"] not in self.data["started"] and self.can_start(item["text"], running)
-               for item in inbox_requests(self.repo / "LOKI_TASKS.md")):
-            return ""                # the inbox comes first
+               for item in inbox_requests(self.repo / "LOKI_TASKS.md")) or self._retry_waiting(running):
+            return ""                # the inbox (and a request's next try) comes first
         goals = always_goals(self.repo / "LOKI_TASKS.md")
         if not goals:
             return ""
@@ -398,8 +513,9 @@ class Autopilot:
                 break
             i = int(self.data.get("always_next") or 0) % len(goals)
             self.data["always_next"] = i + 1
-            if goals[i] in busy or not self.can_start(goals[i], running):
-                continue
+            if goals[i] in busy or not self.can_start(goals[i], running) \
+                    or task_board.goal_resting(self.data["goal_fails"], goals[i], self.clock()):
+                continue   # a goal that failed again and again rests (task_board.GOAL_REST_S)
             goal = goals[i] + (" (standing goal, %s - make drafts and assets only; never publish or post)"
                                % time.strftime("%Y-%m-%d", time.localtime(self.clock())))
             key = "always-%d-%d" % (i, int(self.clock()))
@@ -723,6 +839,13 @@ class Autopilot:
                     self._save()
         except Exception as exc:  # noqa: BLE001
             self._log("qa", "failed: %s: %s" % (type(exc).__name__, exc))
+        try:   # finished work is counted (and the board rewritten) as soon as it ends, idle or not
+            with self.lock:
+                if self.settle():
+                    self._save()
+                    self.write_board()
+        except Exception as exc:  # noqa: BLE001
+            self._log("board", "failed: %s: %s" % (type(exc).__name__, exc))
         work_ok, _ = self.idle(for_work=True)
         if work_ok and not self.drain():
             # requests and standing goals fill free slots side by side, even while other work runs

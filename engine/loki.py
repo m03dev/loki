@@ -424,7 +424,7 @@ MODELS = {
     # Modes, not endpoints (owner 2026-10-26: "whats our strongest model and fastest. we need a mode for that to get
     # hard tasks done"): MAX resolves to the strongest model that is ready (MAX_ORDER), FAST to the quickest capable one
     # (FAST_ORDER). Both fail over like Smart.
-    "max": ModelConfig(base_url="https://integrate.api.nvidia.com/v1", model="deepseek-ai/deepseek-v4-pro"),
+    "max": ModelConfig(base_url="https://integrate.api.nvidia.com/v1", model="z-ai/glm-5.3"),
     "fast": ModelConfig(base_url="https://api.cerebras.ai/v1", model="gpt-oss-120b"),
     "local": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-small": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
@@ -567,11 +567,11 @@ MODELS = {
     "nvidia": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                           api_key=os.getenv("NVIDIA_API_KEY", ""),
                           model=os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4.1-flash")),
-    # The strongest free open model on the same NVIDIA key (2026-10: DeepSeek V4 Pro, 1M context; SWE-bench Verified
-    # ~96%). Shares NVIDIA's per-minute cap (ratelimit.py buckets nvidia-*). Max mode's first free pick, thinking on.
+    # The strongest free open model on the same NVIDIA key: GLM-5.3 by default (the PC's key has no DeepSeek V4 Pro);
+    # nim_models.STRONGEST picks the best one the key really serves at start. Shares NVIDIA's per-minute cap (ratelimit.py buckets nvidia-*). Max mode's first free pick, thinking on.
     "nvidia-pro": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                               api_key=os.getenv("NVIDIA_API_KEY", ""),
-                              model=os.getenv("NVIDIA_PRO_MODEL", "deepseek-ai/deepseek-v4-pro")),
+                              model=os.getenv("NVIDIA_PRO_MODEL", "z-ai/glm-5.3")),
     "ollama-cloud": ModelConfig(base_url=os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/api"),
                                 api_key=os.getenv("OLLAMA_API_KEY", ""),
                                 model=os.getenv("OLLAMA_CLOUD_MODEL", "deepseek-v4-pro")),
@@ -9345,6 +9345,10 @@ except OSError:
     pass
 
 
+# Free routes that answer but cannot carry an agent job (no reliable tool calls, no vision): after every capable one.
+WEAK_FOR_JOBS = tuple(p.strip() for p in os.getenv("LOKI_WEAK_FOR_JOBS", "llm7,omniroute,local-fast,local-small").split(",") if p.strip())
+
+
 def _oc_providers(first: str) -> dict:
     """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider - and
     this computer's local model always among them (it never runs out; 2026-10-26: with every free tier spent, jobs
@@ -9354,7 +9358,7 @@ def _oc_providers(first: str) -> dict:
                   and str(MODELS[n].base_url or "").startswith("http")), "")
     out = {}
     for name in order:
-        if name in seen or name not in MODELS:
+        if name in seen or name not in MODELS or name in AUTO_ROUTING_MODES:   # smart / online / max / fast are modes
             continue
         seen.add(name)
         cfg = MODELS[name]
@@ -9365,7 +9369,14 @@ def _oc_providers(first: str) -> dict:
         out[name] = {"base_url": base, "model": model, "key": str(cfg.api_key or "")}
     try:   # crawling ones go last, ones that said they are out are left off (engine/provider_speed.py)
         import provider_speed  # pylint: disable=import-outside-toplevel
-        out = {n: out[n] for n in provider_speed.order(DATA_DIR, list(out), keep=(local,))}
+        names = provider_speed.order(DATA_DIR, list(out), keep=(local,))
+        if _job_process():
+            # unattended work (2026-10-27, the PC overnight): NVIDIA took ~200 s a step, was benched as slow, and the
+            # jobs ran on the 8B local model and a 20B free route that could not call tools - 60% failed. Nobody waits
+            # on a job, so a slow capable route beats a quick weak one: the small models go after every cloud route.
+            weak = [n for n in names if n in LOCAL_PROVIDERS or n in WEAK_FOR_JOBS]
+            names = [n for n in names if n not in weak] + weak
+        out = {n: out[n] for n in names}
     except Exception:  # noqa: BLE001
         pass
     names = list(out)[:6]

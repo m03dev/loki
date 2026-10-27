@@ -344,6 +344,34 @@ def tool_summary(part: dict) -> tuple:
     return name, str(st.get("status") or ""), str(shown)[:300], str(out)[:600]
 
 
+# A message longer than this is sent as an attached file (--file) instead of on the command line. Windows' limit is
+# 32,767 characters for the whole line; the other arguments and the exe path need room too. LOKI_OC_ARGV_MAX overrides.
+ARGV_MAX = int(os.getenv("LOKI_OC_ARGV_MAX", "") or (24000 if os.name == "nt" else 120000))
+LONG_MESSAGE_POINTER = ("Your full instructions are in the attached file %s (they were too long for the command line). "
+                        "Read ALL of it first, then do exactly what it says.")
+
+
+def long_message_file(text: str, workspace: str, limit: int | None = None) -> str:
+    """The path of a file holding `text` when it is too long for the command line, else "". The file goes in the
+    workspace's .loki/messages/ (OpenCode may read inside its folder); old ones are pruned."""
+    limit = ARGV_MAX if limit is None else limit
+    if len(text or "") <= limit:
+        return ""
+    folder = Path(workspace or ".") / ".loki" / "messages"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in sorted(folder.glob("msg-*.md"))[:-20]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        path = folder / ("msg-%d-%d.md" % (int(time.time() * 1000), os.getpid()))
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+    except OSError:
+        return ""
+
+
 def run_turn(text: str, workspace: str, *, exe: str, config_path: str, env: dict, session: str = "", model: str = "",
              agent: str = "", timeout: int = DEFAULT_TIMEOUT, on_event: Callable[[dict], None] | None = None,
              cancelled: Callable[[], bool] = lambda: False, popen=subprocess.Popen) -> dict:
@@ -355,7 +383,12 @@ def run_turn(text: str, workspace: str, *, exe: str, config_path: str, env: dict
         argv += ["--model", model]
     if agent:
         argv += ["--agent", agent]
-    argv.append(text)
+    msg_file = long_message_file(text, workspace)
+    if msg_file:   # Windows caps a whole command line at 32,767 characters (the PC, 2026-10-27: 35+ jobs died on
+        # "The command line is too long" - every provider in turn); a long message goes as an attached file
+        argv += ["--file", msg_file, LONG_MESSAGE_POINTER % Path(msg_file).name]
+    else:
+        argv.append(text)
     env = dict(env)
     env["OPENCODE_CONFIG"] = config_path
     out = {"text": "", "tools": [], "session": session, "error": "", "exit": None}

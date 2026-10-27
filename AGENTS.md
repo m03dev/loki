@@ -97,7 +97,7 @@ The separate MMO engine base lives in `native/carbon_mmo/` (its own README and r
   under the request, report at the top of Reports, tick it, ship.
 - **Mac mini:** checkout `~/Loki`. Its drive is nearly full: builds, downloads, caches and models go on the
   external drive **`/Volumes/Xero`** (stop and ask if it isn't mounted).
-- **PC:** `C:\Users\macul\Documents\loki`, RTX 3070 Ti, on 24/7 - the farm's GPU worker (ComfyUI, training).
+- **PC:** `D:\loki` (moved off a full C: on 2026-10-21; `C:\Users\macul\Documents\loki` no longer exists), RTX 3070 Ti, on 24/7 - the farm's GPU worker (ComfyUI, training).
 - **No visible terminal windows** on the owner's screen: run hidden (Windows `Start-Process -WindowStyle
   Hidden`, Mac never `open -a Terminal`), close what you opened.
 - Never open the owner's Godot projects in Godot_v4.8-beta1_mono / Godot_mono 4.8 (it rewrites them).

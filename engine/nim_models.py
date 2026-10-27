@@ -20,6 +20,11 @@ import urllib.request
 NIM_URL = "https://integrate.api.nvidia.com/v1"
 # the same model under its known names, best first; the older V4 Flash is the last resort
 DEEPSEEK_FLASH = ["deepseek-ai/deepseek-v4.1-flash", "nvidia/deepseek-v4.1-flash", "deepseek-ai/deepseek-v4-flash"]
+# Max mode's "strongest free model on the NVIDIA key", best first (2026-10 agentic rankings: GLM-5.3 is the top open
+# model; DeepSeek V4 Pro where a key has it; Kimi K2.6; Nemotron 3 Ultra). The PC's key (2026-10-27) had no DeepSeek V4
+# Pro - Max asked for it, got model_missing, and every Max job fell to weaker routes. The first one the key serves wins.
+STRONGEST = ["z-ai/glm-5.3", "deepseek-ai/deepseek-v4-pro", "deepseek-ai/deepseek-v4-pro-0813", "moonshotai/kimi-k3",
+             "moonshotai/kimi-k2.6", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/llama-3.1-nemotron-ultra-253b-v1"]
 TTL_S = 3600.0
 _cache: dict = {}            # base_url -> (time, [ids])
 _lock = threading.Lock()
@@ -66,6 +71,8 @@ def family(model: str) -> list:
     low = str(model or "").lower()
     if "deepseek-v4" in low and "flash" in low:
         return DEEPSEEK_FLASH
+    if model in STRONGEST:   # nvidia-pro (Max mode): whichever of the strongest ones this key serves
+        return STRONGEST
     return []
 
 

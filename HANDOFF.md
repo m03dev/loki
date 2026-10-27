@@ -18,7 +18,7 @@ Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of 
 
 | | Mac mini (M4, 16 GB) | Windows PC (RTX 3070 Ti, on 24/7) |
 | --- | --- | --- |
-| Checkout | `~/Documents/loki` -> `/Volumes/LokiSSD/loki` (APFS sparse image on the 2 TB SSD; login item `sh.loki.attach-image` reattaches it) | `C:\Users\macul\Documents\loki` |
+| Checkout | `~/Documents/loki` -> `/Volumes/LokiSSD/loki` (APFS sparse image on the 2 TB SSD; login item `sh.loki.attach-image` reattaches it) | `D:\loki` (moved off a full C: on 2026-10-21; `C:\Users\macul\Documents\loki` no longer exists) |
 | Python | `harness_data/.venv/bin/python` | `harness_data\.venv\Scripts\python.exe` |
 | Godot | LOKI's own 4.7.2 when no other Godot; Godot_mono 4.8 dev is not LOKI's - never open the owner's projects in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
 
@@ -26,6 +26,25 @@ The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master`
 ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
 
 ## Now (2026-10-25)
+
+**2026-10-27 (Claude, cloud, read the PC's own records through the desktop bridge) - why the PC "did nothing".** It ran
+all night (353 jobs in 36 h) but: (1) the autopilot started each LOKI_TASKS request ONCE - 159 of 281 teams ended "needs
+you", nothing retried or reported them, no box ever changed, and the four standing goals filled the night (57% failing);
+(2) OpenCode got the whole prompt on the command line - Windows' 32,767-char limit killed 35+ jobs on every provider
+("The command line is too long"); (3) NVIDIA took ~200 s a step, was benched as slow, and jobs fell to the 8B local
+model / llm7 gpt-oss:20b that cannot carry an agent job; (4) Max mode asked for deepseek-v4-pro, which the PC's key does
+not serve (model_missing), and the mode names "max"/"fast" were handed to OpenCode as providers. Fixed: `engine/task_board.py`
+(the record: request / goal, team, running / done / retrying / failed, tries, the reason, the answer, files made; a failed
+request is retried twice, 20 min apart, told why; after that "needs you" with the reason; goals that fail 3x rest 6 h;
+failures older than 48 h are listed, not re-run) + autopilot.settle/board/retry/dismiss + GET /tasks/board, POST
+/tasks/retry|dismiss + **Lab > Tasks** (app/ui/task_board.js, Lab's first view) + <data>/reports/tasks.md;
+opencode_engine sends a long message as `--file` (LOKI_OC_ARGV_MAX, 24k on Windows); in a job the small/weak routes go
+after every cloud route (LOKI_WEAK_FOR_JOBS); nim_models.STRONGEST picks Max's model from what the key serves (GLM-5.3
+first - on the PC's key - then DeepSeek V4 Pro, Kimi ...). The board built from the PC's real records: of 27 distinct
+requests 3 finished, 23 failed (mostly the command-line limit and out-of-credit OpenRouter routes). Cloud: test_task_board
+26, test_task_board_ui 14, test_max_fast_modes 24, test_autopilot 36, test_opencode_engine 36, test_job_reliability 33,
+test_team 39, test_studio_engine_ui 16, test_studio_agents_ui 16 (both: Lab opens on Tasks now), + the earlier list.
+Also: the PC's checkout is D:\loki (AGENTS.md said Documents\loki).
 
 **2026-10-26 late (Claude, cloud) - updates land, chats side by side, agents in Lab.** Why updates "got stuck":
 (1) GitHub master had not moved since 11:43 - all of the day's work sat on agent/* branches (the Mac's ship.py was
