@@ -305,12 +305,21 @@ def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
         return str(res["file"])
 
     backend = str(args.get("backend") or "auto").lower()
+    kw = {}
+    if args.get("judge") and src:      # compare the model with its picture (engine/forge_judge.py, a vision model)
+        try:
+            import forge_judge  # pylint: disable=import-outside-toplevel
+            kw["judge"] = forge_judge.judge_one
+        except Exception:  # noqa: BLE001
+            pass
     res = make(src, out, prompt, backend if backend in ("auto", "pixal3d", "trellis2", "triposr", "online", "lift")
-               else "auto", image_maker=maker)
+               else "auto", image_maker=maker, **kw)
     if not res.get("ok"):
-        return {"ok": False, "error": str(res.get("error", "the model was not made"))[:400]}
+        return {"ok": False, "error": str(res.get("error", "the model was not made"))[:600]}
     files = [os.path.relpath(str(Path(f).resolve()), cwd) for f in (res.get("glb"), res.get("obj")) if f]
-    return {"ok": True, "files": files, "backend": res.get("backend", ""),
+    judge = {k: v for k, v in (res.get("judge") or {}).items() if k in ("score", "shape", "colour", "missing", "note", "error")}
+    return {"ok": True, "files": files, "backend": res.get("backend", ""), "judge": judge,
+            "fallbacks": (res.get("meta") or {}).get("fallbacks", []),
             "triangles": (res.get("meta") or {}).get("triangles", 0),
             "next": "render_scene model=%s (passes, an AI still or a turntable)" % files[0] if files else ""}
 

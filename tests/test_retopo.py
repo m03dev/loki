@@ -132,6 +132,14 @@ check("... the result says how workable it is", res.get("topology") == {"verdict
                                                                           "pole_pct": 4.2, "retopo": "quadriflow"}, res.get("topology"))
 side = json.loads((model.parent / ".meta" / (Path(res["files"]["models"][0]).name + ".json")).read_text())
 check("... and the sidecar carries it (Forge's list, Home)", side.get("topology", {}).get("verdict") == "quads", side)
+blob = TMP / "ws" / "models" / "golem_20261025-2226.glb"
+blob.write_bytes(b"glTF")
+(blob.parent / ".meta").mkdir(exist_ok=True)
+(blob.parent / ".meta" / (blob.name + ".json")).write_text('{"backend": "lift"}')
+seen.clear()
+r = blender_link.polish(blob, TMP / "ws", retopo=8000)
+check("a 'lift' silhouette draft is refused - polishing a blob only makes a cleaner blob (the Mac golem)",
+      not r["ok"] and "lift" in r["error"] and "cmds" not in seen, r)
 res = blender_link.polish(model, TMP / "ws", turntable=0)
 check("polish without retopo keeps its decimate", "decimate" in [c["type"] for c in seen["cmds"]]
       and "retopo" not in [c["type"] for c in seen["cmds"]])

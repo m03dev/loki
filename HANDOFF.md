@@ -48,6 +48,13 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Blob fix (2026-10-26 late, owner: "that golem looks so bad its just a blob ... looks nothing like images"):** every
+model on the Mac had been the silhouette 'lift' (models/.meta backend lift) - the online TRELLIS Space failed and
+forge3d fell through to lift without a word. Now: a failed real backend is an error (lift only when asked for or
+allow_draft); online tries each Space in LOKI_FORGE_SPACES (TRELLIS, then TRELLIS.2); polish refuses lift drafts; the
+pipeline's model stage asks the vision judge (forge_judge) and fails a model under 60 % likeness; on the Mac a failed
+model retries online first. tools/check_online_3d.py shows what each Space offers and makes a test model. The golem
+remake is the Mac's DO FIRST request. Cloud: test_forge3d 80/80, test_asset_pipeline 39/39, test_retopo 25/25.
 **Asset pipeline (2026-10-26 night, owner: "like an industry pipeline where they pass on work to each other and can
 improve"):** engine/asset_pipeline.py + docs/ASSET_PIPELINE.md. concept -> turnaround -> model -> finish (Blender
 retopo) -> render; each stage's output is checked before the next stage gets its APPROVED hand-off record

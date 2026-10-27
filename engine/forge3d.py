@@ -57,6 +57,7 @@ MODEL_EXTS = (".glb", ".obj", ".png", ".ptex", ".level")   # what the file route
 SAVE_EXTS = MODEL_EXTS
 META_DIR = ".meta"
 DEFAULT_SPACE = "trellis-community/TRELLIS"
+DEFAULT_SPACES = (DEFAULT_SPACE, "microsoft/TRELLIS.2")      # both MIT; tried in turn (online_spaces)
 MAX_IMAGE_BYTES = 25_000_000
 JUDGE_LOW = 0.6          # E19: under this a second backend is worth one try (engine/forge_judge.LOW)
 LIFT_GRID = 112          # cells along the longer side of the lift's silhouette
@@ -630,10 +631,27 @@ def _find_glb(res):
     return res
 
 
+def online_spaces() -> list:
+    """The Spaces to try, in order: LOKI_FORGE_SPACES (comma list), else LOKI_FORGE_SPACE, else the default list -
+    one Space renaming its endpoints or running out of quota must not end in no model."""
+    raw = os.environ.get("LOKI_FORGE_SPACES") or os.environ.get("LOKI_FORGE_SPACE") or ",".join(DEFAULT_SPACES)
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
 def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict | None = None) -> dict:
+    """Each Space in online_spaces() until one gives a .glb; the errors of all of them when none does."""
+    errors = []
+    for space in online_spaces():
+        try:
+            return run_online_space(space, cutout_png, out_base, client_factory, opts)
+        except ForgeError as exc:
+            errors.append(str(exc))
+    raise ForgeError(" | ".join(errors) or "no online Space configured")
+
+
+def run_online_space(space: str, cutout_png: Path, out_base: Path, client_factory=None, opts: dict | None = None) -> dict:
     """A Hugging Face Space through gradio_client (TRELLIS by default: /image_to_3d, then
     /extract_glb). The picture goes to that Space - a third party."""
-    space = os.environ.get("LOKI_FORGE_SPACE", DEFAULT_SPACE)
     if client_factory is None:
         try:
             from gradio_client import Client, handle_file  # pylint: disable=import-outside-toplevel
@@ -650,7 +668,8 @@ def run_online(cutout_png: Path, out_base: Path, client_factory=None, opts: dict
               "randomize_seed": lambda: False, "ss_guidance_strength": lambda: 7.5, "ss_sampling_steps": lambda: 12,
               "slat_guidance_strength": lambda: 3.0, "slat_sampling_steps": lambda: 12,
               "multiimage_algo": lambda: "stochastic", "mesh_simplify": lambda: simplify, "texture_size": lambda: tex,
-              "is_multiimage": lambda: False}
+              "is_multiimage": lambda: False, "resolution": lambda: "1024", "decimation_target": lambda: 200000,
+              "ss_guidance_rescale": lambda: 0.7, "ss_rescale_t": lambda: 5.0}
     try:
         steps = space_steps(client)
         if steps is KNOWN_STEPS:               # no endpoint list to read: the session start may or may not exist
@@ -815,6 +834,10 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
 
         errors, result, used = [], None, ""
         tried: list = []                                   # backends already attempted (E19 retry)
+        if backend != "lift" and not (options or {}).get("allow_draft") and len(order) > 1:
+            # Owner 2026-10-26 ("that golem looks so bad its just a blob"): every Mac model had quietly become the
+            # silhouette "lift" after the online Space failed. A real backend failing is an error, never a blob.
+            order = [b for b in order if b != "lift"]
         for name in order:
             say("shaping it (%s)" % name, 0.45)
             tried.append(name)
@@ -825,7 +848,8 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
             except Exception as exc:  # noqa: BLE001 - try the next backend
                 errors.append("%s: %s" % (name, str(exc)[:200]))
         if result is None:
-            raise ForgeError("; ".join(errors) or "no backend")
+            raise ForgeError("no real 3D model was made (a rough 'lift' draft only on purpose: backend=lift) - "
+                             + ("; ".join(errors) or "no backend"))
         glb = Path(result["glb"])
 
         def _drop(model):                            # a model that lost the comparison leaves nothing behind

@@ -45,7 +45,10 @@ MAX_TRIES = 3
 FRESH_WIP_S = 3 * 3600          # a wip older than this is a crashed run: it may start again
 KINDS = ("character", "creature", "prop", "vehicle")
 QUADS = {"prop": 3000, "vehicle": 6000, "character": 8000, "creature": 8000}
-BACKENDS = ("auto", "pixal3d", "trellis2", "online", "triposr")
+# retries walk through these; without an NVIDIA card (the Mac) the ComfyUI ones cannot run, so online comes first
+BACKENDS = (("auto", "online", "triposr", "pixal3d", "trellis2") if sys.platform == "darwin"
+            else ("auto", "pixal3d", "trellis2", "online", "triposr"))
+LIKENESS = float(os.environ.get("LOKI_PIPELINE_LIKENESS", "0.6"))
 LOCK = threading.RLock()       # re-entrant: settling a stage also writes lessons
 
 
@@ -196,6 +199,22 @@ def check_model(ctx) -> tuple:
     return True, "%d triangles (%s)" % (tris, backend or "?"), ""
 
 
+def check_likeness(ctx) -> tuple:
+    """Does the model look like its picture? forge_judge renders it from four sides and asks a vision model
+    (owner 2026-10-26: "looks nothing like images they are making"). Under LIKENESS fails; a judge that could not
+    look passes but says so in the record (a missing vision model must not stop every asset)."""
+    j = ctx["report"].get("judge") or {}
+    if j.get("score") is None:
+        return True, "not judged: %s" % (j.get("error") or "no vision model answered"), ""
+    score = float(j["score"])
+    if score < LIKENESS:
+        missing = ", ".join(j.get("missing") or [])
+        return False, "looks %d%% like the picture (shape %s, colour %s)%s - %s" % (
+            score * 100, j.get("shape"), j.get("colour"), ("; missing " + missing) if missing else "",
+            j.get("note") or ""), "another backend, or a cleaner front view (one subject, plain background)"
+    return True, "looks %d%% like the picture" % (score * 100), ""
+
+
 def check_topology(ctx) -> tuple:
     topo = ctx["report"].get("topology") or {}
     if not topo:
@@ -229,6 +248,7 @@ def check_formats(ctx) -> tuple:
 
 
 CHECKS = {"files": check_files, "pictures": check_pictures, "views": check_views, "model": check_model,
+          "likeness": check_likeness,
           "topology": check_topology, "quality": check_quality, "formats": check_formats}
 
 
@@ -257,7 +277,8 @@ def _args_turnaround(asset, inputs, params):
 def _args_model(asset, inputs, params):
     views = inputs["turnaround"]["report"].get("views") or {}
     front = views.get("front") or _first(_files(inputs["turnaround"]), (".png",))
-    return "make_3d", {"image": front, "prompt": asset["brief"], "backend": params.get("backend", "auto")}
+    return "make_3d", {"image": front, "prompt": asset["brief"], "backend": params.get("backend", "auto"),
+                       "judge": os.environ.get("LOKI_PIPELINE_JUDGE", "on") != "off"}
 
 
 def _args_finish(asset, inputs, params):
@@ -296,7 +317,7 @@ STAGES = [
      "checks": ["files", "pictures", "views"], "retry": _retry_concept,
      "expected": "orthographic front / side / back (+ top) views of the SAME design, T-pose for characters"},
     {"name": "model", "needs": ["turnaround"], "role": "3D Artist", "lane": "gpu", "args": _args_model,
-     "checks": ["files", "model"], "retry": _retry_model, "min_tris": 1000,
+     "checks": ["files", "model", "likeness"], "retry": _retry_model, "min_tris": 1000,
      "expected": "a textured .glb from the front view that matches the side and back views"},
     {"name": "finish", "needs": ["model"], "role": "3D Finisher", "lane": "cpu", "args": _args_finish,
      "skills": ["blender-gameready", "gameready-retopo", "gameready-uv-bake", "gameready-qa"],

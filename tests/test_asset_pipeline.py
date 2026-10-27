@@ -187,6 +187,21 @@ check("a stage left 'wip' by a crash goes back to ready", ap.recover(WS) == 1 an
 check("the tool: status lists every asset", len(ap.tool({"action": "status"}, WS)["assets"]) == 3)
 check("the tool: bad input is an answer, not a crash", not ap.tool({"action": "note", "asset": "nope", "stage": "model"}, WS)["ok"])
 
+# likeness: a model that does not look like its picture is not handed on
+ctx = {"stage": ap.BY_NAME["model"], "outputs": [], "report": {"judge": {"score": 0.3, "shape": 0.2, "colour": 0.5,
+                                                                          "missing": ["arms"], "note": "a blob"}}}
+ok, detail, hint = ap.check_likeness(ctx)
+check("likeness: 30% like the picture fails, with what is missing", not ok and "30%" in detail and "arms" in detail, detail)
+ctx["report"]["judge"] = {"score": None, "error": "no vision model"}
+ok, detail, _ = ap.check_likeness(ctx)
+check("... a judge that could not look passes but says so in the record", ok and "not judged" in detail, detail)
+check("the model stage asks make_3d to judge itself", ap._args_model(
+    {"brief": "x", "kind": "creature"}, {"turnaround": {"report": {"views": {"front": "t/front.png"}}, "outputs_rel": []}},
+    {})[1].get("judge") is True)
+mac = (("auto", "online", "triposr", "pixal3d", "trellis2"))
+check("on the Mac a failed model retries online first (no NVIDIA card for ComfyUI)",
+      "sys.platform == \"darwin\"" in (REPO / "engine" / "asset_pipeline.py").read_text() and ap.BACKENDS in (mac, ("auto", "pixal3d", "trellis2", "online", "triposr")))
+
 # wiring
 import make_mcp  # noqa: E402
 check("LOKI's making tools (OpenCode agents) have asset_pipeline", any(t["name"] == "asset_pipeline" for t in make_mcp.TOOLS))

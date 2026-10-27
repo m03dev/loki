@@ -121,11 +121,17 @@ check("nothing to make from is refused", not forge3d.make_3d("", WS / "models")[
 check("auto with neither TripoSR nor gradio_client -> the lift", forge3d.plan("auto") == ["lift"], forge3d.plan("auto"))
 check("asking for triposr still ends with the lift", forge3d.plan("triposr") == ["triposr", "lift"])
 res3 = forge3d.make_3d(str(circle), WS / "models", backend="triposr")
-check("TripoSR missing -> falls through to the lift, says why", res3["ok"] and res3["backend"] == "lift"
-      and res3["meta"]["fallbacks"] and res3["meta"]["fallbacks"][0].startswith("triposr"), res3)
+check("TripoSR missing -> an error that says why, never a silent lift blob (owner 2026-10-26: 'its just a blob')",
+      res3["ok"] is False and "triposr" in res3["error"] and "lift" in res3["error"], res3)
+res3b = forge3d.make_3d(str(circle), WS / "models", backend="triposr", options={"allow_draft": True})
+check("... a draft asked for on purpose still falls through to the lift and says why", res3b["ok"]
+      and res3b["backend"] == "lift" and res3b["meta"]["fallbacks"][0].startswith("triposr"), res3b)
 res4 = forge3d.make_3d(str(circle), WS / "models", backend="online")
-check("gradio_client missing -> falls through to the lift", res4["ok"] and res4["backend"] == "lift"
-      and "gradio_client" in res4["meta"]["fallbacks"][0], res4["meta"])
+check("gradio_client missing -> an error naming it, not a lift", res4["ok"] is False and "gradio_client" in res4["error"], res4)
+os.environ["LOKI_FORGE_SPACES"] = "a/one, b/two"
+check("online Spaces are tried in turn (LOKI_FORGE_SPACES)", forge3d.online_spaces() == ["a/one", "b/two"])
+os.environ.pop("LOKI_FORGE_SPACES")
+check("... by default TRELLIS then TRELLIS.2", forge3d.online_spaces()[:2] == ["trellis-community/TRELLIS", "microsoft/TRELLIS.2"])
 os.environ["LOKI_LOCAL_ONLY"] = "1"
 check("local-only never uses the online Space", not forge3d.online_ready())
 os.environ.pop("LOKI_LOCAL_ONLY")

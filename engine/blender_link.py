@@ -281,6 +281,10 @@ def polish(model: str | Path, out_dir: str | Path, name: str = "", size: float =
     (Blender 5.2.3): a Forge character 32.8k -> 20k triangles with its textures; a Poly Haven cannon remixed."""
     import out_names  # pylint: disable=import-outside-toplevel
     model, out_dir = Path(model), Path(out_dir)
+    if lift_draft(model) and not kw.pop("allow_draft", False):
+        return {"ok": False, "error": "%s is a rough 'lift' silhouette draft, not a 3D model - polishing it only makes a "
+                                      "cleaner blob (owner 2026-10-26). Make a real model first (make_3d with ComfyUI on "
+                                      "the PC, or backend=online), then polish that." % model.name}
     free = is_free_asset(model)
     if free and not edits:
         return {"ok": False, "error": "%s is a free asset (%s): change it first - give edits (tint, lowpoly, taper, "
@@ -362,6 +366,15 @@ def topology_summary(topo: dict, retopo: dict | None = None) -> dict:
         hows = sorted({v.get("how") for v in (retopo.get("objects") or {}).values() if v.get("how")})
         out["retopo"] = ", ".join(hows) or "not run"
     return out
+
+
+def lift_draft(path: Path) -> bool:
+    """True when Forge's sidecar (models/.meta/<name>.json) says the model came from the silhouette 'lift'."""
+    try:
+        meta = json.loads((Path(path).parent / ".meta" / (Path(path).name + ".json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return str(meta.get("backend") or "") == "lift"
 
 
 def is_free_asset(path: Path) -> str:
