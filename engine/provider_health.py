@@ -542,7 +542,7 @@ def refresh_once(agent: Any, reg: Registry | None = None, opener=urllib.request.
     done = []
     for pid, cfg in list(agent.MODELS.items()):
         base = str(getattr(cfg, "base_url", "") or "")
-        if pid in ("smart", "online") or base.startswith("cli-agent://") or not base.startswith("https://"):
+        if pid in ("smart", "online", "max", "fast") or base.startswith("cli-agent://") or not base.startswith("https://"):
             continue
         key = str(getattr(cfg, "api_key", "") or "").strip()
         try:

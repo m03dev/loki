@@ -116,17 +116,34 @@
     const p = load();
     if (p.heroSet) document.documentElement.style.setProperty("--tidy-hero", p.hero + "vh");
     else {
-      // not set by hand: the preview takes the room the cards leave, so Home fits the window without scrolling
+      // not set by hand: the preview takes the room left after Home's header and ONE row of cards, so the latest
+      // picture is big and the first recent ones still show under it (owner 2026-10-26, vertical screen: the old sum
+      // counted every card below - with a full grid there was never room and the preview sat at its 140px floor).
+      // It follows the hub's own height, so a stacked Home (chat_view.js flow) gets a preview that fits it.
       const hub = $(".home-hub");
       if (hub && hub.clientHeight) {
-        const gap = parseFloat(getComputedStyle(hub).rowGap) || 12;
-        let other = 0, n = 0;
-        for (const k of hub.children) { if (k === hero || k.hidden || getComputedStyle(k).display === "none") continue; other += k.getBoundingClientRect().height; n++; }
-        const pad = parseFloat(getComputedStyle(hub).paddingTop) + parseFloat(getComputedStyle(hub).paddingBottom);
-        const room = hub.clientHeight - other - gap * n - pad - 4;
-        const px = Math.max(140, Math.min(window.innerHeight * 0.62, room));
+        const cs = getComputedStyle(hub), gap = parseFloat(cs.rowGap) || 12;
+        const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+        let other = 0;
+        for (const k of hub.children) {
+          if (k === hero || k.hidden || getComputedStyle(k).display === "none") continue;
+          if (k.classList.contains("home-grid")) {   // the cards: the day label and the first row only
+            const day = k.querySelector(".home-day"), card = k.querySelector(".home-card");
+            other += (day ? day.getBoundingClientRect().height + 8 : 0) + (card ? card.getBoundingClientRect().height : 0) + gap;
+          } else if (k.id !== "tidy-hero-edge" && !k.classList.contains("home-more")) other += k.getBoundingClientRect().height + gap;
+          if (k.classList.contains("home-grid")) break;   // everything after the first row scrolls
+        }
+        const side = $(".home-hero-side"), sideH = side && hero && getComputedStyle(hero).gridTemplateColumns.split(" ").length < 2 ? side.getBoundingClientRect().height + 6 : 0;
+        const room = hub.clientHeight - other - pad - sideH - 14;
+        const px = Math.max(120, Math.min(window.innerHeight * 0.62, room));
         document.documentElement.style.setProperty("--tidy-hero", Math.round(px) + "px");
       }
+    }
+    const hubEl = $(".home-hub");
+    if (hubEl && window.ResizeObserver && !hubEl.dataset.tidyFit) {
+      hubEl.dataset.tidyFit = "1";
+      let raf = 0;
+      new ResizeObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (!load().heroSet) heroHandle(); }); }).observe(hubEl);
     }
     if ($("#tidy-hero-edge")) return;
     const h = document.createElement("div");

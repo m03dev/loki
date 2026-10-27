@@ -99,15 +99,8 @@
 .topbar .topbar-right { min-width: 0; flex-shrink: 1; }
 .topbar .model-button { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------------------------------------------------------------- narrow windows: the panes stack */
-@media (max-width: 900px) {
-  .loki-split, .main.hub-off .loki-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, auto) minmax(0, 1fr); }
-  .loki-split > .home-hub { height: auto; max-height: 48vh; border-bottom: 1px solid var(--line); }
-  .main:not(.home) .loki-split > .home-hub { display: none; }   /* in a chat the conversation gets the window */
-  .main:not(.home) .loki-split { grid-template-rows: minmax(0, 1fr); }
-  .chat-col { border-inline-start: 0; }
-  .main.home .chat-col .welcome-sub { display: none; }
-}
+/* narrow / tall windows: the panes stack - see "the flow" at the end of this file (chat_view.js decides, by the
+   split's own size, not the window's width; the old 900px rule here hid Home in every chat) */
 @media (prefers-reduced-motion: reduce) { .jump-latest { transition: none; } }
 html.u-hc .chat-col .transcript::-webkit-scrollbar-thumb { background: #fff; }
 
@@ -173,15 +166,6 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .layout-pic i.s { background: rgba(255, 255, 255, .08); }
 .layout-pic i.c { background: rgba(140, 207, 196, .55); }
 .layout-menu .layout-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
-@media (max-width: 900px) {
-  .loki-split > .home-hub { grid-column: 1; grid-row: 1; }
-  .loki-split > .chat-col { grid-column: 1; grid-row: 2; border-inline: 0; }
-  .main:not(.home) .loki-split > .chat-col, .main.hub-off .loki-split > .chat-col { grid-row: 1; }
-  .loki-split.chat-first, .main.hub-off .loki-split.chat-first { grid-template-columns: minmax(0, 1fr); }
-  .loki-split.chat-first > .chat-col, .loki-split.chat-first > .home-hub { grid-column: 1; }
-  .loki-split.chat-first > .chat-col { grid-row: 2; border-inline-end: 0; }
-  .chat-edge { display: none; }
-}
 
 /* the agent card (agent_engine.js): Settings > Agents, and the notice over the chat when OpenCode is missing */
 .ae-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; background: rgba(255, 255, 255, .03); }
@@ -289,3 +273,37 @@ body.lk-dragging, body.lk-dragging * { user-select: none !important; cursor: gra
 .ts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0 7px 12px; }
 .ts-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
 .ts-meta { font-size: 11px; opacity: .8; }
+
+/* ================================================================ the flow (chat_view.js applyFlow; owner 2026-10-26:
+   "i cant see the home ui right because im using the screen vertically ... make it smarter and fit better even when
+   squished"). data-flow="stack" on #loki-split: one column, Home's share of the height --hub-fr, the chat --chat-fr
+   (dragged at the edge between them, remembered for Home and for chats). Home is never hidden in a chat. data-hubh
+   short / mid / tall: how much height the hub has, so the preview shrinks or steps aside instead of crowding the cards. */
+.loki-split[data-flow="stack"], .loki-split.chat-first[data-flow="stack"] { grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(110px, var(--hub-fr, 58fr)) minmax(230px, var(--chat-fr, 42fr)); }
+.loki-split.chat-first[data-flow="stack"] { grid-template-rows: minmax(230px, var(--chat-fr, 42fr)) minmax(110px, var(--hub-fr, 58fr)); }
+.loki-split[data-flow="stack"] > .home-hub { grid-column: 1; grid-row: 1; height: 100%; max-height: none; border-bottom: 1px solid var(--line); }
+.loki-split[data-flow="stack"] > .chat-col { grid-column: 1; grid-row: 2; border-inline: 0; }
+.loki-split.chat-first[data-flow="stack"] > .chat-col { grid-row: 1; border-bottom: 1px solid var(--line); }
+.loki-split.chat-first[data-flow="stack"] > .home-hub { grid-row: 2; border-bottom: 0; }
+.main.hub-off .loki-split[data-flow="stack"] { grid-template-rows: minmax(0, 1fr); }
+.main.hub-off .loki-split[data-flow="stack"] > .chat-col { grid-row: 1; }
+/* the edge between them runs across: drag up / down */
+.loki-split[data-flow="stack"] .chat-edge { left: 0; right: 0; top: -4px; bottom: auto; width: auto; height: 8px; cursor: row-resize; }
+.loki-split.chat-first[data-flow="stack"] .chat-edge { top: auto; bottom: -4px; left: 0; right: 0; }
+/* the preview's height follows the hub's own height (ui_tidy.js heroHandle: header + one row of cards stay in view) */
+.loki-split[data-flow="stack"] .home-hub { padding-block: clamp(8px, 1.4vh, 18px) 6px; gap: clamp(8px, 1.4vh, 16px); }
+/* a short hub (a chat on a small screen): the cards only, one strip - the big preview waits until there is room */
+.loki-split[data-hubh="short"] .home-hero, .loki-split[data-hubh="short"] .home-hero-side { display: none; }
+.loki-split[data-hubh="short"] .home-day:first-child { display: none; }
+.loki-split[data-hubh="mid"] .home-hero-out { display: none; }
+/* the chat in a short stack: the welcome card shrinks first so the message box always has its room */
+.loki-split[data-flow="stack"] .chat-col .welcome-sub, .loki-split[data-flow="stack"] .chat-col .welcome-mark { display: none; }
+.loki-split[data-flow="stack"] .chat-col .welcome-title { font-size: clamp(17px, 2.2vh, 22px); margin-bottom: 8px; }
+.loki-split[data-flow="stack"] .chat-col .welcome-inner { padding: 10px 14px; }
+.main.home .loki-split[data-flow="stack"] .chat-col .welcome { padding-block: 8px; }
+.loki-split[data-flow="stack"] .chat-col .composer-box, .loki-split[data-flow="stack"] .chat-col .work { max-width: 1100px; }
+/* the Layout menu's Arrange row; the menu never runs off a short screen */
+.layout-menu { max-height: calc(100vh - 60px); overflow-y: auto; }
+.layout-arrange { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.layout-flow { align-items: center; justify-content: center; text-align: center; padding: 7px 4px; }

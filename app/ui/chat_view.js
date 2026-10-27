@@ -175,24 +175,42 @@ const LokiChatView = (() => {
     const col = document.getElementById("chat-col"), split = document.getElementById("loki-split");
     if (!col || !split || col.querySelector(":scope > .chat-edge")) return;
     const edge = document.createElement("div"); edge.className = "chat-edge"; edge.setAttribute("role", "separator");
-    edge.setAttribute("aria-label", "Chat width"); edge.title = "Drag to make the chat wider or narrower; double-click resets";
+    edge.setAttribute("aria-label", "Chat size"); edge.title = "Drag to give the chat or Home more room; double-click resets";
     col.append(edge);
     edge.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); edge.setPointerCapture(e.pointerId); document.body.classList.add("lk-dragging");
+      const stacked = split.dataset.flow === "stack";
+      edge.dataset.v = ""; edge.dataset.h = "";
       const mv = (ev) => {
         const r = split.getBoundingClientRect(), first = split.classList.contains("chat-first");
+        if (stacked) {   // the edge between Home (top) and the chat: Home's share of the height
+          const hub = first ? r.bottom - ev.clientY : ev.clientY - r.top;
+          const pct = Math.max(15, Math.min(85, hub / r.height * 100));
+          split.style.setProperty("--hub-fr", pct.toFixed(1) + "fr"); split.style.setProperty("--chat-fr", (100 - pct).toFixed(1) + "fr");
+          split.style.setProperty("--hub-px", Math.round(r.height * pct / 100) + "px");
+          edge.dataset.h = pct.toFixed(1);
+          return;
+        }
         const w = first ? ev.clientX - r.left : r.right - ev.clientX;
         const pct = Math.max(22, Math.min(72, w / r.width * 100));
         split.style.setProperty("--chat-w", pct.toFixed(1) + "%"); edge.dataset.v = pct.toFixed(1);
       };
       const up = () => {
         edge.removeEventListener("pointermove", mv); edge.removeEventListener("pointerup", up); document.body.classList.remove("lk-dragging");
-        if (edge.dataset.v) { const L = lload(); L.chatW = +edge.dataset.v; lsave(L); }
+        const L = lload(), main = document.getElementById("main");
+        if (edge.dataset.v) { L.chatW = +edge.dataset.v; lsave(L); }
+        if (edge.dataset.h) { if (main && main.classList.contains("home")) L.hubH = +edge.dataset.h; else L.hubHChat = +edge.dataset.h; lsave(L); }
+        queueFlow();
       };
       edge.addEventListener("pointermove", mv); edge.addEventListener("pointerup", up);
     });
-    edge.addEventListener("dblclick", () => { const L = lload(); L.chatW = null; lsave(L); applyLayout(L); });
+    edge.addEventListener("dblclick", () => {
+      const L = lload();
+      if (split.dataset.flow === "stack") { const main = document.getElementById("main"); if (main && main.classList.contains("home")) L.hubH = null; else L.hubHChat = null; }
+      else L.chatW = null;
+      lsave(L); applyLayout(L); queueFlow();
+    });
   }
 
   // the top bar's Layout button: the presets as little pictures
@@ -217,12 +235,22 @@ const LokiChatView = (() => {
       o.addEventListener("click", () => { setLayout(order); close(); });
       menu.append(o);
     }
+    const h2 = document.createElement("h4"); h2.textContent = "Arrange"; menu.append(h2);
+    const arr = document.createElement("div"); arr.className = "layout-arrange";
+    for (const [f, name, tip] of [["auto", "Auto", "Side by side on a wide window, stacked on a tall or narrow one"],
+      ["row", "Side by side", "Home and the chat next to each other"], ["stack", "Stacked", "Home on top, the chat under it"]]) {
+      const o = document.createElement("button"); o.type = "button"; o.className = "layout-opt layout-flow"; o.setAttribute("role", "menuitemradio");
+      o.dataset.flow = f; o.textContent = name; o.title = tip;
+      o.addEventListener("click", () => { setFlow(f); close(); });
+      arr.append(o);
+    }
+    menu.append(arr);
     const only = document.createElement("button"); only.type = "button"; only.className = "layout-opt layout-wide"; only.setAttribute("role", "menuitem");
     only.textContent = "Chat only (hide Home)";
     only.addEventListener("click", () => { setHub(!document.getElementById("main").classList.contains("hub-off")); close(); });
     const reset = document.createElement("button"); reset.type = "button"; reset.className = "layout-opt layout-wide"; reset.setAttribute("role", "menuitem");
     reset.textContent = "Reset the layout";
-    reset.addEventListener("click", () => { lsave({}); applyLayout(); setHub(false); close(); });
+    reset.addEventListener("click", () => { lsave({}); applyLayout(); setHub(false); queueFlow(); close(); });
     menu.append(only, reset);
     document.body.append(menu);
     function close() { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); }
@@ -231,6 +259,7 @@ const LokiChatView = (() => {
       if (!menu.hidden) return close();
       only.textContent = document.getElementById("main").classList.contains("hub-off") ? "Show Home beside the chat" : "Chat only (hide Home)";
       menu.hidden = false; btn.setAttribute("aria-expanded", "true");
+      applyFlow();
       const r = btn.getBoundingClientRect(), w = menu.offsetWidth || 300;
       menu.style.top = Math.round(r.bottom + 6) + "px";
       menu.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w))) + "px";
@@ -248,14 +277,76 @@ const LokiChatView = (() => {
     applyLayout();
   }
 
+  // ---------------------------------------------------------------- the flow: side by side, or stacked
+  // (owner 2026-10-26: "i cant see the home ui right because im using the screen vertically and they disappeared ...
+  // make the ui logic smarter and fit better even when squished"). Media queries only knew the window's WIDTH, so a
+  // tall portrait screen got two skinny columns and a narrow one hid Home in a chat. This measures the split itself
+  // (what is left after the sidebar) and decides:
+  //   row    Home and the chat side by side - a landscape window with room for both;
+  //   stack  Home on top, the chat under it (or the other way, with "chat first") - a portrait window, or too narrow
+  //          for two columns. Home NEVER disappears in a chat; it gets a smaller share and the chat the rest.
+  // Layout > Arrange picks Auto (this), Side by side or Stacked; the edge between the panes drags in both flows.
+  // It also tells the hub how tall it is (data-hubh short / mid / tall, --hub-px) so the preview fits the space.
+  const STACK_W = 780;          // narrower than this: two columns never fit (chat 320 + a useful hub)
+  const HUB_HOME = 58, HUB_CHAT = 36;   // the hub's default share of a stack: on Home / in a chat (%)
+  let flowNow = "", flowRaf = 0;
+  function flowFor(r, L) {
+    const want = L.flow === "row" || L.flow === "stack" ? L.flow : "auto";
+    if (want !== "auto") return want;
+    if (r.width < STACK_W) return "stack";
+    // portrait: clearly taller than wide (a little hysteresis so a square-ish window doesn't flip while resizing)
+    const tall = r.height > r.width * (flowNow === "stack" ? 1.0 : 1.12);
+    return tall && r.width < 1700 ? "stack" : "row";
+  }
+  function hubShare(L) {
+    const main = document.getElementById("main"), home = !!(main && main.classList.contains("home"));
+    const v = home ? L.hubH : L.hubHChat;
+    return v >= 15 && v <= 85 ? v : (home ? HUB_HOME : HUB_CHAT);
+  }
+  function applyFlow() {
+    flowRaf = 0;
+    const split = document.getElementById("loki-split"), main = document.getElementById("main");
+    if (!split || !main) return;
+    const r = split.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const L = lload(), hub = document.getElementById("home-hub");
+    const hubOn = !!(hub && !hub.hidden && !main.classList.contains("hub-off"));
+    const flow = hubOn ? flowFor(r, L) : "row";
+    if (flow !== flowNow) { flowNow = flow; split.dataset.flow = flow; }
+    const share = hubShare(L);
+    split.style.setProperty("--hub-fr", share + "fr");
+    split.style.setProperty("--chat-fr", (100 - share) + "fr");
+    if (hub && hubOn) {
+      const h = flow === "stack" ? Math.round(r.height * share / 100) : Math.round(r.height);
+      split.style.setProperty("--hub-px", h + "px");
+      const band = h < 300 ? "short" : h < 560 ? "mid" : "tall";
+      if (split.dataset.hubh !== band) split.dataset.hubh = band;
+    }
+    for (const b of document.querySelectorAll(".layout-opt[data-flow]")) b.setAttribute("aria-checked", String(b.dataset.flow === (L.flow || "auto")));
+  }
+  function queueFlow() { if (!flowRaf) flowRaf = requestAnimationFrame(applyFlow); }
+  function setFlow(f) {
+    const L = lload(); L.flow = f === "row" || f === "stack" ? f : "auto"; lsave(L); applyFlow();
+  }
+  function watchFlow() {
+    const split = document.getElementById("loki-split"), main = document.getElementById("main");
+    if (!split) return;
+    if (window.ResizeObserver) new ResizeObserver(queueFlow).observe(split);
+    window.addEventListener("resize", queueFlow);
+    if (main) new MutationObserver(queueFlow).observe(main, { attributes: true, attributeFilter: ["class"] });
+    const hub = document.getElementById("home-hub");
+    if (hub) new MutationObserver(queueFlow).observe(hub, { attributes: true, attributeFilter: ["hidden"] });
+    applyFlow();
+  }
+
   function startLayout() {
     applyLayout();
-    ensureMenu(); ensureEdge(); ensureGrips();
+    ensureMenu(); ensureEdge(); ensureGrips(); watchFlow();
     setTimeout(ensureGrips, 0); setTimeout(ensureGrips, 600);   // the hub (home.js) may build a moment later
   }
 
   document.addEventListener("DOMContentLoaded", startLayout);
   document.addEventListener("DOMContentLoaded", start);
-  return { update, toLatest, setHub, atBottom, setLayout, dropOn, layout: () => lload().order.slice(), PRESETS };
+  return { update, toLatest, setHub, atBottom, setLayout, dropOn, setFlow, flow: () => flowNow, flowFor, layout: () => lload().order.slice(), PRESETS };
 })();
 window.LokiChatView = LokiChatView;

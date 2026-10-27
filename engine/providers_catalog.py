@@ -209,6 +209,11 @@ GROUPS = [("local", "On this computer"), ("free", "Free tiers"), ("keyless", "No
           ("trial", "Free credits"), ("subscription", "Your subscriptions"), ("paid", "Pay per use")]
 
 _BY_ID = {p["id"]: p for p in CATALOG}
+# Same NVIDIA key, a second model: DeepSeek V4 Pro for Max mode (loki.py MAX_ORDER). Looked up by id for its name and
+# blurb, but not a row in CATALOG - Connections keeps ONE NVIDIA key field.
+_BY_ID["nvidia-pro"] = dict(_BY_ID["nvidia"], id="nvidia-pro", name="DeepSeek V4 Pro (NVIDIA)", main_driver=False,
+                            blurb="The strongest free open model on your NVIDIA key: DeepSeek V4 Pro, 1M context, calls "
+                                  "tools, thinks before it answers. Slower than Flash - Max mode uses it for hard tasks.")
 _TESTS: dict = {}          # id -> {"ok", "detail", "at", "ms"}
 _MODELS_CACHE: dict = {}   # id -> (at, [model ids])
 

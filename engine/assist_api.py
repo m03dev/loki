@@ -228,7 +228,7 @@ def _route(state: Any, method: str, path: str, data: dict) -> tuple:
         return 200, out
     # ------------------------------------------------------------------ compare
     if r == "/compare" and method == "POST":
-        models = [m for m in (data.get("models") or []) if m in getattr(agent, "MODELS", {}) and m not in ("smart", "online")]
+        models = [m for m in (data.get("models") or []) if m in getattr(agent, "MODELS", {}) and m not in ("smart", "online", "max", "fast")]
         ask = getattr(agent, "_r3_model_ask", None)
         if ask is None:
             return 500, {"ok": False, "error": "this engine cannot compare models"}

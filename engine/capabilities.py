@@ -59,7 +59,7 @@ def provider_entries(models: dict, configured) -> list:
     """One entry per model provider. `configured(name) -> bool` decides ready vs needs_key."""
     entries = []
     for name, cfg in models.items():
-        if name in ("smart", "online"):
+        if name in ("smart", "online", "max", "fast"):
             continue                      # modes, not endpoints
         base = str(getattr(cfg, "base_url", "") or "")
         kind = "cli-agent" if base.startswith("cli-agent://") else "provider"

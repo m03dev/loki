@@ -425,7 +425,7 @@ function modelLabel(name) {
 function paintModelButton() {
   const data = modelMenu.data;
   if (!data) return;
-  const auto = data.current === "smart" || data.current === "online";
+  const auto = ["smart", "online", "max", "fast"].includes(data.current);
   const text = auto ? modelLabel(data.current) + (data.resolved_label ? " · " + data.resolved_label : "")
     : modelLabel(data.current);
   $("#model-button-text").textContent = text || "Smart";   // never an empty button (it showed only "▾")

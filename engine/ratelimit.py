@@ -29,9 +29,16 @@ _lock = threading.Lock()
 _local: dict = {}   # provider -> [timestamps] (this process)
 
 
+def bucket(provider: str) -> str:
+    """The account a provider's requests count against: every nvidia-* route (the main driver, nvidia-pro for Max
+    mode) is the same NVIDIA key, so they share one window."""
+    name = str(provider or "").strip().lower()
+    return "nvidia" if name.startswith("nvidia") else name
+
+
 def rpm(provider: str) -> int:
     """The requests-per-minute cap for `provider`; 0 = not paced."""
-    name = str(provider or "").strip().lower()
+    name = bucket(provider)
     env = "LOKI_%s_RPM" % name.upper().replace("-", "_").replace(".", "_")
     raw = os.getenv(env, "")
     if raw.strip():
@@ -82,6 +89,7 @@ def _window(provider: str, now: float) -> list:
 
 def wait_s(provider: str, now: float | None = None) -> float:
     """Seconds to wait before the next request to `provider` fits its cap (0 = go now)."""
+    provider = bucket(provider)
     cap = rpm(provider)
     if cap <= 0:
         return 0.0
@@ -96,6 +104,7 @@ def wait_s(provider: str, now: float | None = None) -> float:
 
 def take(provider: str, now: float | None = None) -> None:
     """Book a request to `provider` now."""
+    provider = bucket(provider)
     if rpm(provider) <= 0:
         return
     now = time.time() if now is None else now
@@ -109,6 +118,7 @@ def take(provider: str, now: float | None = None) -> None:
 def penalize(provider: str, seconds: float, now: float | None = None) -> None:
     """The provider answered 429 anyway (another program used the same key): treat the window
     as full for `seconds`, so the next requests wait instead of hammering it."""
+    provider = bucket(provider)
     cap = rpm(provider)
     if cap <= 0:
         return

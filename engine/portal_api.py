@@ -170,7 +170,7 @@ def handle_get(state: Any, path: str) -> tuple | None:
         return 200, {"ok": True, "templates": profiles.TEMPLATES, "library": library,
                      "engines": profiles.ENGINE_LABELS,
                      "tools": profiles.TOOL_GROUPS, "memory": list(profiles.MEMORY_SCOPES),
-                     "models": [m for m in agent.MODELS if m not in ("smart", "online")]}
+                     "models": [m for m in agent.MODELS if m not in ("smart", "online", "max", "fast")]}
     if route == "/ruflo":
         import ruflo_library  # pylint: disable=import-outside-toplevel
         import reasoning_bank  # pylint: disable=import-outside-toplevel

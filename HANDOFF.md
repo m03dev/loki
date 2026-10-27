@@ -27,6 +27,18 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-26 night (Claude, cloud) - Home on a vertical screen + Max / Fast modes.** (1) Home's layout is decided by
+the split's own size, not the window width (`app/ui/chat_view.js` "the flow"): a tall or narrow window STACKS Home over
+the chat (full width), a wide one keeps them side by side; Layout > Arrange = Auto / Side by side / Stacked; the edge
+between them drags in both flows (remembered for Home and for chats). Fixed: the old 900px rule hid Home in every chat
+and a later rule left an empty 320px column (720px window = everything in 400px); the preview's auto-size counted every
+card below it, so it sat at its 140px floor on every screen (`ui_tidy.js` heroHandle: header + one row now).
+(2) Model picker: **Max (hard tasks)** = Claude Code / Codex plan, then `nvidia-pro` (DeepSeek V4 Pro, same NVIDIA key,
+thinking on), never paid on its own; **Fast** = Cerebras (now gpt-oss-120b) / Groq / Nemotron Lightning. Research:
+docs/MODELS.md. Cloud: tests/test_home_flow_ui.py 15, tests/test_max_fast_modes.py 19, ui_fit 81, ui_spacing 28,
+home_projects 84, home_3d_ui 11, viewer_e2e 19, image_rate 17, routing_core 142, usability 140 (3 missing i18n
+phrases from the evening work added). NOT seen on a real machine yet: LOKI_TASKS DO FIRST.
+
 **2026-10-26 evening (Claude, cloud) - the Mac gives heavy work to the PC.** `engine/offload.py` over the signed peer
 link (POST /peer/work, chunked files with sha256, whitelisted kinds + settings, results back into the Mac's folders; no
 git): pictures (after the hosted models), area edits, 3D models (Mac never starts its own ComfyUI) and Blender

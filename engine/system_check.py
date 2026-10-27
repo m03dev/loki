@@ -162,7 +162,7 @@ def route_order(agent: Any) -> list:
     walks), with the pinned model first. Used-up marks are ignored: the check tests them."""
     mode = getattr(agent, "model_name", "smart")
     order = []
-    if mode not in ("smart", "online") and mode in agent.MODELS:
+    if mode not in ("smart", "online", "max", "fast") and mode in agent.MODELS:
         order.append(mode)
     if mode != "online":
         try:

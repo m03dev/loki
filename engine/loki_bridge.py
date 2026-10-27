@@ -718,7 +718,7 @@ def connection_inventory(agent: Any) -> dict[str, Any]:
     """Credential-free overview of model providers and optional local integrations."""
     providers: list[dict[str, str]] = []
     for name, cfg in agent.MODELS.items():
-        if name in ("smart", "online") or name.startswith("local"):
+        if name in ("smart", "online", "max", "fast") or name.startswith("local"):
             continue
         if cfg.base_url.startswith("cli-agent://"):
             ready = bool(agent.provider_configured(name))
@@ -2501,7 +2501,7 @@ def model_menu(agent: Any) -> dict[str, Any]:
         resolved = current
     entries = []
     for name in agent.MODELS:
-        if name in ("smart", "online"):
+        if name in ("smart", "online", "max", "fast"):
             continue
         card = (providers_catalog.get(name) if providers_catalog else None) or {}
         try:
@@ -2522,7 +2522,15 @@ def model_menu(agent: Any) -> dict[str, Any]:
              "blurb": "Picks the best free model for each message and switches when one runs out.",
              "using": labels.get(resolved, resolved) if current == "smart" else ""},
             {"name": "online", "label": "Online only", "group": "auto", "ready": True,
-             "blurb": "Like Smart, but never uses a model on this computer."}]
+             "blurb": "Like Smart, but never uses a model on this computer."},
+            {"name": "max", "label": "Max (hard tasks)", "group": "auto", "ready": True,
+             "blurb": "The strongest model that is ready: your Claude Code / Codex plan first, then DeepSeek V4 Pro "
+                      "(free on NVIDIA, thinking on). Slower - for hard builds, debugging and planning.",
+             "using": labels.get(resolved, resolved) if current == "max" else ""},
+            {"name": "fast", "label": "Fast", "group": "auto", "ready": True,
+             "blurb": "The quickest capable model that is ready (Cerebras / Groq / Nemotron Lightning) - for quick "
+                      "questions and many small steps.",
+             "using": labels.get(resolved, resolved) if current == "fast" else ""}]
     return {"entries": auto + entries, "groups": [{"id": g, "label": label} for g, label in MENU_GROUPS],
             "resolved": resolved, "resolved_label": labels.get(resolved, resolved),
             "ready_count": sum(1 for e in entries if e["ready"])}

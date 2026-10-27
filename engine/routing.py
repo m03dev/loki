@@ -414,7 +414,7 @@ def doctor(agent: Any) -> dict:
         needs_you.append(line)
     mode = getattr(agent, "model_name", "smart")
     head = ("Mode: %s%s. Paid providers: %s. Local only: %s." % (
-        mode, "" if mode in ("smart", "online") else " (pinned - routing only steps in when it fails)",
+        mode, "" if mode in ("smart", "online", "max", "fast") else " (pinned - routing only steps in when it fails)",
         "allowed" if getattr(agent, "ALLOW_PAID", False) else "never picked automatically",
         "on" if local_only_setting() else "off"))
     driver = main_driver(agent)
@@ -446,7 +446,7 @@ def main_driver(agent: Any) -> dict:
     except Exception as exc:  # noqa: BLE001
         ready, why = False, str(exc)
     mode = getattr(agent, "model_name", "smart")
-    pinned = mode not in ("smart", "online") and mode != pid
+    pinned = mode not in ("smart", "online", "max", "fast") and mode != pid
     fix = ""
     if not ready and "key" in why:
         fix = ("Main driver %s needs its free key: get one at %s and paste it in Settings > Connections > "

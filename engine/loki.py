@@ -421,6 +421,11 @@ MODELS = {
     "smart": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     # A mode, not an endpoint: resolves to the best online provider. No Ollama, no GPU.
     "online": ModelConfig(base_url="https://api.deepseek.com", model="deepseek-flash"),
+    # Modes, not endpoints (owner 2026-10-26: "whats our strongest model and fastest. we need a mode for that to get
+    # hard tasks done"): MAX resolves to the strongest model that is ready (MAX_ORDER), FAST to the quickest capable one
+    # (FAST_ORDER). Both fail over like Smart.
+    "max": ModelConfig(base_url="https://integrate.api.nvidia.com/v1", model="deepseek-ai/deepseek-v4-pro"),
+    "fast": ModelConfig(base_url="https://api.cerebras.ai/v1", model="gpt-oss-120b"),
     "local": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-small": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen3:8b"),
     "local-coder": ModelConfig(base_url="http://localhost:11434/v1", api_key="ollama", model="qwen2.5-coder:7b"),
@@ -473,7 +478,7 @@ MODELS = {
         model=os.getenv("GPT6_LUNA_MODEL", "gpt-6-luna" if os.getenv("OPENAI_API_KEY") else "openai/gpt-6-luna")),
     # NOTE: not really free - Cerebras requires a verified payment method to activate.
     "cerebras": ModelConfig(base_url="https://api.cerebras.ai/v1",
-                            api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")),
+                            api_key=os.getenv("CEREBRAS_API_KEY", ""), model=os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")),
     "mistral": ModelConfig(base_url="https://api.mistral.ai/v1",
                            api_key=os.getenv("MISTRAL_API_KEY", ""), model=os.getenv("MISTRAL_MODEL", "mistral-large-latest")),
     "together": ModelConfig(base_url="https://api.together.xyz/v1",
@@ -562,6 +567,11 @@ MODELS = {
     "nvidia": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                           api_key=os.getenv("NVIDIA_API_KEY", ""),
                           model=os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4.1-flash")),
+    # The strongest free open model on the same NVIDIA key (2026-10: DeepSeek V4 Pro, 1M context; SWE-bench Verified
+    # ~96%). Shares NVIDIA's per-minute cap (ratelimit.py buckets nvidia-*). Max mode's first free pick, thinking on.
+    "nvidia-pro": ModelConfig(base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+                              api_key=os.getenv("NVIDIA_API_KEY", ""),
+                              model=os.getenv("NVIDIA_PRO_MODEL", "deepseek-ai/deepseek-v4-pro")),
     "ollama-cloud": ModelConfig(base_url=os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/api"),
                                 api_key=os.getenv("OLLAMA_API_KEY", ""),
                                 model=os.getenv("OLLAMA_CLOUD_MODEL", "deepseek-v4-pro")),
@@ -725,6 +735,22 @@ if MAIN_DRIVER and MAIN_DRIVER in MODELS:
     SMART_ORDER = (MAIN_DRIVER,) + tuple(p for p in SMART_ORDER if p != MAIN_DRIVER)
 
 ONLINE_ORDER = tuple(p for p in SMART_ORDER if p not in LOCAL_PROVIDERS)
+
+# MAX: the strongest model that is ready, in this order, no learned reshuffling and no main-driver jump (the main
+# driver is a fast Flash model - the wrong pick for a hard task). The owner's subscriptions first (Claude Code runs
+# Claude Opus / Sonnet 5.5, Codex runs GPT-6.x - flat rate, nothing extra), then the strongest FREE open model
+# (DeepSeek V4 Pro on NVIDIA, thinking on), then the API frontier models only when paid use is allowed, then the
+# rest of Smart's order so a hard task never dead-ends. Research behind it: docs/MODELS.md (2026-10-26).
+# LOKI_MAX_ORDER=a,b,c replaces it.
+MAX_ORDER = tuple(p for p in (os.getenv("LOKI_MAX_ORDER", "").replace(" ", "").split(",") if os.getenv("LOKI_MAX_ORDER", "").strip() else
+                  ("claude-code", "codex", "nvidia-pro", "claude", "gpt", "deepseek-4.1", "nvidia", "openrouter", "gemini")) if p in MODELS)
+MAX_ORDER = MAX_ORDER + tuple(p for p in SMART_ORDER if p not in MAX_ORDER)
+# FAST: the quickest capable model - wafer-scale / LPU hosts and the high-throughput free models first (gpt-oss-120B
+# on Cerebras ~1,700 tokens/s; Groq; Nemotron 3.5 Lightning free ~300 t/s), then the main driver, then the rest.
+# LOKI_FAST_ORDER=a,b,c replaces it.
+FAST_ORDER = tuple(p for p in (os.getenv("LOKI_FAST_ORDER", "").replace(" ", "").split(",") if os.getenv("LOKI_FAST_ORDER", "").strip() else
+                   ("cerebras", "groq", "nemotron-free", "sambanova", "nvidia", "gemini", "local-fast")) if p in MODELS)
+FAST_ORDER = FAST_ORDER + tuple(p for p in SMART_ORDER if p not in FAST_ORDER)
 
 
 class _FailedSet(set):
@@ -1341,6 +1367,25 @@ def _route_pick(order, needs: dict, allow_local: bool = True) -> str:
     return min(waiting)[1] if waiting else ""
 
 
+def _ranked_pick(order, needs: dict) -> str:
+    """Max / Fast: the first provider in `order` (kept as written - the order IS the ranking) that is set up, not
+    used up, healthy for now and affordable. Never a paid API unless paid use is allowed. "" when none is."""
+    reg = provider_health.registry()
+    for candidate in order:
+        if candidate in _SMART_FAILED or (needs.get("local_only") and candidate not in LOCAL_PROVIDERS):
+            continue
+        if provider_tier(candidate) == "paid" and not paid_allowed_automatically():
+            continue
+        try:
+            if not reg.usable(candidate)[0]:
+                continue
+        except Exception:  # noqa: BLE001 - health never blocks routing
+            pass
+        if provider_configured(candidate):
+            return candidate
+    return ""
+
+
 def _free_capable_online(needs: dict) -> str:
     """The best FREE online provider that can do this task, or "". Subscription agents (Claude
     Code, Codex) are not counted here: an unattended job should not use up the owner's plan when
@@ -1414,6 +1459,11 @@ def route_for(needs: dict) -> tuple:
         return model_name, "you picked it (pinned); routing steps in only when it fails"
     _NEEDS_OVERRIDE.append(needs)
     try:
+        if model_name in ("max", "fast"):
+            pick = _ranked_pick(MAX_ORDER if model_name == "max" else FAST_ORDER, needs)
+            why = ("the strongest model that is ready (Max)" if model_name == "max" else "the quickest capable model that is ready (Fast)")
+            return (pick, why + "; " + routing.why_line(sys.modules[__name__], pick, needs)) if pick else \
+                ("local", "nothing in the %s order is set up yet - add a key in Settings > Connections" % model_name)
         if model_name == "online":
             pick = _route_pick(ONLINE_ORDER, needs, allow_local=False)
             return (pick, routing.why_line(sys.modules[__name__], pick, needs)) if pick else \
@@ -1430,6 +1480,8 @@ def route_for(needs: dict) -> tuple:
 
 def active_model_name() -> str:
     """The provider actually in use - SMART resolves to the best available for THIS task."""
+    if model_name in ("max", "fast"):
+        return _ranked_pick(MAX_ORDER if model_name == "max" else FAST_ORDER, current_needs()) or _smart_pick(current_needs())[0]
     if model_name == "online":
         pick = _route_pick(ONLINE_ORDER, current_needs(), allow_local=False)
         # Nothing is configured yet. Name one anyway so the error tells the user exactly
@@ -1451,7 +1503,7 @@ def smart_report() -> str:
     return "%s | %s" % (headline, ", ".join(marks))
 
 
-AUTO_ROUTING_MODES = ("smart", "online")
+AUTO_ROUTING_MODES = ("smart", "online", "max", "fast")
 
 
 def _mark_smart_failure(provider: str = "") -> None:
@@ -7614,7 +7666,7 @@ def _has_alternative(provider: str) -> bool:
     """Is another provider ready, so a struggling one is not worth a long back-off?"""
     if model_name not in AUTO_ROUTING_MODES:
         return False
-    order = ONLINE_ORDER if model_name == "online" else SMART_ORDER
+    order = {"online": ONLINE_ORDER, "max": MAX_ORDER, "fast": FAST_ORDER}.get(model_name, SMART_ORDER)
     try:
         return any(p != provider and p not in _SMART_FAILED and provider_configured(p)
                    and (provider_tier(p) != "paid" or paid_allowed_automatically())
@@ -7897,9 +7949,9 @@ def _provider_kwargs(provider: str, cfg, kwargs: dict) -> dict:
         return kwargs
     extra = dict(kwargs.get("extra_body") or {})
     extra.pop("think", None)
-    thinking = NVIDIA_THINKING not in ("off", "0", "false", "no", "")
+    thinking = NVIDIA_THINKING not in ("off", "0", "false", "no", "") or (model_name == "max" and provider == "nvidia-pro")
     tmpl: dict = {"thinking": thinking}
-    if thinking:
+    if thinking:   # Max mode on DeepSeek V4 Pro thinks hard (high), LOKI_NVIDIA_THINKING=max goes further
         tmpl["reasoning_effort"] = "max" if NVIDIA_THINKING == "max" else "high"
     extra["chat_template_kwargs"] = tmpl
     return dict(kwargs, extra_body=extra)

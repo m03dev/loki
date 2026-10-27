@@ -202,7 +202,7 @@ def alternatives(agent: Any, exclude: str = "") -> list:
     except Exception:  # noqa: BLE001
         providers_catalog = None
     for name in list(getattr(agent, "MODELS", {}) or {}):
-        if name in ("smart", "online") or name == exclude:
+        if name in ("smart", "online", "max", "fast") or name == exclude:
             continue
         try:
             if not agent.provider_configured(name):
