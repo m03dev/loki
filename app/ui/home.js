@@ -231,7 +231,16 @@ const LokiHome = (() => {
           "Thumbs down", "I don't like this one - say why in the viewer; LOKI avoids it next time.", () => {
             if (window.LokiViewer) window.LokiViewer.open(pics, at, { rate: -1 });
           });
-        row.append(up, down, say); side.insertBefore(row, go);
+        let armed = 0;
+        const del = iconBtn("home-rate-del", '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+          "Delete", "I really don't like it - remove it (click twice). It goes to the trash folder and LOKI learns from it.", async () => {
+            if (!armed) { del.classList.add("armed"); say.textContent = "Click the bin again to delete"; armed = setTimeout(() => { armed = 0; del.classList.remove("armed"); say.textContent = ""; }, 3000); return; }
+            clearTimeout(armed); armed = 0; del.classList.remove("armed");
+            const r = await call("/image/delete", { path: pics[at].path }).catch(() => null);
+            if (r && r.ok) { S.pick = (pics[at + 1] || pics[at - 1] || {}).key || null; if (window.LokiHome && LokiHome.refresh) LokiHome.refresh(); }
+            else say.textContent = "Not deleted: " + ((r && r.error) || "no answer");
+          });
+        row.append(up, down, del, say); side.insertBefore(row, go);
         call("/image/info?path=" + encodeURIComponent(pics[at].path)).then((r) => {
           if (!r || !r.ok) return;
           up.setAttribute("aria-pressed", String(r.rating > 0)); down.setAttribute("aria-pressed", String(r.rating < 0));

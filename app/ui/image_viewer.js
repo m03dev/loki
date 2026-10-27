@@ -10,6 +10,8 @@
 //   Before / after (B)    hold to see the original again after an edit
 //   Thumbs up / down      tell LOKI you like it or not; a thumbs down asks why (chips + a note) - engine/image_feedback.py:
 //                         the reasons shape the next prompts, and a pipeline picture's stage is redone with them
+//   Delete (Del twice)    "I really don't like it": a thumbs down + the picture moves to trash/ (gone from Home and the
+//                         library, recoverable from that folder). Click once, then again within 3 s - no pop-ups
 //   Settings (G)          every setting the picture can be made with (engine/image_settings.py draws the panel: size in
 //                         pixels or aspect + megapixels, steps, guidance, sampler, seed, count, change amount, start from
 //                         this picture, style, avoid, upscale, pixel-art size, palette, model) - Remake makes a new one
@@ -27,6 +29,7 @@ const LokiViewer = (() => {
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     up: '<path d="M7 11v9H4v-9z"/><path d="M7 11l4-8c1.5 0 2.5 1 2.5 2.5V9h5a2 2 0 012 2.3l-1.2 7A2 2 0 0117.3 20H7"/>',
     down: '<path d="M17 13V4h3v9z"/><path d="M17 13l-4 8c-1.5 0-2.5-1-2.5-2.5V15h-5a2 2 0 01-2-2.3l1.2-7A2 2 0 016.7 4H17"/>',
+    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   };
   const svg = (p) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
@@ -112,8 +115,9 @@ const LokiViewer = (() => {
     const bUp = btn("up", "Thumbs up", "I like this one - LOKI makes more like it (and stars it).", () => rate(1));
     const bDown = btn("down", "Thumbs down", "I don't like this one - say why, LOKI avoids it next time (a pipeline picture is redone).", () => rate(-1));
     const bSet = btn("settings", "Settings", "Every setting this picture can be made with - change them and Remake.", toggleSettings, "G");
-    bUp.classList.add("lv-up"); bDown.classList.add("lv-down");
-    tools.append(bUp, bDown, bSet, bSelect, bFocus, bCrop, bEdit, bCompare, bOpen, bClose);
+    const bDel = btn("trash", "Delete", "I really don't like it - remove it (click twice). It goes to the trash folder and LOKI learns from it.", askDelete, "Del");
+    bUp.classList.add("lv-up"); bDown.classList.add("lv-down"); bDel.classList.add("lv-del");
+    tools.append(bUp, bDown, bDel, bSet, bSelect, bFocus, bCrop, bEdit, bCompare, bOpen, bClose);
     bar.append(title, count, tools);
     const editRow = mk("form", "lv-edit"); editRow.hidden = true;
     const prompt = mk("input", "lv-prompt"); prompt.type = "text"; prompt.placeholder = "What should the selected area become?  e.g. a golden helmet";
@@ -136,7 +140,7 @@ const LokiViewer = (() => {
 
     V = { wrap, stage, img, list, i: Math.max(0, Math.min(list.length - 1, index | 0)), title, count, prev, next, say,
           editRow, prompt, strength, bSelect, bFocus, bCrop, bEdit, bCompare, cropper: null, focus: false, before: "",
-          touchX: null, busy: false, bUp, bDown, bSet, why, chips, note, panel, info: null, schema: null, rating: 0 };
+          touchX: null, busy: false, bUp, bDown, bSet, bDel, armed: 0, why, chips, note, panel, info: null, schema: null, rating: 0 };
     editRow.addEventListener("submit", (e) => { e.preventDefault(); runEdit(); });
     why.addEventListener("submit", (e) => { e.preventDefault(); sendRating(-1); });
     skipWhy.addEventListener("click", () => sendRating(-1));
@@ -172,7 +176,8 @@ const LokiViewer = (() => {
     if (!editable) { V.bCrop.title = V.bEdit.title = "Only pictures LOKI saved in its folders can be cropped or edited."; }
     V.bCompare.hidden = !V.before || V.list[V.i].before !== V.before;
     V.editRow.hidden = true; V.why.hidden = true;
-    for (const b of [V.bUp, V.bDown, V.bSet]) b.disabled = !editable;
+    for (const b of [V.bUp, V.bDown, V.bSet, V.bDel]) b.disabled = !editable;
+    disarm();
     V.rating = 0; paintThumbs(); V.info = null;
     if (editable) loadInfo(it);
     for (const d of [-1, 1]) { const n = V.list[V.i + d]; if (n) { const pre = new Image(); pre.src = n.src; } }   // next one is instant
@@ -312,6 +317,30 @@ const LokiViewer = (() => {
       (r.retake ? " - its " + r.retake.stage + " stage is being redone." : ".")) : "Cleared.");
   }
 
+  // ---- delete: two clicks (no pop-up dialogs - they block the app), then gone from the list
+  function disarm() { if (!V) return; clearTimeout(V.armed); V.armed = 0; V.bDel.classList.remove("lv-armed"); }
+  function askDelete() {
+    if (!V || !V.list[V.i].path) return;
+    if (!V.armed) {
+      V.bDel.classList.add("lv-armed");
+      V.armed = setTimeout(disarm, 3000);
+      tell("Delete this picture? Click the bin again (or Del) within 3 seconds.", true);
+      return;
+    }
+    disarm(); removeIt();
+  }
+  async function removeIt() {
+    const it = V.list[V.i];
+    const r = await call("/image/delete", { path: it.path }).catch((e) => ({ ok: false, error: e.message }));
+    if (!V) return;
+    if (!r || !r.ok) { tell("Not deleted: " + ((r && r.error) || "no answer"), true); return; }
+    V.list.splice(V.i, 1);
+    if (window.LokiHome && typeof window.LokiHome.refresh === "function") window.LokiHome.refresh();
+    if (!V.list.length) { close(); return; }
+    V.i = Math.min(V.i, V.list.length - 1); V.before = ""; show();
+    tell("Deleted " + (it.name || it.path) + " - moved to " + (r.trash || "the trash folder") + ".");
+  }
+
   // ---- settings (engine/image_settings.py draws the panel; /image/remake makes the new picture)
   async function toggleSettings() {
     if (!V) return;
@@ -402,7 +431,7 @@ const LokiViewer = (() => {
     }
     if (typing) return;
     const k = e.key.toLowerCase();
-    const handled = { arrowleft: () => go(-1), arrowright: () => go(1), s: toggleSelect, f: toggleFocus, e: showEdit, g: toggleSettings,
+    const handled = { arrowleft: () => go(-1), arrowright: () => go(1), s: toggleSelect, f: toggleFocus, e: showEdit, g: toggleSettings, delete: askDelete, backspace: askDelete,
                       b: () => { if (V.before && !V.wrap.classList.contains("lv-showing-before")) { V.img.src = V.before; V.wrap.classList.add("lv-showing-before"); } } }[k];
     if (handled && !(V.cropper && k.startsWith("arrow"))) { e.preventDefault(); e.stopPropagation(); handled(); }
     else if (V) e.stopPropagation();   // the viewer is modal: keys don't reach Forge or the chat

@@ -5,6 +5,9 @@
     POST /image/remake {path, settings}   a new picture from this one's prompt with these settings (a job)
     GET  /image/remake?job=           that job: running / done {files} / failed {error}
     POST /image/rate {path, rating, reasons[], note}   thumbs up (+1) / down (-1) / clear (0) - engine/image_feedback.py
+    POST /image/delete {path, reasons[]}  "I really don't like it": a thumbs down (reason "deleted") and the picture
+                                      moves to the workspace's trash/ folder (creations.delete_creation) - gone from
+                                      Home and the library, still recoverable
     GET  /image/feedback              what the owner liked and disliked, and the reasons (engine/image_feedback.py)
 """
 from __future__ import annotations
@@ -15,7 +18,7 @@ import uuid
 from pathlib import Path
 
 ROUTES = {("GET", "/image/settings"), ("GET", "/image/info"), ("POST", "/image/remake"), ("GET", "/image/remake"),
-          ("POST", "/image/rate"), ("GET", "/image/feedback")}
+          ("POST", "/image/rate"), ("GET", "/image/feedback"), ("POST", "/image/delete")}
 JOBS: dict = {}
 
 
@@ -130,6 +133,12 @@ def route(state, method: str, route_: str, q: dict, data: dict) -> tuple:
         import image_feedback  # pylint: disable=import-outside-toplevel
         out = image_feedback.rate(ws, rel, int(data.get("rating") or 0), data.get("reasons") or [], data.get("note") or "")
         return (200 if out.get("ok") else 400), out
+    if (method, route_) == ("POST", "/image/delete"):
+        import creations  # pylint: disable=import-outside-toplevel
+        import image_feedback  # pylint: disable=import-outside-toplevel
+        image_feedback.rate(ws, rel, -1, list(data.get("reasons") or []) + ["deleted"], data.get("note") or "")
+        out = creations.delete_creation(ws, rel)
+        return (200 if out.get("ok") else 400), dict(out, path=rel)
     if (method, route_) == ("POST", "/image/remake"):
         return 200, remake(ws, rel, data.get("settings") or {})
     return 404, {"ok": False, "error": "unknown route"}

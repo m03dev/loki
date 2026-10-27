@@ -1545,7 +1545,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(state, "POST", route, {}, data))
             return
-        if route in ("/image/remake", "/image/rate"):   # settings + thumbs up / down (engine/image_api.py)
+        if route in ("/image/remake", "/image/rate", "/image/delete"):   # settings, thumbs, delete (engine/image_api.py)
             import image_api  # pylint: disable=import-outside-toplevel
             self._send_json(*image_api.route(state, "POST", route, {}, data))
             return

@@ -32,6 +32,7 @@
 .lv-chip { padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .18); background: transparent; color: #ddd; font-size: 12px; cursor: pointer; }
 .lv-chip[aria-pressed="true"] { background: rgba(240, 140, 120, .25); border-color: rgba(240, 140, 120, .7); color: #fff; }
 .lv-up[aria-pressed="true"] { background: rgba(120, 210, 140, .25); color: #fff; }
+.lv-del.lv-armed { background: rgba(230, 80, 70, .55); color: #fff; }
 .lv-down[aria-pressed="true"] { background: rgba(240, 120, 110, .28); color: #fff; }
 /* the settings panel: a column of its own beside the picture (never over it), closable, scrolls by itself */
 .lv.lv-with-settings { grid-template-columns: minmax(0, 1fr) minmax(260px, 28%); }

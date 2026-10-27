@@ -37,6 +37,7 @@ REASONS = {
     "cropped": "cut off or not all in frame",
     "pose": "wrong pose (not a T-pose / neutral pose)",
     "boring": "boring composition",
+    "deleted": "the owner deleted it",
 }
 AVOID = {   # what the next prompt says when the owner keeps giving this reason
     "text": "absolutely no text, letters, numbers, labels or captions anywhere",

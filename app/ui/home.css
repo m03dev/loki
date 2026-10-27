@@ -135,3 +135,4 @@ html.u-hc .home-card-thumb, html.u-hc .home-hero-pic { background: #000 !importa
 .home-hero-rated { color: var(--muted, #999); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .home-rate-up[aria-pressed="true"] { background: rgba(120, 210, 140, .25); }
 .home-rate-down[aria-pressed="true"] { background: rgba(240, 120, 110, .28); }
+.home-rate-del.armed { background: rgba(230, 80, 70, .55); color: #fff; }

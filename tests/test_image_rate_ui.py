@@ -155,6 +155,17 @@ async def main():
               and (WS / "images" / "moss-golem_20261026-1930.png").is_file(), MADE)
         if SHOTS:
             await page.screenshot(path=str(SHOTS / "3_remade.png"))
+        # delete: two clicks, then gone (to trash/), and remembered as a thumbs down
+        before = await E("document.querySelector('.lv-count').textContent")
+        await page.click(".lv-del")
+        armed = await E("document.querySelector('.lv-del').classList.contains('lv-armed')")
+        check("one click on the bin only arms it (no pop-up)", armed and (WS / "images" / "moss-golem_20261026-1930.png").is_file())
+        await page.click(".lv-del")
+        await page.wait_for_function("document.querySelector('.lv-count').textContent !== %r" % before, timeout=5000)
+        gone = not (WS / "images" / "moss-golem_20261026-1930.png").exists()
+        check("the second click deletes it: gone from the folder and the viewer, kept in trash/",
+              gone and (WS / "trash" / "images" / "moss-golem_20261026-1930.png").is_file(), list((WS / "trash").rglob("*")))
+        check("... and LOKI learns it was not liked", "deleted" in (image_feedback.ratings(WS).get("images/moss-golem_20261026-1930.png") or {}).get("reasons", []))
         await page.keyboard.press("Escape")
         await page.keyboard.press("Escape")
         check("Esc closes the panel, then the viewer", await E("!document.querySelector('.lv')"))
