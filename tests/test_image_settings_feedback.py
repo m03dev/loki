@@ -154,6 +154,10 @@ check("thumbs down on an approved pipeline concept -> a retake note: the concept
       out.get("retake", {}).get("stage") == "concept" and s["concept"] == "ready" and s["turnaround"] == "waiting"
       and "does not match" in ap.notes(WS, a["id"], "concept")[0]["text"], (out, s))
 check("... and the concept stage gets a lesson", any("rejected" in x["text"] for x in ap.recall("concept", "creature")))
+check("a complaint goes to the stage that made the problem (not just the one rated): design -> turnaround, "
+      "limbs / detail -> the 3D model, no reason on a model -> the 3D model",
+      fb.fault_stage("finish", ["match"]) == "turnaround" and fb.fault_stage("render", ["anatomy", "detail"]) == "model"
+      and fb.fault_stage("finish", []) == "model" and fb.fault_stage("concept", ["anatomy"]) == "concept")
 
 # ---- routes
 state = types.SimpleNamespace(agent=types.SimpleNamespace(WORKSPACE=str(WS)))

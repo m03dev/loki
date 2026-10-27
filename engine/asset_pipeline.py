@@ -193,7 +193,25 @@ def check_views(ctx) -> tuple:
                 ["%s height %.0f%% of front" % (v, 100 * hc[0] / front_h) for v, hc in bad.items()] +
                 ["%s off-centre %.0f%%" % (v, 100 * hc[1]) for v, hc in off.items()]), \
                 "same scale and centred in every view: full body in frame, same margin, feet on one line"
-    match = rep.get("colour_match") or {}
+    concept = ""
+    con = (ctx.get("inputs") or {}).get("concept")
+    if con:
+        concept = next((o for o in con.get("outputs") or [] if Path(o).suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+                        and Path(o).is_file()), "")
+    modes = rep.get("mode") or {}
+    if concept and modes and all(str(m).startswith("text") for m in modes.values()):
+        return False, "the views were drawn from text, not from the concept picture (mode %s)" % ", ".join(
+            sorted(set(map(str, modes.values())))), "make them FROM the concept: a model that takes a reference picture"
+    match = dict(rep.get("colour_match") or {})
+    if concept and not match:   # an older turnaround (no scores): score it now
+        try:
+            import turnaround as _ta  # pylint: disable=import-outside-toplevel
+            for v in ("front", "side", "back"):
+                f = next((o for o in ctx["outputs"] if Path(o).stem == v and Path(o).is_file()), "")
+                if f:
+                    match[v] = _ta.colour_match(concept, f)
+        except Exception:  # noqa: BLE001
+            pass
     off = {v: m for v, m in match.items() if m < VIEW_MATCH}
     if off:
         return False, "views do not match the concept's colours: %s (mode %s)" % (
@@ -296,7 +314,8 @@ def _args_model(asset, inputs, params):
     views = inputs["turnaround"]["report"].get("views") or {}
     front = views.get("front") or _first(_files(inputs["turnaround"]), (".png",))
     return "make_3d", {"image": front, "prompt": asset["brief"], "backend": params.get("backend", "auto"),
-                       "judge": os.environ.get("LOKI_PIPELINE_JUDGE", "on") != "off"}
+                       "judge": os.environ.get("LOKI_PIPELINE_JUDGE", "on") != "off",
+                       **({"seed": params["seed"]} if params.get("seed") else {})}
 
 
 def _args_finish(asset, inputs, params):
@@ -318,11 +337,11 @@ def _retry_concept(params, failed, tries, kind=""):
 def _retry_model(params, failed, tries, kind=""):
     cur = params.get("backend", "auto")
     nxt = BACKENDS[(BACKENDS.index(cur) + 1) % len(BACKENDS)] if cur in BACKENDS else "pixal3d"
-    return dict(params, backend=nxt)
+    return dict(params, backend=nxt, seed=int(params.get("seed") or 7) + 7919 * int(tries or 1))
 
 
 def _retry_finish(params, failed, tries, kind="creature"):
-    if "topology" in failed:
+    if "topology" in failed or str(failed).startswith("retake"):
         return dict(params, faces=min(15000, int((params.get("faces") or QUADS.get(kind, 8000)) * 1.5)))
     return dict(params)
 
@@ -564,7 +583,12 @@ def note(ws: Path, asset_id: str, stage: str, text: str, author: str = "owner", 
             asset = load(ws, asset_id)
             st = asset["stages"][stage]
             if st["status"] != "omitted":
-                st.update(status="ready", tries=0, approved=None)
+                rejected = st.get("rejected") or []
+                if st.get("approved"):     # its files must never come back unchanged (the Mac 2026-10-26: the
+                    rec = _read(asset_dir(ws, asset_id) / stage / st["approved"] / "record.json", {})   # same model
+                    rejected += [f.get("sha256") for f in rec.get("files") or [] if f.get("sha256")]   # 3 times)
+                st.update(status="ready", tries=0, approved=None, retakes=int(st.get("retakes") or 0) + 1,
+                          rejected=rejected[-60:], retake_note=n["text"][:300])
             for d in downstream(stage):
                 if asset["stages"][d]["status"] != "omitted":
                     asset["stages"][d].update(status="waiting", tries=0, approved=None)
@@ -656,9 +680,15 @@ def _record(ws: Path, asset: dict, stage: dict, version: str, inputs: dict, outp
     return rec
 
 
-def _validate(stage: dict, outputs: list, report: dict) -> list:
-    ctx = {"stage": stage, "outputs": outputs, "report": report or {}}
+def _validate(stage: dict, outputs: list, report: dict, inputs: dict | None = None, rejected=None) -> list:
+    ctx = {"stage": stage, "outputs": outputs, "report": report or {}, "inputs": inputs or {}}
     out = []
+    if rejected:          # a retake that made the very same files again is not a retake
+        same = [Path(o).name for o in outputs if Path(o).is_file() and sha256(Path(o)) in set(rejected)]
+        if same:
+            return [{"check": "new", "ok": False, "detail": "the same files as the version that was sent back: %s"
+                     % ", ".join(same[:3]), "hint": "change the input or the settings - a rejected result must not "
+                     "come back unchanged"}]
     for name in stage["checks"]:
         try:
             ok, detail, hint = CHECKS[name](ctx)
@@ -699,7 +729,7 @@ def _settle(ws: Path, asset_id: str, stage: dict, outputs: list, report: dict, p
             inputs = _inputs(ws, asset, stage)
         except RuntimeError:
             inputs = {}
-        validation = _validate(stage, outputs, report)
+        validation = _validate(stage, outputs, report, inputs, st.get("rejected"))
         version = "v%03d" % (len(st["versions"]) + 1)
         rec = _record(ws, asset, stage, version, inputs, outputs, report, params, validation,
                       [r["id"] for r in lessons], author, seconds)
@@ -780,6 +810,11 @@ def advance(ws: Path, asset_id: str, call=None, stage_name: str = "") -> dict:
         if st["tries"]:                       # a retry changes what the failed check points at (CrewAI guardrail)
             params = stage["retry"](st.get("last_params") or params, st.get("last_failed", ""), st["tries"],
                                     asset["kind"])
+        elif st.get("retakes"):               # sent back by a review note: never the same run again - new seed and
+            n = int(st["retakes"])            # the stage's own "try something else" (another backend, more quads...)
+            params = stage["retry"](dict(params, **(st.get("params") or {})), "retake " + str(st.get("retake_note", "")),
+                                    n, asset["kind"])
+            params["seed"] = int(params.get("seed") or 1000) + 104729 * n
         tool, args = stage["args"](asset, inputs, params)
         st.update(status="wip", started=_now())
         _log(asset, "%s started by %s (%s, try %d)" % (name, stage["role"], tool, st["tries"] + 1))
@@ -842,6 +877,12 @@ def tick(ws: Path, call=None, thread: bool = True) -> str:
     recover(ws)
     if busy(ws):
         return ""
+    try:   # another heavy job (Blender, a local model) is running on this computer: wait for it (engine/heavy.py)
+        import heavy  # pylint: disable=import-outside-toplevel
+        if heavy.busy():
+            return ""
+    except ImportError:
+        pass
     todo = active(ws)
     if not todo:
         return ""

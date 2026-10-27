@@ -92,9 +92,16 @@ def inbox_root() -> Path:
 
 def window_status() -> dict:
     """The open Blender's status.json, with "fresh" true when its loader wrote it in the last WINDOW_FRESH_S."""
-    try:
-        st = json.loads((inbox_root() / "status.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    st = None
+    for _ in range(4):        # the loader may be rewriting it this very moment (an empty / half file): read again
+        try:
+            st = json.loads((inbox_root() / "status.json").read_text(encoding="utf-8"))
+            break
+        except ValueError:
+            time.sleep(0.05)
+        except OSError:
+            break
+    if not isinstance(st, dict):
         return {"fresh": False}
     st["fresh"] = bool(st.get("alive")) and not st.get("background") and time.time() - float(st.get("at") or 0) < WINDOW_FRESH_S
     return st
@@ -204,7 +211,25 @@ def update(run=subprocess.run) -> dict:
 def run(commands: list, name: str = "", timeout: float = 900, run_proc=subprocess.run, sleep=time.sleep,
         prefer_window: bool = True) -> dict:
     """Run LOKI Blender commands (see loki_blender_core.py): in the open Blender window when LOKI's loader is alive
-    there (the owner sees it happen), else in a background Blender. Returns the core's answer."""
+    there (the owner sees it happen), else in a background Blender. Returns the core's answer. One heavy job at a time
+    on this computer, and only with memory free (engine/heavy.py - the Mac crashed 2026-10-26)."""
+    try:
+        import heavy  # pylint: disable=import-outside-toplevel
+        guard = heavy.slot("blender " + str(name or "job")[:40], wait_s=float(os.environ.get("LOKI_HEAVY_WAIT_S", "1800")))
+    except ImportError:
+        import contextlib  # pylint: disable=import-outside-toplevel
+        guard = contextlib.nullcontext()
+    try:
+        with guard:
+            return _run(commands, name, timeout, run_proc, sleep, prefer_window)
+    except Exception as exc:  # noqa: BLE001 - heavy.Busy: say why, never crash the caller
+        if type(exc).__name__ == "Busy":
+            return {"ok": False, "error": str(exc), "results": []}
+        raise
+
+
+def _run(commands: list, name: str = "", timeout: float = 900, run_proc=subprocess.run, sleep=time.sleep,
+         prefer_window: bool = True) -> dict:
     name = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in (name or "job"))[:40] + "-" + uuid.uuid4().hex[:6]
     root = inbox_root()
     if prefer_window and window_status().get("fresh"):

@@ -347,10 +347,32 @@ def mflux_edit_argv(cmd: str, refs: list, prompt: str, width: int, height: int, 
     return argv
 
 
-def run_local_image(prompt: str, negative: str, width: int, height: int, seed: int, count: int, out_dir: Path,
-                    run: Callable = subprocess.run, env: dict | None = None, info: dict | None = None,
-                    status: dict | None = None, out_path: Callable | None = None, steps=None, cfg=None,
-                    sampler=None, init_image=None, strength=None, edit_refs=None) -> dict:
+def run_local_image(*args, **kw) -> dict:
+    """This machine's local image model, one heavy job at a time and only with memory free (engine/heavy.py)."""
+    try:
+        import heavy  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return _run_local_image(*args, **kw)
+    with heavy.slot("local image model", wait_s=float(os.environ.get("LOKI_HEAVY_WAIT_S", "1800"))):
+        return _run_local_image(*args, **kw)
+
+
+def mflux_edit_allowed(info: dict | None = None, env: dict | None = None) -> str:
+    """"" when a LOCAL FLUX.2 edit may run here, else why not. Off unless LOKI_MFLUX_EDIT=on AND the machine has more
+    than 16 GB: on the 16 GB Mac mini it took the whole memory with everything else running (2026-10-26 crash)."""
+    env = os.environ if env is None else env
+    if str(env.get("LOKI_MFLUX_EDIT", "off")).lower() not in ("on", "1", "true", "yes"):
+        return "local FLUX.2 edits are off (LOKI_MFLUX_EDIT=on to allow them) - the hosted model is used"
+    ram = float((info or {}).get("ram_gb") or 0)
+    if 0 < ram <= 17:
+        return "this computer has %.0f GB - a local FLUX.2 edit needs more (it crashed the 16 GB Mac)" % ram
+    return ""
+
+
+def _run_local_image(prompt: str, negative: str, width: int, height: int, seed: int, count: int, out_dir: Path,
+                     run: Callable = subprocess.run, env: dict | None = None, info: dict | None = None,
+                     status: dict | None = None, out_path: Callable | None = None, steps=None, cfg=None,
+                     sampler=None, init_image=None, strength=None, edit_refs=None) -> dict:
     """Make `count` pictures with this machine's local backend. {"files", "seeds", "backend", "model"}."""
     info = info if info is not None else machine()
     status = status if status is not None else local_image_status(env, info)
@@ -364,6 +386,9 @@ def run_local_image(prompt: str, negative: str, width: int, height: int, seed: i
     started = time.time()
     files, seeds = [], []
     if edit_refs:              # turn / edit the subject of reference pictures (not image-to-image)
+        why = mflux_edit_allowed(info, env)
+        if why:
+            raise RuntimeError(why)
         cmd = mflux_edit_cmd(status) if status["backend"] == "mflux" else ""
         if not cmd:
             raise RuntimeError("no local edit model here (mflux-generate-flux2-edit on the Mac; the PC: Qwen-Image-Edit "

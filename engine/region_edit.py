@@ -102,7 +102,12 @@ def local_img2img(init: Path, mask: Path, prompt: str, width: int, height: int, 
         argv = creative.mflux_argv(status["cmd"], status["model"], prompt, width, height, seed, out,
                                    low_ram=float(info.get("ram_gb") or 0) <= 16)
         argv += ["--image-path", str(init), "--image-strength", "%.2f" % (1.0 - strength)]   # mflux: how much to KEEP
-    proc = run(argv, capture_output=True, text=True, timeout=1800)
+    try:
+        import heavy  # pylint: disable=import-outside-toplevel
+        with heavy.slot("area edit"):
+            proc = run(argv, capture_output=True, text=True, timeout=1800)
+    except ImportError:
+        proc = run(argv, capture_output=True, text=True, timeout=1800)
     if getattr(proc, "returncode", 1) != 0 or not Path(out).is_file():
         tail = ((getattr(proc, "stderr", "") or "") + (getattr(proc, "stdout", "") or "")).strip()[-400:]
         raise EditError("%s failed (exit %s): %s" % (status["backend"], getattr(proc, "returncode", "?"), tail))

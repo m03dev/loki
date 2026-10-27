@@ -328,6 +328,8 @@ def make_3d(args: dict, cwd: Path, runner=subprocess.run, make=None) -> dict:
             kw["judge"] = forge_judge.judge_one
         except Exception:  # noqa: BLE001
             pass
+    if args.get("seed"):                # a retry / retake must not ask the generator for the same model again
+        kw["options"] = {"seed": int(args["seed"]) % 2**31}
     res = make(src, out, prompt, backend if backend in ("auto", "pixal3d", "trellis2", "triposr", "online", "lift")
                else "auto", image_maker=maker, **kw)
     if not res.get("ok"):

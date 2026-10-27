@@ -42,8 +42,8 @@ def picture(path: Path, size=(768, 1024)):
     return path
 
 
-def glb(path: Path, tris: int):
-    j = json.dumps({"asset": {"version": "2.0"}, "accessors": [{"count": tris * 3}, {"count": tris * 3}],
+def glb(path: Path, tris: int, seed=0):
+    j = json.dumps({"asset": {"version": "2.0", "extras": {"seed": seed}}, "accessors": [{"count": tris * 3}, {"count": tris * 3}],
                     "meshes": [{"primitives": [{"attributes": {"POSITION": 1}, "indices": 0}]}]}).encode()
     j += b" " * (-len(j) % 4)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +73,7 @@ def fake(tool, args, cwd):
         if script["model_lift"] > 0:
             script["model_lift"] -= 1
             return {"ok": True, "files": [str(glb(cwd / "models" / ("blob%d.glb" % n), 300).relative_to(cwd))], "backend": "lift"}
-        return {"ok": True, "files": [str(glb(cwd / "models" / ("golem%d.glb" % n), 30000).relative_to(cwd))],
+        return {"ok": True, "files": [str(glb(cwd / "models" / ("golem%d.glb" % n), 30000, args.get("seed", 0)).relative_to(cwd))],
                 "backend": args.get("backend")}
     if tool == "blender":
         stem = cwd / "models" / ("golem-polished%d" % n)
@@ -143,8 +143,16 @@ brief = ap.stage_brief(WS, a["id"], "model")
 check("the stage brief carries the upstream hand-off, the lessons and the open note",
       "From turnaround" in brief and "front.png" in brief and n["id"] in brief and "Lessons" in brief, brief)
 r = ap.advance(WS, a["id"], fake)
-check("the model starts from the settings that worked (pixal3d) and the note is addressed",
-      r["ok"] and calls[-1][1]["backend"] == "pixal3d" and not ap.notes(WS, a["id"], "model", open_only=True), calls[-1])
+check("a retaken model is NOT made the same way again: another backend and a new seed; the note is addressed",
+      r["ok"] and calls[-1][1]["backend"] != "pixal3d" and calls[-1][1].get("seed") and not ap.notes(WS, a["id"], "model", open_only=True), calls[-1])
+# the same files coming back after a retake are refused
+mrec = ap.resolve(WS, ap.ref(a["id"], "model"))
+ap.note(WS, a["id"], "model", "still wrong", retake=True)
+same_again = lambda tool, args, cwd: {"ok": True, "files": [mrec["outputs_rel"][0]], "backend": "online"}   # noqa: E731
+r = ap.advance(WS, a["id"], same_again)
+check("a retake that hands back the very same model is refused ('the same files as the version that was sent back')",
+      not r["ok"] and r["checks"][0]["check"] == "new", r.get("checks"))
+r = ap.advance(WS, a["id"], fake)
 
 # a stage that keeps failing waits for a person
 b = ap.start(WS, "a broken lantern", kind="prop", concept=str(picture(WS / "images" / "lantern.png", (1024, 1024)).relative_to(WS)))

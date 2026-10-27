@@ -827,7 +827,9 @@ def make_3d(source="", out_dir="models", prompt: str = "", backend: str = "auto"
                 except forge_trellis.TrellisError as exc:
                     raise ForgeError(str(exc)) from None
             if name == "triposr":
-                return run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
+                import heavy  # pylint: disable=import-outside-toplevel - one heavy job at a time
+                with heavy.slot("TripoSR"):
+                    return run_triposr(cut_png, base, runner=triposr_runner, opts=opts)
             if name == "online":
                 return run_online(cut_png, base, client_factory=online_factory, opts=opts)
             return run_lift(cut, base, puff=puff, opts=opts)

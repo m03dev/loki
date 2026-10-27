@@ -401,6 +401,8 @@ class Autopilot:
         oldest asset in the background - its checks decide whether it is handed on or retried."""
         if self.agent is None or not hasattr(self.agent, "WORKSPACE"):
             return ""
+        if any(r["lane"] == "gpu" for r in self.running_work()):   # one GPU / memory-heavy thing at a time (the
+            return ""                                              # Mac crashed 2026-10-26 with three at once)
         import asset_pipeline  # pylint: disable=import-outside-toplevel
         out = asset_pipeline.tick(Path(self.agent.WORKSPACE))
         if out:

@@ -134,15 +134,35 @@ def _to_pipeline(ws: Path, rel: str, reasons: list, note: str) -> dict:
                 continue
             rec = ap.resolve(ws, ap.ref(asset["id"], stage, v)) or {}
             if rel in (rec.get("outputs_rel") or []):
-                n = ap.note(ws, asset["id"], stage, "Owner thumbs down on %s: %s" % (Path(rel).name, why),
+                at = fault_stage(stage, reasons)
+                n = ap.note(ws, asset["id"], at, "Owner thumbs down on %s (%s stage): %s" % (Path(rel).name, stage, why),
                             author="owner", retake=True)
-                ap.add_lesson(stage, asset["kind"], "The owner rejected a %s: %s." % (stage, why), source=n["id"])
-                return {"retake": {"asset": asset["id"], "stage": stage, "note": n["id"]}}
+                ap.add_lesson(at, asset["kind"], "The owner rejected a %s: %s." % (stage, why), source=n["id"])
+                return {"retake": {"asset": asset["id"], "stage": at, "rated": stage, "note": n["id"]}}
     stage = {"images": "concept", "turnarounds": "turnaround", "renders": "render"}.get(rel.split("/")[0])
     if stage and reasons:
         ap.add_lesson(stage, "any", "The owner rejected a %s: %s." % (stage, why), source="feedback:" + rel)
         return {"lesson": stage}
     return {}
+
+
+# Which stage made the problem the owner names. A thumbs down on the finished model must not only re-polish the same
+# model (the Mac 2026-10-26: "why is it keep making the same shitty model") - a wrong design goes back to the
+# turnaround, bad shape / limbs / detail to the 3D model, bad topology to the finish.
+FAULT = {"match": "turnaround", "colour": "turnaround", "style": "turnaround", "perspective": "turnaround",
+         "pose": "turnaround", "text": "turnaround", "background": "turnaround", "anatomy": "model", "detail": "model",
+         "cropped": "model", "boring": "concept", "deleted": "model"}
+ORDER_ = ("concept", "turnaround", "model", "finish", "render")
+
+
+def fault_stage(rated: str, reasons) -> str:
+    """The earliest stage at fault (never later than the one rated, never earlier than the concept). A thumbs down
+    with no reason on a model / finish / render goes to the 3D model step."""
+    picks = [FAULT[r] for r in reasons or [] if r in FAULT]
+    if not picks:
+        return "model" if rated in ("finish", "render") else rated
+    best = min(picks, key=ORDER_.index)
+    return best if ORDER_.index(best) <= ORDER_.index(rated) else rated
 
 
 def ratings(ws: Path, data_dir=None) -> dict:

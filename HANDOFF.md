@@ -48,6 +48,18 @@ Picture viewer (app/ui/image_viewer.js, Cropper.js vendored): click a Home previ
 through all pictures; S select area, F focus, Save crop, E edit area -> engine/region_edit.py redraws only the box
 (local img2img: sd.cpp -i/--mask on the PC, mflux --image-path on the Mac) and saves <name>_edit.png beside the
 original; pixels outside the box are copied untouched (tests/test_image_area.py). Real-model run: LOKI_TASKS.
+**Mac crash + "the same shitty model" (2026-10-26 20:30):** the Mac mini (16 GB unified memory) froze: a LOKI team was
+running the optional local FLUX.2 request (mflux installed into the venv, ~8 GB model) while the asset pipeline ran
+Blender polish + renders and other agents made pictures. Done: the request is gone, mflux's generate commands were moved
+out of the venv (harness_data/disabled_mflux/ on the Mac), and engine/heavy.py now gives the machine ONE heavy slot
+(Blender, local image models, area edits, render passes, TripoSR) that also waits for 5 GB free on a <=16 GB machine;
+the pipeline and the autopilot do not start a stage while heavy work runs; a local FLUX.2 edit needs LOKI_MFLUX_EDIT=on
+AND more than 16 GB. "Same model" cause: the owner's thumbs-downs on the dragon only retook the FINISH stage, which
+re-polished the identical model (6145 quads three times); the asset had been started from an old text-only turnaround
+(grey dragon, not the red concept) and the vision judge never ran (proxy refused). Now: a thumbs-down goes to the stage
+that made the problem (design -> turnaround, limbs/detail -> model), a retake always changes something (new seed + the
+stage's own retry: next backend, more quads) and refuses to approve the same files again, and the turnaround check fails
+views drawn from text when a concept exists (and scores old turnarounds' colours). test_heavy 16/16.
 **Home + turnarounds v3 (2026-10-26 20:00, owner: "when i click on an image it takes me to the top ... jarring ...
 it needs to match in every perspective, environment pieces dont need 4 views"):** Home works like a photo app now - a
 click opens the picture (or a 3D model) in the viewer right there, no jump or redraw; double-click / Shift+Enter opens it

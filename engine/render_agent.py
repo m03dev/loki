@@ -161,11 +161,15 @@ def render(args: dict, ws, state=None, wait_s: float = 900, starter=None) -> dic
     stem = "".join(c if c.isalnum() or c in "-_" else "-" for c in model.stem)[:40] or "model"
     out = ws / "renders" / ("%s-%s" % (stem, time.strftime("%Y%m%d-%H%M%S")))
     try:
-        res = scene_passes.render(model, out, frames=frames, passes=want, width=w, height=h,
-                                  azimuth=float(args.get("azimuth", 30)), elevation=float(args.get("elevation", 15)),
-                                  orbit=float(args.get("orbit", 360)))
+        import heavy  # pylint: disable=import-outside-toplevel - one heavy job at a time (the Mac, 2026-10-26)
+        with heavy.slot("render passes " + model.name[:40]):
+            res = scene_passes.render(model, out, frames=frames, passes=want, width=w, height=h,
+                                      azimuth=float(args.get("azimuth", 30)), elevation=float(args.get("elevation", 15)),
+                                      orbit=float(args.get("orbit", 360)))
     except (scene_passes.PassError, OSError, KeyError, ValueError) as exc:
         return {"ok": False, "error": "could not read %s: %s" % (model.name, exc)}
+    except RuntimeError as exc:          # heavy.Busy: another heavy job held the computer too long
+        return {"ok": False, "error": str(exc)}
     sheet = contact_sheet(res["passes"], out / "sheet.png")
     if not prompt:
         files = [sheet] if sheet else []
