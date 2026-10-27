@@ -146,9 +146,11 @@ async def ui():
         pdf_text = await E("document.querySelector('.cm-pdf').textContent")
         check("the PDF turns the page (page 2 of 3)", "page 2 of 3" in pdf_text, [pdf_text, asked[-3:], errors])
         await page.click(".cm-image .cm-pic")
-        await page.wait_for_selector("#cm-big img", timeout=3000)
+        # the picture viewer (image_viewer.js) replaced the old #cm-big overlay; without it the overlay is the fallback
+        await page.wait_for_selector(".lv img, #cm-big img", timeout=3000)
         await page.keyboard.press("Escape")
-        check("a click shows the picture big; Esc closes it", await E("!document.getElementById('cm-big')"))
+        await page.wait_for_timeout(200)
+        check("a click shows the picture big; Esc closes it", await E("!document.getElementById('cm-big') && !document.querySelector('.lv:not([hidden])')"))
         await page.click(".cm-image .cm-btn:has-text('Open')")
         await page.wait_for_timeout(100)
         check("Open asks the engine to open it in the computer's app", [b for u, b in posts if u == "/chat/media/open"][-1:] == [{"path": "/ws/images/fox.png"}])

@@ -76,7 +76,10 @@
 }
 .main.home .chat-col .welcome-mark { display: block; }
 .main:not(.home) .chat-col .welcome { display: none; }
-.main.has-hub.home:not(.summoned) .chat-col #work:not([hidden]) { display: block; }
+/* the work strip (agents + teams) lives in Lab > Agents (studio_farm.js moves it there); never under the Home chat */
+.chat-col #work { display: none !important; }
+.sf-work[hidden] { display: none; }
+.sf-work .work { width: auto; max-width: none; margin: 8px clamp(10px, 2%, 20px) 0; }
 
 /* the message box: always at the foot of the column, never hidden, nothing in its row is ever cut off */
 .chat-col .composer, .main.home:not(.summoned) .chat-col .composer { display: block; flex: none; margin: 0; padding: 8px clamp(10px, 3%, 18px) 14px; animation: none; }

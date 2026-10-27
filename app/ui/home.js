@@ -42,15 +42,17 @@ const LokiHome = (() => {
     studio: { label: "Studio", tip: "Studio sessions: an app being built or changed with an agent.",
       empty: "No Studio sessions yet: open Studio and tell it what to build or change.",
       icon: '<path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/>' },
-    job: { label: "Jobs", tip: "Background and AI jobs on this computer and the worker farm.",
-      empty: "No jobs yet: tick Run in background on a message, or start a render on the farm.",
+    job: { label: "Agents", tip: "Your agents and teams: what each is making on every machine, newest first - double-click opens it in Lab > Agents.",
+      empty: "No agent work yet: tick Run in background on a message, or start something in Lab > Agents > Make.",
       icon: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>' },
   };
   // Owner 2026-10-26: "whats the point of the home middle collum if it doesnt have a thumbnail preview of whats inside
   // ... i dont wanna see folders or text i wanna see real results". The grid and the big preview show only things you
   // can SEE (a picture, a render, a model's picture, a video); games and Studio sessions live in the Engine tab and the
   // Studio button, jobs in the "working now" chip - and a job in the preview shows the picture it made, never its log.
-  const ORDER = ["made", "render", "forge", "content"];   // the filter and the grid
+  // + "job" = Agents (owner 2026-10-26: "remove the agent working and team from loki home chat move them over to lab ...
+  // also add them to the tabs in that middle section")
+  const ORDER = ["made", "render", "forge", "content", "job"];   // the filter and the grid
   const ICON = {
     all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
     open: '<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 13.5v5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -69,7 +71,7 @@ const LokiHome = (() => {
   const S = { items: [], errors: {}, filter: "all", pick: "", shown: 60, size: "m", timer: 0, loading: false, loaded: false };
   const PAGE = 60, SIZES = { s: 110, m: 160, l: 240 };
   let pc = null, root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
-  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content"].includes(S.filter)) S.filter = "all"; if (SIZES[saved.size]) S.size = saved.size; } catch (_) { /* private mode */ }
+  try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content", "job"].includes(S.filter)) S.filter = "all"; if (SIZES[saved.size]) S.size = saved.size; } catch (_) { /* private mode */ }
   const remember = () => { try { localStorage.setItem(STORE, JSON.stringify({ filter: S.filter, size: S.size })); } catch (_) { /* private mode */ } };
 
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -92,10 +94,14 @@ const LokiHome = (() => {
   }
   const keyOf = (it) => it.kind + ":" + it.path_or_id;
   const seeable = (it) => !!(it.thumb || it.video);
-  const visible = () => S.items.filter((it) => it.kind !== "job" && seeable(it) && (S.filter === "all" || it.kind === S.filter));
+  // a tab shows ONLY its kind (owner 2026-10-26: "those tabs dont work they need to isolate whatever they have selected
+  // like a filter"); agents' jobs only under Agents. seeable() keeps folders and text cards out, but an agent job is
+  // shown under Agents even before it has a picture (its status is what you look at there)
+  const visible = () => S.items.filter((it) => (S.filter === "job" ? it.kind === "job"
+    : it.kind !== "job" && seeable(it) && (S.filter === "all" || it.kind === S.filter)));
   const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
   const whatOpens = { made: "opens it in Files", render: "opens it in Studio", forge: "opens it in Forge", godot: "opens it in the Engine tab",
-    studio: "opens it in Studio", content: "opens it in Files", job: "shows how it is going" };
+    studio: "opens it in Studio", content: "opens it in Files", job: "opens it in Lab > Agents" };
 
   // ---------------------------------------------------------------- building the hub (once)
   function build() {
@@ -105,7 +111,7 @@ const LokiHome = (() => {
     const head = mk("div", "home-head");
     const kinds = mk("div", "home-kinds"); kinds.setAttribute("role", "toolbar"); kinds.setAttribute("aria-label", "Show");
     const kindBtn = (id, icon, name, what) => {
-      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; S.shown = PAGE; remember(); render(); });
+      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; S.pick = ""; S.shown = PAGE; remember(); render(); });
       b.dataset.kind = id; b.setAttribute("aria-pressed", String(S.filter === id));
       return b;
     };
@@ -274,8 +280,10 @@ const LokiHome = (() => {
 
   function heroItem() {
     const list = visible();
-    const picked = S.items.find((it) => keyOf(it) === S.pick);
-    return picked || list[0] || null;   // the newest real thing (a running job only when you pick it)
+    // the picked card only while it is in this tab (a picked picture stayed big under every tab, so they looked dead);
+    // under All, "working now" may still put a running job in the preview
+    const picked = list.find((it) => keyOf(it) === S.pick) || (S.filter === "all" && S.items.find((it) => it.kind === "job" && keyOf(it) === S.pick));
+    return picked || list[0] || null;
   }
 
   function renderHero() {
@@ -298,7 +306,7 @@ const LokiHome = (() => {
         const img = mk("img"); img.alt = it.name; img.src = src; pic.replaceChildren(img);
       });
     }
-    const go = mk("button", "send small home-hero-open", it.kind === "job" ? "Show in the work strip" : it.kind === "made" ? "Show in Files" : "Open in " + k.label);
+    const go = mk("button", "send small home-hero-open", it.kind === "job" ? "Open in Lab > Agents" : it.kind === "made" ? "Show in Files" : "Open in " + k.label);
     go.type = "button"; go.addEventListener("click", () => open(it));
     side.append(go);
     pic = pic || thumbOf(it, "home-hero-pic");
@@ -434,10 +442,8 @@ const LokiHome = (() => {
     const o = it.open || {};
     const bar = window.LokiModeBar;
     if (o.mode === "studio") return openStudio(o.session || "");
-    if (o.mode === "job") {
-      if (typeof summon === "function") summon(true);
-      const work = document.getElementById("work");
-      if (work) { work.hidden = false; work.classList.remove("collapsed"); work.scrollIntoView({ block: "nearest" }); }
+    if (o.mode === "job" || it.kind === "job") {   // agents live in Lab > Agents now, not under the Home chat
+      if (bar && bar.modes().includes("render")) bar.go("render", { view: "agents", job: "" });
       if (typeof refreshJobs === "function") refreshJobs();
       return;
     }

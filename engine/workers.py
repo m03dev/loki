@@ -791,6 +791,9 @@ class Supervisor:
             "model": str(spec.get("model") or ""),
             "fallback": str(spec.get("fallback") or "")[:80],
             "team": str(spec.get("team") or "")[:40],
+            # the owner's chat this job answers (a message sent with "Run in background", or while another chat was
+            # answering): its reply goes back into that chat (loki_bridge chat_job_done)
+            "conversation_id": str(spec.get("conversation_id") or "")[:40],
             # The agent this job runs as (agent builder) and its colour in the agents list.
             "agent_id": str(spec.get("agent_id") or "")[:40],
             "color": str(spec.get("color") or "")[:7],
@@ -964,7 +967,8 @@ def present(job: dict) -> dict:
         "pane": handle.get("pane", ""), "screenshot": bool(handle.get("screenshot"))
         and Path(handle.get("screenshot", "")).is_file(),
         "agent_id": job.get("agent_id", ""), "color": job.get("color", ""),
-        "machine": job.get("machine", ""),
+        "machine": job.get("machine", ""), "conversation_id": job.get("conversation_id", ""),
+        "team": job.get("team", ""), "make_kind": job.get("make_kind", ""),
     }
 
 

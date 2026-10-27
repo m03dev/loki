@@ -7,7 +7,7 @@
 const $ = (sel) => document.querySelector(sel);
 const state = {
   token: "",
-  busy: false,
+  busy: false, busyChat: "", engineActive: "", bgJobs: {},
   cursor: 0,
   chatId: "",
   startedAt: 0,
@@ -214,20 +214,25 @@ function renderConversations() {
   $("#chat-title").textContent = current ? (current.title || "New chat") : "Loki";
 }
 
-function applyConversations(data) {
+function applyConversations(data, opts) {
   if (!data || !data.ok) {
     if (data && data.error) addNotice(data.error, true);
     return;
   }
   if (data.conversations) state.conversations = data.conversations;
-  if (data.active !== undefined) state.active = data.active;
+  if (data.active !== undefined) {
+    if (!data.parked) state.engineActive = data.active;
+    // a plain listing names the ENGINE's chat; keep the chat on screen when it still exists
+    const keep = opts && opts.keepView && state.active && (state.conversations || []).some((c) => c.id === state.active);
+    if (!keep) state.active = data.active;
+  }
   renderConversations();
   if (data.messages) renderMessages(data.messages);
 }
 
 async function loadConversations() {
   const data = await api("/conversations");
-  applyConversations(data);
+  applyConversations(data, { keepView: true });
   if (state.active) {
     const messages = await api("/conversations/messages?id=" + encodeURIComponent(state.active));
     if (messages.ok) renderMessages(messages.messages);
@@ -236,15 +241,26 @@ async function loadConversations() {
   }
 }
 
+// Several chats at once (owner 2026-10-26: "when i try to start another chat it says i cant cuz thers another chat
+// going"). state.active = the chat on screen; state.engineActive = the one the engine holds (the one answering in
+// front). While a chat answers you can open or start another; what you send there runs as a background agent and its
+// answer appears in that chat (engine: loki_bridge chat_job_done). Send / Stop follow the chat on screen.
+function viewIsBusy() { return !!state.busy && state.active === state.busyChat; }
+function paintBusy() {
+  const b = viewIsBusy();
+  $("#send").disabled = b;
+  $("#stop").hidden = !b;
+}
+
 async function switchTo(id) {
-  if (state.busy) return;
   applyConversations(await api("/conversations/switch", { id }));
+  paintBusy();
   showChat();
 }
 
 async function newChat() {
-  if (state.busy) return;
   applyConversations(await api("/conversations", { title: "" }));
+  paintBusy();
   showHome();
   renderMessages([]);
   summon(true);   // they asked for a new chat: open the box straight away
@@ -260,16 +276,17 @@ async function removeChat(id) {
 // ---------------------------------------------------------------- sending
 function setBusy(busy) {
   state.busy = busy;
-  $("#send").disabled = busy;
-  $("#stop").hidden = !busy;
+  state.busyChat = busy ? state.active : "";
+  paintBusy();
   $("#elapsed").textContent = "";
   if (busy) state.startedAt = Date.now();
 }
 
 async function send(text, opts) {
   opts = opts || {};
-  if (state.busy || !text.trim()) return;
-  const background = $("#in-background") && $("#in-background").checked;
+  if (viewIsBusy() || !text.trim()) return;   // THIS chat is answering: Stop, or wait
+  // "Run in background" on, or another chat is answering right now: this message runs as a background agent
+  const background = ($("#in-background") && $("#in-background").checked) || !!state.busy;
   if ($("#main").classList.contains("home")) {
     // Reuse the current chat when it is still empty; otherwise start a new one.
     const current = (state.conversations || []).find((c) => c.id === state.active);
@@ -278,7 +295,13 @@ async function send(text, opts) {
     showChat();
     $("#transcript").replaceChildren();
   }
-  if (background) { $("#in-background").checked = false; return sendToBackground(text); }
+  if (background) { if ($("#in-background")) $("#in-background").checked = false; return sendToBackground(text); }
+  if (state.active && state.engineActive && state.active !== state.engineActive) {
+    // a chat made or opened while another one answered: the engine takes it now that it is free
+    const sw = await api("/conversations/switch", { id: state.active }).catch(() => null);
+    if (sw && sw.ok && !sw.parked) state.engineActive = sw.active;
+  }
+  const mine = state.active;
   // an open request first gets 3-4 readings to pick from (workbench.js / engine/options.py)
   if (!opts.direct && window.Workbench && Workbench.offerOptions) {
     state.busy = true;
@@ -301,7 +324,10 @@ async function send(text, opts) {
   try {
     const data = await api("/chat", { message: text });
     await pollProgress();
-    if (data.ok) {
+    if (state.active !== mine) {
+      // you moved to another chat meanwhile: the answer is saved in its own chat, shown when you go back
+      setStatus("Ready", true);
+    } else if (data.ok) {
       const reply = String(data.response || "").trim();
       if (reply) { addLoki(reply); if (window.Voice) Voice.afterReply(reply); }   // spoken replies (voice.js)
       if (window.Workbench) Workbench.afterReply(data);   // files changed: Review / Rewind
@@ -322,7 +348,7 @@ async function send(text, opts) {
     if (window.LiveMeter) LiveMeter.finish();
     setBusy(false);
     const data = await api("/conversations").catch(() => null);
-    if (data) applyConversations(data);
+    if (data) applyConversations(data, { keepView: true });
   }
 }
 
@@ -332,6 +358,7 @@ async function pollProgress() {
   let data;
   try { data = await api("/progress?after=" + state.cursor); } catch (_) { return; }
   if (!data.ok || !data.chat_id) return;
+  if (state.active !== state.busyChat) return;   // another chat is on screen: its steps stay out of it
   if (!state.chatId) state.chatId = data.chat_id;
   else if (state.chatId !== data.chat_id) return;
   for (const event of data.progress || []) {
@@ -911,15 +938,41 @@ function renderTeams(list) {
 
 async function sendToBackground(text) {
   addUser(text);
-  const data = await api("/jobs", { backend: "local", agent: "loki", prompt: text, isolate: true, timeout_s: 3600 })
+  const cid = state.active || "";
+  const data = await api("/jobs", { backend: "local", agent: "loki", prompt: text, isolate: true, timeout_s: 3600, conversation_id: cid })
     .catch((e) => ({ ok: false, error: String(e) }));
   if (data.ok) {
-    addLoki("Started a background agent on this. You can keep chatting; its progress is shown above the message box.");
-    jobsView.collapsed = false;
-    renderWork(data);
+    addEvent("progress", "Working on it in the background - you can keep chatting or switch chats; the answer appears here.");
+    if (data.id) { state.bgJobs[data.id] = cid; watchBackground(); }
+    if (typeof renderWork === "function") renderWork(data);
   } else {
     addNotice(data.error || "Could not start the background agent.", true);
   }
+}
+
+// a chat's background answers: when one is done, the chat it belongs to shows it (reloaded if it is on screen)
+let bgTimer = 0;
+function watchBackground() {
+  if (bgTimer) return;
+  bgTimer = setInterval(async () => {
+    const ids = Object.keys(state.bgJobs);
+    if (!ids.length) { clearInterval(bgTimer); bgTimer = 0; return; }
+    const data = await api("/jobs").catch(() => null);
+    if (!data || !data.ok) return;
+    for (const job of data.jobs || []) {
+      if (!(job.id in state.bgJobs) || !["done", "failed", "cancelled"].includes(job.status)) continue;
+      const cid = state.bgJobs[job.id];
+      delete state.bgJobs[job.id];
+      setTimeout(async () => {   // the engine writes the answer into the chat as the job ends
+        if (state.active === cid && !viewIsBusy()) {
+          const m = await api("/conversations/messages?id=" + encodeURIComponent(cid)).catch(() => null);
+          if (m && m.ok) renderMessages(m.messages);
+        }
+        const list = await api("/conversations").catch(() => null);
+        if (list) applyConversations(list, { keepView: true });
+      }, 800);
+    }
+  }, 3000);
 }
 
 // ---------------------------------------------------------------- wiring

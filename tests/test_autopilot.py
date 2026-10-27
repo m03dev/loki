@@ -75,6 +75,7 @@ def make(tmp, **kw):
 import os  # noqa: E402
 
 os.environ["LOKI_AUTOPILOT"] = "on"
+os.environ["LOKI_MACHINE_ROLE"] = "main"     # the slot tests are about the PC's 3 slots; the light default is checked below
 os.environ["LOKI_FORGE_QA"] = "off"          # the real Forge QA sweep is not run here (tests/test_forge_qa_duty.py fakes it)
 
 # ---------------------------------------------------------------------------- idle gate
@@ -301,6 +302,13 @@ updater.STATE.pop("update_available")
 updater.force_enabled = _saved_force
 check("otherwise no drain", _ap2.drain() == "")
 
+os.environ["LOKI_MACHINE_ROLE"] = "light"
+os.environ.pop("LOKI_AUTOPILOT_SLOTS", None)
+os.environ.pop("LOKI_AUTOPILOT_ALWAYS_S", None)
+check("a light machine (the Mac) runs one job at a time by default", autopilot.slots() == 1, autopilot.slots())
+check("... and standing goals at most once an hour", autopilot.always_every_s() == 3600, autopilot.always_every_s())
+os.environ["LOKI_MACHINE_ROLE"] = "main"
+check("the PC keeps 3 slots and 10-minute standing goals", autopilot.slots() == 3 and autopilot.always_every_s() == 600)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))

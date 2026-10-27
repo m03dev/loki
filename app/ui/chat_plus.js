@@ -24,7 +24,7 @@ const ChatPlus = (function () {
   }
 
   function busyNote() {
-    if (state.busy) { addNotice("LOKI is still answering - wait for it, or press Stop.", true); return true; }
+    if (typeof viewIsBusy === "function" ? viewIsBusy() : state.busy) { addNotice("LOKI is still answering - wait for it, or press Stop.", true); return true; }
     return false;
   }
 

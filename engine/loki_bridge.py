@@ -567,6 +567,7 @@ class BridgeState:
                         pass
                 else:
                     self.agent.loki_progress_callback = old_callback
+                self.loop.call_soon(lambda: flush_chat_jobs(self)) if self.loop else None
 
     async def request_task(self, task: str, steps: int) -> dict[str, Any]:
         if len(task) > MAX_PROMPT_CHARS:
@@ -1163,7 +1164,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                                   "providers": report, "route": route_trace,
                                   "usage": dict(getattr(agent, "REQUEST_USAGE", {})),
                                   "first_layer": first_layer_status(agent),
-                                  "update": update_status(), "ui_errors": UI_ERRORS[-10:]})
+                                  "update": update_status(), "deps": deps_status(), "ui_errors": UI_ERRORS[-10:]})
             return
         if route == "/progress":
             try:
@@ -2026,7 +2027,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/conversations") or route == "/memory":
             busy = state.try_busy()
             if busy is None:
-                self._send_json(409, {"ok": False, "error": "Loki is busy; try again shortly."})
+                # another chat is answering (owner 2026-10-26: "it says i cant cuz thers another chat going"): a new
+                # chat is made and opened anyway, another chat can be opened to read; the running answer keeps the
+                # active chat, and what is sent in this one runs as a background agent (chat_job_done answers in it)
+                if route == "/conversations":
+                    cid = state.agent.park_conversation(str(data.get("title", "") or ""))
+                    self._send_json(200, {"ok": True, "active": cid, "parked": True, "conversations": state.agent.list_conversations()})
+                elif route == "/conversations/switch" and str(data.get("id", "")) in {c["id"] for c in state.agent.list_conversations()}:
+                    cid = str(data.get("id", ""))
+                    self._send_json(200, {"ok": True, "active": cid, "parked": cid != state.agent.active_conversation_id(),
+                                          "messages": state.agent.conversation_messages(cid), "conversations": state.agent.list_conversations()})
+                elif route == "/conversations/rename":
+                    ok = state.agent.rename_conversation(str(data.get("id", "")), str(data.get("title", "")))
+                    self._send_json(200 if ok else 404, {"ok": ok, "conversations": state.agent.list_conversations()})
+                else:
+                    self._send_json(409, {"ok": False, "error": "Loki is busy; try again shortly."})
                 return
             try:
                 if route == "/conversations":
@@ -2146,6 +2161,19 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
                 return 403, {"ok": False, "error": verdict.reason}
         if not str(spec.get("workspace") or "").strip() and state.project is not None:
             spec["workspace"] = str(state.project)
+        cid = str(spec.get("conversation_id") or "")
+        agent = getattr(state, "agent", None)
+        if cid and agent is not None and hasattr(agent, "append_to_conversation"):
+            # a chat message run in the background: it is the chat's next turn - the agent gets the chat so far, the
+            # message is in the chat at once, and the answer lands there when the job ends (chat_job_done)
+            ask = str(spec.get("prompt") or "").strip()
+            before = agent.conversation_context(cid) if hasattr(agent, "conversation_context") else ""
+            if before:
+                spec["prompt"] = ("This continues a chat with the owner. The chat so far:\n\n%s\n\nThe owner's new message "
+                                  "(answer it as the chat's next reply):\n%s" % (before, ask))
+            spec.setdefault("title", ask.splitlines()[0][:80] if ask else "")
+            agent.append_to_conversation(cid, "user", ask)
+            watch_chat_jobs(state)
         try:
             job = jobs.create(spec)
         except ValueError as exc:
@@ -2161,6 +2189,85 @@ def job_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[
         removed = jobs.store.remove_finished(keep=0)
         return 200, {"ok": True, "removed": removed, **jobs.status()}
     return 404, {"ok": False, "error": "Unknown endpoint."}
+
+
+def deps_status() -> dict:
+    """GET /health "deps": what engine/deps_check.py found and installed at this start."""
+    try:
+        import deps_check  # pylint: disable=import-outside-toplevel
+        return deps_check.status()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "failed": str(exc)}
+
+
+def chat_job_answer(job: dict, data_dir: Path | None) -> str:
+    """The answer a finished chat job gave: its result file (loki.run_job writes it), else the end of its log."""
+    text = ""
+    if data_dir is not None:
+        try:
+            text = (Path(data_dir) / "jobs" / (str(job.get("id", "")) + ".result.txt")).read_text(encoding="utf-8").strip()
+        except OSError:
+            text = ""
+    if not text:
+        text = str(job.get("output") or job.get("error") or "").strip()[-4000:]
+    for prefix in ("DONE:", "DONE -", "DONE"):
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+    if job.get("status") in ("failed", "cancelled"):
+        text = ("The background agent stopped (%s). " % job.get("status")) + (text or "It left no answer.")
+    return text or "The background agent finished without an answer."
+
+
+def chat_job_done(state: "BridgeState", job: dict) -> bool:
+    """A chat job finished: its answer goes into the chat it came from (once). While a chat is answering in front, an
+    answer for THAT chat waits until it is done (its history is being written)."""
+    cid = str(job.get("conversation_id") or "")
+    if not cid or job.get("status") not in ("done", "failed", "cancelled"):
+        return False
+    agent = getattr(state, "agent", None)
+    if agent is None or not hasattr(agent, "append_to_conversation"):
+        return False
+    with state.lock:
+        delivered = state.__dict__.setdefault("chat_jobs_delivered", set())
+        if job.get("id") in delivered:
+            return False
+        if cid == agent.active_conversation_id() and state.chat_lock is not None and state.chat_lock.locked():
+            state.__dict__.setdefault("chat_jobs_waiting", {})[job["id"]] = dict(job)
+            return False
+        delivered.add(job.get("id"))
+    data_dir = Path(getattr(agent, "DATA_DIR", "") or ".") if getattr(agent, "DATA_DIR", "") else None
+    return bool(agent.append_to_conversation(cid, "assistant", chat_job_answer(job, data_dir)))
+
+
+def flush_chat_jobs(state: "BridgeState") -> None:
+    waiting = state.__dict__.get("chat_jobs_waiting") or {}
+    for job_id in list(waiting):
+        job = waiting.pop(job_id, None)
+        if job:
+            chat_job_done(state, job)
+
+
+def watch_chat_jobs(state: "BridgeState") -> None:
+    """Hook the job supervisor once: every status change of a chat job is checked for its answer."""
+    jobs = getattr(state, "jobs", None)
+    if jobs is None or getattr(jobs, "_chat_watch", False):
+        return
+    previous = jobs.on_change
+
+    def on_change(job: dict) -> None:
+        if previous is not None:
+            try:
+                previous(job)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            chat_job_done(state, job)
+        except Exception:  # noqa: BLE001 - a chat answer never breaks the job loop
+            traceback.print_exc()
+
+    jobs.on_change = on_change
+    jobs._chat_watch = True
 
 
 def system_action(state: "BridgeState", route: str, data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -2897,6 +3004,7 @@ async def serve() -> None:
     try:
         import workers  # pylint: disable=import-outside-toplevel
         state.jobs = workers.default_supervisor(Path(loki.DATA_DIR))
+        watch_chat_jobs(state)   # chat jobs answer in their chat, also those that finish after a restart
         state.jobs.start()
         loki.JOBS = state.jobs
         try:
@@ -2938,10 +3046,12 @@ async def serve() -> None:
     try:
         import updater  # pylint: disable=import-outside-toplevel
         updater.RUNNING_COMMIT = updater.version().get("commit", "")
-        def _idle() -> bool:   # nobody is talking to LOKI and no background job is running
+        def _idle(strict: bool = True) -> bool:   # nobody is talking to LOKI (strict: and no background job runs)
             if (state.chat_lock is not None and state.chat_lock.locked()) or state.chat_request_lock.locked() \
                     or state.task_request_lock.locked() or time.time() - state.last_request_at < 120:
                 return False
+            if not strict:
+                return True
             try:
                 jobs = state.jobs.store.all() if state.jobs is not None else []
                 return not any(j.get("status") in ("queued", "starting", "working", "blocked") for j in jobs)
@@ -3052,6 +3162,11 @@ async def serve() -> None:
                 lock.release()
             return False
         auto_setup.start(Path(getattr(loki, "DATA_DIR", ".")), busy=_busy)
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # every required package installed - a failed pip run during an update is retried here (engine/deps_check.py)
+        import deps_check  # pylint: disable=import-outside-toplevel
+        deps_check.start_background()
     except Exception:  # noqa: BLE001
         pass
     try:   # NVIDIA serves DeepSeek under changing names; a wrong one was HTTP 404 on the Mac

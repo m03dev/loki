@@ -5453,6 +5453,39 @@ def switch_conversation(cid: str) -> bool:
     return True
 
 
+def park_conversation(title: str = "") -> str:
+    """A new chat made while another chat is answering (owner 2026-10-26: "when i try to start another chat it says i
+    cant cuz thers another chat going"). It is saved and listed, but the running answer keeps the active one - it
+    becomes active the next time the owner sends in it while LOKI is free (switch_conversation)."""
+    convo = _new_conversation(title)
+    CONVERSATIONS[convo["id"]] = convo
+    save_conversations()
+    return convo["id"]
+
+
+def append_to_conversation(cid: str, role: str, content: str) -> bool:
+    """Add one turn to a chat that is not being answered right now - a background chat's message and its answer
+    (bridge: /jobs with conversation_id). The active chat's in-memory history gets it too, so its next turn sees it."""
+    convo = CONVERSATIONS.get(cid)
+    if convo is None or role not in ("user", "assistant") or not isinstance(content, str) or not content.strip():
+        return False
+    convo["messages"].append({"role": role, "content": content})
+    convo["updated"] = time.time()
+    if role == "user" and (convo["title"] in ("", "New chat") or _is_internal_turn(convo["title"])):
+        convo["title"] = _title_from_text(content)
+    if cid == active_conversation:
+        messages.append({"role": role, "content": content})
+    save_conversations()
+    return True
+
+
+def conversation_context(cid: str, turns: int = 8, chars: int = 6000) -> str:
+    """The last few turns of a chat as plain text, for a background agent that continues it."""
+    rows = conversation_messages(cid)[-turns:]
+    text = "\n\n".join("%s: %s" % ("Owner" if m["role"] == "user" else "Loki", m["content"].strip()) for m in rows)
+    return text[-chars:]
+
+
 def rename_conversation(cid: str, title: str) -> bool:
     convo = CONVERSATIONS.get(cid)
     if convo is None:

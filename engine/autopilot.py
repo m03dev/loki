@@ -184,8 +184,24 @@ def lane(text: str) -> str:
     return "gpu" if _GPU.search(re.sub(r"`[^`]*`", " ", str(text or ""))) else "light"
 
 
+def light_machine() -> bool:
+    """The Mac mini (or any machine without an NVIDIA GPU) - the one that gives heavy work to the PC (offload.role)."""
+    try:
+        import offload  # pylint: disable=import-outside-toplevel
+        return offload.role() == "light"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def slots() -> int:
-    return max(1, int(_env_s("LOKI_AUTOPILOT_SLOTS", 3)))
+    """Work side by side. A light machine runs ONE at a time by default (owner 2026-10-26: "im using loki mac and its
+    not very good so slow" - three agents plus standing goals beside the owner's own chat on a 16 GB Mac); the PC 3."""
+    return max(1, int(_env_s("LOKI_AUTOPILOT_SLOTS", 1 if light_machine() else 3)))
+
+
+def always_every_s() -> float:
+    """How often standing goals may start: every 10 min on the PC, once an hour on a light machine."""
+    return _env_s("LOKI_AUTOPILOT_ALWAYS_S", 3600 if light_machine() else 600)
 
 
 class Autopilot:
@@ -714,7 +730,7 @@ class Autopilot:
             if _env_on("LOKI_AUTOPILOT_INBOX"):
                 work.append(("inbox", _env_s("LOKI_AUTOPILOT_INBOX_S", 120), self.duty_inbox))
             if _env_on("LOKI_AUTOPILOT_ALWAYS"):
-                work.append(("always", _env_s("LOKI_AUTOPILOT_ALWAYS_S", 600), self.duty_always))
+                work.append(("always", always_every_s(), self.duty_always))
             if _env_on("LOKI_AUTOPILOT_PIPELINE"):
                 work.append(("pipeline", _env_s("LOKI_AUTOPILOT_PIPELINE_S", 120), self.duty_pipeline))
             with self.lock:

@@ -201,6 +201,8 @@ const LokiQol = (function () {
   send = async function (text, opts) {   // eslint-disable-line no-global-assign
     opts = opts || {};
     if (!String(text || "").trim()) return;
+    // another chat is answering: this one goes to a background agent (app.js send) - not the queue of the busy chat
+    if (state.busy && typeof viewIsBusy === "function" && !viewIsBusy()) return _send(text, opts);
     if (state.busy && !opts.qolInternal) { enqueue(text); return; }
     Object.assign(turn, { text, data: null, error: null, started: Date.now(), news: Date.now(), extended: 0, stopped: false,
       sendNow: false, retryAfterStop: "", switchAfterStop: "" });

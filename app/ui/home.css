@@ -80,6 +80,8 @@
 .home-card-when { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-pill { display: none; }
 .home-pill.failed, .home-pill.error { display: inline-block; margin-inline-start: auto; font-size: 10.5px; padding: 0 7px; }
+/* under Agents every job says how it is going */
+.home-card[data-kind="job"] .home-pill { display: inline-block; margin-inline-start: auto; font-size: 10.5px; padding: 0 7px; }
 .home-card-open { position: absolute; top: 6px; right: 6px; width: 28px; height: 26px; background: rgba(16, 18, 24, .82); color: var(--text);
   opacity: 0; transition: opacity .12s; }
 .home-card:hover .home-card-open, .home-card:focus-within .home-card-open, .home-card:focus .home-card-open { opacity: 1; }

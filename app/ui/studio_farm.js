@@ -43,10 +43,15 @@ const LokiStudioFarm = (() => {
       b.addEventListener("click", () => show(id));
       bar.append(b);
     }
+    // the work strip (every background agent and team, Clear finished) moved here from under the Home chat
+    // (owner 2026-10-26: "remove the agent working and team from loki home chat move them over to lab")
+    S.work = mk("div", "sf-work");
+    const strip = document.getElementById("work");
+    if (strip) { S.work.append(strip); strip.classList.remove("collapsed"); }
     S.agents = mk("div", "sf-agents"); S.agents.id = "studio-agents"; S.agents.hidden = true;
     S.farm = mk("div", "sf-farm"); S.farm.id = "studio-farm";
     S.render = mk("div", "sf-render"); S.render.hidden = true;
-    p.append(bar, S.agents, S.farm, S.render);
+    p.append(bar, S.work, S.agents, S.farm, S.render);
     S.root = p;
     buildFarm(S.farm);
   }
@@ -55,6 +60,8 @@ const LokiStudioFarm = (() => {
     try { localStorage.setItem(STORE, S.view); } catch (_) { /* private window */ }
     for (const b of S.root.querySelectorAll(".sf-view")) b.setAttribute("aria-selected", String(b.dataset.view === S.view));
     S.agents.hidden = S.view !== "agents"; S.farm.hidden = S.view !== "farm"; S.render.hidden = S.view !== "render";
+    S.work.hidden = S.view !== "agents";
+    if (S.view === "agents" && typeof refreshJobs === "function") refreshJobs();
     if (S.view !== "agents" && window.LokiStudioAgents) window.LokiStudioAgents.leave();
     if (S.view === "agents") {
       clearInterval(S.timer); S.timer = 0;

@@ -5,7 +5,7 @@ The Mac and the PC must never drift apart. Each LOKI updates itself from GitHub:
   - when the app starts (before the engine starts, so the new code runs at once);
   - while it runs, it checks every LOKI_UPDATE_EVERY_S seconds (default 10 min) and when a
     linked machine reports a different version; a waiting update is applied as soon as LOKI
-    is idle and the WHOLE app restarts on it (LOKI_FORCE_UPDATE=0: only tell you, apply at
+    is idle (or, after LOKI_UPDATE_MAX_WAIT_S, as soon as nobody is mid-chat) and the WHOLE app restarts on it (LOKI_FORCE_UPDATE=0: only tell you, apply at
     the next start).
 
 An update never overwrites your work. Genuinely edited tracked files stop it (named in the
@@ -1132,11 +1132,40 @@ def force_enabled() -> bool:
     return str(os.getenv("LOKI_FORCE_UPDATE", "1")).strip().lower() not in ("0", "false", "off", "no")
 
 
+def max_wait_s() -> float:
+    """How long a waiting update may wait for background jobs (owner 2026-10-26: "updates dont push through right
+    away anymore ... they get stuck"). The autopilot keeps teams running and a job waiting for an approval never ends,
+    so "no job running" never came. After this, the update goes in as soon as nobody is mid-chat; background jobs are
+    their own processes and LOKI picks them up again after the restart. LOKI_UPDATE_MAX_WAIT_S (default 20 min)."""
+    try:
+        return max(0.0, float(os.getenv("LOKI_UPDATE_MAX_WAIT_S", "1200") or 1200))
+    except ValueError:
+        return 1200.0
+
+
+def ready_to_apply(idle, waiting_since: float, now: float | None = None) -> bool:
+    """idle() = nobody talking AND no job running; idle(strict=False) = only nobody talking. The strict test first;
+    the relaxed one once the update has waited max_wait_s()."""
+    now = time.time() if now is None else now
+    try:
+        if idle():
+            return True
+        if waiting_since and now - waiting_since >= max_wait_s():
+            try:
+                return bool(idle(strict=False))
+            except TypeError:   # an idle() without the relaxed form: keep waiting for it
+                return False
+    except Exception:  # noqa: BLE001 - never take the engine down over an update
+        return False
+    return False
+
+
 def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
     """Background loop for the engine: check GitHub now and then. When an update is waiting,
     `idle()` says LOKI is not busy and force updates are on, `apply()` updates and restarts."""
     every = every_s if every_s is not None else float(os.getenv("LOKI_UPDATE_EVERY_S", "600") or 600)
     time.sleep(30)
+    waiting_since = 0.0
     while True:
         if enabled() and (is_checkout(REPO) or _release()):
             try:
@@ -1149,7 +1178,11 @@ def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
                         preflight(REPO, "origin/" + BRANCH)
                     except Exception:  # noqa: BLE001 - only a head start
                         pass
-                if STATE.get("update_available") and force_enabled() and idle and apply and idle():
+                if not STATE.get("update_available"):
+                    waiting_since = 0.0
+                elif not waiting_since:
+                    waiting_since = time.time()
+                if STATE.get("update_available") and force_enabled() and idle and apply and ready_to_apply(idle, waiting_since):
                     STATE["note"] = "applying the update and restarting LOKI"
                     apply()
             except Exception as exc:  # noqa: BLE001 - updates must never take the engine down

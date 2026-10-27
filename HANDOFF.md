@@ -27,6 +27,24 @@ ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only em
 
 ## Now (2026-10-25)
 
+**2026-10-26 late (Claude, cloud) - updates land, chats side by side, agents in Lab.** Why updates "got stuck":
+(1) GitHub master had not moved since 11:43 - all of the day's work sat on agent/* branches (the Mac's ship.py was
+blocked by test_usability: 3 missing i18n phrases), so this time Claude fast-forwarded master itself (owner: "updates
+dont push through ... gotta fix that"); (2) a waiting update was applied only when NO job was queued/working/blocked -
+the autopilot never let that happen. Now `updater.ready_to_apply`: idle at once, or after LOKI_UPDATE_MAX_WAIT_S (20 min)
+as soon as nobody is mid-chat (jobs are their own processes and are picked up after the restart). Chats: a new chat can
+be made / another opened while one answers (`loki.park_conversation`, bridge /conversations while busy); a message
+there - or with "Run in background" - is a chat job: it gets the chat so far, and its answer is written into THAT chat
+when it ends (`loki_bridge.chat_job_done`; before, background answers never reached any chat). The window: Send / Stop
+follow the chat on screen (app.js viewIsBusy). Home: tabs really filter (a picked picture stayed big under every tab),
+an **Agents** tab; the agents + teams strip moved from under the chat into Lab > Agents (studio_farm.js). Mac speed:
+a light machine (offload.role) runs ONE autopilot job at a time and standing goals hourly (PC: 3 and 10 min).
+`engine/deps_check.py`: every start installs any missing/too-old requirement (a failed pip run during an update was
+never retried - gradio_client on the Mac); /health "deps". Cloud: test_home_tabs_chats_ui 22, test_chat_jobs 21,
+test_deps_check 9, test_autopilot 36, test_updater 106, test_update_overhaul 24, test_qol 82, test_job_reliability 33,
+test_chat_media 25 (stale #cm-big check updated), ui_fit 81, ui_spacing 28 + the earlier list. Known: test_render_studio_ui
+"depth" fails in cloud Chromium before and after (software GL).
+
 **2026-10-26 night (Claude, cloud) - Home on a vertical screen + Max / Fast modes.** (1) Home's layout is decided by
 the split's own size, not the window width (`app/ui/chat_view.js` "the flow"): a tall or narrow window STACKS Home over
 the chat (full width), a wide one keeps them side by side; Layout > Arrange = Auto / Side by side / Stacked; the edge
