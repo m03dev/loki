@@ -565,7 +565,7 @@ class Autopilot:
             # the Concept Artist proposes the next asset - as a prompt card for the owner, nothing is drawn yet
             self.data["last"]["propose"] = self.clock()
             try:
-                made = asset_pipeline.propose(ws, self._ask_model)
+                made = asset_pipeline.propose(ws, self._concept_ask)
             except Exception as exc:  # noqa: BLE001
                 made = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
             if made.get("ok"):
@@ -577,8 +577,9 @@ class Autopilot:
             self._log("pipeline", out)
         return out
 
-    def _ask_model(self, prompt: str) -> str:
-        """One short answer from the free cloud model (the main driver), for the Concept Artist's proposal."""
+    def _concept_ask(self, prompt: str) -> str:
+        """One short answer from the free cloud model (the main driver), for the Concept Artist's proposal. (Not
+        _ask_model: that name is the self-review's - the clash broke the first proposal on the PC, 2026-10-27.)"""
         import asyncio  # pylint: disable=import-outside-toplevel
         agent = self.agent
         provider = "nvidia" if "nvidia" in getattr(agent, "MODELS", {}) and agent.provider_configured("nvidia") else ""
@@ -879,8 +880,22 @@ class Autopilot:
         import creations  # pylint: disable=import-outside-toplevel
         import creative  # pylint: disable=import-outside-toplevel
         ws = Path(self.agent.WORKSPACE)
-        out = creative.daily_creation(lambda prompt, **kw: creations.make_image(self.agent, prompt, **kw),
-                                      creations.liked_meta(ws), clock=self.clock)
+        cards: list = []
+
+        def make(prompt, **kw):
+            try:   # today's picture waits for the owner's OK on its prompt like every other one (engine/owner_review.py)
+                import owner_review  # pylint: disable=import-outside-toplevel
+                if owner_review.on():
+                    card = owner_review.queue("prompt", "make_image", {"prompt": prompt, "style": str(kw.get("style") or "")},
+                                              str(ws), who="Daily picture")
+                    cards.append(card)
+                    return {"ok": True, "id": card["id"]}
+            except ImportError:
+                pass
+            return creations.make_image(self.agent, prompt, **kw)
+        out = creative.daily_creation(make, creations.liked_meta(ws), clock=self.clock)
+        if out and cards:
+            out = "today's picture waits for your OK in Home > For you: %s" % cards[0]["args"]["prompt"][:160]
         if out:
             self._log("creation", out)
         return out

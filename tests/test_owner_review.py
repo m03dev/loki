@@ -180,6 +180,32 @@ try:
     check("no second proposal while the owner has a card", not ap.propose(WS, idea)["ok"])
     check("a model that answers nonsense starts nothing", not ap.propose(TMP / "empty", lambda p: "sure!")["ok"])
 
+    # ------------------------------------------------------------------ the autopilot's pipeline duty proposes
+    import autopilot  # noqa: E402,PLC0415
+    WS2 = TMP / "ws2"
+    (WS2 / "images").mkdir(parents=True)
+    for c in orv.waiting():
+        orv.decide(c["id"], "reject" if c["kind"] == "prompt" else "approve")
+    fake_agent = types.SimpleNamespace(WORKSPACE=str(WS2))
+    pilot = autopilot.Autopilot.__new__(autopilot.Autopilot)
+    pilot.agent, pilot.data, pilot.clock = fake_agent, {"last": {}, "log": []}, lambda: 1e9
+    pilot._log = lambda duty, text, **k: pilot.data["log"].append((duty, text))
+    pilot.running_work = lambda: []
+    pilot._concept_ask = lambda prompt: '{"brief": "a stone lantern with a sleeping moth spirit, full view", "kind": "prop"}'
+    ap_tick = ap.tick
+    ap.tick = lambda ws, call=None, thread=True: ap_tick(ws, fake_call, thread=False)
+    try:
+        said = pilot.duty_pipeline()
+    finally:
+        ap.tick = ap_tick
+    cards = [c for c in orv.waiting() if c["kind"] == "prompt" and "moth spirit" in c["args"].get("prompt", "")]
+    check("the autopilot's pipeline duty: the Concept Artist proposes, and its prompt card is waiting (2026-10-27: a "
+          "name clash broke this on the PC)", "Concept Artist proposed" in said and cards
+          and cards[0]["who"] == "Concept Artist", (said, pilot.data["log"][-2:]))
+    import inspect  # noqa: PLC0415
+    check("the proposal's model call takes the prompt (not the self-review's ask)",
+          list(inspect.signature(autopilot.Autopilot._concept_ask).parameters) == ["self", "prompt"])
+
     # ------------------------------------------------------------------ the routes
     state = types.SimpleNamespace(agent=types.SimpleNamespace(WORKSPACE=str(WS)))
     code, body = orv.route(state, "GET", "/review", {}, {})

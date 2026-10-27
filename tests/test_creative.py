@@ -566,7 +566,7 @@ pilot = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORKS
                             data_dir=TMP / "auto", clock=lambda: 1792224000.0)
 pilot.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0,
                             "selftest": 1792224000.0, "task_bench": 1792224000.0})
-ran = pilot.tick()
+ran = [r for r in pilot.tick() if r[0] != "storage"]   # the storage clean-up may run alongside (2026-10-27)
 check("an idle pass makes today's picture", ran and ran[0][0] == "creation" and made_by_autopilot
       and made_by_autopilot[0][1]["daily"], (ran, made_by_autopilot))
 os.environ["LOKI_DAILY_CREATION"] = "off"
@@ -574,7 +574,28 @@ pilot2 = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORK
                              clock=lambda: 1792224000.0)
 pilot2.data["last"].update({"health": 1792224000.0, "inbox": 1792224000.0, "report": 1792224000.0,
                              "selftest": 1792224000.0, "task_bench": 1792224000.0})
-check("switched off: no creation duty at all", pilot2.tick() == [])
+check("switched off: no creation duty at all", [r for r in pilot2.tick() if r[0] != "storage"] == [])
+os.environ.pop("LOKI_DAILY_CREATION", None)
+# the owner signs off (engine/owner_review.py, 2026-10-27): today's picture is a prompt card, nothing is drawn
+os.environ["LOKI_OWNER_REVIEW"] = "on"
+os.environ["LOKI_DAILY_CREATION"] = "on"
+os.environ["LOKI_DATA"] = str(TMP / "auto3")
+made_by_autopilot.clear()
+_ws3 = TMP / "ws3"
+_ws3.mkdir(exist_ok=True)
+pilot3 = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORKSPACE=_ws3), data_dir=TMP / "auto3",
+                             clock=lambda: 1792224000.0 + 3 * 86400)
+_t3 = 1792224000.0 + 3 * 86400
+pilot3.data["last"].update({"health": _t3, "inbox": _t3, "report": _t3, "selftest": _t3, "task_bench": _t3})
+ran3 = [r for r in pilot3.tick() if r[0] != "storage"]
+import owner_review  # noqa: E402
+_cards = owner_review.waiting()
+check("with the owner's sign-off on: today's picture waits as a prompt card - nothing drawn",
+      ran3 and ran3[0][0] == "creation" and "waits for your OK" in ran3[0][1] and not made_by_autopilot
+      and _cards and _cards[0]["who"] == "Daily picture", (ran3, made_by_autopilot, _cards[:1]))
+os.environ["LOKI_OWNER_REVIEW"] = "off"
+os.environ.pop("LOKI_DATA", None)
+os.environ.pop("LOKI_DAILY_CREATION", None)
 creations.make_image = orig_make
 os.environ.pop("LOKI_DAILY_CREATION", None)
 os.environ["LOKI_DATA"] = str(DATA)
