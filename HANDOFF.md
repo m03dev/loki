@@ -55,7 +55,12 @@ retopo) -> render; each stage's output is checked before the next stage gets its
 fails -> retake; review notes (retake=true) reopen a stage and send everything after it back; lessons per stage voted
 by results, promoted into skills/learned/pipeline-<stage>; settings that worked reused. Driven by the autopilot
 `pipeline` duty, the `asset_pipeline` tool, and the PRODUCER / ART DIRECTOR standing goals (they replace the three
-"newest file without X" goals). Cloud: tests/test_asset_pipeline.py 35/35. Not run on a machine yet.
+"newest file without X" goals). Cloud: tests/test_asset_pipeline.py 35/35. On the Mac (2026-10-26 18:00, merged into
+~/Documents/loki by Claude from a git bundle - origin/master not pushed yet, ship.py must): LOKI's own team ran the
+retopo request with a background Blender 4.5.9 LTS (/Applications): moss golem 17,216 tris -> 8,127 quads, 100% quads,
+0.7% poles, colour + normal map baked, .glb/.gltf/.fbx/.blend + LODs (qa/retopo-mac.md, renders/moss-golem-polished_
+20261026-1801.png; triangle counts re-read from the .glb files). The window loader + MCP add-on on the Mac is the open
+DO FIRST request (blender_link.py setup); the engine picks up the pipeline duty and tool on its next restart.
 **Workable topology (2026-10-26 evening, owner: "the entire point of blender is so it can edit the mesh and make em
 workable"):** core command `retopo` (engine/blender_scripts/loki_blender_core.py, core 2026-10-26.14): original kept as
 `<name>__high`, scale applied, voxel surface, tiny edges merged until Blender's own QuadriFlow pre-check passes
