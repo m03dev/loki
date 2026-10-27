@@ -314,6 +314,46 @@ def job_data_env(folder, home: str | None = None) -> dict:
     return {"XDG_DATA_HOME": str(data), "XDG_STATE_HOME": str(state)}
 
 
+def windows_bash(which=shutil.which, isfile=os.path.isfile, env: dict | None = None) -> str:
+    """Git for Windows' bash.exe, or "". OpenCode on Windows otherwise runs every command in powershell.exe - on the
+    PC that is Windows PowerShell 5.1, where `a && b` is a parse error. Every model writes `cd X && python ...`, got
+    "The token '&&' is not a valid statement separator in this version" and wrote the same command again, step after
+    step (2026-10-27, the PC: jobs b9903fd0 / decb449c looped on it until the context passed 200k tokens).
+    OpenCode takes $SHELL when it points at an existing file (packages/core/src/shell/select.ts), so jobs get bash."""
+    env = os.environ if env is None else env
+    found = []
+    git = which("git")
+    if git:   # ...\Git\cmd\git.exe or ...\Git\bin\git.exe -> ...\Git\bin\bash.exe (OpenCode's own rule)
+        found.append(str(Path(git).resolve().parent.parent / "bin" / "bash.exe"))
+    for root in (env.get("ProgramFiles", r"C:\Program Files"), env.get("ProgramW6432", ""),
+                 env.get("LOCALAPPDATA", "") and str(Path(env.get("LOCALAPPDATA", "")) / "Programs")):
+        if root:
+            found.append(str(Path(root) / "Git" / "bin" / "bash.exe"))
+    return next((f for f in found if isfile(f)), "")
+
+
+def shell_for(env: dict) -> str:
+    """The shell OpenCode's bash tool will use with this env: 'bash' or 'powershell' (Windows) / 'sh'."""
+    if os.name != "nt":
+        return "bash"
+    shell = str(env.get("SHELL") or "")
+    return "bash" if shell and os.path.isfile(shell) else "powershell"
+
+
+def shell_note(shell: str) -> str:
+    """One paragraph for the agent's instructions: which shell its commands run in, so it writes them right first."""
+    if shell == "powershell":
+        return ("# Your shell\nYour commands run in Windows PowerShell 5.1: `&&` and `||` do NOT work there - use `;` "
+                "(or `if ($?) { ... }`). Quote every path with a space in it. If a command fails, read the error and "
+                "change the command - never send the same command again.")
+    if os.name == "nt":
+        return ("# Your shell\nYour commands run in Git Bash on Windows: `&&` works; write paths as /d/loki/... or "
+                "\"D:/loki/...\" (quoted, forward slashes). Quote every path with a space in it. If a command fails, "
+                "read the error and change the command - never send the same command again.")
+    return ("# Your shell\nYour commands run in bash. Quote every path with a space in it. If a command fails, read "
+            "the error and change the command - never send the same command again.")
+
+
 def env_for(providers: dict, base: dict | None = None) -> dict:
     env = dict(base if base is not None else os.environ)
     for name, p in providers.items():
@@ -321,7 +361,57 @@ def env_for(providers: dict, base: dict | None = None) -> dict:
         env[key_env(name)] = key if key and key != "none" else "none"
     env.setdefault("OPENCODE_DISABLE_AUTOUPDATE", "1")
     env["PATH"] = os.pathsep.join([env.get("PATH", "")] + [d for d in _global_bins() if Path(d).is_dir()])
+    if os.name == "nt" and os.getenv("LOKI_OC_SHELL", "bash").strip().lower() != "powershell" \
+            and not (env.get("SHELL") and os.path.isfile(str(env.get("SHELL")))):
+        bash = windows_bash(env=env)
+        if bash:
+            env["SHELL"] = bash
     return env
+
+
+# ------------------------------------------------------------------ the same mistake again and again
+_ERR_WORDS = re.compile(r"error|exception|traceback|not a valid|not recognized|no such file|not found|cannot|"
+                        r"could not|denied|prevents you|failed|invalid|unexpected token|exit (-?[1-9]\d*)\b", re.I)
+
+
+def error_signature(name: str, status: str, output: str) -> str:
+    """What makes a failed tool call 'the same failure': the tool and its first error line, numbers and quoted bits
+    blanked (two `cd X && ...` variants give one signature). "" for a call that did not fail."""
+    text = str(output or "")
+    if status == "completed" and not _ERR_WORDS.search(text):
+        return ""
+    line = next((ln for ln in text.splitlines() if _ERR_WORDS.search(ln)), text.strip().splitlines()[0] if text.strip() else status)
+    line = re.sub(r"\d+", "#", line)
+    line = re.sub(r"(['\"]).*?\1", "''", line)
+    line = re.sub(r"[A-Za-z]:[\\/][^\s'\"]*", "<path>", line)
+    return "%s: %s" % (name, " ".join(line.split())[:160])
+
+
+class RepeatGuard:
+    """Says when a turn is stuck: the same failure LOKI_OC_REPEAT_LIMIT times (default 3), or the very same call
+    (tool + input) that many times in a row. The caller then stops the turn and hands it on (another model, told what
+    went wrong) instead of letting a model burn its context on one broken command."""
+
+    def __init__(self, limit: int | None = None) -> None:
+        self.limit = max(2, int(limit or os.getenv("LOKI_OC_REPEAT_LIMIT", "3") or 3))
+        self.fails: dict = {}
+        self.last_call, self.same_calls = "", 0
+        self.stuck = ""
+
+    def see(self, name: str, status: str, shown: str, output: str) -> str:
+        if status not in ("completed", "error"):
+            return self.stuck                     # pending / running: the call is not finished yet
+        call = "%s %s" % (name, " ".join(str(shown or "").split()))
+        self.same_calls = self.same_calls + 1 if call == self.last_call else 1
+        self.last_call = call
+        sig = error_signature(name, status, output)
+        if sig:
+            self.fails[sig] = self.fails.get(sig, 0) + 1
+            if self.fails[sig] >= self.limit and not self.stuck:
+                self.stuck = "the same error %d times: %s (last command: %s)" % (self.fails[sig], sig, str(shown)[:200])
+        if self.same_calls >= self.limit and not self.stuck and name not in ("todowrite", "team_read"):
+            self.stuck = "the same call %d times in a row: %s" % (self.same_calls, call[:200])
+        return self.stuck
 
 
 # ------------------------------------------------------------------ sessions: one per LOKI conversation

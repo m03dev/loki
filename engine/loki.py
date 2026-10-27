@@ -5032,6 +5032,18 @@ def is_godot_workspace() -> bool:
     return bool(GAME_PROJECT) and (Path(GAME_PROJECT) / "project.godot").is_file()
 
 
+def loki_folder_note() -> str:
+    """Where "LOKI's folder" is. Jobs run in the workspace (LOKI Projects/Home); tasks that said "in LOKI's folder:
+    harness_data\\.venv\\Scripts\\python.exe ..." were run from there, failed ("No module named 'loki'"), and agents
+    then wrote look-alike engine/ and harness_data/ copies in Home and 'proved' those (2026-10-27, the PC)."""
+    root = Path(__file__).resolve().parent.parent
+    py = root / "harness_data" / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
+    return ("# LOKI's folder\n\"LOKI's folder\" means LOKI's own install: %s (its code is engine/, its Python is %s). "
+            "A task that says \"in LOKI's folder\" runs its commands THERE (cd into it first), not in your workspace. "
+            "Any engine/ or harness_data/ folder inside your workspace is an old copy - never run, edit or cite it as "
+            "proof." % (root.as_posix(), py.as_posix()))
+
+
 def identity_section() -> str:
     """Who is answering, on which machine, with which model - so LOKI can say it plainly
     instead of guessing (it used to answer "I don't know which model I am")."""
@@ -9196,6 +9208,19 @@ WEAK_FOR_JOBS = tuple(p.strip() for p in os.getenv("LOKI_WEAK_FOR_JOBS", "llm7,o
 NOT_CHAT_ROUTES = ("huggingface",)
 
 
+JOB_TRY = 1   # set by run_job from the job's prompt
+
+
+def try_number(prompt: str) -> int:
+    """Which try of an autopilot request a prompt is (task_board.retry_text writes "(Try N of M." into it)."""
+    m = re.search(r"\(Try (\d+) of \d+\.", str(prompt or ""))
+    return int(m.group(1)) if m else 1
+
+
+def _job_try() -> int:
+    return JOB_TRY if _job_process() else 1
+
+
 def _oc_providers(first: str) -> dict:
     """The providers OpenCode may use: the one LOKI picked first, then every other configured HTTP provider - and
     this computer's local model always among them (it never runs out; 2026-10-26: with every free tier spent, jobs
@@ -9231,6 +9256,15 @@ def _oc_providers(first: str) -> dict:
             # on a job, so a slow capable route beats a quick weak one: the small models go after every cloud route.
             weak = [n for n in names if n in LOCAL_PROVIDERS or n in WEAK_FOR_JOBS]
             names = [n for n in names if n not in weak] + weak
+            # the model the job was given goes first, not the quickest one: speed put Nemotron (the small Fast model)
+            # in front of every job, and it looped on one broken command (2026-10-27, the PC)
+            if first in names and first not in weak:
+                names = [first] + [n for n in names if n != first]
+            # a retry ("Try 2 of 3 ... use a different model") really starts on a different model
+            strong = [n for n in names if n not in weak]
+            shift = (_job_try() - 1) % len(strong) if strong else 0
+            if shift:
+                names = strong[shift:] + strong[:shift] + weak
         out = {n: out[n] for n in names}
     except Exception:  # noqa: BLE001
         pass
@@ -9348,8 +9382,9 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         import machines  # pylint: disable=import-outside-toplevel
         ctx = cfg_dir / (("context-%s.md" % re.sub(r"[^\w-]", "", os.getenv("LOKI_JOB_ID", ""))[:40])
                          if os.getenv("LOKI_JOB_ID") else "context.md")
-        ctx.write_text(identity_section() + "\n\n# Your other machines\n" + machines.describe() + "\n",
-                       encoding="utf-8")
+        shell = opencode_engine.shell_for(opencode_engine.env_for(providers))
+        ctx.write_text(identity_section() + "\n\n" + opencode_engine.shell_note(shell) + "\n\n" + loki_folder_note()
+                       + "\n\n# Your other machines\n" + machines.describe() + "\n", encoding="utf-8")
         oc_cfg["instructions"] = [str(ctx)]
     except Exception as exc:  # noqa: BLE001
         print("[loki] context for OpenCode not written: %s" % exc, flush=True)
@@ -9375,6 +9410,11 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             name, status, shown, out = opencode_engine.tool_summary(part)
             _progress("tool", "%s %s" % (name, shown))
             _progress("tool_result" if status == "completed" else "error", ("%s: %s" % (name, out or status))[:400])
+            guard = meter.get("guard")
+            if guard is not None and not meter.get("stuck") and guard.see(name, status, shown, out):
+                meter["stuck"] = guard.stuck       # the loop below stops this turn and hands it on
+                _progress("error", "%s is stuck - %s. %s" % (meter["where"] or "The model", guard.stuck[:240],
+                          "Handing it to the next model." if meter.get("can_move") else "Stopping this turn."))
         elif kind == "text" and part.get("text"):
             _progress("assistant", str(part["text"])[:300])
         elif kind == "step_start":
@@ -9410,7 +9450,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
         pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")
         meter.update(model=model, where=pname or "OpenCode", last=time.time(), too_slow=False,
-                     can_move=i + 1 < len(tries))
+                     can_move=i + 1 < len(tries), stuck="", guard=opencode_engine.RepeatGuard())
         _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
@@ -9418,11 +9458,30 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
                                          config_path=str(cfg_local if is_local else cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,
-                                         cancelled=lambda: _cancel_event.is_set() or bool(meter.get("too_slow")))
+                                         cancelled=lambda: _cancel_event.is_set() or bool(meter.get("too_slow"))
+                                         or bool(meter.get("stuck")))
         used = model
         if result.get("session"):
             session = result["session"]
             OC_SESSIONS.set(conv, session)
+        if meter.get("stuck") and not _cancel_event.is_set():
+            # the model kept making one mistake (2026-10-27, the PC: `cd X && ...` in PowerShell 5.1, nine steps in a
+            # row): the next model carries on in the same session, told exactly what not to do again
+            stuck = meter["stuck"]
+            meter["carried"] = list(meter.get("carried") or []) + list(result.get("tools") or [])
+            try:
+                import provider_speed  # pylint: disable=import-outside-toplevel
+                provider_speed.mark_out(DATA_DIR, meter.get("where") or "", "stuck: " + stuck[:120])
+            except Exception:  # noqa: BLE001
+                pass
+            if i + 1 >= len(tries):
+                result = dict(result, error="stopped: %s" % stuck)
+                break
+            prompt = ("Carry on with this task from where it stands; check what is already done first, then finish it "
+                      "with your tools. The last attempt got stuck - %s. Do NOT repeat that: read the error and change "
+                      "the approach.\n\nGOAL: %s\n\nEnd with one line: 'DONE: <what you made>' or 'BLOCKED: <exactly "
+                      "what you need>'." % (stuck[:600], text[:4000]))
+            continue
         if meter.get("too_slow") and not _cancel_event.is_set():
             # carry on in the same session with the next provider; the tools that already ran stay counted
             # never mention the switch: a small model took "the previous model was too slow" as its new task and spent
@@ -9807,8 +9866,9 @@ async def main() -> None:
 # it); commands, moves and deletes run only when the job was started with
 # allow_commands, and still pass the command policy and the no-shell rule.
 async def run_job(job_path: str) -> int:
-    global approve, model_name
+    global approve, model_name, JOB_TRY
     job = json.loads(Path(job_path).read_text(encoding="utf-8"))
+    JOB_TRY = try_number(job.get("prompt") or "")
     if job.get("selfcheck"):
         # The System check (system_check.py): prove that a background agent starts here, in
         # its own folder, with LOKI's data, and reports back - without a model or any tool.
