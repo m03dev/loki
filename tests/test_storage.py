@@ -142,15 +142,39 @@ STATUS["old2"] = "done"
 a = storage.auto(DATA, WS, job_status=js)
 check("auto within budget: the safe rules only", "caches" not in a["categories"] and not (DATA / "jobs" / "old2.log").exists()
       and (DATA / "big" / "uv-cache").exists(), a)
-os.environ["LOKI_STORAGE_BUDGET_GB"] = "0.000001"
-a = storage.auto(DATA, WS, job_status=js)
-check("auto over budget: caches go too", a["tight"] and "caches" in a["categories"] and not (DATA / "big" / "uv-cache").exists(), a)
-check("... but never a duplicate on its own (that one asks)", "duplicates" not in a["categories"])
+# owner 2026-10-27: "i hope you didnt make any system that automatically deletes things without my permission cache
+# and little running things are fine but not real stuff" - auto never touches the owner's work, even over budget
+mine = [put(WS / "images" / "old-goal-draft.png", 50_000, OLD), put(WS / "trash" / "images" / "deleted-long-ago.png", 50_000, OLD),
+        put(WS / "dist" / "my-game-export.html", 50_000, OLD), put(WS / "images" / "copy-a.png", 10, OLD, b"same"),
+        put(WS / "images" / "copy-b.png", 10, OLD, b"same")]
+age_tree(WS / "dist", OLD)
 old_batch = storage.trash(DATA)
 for b in old_batch:
     os.utime(DATA / "storage_trash" / b["batch"], (OLD, OLD))
+os.environ["LOKI_STORAGE_BUDGET_GB"] = "0.000001"
+a = storage.auto(DATA, WS, job_status=js)
+check("auto over budget: caches go too", a["tight"] and "caches" in a["categories"] and not (DATA / "big" / "uv-cache").exists(), a)
+check("... and only regenerable things: never drafts, duplicates, Home deletes or build output",
+      set(a["categories"]) <= {"worktrees", "job_runs", "agent_junk", "caches"}, a["categories"])
+check("... every one of the owner's files is still where it was (draft, old Home delete, dist export, copies)",
+      all(f.exists() for f in mine), [str(f) for f in mine if not f.exists()])
+check("... the trash is not emptied by auto, however old (only the owner empties it)",
+      len(storage.trash(DATA)) == len(old_batch) and "trash" not in a, (old_batch, storage.trash(DATA)))
+manual = {i["category"] for i in storage.plan(DATA, WS, job_status=js)["items"]}
+check("the owner's own plan (Lab > Storage) still offers them, to choose", {"builds", "rejected"} <= manual, manual)
 e = storage.empty_trash(DATA)
-check("trash older than a week empties itself", e["emptied"] == len(old_batch) and not storage.trash(DATA), e)
+check("the owner's Empty trash removes trash older than a week", e["emptied"] == len(old_batch) and not storage.trash(DATA), e)
+_saved_fb = sys.modules.get("image_feedback")
+sys.modules["image_feedback"] = None          # the likes cannot be read (a broken install)
+try:
+    blind = {i["category"] for i in storage.plan(DATA, WS, ["drafts", "duplicates"], job_status=js)["items"]}
+finally:
+    if _saved_fb is not None:
+        sys.modules["image_feedback"] = _saved_fb
+    else:
+        sys.modules.pop("image_feedback", None)
+check("when the owner's likes cannot be read, none of their files is offered (fails closed - a liked picture once "
+      "showed up as a draft)", not blind, blind)
 os.environ["LOKI_STORAGE_AUTO"] = "off"
 check("LOKI_STORAGE_AUTO=off does nothing", storage.auto(DATA, WS).get("skipped"))
 check("this suite stays under 60 s", time.time() - T0 < 60, round(time.time() - T0, 1))

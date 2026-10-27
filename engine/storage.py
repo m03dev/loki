@@ -14,20 +14,25 @@ Deleted" and Lightroom's rejected flag (a cleanup goes to a trash that empties i
   plan()      what may go, item by item, with why and how much it frees, by the RULES below; a plan has an id
   clean(id)   runs exactly that plan: regenerable things are deleted, your outputs go to the trash
               (<data>/storage_trash/<batch>/ + a manifest), restore(batch) puts them back
-  auto        every 6 h (the autopilot): the safe rules always; the draft rules when LOKI is over its budget
-              (LOKI_STORAGE_BUDGET_GB, default 20) or the drive is low (LOKI_MIN_FREE_GB, default 25); trash older than
-              LOKI_TRASH_DAYS (7) is emptied. LOKI_STORAGE_AUTO=off|safe|budget (default budget)
+  auto        every 6 h (the autopilot): ONLY regenerable things - never the owner's work (owner 2026-10-27: "i hope
+              you didnt make any system that automatically deletes things without my permission cache and little
+              running things are fine but not real stuff"). The safe regenerable rules always; download caches too
+              when LOKI is over its budget (LOKI_STORAGE_BUDGET_GB, default 20) or the drive is low (LOKI_MIN_FREE_GB,
+              default 25). It never moves anything of the owner's to the trash and never empties the trash - the owner
+              does both in Lab > Storage. LOKI_STORAGE_AUTO=off|safe|budget (default budget)
 
-Rules (never anything you liked or kept, never a folder outside LOKI's data and workspace):
+Rules (never anything you liked or kept, never a folder outside LOKI's data and workspace; "manual" = only when the
+owner runs that plan, never automatically):
   worktrees     LOKI's code checked out for a finished improve job                     regenerable  safe
   job_runs      a finished job's log and run folder, older than 7 days                regenerable  safe
-  agent_junk    build leftovers agents made in the workspace (node_modules, dist,     regenerable  safe
-                caches, *.log, .loki/messages) older than 3 days
+  agent_junk    caches agents left in the workspace (node_modules, __pycache__,       regenerable  safe
+                .next, coverage, *.log, *.tmp, .loki/messages) older than 3 days
   caches        pip / uv / npm / Hugging Face download caches in LOKI's big/ folder    regenerable  budget
-  rejected      what you deleted on Home (the workspace trash/), older than 7 days     yours        safe
-  drafts        what standing goals and tests made, older than LOKI_DRAFT_DAYS (7)     yours        budget
+  builds        dist/ and build/ folders in the workspace (could be an export)         yours        manual
+  rejected      what you deleted on Home (the workspace trash/), older than 7 days     yours        manual
+  drafts        what standing goals and tests made, older than LOKI_DRAFT_DAYS (7)     yours        manual
                 and not liked or kept
-  duplicates    byte-identical copies of an output (the newest copy stays)             yours        budget
+  duplicates    byte-identical copies of an output (the newest copy stays)             yours        manual
 Standard library only.
 """
 from __future__ import annotations
@@ -46,17 +51,19 @@ from typing import Any, Callable
 DAY = 86400.0
 OUTPUT_DIRS = ("images", "sprites", "models", "renders", "turnarounds", "music", "audio", "voice", "video", "videos",
                "scenes", "pipeline", "library", "brand", "qa")
-JUNK_DIRS = {"node_modules", "dist", "build", ".pytest_cache", "__pycache__", ".next", ".parcel-cache", "coverage", ".turbo"}
+JUNK_DIRS = {"node_modules", ".pytest_cache", "__pycache__", ".next", ".parcel-cache", "coverage", ".turbo"}
+BUILD_DIRS = {"dist", "build"}     # a build's output may be the owner's export: only ever on the owner's say
 JUNK_FILES = (".log", ".tmp")
 CACHE_DIRS = ("uv-cache", "pip-cache", "npm-cache", "huggingface", "torch")
 CATEGORIES = {
     "worktrees": ("LOKI's code for finished improve jobs", "regenerable", "safe"),
     "job_runs": ("logs and folders of finished jobs", "regenerable", "safe"),
-    "agent_junk": ("build leftovers agents made (node_modules, dist, logs)", "regenerable", "safe"),
+    "agent_junk": ("caches agents left (node_modules, __pycache__, logs)", "regenerable", "safe"),
     "caches": ("download caches (pip, uv, npm, models)", "regenerable", "budget"),
-    "rejected": ("pictures and models you deleted on Home", "yours", "safe"),
-    "drafts": ("what standing goals and tests made", "yours", "budget"),
-    "duplicates": ("identical copies of the same output", "yours", "budget"),
+    "builds": ("dist / build folders in the workspace", "yours", "manual"),
+    "rejected": ("pictures and models you deleted on Home", "yours", "manual"),
+    "drafts": ("what standing goals and tests made", "yours", "manual"),
+    "duplicates": ("identical copies of the same output", "yours", "manual"),
 }
 _lock = threading.Lock()
 _cache: dict = {}
@@ -149,6 +156,9 @@ def _sha(path: Path) -> str:
 
 
 # ------------------------------------------------------------------ what is kept
+UNKNOWN = "*"     # in kept_paths(): the owner's likes could not be read - nothing of theirs is offered
+
+
 def kept_paths(workspace: Path, data_dir: Path) -> set:
     """Relative workspace paths that are never cleaned: liked (thumbs up), pinned here (storage_keep.json)."""
     keep = set()
@@ -157,8 +167,8 @@ def kept_paths(workspace: Path, data_dir: Path) -> set:
         for rel, r in (image_feedback.ratings(workspace, data_dir) or {}).items():
             if int(r.get("rating") or 0) > 0:
                 keep.add(str(rel).replace("\\", "/"))
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:  # noqa: BLE001 - the likes could not be read: fail CLOSED (UNKNOWN = offer none of the owner's
+        keep.add(UNKNOWN)   # files), never "nothing is liked" (2026-10-27: a liked picture showed up as a draft)
     for name in OUTPUT_DIRS:   # a picture's own sidecar (<folder>/.meta/<file>.json) saying liked - a second record
         meta = Path(workspace) / name / ".meta"
         if not meta.is_dir():
@@ -284,6 +294,16 @@ def rule_agent_junk(c: Ctx) -> list:
     return out
 
 
+def rule_builds(c: Ctx) -> list:
+    out = []
+    if c.ws is None or not c.ws.is_dir():
+        return out
+    for p in c.ws.iterdir():
+        if p.is_dir() and p.name in BUILD_DIRS and c.now - newest_mtime(p, 300) >= 3 * DAY:
+            out.append(c.item("builds", p, "%s folder in the workspace (a build's output)" % p.name, rel=p.name))
+    return out
+
+
 def rule_caches(c: Ctx) -> list:
     out = []
     big = c.data / "big"
@@ -313,6 +333,8 @@ def rule_drafts(c: Ctx) -> list:
     if c.ws is None:
         return out
     days = _env("LOKI_DRAFT_DAYS", 7)
+    if UNKNOWN in c.kept:
+        return out
     for rel, t in draft_paths(c.data).items():
         p = c.ws / rel
         if rel in c.kept or not p.is_file():
@@ -326,7 +348,7 @@ def rule_drafts(c: Ctx) -> list:
 
 def rule_duplicates(c: Ctx) -> list:
     out = []
-    if c.ws is None:
+    if c.ws is None or UNKNOWN in c.kept:
         return out
     by_size: dict = {}
     for name in OUTPUT_DIRS:
@@ -362,7 +384,7 @@ def rule_duplicates(c: Ctx) -> list:
     return out
 
 
-RULES = {"worktrees": rule_worktrees, "job_runs": rule_job_runs, "agent_junk": rule_agent_junk, "caches": rule_caches,
+RULES = {"builds": rule_builds, "worktrees": rule_worktrees, "job_runs": rule_job_runs, "agent_junk": rule_agent_junk, "caches": rule_caches,
          "rejected": rule_rejected, "drafts": rule_drafts, "duplicates": rule_duplicates}
 
 
@@ -556,15 +578,16 @@ def auto(data_dir: Path, workspace: Path | None, job_status=None, repo: Path | N
     mode = auto_mode()
     if mode == "off":
         return {"ok": True, "skipped": "LOKI_STORAGE_AUTO=off"}
-    cats = [c for c, (_l, _k, when) in CATEGORIES.items() if when == "safe"]
+    # regenerable things only - never the owner's work, whatever the budget says (owner 2026-10-27)
+    cats = [c for c, (_l, kind, when) in CATEGORIES.items() if when == "safe" and kind == "regenerable"]
     s = scan(data_dir, workspace, deadline_s=10)
     tight = s["total"] > s["budget"] or (s["free"] and s["free"] < s["min_free"]) or \
         (s.get("ws_free") is not None and s["ws_free"] < s["min_free"])
     if mode == "budget" and tight:
-        cats += [c for c, (_l, _k, when) in CATEGORIES.items() if when == "budget" and c != "duplicates"]
+        cats += [c for c, (_l, kind, when) in CATEGORIES.items() if when == "budget" and kind == "regenerable"]
     p = plan(data_dir, workspace, cats, job_status=job_status)
     res = clean(data_dir, workspace, p["id"], repo=repo) if p["items"] else {"removed": 0, "freed": 0}
-    res["trash"] = empty_trash(data_dir)
+    # the trash is NOT emptied here: what is in it is the owner's, and only the owner empties it (Lab > Storage)
     res.update(tight=bool(tight), categories=cats)
     return res
 

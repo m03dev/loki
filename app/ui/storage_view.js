@@ -1,7 +1,7 @@
 // Lab > Storage: how much LOKI uses, what may go and why, one click to clean, a trash you can restore (owner
 // 2026-10-27: "what are we doing about data management i dont have that much space"). GET /storage (engine/storage.py:
 // usage + the plan + the trash); POST /storage/clean {plan, ids} runs exactly what is ticked; /storage/restore {batch};
-// /storage/empty-trash. Your outputs go to the trash first (emptied after 7 days); caches and code copies are deleted.
+// /storage/empty-trash. Your outputs go to the trash first (kept until you empty it); caches and code copies are deleted.
 // Plain DOM, CSP script-src 'self'; api() from app.js.
 "use strict";
 
@@ -29,7 +29,7 @@ const LokiStorage = (() => {
     head.append(mk("h3", "st-title", "LOKI uses " + fmt(u.total) + (u.budget ? " of its " + fmt(u.budget) + " budget" : "")),
       bar(u.total, u.budget, u.total > u.budget ? "over" : ""),
       mk("p", "st-line", "Free on this drive: " + fmt(u.free) + " of " + fmt(u.disk) + (u.ws_free != null ? " · workspace drive: " + fmt(u.ws_free) + " free" : "")
-        + " · automatic clean-up: " + ({ off: "off", safe: "safe things only", budget: "on (drafts and caches too when over budget)" }[u.auto] || u.auto)));
+        + " · automatic clean-up: " + ({ off: "off", safe: "rebuildable things only", budget: "rebuildable things only (download caches too when over budget) - never your work" }[u.auto] || u.auto)));
     S.root.append(head);
     const areas = mk("div", "st-areas");
     const top = (u.areas || []).slice(0, 10), max = Math.max(1, ...top.map((a) => a.size));
@@ -66,10 +66,13 @@ const LokiStorage = (() => {
     const go = mk("button", "send small st-go"); go.type = "button"; go.id = "st-go";
     go.addEventListener("click", clean);
     const all = mk("button", "quiet small", "Tick everything that cleans on its own"); all.type = "button";
-    all.title = "Ticks the safe things and, when LOKI is over budget, its drafts and caches - what the automatic clean-up would take.";
+    all.title = "Ticks only what the automatic clean-up takes: rebuildable things (old code copies, job logs, caches). Your pictures, models and drafts are never ticked for you.";
     all.addEventListener("click", () => {
       const over = u.total > u.budget || u.free < u.min_free;
-      for (const i of p.items) if (p.categories[i.category].when === "safe" || (over && i.category !== "duplicates")) S.pick.add(i.id);
+      for (const i of p.items) {
+        const c = p.categories[i.category] || {};
+        if (c.kind === "regenerable" && (c.when === "safe" || (over && c.when === "budget"))) S.pick.add(i.id);
+      }
       render();
     });
     acts.append(go, all);
@@ -77,7 +80,7 @@ const LokiStorage = (() => {
     S.root.append(acts);
     paintGo();
     if ((d.trash || []).length) {
-      S.root.append(mk("h4", "st-h", "Trash (emptied after 7 days)"));
+      S.root.append(mk("h4", "st-h", "Trash (kept until you empty it)"));
       for (const b of d.trash) {
         const r = mk("div", "st-area");
         const rest = mk("button", "quiet small", "Restore"); rest.type = "button";
