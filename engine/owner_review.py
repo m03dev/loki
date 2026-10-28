@@ -274,7 +274,8 @@ def run_expert(item_id: str, ask, ws=None) -> dict | None:
         return it
     it["agent_prompt"] = str(it["args"].get(key) or "")
     it["args"][key] = better["prompt"]
-    it["expert"] = {"status": "done", "by": better.get("by", ""), "why": better.get("why", ""), "t": time.time()}
+    it["expert"] = {"status": "done", "by": better.get("by", ""), "why": better.get("why", ""), "t": time.time(),
+                    "refs": better.get("refs") or []}
     return _save(it)
 
 
@@ -292,7 +293,10 @@ def kick_expert(agent=None, ws=None, thread: bool = True) -> int:
     n = 0
     for it in items(("waiting",)):
         ex = it.get("expert") or {}
-        if it["kind"] != "prompt" or ex.get("status") in ("done", "failed") or (
+        # a failed run is tried again after a while (2026-10-28: one NVIDIA timeout left a card on the agent's own
+        # words for good)
+        if it["kind"] != "prompt" or ex.get("status") == "done" or (
+                ex.get("status") == "failed" and time.time() - float(ex.get("t") or 0) < EXPERT_STALE_S) or (
                 ex.get("status") == "working" and time.time() - float(ex.get("t") or 0) < EXPERT_STALE_S):
             continue
         it["expert"] = {"status": "working", "t": time.time()}

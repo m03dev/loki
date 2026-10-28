@@ -16,6 +16,19 @@ Every source follows the SAME convention - `agents/*.md` and `skills/<name>/SKIL
   awesome-gamedev    game-dev skills across engines (gamedev-skills/...)
   gamedev-plugin     game design/engineering/narrative skills (fcsouza/agent-skills)
   ponytail           the "lazy senior dev" coding standard (AGENTS.md only)
+
+Premade specialists and real references for the Prompt Expert and every agent (owner 2026-10-28: "needs real ref
+... we need premade, just add them to loki"; engine/prompt_library.py picks from them per task):
+
+  wshobson-agents      ~180 agents + ~185 skills across dev, content, design, game dev (wshobson/agents, MIT)
+  voltagent-subagents  ~130 specialist agents in 10 categories (VoltAgent/awesome-claude-code-subagents, MIT)
+  nano-banana-prompts  real image prompts with the pictures they made (YouMind-OpenLab, CC BY 4.0)
+  gpt-image-prompts    the same for GPT Image 2 (YouMind-OpenLab, CC BY 4.0)
+  chatgpt-prompts      ~2,700 role prompts for any task (f/awesome-chatgpt-prompts, CC0)
+  wan-prompts          Alibaba's own Wan2.2 video prompt rules (Wan-Video/Wan2.2, Apache-2.0)
+
+Sources that need only a few files use "raw" (each file straight from raw.githubusercontent.com) instead of the
+repository zip - the prompts repository's zip is over 200 MB for one 9 MB file.
 """
 from __future__ import annotations
 
@@ -53,7 +66,14 @@ SOURCES = {
     "agentic-gamedev": {"repo": "abagames/agentic-gamedev-skills", "keep": (".agents",)},
     "ponytail": {"repo": "DietrichGebert/ponytail", "keep": None,
                  "files": ("AGENTS.md", "LICENSE")},
+    "wshobson-agents": {"repo": "wshobson/agents", "keep": ("plugins", "LICENSE")},
+    "voltagent-subagents": {"repo": "VoltAgent/awesome-claude-code-subagents", "keep": ("categories", "LICENSE")},
+    "nano-banana-prompts": {"repo": "YouMind-OpenLab/awesome-nano-banana-pro-prompts", "raw": ("README.md", "LICENSE")},
+    "gpt-image-prompts": {"repo": "YouMind-OpenLab/awesome-gpt-image-2", "raw": ("README.md", "LICENSE")},
+    "chatgpt-prompts": {"repo": "f/awesome-chatgpt-prompts", "raw": ("prompts.csv", "LICENSE-CC0")},
+    "wan-prompts": {"repo": "Wan-Video/Wan2.2", "raw": ("wan/utils/system_prompt.py", "LICENSE.txt")},
 }
+_RAW = "https://raw.githubusercontent.com/{repo}/{branch}/{path}"
 
 _ZIP = "https://codeload.github.com/{repo}/zip/refs/heads/{branch}"
 _BRANCHES = ("main", "master")
@@ -73,6 +93,29 @@ def _download(repo: str) -> bytes | None:
     return None
 
 
+def _fetch_raw(repo: str, files: tuple, target: Path) -> int:
+    """Each file on its own; the first file decides the branch. A missing extra (a LICENSE) is not an error."""
+    written = 0
+    for branch in _BRANCHES:
+        for i, path in enumerate(files):
+            try:
+                request = urllib.request.Request(_RAW.format(repo=repo, branch=branch, path=path),
+                                                 headers={"User-Agent": "loki-ecc-sync"})
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    data = response.read()
+            except Exception:
+                if i == 0:
+                    break
+                continue
+            destination = target / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+            written += 1
+        if written:
+            return written
+    raise RuntimeError(f"could not download {repo}")
+
+
 def _extract(repo: str, keep: tuple | None, files: tuple | None, target: Path) -> int:
     data = _download(repo)
     if data is None:
@@ -85,7 +128,7 @@ def _extract(repo: str, keep: tuple | None, files: tuple | None, target: Path) -
         relative = member[len(prefix):]
         if not relative or member.endswith("/"):
             continue
-        if folders and not relative.startswith(folders):
+        if folders and not relative.startswith(folders) and relative not in keep:
             continue
         if files and relative not in files:
             continue
@@ -106,7 +149,10 @@ def sync(force: bool = False, log=print) -> dict:
             report[name] = json.loads(marker.read_text(encoding="utf-8")).get("files", 0)
             continue
         try:
-            count = _extract(spec["repo"], spec.get("keep"), spec.get("files"), target)
+            if spec.get("raw"):
+                count = _fetch_raw(spec["repo"], spec["raw"], target)
+            else:
+                count = _extract(spec["repo"], spec.get("keep"), spec.get("files"), target)
         except Exception as exc:
             log(f"[sync] {name}: failed - {exc}")
             report[name] = f"error: {exc}"
@@ -125,7 +171,8 @@ def _count(root: Path, kind: str) -> int:
     if not root.is_dir():
         return 0
     if kind == "agents":
-        return len(list(root.glob("**/agents/*.md")))
+        return len(list(root.glob("**/agents/*.md"))) + len(
+            [p for p in root.glob("categories/*/*.md") if p.name.lower() != "readme.md"])
     return len(list(root.glob("**/SKILL.md")))
 
 

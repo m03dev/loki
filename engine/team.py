@@ -107,8 +107,11 @@ def team_method(goal: str) -> tuple:
     return ("sparc" if method == "sparc" else "standard"), goal
 
 
-def _with_playbook(role: str, brief: str) -> str:
-    """LOKI's brief first (it is the rule), then Ruflo's matching playbook as guidance."""
+def _with_playbook(role: str, brief: str, goal: str = "") -> str:
+    """LOKI's brief first (it is the rule), then the best premade specialist for the goal, then Ruflo's playbook."""
+    premade = premade_specialist(role, brief, goal)
+    if premade:
+        brief = brief + "\n\n" + premade
     if os.getenv("LOKI_TEAM_PLAYBOOKS", "ruflo").strip().lower() in ("", "0", "off", "none"):
         return brief
     try:
@@ -121,6 +124,29 @@ def _with_playbook(role: str, brief: str) -> str:
         return brief
     return (brief + "\n\n## Playbook (from Ruflo, github.com/ruvnet/ruflo; your brief above wins "
             "where they differ)\n" + extra)
+
+
+def premade_specialist(role: str, brief: str, goal: str = "") -> str:
+    """The premade agent that fits this role and goal best, from the downloaded libraries (engine/specialist_library.py;
+    owner 2026-10-28: "we need premade, just add them to loki") - a Builder on a FastAPI goal gets the FastAPI pro,
+    a Reviewer on a Rust goal the Rust reviewer. Art roles keep their own skill."""
+    if role.startswith("art_") or os.getenv("LOKI_TEAM_PREMADE", "on").strip().lower() in ("0", "off", "no"):
+        return ""
+    try:
+        import specialist_library  # pylint: disable=import-outside-toplevel
+        words = {"researcher": "research analyst", "architect": "architect architecture design",
+                 "builder": "developer engineer pro", "tester": "test automation qa engineer",
+                 "reviewer": "code reviewer review", "browser": "browser e2e test playwright"}.get(role, role)
+        hits = specialist_library.best_specialists("%s %s" % (goal or brief[-600:], words), 1, "agent")
+        if not hits or hits[0]["score"] < 6:
+            return ""
+        text = clean_playbook(specialist_library.specialist_text(hits[0], 3000))
+    except Exception:  # noqa: BLE001 - the brief stands alone
+        return ""
+    if not text:
+        return ""
+    return ("## Specialist know-how (premade agent '%s' from %s; your brief above wins where they differ)\n%s"
+            % (hits[0]["name"], hits[0]["lib"], text))
 
 
 def clean_playbook(text: str, limit: int = 1500) -> str:
@@ -492,7 +518,7 @@ class TeamRunner:
             "title": "Team %s · %s: %s" % (team["id"], spec["name"], team["goal"][:50]),
             "prompt": agent_prompt(team, role, extra), "team": team["id"],
             "profile": {"name": spec["name"], "role": role,
-                        "instructions": _with_playbook(role, brief(team, role))},
+                        "instructions": _with_playbook(role, brief(team, role), team.get("goal", ""))},
         })
         return job["id"]
 

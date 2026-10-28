@@ -48,6 +48,8 @@
 .rv-expert.done { color: #9fd4b0; }
 .rv-expert.working::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-inline-end: 7px; border-radius: 50%;
   background: var(--accent); animation: home-pulse 1.6s ease-in-out infinite; }
+.rv-refs { display: flex; gap: 6px; padding-block: 4px; }
+.rv-refs img { width: 18%; min-width: 48px; max-width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: #141418; }
 .rv-expert.failed { color: #e0c48a; }
 .rv-facts { display: grid; gap: 4px; font-size: 12.5px; }
 .rv-fact { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

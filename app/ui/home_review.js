@@ -134,6 +134,19 @@ const LokiHomeReview = (() => {
       const e = mk("div", "rv-expert done", "Improved by the Prompt Expert" + (ex.why ? ": " + ex.why : ""));
       e.dataset.tipName = "Prompt Expert"; e.dataset.tipWhat = "An art director rewrote the agent's prompt" + (ex.by ? " (" + ex.by + ")" : "") + ". Edit it freely before you approve.";
       c.append(e);
+      const refs = (ex.refs || []).filter(r => r && r.image).slice(0, 3);
+      if (refs.length) {   // the real reference prompts the expert matched (engine/specialist_library.py), with their pictures
+        const rr = mk("div", "rv-refs"); rr.setAttribute("aria-label", "Reference pictures the expert used");
+        for (const r of refs) {
+          const img = mk("img"); img.src = r.image; img.loading = "lazy"; img.alt = r.title || "reference";
+          img.referrerPolicy = "no-referrer";
+          img.dataset.tipName = "Reference: " + (r.title || "");
+          img.dataset.tipWhat = "A real prompt that made this picture" + (r.author ? " (by " + r.author + ")" : "") + ". The expert matched its detail, not its subject.";
+          img.addEventListener("error", () => img.remove());
+          rr.append(img);
+        }
+        c.append(rr);
+      }
     } else if (ex.status === "failed") c.append(mk("div", "rv-expert failed", "The Prompt Expert could not run (" + (ex.error || "?") + ") - these are the agent's own words."));
     const box = mk("textarea", "rv-words"); box.value = words(it); box.rows = 3; box.dataset.orig = box.value;
     box.setAttribute("aria-label", "The prompt - edit it before you approve");

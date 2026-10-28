@@ -10,11 +10,15 @@ What it knows (and what the agent usually ignores):
   - what the picture is FOR: who asks and what the stage must deliver (a concept, a T-pose turnaround, a sprite...)
   - the owner's taste, the prompts of pictures they gave a thumbs-up, the reasons they gave for thumbs-down
     (engine/image_feedback.py), their note on a retake
+  - real reference prompts that made great pictures in real models, picked for THIS card (engine/specialist_library.py:
+    the YouMind galleries, f/awesome-chatgpt-prompts); the card shows their pictures so the owner sees the reference;
+    a video card also gets the Wan2.2 makers' own prompt rules
   - how the image models LOKI draws with read prompts (FLUX, Z-Image: plain descriptive sentences, subject first, no
     keyword soup, no weights, nothing to "avoid" written as a positive word); the style finish (art_direction.STYLES)
     is added later by make_image, so it is not repeated here
 
-The model: the free NVIDIA driver first (one short call), this computer's local model next; with neither the card
+The model: the strongest one set up first (EXPERT_MODELS: GLM-5.3 on the free NVIDIA key, ...), this computer's
+local model last; with neither the card
 keeps the agent's words and says the expert could not run. (Laya, LOKI's first layer, is a decision model - it
 answers choices and scores, it does not write - so it is not the writer here.)
 
@@ -93,11 +97,44 @@ def brief(card: dict, ws=None) -> str:
     if card.get("note"):
         lines.append("The owner's note (must be addressed): %s" % card["note"])
     lines.append("The owner's taste: %s" % TASTE)
+    refs = references(card)
+    if refs:
+        lines.append("Real prompts that made great pictures in real image models (from open prompt galleries). Match "
+                     "their level of detail and how they are built - subject, materials, camera, light, finish - but "
+                     "keep YOUR subject; never copy theirs:")
+        for i, r in enumerate(refs, 1):
+            lines.append("%d. \"%s\": %s" % (i, r["title"], r["prompt"][:700]))
     if liked:
         lines.append("Prompts of pictures the owner gave a thumbs-up:\n- " + "\n- ".join(liked))
     if disliked:
         lines.append("What the owner disliked before: " + "; ".join(disliked))
     return "\n".join(lines)
+
+
+def _task_text(card: dict) -> str:
+    args = card.get("args") or {}
+    return " ".join(str(x) for x in (args.get("prompt") or args.get("subject") or "", card.get("stage") or "",
+                                     card.get("tool") or "", args.get("style") or "") if x)
+
+
+def _card_kind(card: dict) -> str:
+    stage, tool = str(card.get("stage") or ""), str(card.get("tool") or "")
+    if stage == "turnaround" or tool == "make_turnaround":
+        return "turnaround"
+    if stage == "video" or tool == "make_video":
+        return "video"
+    if stage in ("model", "finish", "render") or tool in ("make_3d", "blender", "render_scene"):
+        return "3d"
+    return "image"
+
+
+def references(card: dict, n: int = 3) -> list:
+    """Real reference prompts (with the pictures they made) for this card (engine/specialist_library.py)."""
+    try:
+        import specialist_library  # pylint: disable=import-outside-toplevel
+        return specialist_library.image_refs(_task_text(card), n, _card_kind(card))
+    except Exception:  # noqa: BLE001 - the expert still writes without references
+        return []
 
 
 def parse(text: str) -> dict:
@@ -114,14 +151,24 @@ def parse(text: str) -> dict:
 def system_for(card: dict) -> str:
     """The specialist for this card writes it (engine/art_specialists.py; owner 2026-10-27: "they need specialized
     agents ... the prompts should be very technical"); the general art director only when no specialist fits."""
+    base = SYSTEM
     try:
         import art_specialists  # pylint: disable=import-outside-toplevel
         key = art_specialists.for_card(card)
         if key:
-            return art_specialists.system(key)
+            base = art_specialists.system(key)
     except Exception:  # noqa: BLE001 - the general expert still runs
         pass
-    return SYSTEM
+    if _card_kind(card) == "video":   # the video model's makers know best how it reads prompts
+        try:
+            import specialist_library  # pylint: disable=import-outside-toplevel
+            rules = specialist_library.video_rules(bool((card.get("args") or {}).get("image")))
+        except Exception:  # noqa: BLE001
+            rules = ""
+        if rules:
+            base += ("\n\nHow the Wan video model's own makers (Alibaba, Wan2.2) say its prompts are written - follow "
+                     "these for the prompt text, but still answer with the JSON above:\n" + rules[:4000])
+    return base
 
 
 def improve(card: dict, ask: Callable[[str, str], tuple], ws=None) -> dict:
@@ -129,6 +176,8 @@ def improve(card: dict, ask: Callable[[str, str], tuple], ws=None) -> dict:
     text, by = ask(system_for(card), brief(card, ws))
     out = parse(text)
     out["by"] = by
+    out["refs"] = [{"title": r["title"], "image": (r.get("images") or [""])[0], "author": r.get("author", ""),
+                    "source": r.get("source", ""), "lib": r.get("lib", "")} for r in references(card)]
     return out
 
 
@@ -141,12 +190,18 @@ def _heavy_busy() -> bool:
         return True
 
 
+# The writer, strongest first (owner 2026-10-28: "the prompt agent is bad"): the strongest free model on the NVIDIA key
+# (GLM-5.3), the free NVIDIA driver, the paid keys when the owner has them, this computer's model last.
+EXPERT_MODELS = ("nvidia-pro", "nvidia", "deepseek", "claude", "gpt", "local")
+
+
 def asker(agent) -> Callable[[str, str], tuple]:
-    """ask(system, user) for the engine: NVIDIA's free driver, then this computer's local model."""
+    """ask(system, user) for the engine: the first model in EXPERT_MODELS that is set up and answers."""
     def ask(system: str, user: str) -> tuple:
         import asyncio  # pylint: disable=import-outside-toplevel
         errors = []
-        for name in ("nvidia", "local"):
+        order = os.environ.get("LOKI_PROMPT_EXPERT_MODELS", ",".join(EXPERT_MODELS)).split(",")
+        for name in [x.strip() for x in order if x.strip()]:
             try:
                 if name not in agent.MODELS or not agent.provider_configured(name):
                     continue
@@ -159,7 +214,7 @@ def asker(agent) -> Callable[[str, str], tuple]:
 
                 async def go():
                     r = await asyncio.wait_for(client.chat.completions.create(
-                        model=model, max_tokens=900, temperature=0.5,
+                        model=model, max_tokens=2000, temperature=0.5,
                         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}]),
                         float(os.environ.get("LOKI_PROMPT_EXPERT_TIMEOUT_S", "120")))
                     return str(r.choices[0].message.content or "")

@@ -27,6 +27,21 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 01:30 (Claude, cloud) - Prompt Expert per task with real references; ~2,000 premade agents/skills.**
+- New libraries (engine/ecc_sync.py, auto-download on next start): wshobson/agents (MIT, plugins/), VoltAgent
+  awesome-claude-code-subagents (MIT, categories/), YouMind nano-banana-pro + gpt-image-2 galleries (CC BY 4.0, real
+  prompts with the pictures they made), f/awesome-chatgpt-prompts (CC0, role prompts), Wan2.2 system_prompt.py
+  (Apache-2.0). Single-file sources come from raw.githubusercontent.com (the prompts repo zip is 200+ MB).
+- engine/specialist_library.py: task kind (image/turnaround/3d/video/code/marketing/research/writing), BM25 over
+  every agent/skill (name, area, description), real image refs, role prompts, Wan's own video rules (read via ast,
+  never run). Tool `find_specialist(task)`; team roles get the best premade agent (Builder on FastAPI -> fastapi-pro);
+  art_specialists library matches use it too.
+- Prompt Expert: brief carries 3 matched real reference prompts; video cards get Wan's rules; writer order
+  nvidia-pro (GLM-5.3) > nvidia > deepseek > claude > gpt > local (LOKI_PROMPT_EXPERT_MODELS); a failed run retries
+  after 10 min (it stayed failed forever); the card shows the reference pictures (expert.refs).
+- Root fix: art_specialists read only LOKI_DATA_DIR - the app sets LOKI_DATA, so a relocated data folder never found
+  the skills. Not yet run on the machines (no access): LOKI_TASKS "Prompt Expert with real references".
+
 **2026-10-28 00:30 (Claude, cloud) - type a line, get a video; specialists instead of the vague builder.**
 - Video: `/video <shot> [5s]` in the chat goes straight to engine/text_video.py (no chat model): Wan VACE with no
   control passes (engine/forge_workflows/wan_t2v.json, the 3 files Render Studio already has on the PC), 640x368, 4n+1

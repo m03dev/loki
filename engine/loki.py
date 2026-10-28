@@ -2740,7 +2740,7 @@ def open_godot(project_path: str = "") -> str:
 # covers ECC, GodotPrompter, Superpowers and the game-dev skill packs alike.
 # Nothing ships inside the addon; these are user data.
 LIBRARIES = ("ECC", "GodotPrompter", "Superpowers", "awesome-gamedev", "gamedev-plugin",
-             "agentic-gamedev")
+             "agentic-gamedev", "wshobson-agents", "voltagent-subagents")
 ECC_DIR = DATA_DIR / "vendor" / "ECC"          # kept for backward compatibility
 ECC_AGENTS_DIR = ECC_DIR / "agents"
 ECC_SKILLS_DIR = ECC_DIR / "skills"
@@ -2764,7 +2764,19 @@ def _agent_entries() -> list:
     for library, folder in _lib_roots():
         for path in sorted(folder.glob("**/agents/*.md")):
             entries.append((library, path.stem, path))
+        for path in sorted(folder.glob("categories/*/*.md")):   # VoltAgent's layout: categories/<area>/<agent>.md
+            if path.name.lower() != "readme.md":
+                entries.append((library, path.stem, path))
     return entries
+
+
+def find_specialist(task: str) -> str:
+    """The premade agents, skills and real reference prompts that fit a task best (engine/specialist_library.py)."""
+    try:
+        import specialist_library  # pylint: disable=import-outside-toplevel
+        return specialist_library.summary_text(str(task or ""))
+    except Exception as e:  # noqa: BLE001
+        return "error: could not search the libraries: %s" % e
 
 
 def _skill_entries() -> list:
@@ -3149,6 +3161,7 @@ LOCAL_TOOLS = {
     "add_autoload": godot_tools.add_autoload,
     "list_ecc_agents": list_ecc_agents,
     "load_ecc_agent": load_ecc_agent,
+    "find_specialist": find_specialist,
     "list_ecc_skills": list_ecc_skills,
     "load_ecc_skill": load_ecc_skill,
     "sync_ecc": sync_ecc,
@@ -3995,6 +4008,10 @@ TOOL_SCHEMAS = [
            {"query": {"type": "string"}}),
     schema("list_ecc_agents", "List the specialised coding agents available (planning, review, security, build repair, etc.). Pass query to filter by name when the list is long.",
            {"query": {"type": "string"}}),
+    schema("find_specialist", "Before a task, find the premade specialist agents and skills (about 2,000 from wshobson, "
+           "VoltAgent, ECC and others) and the real reference prompts that fit it best. Then load the best one with "
+           "load_ecc_agent / load_ecc_skill and follow it.",
+           {"task": {"type": "string", "description": "the task in one or two sentences"}}, ["task"]),
     schema("load_ecc_agent", "Load a specialised agent's instructions and follow them for the task.",
            {"name": {"type": "string"}}, ["name"]),
     schema("list_ecc_skills", "List the specialised skill packs available (TDD, security, Godot game dev, frontend, data, ML, operations, ...). Pass query to filter by name - the library holds hundreds.",
@@ -4087,7 +4104,7 @@ TOOL_SCHEMAS = [
 # excluded: they are dangerous (approval prompts) and a small model misuses them
 # (e.g. unix "ls -R" on Windows), which stalls the whole task.
 MODEL_TOOL_NAMES = {
-    "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
+    "list_ecc_agents", "load_ecc_agent", "find_specialist", "list_ecc_skills", "load_ecc_skill", "sync_ecc",
     "godot_api", "godot_search", "read_scene", "add_input_action",
     "set_project_setting", "add_autoload",
     "list_files", "list_tree", "read_file", "folders", "write_file", "append_file",
@@ -4127,7 +4144,7 @@ TOOL_CATEGORIES = {
     "creative": ["generate_media", "video_project", "render_video", "game_engine_guide", "sketch_reply"],
     "business": ["crm_add", "crm_update", "crm_find", "crm_log", "crm_pipeline"],
     "web": ["scrape", "read_web", "web_search", "research_web", "browse_page", "map_site", "reach"],
-    "skills": ["list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
+    "skills": ["find_specialist", "list_ecc_agents", "load_ecc_agent", "list_ecc_skills", "load_ecc_skill", "sync_ecc"],
     "system": ["run_command", "bash", "itch", "run_godot", "open_godot"],
 }
 # Tools that only make sense inside a Godot project (the optional game adapter).

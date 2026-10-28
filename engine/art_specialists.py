@@ -18,7 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OWN = ROOT / "skills" / "art-pipeline"
-VENDOR = Path(os.getenv("LOKI_DATA_DIR") or ROOT / "harness_data") / "vendor"
+# LOKI_DATA is what the app sets (engine/loki.py); this file used to read only LOKI_DATA_DIR, so a build with its data
+# elsewhere (a packaged build, the external drive) never found the downloaded skills.
+VENDOR = Path(os.getenv("LOKI_DATA") or os.getenv("LOKI_DATA_DIR") or ROOT / "harness_data") / "vendor"
 LOCAL_SKILLS = ROOT / "skills"
 
 SPECIALISTS = {
@@ -97,7 +99,26 @@ def _library() -> list:
 
 
 def library_matches(key: str, n: int = 2) -> list:
+    """The library skills for this role: its own named ones first, then the best search matches of every premade
+    library (engine/specialist_library.py: wshobson, VoltAgent, ECC ...) for what the role does."""
     spec = SPECIALISTS.get(key) or {}
+    out = _named_matches(spec, n)
+    if len(out) < n:
+        try:
+            import specialist_library  # pylint: disable=import-outside-toplevel
+            for d in specialist_library.best_specialists("%s %s %s" % (spec.get("name", ""), spec.get("does", ""),
+                                                                    " ".join(spec.get("keys", ()))), n * 2, "skill"):
+                p = Path(d["path"])
+                if OWN not in p.parents and p not in out:
+                    out.append(p)
+                if len(out) >= n:
+                    break
+        except Exception:  # noqa: BLE001 - the named matches stand
+            pass
+    return out
+
+
+def _named_matches(spec: dict, n: int) -> list:
     out = []
     for want in spec.get("keys", ()):
         for name, path in _library():
