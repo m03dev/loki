@@ -118,6 +118,17 @@ nothing is published or posted without the owner. Edit freely.
 - After this update, open the Local models tab on the Mac: the Hugging Face models (harness_data/big/huggingface, ~18 GB) and Ollama models must be listed again. Report the count in the task log.
 - Never write into /Volumes/Xero/loki - it is an old copy of the repo, not a cache folder. Big things go to harness_data/big (LokiSSD, which lives on Xero).
 
+## 2026-10-27 - [loki] DO FIRST: the Mac-PC link, then a real video (owner: "i have still to receive a render")
+- PC and Mac, after this update starts: `python engine/tunnel_link.py <other machine's name>` must print an
+  https://...trycloudflare.com address (cloudflared is downloaded once into harness_data/bin). Then the Mac's
+  Lab > farm must list the PC as a worker. Report both outputs under this request.
+- PC: make one real video with the owner's wording style: `/video a red fox trotting through fresh snow at dusk, slow
+  push-in, low warm sun from the left 5s` in the chat (engine/text_video.py, Wan VACE text-only on ComfyUI). Report the
+  time it took and save it in videos/ (it shows on Home). If a model file is missing, say which.
+- Mac: the same `/video ...` must run on the PC and come back into the Mac's Home > videos. Report where it ran.
+- PC: research jobs in docs/research/VIDEO_AND_RENDER_REPOS_2026-10-27.md - add Wan2.2 TI2V-5B Q5 GGUF + the
+  Wan2.2 Lightning LoRA as a second graph, time both on the same prompt, keep the faster one if it looks as good.
+
 ## 2026-10-26 - PC: jobs stopped on a non-answer (already on master)
 - Seen on the PC today: 6 of the last 9 team jobs ended "BLOCKED: no tool ran". Chain each time: NVIDIA DeepSeek timed out
   after 1200 s, OpenCode Zen "Model is unavailable", DeepSeek "Insufficient Balance", then Vireonix 'auto' answered

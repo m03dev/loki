@@ -55,3 +55,6 @@
 .rv-v { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .rv-uses { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .rv-uses img { width: clamp(44px, 14%, 64px); aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: #141418; }
+/* /video in the chat (video_cmd.js) */
+.lk-video-player { display: block; width: 100%; max-width: 720px; border-radius: 10px; background: #000; }
+.lk-video-cap { margin-top: 6px; font-size: 12px; color: var(--muted); }

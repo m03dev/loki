@@ -27,6 +27,23 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 00:30 (Claude, cloud) - type a line, get a video; specialists instead of the vague builder.**
+- Video: `/video <shot> [5s]` in the chat goes straight to engine/text_video.py (no chat model): Wan VACE with no
+  control passes (engine/forge_workflows/wan_t2v.json, the 3 files Render Studio already has on the PC), 640x368, 4n+1
+  frames at 16 fps. The Mac hands it to the PC (new offload kind "video"; the PC advertises it only when the files are on
+  its disk - never starts ComfyUI for a hello); the video lands in <workspace>/videos and plays on Home. Agents'
+  make_video (text only) uses it too. Finished Render Studio jobs are now copied into videos/ (Home could never play
+  /render/file - a <video> can't send the token). Not yet run on the PC (no access from this session): LOKI_TASKS.
+- Specialists: skills/art-pipeline/<role>/SKILL.md (Concept Artist, Technical Artist, 3D Artist, 3D Finisher,
+  Lighting/Render, Video Director) - technical checklists. engine/art_specialists.py picks the specialist per card /
+  goal and adds the best library match (harness_data/vendor: 1,283 SKILL.md, mostly game code; few art ones).
+  The Prompt Expert writes AS that specialist; team goals about art get the specialist, never the coding Builder;
+  a whole-asset goal goes into the asset pipeline (Concept Artist first, gated in For you).
+- Tests fixed at the root: test_asset_pipeline / test_make_mcp had failed since the For you gate (they check the tools
+  themselves, now with LOKI_OWNER_REVIEW=off; the gate keeps its own test).
+- Research: docs/research/VIDEO_AND_RENDER_REPOS_2026-10-27.md (Wan2.2 TI2V-5B GGUF, Wan2.2 Lightning 4-step, LTX-2,
+  FramePack).
+
 **2026-10-27 23:40 (Claude, cloud) - one link, one branch, the owner's own rules, cards that say what runs.**
 - Link: the PC is on another network and the bore relay reset every call (farm had 0 workers, library sync pulled 0,
   so no render ever came back). New engine/tunnel_link.py: each machine runs a Cloudflare quick tunnel (cloudflared,

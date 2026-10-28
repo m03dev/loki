@@ -46,7 +46,29 @@ ROLES = {
                 "brief": "Open the built site or app in a browser (the conductor's browse role) and "
                          "check it works like a user would. Report PASS or FAIL with what you saw."},
 }
+# The art specialists (engine/art_specialists.py; owner 2026-10-27: "the builder is too vague. They need specialized
+# agents"): an art goal gets the specialist for it, with its skill and its tool, never the coding Builder.
+try:
+    import art_specialists as _art
+    for _k, _sp in _art.SPECIALISTS.items():
+        ROLES["art_" + _k] = {"name": _sp["name"], "stage": "build", "writes": True, "commands": False,
+                              "brief": "You are the %s. Deliver %s with the %s tool. Follow your skill (below) line by "
+                                       "line: every prompt you write is technical and complete. Every picture waits "
+                                       "for the owner's OK on its prompt in Home > For you - submit it and report what "
+                                       "you submitted." % (_sp["name"], _sp["does"], _sp["tool"])}
+except Exception:  # noqa: BLE001 - teams work without the art roles
+    _art = None
 STAGES = ["plan", "build", "check"]
+ART_KINDS = (("character", r"\b(character|hero|warrior|knight|girl|boy|man|woman|kid|person)\b"),
+             ("vehicle", r"\b(vehicle|car|ship|boat|tank|cart|bike)\b"),
+             ("prop", r"\b(prop|sword|chest|weapon|shield|lamp|barrel|tool|item)\b"))
+
+
+def art_kind(goal: str) -> str:
+    for kind, rx in ART_KINDS:
+        if re.search(rx, goal, re.I):
+            return kind
+    return "creature"
 FINAL = {"done", "failed", "cancelled"}
 
 ROLE_QUESTIONS = {
@@ -200,6 +222,9 @@ def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     kind = triage.get("kind", "")
     text = goal.lower()
     roles = ["architect", "builder", "tester", "reviewer"]
+    art = _art.for_goal(goal) if _art is not None else []
+    if len(art) == 1:                       # one specialist does it (a concept, a render, a video)
+        return ["art_" + art[0]]
     # a small, concrete job (a check, a conversion, one file) needs one agent, not four in turn (2026-10-25: a
     # "pixelize three pictures" request became an Architect writing a plan for 25 minutes on a 9B model)
     if solo_goal(goal, triage):
@@ -300,6 +325,8 @@ def agent_prompt(team: dict, role: str, extra: str = "") -> str:
         "Work only on THIS team's goal. TEAM_PLAN.md, team_board.md and other files in team_plans/ are from earlier "
         "teams - ignore them unless the goal names them.",
     ]
+    if role.startswith("art_") and _art is not None:
+        parts.append("Your skill:\n" + _art.skills_text(role[4:]))
     if team.get("method") == "sparc" and role in SPARC_PHASES:
         parts.append(SPARC_PHASES[role].replace("TEAM_PLAN.md", plan_file(team)))
     history = board_text(team["id"])
@@ -365,6 +392,15 @@ class TeamRunner:
         method, goal = team_method(goal)
         if not goal:
             raise ValueError("say what the team should build")
+        if not dry_run and _art is not None and len(_art.for_goal(goal)) > 1:
+            # a whole asset (concept -> turnaround -> 3D -> finish -> render): the specialist pipeline does it, each
+            # specialist in turn, every prompt and hand-off waiting for the owner (engine/asset_pipeline.py)
+            import asset_pipeline  # pylint: disable=import-outside-toplevel
+            asset = asset_pipeline.start(Path(workspace), goal, kind=art_kind(goal))
+            return {"id": "asset-" + asset.get("id", ""), "goal": goal, "workspace": str(workspace), "status": "pipeline",
+                    "roles": ["art_" + k for k in _art.ORDER], "asset": asset.get("id"),
+                    "verdict": "handed to the art pipeline: %s (Concept Artist first; its prompt waits in Home > For you)"
+                               % asset.get("id")}
         roles = choose_roles(goal, triage, self.decide)
         if method == "sparc" and "researcher" not in roles:
             roles.insert(0, "researcher")       # SPARC always starts with the Specification

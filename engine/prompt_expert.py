@@ -111,9 +111,22 @@ def parse(text: str) -> dict:
     return {"prompt": prompt[:1800], "why": " ".join(str(d.get("why") or "").split())[:200]}
 
 
+def system_for(card: dict) -> str:
+    """The specialist for this card writes it (engine/art_specialists.py; owner 2026-10-27: "they need specialized
+    agents ... the prompts should be very technical"); the general art director only when no specialist fits."""
+    try:
+        import art_specialists  # pylint: disable=import-outside-toplevel
+        key = art_specialists.for_card(card)
+        if key:
+            return art_specialists.system(key)
+    except Exception:  # noqa: BLE001 - the general expert still runs
+        pass
+    return SYSTEM
+
+
 def improve(card: dict, ask: Callable[[str, str], tuple], ws=None) -> dict:
     """One rewrite. `ask(system, user)` -> (text, model name)."""
-    text, by = ask(SYSTEM, brief(card, ws))
+    text, by = ask(system_for(card), brief(card, ws))
     out = parse(text)
     out["by"] = by
     return out
@@ -146,7 +159,7 @@ def asker(agent) -> Callable[[str, str], tuple]:
 
                 async def go():
                     r = await asyncio.wait_for(client.chat.completions.create(
-                        model=model, max_tokens=700, temperature=0.6,
+                        model=model, max_tokens=900, temperature=0.5,
                         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}]),
                         float(os.environ.get("LOKI_PROMPT_EXPERT_TIMEOUT_S", "120")))
                     return str(r.choices[0].message.content or "")

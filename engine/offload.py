@@ -52,9 +52,10 @@ KINDS = {
     "make_3d": ({"prompt", "backend", "options"}, 2400),
     "polish": ({"name", "size", "target", "style", "lods", "turntable", "remesh", "edits", "formats", "repair",
                 "symmetric", "retopo"}, 2400),
+    "video": ({"prompt", "negative", "width", "height", "frames", "seed", "steps"}, 3600),   # engine/text_video.py
 }
 LABEL = {"image": "make pictures", "img2img": "edit an area of a picture", "make_3d": "make 3D models",
-         "polish": "clean up models in Blender"}
+         "polish": "clean up models in Blender", "video": "make videos from text"}
 
 
 class OffloadError(Exception):
@@ -330,6 +331,14 @@ def serves(env: dict | None = None, clock=time.time) -> tuple:
     return v
 
 
+def _has_comfy() -> bool:
+    try:
+        import comfy_autostart  # pylint: disable=import-outside-toplevel
+        return (comfy_autostart.comfy_root() / "ComfyUI" / "main.py").is_file()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _serves(env: dict) -> tuple:
     if str(env.get("LOKI_OFFLOAD_SERVE", "on")).lower() in ("off", "0", "no"):
         return [], {k: "taking work is off here (LOKI_OFFLOAD_SERVE=off)" for k in KINDS}
@@ -355,6 +364,15 @@ def _serves(env: dict) -> tuple:
             why["make_3d"] = "no 3D model of its own here (ComfyUI, Hunyuan3D or TripoSR)"
     except Exception as exc:  # noqa: BLE001
         why["make_3d"] = str(exc)[:120]
+    try:
+        import text_video  # pylint: disable=import-outside-toplevel
+        ok, no = text_video.files_here()          # never starts ComfyUI just to answer a hello
+        if ok:
+            kinds.append("video")
+        else:
+            why["video"] = no
+    except Exception as exc:  # noqa: BLE001
+        why["video"] = str(exc)[:120]
     try:
         import blender_link  # pylint: disable=import-outside-toplevel
         if blender_link.find_blender():
@@ -569,7 +587,14 @@ def _run_polish(params: dict, inputs: dict, out: Path, rec: dict) -> dict:
     return {"files": res.get("files"), "quality": res.get("quality"), "topology": res.get("topology"), "info": info}
 
 
-RUNNERS = {"image": _run_image, "img2img": _run_img2img, "make_3d": _run_make_3d, "polish": _run_polish}
+def _run_video(params: dict, inputs: dict, out: Path, rec: dict) -> dict:
+    import text_video  # pylint: disable=import-outside-toplevel
+    rec["note"] = "rendering the video"
+    return text_video.run_here(params, out)
+
+
+RUNNERS = {"image": _run_image, "img2img": _run_img2img, "make_3d": _run_make_3d, "polish": _run_polish,
+           "video": _run_video}
 
 
 # ----------------------------------------------------------------------------- the window

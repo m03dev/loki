@@ -27,6 +27,7 @@ UI_ONLY = ("Note", "MarkdownNote", "Reroute", "PrimitiveNode")   # never sent to
 # loader class -> (its file input, the models/ folder it reads)
 LOADERS = {
     "UNETLoader": ("unet_name", "diffusion_models"),
+    "UnetLoaderGGUF": ("unet_name", "unet"),           # city96/ComfyUI-GGUF (text to video, Render Studio)
     "VAELoader": ("vae_name", "vae"),
     "CLIPVisionLoader": ("clip_name", "clip_vision"),
     "CLIPLoader": ("clip_name", "text_encoders"),

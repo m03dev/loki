@@ -9,6 +9,9 @@ Under a minute.
 """
 from __future__ import annotations
 
+import os
+os.environ["LOKI_OWNER_REVIEW"] = "off"   # these check the tools themselves; the approval gate: test_owner_review
+
 import json
 import subprocess
 import sys

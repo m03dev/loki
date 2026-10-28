@@ -346,6 +346,11 @@ def make_video(args: dict, cwd: Path, make=None) -> dict:
     prompt = str(args.get("prompt") or "").strip()
     if not prompt:
         return {"ok": False, "error": "describe the clip (prompt)"}
+    if make is None and not args.get("image"):
+        # text only: Wan VACE on the PC's ComfyUI, handed over from the Mac (engine/text_video.py)
+        import text_video  # pylint: disable=import-outside-toplevel
+        if text_video.status().get("ready"):
+            return text_video.make(prompt[:800], seconds=float(args.get("seconds") or 3.0), ws=cwd)
     if make is None:
         import creative  # pylint: disable=import-outside-toplevel
         make = creative.make_video

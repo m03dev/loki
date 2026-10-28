@@ -1021,6 +1021,33 @@ def _run_inner(state, job, stop, factory, env, poll_s):
     if not outputs:
         raise RenderError("ComfyUI finished but sent no picture or video back")
     _set(state, job, "succeeded", "done: %s" % ", ".join(outputs), outputs=outputs, thumb=thumb or m.get("thumb"), progress=1.0)
+    _to_home(state, job, folder, outputs, m)
+
+
+def _to_home(state: Any, job: str, folder: Path, outputs: list, m: dict) -> None:
+    """A finished render also lands in the workspace's videos/ (or images/) - Home plays those; a <video> on Home
+    cannot send the token /render/file needs, so a render never showed there (owner 2026-10-27: "i have still to
+    receive a render")."""
+    try:
+        ws = Path(getattr(getattr(state, "agent", None), "WORKSPACE", "") or ".")
+        for name in outputs:
+            ext = Path(name).suffix.lower()
+            sub = "videos" if ext in (".webm", ".mp4", ".mov") else "images" if ext in (".png", ".jpg", ".webp") else ""
+            if not sub or not (folder / name).is_file():
+                continue
+            dest = ws / sub / ("render-%s-%s" % (job, name))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                shutil.copy2(folder / name, dest)
+            side = dest.parent / ".meta" / (dest.name + ".json")
+            side.parent.mkdir(exist_ok=True)
+            if not side.exists():
+                side.write_text(json.dumps({"prompt": str(m.get("prompt") or "")[:1800], "engine": str(m.get("workflow") or ""),
+                                            "render_job": job, "t": time.time()}), encoding="utf-8")
+            if sub == "videos":
+                break          # one video per render is enough on Home
+    except Exception:  # noqa: BLE001 - the render itself succeeded; Home is a nicety
+        pass
 
 
 def _stop_remote(cl: Comfy, pid: str) -> None:

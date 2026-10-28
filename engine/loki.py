@@ -3290,6 +3290,8 @@ def _start_team(goal: str, triage: dict) -> str:
         team = TEAMS.start(goal, str(WORKSPACE), triage=triage, model="")
     except ValueError as exc:
         return "error: %s" % exc
+    if team.get("status") == "pipeline":     # an art asset: the specialists take it (engine/team.py, art_specialists.py)
+        return team["verdict"] + ". Specialists in turn: " + ", ".join(teams.ROLES[r]["name"] for r in team["roles"]) + "."
     return ("started team %s (%s) on %s. They plan, build, test and review in turn and talk on a "
             "shared board; the user sees them above the message box. You do not need to wait."
             % (team["id"], ", ".join(teams.ROLES[r]["name"] for r in team["roles"]), WORKSPACE))

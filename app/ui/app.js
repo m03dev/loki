@@ -295,6 +295,7 @@ async function send(text, opts) {
     showChat();
     $("#transcript").replaceChildren();
   }
+  if (window.LokiVideo && LokiVideo.handles(text)) return LokiVideo.run(text);   // "/video <what it shows>" (video_cmd.js)
   if (background) { if ($("#in-background")) $("#in-background").checked = false; return sendToBackground(text); }
   if (state.active && state.engineActive && state.active !== state.engineActive) {
     // a chat made or opened while another one answered: the engine takes it now that it is free

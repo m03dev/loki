@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+os.environ["LOKI_OWNER_REVIEW"] = "off"   # these check the tools themselves; the approval gate: test_owner_review
 import struct
 import sys
 import tempfile

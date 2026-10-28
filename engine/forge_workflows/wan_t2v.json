@@ -1,0 +1,273 @@
+{
+ "name": "wan_t2v",
+ "label": "Text to video (Wan VACE, GGUF)",
+ "license": "AGPL-3.0 (LOKI's own graph: vace_render.json without its control passes)",
+ "about": "WanVaceToVideo with no control_video and no reference_image is plain text-to-video (comfy_extras/nodes_wan.py: both inputs optional). Same three model files as Render Studio's vace_render, already on the PC. 640x368, 49 frames = 3 s at 16 fps fits an 8 GB RTX 3070 Ti.",
+ "api": {
+  "1": {
+   "class_type": "UnetLoaderGGUF",
+   "inputs": {
+    "unet_name": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf"
+   },
+   "_meta": {
+    "title": "Model (GGUF)"
+   }
+  },
+  "2": {
+   "class_type": "CLIPLoader",
+   "inputs": {
+    "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "type": "wan",
+    "device": "default"
+   },
+   "_meta": {
+    "title": "Text encoder"
+   }
+  },
+  "3": {
+   "class_type": "VAELoader",
+   "inputs": {
+    "vae_name": "wan_2.1_vae.safetensors"
+   },
+   "_meta": {
+    "title": "VAE"
+   }
+  },
+  "4": {
+   "class_type": "ModelSamplingSD3",
+   "inputs": {
+    "model": [
+     "1",
+     0
+    ],
+    "shift": 8.0
+   },
+   "_meta": {
+    "title": "Shift"
+   }
+  },
+  "5": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Prompt"
+   }
+  },
+  "6": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+    "clip": [
+     "2",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Negative"
+   }
+  },
+  "11": {
+   "class_type": "WanVaceToVideo",
+   "inputs": {
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ],
+    "width": 640,
+    "height": 368,
+    "length": 49,
+    "batch_size": 1,
+    "strength": 1.0
+   },
+   "_meta": {
+    "title": "Wan VACE (text only)"
+   }
+  },
+  "12": {
+   "class_type": "KSampler",
+   "inputs": {
+    "model": [
+     "4",
+     0
+    ],
+    "seed": 0,
+    "steps": 20,
+    "cfg": 6.0,
+    "sampler_name": "uni_pc",
+    "scheduler": "simple",
+    "positive": [
+     "11",
+     0
+    ],
+    "negative": [
+     "11",
+     1
+    ],
+    "latent_image": [
+     "11",
+     2
+    ],
+    "denoise": 1.0
+   },
+   "_meta": {
+    "title": "Sampler"
+   }
+  },
+  "13": {
+   "class_type": "TrimVideoLatent",
+   "inputs": {
+    "samples": [
+     "12",
+     0
+    ],
+    "trim_amount": [
+     "11",
+     3
+    ]
+   },
+   "_meta": {
+    "title": "Drop the reference latent"
+   }
+  },
+  "14": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "13",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   },
+   "_meta": {
+    "title": "Decode"
+   }
+  },
+  "15": {
+   "class_type": "SaveWEBM",
+   "inputs": {
+    "images": [
+     "14",
+     0
+    ],
+    "filename_prefix": "loki_video/t2v",
+    "codec": "vp9",
+    "fps": 16.0,
+    "crf": 16.0
+   },
+   "_meta": {
+    "title": "Video"
+   }
+  }
+ },
+ "params": {
+  "prompt": [
+   [
+    "5",
+    "text"
+   ]
+  ],
+  "negative": [
+   [
+    "6",
+    "text"
+   ]
+  ],
+  "width": [
+   [
+    "11",
+    "width"
+   ]
+  ],
+  "height": [
+   [
+    "11",
+    "height"
+   ]
+  ],
+  "frames": [
+   [
+    "11",
+    "length"
+   ]
+  ],
+  "seed": [
+   [
+    "12",
+    "seed"
+   ]
+  ],
+  "steps": [
+   [
+    "12",
+    "steps"
+   ]
+  ]
+ },
+ "save": "15",
+ "models": [
+  {
+   "node": "1",
+   "input": "unet_name",
+   "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf",
+   "folder": "models/unet",
+   "repo": "mickmumpitz/VACE_Skyreels_V3_R2V_Merge-GGUF",
+   "revision": "57045d4ab42eb76a53bdaadb37b5d8dc923ec67b",
+   "path": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q4_K_M.gguf",
+   "size": 11627589408,
+   "license": "no licence in the repo metadata; base merge Inner-Reflections/VACE_Skyreels_V3_R2V_Merge says apache-2.0, but SkyReels-V3-R2V-14B is the Skywork Community License (other)",
+   "alternatives": [
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q3_K_M.gguf",
+     "size": 8624197408
+    },
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q5_K_M.gguf",
+     "size": 13025472288
+    },
+    {
+     "file": "wan-14B_vace_skyreels_v3_R2V_e4m3fn_v1-Q8_0.gguf",
+     "size": 18651410208
+    }
+   ]
+  },
+  {
+   "node": "2",
+   "input": "clip_name",
+   "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "folder": "models/text_encoders",
+   "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+   "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+   "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+   "size": 6735906897,
+   "license": "apache-2.0"
+  },
+  {
+   "node": "3",
+   "input": "vae_name",
+   "file": "wan_2.1_vae.safetensors",
+   "folder": "models/vae",
+   "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+   "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+   "path": "split_files/vae/wan_2.1_vae.safetensors",
+   "size": 253815318,
+   "license": "apache-2.0"
+  }
+ ]
+}

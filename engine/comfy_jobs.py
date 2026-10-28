@@ -22,8 +22,8 @@ from typing import Callable
 import comfy_workflow
 
 FLOWS = Path(__file__).resolve().parent / "forge_workflows"
-GRAPHS = {"music": "ace_step_music.json"}
-LABELS = {"music": "Music (ACE-Step 1.5)"}
+GRAPHS = {"music": "ace_step_music.json", "video": "wan_t2v.json"}
+LABELS = {"music": "Music (ACE-Step 1.5)", "video": "Text to video (Wan VACE)"}
 
 
 class JobError(RuntimeError):

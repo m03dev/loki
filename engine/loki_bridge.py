@@ -1013,6 +1013,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(self.server.state, "GET", route, {}, {}))
             return
+        if route in ("/video/status", "/video/jobs"):   # type a line, get a video (engine/text_video.py)
+            import text_video  # pylint: disable=import-outside-toplevel
+            self._send_json(*text_video.route(self.server.state, "GET", route, {}))
+            return
         if route == "/review":   # what waits for the owner's OK: prompts and hand-offs (engine/owner_review.py)
             import owner_review  # pylint: disable=import-outside-toplevel
             self._send_json(*owner_review.route(self.server.state, "GET", route, {}, {}))
@@ -1530,6 +1534,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/local/models/remove":   # uninstall a downloaded model (engine/local_models.py)
             import local_models  # pylint: disable=import-outside-toplevel
             self._send_json(*local_models.route(state, "POST", route, {}, data))
+            return
+        if route == "/video/make":   # type a line, get a video (engine/text_video.py)
+            import text_video  # pylint: disable=import-outside-toplevel
+            self._send_json(*text_video.route(state, "POST", route, data))
             return
         if route == "/review/decide":   # the owner approves / edits / rejects / sends back (engine/owner_review.py)
             import owner_review  # pylint: disable=import-outside-toplevel
