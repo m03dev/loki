@@ -142,6 +142,15 @@ try:
     check("only https web pictures are fetched", False)
 except chat_media.MediaError:
     check("only https web pictures are fetched", True)
+os.environ["LOKI_JOB_ID"] = "x"
+_prov = {"nvidia": {"base_url": "https://integrate.api.nvidia.com/v1"}, "local": {"base_url": "http://127.0.0.1:11434/v1"},
+         "groq": {"base_url": "https://api.groq.com/openai/v1"}}
+_pid = loki.opencode_engine.provider_id
+check("a job never leaves a slow capable route for the local model only",
+      not loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov)
+      and loki._slow_may_move("nvidia", ["%s/q" % _pid("groq"), "%s/q" % _pid("local")], _prov))
+os.environ.pop("LOKI_JOB_ID")
+check("the chat may still move off a slow route", loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov))
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

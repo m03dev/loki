@@ -9562,7 +9562,8 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
             meter["last"] = time.time()
             try:
                 import provider_speed  # pylint: disable=import-outside-toplevel
-                if provider_speed.record(DATA_DIR, meter["where"], step_s) and meter.get("can_move"):
+                if provider_speed.record(DATA_DIR, meter["where"], step_s) and meter.get("can_move") \
+                        and meter.get("can_move_slow", True):
                     meter["too_slow"] = True       # the loop below moves this turn to the next provider
                     _progress("thinking", "%s took %d s for one step - moving to the next provider." % (
                         meter["where"], step_s))
@@ -9586,7 +9587,8 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
         pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")
         meter.update(model=model, where=pname or "OpenCode", last=time.time(), too_slow=False,
-                     can_move=i + 1 < len(tries), stuck="", guard=opencode_engine.RepeatGuard())
+                     can_move=i + 1 < len(tries), stuck="", guard=opencode_engine.RepeatGuard(),
+                     can_move_slow=_slow_may_move(pname, tries[i + 1:], providers))
         _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
@@ -10175,6 +10177,17 @@ def job_model_choice(job: dict, current: str) -> str:
 
 
 OC_LAST: dict = {"stopped": ""}
+
+
+def _slow_may_move(pname: str, rest: list, providers: dict) -> bool:
+    """May a SLOW step move this turn to the next route? Not in a job when every route left is weaker (the local model,
+    the weak free ones): nobody waits on a job, and a slow capable model beats a quick weak one (2026-10-28, the Mac:
+    one 147 s NVIDIA step - normal for its free tier - handed a job to the 9B local model)."""
+    if not _job_process():
+        return True
+    names = [next((n for n in providers if str(m).startswith(opencode_engine.provider_id(n) + "/")), "") for m in rest]
+    return any(n and n not in LOCAL_PROVIDERS and n not in WEAK_FOR_JOBS
+               and not (n in MODELS and _cfg_is_local(MODELS[n])) for n in names)
 
 
 def _turn_timeout() -> int:
