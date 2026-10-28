@@ -98,6 +98,10 @@ loki.JOB_DEADLINE_AT = 0
 import art_specialists  # noqa: E402
 check("a UI design job ('render a login screen') never goes to the 3D Lighting / Render specialist",
       art_specialists.for_goal("Design (OpenPencil) proof: render a dark login screen for the LOKI phone app") == [])
+import task_board  # noqa: E402
+check("the board spots the old fake stamp (DONE: <its own first line>) and never an agent's own DONE",
+      task_board.stamped("I'll start by exploring the project.\n\nTools run: 10 ok.\n\nDONE: I'll start by exploring the project.")
+      and not task_board.stamped("Made the sprite.\nDONE: sprites/fox.png") and not task_board.stamped("DONE: wrote it"))
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -160,7 +160,26 @@ def row_for(key: str, entry: dict, attempts: dict, team: dict | None, data_dir: 
         row["answer"] = _answer(builder, data_dir, job_get)
     if workspace is not None and row["status"] != "running":
         row["files"] = made_files(Path(team.get("workspace") or workspace), row["started"], row["finished"])
+    if row["status"] == "done" and stamped(row["answer"]) and not row["files"] \
+            and not ((row.get("proof") or {}).get("evidence")):
+        # finished before 2026-10-28 under LOKI's own fake "DONE: <first line>" stamp, with nothing made: not done
+        row.update(status="failed", summary="Not done - LOKI marked it done without the work (the fake-DONE bug, "
+                                            "fixed 2026-10-28).", why="nothing was made; the DONE line was LOKI's, "
+                                                                     "not the agent's")
+        if kind == "request" and row["tries"] < row["max_tries"] and not tries.get("given_up"):
+            row.update(status="retrying", next_try=float(tries.get("next") or 0) or (now + RETRY_AFTER_S))
     return row
+
+
+def stamped(answer: str) -> bool:
+    """The old fake stamp: the result ends 'DONE: <its own first line>' (engine/loki.py _job_outcome before
+    2026-10-28 wrote that whenever one tool had run). Never the agent's own DONE."""
+    text = str(answer or "").strip()
+    if not text or "\nDONE: " not in text:
+        return False
+    first = text.splitlines()[0].strip()
+    last = text.rsplit("\nDONE: ", 1)[1].strip()
+    return bool(first) and last[:60] == first[:60] and not first.upper().startswith("DONE")
 
 
 def prove(entry: dict, team: dict, data_dir: Path, job_get: Callable[[str], Any], agent: Any = None) -> dict:
