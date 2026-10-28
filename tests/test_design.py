@@ -204,8 +204,10 @@ async def window_checks():
         async def route(r):
             url = r.request.url.split("8893", 1)[1].split("#")[0]
             bare = url.split("?")[0]
-            if bare == "/":
-                return await r.fulfill(path=str(UI / "index.html"))
+            if bare == "/":   # with the window's REAL security policy - blob: pictures came out blank in the app
+                import loki_bridge  # noqa: E402 - pylint: disable=import-outside-toplevel
+                return await r.fulfill(path=str(UI / "index.html"), headers={"Content-Security-Policy": loki_bridge.UI_CSP.replace(
+                    "script-src 'self'", "script-src 'self' 'unsafe-eval'")})   # (the test driver evaluates scripts)
             if bare.startswith("/ui/") and (UI / bare[4:]).is_file():
                 return await r.fulfill(path=str(UI / bare[4:]))
             body = json.loads(r.request.post_data or "{}") if r.request.method == "POST" else {}

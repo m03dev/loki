@@ -304,6 +304,32 @@ class StreamFixer:
         return out
 
 
+# ------------------------------------------------------------------ pacing (engine/ratelimit.py)
+def _pace(url: str) -> None:
+    """Every model request that goes through LOKI's proxy (OpenCode, DeepSeek Harness) books a slot in the same
+    per-minute window as LOKI's own loop - before 2026-10-28 only the chat was paced, the agents were not, and they
+    ran NVIDIA into 429s that pushed the chat onto the offline model. A job waits; the chat has a reserve."""
+    try:
+        import ratelimit  # pylint: disable=import-outside-toplevel
+        name = ratelimit.for_url(url)
+        if name and ratelimit.rpm(name):
+            ratelimit.acquire(name, max_wait_s=120.0)
+    except Exception:  # noqa: BLE001 - pacing never stops a request
+        pass
+
+
+def _penalize(url: str, exc) -> None:
+    if getattr(exc, "code", 0) != 429:
+        return
+    try:
+        import ratelimit  # pylint: disable=import-outside-toplevel
+        name = ratelimit.for_url(url)
+        if name:
+            ratelimit.penalize(name, 20)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ------------------------------------------------------------------ the proxy
 class _Proxy:
     def __init__(self) -> None:
@@ -329,6 +355,8 @@ class _Proxy:
                 headers = {k: v for k, v in self.headers.items()
                            if k.lower() not in ("host", "content-length", "connection", "accept-encoding")}
                 req = urllib.request.Request(url, data=body, method=method, headers=headers)
+                if "chat/completions" in url:
+                    _pace(url)
                 if "chat/completions" in url and _wants_stream(body):
                     self._early_stream(req, request_tools(body))
                     return
@@ -336,6 +364,7 @@ class _Proxy:
                     resp = urllib.request.urlopen(req, timeout=600)  # noqa: S310 - the provider's own URL
                 except urllib.error.HTTPError as exc:
                     resp = exc
+                    _penalize(url, exc)
                 except Exception as exc:  # noqa: BLE001
                     data = json.dumps({"error": {"message": "LOKI proxy: %s" % exc}}).encode()
                     self.send_response(502)
@@ -374,6 +403,7 @@ class _Proxy:
                         box["resp"] = urllib.request.urlopen(req, timeout=600)  # noqa: S310
                     except urllib.error.HTTPError as exc:
                         box["resp"] = exc
+                        _penalize(req.full_url, exc)
                     except Exception as exc:  # noqa: BLE001
                         box["error"] = str(exc)
                     done.set()

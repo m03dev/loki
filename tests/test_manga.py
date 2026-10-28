@@ -236,8 +236,10 @@ async def window_checks():
         async def route(r):
             url = r.request.url.split("8893", 1)[1].split("#")[0]
             bare = url.split("?")[0]
-            if bare == "/":
-                return await r.fulfill(path=str(UI / "index.html"))
+            if bare == "/":   # with the window's REAL security policy - blob: pictures came out blank in the app
+                import loki_bridge  # noqa: E402 - pylint: disable=import-outside-toplevel
+                return await r.fulfill(path=str(UI / "index.html"), headers={"Content-Security-Policy": loki_bridge.UI_CSP.replace(
+                    "script-src 'self'", "script-src 'self' 'unsafe-eval'")})   # (the test driver evaluates scripts)
             if bare.startswith("/ui/") and (UI / bare[4:]).is_file():
                 return await r.fulfill(path=str(UI / bare[4:]))
             if bare.startswith("/manga/"):
@@ -278,6 +280,9 @@ async def window_checks():
         await E("document.querySelector('[data-tip-name=\"Draw Page\"]').click()")
         await page.wait_for_function("document.querySelectorAll('.fmg-hotpanel').length === 6 && document.querySelector('.fmg-pageimg').naturalWidth > 0", timeout=20000)
         check("Draw Page shows the lettered page with its 6 panels as click targets", True)
+        shown = await E("(() => { const i = document.querySelector('.fmg-pageimg'); return [i.naturalWidth, i.src.slice(0, 11)]; })()")
+        check("the page preview really shows under the window's security policy (a data: picture, not a blank blob:)",
+              shown[0] > 0 and shown[1] == "data:image/", shown)
         await E("document.querySelectorAll('.fmg-hotpanel')[3].click()")
         await page.wait_for_selector(".fmg-line", timeout=5000)
         await E("""(() => { const t = document.querySelectorAll('.fmg-line input')[1]; t.value = 'Stop right there!';

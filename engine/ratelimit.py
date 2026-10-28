@@ -29,6 +29,13 @@ _lock = threading.Lock()
 _local: dict = {}   # provider -> [timestamps] (this process)
 
 
+def for_url(url: str) -> str:
+    """The paced provider a request URL goes to ("" = not paced): LOKI's model proxy (engine/dsml_proxy.py) paces
+    OpenCode's and DeepSeek Harness's requests with the same window as LOKI's own loop."""
+    low = str(url or "").lower()
+    return "nvidia" if "nvidia.com" in low else ""
+
+
 def bucket(provider: str) -> str:
     """The account a provider's requests count against: every nvidia-* route (the main driver, nvidia-pro for Max
     mode) is the same NVIDIA key, so they share one window."""
@@ -87,10 +94,24 @@ def _window(provider: str, now: float) -> list:
     return merged
 
 
+def chat_reserve() -> int:
+    """Requests per minute kept free for the owner's chat: a background job / team agent may only fill the window up
+    to (cap - reserve) - 2026-10-28, the Mac: agents used up NVIDIA's per-minute cap through OpenCode, the chat got
+    429s and fell to the offline model ("the online model goes to the agent and leaves the chat")."""
+    if not (os.getenv("LOKI_JOB_ID") or os.getenv("LOKI_TEAM_ID")):
+        return 0
+    try:
+        return max(0, int(os.getenv("LOKI_CHAT_RESERVE_RPM", "10") or 10))
+    except ValueError:
+        return 10
+
+
 def wait_s(provider: str, now: float | None = None) -> float:
     """Seconds to wait before the next request to `provider` fits its cap (0 = go now)."""
     provider = bucket(provider)
     cap = rpm(provider)
+    if cap > 0:
+        cap = max(1, cap - chat_reserve())
     if cap <= 0:
         return 0.0
     now = time.time() if now is None else now

@@ -1056,7 +1056,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             self._send_json(*region_edit.route(self.server.state, "GET", route, q, {}))
             return
-        if route == "/chat/media":   # a picture or PDF named in a reply, shown in the chat (engine/chat_media.py)
+        if route in ("/chat/media", "/chat/media/ref"):   # a picture or PDF shown in the window (engine/chat_media.py)
             import chat_media  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             self._send_json(*chat_media.route(self.server.state, "GET", route, q, {}))
@@ -1972,6 +1972,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": "Unknown model."})
                 return
             agent.model_name = name
+            # saved, so an update restart keeps the owner's choice (2026-10-28, the Mac: it lived only in memory, every
+            # update restart put the chat back on the saved local model - "the offline model picks up the chat")
+            if hasattr(agent, "write_env_setting"):
+                agent.write_env_setting("LOKI_MODEL", name)
+                agent.write_env_setting("LOKI_CHAT_ROLE_V2", "1")
             resolved = name
             report = ""
             if name == "smart" and hasattr(agent, "active_model_name"):
@@ -2998,8 +3003,12 @@ async def serve() -> None:
     import loki  # pylint: disable=import-outside-toplevel
     _startup_mark("bridge state, session")
 
+    try:
+        loki.apply_chat_default()          # the conversation gets the strongest model (engine/loki.py chat_model_default)
+    except Exception as exc:  # noqa: BLE001
+        print("[loki-bridge] chat model default: %s" % exc, flush=True)
     if loki.model_name not in loki.MODELS:
-        loki.model_name = "local-reasoning"
+        loki.model_name = "smart"          # an unknown saved name: the strongest ready model, never the 9B local one
     secret_path = Path(args.secret_file)
     secret = secrets.token_urlsafe(32)
 

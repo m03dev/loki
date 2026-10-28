@@ -135,7 +135,8 @@ const LokiChatMedia = (() => {
       if (!SEEN.has(p)) SEEN.set(p, call("/chat/media?path=" + encodeURIComponent(p)).catch(() => null));   // the work strip redraws often: fetch each picture once
       if (SEEN.size > 200) SEEN.delete(SEEN.keys().next().value);
       const m = await SEEN.get(p);
-      if (!m || !m.ok || m.kind === "pdf" || strip.querySelector('[data-path="' + CSS.escape(m.path) + '"]')) continue;
+      if (!m || !m.ok) { SEEN.delete(p); el.dataset.mediaDone = ""; continue; }   // not there yet / still being written: ask again on the next redraw
+      if (m.kind === "pdf" || strip.querySelector('[data-path="' + CSS.escape(m.path) + '"]')) continue;
       try { strip.append(imageTile(m)); } catch (exc) { console.warn("job media:", exc); }
     }
     if (strip.childElementCount) el.prepend(strip);

@@ -520,6 +520,39 @@ def current_provider_name(name: str) -> str:
 
 model_name = current_provider_name(os.getenv("LOKI_MODEL", "smart") or "smart")
 
+
+def chat_model_default(saved: str, env=None) -> str:
+    """The model the owner's CHAT starts on. The established agents agree (Claude Code: subagents inherit the main
+    conversation's model; Goose: a strong lead model, back to it on failures; aider / OpenCode: a small model only for
+    commit messages and titles): the conversation the owner is in gets the strongest model. 2026-10-28, the Mac: the
+    saved default was the 9B local model, so after every update restart the chat silently came back offline while the
+    jobs got the strong model. A local pin from before this rule becomes Smart once (LOKI_CHAT_ROLE_V2 marks it);
+    choosing a local model in the window afterwards is saved and kept."""
+    env = os.environ if env is None else env
+    if str(env.get("LOKI_CHAT_ROLE_V2") or "") == "1" or str(env.get("LOKI_LOCAL_ONLY", "0")).lower() in ("1", "true", "yes", "on"):
+        return saved
+    return "smart" if saved in LOCAL_PROVIDERS_EARLY else saved
+
+
+LOCAL_PROVIDERS_EARLY = ("local", "local-small", "local-coder", "local-hermes", "local-reasoning", "local-tools",
+                         "local-fast", "loki-tuned")
+
+
+def apply_chat_default() -> str:
+    """At the app's start (engine/loki_bridge.py): the chat starts on the strongest model (chat_model_default), saved."""
+    global model_name
+    start = chat_model_default(model_name)
+    if start != model_name:
+        print("[loki] the chat starts on Smart (the strongest ready model) instead of the local model %s - the local "
+              "model stays for small chores; pick a local model in the window to keep the chat offline" % model_name,
+              flush=True)
+        model_name = start
+        write_env_setting("LOKI_MODEL", start)
+    if os.getenv("LOKI_CHAT_ROLE_V2") != "1":
+        write_env_setting("LOKI_CHAT_ROLE_V2", "1")
+    return model_name
+
+
 # --- Smart mode -------------------------------------------------------------
 # "smart" picks the best available FREE provider on its own: the first in this
 # order that has a key configured (or a reachable Ollama), and it falls back to

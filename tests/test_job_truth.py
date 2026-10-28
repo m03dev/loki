@@ -102,6 +102,46 @@ import task_board  # noqa: E402
 check("the board spots the old fake stamp (DONE: <its own first line>) and never an agent's own DONE",
       task_board.stamped("I'll start by exploring the project.\n\nTools run: 10 ok.\n\nDONE: I'll start by exploring the project.")
       and not task_board.stamped("Made the sprite.\nDONE: sprites/fox.png") and not task_board.stamped("DONE: wrote it"))
+check("the chat gets the strongest model: an old local pin becomes Smart once (Claude Code / Goose / aider all give the "
+      "main conversation the strong model)", loki.chat_model_default("local-reasoning", {}) == "smart"
+      and loki.chat_model_default("local-reasoning", {"LOKI_CHAT_ROLE_V2": "1"}) == "local-reasoning"
+      and loki.chat_model_default("local", {"LOKI_LOCAL_ONLY": "1"}) == "local" and loki.chat_model_default("nvidia", {}) == "nvidia")
+import ratelimit  # noqa: E402
+os.environ["LOKI_RATE_FILE_DIR"] = str(TMP / "rl")
+os.environ["LOKI_JOB_ID"] = "x"
+ratelimit.reset("nvidia")
+for _ in range(ratelimit.rpm("nvidia") - ratelimit.chat_reserve()):
+    ratelimit.take("nvidia")
+job_waits = ratelimit.wait_s("nvidia") > 0
+os.environ.pop("LOKI_JOB_ID")
+check("a background job leaves NVIDIA's last requests a minute for the chat (it waits; the chat does not)",
+      job_waits and ratelimit.wait_s("nvidia") == 0)
+import chat_media  # noqa: E402
+import io  # noqa: E402
+from PIL import Image  # noqa: E402
+_buf = io.BytesIO(); Image.new("RGB", (64, 64), "red").save(_buf, "PNG"); _png = _buf.getvalue()
+check("a picture a maker is still writing is not shown as a (blank) preview; the whole one is",
+      not chat_media.complete_image(_png[: len(_png) // 2]) and chat_media.complete_image(_png))
+
+
+class _Resp:
+    headers = {"Content-Type": "image/png"}
+
+    def __init__(self, b): self.b = b
+    def read(self, n=-1): return self.b
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+_st = type("S", (), {"agent": type("A", (), {"DATA_DIR": str(TMP / "d")})()})()
+_ref = chat_media.reference(_st, "https://cms-assets.example.com/a.png", opener=lambda req, timeout=0: _Resp(_png))
+check("a web reference picture comes to the window as data (its CSP blocks web pictures), cached",
+      _ref["data_url"].startswith("data:image/png;base64,") and any((TMP / "d" / "refcache").glob("*.png")))
+try:
+    chat_media.reference(_st, "http://127.0.0.1/x.png")
+    check("only https web pictures are fetched", False)
+except chat_media.MediaError:
+    check("only https web pictures are fetched", True)
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

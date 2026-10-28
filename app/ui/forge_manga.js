@@ -44,6 +44,7 @@ const ForgeManga = (() => {
   const input = (value, ph) => { const i = el("input", "fmg-in"); i.value = value || ""; if (ph) i.placeholder = ph; return i; };
   const area = (value, ph, rows) => { const t = el("textarea", "fmg-in"); t.value = value || ""; if (ph) t.placeholder = ph; t.rows = rows || 3; return t; };
 
+  const dataUrl = (blob) => new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = bad; fr.readAsDataURL(blob); });
   function say(text, bad) {
     const s = q(".fmg-status"); if (s) { s.textContent = text || ""; s.classList.toggle("bad", !!bad); s.title = text || ""; }
     return text;
@@ -56,7 +57,7 @@ const ForgeManga = (() => {
     try {
       const r = await fetch("/manga/file?path=" + encodeURIComponent(path), { headers: { Authorization: "Bearer " + state.token } });
       if (!r.ok) return;
-      const url = URL.createObjectURL(await r.blob());
+      const url = await dataUrl(await r.blob());     // a data URL: the window's CSP allows img-src 'self' data:, never blob:
       S.blobs[key] = url; img.src = url;
     } catch (_) { /* the page shows without it */ }
   }

@@ -24,6 +24,7 @@ const ForgeDesign = (() => {
   const sec = (title, cls) => { const d = el("div", "fuv-sec fmg-sec " + (cls || "")); d.append(el("div", "fuv-sec-title", title)); return d; };
   const field = (label, node) => { const r = el("label", "fmg-field"); r.append(el("span", "", label), node); return r; };
 
+  const dataUrl = (blob) => new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = bad; fr.readAsDataURL(blob); });
   function say(text, bad) { const s = q(".fds-status"); if (s) { s.textContent = text || ""; s.classList.toggle("bad", !!bad); s.title = text || ""; } return text; }
 
   async function picture(path, img, stamp) {
@@ -33,7 +34,7 @@ const ForgeDesign = (() => {
     try {
       const r = await fetch("/design/file?path=" + encodeURIComponent(path), { headers: { Authorization: "Bearer " + state.token } });
       if (!r.ok) return;
-      S.blobs[key] = URL.createObjectURL(await r.blob()); img.src = S.blobs[key];
+      S.blobs[key] = await dataUrl(await r.blob()); img.src = S.blobs[key];   // data URL: CSP img-src allows data:, never blob:
     } catch (_) { /* shown without it */ }
   }
 

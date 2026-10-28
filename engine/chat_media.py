@@ -4,6 +4,7 @@ chat?"). When a reply names a picture or a PDF LOKI made, the window shows it ri
   GET  /chat/media?path=<p>&page=<n>   a picture (as a data URL, with its size) or a PDF page (rendered to a picture,
                                        with the page count) - only pictures and PDFs, only from the workspace or
                                        ~/LOKI Projects (where Studio's agents work), never anywhere else
+  GET  /chat/media/ref?url=<https>     a reference picture from the web, fetched and cached by the engine (data URL)
   POST /chat/media/open     {path}            open it in the computer's own app (Preview / Photos / the PDF reader)
   POST /chat/media/convert  {path, to}        save a copy as JPG or as PDF beside it (Pillow); returns the new path
 
@@ -67,6 +68,70 @@ def find(state: Any, raw: str) -> Path:
     raise MediaError("no such picture or PDF in the workspace or LOKI Projects: %s" % raw)
 
 
+def complete_image(data: bytes) -> bool:
+    """Is this a whole picture (not one a maker is still writing)? Pillow's verify; without Pillow, the format's end
+    marker (PNG IEND, JPEG FFD9)."""
+    if not data:
+        return False
+    try:
+        from PIL import Image  # pylint: disable=import-outside-toplevel
+        with Image.open(io.BytesIO(data)) as im:
+            im.load()
+        return True
+    except ImportError:
+        if data[:8] == b"\x89PNG\r\n\x1a\n":
+            return b"IEND" in data[-16:]
+        if data[:2] == b"\xff\xd8":
+            return data.rstrip(b"\x00")[-2:] == b"\xff\xd9"
+        return True
+    except Exception:  # noqa: BLE001 - truncated or not a picture
+        return False
+
+
+REF_DIR_NAME = "refcache"
+
+
+def reference(state: Any, url: str, opener=None) -> dict:
+    """A reference picture from the web (the Prompt Expert's matched prompts link pictures on other sites), fetched
+    by the engine, cached, and handed to the window as a data URL - the window may only show its own pictures
+    (img-src 'self' data:), so a web link stayed blank (2026-10-28, the Mac: cms-assets.youmind.com)."""
+    import hashlib  # pylint: disable=import-outside-toplevel
+    import ipaddress  # pylint: disable=import-outside-toplevel
+    import socket  # pylint: disable=import-outside-toplevel
+    import urllib.parse  # pylint: disable=import-outside-toplevel
+    import urllib.request  # pylint: disable=import-outside-toplevel
+    u = urllib.parse.urlparse(str(url or ""))
+    if u.scheme != "https" or not u.hostname:
+        raise MediaError("only https pictures")
+    agent = getattr(state, "agent", None)
+    data_dir = Path(getattr(agent, "DATA_DIR", "") or Path(__file__).resolve().parent.parent / "harness_data")
+    cache = data_dir / REF_DIR_NAME
+    key = hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
+    hit = next(iter(cache.glob(key + ".*")), None) if cache.is_dir() else None
+    if hit is None:
+        if opener is None:
+            for info in socket.getaddrinfo(u.hostname, 443):          # never a request into the owner's own network
+                ip = ipaddress.ip_address(info[4][0])
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                    raise MediaError("not a public address")
+        req = urllib.request.Request(url, headers={"User-Agent": "Loki/1.0"})
+        with (opener or urllib.request.urlopen)(req, timeout=20) as resp:
+            kind = str(resp.headers.get("Content-Type", "")).split(";")[0].strip().lower()
+            data = resp.read(8 * 1024 * 1024 + 1)
+        ext = {v: k for k, v in IMAGES.items()}.get(kind)
+        if not ext or len(data) > 8 * 1024 * 1024 or not complete_image(data):
+            raise MediaError("not a picture")
+        cache.mkdir(parents=True, exist_ok=True)
+        hit = cache / (key + ext)
+        hit.write_bytes(data)
+        for old in sorted(cache.glob("*"), key=lambda p: p.stat().st_mtime)[:-300]:   # a small cache
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    return {"ok": True, "data_url": "data:%s;base64,%s" % (IMAGES[hit.suffix.lower()], base64.b64encode(hit.read_bytes()).decode())}
+
+
 def get(state: Any, raw: str, page: int = 1) -> dict:
     path = find(state, raw)
     size = path.stat().st_size
@@ -76,6 +141,10 @@ def get(state: Any, raw: str, page: int = 1) -> dict:
     suffix = path.suffix.lower()
     if suffix in IMAGES:
         data = path.read_bytes()
+        if not complete_image(data):
+            # caught while a maker is still writing it (2026-10-28: previews of the pictures agents were working on
+            # came out blank - the window cached a half-written file); the window asks again on its next redraw
+            raise MediaError("still being written")
         w = h = 0
         try:
             import doc_read  # pylint: disable=import-outside-toplevel
@@ -163,6 +232,8 @@ def route(state: Any, method: str, path: str, query: dict, body: dict) -> tuple:
     try:
         if method == "GET" and path == "/chat/media":
             return 200, get(state, query.get("path", ""), int(query.get("page") or 1))
+        if method == "GET" and path == "/chat/media/ref":
+            return 200, reference(state, query.get("url", ""))
         if method == "POST" and path == "/chat/media/open":
             return 200, open_file(state, str(body.get("path") or ""))
         if method == "POST" and path == "/chat/media/convert":

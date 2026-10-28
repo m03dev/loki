@@ -142,8 +142,9 @@ const LokiHomeReview = (() => {
       if (refs.length) {   // the real reference prompts the expert matched (engine/specialist_library.py), with their pictures
         const rr = mk("div", "rv-refs"); rr.setAttribute("aria-label", "Reference pictures the expert used");
         for (const r of refs) {
-          const img = mk("img"); img.src = r.image; img.loading = "lazy"; img.alt = r.title || "reference";
-          img.referrerPolicy = "no-referrer";
+          const img = mk("img"); img.alt = r.title || "reference";
+          // the window shows only its own pictures (CSP img-src 'self' data:): the engine fetches the web picture
+          call("/chat/media/ref?url=" + encodeURIComponent(r.image)).then((d) => { if (d && d.ok) img.src = d.data_url; else img.remove(); }).catch(() => img.remove());
           img.dataset.tipName = "Reference: " + (r.title || "");
           img.dataset.tipWhat = "A real prompt that made this picture" + (r.author ? " (by " + r.author + ")" : "") + ". The expert matched its detail, not its subject.";
           img.addEventListener("error", () => img.remove());
