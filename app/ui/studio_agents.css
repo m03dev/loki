@@ -1,5 +1,5 @@
 /* Studio > Agents (app/ui/studio_agents.js): Make, Machines, Agents at work - sizes in % and rem, nothing overlaps */
-.sf-agents { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.sf-agents { flex: 1; min-height: 0; overflow: auto; }
 .sf-agents[hidden] { display: none; }
 .sa-pane { display: flex; flex-direction: column; gap: 12px; padding: 1% 1.4% 2%; }
 .sa-make, .sa-machines, .sa-agents { background: var(--side, #18181c); border: 1px solid var(--line, #34343c); border-radius: 12px; padding: 10px 12px; min-width: 0; }

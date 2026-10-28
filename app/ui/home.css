@@ -1,7 +1,7 @@
 /* LOKI's home: the preview hub (app/ui/home.js). Dark, the app's own tokens (app.css / glass.css), sizes in % / fr /
    clamp so it fits any window; no fixed pixel layout. */
 .home-hub { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column;
-  gap: clamp(10px, 2vh, 20px); padding: clamp(12px, 2.4vh, 26px) clamp(14px, 3.5%, 44px) 8px; scrollbar-width: thin;
+  gap: clamp(10px, 2vh, 20px); padding: clamp(12px, 2.4vh, 26px) clamp(14px, 3.5%, 44px) 8px;
   width: 100%; max-width: 1480px; margin-inline: auto; box-sizing: border-box; }
 .home-hub > * { flex-shrink: 0; }   /* the preview never squashes under the cards (it spilled over them) */
 .home-hub[hidden] { display: none; }

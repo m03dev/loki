@@ -18,7 +18,8 @@
   min-height: 0; align-self: stretch; }
 /* Home's scroll bar (owner 2026-10-26: "mac scroll bar at home doesnt work but windows works"). macOS hides overlay
    scroll bars and `scrollbar-width: thin` gave WebKit nothing to grab; the same always-there bar as the chat column. */
-.loki-split > .home-hub, .home-hub { overflow-y: auto; scrollbar-width: auto; scrollbar-color: rgba(255, 255, 255, .34) rgba(255, 255, 255, .04);
+/* (2026-10-27) the standard scrollbar-width/-color here switched these rules off in WebKit - see glass.css "Scroll bars" */
+.loki-split > .home-hub, .home-hub { overflow-y: auto;
   scrollbar-gutter: stable; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .home-hub::-webkit-scrollbar { width: 12px; }
 .home-hub::-webkit-scrollbar-track { background: rgba(255, 255, 255, .04); border-radius: 999px; }
@@ -45,7 +46,7 @@
 
 /* the conversation: always shown in a chat, with a scroll bar you can see and grab */
 .chat-col .transcript { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 0 12px;
-  scrollbar-width: auto; scrollbar-color: rgba(255, 255, 255, .34) rgba(255, 255, 255, .04); scrollbar-gutter: stable; }
+  scrollbar-gutter: stable; }
 .chat-col .transcript::-webkit-scrollbar { width: 12px; }
 .chat-col .transcript::-webkit-scrollbar-track { background: rgba(255, 255, 255, .04); border-radius: 999px; }
 .chat-col .transcript::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .32); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; min-height: 40px; }

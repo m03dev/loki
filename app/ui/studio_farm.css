@@ -11,7 +11,7 @@
 .sf-stat { flex: 1 1 14%; min-width: 96px; background: var(--surface, #2a2a31); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; }
 .sf-stat b { font-size: 18px; } .sf-stat span { font-size: 11px; color: var(--muted, #9aa0aa); text-transform: uppercase; letter-spacing: .06em; }
 .sf-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr minmax(220px, 30%); grid-template-rows: 1fr 1fr; gap: 8px; }
-.sf-box { background: var(--side, #18181c); border: 1px solid var(--line, #34343c); border-radius: 10px; padding: 6px 10px; min-height: 0; min-width: 0; overflow: auto; scrollbar-width: thin; }
+.sf-box { background: var(--side, #18181c); border: 1px solid var(--line, #34343c); border-radius: 10px; padding: 6px 10px; min-height: 0; min-width: 0; overflow: auto; }
 .sf-box h3 { margin: .3em 0 .5em; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted, #9aa0aa); }
 .sf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .sf-table { display: flex; flex-direction: column; gap: 3px; }
